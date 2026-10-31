@@ -1,0 +1,68 @@
+%% rdra-ish diagram=flow scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__OnboardingFlow["新患登録の流れ"]
+    step__IntakeExpireStep["問診票の期限切れ"]:::step
+    subgraph lane__OnboardingFlow__Patient["Patient"]
+      %% lane lane__OnboardingFlow__Patient: actor__Patient
+      step__ConsentStep["同意の取得"]:::step
+      step__IntakeAnswerStep["問診票の回答"]:::step
+    end
+    subgraph lane__OnboardingFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__OnboardingFlow__ReceptionClerk: actor__ReceptionClerk
+      step__InsuranceStep["保険資格・限度額情報の登録"]:::step
+      step__IntakeSendStep["問診票の送付"]:::step
+      step__NewPatientSearchStep["既存患者の検索"]:::step
+      step__RegisterStep["新患登録"]:::step
+    end
+  end
+  subgraph flow__PatientMaintenanceFlow["患者情報の保守"]
+    subgraph lane__PatientMaintenanceFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__PatientMaintenanceFlow__ReceptionClerk: actor__ReceptionClerk
+      step__ArchiveStep["患者のアーカイブ"]:::step
+      step__DemographicsStep["患者属性の変更"]:::step
+      step__MaintainSearchStep["登録済み患者の検索"]:::step
+      step__MergeStep["重複患者の統合"]:::step
+    end
+  end
+  timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+  usecase__ArchivePatient["Archive Patient"]:::usecase
+  usecase__CaptureConsent["Capture Consent"]:::usecase
+  usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+  usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+  usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+  usecase__RegisterPatient["Register Patient"]:::usecase
+  usecase__SearchPatient["Search Patient"]:::usecase
+  usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+  usecase__UpdateDemographics["Update Demographics"]:::usecase
+  usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+  event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+  step__ArchiveStep -.->|covers| usecase__ArchivePatient
+  step__ConsentStep -.->|covers| usecase__CaptureConsent
+  step__ConsentStep -->|precedes| step__IntakeSendStep
+  step__DemographicsStep -.->|covers| usecase__UpdateDemographics
+  step__InsuranceStep -.->|covers| usecase__VerifyInsurance
+  step__InsuranceStep -->|precedes| step__ConsentStep
+  step__IntakeAnswerStep -.->|covers| usecase__CompleteIntakeForms
+  step__IntakeAnswerStep -.->|excepts| step__IntakeExpireStep
+  step__IntakeExpireStep -.->|covers| timer__IntakeExpiryCheck
+  step__IntakeExpireStep -.->|covers| usecase__ExpireIntakeForms
+  step__IntakeSendStep -.->|covers| event__EvAppointmentScheduled
+  step__IntakeSendStep -.->|covers| usecase__SendIntakeForms
+  step__IntakeSendStep -->|precedes| step__IntakeAnswerStep
+  step__MaintainSearchStep -->|branches| step__ArchiveStep
+  step__MaintainSearchStep -->|branches| step__MergeStep
+  step__MaintainSearchStep -.->|covers| usecase__SearchPatient
+  step__MaintainSearchStep -->|precedes| step__DemographicsStep
+  step__MergeStep -.->|covers| usecase__MergeDuplicatePatient
+  step__NewPatientSearchStep -.->|covers| usecase__SearchPatient
+  step__NewPatientSearchStep -->|precedes| step__RegisterStep
+  step__RegisterStep -.->|covers| usecase__RegisterPatient
+  step__RegisterStep -->|precedes| step__InsuranceStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;
+  classDef event stroke:#333;

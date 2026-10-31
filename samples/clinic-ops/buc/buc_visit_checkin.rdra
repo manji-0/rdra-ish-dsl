@@ -243,6 +243,12 @@ covers(DeclarationStep, ConfirmEligibilityInOutageMode)
 covers(ReferralStep, ReceiveReferralLetter)
 covers(RoomingStep, AssignRoom)
 
+performs(ReceptionClerk, ArrivalStep)
+performs(ReceptionClerk, EligibilityStep)
+performs(ReceptionClerk, DeclarationStep)
+performs(ReceptionClerk, ReferralStep)
+performs(Nurse, RoomingStep)
+
 // Screen fields
 field ArrivalTimeField "受付時刻" access readonly required true source system
 field EligibilityResultField "資格確認結果" access readonly required true source system

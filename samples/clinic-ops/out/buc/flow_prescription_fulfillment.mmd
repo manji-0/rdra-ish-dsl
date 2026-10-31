@@ -1,16 +1,24 @@
 %% rdra-ish diagram=flow scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
-%% kinds: flow step usecase
+%% kinds: flow step lane actor usecase
 %% omitted: buc
 flowchart TD
   subgraph flow__PrescriptionFlow["処方の流れ"]
-    step__CounselStep["服薬指導・薬剤交付"]:::step
-    step__DispenseStep["調剤・監査"]:::step
-    step__InhouseStep["院内処方（引換券）"]:::step
     step__InquiryStep["疑義照会"]:::step
-    step__OrderStep["処方オーダ"]:::step
-    step__OutsideStep["院外処方箋（電子処方箋管理サービス）"]:::step
     step__PharmacyStep["保険薬局での調剤"]:::step
+    subgraph lane__PrescriptionFlow__Clinician["医師"]
+      %% lane lane__PrescriptionFlow__Clinician: actor__Clinician
+      step__InhouseStep["院内処方（引換券）"]:::step
+      step__OrderStep["処方オーダ"]:::step
+      step__OutsideStep["院外処方箋（電子処方箋管理サービス）"]:::step
+    end
+    subgraph lane__PrescriptionFlow__Pharmacist["薬剤師"]
+      %% lane lane__PrescriptionFlow__Pharmacist: actor__Pharmacist
+      step__CounselStep["服薬指導・薬剤交付"]:::step
+      step__DispenseStep["調剤・監査"]:::step
+    end
   end
+  actor__Clinician["医師"]:::actor
+  actor__Pharmacist["薬剤師"]:::actor
   usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
   usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
   usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
@@ -22,6 +30,8 @@ flowchart TD
   usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
   usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
   usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+  actor__Clinician -.->|performs| step__InquiryStep
+  actor__Pharmacist -.->|performs| step__InquiryStep
   step__CounselStep -.->|covers| usecase__CounselMedication
   step__CounselStep -.->|covers| usecase__HandOverMedication
   step__DispenseStep -.->|covers| usecase__DispenseAndAudit
@@ -42,4 +52,6 @@ flowchart TD
   step__PharmacyStep -.->|covers| usecase__ConfirmDispense
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef actor stroke:#333;
   classDef usecase stroke:#333;

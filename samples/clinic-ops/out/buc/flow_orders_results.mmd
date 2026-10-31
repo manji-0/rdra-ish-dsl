@@ -1,0 +1,66 @@
+%% rdra-ish diagram=flow scope=buc:BucOrdersResults model=samples/clinic-ops
+%% kinds: flow step lane actor usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__LabOrderFlow["検体検査の流れ"]
+    step__ProxyOrderStep["オーダの代行入力"]:::step
+    subgraph lane__LabOrderFlow__Clinician["医師"]
+      %% lane lane__LabOrderFlow__Clinician: actor__Clinician
+      step__ConfirmOrderStep["代行入力オーダの確定"]:::step
+      step__CriticalStep["重要結果の通知"]:::step
+      step__LabOrderStep["検査オーダ"]:::step
+      step__OrderCancelStep["オーダの取消"]:::step
+      step__ResultReviewStep["検査結果の確認"]:::step
+    end
+    subgraph lane__LabOrderFlow__Nurse["看護師"]
+      %% lane lane__LabOrderFlow__Nurse: actor__Nurse
+      step__CollectStep["採血"]:::step
+      step__CostStep["実施内容（コスト）の登録"]:::step
+      step__LabResultStep["検査結果の受信"]:::step
+      step__LabelStep["採血管ラベルの発行"]:::step
+    end
+  end
+  actor__MedicalClerk["医師事務作業補助者"]:::actor
+  %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
+  actor__Nurse["看護師"]:::actor
+  %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
+  usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
+  usecase__CollectSpecimen["Collect Specimen"]:::usecase
+  usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+  usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+  usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
+  usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+  usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+  usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+  usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+  usecase__ReviewLabResult["Review Lab Result"]:::usecase
+  event__EvLabResultReceived["Lab Result Received"]:::event
+  actor__MedicalClerk -.->|performs| step__ProxyOrderStep
+  actor__Nurse -.->|performs| step__ProxyOrderStep
+  step__CollectStep -.->|covers| usecase__CollectSpecimen
+  step__CollectStep -->|precedes| step__CostStep
+  step__ConfirmOrderStep -.->|covers| usecase__ConfirmProxyOrder
+  step__ConfirmOrderStep -->|precedes| step__LabelStep
+  step__CostStep -.->|covers| usecase__RegisterPerformedProcedure
+  step__CostStep -->|precedes| step__LabResultStep
+  step__CriticalStep -.->|covers| usecase__NotifyCriticalResult
+  step__LabOrderStep -->|branches| step__ProxyOrderStep
+  step__LabOrderStep -.->|covers| usecase__PlaceLabOrder
+  step__LabOrderStep -.->|excepts| step__OrderCancelStep
+  step__LabOrderStep -->|precedes| step__LabelStep
+  step__LabResultStep -.->|covers| event__EvLabResultReceived
+  step__LabResultStep -.->|covers| usecase__ReceiveLabResult
+  step__LabResultStep -->|precedes| step__ResultReviewStep
+  step__LabelStep -.->|covers| usecase__PrintSpecimenLabel
+  step__LabelStep -->|precedes| step__CollectStep
+  step__OrderCancelStep -.->|covers| usecase__CancelClinicalOrder
+  step__ProxyOrderStep -.->|covers| usecase__EnterProxyOrder
+  step__ProxyOrderStep -->|precedes| step__ConfirmOrderStep
+  step__ResultReviewStep -->|branches| step__CriticalStep
+  step__ResultReviewStep -.->|covers| usecase__ReviewLabResult
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef actor stroke:#333;
+  classDef usecase stroke:#333;
+  classDef event stroke:#333;

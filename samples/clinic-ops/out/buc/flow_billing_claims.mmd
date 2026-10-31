@@ -1,17 +1,20 @@
 %% rdra-ish diagram=flow scope=buc:BucBillingClaims model=samples/clinic-ops
-%% kinds: flow step timer usecase
+%% kinds: flow step lane timer usecase
 %% omitted: buc
 flowchart TD
   subgraph flow__ClaimCycleFlow["レセプトの月次サイクル"]
-    step__AssessStep["査定と再審査請求"]:::step
-    step__CreateStatementStep["レセプト作成（月初）"]:::step
-    step__HoldStep["保留（月遅れ）"]:::step
-    step__InspectStep["院内点検"]:::step
-    step__PaidStep["支払（診療翌々月）"]:::step
-    step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
-    step__ReturnStep["返戻と再請求"]:::step
-    step__ReviewStep["審査"]:::step
-    step__SubmitStep["請求（5日～10日）"]:::step
+    subgraph lane__ClaimCycleFlow__ClaimsClerk["医事課 レセプト担当"]
+      %% lane lane__ClaimCycleFlow__ClaimsClerk: actor__ClaimsClerk
+      step__AssessStep["査定と再審査請求"]:::step
+      step__CreateStatementStep["レセプト作成（月初）"]:::step
+      step__HoldStep["保留（月遅れ）"]:::step
+      step__InspectStep["院内点検"]:::step
+      step__PaidStep["支払（診療翌々月）"]:::step
+      step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
+      step__ReturnStep["返戻と再請求"]:::step
+      step__ReviewStep["審査"]:::step
+      step__SubmitStep["請求（5日～10日）"]:::step
+    end
   end
   timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
   timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
@@ -61,5 +64,6 @@ flowchart TD
   step__SubmitStep -->|precedes| step__ReviewStep
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
   classDef timer stroke:#333;
   classDef usecase stroke:#333;

@@ -190,3 +190,60 @@ requires_permission(CriticalNoticeApi, PatientMessageSend)
 
 requires_permission(CancelClinicalOrder, ClinicalOrderWrite)
 requires_medium(CancelClinicalOrder, ClinicalWorkstation)
+
+// Business flow. An order a 医師事務作業補助者 or a nurse enters waits for the physician's
+// confirmation before the label is printed and the specimen collected (保助看法 第37条, above).
+flow LabOrderFlow "検体検査の流れ"
+step LabOrderStep     "検査オーダ"
+step ProxyOrderStep   "オーダの代行入力"
+step ConfirmOrderStep "代行入力オーダの確定"
+step LabelStep        "採血管ラベルの発行"
+step CollectStep      "採血"
+step CostStep         "実施内容（コスト）の登録"
+step LabResultStep    "検査結果の受信"
+step ResultReviewStep "検査結果の確認"
+step CriticalStep     "重要結果の通知"
+step OrderCancelStep  "オーダの取消"
+contains(BucOrdersResults, LabOrderFlow)
+contains(LabOrderFlow, LabOrderStep)
+contains(LabOrderFlow, ProxyOrderStep)
+contains(LabOrderFlow, ConfirmOrderStep)
+contains(LabOrderFlow, LabelStep)
+contains(LabOrderFlow, CollectStep)
+contains(LabOrderFlow, CostStep)
+contains(LabOrderFlow, LabResultStep)
+contains(LabOrderFlow, ResultReviewStep)
+contains(LabOrderFlow, CriticalStep)
+contains(LabOrderFlow, OrderCancelStep)
+precedes(LabOrderStep, LabelStep)
+branches(LabOrderStep, ProxyOrderStep)
+precedes(ProxyOrderStep, ConfirmOrderStep)
+precedes(ConfirmOrderStep, LabelStep)
+precedes(LabelStep, CollectStep)
+precedes(CollectStep, CostStep)
+precedes(CostStep, LabResultStep)
+precedes(LabResultStep, ResultReviewStep)
+branches(ResultReviewStep, CriticalStep)
+excepts(LabOrderStep, OrderCancelStep)
+covers(LabOrderStep, PlaceLabOrder)
+covers(ProxyOrderStep, EnterProxyOrder)
+covers(ConfirmOrderStep, ConfirmProxyOrder)
+covers(LabelStep, PrintSpecimenLabel)
+covers(CollectStep, CollectSpecimen)
+covers(CostStep, RegisterPerformedProcedure)
+covers(LabResultStep, ReceiveLabResult)
+covers(LabResultStep, EvLabResultReceived)
+covers(ResultReviewStep, ReviewLabResult)
+covers(CriticalStep, NotifyCriticalResult)
+covers(OrderCancelStep, CancelClinicalOrder)
+performs(Clinician, LabOrderStep)
+performs(MedicalClerk, ProxyOrderStep)
+performs(Nurse, ProxyOrderStep)
+performs(Clinician, ConfirmOrderStep)
+performs(Nurse, LabelStep)
+performs(Nurse, CollectStep)
+performs(Nurse, CostStep)
+performs(Nurse, LabResultStep)
+performs(Clinician, ResultReviewStep)
+performs(Clinician, CriticalStep)
+performs(Clinician, OrderCancelStep)

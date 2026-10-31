@@ -1,13 +1,19 @@
 %% rdra-ish diagram=flow scope=buc:BucVisitPayment model=samples/clinic-ops
-%% kinds: flow step usecase event
+%% kinds: flow step lane usecase event
 %% omitted: buc
 flowchart TD
   subgraph flow__VisitPaymentFlow["計算・会計の流れ"]
-    step__CalculationStep["計算受付・会計計算入力"]:::step
-    step__CallStep["会計の呼出"]:::step
-    step__KioskStep["自動精算機で精算"]:::step
-    step__ReceiptStep["領収証・明細書の交付"]:::step
-    step__WindowStep["会計窓口で精算"]:::step
+    subgraph lane__VisitPaymentFlow__AccountsClerk["医事課 会計担当"]
+      %% lane lane__VisitPaymentFlow__AccountsClerk: actor__AccountsClerk
+      step__CalculationStep["計算受付・会計計算入力"]:::step
+      step__CallStep["会計の呼出"]:::step
+      step__ReceiptStep["領収証・明細書の交付"]:::step
+      step__WindowStep["会計窓口で精算"]:::step
+    end
+    subgraph lane__VisitPaymentFlow__Patient["Patient"]
+      %% lane lane__VisitPaymentFlow__Patient: actor__Patient
+      step__KioskStep["自動精算機で精算"]:::step
+    end
   end
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
@@ -30,5 +36,6 @@ flowchart TD
   step__WindowStep -->|precedes| step__ReceiptStep
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
   classDef usecase stroke:#333;
   classDef event stroke:#333;

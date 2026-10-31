@@ -1,0 +1,54 @@
+%% rdra-ish diagram=flow scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% kinds: flow step lane actor timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__AppointmentFlow["予約の流れ"]
+    step__AvailabilityStep["空き枠の検索"]:::step
+    step__NoShowStep["未来院の処理"]:::step
+    subgraph lane__AppointmentFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__AppointmentFlow__ReceptionClerk: actor__ReceptionClerk
+      step__BookStep["予約確定"]:::step
+      step__CancelStep["予約の取消"]:::step
+      step__NoticeStep["予約の通知"]:::step
+      step__RescheduleStep["予約の変更"]:::step
+      step__ReserveStep["仮押さえ"]:::step
+    end
+  end
+  actor__Patient["Patient"]:::actor
+  %% desc actor__Patient: A person receiving care through the clinic.
+  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
+  timer__NoShowSweep["Nightly no-show sweep"]:::timer
+  usecase__BookAppointment["Book Appointment"]:::usecase
+  usecase__CancelAppointment["Cancel Appointment"]:::usecase
+  usecase__MarkNoShow["Mark No Show"]:::usecase
+  usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
+  usecase__ReserveAppointment["Reserve Appointment"]:::usecase
+  usecase__SearchAvailability["Search Availability"]:::usecase
+  usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+  event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+  actor__Patient -.->|performs| step__AvailabilityStep
+  actor__ReceptionClerk -.->|performs| step__AvailabilityStep
+  step__AvailabilityStep -.->|covers| usecase__SearchAvailability
+  step__AvailabilityStep -->|precedes| step__ReserveStep
+  step__BookStep -.->|covers| usecase__BookAppointment
+  step__BookStep -->|precedes| step__NoticeStep
+  step__CancelStep -.->|covers| event__EvAppointmentCancelled
+  step__CancelStep -.->|covers| usecase__CancelAppointment
+  step__NoShowStep -.->|covers| timer__NoShowSweep
+  step__NoShowStep -.->|covers| usecase__MarkNoShow
+  step__NoticeStep -->|branches| step__CancelStep
+  step__NoticeStep -->|branches| step__RescheduleStep
+  step__NoticeStep -.->|covers| usecase__SendAppointmentNotice
+  step__NoticeStep -.->|excepts| step__NoShowStep
+  step__RescheduleStep -.->|covers| usecase__RescheduleAppointment
+  step__RescheduleStep -->|repeats| step__NoticeStep
+  step__ReserveStep -.->|covers| usecase__ReserveAppointment
+  step__ReserveStep -->|precedes| step__BookStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef actor stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;
+  classDef event stroke:#333;

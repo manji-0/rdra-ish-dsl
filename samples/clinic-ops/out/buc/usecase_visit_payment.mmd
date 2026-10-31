@@ -6,6 +6,8 @@ flowchart LR
   subgraph layer_value["システム価値"]
     actor__AccountsClerk["医事課 会計担当"]:::actor
     %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
+    actor__Patient["Patient"]:::actor
+    %% desc actor__Patient: A person receiving care through the clinic.
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
@@ -43,6 +45,8 @@ flowchart LR
   actor__AccountsClerk -.->|performs| usecase__SettleAtKiosk
   %% derived actor__AccountsClerk -> usecase__SettleAtKiosk via buc__BucVisitPayment
   actor__AccountsClerk -.->|performs| usecase__SettleAtWindow
+  actor__Patient -.->|performs| usecase__SettleAtKiosk
+  %% derived actor__Patient -> usecase__SettleAtKiosk via step__KioskStep
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
   event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway

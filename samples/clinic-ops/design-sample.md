@@ -84,7 +84,7 @@ rdra-ish diagram samples/clinic-ops --kind context --format mermaid --out sample
 %% rdra-ish diagram=context scope=whole model=samples/clinic-ops
 %% layers: value=システム価値 system=システム
 %% kinds: actor extsystem system
-%% omitted: buc permission usecase event
+%% omitted: buc step permission usecase event
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__AccountsClerk["医事課 会計担当"]:::actor
@@ -115,25 +115,25 @@ flowchart LR
     system__ClinicOpsSystem["Clinic Operations System"]:::system
   end
   actor__AccountsClerk -.->|performs| system__ClinicOpsSystem
-  %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment,usecase__ApplySelectedTreatmentFee,usecase__CalculateVisitBill,usecase__CallPatientForPayment,usecase__IssueReceipt,usecase__SettleAtWindow
+  %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment,step__CalculationStep,step__CallStep,step__ReceiptStep,step__WindowStep,usecase__ApplySelectedTreatmentFee,usecase__CalculateVisitBill,usecase__CallPatientForPayment,usecase__IssueReceipt,usecase__SettleAtWindow
   actor__CareCoordinator -.->|performs| system__ClinicOpsSystem
-  %% derived actor__CareCoordinator -> system__ClinicOpsSystem via buc__BucFollowupCare,usecase__CloseCarePlan,usecase__CreateCarePlan,usecase__NotifyPatientResult,usecase__ReviewPatientResponse,usecase__ScheduleFollowUpVisit,usecase__SendFollowUpMessage
+  %% derived actor__CareCoordinator -> system__ClinicOpsSystem via buc__BucFollowupCare,step__CarePlanStep,step__FollowUpMsgStep,step__PlanCloseStep,step__ResponseStep,step__ResultNoticeStep,step__RevisitStep,usecase__CloseCarePlan,usecase__CreateCarePlan,usecase__NotifyPatientResult,usecase__ReviewPatientResponse,usecase__ScheduleFollowUpVisit,usecase__SendFollowUpMessage
   actor__ClaimsClerk -.->|performs| system__ClinicOpsSystem
-  %% derived actor__ClaimsClerk -> system__ClinicOpsSystem via buc__BucBillingClaims,usecase__CorrectReturnedStatement,usecase__HoldClaimStatement,usecase__InspectClaimStatement,usecase__ReconcileBalance,usecase__ReleaseHeldStatement,usecase__RequestReexamination,usecase__VoidCharge
+  %% derived actor__ClaimsClerk -> system__ClinicOpsSystem via buc__BucBillingClaims,step__AssessStep,step__CreateStatementStep,step__HoldStep,step__InspectStep,step__PaidStep,step__ReceiptErrorStep,step__ReturnStep,step__ReviewStep,step__SubmitStep,usecase__CorrectReturnedStatement,usecase__HoldClaimStatement,usecase__InspectClaimStatement,usecase__ReconcileBalance,usecase__ReleaseHeldStatement,usecase__RequestReexamination,usecase__VoidCharge
   actor__ClinicAdmin -.->|performs| system__ClinicOpsSystem
   %% derived actor__ClinicAdmin -> system__ClinicOpsSystem via buc__BucStaffAdministration
   actor__Clinician -.->|performs| system__ClinicOpsSystem
-  %% derived actor__Clinician -> system__ClinicOpsSystem via usecase__AmendEncounter,usecase__AnswerPharmacyInquiry,usecase__AnswerPrescriptionInquiry,usecase__CancelClinicalOrder,usecase__CancelPrescription,usecase__CompleteConsultation,usecase__ConfirmProxyOrder,usecase__DocumentAssessment,usecase__DraftPrescription,usecase__IssueInhouseVoucher,usecase__IssueOutsidePrescription,usecase__IssueReferralLetter,usecase__IssueRefillPrescription,usecase__NotifyCriticalResult,usecase__PlaceLabOrder,usecase__ReviewLabResult,usecase__SearchMedication,usecase__SignEncounter
+  %% derived actor__Clinician -> system__ClinicOpsSystem via step__AmendStep,step__AssessmentStep,step__CompleteStep,step__ConfirmOrderStep,step__CriticalStep,step__InhouseStep,step__InquiryStep,step__LabOrderStep,step__OrderCancelStep,step__OrderStep,step__OutsideStep,step__ReferralOutStep,step__ResultReviewStep,step__SignStep,usecase__AmendEncounter,usecase__AnswerPharmacyInquiry,usecase__AnswerPrescriptionInquiry,usecase__CancelClinicalOrder,usecase__CancelPrescription,usecase__CompleteConsultation,usecase__ConfirmProxyOrder,usecase__DocumentAssessment,usecase__DraftPrescription,usecase__IssueInhouseVoucher,usecase__IssueOutsidePrescription,usecase__IssueReferralLetter,usecase__IssueRefillPrescription,usecase__NotifyCriticalResult,usecase__PlaceLabOrder,usecase__ReviewLabResult,usecase__SearchMedication,usecase__SignEncounter
   actor__MedicalClerk -.->|performs| system__ClinicOpsSystem
-  %% derived actor__MedicalClerk -> system__ClinicOpsSystem via usecase__EnterProxyOrder
+  %% derived actor__MedicalClerk -> system__ClinicOpsSystem via step__ProxyOrderStep,usecase__EnterProxyOrder
   actor__Nurse -.->|performs| system__ClinicOpsSystem
-  %% derived actor__Nurse -> system__ClinicOpsSystem via usecase__AssignRoom,usecase__CollectSpecimen,usecase__EnterProxyOrder,usecase__OpenEncounter,usecase__PrepareEncounter,usecase__PrintSpecimenLabel,usecase__ReceiveLabResult,usecase__RecordVitals,usecase__RegisterPerformedProcedure
+  %% derived actor__Nurse -> system__ClinicOpsSystem via step__CollectStep,step__CostStep,step__LabResultStep,step__LabelStep,step__OpenStep,step__ProxyOrderStep,step__RoomingStep,step__VitalsStep,usecase__AssignRoom,usecase__CollectSpecimen,usecase__EnterProxyOrder,usecase__OpenEncounter,usecase__PrepareEncounter,usecase__PrintSpecimenLabel,usecase__ReceiveLabResult,usecase__RecordVitals,usecase__RegisterPerformedProcedure
   actor__Patient -.->|performs| system__ClinicOpsSystem
-  %% derived actor__Patient -> system__ClinicOpsSystem via usecase__CaptureConsent,usecase__CompleteIntakeForms,usecase__SearchAvailability
+  %% derived actor__Patient -> system__ClinicOpsSystem via step__AvailabilityStep,step__ConsentStep,step__IntakeAnswerStep,step__KioskStep,usecase__CaptureConsent,usecase__CompleteIntakeForms,usecase__SearchAvailability
   actor__Pharmacist -.->|performs| system__ClinicOpsSystem
-  %% derived actor__Pharmacist -> system__ClinicOpsSystem via usecase__CounselMedication,usecase__DispenseAndAudit,usecase__HandOverMedication,usecase__RaisePrescriptionInquiry
+  %% derived actor__Pharmacist -> system__ClinicOpsSystem via step__CounselStep,step__DispenseStep,step__InquiryStep,usecase__CounselMedication,usecase__DispenseAndAudit,usecase__HandOverMedication,usecase__RaisePrescriptionInquiry
   actor__ReceptionClerk -.->|performs| system__ClinicOpsSystem
-  %% derived actor__ReceptionClerk -> system__ClinicOpsSystem via buc__BucAppointmentScheduling,usecase__ArchivePatient,usecase__BatchVerifyEligibility,usecase__BookAppointment,usecase__CancelAppointment,usecase__CheckInPatient,usecase__ConfirmEligibilityInOutageMode,usecase__ExpireIntakeForms,usecase__MarkNoShow,usecase__MergeDuplicatePatient,usecase__ReceiveReferralLetter,usecase__RecheckEligibility,usecase__RecordEligibilityDeclaration,usecase__RegisterPatient,usecase__RescheduleAppointment,usecase__ReserveAppointment,usecase__SearchAvailability,usecase__SearchPatient,usecase__SendAppointmentNotice,usecase__SendIntakeForms,usecase__UpdateDemographics,usecase__VerifyArrival,usecase__VerifyInsurance
+  %% derived actor__ReceptionClerk -> system__ClinicOpsSystem via buc__BucAppointmentScheduling,step__ArchiveStep,step__ArrivalStep,step__AvailabilityStep,step__BookStep,step__CancelStep,step__DeclarationStep,step__DemographicsStep,step__EligibilityStep,step__InsuranceStep,step__IntakeSendStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__NoticeStep,step__ReferralStep,step__RegisterStep,step__RescheduleStep,step__ReserveStep,usecase__ArchivePatient,usecase__BatchVerifyEligibility,usecase__BookAppointment,usecase__CancelAppointment,usecase__CheckInPatient,usecase__ConfirmEligibilityInOutageMode,usecase__ExpireIntakeForms,usecase__MarkNoShow,usecase__MergeDuplicatePatient,usecase__ReceiveReferralLetter,usecase__RecheckEligibility,usecase__RecordEligibilityDeclaration,usecase__RegisterPatient,usecase__RescheduleAppointment,usecase__ReserveAppointment,usecase__SearchAvailability,usecase__SearchPatient,usecase__SendAppointmentNotice,usecase__SendIntakeForms,usecase__UpdateDemographics,usecase__VerifyArrival,usecase__VerifyInsurance
   extsystem__ClaimsReviewOrganization -.->|raises EvClaimAccepted| system__ClinicOpsSystem
   %% derived extsystem__ClaimsReviewOrganization -> system__ClinicOpsSystem via event__EvClaimAccepted
   extsystem__ClaimsReviewOrganization -.->|raises EvClaimAssessed| system__ClinicOpsSystem
@@ -309,30 +309,32 @@ flowchart LR
   actor__ClaimsClerk -.->|performs| buc__BucBillingClaims
   actor__ClinicAdmin -.->|performs| buc__BucStaffAdministration
   actor__Clinician -.->|performs| buc__BucClinicalEncounter
-  %% derived actor__Clinician -> buc__BucClinicalEncounter via usecase__AmendEncounter,usecase__CompleteConsultation,usecase__DocumentAssessment,usecase__IssueReferralLetter,usecase__SignEncounter
+  %% derived actor__Clinician -> buc__BucClinicalEncounter via step__AmendStep,step__AssessmentStep,step__CompleteStep,step__ReferralOutStep,step__SignStep,usecase__AmendEncounter,usecase__CompleteConsultation,usecase__DocumentAssessment,usecase__IssueReferralLetter,usecase__SignEncounter
   actor__Clinician -.->|performs| buc__BucOrdersResults
-  %% derived actor__Clinician -> buc__BucOrdersResults via usecase__CancelClinicalOrder,usecase__ConfirmProxyOrder,usecase__NotifyCriticalResult,usecase__PlaceLabOrder,usecase__ReviewLabResult
+  %% derived actor__Clinician -> buc__BucOrdersResults via step__ConfirmOrderStep,step__CriticalStep,step__LabOrderStep,step__OrderCancelStep,step__ResultReviewStep,usecase__CancelClinicalOrder,usecase__ConfirmProxyOrder,usecase__NotifyCriticalResult,usecase__PlaceLabOrder,usecase__ReviewLabResult
   actor__Clinician -.->|performs| buc__BucPrescriptionFulfillment
-  %% derived actor__Clinician -> buc__BucPrescriptionFulfillment via usecase__AnswerPharmacyInquiry,usecase__AnswerPrescriptionInquiry,usecase__CancelPrescription,usecase__DraftPrescription,usecase__IssueInhouseVoucher,usecase__IssueOutsidePrescription,usecase__IssueRefillPrescription,usecase__SearchMedication
+  %% derived actor__Clinician -> buc__BucPrescriptionFulfillment via step__InhouseStep,step__InquiryStep,step__OrderStep,step__OutsideStep,usecase__AnswerPharmacyInquiry,usecase__AnswerPrescriptionInquiry,usecase__CancelPrescription,usecase__DraftPrescription,usecase__IssueInhouseVoucher,usecase__IssueOutsidePrescription,usecase__IssueRefillPrescription,usecase__SearchMedication
   actor__MedicalClerk -.->|performs| buc__BucOrdersResults
-  %% derived actor__MedicalClerk -> buc__BucOrdersResults via usecase__EnterProxyOrder
+  %% derived actor__MedicalClerk -> buc__BucOrdersResults via step__ProxyOrderStep,usecase__EnterProxyOrder
   actor__Nurse -.->|performs| buc__BucClinicalEncounter
-  %% derived actor__Nurse -> buc__BucClinicalEncounter via usecase__OpenEncounter,usecase__RecordVitals
+  %% derived actor__Nurse -> buc__BucClinicalEncounter via step__OpenStep,step__VitalsStep,usecase__OpenEncounter,usecase__RecordVitals
   actor__Nurse -.->|performs| buc__BucOrdersResults
-  %% derived actor__Nurse -> buc__BucOrdersResults via usecase__CollectSpecimen,usecase__EnterProxyOrder,usecase__PrintSpecimenLabel,usecase__ReceiveLabResult,usecase__RegisterPerformedProcedure
+  %% derived actor__Nurse -> buc__BucOrdersResults via step__CollectStep,step__CostStep,step__LabResultStep,step__LabelStep,step__ProxyOrderStep,usecase__CollectSpecimen,usecase__EnterProxyOrder,usecase__PrintSpecimenLabel,usecase__ReceiveLabResult,usecase__RegisterPerformedProcedure
   actor__Nurse -.->|performs| buc__BucVisitCheckIn
-  %% derived actor__Nurse -> buc__BucVisitCheckIn via usecase__AssignRoom,usecase__PrepareEncounter
+  %% derived actor__Nurse -> buc__BucVisitCheckIn via step__RoomingStep,usecase__AssignRoom,usecase__PrepareEncounter
   actor__Patient -.->|performs| buc__BucAppointmentScheduling
-  %% derived actor__Patient -> buc__BucAppointmentScheduling via usecase__SearchAvailability
+  %% derived actor__Patient -> buc__BucAppointmentScheduling via step__AvailabilityStep,usecase__SearchAvailability
   actor__Patient -.->|performs| buc__BucPatientOnboarding
-  %% derived actor__Patient -> buc__BucPatientOnboarding via usecase__CaptureConsent,usecase__CompleteIntakeForms
+  %% derived actor__Patient -> buc__BucPatientOnboarding via step__ConsentStep,step__IntakeAnswerStep,usecase__CaptureConsent,usecase__CompleteIntakeForms
+  actor__Patient -.->|performs| buc__BucVisitPayment
+  %% derived actor__Patient -> buc__BucVisitPayment via step__KioskStep
   actor__Pharmacist -.->|performs| buc__BucPrescriptionFulfillment
-  %% derived actor__Pharmacist -> buc__BucPrescriptionFulfillment via usecase__CounselMedication,usecase__DispenseAndAudit,usecase__HandOverMedication,usecase__RaisePrescriptionInquiry
+  %% derived actor__Pharmacist -> buc__BucPrescriptionFulfillment via step__CounselStep,step__DispenseStep,step__InquiryStep,usecase__CounselMedication,usecase__DispenseAndAudit,usecase__HandOverMedication,usecase__RaisePrescriptionInquiry
   actor__ReceptionClerk -.->|performs| buc__BucAppointmentScheduling
   actor__ReceptionClerk -.->|performs| buc__BucPatientOnboarding
-  %% derived actor__ReceptionClerk -> buc__BucPatientOnboarding via usecase__ArchivePatient,usecase__ExpireIntakeForms,usecase__MergeDuplicatePatient,usecase__RegisterPatient,usecase__SearchPatient,usecase__SendIntakeForms,usecase__UpdateDemographics,usecase__VerifyInsurance
+  %% derived actor__ReceptionClerk -> buc__BucPatientOnboarding via step__ArchiveStep,step__DemographicsStep,step__InsuranceStep,step__IntakeSendStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__RegisterStep,usecase__ArchivePatient,usecase__ExpireIntakeForms,usecase__MergeDuplicatePatient,usecase__RegisterPatient,usecase__SearchPatient,usecase__SendIntakeForms,usecase__UpdateDemographics,usecase__VerifyInsurance
   actor__ReceptionClerk -.->|performs| buc__BucVisitCheckIn
-  %% derived actor__ReceptionClerk -> buc__BucVisitCheckIn via usecase__BatchVerifyEligibility,usecase__CheckInPatient,usecase__ConfirmEligibilityInOutageMode,usecase__ReceiveReferralLetter,usecase__RecheckEligibility,usecase__RecordEligibilityDeclaration,usecase__VerifyArrival
+  %% derived actor__ReceptionClerk -> buc__BucVisitCheckIn via step__ArrivalStep,step__DeclarationStep,step__EligibilityStep,step__ReferralStep,usecase__BatchVerifyEligibility,usecase__CheckInPatient,usecase__ConfirmEligibilityInOutageMode,usecase__ReceiveReferralLetter,usecase__RecheckEligibility,usecase__RecordEligibilityDeclaration,usecase__VerifyArrival
   buc__BucAppointmentScheduling -.->|triggers EvAppointmentCancelled| extsystem__MessagingGateway
   %% derived buc__BucAppointmentScheduling -> extsystem__MessagingGateway via usecase__CancelAppointment
   buc__BucAppointmentScheduling -.->|triggers EvAppointmentRescheduled| extsystem__MessagingGateway
@@ -425,6 +427,85 @@ UC/API 要求に対して actor の `has_permission` が不足していること
 - 受付ごとの資格確認（`BucVisitCheckIn`）と新患登録時の資格登録の責務が混ざっていないか。
 - SendIntakeForms は予約イベントから起動されるため、予約 BUC 側の責務と混同しないか。
 
+#### Patient Onboarding 業務フロー図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucPatientOnboarding --out samples/clinic-ops/out/buc/flow_patient_onboarding
+```
+
+```mermaid
+%% rdra-ish diagram=flow scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__OnboardingFlow["新患登録の流れ"]
+    step__IntakeExpireStep["問診票の期限切れ"]:::step
+    subgraph lane__OnboardingFlow__Patient["Patient"]
+      %% lane lane__OnboardingFlow__Patient: actor__Patient
+      step__ConsentStep["同意の取得"]:::step
+      step__IntakeAnswerStep["問診票の回答"]:::step
+    end
+    subgraph lane__OnboardingFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__OnboardingFlow__ReceptionClerk: actor__ReceptionClerk
+      step__InsuranceStep["保険資格・限度額情報の登録"]:::step
+      step__IntakeSendStep["問診票の送付"]:::step
+      step__NewPatientSearchStep["既存患者の検索"]:::step
+      step__RegisterStep["新患登録"]:::step
+    end
+  end
+  subgraph flow__PatientMaintenanceFlow["患者情報の保守"]
+    subgraph lane__PatientMaintenanceFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__PatientMaintenanceFlow__ReceptionClerk: actor__ReceptionClerk
+      step__ArchiveStep["患者のアーカイブ"]:::step
+      step__DemographicsStep["患者属性の変更"]:::step
+      step__MaintainSearchStep["登録済み患者の検索"]:::step
+      step__MergeStep["重複患者の統合"]:::step
+    end
+  end
+  timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+  usecase__ArchivePatient["Archive Patient"]:::usecase
+  usecase__CaptureConsent["Capture Consent"]:::usecase
+  usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+  usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+  usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
+  usecase__RegisterPatient["Register Patient"]:::usecase
+  usecase__SearchPatient["Search Patient"]:::usecase
+  usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+  usecase__UpdateDemographics["Update Demographics"]:::usecase
+  usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+  event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+  step__ArchiveStep -.->|covers| usecase__ArchivePatient
+  step__ConsentStep -.->|covers| usecase__CaptureConsent
+  step__ConsentStep -->|precedes| step__IntakeSendStep
+  step__DemographicsStep -.->|covers| usecase__UpdateDemographics
+  step__InsuranceStep -.->|covers| usecase__VerifyInsurance
+  step__InsuranceStep -->|precedes| step__ConsentStep
+  step__IntakeAnswerStep -.->|covers| usecase__CompleteIntakeForms
+  step__IntakeAnswerStep -.->|excepts| step__IntakeExpireStep
+  step__IntakeExpireStep -.->|covers| timer__IntakeExpiryCheck
+  step__IntakeExpireStep -.->|covers| usecase__ExpireIntakeForms
+  step__IntakeSendStep -.->|covers| event__EvAppointmentScheduled
+  step__IntakeSendStep -.->|covers| usecase__SendIntakeForms
+  step__IntakeSendStep -->|precedes| step__IntakeAnswerStep
+  step__MaintainSearchStep -->|branches| step__ArchiveStep
+  step__MaintainSearchStep -->|branches| step__MergeStep
+  step__MaintainSearchStep -.->|covers| usecase__SearchPatient
+  step__MaintainSearchStep -->|precedes| step__DemographicsStep
+  step__MergeStep -.->|covers| usecase__MergeDuplicatePatient
+  step__NewPatientSearchStep -.->|covers| usecase__SearchPatient
+  step__NewPatientSearchStep -->|precedes| step__RegisterStep
+  step__RegisterStep -.->|covers| usecase__RegisterPatient
+  step__RegisterStep -->|precedes| step__InsuranceStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;
+  classDef event stroke:#333;
+```
+
 #### Patient Onboarding UC複合図
 
 生成コマンド:
@@ -437,7 +518,7 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucPat
 %% rdra-ish diagram=usecase scope=buc:BucPatientOnboarding model=samples/clinic-ops
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
 %% kinds: actor extsystem timer usecase screen event entity state
-%% omitted: buc medium permission api
+%% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Patient["Patient"]:::actor
@@ -565,6 +646,71 @@ flowchart LR
 - CancelAppointment が Appointment と ProviderSchedule を同じ API 境界で更新することが妥当か。
 - 予約時に選ばれる `Appointment.referral`（再診・紹介状あり・紹介状なし・除外）が、受付で確認する紹介状の有無と一致するか。
 
+#### Appointment Scheduling 業務フロー図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucAppointmentScheduling --out samples/clinic-ops/out/buc/flow_appointment_scheduling
+```
+
+```mermaid
+%% rdra-ish diagram=flow scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% kinds: flow step lane actor timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__AppointmentFlow["予約の流れ"]
+    step__AvailabilityStep["空き枠の検索"]:::step
+    step__NoShowStep["未来院の処理"]:::step
+    subgraph lane__AppointmentFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__AppointmentFlow__ReceptionClerk: actor__ReceptionClerk
+      step__BookStep["予約確定"]:::step
+      step__CancelStep["予約の取消"]:::step
+      step__NoticeStep["予約の通知"]:::step
+      step__RescheduleStep["予約の変更"]:::step
+      step__ReserveStep["仮押さえ"]:::step
+    end
+  end
+  actor__Patient["Patient"]:::actor
+  %% desc actor__Patient: A person receiving care through the clinic.
+  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
+  timer__NoShowSweep["Nightly no-show sweep"]:::timer
+  usecase__BookAppointment["Book Appointment"]:::usecase
+  usecase__CancelAppointment["Cancel Appointment"]:::usecase
+  usecase__MarkNoShow["Mark No Show"]:::usecase
+  usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
+  usecase__ReserveAppointment["Reserve Appointment"]:::usecase
+  usecase__SearchAvailability["Search Availability"]:::usecase
+  usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+  event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+  actor__Patient -.->|performs| step__AvailabilityStep
+  actor__ReceptionClerk -.->|performs| step__AvailabilityStep
+  step__AvailabilityStep -.->|covers| usecase__SearchAvailability
+  step__AvailabilityStep -->|precedes| step__ReserveStep
+  step__BookStep -.->|covers| usecase__BookAppointment
+  step__BookStep -->|precedes| step__NoticeStep
+  step__CancelStep -.->|covers| event__EvAppointmentCancelled
+  step__CancelStep -.->|covers| usecase__CancelAppointment
+  step__NoShowStep -.->|covers| timer__NoShowSweep
+  step__NoShowStep -.->|covers| usecase__MarkNoShow
+  step__NoticeStep -->|branches| step__CancelStep
+  step__NoticeStep -->|branches| step__RescheduleStep
+  step__NoticeStep -.->|covers| usecase__SendAppointmentNotice
+  step__NoticeStep -.->|excepts| step__NoShowStep
+  step__RescheduleStep -.->|covers| usecase__RescheduleAppointment
+  step__RescheduleStep -->|repeats| step__NoticeStep
+  step__ReserveStep -.->|covers| usecase__ReserveAppointment
+  step__ReserveStep -->|precedes| step__BookStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef actor stroke:#333;
+  classDef timer stroke:#333;
+  classDef usecase stroke:#333;
+  classDef event stroke:#333;
+```
+
 #### Appointment Scheduling UC複合図
 
 生成コマンド:
@@ -577,7 +723,7 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucApp
 %% rdra-ish diagram=usecase scope=buc:BucAppointmentScheduling model=samples/clinic-ops
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
 %% kinds: actor extsystem timer usecase screen event entity state
-%% omitted: buc medium permission api
+%% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Patient["Patient"]:::actor
@@ -711,15 +857,21 @@ rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitC
 
 ```mermaid
 %% rdra-ish diagram=flow scope=buc:BucVisitCheckIn model=samples/clinic-ops
-%% kinds: flow step usecase
+%% kinds: flow step lane usecase
 %% omitted: buc
 flowchart TD
   subgraph flow__VisitCheckInFlow["受付の流れ"]
-    step__ArrivalStep["到着・予約票の確認"]:::step
-    step__DeclarationStep["資格を確認できない（申立書・障害時モード）"]:::step
-    step__EligibilityStep["資格確認"]:::step
-    step__ReferralStep["紹介状あり（初診）"]:::step
-    step__RoomingStep["診察室への案内"]:::step
+    subgraph lane__VisitCheckInFlow__Nurse["看護師"]
+      %% lane lane__VisitCheckInFlow__Nurse: actor__Nurse
+      step__RoomingStep["診察室への案内"]:::step
+    end
+    subgraph lane__VisitCheckInFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__VisitCheckInFlow__ReceptionClerk: actor__ReceptionClerk
+      step__ArrivalStep["到着・予約票の確認"]:::step
+      step__DeclarationStep["資格を確認できない（申立書・障害時モード）"]:::step
+      step__EligibilityStep["資格確認"]:::step
+      step__ReferralStep["紹介状あり（初診）"]:::step
+    end
   end
   usecase__AssignRoom["Assign Room"]:::usecase
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
@@ -749,6 +901,7 @@ flowchart TD
   step__RoomingStep -.->|covers| usecase__AssignRoom
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
   classDef usecase stroke:#333;
 ```
 
@@ -818,6 +971,12 @@ flowchart LR
   actor__ReceptionClerk -.->|performs| usecase__BatchVerifyEligibility
   actor__ReceptionClerk -.->|performs| usecase__CheckInPatient
   actor__ReceptionClerk -.->|performs| usecase__ConfirmEligibilityInOutageMode
+  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityInvalid
+  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityInvalid via step__EligibilityStep
+  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityNoInfo
+  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityNoInfo via step__EligibilityStep
+  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityValid
+  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityValid via step__EligibilityStep
   actor__ReceptionClerk -.->|performs| usecase__ReceiveReferralLetter
   actor__ReceptionClerk -.->|performs| usecase__RecheckEligibility
   actor__ReceptionClerk -.->|performs| usecase__RecordEligibilityDeclaration
@@ -921,6 +1080,61 @@ flowchart LR
 - CompleteConsultation が予約を完了にせず「計算待ち」に置くことで、会計前に予約が閉じないか。
 - IssueReferralLetter（診療情報提供書）と受付の紹介状受付（ReceiveReferralLetter）が同じ `ReferralLetter` を向きで区別できるか。
 
+#### Clinical Encounter 業務フロー図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucClinicalEncounter --out samples/clinic-ops/out/buc/flow_clinical_encounter
+```
+
+```mermaid
+%% rdra-ish diagram=flow scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__EncounterFlow["診察の流れ"]
+    subgraph lane__EncounterFlow__Clinician["医師"]
+      %% lane lane__EncounterFlow__Clinician: actor__Clinician
+      step__AmendStep["署名後の修正"]:::step
+      step__AssessmentStep["診察・診断の記録"]:::step
+      step__CompleteStep["診察終了"]:::step
+      step__ReferralOutStep["診療情報提供書の作成・送信"]:::step
+      step__SignStep["診療記録の署名"]:::step
+    end
+    subgraph lane__EncounterFlow__Nurse["看護師"]
+      %% lane lane__EncounterFlow__Nurse: actor__Nurse
+      step__OpenStep["診療記録を開く"]:::step
+      step__VitalsStep["バイタル測定"]:::step
+    end
+  end
+  usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+  usecase__CompleteConsultation["診察終了"]:::usecase
+  usecase__DocumentAssessment["Document Assessment"]:::usecase
+  usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+  usecase__OpenEncounter["Open Encounter"]:::usecase
+  usecase__RecordVitals["Record Vitals"]:::usecase
+  usecase__SignEncounter["Sign Encounter"]:::usecase
+  step__AmendStep -.->|covers| usecase__AmendEncounter
+  step__AssessmentStep -->|branches| step__ReferralOutStep
+  step__AssessmentStep -.->|covers| usecase__DocumentAssessment
+  step__AssessmentStep -->|precedes| step__SignStep
+  step__CompleteStep -.->|covers| usecase__CompleteConsultation
+  step__OpenStep -.->|covers| usecase__OpenEncounter
+  step__OpenStep -->|precedes| step__VitalsStep
+  step__ReferralOutStep -.->|covers| usecase__IssueReferralLetter
+  step__ReferralOutStep -->|precedes| step__SignStep
+  step__SignStep -.->|covers| usecase__SignEncounter
+  step__SignStep -.->|excepts| step__AmendStep
+  step__SignStep -->|precedes| step__CompleteStep
+  step__VitalsStep -.->|covers| usecase__RecordVitals
+  step__VitalsStep -->|precedes| step__AssessmentStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef usecase stroke:#333;
+```
+
 #### Clinical Encounter UC複合図
 
 生成コマンド:
@@ -933,7 +1147,7 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucCli
 %% rdra-ish diagram=usecase scope=buc:BucClinicalEncounter model=samples/clinic-ops
 %% layers: value=システム価値 boundary=システム境界 system=システム
 %% kinds: actor extsystem usecase screen event entity state
-%% omitted: buc medium permission field api
+%% omitted: buc step medium permission field api
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Clinician["医師"]:::actor
@@ -1045,6 +1259,83 @@ flowchart LR
 - RegisterPerformedProcedure が作る Charge を、会計計算入力が読めるか。
 - NotifyCriticalResult は結果確認イベントから起動されるため、手動 UC と自動 UC の違いをレビューできるか。
 
+#### Orders and Results 業務フロー図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucOrdersResults --out samples/clinic-ops/out/buc/flow_orders_results
+```
+
+```mermaid
+%% rdra-ish diagram=flow scope=buc:BucOrdersResults model=samples/clinic-ops
+%% kinds: flow step lane actor usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__LabOrderFlow["検体検査の流れ"]
+    step__ProxyOrderStep["オーダの代行入力"]:::step
+    subgraph lane__LabOrderFlow__Clinician["医師"]
+      %% lane lane__LabOrderFlow__Clinician: actor__Clinician
+      step__ConfirmOrderStep["代行入力オーダの確定"]:::step
+      step__CriticalStep["重要結果の通知"]:::step
+      step__LabOrderStep["検査オーダ"]:::step
+      step__OrderCancelStep["オーダの取消"]:::step
+      step__ResultReviewStep["検査結果の確認"]:::step
+    end
+    subgraph lane__LabOrderFlow__Nurse["看護師"]
+      %% lane lane__LabOrderFlow__Nurse: actor__Nurse
+      step__CollectStep["採血"]:::step
+      step__CostStep["実施内容（コスト）の登録"]:::step
+      step__LabResultStep["検査結果の受信"]:::step
+      step__LabelStep["採血管ラベルの発行"]:::step
+    end
+  end
+  actor__MedicalClerk["医師事務作業補助者"]:::actor
+  %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
+  actor__Nurse["看護師"]:::actor
+  %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
+  usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
+  usecase__CollectSpecimen["Collect Specimen"]:::usecase
+  usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+  usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+  usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
+  usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+  usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+  usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+  usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+  usecase__ReviewLabResult["Review Lab Result"]:::usecase
+  event__EvLabResultReceived["Lab Result Received"]:::event
+  actor__MedicalClerk -.->|performs| step__ProxyOrderStep
+  actor__Nurse -.->|performs| step__ProxyOrderStep
+  step__CollectStep -.->|covers| usecase__CollectSpecimen
+  step__CollectStep -->|precedes| step__CostStep
+  step__ConfirmOrderStep -.->|covers| usecase__ConfirmProxyOrder
+  step__ConfirmOrderStep -->|precedes| step__LabelStep
+  step__CostStep -.->|covers| usecase__RegisterPerformedProcedure
+  step__CostStep -->|precedes| step__LabResultStep
+  step__CriticalStep -.->|covers| usecase__NotifyCriticalResult
+  step__LabOrderStep -->|branches| step__ProxyOrderStep
+  step__LabOrderStep -.->|covers| usecase__PlaceLabOrder
+  step__LabOrderStep -.->|excepts| step__OrderCancelStep
+  step__LabOrderStep -->|precedes| step__LabelStep
+  step__LabResultStep -.->|covers| event__EvLabResultReceived
+  step__LabResultStep -.->|covers| usecase__ReceiveLabResult
+  step__LabResultStep -->|precedes| step__ResultReviewStep
+  step__LabelStep -.->|covers| usecase__PrintSpecimenLabel
+  step__LabelStep -->|precedes| step__CollectStep
+  step__OrderCancelStep -.->|covers| usecase__CancelClinicalOrder
+  step__ProxyOrderStep -.->|covers| usecase__EnterProxyOrder
+  step__ProxyOrderStep -->|precedes| step__ConfirmOrderStep
+  step__ResultReviewStep -->|branches| step__CriticalStep
+  step__ResultReviewStep -.->|covers| usecase__ReviewLabResult
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef actor stroke:#333;
+  classDef usecase stroke:#333;
+  classDef event stroke:#333;
+```
+
 #### Orders and Results UC複合図
 
 生成コマンド:
@@ -1057,7 +1348,7 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucOrd
 %% rdra-ish diagram=usecase scope=buc:BucOrdersResults model=samples/clinic-ops
 %% layers: value=システム価値 boundary=システム境界 system=システム
 %% kinds: actor extsystem usecase screen event entity state condition
-%% omitted: buc medium permission api
+%% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Clinician["医師"]:::actor
@@ -1202,18 +1493,26 @@ rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucPrescr
 
 ```mermaid
 %% rdra-ish diagram=flow scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
-%% kinds: flow step usecase
+%% kinds: flow step lane actor usecase
 %% omitted: buc
 flowchart TD
   subgraph flow__PrescriptionFlow["処方の流れ"]
-    step__CounselStep["服薬指導・薬剤交付"]:::step
-    step__DispenseStep["調剤・監査"]:::step
-    step__InhouseStep["院内処方（引換券）"]:::step
     step__InquiryStep["疑義照会"]:::step
-    step__OrderStep["処方オーダ"]:::step
-    step__OutsideStep["院外処方箋（電子処方箋管理サービス）"]:::step
     step__PharmacyStep["保険薬局での調剤"]:::step
+    subgraph lane__PrescriptionFlow__Clinician["医師"]
+      %% lane lane__PrescriptionFlow__Clinician: actor__Clinician
+      step__InhouseStep["院内処方（引換券）"]:::step
+      step__OrderStep["処方オーダ"]:::step
+      step__OutsideStep["院外処方箋（電子処方箋管理サービス）"]:::step
+    end
+    subgraph lane__PrescriptionFlow__Pharmacist["薬剤師"]
+      %% lane lane__PrescriptionFlow__Pharmacist: actor__Pharmacist
+      step__CounselStep["服薬指導・薬剤交付"]:::step
+      step__DispenseStep["調剤・監査"]:::step
+    end
   end
+  actor__Clinician["医師"]:::actor
+  actor__Pharmacist["薬剤師"]:::actor
   usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
   usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
   usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
@@ -1225,6 +1524,8 @@ flowchart TD
   usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
   usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
   usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+  actor__Clinician -.->|performs| step__InquiryStep
+  actor__Pharmacist -.->|performs| step__InquiryStep
   step__CounselStep -.->|covers| usecase__CounselMedication
   step__CounselStep -.->|covers| usecase__HandOverMedication
   step__DispenseStep -.->|covers| usecase__DispenseAndAudit
@@ -1245,6 +1546,8 @@ flowchart TD
   step__PharmacyStep -.->|covers| usecase__ConfirmDispense
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef actor stroke:#333;
   classDef usecase stroke:#333;
 ```
 
@@ -1315,7 +1618,11 @@ flowchart LR
   actor__Clinician -.->|performs| usecase__IssueInhouseVoucher
   actor__Clinician -.->|performs| usecase__IssueOutsidePrescription
   actor__Clinician -.->|performs| usecase__IssueRefillPrescription
+  actor__Clinician -.->|performs| usecase__RaisePrescriptionInquiry
+  %% derived actor__Clinician -> usecase__RaisePrescriptionInquiry via step__InquiryStep
   actor__Clinician -.->|performs| usecase__SearchMedication
+  actor__Pharmacist -.->|performs| usecase__AnswerPrescriptionInquiry
+  %% derived actor__Pharmacist -> usecase__AnswerPrescriptionInquiry via step__InquiryStep
   actor__Pharmacist -.->|performs| usecase__CounselMedication
   actor__Pharmacist -.->|performs| usecase__DispenseAndAudit
   actor__Pharmacist -.->|performs| usecase__HandOverMedication
@@ -1422,15 +1729,21 @@ rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitP
 
 ```mermaid
 %% rdra-ish diagram=flow scope=buc:BucVisitPayment model=samples/clinic-ops
-%% kinds: flow step usecase event
+%% kinds: flow step lane usecase event
 %% omitted: buc
 flowchart TD
   subgraph flow__VisitPaymentFlow["計算・会計の流れ"]
-    step__CalculationStep["計算受付・会計計算入力"]:::step
-    step__CallStep["会計の呼出"]:::step
-    step__KioskStep["自動精算機で精算"]:::step
-    step__ReceiptStep["領収証・明細書の交付"]:::step
-    step__WindowStep["会計窓口で精算"]:::step
+    subgraph lane__VisitPaymentFlow__AccountsClerk["医事課 会計担当"]
+      %% lane lane__VisitPaymentFlow__AccountsClerk: actor__AccountsClerk
+      step__CalculationStep["計算受付・会計計算入力"]:::step
+      step__CallStep["会計の呼出"]:::step
+      step__ReceiptStep["領収証・明細書の交付"]:::step
+      step__WindowStep["会計窓口で精算"]:::step
+    end
+    subgraph lane__VisitPaymentFlow__Patient["Patient"]
+      %% lane lane__VisitPaymentFlow__Patient: actor__Patient
+      step__KioskStep["自動精算機で精算"]:::step
+    end
   end
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
@@ -1453,6 +1766,7 @@ flowchart TD
   step__WindowStep -->|precedes| step__ReceiptStep
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
   classDef usecase stroke:#333;
   classDef event stroke:#333;
 ```
@@ -1474,6 +1788,8 @@ flowchart LR
   subgraph layer_value["システム価値"]
     actor__AccountsClerk["医事課 会計担当"]:::actor
     %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
+    actor__Patient["Patient"]:::actor
+    %% desc actor__Patient: A person receiving care through the clinic.
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
@@ -1511,6 +1827,8 @@ flowchart LR
   actor__AccountsClerk -.->|performs| usecase__SettleAtKiosk
   %% derived actor__AccountsClerk -> usecase__SettleAtKiosk via buc__BucVisitPayment
   actor__AccountsClerk -.->|performs| usecase__SettleAtWindow
+  actor__Patient -.->|performs| usecase__SettleAtKiosk
+  %% derived actor__Patient -> usecase__SettleAtKiosk via step__KioskStep
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
   event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
@@ -1597,19 +1915,22 @@ rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucBillin
 
 ```mermaid
 %% rdra-ish diagram=flow scope=buc:BucBillingClaims model=samples/clinic-ops
-%% kinds: flow step timer usecase
+%% kinds: flow step lane timer usecase
 %% omitted: buc
 flowchart TD
   subgraph flow__ClaimCycleFlow["レセプトの月次サイクル"]
-    step__AssessStep["査定と再審査請求"]:::step
-    step__CreateStatementStep["レセプト作成（月初）"]:::step
-    step__HoldStep["保留（月遅れ）"]:::step
-    step__InspectStep["院内点検"]:::step
-    step__PaidStep["支払（診療翌々月）"]:::step
-    step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
-    step__ReturnStep["返戻と再請求"]:::step
-    step__ReviewStep["審査"]:::step
-    step__SubmitStep["請求（5日～10日）"]:::step
+    subgraph lane__ClaimCycleFlow__ClaimsClerk["医事課 レセプト担当"]
+      %% lane lane__ClaimCycleFlow__ClaimsClerk: actor__ClaimsClerk
+      step__AssessStep["査定と再審査請求"]:::step
+      step__CreateStatementStep["レセプト作成（月初）"]:::step
+      step__HoldStep["保留（月遅れ）"]:::step
+      step__InspectStep["院内点検"]:::step
+      step__PaidStep["支払（診療翌々月）"]:::step
+      step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
+      step__ReturnStep["返戻と再請求"]:::step
+      step__ReviewStep["審査"]:::step
+      step__SubmitStep["請求（5日～10日）"]:::step
+    end
   end
   timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
   timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
@@ -1659,6 +1980,7 @@ flowchart TD
   step__SubmitStep -->|precedes| step__ReviewStep
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
   classDef timer stroke:#333;
   classDef usecase stroke:#333;
 ```
@@ -1743,28 +2065,28 @@ flowchart LR
   actor__ClaimsClerk -.->|performs| usecase__CreateCharge
   %% derived actor__ClaimsClerk -> usecase__CreateCharge via buc__BucBillingClaims
   actor__ClaimsClerk -.->|performs| usecase__GenerateClaimStatement
-  %% derived actor__ClaimsClerk -> usecase__GenerateClaimStatement via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__GenerateClaimStatement via buc__BucBillingClaims,step__CreateStatementStep
   actor__ClaimsClerk -.->|performs| usecase__HoldClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__InspectClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__PostPayment
-  %% derived actor__ClaimsClerk -> usecase__PostPayment via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__PostPayment via buc__BucBillingClaims,step__PaidStep
   actor__ClaimsClerk -.->|performs| usecase__ReceiveClaimAccepted
-  %% derived actor__ClaimsClerk -> usecase__ReceiveClaimAccepted via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__ReceiveClaimAccepted via buc__BucBillingClaims,step__ReviewStep
   actor__ClaimsClerk -.->|performs| usecase__ReconcileBalance
   actor__ClaimsClerk -.->|performs| usecase__RecordClaimAssessment
-  %% derived actor__ClaimsClerk -> usecase__RecordClaimAssessment via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__RecordClaimAssessment via buc__BucBillingClaims,step__AssessStep
   actor__ClaimsClerk -.->|performs| usecase__RecordClaimReturn
-  %% derived actor__ClaimsClerk -> usecase__RecordClaimReturn via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__RecordClaimReturn via buc__BucBillingClaims,step__ReturnStep
   actor__ClaimsClerk -.->|performs| usecase__RecordReceiptError
-  %% derived actor__ClaimsClerk -> usecase__RecordReceiptError via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__RecordReceiptError via buc__BucBillingClaims,step__ReceiptErrorStep
   actor__ClaimsClerk -.->|performs| usecase__ReleaseHeldStatement
   actor__ClaimsClerk -.->|performs| usecase__RequestReexamination
   actor__ClaimsClerk -.->|performs| usecase__ResendErroredStatement
-  %% derived actor__ClaimsClerk -> usecase__ResendErroredStatement via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__ResendErroredStatement via buc__BucBillingClaims,step__ReceiptErrorStep
   actor__ClaimsClerk -.->|performs| usecase__ReviewClaimTransfer
-  %% derived actor__ClaimsClerk -> usecase__ReviewClaimTransfer via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__ReviewClaimTransfer via buc__BucBillingClaims,step__ReviewStep
   actor__ClaimsClerk -.->|performs| usecase__SubmitClaimStatements
-  %% derived actor__ClaimsClerk -> usecase__SubmitClaimStatements via buc__BucBillingClaims
+  %% derived actor__ClaimsClerk -> usecase__SubmitClaimStatements via buc__BucBillingClaims,step__SubmitStep
   actor__ClaimsClerk -.->|performs| usecase__VoidCharge
   condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
@@ -1886,6 +2208,54 @@ flowchart LR
 - ScheduleFollowUpVisit が予約 BUC と同じ Appointment lifecycle を使ってよいか。
 - NotifyPatientResult と NotifyCriticalResult の通知責務が重複していないか。
 
+#### Follow-Up Care 業務フロー図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucFollowupCare --out samples/clinic-ops/out/buc/flow_followup_care
+```
+
+```mermaid
+%% rdra-ish diagram=flow scope=buc:BucFollowupCare model=samples/clinic-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__FollowupFlow["フォローアップの流れ"]
+    subgraph lane__FollowupFlow__CareCoordinator["Care Coordinator"]
+      %% lane lane__FollowupFlow__CareCoordinator: actor__CareCoordinator
+      step__CarePlanStep["ケアプランの作成"]:::step
+      step__FollowUpMsgStep["患者への連絡"]:::step
+      step__PlanCloseStep["ケアプランの終了"]:::step
+      step__ResponseStep["患者応答の確認"]:::step
+      step__ResultNoticeStep["検査結果の患者通知"]:::step
+      step__RevisitStep["再診の予約"]:::step
+    end
+  end
+  usecase__CloseCarePlan["Close Care Plan"]:::usecase
+  usecase__CreateCarePlan["Create Care Plan"]:::usecase
+  usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+  usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+  usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+  usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+  step__CarePlanStep -->|branches| step__ResultNoticeStep
+  step__CarePlanStep -.->|covers| usecase__CreateCarePlan
+  step__CarePlanStep -->|precedes| step__FollowUpMsgStep
+  step__FollowUpMsgStep -.->|covers| usecase__SendFollowUpMessage
+  step__FollowUpMsgStep -->|precedes| step__ResponseStep
+  step__PlanCloseStep -.->|covers| usecase__CloseCarePlan
+  step__ResponseStep -.->|covers| usecase__ReviewPatientResponse
+  step__ResponseStep -->|precedes| step__RevisitStep
+  step__ResultNoticeStep -.->|covers| usecase__NotifyPatientResult
+  step__ResultNoticeStep -->|precedes| step__ResponseStep
+  step__RevisitStep -.->|covers| usecase__ScheduleFollowUpVisit
+  step__RevisitStep -->|precedes| step__PlanCloseStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef usecase stroke:#333;
+```
+
 #### Follow-Up Care UC複合図
 
 生成コマンド:
@@ -1898,7 +2268,7 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucFol
 %% rdra-ish diagram=usecase scope=buc:BucFollowupCare model=samples/clinic-ops
 %% layers: value=システム価値 boundary=システム境界 system=システム
 %% kinds: actor extsystem usecase screen event entity state
-%% omitted: buc medium permission api
+%% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__CareCoordinator["Care Coordinator"]:::actor

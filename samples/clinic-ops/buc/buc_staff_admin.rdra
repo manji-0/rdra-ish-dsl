@@ -89,3 +89,7 @@ requires_permission(AuditApi, AuditRead)
 
 requires_permission(ResolveAuditFinding, AuditResolve)
 requires_medium(ResolveAuditFinding, AdminConsole)
+
+// No business flow. The schedule, room, and audit work here is master maintenance an
+// administrator does whenever it is needed, in no fixed order, so a flow would only restate the
+// list of use cases.

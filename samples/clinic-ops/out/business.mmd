@@ -59,30 +59,32 @@ flowchart LR
   actor__ClaimsClerk -.->|performs| buc__BucBillingClaims
   actor__ClinicAdmin -.->|performs| buc__BucStaffAdministration
   actor__Clinician -.->|performs| buc__BucClinicalEncounter
-  %% derived actor__Clinician -> buc__BucClinicalEncounter via usecase__AmendEncounter,usecase__CompleteConsultation,usecase__DocumentAssessment,usecase__IssueReferralLetter,usecase__SignEncounter
+  %% derived actor__Clinician -> buc__BucClinicalEncounter via step__AmendStep,step__AssessmentStep,step__CompleteStep,step__ReferralOutStep,step__SignStep,usecase__AmendEncounter,usecase__CompleteConsultation,usecase__DocumentAssessment,usecase__IssueReferralLetter,usecase__SignEncounter
   actor__Clinician -.->|performs| buc__BucOrdersResults
-  %% derived actor__Clinician -> buc__BucOrdersResults via usecase__CancelClinicalOrder,usecase__ConfirmProxyOrder,usecase__NotifyCriticalResult,usecase__PlaceLabOrder,usecase__ReviewLabResult
+  %% derived actor__Clinician -> buc__BucOrdersResults via step__ConfirmOrderStep,step__CriticalStep,step__LabOrderStep,step__OrderCancelStep,step__ResultReviewStep,usecase__CancelClinicalOrder,usecase__ConfirmProxyOrder,usecase__NotifyCriticalResult,usecase__PlaceLabOrder,usecase__ReviewLabResult
   actor__Clinician -.->|performs| buc__BucPrescriptionFulfillment
-  %% derived actor__Clinician -> buc__BucPrescriptionFulfillment via usecase__AnswerPharmacyInquiry,usecase__AnswerPrescriptionInquiry,usecase__CancelPrescription,usecase__DraftPrescription,usecase__IssueInhouseVoucher,usecase__IssueOutsidePrescription,usecase__IssueRefillPrescription,usecase__SearchMedication
+  %% derived actor__Clinician -> buc__BucPrescriptionFulfillment via step__InhouseStep,step__InquiryStep,step__OrderStep,step__OutsideStep,usecase__AnswerPharmacyInquiry,usecase__AnswerPrescriptionInquiry,usecase__CancelPrescription,usecase__DraftPrescription,usecase__IssueInhouseVoucher,usecase__IssueOutsidePrescription,usecase__IssueRefillPrescription,usecase__SearchMedication
   actor__MedicalClerk -.->|performs| buc__BucOrdersResults
-  %% derived actor__MedicalClerk -> buc__BucOrdersResults via usecase__EnterProxyOrder
+  %% derived actor__MedicalClerk -> buc__BucOrdersResults via step__ProxyOrderStep,usecase__EnterProxyOrder
   actor__Nurse -.->|performs| buc__BucClinicalEncounter
-  %% derived actor__Nurse -> buc__BucClinicalEncounter via usecase__OpenEncounter,usecase__RecordVitals
+  %% derived actor__Nurse -> buc__BucClinicalEncounter via step__OpenStep,step__VitalsStep,usecase__OpenEncounter,usecase__RecordVitals
   actor__Nurse -.->|performs| buc__BucOrdersResults
-  %% derived actor__Nurse -> buc__BucOrdersResults via usecase__CollectSpecimen,usecase__EnterProxyOrder,usecase__PrintSpecimenLabel,usecase__ReceiveLabResult,usecase__RegisterPerformedProcedure
+  %% derived actor__Nurse -> buc__BucOrdersResults via step__CollectStep,step__CostStep,step__LabResultStep,step__LabelStep,step__ProxyOrderStep,usecase__CollectSpecimen,usecase__EnterProxyOrder,usecase__PrintSpecimenLabel,usecase__ReceiveLabResult,usecase__RegisterPerformedProcedure
   actor__Nurse -.->|performs| buc__BucVisitCheckIn
-  %% derived actor__Nurse -> buc__BucVisitCheckIn via usecase__AssignRoom,usecase__PrepareEncounter
+  %% derived actor__Nurse -> buc__BucVisitCheckIn via step__RoomingStep,usecase__AssignRoom,usecase__PrepareEncounter
   actor__Patient -.->|performs| buc__BucAppointmentScheduling
-  %% derived actor__Patient -> buc__BucAppointmentScheduling via usecase__SearchAvailability
+  %% derived actor__Patient -> buc__BucAppointmentScheduling via step__AvailabilityStep,usecase__SearchAvailability
   actor__Patient -.->|performs| buc__BucPatientOnboarding
-  %% derived actor__Patient -> buc__BucPatientOnboarding via usecase__CaptureConsent,usecase__CompleteIntakeForms
+  %% derived actor__Patient -> buc__BucPatientOnboarding via step__ConsentStep,step__IntakeAnswerStep,usecase__CaptureConsent,usecase__CompleteIntakeForms
+  actor__Patient -.->|performs| buc__BucVisitPayment
+  %% derived actor__Patient -> buc__BucVisitPayment via step__KioskStep
   actor__Pharmacist -.->|performs| buc__BucPrescriptionFulfillment
-  %% derived actor__Pharmacist -> buc__BucPrescriptionFulfillment via usecase__CounselMedication,usecase__DispenseAndAudit,usecase__HandOverMedication,usecase__RaisePrescriptionInquiry
+  %% derived actor__Pharmacist -> buc__BucPrescriptionFulfillment via step__CounselStep,step__DispenseStep,step__InquiryStep,usecase__CounselMedication,usecase__DispenseAndAudit,usecase__HandOverMedication,usecase__RaisePrescriptionInquiry
   actor__ReceptionClerk -.->|performs| buc__BucAppointmentScheduling
   actor__ReceptionClerk -.->|performs| buc__BucPatientOnboarding
-  %% derived actor__ReceptionClerk -> buc__BucPatientOnboarding via usecase__ArchivePatient,usecase__ExpireIntakeForms,usecase__MergeDuplicatePatient,usecase__RegisterPatient,usecase__SearchPatient,usecase__SendIntakeForms,usecase__UpdateDemographics,usecase__VerifyInsurance
+  %% derived actor__ReceptionClerk -> buc__BucPatientOnboarding via step__ArchiveStep,step__DemographicsStep,step__InsuranceStep,step__IntakeSendStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__RegisterStep,usecase__ArchivePatient,usecase__ExpireIntakeForms,usecase__MergeDuplicatePatient,usecase__RegisterPatient,usecase__SearchPatient,usecase__SendIntakeForms,usecase__UpdateDemographics,usecase__VerifyInsurance
   actor__ReceptionClerk -.->|performs| buc__BucVisitCheckIn
-  %% derived actor__ReceptionClerk -> buc__BucVisitCheckIn via usecase__BatchVerifyEligibility,usecase__CheckInPatient,usecase__ConfirmEligibilityInOutageMode,usecase__ReceiveReferralLetter,usecase__RecheckEligibility,usecase__RecordEligibilityDeclaration,usecase__VerifyArrival
+  %% derived actor__ReceptionClerk -> buc__BucVisitCheckIn via step__ArrivalStep,step__DeclarationStep,step__EligibilityStep,step__ReferralStep,usecase__BatchVerifyEligibility,usecase__CheckInPatient,usecase__ConfirmEligibilityInOutageMode,usecase__ReceiveReferralLetter,usecase__RecheckEligibility,usecase__RecordEligibilityDeclaration,usecase__VerifyArrival
   buc__BucAppointmentScheduling -.->|triggers EvAppointmentCancelled| extsystem__MessagingGateway
   %% derived buc__BucAppointmentScheduling -> extsystem__MessagingGateway via usecase__CancelAppointment
   buc__BucAppointmentScheduling -.->|triggers EvAppointmentRescheduled| extsystem__MessagingGateway

@@ -105,3 +105,38 @@ requires_medium(CloseCarePlan, CareCoordinationConsole)
 requires_permission(NotifyPatientResult, PatientMessageSend)
 requires_medium(NotifyPatientResult, CareCoordinationConsole)
 requires_permission(NotifyPatientResultApi, PatientMessageSend)
+
+// Business flow. The care plan opens after the encounter; the patient is contacted, answers, and
+// is booked for a 再診 before the plan closes. A reviewed result is told to the patient on the way.
+flow FollowupFlow "フォローアップの流れ"
+step CarePlanStep     "ケアプランの作成"
+step ResultNoticeStep "検査結果の患者通知"
+step FollowUpMsgStep  "患者への連絡"
+step ResponseStep     "患者応答の確認"
+step RevisitStep      "再診の予約"
+step PlanCloseStep    "ケアプランの終了"
+contains(BucFollowupCare, FollowupFlow)
+contains(FollowupFlow, CarePlanStep)
+contains(FollowupFlow, ResultNoticeStep)
+contains(FollowupFlow, FollowUpMsgStep)
+contains(FollowupFlow, ResponseStep)
+contains(FollowupFlow, RevisitStep)
+contains(FollowupFlow, PlanCloseStep)
+precedes(CarePlanStep, FollowUpMsgStep)
+branches(CarePlanStep, ResultNoticeStep)
+precedes(ResultNoticeStep, ResponseStep)
+precedes(FollowUpMsgStep, ResponseStep)
+precedes(ResponseStep, RevisitStep)
+precedes(RevisitStep, PlanCloseStep)
+covers(CarePlanStep, CreateCarePlan)
+covers(ResultNoticeStep, NotifyPatientResult)
+covers(FollowUpMsgStep, SendFollowUpMessage)
+covers(ResponseStep, ReviewPatientResponse)
+covers(RevisitStep, ScheduleFollowUpVisit)
+covers(PlanCloseStep, CloseCarePlan)
+performs(CareCoordinator, CarePlanStep)
+performs(CareCoordinator, ResultNoticeStep)
+performs(CareCoordinator, FollowUpMsgStep)
+performs(CareCoordinator, ResponseStep)
+performs(CareCoordinator, RevisitStep)
+performs(CareCoordinator, PlanCloseStep)

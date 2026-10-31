@@ -134,3 +134,44 @@ requires_permission(IssueReferralLetterApi, ReferralManage)
 requires_permission(CompleteConsultation, EncounterOpen)
 requires_medium(CompleteConsultation, NurseStation)
 requires_permission(CompleteConsultationApi, EncounterOpen)
+
+// Business flow. The nurse opens the record and takes vitals, the physician examines, writes the
+// diagnosis, and signs; 診察終了 then hands the visit to 計算・会計. A signed record is amended,
+// not edited.
+flow EncounterFlow "診察の流れ"
+step OpenStep       "診療記録を開く"
+step VitalsStep     "バイタル測定"
+step AssessmentStep "診察・診断の記録"
+step ReferralOutStep "診療情報提供書の作成・送信"
+step SignStep       "診療記録の署名"
+step CompleteStep   "診察終了"
+step AmendStep      "署名後の修正"
+contains(BucClinicalEncounter, EncounterFlow)
+contains(EncounterFlow, OpenStep)
+contains(EncounterFlow, VitalsStep)
+contains(EncounterFlow, AssessmentStep)
+contains(EncounterFlow, ReferralOutStep)
+contains(EncounterFlow, SignStep)
+contains(EncounterFlow, CompleteStep)
+contains(EncounterFlow, AmendStep)
+precedes(OpenStep, VitalsStep)
+precedes(VitalsStep, AssessmentStep)
+precedes(AssessmentStep, SignStep)
+branches(AssessmentStep, ReferralOutStep)
+precedes(ReferralOutStep, SignStep)
+precedes(SignStep, CompleteStep)
+excepts(SignStep, AmendStep)
+covers(OpenStep, OpenEncounter)
+covers(VitalsStep, RecordVitals)
+covers(AssessmentStep, DocumentAssessment)
+covers(ReferralOutStep, IssueReferralLetter)
+covers(SignStep, SignEncounter)
+covers(CompleteStep, CompleteConsultation)
+covers(AmendStep, AmendEncounter)
+performs(Nurse, OpenStep)
+performs(Nurse, VitalsStep)
+performs(Clinician, AssessmentStep)
+performs(Clinician, ReferralOutStep)
+performs(Clinician, SignStep)
+performs(Clinician, CompleteStep)
+performs(Clinician, AmendStep)

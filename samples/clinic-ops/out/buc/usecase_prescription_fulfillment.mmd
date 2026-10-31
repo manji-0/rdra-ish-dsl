@@ -56,7 +56,11 @@ flowchart LR
   actor__Clinician -.->|performs| usecase__IssueInhouseVoucher
   actor__Clinician -.->|performs| usecase__IssueOutsidePrescription
   actor__Clinician -.->|performs| usecase__IssueRefillPrescription
+  actor__Clinician -.->|performs| usecase__RaisePrescriptionInquiry
+  %% derived actor__Clinician -> usecase__RaisePrescriptionInquiry via step__InquiryStep
   actor__Clinician -.->|performs| usecase__SearchMedication
+  actor__Pharmacist -.->|performs| usecase__AnswerPrescriptionInquiry
+  %% derived actor__Pharmacist -> usecase__AnswerPrescriptionInquiry via step__InquiryStep
   actor__Pharmacist -.->|performs| usecase__CounselMedication
   actor__Pharmacist -.->|performs| usecase__DispenseAndAudit
   actor__Pharmacist -.->|performs| usecase__HandOverMedication

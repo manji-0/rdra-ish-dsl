@@ -256,3 +256,12 @@ covers(CounselStep, CounselMedication)
 covers(CounselStep, HandOverMedication)
 covers(PharmacyStep, ConfirmDispense)
 covers(PharmacyStep, AnswerPharmacyInquiry)
+
+// The 保険薬局 is an external system, so PharmacyStep has no lane.
+performs(Clinician, OrderStep)
+performs(Clinician, OutsideStep)
+performs(Clinician, InhouseStep)
+performs(Pharmacist, DispenseStep)
+performs(Pharmacist, InquiryStep)
+performs(Clinician, InquiryStep)
+performs(Pharmacist, CounselStep)

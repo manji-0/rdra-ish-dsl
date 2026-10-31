@@ -23,20 +23,59 @@ flowchart LR
     buc__BucVisitPayment["計算・会計"]:::buc
     %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
     flow__ClaimCycleFlow["レセプトの月次サイクル"]:::flow
+    flow__EncounterFlow["診察の流れ"]:::flow
+    flow__FollowupFlow["フォローアップの流れ"]:::flow
+    flow__LabOrderFlow["検体検査の流れ"]:::flow
+    flow__OnboardingFlow["新患登録の流れ"]:::flow
+    flow__PatientMaintenanceFlow["患者情報の保守"]:::flow
     flow__VisitPaymentFlow["計算・会計の流れ"]:::flow
+    step__AmendStep["署名後の修正"]:::step
+    step__ArchiveStep["患者のアーカイブ"]:::step
     step__AssessStep["査定と再審査請求"]:::step
+    step__AssessmentStep["診察・診断の記録"]:::step
     step__CalculationStep["計算受付・会計計算入力"]:::step
     step__CallStep["会計の呼出"]:::step
+    step__CarePlanStep["ケアプランの作成"]:::step
+    step__CollectStep["採血"]:::step
+    step__CompleteStep["診察終了"]:::step
+    step__ConfirmOrderStep["代行入力オーダの確定"]:::step
+    step__ConsentStep["同意の取得"]:::step
+    step__CostStep["実施内容（コスト）の登録"]:::step
     step__CreateStatementStep["レセプト作成（月初）"]:::step
+    step__CriticalStep["重要結果の通知"]:::step
+    step__DemographicsStep["患者属性の変更"]:::step
+    step__FollowUpMsgStep["患者への連絡"]:::step
     step__HoldStep["保留（月遅れ）"]:::step
     step__InspectStep["院内点検"]:::step
+    step__InsuranceStep["保険資格・限度額情報の登録"]:::step
+    step__IntakeAnswerStep["問診票の回答"]:::step
+    step__IntakeExpireStep["問診票の期限切れ"]:::step
+    step__IntakeSendStep["問診票の送付"]:::step
     step__KioskStep["自動精算機で精算"]:::step
+    step__LabOrderStep["検査オーダ"]:::step
+    step__LabResultStep["検査結果の受信"]:::step
+    step__LabelStep["採血管ラベルの発行"]:::step
+    step__MaintainSearchStep["登録済み患者の検索"]:::step
+    step__MergeStep["重複患者の統合"]:::step
+    step__NewPatientSearchStep["既存患者の検索"]:::step
+    step__OpenStep["診療記録を開く"]:::step
+    step__OrderCancelStep["オーダの取消"]:::step
     step__PaidStep["支払（診療翌々月）"]:::step
+    step__PlanCloseStep["ケアプランの終了"]:::step
+    step__ProxyOrderStep["オーダの代行入力"]:::step
     step__ReceiptErrorStep["受付不能・要確認の再送（11日・12日）"]:::step
     step__ReceiptStep["領収証・明細書の交付"]:::step
+    step__ReferralOutStep["診療情報提供書の作成・送信"]:::step
+    step__RegisterStep["新患登録"]:::step
+    step__ResponseStep["患者応答の確認"]:::step
+    step__ResultNoticeStep["検査結果の患者通知"]:::step
+    step__ResultReviewStep["検査結果の確認"]:::step
     step__ReturnStep["返戻と再請求"]:::step
     step__ReviewStep["審査"]:::step
+    step__RevisitStep["再診の予約"]:::step
+    step__SignStep["診療記録の署名"]:::step
     step__SubmitStep["請求（5日～10日）"]:::step
+    step__VitalsStep["バイタル測定"]:::step
     step__WindowStep["会計窓口で精算"]:::step
     timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
     timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
@@ -409,6 +448,7 @@ flowchart LR
   buc__BucBillingClaims -->|contains| usecase__SubmitClaimStatements
   buc__BucBillingClaims -->|contains| usecase__VoidCharge
   buc__BucClinicalEncounter -->|belongs| business__CareDelivery
+  buc__BucClinicalEncounter -->|contains| flow__EncounterFlow
   buc__BucClinicalEncounter -->|contains| usecase__AmendEncounter
   buc__BucClinicalEncounter -->|contains| usecase__CompleteConsultation
   buc__BucClinicalEncounter -->|contains| usecase__DocumentAssessment
@@ -417,6 +457,7 @@ flowchart LR
   buc__BucClinicalEncounter -->|contains| usecase__RecordVitals
   buc__BucClinicalEncounter -->|contains| usecase__SignEncounter
   buc__BucFollowupCare -->|belongs| business__PatientAccess
+  buc__BucFollowupCare -->|contains| flow__FollowupFlow
   buc__BucFollowupCare -->|contains| usecase__CloseCarePlan
   buc__BucFollowupCare -->|contains| usecase__CreateCarePlan
   buc__BucFollowupCare -->|contains| usecase__NotifyPatientResult
@@ -424,6 +465,7 @@ flowchart LR
   buc__BucFollowupCare -->|contains| usecase__ScheduleFollowUpVisit
   buc__BucFollowupCare -->|contains| usecase__SendFollowUpMessage
   buc__BucOrdersResults -->|belongs| business__CareDelivery
+  buc__BucOrdersResults -->|contains| flow__LabOrderFlow
   buc__BucOrdersResults -->|contains| usecase__CancelClinicalOrder
   buc__BucOrdersResults -->|contains| usecase__CollectSpecimen
   buc__BucOrdersResults -->|contains| usecase__ConfirmProxyOrder
@@ -435,6 +477,8 @@ flowchart LR
   buc__BucOrdersResults -->|contains| usecase__RegisterPerformedProcedure
   buc__BucOrdersResults -->|contains| usecase__ReviewLabResult
   buc__BucPatientOnboarding -->|belongs| business__PatientAccess
+  buc__BucPatientOnboarding -->|contains| flow__OnboardingFlow
+  buc__BucPatientOnboarding -->|contains| flow__PatientMaintenanceFlow
   buc__BucPatientOnboarding -->|contains| usecase__ArchivePatient
   buc__BucPatientOnboarding -->|contains| usecase__CaptureConsent
   buc__BucPatientOnboarding -->|contains| usecase__CompleteIntakeForms
@@ -545,6 +589,40 @@ flowchart LR
   flow__ClaimCycleFlow -->|contains| step__ReturnStep
   flow__ClaimCycleFlow -->|contains| step__ReviewStep
   flow__ClaimCycleFlow -->|contains| step__SubmitStep
+  flow__EncounterFlow -->|contains| step__AmendStep
+  flow__EncounterFlow -->|contains| step__AssessmentStep
+  flow__EncounterFlow -->|contains| step__CompleteStep
+  flow__EncounterFlow -->|contains| step__OpenStep
+  flow__EncounterFlow -->|contains| step__ReferralOutStep
+  flow__EncounterFlow -->|contains| step__SignStep
+  flow__EncounterFlow -->|contains| step__VitalsStep
+  flow__FollowupFlow -->|contains| step__CarePlanStep
+  flow__FollowupFlow -->|contains| step__FollowUpMsgStep
+  flow__FollowupFlow -->|contains| step__PlanCloseStep
+  flow__FollowupFlow -->|contains| step__ResponseStep
+  flow__FollowupFlow -->|contains| step__ResultNoticeStep
+  flow__FollowupFlow -->|contains| step__RevisitStep
+  flow__LabOrderFlow -->|contains| step__CollectStep
+  flow__LabOrderFlow -->|contains| step__ConfirmOrderStep
+  flow__LabOrderFlow -->|contains| step__CostStep
+  flow__LabOrderFlow -->|contains| step__CriticalStep
+  flow__LabOrderFlow -->|contains| step__LabOrderStep
+  flow__LabOrderFlow -->|contains| step__LabResultStep
+  flow__LabOrderFlow -->|contains| step__LabelStep
+  flow__LabOrderFlow -->|contains| step__OrderCancelStep
+  flow__LabOrderFlow -->|contains| step__ProxyOrderStep
+  flow__LabOrderFlow -->|contains| step__ResultReviewStep
+  flow__OnboardingFlow -->|contains| step__ConsentStep
+  flow__OnboardingFlow -->|contains| step__InsuranceStep
+  flow__OnboardingFlow -->|contains| step__IntakeAnswerStep
+  flow__OnboardingFlow -->|contains| step__IntakeExpireStep
+  flow__OnboardingFlow -->|contains| step__IntakeSendStep
+  flow__OnboardingFlow -->|contains| step__NewPatientSearchStep
+  flow__OnboardingFlow -->|contains| step__RegisterStep
+  flow__PatientMaintenanceFlow -->|contains| step__ArchiveStep
+  flow__PatientMaintenanceFlow -->|contains| step__DemographicsStep
+  flow__PatientMaintenanceFlow -->|contains| step__MaintainSearchStep
+  flow__PatientMaintenanceFlow -->|contains| step__MergeStep
   flow__VisitPaymentFlow -->|contains| step__CalculationStep
   flow__VisitPaymentFlow -->|contains| step__CallStep
   flow__VisitPaymentFlow -->|contains| step__KioskStep
@@ -556,33 +634,95 @@ flowchart LR
   screen__PatientSearchScreen -.->|shows| entity__PatientAccount
   screen__PaymentWindowScreen -->|contains| field__PaymentAmountField
   screen__ReferralLetterScreen -->|contains| field__ReferralDirectionField
+  step__AmendStep -.->|covers| usecase__AmendEncounter
+  step__ArchiveStep -.->|covers| usecase__ArchivePatient
   step__AssessStep -.->|covers| usecase__RecordClaimAssessment
   step__AssessStep -.->|covers| usecase__RequestReexamination
   step__AssessStep -->|precedes| step__PaidStep
+  step__AssessmentStep -->|branches| step__ReferralOutStep
+  step__AssessmentStep -.->|covers| usecase__DocumentAssessment
+  step__AssessmentStep -->|precedes| step__SignStep
   step__CalculationStep -.->|covers| usecase__ApplySelectedTreatmentFee
   step__CalculationStep -.->|covers| usecase__CalculateVisitBill
   step__CalculationStep -->|precedes| step__CallStep
   step__CallStep -->|branches| step__KioskStep
   step__CallStep -.->|covers| usecase__CallPatientForPayment
   step__CallStep -->|precedes| step__WindowStep
+  step__CarePlanStep -->|branches| step__ResultNoticeStep
+  step__CarePlanStep -.->|covers| usecase__CreateCarePlan
+  step__CarePlanStep -->|precedes| step__FollowUpMsgStep
+  step__CollectStep -.->|covers| usecase__CollectSpecimen
+  step__CollectStep -->|precedes| step__CostStep
+  step__CompleteStep -.->|covers| usecase__CompleteConsultation
+  step__ConfirmOrderStep -.->|covers| usecase__ConfirmProxyOrder
+  step__ConfirmOrderStep -->|precedes| step__LabelStep
+  step__ConsentStep -.->|covers| usecase__CaptureConsent
+  step__ConsentStep -->|precedes| step__IntakeSendStep
+  step__CostStep -.->|covers| usecase__RegisterPerformedProcedure
+  step__CostStep -->|precedes| step__LabResultStep
   step__CreateStatementStep -.->|covers| timer__MonthlyClaimCreation
   step__CreateStatementStep -.->|covers| usecase__GenerateClaimStatement
   step__CreateStatementStep -->|precedes| step__InspectStep
+  step__CriticalStep -.->|covers| usecase__NotifyCriticalResult
+  step__DemographicsStep -.->|covers| usecase__UpdateDemographics
+  step__FollowUpMsgStep -.->|covers| usecase__SendFollowUpMessage
+  step__FollowUpMsgStep -->|precedes| step__ResponseStep
   step__HoldStep -.->|covers| usecase__HoldClaimStatement
   step__HoldStep -.->|covers| usecase__ReleaseHeldStatement
   step__HoldStep -->|repeats| step__InspectStep
   step__InspectStep -->|branches| step__HoldStep
   step__InspectStep -.->|covers| usecase__InspectClaimStatement
   step__InspectStep -->|precedes| step__SubmitStep
+  step__InsuranceStep -.->|covers| usecase__VerifyInsurance
+  step__InsuranceStep -->|precedes| step__ConsentStep
+  step__IntakeAnswerStep -.->|covers| usecase__CompleteIntakeForms
+  step__IntakeAnswerStep -.->|excepts| step__IntakeExpireStep
+  step__IntakeExpireStep -.->|covers| timer__IntakeExpiryCheck
+  step__IntakeExpireStep -.->|covers| usecase__ExpireIntakeForms
+  step__IntakeSendStep -.->|covers| event__EvAppointmentScheduled
+  step__IntakeSendStep -.->|covers| usecase__SendIntakeForms
+  step__IntakeSendStep -->|precedes| step__IntakeAnswerStep
   step__KioskStep -.->|covers| event__EvPaymentSettled
   step__KioskStep -.->|covers| usecase__SettleAtKiosk
   step__KioskStep -->|precedes| step__ReceiptStep
+  step__LabOrderStep -->|branches| step__ProxyOrderStep
+  step__LabOrderStep -.->|covers| usecase__PlaceLabOrder
+  step__LabOrderStep -.->|excepts| step__OrderCancelStep
+  step__LabOrderStep -->|precedes| step__LabelStep
+  step__LabResultStep -.->|covers| event__EvLabResultReceived
+  step__LabResultStep -.->|covers| usecase__ReceiveLabResult
+  step__LabResultStep -->|precedes| step__ResultReviewStep
+  step__LabelStep -.->|covers| usecase__PrintSpecimenLabel
+  step__LabelStep -->|precedes| step__CollectStep
+  step__MaintainSearchStep -->|branches| step__ArchiveStep
+  step__MaintainSearchStep -->|branches| step__MergeStep
+  step__MaintainSearchStep -.->|covers| usecase__SearchPatient
+  step__MaintainSearchStep -->|precedes| step__DemographicsStep
+  step__MergeStep -.->|covers| usecase__MergeDuplicatePatient
+  step__NewPatientSearchStep -.->|covers| usecase__SearchPatient
+  step__NewPatientSearchStep -->|precedes| step__RegisterStep
+  step__OpenStep -.->|covers| usecase__OpenEncounter
+  step__OpenStep -->|precedes| step__VitalsStep
+  step__OrderCancelStep -.->|covers| usecase__CancelClinicalOrder
   step__PaidStep -.->|covers| usecase__PostPayment
+  step__PlanCloseStep -.->|covers| usecase__CloseCarePlan
+  step__ProxyOrderStep -.->|covers| usecase__EnterProxyOrder
+  step__ProxyOrderStep -->|precedes| step__ConfirmOrderStep
   step__ReceiptErrorStep -.->|covers| timer__ErrorResendWindow
   step__ReceiptErrorStep -.->|covers| usecase__RecordReceiptError
   step__ReceiptErrorStep -.->|covers| usecase__ResendErroredStatement
   step__ReceiptErrorStep -->|repeats| step__SubmitStep
   step__ReceiptStep -.->|covers| usecase__IssueReceipt
+  step__ReferralOutStep -.->|covers| usecase__IssueReferralLetter
+  step__ReferralOutStep -->|precedes| step__SignStep
+  step__RegisterStep -.->|covers| usecase__RegisterPatient
+  step__RegisterStep -->|precedes| step__InsuranceStep
+  step__ResponseStep -.->|covers| usecase__ReviewPatientResponse
+  step__ResponseStep -->|precedes| step__RevisitStep
+  step__ResultNoticeStep -.->|covers| usecase__NotifyPatientResult
+  step__ResultNoticeStep -->|precedes| step__ResponseStep
+  step__ResultReviewStep -->|branches| step__CriticalStep
+  step__ResultReviewStep -.->|covers| usecase__ReviewLabResult
   step__ReturnStep -.->|covers| usecase__CorrectReturnedStatement
   step__ReturnStep -.->|covers| usecase__RecordClaimReturn
   step__ReturnStep -->|repeats| step__InspectStep
@@ -591,10 +731,17 @@ flowchart LR
   step__ReviewStep -.->|covers| usecase__ReviewClaimTransfer
   step__ReviewStep -.->|excepts| step__ReturnStep
   step__ReviewStep -->|precedes| step__PaidStep
+  step__RevisitStep -.->|covers| usecase__ScheduleFollowUpVisit
+  step__RevisitStep -->|precedes| step__PlanCloseStep
+  step__SignStep -.->|covers| usecase__SignEncounter
+  step__SignStep -.->|excepts| step__AmendStep
+  step__SignStep -->|precedes| step__CompleteStep
   step__SubmitStep -.->|covers| timer__MonthlyClaimDeadline
   step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
   step__SubmitStep -.->|excepts| step__ReceiptErrorStep
   step__SubmitStep -->|precedes| step__ReviewStep
+  step__VitalsStep -.->|covers| usecase__RecordVitals
+  step__VitalsStep -->|precedes| step__AssessmentStep
   step__WindowStep -.->|covers| usecase__SettleAtWindow
   step__WindowStep -->|precedes| step__ReceiptStep
   timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement

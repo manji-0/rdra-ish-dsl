@@ -131,3 +131,45 @@ triggers(EvAppointmentCancelled, SendAppointmentNotice)
 triggers(EvAppointmentScheduled, MessagingGateway)
 triggers(EvAppointmentRescheduled, MessagingGateway)
 triggers(EvAppointmentCancelled, MessagingGateway)
+
+// Business flow. A booked appointment can be changed or cancelled until the visit; the nightly
+// sweep marks an appointment nobody came to as 未来院.
+flow AppointmentFlow "予約の流れ"
+step AvailabilityStep "空き枠の検索"
+step ReserveStep      "仮押さえ"
+step BookStep         "予約確定"
+step NoticeStep       "予約の通知"
+step RescheduleStep   "予約の変更"
+step CancelStep       "予約の取消"
+step NoShowStep       "未来院の処理"
+contains(BucAppointmentScheduling, AppointmentFlow)
+contains(AppointmentFlow, AvailabilityStep)
+contains(AppointmentFlow, ReserveStep)
+contains(AppointmentFlow, BookStep)
+contains(AppointmentFlow, NoticeStep)
+contains(AppointmentFlow, RescheduleStep)
+contains(AppointmentFlow, CancelStep)
+contains(AppointmentFlow, NoShowStep)
+precedes(AvailabilityStep, ReserveStep)
+precedes(ReserveStep, BookStep)
+precedes(BookStep, NoticeStep)
+branches(NoticeStep, RescheduleStep)
+branches(NoticeStep, CancelStep)
+repeats(RescheduleStep, NoticeStep)
+excepts(NoticeStep, NoShowStep)
+covers(AvailabilityStep, SearchAvailability)
+covers(ReserveStep, ReserveAppointment)
+covers(BookStep, BookAppointment)
+covers(NoticeStep, SendAppointmentNotice)
+covers(RescheduleStep, RescheduleAppointment)
+covers(CancelStep, CancelAppointment)
+covers(CancelStep, EvAppointmentCancelled)
+covers(NoShowStep, MarkNoShow)
+covers(NoShowStep, NoShowSweep)
+performs(ReceptionClerk, AvailabilityStep)
+performs(Patient, AvailabilityStep)
+performs(ReceptionClerk, ReserveStep)
+performs(ReceptionClerk, BookStep)
+performs(ReceptionClerk, NoticeStep)
+performs(ReceptionClerk, RescheduleStep)
+performs(ReceptionClerk, CancelStep)

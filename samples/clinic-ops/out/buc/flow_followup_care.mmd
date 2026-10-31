@@ -1,0 +1,37 @@
+%% rdra-ish diagram=flow scope=buc:BucFollowupCare model=samples/clinic-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__FollowupFlow["フォローアップの流れ"]
+    subgraph lane__FollowupFlow__CareCoordinator["Care Coordinator"]
+      %% lane lane__FollowupFlow__CareCoordinator: actor__CareCoordinator
+      step__CarePlanStep["ケアプランの作成"]:::step
+      step__FollowUpMsgStep["患者への連絡"]:::step
+      step__PlanCloseStep["ケアプランの終了"]:::step
+      step__ResponseStep["患者応答の確認"]:::step
+      step__ResultNoticeStep["検査結果の患者通知"]:::step
+      step__RevisitStep["再診の予約"]:::step
+    end
+  end
+  usecase__CloseCarePlan["Close Care Plan"]:::usecase
+  usecase__CreateCarePlan["Create Care Plan"]:::usecase
+  usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+  usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
+  usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+  usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+  step__CarePlanStep -->|branches| step__ResultNoticeStep
+  step__CarePlanStep -.->|covers| usecase__CreateCarePlan
+  step__CarePlanStep -->|precedes| step__FollowUpMsgStep
+  step__FollowUpMsgStep -.->|covers| usecase__SendFollowUpMessage
+  step__FollowUpMsgStep -->|precedes| step__ResponseStep
+  step__PlanCloseStep -.->|covers| usecase__CloseCarePlan
+  step__ResponseStep -.->|covers| usecase__ReviewPatientResponse
+  step__ResponseStep -->|precedes| step__RevisitStep
+  step__ResultNoticeStep -.->|covers| usecase__NotifyPatientResult
+  step__ResultNoticeStep -->|precedes| step__ResponseStep
+  step__RevisitStep -.->|covers| usecase__ScheduleFollowUpVisit
+  step__RevisitStep -->|precedes| step__PlanCloseStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef usecase stroke:#333;

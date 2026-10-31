@@ -320,15 +320,21 @@ rdra-ish diagram samples/clinic-ops \
 <!-- embed: ../samples/clinic-ops/out/buc/flow_visit_check_in.mmd -->
 ```mermaid
 %% rdra-ish diagram=flow scope=buc:BucVisitCheckIn model=samples/clinic-ops
-%% kinds: flow step usecase
+%% kinds: flow step lane usecase
 %% omitted: buc
 flowchart TD
   subgraph flow__VisitCheckInFlow["受付の流れ"]
-    step__ArrivalStep["到着・予約票の確認"]:::step
-    step__DeclarationStep["資格を確認できない（申立書・障害時モード）"]:::step
-    step__EligibilityStep["資格確認"]:::step
-    step__ReferralStep["紹介状あり（初診）"]:::step
-    step__RoomingStep["診察室への案内"]:::step
+    subgraph lane__VisitCheckInFlow__Nurse["看護師"]
+      %% lane lane__VisitCheckInFlow__Nurse: actor__Nurse
+      step__RoomingStep["診察室への案内"]:::step
+    end
+    subgraph lane__VisitCheckInFlow__ReceptionClerk["医事課 受付担当"]
+      %% lane lane__VisitCheckInFlow__ReceptionClerk: actor__ReceptionClerk
+      step__ArrivalStep["到着・予約票の確認"]:::step
+      step__DeclarationStep["資格を確認できない（申立書・障害時モード）"]:::step
+      step__EligibilityStep["資格確認"]:::step
+      step__ReferralStep["紹介状あり（初診）"]:::step
+    end
   end
   usecase__AssignRoom["Assign Room"]:::usecase
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
@@ -358,6 +364,7 @@ flowchart TD
   step__RoomingStep -.->|covers| usecase__AssignRoom
   classDef flow stroke:#333;
   classDef step stroke:#333;
+  classDef lane stroke:#333;
   classDef usecase stroke:#333;
 ```
 
@@ -366,12 +373,15 @@ How to read it:
 - Each flow is `subgraph flow__<id>` holding its steps. `precedes` and `branches` are
   `-->`, `excepts` is `-.->`, and `repeats` is `-->` back to an earlier step.
 - `covers` runs from a step to the use cases (and APIs, events, or timers) that carry it.
-- clinic-ops declares no `performs(Actor, Step)`, so there are no lanes. A step one actor
-  performs would sit in `subgraph lane__<Flow>__<Actor>`.
+- A step that one actor performs (`performs(Actor, Step)`) sits in that actor's lane,
+  `subgraph lane__<Flow>__<Actor>`, whose first line names the actor. Here the receptionist
+  carries the arrival, eligibility, and referral steps, and the nurse rooms the patient.
 
 Review points:
 
 - Does every step cover a use case, and every exception rejoin the flow?
+- Is each step in the lane of the person who does it, and does the hand-off between lanes
+  match the work?
 - Is the business order in the flow the order the use cases can run in?
 
 ## Information Model

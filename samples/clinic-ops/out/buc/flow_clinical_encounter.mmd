@@ -1,0 +1,44 @@
+%% rdra-ish diagram=flow scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__EncounterFlow["診察の流れ"]
+    subgraph lane__EncounterFlow__Clinician["医師"]
+      %% lane lane__EncounterFlow__Clinician: actor__Clinician
+      step__AmendStep["署名後の修正"]:::step
+      step__AssessmentStep["診察・診断の記録"]:::step
+      step__CompleteStep["診察終了"]:::step
+      step__ReferralOutStep["診療情報提供書の作成・送信"]:::step
+      step__SignStep["診療記録の署名"]:::step
+    end
+    subgraph lane__EncounterFlow__Nurse["看護師"]
+      %% lane lane__EncounterFlow__Nurse: actor__Nurse
+      step__OpenStep["診療記録を開く"]:::step
+      step__VitalsStep["バイタル測定"]:::step
+    end
+  end
+  usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+  usecase__CompleteConsultation["診察終了"]:::usecase
+  usecase__DocumentAssessment["Document Assessment"]:::usecase
+  usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+  usecase__OpenEncounter["Open Encounter"]:::usecase
+  usecase__RecordVitals["Record Vitals"]:::usecase
+  usecase__SignEncounter["Sign Encounter"]:::usecase
+  step__AmendStep -.->|covers| usecase__AmendEncounter
+  step__AssessmentStep -->|branches| step__ReferralOutStep
+  step__AssessmentStep -.->|covers| usecase__DocumentAssessment
+  step__AssessmentStep -->|precedes| step__SignStep
+  step__CompleteStep -.->|covers| usecase__CompleteConsultation
+  step__OpenStep -.->|covers| usecase__OpenEncounter
+  step__OpenStep -->|precedes| step__VitalsStep
+  step__ReferralOutStep -.->|covers| usecase__IssueReferralLetter
+  step__ReferralOutStep -->|precedes| step__SignStep
+  step__SignStep -.->|covers| usecase__SignEncounter
+  step__SignStep -.->|excepts| step__AmendStep
+  step__SignStep -->|precedes| step__CompleteStep
+  step__VitalsStep -.->|covers| usecase__RecordVitals
+  step__VitalsStep -->|precedes| step__AssessmentStep
+  classDef flow stroke:#333;
+  classDef step stroke:#333;
+  classDef lane stroke:#333;
+  classDef usecase stroke:#333;

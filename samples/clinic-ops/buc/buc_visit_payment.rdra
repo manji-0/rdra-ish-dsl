@@ -178,6 +178,13 @@ covers(KioskStep, SettleAtKiosk)
 covers(KioskStep, EvPaymentSettled)
 covers(ReceiptStep, IssueReceipt)
 
+// The patient pays at the 自動精算機 alone, so KioskStep is in the patient's lane.
+performs(AccountsClerk, CalculationStep)
+performs(AccountsClerk, CallStep)
+performs(AccountsClerk, WindowStep)
+performs(Patient, KioskStep)
+performs(AccountsClerk, ReceiptStep)
+
 // Screen fields
 field PaymentAmountField "お支払額" access readonly required true source system
 
