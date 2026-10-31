@@ -4,6 +4,7 @@ mod effects;
 mod foreign_key;
 mod instances;
 mod keys;
+mod origin;
 mod refs;
 mod symbol;
 mod typed;
@@ -14,6 +15,7 @@ pub use effects::*;
 pub use foreign_key::*;
 pub use instances::*;
 pub use keys::*;
+pub use origin::*;
 pub use refs::*;
 pub use symbol::*;
 pub use typed::*;
@@ -31,6 +33,21 @@ impl SemanticModel {
             ColumnType::Variation(key) => self.variations.get(*key).map(|v| v.values.as_slice()),
             _ => None,
         }
+    }
+
+    /// The origin of a foreign stub, or `None` for a local element.
+    pub fn origin(&self, node: &NodeRef) -> Option<&Origin> {
+        match node {
+            NodeRef::UseCase(k) => self.use_cases.origin(*k),
+            NodeRef::Event(k) => self.events.origin(*k),
+            NodeRef::Entity(k) => self.entities.origin(*k),
+            NodeRef::Permission(k) => self.permissions.origin(*k),
+            _ => None,
+        }
+    }
+
+    pub fn is_foreign(&self, node: &NodeRef) -> bool {
+        self.origin(node).is_some()
     }
 
     /// `transitions` names this column of this entity, so it is a state axis.
@@ -183,17 +200,17 @@ pub struct SemanticModel {
     pub bucs: SlotMap<BucKey, Buc>,
     pub flows: SlotMap<FlowKey, Flow>,
     pub steps: SlotMap<StepKey, Step>,
-    pub use_cases: SlotMap<UseCaseKey, UseCase>,
+    pub use_cases: Partitioned<UseCaseKey, UseCase>,
     pub screens: SlotMap<ScreenKey, Screen>,
     pub fields: SlotMap<FieldKey, Field>,
-    pub events: SlotMap<EventKey, Event>,
-    pub entities: SlotMap<EntityKey, Entity>,
+    pub events: Partitioned<EventKey, Event>,
+    pub entities: Partitioned<EntityKey, Entity>,
     pub states: SlotMap<StateKey, State>,
     pub apis: SlotMap<ApiKey, Api>,
     pub dtos: SlotMap<DtoKey, Dto>,
     pub timers: SlotMap<TimerKey, Timer>,
     pub media: SlotMap<MediumKey, Medium>,
-    pub permissions: SlotMap<PermissionKey, Permission>,
+    pub permissions: Partitioned<PermissionKey, Permission>,
     pub variations: SlotMap<VariationKey, Variation>,
     pub conditions: SlotMap<ConditionKey, Condition>,
     pub relations: Vec<Relation>,
