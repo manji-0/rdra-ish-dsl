@@ -507,7 +507,9 @@ fn resolve_cross_comparison(
     ) {
         Some(v) => v,
         None => {
-            if matches!(cmp.lhs, Operand::IntLit(_) | Operand::Now) {
+            let dotted =
+                matches!(&cmp.lhs, Operand::QualifiedColumn(q) if q.entity.parts.len() > 1);
+            if !dotted {
                 push_error_cmp(ctx, diags, cmp, RdraError::ComparisonLhsMustBeColumn);
             }
             return None;
@@ -738,12 +740,12 @@ pub(crate) fn process_forbidden(
         }
     }
 
-    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     if conditions.is_empty() {
         return;
     }
 
     add_condition_entities_to_scope(&mut scope, &conditions);
+    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     model
         .cross_forbidden_constraints
         .push(CrossForbiddenConstraint {

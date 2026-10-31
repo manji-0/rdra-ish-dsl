@@ -552,8 +552,8 @@ fn every_expression_site_names_the_foreign_entity_once() {
             1,
         ),
         (
-            "forbidden(Order).along(Auth.Session)",
-            "57:24: NotExposed: 'Auth.Session'",
+            "forbidden(Order, Order.status == placed).along(Auth.Session)",
+            "57:48: NotExposed: 'Auth.Session'",
             1,
         ),
         (
