@@ -234,6 +234,7 @@ fn model_column(c: &SurfaceColumn) -> ModelColumn {
         default_val: None,
         label: None,
         check_constraints: Vec::new(),
+        value_labels: Vec::new(),
         is_soft_delete: false,
         is_history: false,
         is_tenant_scope: false,
