@@ -117,6 +117,8 @@ pub(crate) enum ListKind {
     BusinessInputs,
     /// The published surface (`exposes` and `shares`) as canonical text; takes no `--format`
     Surface,
+    /// One row per reference to a bound dependency: its use, the foreign element, the local element, and where
+    Dependency,
 }
 
 #[derive(ValueEnum, Clone, Copy)]
@@ -196,7 +198,7 @@ pub(crate) enum Commands {
     List {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, condition, permission-callables, actor-permission-audit, business-inputs, or surface
+        /// Element kind to list: actor, entity, requirement, adr, adr-impact, nfr, quality, constraint, buc, flow, step, usecase, field, system, api, dto, variation, condition, permission-callables, actor-permission-audit, business-inputs, surface, or dependency
         #[arg(long, default_value = "actor")]
         kind: ListKind,
         /// Output format: table, json, csv

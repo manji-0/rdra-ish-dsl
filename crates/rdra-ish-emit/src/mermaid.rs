@@ -17,8 +17,8 @@ pub use requirement::RequirementMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{
-    class_defs, col_type_str, contract_id, desc_line, lifecycle_start_states, node_id, node_label,
-    quote, render_event_flows, Header,
+    class_defs, col_type_str, contract_id, desc_line, lifecycle_start_states, node_class, node_id,
+    node_label, quote, render_event_flows, Header, FOREIGN_CLASS,
 };
 use crate::{
     collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
@@ -73,7 +73,7 @@ fn render_layered_nodes(
             out.push_str(&format!(
                 "    {id}[\"{}\"]:::{}\n",
                 quote(label),
-                node_kind_filter_name(nr)
+                node_class(model, nr)
             ));
             if let Some(desc) = desc_line(model, nr, &id) {
                 out.push_str(&format!("    {desc}\n"));
@@ -89,7 +89,7 @@ fn declare(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str
     let (Some(id), Some(label)) = (contract_id(model, node), node_label(model, node)) else {
         return;
     };
-    let kind = node_kind_filter_name(node);
+    let kind = node_class(model, node);
     out.push_str(&format!("{indent}{id}[\"{}\"]:::{kind}\n", quote(label)));
     if let Some(desc) = desc_line(model, node, &id) {
         out.push_str(&format!("{indent}{desc}\n"));
@@ -289,6 +289,15 @@ fn kinds_by_layer(nodes: &[NodeRef]) -> Vec<&'static str> {
     kinds
 }
 
+/// The classes `class_defs` writes: the kinds, plus `foreign` when a stub is drawn.
+fn classes(model: &SemanticModel, kinds: &[&'static str], nodes: &[NodeRef]) -> Vec<&'static str> {
+    let mut classes = kinds.to_vec();
+    if nodes.iter().any(|nr| model.is_foreign(nr)) {
+        classes.push(FOREIGN_CLASS);
+    }
+    classes
+}
+
 /// Every relation between two visible nodes, with `transitions` drawn from the use case to
 /// the state it enters. Each comes with its kind, so the caller can apply `--edge-kind`.
 fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKind, GraphEdge)> {
@@ -417,7 +426,7 @@ impl Emitter for RdraMermaidEmitter {
             .chain(omitted_edges)
             .map(str::to_string)
             .collect();
-        body.push_str(&class_defs(&kinds));
+        body.push_str(&class_defs(&classes(model, &kinds, &visible_nodes)));
         let header = Header {
             diagram: "rdra",
             view,

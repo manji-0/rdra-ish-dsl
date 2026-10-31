@@ -6,8 +6,8 @@ use super::{
 };
 use crate::diagram_common::{class_defs, contract_id, node_id, Header};
 use crate::{
-    collect_object_graph_nodes, object_graph_layer, EmitError, Emitter, ObjectGraphLayer, Scope,
-    View,
+    collect_object_graph_nodes, object_graph_layer, object_graph_rel_label, EmitError, Emitter,
+    ObjectGraphLayer, Scope, View,
 };
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
@@ -91,10 +91,38 @@ impl Emitter for ContextMermaidEmitter {
         for rel in &model.relations {
             // The outside node, the edge label, the node it goes through, and the use cases
             // behind it; `outbound` when the edge runs from the system.
+            let bound = |stub: &NodeRef| model.origin(stub).map(|o| NodeRef::ExtSystem(o.ext));
             let (outside, label, via, usecases, outbound) = match (&rel.kind, &rel.from, &rel.to) {
                 (RelKind::Performs, actor @ NodeRef::Actor(_), target) if in_scope(target) => {
                     let usecases = usecases_of(model, target);
-                    (actor, "performs".to_string(), target, usecases, false)
+                    (
+                        actor.clone(),
+                        "performs".to_string(),
+                        target,
+                        usecases,
+                        false,
+                    )
+                }
+                // A call to, or a read of, a bound external system's element.
+                (RelKind::Invokes | RelKind::Reads | RelKind::Shows, usecase, stub)
+                    if in_scope(usecase) && bound(stub).is_some() =>
+                {
+                    let Some(ext) = bound(stub) else { continue };
+                    let label = format!("{} {}", object_graph_rel_label(&rel.kind), event_id(stub));
+                    (ext, label, stub, vec![usecase.clone()], true)
+                }
+                // A foreign event is raised by the external system it is bound through.
+                (RelKind::Triggers, event, target) if bound(event).is_some() => {
+                    let usecases: Vec<NodeRef> = usecases_of(model, target)
+                        .into_iter()
+                        .filter(|usecase| in_scope(usecase))
+                        .collect();
+                    if usecases.is_empty() {
+                        continue;
+                    }
+                    let Some(ext) = bound(event) else { continue };
+                    let label = format!("raises {}", event_id(event));
+                    (ext, label, event, usecases, false)
                 }
                 (RelKind::Raises, extsystem @ NodeRef::ExtSystem(_), event) => {
                     let usecases: Vec<NodeRef> = targets(model, event, RelKind::Triggers)
@@ -106,7 +134,7 @@ impl Emitter for ContextMermaidEmitter {
                         continue;
                     }
                     let label = format!("raises {}", event_id(event));
-                    (extsystem, label, event, usecases, false)
+                    (extsystem.clone(), label, event, usecases, false)
                 }
                 (RelKind::Triggers, event, extsystem @ NodeRef::ExtSystem(_)) => {
                     let usecases: Vec<NodeRef> = model
@@ -124,16 +152,16 @@ impl Emitter for ContextMermaidEmitter {
                         continue;
                     }
                     let label = format!("triggers {}", event_id(event));
-                    (extsystem, label, event, usecases, true)
+                    (extsystem.clone(), label, event, usecases, true)
                 }
                 _ => continue,
             };
             let (Some(outside_id), Some(via)) =
-                (contract_id(model, outside), contract_id(model, via))
+                (contract_id(model, &outside), contract_id(model, via))
             else {
                 continue;
             };
-            linked.insert(outside.clone());
+            linked.insert(outside);
             for end in system_ends(model, &systems, &usecases) {
                 let key = if outbound {
                     (end, label.clone(), outside_id.clone())

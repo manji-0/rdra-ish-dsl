@@ -9,6 +9,9 @@ use rdra_ish_syntax::ast::{
 pub struct SymbolTarget {
     pub kind: String,
     pub id: String,
+    /// The ids of the bound external systems: a reference `Ext.Name` under one of them
+    /// names another model's element, which no rename or goto touches.
+    pub bound: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,9 +30,30 @@ pub fn reference_at_offset(ast: &Ast, offset: usize) -> Option<ReferenceAt<'_>> 
     best.map(|(_, reference)| reference)
 }
 
+/// `Ext.Name` where `Ext` is an external system bound with `from`.
+fn is_bound_reference(model: &SemanticModel, qref: &QRef) -> bool {
+    match qref.parts.as_slice() {
+        [alias, _] => model
+            .ext_systems
+            .values()
+            .any(|x| x.id == *alias && x.binding.is_some()),
+        _ => false,
+    }
+}
+
+fn bound_aliases(model: &SemanticModel) -> Vec<String> {
+    model
+        .ext_systems
+        .values()
+        .filter(|x| x.binding.is_some())
+        .map(|x| x.id.clone())
+        .collect()
+}
+
 pub fn resolve_decl_site(model: &SemanticModel, reference: ReferenceAt<'_>) -> Option<DeclSite> {
     match reference {
         ReferenceAt::Declaration { kind, id } => model.decl_sites.get(kind, id).cloned(),
+        ReferenceAt::Symbol(qref) if is_bound_reference(model, qref) => None,
         ReferenceAt::Symbol(qref) => {
             let id = qref.parts.last()?;
             let kind = if let Some(kind) = &qref.kind_qualifier {
@@ -51,7 +75,9 @@ pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Optio
         ReferenceAt::Declaration { kind, id } => Some(SymbolTarget {
             kind: kind.to_string(),
             id: id.to_string(),
+            bound: bound_aliases(model),
         }),
+        ReferenceAt::Symbol(qref) if is_bound_reference(model, qref) => None,
         ReferenceAt::Symbol(qref) => {
             let id = qref.parts.last()?.clone();
             let kind = if let Some(kind) = &qref.kind_qualifier {
@@ -63,7 +89,11 @@ pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Optio
                 };
                 node_ref_kind(node).to_string()
             };
-            Some(SymbolTarget { kind, id })
+            Some(SymbolTarget {
+                kind,
+                id,
+                bound: bound_aliases(model),
+            })
         }
     }
 }
@@ -133,6 +163,11 @@ pub fn qref_matches_target(qref: &QRef, target: &SymbolTarget) -> bool {
     };
     if id != &target.id {
         return false;
+    }
+    if let [alias, _] = qref.parts.as_slice() {
+        if target.bound.contains(alias) {
+            return false;
+        }
     }
     match &qref.kind_qualifier {
         Some(kind) => kind.name() == target.kind,
@@ -302,6 +337,7 @@ invokes(Book, BookingApi)
         let (ast, errs) = parse(src);
         assert!(errs.is_empty());
         let target = SymbolTarget {
+            bound: Vec::new(),
             kind: "usecase".to_string(),
             id: "Book".to_string(),
         };

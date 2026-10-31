@@ -37,6 +37,9 @@ fn asyncapi_document(model: &SemanticModel) -> Value {
         let publishers = extsystem_ids(model, &flow.raising_extsystems());
         let subscribers = extsystem_ids(model, &flow.delivered_to);
         if let Some(obj) = channel.as_object_mut() {
+            if let Some(origin) = model.events.origin(flow.event) {
+                obj.insert("x-rdra-ish-external".to_string(), json!(origin.dep));
+            }
             if !publishers.is_empty() {
                 obj.insert("x-publisher".to_string(), json!(publishers));
             }

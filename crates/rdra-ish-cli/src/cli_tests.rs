@@ -57,7 +57,7 @@ fn check_command_includes_source_location() {
 fn table_list_reports_empty_api_result() {
     let model = SemanticModel::default();
 
-    let output = list_elements(&model, &ListKind::Api, &ListFormat::Table).unwrap();
+    let output = list_elements(None, &model, &ListKind::Api, &ListFormat::Table).unwrap();
 
     assert_eq!(output, "No APIs found.\n");
 }
@@ -66,8 +66,8 @@ fn table_list_reports_empty_api_result() {
 fn structured_empty_lists_stay_machine_readable() {
     let model = SemanticModel::default();
 
-    let csv = list_elements(&model, &ListKind::Api, &ListFormat::Csv).unwrap();
-    let json = list_elements(&model, &ListKind::Api, &ListFormat::Json).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Api, &ListFormat::Csv).unwrap();
+    let json = list_elements(None, &model, &ListKind::Api, &ListFormat::Json).unwrap();
 
     assert_eq!(
         csv,
@@ -89,7 +89,7 @@ api CreateOrder "Create order" method POST path "/orders" idempotency "idempoten
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Api, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Api, &ListFormat::Csv).unwrap();
     assert!(csv.contains("api_id,api_label,method,path,idempotency,mode,auth_scheme"));
     assert!(csv.contains("CreateOrder,Create order,POST,/orders,idempotent,sync,bearer"));
 }
@@ -205,7 +205,7 @@ requirement ReqCheckout "Checkout must be reliable"
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Requirement, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Requirement, &ListFormat::Csv).unwrap();
     assert!(csv.contains(
         "id,label,priority,sources,stakeholders,owner,acceptance_criteria,status,risk,rationale,description"
     ));
@@ -239,7 +239,7 @@ decides(AdrOutbox, Customer)
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let adr_csv = list_elements(&model, &ListKind::Adr, &ListFormat::Csv).unwrap();
+    let adr_csv = list_elements(None, &model, &ListKind::Adr, &ListFormat::Csv).unwrap();
     assert!(adr_csv.contains(
         "id,label,status,context,decision,consequences,accepted_options,rejected_options,reasons,target_kinds,target_ids,description"
     ));
@@ -247,7 +247,7 @@ decides(AdrOutbox, Customer)
     assert!(adr_csv.contains("entity|system"));
     assert!(adr_csv.contains("Customer|CustomerSystem"));
 
-    let impact_csv = list_elements(&model, &ListKind::AdrImpact, &ListFormat::Csv).unwrap();
+    let impact_csv = list_elements(None, &model, &ListKind::AdrImpact, &ListFormat::Csv).unwrap();
     assert!(impact_csv.contains("adr_id,adr_label,adr_status,target_kind,target_id,target_label"));
     assert!(
         impact_csv.contains("AdrOutbox,Use transactional outbox,accepted,entity,Customer,Customer")
@@ -276,7 +276,7 @@ usecase CapturePayment "Capture payment"
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Usecase, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Usecase, &ListFormat::Csv).unwrap();
     assert!(csv
         .contains("id,label,preconditions,guards,postconditions,alternatives,errors,description"));
     assert!(csv.contains(
@@ -448,7 +448,7 @@ dto CreateOrderRequest "Create order request" {
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Dto, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Dto, &ListFormat::Csv).unwrap();
     assert!(csv.contains("dto_id,dto_label,field_name,field_type,required"));
     assert!(csv.contains("CreateOrderRequest,Create order request,customer_id,Int,true"));
     assert!(csv.contains("CreateOrderRequest,Create order request,note,String,false"));
@@ -474,7 +474,7 @@ maps_field(ShippingAddress, Order, "shipping_address")
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Field, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Field, &ListFormat::Csv).unwrap();
     assert!(csv.contains("field_id,field_label,access,required,source,entity_id,column_name"));
     assert!(
         csv.contains("ShippingAddress,Shipping address,editable,true,actor,Order,shipping_address")
@@ -504,7 +504,7 @@ relate(Order, Customer, N:1).optional().on_delete(set_null).on_update(cascade)
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Entity, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Entity, &ListFormat::Csv).unwrap();
     assert!(csv.contains("fk_optional,fk_on_delete,fk_on_update"));
     assert!(csv.contains("tenant_id,Int,false,false,false,false,,false,,,false,,"));
     assert!(csv.contains("total,Money,false,false,false,false,,false,,,false,,total >= 0"));
@@ -536,7 +536,7 @@ nfr CheckoutLatency "Checkout latency"
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Nfr, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Nfr, &ListFormat::Csv).unwrap();
     assert!(csv.contains("id,label,metric,target,window,slo"));
     assert!(csv.contains("CheckoutLatency,Checkout latency,p95_latency_ms,<=300,5m,99.9%"));
     assert!(csv.contains("multi_az,retryable"));
@@ -559,7 +559,7 @@ constraint AuditRetention "Audit retention"
     let (model, diags) = build_model(&ast);
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Constraint, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Constraint, &ListFormat::Csv).unwrap();
     assert!(csv.contains("AuditRetention,Audit retention"));
     assert!(csv.contains("enabled,structured,7y,restricted"));
 }
@@ -568,7 +568,7 @@ constraint AuditRetention "Audit retention"
 fn table_list_reports_empty_entity_result() {
     let model = SemanticModel::default();
 
-    let output = list_elements(&model, &ListKind::Entity, &ListFormat::Table).unwrap();
+    let output = list_elements(None, &model, &ListKind::Entity, &ListFormat::Table).unwrap();
 
     assert_eq!(output, "No entities found.\n");
 }
@@ -589,7 +589,13 @@ requires_permission(BookingApi, ScheduleWrite)
     let (ast, _) = parse(src);
     let (model, _) = build_model(&ast);
 
-    let output = list_elements(&model, &ListKind::PermissionCallables, &ListFormat::Table).unwrap();
+    let output = list_elements(
+        None,
+        &model,
+        &ListKind::PermissionCallables,
+        &ListFormat::Table,
+    )
+    .unwrap();
 
     assert!(output.contains("PERMISSION_ID"));
     assert!(output.contains("ScheduleWrite"));
@@ -597,7 +603,13 @@ requires_permission(BookingApi, ScheduleWrite)
     assert!(output.contains("BookingApi"));
     assert!(output.contains("BookAppointment->BookingApi"));
 
-    let json = list_elements(&model, &ListKind::PermissionCallables, &ListFormat::Json).unwrap();
+    let json = list_elements(
+        None,
+        &model,
+        &ListKind::PermissionCallables,
+        &ListFormat::Json,
+    )
+    .unwrap();
     assert!(json.contains("\"usecase_api_paths\""));
     assert!(json.contains("BookAppointment->BookingApi"));
 }
@@ -606,7 +618,13 @@ requires_permission(BookingApi, ScheduleWrite)
 fn table_list_reports_empty_permission_callables() {
     let model = SemanticModel::default();
 
-    let output = list_elements(&model, &ListKind::PermissionCallables, &ListFormat::Table).unwrap();
+    let output = list_elements(
+        None,
+        &model,
+        &ListKind::PermissionCallables,
+        &ListFormat::Table,
+    )
+    .unwrap();
 
     assert_eq!(output, "No permissions found.\n");
 }
@@ -631,8 +649,13 @@ requires_permission(BookingApi, ScheduleWrite)
     let (ast, _) = parse(src);
     let (model, _) = build_model(&ast);
 
-    let output =
-        list_elements(&model, &ListKind::ActorPermissionAudit, &ListFormat::Table).unwrap();
+    let output = list_elements(
+        None,
+        &model,
+        &ListKind::ActorPermissionAudit,
+        &ListFormat::Table,
+    )
+    .unwrap();
 
     assert!(output.contains("ACTOR_ID"));
     assert!(output.contains("LegacyAdmin"));
@@ -808,7 +831,7 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
     let Project { model, diags, .. } = load_project(&inputs, None).expect("load clinic-ops");
     assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
 
-    let csv = list_elements(&model, &ListKind::Condition, &ListFormat::Csv).unwrap();
+    let csv = list_elements(None, &model, &ListKind::Condition, &ListFormat::Csv).unwrap();
     let mut lines = csv.lines();
     assert_eq!(
         lines.next(),
