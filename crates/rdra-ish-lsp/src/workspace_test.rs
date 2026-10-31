@@ -55,6 +55,40 @@ mod tests {
     }
 
     #[test]
+    fn a_dependency_file_opened_under_the_product_root_is_its_own_model() {
+        let xsys =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/xsys");
+        let shop = xsys.join("shop-model");
+        let auth_file = xsys.join("auth-model/auth/session.rdra");
+        let groups = rdra_ish_core::group_by_model(&[shop.clone(), auth_file.clone()]);
+        assert_eq!(groups, vec![vec![shop.clone()], vec![auth_file.clone()]]);
+
+        for group in groups {
+            let project = load_project(&group, None).unwrap();
+            let analysis = analyze_project(project);
+            let errors: Vec<String> = analysis
+                .diagnostics
+                .iter()
+                .filter(|d| !d.is_warning)
+                .map(|d| d.error.to_string())
+                .collect();
+            assert!(errors.is_empty(), "{group:?}: {errors:?}");
+            let files: Vec<String> = analysis
+                .program
+                .sources
+                .iter()
+                .map(|(p, _, _)| p.display().to_string())
+                .collect();
+            let own = if group[0] == shop {
+                "shop-model"
+            } else {
+                "auth-model"
+            };
+            assert!(files.iter().all(|f| f.contains(own)), "{files:?}");
+        }
+    }
+
+    #[test]
     fn analyze_workspace_reports_located_type_mismatch() {
         let root = std::env::temp_dir().join(format!(
             "rdra_lsp_test_{}",

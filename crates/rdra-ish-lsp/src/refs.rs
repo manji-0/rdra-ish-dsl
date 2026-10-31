@@ -9,9 +9,10 @@ use rdra_ish_syntax::ast::{
 pub struct SymbolTarget {
     pub kind: String,
     pub id: String,
-    /// The ids of the bound external systems: a reference `Ext.Name` under one of them
-    /// names another model's element, which no rename or goto touches.
-    pub bound: Vec<String>,
+    /// The ids of the external systems bound with `from`. `Ext.Name` under one of them names
+    /// another model's element: a rename or goto of `Name` never touches it, and a rename of
+    /// the external system `Ext` rewrites the qualifier.
+    pub bound_systems: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,17 +32,11 @@ pub fn reference_at_offset(ast: &Ast, offset: usize) -> Option<ReferenceAt<'_>> 
 }
 
 /// `Ext.Name` where `Ext` is an external system bound with `from`.
-fn is_bound_reference(model: &SemanticModel, qref: &QRef) -> bool {
-    match qref.parts.as_slice() {
-        [alias, _] => model
-            .ext_systems
-            .values()
-            .any(|x| x.id == *alias && x.binding.is_some()),
-        _ => false,
-    }
+pub fn is_bound_reference(model: &SemanticModel, qref: &QRef) -> bool {
+    matches!(qref.parts.as_slice(), [alias, _] if rdra_ish_core::binding::bound_ext(model, alias).is_some())
 }
 
-fn bound_aliases(model: &SemanticModel) -> Vec<String> {
+fn bound_systems(model: &SemanticModel) -> Vec<String> {
     model
         .ext_systems
         .values()
@@ -75,7 +70,7 @@ pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Optio
         ReferenceAt::Declaration { kind, id } => Some(SymbolTarget {
             kind: kind.to_string(),
             id: id.to_string(),
-            bound: bound_aliases(model),
+            bound_systems: bound_systems(model),
         }),
         ReferenceAt::Symbol(qref) if is_bound_reference(model, qref) => None,
         ReferenceAt::Symbol(qref) => {
@@ -92,7 +87,7 @@ pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Optio
             Some(SymbolTarget {
                 kind,
                 id,
-                bound: bound_aliases(model),
+                bound_systems: bound_systems(model),
             })
         }
     }
@@ -157,22 +152,27 @@ fn collect_references_in_operand(operand: &Operand, target: &SymbolTarget, spans
     }
 }
 
-pub fn qref_matches_target(qref: &QRef, target: &SymbolTarget) -> bool {
-    let Some(id) = qref.parts.last() else {
-        return false;
-    };
-    if id != &target.id {
-        return false;
-    }
+/// The segment of `qref` that names `target`: the qualifier of `Ext.Name` when the target is
+/// the bound external system `Ext`, else the last segment.
+pub fn qref_segment_for<'a>(qref: &'a QRef, target: &SymbolTarget) -> Option<&'a str> {
     if let [alias, _] = qref.parts.as_slice() {
-        if target.bound.contains(alias) {
-            return false;
+        if target.bound_systems.contains(alias) {
+            return (target.kind == "extsystem" && *alias == target.id).then_some(alias.as_str());
         }
+    }
+    let id = qref.parts.last()?;
+    if id != &target.id {
+        return None;
     }
     match &qref.kind_qualifier {
         Some(kind) => kind.name() == target.kind,
         None => true,
     }
+    .then_some(id.as_str())
+}
+
+pub fn qref_matches_target(qref: &QRef, target: &SymbolTarget) -> bool {
+    qref_segment_for(qref, target).is_some()
 }
 
 fn visit_item<'a>(
@@ -263,14 +263,15 @@ pub fn instance_id_span(inst: &InstanceDecl, source: &str) -> Span {
 }
 
 pub fn id_span_in_qref(qref: &QRef, source: &str, target: &SymbolTarget) -> Option<Span> {
-    if !qref_matches_target(qref, target) {
-        return None;
-    }
-    let id = qref.parts.last()?;
+    let segment = qref_segment_for(qref, target)?;
     let slice = source.get(qref.span.clone())?;
-    let rel = slice.rfind(id)?;
+    let rel = if qref.parts.first().is_some_and(|first| first == segment) && qref.parts.len() > 1 {
+        slice.find(segment)?
+    } else {
+        slice.rfind(segment)?
+    };
     let start = qref.span.start + rel;
-    Some(start..start + id.len())
+    Some(start..start + segment.len())
 }
 
 fn consider<'a>(
@@ -337,7 +338,7 @@ invokes(Book, BookingApi)
         let (ast, errs) = parse(src);
         assert!(errs.is_empty());
         let target = SymbolTarget {
-            bound: Vec::new(),
+            bound_systems: Vec::new(),
             kind: "usecase".to_string(),
             id: "Book".to_string(),
         };

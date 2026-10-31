@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use rdra_ish_core::{analyze_project, load_project, Diagnostic, ProjectError, WorkspaceAnalysis};
+use rdra_ish_core::{
+    analyze_project, group_by_model, load_project, Diagnostic, ProjectError, WorkspaceAnalysis,
+};
 use tokio::sync::RwLock;
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -22,15 +24,28 @@ use crate::refs::{find_symbol_references, reference_at_offset, resolve_decl_site
 use crate::rename::{prepare_rename_range, workspace_rename, RenameError};
 use crate::semantic_tokens::{semantic_tokens, TOKEN_MODIFIERS, TOKEN_TYPES};
 use crate::symbols::{document_symbols, workspace_symbols};
-use crate::uri::{path_to_uri, watched_path_is_rdra};
+use crate::uri::{path_to_uri, paths_equal, watched_path_is_rdra};
 
 #[derive(Default)]
 struct ServerState {
     documents: HashMap<PathBuf, String>,
     workspace_roots: Vec<PathBuf>,
-    analysis: Option<WorkspaceAnalysis>,
+    /// One analysis per model the open documents and workspace roots belong to.
+    analyses: Vec<WorkspaceAnalysis>,
     published: HashSet<Url>,
     manifest_error: Option<String>,
+}
+
+impl ServerState {
+    fn analysis_for(&self, path: &Path) -> Option<&WorkspaceAnalysis> {
+        self.analyses.iter().find(|analysis| {
+            analysis
+                .program
+                .sources
+                .iter()
+                .any(|(source, _, _)| paths_equal(source, path))
+        })
+    }
 }
 
 pub struct Backend {
@@ -66,45 +81,67 @@ impl Backend {
         let overlays = state.documents.clone();
         drop(state);
 
-        let project = match load_project(&inputs, Some(&overlays)) {
-            Ok(project) => project,
-            Err(ProjectError::NoRdraFiles) => return,
-            Err(err) => {
-                self.report_load_error(&err, &overlays).await;
-                return;
+        let stale = std::mem::take(&mut self.state.write().await.published);
+        let mut analyses = Vec::new();
+        let mut published = HashSet::new();
+        let mut failed = false;
+        for group in group_by_model(&inputs) {
+            match load_project(&group, Some(&overlays)) {
+                Ok(project) => {
+                    let analysis = analyze_project(project);
+                    published.extend(self.publish_diagnostics(&analysis).await);
+                    analyses.push(analysis);
+                }
+                Err(ProjectError::NoRdraFiles) => {}
+                Err(err) => {
+                    failed = true;
+                    published.extend(self.report_load_error(&err, &group, &overlays).await);
+                }
             }
-        };
-        let analysis = analyze_project(project);
-        self.publish_diagnostics(&analysis).await;
+        }
+        for uri in stale.difference(&published) {
+            self.client
+                .publish_diagnostics(uri.clone(), vec![], None)
+                .await;
+        }
 
         let mut state = self.state.write().await;
-        state.analysis = Some(analysis);
-        state.manifest_error = None;
+        state.analyses = analyses;
+        state.published = published;
+        if !failed {
+            state.manifest_error = None;
+        }
     }
 
-    async fn report_load_error(&self, err: &ProjectError, overlays: &HashMap<PathBuf, String>) {
+    /// Log a load error of one model, show it once, and attach it to the first open
+    /// document of that model. Returns the URIs it published to.
+    async fn report_load_error(
+        &self,
+        err: &ProjectError,
+        inputs: &[PathBuf],
+        overlays: &HashMap<PathBuf, String>,
+    ) -> HashSet<Url> {
         let message = err.to_string();
         self.client.log_message(MessageType::ERROR, &message).await;
 
         let mut state = self.state.write().await;
-        state.analysis = None;
-        let stale = std::mem::take(&mut state.published);
         let announce = state.manifest_error.as_deref() != Some(message.as_str());
         state.manifest_error = Some(message.clone());
         drop(state);
 
-        for uri in stale {
-            self.client.publish_diagnostics(uri, vec![], None).await;
-        }
-        if !matches!(err, ProjectError::Manifest { .. }) {
-            return;
+        let mut published = HashSet::new();
+        if !matches!(
+            err,
+            ProjectError::Manifest { .. } | ProjectError::Dependency { .. }
+        ) {
+            return published;
         }
         if announce {
             self.client.show_message(MessageType::ERROR, &message).await;
         }
         let first_open = overlays
             .keys()
-            .filter(|path| has_rdra_extension(path))
+            .filter(|path| has_rdra_extension(path) && inputs.iter().any(|i| paths_equal(i, path)))
             .min()
             .and_then(|path| path_to_uri(path).ok());
         if let Some(uri) = first_open {
@@ -118,11 +155,12 @@ impl Backend {
             self.client
                 .publish_diagnostics(uri.clone(), vec![diagnostic], None)
                 .await;
-            self.state.write().await.published.insert(uri);
+            published.insert(uri);
         }
+        published
     }
 
-    async fn publish_diagnostics(&self, analysis: &WorkspaceAnalysis) {
+    async fn publish_diagnostics(&self, analysis: &WorkspaceAnalysis) -> HashSet<Url> {
         let mut by_source: HashMap<usize, Vec<&Diagnostic>> = HashMap::new();
         for diag in &analysis.diagnostics {
             if let Some(loc) = &diag.location {
@@ -146,7 +184,7 @@ impl Backend {
                 .await;
             published.insert(uri);
         }
-        self.state.write().await.published = published;
+        published
     }
 }
 
@@ -276,7 +314,7 @@ impl LanguageServer for Backend {
         if let Ok(path) = uri_to_path(&params.text_document.uri) {
             let mut state = self.state.write().await;
             state.documents.remove(&path);
-            state.analysis = None;
+            state.analyses.clear();
             self.client
                 .publish_diagnostics(params.text_document.uri, vec![], None)
                 .await;
@@ -305,7 +343,7 @@ impl LanguageServer for Backend {
         let position = params.text_document_position_params.position;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
@@ -339,7 +377,7 @@ impl LanguageServer for Backend {
         let position = params.text_document_position.position;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
@@ -382,7 +420,7 @@ impl LanguageServer for Backend {
         let position = params.text_document_position.position;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
@@ -403,7 +441,7 @@ impl LanguageServer for Backend {
         };
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some(doc) = open_document(analysis, &path) else {
@@ -424,8 +462,7 @@ impl LanguageServer for Backend {
         let state = self.state.read().await;
         let text = state.documents.get(&path).cloned().or_else(|| {
             state
-                .analysis
-                .as_ref()
+                .analysis_for(&path)
                 .and_then(|analysis| open_document(analysis, &path).map(|doc| doc.text.to_string()))
         });
 
@@ -452,10 +489,14 @@ impl LanguageServer for Backend {
         params: WorkspaceSymbolParams,
     ) -> Result<Option<Vec<SymbolInformation>>> {
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        if state.analyses.is_empty() {
             return Ok(None);
-        };
-        let symbols = workspace_symbols(analysis, &params.query);
+        }
+        let symbols = state
+            .analyses
+            .iter()
+            .flat_map(|analysis| workspace_symbols(analysis, &params.query))
+            .collect();
         Ok(Some(symbols))
     }
 
@@ -467,7 +508,7 @@ impl LanguageServer for Backend {
         let position = params.text_document_position_params.position;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
@@ -484,7 +525,7 @@ impl LanguageServer for Backend {
         let position = params.text_document_position_params.position;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
@@ -504,7 +545,7 @@ impl LanguageServer for Backend {
         let position = params.position;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((_, offset)) = byte_offset_at(analysis, &path, position) else {
@@ -523,7 +564,7 @@ impl LanguageServer for Backend {
         let new_name = params.new_name;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((_, offset)) = byte_offset_at(analysis, &path, position) else {
@@ -552,7 +593,7 @@ impl LanguageServer for Backend {
         };
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some(doc) = open_document(analysis, &path) else {
@@ -570,7 +611,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri.clone();
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some(doc) = open_document(analysis, &path) else {
@@ -591,7 +632,7 @@ impl LanguageServer for Backend {
         };
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some(doc) = open_document(analysis, &path) else {
@@ -608,7 +649,7 @@ impl LanguageServer for Backend {
         };
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some(doc) = open_document(analysis, &path) else {
@@ -625,7 +666,7 @@ impl LanguageServer for Backend {
         };
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some(doc) = open_document(analysis, &path) else {
@@ -651,7 +692,7 @@ impl LanguageServer for Backend {
         let position = params.text_document_position_params.position;
 
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(analysis) = state.analysis_for(&path) else {
             return Ok(None);
         };
         let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
