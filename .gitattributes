@@ -1,2 +1,3 @@
-# Snapshot files are compared byte for byte, so they keep LF on every platform.
-crates/rdra-ish-cli/tests/next_snapshots/*.json text eol=lf
+# Tests compare committed text (snapshots, docs, sample artifacts) byte for byte, so every
+# text file keeps LF on every platform.
+* text=auto eol=lf
