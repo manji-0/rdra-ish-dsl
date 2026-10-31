@@ -385,6 +385,12 @@ system Back "Back office"
 api Lonely "Lonely"
 contains(Shop, Lonely)
 contains(Back, Lonely)
+entity Receipt "Receipt (published)" { id: Int @pk }
+usecase Refund "Refund"
+creates(Refund, Order)
+creates(Refund, OrderLine)
+creates(Refund, Receipt)
+exposes(Shop, Receipt).append()
 "#,
     )
     .unwrap();
@@ -399,6 +405,10 @@ contains(Back, Lonely)
     ] {
         assert!(stderr.contains(warning), "missing `{warning}` in:\n{stderr}");
     }
+    assert!(
+        !stderr.contains("writes 'Receipt'"),
+        "a published write joins the FK group, so no SeparateTxInferred:\n{stderr}"
+    );
 }
 
 fn copy_dir(from: &Path, to: &Path) {

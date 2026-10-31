@@ -25,6 +25,27 @@ fn tla_order_snapshot() {
     insta::assert_snapshot!("order_cfg", bundle.cfg);
 }
 
+const PUBLISHED_OUTBOX: &str = r#"
+system Auth "Auth"
+actor User "User"
+usecase Login "Log in"
+performs(User, Login)
+entity Session "Session" { id: Int @pk  status: Enum(active, revoked) @default(active) }
+entity LoginRecord "Login record" { id: Int @pk  result: Enum(succeeded, failed) }
+creates(Login, Session)
+creates(Login, LoginRecord)
+sets(Login, LoginRecord, result == succeeded)
+exposes(Auth, LoginRecord).append()
+"#;
+
+#[test]
+fn tla_published_outbox_is_one_action_snapshot() {
+    let bundle = print(&system(PUBLISHED_OUTBOX), PrintMode::Check, "RdraSpec");
+    assert!(bundle.tla.contains("\nLogin(p0) ==\n"), "{}", bundle.tla);
+    assert!(!bundle.tla.contains("Login_1"), "{}", bundle.tla);
+    insta::assert_snapshot!(bundle.tla);
+}
+
 #[test]
 fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
     let ts = system(&sample("order.rdra"));

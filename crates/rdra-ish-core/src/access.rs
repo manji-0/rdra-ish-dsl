@@ -1,8 +1,8 @@
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::push_model_decl_diagnostic;
 use crate::model::{
-    ActorKey, ApiKey, BucKey, EntityKey, MediumKey, NodeRef, PermissionKey, RelKind, ScreenKey,
-    SemanticModel, UseCaseKey,
+    ActorKey, ApiKey, BucKey, CallerKind, EntityKey, MediumKey, NodeRef, PermissionKey, RelKind,
+    ScreenKey, SemanticModel, UseCaseKey,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -383,7 +383,7 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     for (usecase, permissions) in &uc_requirements {
         let usecase = *usecase;
         let actors = actors_for_usecase(model, usecase);
-        if actors.is_empty() {
+        if actors.is_empty() && !system_may_call(model, usecase) {
             let uc_id = model.use_cases[usecase].id.clone();
             for &permission in permissions {
                 push_model_decl_diagnostic(
@@ -407,7 +407,7 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         invoking_usecases.sort_by_key(|uc| model.use_cases[*uc].id.as_str());
         for usecase in invoking_usecases {
             let actors = actors_for_usecase(model, usecase);
-            if actors.is_empty() {
+            if actors.is_empty() && !system_may_call(model, usecase) {
                 let api_id = model.apis[api].id.clone();
                 let uc_id = model.use_cases[usecase].id.clone();
                 for &permission in permissions {
@@ -462,6 +462,13 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     }
 
     diags
+}
+
+fn system_may_call(model: &SemanticModel, usecase: UseCaseKey) -> bool {
+    matches!(
+        model.publication.caller_of(usecase),
+        Some(CallerKind::System | CallerKind::Any)
+    )
 }
 
 fn collect_actor_permissions(model: &SemanticModel) -> HashMap<ActorKey, HashSet<PermissionKey>> {

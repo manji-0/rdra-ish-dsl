@@ -234,6 +234,16 @@ usecase Book "Book"
     }
 
     #[test]
+    fn exposes_and_shares_are_offered_as_predicates() {
+        let (ast, _) = parse("system S \"s\"");
+        let (model, _) = build_model(&ast);
+        for (prefix, name) in [("expo", "exposes"), ("sha", "shares")] {
+            let items = completion_items(&model, prefix, prefix.len());
+            assert!(items.iter().any(|item| item.label == name), "{name}");
+        }
+    }
+
+    #[test]
     fn offers_predicate_name_at_line_start() {
         let src = "inv";
         let (ast, _) = parse("usecase X \"x\"");

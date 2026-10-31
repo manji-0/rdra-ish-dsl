@@ -36,7 +36,7 @@
       "patterns": [
         {
           "name": "keyword.control.rdra",
-          "match": "\\b(actor|usecase|entity|api|buc|import|performs|invokes|contains|reads|writes|creates|updates|deletes|relate|requires_permission|has_permission)\\b"
+          "match": "\\b(actor|usecase|entity|api|buc|import|performs|invokes|contains|reads|writes|creates|updates|deletes|relate|requires_permission|has_permission|exposes|shares)\\b"
         }
       ]
     },

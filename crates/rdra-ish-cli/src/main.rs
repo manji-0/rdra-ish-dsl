@@ -13,7 +13,7 @@ mod tlc_env;
 mod tlc_output;
 mod tlc_replay;
 mod verify;
-use cli::{Cli, Commands, ExportKind};
+use cli::{Cli, Commands, ExportKind, ListFormat, ListKind};
 use csv_cmd::run_csv;
 use diagram::{run_diagram, DiagramRequest};
 use export::export_artifact;
@@ -135,6 +135,15 @@ fn main() -> Result<()> {
             kind,
             format,
         } => {
+            if matches!(kind, ListKind::Surface) && !matches!(format, ListFormat::Table) {
+                use clap::CommandFactory;
+                Cli::command()
+                    .error(
+                        clap::error::ErrorKind::ArgumentConflict,
+                        "`list --kind surface` prints canonical text only; drop `--format`",
+                    )
+                    .exit();
+            }
             let Project {
                 program,
                 model,

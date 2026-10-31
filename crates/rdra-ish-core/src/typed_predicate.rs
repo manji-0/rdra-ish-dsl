@@ -162,6 +162,14 @@ pub fn build_typed_predicate(
                     adr: as_adr(from)?,
                     target: DecidesTarget::from_node_ref(to)?,
                 }),
+                "exposes" => Some(TypedPredicate::Exposes {
+                    system: as_system(from)?,
+                    item: crate::publication::exposed_item(to, &pred.chain)?.ok()?,
+                }),
+                "shares" => Some(TypedPredicate::Shares {
+                    system: as_system(from)?,
+                    entity: as_entity(to)?,
+                }),
                 _ => None,
             }
         }
@@ -209,6 +217,8 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::RequiresMedium { .. } => "requires_medium",
         TypedPredicate::Motivates { .. } => "motivates",
         TypedPredicate::Decides { .. } => "decides",
+        TypedPredicate::Exposes { .. } => "exposes",
+        TypedPredicate::Shares { .. } => "shares",
         TypedPredicate::Transitions { .. } => "transitions",
         TypedPredicate::Combines { .. } => "combines",
         TypedPredicate::Holds { .. } => "holds",

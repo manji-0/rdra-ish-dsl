@@ -1,0 +1,42 @@
+// One owner-side mistake per published-entity rule. `check` reports each line marked `//=>`.
+system AuthSystem "Authentication System"
+usecase Login "Log in"
+usecase Revoke "Revoke a session"
+usecase Audit "Audit sessions"
+
+entity Session "Session" {
+  id: Int @pk
+  status: Enum(none, active, revoked) @default(none)
+}
+creates(Login, Session)
+transitions(Session.status, Login, none -> active)
+transitions(Session.status, Revoke, active -> revoked)
+
+entity SessionView "Session (published)" {
+  view_id: Int @pk
+  status: Enum(active, ended)
+}
+writes(Login, SessionView)
+sets(Login, SessionView, status == active)
+
+entity LoginLog "Login log (published)" {
+  id: Int @pk
+  result: Enum(ok, failed)
+}
+creates(Login, LoginLog)
+sets(Login, LoginLog, result == ok)
+
+entity Stale "Stale projection" {
+  id: Int @pk
+}
+
+updates(Revoke, LoginLog)            //=> PublishedEntityMutated: an append entity is never updated
+reads(Revoke, SessionView)           //=> PublishedEntityReadByOwner: the owner never reads what it publishes
+relate(SessionView, Session, N:1)    //=> PublishedEntityKeysInternal: a published row keys only to published rows
+writes(Audit, SessionView)           //=> PublishedNotInSourceTx: Audit changes no internal state
+sets(Audit, SessionView, status == ended)
+
+exposes(AuthSystem, Session)         //=> InternalEntityExposed: publish a projection instead
+exposes(AuthSystem, SessionView).upsert()
+exposes(AuthSystem, LoginLog).append()
+exposes(AuthSystem, Stale).upsert()  //=> PublishedEntityNeverWritten: no use case writes it

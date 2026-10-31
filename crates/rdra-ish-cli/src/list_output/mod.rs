@@ -83,5 +83,6 @@ pub(crate) fn list_elements(
         ListKind::PermissionCallables => format_permission_callables(model, format),
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
         ListKind::BusinessInputs => format_business_inputs(model, format),
+        ListKind::Surface => Ok(rdra_ish_core::Surface::of(model).text()),
     }
 }
