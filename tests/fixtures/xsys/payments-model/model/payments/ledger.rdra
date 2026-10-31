@@ -1,5 +1,3 @@
-// The payments team's model. It lives in the `model/` directory of its own repository, so a
-// product binds it with `path = "../payments-model/model"`.
 module payments.ledger
 
 system PaymentSystem "Payment System"
@@ -21,8 +19,6 @@ api CaptureApi "Capture API" method POST path "/captures"
 contains(PaymentSystem, CaptureApi)
 invokes(CapturePayment, CaptureApi)
 
-// Internal information. `shares` lets another model name it, at the cost of a warning on
-// both sides.
 entity Charge "Charge" {
   id: Int @pk
   amount: Money
@@ -31,7 +27,6 @@ entity Charge "Charge" {
 creates(CaptureApi, Charge)
 transitions(Charge.status, RefundPayment, captured -> refunded)
 
-// Published information: an append-only ledger written with each charge.
 entity PaymentEntry "Payment entry" {
   entry_id: Int @pk
   charge_id: Int

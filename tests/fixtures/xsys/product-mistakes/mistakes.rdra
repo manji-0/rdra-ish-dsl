@@ -1,5 +1,5 @@
-// Each foreign reference below is a mistake a product author can make. The comment names the
-// diagnostic `check` reports for it.
+// Each foreign reference below is a mistake a product author can make. The test
+// crates/rdra-ish-cli/tests/cross_model.rs names the diagnostic `check` reports for each line.
 module mistakes
 import auth.session
 

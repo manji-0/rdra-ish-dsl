@@ -1,6 +1,3 @@
-//! A product that binds other models' published surfaces: every reference is checked, every
-//! mistake has a named diagnostic, and no output names an owner's internals.
-
 mod common;
 
 use clap::ValueEnum;
@@ -52,7 +49,6 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// The xsys fixtures copied under `dir`, so a test can edit a model without touching the repo.
 fn xsys_copy(test: &str) -> PathBuf {
     let dir = scratch(test);
     for model in [
@@ -67,8 +63,7 @@ fn xsys_copy(test: &str) -> PathBuf {
     dir
 }
 
-/// Ids of the owners' internals that no output of the shop may name.
-const SENTINELS: &[&str] = &[
+const OWNER_INTERNALS: &[&str] = &[
     "Session\n",
     "Session,",
     "Session\"",
@@ -84,7 +79,7 @@ const SENTINELS: &[&str] = &[
 ];
 
 fn leaks(text: &str) -> Vec<&'static str> {
-    SENTINELS
+    OWNER_INTERNALS
         .iter()
         .copied()
         .filter(|s| text.contains(s))
@@ -236,7 +231,7 @@ fn check_on_the_product_mistakes_names_each_mistake_at_its_line() {
         ("error", "mistakes.rdra:29:21: ForeignWrite: `updates` on 'Auth.SessionView' writes another model's data", "`invokes(<UseCase>, Auth.Login)`"),
         ("error", "mistakes.rdra:30:23: ForeignContained: 'Auth.Login' is a use case of external system 'Auth'", "invokes(<UseCase>, Auth.Login)"),
         ("warning", "mistakes.rdra:31:19: DirectEntityReference: `reads` names 'Pay.Charge', an internal entity payments shares", "prefer a published projection"),
-        ("error", "mistakes.rdra:33:17: ForeignStateNeedsEnvironment: a guard on 'Auth.SessionView' reads another model's state", "react to an event the owner exposes"),
+        ("error", "mistakes.rdra:33:17: ForeignStateNeedsEnvironment: a comparison on 'Auth.SessionView' reads another model's state", "react to an event the owner exposes"),
     ];
     for (level, message, hint) in expected {
         assert!(
@@ -271,8 +266,8 @@ fn list_dependency_prints_one_row_per_foreign_reference_with_its_site() {
         "use,foreign,local,file,line\n\
          has_permission,Auth.CanLogin,Shopper,shop/checkout.rdra,12\n\
          invokes,Auth.Login,SignInAtCheckout,shop/checkout.rdra,34\n\
-         invokes,Pay.CapturePayment,CapturePaymentForOrder,shop/checkout.rdra,51\n\
          reads,Auth.SessionView,PlaceOrder,shop/checkout.rdra,45\n\
+         invokes,Pay.CapturePayment,CapturePaymentForOrder,shop/checkout.rdra,51\n\
          triggers,Pay.EvPaymentCaptured,MarkPaid,shop/checkout.rdra,54\n"
     );
     for row in stdout.lines().skip(1) {
@@ -358,7 +353,267 @@ fn a_second_binding_of_one_system_and_a_binding_of_a_transitive_dependency_are_r
     assert!(stderr.contains("UnknownDependency: 'idp' is not a [dependencies] entry of the manifest (auth, payments)"), "{stderr}");
 }
 
-/// One broken dependency per case: a missing path, a cycle, and a dependency with an error.
+/// Append `line` to the shop's checkout file in a fresh copy and run `check` there.
+fn check_shop_with(test: &str, line: &str) -> (Option<i32>, String) {
+    let dir = xsys_copy(test);
+    let file = dir.join("shop-model/shop/checkout.rdra");
+    let mut src = std::fs::read_to_string(&file).unwrap();
+    src.push_str(line);
+    src.push('\n');
+    std::fs::write(&file, src).unwrap();
+    let output = rdra_ish(&["check", "shop-model"], &dir);
+    (output.status.code(), text(&output.stderr))
+}
+
+#[test]
+fn the_files_of_a_dependency_as_inputs_are_a_manifest_conflict() {
+    let xsys = fixture("shop-model").parent().unwrap().to_path_buf();
+    for args in [
+        vec!["check", "shop-model", "auth-model"],
+        vec!["list", "shop-model", "auth-model", "--kind", "usecase"],
+        vec!["check", "auth-model/auth/session.rdra", "shop-model"],
+    ] {
+        let output = rdra_ish(&args, &xsys);
+        let stderr = text(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "{args:?}: {stderr}");
+        assert!(
+            stderr.contains("ManifestConflict: the inputs belong to two models ("),
+            "{args:?}: {stderr}"
+        );
+        assert!(!text(&output.stdout).contains("Revoke"), "{args:?}");
+    }
+}
+
+#[test]
+fn a_value_from_another_model_in_sets_is_checked() {
+    let cases = [
+        (
+            "sets(PlaceOrder, Order, status == Auth.Session.status)",
+            "57:35: NotExposed: 'Auth.Session' is auth's internal entity 'Session'",
+        ),
+        (
+            "sets(PlaceOrder, Order, status == Auth.Logon.status)",
+            "57:35: UnknownForeignName: 'Auth' publishes no 'Logon'",
+        ),
+        (
+            "sets(PlaceOrder, Order, status == Nope.Zz.yy)",
+            "57:35: undefined symbol: Nope.Zz",
+        ),
+        (
+            "sets(PlaceOrder, Order, status == Auth.SessionView.status)",
+            "57:35: ForeignStateNeedsEnvironment: a comparison on 'Auth.SessionView'",
+        ),
+        (
+            "sets(PlaceOrder, Order, status == Auth.SessionView.nope)",
+            "57:35: unknown column: entity 'Auth.SessionView' has no column 'nope'",
+        ),
+    ];
+    for (line, expected) in cases {
+        let (code, stderr) = check_shop_with("cross_model_sets_value", line);
+        assert_eq!(code, Some(1), "{line}: {stderr}");
+        assert!(stderr.contains(expected), "{line}: {stderr}");
+        assert_eq!(stderr.matches("error: ").count(), 1, "{line}: {stderr}");
+    }
+}
+
+#[test]
+fn a_write_to_a_shared_entity_names_the_exposed_writer() {
+    let (code, stderr) = check_shop_with(
+        "cross_model_shared_write",
+        "updates(PlaceOrder, Pay.Charge)",
+    );
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("ForeignWrite: `updates` on 'Pay.Charge' writes another model's data"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("ask it with `invokes(<UseCase>, Pay.CapturePayment)`"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn two_stubs_with_one_generated_name_are_rejected() {
+    let dir = scratch("cross_model_slug_clash");
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
+    std::fs::create_dir_all(dir.join("own")).unwrap();
+    std::fs::create_dir_all(dir.join("prod")).unwrap();
+    std::fs::write(dir.join("own/rdra.toml"), "[model]\nname = \"own\"\n").unwrap();
+    std::fs::write(
+        dir.join("own/m.rdra"),
+        "module own.m\nsystem Sys1 \"S1\"\nsystem Sys2 \"S2\"\nactor U \"U\"\nusecase B__C \"bc\"\nusecase C \"c\"\nperforms(U, B__C)\nperforms(U, C)\nexposes(Sys1, B__C)\nexposes(Sys2, C)\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("prod/rdra.toml"),
+        "[model]\nname = \"prod\"\n[dependencies]\nown = { path = \"../own\" }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("prod/m.rdra"),
+        "module prod.m\nextsystem A \"a\" from own.Sys1\nextsystem A__B \"ab\" from own.Sys2\nactor Q \"Q\"\nusecase U1 \"u1\"\nperforms(Q, U1)\ninvokes(U1, usecase::A.B__C)\ninvokes(U1, usecase::A__B.C)\n",
+    )
+    .unwrap();
+
+    let output = rdra_ish(&["check", "prod"], &dir);
+    let stderr = text(&output.stderr);
+
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("m.rdra:3:1: ForeignSlugClash: 'A.B__C' and 'A__B.C' both generate the identifier 'A__B__C'"), "{stderr}");
+}
+
+#[test]
+fn a_foreign_operand_outside_the_entity_position_of_a_write_is_foreign_operand() {
+    let cases = [
+        (
+            "creates(Auth.Login, Order)",
+            "ForeignOperand: 'Auth.Login' cannot be argument 1 of `creates`",
+        ),
+        (
+            "creates(PlaceOrder, Auth.CanLogin)",
+            "ForeignOperand: 'Auth.CanLogin' cannot be argument 2 of `creates`",
+        ),
+        (
+            "sets(Auth.Login, Order, status == placed)",
+            "ForeignOperand: 'Auth.Login' cannot be argument 1 of `sets`",
+        ),
+        (
+            "transitions(Order.status, Auth.Login, draft -> placed)",
+            "ForeignOperand: 'Auth.Login' cannot be argument 2 of `transitions`",
+        ),
+        (
+            "updates(PlaceOrder, Auth.SessionView)",
+            "ForeignWrite: `updates` on 'Auth.SessionView'",
+        ),
+    ];
+    for (line, expected) in cases {
+        let (code, stderr) = check_shop_with("cross_model_write_positions", line);
+        assert_eq!(code, Some(1), "{line}: {stderr}");
+        assert!(stderr.contains(expected), "{line}: {stderr}");
+    }
+}
+
+#[test]
+fn next_counts_the_products_own_entities_only() {
+    let dir = xsys_copy("cross_model_next");
+    let file = dir.join("shop-model/shop/checkout.rdra");
+    let mut src = std::fs::read_to_string(&file).unwrap();
+    src.push_str("entity Bare \"Bare\" { id: Int @pk }\nreads(PlaceOrder, Bare)\n");
+    std::fs::write(&file, src).unwrap();
+
+    let output = rdra_ish(&["next", "shop-model"], &dir);
+    let stdout = text(&output.stdout);
+
+    assert!(output.status.success(), "{}", text(&output.stderr));
+    assert!(
+        stdout.contains("Entity structure      1/2 entities have a column beyond their keys"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("Auth.SessionView"), "{stdout}");
+}
+
+#[test]
+fn every_expression_site_names_the_foreign_entity_once() {
+    let cases = [
+        (
+            "forbidden(Order, Auth.SessionView.status == ended)",
+            "57:18: ForeignStateNeedsEnvironment: a comparison on 'Auth.SessionView'",
+            1,
+        ),
+        (
+            "invariant(Order).when(Auth.SessionView.status == active).then(Order.status == placed)",
+            "57:23: ForeignStateNeedsEnvironment: a comparison on 'Auth.SessionView'",
+            1,
+        ),
+        (
+            "property P1 \"p\" always(Auth.SessionView.status == active)",
+            "57:24: ForeignStateNeedsEnvironment: a comparison on 'Auth.SessionView'",
+            1,
+        ),
+        (
+            "condition C \"c\"\ncombines(C, Auth.SessionView.status)",
+            "58:13: ForeignStateNeedsEnvironment: a comparison on 'Auth.SessionView'",
+            1,
+        ),
+        (
+            "condition Cond \"c\"\nholds(Cond, A.B.C.d == x)",
+            "58:13: undefined symbol: A.B.C",
+            1,
+        ),
+        (
+            "required(Auth.SessionView, status)",
+            "57:10: ForeignOperand: 'Auth.SessionView' cannot be argument 1 of `required`",
+            1,
+        ),
+        (
+            "forbidden(Order, Auth.SessionView.nope == ended)",
+            "57:18: unknown column: entity 'Auth.SessionView' has no column 'nope'",
+            1,
+        ),
+        (
+            "forbidden(Order).along(Auth.Session)",
+            "57:24: NotExposed: 'Auth.Session'",
+            1,
+        ),
+        (
+            "forbidden(Order, shop.checkout.Order.status == placed)",
+            "error[Forbidden_Order_0]",
+            1,
+        ),
+    ];
+    for (line, expected, errors) in cases {
+        let (code, stderr) = check_shop_with("cross_model_expression_sites", line);
+        assert_eq!(code, Some(1), "{line}: {stderr}");
+        assert!(stderr.contains(expected), "{line}: {stderr}");
+        assert_eq!(
+            stderr.matches("error").count() - stderr.matches("errors").count(),
+            errors,
+            "{line}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn a_failed_binding_reports_once_and_a_missing_manifest_says_so() {
+    let dir = scratch("cross_model_no_manifest");
+    std::fs::create_dir_all(dir.join(".git")).unwrap();
+    let src = "extsystem Auth \"Auth\" from auth.AuthSystem\nactor U \"U\"\nusecase SignIn \"s\"\nperforms(U, SignIn)\ninvokes(SignIn, Auth.Login)\nhas_permission(U, Auth.CanLogin)\n";
+    std::fs::write(dir.join("m.rdra"), src).unwrap();
+    let output = rdra_ish(&["check", "m.rdra"], &dir);
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains("UnknownDependency: 'auth' is not a [dependencies] entry of the manifest (there is no rdra.toml)"), "{stderr}");
+    assert!(
+        stderr.contains("hint: create rdra.toml next to the model"),
+        "{stderr}"
+    );
+    assert_eq!(stderr.matches("error: ").count(), 1, "{stderr}");
+
+    std::fs::write(
+        dir.join("rdra.toml"),
+        "[model]\nname = \"m\"\n[dependencies]\nauth = { path = \"../auth-model\" }\n",
+    )
+    .unwrap();
+    copy_dir(
+        &fixture("auth-model"),
+        &dir.parent().unwrap().join("auth-model"),
+    );
+    std::fs::write(
+        dir.join("m.rdra"),
+        src.replace("auth.AuthSystem", "auth.Nope"),
+    )
+    .unwrap();
+    let output = rdra_ish(&["check", "m.rdra"], &dir);
+    let stderr = text(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert!(
+        stderr.contains("UnknownForeignName: 'auth' publishes no 'Nope'"),
+        "{stderr}"
+    );
+    assert_eq!(stderr.matches("error: ").count(), 1, "{stderr}");
+}
+
 fn break_dependency(dir: &Path, case: &str) {
     match case {
         "missing path" => std::fs::write(
@@ -394,7 +649,7 @@ fn a_broken_dependency_fails_check_with_one_diagnostic_that_names_it() {
         ),
         (
             "dependency with errors",
-            "DependencyHasErrors: dependency 'auth' (path ../auth-model) has 1 error(s); the first is error: ",
+            "DependencyHasErrors: dependency 'auth' (path ../auth-model) has 1 error(s); the first: error: ",
         ),
     ];
     for (name, expected) in cases {

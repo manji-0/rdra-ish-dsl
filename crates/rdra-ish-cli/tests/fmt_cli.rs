@@ -29,7 +29,6 @@ fn fmt_write_keeps_comments() {
     );
 }
 
-/// The cross-model forms survive `fmt`, and a second `fmt` changes nothing.
 #[test]
 fn fmt_round_trips_the_cross_model_forms() {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fmt_cli_cross_model");
