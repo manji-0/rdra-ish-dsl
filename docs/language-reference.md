@@ -83,14 +83,12 @@ resolution yet (see [Project manifest](./cli-reference.md#project-manifest)).
 ## Kind-Qualified References
 
 When an id is unambiguous, you reference an instance by its bare id. When the same id is
-declared for more than one kind — a common and natural situation, e.g. a `state Active`
-and an `event Active`, or an `event Cancel` and a `usecase Cancel` — you must
-disambiguate the reference with a kind prefix:
+declared for more than one kind — a common and natural situation, e.g. an `event Cancel`
+and a `usecase Cancel` — you must disambiguate the reference with a kind prefix:
 
 ```
-usecase::Foo      // the use case named Foo
+usecase::Cancel   // the use case named Cancel
 event::Cancel     // the event named Cancel
-state::Active      // the state named Active
 ```
 
 Typical cases:
@@ -168,10 +166,10 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | Predicate | Signature | Semantics |
 |---|---|---|
 | `performs` | `(Actor, UseCase \| Buc \| Step)` | The actor performs the given use case, BUC, or business step. |
-| `invokes` | `UseCase == Api` | The use case invokes the API layer. The API's writes form one transaction group of the use case. |
-| `request` | `Api == Dto` | The API accepts the DTO as a request payload. |
-| `response` | `Api == Dto` | The API returns the DTO as a successful response payload. |
-| `error_response` | `Api == Dto` | The API may return the DTO as an error payload. |
+| `invokes` | `(UseCase, Api)` | The use case invokes the API layer. The API's writes form one transaction group of the use case. |
+| `request` | `(Api, Dto)` | The API accepts the DTO as a request payload. |
+| `response` | `(Api, Dto)` | The API returns the DTO as a successful response payload. |
+| `error_response` | `(Api, Dto)` | The API may return the DTO as an error payload. |
 | `applies_to` | `(Nfr \| Condition, UseCase \| Api \| System)` | The non-functional requirement or condition applies to the use case, API, or system boundary. Use this for performance, availability, or SLO requirements tied to an operation or system, and for the rule a [condition](#conditions) selects on a use case. |
 | `combines` | `(Condition, Variation \| Entity.column)` | Links the condition to a variation or to the lifecycle column (a column some `transitions` moves) of an entity: the 条件 sheet's バリエーション and 状態モデル columns. Not allowed on a condition that has a `holds` body. |
 | `holds` | `(Condition, comparison, ...)` | The condition's body: a comma list of comparisons, an implicit conjunction, each on a qualified column such as `Payment.method == insurance`. At most one per condition. |
@@ -182,30 +180,30 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
 | `updates` | `(UseCase \| Api, Entity)` | The use case or API updates the entity. Produces a transition operation in state derivation. |
 | `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. |
-| `displays` | `UseCase == Screen` | The use case displays the screen. |
-| `shows` | `Screen == Entity` | The screen shows information from the entity. |
-| `navigates` | `Screen == Screen` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
+| `displays` | `(UseCase, Screen)` | The use case displays the screen. |
+| `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
+| `navigates` | `(Screen, Screen)` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
 | `maps_field` | `(Field, Entity, "column")` | Maps a screen field to a specific Entity column. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
 | `raises` | `(UseCase \| ExtSystem, Event)` | The use case or external system raises the event, which `triggers` hands to downstream use cases or BUCs. An external system raising an event is the inbound direction. |
 | `triggers` | `(Event \| Timer, UseCase \| Buc \| ExtSystem)` | The event or timer triggers a concrete use case or starts a BUC boundary. An event triggering an external system delivers the event to it (outbound). A timer cannot trigger an external system: the legal pairs are `Event` to any of the three and `Timer` to `UseCase` or `Buc`. |
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
-| `contains` | `(Buc, UseCase \| Flow)`, `Flow == Step`, `Screen == Field`, or `System == Api` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, or the API belongs to the system boundary. |
-| `owns` | `System == Entity` | Optionally declares that a system is responsible for an entity even before API operations are fully modeled. API CRUD still records concrete access; `owns` records intended ownership. |
+| `contains` | `(Buc, UseCase \| Flow)`, `(Flow, Step)`, `(Screen, Field)`, or `(System, Api)` | The use case or flow composes the BUC, the step composes the flow, the field belongs to the screen, or the API belongs to the system boundary. |
+| `owns` | `(System, Entity)` | Optionally declares that a system is responsible for an entity even before API operations are fully modeled. API CRUD still records concrete access; `owns` records intended ownership. |
 | `exposes` | `(System, UseCase \| Event \| Entity)` | Publishes the element to other models. A use case takes `.caller(actor \| system \| any)`, default `actor`. An entity takes `.append()` or `.upsert()` and becomes a published entity; without a mode it is `InternalEntityExposed`. See [Publishing to other models](#publishing-to-other-models). |
-| `shares` | `System == Entity` | Lets other models name an internal entity directly. The owner's `check` reports `SharedInternalEntity` (warning) for as long as the line stays. |
-| `precedes` | `Step == Step` | The first business step normally occurs before the second. |
-| `branches` | `Step == Step` | The first step may branch to the second as an alternate path. |
-| `excepts` | `Step == Step` | The first step may route to the second as an exception path. |
-| `repeats` | `Step == Step` | The first step may loop back to the second. |
+| `shares` | `(System, Entity)` | Lets other models name an internal entity directly. The owner's `check` reports `SharedInternalEntity` (warning) for as long as the line stays. |
+| `precedes` | `(Step, Step)` | The first business step normally occurs before the second. |
+| `branches` | `(Step, Step)` | The first step may branch to the second as an alternate path. |
+| `excepts` | `(Step, Step)` | The first step may route to the second as an exception path. |
+| `repeats` | `(Step, Step)` | The first step may loop back to the second. |
 | `covers` | `(Step, UseCase \| Api \| Event \| Timer)` | The business step covers the referenced use case, API, event, or timer. Use this to make UC ordering and event chains explicit in the DSL while keeping the step vocabulary business-facing. |
-| `compensates` | `UseCase == UseCase` | The first use case compensates for or rolls back the business effect of the second. Use this for alternative or exception flow review without forcing compensation into CRUD/state derivation. |
+| `compensates` | `(UseCase, UseCase)` | The first use case compensates for or rolls back the business effect of the second. Use this for alternative or exception flow review without forcing compensation into CRUD/state derivation. |
 | `coordinates` | `(UseCase, Entity, Entity)` | The use case coordinates consistency for a relation crossing system boundaries. The use case must invoke APIs on both system sides that operate the corresponding entities. |
-| `belongs` | `Buc == Business` | The BUC belongs to the business. |
-| `has_permission` | `Actor == Permission` | The actor has the permission type. This provides a base vocabulary for later UC/API permission constraints. |
+| `belongs` | `(Buc, Business)` | The BUC belongs to the business. |
+| `has_permission` | `(Actor, Permission)` | The actor has the permission type. This provides a base vocabulary for later UC/API permission constraints. |
 | `requires_permission` | `(UseCase \| Api, Permission)` | The use case or API requires the permission type. |
 | `requires_medium` | `(UseCase \| Api, Medium)` | The use case or API requires the operation medium. |
-| `motivates` | `Requirement == Buc` | The requirement motivates the BUC. |
-| `achieves` | `Requirement == Goal` | The requirement serves the goal. A requirement may achieve several goals. |
+| `motivates` | `(Requirement, Buc)` | The requirement motivates the BUC. |
+| `achieves` | `(Requirement, Goal)` | The requirement serves the goal. A requirement may achieve several goals. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). The child side, the `N` of `N:1` / `1:N` or the left of `1:1`, may be a range `lo..hi` with `lo` 0 or 1 and `hi` 1 or `*`: `relate(OrderLine, Order, 1..*:1)` says every `Order` has at least one `OrderLine`, and the lifecycle checks it as the invariant `MinCard_<Child>_<role>`. A range on the parent side is an error; write `.optional()` for a parent that may be absent. For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. For `1:1` the left end is the child: it holds the key column, marked unique. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
 | `transitions` | `(Entity.column, UseCase, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. |
@@ -1287,24 +1285,23 @@ which rewrites a model to one line per use case that raises the event. See
 
 ## Value Vocabulary for `sets`
 
-The fourth argument of `sets` is a string whose interpretation depends on the target
-column's type:
+The third argument of `sets` is an unquoted assignment `column == value`. The value is a
+bare word or number, and what it may be depends on the target column's type:
 
 ```
-// Enum column variant
+// Enum column: a variant
 sets(usecase::Capture, Payment, status == captured)
 
 // Bool column
 sets(usecase::Enable, Switch, enabled == true)
 
-// Set a nullable column to non-null without recording a type
+// Int column: a number
+sets(usecase::Restock, Stock, stock == 3)
+
+// Nullable column: make it non-null
 sets(usecase::Login, UserAccount, last_login_at == present)
 
-// Set a nullable column to non-null, recording a PostgreSQL-specific type
-sets(usecase::Deliver, Order, delivered_at == present)
-sets(usecase::Tag, Doc, metadata == present)
-
-// Set a nullable column to null
+// Nullable column: make it null
 sets(usecase::Logout, Session, token == null)
 ```
 
@@ -1315,11 +1312,13 @@ names `scripts/migrate-phase3.py`.
 |---|---|---|
 | Enum variant name | `Enum` column | Set the column to that variant. |
 | `true` / `false` | `Bool` column | Set the boolean value. |
+| A number | `Int` column | Set the column to that value. |
 | `present` | `@null` column | Make the column non-null (value present). |
 | `null` | `@null` column | Make the column null. |
 
-PostgreSQL type names are **not** valid in `sets`; use `present` for a nullable non-null
-value. Display/storage types belong on entity annotations or DBML export inference.
+`sets` records which value a use case leaves, not how it is stored. A storage type name
+such as `timestamptz` is not a value; write `present` for a nullable column the use case
+fills. The storage type belongs on the column's type and the DBML export.
 
 ### Driving comparison propositions with `sets`
 
@@ -1347,8 +1346,8 @@ that drives a comparison to one truth while its own Int `sets` make it the other
 
 | Fourth argument | Meaning |
 |---|---|
-| `true` | The comparison holds after this use case / event executes. |
-| `false` | The comparison does not hold after this use case / event executes. |
+| `true` | The comparison holds after this use case runs. |
+| `false` | The comparison does not hold after this use case runs. |
 
 ---
 
@@ -1586,10 +1585,10 @@ property PaidLeadsToShipped "paid eventually reaches shipped"
   leads_to(Order.status == paid, Order.status == shipped)
 
 property EventuallyTerminal "order finishes"
-  eventually(Order.status == delivered \/ Order.status == cancelled)
+  eventually(Order.status == delivered or Order.status == cancelled)
 
 property NeverBoth "mutex"
-  always ~(Order.status == paid /\ Order.status == cancelled)
+  always(not (Order.status == paid and Order.status == cancelled))
 ```
 
 | Form | TLA+ |

@@ -145,20 +145,20 @@ kinds fail to parse, with a hint naming the replacement.
 | Predicate | Signature | Meaning |
 |---|---|---|
 | `performs` | `(Actor, UseCase\|Buc\|Step)` | actor performs a use case, every use case of a BUC, or a business step |
-| `contains` | `Buc == UseCase` / `Buc == Flow` / `Flow == Step` / `System == Api` / `Screen == Field` | composition |
-| `precedes/branches/excepts/repeats` | `Step == Step` | business flow order, alternatives, exceptions, loops |
+| `contains` | `(Buc, UseCase)` / `(Buc, Flow)` / `(Flow, Step)` / `(System, Api)` / `(Screen, Field)` | composition |
+| `precedes/branches/excepts/repeats` | `(Step, Step)` | business flow order, alternatives, exceptions, loops |
 | `covers` | `(Step, UseCase\|Api\|Event\|Timer)` | business step covers model behavior |
-| `belongs` | `Buc == Business` | BUC ownership, optionally chained with `.by(Medium\|"text")` |
+| `belongs` | `(Buc, Business)` | BUC ownership, optionally chained with `.by(Medium\|"text")` |
 | `reads/writes/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation |
-| `displays` | `UseCase == Screen` | UI path |
-| `shows` | `Screen == Entity` | screen data exposure |
-| `navigates` | `Screen == Screen` | screen transition, optionally `.via(UseCase)` for the operation that causes it |
-| `invokes` | `UseCase == Api` | UC delegates to an API boundary |
+| `displays` | `(UseCase, Screen)` | UI path |
+| `shows` | `(Screen, Entity)` | screen data exposure |
+| `navigates` | `(Screen, Screen)` | screen transition, optionally `.via(UseCase)` for the operation that causes it |
+| `invokes` | `(UseCase, Api)` | UC delegates to an API boundary |
 | `maps_field` | `(Field, Entity, "column")` | screen field to logical data mapping |
-| `request/response/error_response` | `Api == Dto` | API payload contract |
+| `request/response/error_response` | `(Api, Dto)` | API payload contract |
 | `coordinates` | `(UseCase, Entity, Entity)` | UC coordinates cross-system consistency |
-| `compensates` | `UseCase == UseCase` | the first use case compensates the second |
-| `owns` | `System == Entity` | explicit intended ownership before CRUD is complete |
+| `compensates` | `(UseCase, UseCase)` | the first use case compensates the second |
+| `owns` | `(System, Entity)` | explicit intended ownership before CRUD is complete |
 | `raises` | `(UseCase\|ExtSystem, Event)` | a use case emits an event; an external system raising one is inbound |
 | `triggers` | `(Event\|Timer, UseCase\|Buc\|ExtSystem)` | an event or timer starts a use case or a BUC; an event delivered to an external system is outbound (a timer never triggers one) |
 | `outbox` | `(Event)` | the event is published outside the model, so it needs no local consumer |
@@ -175,14 +175,14 @@ kinds fail to parse, with a hint naming the replacement.
 | `property` | `Name ["label"] always\|eventually\|leads_to(...)` | temporal path property, checked by `verify` only |
 | `after` | `(UseCase).assert(...)` | predicate on the state each step of the use case leaves |
 | `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation and generated key; see below |
-| `has_permission` | `Actor == Permission` | actor-side grant |
+| `has_permission` | `(Actor, Permission)` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |
 | `requires_medium` | `(UseCase\|Api, Medium)` | UC/API required operation medium |
 | `applies_to` | `(Nfr\|Condition, UseCase\|Api\|System)` | NFR scope; a condition's rule applies to the use case (a body guards it) |
 | `qualifies` / `constrains` | `(Nfr\|Constraint, Quality)` / `(Constraint, UseCase\|Api\|System\|Entity\|Dto)` | quality category and guardrail scope |
 | `combines` | `(Condition, Variation\|Entity.column)` | traceability link to a variation or a lifecycle column |
 | `holds` | `(Condition, Entity.col == value, ...)` | condition body (implicit AND); links are then derived, so no `combines` |
-| `motivates` / `achieves` / `decides` | `Requirement == Buc` / `Requirement == Goal` / `Adr == target` | requirement, goal, and decision traceability; a non-goal is a requirement with `status "out-of-scope"` and a `rationale` |
+| `motivates` / `achieves` / `decides` | `(Requirement, Buc)` / `(Requirement, Goal)` / `(Adr, target)` | requirement, goal, and decision traceability; a non-goal is a requirement with `status "out-of-scope"` and a `rationale` |
 
 `relate(Child, Parent, N:1)` generates the key column `{role}_{parent key column}` on the
 child (`order_id`); `1:N` puts it on the right entity, and `1:1` on the left, marked
