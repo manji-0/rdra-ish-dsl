@@ -544,9 +544,39 @@ use case to execute. This is the refined form when the entry action is known. Th
 validates that a triggered use case belongs to at least one BUC via `contains`; a warning
 is emitted otherwise. Use `diagram --kind event` to visualise the full
 `raises -> Event -> triggers` chain, and `diagram --kind state` for the transitions the
-triggered use cases drive. The order of `raises`
-and `triggers` between use cases adds no guard to state derivation: a use case is limited
-only by the states it requires and by the guards of its linked conditions.
+triggered use cases drive.
+
+The order of `raises` and `triggers` between use cases adds no guard to state derivation:
+a use case is limited only by the states it requires and by the guards of its linked
+conditions. `states`, `check`, and `verify` therefore let a triggered use case run before
+the use case that raises its event. This over-approximates the flow, so a check never
+misses a violation the event order could produce, but it can report a run that the event
+order prevents. In the model below, `check` reports `AfterAssert_IssueCert_0` with the trace
+RequestCert, IssueCert, although in the real flow IssueCert runs only after
+ExecuteCertIssue raises `EvOrderExecuted`.
+
+```rdra
+transitions(CertificateOrder.status, ExecuteCertIssue, requested -> executed)
+raises(ExecuteCertIssue, EvOrderExecuted)
+triggers(EvOrderExecuted, IssueCert)
+creates(IssueCert, ClientCertificate)
+relate(ClientCertificate, CertificateOrder, N:1)
+after(IssueCert).assert(CertificateOrder.status == executed)
+```
+
+When a rule depends on the event order, state what the order guarantees as a `condition`
+guard on the triggered use case. Here the event is raised only once the order is
+`executed`, so IssueCert needs an executed order:
+
+```rdra
+condition OrderExecuted "実行済みの依頼にだけ証明書を作る"
+holds(OrderExecuted, CertificateOrder.status == executed)
+applies_to(OrderExecuted, IssueCert)
+```
+
+With the guard, `check` and `verify --instance-count 2` pass. The guard also documents the
+precondition the event handler relies on, so it stays true if the use case is later started
+some other way.
 
 `outbox(event::E)` declares that a raised event is intentionally published outside the
 local model boundary, such as a domain event sent to an outbox, external subscriber, or

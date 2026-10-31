@@ -151,7 +151,10 @@ case's action:
   trace link.
 - A body applied to a use case that writes nothing is `UnbindableCondition`.
 
-The order of `raises` and `triggers` between use cases adds no guard.
+The order of `raises` and `triggers` between use cases adds no guard, so a triggered use
+case can run before the use case that raises its event. A rule that depends on the event
+order needs the precondition the order guarantees as a `condition` guard on the triggered
+use case ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 
 **Clock.** When something compares a column to `now`, a `Tick` action adds one to
 `now` until it reaches the top of the Int range.

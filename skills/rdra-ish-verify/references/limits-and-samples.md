@@ -10,6 +10,10 @@
 - **`.along`**: each adjacent pair needs a `relate` that binds it; the invariant joins
   them with `Child_owner_Parent` equalities. Without a `relate` the rule is
   `UnbindableScope`, an error.
+- **Event order**: `raises` and `triggers` add no guard, so a triggered use case can run
+  before the use case that raises its event. A check never misses a violation the event
+  order allows, but it can report a run the order prevents. Put what the order guarantees
+  on the triggered use case as a `condition` guard (`holds(..)` + `applies_to(.., UC)`).
 - **Quantifiers**: `\A` / `\E` over `Entity_Ids`. A `relate` links the related instance
   through its owner; otherwise the related side is independent.
 - **Atomic use case**: one use case is one atomic action per transaction group it
