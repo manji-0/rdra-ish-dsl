@@ -25,21 +25,21 @@ usecase ConfirmEligibilityInOutageMode "システム障害時モードでの資�
 // 紹介状を受領し各診察室へ回付 (sendai-iji-gairai-shiyousyo.txt:171); 紹介状受付処理
 // (koseikan-2024-iji-shiyousyo.txt:101).
 usecase ReceiveReferralLetter "紹介状受付処理"
-usecase AssignRoom        "Assign Room"
-usecase PrepareEncounter  "Prepare Encounter"
+usecase AssignRoom        "診察室への案内"
+usecase PrepareEncounter  "診療の準備"
 
 screen CheckInScreen     "受付画面"
 screen EligibilityScreen "資格確認画面"
 screen ReferralScreen    "紹介状受付画面"
-screen RoomBoardScreen   "Room Board Screen"
+screen RoomBoardScreen   "診察室ボード画面"
 
-api VerifyArrivalApi     "Verify Arrival API"
-api CheckInPatientApi    "Check-In Patient API"
+api VerifyArrivalApi     "到着確認 API"
+api CheckInPatientApi    "受付 API"
 api OnlineEligibilityApi "オンライン資格確認 API"
 api EligibilityResultApi "資格確認結果 API"
 api ReferralLetterApi    "紹介状 API"
-api AssignRoomApi        "Assign Room API"
-api PrepareEncounterApi  "Prepare Encounter API"
+api AssignRoomApi        "診察室案内 API"
+api PrepareEncounterApi  "診療準備 API"
 
 performs(ReceptionClerk, VerifyArrival)
 performs(ReceptionClerk, CheckInPatient)

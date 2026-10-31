@@ -23,11 +23,11 @@ flowchart LR
   end
   subgraph layer_system["システム"]
     entity__AccountBalance["未収金残高"]:::entity
-    entity__Appointment["Appointment"]:::entity
-    entity__Charge["Charge"]:::entity
-    entity__Encounter["Encounter"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__Charge["コスト（診療行為）"]:::entity
+    entity__Encounter["診療記録"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__PaymentTransaction["精算"]:::entity
     entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
     state__Appointment_apptawaitingcalc["計算待ち"]:::state
     state__Appointment_apptawaitingpay["会計待ち"]:::state

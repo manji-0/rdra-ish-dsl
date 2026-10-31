@@ -6,10 +6,10 @@ import shared.biz
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
-buc BucOrdersResults "Manage Orders and Results"
+buc BucOrdersResults "検体検査"
 
 // 検体検査オーダの登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:108).
-usecase PlaceLabOrder       "Place Lab Order"
+usecase PlaceLabOrder       "検体検査オーダの登録"
 // 看護師や医師事務作業補助者 enter the physician's 指示 into the chart as a 代行入力（代行オーダー）
 // (mhlw-2020-dairi-nyuuryoku.txt:71-79). The 指示 itself is the physician's alone (:9), and the
 // physician checks what the order needs before it is carried out (:15).
@@ -17,27 +17,27 @@ usecase EnterProxyOrder     "検体検査オーダの代行入力"
 usecase ConfirmProxyOrder   "代行入力オーダの確定"
 // 採血管ラベル発行・貼付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:129).
 usecase PrintSpecimenLabel  "採血管ラベル発行・貼付"
-usecase CollectSpecimen     "Collect Specimen"
+usecase CollectSpecimen     "採血"
 // 実施内容(コスト)の登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:152), which 会計計算 reads.
 usecase RegisterPerformedProcedure "実施内容（コスト）の登録"
-usecase ReceiveLabResult    "Receive Lab Result"
-usecase ReviewLabResult     "Review Lab Result"
-usecase NotifyCriticalResult "Notify Critical Result"
-usecase CancelClinicalOrder "Cancel Clinical Order"
+usecase ReceiveLabResult    "検査結果の受信"
+usecase ReviewLabResult     "検査結果の確認"
+usecase NotifyCriticalResult "重要結果（パニック値）の通知"
+usecase CancelClinicalOrder "オーダの取消"
 
-screen OrderEntryScreen      "Order Entry Screen"
-screen SpecimenScreen        "Specimen Collection Screen"
-screen ResultReviewScreen    "Result Review Screen"
-screen CriticalNoticeScreen  "Critical Result Notice Screen"
+screen OrderEntryScreen      "オーダ入力画面"
+screen SpecimenScreen        "採血画面"
+screen ResultReviewScreen    "検査結果確認画面"
+screen CriticalNoticeScreen  "重要結果通知画面"
 
-api OrderEntryApi     "Order Entry API"
+api OrderEntryApi     "オーダ登録 API"
 api ProxyOrderApi     "代行入力 API"
 api ConfirmOrderApi   "オーダ確定 API"
 api PerformedProcedureApi "実施登録 API"
-api CollectSpecimenApi "Collect Specimen API"
-api ReceiveLabResultApi "Receive Lab Result API"
-api ResultReviewApi   "Result Review API"
-api CriticalNoticeApi "Critical Notice API"
+api CollectSpecimenApi "採血 API"
+api ReceiveLabResultApi "検査結果受信 API"
+api ResultReviewApi   "検査結果確認 API"
+api CriticalNoticeApi "重要結果通知 API"
 
 performs(Clinician, PlaceLabOrder)
 performs(MedicalClerk, EnterProxyOrder)

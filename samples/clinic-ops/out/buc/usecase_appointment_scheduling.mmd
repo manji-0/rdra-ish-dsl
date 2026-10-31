@@ -4,37 +4,37 @@
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Patient["患者"]:::actor
+    %% desc actor__Patient: 病院で診療を受ける人。
     actor__ReceptionClerk["医事課 受付担当"]:::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    timer__NoShowSweep["Nightly no-show sweep"]:::timer
+    timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__BookAppointment["Book Appointment"]:::usecase
-    usecase__CancelAppointment["Cancel Appointment"]:::usecase
-    usecase__MarkNoShow["Mark No Show"]:::usecase
-    usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
-    usecase__ReserveAppointment["Reserve Appointment"]:::usecase
-    usecase__SearchAvailability["Search Availability"]:::usecase
-    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
-    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
-    screen__AppointmentScreen["Appointment Screen"]:::screen
-    screen__ScheduleSearchScreen["Schedule Search Screen"]:::screen
-    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
-    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
-    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    usecase__BookAppointment["予約の確定"]:::usecase
+    usecase__CancelAppointment["予約の取消"]:::usecase
+    usecase__MarkNoShow["未来院の処理"]:::usecase
+    usecase__RescheduleAppointment["予約の変更"]:::usecase
+    usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+    usecase__SearchAvailability["空き枠の検索"]:::usecase
+    usecase__SendAppointmentNotice["予約の通知"]:::usecase
+    screen__AppointmentNoticeScreen["予約通知画面"]:::screen
+    screen__AppointmentScreen["予約画面"]:::screen
+    screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
+    event__EvAppointmentCancelled["予約取消"]:::event
+    event__EvAppointmentRescheduled["予約変更"]:::event
+    event__EvAppointmentScheduled["予約確定"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
-    entity__ClinicLocation["Clinic Location"]:::entity
-    entity__Notification["Notification"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
-    entity__Provider["Provider"]:::entity
-    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__ClinicLocation["施設"]:::entity
+    entity__Notification["通知"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
+    entity__Provider["医師マスタ"]:::entity
+    entity__ProviderSchedule["診療枠"]:::entity
     state__Appointment_apptcancelled["取消"]:::state
     state__Appointment_apptnoshow["未来院"]:::state
     state__Appointment_apptrequested["仮押さえ"]:::state

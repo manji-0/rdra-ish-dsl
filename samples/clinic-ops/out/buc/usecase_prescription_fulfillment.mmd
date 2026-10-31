@@ -26,18 +26,18 @@ flowchart LR
     usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
     usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
     usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
-    usecase__SearchMedication["Search Medication"]:::usecase
+    usecase__SearchMedication["薬剤の検索"]:::usecase
     screen__DispensingScreen["調剤・監査画面"]:::screen
-    screen__MedicationSearchScreen["Medication Search Screen"]:::screen
+    screen__MedicationSearchScreen["薬剤検索画面"]:::screen
     screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
     screen__PrescriptionScreen["処方画面"]:::screen
     event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
-    event__EvPrescriptionDispensed["Prescription Dispensed"]:::event
+    event__EvPrescriptionDispensed["保険薬局での調剤完了"]:::event
     event__EvPrescriptionIssued["電子処方箋の登録"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Encounter["Encounter"]:::entity
-    entity__Medication["Medication"]:::entity
+    entity__Encounter["診療記録"]:::entity
+    entity__Medication["薬剤"]:::entity
     entity__Prescription["処方箋"]:::entity
     state__Prescription_rxaudited["調剤・監査済"]:::state
     state__Prescription_rxcancelled["取消"]:::state

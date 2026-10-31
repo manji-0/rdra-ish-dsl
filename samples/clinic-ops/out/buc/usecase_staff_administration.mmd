@@ -4,25 +4,25 @@
 %% omitted: buc medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__ClinicAdmin["Clinic Administrator"]:::actor
+    actor__ClinicAdmin["病院管理者"]:::actor
   end
   subgraph layer_boundary["システム境界"]
-    usecase__BlockScheduleSlot["Block Schedule Slot"]:::usecase
-    usecase__ConfigureRoom["Configure Room"]:::usecase
-    usecase__ManageProviderSchedule["Manage Provider Schedule"]:::usecase
-    usecase__ReleaseRoom["Release Room"]:::usecase
-    usecase__ResolveAuditFinding["Resolve Audit Finding"]:::usecase
-    usecase__ReviewAuditEvents["Review Audit Events"]:::usecase
-    screen__AuditReviewScreen["Audit Review Screen"]:::screen
-    screen__RoomAdminScreen["Room Admin Screen"]:::screen
-    screen__ScheduleAdminScreen["Schedule Admin Screen"]:::screen
+    usecase__BlockScheduleSlot["診療枠の停止"]:::usecase
+    usecase__ConfigureRoom["診察室の設定"]:::usecase
+    usecase__ManageProviderSchedule["診療枠の管理"]:::usecase
+    usecase__ReleaseRoom["診察室の解放"]:::usecase
+    usecase__ResolveAuditFinding["監査指摘の解決"]:::usecase
+    usecase__ReviewAuditEvents["監査ログの確認"]:::usecase
+    screen__AuditReviewScreen["監査ログ画面"]:::screen
+    screen__RoomAdminScreen["診察室管理画面"]:::screen
+    screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
   end
   subgraph layer_system["システム"]
-    entity__AuditEvent["Audit Event"]:::entity
-    entity__PatientAccount["Patient Account"]:::entity
-    entity__Provider["Provider"]:::entity
-    entity__ProviderSchedule["Provider Schedule"]:::entity
-    entity__Room["Room"]:::entity
+    entity__AuditEvent["監査ログ"]:::entity
+    entity__PatientAccount["患者登録"]:::entity
+    entity__Provider["医師マスタ"]:::entity
+    entity__ProviderSchedule["診療枠"]:::entity
+    entity__Room["診察室"]:::entity
   end
   actor__ClinicAdmin -.->|performs| usecase__BlockScheduleSlot
   %% derived actor__ClinicAdmin -> usecase__BlockScheduleSlot via buc__BucStaffAdministration

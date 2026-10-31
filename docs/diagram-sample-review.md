@@ -138,27 +138,27 @@ flowchart LR
     constraint__BillingAuditTrail["会計の監査証跡"]:::constraint
     constraint__NoPharmacySteering["特定の保険薬局において調剤を受けるべき旨の指示等を行わない"]:::constraint
     constraint__PatientDataPrivacy["患者情報の保護"]:::constraint
-    buc__BucAppointmentScheduling["Schedule Appointments"]:::buc
-    %% desc buc__BucAppointmentScheduling: Find, reserve, book, change, and notify appointment slots.
+    buc__BucAppointmentScheduling["予約"]:::buc
+    %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
     buc__BucBillingClaims["レセプト作成・請求"]:::buc
     %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
-    buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
-    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
-    buc__BucOrdersResults["Manage Orders and Results"]:::buc
-    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    buc__BucClinicalEncounter["診察"]:::buc
+    buc__BucFollowupCare["フォローアップ"]:::buc
+    buc__BucOrdersResults["検体検査"]:::buc
+    buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
     buc__BucPrescriptionFulfillment["処方"]:::buc
     %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
-    buc__BucStaffAdministration["Administer Clinic Operations"]:::buc
+    buc__BucStaffAdministration["病院管理"]:::buc
     buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
     %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
     buc__BucVisitPayment["計算・会計"]:::buc
     %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
   end
   subgraph layer_system["システム"]
-    system__ClinicOpsSystem["Clinic Operations System"]:::system
+    system__ClinicOpsSystem["外来業務システム"]:::system
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PatientProfile["Patient Profile"]:::entity
-    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__PatientProfile["患者基本情報"]:::entity
+    entity__PaymentTransaction["精算"]:::entity
     entity__Prescription["処方箋"]:::entity
   end
   constraint__BillingAuditTrail -.->|constrains| entity__PaymentTransaction
@@ -367,7 +367,7 @@ flowchart TD
       step__ReferralStep["紹介状あり（初診）"]:::step
     end
   end
-  usecase__AssignRoom["Assign Room"]:::usecase
+  usecase__AssignRoom["診察室への案内"]:::usecase
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
   usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase

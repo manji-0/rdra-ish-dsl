@@ -17,13 +17,13 @@ flowchart TD
       step__VitalsStep["バイタル測定"]:::step
     end
   end
-  usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+  usecase__AmendEncounter["署名済み記録の修正"]:::usecase
   usecase__CompleteConsultation["診察終了"]:::usecase
-  usecase__DocumentAssessment["Document Assessment"]:::usecase
+  usecase__DocumentAssessment["診察・診断の記録"]:::usecase
   usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
-  usecase__OpenEncounter["Open Encounter"]:::usecase
-  usecase__RecordVitals["Record Vitals"]:::usecase
-  usecase__SignEncounter["Sign Encounter"]:::usecase
+  usecase__OpenEncounter["診療記録を開く"]:::usecase
+  usecase__RecordVitals["バイタルの記録"]:::usecase
+  usecase__SignEncounter["診療記録の署名"]:::usecase
   step__AmendStep -.->|covers| usecase__AmendEncounter
   step__AssessmentStep -->|branches| step__ReferralOutStep
   step__AssessmentStep -.->|covers| usecase__DocumentAssessment

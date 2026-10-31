@@ -4,23 +4,23 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucStaffAdministration "Administer Clinic Operations"
+buc BucStaffAdministration "病院管理"
 
-usecase ManageProviderSchedule "Manage Provider Schedule"
-usecase BlockScheduleSlot      "Block Schedule Slot"
-usecase ConfigureRoom          "Configure Room"
-usecase ReleaseRoom            "Release Room"
-usecase ReviewAuditEvents      "Review Audit Events"
-usecase ResolveAuditFinding    "Resolve Audit Finding"
+usecase ManageProviderSchedule "診療枠の管理"
+usecase BlockScheduleSlot      "診療枠の停止"
+usecase ConfigureRoom          "診察室の設定"
+usecase ReleaseRoom            "診察室の解放"
+usecase ReviewAuditEvents      "監査ログの確認"
+usecase ResolveAuditFinding    "監査指摘の解決"
 
-screen ScheduleAdminScreen "Schedule Admin Screen"
-screen RoomAdminScreen     "Room Admin Screen"
-screen AuditReviewScreen   "Audit Review Screen"
+screen ScheduleAdminScreen "診療枠管理画面"
+screen RoomAdminScreen     "診察室管理画面"
+screen AuditReviewScreen   "監査ログ画面"
 
-api ManageProviderScheduleApi "Manage Provider Schedule API"
-api BlockScheduleSlotApi      "Block Schedule Slot API"
-api RoomAdminApi     "Room Admin API"
-api AuditApi         "Audit API"
+api ManageProviderScheduleApi "診療枠管理 API"
+api BlockScheduleSlotApi      "診療枠停止 API"
+api RoomAdminApi     "診察室管理 API"
+api AuditApi         "監査 API"
 
 performs(ClinicAdmin, BucStaffAdministration)
 belongs(BucStaffAdministration, ClinicAdministration)

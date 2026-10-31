@@ -24,17 +24,17 @@ flowchart TD
   %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
   actor__Nurse["看護師"]:::actor
   %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-  usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
-  usecase__CollectSpecimen["Collect Specimen"]:::usecase
+  usecase__CancelClinicalOrder["オーダの取消"]:::usecase
+  usecase__CollectSpecimen["採血"]:::usecase
   usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
   usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
-  usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
-  usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+  usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+  usecase__PlaceLabOrder["検体検査オーダの登録"]:::usecase
   usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
-  usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+  usecase__ReceiveLabResult["検査結果の受信"]:::usecase
   usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
-  usecase__ReviewLabResult["Review Lab Result"]:::usecase
-  event__EvLabResultReceived["Lab Result Received"]:::event
+  usecase__ReviewLabResult["検査結果の確認"]:::usecase
+  event__EvLabResultReceived["検査結果の受信"]:::event
   actor__MedicalClerk -.->|performs| step__ProxyOrderStep
   actor__Nurse -.->|performs| step__ProxyOrderStep
   step__CollectStep -.->|covers| usecase__CollectSpecimen

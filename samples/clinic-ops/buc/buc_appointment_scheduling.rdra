@@ -4,26 +4,26 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucAppointmentScheduling "Schedule Appointments" description "Find, reserve, book, change, and notify appointment slots."
+buc BucAppointmentScheduling "予約" description "空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。"
 
-usecase SearchAvailability     "Search Availability"
-usecase ReserveAppointment     "Reserve Appointment"
-usecase BookAppointment        "Book Appointment"
-usecase RescheduleAppointment  "Reschedule Appointment"
-usecase CancelAppointment      "Cancel Appointment"
-usecase MarkNoShow             "Mark No Show"
-usecase SendAppointmentNotice  "Send Appointment Notice"
+usecase SearchAvailability     "空き枠の検索"
+usecase ReserveAppointment     "予約の仮押さえ"
+usecase BookAppointment        "予約の確定"
+usecase RescheduleAppointment  "予約の変更"
+usecase CancelAppointment      "予約の取消"
+usecase MarkNoShow             "未来院の処理"
+usecase SendAppointmentNotice  "予約の通知"
 
-screen ScheduleSearchScreen "Schedule Search Screen"
-screen AppointmentScreen    "Appointment Screen"
-screen AppointmentNoticeScreen "Appointment Notice Screen"
+screen ScheduleSearchScreen "空き枠検索画面"
+screen AppointmentScreen    "予約画面"
+screen AppointmentNoticeScreen "予約通知画面"
 
-api SearchAvailabilityApi    "Search Availability API"
-api ReserveAppointmentApi    "Reserve Appointment API"
-api BookAppointmentApi       "Book Appointment API"
-api RescheduleAppointmentApi "Reschedule Appointment API"
-api CancelAppointmentApi     "Cancel Appointment API"
-api AppointmentNoticeApi     "Appointment Notice API"
+api SearchAvailabilityApi    "空き枠検索 API"
+api ReserveAppointmentApi    "予約仮押さえ API"
+api BookAppointmentApi       "予約確定 API"
+api RescheduleAppointmentApi "予約変更 API"
+api CancelAppointmentApi     "予約取消 API"
+api AppointmentNoticeApi     "予約通知 API"
 
 performs(ReceptionClerk, BucAppointmentScheduling)
 performs(ReceptionClerk, SearchAvailability)

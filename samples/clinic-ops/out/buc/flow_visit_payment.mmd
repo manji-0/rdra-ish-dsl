@@ -10,7 +10,7 @@ flowchart TD
       step__ReceiptStep["領収証・明細書の交付"]:::step
       step__WindowStep["会計窓口で精算"]:::step
     end
-    subgraph lane__VisitPaymentFlow__Patient["Patient"]
+    subgraph lane__VisitPaymentFlow__Patient["患者"]
       %% lane lane__VisitPaymentFlow__Patient: actor__Patient
       step__KioskStep["自動精算機で精算"]:::step
     end

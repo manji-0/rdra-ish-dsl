@@ -4,23 +4,23 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucFollowupCare "Coordinate Follow-Up Care"
+buc BucFollowupCare "フォローアップ"
 
-usecase CreateCarePlan       "Create Care Plan"
-usecase SendFollowUpMessage  "Send Follow-Up Message"
-usecase ReviewPatientResponse "Review Patient Response"
-usecase ScheduleFollowUpVisit "Schedule Follow-Up Visit"
-usecase CloseCarePlan        "Close Care Plan"
-usecase NotifyPatientResult  "Notify Patient Result"
+usecase CreateCarePlan       "ケアプランの作成"
+usecase SendFollowUpMessage  "患者への連絡"
+usecase ReviewPatientResponse "患者応答の確認"
+usecase ScheduleFollowUpVisit "再診の予約"
+usecase CloseCarePlan        "ケアプランの終了"
+usecase NotifyPatientResult  "検査結果の患者通知"
 
-screen CarePlanScreen        "Care Plan Screen"
-screen PatientMessageScreen  "Patient Message Screen"
-screen FollowUpScheduleScreen "Follow-Up Schedule Screen"
+screen CarePlanScreen        "ケアプラン画面"
+screen PatientMessageScreen  "患者連絡画面"
+screen FollowUpScheduleScreen "再診予約画面"
 
-api CreateCarePlanApi      "Create Care Plan API"
-api SendFollowUpMessageApi "Send Follow-Up Message API"
-api FollowUpScheduleApi "Follow-Up Schedule API"
-api NotifyPatientResultApi "Notify Patient Result API"
+api CreateCarePlanApi      "ケアプラン作成 API"
+api SendFollowUpMessageApi "患者連絡 API"
+api FollowUpScheduleApi "再診予約 API"
+api NotifyPatientResultApi "検査結果通知 API"
 
 performs(CareCoordinator, BucFollowupCare)
 performs(CareCoordinator, CreateCarePlan)

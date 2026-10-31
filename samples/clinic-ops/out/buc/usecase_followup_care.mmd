@@ -4,30 +4,30 @@
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__CareCoordinator["Care Coordinator"]:::actor
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__CloseCarePlan["Close Care Plan"]:::usecase
-    usecase__CreateCarePlan["Create Care Plan"]:::usecase
-    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
-    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
-    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
-    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
-    screen__CarePlanScreen["Care Plan Screen"]:::screen
-    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
-    screen__PatientMessageScreen["Patient Message Screen"]:::screen
-    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
-    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
+    usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+    usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+    usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+    usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+    usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+    usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+    screen__CarePlanScreen["ケアプラン画面"]:::screen
+    screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+    screen__PatientMessageScreen["患者連絡画面"]:::screen
+    event__EvAppointmentScheduled["予約確定"]:::event
+    event__EvClinicalOrderReviewed["検査結果の確認"]:::event
+    event__EvEncounterSigned["診療記録の署名"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
-    entity__CarePlan["Care Plan"]:::entity
-    entity__Encounter["Encounter"]:::entity
-    entity__Notification["Notification"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
-    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__CarePlan["ケアプラン"]:::entity
+    entity__Encounter["診療記録"]:::entity
+    entity__Notification["通知"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
+    entity__ProviderSchedule["診療枠"]:::entity
     state__Appointment_apptrequested["仮押さえ"]:::state
     state__Appointment_apptscheduled["予約済"]:::state
     state__CarePlan_careclosed["終了"]:::state

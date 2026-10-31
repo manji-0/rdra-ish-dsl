@@ -5,19 +5,19 @@
 flowchart LR
   subgraph layer_value["システム価値"]
     extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    business__CareDelivery["Care Delivery"]:::business
-    business__PatientAccess["Patient Access"]:::business
-    %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
-    business__RevenueCycle["Revenue Cycle"]:::business
+    business__CareDelivery["診療"]:::business
+    business__PatientAccess["患者受付"]:::business
+    %% desc business__PatientAccess: 新患登録から予約、受付、フォローアップまでの患者に向き合う業務。
+    business__RevenueCycle["医事会計"]:::business
     buc__BucBillingClaims["レセプト作成・請求"]:::buc
     %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
-    buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
-    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
-    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    buc__BucClinicalEncounter["診察"]:::buc
+    buc__BucFollowupCare["フォローアップ"]:::buc
+    buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
     buc__BucVisitPayment["計算・会計"]:::buc
     %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
     flow__ClaimCycleFlow["レセプトの月次サイクル"]:::flow
@@ -65,115 +65,115 @@ flowchart LR
     step__VitalsStep["バイタル測定"]:::step
     step__WindowStep["会計窓口で精算"]:::step
     timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
-    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
     timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
     timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
     timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
     timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
     medium__AccountsWindow["会計窓口"]:::medium
-    medium__BillingWorkstation["Billing Workstation"]:::medium
-    medium__CareCoordinationConsole["Care Coordination Console"]:::medium
-    medium__ClinicalWorkstation["Clinical Workstation"]:::medium
-    medium__FrontDeskTerminal["Front Desk Terminal"]:::medium
-    medium__NurseStation["Nurse Station"]:::medium
+    medium__BillingWorkstation["医事会計端末"]:::medium
+    medium__CareCoordinationConsole["患者支援端末"]:::medium
+    medium__ClinicalWorkstation["電子カルテ端末"]:::medium
+    medium__FrontDeskTerminal["受付端末"]:::medium
+    medium__NurseStation["ナースステーション端末"]:::medium
     medium__OnlineClaimTerminal["オンライン請求用端末"]:::medium
-    medium__PatientMobile["Patient Mobile"]:::medium
+    medium__PatientMobile["患者のスマートフォン"]:::medium
     medium__PaymentKiosk["自動精算機"]:::medium
     permission__BillCalculate["会計計算"]:::permission
     permission__BillingClaimWrite["レセプト業務"]:::permission
-    permission__ClinicalDocument["Clinical Document"]:::permission
-    permission__ConsentCapture["Consent Capture"]:::permission
-    permission__EncounterOpen["Encounter Open"]:::permission
-    permission__EncounterSign["Encounter Sign"]:::permission
-    permission__FollowUpManage["Follow-Up Manage"]:::permission
-    permission__InsuranceVerify["Insurance Verify"]:::permission
-    permission__IntakeManage["Intake Manage"]:::permission
-    permission__PatientMessageSend["Patient Message Send"]:::permission
-    permission__PatientProfileRead["Patient Profile Read"]:::permission
-    permission__PatientProfileWrite["Patient Profile Write"]:::permission
+    permission__ClinicalDocument["診療記録の記載"]:::permission
+    permission__ConsentCapture["同意の取得"]:::permission
+    permission__EncounterOpen["診療記録の作成"]:::permission
+    permission__EncounterSign["診療記録の署名"]:::permission
+    permission__FollowUpManage["フォローアップの管理"]:::permission
+    permission__InsuranceVerify["保険資格の確認"]:::permission
+    permission__IntakeManage["問診票の管理"]:::permission
+    permission__PatientMessageSend["患者への連絡"]:::permission
+    permission__PatientProfileRead["患者情報の参照"]:::permission
+    permission__PatientProfileWrite["患者情報の更新"]:::permission
     permission__PaymentCollect["窓口収納"]:::permission
-    permission__PaymentPost["Payment Post"]:::permission
+    permission__PaymentPost["入金の消込"]:::permission
     permission__ReferralManage["紹介状管理"]:::permission
-    permission__ScheduleRead["Schedule Read"]:::permission
-    permission__ScheduleWrite["Schedule Write"]:::permission
-    permission__VitalsRecord["Vitals Record"]:::permission
+    permission__ScheduleRead["予約の参照"]:::permission
+    permission__ScheduleWrite["予約の更新"]:::permission
+    permission__VitalsRecord["バイタルの記録"]:::permission
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+    usecase__AmendEncounter["署名済み記録の修正"]:::usecase
     usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
-    usecase__ArchivePatient["Archive Patient"]:::usecase
+    usecase__ArchivePatient["患者のアーカイブ"]:::usecase
     usecase__CalculateVisitBill["会計計算入力"]:::usecase
     usecase__CallPatientForPayment["会計の呼出"]:::usecase
-    usecase__CaptureConsent["Capture Consent"]:::usecase
-    usecase__CloseCarePlan["Close Care Plan"]:::usecase
+    usecase__CaptureConsent["同意の取得"]:::usecase
+    usecase__CloseCarePlan["ケアプランの終了"]:::usecase
     usecase__CompleteConsultation["診察終了"]:::usecase
-    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
+    usecase__CompleteIntakeForms["問診票の回答"]:::usecase
     usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
-    usecase__CreateCarePlan["Create Care Plan"]:::usecase
+    usecase__CreateCarePlan["ケアプランの作成"]:::usecase
     usecase__CreateCharge["コスト情報の登録"]:::usecase
-    usecase__DocumentAssessment["Document Assessment"]:::usecase
-    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+    usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+    usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
     usecase__GenerateClaimStatement["レセプト作成"]:::usecase
     usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
     usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
     usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
     usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
-    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
-    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
-    usecase__OpenEncounter["Open Encounter"]:::usecase
+    usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+    usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+    usecase__OpenEncounter["診療記録を開く"]:::usecase
     usecase__PostPayment["診療報酬の入金"]:::usecase
     usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
     usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
     usecase__RecordClaimAssessment["査定の取込"]:::usecase
     usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
     usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
-    usecase__RecordVitals["Record Vitals"]:::usecase
-    usecase__RegisterPatient["Register Patient"]:::usecase
+    usecase__RecordVitals["バイタルの記録"]:::usecase
+    usecase__RegisterPatient["新患登録"]:::usecase
     usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
     usecase__RequestReexamination["再審査請求"]:::usecase
     usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
     usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
-    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
-    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
-    usecase__SearchPatient["Search Patient"]:::usecase
-    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
-    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
-    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+    usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+    usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+    usecase__SearchPatient["患者の検索"]:::usecase
+    usecase__SendAppointmentNotice["予約の通知"]:::usecase
+    usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+    usecase__SendIntakeForms["問診票の送付"]:::usecase
     usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
     usecase__SettleAtWindow["会計窓口での精算"]:::usecase
-    usecase__SignEncounter["Sign Encounter"]:::usecase
+    usecase__SignEncounter["診療記録の署名"]:::usecase
     usecase__SubmitClaimStatements["レセプト請求"]:::usecase
-    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__UpdateDemographics["患者属性の変更"]:::usecase
     usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
     usecase__VoidCharge["コストの取消"]:::usecase
-    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
+    screen__AppointmentNoticeScreen["予約通知画面"]:::screen
     screen__BalanceScreen["未収金画面"]:::screen
     screen__BillCalculationScreen["会計計算画面"]:::screen
-    screen__CarePlanScreen["Care Plan Screen"]:::screen
-    screen__ChargeWorklistScreen["Charge Worklist Screen"]:::screen
+    screen__CarePlanScreen["ケアプラン画面"]:::screen
+    screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
     screen__ClaimScreen["レセプト画面"]:::screen
-    screen__ConsentScreen["Consent Capture Screen"]:::screen
-    screen__DiagnosisScreen["Diagnosis Screen"]:::screen
-    screen__EncounterWorkspaceScreen["Encounter Workspace"]:::screen
-    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
-    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
-    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
+    screen__ConsentScreen["同意取得画面"]:::screen
+    screen__DiagnosisScreen["診断入力画面"]:::screen
+    screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
+    screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+    screen__InsuranceScreen["保険資格登録画面"]:::screen
+    screen__IntakePortalScreen["問診票ポータル画面"]:::screen
     screen__KioskScreen["自動精算機画面"]:::screen
-    screen__PatientMessageScreen["Patient Message Screen"]:::screen
-    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
-    screen__PatientSearchScreen["Patient Search Screen"]:::screen
+    screen__PatientMessageScreen["患者連絡画面"]:::screen
+    screen__PatientProfileScreen["患者基本情報画面"]:::screen
+    screen__PatientSearchScreen["患者検索画面"]:::screen
     screen__PaymentPostingScreen["入金画面"]:::screen
     screen__PaymentWindowScreen["会計窓口画面"]:::screen
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
-    screen__VitalsScreen["Vitals Screen"]:::screen
+    screen__VitalsScreen["バイタル入力画面"]:::screen
     field__ChargeCodeField["診療行為"]:::field
     field__KioskReferenceField["精算機の取引番号"]:::field
     field__PaymentAmountField["お支払額"]:::field
     field__ReferralDirectionField["紹介の向き"]:::field
-    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
-    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
-    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
-    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    event__EvAppointmentCancelled["予約取消"]:::event
+    event__EvAppointmentCheckedIn["受付完了"]:::event
+    event__EvAppointmentRescheduled["予約変更"]:::event
+    event__EvAppointmentScheduled["予約確定"]:::event
     event__EvBillCalculated["会計計算完了"]:::event
     event__EvClaimAccepted["レセプト受付"]:::event
     event__EvClaimAssessed["査定"]:::event
@@ -181,63 +181,63 @@ flowchart LR
     event__EvClaimReturned["返戻"]:::event
     event__EvClaimStatementsSubmitted["レセプト請求"]:::event
     event__EvClaimTransferred["資格の振替・分割"]:::event
-    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
+    event__EvClinicalOrderReviewed["検査結果の確認"]:::event
     event__EvConsultationCompleted["診察終了"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvEncounterSigned["診療記録の署名"]:::event
     event__EvPaymentSettled["自動精算機での精算完了"]:::event
     event__EvRemittance["診療報酬の支払"]:::event
   end
   subgraph layer_system["システム"]
-    api__AmendEncounterApi["Amend Encounter API"]:::api
-    api__AppointmentNoticeApi["Appointment Notice API"]:::api
+    api__AmendEncounterApi["記録修正 API"]:::api
+    api__AppointmentNoticeApi["予約通知 API"]:::api
     api__BalanceApi["未収金 API"]:::api
     api__CalculateVisitBillApi["会計計算 API"]:::api
     api__ClaimEditApi["レセプト点検・訂正 API"]:::api
     api__ClaimResultApi["審査結果 API"]:::api
     api__CompleteConsultationApi["診察終了 API"]:::api
-    api__ConsentApi["Consent API"]:::api
-    api__CreateCarePlanApi["Create Care Plan API"]:::api
-    api__CreateChargeApi["Create Charge API"]:::api
-    api__DocumentAssessmentApi["Document Assessment API"]:::api
-    api__EligibilityApi["Eligibility API"]:::api
-    api__FollowUpScheduleApi["Follow-Up Schedule API"]:::api
+    api__ConsentApi["同意 API"]:::api
+    api__CreateCarePlanApi["ケアプラン作成 API"]:::api
+    api__CreateChargeApi["コスト登録 API"]:::api
+    api__DocumentAssessmentApi["診察記録 API"]:::api
+    api__EligibilityApi["保険資格登録 API"]:::api
+    api__FollowUpScheduleApi["再診予約 API"]:::api
     api__GenerateClaimApi["レセプト作成 API"]:::api
-    api__IntakeMessagingApi["Intake Messaging API"]:::api
+    api__IntakeMessagingApi["問診票送付 API"]:::api
     api__IssueReferralLetterApi["診療情報提供書 API"]:::api
-    api__NotifyPatientResultApi["Notify Patient Result API"]:::api
-    api__OpenEncounterApi["Open Encounter API"]:::api
+    api__NotifyPatientResultApi["検査結果通知 API"]:::api
+    api__OpenEncounterApi["診療記録作成 API"]:::api
     api__PaymentPostApi["入金 API"]:::api
     api__ReceiptApi["領収証 API"]:::api
-    api__RecordVitalsApi["Record Vitals API"]:::api
-    api__RegisterPatientApi["Register Patient API"]:::api
-    api__SearchPatientApi["Search Patient API"]:::api
+    api__RecordVitalsApi["バイタル記録 API"]:::api
+    api__RegisterPatientApi["新患登録 API"]:::api
+    api__SearchPatientApi["患者検索 API"]:::api
     api__SelectedFeeApi["選定療養費 API"]:::api
-    api__SendFollowUpMessageApi["Send Follow-Up Message API"]:::api
+    api__SendFollowUpMessageApi["患者連絡 API"]:::api
     api__SettlementApi["精算 API"]:::api
-    api__SignEncounterApi["Sign Encounter API"]:::api
+    api__SignEncounterApi["署名 API"]:::api
     api__SubmitClaimApi["オンライン請求 API"]:::api
-    api__UpdateDemographicsApi["Update Demographics API"]:::api
+    api__UpdateDemographicsApi["患者属性変更 API"]:::api
     entity__AccountBalance["未収金残高"]:::entity
-    entity__Appointment["Appointment"]:::entity
-    entity__CarePlan["Care Plan"]:::entity
-    entity__Charge["Charge"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__CarePlan["ケアプラン"]:::entity
+    entity__Charge["コスト（診療行為）"]:::entity
     entity__ClaimStatement["レセプト"]:::entity
-    entity__ConsentRecord["Consent Record"]:::entity
-    entity__Diagnosis["Diagnosis"]:::entity
+    entity__ConsentRecord["同意記録"]:::entity
+    entity__Diagnosis["診断"]:::entity
     entity__EligibilityCheck["資格確認"]:::entity
-    entity__Encounter["Encounter"]:::entity
+    entity__Encounter["診療記録"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__IntakePacket["Intake Packet"]:::entity
-    entity__Notification["Notification"]:::entity
-    entity__PatientAccount["Patient Account"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
-    entity__PatientProfile["Patient Profile"]:::entity
-    entity__PaymentTransaction["Payment Transaction"]:::entity
-    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__IntakePacket["問診票"]:::entity
+    entity__Notification["通知"]:::entity
+    entity__PatientAccount["患者登録"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
+    entity__PatientProfile["患者基本情報"]:::entity
+    entity__PaymentTransaction["精算"]:::entity
+    entity__ProviderSchedule["診療枠"]:::entity
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-    entity__Room["Room"]:::entity
+    entity__Room["診察室"]:::entity
     entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-    entity__VitalSign["Vital Sign"]:::entity
+    entity__VitalSign["バイタル"]:::entity
     state__Appointment_apptawaitingcalc["計算待ち"]:::state
     state__Appointment_apptawaitingpay["会計待ち"]:::state
     state__Appointment_apptcheckedin["受付済"]:::state

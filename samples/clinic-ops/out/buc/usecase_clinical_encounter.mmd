@@ -10,28 +10,28 @@ flowchart LR
     extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+    usecase__AmendEncounter["署名済み記録の修正"]:::usecase
     usecase__CompleteConsultation["診察終了"]:::usecase
-    usecase__DocumentAssessment["Document Assessment"]:::usecase
+    usecase__DocumentAssessment["診察・診断の記録"]:::usecase
     usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
-    usecase__OpenEncounter["Open Encounter"]:::usecase
-    usecase__RecordVitals["Record Vitals"]:::usecase
-    usecase__SignEncounter["Sign Encounter"]:::usecase
-    screen__DiagnosisScreen["Diagnosis Screen"]:::screen
-    screen__EncounterWorkspaceScreen["Encounter Workspace"]:::screen
+    usecase__OpenEncounter["診療記録を開く"]:::usecase
+    usecase__RecordVitals["バイタルの記録"]:::usecase
+    usecase__SignEncounter["診療記録の署名"]:::usecase
+    screen__DiagnosisScreen["診断入力画面"]:::screen
+    screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
-    screen__VitalsScreen["Vitals Screen"]:::screen
-    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    screen__VitalsScreen["バイタル入力画面"]:::screen
+    event__EvAppointmentCheckedIn["受付完了"]:::event
     event__EvConsultationCompleted["診察終了"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvEncounterSigned["診療記録の署名"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
-    entity__Diagnosis["Diagnosis"]:::entity
-    entity__Encounter["Encounter"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__Diagnosis["診断"]:::entity
+    entity__Encounter["診療記録"]:::entity
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-    entity__Room["Room"]:::entity
-    entity__VitalSign["Vital Sign"]:::entity
+    entity__Room["診察室"]:::entity
+    entity__VitalSign["バイタル"]:::entity
     state__Appointment_apptawaitingcalc["計算待ち"]:::state
     state__Appointment_apptcheckedin["受付済"]:::state
     state__Appointment_apptinconsult["診察中"]:::state

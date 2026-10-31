@@ -6,48 +6,48 @@ flowchart LR
   subgraph layer_value["システム価値"]
     actor__AccountsClerk["医事課 会計担当"]:::actor
     %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
-    actor__CareCoordinator["Care Coordinator"]:::actor
+    actor__CareCoordinator["患者支援・地域連携担当"]:::actor
     actor__ClaimsClerk["医事課 レセプト担当"]:::actor
     %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
-    actor__ClinicAdmin["Clinic Administrator"]:::actor
+    actor__ClinicAdmin["病院管理者"]:::actor
     actor__Clinician["医師"]:::actor
     actor__MedicalClerk["医師事務作業補助者"]:::actor
     %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
     actor__Nurse["看護師"]:::actor
     %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Patient["患者"]:::actor
+    %% desc actor__Patient: 病院で診療を受ける人。
     actor__Pharmacist["薬剤師"]:::actor
     actor__ReceptionClerk["医事課 受付担当"]:::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
     extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
     extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
     extsystem__InsurancePharmacy["保険薬局"]:::extsystem
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
     extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
     extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    subgraph business__CareDelivery["Care Delivery"]
-      buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
-      buc__BucOrdersResults["Manage Orders and Results"]:::buc
+    subgraph business__CareDelivery["診療"]
+      buc__BucClinicalEncounter["診察"]:::buc
+      buc__BucOrdersResults["検体検査"]:::buc
       buc__BucPrescriptionFulfillment["処方"]:::buc
       %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
     end
-    subgraph business__ClinicAdministration["Clinic Administration"]
-      buc__BucStaffAdministration["Administer Clinic Operations"]:::buc
+    subgraph business__ClinicAdministration["病院管理"]
+      buc__BucStaffAdministration["病院管理"]:::buc
     end
-    subgraph business__PatientAccess["Patient Access"]
-      %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
-      buc__BucAppointmentScheduling["Schedule Appointments"]:::buc
-      %% desc buc__BucAppointmentScheduling: Find, reserve, book, change, and notify appointment slots.
-      buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
-      buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    subgraph business__PatientAccess["患者受付"]
+      %% desc business__PatientAccess: 新患登録から予約、受付、フォローアップまでの患者に向き合う業務。
+      buc__BucAppointmentScheduling["予約"]:::buc
+      %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
+      buc__BucFollowupCare["フォローアップ"]:::buc
+      buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
       buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
       %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
     end
-    subgraph business__RevenueCycle["Revenue Cycle"]
+    subgraph business__RevenueCycle["医事会計"]
       buc__BucBillingClaims["レセプト作成・請求"]:::buc
       %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
       buc__BucVisitPayment["計算・会計"]:::buc

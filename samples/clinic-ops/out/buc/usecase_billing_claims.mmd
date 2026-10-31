@@ -34,7 +34,7 @@ flowchart LR
     usecase__SubmitClaimStatements["レセプト請求"]:::usecase
     usecase__VoidCharge["コストの取消"]:::usecase
     screen__BalanceScreen["未収金画面"]:::screen
-    screen__ChargeWorklistScreen["Charge Worklist Screen"]:::screen
+    screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
     screen__ClaimScreen["レセプト画面"]:::screen
     screen__PaymentPostingScreen["入金画面"]:::screen
     event__EvClaimAccepted["レセプト受付"]:::event
@@ -43,16 +43,16 @@ flowchart LR
     event__EvClaimReturned["返戻"]:::event
     event__EvClaimStatementsSubmitted["レセプト請求"]:::event
     event__EvClaimTransferred["資格の振替・分割"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvEncounterSigned["診療記録の署名"]:::event
     event__EvRemittance["診療報酬の支払"]:::event
   end
   subgraph layer_system["システム"]
     entity__AccountBalance["未収金残高"]:::entity
-    entity__Charge["Charge"]:::entity
+    entity__Charge["コスト（診療行為）"]:::entity
     entity__ClaimStatement["レセプト"]:::entity
-    entity__Encounter["Encounter"]:::entity
+    entity__Encounter["診療記録"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__PaymentTransaction["精算"]:::entity
     state__ClaimStatement_stmtassessed["査定"]:::state
     state__ClaimStatement_stmtdrafting["作成中"]:::state
     state__ClaimStatement_stmtinspecting["院内点検中"]:::state

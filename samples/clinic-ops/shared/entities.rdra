@@ -1,21 +1,21 @@
 module shared.entities
 
 // Values an actor chooses from. They type attribute columns and move no lifecycle.
-variation ConsentType "Consent Type" {
-  treatment "Treatment"
-  privacy   "Privacy"
-  billing   "Billing"
+variation ConsentType "同意の種類" {
+  treatment "診療"
+  privacy   "個人情報"
+  billing   "請求"
 }
 
-variation OrderType "Order Type" {
-  lab      "Lab"
-  imaging  "Imaging"
-  referral "Referral"
+variation OrderType "オーダの種類" {
+  lab      "検体検査"
+  imaging  "画像検査"
+  referral "紹介"
 }
 
 // The patient pays at the 会計窓口 or the 自動精算機 (sendai-iji-gairai-shiyousyo.txt:191).
 // The insurer's share is paid through the 審査支払機関 on the レセプト, never at the window.
-variation PaymentMethod "Payment Method" {
+variation PaymentMethod "支払方法" {
   cash       "現金"
   card       "クレジットカード"
   // 還付・追加徴収 after an insurance change or a calculation error (sendai-iji-gairai-shiyousyo.txt:196).
@@ -81,20 +81,20 @@ variation PayerChange "資格変更の種類" {
   publicexpense "公費が関わる変更"
 }
 
-variation MessageChannel "Message Channel" {
-  email  "Email"
+variation MessageChannel "連絡手段" {
+  email  "メール"
   sms    "SMS"
-  portal "Patient portal"
+  portal "患者ポータル"
 }
 
-variation AuditSeverity "Audit Severity" {
-  low      "Low"
-  moderate "Moderate"
-  high     "High"
+variation AuditSeverity "監査指摘の重大度" {
+  low      "低"
+  moderate "中"
+  high     "高"
 }
 
 // Patient master data
-entity PatientAccount "Patient Account" {
+entity PatientAccount "患者登録" {
   id:                Int      @pk
   medical_record_no: String   @unique
   status:            Enum(patientactive "有効", patientinactive "アーカイブ済", patientmerged "統合済") @default(patientactive)
@@ -102,7 +102,7 @@ entity PatientAccount "Patient Account" {
   archived_at:       DateTime @null
 }
 
-entity PatientProfile "Patient Profile" {
+entity PatientProfile "患者基本情報" {
   id:                Int    @pk
   legal_name:        String
   preferred_name:    String @null
@@ -135,7 +135,7 @@ entity EligibilityCheck "資格確認" {
   reference_no: String   @null
 }
 
-entity ConsentRecord "Consent Record" {
+entity ConsentRecord "同意記録" {
   id:           Int      @pk
   consent_type: ConsentType @default(treatment)
   signed_at:    DateTime @null
@@ -143,7 +143,7 @@ entity ConsentRecord "Consent Record" {
   revoked:      Bool
 }
 
-entity IntakePacket "Intake Packet" {
+entity IntakePacket "問診票" {
   id:           Int      @pk
   status:       Enum(intakesent "送付済", intakecompleted "回答済", intakeexpired "期限切れ") @default(intakesent)
   sent_at:      DateTime @null
@@ -151,28 +151,28 @@ entity IntakePacket "Intake Packet" {
 }
 
 // Facility and schedule
-entity Provider "Provider" {
+entity Provider "医師マスタ" {
   id:         Int    @pk
-  npi:        String @unique
+  license_no: String @unique
   name:       String
   specialty:  String
   active:     Bool
 }
 
-entity ClinicLocation "Clinic Location" {
+entity ClinicLocation "施設" {
   id:          Int    @pk
   name:        String
   postal_code: String
   phone:       String
 }
 
-entity Room "Room" {
+entity Room "診察室" {
   id:               Int    @pk
   name:             String
   occupancy_status: Enum(roomavailable "空き", roomoccupied "使用中", roomcleaning "清掃中") @default(roomavailable)
 }
 
-entity ProviderSchedule "Provider Schedule" {
+entity ProviderSchedule "診療枠" {
   id:           Int      @pk
   service_date: Date
   start_at:     DateTime
@@ -185,7 +185,7 @@ entity ProviderSchedule "Provider Schedule" {
 // 会計 comes after the consultation: 計算受付, then 会計受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141-144,
 // :2488). A visit waits for the calculation (apptawaitingcalc) and for payment (apptawaitingpay),
 // is paid (apptsettled), and completes when the 領収証 is handed over.
-entity Appointment "Appointment" {
+entity Appointment "予約・受診" {
   id:             Int      @pk
   reason:         String
   referral:       ReferralCategory @default(revisit)
@@ -196,7 +196,7 @@ entity Appointment "Appointment" {
   cancel_reason:  String   @null
 }
 
-entity Encounter "Encounter" {
+entity Encounter "診療記録" {
   id:              Int      @pk
   chief_complaint: String
   status:          Enum(encopen "記録中", encdocumented "記載済", encsigned "署名済", encamended "修正済") @default(encopen)
@@ -204,7 +204,7 @@ entity Encounter "Encounter" {
   signed_at:       DateTime @null
 }
 
-entity VitalSign "Vital Sign" {
+entity VitalSign "バイタル" {
   id:        Int      @pk
   taken_at:  DateTime
   height_cm: Decimal  @null
@@ -213,7 +213,7 @@ entity VitalSign "Vital Sign" {
   diastolic: Int      @null
 }
 
-entity Diagnosis "Diagnosis" {
+entity Diagnosis "診断" {
   id:          Int    @pk
   code:        String
   description: String
@@ -221,7 +221,7 @@ entity Diagnosis "Diagnosis" {
 }
 
 // Orders, results, and prescriptions
-entity ClinicalOrder "Clinical Order" {
+entity ClinicalOrder "検査オーダ" {
   id:           Int      @pk
   order_type:   OrderType @default(lab)
   status:       Enum(clordered "オーダ済", clcollected "採取済", clresulted "結果受信", clreviewed "結果確認済", clcancelled "取消") @default(clordered)
@@ -232,7 +232,7 @@ entity ClinicalOrder "Clinical Order" {
   resulted_at:  DateTime @null
 }
 
-entity LabResult "Lab Result" {
+entity LabResult "検査結果" {
   id:          Int      @pk
   result_text: String
   abnormal:    Bool
@@ -240,7 +240,7 @@ entity LabResult "Lab Result" {
   reviewed_at: DateTime @null
 }
 
-entity Medication "Medication" {
+entity Medication "薬剤" {
   id:       Int    @pk
   name:     String
   strength: String
@@ -269,7 +269,7 @@ entity Prescription "処方箋" {
 // One 診療行為 with its cost: 指導・管理料 and comments the physician enters
 // (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:104), 実施内容(コスト) a test or treatment room enters
 // (:152), and 選定療養費.
-entity Charge "Charge" {
+entity Charge "コスト（診療行為）" {
   id:        Int      @pk
   code:      String
   kind:      ChargeKind @default(insured)
@@ -296,7 +296,7 @@ entity ClaimStatement "レセプト" {
   return_reason: String   @null
 }
 
-entity PaymentTransaction "Payment Transaction" {
+entity PaymentTransaction "精算" {
   id:           Int      @pk
   amount:       Money
   method:       PaymentMethod @default(card)
@@ -330,7 +330,7 @@ entity SelectedTreatmentFeeSetting "選定療養費の設定" {
 }
 
 // Engagement, follow-up, and audit
-entity CarePlan "Care Plan" {
+entity CarePlan "ケアプラン" {
   id:        Int      @pk
   goal:      String
   status:    Enum(careopen "作成済", caremonitoring "経過観察中", careclosed "終了") @default(careopen)
@@ -338,7 +338,7 @@ entity CarePlan "Care Plan" {
   closed_at: DateTime @null
 }
 
-entity PatientMessage "Patient Message" {
+entity PatientMessage "患者連絡" {
   id:      Int      @pk
   channel: MessageChannel @default(portal)
   status:  Enum(msgdraft "下書き", msgsent "送信済", msgread "既読", msgfailed "送信失敗") @default(msgdraft)
@@ -346,14 +346,14 @@ entity PatientMessage "Patient Message" {
   read_at: DateTime @null
 }
 
-entity Notification "Notification" {
+entity Notification "通知" {
   id:           Int      @pk
   topic:        String
   status:       Enum(notifqueued "送信待ち", notifdelivered "配信済", notiffailed "配信失敗") @default(notifqueued)
   delivered_at: DateTime @null
 }
 
-entity AuditEvent "Audit Event" {
+entity AuditEvent "監査ログ" {
   id:          Int      @pk
   action:      String
   actor_id:    String
@@ -401,15 +401,15 @@ relate(AuditEvent, PatientAccount, N:1)
 // systems. Each lifecycle transition is declared in its BUC file, next to the
 // use case that drives it.
 
-event EvAppointmentScheduled   "Appointment Scheduled"
-event EvAppointmentRescheduled "Appointment Rescheduled"
-event EvAppointmentCheckedIn   "Appointment Checked In"
-event EvAppointmentCancelled   "Appointment Cancelled"
-event EvEncounterSigned     "Encounter Signed"
+event EvAppointmentScheduled   "予約確定"
+event EvAppointmentRescheduled "予約変更"
+event EvAppointmentCheckedIn   "受付完了"
+event EvAppointmentCancelled   "予約取消"
+event EvEncounterSigned     "診療記録の署名"
 event EvConsultationCompleted "診察終了"
-event EvClinicalOrderReviewed  "Clinical Result Reviewed"
-event EvPrescriptionDispensed "Prescription Dispensed"
-event EvLabResultReceived "Lab Result Received"
+event EvClinicalOrderReviewed  "検査結果の確認"
+event EvPrescriptionDispensed "保険薬局での調剤完了"
+event EvLabResultReceived "検査結果の受信"
 event EvEligibilityChecked "資格確認結果"
 event EvPaymentSettled "自動精算機での精算完了"
 event EvBillCalculated "会計計算完了"

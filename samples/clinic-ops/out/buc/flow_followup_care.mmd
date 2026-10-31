@@ -3,7 +3,7 @@
 %% omitted: buc
 flowchart TD
   subgraph flow__FollowupFlow["フォローアップの流れ"]
-    subgraph lane__FollowupFlow__CareCoordinator["Care Coordinator"]
+    subgraph lane__FollowupFlow__CareCoordinator["患者支援・地域連携担当"]
       %% lane lane__FollowupFlow__CareCoordinator: actor__CareCoordinator
       step__CarePlanStep["ケアプランの作成"]:::step
       step__FollowUpMsgStep["患者への連絡"]:::step
@@ -13,12 +13,12 @@ flowchart TD
       step__RevisitStep["再診の予約"]:::step
     end
   end
-  usecase__CloseCarePlan["Close Care Plan"]:::usecase
-  usecase__CreateCarePlan["Create Care Plan"]:::usecase
-  usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
-  usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
-  usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
-  usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+  usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+  usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+  usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  usecase__SendFollowUpMessage["患者への連絡"]:::usecase
   step__CarePlanStep -->|branches| step__ResultNoticeStep
   step__CarePlanStep -.->|covers| usecase__CreateCarePlan
   step__CarePlanStep -->|precedes| step__FollowUpMsgStep

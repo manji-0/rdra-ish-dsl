@@ -4,41 +4,41 @@
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Patient["患者"]:::actor
+    %% desc actor__Patient: 病院で診療を受ける人。
     actor__ReceptionClerk["医事課 受付担当"]:::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__ArchivePatient["Archive Patient"]:::usecase
-    usecase__CaptureConsent["Capture Consent"]:::usecase
-    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
-    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
-    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
-    usecase__RegisterPatient["Register Patient"]:::usecase
-    usecase__SearchPatient["Search Patient"]:::usecase
-    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
-    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+    usecase__CaptureConsent["同意の取得"]:::usecase
+    usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+    usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+    usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+    usecase__RegisterPatient["新患登録"]:::usecase
+    usecase__SearchPatient["患者の検索"]:::usecase
+    usecase__SendIntakeForms["問診票の送付"]:::usecase
+    usecase__UpdateDemographics["患者属性の変更"]:::usecase
     usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
-    screen__ConsentScreen["Consent Capture Screen"]:::screen
-    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
-    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
-    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
-    screen__PatientSearchScreen["Patient Search Screen"]:::screen
-    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    screen__ConsentScreen["同意取得画面"]:::screen
+    screen__InsuranceScreen["保険資格登録画面"]:::screen
+    screen__IntakePortalScreen["問診票ポータル画面"]:::screen
+    screen__PatientProfileScreen["患者基本情報画面"]:::screen
+    screen__PatientSearchScreen["患者検索画面"]:::screen
+    event__EvAppointmentScheduled["予約確定"]:::event
   end
   subgraph layer_system["システム"]
-    entity__ConsentRecord["Consent Record"]:::entity
+    entity__ConsentRecord["同意記録"]:::entity
     entity__EligibilityCheck["資格確認"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__IntakePacket["Intake Packet"]:::entity
-    entity__PatientAccount["Patient Account"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
-    entity__PatientProfile["Patient Profile"]:::entity
+    entity__IntakePacket["問診票"]:::entity
+    entity__PatientAccount["患者登録"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
+    entity__PatientProfile["患者基本情報"]:::entity
     state__IntakePacket_intakecompleted["回答済"]:::state
     state__IntakePacket_intakeexpired["期限切れ"]:::state
     state__IntakePacket_intakesent["送付済"]:::state

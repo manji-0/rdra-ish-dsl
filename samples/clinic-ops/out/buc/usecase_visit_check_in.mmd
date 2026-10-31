@@ -14,11 +14,11 @@ flowchart LR
     timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AssignRoom["Assign Room"]:::usecase
+    usecase__AssignRoom["診察室への案内"]:::usecase
     usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
     usecase__CheckInPatient["受付（初診・再診）"]:::usecase
     usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
-    usecase__PrepareEncounter["Prepare Encounter"]:::usecase
+    usecase__PrepareEncounter["診療の準備"]:::usecase
     usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
     usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
     usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
@@ -29,18 +29,18 @@ flowchart LR
     screen__CheckInScreen["受付画面"]:::screen
     screen__EligibilityScreen["資格確認画面"]:::screen
     screen__ReferralScreen["紹介状受付画面"]:::screen
-    screen__RoomBoardScreen["Room Board Screen"]:::screen
-    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    screen__RoomBoardScreen["診察室ボード画面"]:::screen
+    event__EvAppointmentCheckedIn["受付完了"]:::event
     event__EvEligibilityChecked["資格確認結果"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
+    entity__Appointment["予約・受診"]:::entity
     entity__EligibilityCheck["資格確認"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PatientAccount["Patient Account"]:::entity
-    entity__PatientProfile["Patient Profile"]:::entity
+    entity__PatientAccount["患者登録"]:::entity
+    entity__PatientProfile["患者基本情報"]:::entity
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-    entity__Room["Room"]:::entity
+    entity__Room["診察室"]:::entity
     state__Appointment_apptcheckedin["受付済"]:::state
     state__Appointment_apptscheduled["予約済"]:::state
     state__EligibilityCheck_eligdeclared["申立書で確認"]:::state

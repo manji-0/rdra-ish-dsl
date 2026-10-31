@@ -44,18 +44,18 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clin
 
 対象は病院の外来業務です。患者登録、予約、受付、診療、検査、処方、計算・会計、レセプト請求、フォローアップ、運営管理を BUC として分け、業務担当者がレビューしやすい単位にしています。受付・会計・レセプトは医事課の業務で、病院が外部に委託することもあります。
 
-| Business | BUC | 主な actor | 目的 |
+| Business | BUC | 主な actor | BUC 名 |
 |---|---|---|---|
-| `PatientAccess` | `BucPatientOnboarding` | ReceptionClerk（医事課 受付担当）, Patient | Patient Onboarding |
-| `PatientAccess` | `BucAppointmentScheduling` | ReceptionClerk, Patient | Appointment Scheduling |
-| `PatientAccess` | `BucVisitCheckIn` | ReceptionClerk, Nurse | 受付（初診・再診） |
-| `CareDelivery` | `BucClinicalEncounter` | Nurse（看護師）, Clinician（医師） | Clinical Encounter |
-| `CareDelivery` | `BucOrdersResults` | Clinician, Nurse, MedicalClerk（医師事務作業補助者） | Orders and Results |
-| `CareDelivery` | `BucPrescriptionFulfillment` | Clinician（医師）, Pharmacist（薬剤師） | 処方 |
-| `RevenueCycle` | `BucVisitPayment` | AccountsClerk（医事課 会計担当） | 計算・会計 |
-| `RevenueCycle` | `BucBillingClaims` | ClaimsClerk（医事課 レセプト担当） | レセプト作成・請求 |
-| `PatientAccess` | `BucFollowupCare` | CareCoordinator, Patient | Follow-Up Care |
-| `ClinicAdministration` | `BucStaffAdministration` | ClinicAdmin | Staff Administration |
+| `PatientAccess` | `BucPatientOnboarding` | 医事課 受付担当（`ReceptionClerk`）、患者（`Patient`） | 新患登録・患者情報管理 |
+| `PatientAccess` | `BucAppointmentScheduling` | 医事課 受付担当（`ReceptionClerk`）、患者（`Patient`） | 予約 |
+| `PatientAccess` | `BucVisitCheckIn` | 医事課 受付担当（`ReceptionClerk`）、看護師（`Nurse`） | 受付（初診・再診） |
+| `CareDelivery` | `BucClinicalEncounter` | 看護師（`Nurse`）、医師（`Clinician`） | 診察 |
+| `CareDelivery` | `BucOrdersResults` | 医師（`Clinician`）、看護師（`Nurse`）、医師事務作業補助者（`MedicalClerk`） | 検体検査 |
+| `CareDelivery` | `BucPrescriptionFulfillment` | 医師（`Clinician`）、薬剤師（`Pharmacist`） | 処方 |
+| `RevenueCycle` | `BucVisitPayment` | 医事課 会計担当（`AccountsClerk`） | 計算・会計 |
+| `RevenueCycle` | `BucBillingClaims` | 医事課 レセプト担当（`ClaimsClerk`） | レセプト作成・請求 |
+| `PatientAccess` | `BucFollowupCare` | 患者支援・地域連携担当（`CareCoordinator`）、患者（`Patient`） | フォローアップ |
+| `ClinicAdministration` | `BucStaffAdministration` | 病院管理者（`ClinicAdmin`） | 病院管理 |
 
 米国型の診療所モデルとの主な違いは次のとおりです。
 
@@ -89,30 +89,30 @@ flowchart LR
   subgraph layer_value["システム価値"]
     actor__AccountsClerk["医事課 会計担当"]:::actor
     %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
-    actor__CareCoordinator["Care Coordinator"]:::actor
+    actor__CareCoordinator["患者支援・地域連携担当"]:::actor
     actor__ClaimsClerk["医事課 レセプト担当"]:::actor
     %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
-    actor__ClinicAdmin["Clinic Administrator"]:::actor
+    actor__ClinicAdmin["病院管理者"]:::actor
     actor__Clinician["医師"]:::actor
     actor__MedicalClerk["医師事務作業補助者"]:::actor
     %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
     actor__Nurse["看護師"]:::actor
     %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Patient["患者"]:::actor
+    %% desc actor__Patient: 病院で診療を受ける人。
     actor__Pharmacist["薬剤師"]:::actor
     actor__ReceptionClerk["医事課 受付担当"]:::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
     extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
     extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
     extsystem__InsurancePharmacy["保険薬局"]:::extsystem
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
     extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
     extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_system["システム"]
-    system__ClinicOpsSystem["Clinic Operations System"]:::system
+    system__ClinicOpsSystem["外来業務システム"]:::system
   end
   actor__AccountsClerk -.->|performs| system__ClinicOpsSystem
   %% derived actor__AccountsClerk -> system__ClinicOpsSystem via buc__BucVisitPayment,step__CalculationStep,step__CallStep,step__ReceiptStep,step__WindowStep,usecase__ApplySelectedTreatmentFee,usecase__CalculateVisitBill,usecase__CallPatientForPayment,usecase__IssueReceipt,usecase__SettleAtWindow
@@ -214,27 +214,27 @@ flowchart LR
     constraint__BillingAuditTrail["会計の監査証跡"]:::constraint
     constraint__NoPharmacySteering["特定の保険薬局において調剤を受けるべき旨の指示等を行わない"]:::constraint
     constraint__PatientDataPrivacy["患者情報の保護"]:::constraint
-    buc__BucAppointmentScheduling["Schedule Appointments"]:::buc
-    %% desc buc__BucAppointmentScheduling: Find, reserve, book, change, and notify appointment slots.
+    buc__BucAppointmentScheduling["予約"]:::buc
+    %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
     buc__BucBillingClaims["レセプト作成・請求"]:::buc
     %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
-    buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
-    buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
-    buc__BucOrdersResults["Manage Orders and Results"]:::buc
-    buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    buc__BucClinicalEncounter["診察"]:::buc
+    buc__BucFollowupCare["フォローアップ"]:::buc
+    buc__BucOrdersResults["検体検査"]:::buc
+    buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
     buc__BucPrescriptionFulfillment["処方"]:::buc
     %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
-    buc__BucStaffAdministration["Administer Clinic Operations"]:::buc
+    buc__BucStaffAdministration["病院管理"]:::buc
     buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
     %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
     buc__BucVisitPayment["計算・会計"]:::buc
     %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
   end
   subgraph layer_system["システム"]
-    system__ClinicOpsSystem["Clinic Operations System"]:::system
+    system__ClinicOpsSystem["外来業務システム"]:::system
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PatientProfile["Patient Profile"]:::entity
-    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__PatientProfile["患者基本情報"]:::entity
+    entity__PaymentTransaction["精算"]:::entity
     entity__Prescription["処方箋"]:::entity
   end
   constraint__BillingAuditTrail -.->|constrains| entity__PaymentTransaction
@@ -287,48 +287,48 @@ flowchart LR
   subgraph layer_value["システム価値"]
     actor__AccountsClerk["医事課 会計担当"]:::actor
     %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
-    actor__CareCoordinator["Care Coordinator"]:::actor
+    actor__CareCoordinator["患者支援・地域連携担当"]:::actor
     actor__ClaimsClerk["医事課 レセプト担当"]:::actor
     %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
-    actor__ClinicAdmin["Clinic Administrator"]:::actor
+    actor__ClinicAdmin["病院管理者"]:::actor
     actor__Clinician["医師"]:::actor
     actor__MedicalClerk["医師事務作業補助者"]:::actor
     %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
     actor__Nurse["看護師"]:::actor
     %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Patient["患者"]:::actor
+    %% desc actor__Patient: 病院で診療を受ける人。
     actor__Pharmacist["薬剤師"]:::actor
     actor__ReceptionClerk["医事課 受付担当"]:::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
     extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
     extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
     extsystem__InsurancePharmacy["保険薬局"]:::extsystem
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
     extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
     extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    subgraph business__CareDelivery["Care Delivery"]
-      buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
-      buc__BucOrdersResults["Manage Orders and Results"]:::buc
+    subgraph business__CareDelivery["診療"]
+      buc__BucClinicalEncounter["診察"]:::buc
+      buc__BucOrdersResults["検体検査"]:::buc
       buc__BucPrescriptionFulfillment["処方"]:::buc
       %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
     end
-    subgraph business__ClinicAdministration["Clinic Administration"]
-      buc__BucStaffAdministration["Administer Clinic Operations"]:::buc
+    subgraph business__ClinicAdministration["病院管理"]
+      buc__BucStaffAdministration["病院管理"]:::buc
     end
-    subgraph business__PatientAccess["Patient Access"]
-      %% desc business__PatientAccess: Patient-facing access workflows from onboarding through appointments.
-      buc__BucAppointmentScheduling["Schedule Appointments"]:::buc
-      %% desc buc__BucAppointmentScheduling: Find, reserve, book, change, and notify appointment slots.
-      buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
-      buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+    subgraph business__PatientAccess["患者受付"]
+      %% desc business__PatientAccess: 新患登録から予約、受付、フォローアップまでの患者に向き合う業務。
+      buc__BucAppointmentScheduling["予約"]:::buc
+      %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
+      buc__BucFollowupCare["フォローアップ"]:::buc
+      buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
       buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
       %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
     end
-    subgraph business__RevenueCycle["Revenue Cycle"]
+    subgraph business__RevenueCycle["医事会計"]
       buc__BucBillingClaims["レセプト作成・請求"]:::buc
       %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
       buc__BucVisitPayment["計算・会計"]:::buc
@@ -440,13 +440,13 @@ UC/API 要求に対して actor の `has_permission` が不足していること
 
 ## 3. BUC 単位の設計レビュー
 
-### 3.1 Patient Onboarding
+### 3.1 新患登録・患者情報管理
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucPatientOnboarding` |
 | Business | `PatientAccess` |
-| 主な actor | ReceptionClerk（医事課 受付担当）, Patient |
+| 主な actor | 医事課 受付担当（`ReceptionClerk`）、患者（`Patient`） |
 | 必要権限 | `PatientProfileRead`, `PatientProfileWrite`, `InsuranceVerify`, `ConsentCapture`, `IntakeManage`, `PatientMessageSend` |
 | 主なデータ | `PatientAccount`, `PatientProfile`, `InsurancePolicy`, `EligibilityCheck`, `ConsentRecord`, `IntakePacket`, `PatientMessage` |
 
@@ -458,7 +458,7 @@ UC/API 要求に対して actor の `has_permission` が不足していること
 - 受付ごとの資格確認（`BucVisitCheckIn`）と新患登録時の資格登録の責務が混ざっていないか。
 - SendIntakeForms は予約イベントから起動されるため、予約 BUC 側の責務と混同しないか。
 
-#### Patient Onboarding 業務フロー図
+#### 新患登録・患者情報管理 業務フロー図
 
 生成コマンド:
 
@@ -473,7 +473,7 @@ rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucPatien
 flowchart TD
   subgraph flow__OnboardingFlow["新患登録の流れ"]
     step__IntakeExpireStep["問診票の期限切れ"]:::step
-    subgraph lane__OnboardingFlow__Patient["Patient"]
+    subgraph lane__OnboardingFlow__Patient["患者"]
       %% lane lane__OnboardingFlow__Patient: actor__Patient
       step__ConsentStep["同意の取得"]:::step
       step__IntakeAnswerStep["問診票の回答"]:::step
@@ -495,18 +495,18 @@ flowchart TD
       step__MergeStep["重複患者の統合"]:::step
     end
   end
-  timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
-  usecase__ArchivePatient["Archive Patient"]:::usecase
-  usecase__CaptureConsent["Capture Consent"]:::usecase
-  usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
-  usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
-  usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
-  usecase__RegisterPatient["Register Patient"]:::usecase
-  usecase__SearchPatient["Search Patient"]:::usecase
-  usecase__SendIntakeForms["Send Intake Forms"]:::usecase
-  usecase__UpdateDemographics["Update Demographics"]:::usecase
+  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
+  usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+  usecase__CaptureConsent["同意の取得"]:::usecase
+  usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+  usecase__RegisterPatient["新患登録"]:::usecase
+  usecase__SearchPatient["患者の検索"]:::usecase
+  usecase__SendIntakeForms["問診票の送付"]:::usecase
+  usecase__UpdateDemographics["患者属性の変更"]:::usecase
   usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
-  event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+  event__EvAppointmentScheduled["予約確定"]:::event
   step__ArchiveStep -.->|covers| usecase__ArchivePatient
   step__ConsentStep -.->|covers| usecase__CaptureConsent
   step__ConsentStep -->|precedes| step__IntakeSendStep
@@ -537,7 +537,7 @@ flowchart TD
   classDef event stroke:#333;
 ```
 
-#### Patient Onboarding UC複合図
+#### 新患登録・患者情報管理 UC複合図
 
 生成コマンド:
 
@@ -552,41 +552,41 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucPat
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Patient["患者"]:::actor
+    %% desc actor__Patient: 病院で診療を受ける人。
     actor__ReceptionClerk["医事課 受付担当"]:::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
+    timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__ArchivePatient["Archive Patient"]:::usecase
-    usecase__CaptureConsent["Capture Consent"]:::usecase
-    usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
-    usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
-    usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
-    usecase__RegisterPatient["Register Patient"]:::usecase
-    usecase__SearchPatient["Search Patient"]:::usecase
-    usecase__SendIntakeForms["Send Intake Forms"]:::usecase
-    usecase__UpdateDemographics["Update Demographics"]:::usecase
+    usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+    usecase__CaptureConsent["同意の取得"]:::usecase
+    usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+    usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+    usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+    usecase__RegisterPatient["新患登録"]:::usecase
+    usecase__SearchPatient["患者の検索"]:::usecase
+    usecase__SendIntakeForms["問診票の送付"]:::usecase
+    usecase__UpdateDemographics["患者属性の変更"]:::usecase
     usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
-    screen__ConsentScreen["Consent Capture Screen"]:::screen
-    screen__InsuranceScreen["Insurance Verification Screen"]:::screen
-    screen__IntakePortalScreen["Intake Portal Screen"]:::screen
-    screen__PatientProfileScreen["Patient Profile Screen"]:::screen
-    screen__PatientSearchScreen["Patient Search Screen"]:::screen
-    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    screen__ConsentScreen["同意取得画面"]:::screen
+    screen__InsuranceScreen["保険資格登録画面"]:::screen
+    screen__IntakePortalScreen["問診票ポータル画面"]:::screen
+    screen__PatientProfileScreen["患者基本情報画面"]:::screen
+    screen__PatientSearchScreen["患者検索画面"]:::screen
+    event__EvAppointmentScheduled["予約確定"]:::event
   end
   subgraph layer_system["システム"]
-    entity__ConsentRecord["Consent Record"]:::entity
+    entity__ConsentRecord["同意記録"]:::entity
     entity__EligibilityCheck["資格確認"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__IntakePacket["Intake Packet"]:::entity
-    entity__PatientAccount["Patient Account"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
-    entity__PatientProfile["Patient Profile"]:::entity
+    entity__IntakePacket["問診票"]:::entity
+    entity__PatientAccount["患者登録"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
+    entity__PatientProfile["患者基本情報"]:::entity
     state__IntakePacket_intakecompleted["回答済"]:::state
     state__IntakePacket_intakeexpired["期限切れ"]:::state
     state__IntakePacket_intakesent["送付済"]:::state
@@ -659,13 +659,13 @@ flowchart LR
   classDef state stroke:#333;
 ```
 
-### 3.2 Appointment Scheduling
+### 3.2 予約
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucAppointmentScheduling` |
 | Business | `PatientAccess` |
-| 主な actor | ReceptionClerk, Patient |
+| 主な actor | 医事課 受付担当（`ReceptionClerk`）、患者（`Patient`） |
 | 必要権限 | `ScheduleRead`, `ScheduleWrite` |
 | 主なデータ | `Appointment`, `ProviderSchedule`, `Notification`, `PatientMessage` |
 
@@ -677,7 +677,7 @@ flowchart LR
 - CancelAppointment が Appointment と ProviderSchedule を同じ API 境界で更新することが妥当か。
 - 予約時に選ばれる `Appointment.referral`（再診・紹介状あり・紹介状なし・除外）が、受付で確認する紹介状の有無と一致するか。
 
-#### Appointment Scheduling 業務フロー図
+#### 予約 業務フロー図
 
 生成コマンド:
 
@@ -702,19 +702,19 @@ flowchart TD
       step__ReserveStep["仮押さえ"]:::step
     end
   end
-  actor__Patient["Patient"]:::actor
-  %% desc actor__Patient: A person receiving care through the clinic.
+  actor__Patient["患者"]:::actor
+  %% desc actor__Patient: 病院で診療を受ける人。
   actor__ReceptionClerk["医事課 受付担当"]:::actor
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-  timer__NoShowSweep["Nightly no-show sweep"]:::timer
-  usecase__BookAppointment["Book Appointment"]:::usecase
-  usecase__CancelAppointment["Cancel Appointment"]:::usecase
-  usecase__MarkNoShow["Mark No Show"]:::usecase
-  usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
-  usecase__ReserveAppointment["Reserve Appointment"]:::usecase
-  usecase__SearchAvailability["Search Availability"]:::usecase
-  usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
-  event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
+  usecase__BookAppointment["予約の確定"]:::usecase
+  usecase__CancelAppointment["予約の取消"]:::usecase
+  usecase__MarkNoShow["未来院の処理"]:::usecase
+  usecase__RescheduleAppointment["予約の変更"]:::usecase
+  usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+  usecase__SearchAvailability["空き枠の検索"]:::usecase
+  usecase__SendAppointmentNotice["予約の通知"]:::usecase
+  event__EvAppointmentCancelled["予約取消"]:::event
   actor__Patient -.->|performs| step__AvailabilityStep
   actor__ReceptionClerk -.->|performs| step__AvailabilityStep
   step__AvailabilityStep -.->|covers| usecase__SearchAvailability
@@ -742,7 +742,7 @@ flowchart TD
   classDef event stroke:#333;
 ```
 
-#### Appointment Scheduling UC複合図
+#### 予約 UC複合図
 
 生成コマンド:
 
@@ -757,37 +757,37 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucApp
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
+    actor__Patient["患者"]:::actor
+    %% desc actor__Patient: 病院で診療を受ける人。
     actor__ReceptionClerk["医事課 受付担当"]:::actor
     %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_environment["システム外部環境"]
-    timer__NoShowSweep["Nightly no-show sweep"]:::timer
+    timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__BookAppointment["Book Appointment"]:::usecase
-    usecase__CancelAppointment["Cancel Appointment"]:::usecase
-    usecase__MarkNoShow["Mark No Show"]:::usecase
-    usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
-    usecase__ReserveAppointment["Reserve Appointment"]:::usecase
-    usecase__SearchAvailability["Search Availability"]:::usecase
-    usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
-    screen__AppointmentNoticeScreen["Appointment Notice Screen"]:::screen
-    screen__AppointmentScreen["Appointment Screen"]:::screen
-    screen__ScheduleSearchScreen["Schedule Search Screen"]:::screen
-    event__EvAppointmentCancelled["Appointment Cancelled"]:::event
-    event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
-    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+    usecase__BookAppointment["予約の確定"]:::usecase
+    usecase__CancelAppointment["予約の取消"]:::usecase
+    usecase__MarkNoShow["未来院の処理"]:::usecase
+    usecase__RescheduleAppointment["予約の変更"]:::usecase
+    usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+    usecase__SearchAvailability["空き枠の検索"]:::usecase
+    usecase__SendAppointmentNotice["予約の通知"]:::usecase
+    screen__AppointmentNoticeScreen["予約通知画面"]:::screen
+    screen__AppointmentScreen["予約画面"]:::screen
+    screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
+    event__EvAppointmentCancelled["予約取消"]:::event
+    event__EvAppointmentRescheduled["予約変更"]:::event
+    event__EvAppointmentScheduled["予約確定"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
-    entity__ClinicLocation["Clinic Location"]:::entity
-    entity__Notification["Notification"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
-    entity__Provider["Provider"]:::entity
-    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__ClinicLocation["施設"]:::entity
+    entity__Notification["通知"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
+    entity__Provider["医師マスタ"]:::entity
+    entity__ProviderSchedule["診療枠"]:::entity
     state__Appointment_apptcancelled["取消"]:::state
     state__Appointment_apptnoshow["未来院"]:::state
     state__Appointment_apptrequested["仮押さえ"]:::state
@@ -866,7 +866,7 @@ flowchart LR
 |---|---|
 | BUC | `BucVisitCheckIn` |
 | Business | `PatientAccess` |
-| 主な actor | ReceptionClerk, Nurse |
+| 主な actor | 医事課 受付担当（`ReceptionClerk`）、看護師（`Nurse`） |
 | 必要権限 | `VisitCheckIn`, `InsuranceVerify`, `ReferralManage`, `RoomAssign`, `EncounterOpen` |
 | 主なデータ | `Appointment`, `PatientAccount`, `InsurancePolicy`, `EligibilityCheck`, `ReferralLetter`, `Room` |
 
@@ -904,7 +904,7 @@ flowchart TD
       step__ReferralStep["紹介状あり（初診）"]:::step
     end
   end
-  usecase__AssignRoom["Assign Room"]:::usecase
+  usecase__AssignRoom["診察室への案内"]:::usecase
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
   usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
@@ -961,11 +961,11 @@ flowchart LR
     timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AssignRoom["Assign Room"]:::usecase
+    usecase__AssignRoom["診察室への案内"]:::usecase
     usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
     usecase__CheckInPatient["受付（初診・再診）"]:::usecase
     usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
-    usecase__PrepareEncounter["Prepare Encounter"]:::usecase
+    usecase__PrepareEncounter["診療の準備"]:::usecase
     usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
     usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
     usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
@@ -976,18 +976,18 @@ flowchart LR
     screen__CheckInScreen["受付画面"]:::screen
     screen__EligibilityScreen["資格確認画面"]:::screen
     screen__ReferralScreen["紹介状受付画面"]:::screen
-    screen__RoomBoardScreen["Room Board Screen"]:::screen
-    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    screen__RoomBoardScreen["診察室ボード画面"]:::screen
+    event__EvAppointmentCheckedIn["受付完了"]:::event
     event__EvEligibilityChecked["資格確認結果"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
+    entity__Appointment["予約・受診"]:::entity
     entity__EligibilityCheck["資格確認"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PatientAccount["Patient Account"]:::entity
-    entity__PatientProfile["Patient Profile"]:::entity
+    entity__PatientAccount["患者登録"]:::entity
+    entity__PatientProfile["患者基本情報"]:::entity
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-    entity__Room["Room"]:::entity
+    entity__Room["診察室"]:::entity
     state__Appointment_apptcheckedin["受付済"]:::state
     state__Appointment_apptscheduled["予約済"]:::state
     state__EligibilityCheck_eligdeclared["申立書で確認"]:::state
@@ -1087,13 +1087,13 @@ flowchart LR
   classDef condition stroke:#333;
 ```
 
-### 3.4 Clinical Encounter
+### 3.4 診察
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucClinicalEncounter` |
 | Business | `CareDelivery` |
-| 主な actor | Nurse（看護師）, Clinician（医師） |
+| 主な actor | 看護師（`Nurse`）、医師（`Clinician`） |
 | 必要権限 | `EncounterOpen`, `VitalsRecord`, `ClinicalDocument`, `EncounterSign`, `ReferralManage` |
 | 主なデータ | `Encounter`, `Appointment`, `VitalSign`, `Diagnosis`, `Room`, `ReferralLetter` |
 
@@ -1105,7 +1105,7 @@ flowchart LR
 - CompleteConsultation が予約を完了にせず「計算待ち」に置くことで、会計前に予約が閉じないか。
 - IssueReferralLetter（診療情報提供書）と受付の紹介状受付（ReceiveReferralLetter）が同じ `ReferralLetter` を向きで区別できるか。
 
-#### Clinical Encounter 業務フロー図
+#### 診察 業務フロー図
 
 生成コマンド:
 
@@ -1133,13 +1133,13 @@ flowchart TD
       step__VitalsStep["バイタル測定"]:::step
     end
   end
-  usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+  usecase__AmendEncounter["署名済み記録の修正"]:::usecase
   usecase__CompleteConsultation["診察終了"]:::usecase
-  usecase__DocumentAssessment["Document Assessment"]:::usecase
+  usecase__DocumentAssessment["診察・診断の記録"]:::usecase
   usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
-  usecase__OpenEncounter["Open Encounter"]:::usecase
-  usecase__RecordVitals["Record Vitals"]:::usecase
-  usecase__SignEncounter["Sign Encounter"]:::usecase
+  usecase__OpenEncounter["診療記録を開く"]:::usecase
+  usecase__RecordVitals["バイタルの記録"]:::usecase
+  usecase__SignEncounter["診療記録の署名"]:::usecase
   step__AmendStep -.->|covers| usecase__AmendEncounter
   step__AssessmentStep -->|branches| step__ReferralOutStep
   step__AssessmentStep -.->|covers| usecase__DocumentAssessment
@@ -1160,7 +1160,7 @@ flowchart TD
   classDef usecase stroke:#333;
 ```
 
-#### Clinical Encounter UC複合図
+#### 診察 UC複合図
 
 生成コマンド:
 
@@ -1181,28 +1181,28 @@ flowchart LR
     extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__AmendEncounter["Amend Signed Encounter"]:::usecase
+    usecase__AmendEncounter["署名済み記録の修正"]:::usecase
     usecase__CompleteConsultation["診察終了"]:::usecase
-    usecase__DocumentAssessment["Document Assessment"]:::usecase
+    usecase__DocumentAssessment["診察・診断の記録"]:::usecase
     usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
-    usecase__OpenEncounter["Open Encounter"]:::usecase
-    usecase__RecordVitals["Record Vitals"]:::usecase
-    usecase__SignEncounter["Sign Encounter"]:::usecase
-    screen__DiagnosisScreen["Diagnosis Screen"]:::screen
-    screen__EncounterWorkspaceScreen["Encounter Workspace"]:::screen
+    usecase__OpenEncounter["診療記録を開く"]:::usecase
+    usecase__RecordVitals["バイタルの記録"]:::usecase
+    usecase__SignEncounter["診療記録の署名"]:::usecase
+    screen__DiagnosisScreen["診断入力画面"]:::screen
+    screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
-    screen__VitalsScreen["Vitals Screen"]:::screen
-    event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+    screen__VitalsScreen["バイタル入力画面"]:::screen
+    event__EvAppointmentCheckedIn["受付完了"]:::event
     event__EvConsultationCompleted["診察終了"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvEncounterSigned["診療記録の署名"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
-    entity__Diagnosis["Diagnosis"]:::entity
-    entity__Encounter["Encounter"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__Diagnosis["診断"]:::entity
+    entity__Encounter["診療記録"]:::entity
     entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-    entity__Room["Room"]:::entity
-    entity__VitalSign["Vital Sign"]:::entity
+    entity__Room["診察室"]:::entity
+    entity__VitalSign["バイタル"]:::entity
     state__Appointment_apptawaitingcalc["計算待ち"]:::state
     state__Appointment_apptcheckedin["受付済"]:::state
     state__Appointment_apptinconsult["診察中"]:::state
@@ -1267,13 +1267,13 @@ flowchart LR
   classDef state stroke:#333;
 ```
 
-### 3.5 Orders and Results
+### 3.5 検体検査
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucOrdersResults` |
 | Business | `CareDelivery` |
-| 主な actor | Clinician, Nurse, MedicalClerk（医師事務作業補助者） |
+| 主な actor | 医師（`Clinician`）、看護師（`Nurse`）、医師事務作業補助者（`MedicalClerk`） |
 | 必要権限 | `ClinicalOrderWrite`, `ProxyOrderEntry`, `LabResultManage`, `PatientMessageSend` |
 | 主なデータ | `ClinicalOrder`, `LabResult`, `Charge`, `Notification`, `PatientMessage` |
 
@@ -1285,7 +1285,7 @@ flowchart LR
 - RegisterPerformedProcedure が作る Charge を、会計計算入力が読めるか。
 - NotifyCriticalResult は結果確認イベントから起動されるため、手動 UC と自動 UC の違いをレビューできるか。
 
-#### Orders and Results 業務フロー図
+#### 検体検査 業務フロー図
 
 生成コマンド:
 
@@ -1320,17 +1320,17 @@ flowchart TD
   %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
   actor__Nurse["看護師"]:::actor
   %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
-  usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
-  usecase__CollectSpecimen["Collect Specimen"]:::usecase
+  usecase__CancelClinicalOrder["オーダの取消"]:::usecase
+  usecase__CollectSpecimen["採血"]:::usecase
   usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
   usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
-  usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
-  usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+  usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+  usecase__PlaceLabOrder["検体検査オーダの登録"]:::usecase
   usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
-  usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+  usecase__ReceiveLabResult["検査結果の受信"]:::usecase
   usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
-  usecase__ReviewLabResult["Review Lab Result"]:::usecase
-  event__EvLabResultReceived["Lab Result Received"]:::event
+  usecase__ReviewLabResult["検査結果の確認"]:::usecase
+  event__EvLabResultReceived["検査結果の受信"]:::event
   actor__MedicalClerk -.->|performs| step__ProxyOrderStep
   actor__Nurse -.->|performs| step__ProxyOrderStep
   step__CollectStep -.->|covers| usecase__CollectSpecimen
@@ -1362,7 +1362,7 @@ flowchart TD
   classDef event stroke:#333;
 ```
 
-#### Orders and Results UC複合図
+#### 検体検査 UC複合図
 
 生成コマンド:
 
@@ -1385,30 +1385,30 @@ flowchart LR
     extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__CancelClinicalOrder["Cancel Clinical Order"]:::usecase
-    usecase__CollectSpecimen["Collect Specimen"]:::usecase
+    usecase__CancelClinicalOrder["オーダの取消"]:::usecase
+    usecase__CollectSpecimen["採血"]:::usecase
     usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
     usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
-    usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
-    usecase__PlaceLabOrder["Place Lab Order"]:::usecase
+    usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+    usecase__PlaceLabOrder["検体検査オーダの登録"]:::usecase
     usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
-    usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+    usecase__ReceiveLabResult["検査結果の受信"]:::usecase
     usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
-    usecase__ReviewLabResult["Review Lab Result"]:::usecase
-    screen__CriticalNoticeScreen["Critical Result Notice Screen"]:::screen
-    screen__OrderEntryScreen["Order Entry Screen"]:::screen
-    screen__ResultReviewScreen["Result Review Screen"]:::screen
-    screen__SpecimenScreen["Specimen Collection Screen"]:::screen
-    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
-    event__EvLabResultReceived["Lab Result Received"]:::event
+    usecase__ReviewLabResult["検査結果の確認"]:::usecase
+    screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
+    screen__OrderEntryScreen["オーダ入力画面"]:::screen
+    screen__ResultReviewScreen["検査結果確認画面"]:::screen
+    screen__SpecimenScreen["採血画面"]:::screen
+    event__EvClinicalOrderReviewed["検査結果の確認"]:::event
+    event__EvLabResultReceived["検査結果の受信"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Charge["Charge"]:::entity
-    entity__ClinicalOrder["Clinical Order"]:::entity
-    entity__Encounter["Encounter"]:::entity
-    entity__LabResult["Lab Result"]:::entity
-    entity__Notification["Notification"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
+    entity__Charge["コスト（診療行為）"]:::entity
+    entity__ClinicalOrder["検査オーダ"]:::entity
+    entity__Encounter["診療記録"]:::entity
+    entity__LabResult["検査結果"]:::entity
+    entity__Notification["通知"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
     state__ClinicalOrder_clcancelled["取消"]:::state
     state__ClinicalOrder_clcollected["採取済"]:::state
     state__ClinicalOrder_clordered["オーダ済"]:::state
@@ -1495,7 +1495,7 @@ flowchart LR
 |---|---|
 | BUC | `BucPrescriptionFulfillment` |
 | Business | `CareDelivery` |
-| 主な actor | Clinician（医師）, Pharmacist（薬剤師） |
+| 主な actor | 医師（`Clinician`）、薬剤師（`Pharmacist`） |
 | 必要権限 | `PrescriptionWrite`, `PrescriptionDispense` |
 | 主なデータ | `Prescription`, `Medication`, `Encounter` |
 
@@ -1612,18 +1612,18 @@ flowchart LR
     usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
     usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
     usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
-    usecase__SearchMedication["Search Medication"]:::usecase
+    usecase__SearchMedication["薬剤の検索"]:::usecase
     screen__DispensingScreen["調剤・監査画面"]:::screen
-    screen__MedicationSearchScreen["Medication Search Screen"]:::screen
+    screen__MedicationSearchScreen["薬剤検索画面"]:::screen
     screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
     screen__PrescriptionScreen["処方画面"]:::screen
     event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
-    event__EvPrescriptionDispensed["Prescription Dispensed"]:::event
+    event__EvPrescriptionDispensed["保険薬局での調剤完了"]:::event
     event__EvPrescriptionIssued["電子処方箋の登録"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Encounter["Encounter"]:::entity
-    entity__Medication["Medication"]:::entity
+    entity__Encounter["診療記録"]:::entity
+    entity__Medication["薬剤"]:::entity
     entity__Prescription["処方箋"]:::entity
     state__Prescription_rxaudited["調剤・監査済"]:::state
     state__Prescription_rxcancelled["取消"]:::state
@@ -1731,7 +1731,7 @@ flowchart LR
 |---|---|
 | BUC | `BucVisitPayment` |
 | Business | `RevenueCycle` |
-| 主な actor | AccountsClerk（医事課 会計担当） |
+| 主な actor | 医事課 会計担当（`AccountsClerk`） |
 | 必要権限 | `BillCalculate`, `PaymentCollect` |
 | 主なデータ | `Appointment`, `Charge`, `PaymentTransaction`, `AccountBalance`, `InsurancePolicy`, `SelectedTreatmentFeeSetting` |
 
@@ -1764,7 +1764,7 @@ flowchart TD
       step__ReceiptStep["領収証・明細書の交付"]:::step
       step__WindowStep["会計窓口で精算"]:::step
     end
-    subgraph lane__VisitPaymentFlow__Patient["Patient"]
+    subgraph lane__VisitPaymentFlow__Patient["患者"]
       %% lane lane__VisitPaymentFlow__Patient: actor__Patient
       step__KioskStep["自動精算機で精算"]:::step
     end
@@ -1829,11 +1829,11 @@ flowchart LR
   end
   subgraph layer_system["システム"]
     entity__AccountBalance["未収金残高"]:::entity
-    entity__Appointment["Appointment"]:::entity
-    entity__Charge["Charge"]:::entity
-    entity__Encounter["Encounter"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__Charge["コスト（診療行為）"]:::entity
+    entity__Encounter["診療記録"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__PaymentTransaction["精算"]:::entity
     entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
     state__Appointment_apptawaitingcalc["計算待ち"]:::state
     state__Appointment_apptawaitingpay["会計待ち"]:::state
@@ -1911,7 +1911,7 @@ flowchart LR
 |---|---|
 | BUC | `BucBillingClaims` |
 | Business | `RevenueCycle` |
-| 主な actor | ClaimsClerk（医事課 レセプト担当） |
+| 主な actor | 医事課 レセプト担当（`ClaimsClerk`） |
 | 必要権限 | `BillingClaimWrite`, `PaymentPost` |
 | 主なデータ | `ClaimStatement`, `Charge`, `InsurancePolicy`, `AccountBalance` |
 
@@ -2048,7 +2048,7 @@ flowchart LR
     usecase__SubmitClaimStatements["レセプト請求"]:::usecase
     usecase__VoidCharge["コストの取消"]:::usecase
     screen__BalanceScreen["未収金画面"]:::screen
-    screen__ChargeWorklistScreen["Charge Worklist Screen"]:::screen
+    screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
     screen__ClaimScreen["レセプト画面"]:::screen
     screen__PaymentPostingScreen["入金画面"]:::screen
     event__EvClaimAccepted["レセプト受付"]:::event
@@ -2057,16 +2057,16 @@ flowchart LR
     event__EvClaimReturned["返戻"]:::event
     event__EvClaimStatementsSubmitted["レセプト請求"]:::event
     event__EvClaimTransferred["資格の振替・分割"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
+    event__EvEncounterSigned["診療記録の署名"]:::event
     event__EvRemittance["診療報酬の支払"]:::event
   end
   subgraph layer_system["システム"]
     entity__AccountBalance["未収金残高"]:::entity
-    entity__Charge["Charge"]:::entity
+    entity__Charge["コスト（診療行為）"]:::entity
     entity__ClaimStatement["レセプト"]:::entity
-    entity__Encounter["Encounter"]:::entity
+    entity__Encounter["診療記録"]:::entity
     entity__InsurancePolicy["保険資格"]:::entity
-    entity__PaymentTransaction["Payment Transaction"]:::entity
+    entity__PaymentTransaction["精算"]:::entity
     state__ClaimStatement_stmtassessed["査定"]:::state
     state__ClaimStatement_stmtdrafting["作成中"]:::state
     state__ClaimStatement_stmtinspecting["院内点検中"]:::state
@@ -2189,13 +2189,13 @@ flowchart LR
   classDef condition stroke:#333;
 ```
 
-### 3.9 Follow-Up Care
+### 3.9 フォローアップ
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucFollowupCare` |
 | Business | `PatientAccess` |
-| 主な actor | CareCoordinator, Patient |
+| 主な actor | 患者支援・地域連携担当（`CareCoordinator`）、患者（`Patient`） |
 | 必要権限 | `FollowUpManage`, `PatientMessageSend`, `ScheduleWrite` |
 | 主なデータ | `CarePlan`, `PatientMessage`, `Appointment`, `Notification` |
 
@@ -2206,7 +2206,7 @@ flowchart LR
 - ScheduleFollowUpVisit が予約 BUC と同じ Appointment lifecycle を使ってよいか。
 - NotifyPatientResult と NotifyCriticalResult の通知責務が重複していないか。
 
-#### Follow-Up Care 業務フロー図
+#### フォローアップ 業務フロー図
 
 生成コマンド:
 
@@ -2220,7 +2220,7 @@ rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucFollow
 %% omitted: buc
 flowchart TD
   subgraph flow__FollowupFlow["フォローアップの流れ"]
-    subgraph lane__FollowupFlow__CareCoordinator["Care Coordinator"]
+    subgraph lane__FollowupFlow__CareCoordinator["患者支援・地域連携担当"]
       %% lane lane__FollowupFlow__CareCoordinator: actor__CareCoordinator
       step__CarePlanStep["ケアプランの作成"]:::step
       step__FollowUpMsgStep["患者への連絡"]:::step
@@ -2230,12 +2230,12 @@ flowchart TD
       step__RevisitStep["再診の予約"]:::step
     end
   end
-  usecase__CloseCarePlan["Close Care Plan"]:::usecase
-  usecase__CreateCarePlan["Create Care Plan"]:::usecase
-  usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
-  usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
-  usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
-  usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
+  usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+  usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+  usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  usecase__SendFollowUpMessage["患者への連絡"]:::usecase
   step__CarePlanStep -->|branches| step__ResultNoticeStep
   step__CarePlanStep -.->|covers| usecase__CreateCarePlan
   step__CarePlanStep -->|precedes| step__FollowUpMsgStep
@@ -2254,7 +2254,7 @@ flowchart TD
   classDef usecase stroke:#333;
 ```
 
-#### Follow-Up Care UC複合図
+#### フォローアップ UC複合図
 
 生成コマンド:
 
@@ -2269,30 +2269,30 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucFol
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__CareCoordinator["Care Coordinator"]:::actor
-    extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+    actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+    extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
-    usecase__CloseCarePlan["Close Care Plan"]:::usecase
-    usecase__CreateCarePlan["Create Care Plan"]:::usecase
-    usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
-    usecase__ReviewPatientResponse["Review Patient Response"]:::usecase
-    usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
-    usecase__SendFollowUpMessage["Send Follow-Up Message"]:::usecase
-    screen__CarePlanScreen["Care Plan Screen"]:::screen
-    screen__FollowUpScheduleScreen["Follow-Up Schedule Screen"]:::screen
-    screen__PatientMessageScreen["Patient Message Screen"]:::screen
-    event__EvAppointmentScheduled["Appointment Scheduled"]:::event
-    event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
-    event__EvEncounterSigned["Encounter Signed"]:::event
+    usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+    usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+    usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+    usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+    usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+    usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+    screen__CarePlanScreen["ケアプラン画面"]:::screen
+    screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+    screen__PatientMessageScreen["患者連絡画面"]:::screen
+    event__EvAppointmentScheduled["予約確定"]:::event
+    event__EvClinicalOrderReviewed["検査結果の確認"]:::event
+    event__EvEncounterSigned["診療記録の署名"]:::event
   end
   subgraph layer_system["システム"]
-    entity__Appointment["Appointment"]:::entity
-    entity__CarePlan["Care Plan"]:::entity
-    entity__Encounter["Encounter"]:::entity
-    entity__Notification["Notification"]:::entity
-    entity__PatientMessage["Patient Message"]:::entity
-    entity__ProviderSchedule["Provider Schedule"]:::entity
+    entity__Appointment["予約・受診"]:::entity
+    entity__CarePlan["ケアプラン"]:::entity
+    entity__Encounter["診療記録"]:::entity
+    entity__Notification["通知"]:::entity
+    entity__PatientMessage["患者連絡"]:::entity
+    entity__ProviderSchedule["診療枠"]:::entity
     state__Appointment_apptrequested["仮押さえ"]:::state
     state__Appointment_apptscheduled["予約済"]:::state
     state__CarePlan_careclosed["終了"]:::state
@@ -2342,24 +2342,24 @@ flowchart LR
   classDef state stroke:#333;
 ```
 
-### 3.10 Staff Administration
+### 3.10 病院管理
 
 | 項目 | 内容 |
 |---|---|
 | BUC | `BucStaffAdministration` |
 | Business | `ClinicAdministration` |
-| 主な actor | ClinicAdmin |
+| 主な actor | 病院管理者（`ClinicAdmin`） |
 | 必要権限 | `ProviderScheduleAdmin`, `RoomAdmin`, `AuditRead`, `AuditResolve` |
 | 主なデータ | `Provider`, `ProviderSchedule`, `Room`, `AuditEvent` |
 
-診療所運営のマスタ・監査系業務を扱う。
+病院運営のマスタ（診療枠・診察室）と監査の業務を扱う。
 
 レビュー観点:
 
 - ReleaseRoom と診察終了の部屋状態更新が重複しないか。
 - ResolveAuditFinding が AdminConsole に限定されているか。
 
-#### Staff Administration UC複合図
+#### 病院管理 UC複合図
 
 生成コマンド:
 
@@ -2374,25 +2374,25 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucSta
 %% omitted: buc medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
-    actor__ClinicAdmin["Clinic Administrator"]:::actor
+    actor__ClinicAdmin["病院管理者"]:::actor
   end
   subgraph layer_boundary["システム境界"]
-    usecase__BlockScheduleSlot["Block Schedule Slot"]:::usecase
-    usecase__ConfigureRoom["Configure Room"]:::usecase
-    usecase__ManageProviderSchedule["Manage Provider Schedule"]:::usecase
-    usecase__ReleaseRoom["Release Room"]:::usecase
-    usecase__ResolveAuditFinding["Resolve Audit Finding"]:::usecase
-    usecase__ReviewAuditEvents["Review Audit Events"]:::usecase
-    screen__AuditReviewScreen["Audit Review Screen"]:::screen
-    screen__RoomAdminScreen["Room Admin Screen"]:::screen
-    screen__ScheduleAdminScreen["Schedule Admin Screen"]:::screen
+    usecase__BlockScheduleSlot["診療枠の停止"]:::usecase
+    usecase__ConfigureRoom["診察室の設定"]:::usecase
+    usecase__ManageProviderSchedule["診療枠の管理"]:::usecase
+    usecase__ReleaseRoom["診察室の解放"]:::usecase
+    usecase__ResolveAuditFinding["監査指摘の解決"]:::usecase
+    usecase__ReviewAuditEvents["監査ログの確認"]:::usecase
+    screen__AuditReviewScreen["監査ログ画面"]:::screen
+    screen__RoomAdminScreen["診察室管理画面"]:::screen
+    screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
   end
   subgraph layer_system["システム"]
-    entity__AuditEvent["Audit Event"]:::entity
-    entity__PatientAccount["Patient Account"]:::entity
-    entity__Provider["Provider"]:::entity
-    entity__ProviderSchedule["Provider Schedule"]:::entity
-    entity__Room["Room"]:::entity
+    entity__AuditEvent["監査ログ"]:::entity
+    entity__PatientAccount["患者登録"]:::entity
+    entity__Provider["医師マスタ"]:::entity
+    entity__ProviderSchedule["診療枠"]:::entity
+    entity__Room["診察室"]:::entity
   end
   actor__ClinicAdmin -.->|performs| usecase__BlockScheduleSlot
   %% derived actor__ClinicAdmin -> usecase__BlockScheduleSlot via buc__BucStaffAdministration
@@ -2441,7 +2441,7 @@ flowchart LR
 
 UC ごとの必要権限と確認点を表にまとめます。各 UC の画面、Entity 操作、イベントは BUC 別 UC複合図で、API は API マトリクスで確認します。
 
-### 4.1 Patient Onboarding UC
+### 4.1 新患登録・患者情報管理 UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
@@ -2456,7 +2456,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `MergeDuplicatePatient` | `PatientProfileWrite` | 患者統合状態 |
 | `ArchivePatient` | `PatientProfileWrite` | 患者アーカイブ状態 |
 
-### 4.2 Appointment Scheduling UC
+### 4.2 予約 UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
@@ -2485,7 +2485,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `AssignRoom` | `RoomAssign` | 部屋と予約の同期更新 |
 | `PrepareEncounter` | `EncounterOpen` | 診療準備の参照情報 |
 
-### 4.4 Clinical Encounter UC
+### 4.4 診察 UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
@@ -2497,7 +2497,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `IssueReferralLetter` | `ReferralManage` | 診療情報提供書の作成・送信 |
 | `CompleteConsultation` | `EncounterOpen` | 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する |
 
-### 4.5 Orders and Results UC
+### 4.5 検体検査 UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
@@ -2564,7 +2564,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `ReconcileBalance` | `PaymentPost` | 未収金管理台帳の作成 |
 | `VoidCharge` | `BillingClaimWrite` | コストの取消 |
 
-### 4.9 Follow-Up Care UC
+### 4.9 フォローアップ UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
@@ -2575,7 +2575,7 @@ UC ごとの必要権限と確認点を表にまとめます。各 UC の画面�
 | `CloseCarePlan` | `FollowUpManage` | ケアプラン終了 |
 | `NotifyPatientResult` | `PatientMessageSend` | 結果の患者通知 |
 
-### 4.10 Staff Administration UC
+### 4.10 病院管理 UC
 
 | UC | 必要権限 | 主な確認点 |
 |---|---|---|
@@ -2631,38 +2631,38 @@ rdra-ish diagram samples/clinic-ops --kind event --format mermaid --out samples/
 %% kinds: event usecase extsystem buc timer
 %% omitted: state transitions
 flowchart LR
-  event__EvAppointmentCancelled["Appointment Cancelled"]:::event
-  usecase__CancelAppointment["Cancel Appointment"]:::usecase
+  event__EvAppointmentCancelled["予約取消"]:::event
+  usecase__CancelAppointment["予約の取消"]:::usecase
   usecase__CancelAppointment -.->|raises| event__EvAppointmentCancelled
-  usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
+  usecase__SendAppointmentNotice["予約の通知"]:::usecase
   event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
-  extsystem__MessagingGateway["Messaging Gateway"]:::extsystem
+  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
-  event__EvAppointmentCheckedIn["Appointment Checked In"]:::event
+  event__EvAppointmentCheckedIn["受付完了"]:::event
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
   usecase__CheckInPatient -.->|raises| event__EvAppointmentCheckedIn
-  usecase__OpenEncounter["Open Encounter"]:::usecase
+  usecase__OpenEncounter["診療記録を開く"]:::usecase
   event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
-  usecase__PrepareEncounter["Prepare Encounter"]:::usecase
+  usecase__PrepareEncounter["診療の準備"]:::usecase
   event__EvAppointmentCheckedIn -.->|triggers| usecase__PrepareEncounter
-  buc__BucClinicalEncounter["Conduct Clinical Encounter"]:::buc
+  buc__BucClinicalEncounter["診察"]:::buc
   event__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
   extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
   event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
-  event__EvAppointmentRescheduled["Appointment Rescheduled"]:::event
-  usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
+  event__EvAppointmentRescheduled["予約変更"]:::event
+  usecase__RescheduleAppointment["予約の変更"]:::usecase
   usecase__RescheduleAppointment -.->|raises| event__EvAppointmentRescheduled
   event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
   event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
-  event__EvAppointmentScheduled["Appointment Scheduled"]:::event
-  usecase__BookAppointment["Book Appointment"]:::usecase
+  event__EvAppointmentScheduled["予約確定"]:::event
+  usecase__BookAppointment["予約の確定"]:::usecase
   usecase__BookAppointment -.->|raises| event__EvAppointmentScheduled
-  usecase__ScheduleFollowUpVisit["Schedule Follow-Up Visit"]:::usecase
+  usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
   usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
   event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
-  usecase__SendIntakeForms["Send Intake Forms"]:::usecase
+  usecase__SendIntakeForms["問診票の送付"]:::usecase
   event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
-  buc__BucPatientOnboarding["Onboard and Maintain Patient"]:::buc
+  buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
   event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
   event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
   event__EvBillCalculated["会計計算完了"]:::event
@@ -2697,14 +2697,14 @@ flowchart LR
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
   usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
   event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
-  event__EvClinicalOrderReviewed["Clinical Result Reviewed"]:::event
-  usecase__ReviewLabResult["Review Lab Result"]:::usecase
+  event__EvClinicalOrderReviewed["検査結果の確認"]:::event
+  usecase__ReviewLabResult["検査結果の確認"]:::usecase
   usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
-  usecase__NotifyCriticalResult["Notify Critical Result"]:::usecase
+  usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
-  usecase__NotifyPatientResult["Notify Patient Result"]:::usecase
+  usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
-  buc__BucFollowupCare["Coordinate Follow-Up Care"]:::buc
+  buc__BucFollowupCare["フォローアップ"]:::buc
   event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
   event__EvConsultationCompleted["診察終了"]:::event
   usecase__CompleteConsultation["診察終了"]:::usecase
@@ -2720,10 +2720,10 @@ flowchart LR
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityNoInfo
   usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityValid
-  event__EvEncounterSigned["Encounter Signed"]:::event
-  usecase__SignEncounter["Sign Encounter"]:::usecase
+  event__EvEncounterSigned["診療記録の署名"]:::event
+  usecase__SignEncounter["診療記録の署名"]:::usecase
   usecase__SignEncounter -.->|raises| event__EvEncounterSigned
-  usecase__CreateCarePlan["Create Care Plan"]:::usecase
+  usecase__CreateCarePlan["ケアプランの作成"]:::usecase
   event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
   usecase__CreateCharge["コスト情報の登録"]:::usecase
   event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
@@ -2731,10 +2731,10 @@ flowchart LR
   %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
   event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
-  event__EvLabResultReceived["Lab Result Received"]:::event
+  event__EvLabResultReceived["検査結果の受信"]:::event
   extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
   extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
-  usecase__ReceiveLabResult["Receive Lab Result"]:::usecase
+  usecase__ReceiveLabResult["検査結果の受信"]:::usecase
   event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
   event__EvPaymentSettled["自動精算機での精算完了"]:::event
   extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
@@ -2745,7 +2745,7 @@ flowchart LR
   extsystem__InsurancePharmacy -.->|raises| event__EvPharmacyInquiry
   usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
   event__EvPharmacyInquiry -.->|triggers| usecase__AnswerPharmacyInquiry
-  event__EvPrescriptionDispensed["Prescription Dispensed"]:::event
+  event__EvPrescriptionDispensed["保険薬局での調剤完了"]:::event
   extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
   extsystem__EPrescriptionService -.->|raises| event__EvPrescriptionDispensed
   usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
@@ -2764,16 +2764,16 @@ flowchart LR
   timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
   usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
   timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
-  timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
-  usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
+  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
+  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
   timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
   timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
   usecase__GenerateClaimStatement["レセプト作成"]:::usecase
   timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
   timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
   timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
-  timer__NoShowSweep["Nightly no-show sweep"]:::timer
-  usecase__MarkNoShow["Mark No Show"]:::usecase
+  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
+  usecase__MarkNoShow["未来院の処理"]:::usecase
   timer__NoShowSweep -.->|triggers| usecase__MarkNoShow
   timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
   usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
@@ -2852,33 +2852,33 @@ rdra-ish diagram samples/clinic-ops --kind information --format mermaid --out sa
 %% omitted: columns adr constraint usecase screen field api condition
 flowchart LR
   entity__AccountBalance["未収金残高"]:::entity
-  entity__Appointment["Appointment"]:::entity
-  entity__AuditEvent["Audit Event"]:::entity
-  entity__CarePlan["Care Plan"]:::entity
-  entity__Charge["Charge"]:::entity
+  entity__Appointment["予約・受診"]:::entity
+  entity__AuditEvent["監査ログ"]:::entity
+  entity__CarePlan["ケアプラン"]:::entity
+  entity__Charge["コスト（診療行為）"]:::entity
   entity__ClaimStatement["レセプト"]:::entity
-  entity__ClinicLocation["Clinic Location"]:::entity
-  entity__ClinicalOrder["Clinical Order"]:::entity
-  entity__ConsentRecord["Consent Record"]:::entity
-  entity__Diagnosis["Diagnosis"]:::entity
+  entity__ClinicLocation["施設"]:::entity
+  entity__ClinicalOrder["検査オーダ"]:::entity
+  entity__ConsentRecord["同意記録"]:::entity
+  entity__Diagnosis["診断"]:::entity
   entity__EligibilityCheck["資格確認"]:::entity
-  entity__Encounter["Encounter"]:::entity
+  entity__Encounter["診療記録"]:::entity
   entity__InsurancePolicy["保険資格"]:::entity
-  entity__IntakePacket["Intake Packet"]:::entity
-  entity__LabResult["Lab Result"]:::entity
-  entity__Medication["Medication"]:::entity
-  entity__Notification["Notification"]:::entity
-  entity__PatientAccount["Patient Account"]:::entity
-  entity__PatientMessage["Patient Message"]:::entity
-  entity__PatientProfile["Patient Profile"]:::entity
-  entity__PaymentTransaction["Payment Transaction"]:::entity
+  entity__IntakePacket["問診票"]:::entity
+  entity__LabResult["検査結果"]:::entity
+  entity__Medication["薬剤"]:::entity
+  entity__Notification["通知"]:::entity
+  entity__PatientAccount["患者登録"]:::entity
+  entity__PatientMessage["患者連絡"]:::entity
+  entity__PatientProfile["患者基本情報"]:::entity
+  entity__PaymentTransaction["精算"]:::entity
   entity__Prescription["処方箋"]:::entity
-  entity__Provider["Provider"]:::entity
-  entity__ProviderSchedule["Provider Schedule"]:::entity
+  entity__Provider["医師マスタ"]:::entity
+  entity__ProviderSchedule["診療枠"]:::entity
   entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-  entity__Room["Room"]:::entity
+  entity__Room["診察室"]:::entity
   entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-  entity__VitalSign["Vital Sign"]:::entity
+  entity__VitalSign["バイタル"]:::entity
   statemodel__Appointment_status["Appointment.status"]:::statemodel
   statemodel__CarePlan_status["CarePlan.status"]:::statemodel
   statemodel__ClaimStatement_status["ClaimStatement.status"]:::statemodel
@@ -2888,16 +2888,16 @@ flowchart LR
   statemodel__IntakePacket_status["IntakePacket.status"]:::statemodel
   statemodel__PatientAccount_status["PatientAccount.status"]:::statemodel
   statemodel__Prescription_status["Prescription.status"]:::statemodel
-  variation__AuditSeverity["Audit Severity"]:::variation
+  variation__AuditSeverity["監査指摘の重大度"]:::variation
   variation__BurdenRatio["負担割合"]:::variation
   variation__ChargeKind["診療費の種類"]:::variation
   variation__ChargeOrigin["コストの発生元"]:::variation
-  variation__ConsentType["Consent Type"]:::variation
+  variation__ConsentType["同意の種類"]:::variation
   variation__LimitCategory["限度額適用区分"]:::variation
-  variation__MessageChannel["Message Channel"]:::variation
-  variation__OrderType["Order Type"]:::variation
+  variation__MessageChannel["連絡手段"]:::variation
+  variation__OrderType["オーダの種類"]:::variation
   variation__PayerChange["資格変更の種類"]:::variation
-  variation__PaymentMethod["Payment Method"]:::variation
+  variation__PaymentMethod["支払方法"]:::variation
   variation__ReferralCategory["紹介の有無"]:::variation
   variation__ReferralDirection["紹介の向き"]:::variation
   entity__AccountBalance ---|1:1| entity__PatientAccount
@@ -2998,10 +2998,10 @@ flowchart LR
   statemodel__Appointment_status["Appointment.status"]:::statemodel
   statemodel__ClaimStatement_status["ClaimStatement.status"]:::statemodel
   statemodel__ClinicalOrder_status["ClinicalOrder.status"]:::statemodel
-  subgraph variation__AuditSeverity["Audit Severity"]
-    variation__AuditSeverity__low["Low"]:::value
-    variation__AuditSeverity__moderate["Moderate"]:::value
-    variation__AuditSeverity__high["High"]:::value
+  subgraph variation__AuditSeverity["監査指摘の重大度"]
+    variation__AuditSeverity__low["低"]:::value
+    variation__AuditSeverity__moderate["中"]:::value
+    variation__AuditSeverity__high["高"]:::value
   end
   subgraph variation__BurdenRatio["負担割合"]
     variation__BurdenRatio__thirty["3割"]:::value
@@ -3016,24 +3016,24 @@ flowchart LR
     variation__ChargeOrigin__performed["実施入力（検査・処置）"]:::value
     variation__ChargeOrigin__selectedfee["選定療養費"]:::value
   end
-  subgraph variation__ConsentType["Consent Type"]
-    variation__ConsentType__treatment["Treatment"]:::value
-    variation__ConsentType__privacy["Privacy"]:::value
-    variation__ConsentType__billing["Billing"]:::value
+  subgraph variation__ConsentType["同意の種類"]
+    variation__ConsentType__treatment["診療"]:::value
+    variation__ConsentType__privacy["個人情報"]:::value
+    variation__ConsentType__billing["請求"]:::value
   end
   subgraph variation__LimitCategory["限度額適用区分"]
     variation__LimitCategory__notobtained["限度額情報なし"]:::value
     variation__LimitCategory__obtained["適用区分を取得済"]:::value
   end
-  subgraph variation__MessageChannel["Message Channel"]
-    variation__MessageChannel__email["Email"]:::value
+  subgraph variation__MessageChannel["連絡手段"]
+    variation__MessageChannel__email["メール"]:::value
     variation__MessageChannel__sms["SMS"]:::value
-    variation__MessageChannel__portal["Patient portal"]:::value
+    variation__MessageChannel__portal["患者ポータル"]:::value
   end
-  subgraph variation__OrderType["Order Type"]
-    variation__OrderType__lab["Lab"]:::value
-    variation__OrderType__imaging["Imaging"]:::value
-    variation__OrderType__referral["Referral"]:::value
+  subgraph variation__OrderType["オーダの種類"]
+    variation__OrderType__lab["検体検査"]:::value
+    variation__OrderType__imaging["画像検査"]:::value
+    variation__OrderType__referral["紹介"]:::value
   end
   subgraph variation__PayerChange["資格変更の種類"]
     variation__PayerChange__nochange["資格変更なし"]:::value
@@ -3041,7 +3041,7 @@ flowchart LR
     variation__PayerChange__ratiochanged["負担割合が異なる資格への変更"]:::value
     variation__PayerChange__publicexpense["公費が関わる変更"]:::value
   end
-  subgraph variation__PaymentMethod["Payment Method"]
+  subgraph variation__PaymentMethod["支払方法"]
     variation__PaymentMethod__cash["現金"]:::value
     variation__PaymentMethod__card["クレジットカード"]:::value
     variation__PaymentMethod__adjustment["還付・追加徴収"]:::value
@@ -3059,7 +3059,7 @@ flowchart LR
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
   usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
-  usecase__CollectSpecimen["Collect Specimen"]:::usecase
+  usecase__CollectSpecimen["採血"]:::usecase
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
   condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   condition__BookedPatient -.->|combines| statemodel__Appointment_status
@@ -3442,7 +3442,7 @@ stateDiagram-v2
 Appointment:
 
 ```text
-Entity: Appointment (Appointment)
+Entity: Appointment (予約・受診)
   axes: referral[revisit|referred|unreferred|exempt], status[apptrequested|apptscheduled|apptcheckedin|apptinconsult|apptawaitingcalc|apptawaitingpay|apptsettled|apptcompleted|apptcancelled|apptnoshow], checked_in_at[null|present], completed_at[null|present], cancel_reason[null|present]
   labels: status[apptrequested=仮押さえ|apptscheduled=予約済|apptcheckedin=受付済|apptinconsult=診察中|apptawaitingcalc=計算待ち|apptawaitingpay=会計待ち|apptsettled=精算済|apptcompleted=完了|apptcancelled=取消|apptnoshow=未来院]
 
@@ -3568,12 +3568,12 @@ UC には「その操作を開始するのに必要な権限」と「操作媒�
 
 | BUC | 代表 UC/API | 要求 |
 |---|---|---|
-| Appointment Scheduling | `BookAppointment` / `BookAppointmentApi` | `ScheduleWrite`、`FrontDeskTerminal` または `PatientMobile` |
+| 予約 | `BookAppointment` / `BookAppointmentApi` | `ScheduleWrite`、`FrontDeskTerminal` または `PatientMobile` |
 | 受付 | `CheckInPatient` / `OnlineEligibilityApi` | `VisitCheckIn` と `InsuranceVerify`、`FrontDeskTerminal` |
-| Clinical Encounter | `SignEncounter` / `SignEncounterApi` | `EncounterSign`、`ClinicalWorkstation` |
+| 診察 | `SignEncounter` / `SignEncounterApi` | `EncounterSign`、`ClinicalWorkstation` |
 | 計算・会計 | `SettleAtWindow` / `SettlementApi` | `PaymentCollect`、`AccountsWindow` |
 | レセプト作成・請求 | `SubmitClaimStatements` / `SubmitClaimApi` | `BillingClaimWrite`、`OnlineClaimTerminal` |
-| Staff Administration | `ResolveAuditFinding` | `AuditResolve`、`AdminConsole` |
+| 病院管理 | `ResolveAuditFinding` | `AuditResolve`、`AdminConsole` |
 
 権限レビューでは、UC の要求と API の要求が同じである必要はない。たとえば
 `CheckInPatient` は受付の権限に加えて、オンライン資格確認 API 側の `InsuranceVerify`
@@ -3622,8 +3622,8 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clin
 
 ```csv
 actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths
-Clinician,医師,PatientMessageSend,Patient Message Send,true,true,ok,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
-ReceptionClerk,医事課 受付担当,PatientMessageSend,Patient Message Send,true,true,ok,,SendIntakeForms->IntakeMessagingApi
+Clinician,医師,PatientMessageSend,患者への連絡,true,true,ok,NotifyCriticalResult,NotifyCriticalResult->CriticalNoticeApi
+ReceptionClerk,医事課 受付担当,PatientMessageSend,患者への連絡,true,true,ok,,SendIntakeForms->IntakeMessagingApi
 MedicalClerk,医師事務作業補助者,ProxyOrderEntry,代行入力,true,true,ok,EnterProxyOrder,EnterProxyOrder->ProxyOrderApi
 ClaimsClerk,医事課 レセプト担当,BillingClaimWrite,レセプト業務,true,true,ok,CorrectReturnedStatement|GenerateClaimStatement|HoldClaimStatement|InspectClaimStatement|ReceiveClaimAccepted|RecordClaimAssessment|RecordClaimReturn|RecordReceiptError|ReleaseHeldStatement|RequestReexamination|ResendErroredStatement|ReviewClaimTransfer|SubmitClaimStatements|VoidCharge,CorrectReturnedStatement->ClaimEditApi|GenerateClaimStatement->GenerateClaimApi|HoldClaimStatement->ClaimEditApi|InspectClaimStatement->ClaimEditApi|ReceiveClaimAccepted->ClaimResultApi|RecordClaimAssessment->ClaimResultApi|RecordClaimReturn->ClaimResultApi|RecordReceiptError->ClaimResultApi|ReleaseHeldStatement->ClaimEditApi|RequestReexamination->SubmitClaimApi|ResendErroredStatement->SubmitClaimApi|SubmitClaimStatements->SubmitClaimApi
 ```

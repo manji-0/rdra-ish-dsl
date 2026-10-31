@@ -4,33 +4,33 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucPatientOnboarding "Onboard and Maintain Patient"
+buc BucPatientOnboarding "新患登録・患者情報管理"
 
-usecase SearchPatient         "Search Patient"
-usecase RegisterPatient       "Register Patient"
-usecase UpdateDemographics    "Update Demographics"
+usecase SearchPatient         "患者の検索"
+usecase RegisterPatient       "新患登録"
+usecase UpdateDemographics    "患者属性の変更"
 // 新患登録 with the 保険情報 and, with consent, the 限度額情報 from the オンライン資格確認
 // (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:46, :51; koseikan-2024-iji-shiyousyo.txt:92).
 usecase VerifyInsurance       "保険資格・限度額情報の登録（新患登録）"
-usecase CaptureConsent        "Capture Consent"
-usecase SendIntakeForms       "Send Intake Forms"
-usecase CompleteIntakeForms   "Complete Intake Forms"
-usecase ExpireIntakeForms     "Expire Intake Forms"
-usecase MergeDuplicatePatient "Merge Duplicate Patient"
-usecase ArchivePatient        "Archive Patient"
+usecase CaptureConsent        "同意の取得"
+usecase SendIntakeForms       "問診票の送付"
+usecase CompleteIntakeForms   "問診票の回答"
+usecase ExpireIntakeForms     "問診票の期限切れ"
+usecase MergeDuplicatePatient "重複患者の統合"
+usecase ArchivePatient        "患者のアーカイブ"
 
-screen PatientSearchScreen  "Patient Search Screen"
-screen PatientProfileScreen "Patient Profile Screen"
-screen InsuranceScreen      "Insurance Verification Screen"
-screen ConsentScreen        "Consent Capture Screen"
-screen IntakePortalScreen   "Intake Portal Screen"
+screen PatientSearchScreen  "患者検索画面"
+screen PatientProfileScreen "患者基本情報画面"
+screen InsuranceScreen      "保険資格登録画面"
+screen ConsentScreen        "同意取得画面"
+screen IntakePortalScreen   "問診票ポータル画面"
 
-api SearchPatientApi       "Search Patient API"
-api RegisterPatientApi     "Register Patient API"
-api UpdateDemographicsApi  "Update Demographics API"
-api EligibilityApi       "Eligibility API"
-api ConsentApi           "Consent API"
-api IntakeMessagingApi   "Intake Messaging API"
+api SearchPatientApi       "患者検索 API"
+api RegisterPatientApi     "新患登録 API"
+api UpdateDemographicsApi  "患者属性変更 API"
+api EligibilityApi       "保険資格登録 API"
+api ConsentApi           "同意 API"
+api IntakeMessagingApi   "問診票送付 API"
 
 performs(ReceptionClerk, SearchPatient)
 performs(ReceptionClerk, RegisterPatient)

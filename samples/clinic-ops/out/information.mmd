@@ -3,33 +3,33 @@
 %% omitted: columns adr constraint usecase screen field api condition
 flowchart LR
   entity__AccountBalance["未収金残高"]:::entity
-  entity__Appointment["Appointment"]:::entity
-  entity__AuditEvent["Audit Event"]:::entity
-  entity__CarePlan["Care Plan"]:::entity
-  entity__Charge["Charge"]:::entity
+  entity__Appointment["予約・受診"]:::entity
+  entity__AuditEvent["監査ログ"]:::entity
+  entity__CarePlan["ケアプラン"]:::entity
+  entity__Charge["コスト（診療行為）"]:::entity
   entity__ClaimStatement["レセプト"]:::entity
-  entity__ClinicLocation["Clinic Location"]:::entity
-  entity__ClinicalOrder["Clinical Order"]:::entity
-  entity__ConsentRecord["Consent Record"]:::entity
-  entity__Diagnosis["Diagnosis"]:::entity
+  entity__ClinicLocation["施設"]:::entity
+  entity__ClinicalOrder["検査オーダ"]:::entity
+  entity__ConsentRecord["同意記録"]:::entity
+  entity__Diagnosis["診断"]:::entity
   entity__EligibilityCheck["資格確認"]:::entity
-  entity__Encounter["Encounter"]:::entity
+  entity__Encounter["診療記録"]:::entity
   entity__InsurancePolicy["保険資格"]:::entity
-  entity__IntakePacket["Intake Packet"]:::entity
-  entity__LabResult["Lab Result"]:::entity
-  entity__Medication["Medication"]:::entity
-  entity__Notification["Notification"]:::entity
-  entity__PatientAccount["Patient Account"]:::entity
-  entity__PatientMessage["Patient Message"]:::entity
-  entity__PatientProfile["Patient Profile"]:::entity
-  entity__PaymentTransaction["Payment Transaction"]:::entity
+  entity__IntakePacket["問診票"]:::entity
+  entity__LabResult["検査結果"]:::entity
+  entity__Medication["薬剤"]:::entity
+  entity__Notification["通知"]:::entity
+  entity__PatientAccount["患者登録"]:::entity
+  entity__PatientMessage["患者連絡"]:::entity
+  entity__PatientProfile["患者基本情報"]:::entity
+  entity__PaymentTransaction["精算"]:::entity
   entity__Prescription["処方箋"]:::entity
-  entity__Provider["Provider"]:::entity
-  entity__ProviderSchedule["Provider Schedule"]:::entity
+  entity__Provider["医師マスタ"]:::entity
+  entity__ProviderSchedule["診療枠"]:::entity
   entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
-  entity__Room["Room"]:::entity
+  entity__Room["診察室"]:::entity
   entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
-  entity__VitalSign["Vital Sign"]:::entity
+  entity__VitalSign["バイタル"]:::entity
   statemodel__Appointment_status["Appointment.status"]:::statemodel
   statemodel__CarePlan_status["CarePlan.status"]:::statemodel
   statemodel__ClaimStatement_status["ClaimStatement.status"]:::statemodel
@@ -39,16 +39,16 @@ flowchart LR
   statemodel__IntakePacket_status["IntakePacket.status"]:::statemodel
   statemodel__PatientAccount_status["PatientAccount.status"]:::statemodel
   statemodel__Prescription_status["Prescription.status"]:::statemodel
-  variation__AuditSeverity["Audit Severity"]:::variation
+  variation__AuditSeverity["監査指摘の重大度"]:::variation
   variation__BurdenRatio["負担割合"]:::variation
   variation__ChargeKind["診療費の種類"]:::variation
   variation__ChargeOrigin["コストの発生元"]:::variation
-  variation__ConsentType["Consent Type"]:::variation
+  variation__ConsentType["同意の種類"]:::variation
   variation__LimitCategory["限度額適用区分"]:::variation
-  variation__MessageChannel["Message Channel"]:::variation
-  variation__OrderType["Order Type"]:::variation
+  variation__MessageChannel["連絡手段"]:::variation
+  variation__OrderType["オーダの種類"]:::variation
   variation__PayerChange["資格変更の種類"]:::variation
-  variation__PaymentMethod["Payment Method"]:::variation
+  variation__PaymentMethod["支払方法"]:::variation
   variation__ReferralCategory["紹介の有無"]:::variation
   variation__ReferralDirection["紹介の向き"]:::variation
   entity__AccountBalance ---|1:1| entity__PatientAccount

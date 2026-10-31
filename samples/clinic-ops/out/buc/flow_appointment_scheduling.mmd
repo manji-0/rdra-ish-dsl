@@ -14,19 +14,19 @@ flowchart TD
       step__ReserveStep["仮押さえ"]:::step
     end
   end
-  actor__Patient["Patient"]:::actor
-  %% desc actor__Patient: A person receiving care through the clinic.
+  actor__Patient["患者"]:::actor
+  %% desc actor__Patient: 病院で診療を受ける人。
   actor__ReceptionClerk["医事課 受付担当"]:::actor
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
-  timer__NoShowSweep["Nightly no-show sweep"]:::timer
-  usecase__BookAppointment["Book Appointment"]:::usecase
-  usecase__CancelAppointment["Cancel Appointment"]:::usecase
-  usecase__MarkNoShow["Mark No Show"]:::usecase
-  usecase__RescheduleAppointment["Reschedule Appointment"]:::usecase
-  usecase__ReserveAppointment["Reserve Appointment"]:::usecase
-  usecase__SearchAvailability["Search Availability"]:::usecase
-  usecase__SendAppointmentNotice["Send Appointment Notice"]:::usecase
-  event__EvAppointmentCancelled["Appointment Cancelled"]:::event
+  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
+  usecase__BookAppointment["予約の確定"]:::usecase
+  usecase__CancelAppointment["予約の取消"]:::usecase
+  usecase__MarkNoShow["未来院の処理"]:::usecase
+  usecase__RescheduleAppointment["予約の変更"]:::usecase
+  usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+  usecase__SearchAvailability["空き枠の検索"]:::usecase
+  usecase__SendAppointmentNotice["予約の通知"]:::usecase
+  event__EvAppointmentCancelled["予約取消"]:::event
   actor__Patient -.->|performs| step__AvailabilityStep
   actor__ReceptionClerk -.->|performs| step__AvailabilityStep
   step__AvailabilityStep -.->|covers| usecase__SearchAvailability

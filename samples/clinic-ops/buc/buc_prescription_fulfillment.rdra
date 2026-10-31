@@ -8,7 +8,7 @@ import shared.biz
 
 buc BucPrescriptionFulfillment "処方" description "処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。"
 
-usecase SearchMedication     "Search Medication"
+usecase SearchMedication     "薬剤の検索"
 // 処方オーダの登録(リフィル処方含む) (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:114).
 usecase DraftPrescription    "処方オーダの登録"
 usecase IssueRefillPrescription "リフィル処方箋の処方オーダ"
@@ -27,12 +27,12 @@ usecase ConfirmDispense      "保険薬局での調剤結果の受信"
 usecase ExpirePrescription   "処方箋の使用期間切れ"
 usecase CancelPrescription   "処方の取消"
 
-screen MedicationSearchScreen "Medication Search Screen"
+screen MedicationSearchScreen "薬剤検索画面"
 screen PrescriptionScreen     "処方画面"
 screen DispensingScreen       "調剤・監査画面"
 screen PharmacyStatusScreen   "電子処方箋の状況画面"
 
-api MedicationCatalogApi  "Medication Catalog API"
+api MedicationCatalogApi  "薬剤マスタ API"
 api DraftPrescriptionApi  "処方オーダ API"
 api IssuePrescriptionApi  "処方箋発行 API"
 api DispensingApi         "院内調剤 API"

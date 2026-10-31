@@ -33,15 +33,15 @@ constrains(PatientDataPrivacy, InsurancePolicy)
 constrains(BillingAuditTrail, PaymentTransaction)
 constrains(BillingAuditTrail, ClinicOpsSystem)
 
-adr AdrSingleClinicSystem "Run clinic workflows as one system boundary"
-  description "Decision record for the clinic system boundary."
+adr AdrSingleClinicSystem "外来業務を一つのシステム境界で動かす"
+  description "外来業務システムの境界についての決定記録。"
   adr_status accepted
-  context "Front desk, clinical, and billing workflows share patient and appointment data."
-  decision "Keep every workflow inside a single ClinicOpsSystem boundary."
-  consequence "Cross-workflow changes deploy together."
-  accepted "Single system boundary"
-  rejected "Per-department systems"
-  reason "Shared patient data would otherwise need cross-system coordination."
+  context "受付、診療、会計の業務が患者と予約のデータを共有する。"
+  decision "すべての業務を一つの ClinicOpsSystem の境界に置く。"
+  consequence "業務をまたぐ変更は一緒にデプロイする。"
+  accepted "単一のシステム境界"
+  rejected "部門ごとのシステム"
+  reason "分けると、共有する患者データをシステム間で調整する必要が生じる。"
 
 decides(AdrSingleClinicSystem, ClinicOpsSystem)
 decides(AdrSingleClinicSystem, PatientProfile)

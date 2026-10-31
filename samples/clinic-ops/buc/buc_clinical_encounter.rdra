@@ -4,13 +4,13 @@ import shared.actors
 import shared.entities
 import shared.biz
 
-buc BucClinicalEncounter "Conduct Clinical Encounter"
+buc BucClinicalEncounter "診察"
 
-usecase OpenEncounter       "Open Encounter"
-usecase RecordVitals        "Record Vitals"
-usecase DocumentAssessment  "Document Assessment"
-usecase SignEncounter       "Sign Encounter"
-usecase AmendEncounter      "Amend Signed Encounter"
+usecase OpenEncounter       "診療記録を開く"
+usecase RecordVitals        "バイタルの記録"
+usecase DocumentAssessment  "診察・診断の記録"
+usecase SignEncounter       "診療記録の署名"
+usecase AmendEncounter      "署名済み記録の修正"
 // 診療情報提供書の作成・送信 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:121); 紹介を希望した患者に紹介状を
 // 手渡す (sendai-iji-gairai-shiyousyo.txt:198).
 usecase IssueReferralLetter "診療情報提供書の作成・送信"
@@ -18,16 +18,16 @@ usecase IssueReferralLetter "診療情報提供書の作成・送信"
 // mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141): the visit now waits for 会計計算.
 usecase CompleteConsultation "診察終了"
 
-screen EncounterWorkspaceScreen "Encounter Workspace"
-screen VitalsScreen             "Vitals Screen"
-screen DiagnosisScreen          "Diagnosis Screen"
+screen EncounterWorkspaceScreen "診療記録画面"
+screen VitalsScreen             "バイタル入力画面"
+screen DiagnosisScreen          "診断入力画面"
 screen ReferralLetterScreen     "診療情報提供書画面"
 
-api OpenEncounterApi       "Open Encounter API"
-api RecordVitalsApi        "Record Vitals API"
-api DocumentAssessmentApi  "Document Assessment API"
-api SignEncounterApi       "Sign Encounter API"
-api AmendEncounterApi      "Amend Encounter API"
+api OpenEncounterApi       "診療記録作成 API"
+api RecordVitalsApi        "バイタル記録 API"
+api DocumentAssessmentApi  "診察記録 API"
+api SignEncounterApi       "署名 API"
+api AmendEncounterApi      "記録修正 API"
 api IssueReferralLetterApi "診療情報提供書 API"
 api CompleteConsultationApi "診察終了 API"
 

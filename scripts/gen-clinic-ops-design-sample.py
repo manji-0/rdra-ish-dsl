@@ -26,6 +26,8 @@ def pairs(pred):
 
 
 uc_label = dict(re.findall(r'^usecase (\w+)\s+"([^"]+)"', src, re.M))
+buc_label = dict(re.findall(r'^buc (\w+)\s+"([^"]+)"', src, re.M))
+actor_label = dict(re.findall(r'^actor (\w+)\s+"([^"]+)"', src, re.M))
 contains = pairs('contains')
 invokes = pairs('invokes')
 req_perm = {}
@@ -67,64 +69,64 @@ def csv_rows(rel, pick, cols=(0, 1)):
 
 
 BUCS = [
-    dict(id='BucPatientOnboarding', stem='patient_onboarding', title='Patient Onboarding', business='PatientAccess',
-         actors='ReceptionClerk（医事課 受付担当）, Patient',
+    dict(id='BucPatientOnboarding', stem='patient_onboarding', business='PatientAccess',
+         actors=['ReceptionClerk', 'Patient'],
          data=['PatientAccount', 'PatientProfile', 'InsurancePolicy', 'EligibilityCheck', 'ConsentRecord', 'IntakePacket', 'PatientMessage'],
          prose='新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。',
          points=['VerifyInsurance が、保険資格の登録と限度額情報の取得を同じ API 境界で扱ってよいか。',
                  '受付ごとの資格確認（`BucVisitCheckIn`）と新患登録時の資格登録の責務が混ざっていないか。',
                  'SendIntakeForms は予約イベントから起動されるため、予約 BUC 側の責務と混同しないか。']),
-    dict(id='BucAppointmentScheduling', stem='appointment_scheduling', title='Appointment Scheduling', business='PatientAccess',
-         actors='ReceptionClerk, Patient', data=['Appointment', 'ProviderSchedule', 'Notification', 'PatientMessage'],
+    dict(id='BucAppointmentScheduling', stem='appointment_scheduling', business='PatientAccess',
+         actors=['ReceptionClerk', 'Patient'], data=['Appointment', 'ProviderSchedule', 'Notification', 'PatientMessage'],
          prose='予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。',
          points=['ReserveAppointment と BookAppointment の差が業務上必要か。',
                  'CancelAppointment が Appointment と ProviderSchedule を同じ API 境界で更新することが妥当か。',
                  '予約時に選ばれる `Appointment.referral`（再診・紹介状あり・紹介状なし・除外）が、受付で確認する紹介状の有無と一致するか。']),
-    dict(id='BucVisitCheckIn', stem='visit_check_in', title='受付（初診・再診）', business='PatientAccess',
-         actors='ReceptionClerk, Nurse',
+    dict(id='BucVisitCheckIn', stem='visit_check_in', business='PatientAccess',
+         actors=['ReceptionClerk', 'Nurse'],
          data=['Appointment', 'PatientAccount', 'InsurancePolicy', 'EligibilityCheck', 'ReferralLetter', 'Room'],
          prose='到着確認、資格確認、紹介状の受付、診察室への案内を扱う。療養担当規則 第3条により受付のたびに資格を確認するので、`CheckInPatient` は必ずオンライン資格確認を伴い `EligibilityCheck` を作る。結果は 有効・無効・該当資格なし の 3 通りで、無効と該当資格なしは再確認へ戻る。システムが答えられない場合は被保険者資格申立書かシステム障害時モードで確認する。来院前には予約済み患者の一括照会を行う。受付では支払を受けない（会計は `BucVisitPayment`）。',
          points=['受付と資格確認が 1 つの UC にまとまり、資格確認を飛ばす経路がないか。',
                  '一括照会の結果が無効だった患者を、受付で再確認する流れが説明できるか。',
                  '被保険者資格申立書とシステム障害時モードが、資格確認結果の状態として区別されているか。']),
-    dict(id='BucClinicalEncounter', stem='clinical_encounter', title='Clinical Encounter', business='CareDelivery',
-         actors='Nurse（看護師）, Clinician（医師）', data=['Encounter', 'Appointment', 'VitalSign', 'Diagnosis', 'Room', 'ReferralLetter'],
+    dict(id='BucClinicalEncounter', stem='clinical_encounter', business='CareDelivery',
+         actors=['Nurse', 'Clinician'], data=['Encounter', 'Appointment', 'VitalSign', 'Diagnosis', 'Room', 'ReferralLetter'],
          prose='診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。',
          points=['署名（コスト情報・ケアプランの起点）と診察終了（会計の起点）を別のイベントに分けた境界が業務と合うか。',
                  'CompleteConsultation が予約を完了にせず「計算待ち」に置くことで、会計前に予約が閉じないか。',
                  'IssueReferralLetter（診療情報提供書）と受付の紹介状受付（ReceiveReferralLetter）が同じ `ReferralLetter` を向きで区別できるか。']),
-    dict(id='BucOrdersResults', stem='orders_results', title='Orders and Results', business='CareDelivery',
-         actors='Clinician, Nurse, MedicalClerk（医師事務作業補助者）', data=['ClinicalOrder', 'LabResult', 'Charge', 'Notification', 'PatientMessage'],
+    dict(id='BucOrdersResults', stem='orders_results', business='CareDelivery',
+         actors=['Clinician', 'Nurse', 'MedicalClerk'], data=['ClinicalOrder', 'LabResult', 'Charge', 'Notification', 'PatientMessage'],
          prose='検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。',
          points=['代行入力オーダが医師の確定前に採血へ進まないことが、状態検証で示されているか。',
                  'RegisterPerformedProcedure が作る Charge を、会計計算入力が読めるか。',
                  'NotifyCriticalResult は結果確認イベントから起動されるため、手動 UC と自動 UC の違いをレビューできるか。']),
-    dict(id='BucPrescriptionFulfillment', stem='prescription_fulfillment', title='処方', business='CareDelivery',
-         actors='Clinician（医師）, Pharmacist（薬剤師）', data=['Prescription', 'Medication', 'Encounter'],
+    dict(id='BucPrescriptionFulfillment', stem='prescription_fulfillment', business='CareDelivery',
+         actors=['Clinician', 'Pharmacist'], data=['Prescription', 'Medication', 'Encounter'],
          prose='処方オーダから院外処方箋の発行、院内処方の調剤・監査・服薬指導・交付、疑義照会までを扱う。院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤される。病院は特定の保険薬局を指示しない（療担規則 第2条の5）ので、`Prescription` は薬局を持たない。使用期間は交付日を含めて4日以内で、日数は DSL で数えられないためタイマーで期限切れにする。薬剤師は疑わしい点があれば医師に問い合わせ、回答までは調剤しない。',
          points=['院外（rxissued）と院内（rxvoucher → rxaudited → rxcounseled → rxdispensed）の経路が状態で区別できるか。',
                  '疑義照会中（rxinquiry）の処方箋が調剤・監査に進まないか。',
                  '使用期間切れ（rxexpired）が院外処方箋にだけ起きることが業務と合うか。']),
-    dict(id='BucVisitPayment', stem='visit_payment', title='計算・会計', business='RevenueCycle',
-         actors='AccountsClerk（医事課 会計担当）', data=['Appointment', 'Charge', 'PaymentTransaction', 'AccountBalance', 'InsurancePolicy', 'SelectedTreatmentFeeSetting'],
+    dict(id='BucVisitPayment', stem='visit_payment', business='RevenueCycle',
+         actors=['AccountsClerk'], data=['Appointment', 'Charge', 'PaymentTransaction', 'AccountBalance', 'InsurancePolicy', 'SelectedTreatmentFeeSetting'],
          prose='診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。',
          points=['予約が 計算待ち → 会計待ち → 精算済 → 完了 と進み、受付時点で支払が発生しないか。',
                  '選定療養費の除外（救急搬送、初診時にそのまま入院 など）が `ReferralCategory` の値として説明できるか。',
                  '窓口精算と自動精算機の精算が同じ PaymentTransaction と未収金残高を更新してよいか。']),
-    dict(id='BucBillingClaims', stem='billing_claims', title='レセプト作成・請求', business='RevenueCycle',
-         actors='ClaimsClerk（医事課 レセプト担当）', data=['ClaimStatement', 'Charge', 'InsurancePolicy', 'AccountBalance'],
+    dict(id='BucBillingClaims', stem='billing_claims', business='RevenueCycle',
+         actors=['ClaimsClerk'], data=['ClaimStatement', 'Charge', 'InsurancePolicy', 'AccountBalance'],
          prose='レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。',
          points=['返戻（stmtreturned → stmtinspecting）と査定（stmtassessed → stmtrereview）の出口が区別されているか。',
                  '保留（月遅れ）と受付不能が、それぞれ請求前と請求後の状態として説明できるか。',
                  'GenerateClaimStatement が Charge を更新しない（読むだけ）ことで、レセプトの検証が受診の状態から切り離されていることが妥当か。']),
-    dict(id='BucFollowupCare', stem='followup_care', title='Follow-Up Care', business='PatientAccess',
-         actors='CareCoordinator, Patient', data=['CarePlan', 'PatientMessage', 'Appointment', 'Notification'],
+    dict(id='BucFollowupCare', stem='followup_care', business='PatientAccess',
+         actors=['CareCoordinator', 'Patient'], data=['CarePlan', 'PatientMessage', 'Appointment', 'Notification'],
          prose='診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。',
          points=['ScheduleFollowUpVisit が予約 BUC と同じ Appointment lifecycle を使ってよいか。',
                  'NotifyPatientResult と NotifyCriticalResult の通知責務が重複していないか。']),
-    dict(id='BucStaffAdministration', stem='staff_administration', title='Staff Administration', business='ClinicAdministration',
-         actors='ClinicAdmin', data=['Provider', 'ProviderSchedule', 'Room', 'AuditEvent'],
-         prose='診療所運営のマスタ・監査系業務を扱う。',
+    dict(id='BucStaffAdministration', stem='staff_administration', business='ClinicAdministration',
+         actors=['ClinicAdmin'], data=['Provider', 'ProviderSchedule', 'Room', 'AuditEvent'],
+         prose='病院運営のマスタ（診療枠・診察室）と監査の業務を扱う。',
          points=['ReleaseRoom と診察終了の部屋状態更新が重複しないか。',
                  'ResolveAuditFinding が AdminConsole に限定されているか。']),
 ]
@@ -290,11 +292,13 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit --out samples/clin
 
 対象は病院の外来業務です。患者登録、予約、受付、診療、検査、処方、計算・会計、レセプト請求、フォローアップ、運営管理を BUC として分け、業務担当者がレビューしやすい単位にしています。受付・会計・レセプトは医事課の業務で、病院が外部に委託することもあります。
 
-| Business | BUC | 主な actor | 目的 |
+| Business | BUC | 主な actor | BUC 名 |
 |---|---|---|---|
 ''')
 for b in BUCS:
-    parts.append(f"| `{b['business']}` | `{b['id']}` | {b['actors']} | {b['title']} |\n")
+    b['title'] = buc_label[b['id']]
+    b['actor_text'] = '、'.join(f"{actor_label[a]}（`{a}`）" for a in b['actors'])
+    parts.append(f"| `{b['business']}` | `{b['id']}` | {b['actor_text']} | {b['title']} |\n")
 parts.append('''
 米国型の診療所モデルとの主な違いは次のとおりです。
 
@@ -353,7 +357,7 @@ UC/API 要求に対して actor の `has_permission` が不足していること
 ''')
 for i, b in enumerate(BUCS, 1):
     parts.append(f"### 3.{i} {b['title']}\n\n| 項目 | 内容 |\n|---|---|\n")
-    parts.append(f"| BUC | `{b['id']}` |\n| Business | `{b['business']}` |\n| 主な actor | {b['actors']} |\n")
+    parts.append(f"| BUC | `{b['id']}` |\n| Business | `{b['business']}` |\n| 主な actor | {b['actor_text']} |\n")
     parts.append(f"| 必要権限 | {code_list(buc_perms(b['id']))} |\n| 主なデータ | {code_list(b['data'])} |\n\n")
     parts.append(b['prose'] + '\n\nレビュー観点:\n\n' + ''.join(f'- {p}\n' for p in b['points']) + '\n')
     flow = OUT / f"buc/flow_{b['stem']}.mmd"
@@ -537,12 +541,12 @@ UC には「その操作を開始するのに必要な権限」と「操作媒�
 
 | BUC | 代表 UC/API | 要求 |
 |---|---|---|
-| Appointment Scheduling | `BookAppointment` / `BookAppointmentApi` | `ScheduleWrite`、`FrontDeskTerminal` または `PatientMobile` |
+| 予約 | `BookAppointment` / `BookAppointmentApi` | `ScheduleWrite`、`FrontDeskTerminal` または `PatientMobile` |
 | 受付 | `CheckInPatient` / `OnlineEligibilityApi` | `VisitCheckIn` と `InsuranceVerify`、`FrontDeskTerminal` |
-| Clinical Encounter | `SignEncounter` / `SignEncounterApi` | `EncounterSign`、`ClinicalWorkstation` |
+| 診察 | `SignEncounter` / `SignEncounterApi` | `EncounterSign`、`ClinicalWorkstation` |
 | 計算・会計 | `SettleAtWindow` / `SettlementApi` | `PaymentCollect`、`AccountsWindow` |
 | レセプト作成・請求 | `SubmitClaimStatements` / `SubmitClaimApi` | `BillingClaimWrite`、`OnlineClaimTerminal` |
-| Staff Administration | `ResolveAuditFinding` | `AuditResolve`、`AdminConsole` |
+| 病院管理 | `ResolveAuditFinding` | `AuditResolve`、`AdminConsole` |
 
 権限レビューでは、UC の要求と API の要求が同じである必要はない。たとえば
 `CheckInPatient` は受付の権限に加えて、オンライン資格確認 API 側の `InsuranceVerify`

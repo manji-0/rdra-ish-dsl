@@ -1,4 +1,4 @@
-Entity: Appointment (Appointment)
+Entity: Appointment (予約・受診)
   axes: referral[revisit|referred|unreferred|exempt], status[apptrequested|apptscheduled|apptcheckedin|apptinconsult|apptawaitingcalc|apptawaitingpay|apptsettled|apptcompleted|apptcancelled|apptnoshow], checked_in_at[null|present], completed_at[null|present], cancel_reason[null|present]
   labels: status[apptrequested=仮押さえ|apptscheduled=予約済|apptcheckedin=受付済|apptinconsult=診察中|apptawaitingcalc=計算待ち|apptawaitingpay=会計待ち|apptsettled=精算済|apptcompleted=完了|apptcancelled=取消|apptnoshow=未来院]
 

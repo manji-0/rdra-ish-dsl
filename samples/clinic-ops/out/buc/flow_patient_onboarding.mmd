@@ -4,7 +4,7 @@
 flowchart TD
   subgraph flow__OnboardingFlow["新患登録の流れ"]
     step__IntakeExpireStep["問診票の期限切れ"]:::step
-    subgraph lane__OnboardingFlow__Patient["Patient"]
+    subgraph lane__OnboardingFlow__Patient["患者"]
       %% lane lane__OnboardingFlow__Patient: actor__Patient
       step__ConsentStep["同意の取得"]:::step
       step__IntakeAnswerStep["問診票の回答"]:::step
@@ -26,18 +26,18 @@ flowchart TD
       step__MergeStep["重複患者の統合"]:::step
     end
   end
-  timer__IntakeExpiryCheck["Nightly intake expiry check"]:::timer
-  usecase__ArchivePatient["Archive Patient"]:::usecase
-  usecase__CaptureConsent["Capture Consent"]:::usecase
-  usecase__CompleteIntakeForms["Complete Intake Forms"]:::usecase
-  usecase__ExpireIntakeForms["Expire Intake Forms"]:::usecase
-  usecase__MergeDuplicatePatient["Merge Duplicate Patient"]:::usecase
-  usecase__RegisterPatient["Register Patient"]:::usecase
-  usecase__SearchPatient["Search Patient"]:::usecase
-  usecase__SendIntakeForms["Send Intake Forms"]:::usecase
-  usecase__UpdateDemographics["Update Demographics"]:::usecase
+  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
+  usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+  usecase__CaptureConsent["同意の取得"]:::usecase
+  usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+  usecase__RegisterPatient["新患登録"]:::usecase
+  usecase__SearchPatient["患者の検索"]:::usecase
+  usecase__SendIntakeForms["問診票の送付"]:::usecase
+  usecase__UpdateDemographics["患者属性の変更"]:::usecase
   usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
-  event__EvAppointmentScheduled["Appointment Scheduled"]:::event
+  event__EvAppointmentScheduled["予約確定"]:::event
   step__ArchiveStep -.->|covers| usecase__ArchivePatient
   step__ConsentStep -.->|covers| usecase__CaptureConsent
   step__ConsentStep -->|precedes| step__IntakeSendStep

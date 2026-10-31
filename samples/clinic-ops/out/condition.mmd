@@ -13,10 +13,10 @@ flowchart LR
   statemodel__Appointment_status["Appointment.status"]:::statemodel
   statemodel__ClaimStatement_status["ClaimStatement.status"]:::statemodel
   statemodel__ClinicalOrder_status["ClinicalOrder.status"]:::statemodel
-  subgraph variation__AuditSeverity["Audit Severity"]
-    variation__AuditSeverity__low["Low"]:::value
-    variation__AuditSeverity__moderate["Moderate"]:::value
-    variation__AuditSeverity__high["High"]:::value
+  subgraph variation__AuditSeverity["監査指摘の重大度"]
+    variation__AuditSeverity__low["低"]:::value
+    variation__AuditSeverity__moderate["中"]:::value
+    variation__AuditSeverity__high["高"]:::value
   end
   subgraph variation__BurdenRatio["負担割合"]
     variation__BurdenRatio__thirty["3割"]:::value
@@ -31,24 +31,24 @@ flowchart LR
     variation__ChargeOrigin__performed["実施入力（検査・処置）"]:::value
     variation__ChargeOrigin__selectedfee["選定療養費"]:::value
   end
-  subgraph variation__ConsentType["Consent Type"]
-    variation__ConsentType__treatment["Treatment"]:::value
-    variation__ConsentType__privacy["Privacy"]:::value
-    variation__ConsentType__billing["Billing"]:::value
+  subgraph variation__ConsentType["同意の種類"]
+    variation__ConsentType__treatment["診療"]:::value
+    variation__ConsentType__privacy["個人情報"]:::value
+    variation__ConsentType__billing["請求"]:::value
   end
   subgraph variation__LimitCategory["限度額適用区分"]
     variation__LimitCategory__notobtained["限度額情報なし"]:::value
     variation__LimitCategory__obtained["適用区分を取得済"]:::value
   end
-  subgraph variation__MessageChannel["Message Channel"]
-    variation__MessageChannel__email["Email"]:::value
+  subgraph variation__MessageChannel["連絡手段"]
+    variation__MessageChannel__email["メール"]:::value
     variation__MessageChannel__sms["SMS"]:::value
-    variation__MessageChannel__portal["Patient portal"]:::value
+    variation__MessageChannel__portal["患者ポータル"]:::value
   end
-  subgraph variation__OrderType["Order Type"]
-    variation__OrderType__lab["Lab"]:::value
-    variation__OrderType__imaging["Imaging"]:::value
-    variation__OrderType__referral["Referral"]:::value
+  subgraph variation__OrderType["オーダの種類"]
+    variation__OrderType__lab["検体検査"]:::value
+    variation__OrderType__imaging["画像検査"]:::value
+    variation__OrderType__referral["紹介"]:::value
   end
   subgraph variation__PayerChange["資格変更の種類"]
     variation__PayerChange__nochange["資格変更なし"]:::value
@@ -56,7 +56,7 @@ flowchart LR
     variation__PayerChange__ratiochanged["負担割合が異なる資格への変更"]:::value
     variation__PayerChange__publicexpense["公費が関わる変更"]:::value
   end
-  subgraph variation__PaymentMethod["Payment Method"]
+  subgraph variation__PaymentMethod["支払方法"]
     variation__PaymentMethod__cash["現金"]:::value
     variation__PaymentMethod__card["クレジットカード"]:::value
     variation__PaymentMethod__adjustment["還付・追加徴収"]:::value
@@ -74,7 +74,7 @@ flowchart LR
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
   usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
-  usecase__CollectSpecimen["Collect Specimen"]:::usecase
+  usecase__CollectSpecimen["採血"]:::usecase
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
   condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   condition__BookedPatient -.->|combines| statemodel__Appointment_status

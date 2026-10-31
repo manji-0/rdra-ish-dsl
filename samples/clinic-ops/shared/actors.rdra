@@ -4,7 +4,7 @@ module shared.actors
 // The MHLW outpatient flow splits the work into the lanes 患者, 医師, 看護師等, 事務職員
 // (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:334).
 
-actor Patient           "Patient" description "A person receiving care through the clinic."
+actor Patient           "患者" description "病院で診療を受ける人。"
 // 医事課: reception, 会計, and レセプト are the 医事業務 a hospital contracts out
 // (sendai-iji-gairai-shiyousyo.txt:171-196, koseikan-2024-iji-shiyousyo.txt:88-101, :222-241).
 actor ReceptionClerk    "医事課 受付担当" description "初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。"
@@ -13,14 +13,14 @@ actor ClaimsClerk       "医事課 レセプト担当" description "レセプト
 // 医師事務作業補助者 enters orders on the physician's behalf (mhlw-2020-dairi-nyuuryoku.txt:71-79);
 // the reception checks the orders the physician or medical clerk entered (sendai-iji-gairai-shiyousyo.txt:199).
 actor MedicalClerk      "医師事務作業補助者" description "医師の指示で電子カルテへ代行入力する。確定は医師が行う。"
-actor CareCoordinator   "Care Coordinator"
+actor CareCoordinator   "患者支援・地域連携担当"
 // 看護師 assists in care, and uses devices or gives medicine only on a physician's
 // instruction (egov-hokanhou-323AC0000000203.txt:29, :311).
 actor Nurse             "看護師" description "医師の指示の下で診療の補助を行う。"
 actor Clinician         "医師"
 // 薬剤師 dispenses and audits in-house prescriptions (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:167-170).
 actor Pharmacist        "薬剤師"
-actor ClinicAdmin       "Clinic Administrator"
+actor ClinicAdmin       "病院管理者"
 
 // オンライン資格確認 is the first step of 初診受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:43).
 extsystem OnlineEligibilitySystem "オンライン資格確認等システム"
@@ -32,4 +32,4 @@ extsystem EPrescriptionService "電子処方箋管理サービス"
 extsystem InsurancePharmacy  "保険薬局"
 // 審査支払機関: 社保 (支払基金) and 国保 (国保連) (medicom-receipt-return.md:129, vendor article).
 extsystem ClaimsReviewOrganization "審査支払機関（支払基金・国保連）"
-extsystem MessagingGateway   "Messaging Gateway"
+extsystem MessagingGateway   "患者通知サービス"
