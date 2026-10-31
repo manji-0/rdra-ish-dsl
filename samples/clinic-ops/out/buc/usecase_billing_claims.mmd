@@ -66,31 +66,11 @@ flowchart LR
     condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
   end
   actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement
-  actor__ClaimsClerk -.->|performs| usecase__CreateCharge
-  %% derived actor__ClaimsClerk -> usecase__CreateCharge via buc__BucBillingClaims
-  actor__ClaimsClerk -.->|performs| usecase__GenerateClaimStatement
-  %% derived actor__ClaimsClerk -> usecase__GenerateClaimStatement via buc__BucBillingClaims,step__CreateStatementStep
   actor__ClaimsClerk -.->|performs| usecase__HoldClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__InspectClaimStatement
-  actor__ClaimsClerk -.->|performs| usecase__PostPayment
-  %% derived actor__ClaimsClerk -> usecase__PostPayment via buc__BucBillingClaims,step__PaidStep
-  actor__ClaimsClerk -.->|performs| usecase__ReceiveClaimAccepted
-  %% derived actor__ClaimsClerk -> usecase__ReceiveClaimAccepted via buc__BucBillingClaims,step__ReviewStep
   actor__ClaimsClerk -.->|performs| usecase__ReconcileBalance
-  actor__ClaimsClerk -.->|performs| usecase__RecordClaimAssessment
-  %% derived actor__ClaimsClerk -> usecase__RecordClaimAssessment via buc__BucBillingClaims,step__AssessStep
-  actor__ClaimsClerk -.->|performs| usecase__RecordClaimReturn
-  %% derived actor__ClaimsClerk -> usecase__RecordClaimReturn via buc__BucBillingClaims,step__ReturnStep
-  actor__ClaimsClerk -.->|performs| usecase__RecordReceiptError
-  %% derived actor__ClaimsClerk -> usecase__RecordReceiptError via buc__BucBillingClaims,step__ReceiptErrorStep
   actor__ClaimsClerk -.->|performs| usecase__ReleaseHeldStatement
   actor__ClaimsClerk -.->|performs| usecase__RequestReexamination
-  actor__ClaimsClerk -.->|performs| usecase__ResendErroredStatement
-  %% derived actor__ClaimsClerk -> usecase__ResendErroredStatement via buc__BucBillingClaims,step__ReceiptErrorStep
-  actor__ClaimsClerk -.->|performs| usecase__ReviewClaimTransfer
-  %% derived actor__ClaimsClerk -> usecase__ReviewClaimTransfer via buc__BucBillingClaims,step__ReviewStep
-  actor__ClaimsClerk -.->|performs| usecase__SubmitClaimStatements
-  %% derived actor__ClaimsClerk -> usecase__SubmitClaimStatements via buc__BucBillingClaims,step__SubmitStep
   actor__ClaimsClerk -.->|performs| usecase__VoidCharge
   condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted

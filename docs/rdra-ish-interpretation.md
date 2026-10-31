@@ -103,7 +103,10 @@ In RDRA-ish, a UC is a concrete user-visible or event-triggered interaction. It 
 only a sentence in a business scenario; it is the point where the model attaches
 observable effects:
 
-- `performs` connects an actor to a UC when the actor is known at that level.
+- `performs` connects an actor to a UC when the actor is known at that level. An actor of
+  the BUC, or of a step that covers the UC, also performs it, unless an event or a timer
+  starts the UC. Such a UC is the system's work, and only a `performs(Actor, UC)` says that
+  a person does it.
 - `displays` and `shows` connect the UC to UI surfaces and visible information.
 - `invokes` connects the UC to API boundaries.
 - CRUD predicates connect the UC or invoked API to entities.

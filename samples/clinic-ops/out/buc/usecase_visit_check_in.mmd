@@ -55,12 +55,6 @@ flowchart LR
   actor__ReceptionClerk -.->|performs| usecase__BatchVerifyEligibility
   actor__ReceptionClerk -.->|performs| usecase__CheckInPatient
   actor__ReceptionClerk -.->|performs| usecase__ConfirmEligibilityInOutageMode
-  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityInvalid
-  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityInvalid via step__EligibilityStep
-  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityNoInfo
-  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityNoInfo via step__EligibilityStep
-  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityValid
-  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityValid via step__EligibilityStep
   actor__ReceptionClerk -.->|performs| usecase__ReceiveReferralLetter
   actor__ReceptionClerk -.->|performs| usecase__RecheckEligibility
   actor__ReceptionClerk -.->|performs| usecase__RecordEligibilityDeclaration

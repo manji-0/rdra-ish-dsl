@@ -57,6 +57,13 @@
 
 ### Changed
 
+- The UC複合図 (`diagram --kind usecase`) no longer draws an actor of a BUC or a step
+  performing a use case that an event or a timer starts. Such a use case is the system's
+  work, and only a `performs(Actor, UseCase)` draws who performs it. In clinic-ops,
+  `CreateCharge` loses the レセプト担当 it never had, the received eligibility results lose
+  the receptionist of their step, and the kiosk settlement, which the payment gateway's
+  event records, keeps the patient only in its flow lane. In ec-site, `Capture` loses the
+  customer of its BUC.
 - The LSP loads a workspace through the CLI's rules, so the editor now agrees with `check`.
   It no longer adds the workspace roots as include paths, so a deep import such as
   `import m.a.shared` from `m/a/b/c.rdra` reports "module file not found in include paths"

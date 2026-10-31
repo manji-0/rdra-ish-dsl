@@ -534,8 +534,9 @@ The notes below say how each kind reads, in the order of the table.
   the `rdra` ids, so a node matches its `rdra` node. An edge `rdra` does not draw is
   derived and followed by its `%% derived` line: an API's CRUD drawn from the use case
   that invokes it (`via api__<Api>`), and an actor drawn performing the use cases of the
-  BUC or step it performs (`via buc__<Buc>` or `via step__<Step>`). A declared edge wins
-  over a derived one. APIs, DTOs, permissions, media, fields, and BUCs are not drawn;
+  BUC or step it performs (`via buc__<Buc>` or `via step__<Step>`). A use case that an
+  event or a timer starts gets no derived actor: only a `performs(Actor, UseCase)` draws
+  who performs it. A declared edge wins over a derived one. APIs, DTOs, permissions, media, fields, and BUCs are not drawn;
   `omitted:` names the ones linked to a drawn use case or screen.
 - For `--kind flow`, the type line is `flowchart TD` and there are no layers. Each flow is
   `subgraph flow__<id>["<label>"]` holding its steps; the whole model also draws a step

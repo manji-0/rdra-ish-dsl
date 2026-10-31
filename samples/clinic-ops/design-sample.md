@@ -1002,12 +1002,6 @@ flowchart LR
   actor__ReceptionClerk -.->|performs| usecase__BatchVerifyEligibility
   actor__ReceptionClerk -.->|performs| usecase__CheckInPatient
   actor__ReceptionClerk -.->|performs| usecase__ConfirmEligibilityInOutageMode
-  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityInvalid
-  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityInvalid via step__EligibilityStep
-  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityNoInfo
-  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityNoInfo via step__EligibilityStep
-  actor__ReceptionClerk -.->|performs| usecase__ReceiveEligibilityValid
-  %% derived actor__ReceptionClerk -> usecase__ReceiveEligibilityValid via step__EligibilityStep
   actor__ReceptionClerk -.->|performs| usecase__ReceiveReferralLetter
   actor__ReceptionClerk -.->|performs| usecase__RecheckEligibility
   actor__ReceptionClerk -.->|performs| usecase__RecordEligibilityDeclaration
@@ -1818,8 +1812,6 @@ flowchart LR
   subgraph layer_value["システム価値"]
     actor__AccountsClerk["医事課 会計担当"]:::actor
     %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
-    actor__Patient["Patient"]:::actor
-    %% desc actor__Patient: A person receiving care through the clinic.
     extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
@@ -1854,11 +1846,7 @@ flowchart LR
   actor__AccountsClerk -.->|performs| usecase__CalculateVisitBill
   actor__AccountsClerk -.->|performs| usecase__CallPatientForPayment
   actor__AccountsClerk -.->|performs| usecase__IssueReceipt
-  actor__AccountsClerk -.->|performs| usecase__SettleAtKiosk
-  %% derived actor__AccountsClerk -> usecase__SettleAtKiosk via buc__BucVisitPayment
   actor__AccountsClerk -.->|performs| usecase__SettleAtWindow
-  actor__Patient -.->|performs| usecase__SettleAtKiosk
-  %% derived actor__Patient -> usecase__SettleAtKiosk via step__KioskStep
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
   event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
@@ -2092,31 +2080,11 @@ flowchart LR
     condition__TransferNotPossible["振替・分割の対象外（負担割合の相違・公費）"]:::condition
   end
   actor__ClaimsClerk -.->|performs| usecase__CorrectReturnedStatement
-  actor__ClaimsClerk -.->|performs| usecase__CreateCharge
-  %% derived actor__ClaimsClerk -> usecase__CreateCharge via buc__BucBillingClaims
-  actor__ClaimsClerk -.->|performs| usecase__GenerateClaimStatement
-  %% derived actor__ClaimsClerk -> usecase__GenerateClaimStatement via buc__BucBillingClaims,step__CreateStatementStep
   actor__ClaimsClerk -.->|performs| usecase__HoldClaimStatement
   actor__ClaimsClerk -.->|performs| usecase__InspectClaimStatement
-  actor__ClaimsClerk -.->|performs| usecase__PostPayment
-  %% derived actor__ClaimsClerk -> usecase__PostPayment via buc__BucBillingClaims,step__PaidStep
-  actor__ClaimsClerk -.->|performs| usecase__ReceiveClaimAccepted
-  %% derived actor__ClaimsClerk -> usecase__ReceiveClaimAccepted via buc__BucBillingClaims,step__ReviewStep
   actor__ClaimsClerk -.->|performs| usecase__ReconcileBalance
-  actor__ClaimsClerk -.->|performs| usecase__RecordClaimAssessment
-  %% derived actor__ClaimsClerk -> usecase__RecordClaimAssessment via buc__BucBillingClaims,step__AssessStep
-  actor__ClaimsClerk -.->|performs| usecase__RecordClaimReturn
-  %% derived actor__ClaimsClerk -> usecase__RecordClaimReturn via buc__BucBillingClaims,step__ReturnStep
-  actor__ClaimsClerk -.->|performs| usecase__RecordReceiptError
-  %% derived actor__ClaimsClerk -> usecase__RecordReceiptError via buc__BucBillingClaims,step__ReceiptErrorStep
   actor__ClaimsClerk -.->|performs| usecase__ReleaseHeldStatement
   actor__ClaimsClerk -.->|performs| usecase__RequestReexamination
-  actor__ClaimsClerk -.->|performs| usecase__ResendErroredStatement
-  %% derived actor__ClaimsClerk -> usecase__ResendErroredStatement via buc__BucBillingClaims,step__ReceiptErrorStep
-  actor__ClaimsClerk -.->|performs| usecase__ReviewClaimTransfer
-  %% derived actor__ClaimsClerk -> usecase__ReviewClaimTransfer via buc__BucBillingClaims,step__ReviewStep
-  actor__ClaimsClerk -.->|performs| usecase__SubmitClaimStatements
-  %% derived actor__ClaimsClerk -> usecase__SubmitClaimStatements via buc__BucBillingClaims,step__SubmitStep
   actor__ClaimsClerk -.->|performs| usecase__VoidCharge
   condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted

@@ -78,9 +78,25 @@ fn scoped_use_cases(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
     keys
 }
 
+/// The use cases an event or a timer starts. Only a `performs(Actor, UseCase)` names who
+/// performs one, never an actor of its BUC or step.
+fn triggered_use_cases(model: &SemanticModel) -> HashSet<&NodeRef> {
+    model
+        .relations
+        .iter()
+        .filter(|rel| {
+            rel.kind == RelKind::Triggers
+                && matches!(rel.from, NodeRef::Event(_) | NodeRef::Timer(_))
+                && matches!(rel.to, NodeRef::UseCase(_))
+        })
+        .map(|rel| &rel.to)
+        .collect()
+}
+
 /// The edges drawn for `usecases`, and the nodes drawn without an edge of their own (the
 /// state a transition leaves).
 fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<NodeRef>) {
+    let triggered = triggered_use_cases(model);
     let mut facts = Vec::new();
     let mut screens = HashSet::new();
     let mut events = HashSet::new();
@@ -120,7 +136,8 @@ fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<
             {
                 facts.push(Fact::declared(rel));
             }
-            // An actor performs each use case of a BUC or a step it performs.
+            // An actor performs each use case of a BUC or a step it performs, except one an
+            // event or a timer starts.
             (RelKind::Performs, NodeRef::Actor(_), via @ (NodeRef::Buc(_) | NodeRef::Step(_))) => {
                 let link = if matches!(via, NodeRef::Buc(_)) {
                     RelKind::Contains
@@ -128,7 +145,11 @@ fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<
                     RelKind::Covers
                 };
                 for inner in &model.relations {
-                    if inner.kind == link && inner.from == *via && usecases.contains(&inner.to) {
+                    if inner.kind == link
+                        && inner.from == *via
+                        && usecases.contains(&inner.to)
+                        && !triggered.contains(&inner.to)
+                    {
                         facts.push(Fact {
                             to: inner.to.clone(),
                             via: Some(via.clone()),
@@ -240,6 +261,10 @@ step Settle "Settle"
 usecase Capture "Capture"
 usecase Refund "Refund"
 usecase Browse "Browse"
+usecase Reconcile "Reconcile"
+usecase Remind "Remind"
+event Settled "Settled"
+timer Nightly "Nightly"
 api CaptureApi "Capture API"
 screen ResultScreen "Result"
 entity Order "Order" {
@@ -251,6 +276,11 @@ performs(Customer, BucPay)
 performs(Clerk, Settle)
 performs(Clerk, Refund)
 contains(BucPay, Capture)
+contains(BucPay, Reconcile)
+contains(BucPay, Remind)
+triggers(Settled, Reconcile)
+triggers(Nightly, Remind)
+performs(Clerk, Remind)
 contains(BucPay, PayFlow)
 contains(PayFlow, Settle)
 covers(Settle, Refund)
@@ -280,10 +310,29 @@ transitions(Order.status, Capture, awaiting -> paid)
         );
         // Declared and derived through the step: the declaration wins.
         assert!(
-            result.contains("  actor__Clerk -.->|performs| usecase__Refund\n  actor__Customer"),
+            result.contains("  actor__Clerk -.->|performs| usecase__Refund\n  actor__Clerk"),
             "{result}"
         );
         assert!(!result.contains("via step__Settle"), "{result}");
+    }
+
+    #[test]
+    fn a_use_case_an_event_or_timer_starts_is_performed_only_as_declared() {
+        let result = emit(View::whole());
+        // Nobody performs Reconcile: the event starts it, and the BUC's actor does not.
+        assert!(
+            !result.contains("|performs| usecase__Reconcile"),
+            "{result}"
+        );
+        // A declared performer of a timer-started use case stays, and the BUC adds no other.
+        assert!(
+            result.contains("  actor__Clerk -.->|performs| usecase__Remind\n"),
+            "{result}"
+        );
+        assert!(
+            !result.contains("actor__Customer -.->|performs| usecase__Remind"),
+            "{result}"
+        );
     }
 
     #[test]

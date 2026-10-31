@@ -25,8 +25,6 @@ flowchart LR
   end
   actor__Customer -.->|performs| usecase__AuthorizePayment
   %% derived actor__Customer -> usecase__AuthorizePayment via buc__BucPayment
-  actor__Customer -.->|performs| usecase__Capture
-  %% derived actor__Customer -> usecase__Capture via buc__BucPayment
   actor__Customer -.->|performs| usecase__InputPaymentInfo
   %% derived actor__Customer -> usecase__InputPaymentInfo via buc__BucPayment
   actor__Customer -.->|performs| usecase__RefundPayment
