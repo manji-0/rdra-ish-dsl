@@ -8,9 +8,13 @@ stateDiagram-v2
     state "active" as state__UserAccount_active
     state "suspended" as state__UserAccount_suspended
     state "deleted" as state__UserAccount_deleted
-    state__UserAccount_provisioned --> state__UserAccount_active : usecase__SetInitialPassword
-    state__UserAccount_active --> state__UserAccount_suspended : usecase__SuspendAccount
-    state__UserAccount_active --> state__UserAccount_deleted : usecase__DeleteAccount
-    state__UserAccount_suspended --> state__UserAccount_active : usecase__RestoreAccount
+    %% transition usecase__SetInitialPassword
+    state__UserAccount_provisioned --> state__UserAccount_active : Set Initial Password
+    %% transition usecase__SuspendAccount
+    state__UserAccount_active --> state__UserAccount_suspended : Suspend Account
+    %% transition usecase__DeleteAccount
+    state__UserAccount_active --> state__UserAccount_deleted : Delete Account
+    %% transition usecase__RestoreAccount
+    state__UserAccount_suspended --> state__UserAccount_active : Restore Account
     state__UserAccount_deleted --> [*]
   }

@@ -161,6 +161,44 @@ pub fn condition_body_display(
     Some(text)
 }
 
+/// Every `holds` body that guards a use case: `applies_to(Cond, UC)`, or `applies_to(Cond, Api)`
+/// for each use case that invokes the API. In relation order, without duplicates.
+pub fn applied_bodies(model: &SemanticModel) -> Vec<(ConditionKey, UseCaseKey, &HoldsBody)> {
+    let mut out: Vec<(ConditionKey, UseCaseKey, &HoldsBody)> = Vec::new();
+    for rel in model
+        .relations
+        .iter()
+        .filter(|r| r.kind == RelKind::AppliesTo)
+    {
+        let NodeRef::Condition(ck) = rel.from else {
+            continue;
+        };
+        let Some(body) = model.conditions[ck].body.as_ref() else {
+            continue;
+        };
+        let ucs: Vec<UseCaseKey> = match rel.to {
+            NodeRef::UseCase(uc) => vec![uc],
+            NodeRef::Api(api) => model
+                .relations
+                .iter()
+                .filter_map(|r| match (&r.kind, &r.from, &r.to) {
+                    (RelKind::Invokes, NodeRef::UseCase(uc), NodeRef::Api(a)) if *a == api => {
+                        Some(*uc)
+                    }
+                    _ => None,
+                })
+                .collect(),
+            _ => continue,
+        };
+        for uc in ucs {
+            if !out.iter().any(|(c, u, _)| (*c, *u) == (ck, uc)) {
+                out.push((ck, uc, body));
+            }
+        }
+    }
+    out
+}
+
 /// Second argument of `combines`: a variation, or `Entity.column`.
 ///
 /// A one-part reference is a variation. A two-part reference is a variation through the import

@@ -167,8 +167,10 @@ stateDiagram-v2
     state "normal" as state__Store_normal
     state "scheduled" as state__Store_scheduled
     state "blocked" as state__Store_blocked
-    state__Store_normal --> state__Store_scheduled : usecase__ChangeNextRestockDate
-    state__Store_scheduled --> state__Store_blocked : usecase__BlockScheduledRestock
+    %% transition usecase__ChangeNextRestockDate
+    state__Store_normal --> state__Store_scheduled : Change Next Restock Date
+    %% transition usecase__BlockScheduledRestock
+    state__Store_scheduled --> state__Store_blocked : Block Scheduled Restock
     state__Store_blocked --> [*]
   }
 ```

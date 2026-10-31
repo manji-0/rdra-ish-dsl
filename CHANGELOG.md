@@ -69,6 +69,12 @@
 
 ### Changed
 
+- `diagram --kind state` labels each transition with the use case's label, then `[...]`
+  with the label of each condition whose `holds` body guards it: `採血 [医師が確定したオーダ]`
+  (was `usecase__CollectSpecimen`). The use case's id moves to a `%% transition <id>` line
+  before the arrow, so a tool that read the id from the label reads that line instead.
+  `rdra_ish_core::analysis::applied_bodies` gives the guarding bodies to the lifecycle and
+  the diagram alike.
 - Every flowchart diagram gives each RDRA element family its own light fill in its
   `classDef` lines (was `stroke:#333` for every kind), so actors, BUCs, use cases,
   screens, events, information, and conditions tell apart when Mermaid renders the `.mmd`

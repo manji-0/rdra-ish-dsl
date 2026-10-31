@@ -10,12 +10,18 @@ stateDiagram-v2
     state "shipped" as state__Order_shipped
     state "delivered" as state__Order_delivered
     state "cancelled" as state__Order_cancelled
-    state__Order_pending --> state__Order_awaiting_capture : usecase__InputPaymentInfo
-    state__Order_pending --> state__Order_cancelled : usecase__Cancel
-    state__Order_awaiting_capture --> state__Order_paid : usecase__Capture
-    state__Order_awaiting_capture --> state__Order_cancelled : usecase__Cancel
-    state__Order_paid --> state__Order_shipped : usecase__ShipOrder
-    state__Order_shipped --> state__Order_delivered : usecase__DeliverOrder
+    %% transition usecase__InputPaymentInfo
+    state__Order_pending --> state__Order_awaiting_capture : Enter Payment Information
+    %% transition usecase__Cancel
+    state__Order_pending --> state__Order_cancelled : Cancel Order
+    %% transition usecase__Capture
+    state__Order_awaiting_capture --> state__Order_paid : Capture Payment
+    %% transition usecase__Cancel
+    state__Order_awaiting_capture --> state__Order_cancelled : Cancel Order
+    %% transition usecase__ShipOrder
+    state__Order_paid --> state__Order_shipped : Ship Order
+    %% transition usecase__DeliverOrder
+    state__Order_shipped --> state__Order_delivered : Confirm Delivery
     state__Order_delivered --> [*]
     state__Order_cancelled --> [*]
   }

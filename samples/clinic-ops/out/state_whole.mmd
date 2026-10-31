@@ -15,19 +15,32 @@ stateDiagram-v2
     state "完了" as state__Appointment_apptcompleted
     state "取消" as state__Appointment_apptcancelled
     state "未来院" as state__Appointment_apptnoshow
-    state__Appointment_apptrequested --> state__Appointment_apptscheduled : usecase__BookAppointment
-    state__Appointment_apptrequested --> state__Appointment_apptscheduled : usecase__ScheduleFollowUpVisit
-    state__Appointment_apptscheduled --> state__Appointment_apptscheduled : usecase__RescheduleAppointment
-    state__Appointment_apptscheduled --> state__Appointment_apptcheckedin : usecase__CheckInPatient
-    state__Appointment_apptscheduled --> state__Appointment_apptcancelled : usecase__CancelAppointment
-    state__Appointment_apptscheduled --> state__Appointment_apptnoshow : usecase__MarkNoShow
-    state__Appointment_apptcheckedin --> state__Appointment_apptcheckedin : usecase__AssignRoom
-    state__Appointment_apptcheckedin --> state__Appointment_apptinconsult : usecase__OpenEncounter
-    state__Appointment_apptinconsult --> state__Appointment_apptawaitingcalc : usecase__CompleteConsultation
-    state__Appointment_apptawaitingcalc --> state__Appointment_apptawaitingpay : usecase__CalculateVisitBill
-    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : usecase__SettleAtKiosk
-    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : usecase__SettleAtWindow
-    state__Appointment_apptsettled --> state__Appointment_apptcompleted : usecase__IssueReceipt
+    %% transition usecase__BookAppointment
+    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 予約の確定
+    %% transition usecase__ScheduleFollowUpVisit
+    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 再診の予約
+    %% transition usecase__RescheduleAppointment
+    state__Appointment_apptscheduled --> state__Appointment_apptscheduled : 予約の変更
+    %% transition usecase__CheckInPatient
+    state__Appointment_apptscheduled --> state__Appointment_apptcheckedin : 受付（初診・再診）
+    %% transition usecase__CancelAppointment
+    state__Appointment_apptscheduled --> state__Appointment_apptcancelled : 予約の取消
+    %% transition usecase__MarkNoShow
+    state__Appointment_apptscheduled --> state__Appointment_apptnoshow : 未来院の処理
+    %% transition usecase__AssignRoom
+    state__Appointment_apptcheckedin --> state__Appointment_apptcheckedin : 診察室への案内
+    %% transition usecase__OpenEncounter
+    state__Appointment_apptcheckedin --> state__Appointment_apptinconsult : 診療記録を開く
+    %% transition usecase__CompleteConsultation
+    state__Appointment_apptinconsult --> state__Appointment_apptawaitingcalc : 診察終了
+    %% transition usecase__CalculateVisitBill
+    state__Appointment_apptawaitingcalc --> state__Appointment_apptawaitingpay : 会計計算入力
+    %% transition usecase__SettleAtKiosk
+    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 自動精算機での精算
+    %% transition usecase__SettleAtWindow
+    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 会計窓口での精算
+    %% transition usecase__IssueReceipt
+    state__Appointment_apptsettled --> state__Appointment_apptcompleted : 領収証・明細書の交付
     state__Appointment_apptcompleted --> [*]
     state__Appointment_apptcancelled --> [*]
     state__Appointment_apptnoshow --> [*]
@@ -37,8 +50,10 @@ stateDiagram-v2
     state "作成済" as state__CarePlan_careopen
     state "経過観察中" as state__CarePlan_caremonitoring
     state "終了" as state__CarePlan_careclosed
-    state__CarePlan_careopen --> state__CarePlan_caremonitoring : usecase__ReviewPatientResponse
-    state__CarePlan_caremonitoring --> state__CarePlan_careclosed : usecase__CloseCarePlan
+    %% transition usecase__ReviewPatientResponse
+    state__CarePlan_careopen --> state__CarePlan_caremonitoring : 患者応答の確認
+    %% transition usecase__CloseCarePlan
+    state__CarePlan_caremonitoring --> state__CarePlan_careclosed : ケアプランの終了
     state__CarePlan_careclosed --> [*]
   }
   state "ClaimStatement.status" as statemodel__ClaimStatement_status {
@@ -53,20 +68,34 @@ stateDiagram-v2
     state "返戻" as state__ClaimStatement_stmtreturned
     state "査定" as state__ClaimStatement_stmtassessed
     state "再審査請求中" as state__ClaimStatement_stmtrereview
-    state__ClaimStatement_stmtdrafting --> state__ClaimStatement_stmtinspecting : usecase__InspectClaimStatement
-    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtonhold : usecase__HoldClaimStatement
-    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtsubmitted : usecase__SubmitClaimStatements
-    state__ClaimStatement_stmtonhold --> state__ClaimStatement_stmtinspecting : usecase__ReleaseHeldStatement
-    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtreceipterror : usecase__RecordReceiptError
-    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtunderreview : usecase__ReceiveClaimAccepted
-    state__ClaimStatement_stmtreceipterror --> state__ClaimStatement_stmtsubmitted : usecase__ResendErroredStatement
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtpaid : usecase__PostPayment
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtreturned : usecase__RecordClaimReturn
-    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtassessed : usecase__RecordClaimAssessment
-    state__ClaimStatement_stmtreturned --> state__ClaimStatement_stmtinspecting : usecase__CorrectReturnedStatement
-    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtpaid : usecase__PostPayment
-    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtrereview : usecase__RequestReexamination
-    state__ClaimStatement_stmtrereview --> state__ClaimStatement_stmtpaid : usecase__PostPayment
+    %% transition usecase__InspectClaimStatement
+    state__ClaimStatement_stmtdrafting --> state__ClaimStatement_stmtinspecting : レセプトの院内点検
+    %% transition usecase__HoldClaimStatement
+    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtonhold : レセプトの保留（月遅れ）
+    %% transition usecase__SubmitClaimStatements
+    state__ClaimStatement_stmtinspecting --> state__ClaimStatement_stmtsubmitted : レセプト請求
+    %% transition usecase__ReleaseHeldStatement
+    state__ClaimStatement_stmtonhold --> state__ClaimStatement_stmtinspecting : 保留レセプトの再提出準備
+    %% transition usecase__RecordReceiptError
+    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtreceipterror : 受付不能・要確認の確認
+    %% transition usecase__ReceiveClaimAccepted
+    state__ClaimStatement_stmtsubmitted --> state__ClaimStatement_stmtunderreview : レセプト受付（審査へ）
+    %% transition usecase__ResendErroredStatement
+    state__ClaimStatement_stmtreceipterror --> state__ClaimStatement_stmtsubmitted : エラー分レセプトの再送
+    %% transition usecase__PostPayment
+    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtpaid : 診療報酬の入金
+    %% transition usecase__RecordClaimReturn
+    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtreturned : 返戻レセプトの取込
+    %% transition usecase__RecordClaimAssessment
+    state__ClaimStatement_stmtunderreview --> state__ClaimStatement_stmtassessed : 査定の取込
+    %% transition usecase__CorrectReturnedStatement
+    state__ClaimStatement_stmtreturned --> state__ClaimStatement_stmtinspecting : 返戻レセプトの訂正（再請求）
+    %% transition usecase__PostPayment
+    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtpaid : 診療報酬の入金
+    %% transition usecase__RequestReexamination
+    state__ClaimStatement_stmtassessed --> state__ClaimStatement_stmtrereview : 再審査請求
+    %% transition usecase__PostPayment
+    state__ClaimStatement_stmtrereview --> state__ClaimStatement_stmtpaid : 診療報酬の入金
     state__ClaimStatement_stmtpaid --> [*]
   }
   state "ClinicalOrder.status" as statemodel__ClinicalOrder_status {
@@ -76,11 +105,16 @@ stateDiagram-v2
     state "結果受信" as state__ClinicalOrder_clresulted
     state "結果確認済" as state__ClinicalOrder_clreviewed
     state "取消" as state__ClinicalOrder_clcancelled
-    state__ClinicalOrder_clordered --> state__ClinicalOrder_clordered : usecase__ConfirmProxyOrder
-    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcollected : usecase__CollectSpecimen
-    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcancelled : usecase__CancelClinicalOrder
-    state__ClinicalOrder_clcollected --> state__ClinicalOrder_clresulted : usecase__ReceiveLabResult
-    state__ClinicalOrder_clresulted --> state__ClinicalOrder_clreviewed : usecase__ReviewLabResult
+    %% transition usecase__ConfirmProxyOrder
+    state__ClinicalOrder_clordered --> state__ClinicalOrder_clordered : 代行入力オーダの確定
+    %% transition usecase__CollectSpecimen
+    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcollected : 採血 [医師が確定したオーダ]
+    %% transition usecase__CancelClinicalOrder
+    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcancelled : オーダの取消
+    %% transition usecase__ReceiveLabResult
+    state__ClinicalOrder_clcollected --> state__ClinicalOrder_clresulted : 検査結果の受信
+    %% transition usecase__ReviewLabResult
+    state__ClinicalOrder_clresulted --> state__ClinicalOrder_clreviewed : 検査結果の確認
     state__ClinicalOrder_clreviewed --> [*]
     state__ClinicalOrder_clcancelled --> [*]
   }
@@ -92,13 +126,20 @@ stateDiagram-v2
     state "無効" as state__EligibilityCheck_eliginvalid
     state "該当資格なし" as state__EligibilityCheck_elignoinfo
     state "申立書で確認" as state__EligibilityCheck_eligdeclared
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : usecase__ConfirmEligibilityInOutageMode
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : usecase__ReceiveEligibilityValid
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eliginvalid : usecase__ReceiveEligibilityInvalid
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_elignoinfo : usecase__ReceiveEligibilityNoInfo
-    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligdeclared : usecase__RecordEligibilityDeclaration
-    state__EligibilityCheck_eliginvalid --> state__EligibilityCheck_eligpending : usecase__RecheckEligibility
-    state__EligibilityCheck_elignoinfo --> state__EligibilityCheck_eligpending : usecase__RecheckEligibility
+    %% transition usecase__ConfirmEligibilityInOutageMode
+    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : システム障害時モードでの資格確認
+    %% transition usecase__ReceiveEligibilityValid
+    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligvalid : 資格確認結果（有効）の取込
+    %% transition usecase__ReceiveEligibilityInvalid
+    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eliginvalid : 資格確認結果（無効）の取込
+    %% transition usecase__ReceiveEligibilityNoInfo
+    state__EligibilityCheck_eligpending --> state__EligibilityCheck_elignoinfo : 資格確認結果（該当資格なし）の取込
+    %% transition usecase__RecordEligibilityDeclaration
+    state__EligibilityCheck_eligpending --> state__EligibilityCheck_eligdeclared : 被保険者資格申立書の受領
+    %% transition usecase__RecheckEligibility
+    state__EligibilityCheck_eliginvalid --> state__EligibilityCheck_eligpending : 資格の再確認
+    %% transition usecase__RecheckEligibility
+    state__EligibilityCheck_elignoinfo --> state__EligibilityCheck_eligpending : 資格の再確認
     state__EligibilityCheck_eligvalid --> [*]
     state__EligibilityCheck_eligdeclared --> [*]
   }
@@ -108,9 +149,12 @@ stateDiagram-v2
     state "記載済" as state__Encounter_encdocumented
     state "署名済" as state__Encounter_encsigned
     state "修正済" as state__Encounter_encamended
-    state__Encounter_encopen --> state__Encounter_encdocumented : usecase__DocumentAssessment
-    state__Encounter_encdocumented --> state__Encounter_encsigned : usecase__SignEncounter
-    state__Encounter_encsigned --> state__Encounter_encamended : usecase__AmendEncounter
+    %% transition usecase__DocumentAssessment
+    state__Encounter_encopen --> state__Encounter_encdocumented : 診察・診断の記録
+    %% transition usecase__SignEncounter
+    state__Encounter_encdocumented --> state__Encounter_encsigned : 診療記録の署名
+    %% transition usecase__AmendEncounter
+    state__Encounter_encsigned --> state__Encounter_encamended : 署名済み記録の修正
     state__Encounter_encamended --> [*]
   }
   state "IntakePacket.status" as statemodel__IntakePacket_status {
@@ -118,8 +162,10 @@ stateDiagram-v2
     state "送付済" as state__IntakePacket_intakesent
     state "回答済" as state__IntakePacket_intakecompleted
     state "期限切れ" as state__IntakePacket_intakeexpired
-    state__IntakePacket_intakesent --> state__IntakePacket_intakecompleted : usecase__CompleteIntakeForms
-    state__IntakePacket_intakesent --> state__IntakePacket_intakeexpired : usecase__ExpireIntakeForms
+    %% transition usecase__CompleteIntakeForms
+    state__IntakePacket_intakesent --> state__IntakePacket_intakecompleted : 問診票の回答
+    %% transition usecase__ExpireIntakeForms
+    state__IntakePacket_intakesent --> state__IntakePacket_intakeexpired : 問診票の期限切れ
     state__IntakePacket_intakecompleted --> [*]
     state__IntakePacket_intakeexpired --> [*]
   }
@@ -128,8 +174,10 @@ stateDiagram-v2
     state "有効" as state__PatientAccount_patientactive
     state "アーカイブ済" as state__PatientAccount_patientinactive
     state "統合済" as state__PatientAccount_patientmerged
-    state__PatientAccount_patientactive --> state__PatientAccount_patientinactive : usecase__ArchivePatient
-    state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : usecase__MergeDuplicatePatient
+    %% transition usecase__ArchivePatient
+    state__PatientAccount_patientactive --> state__PatientAccount_patientinactive : 患者のアーカイブ
+    %% transition usecase__MergeDuplicatePatient
+    state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : 重複患者の統合
     state__PatientAccount_patientinactive --> [*]
     state__PatientAccount_patientmerged --> [*]
   }
@@ -137,7 +185,8 @@ stateDiagram-v2
     [*] --> state__PaymentTransaction_payposted
     state "収納済" as state__PaymentTransaction_payposted
     state "還付済" as state__PaymentTransaction_payrefunded
-    state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : usecase__RefundPayment
+    %% transition usecase__RefundPayment
+    state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : 還付・追加徴収
     state__PaymentTransaction_payrefunded --> [*]
   }
   state "Prescription.status" as statemodel__Prescription_status {
@@ -151,17 +200,28 @@ stateDiagram-v2
     state "交付済" as state__Prescription_rxdispensed
     state "使用期間切れ" as state__Prescription_rxexpired
     state "取消" as state__Prescription_rxcancelled
-    state__Prescription_rxdrafted --> state__Prescription_rxissued : usecase__IssueOutsidePrescription
-    state__Prescription_rxdrafted --> state__Prescription_rxvoucher : usecase__IssueInhouseVoucher
-    state__Prescription_rxdrafted --> state__Prescription_rxcancelled : usecase__CancelPrescription
-    state__Prescription_rxissued --> state__Prescription_rxissued : usecase__AnswerPharmacyInquiry
-    state__Prescription_rxissued --> state__Prescription_rxdispensed : usecase__ConfirmDispense
-    state__Prescription_rxissued --> state__Prescription_rxexpired : usecase__ExpirePrescription
-    state__Prescription_rxvoucher --> state__Prescription_rxinquiry : usecase__RaisePrescriptionInquiry
-    state__Prescription_rxvoucher --> state__Prescription_rxaudited : usecase__DispenseAndAudit
-    state__Prescription_rxinquiry --> state__Prescription_rxvoucher : usecase__AnswerPrescriptionInquiry
-    state__Prescription_rxaudited --> state__Prescription_rxcounseled : usecase__CounselMedication
-    state__Prescription_rxcounseled --> state__Prescription_rxdispensed : usecase__HandOverMedication
+    %% transition usecase__IssueOutsidePrescription
+    state__Prescription_rxdrafted --> state__Prescription_rxissued : 院外処方箋の発行
+    %% transition usecase__IssueInhouseVoucher
+    state__Prescription_rxdrafted --> state__Prescription_rxvoucher : 院内処方用引換券の交付
+    %% transition usecase__CancelPrescription
+    state__Prescription_rxdrafted --> state__Prescription_rxcancelled : 処方の取消
+    %% transition usecase__AnswerPharmacyInquiry
+    state__Prescription_rxissued --> state__Prescription_rxissued : 保険薬局からの疑義照会への回答
+    %% transition usecase__ConfirmDispense
+    state__Prescription_rxissued --> state__Prescription_rxdispensed : 保険薬局での調剤結果の受信
+    %% transition usecase__ExpirePrescription
+    state__Prescription_rxissued --> state__Prescription_rxexpired : 処方箋の使用期間切れ
+    %% transition usecase__RaisePrescriptionInquiry
+    state__Prescription_rxvoucher --> state__Prescription_rxinquiry : 疑義照会
+    %% transition usecase__DispenseAndAudit
+    state__Prescription_rxvoucher --> state__Prescription_rxaudited : 調剤・監査
+    %% transition usecase__AnswerPrescriptionInquiry
+    state__Prescription_rxinquiry --> state__Prescription_rxvoucher : 疑義照会への回答
+    %% transition usecase__CounselMedication
+    state__Prescription_rxaudited --> state__Prescription_rxcounseled : 服薬指導
+    %% transition usecase__HandOverMedication
+    state__Prescription_rxcounseled --> state__Prescription_rxdispensed : 薬剤交付
     state__Prescription_rxdispensed --> [*]
     state__Prescription_rxexpired --> [*]
     state__Prescription_rxcancelled --> [*]

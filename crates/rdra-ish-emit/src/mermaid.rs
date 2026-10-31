@@ -25,8 +25,9 @@ use crate::{
     view_node_visible, view_relation_visible, EmitError, Emitter, ObjectGraphLayer, Scope, View,
     OBJECT_GRAPH_LAYERS,
 };
+use rdra_ish_core::analysis::applied_bodies;
 use rdra_ish_core::model::{
-    ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition,
+    ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StateTransition, UseCaseKey,
 };
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -515,12 +516,17 @@ impl Emitter for StateMermaidEmitter {
                 state_key(model, sm.entity, variant)
                     .and_then(|sk| contract_id(model, &NodeRef::State(sk)))
             };
-            let mut arms: Vec<(&str, &str, String)> = sm
+            let mut arms: Vec<(&str, &str, String, String)> = sm
                 .transitions
                 .iter()
                 .filter_map(|t| {
                     let usecase = contract_id(model, &NodeRef::UseCase(t.usecase))?;
-                    Some((t.from.as_str(), t.to.as_str(), usecase))
+                    Some((
+                        t.from.as_str(),
+                        t.to.as_str(),
+                        usecase,
+                        transition_label(model, t.usecase),
+                    ))
                 })
                 .collect();
             arms.sort_by(|a, b| {
@@ -543,7 +549,7 @@ impl Emitter for StateMermaidEmitter {
                 .copied()
                 .filter(|v| {
                     start_variants.contains(v)
-                        || arms.iter().any(|(from, to, _)| from == v || to == v)
+                        || arms.iter().any(|(from, to, ..)| from == v || to == v)
                 })
                 .collect();
 
@@ -565,17 +571,18 @@ impl Emitter for StateMermaidEmitter {
                     body.push_str(&format!("    state \"{}\" as {id}\n", quote(label)));
                 }
             }
-            for (from, to, usecase) in &arms {
+            for (from, to, usecase, label) in &arms {
                 if let (Some(from), Some(to)) = (state_id(from), state_id(to)) {
                     add_kind("usecase");
-                    body.push_str(&format!("    {from} --> {to} : {usecase}\n"));
+                    body.push_str(&format!("    %% transition {usecase}\n"));
+                    body.push_str(&format!("    {from} --> {to} : {label}\n"));
                 }
             }
             // An end state has no transition to another state.
             for variant in &drawn {
                 let leaves = arms
                     .iter()
-                    .any(|(from, to, _)| from == variant && to != variant);
+                    .any(|(from, to, ..)| from == variant && to != variant);
                 if let (false, Some(id)) = (leaves, state_id(variant)) {
                     body.push_str(&format!("    {id} --> [*]\n"));
                 }
@@ -614,6 +621,22 @@ impl Emitter for StateMermaidEmitter {
             omitted,
         };
         Ok(format!("{}stateDiagram-v2\n{body}", header.render()))
+    }
+}
+
+/// A transition's label: the use case's label, then `[...]` with the label of each condition
+/// that guards it (UML guard notation).
+fn transition_label(model: &SemanticModel, uc: UseCaseKey) -> String {
+    let guards: Vec<&str> = applied_bodies(model)
+        .into_iter()
+        .filter(|(_, u, _)| *u == uc)
+        .map(|(ck, ..)| model.conditions[ck].label.as_str())
+        .collect();
+    let label = quote(&model.use_cases[uc].label);
+    if guards.is_empty() {
+        label
+    } else {
+        format!("{label} [{}]", quote(&guards.join(", ")))
     }
 }
 
@@ -1006,7 +1029,8 @@ transitions(Doc.status, Publish, draft -> published)
                  [*] --> state__Doc_draft\n    \
                  state \"draft\" as state__Doc_draft\n    \
                  state \"published\" as state__Doc_published\n    \
-                 state__Doc_draft --> state__Doc_published : usecase__Publish\n    \
+                 %% transition usecase__Publish\n    \
+                 state__Doc_draft --> state__Doc_published : 公開する\n    \
                  state__Doc_published --> [*]\n  \
                }\n"
         );
@@ -1032,6 +1056,33 @@ transitions(Doc.status, Publish, draft -> published)
         assert!(
             result.contains("    state \"published\" as state__Doc_published\n"),
             "{result}"
+        );
+    }
+
+    #[test]
+    fn test_state_mermaid_names_the_conditions_that_guard_a_transition() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published) @default(draft)
+  reviewed: Bool @default(false)
+}
+usecase Publish "公開する"
+transitions(Doc.status, Publish, draft -> published)
+condition Reviewed "レビュー済み"
+holds(Reviewed, Doc.reviewed == true)
+applies_to(Reviewed, Publish)
+condition Traced "追跡のみ"
+applies_to(Traced, Publish)
+"#;
+        let result = StateMermaidEmitter
+            .emit(&model_from(src), &View::whole())
+            .unwrap();
+        assert!(
+            result.contains(
+                "    %% transition usecase__Publish\n    state__Doc_draft --> state__Doc_published : 公開する [レビュー済み]\n"
+            ),
+            "a condition without a body guards nothing: {result}"
         );
     }
 
@@ -1063,7 +1114,9 @@ transitions(Ticket.phase, Finish, new -> done)
             .nth(1)
             .and_then(|rest| rest.split("  }\n").next())
             .unwrap();
-        assert!(order.contains("state__Order_closed --> state__Order_open : usecase__Reopen"));
+        assert!(order.contains(
+            "%% transition usecase__Reopen\n    state__Order_closed --> state__Order_open : Reopen"
+        ));
         assert!(!order.contains("Ticket"), "{order}");
         // Every Order state leaves, so none is an end state; Ticket ends at done.
         assert!(!order.contains("--> [*]"), "{result}");
@@ -1102,7 +1155,7 @@ transitions(Parcel.status, Ship, packed -> sent)
         assert!(result.contains("scope=buc:BucPay"), "{result}");
         assert!(result.contains("statemodel__Order_status {"), "{result}");
         assert!(
-            result.contains("state__Order_paid --> state__Order_shipped : usecase__Ship"),
+            result.contains("state__Order_paid --> state__Order_shipped : Ship"),
             "{result}"
         );
         assert!(!result.contains("Parcel"), "{result}");

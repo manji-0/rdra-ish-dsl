@@ -325,9 +325,12 @@ fn parse_state(text: &str) -> Result<StateChart, String> {
     let mut chart = StateChart::default();
     let mut seen_type = false;
     let mut current: Option<String> = None;
+    let mut transition: Option<String> = None;
     for line in lines {
         let trimmed = line.trim();
-        if let Some(kinds) = trimmed.strip_prefix("%% kinds: ") {
+        if let Some(usecase) = trimmed.strip_prefix("%% transition ") {
+            transition = Some(usecase.to_string());
+        } else if let Some(kinds) = trimmed.strip_prefix("%% kinds: ") {
             chart.header_kinds = kinds
                 .split(' ')
                 .filter(|kind| *kind != "(none)")
@@ -367,18 +370,18 @@ fn parse_state(text: &str) -> Result<StateChart, String> {
                     .ok_or_else(|| format!("unparsed state: {line}"))?;
                 chart.states.insert(id.to_string(), model);
             } else {
-                let (arm, usecase) = trimmed
+                let (arm, _label) = trimmed
                     .split_once(" : ")
                     .ok_or_else(|| format!("unparsed line: {line}"))?;
+                let usecase = transition
+                    .take()
+                    .ok_or_else(|| format!("no `%% transition` line before: {line}"))?;
                 let (from, to) = arm
                     .split_once(" --> ")
                     .ok_or_else(|| format!("unparsed line: {line}"))?;
-                chart.transitions.push((
-                    model,
-                    from.to_string(),
-                    to.to_string(),
-                    usecase.to_string(),
-                ));
+                chart
+                    .transitions
+                    .push((model, from.to_string(), to.to_string(), usecase));
             }
         }
     }
@@ -473,7 +476,7 @@ fn every_state_diagram_of_every_sample_keeps_the_contract() {
 
 #[test]
 fn the_state_contract_check_rejects_a_broken_diagram() {
-    let good = "%% rdra-ish diagram=state scope=whole\n%% kinds: statemodel state usecase\nstateDiagram-v2\n  state \"Doc.status\" as statemodel__Doc_status {\n    [*] --> state__Doc_draft\n    state \"draft\" as state__Doc_draft\n    state \"done\" as state__Doc_done\n    state__Doc_draft --> state__Doc_done : usecase__Publish\n    state__Doc_done --> [*]\n  }\n";
+    let good = "%% rdra-ish diagram=state scope=whole\n%% kinds: statemodel state usecase\nstateDiagram-v2\n  state \"Doc.status\" as statemodel__Doc_status {\n    [*] --> state__Doc_draft\n    state \"draft\" as state__Doc_draft\n    state \"done\" as state__Doc_done\n    %% transition usecase__Publish\n    state__Doc_draft --> state__Doc_done : Publish\n    state__Doc_done --> [*]\n  }\n";
     assert!(check_state(&parse_state(good).unwrap()).is_ok());
     for (broken, from, to) in [
         ("missing end", "    state__Doc_done --> [*]\n", ""),
@@ -482,7 +485,16 @@ fn the_state_contract_check_rejects_a_broken_diagram() {
             "    state__Doc_done --> [*]\n",
             "    state__Doc_done --> [*]\n    state__Doc_draft --> [*]\n",
         ),
-        ("label is not an id", ": usecase__Publish", ": Publish"),
+        (
+            "transition is not an id",
+            "%% transition usecase__Publish",
+            "%% transition Publish",
+        ),
+        (
+            "transition without its id",
+            "    %% transition usecase__Publish\n",
+            "",
+        ),
         ("emoji-era id", "as state__Doc_done", "as Doc_done"),
         (
             "header kinds",

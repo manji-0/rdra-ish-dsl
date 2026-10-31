@@ -662,7 +662,8 @@ stateDiagram-v2
     [*] --> state__Order_pending
     state "pending" as state__Order_pending
     ...
-    state__Order_awaiting_capture --> state__Order_paid : usecase__Capture
+    %% transition usecase__Capture
+    state__Order_awaiting_capture --> state__Order_paid : Capture Payment
     state__Order_delivered --> [*]
   }
 ```
@@ -670,7 +671,10 @@ stateDiagram-v2
 - Each state model, a column that `transitions` drive, is one composite state
   `statemodel__<Entity>_<column>` labelled `<Entity>.<column>`. Its states follow the
   column's `Enum` order, with the ids `--kind rdra` gives them.
-- Each transition is labelled with the id of the use case that drives it.
+- Each transition is labelled with the label of the use case that drives it, then
+  `[...]` with the label of each condition whose `holds` body guards that use case (UML
+  guard notation). The line before it, `%% transition <usecase id>`, names the use case
+  by the id `--kind rdra` gives it, for tools that read the diagram.
 - `[*] -->` marks the start state the lifecycle gives the column. `--> [*]` marks an end
   state, one with no transition to another state.
 - `omitted:` names the `Enum` columns in scope that no `transitions` drive.

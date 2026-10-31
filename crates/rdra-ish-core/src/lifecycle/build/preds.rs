@@ -2,8 +2,9 @@
 
 use std::collections::HashSet;
 
-use super::naming::{applied_bodies, is_driven, property_entity};
+use super::naming::{is_driven, property_entity};
 use super::Builder;
+use crate::analysis::applied_bodies;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, CmpOp, Domain, Effect, Guard,
