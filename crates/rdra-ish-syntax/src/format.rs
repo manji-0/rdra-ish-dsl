@@ -5,6 +5,12 @@ use chumsky::error::Simple;
 use crate::ast::*;
 use crate::parser::parse;
 use crate::token::Token;
+use unicode_width::UnicodeWidthStr;
+
+/// The widest line, in display columns, that keeps a declaration and its description on one
+/// line. Columns are counted as a terminal shows them: an East Asian wide or fullwidth
+/// character (most Japanese text) is two columns, others one. Trailing comments do not count.
+const MAX_WIDTH: usize = 120;
 
 #[derive(Debug)]
 pub struct FormatError {
@@ -32,7 +38,7 @@ pub fn format_ast(ast: &Ast) -> String {
 
     let mut out = String::new();
     for (index, lines) in items.iter().enumerate() {
-        if index > 0 {
+        if index > 0 && blank_line_between(ast, &items, index - 1) {
             out.push('\n');
         }
         for line in lines {
@@ -59,6 +65,39 @@ pub fn format_ast(ast: &Ast) -> String {
         out.push('\n');
     }
     out
+}
+
+/// Whether a blank line separates item `prev` from the item after it.
+///
+/// Consecutive imports form one block with no blank line inside it, and a blank line
+/// follows the module line and the import block. An item that prints on several lines is
+/// set off by blank lines. Between two one-line items the author's grouping stands: a
+/// blank line there is kept (several collapse to one), and none is added.
+fn blank_line_between(ast: &Ast, items: &[Vec<Line>], prev: usize) -> bool {
+    let (before, after) = (&ast.items[prev], &ast.items[prev + 1]);
+    match (before, after) {
+        (Item::Import(_), Item::Import(_)) => false,
+        (Item::Module(..) | Item::Import(_), _) => true,
+        _ => {
+            items[prev].len() > 1
+                || items[prev + 1].len() > 1
+                || source_blank_after(ast, item_span(before).end)
+        }
+    }
+}
+
+/// Whether the source has a blank line after the item ending at `end`, past the comments
+/// that trail it on its last line.
+fn source_blank_after(ast: &Ast, end: usize) -> bool {
+    let src = &ast.source;
+    let mut at = end;
+    loop {
+        at += src[at..].len() - src[at..].trim_start_matches([' ', '\t']).len();
+        match ast.comments.iter().find(|comment| comment.span.start == at) {
+            Some(comment) => at = comment.span.end,
+            None => return blank_line_follows(src, at),
+        }
+    }
 }
 
 /// One output line of an item.
@@ -269,9 +308,6 @@ fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
     metadata.extend(format_field_metadata(instance));
     metadata.extend(format_usecase_metadata(instance));
 
-    let mut lines = vec![Line::new(header, Some(instance.span.start), "")];
-    lines.extend(metadata.into_iter().map(|text| Line::new(text, None, "")));
-
     let body: Vec<(String, usize)> = if !instance.columns.is_empty() {
         instance
             .columns
@@ -291,8 +327,25 @@ fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
             })
             .collect()
     };
+    let opener = if body.is_empty() { "" } else { " {" };
+
+    // A declaration whose only clause is its description keeps it on its own line while
+    // the line fits; any other clause goes on an indented line of its own.
+    let mut lines = vec![Line::new(header, Some(instance.span.start), "")];
+    match &metadata[..] {
+        // `  description …` with one of its two indenting spaces kept as the separator.
+        [description]
+            if instance.description.is_some()
+                && lines[0].text.width() + description[1..].width() + opener.len() <= MAX_WIDTH =>
+        {
+            lines[0].text.push_str(&description[1..]);
+        }
+        _ => lines.extend(metadata.into_iter().map(|text| Line::new(text, None, ""))),
+    }
+
     if !body.is_empty() {
-        lines[0].text.push_str(" {");
+        let last = lines.len() - 1;
+        lines[last].text.push_str(opener);
         for (text, anchor) in body {
             lines.push(Line::new(format!("  {text}"), Some(anchor), "  "));
         }
@@ -771,6 +824,67 @@ mod tests {
     }
 
     #[test]
+    fn prints_consecutive_imports_as_one_block() {
+        assert_formats_to(
+            "module m\nimport a\n\nimport b.{X}\n// why c\nimport c as C\nactor A \"a\"\n",
+            "module m\n\nimport a\nimport b.{X}\n// why c\nimport c as C\n\nactor A \"a\"\n",
+        );
+    }
+
+    #[test]
+    fn keeps_a_description_on_the_line_of_its_declaration_while_it_fits() {
+        let fits = format!("usecase U \"u\" description \"{}\"\n", "x".repeat(92));
+        assert_eq!(fits.trim_end().len(), MAX_WIDTH);
+        assert_formats_to(&fits.replace(" description", "\n  description"), &fits);
+
+        let over = format!("usecase U \"u\" description \"{}\"\n", "x".repeat(93));
+        assert_formats_to(&over, &over.replace(" description", "\n  description"));
+    }
+
+    #[test]
+    fn counts_a_wide_character_as_two_columns() {
+        // 46 wide characters are 92 columns: the line is exactly MAX_WIDTH wide.
+        let fits = format!("usecase U \"u\" description \"{}\"\n", "会".repeat(46));
+        assert_formats_to(&fits, &fits);
+        let over = format!("usecase U \"u\" description \"{}\"\n", "会".repeat(47));
+        assert_formats_to(&over, &over.replace(" description", "\n  description"));
+    }
+
+    #[test]
+    fn keeps_a_clause_beside_another_on_its_own_line_and_opens_a_body_after_it() {
+        assert_formats_to(
+            "requirement R \"r\" description \"d\" priority must\n",
+            "requirement R \"r\"\n  description \"d\"\n  priority must\n",
+        );
+        assert_formats_to(
+            "entity E \"e\" description \"d\" {\n  id: Int @pk\n}\n",
+            "entity E \"e\" description \"d\" {\n  id: Int @pk\n}\n",
+        );
+        let long = "x".repeat(110);
+        assert_formats_to(
+            &format!("entity E \"e\" description \"{long}\" {{\n  id: Int @pk\n}}\n"),
+            &format!("entity E \"e\"\n  description \"{long}\" {{\n  id: Int @pk\n}}\n"),
+        );
+    }
+
+    #[test]
+    fn keeps_runs_of_one_line_declarations_and_their_citations_together() {
+        assert_formats_to(
+            "// a.txt:1\nusecase A \"a\" description \"x\"\n// b.txt:2\nusecase B  \"b\"\n\n\nscreen S \"s\"\nusecase C \"c\" // c.txt:3\n  description \"y\"\nrequirement R \"r\"\n  priority must\n  status draft\nperforms(P, A)\n",
+            "// a.txt:1\nusecase A \"a\" description \"x\"\n// b.txt:2\nusecase B \"b\"\n\nscreen S \"s\"\nusecase C \"c\" description \"y\" // c.txt:3\n\nrequirement R \"r\"\n  priority must\n  status draft\n\nperforms(P, A)\n",
+        );
+    }
+
+    #[test]
+    fn keeps_a_trailing_comment_on_the_header_of_a_wrapped_description() {
+        let long = "x".repeat(110);
+        assert_formats_to(
+            &format!("actor A \"a\" description \"{long}\" // note\nactor B \"b\"\n"),
+            &format!("actor A \"a\" // note\n  description \"{long}\"\n\nactor B \"b\"\n"),
+        );
+    }
+
+    #[test]
     fn keeps_an_own_line_comment_above_the_item_it_precedes() {
         assert_formats_to(
             "module a\n// heading comment\nactor A \"a\"\n",
@@ -790,7 +904,7 @@ mod tests {
     fn keeps_block_comments_inline_and_on_their_own_lines() {
         assert_formats_to(
             "/* file\n   header */\nactor A \"a\" /* inline */\nactor B \"b\" /* both */ // kinds\n",
-            "/* file\n   header */\nactor A \"a\" /* inline */\n\nactor B \"b\" /* both */ // kinds\n",
+            "/* file\n   header */\nactor A \"a\" /* inline */\nactor B \"b\" /* both */ // kinds\n",
         );
     }
 
@@ -798,7 +912,7 @@ mod tests {
     fn keeps_comments_between_predicates() {
         assert_formats_to(
             "performs(A, U1)\n// sources/a.txt:12\nperforms(A, U2) // sources/b.txt:3\n// sources/c.txt:4\nperforms(A, U3)\n",
-            "performs(A, U1)\n\n// sources/a.txt:12\nperforms(A, U2) // sources/b.txt:3\n\n// sources/c.txt:4\nperforms(A, U3)\n",
+            "performs(A, U1)\n// sources/a.txt:12\nperforms(A, U2) // sources/b.txt:3\n// sources/c.txt:4\nperforms(A, U3)\n",
         );
     }
 
@@ -912,7 +1026,7 @@ mod tests {
             format_source("relate(Line, Order, 1 .. *:1)\nrelate(Note, Order, 0..1:1)\n").unwrap();
         assert_eq!(
             formatted,
-            "relate(Line, Order, 1..*:1)\n\nrelate(Note, Order, 0..1:1)\n"
+            "relate(Line, Order, 1..*:1)\nrelate(Note, Order, 0..1:1)\n"
         );
     }
 

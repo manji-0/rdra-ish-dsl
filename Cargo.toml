@@ -20,6 +20,7 @@ description = "RDRA-inspired DSL compiler and diagram generator"
 # parser
 logos        = "0.14"
 chumsky      = "0.9"
+unicode-width = "0.2"
 # diagnostics
 miette       = { version = "7", features = ["fancy"] }
 thiserror    = "2"

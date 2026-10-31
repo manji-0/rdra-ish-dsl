@@ -196,6 +196,15 @@
 
 ### Changed
 
+- `rdra-ish fmt` keeps a model's layout readable. Consecutive `import` lines print as one
+  block. A declaration whose only clause is `description` stays on one line while the line
+  is at most 120 display columns wide (a wide character such as Japanese counts as two);
+  a longer one, or one with several clauses, puts each clause on its own indented line. A
+  declaration that prints on several lines is set off by blank lines; between one-line
+  declarations, `fmt` keeps the author's blank lines (several become one) and adds none,
+  so a `//` citation above a declaration stays attached to it. Ids are not aligned. An
+  entity or variation whose only clause is `description` no longer prints the clause
+  inside its braces, where it failed to parse (#50).
 - Every construct that takes a comparison reads its bare right-hand side by one rule:
   `forbidden`, `required`, `exclusive`, `invariant` (`.when`, `.then`, `.has`, `.none`),
   `holds`, `after(...).assert(...)`, `sets`, `property`, `@check`, and `@derived`. A

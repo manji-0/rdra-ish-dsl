@@ -941,6 +941,7 @@ dependencies = [
  "insta",
  "logos",
  "miette",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]

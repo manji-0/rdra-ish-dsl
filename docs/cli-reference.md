@@ -420,14 +420,26 @@ rdra-ish fmt <INPUTS...> [--write | --check]
 ```
 
 The formatter parses each `.rdra` file and prints a canonical source layout:
-top-level items are separated by one blank line, instance metadata is indented by
-two spaces, entity/DTO columns are indented by two spaces, annotations use compact
-spacing, and predicate calls keep their chain form on one line.
+
+- The `module` line is followed by one blank line. Consecutive `import` lines form one
+  block with no blank line inside it, and one blank line follows the block.
+- A declaration whose only clause is `description` keeps it on the declaration's line
+  while that line is at most 120 display columns wide; a wide character, such as most
+  Japanese text, counts as two columns, and a trailing comment does not count. A longer
+  declaration, or one with several clauses, puts each clause on its own line indented by
+  two spaces. Entity and DTO columns and variation values are indented by two spaces.
+- A declaration that prints on several lines is set off by one blank line on each side.
+  Between two one-line items the source's grouping stands: a blank line there is kept
+  (several become one), and none is added. Ids are not aligned into columns.
+- Annotations use compact spacing, and a predicate call keeps its chain on one line.
+- A comment stays where it was: a trailing comment at the end of its line, and an
+  own-line comment above the line that follows it, so a citation above a declaration
+  stays attached to it. A comment from a line that `fmt` joins, such as a metadata clause
+  or a wrapped chain call, moves above its item.
 
 This is an AST-based formatter. It preserves model structure, identifiers, labels,
-metadata values, columns, predicates, chains, tuples, and comparison expressions,
-but it does not preserve comments or original blank-line grouping. Prefer
-`--check` before `--write` when adopting it on an existing hand-commented file.
+metadata values, columns, predicates, chains, tuples, and comparison expressions, and a
+second run changes nothing.
 
 | Option | Type | Default | Description |
 |---|---|---|---|

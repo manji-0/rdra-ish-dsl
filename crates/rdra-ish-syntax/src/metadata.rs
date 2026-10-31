@@ -343,7 +343,8 @@ mod tests {
     fn description_takes_a_quoted_string_and_a_bare_token() {
         for value in ["\"A customer.\"", "customer"] {
             let src = format!("actor X \"X\"\n  description {value}\n");
-            assert_eq!(format_source(&src).unwrap(), src);
+            let expected = format!("actor X \"X\" description {value}\n");
+            assert_eq!(format_source(&src).unwrap(), expected);
         }
     }
 
