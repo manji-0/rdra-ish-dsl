@@ -20,6 +20,6 @@ flowchart LR
   %% derived extsystem__PaymentGW -> system__CommerceSystem via event__EvPaymentAuthorized
   system__CommerceSystem -.->|triggers EvOrderShipped| extsystem__ShippingSvc
   %% derived system__CommerceSystem -> extsystem__ShippingSvc via event__EvOrderShipped
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef system stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;

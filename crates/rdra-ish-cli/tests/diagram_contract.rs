@@ -162,9 +162,10 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
                 .split_once("__")
                 .ok_or_else(|| format!("subgraph id without `<kind>__`: {line}"))?;
             chart.nodes.insert(id.to_string(), kind.to_string());
-        } else if let Some(kind) = trimmed
+        } else if let Some((kind, _)) = trimmed
             .strip_prefix("classDef ")
-            .and_then(|rest| rest.strip_suffix(" stroke:#333;"))
+            .filter(|rest| rest.ends_with(';'))
+            .and_then(|rest| rest.split_once(' '))
         {
             chart.class_defs.insert(kind.to_string());
         } else if let Some((id, rest)) = trimmed.split_once("[\"") {

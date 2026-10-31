@@ -106,16 +106,16 @@ flowchart LR
   usecase__ChangeStoreParentOrganization -.->|invokes| api__StoreAdminApi
   usecase__ChangeStoreParentOrganization -.->|requires_medium| medium__OpsConsole
   usecase__ChangeStoreParentOrganization -.->|requires_permission| permission__StoreMaintenanceWrite
-  classDef actor stroke:#333;
-  classDef business stroke:#333;
-  classDef buc stroke:#333;
-  classDef medium stroke:#333;
-  classDef permission stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef api stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef medium fill:#f1f3f5,stroke:#333,color:#000;
+  classDef permission fill:#f1f3f5,stroke:#333,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 ### 4.3 ER 図

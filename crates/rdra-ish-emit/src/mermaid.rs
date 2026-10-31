@@ -804,7 +804,7 @@ creates(OrderApi, Order)
         assert!(result.contains("  buc__BucOrder -->|contains| usecase__PlaceOrder\n"));
         assert!(result.contains("  usecase__PlaceOrder -.->|invokes| api__OrderApi\n"));
         assert!(result.contains("  api__OrderApi -.->|creates| entity__Order\n"));
-        assert!(result.ends_with("  classDef api stroke:#333;\n  classDef entity stroke:#333;\n"));
+        assert!(result.ends_with("  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;\n  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;\n"));
         assert!(!result.contains("direction TB"), "{result}");
     }
 
@@ -1259,7 +1259,7 @@ triggers(Nightly, Sweep)
         );
         assert!(result.contains("  timer__Nightly[\"Nightly\"]:::timer\n"));
         assert!(
-            result.ends_with("  classDef timer stroke:#333;\n"),
+            result.ends_with("  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;\n"),
             "{result}"
         );
     }

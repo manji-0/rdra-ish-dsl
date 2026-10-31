@@ -12,6 +12,6 @@ flowchart LR
   extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
   usecase__Capture["Capture Payment"]:::usecase
   event__EvPaymentAuthorized -.->|triggers| usecase__Capture
-  classDef event stroke:#333;
-  classDef usecase stroke:#333;
-  classDef extsystem stroke:#333;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;

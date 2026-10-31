@@ -76,8 +76,8 @@ flowchart LR
   %% derived actor__OpsStaff -> system__OrganizationSystem via buc__BucStoreRestock
   actor__OpsStaff -.->|performs| system__StoreAdminSystem
   %% derived actor__OpsStaff -> system__StoreAdminSystem via buc__BucStoreRestock
-  classDef actor stroke:#333;
-  classDef system stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;
 ```
 
 How to read it:
@@ -183,13 +183,13 @@ flowchart LR
   requirement__ReqResolveAuditFindings -.->|motivates| buc__BucStaffAdministration
   requirement__ReqResubmitReturned -.->|motivates| buc__BucBillingClaims
   requirement__ReqSwiftCheckIn -.->|motivates| buc__BucVisitCheckIn
-  classDef requirement stroke:#333;
-  classDef nfr stroke:#333;
-  classDef quality stroke:#333;
-  classDef constraint stroke:#333;
-  classDef buc stroke:#333;
-  classDef system stroke:#333;
-  classDef entity stroke:#333;
+  classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef nfr fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef quality fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef constraint fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
 How to read it:
@@ -237,9 +237,9 @@ flowchart LR
     end
   end
   actor__OpsStaff -.->|performs| buc__BucStoreRestock
-  classDef actor stroke:#333;
-  classDef business stroke:#333;
-  classDef buc stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
 ```
 
 How to read it:
@@ -310,11 +310,11 @@ flowchart LR
   %% derived usecase__ChangeStoreParentOrganization -> entity__Organization via api__OrganizationLookupApi
   usecase__ChangeStoreParentOrganization -.->|updates| entity__Store
   %% derived usecase__ChangeStoreParentOrganization -> entity__Store via api__StoreAdminApi
-  classDef actor stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 How to read it:
@@ -393,10 +393,10 @@ flowchart TD
   step__ReferralStep -.->|covers| usecase__ReceiveReferralLetter
   step__ReferralStep -->|precedes| step__RoomingStep
   step__RoomingStep -.->|covers| usecase__AssignRoom
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef usecase stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 How to read it:
@@ -439,8 +439,8 @@ flowchart LR
   statemodel__Store_restock_status["Store.restock_status"]:::statemodel
   entity__Store ---|N:1| entity__Organization
   entity__Store -.->|statemodel| statemodel__Store_restock_status
-  classDef entity stroke:#333;
-  classDef statemodel stroke:#333;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
 How to read it:
@@ -510,11 +510,11 @@ flowchart LR
   %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
   condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
   %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
-  classDef condition stroke:#333;
-  classDef statemodel stroke:#333;
-  classDef variation stroke:#333;
-  classDef value stroke:#333;
-  classDef usecase stroke:#333;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef value fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 How to read it:
@@ -611,9 +611,9 @@ flowchart LR
   extsystem__PaymentGW -.->|raises| event__EvPaymentAuthorized
   usecase__Capture["Capture Payment"]:::usecase
   event__EvPaymentAuthorized -.->|triggers| usecase__Capture
-  classDef event stroke:#333;
-  classDef usecase stroke:#333;
-  classDef extsystem stroke:#333;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
 ```
 
 How to read it:
@@ -752,16 +752,16 @@ flowchart LR
   usecase__ChangeStoreParentOrganization -.->|invokes| api__StoreAdminApi
   usecase__ChangeStoreParentOrganization -.->|requires_medium| medium__OpsConsole
   usecase__ChangeStoreParentOrganization -.->|requires_permission| permission__StoreMaintenanceWrite
-  classDef actor stroke:#333;
-  classDef business stroke:#333;
-  classDef buc stroke:#333;
-  classDef medium stroke:#333;
-  classDef permission stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef api stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef medium fill:#f1f3f5,stroke:#333,color:#000;
+  classDef permission fill:#f1f3f5,stroke:#333,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 How to read it:

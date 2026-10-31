@@ -170,9 +170,9 @@ flowchart LR
   %% derived system__ClinicOpsSystem -> extsystem__ClaimsReviewOrganization via event__EvClaimStatementsSubmitted
   system__ClinicOpsSystem -.->|triggers EvPrescriptionIssued| extsystem__EPrescriptionService
   %% derived system__ClinicOpsSystem -> extsystem__EPrescriptionService via event__EvPrescriptionIssued
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef system stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;
 ```
 
 ### 2.2 要求モデル図
@@ -259,13 +259,13 @@ flowchart LR
   requirement__ReqResolveAuditFindings -.->|motivates| buc__BucStaffAdministration
   requirement__ReqResubmitReturned -.->|motivates| buc__BucBillingClaims
   requirement__ReqSwiftCheckIn -.->|motivates| buc__BucVisitCheckIn
-  classDef requirement stroke:#333;
-  classDef nfr stroke:#333;
-  classDef quality stroke:#333;
-  classDef constraint stroke:#333;
-  classDef buc stroke:#333;
-  classDef system stroke:#333;
-  classDef entity stroke:#333;
+  classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef nfr fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef quality fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef constraint fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
 ### 2.3 ビジネスコンテキスト図
@@ -404,10 +404,10 @@ flowchart LR
   %% derived extsystem__OutsourcedLabSystem -> buc__BucOrdersResults via usecase__ReceiveLabResult
   extsystem__PaymentGateway -.->|raises EvPaymentSettled| buc__BucVisitPayment
   %% derived extsystem__PaymentGateway -> buc__BucVisitPayment via usecase__SettleAtKiosk
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef business stroke:#333;
-  classDef buc stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
 ```
 
 ### 2.4 Context / Access 制約
@@ -529,12 +529,12 @@ flowchart TD
   step__NewPatientSearchStep -->|precedes| step__RegisterStep
   step__RegisterStep -.->|covers| usecase__RegisterPatient
   step__RegisterStep -->|precedes| step__InsuranceStep
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
-  classDef event stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
 ```
 
 #### 新患登録・患者情報管理 UC複合図
@@ -649,14 +649,14 @@ flowchart LR
   %% derived usecase__VerifyInsurance -> entity__InsurancePolicy via api__EligibilityApi
   usecase__VerifyInsurance -.->|updates| entity__InsurancePolicy
   %% derived usecase__VerifyInsurance -> entity__InsurancePolicy via api__EligibilityApi
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 ### 3.2 予約
@@ -733,13 +733,13 @@ flowchart TD
   step__RescheduleStep -->|repeats| step__NoticeStep
   step__ReserveStep -.->|covers| usecase__ReserveAppointment
   step__ReserveStep -->|precedes| step__BookStep
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef actor stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
-  classDef event stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
 ```
 
 #### 予約 UC複合図
@@ -850,14 +850,14 @@ flowchart LR
   usecase__SendAppointmentNotice -.->|creates| entity__PatientMessage
   %% derived usecase__SendAppointmentNotice -> entity__PatientMessage via api__AppointmentNoticeApi
   usecase__SendAppointmentNotice -.->|displays| screen__AppointmentNoticeScreen
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 ### 3.3 受付（初診・再診）
@@ -930,10 +930,10 @@ flowchart TD
   step__ReferralStep -.->|covers| usecase__ReceiveReferralLetter
   step__ReferralStep -->|precedes| step__RoomingStep
   step__RoomingStep -.->|covers| usecase__AssignRoom
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef usecase stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 #### 受付（初診・再診） UC複合図
@@ -1077,15 +1077,15 @@ flowchart LR
   %% derived usecase__VerifyArrival -> entity__InsurancePolicy via api__VerifyArrivalApi
   usecase__VerifyArrival -.->|reads| entity__PatientAccount
   %% derived usecase__VerifyArrival -> entity__PatientAccount via api__VerifyArrivalApi
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
-  classDef condition stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
 ```
 
 ### 3.4 診察
@@ -1155,10 +1155,10 @@ flowchart TD
   step__SignStep -->|precedes| step__CompleteStep
   step__VitalsStep -.->|covers| usecase__RecordVitals
   step__VitalsStep -->|precedes| step__AssessmentStep
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef usecase stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 #### 診察 UC複合図
@@ -1259,13 +1259,13 @@ flowchart LR
   usecase__SignEncounter -.->|transitions Encounter.status encdocumented->encsigned| state__Encounter_encsigned
   usecase__SignEncounter -.->|updates| entity__Encounter
   %% derived usecase__SignEncounter -> entity__Encounter via api__SignEncounterApi
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 ### 3.5 検体検査
@@ -1355,12 +1355,12 @@ flowchart TD
   step__ProxyOrderStep -->|precedes| step__ConfirmOrderStep
   step__ResultReviewStep -->|branches| step__CriticalStep
   step__ResultReviewStep -.->|covers| usecase__ReviewLabResult
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef actor stroke:#333;
-  classDef usecase stroke:#333;
-  classDef event stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
 ```
 
 #### 検体検査 UC複合図
@@ -1480,14 +1480,14 @@ flowchart LR
   %% derived usecase__ReviewLabResult -> entity__ClinicalOrder via api__ResultReviewApi
   usecase__ReviewLabResult -.->|updates| entity__LabResult
   %% derived usecase__ReviewLabResult -> entity__LabResult via api__ResultReviewApi
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
-  classDef condition stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
 ```
 
 ### 3.6 処方
@@ -1569,11 +1569,11 @@ flowchart TD
   step__OutsideStep -->|precedes| step__PharmacyStep
   step__PharmacyStep -.->|covers| usecase__AnswerPharmacyInquiry
   step__PharmacyStep -.->|covers| usecase__ConfirmDispense
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef actor stroke:#333;
-  classDef usecase stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 #### 処方 UC複合図
@@ -1716,14 +1716,14 @@ flowchart LR
   usecase__SearchMedication -.->|displays| screen__MedicationSearchScreen
   usecase__SearchMedication -.->|reads| entity__Medication
   %% derived usecase__SearchMedication -> entity__Medication via api__MedicationCatalogApi
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 ### 3.7 計算・会計
@@ -1793,11 +1793,11 @@ flowchart TD
   step__RefundStep -.->|covers| usecase__RefundPayment
   step__WindowStep -.->|covers| usecase__SettleAtWindow
   step__WindowStep -->|precedes| step__ReceiptStep
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef usecase stroke:#333;
-  classDef event stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
 ```
 
 #### 計算・会計 UC複合図
@@ -1845,7 +1845,7 @@ flowchart LR
     state__Appointment_apptawaitingpay["会計待ち"]:::state
     state__Appointment_apptcompleted["完了"]:::state
     state__Appointment_apptsettled["精算済"]:::state
-    state__PaymentTransaction_payposted["精算済"]:::state
+    state__PaymentTransaction_payposted["収納済"]:::state
     state__PaymentTransaction_payrefunded["還付済"]:::state
     condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
     condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
@@ -1908,14 +1908,14 @@ flowchart LR
   %% derived usecase__SettleAtWindow -> entity__AccountBalance via api__SettlementApi
   usecase__SettleAtWindow -.->|updates| entity__Appointment
   %% derived usecase__SettleAtWindow -> entity__Appointment via api__SettlementApi
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
-  classDef condition stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
 ```
 
 ### 3.8 レセプト作成・請求
@@ -2009,11 +2009,11 @@ flowchart TD
   step__SubmitStep -.->|covers| usecase__SubmitClaimStatements
   step__SubmitStep -.->|excepts| step__ReceiptErrorStep
   step__SubmitStep -->|precedes| step__ReviewStep
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 #### レセプト作成・請求 UC複合図
@@ -2191,15 +2191,15 @@ flowchart LR
   %% derived usecase__SubmitClaimStatements -> entity__ClaimStatement via api__SubmitClaimApi
   usecase__VoidCharge -.->|displays| screen__ChargeWorklistScreen
   usecase__VoidCharge -.->|updates| entity__Charge
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef timer stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
-  classDef condition stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
 ```
 
 ### 3.9 フォローアップ
@@ -2261,10 +2261,10 @@ flowchart TD
   step__ResultNoticeStep -->|precedes| step__ResponseStep
   step__RevisitStep -.->|covers| usecase__ScheduleFollowUpVisit
   step__RevisitStep -->|precedes| step__PlanCloseStep
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef lane stroke:#333;
-  classDef usecase stroke:#333;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 #### フォローアップ UC複合図
@@ -2346,13 +2346,13 @@ flowchart LR
   usecase__SendFollowUpMessage -.->|creates| entity__PatientMessage
   %% derived usecase__SendFollowUpMessage -> entity__PatientMessage via api__SendFollowUpMessageApi
   usecase__SendFollowUpMessage -.->|displays| screen__PatientMessageScreen
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
 ```
 
 ### 3.10 病院管理
@@ -2444,10 +2444,10 @@ flowchart LR
   %% derived usecase__ReviewAuditEvents -> entity__AuditEvent via api__AuditApi
   usecase__ReviewAuditEvents -.->|reads| entity__PatientAccount
   %% derived usecase__ReviewAuditEvents -> entity__PatientAccount via api__AuditApi
-  classDef actor stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef entity stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
 ## 4. UC 単位のレビュー
@@ -2797,11 +2797,11 @@ flowchart LR
   timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
   timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
   timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn
-  classDef event stroke:#333;
-  classDef usecase stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef buc stroke:#333;
-  classDef timer stroke:#333;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
 ```
 
 主要イベントと起動先:
@@ -2970,9 +2970,9 @@ flowchart LR
   entity__ReferralLetter -.->|variation direction| variation__ReferralDirection
   entity__Room ---|N:1| entity__ClinicLocation
   entity__VitalSign ---|N:1| entity__Encounter
-  classDef entity stroke:#333;
-  classDef statemodel stroke:#333;
-  classDef variation stroke:#333;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
 ```
 
 variation（actor や保険者が決め、use case が動かさない値）:
@@ -3095,11 +3095,11 @@ flowchart LR
   %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
   condition__UnreferredFirstVisit -.->|combines| variation__ReferralCategory
   %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
-  classDef condition stroke:#333;
-  classDef statemodel stroke:#333;
-  classDef variation stroke:#333;
-  classDef value stroke:#333;
-  classDef usecase stroke:#333;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef value fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
 ```
 
 ### 6.3 ER 図
@@ -3428,7 +3428,7 @@ stateDiagram-v2
   }
   state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
     [*] --> state__PaymentTransaction_payposted
-    state "精算済" as state__PaymentTransaction_payposted
+    state "収納済" as state__PaymentTransaction_payposted
     state "還付済" as state__PaymentTransaction_payrefunded
     state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : usecase__RefundPayment
     state__PaymentTransaction_payrefunded --> [*]

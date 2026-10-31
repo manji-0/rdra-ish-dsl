@@ -300,7 +300,7 @@ entity PaymentTransaction "精算" {
   id:           Int      @pk
   amount:       Money
   method:       PaymentMethod @default(card)
-  status:       Enum(paypending "未精算", payposted "精算済", payrefunded "還付済") @default(paypending)
+  status:       Enum(paypending "未精算", payposted "収納済", payrefunded "還付済") @default(paypending)
   processed_at: DateTime @null
   gateway_ref:  String   @null
 }

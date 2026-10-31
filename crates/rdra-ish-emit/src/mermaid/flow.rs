@@ -329,7 +329,7 @@ performs(Manager, Handover)
         let result = emit(View::bucs(vec!["BucOther".to_string()]));
         assert_eq!(
             result,
-            "%% rdra-ish diagram=flow scope=buc:BucOther\n%% kinds: flow step\n%% omitted: buc\nflowchart TD\n  subgraph flow__OtherFlow[\"Other flow\"]\n    step__Elsewhere[\"Elsewhere\"]:::step\n  end\n  classDef flow stroke:#333;\n  classDef step stroke:#333;\n"
+            "%% rdra-ish diagram=flow scope=buc:BucOther\n%% kinds: flow step\n%% omitted: buc\nflowchart TD\n  subgraph flow__OtherFlow[\"Other flow\"]\n    step__Elsewhere[\"Elsewhere\"]:::step\n  end\n  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;\n  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;\n"
         );
     }
 }

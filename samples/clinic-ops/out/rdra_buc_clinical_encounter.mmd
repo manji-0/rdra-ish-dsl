@@ -271,7 +271,7 @@ flowchart LR
     state__PatientAccount_patientactive["有効"]:::state
     state__PatientAccount_patientinactive["アーカイブ済"]:::state
     state__PatientAccount_patientmerged["統合済"]:::state
-    state__PaymentTransaction_payposted["精算済"]:::state
+    state__PaymentTransaction_payposted["収納済"]:::state
     state__PaymentTransaction_payrefunded["還付済"]:::state
     variation__BurdenRatio["負担割合"]:::variation
     variation__ChargeKind["診療費の種類"]:::variation
@@ -863,20 +863,20 @@ flowchart LR
   usecase__VoidCharge -.->|requires_medium| medium__BillingWorkstation
   usecase__VoidCharge -.->|requires_permission| permission__BillingClaimWrite
   usecase__VoidCharge -.->|updates| entity__Charge
-  classDef extsystem stroke:#333;
-  classDef business stroke:#333;
-  classDef buc stroke:#333;
-  classDef flow stroke:#333;
-  classDef step stroke:#333;
-  classDef timer stroke:#333;
-  classDef medium stroke:#333;
-  classDef permission stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef field stroke:#333;
-  classDef event stroke:#333;
-  classDef api stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
-  classDef variation stroke:#333;
-  classDef condition stroke:#333;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef medium fill:#f1f3f5,stroke:#333,color:#000;
+  classDef permission fill:#f1f3f5,stroke:#333,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef field fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

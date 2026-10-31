@@ -202,13 +202,35 @@ pub(crate) fn desc_line(model: &SemanticModel, node: &NodeRef, id: &str) -> Opti
     (!text.is_empty()).then(|| format!("%% desc {id}: {text}"))
 }
 
-/// One `classDef` per kind, so Mermaid accepts the `:::<kind>` on each node. The style
-/// carries no meaning.
+/// One `classDef` per kind, so Mermaid accepts the `:::<kind>` on each node. Each RDRA
+/// element family has its own fill, so kinds tell apart in a plain Mermaid render; the
+/// colour says no more than the `:::<kind>` tag does.
 pub(crate) fn class_defs(kinds: &[&str]) -> String {
     kinds
         .iter()
-        .map(|kind| format!("  classDef {kind} stroke:#333;\n"))
+        .map(|kind| format!("  classDef {kind} {};\n", kind_style(kind)))
         .collect()
+}
+
+/// Light fills with dark text and stroke, readable on a light or a dark page.
+fn kind_style(kind: &str) -> &'static str {
+    match kind {
+        "actor" => "fill:#ffe3e3,stroke:#c92a2a,color:#000",
+        "extsystem" => "fill:#e9ecef,stroke:#495057,color:#000",
+        "requirement" | "nfr" | "quality" | "constraint" | "adr" => {
+            "fill:#fff3bf,stroke:#e67700,color:#000"
+        }
+        "business" | "buc" | "flow" | "step" | "lane" => "fill:#d3f9d8,stroke:#2b8a3e,color:#000",
+        "timer" => "fill:#ffe8cc,stroke:#d9480f,color:#000",
+        "usecase" => "fill:#d0ebff,stroke:#1864ab,color:#000",
+        "screen" | "field" => "fill:#e5dbff,stroke:#5f3dc4,color:#000",
+        "event" => "fill:#ffdeeb,stroke:#a61e4d,color:#000",
+        "api" | "dto" | "system" => "fill:#c5f6fa,stroke:#0b7285,color:#000",
+        "entity" | "statemodel" => "fill:#fff9db,stroke:#5c940d,color:#000",
+        "state" => "fill:#f8f9fa,stroke:#5c940d,color:#000",
+        "variation" | "value" | "condition" => "fill:#f3d9fa,stroke:#862e9c,color:#000",
+        _ => "fill:#f1f3f5,stroke:#333,color:#000",
+    }
 }
 
 /// A node the event diagram declares.

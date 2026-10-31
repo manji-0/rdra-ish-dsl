@@ -62,6 +62,11 @@
 
 ### Changed
 
+- Every flowchart diagram gives each RDRA element family its own light fill in its
+  `classDef` lines (was `stroke:#333` for every kind), so actors, BUCs, use cases,
+  screens, events, information, and conditions tell apart when Mermaid renders the `.mmd`
+  as it is. Node shapes, edge styles, and the `:::<kind>` tags do not change, and the
+  colour carries no meaning beyond the tag.
 - The UC複合図 (`diagram --kind usecase`) no longer draws an actor of a BUC or a step
   performing a use case that an event or a timer starts. Such a use case is the system's
   work, and only a `performs(Actor, UseCase)` draws who performs it. In clinic-ops,

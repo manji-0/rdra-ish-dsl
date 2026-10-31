@@ -601,7 +601,7 @@ flowchart LR
   actor__Customer -.->|performs| buc__BucPayment
   buc__BucPayment -->|contains| usecase__Capture
   usecase__Capture -.->|transitions Order.status awaiting_capture->paid| state__Order_paid
-  classDef actor stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
 ```
 
 - The header comes first. `scope` is `whole`, `buc:<id>[,<id>]`, or
@@ -623,7 +623,10 @@ flowchart LR
   | `system__Model` | `system` | `context` | The system when no declared system can stand for it |
 
 - Each node carries `:::<kind>`, and one `classDef <kind>` per kind closes the diagram.
-  The style is a placeholder Mermaid needs; it carries no meaning.
+  Each RDRA element family has its own light fill (actors red, BUCs and flows green, use
+  cases blue, screens violet, events pink, information yellow, variations and conditions
+  purple), so a plain Mermaid render tells the kinds apart. The colour says no more than
+  the `:::<kind>` tag, and a renderer is free to replace it.
 - Each layer is `subgraph layer_<token>["<RDRA name>"]`. A subgraph with an element id
   (`business__<id>`, `flow__<id>`, `variation__<id>`) is that element, holding its parts.
 - Each edge label is the DSL predicate name; a relate edge is labelled with its

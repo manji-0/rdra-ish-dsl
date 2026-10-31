@@ -36,8 +36,9 @@ flowchart LR
   - `lane__<Flow>__<Actor>`, a subgraph tagged by its `lane` kind: one actor's swimlane in
     one flow.
   - `system__Model`: the system in `context` when no declared system can stand for it.
-- `classDef <kind> stroke:#333;` lines close a flowchart. Mermaid needs them for the
-  `:::` tags; the style means nothing.
+- `classDef <kind> <style>;` lines close a flowchart. Mermaid needs them for the `:::`
+  tags. Each kind family has its own fill so a plain render tells kinds apart; the style
+  says nothing the `:::<kind>` tag does not.
 
 ## Edges
 

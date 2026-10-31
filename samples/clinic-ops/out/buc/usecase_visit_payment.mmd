@@ -34,7 +34,7 @@ flowchart LR
     state__Appointment_apptawaitingpay["会計待ち"]:::state
     state__Appointment_apptcompleted["完了"]:::state
     state__Appointment_apptsettled["精算済"]:::state
-    state__PaymentTransaction_payposted["精算済"]:::state
+    state__PaymentTransaction_payposted["収納済"]:::state
     state__PaymentTransaction_payrefunded["還付済"]:::state
     condition__CopayCappedAtLimit["窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"]:::condition
     condition__UnreferredFirstVisit["紹介状なしの初診で、除外に当たらない"]:::condition
@@ -97,11 +97,11 @@ flowchart LR
   %% derived usecase__SettleAtWindow -> entity__AccountBalance via api__SettlementApi
   usecase__SettleAtWindow -.->|updates| entity__Appointment
   %% derived usecase__SettleAtWindow -> entity__Appointment via api__SettlementApi
-  classDef actor stroke:#333;
-  classDef extsystem stroke:#333;
-  classDef usecase stroke:#333;
-  classDef screen stroke:#333;
-  classDef event stroke:#333;
-  classDef entity stroke:#333;
-  classDef state stroke:#333;
-  classDef condition stroke:#333;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
