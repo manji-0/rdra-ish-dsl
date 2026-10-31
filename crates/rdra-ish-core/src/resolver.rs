@@ -116,6 +116,7 @@ pub fn resolve_overlaid(
                     RdraError::ForeignImport {
                         module,
                         dep: dep.to_string(),
+                        hint: foreign.import_hint(dep),
                     },
                     LocatedSpan::new(id, imp.span.clone()),
                 ));
@@ -258,11 +259,14 @@ fn read_source(
 }
 
 /// Build a semantic model from located items collected across source files.
+/// `dependencies` is `None` for a project without a manifest.
 pub fn build_merged_model(
     program: &ResolvedProgram,
     _include_paths: &[PathBuf],
-    dependencies: &[Arc<DependencySurface>],
+    dependencies: Option<&[Arc<DependencySurface>]>,
 ) -> (SemanticModel, Vec<Diagnostic>) {
+    let has_manifest = dependencies.is_some();
+    let dependencies = dependencies.unwrap_or_default();
     let mut all_diags: Vec<Diagnostic> = vec![];
     let mut located_items: Vec<(SourceId, Item)> = Vec::new();
     // (kind, id, module_path) — same id is allowed across different modules.
@@ -343,6 +347,7 @@ pub fn build_merged_model(
         &located_items,
         import_scopes,
         dependencies.to_vec(),
+        has_manifest,
     );
     all_diags.extend(model_diags);
 
@@ -374,9 +379,8 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
 
     // 前向き BFS: ER entity-entity 関係を除くすべての forward 関係を辿る
     while let Some(current) = queue.pop() {
-        // A foreign stub is a leaf, and it brings the external system it is bound through.
-        if let Some(origin) = model.origin(&current) {
-            visited.insert(NodeRef::ExtSystem(origin.ext));
+        if let Some(ext) = model.bound_through(&current) {
+            visited.insert(NodeRef::ExtSystem(ext));
             continue;
         }
         for rel in &model.relations {
@@ -409,8 +413,8 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
         .map(|rel| rel.from.clone())
         .collect();
     for event in &inbound {
-        if let Some(origin) = model.origin(event) {
-            visited.insert(NodeRef::ExtSystem(origin.ext));
+        if let Some(ext) = model.bound_through(event) {
+            visited.insert(NodeRef::ExtSystem(ext));
         }
     }
     visited.extend(inbound);
@@ -597,7 +601,7 @@ performs(Customer, Browse)
         assert_eq!(program.import_graph.edge_count(), 1);
 
         // Verify model builds correctly.
-        let (model, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (model, model_diags) = build_merged_model(&program, &[dir], None);
         let model_errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
         assert!(
             model_errors.is_empty(),
@@ -637,7 +641,7 @@ performs(Customer, Work)
         );
 
         let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
         let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
 
         assert!(
@@ -688,7 +692,7 @@ performs(Staff, Work)
         );
 
         let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
         let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
 
         assert!(
@@ -751,7 +755,7 @@ performs(b.Staff, Work)
             resolve_diags.iter().all(|d| d.is_warning),
             "{resolve_diags:?}"
         );
-        let (model, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (model, model_diags) = build_merged_model(&program, &[dir], None);
         let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
         assert!(
             errors.is_empty(),
@@ -795,7 +799,7 @@ performs(Staff, Other)
             shared.join("actors.rdra"),
         ];
         let (program, _) = resolve(&entries, std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
         let errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
         assert!(
             errors.is_empty(),
@@ -835,7 +839,7 @@ performs(Staff, Work)
         );
 
         let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
         assert!(
             model_diags.iter().any(|d| matches!(
                 &d.error,
@@ -877,7 +881,7 @@ performs(x.Staff, W)
         );
 
         let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
         assert!(
             model_diags.iter().any(|d| matches!(
                 &d.error,
@@ -898,7 +902,7 @@ usecase Work "作業"
 "#,
         );
         let (program, _) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
         assert!(
             model_diags.iter().any(|d| matches!(
                 &d.error,
@@ -946,7 +950,7 @@ performs(s.StaffA, Work)
             b.join("actors.rdra"),
         ];
         let (program, _) = resolve(&entries, std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
         assert!(
             model_diags.iter().any(|d| matches!(
                 &d.error,
@@ -1024,7 +1028,7 @@ actor Customer "重複定義"
 
         let (program, resolve_diags) =
             resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
 
         let all_diags: Vec<_> = resolve_diags.iter().chain(model_diags.iter()).collect();
         let dup_errors: Vec<_> = all_diags
@@ -1057,7 +1061,7 @@ actor Customer "重複定義"
 
         let (program, resolve_diags) =
             resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (_, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (_, model_diags) = build_merged_model(&program, &[dir], None);
 
         let dup = resolve_diags
             .iter()
@@ -1110,7 +1114,7 @@ sets(usecase::Capture, Payment, status == captured)
 
         let (program, resolve_diags) =
             resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-        let (model, model_diags) = build_merged_model(&program, &[dir], &[]);
+        let (model, model_diags) = build_merged_model(&program, &[dir], None);
         let errors: Vec<_> = resolve_diags
             .iter()
             .chain(model_diags.iter())
@@ -1160,7 +1164,7 @@ sets(usecase::Capture, Payment, status == captured)
         );
         assert_eq!(program.sources.len(), 3, "expected 3 source files");
 
-        let (model, model_diags) = build_merged_model(&program, &[fixture_root], &[]);
+        let (model, model_diags) = build_merged_model(&program, &[fixture_root], None);
         let model_errors: Vec<_> = model_diags.iter().filter(|d| !d.is_warning).collect();
         assert!(
             model_errors.is_empty(),

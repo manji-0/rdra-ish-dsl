@@ -35,7 +35,11 @@ pub enum ProjectError {
         line: Option<usize>,
         message: String,
     },
-    /// A `[dependencies]` entry of `manifest` cannot be loaded as its own model.
+    /// The inputs belong to two models.
+    ManifestConflict {
+        first: Option<PathBuf>,
+        second: Option<PathBuf>,
+    },
     Dependency {
         manifest: PathBuf,
         name: String,
@@ -77,6 +81,18 @@ impl fmt::Display for ProjectError {
                 line: None,
                 message,
             } => write!(f, "{}: {message}", path.display()),
+            Self::ManifestConflict { first, second } => {
+                let name = |m: &Option<PathBuf>| match m {
+                    Some(path) => path.display().to_string(),
+                    None => "no manifest".to_string(),
+                };
+                write!(
+                    f,
+                    "ManifestConflict: the inputs belong to two models ({} and {}); run each model on its own",
+                    name(first),
+                    name(second)
+                )
+            }
             Self::Dependency {
                 manifest,
                 name,
@@ -107,7 +123,6 @@ pub struct Project {
     pub dependencies: Vec<Dependency>,
 }
 
-/// One `[dependencies]` entry, loaded.
 #[derive(Debug)]
 pub struct Dependency {
     pub name: String,
@@ -116,7 +131,6 @@ pub struct Dependency {
     pub surface: Arc<DependencySurface>,
 }
 
-/// Where a `[dependencies]` entry points.
 enum DependencySource {
     Path(String),
 }
@@ -130,18 +144,29 @@ impl Manifest {
                 line: None,
                 message,
             };
-            let table = value
-                .as_table()
-                .ok_or_else(|| fail(format!("dependency '{name}' needs `{{ path = \"...\" }}`")))?;
+            let table = value.as_table().ok_or_else(|| {
+                fail(format!(
+                    "DependencyNeedsPath: dependency '{name}' needs `{{ path = \"...\" }}`"
+                ))
+            })?;
             if table.contains_key("git") {
                 return Err(fail(format!(
-                    "dependency '{name}' uses `git`, which a later release adds; use `path` for now"
+                    "DependencyGitUnsupported: dependency '{name}' uses `git`, which a later release adds; use `path` for now"
                 )));
             }
             let path = table
                 .get("path")
                 .and_then(toml::Value::as_str)
-                .ok_or_else(|| fail(format!("dependency '{name}' needs `path = \"...\"`")))?;
+                .ok_or_else(|| {
+                    fail(format!(
+                        "DependencyNeedsPath: dependency '{name}' needs `path = \"...\"`"
+                    ))
+                })?;
+            if Path::new(path).is_absolute() {
+                return Err(fail(format!(
+                    "DependencyPathAbsolute: dependency '{name}' has the absolute path {path}; write a path relative to this rdra.toml"
+                )));
+            }
             sources.push((name.clone(), DependencySource::Path(path.to_string())));
         }
         Ok(sources)
@@ -149,8 +174,9 @@ impl Manifest {
 }
 
 /// Expand `inputs` into `.rdra` entry files. A directory contributes its `.rdra` files in
-/// file-name order. A file input is taken as given. A path with an `overlays` entry counts as
-/// existing, so an unsaved editor buffer loads.
+/// file-name order, except those under a nested directory with its own `rdra.toml`, which
+/// belong to another model. A file input is taken as given. A path with an `overlays` entry
+/// counts as existing, so an unsaved editor buffer loads.
 pub fn collect_rdra_files(
     inputs: &[PathBuf],
     overlays: Option<&HashMap<PathBuf, String>>,
@@ -164,6 +190,7 @@ pub fn collect_rdra_files(
             for entry in walkdir::WalkDir::new(input)
                 .sort_by_file_name()
                 .into_iter()
+                .filter_entry(|e| e.depth() == 0 || !e.path().join(MANIFEST_FILE).is_file())
                 .flatten()
             {
                 if entry.path().extension().is_some_and(|e| e == "rdra") {
@@ -201,22 +228,53 @@ pub fn root_include_paths(files: &[PathBuf]) -> Vec<PathBuf> {
 /// Find the manifest for `inputs`. Each input is made absolute without resolving symlinks,
 /// and the search walks up from its directory. It stops at the first directory that holds
 /// `.git` (that directory is still searched) or at the filesystem root, so a stray
-/// `rdra.toml` above a repository never applies. Every input's manifest is parsed, so a
-/// malformed one fails whatever the input order. The first input's manifest is the project's.
+/// `rdra.toml` above a repository never applies. Every distinct manifest is parsed once, so a
+/// malformed one fails whatever the input order. Inputs that belong to two models, or to a
+/// model and to none, are `ManifestConflict`.
 pub fn discover(inputs: &[PathBuf]) -> Result<Option<Manifest>, ProjectError> {
-    let mut found = None;
+    let mut found: Option<(Option<PathBuf>, Option<Manifest>)> = None;
     let mut parsed: HashSet<PathBuf> = HashSet::new();
     for input in inputs {
-        let Some(path) = manifest_path_above(input) else {
-            continue;
+        let path = manifest_path_above(input);
+        let manifest = match &path {
+            Some(path) if parsed.insert(path.clone()) => Some(parse_manifest(path)?),
+            _ => None,
         };
-        if !parsed.insert(path.clone()) {
-            continue;
+        match &mut found {
+            None => found = Some((path, manifest)),
+            Some((first, first_manifest)) => {
+                if *first != path {
+                    return Err(ProjectError::ManifestConflict {
+                        first: first.clone(),
+                        second: path,
+                    });
+                }
+                if first_manifest.is_none() {
+                    *first_manifest = manifest;
+                }
+            }
         }
-        let manifest = parse_manifest(&path)?;
-        found.get_or_insert(manifest);
     }
-    Ok(found)
+    Ok(found.and_then(|(_, manifest)| manifest))
+}
+
+/// The manifest directory an input belongs to, or `None` outside any model.
+pub fn manifest_root(input: &Path) -> Option<PathBuf> {
+    manifest_path_above(input).and_then(|m| m.parent().map(Path::to_path_buf))
+}
+
+/// `inputs` split into one group per model, in first-seen order: the inputs under one manifest
+/// directory, and the inputs under none. Each group loads as its own project.
+pub fn group_by_model(inputs: &[PathBuf]) -> Vec<Vec<PathBuf>> {
+    let mut groups: Vec<(Option<PathBuf>, Vec<PathBuf>)> = Vec::new();
+    for input in inputs {
+        let root = manifest_root(input);
+        match groups.iter_mut().find(|(r, _)| *r == root) {
+            Some((_, members)) => members.push(input.clone()),
+            None => groups.push((root, vec![input.clone()])),
+        }
+    }
+    groups.into_iter().map(|(_, members)| members).collect()
 }
 
 fn manifest_path_above(input: &Path) -> Option<PathBuf> {
@@ -288,7 +346,11 @@ pub(crate) fn build_project(
         overlays,
         &ForeignModules::of(&surfaces),
     );
-    let (model, model_diags) = build_merged_model(&program, &include_paths, &surfaces);
+    let (model, model_diags) = build_merged_model(
+        &program,
+        &include_paths,
+        manifest.as_ref().map(|_| surfaces.as_slice()),
+    );
     diags.extend(model_diags);
     Project {
         entry_files,
@@ -310,7 +372,7 @@ pub fn load_project(
 ) -> Result<Project, ProjectError> {
     let mut loader = Loader {
         overlays,
-        loading: Vec::new(),
+        load_path: Vec::new(),
         loaded: HashMap::new(),
     };
     loader.load(inputs)
@@ -318,9 +380,10 @@ pub fn load_project(
 
 struct Loader<'o> {
     overlays: Option<&'o HashMap<PathBuf, String>>,
-    /// Manifest directories on the current load path, for cycle detection.
-    loading: Vec<PathBuf>,
-    /// Dependencies already loaded, by manifest directory, so a diamond loads once.
+    /// Manifest directories on the current load path.
+    load_path: Vec<PathBuf>,
+    /// Surfaces already loaded, by manifest directory. Each consumer binds one under its own
+    /// `[dependencies]` key.
     loaded: HashMap<PathBuf, Arc<DependencySurface>>,
 }
 
@@ -349,7 +412,7 @@ impl Loader<'_> {
         let manifest_dir = manifest.path.parent().unwrap_or(Path::new("."));
         let own_dir =
             dunce::canonicalize(manifest_dir).unwrap_or_else(|_| manifest_dir.to_path_buf());
-        self.loading.push(own_dir);
+        self.load_path.push(own_dir);
         let mut dependencies = Vec::new();
         for (name, source) in manifest.dependency_sources()? {
             let DependencySource::Path(path) = source;
@@ -368,9 +431,9 @@ impl Loader<'_> {
                 ));
             }
             let canon = dunce::canonicalize(&dir).unwrap_or(dir.clone());
-            if self.loading.contains(&canon) {
+            if self.load_path.contains(&canon) {
                 let chain: Vec<String> = self
-                    .loading
+                    .load_path
                     .iter()
                     .map(|d| d.display().to_string())
                     .collect();
@@ -383,7 +446,10 @@ impl Loader<'_> {
                 ));
             }
             let surface = match self.loaded.get(&canon) {
-                Some(surface) => surface.clone(),
+                Some(surface) => Arc::new(DependencySurface {
+                    name: name.clone(),
+                    ..(**surface).clone()
+                }),
                 None => {
                     if !canon.join(MANIFEST_FILE).is_file() {
                         return Err(fail(
@@ -391,14 +457,14 @@ impl Loader<'_> {
                             format!("has no {MANIFEST_FILE}: {}", dir.display()),
                         ));
                     }
-                    let project = self
-                        .load(std::slice::from_ref(&dir))
-                        .map_err(|e| fail(DependencyErrorKind::HasErrors, e.to_string()))?;
-                    if let Some(first) = DependencySurface::first_error(&project) {
-                        let count = project.diags.iter().filter(|d| !d.is_warning).count();
+                    let project = self.load(std::slice::from_ref(&dir)).map_err(|e| {
+                        fail(DependencyErrorKind::HasErrors, format!("cannot load: {e}"))
+                    })?;
+                    let errors = DependencySurface::errors(&project);
+                    if let Some(first) = errors.first() {
                         return Err(fail(
                             DependencyErrorKind::HasErrors,
-                            format!("has {count} error(s); the first is {first}"),
+                            format!("has {} error(s); the first: {first}", errors.len()),
                         ));
                     }
                     let surface = Arc::new(DependencySurface::of(&name, &project));
@@ -412,7 +478,7 @@ impl Loader<'_> {
                 surface,
             });
         }
-        self.loading.pop();
+        self.load_path.pop();
         Ok(dependencies)
     }
 }
@@ -437,7 +503,6 @@ mod tests {
         dir
     }
 
-    /// The `auth` model `MANIFEST` depends on, next to `root`.
     fn with_auth(root: &Path) {
         write(&root.join("auth/rdra.toml"), "[model]\nname = \"auth\"\n");
         write(&root.join("auth/auth/session.rdra"), AUTH);
@@ -557,9 +622,10 @@ mod tests {
     }
 
     #[test]
-    fn the_first_inputs_manifest_is_the_projects() {
+    fn inputs_of_two_models_are_a_manifest_conflict() {
         let first = repo();
         write(&first.path().join("rdra.toml"), MANIFEST);
+        with_auth(first.path());
         let first_src = layout(first.path());
         let second = repo();
         write(
@@ -567,10 +633,29 @@ mod tests {
             "[model]\nname = \"other\"\n",
         );
         let second_src = layout(second.path());
+        let loose = repo();
+        let loose_src = layout(loose.path());
 
-        let manifest = discover(&[first_src, second_src]).unwrap().unwrap();
+        let err = discover(&[first_src.clone(), second_src])
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.starts_with("ManifestConflict: the inputs belong to two models ("),
+            "{err}"
+        );
+        assert!(
+            err.contains("rdra.toml and ") && err.ends_with("run each model on its own"),
+            "{err}"
+        );
 
-        assert_eq!(manifest.model.name, "shop");
+        let err = discover(&[first_src.clone(), loose_src])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains(" and no manifest)"), "{err}");
+
+        assert!(discover(&[first_src.clone(), first_src.join("buc")])
+            .unwrap()
+            .is_some());
     }
 
     #[test]
@@ -609,7 +694,6 @@ mod tests {
 
     const AUTH: &str = "module auth.session\nsystem AuthSystem \"Auth\"\nusecase Login \"Log in\"\nactor User \"User\"\nperforms(User, Login)\nexposes(AuthSystem, Login)\n";
 
-    /// `shop` depends on `auth`, which `auth_manifest` describes.
     fn shop_and_auth(auth_manifest: &str, auth_src: &str) -> (tempfile::TempDir, PathBuf) {
         let dir = repo();
         write(
@@ -674,7 +758,7 @@ mod tests {
         let err = load_project(&[shop], None).unwrap_err().to_string();
 
         assert!(
-            err.contains("DependencyHasErrors: dependency 'auth' (path ../auth) has 2 error(s); the first is error: "),
+            err.contains("DependencyHasErrors: dependency 'auth' (path ../auth) has 2 error(s); the first: error: "),
             "{err}"
         );
         assert!(err.contains("session.rdra:2:"), "{err}");
@@ -744,7 +828,150 @@ mod tests {
 
         let err = load_project(&[src], None).unwrap_err().to_string();
 
-        assert!(err.contains("dependency 'pay' uses `git`"), "{err}");
+        assert!(
+            err.contains("rdra.toml: DependencyGitUnsupported: dependency 'pay' uses `git`"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_dependency_nested_under_the_product_is_not_a_product_file() {
+        let dir = repo();
+        write(
+            &dir.path().join("shop/rdra.toml"),
+            "[model]\nname = \"shop\"\n[dependencies]\nauth = { path = \"vendor/auth\" }\n",
+        );
+        write(
+            &dir.path().join("shop/shop/checkout.rdra"),
+            "module shop.checkout\nextsystem Auth \"Auth\" from auth.AuthSystem\nusecase Checkout \"Checkout\"\nactor U \"U\"\nperforms(U, Checkout)\ninvokes(Checkout, Auth.Login)\n",
+        );
+        write(
+            &dir.path().join("shop/vendor/auth/rdra.toml"),
+            "[model]\nname = \"auth\"\n",
+        );
+        write(&dir.path().join("shop/vendor/auth/auth/session.rdra"), AUTH);
+
+        let project = load_project(&[dir.path().join("shop")], None).unwrap();
+
+        assert!(project.diags.is_empty(), "{:?}", project.diags);
+        let files: Vec<String> = project
+            .program
+            .sources
+            .iter()
+            .map(|(p, _, _)| p.display().to_string())
+            .collect();
+        assert!(files.iter().all(|f| !f.contains("vendor")), "{files:?}");
+        let local: Vec<&str> = project
+            .model
+            .use_cases
+            .values()
+            .map(|u| u.id.as_str())
+            .collect();
+        assert_eq!(local, ["Checkout"]);
+        assert_eq!(project.dependencies[0].name, "auth");
+    }
+
+    #[test]
+    fn one_directory_binds_under_each_consumers_own_key() {
+        let dir = repo();
+        write(
+            &dir.path().join("shop/rdra.toml"),
+            "[model]\nname = \"shop\"\n[dependencies]\nauth = { path = \"../idp\" }\nalso = { path = \"../idp\" }\nleft = { path = \"../left\" }\nright = { path = \"../right\" }\n",
+        );
+        write(
+            &dir.path().join("shop/shop/checkout.rdra"),
+            "module shop.checkout\nextsystem Auth \"Auth\" from auth.AuthSystem\nextsystem Also \"Also\" from also.AuthSystem\nusecase Checkout \"Checkout\"\nactor U \"U\"\nperforms(U, Checkout)\ninvokes(Checkout, Auth.Login)\ninvokes(Checkout, Also.Login)\n",
+        );
+        write(
+            &dir.path().join("idp/rdra.toml"),
+            "[model]\nname = \"idp\"\n",
+        );
+        write(&dir.path().join("idp/auth/session.rdra"), AUTH);
+        for (side, key) in [("left", "idp"), ("right", "identity")] {
+            write(
+                &dir.path().join(format!("{side}/rdra.toml")),
+                &format!(
+                    "[model]\nname = \"{side}\"\n[dependencies]\n{key} = {{ path = \"../idp\" }}\n"
+                ),
+            );
+            write(
+                &dir.path().join(format!("{side}/{side}/main.rdra")),
+                &format!("module {side}.main\nextsystem Idp \"Idp\" from {key}.AuthSystem\nusecase Go \"Go\"\nactor U \"U\"\nperforms(U, Go)\ninvokes(Go, Idp.Login)\n"),
+            );
+        }
+
+        let project = load_project(&[dir.path().join("shop")], None).unwrap();
+
+        assert!(project.diags.is_empty(), "{:?}", project.diags);
+        let names: Vec<&str> = project
+            .dependencies
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect();
+        assert_eq!(names, ["also", "auth", "left", "right"]);
+        assert!(project
+            .dependencies
+            .iter()
+            .all(|d| d.surface.name == d.name));
+    }
+
+    #[test]
+    fn a_dependency_with_a_lifecycle_error_fails_the_load() {
+        let (_dir, shop) = shop_and_auth(
+            "[model]\nname = \"auth\"\n",
+            "module auth.session\nactor U \"U\"\nusecase Add \"Add\"\nperforms(U, Add)\nentity CartLine \"Line\" { id: Int @pk  qty: Int @check(qty >= 1) }\ncreates(Add, CartLine)\nsets(Add, CartLine, qty == 0)\n",
+        );
+
+        let err = load_project(&[shop], None).unwrap_err().to_string();
+
+        assert!(
+            err.contains("DependencyHasErrors: dependency 'auth' (path ../auth) has 1 error(s); the first: error[Check_CartLine_qty_0]: "),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn an_absolute_dependency_path_is_rejected() {
+        let dir = repo();
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n[dependencies]\nauth = { path = \"/srv/auth\" }\n",
+        );
+        let src = layout(dir.path());
+
+        let err = load_project(&[src], None).unwrap_err().to_string();
+
+        assert!(
+            err.contains("rdra.toml: DependencyPathAbsolute: dependency 'auth' has the absolute path /srv/auth; write a path relative to this rdra.toml"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn inputs_are_grouped_by_model() {
+        let dir = repo();
+        write(&dir.path().join("rdra.toml"), MANIFEST);
+        with_auth(dir.path());
+        let src = layout(dir.path());
+        let auth_file = dir.path().join("auth/auth/session.rdra");
+        let loose = tempfile::tempdir().unwrap();
+        write(&loose.path().join("x.rdra"), "usecase X \"X\"\n");
+
+        let groups = group_by_model(&[
+            src.clone(),
+            auth_file.clone(),
+            loose.path().join("x.rdra"),
+            src.join("buc"),
+        ]);
+
+        assert_eq!(
+            groups,
+            vec![
+                vec![src.clone(), src.join("buc")],
+                vec![auth_file],
+                vec![loose.path().join("x.rdra")],
+            ]
+        );
     }
 
     #[test]

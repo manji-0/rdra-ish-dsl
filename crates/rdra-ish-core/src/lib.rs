@@ -63,8 +63,8 @@ pub use model::{
 pub use model::{CallerKind, Exposed, Exposure, Publication, PublishMode, Share};
 pub use predicate::{predicate_signature, KNOWN_PREDICATES};
 pub use project::{
-    collect_rdra_files, discover, load_project, root_include_paths, Dependency, Manifest,
-    ModelSection, Project, ProjectError,
+    collect_rdra_files, discover, group_by_model, load_project, manifest_root, root_include_paths,
+    Dependency, Manifest, ModelSection, Project, ProjectError,
 };
 pub use publication::publication_diagnostics;
 pub use resolver::{

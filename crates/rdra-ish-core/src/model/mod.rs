@@ -35,7 +35,6 @@ impl SemanticModel {
         }
     }
 
-    /// The origin of a foreign stub, or `None` for a local element.
     pub fn origin(&self, node: &NodeRef) -> Option<&Origin> {
         match node {
             NodeRef::UseCase(k) => self.use_cases.origin(*k),
@@ -48,6 +47,11 @@ impl SemanticModel {
 
     pub fn is_foreign(&self, node: &NodeRef) -> bool {
         self.origin(node).is_some()
+    }
+
+    /// The external system a foreign stub is bound through.
+    pub fn bound_through(&self, node: &NodeRef) -> Option<ExtSystemKey> {
+        self.origin(node).map(|o| o.ext)
     }
 
     /// `transitions` names this column of this entity, so it is a state axis.
@@ -257,6 +261,8 @@ pub struct SemanticModel {
     pub import_scopes: crate::import_scope::ImportScopes,
     /// The published surface of each direct dependency, bound through `extsystem ... from`.
     pub dependencies: Vec<std::sync::Arc<crate::binding::DependencySurface>>,
+    /// Whether the project has an `rdra.toml`; without one nothing can be bound.
+    pub has_manifest: bool,
     /// Declaration sites for `kind:id` lookups (LSP go-to-definition).
     pub decl_sites: crate::location::DeclIndex,
 }

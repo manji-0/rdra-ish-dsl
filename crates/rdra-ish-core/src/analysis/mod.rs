@@ -17,6 +17,7 @@ mod predicate_process;
 mod property;
 mod qref_util;
 
+pub(crate) use arg_resolve::resolve_arg;
 pub use condition::{applied_bodies, condition_body_display, condition_edges, ConditionEdge};
 use fk::{resolve_along_links, resolve_foreign_keys};
 use instance::register_instance;
@@ -29,6 +30,7 @@ pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {
         &items,
         crate::import_scope::ImportScopes::unrestricted(0),
         Vec::new(),
+        false,
     )
 }
 
@@ -37,6 +39,7 @@ pub fn build_model_items(items: &[(SourceId, Item)]) -> (SemanticModel, Vec<Diag
         items,
         crate::import_scope::ImportScopes::unrestricted(0),
         Vec::new(),
+        false,
     )
 }
 
@@ -44,10 +47,12 @@ pub fn build_model_items_with_scopes(
     items: &[(SourceId, Item)],
     import_scopes: crate::import_scope::ImportScopes,
     dependencies: Vec<std::sync::Arc<crate::binding::DependencySurface>>,
+    has_manifest: bool,
 ) -> (SemanticModel, Vec<Diagnostic>) {
     let mut model = SemanticModel {
         import_scopes,
         dependencies,
+        has_manifest,
         ..SemanticModel::default()
     };
     let mut diags: Vec<Diagnostic> = vec![];
