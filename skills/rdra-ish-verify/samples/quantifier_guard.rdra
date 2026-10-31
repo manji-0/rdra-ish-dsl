@@ -1,5 +1,5 @@
 // A condition guard with .none(): Revoke runs only while no linked assignment is active.
-// Without the guard on Revoke, the when(...).none(...) below fails (see quantifier_none).
+// Without the guard on Revoke, the invariant(...).none(...) below fails (see quantifier_none).
 // expect check: ok
 // expect verify: tlc=ok
 entity ClientCertificate "証明書" {
@@ -42,4 +42,4 @@ holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertA
 
 applies_to(NoActiveAssignment, Revoke)
 
-when(ClientCertificate, status == revoked).none(TerminalCertAssignment.status == active)
+invariant(ClientCertificate).when(status == revoked).none(TerminalCertAssignment.status == active)

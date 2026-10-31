@@ -32,4 +32,4 @@ transitions(Assign.status, EndAssign, active -> ended)
 relate(Assign, Cert, N:1)
 
 // When a cert is revoked, no assignment may stay active.
-when(Cert, status == revoked).none(Assign.status == active)
+invariant(Cert).when(status == revoked).none(Assign.status == active)

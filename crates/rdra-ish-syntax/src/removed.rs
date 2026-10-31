@@ -1,5 +1,7 @@
 //! Migration hints for keywords and predicates removed from the DSL.
 
+use crate::ast::{Expr, Operand, PredicateArg, PredicateCall, Span};
+
 const CONCEPTUAL: &str = "conceptual-model kinds were removed; model persistent structure with `entity` (and `dto` for payloads)";
 
 const HINTS: &[(&str, &str)] = &[
@@ -40,6 +42,79 @@ pub fn migration_hint(word: &str) -> Option<String> {
         .iter()
         .find(|(removed, _)| *removed == word)
         .map(|(removed, hint)| format!("`{removed}` is no longer supported; {hint}"))
+}
+
+/// The error for a removed top-level `when(...)` rule, naming the `invariant` to write: the
+/// leading entity arguments, or else the entity of the first qualified column, become its
+/// scope, and the conditions and chain carry over as written.
+pub(crate) fn removed_when(call: &PredicateCall, src: &str) -> Option<String> {
+    if call.name != "when" {
+        return None;
+    }
+    let text = |span: Span| src.get(span).unwrap_or("").trim().to_string();
+    let leading = call
+        .args
+        .iter()
+        .take_while(|arg| matches!(arg, PredicateArg::Ref(_)))
+        .count();
+    let (scope, conds) = call.args.split_at(leading);
+    let mut scope: Vec<String> = scope
+        .iter()
+        .filter_map(|arg| match arg {
+            PredicateArg::Ref(qref) => Some(text(qref.span.clone())),
+            _ => None,
+        })
+        .collect();
+    if scope.is_empty() {
+        scope.extend(conds.iter().find_map(first_entity).map(text));
+    }
+    let conds = match (conds.first(), conds.last()) {
+        (Some(first), Some(last)) => text(arg_span(first).start..arg_span(last).end),
+        _ => String::new(),
+    };
+    let chain: String = call.chain.iter().map(|cc| text(cc.span.clone())).collect();
+    let entity = if scope.is_empty() {
+        "Entity".to_string()
+    } else {
+        scope.join(", ")
+    };
+    Some(format!(
+        "`when(...)` is no longer a rule; write `invariant({entity}).when({conds}){chain}`"
+    ))
+}
+
+fn arg_span(arg: &PredicateArg) -> Span {
+    match arg {
+        PredicateArg::Ref(qref) => qref.span.clone(),
+        PredicateArg::Expr(expr) => expr_span(expr),
+        _ => 0..0,
+    }
+}
+
+fn expr_span(expr: &Expr) -> Span {
+    match expr {
+        Expr::Cmp(cmp) => cmp.span.clone(),
+        Expr::Not(inner) => expr_span(inner),
+        Expr::And(a, b) | Expr::Or(a, b) => expr_span(a).start..expr_span(b).end,
+    }
+}
+
+/// The span of the entity in the first `Entity.column` an argument names.
+fn first_entity(arg: &PredicateArg) -> Option<Span> {
+    fn in_expr(expr: &Expr) -> Option<Span> {
+        match expr {
+            Expr::Cmp(cmp) => [&cmp.lhs, &cmp.rhs].into_iter().find_map(|op| match op {
+                Operand::QualifiedColumn(qcol) => Some(qcol.entity.span.clone()),
+                _ => None,
+            }),
+            Expr::Not(inner) => in_expr(inner),
+            Expr::And(a, b) | Expr::Or(a, b) => in_expr(a).or_else(|| in_expr(b)),
+        }
+    }
+    match arg {
+        PredicateArg::Expr(expr) => in_expr(expr),
+        _ => None,
+    }
 }
 
 #[cfg(test)]
@@ -133,9 +208,43 @@ mod tests {
     }
 
     #[test]
+    fn a_top_level_when_names_its_invariant_rewrite() {
+        let msgs =
+            messages("when(Cert, status == revoked).none(Assign.status == active).label(\"x\")\n");
+        assert_eq!(
+            msgs,
+            vec![
+                "`when(...)` is no longer a rule; write \
+                 `invariant(Cert).when(status == revoked).none(Assign.status == active).label(\"x\")`"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_top_level_when_takes_its_entity_from_the_first_qualified_column() {
+        let msgs = messages(
+            "when(ClientCertificate.status == revoked)\n  .none(TerminalCertAssignment.status == active)\n",
+        );
+        assert_eq!(
+            msgs,
+            vec![
+                "`when(...)` is no longer a rule; write \
+                 `invariant(ClientCertificate).when(ClientCertificate.status == revoked)\
+                 .none(TerminalCertAssignment.status == active)`"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_top_level_when_does_not_load() {
+        let (ast, _) = parse("when(Cert.status == revoked).none(Assign.status == active)\n");
+        assert!(ast.items.is_empty(), "{:?}", ast.items);
+    }
+
+    #[test]
     fn removed_words_stay_usable_as_column_names() {
         let (_, errs) =
-            parse("entity E \"E\" { condition: String\n  state: String\n  location: String }\n");
+            parse("entity E \"E\" { condition: String\n  state: String\n  location: String\n  when: String }\n");
         assert!(errs.is_empty(), "{errs:?}");
     }
 }

@@ -238,7 +238,6 @@ only the methods below, and any other name is an `unknown chain method` error
 | `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
 | `required`, `exclusive` | `.label("...")` |
-| `when` | `.has(...)`, `.none(...)`, `.label("...")` |
 | `holds` | `.has(...)`, `.none(...)` |
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
@@ -1093,17 +1092,17 @@ negation are not available yet. A second `holds` on one condition is `ConditionS
 A body may end in `.has(Related.col == v)` or `.none(Related.col == v)` calls. The guard then
 also needs some row (`has`), or no row (`none`), of the related entity to match. The rows are
 the ones the relate links to the instance the use case runs on, and every row when no relate
-joins the two entities. Like `when(...).none(...)`, it ranges over the present rows.
+joins the two entities. Like the `.none(...)` of an `invariant`, it ranges over the present rows.
 
 ```rdra
 // Revoke only while no assignment of the certificate is active.
 condition NoActiveAssignment "有効な割当がない証明書だけ失効できる"
 holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertAssignment.status == active)
 applies_to(NoActiveAssignment, Revoke)
-when(ClientCertificate, status == revoked).none(TerminalCertAssignment.status == active)
+invariant(ClientCertificate).when(status == revoked).none(TerminalCertAssignment.status == active)
 ```
 
-Without the guard on Revoke, the `when(...).none(...)` rule fails: Revoke can run while an
+Without the guard on Revoke, the `invariant(...).when(...).none(...)` rule fails: Revoke can run while an
 assignment is active (`samples/formal-verification/quantifier_guard.rdra`). A column named in
 a `.has` or `.none` is part of the body for `condition_edges`, so a lifecycle column there links
 the state model.
@@ -1229,7 +1228,7 @@ A constraint's `.along(A, B)` follows the key between `A` and `B`. When two keys
 them, `.along(A, B).by(ship_to)` names the one to follow (the role, or the parent id for
 a key without `.role`); without `.by` the constraint is `AmbiguousOwnerLink`. `.by` that
 names no key on the path is `UnknownOwnerRole`, and `.by` without `.along` is
-`ByWithoutAlong`. A quantifier (`when(...).has/none(...)`) and a condition take no `.by`
+`ByWithoutAlong`. A quantifier (`.has/.none(...)` on an `invariant`) and a condition take no `.by`
 and follow the first key between the pair.
 
 ### Cardinality ranges
@@ -1384,8 +1383,9 @@ and `after(UseCase)` without `.assert(...)` is `AfterWithoutAssert`.
 ### Labelling a rule
 
 A constraint says what is forbidden or required, not why. `.label("...")` names the rule in
-the business's words, on any of `forbidden`, `invariant`, `required`, `exclusive`,
-`when(...).none/has(...)`, and `after(...).assert(...)`, single- or multi-entity:
+the business's words, on any of `forbidden`, `invariant` (with `.then(...)` or
+`.has/.none(...)`), `required`, `exclusive`, and `after(...).assert(...)`, single- or
+multi-entity:
 
 ```rdra
 entity Appointment "Appointment" {
@@ -1618,14 +1618,14 @@ export (nullable ones add `null`). The export domain is a fixed approximation (d
 `0..5`, override with `--int-range-max`), and an Int literal outside it is
 `IntLiteralOutOfBounds`. `@default(0)` is valid on Int columns.
 
-`when(Entity, conditions...).has/none(...)` or
-`when(Entity.col == val).has/none(Related.col == val)` declares a to-many quantifier
-rule. It ranges over the present instances: `none` fails in a reachable state where the
+`invariant(Entity).when(conditions...).has/none(Related.col == val)` declares a to-many
+quantifier rule. It ranges over the present instances: `none` fails in a reachable state where the
 anchor condition holds and some related instance satisfies the related condition. A
 `relate` between the two entities links the related instance through its owner; without
-one, the related side is independent. `invariant(Entity).when(...).has/none(...)` is the
-same rule: a one-entity `invariant` takes the related entity from the qualified columns of
-`.has/.none(...)`, as `invariant(Entity, Related)` does. A `.has(...)` or `.none(...)` that
+one, the related side is independent. A one-entity `invariant` takes the related entity
+from the qualified columns of `.has/.none(...)`, so it is the same rule as
+`invariant(Entity, Related)`, and `invariant()` takes its entity from the qualified
+columns of `.when(...)`. A `.has(...)` or `.none(...)` that
 names no condition on a related entity, as `.none()` or `.none(Related)`, is
 `QuantifierWithoutCondition`, and `invariant()` with no entity in its scope or its
 `.when(...)` is `QuantifierScopeUnknown`. `states` runs one instance per entity, so use
@@ -1727,6 +1727,13 @@ to load with a message naming the replacement:
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `medium` / `.by(...)` for Business-BUC context. |
 | `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, UseCase, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for `lint` and the diagrams, which name it `state__{Entity}_{variant}`. |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
+
+A top-level `when(...)` rule was removed too: a rule over related rows is an `invariant`,
+and a guard is a `holds`. `when(Entity, conditions...).none(...)` and
+`when(Entity.col == val).none(...)` fail to load with the rewrite to write,
+`invariant(Entity).when(...).none(...)`, whose entity is the leading argument or the entity
+of the first qualified column, with the rest of the chain, `.label(...)` included, as
+written.
 
 ---
 

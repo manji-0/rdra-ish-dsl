@@ -193,7 +193,6 @@ pub struct RelatedQuantifier {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
-/// `when(...).has/none(...)` または
 /// `invariant(...).when(...).has/none(...)` で宣言される集計制約。
 #[derive(Debug, Clone)]
 pub struct QuantifierConstraint {

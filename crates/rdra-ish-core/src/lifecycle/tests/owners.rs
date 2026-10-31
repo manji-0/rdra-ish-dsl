@@ -180,7 +180,7 @@ creates(Issue, Cert)
 creates(Spare, Assign)
 transitions(Cert.status, Revoke, active -> revoked)
 relate(Assign, Cert, N:1).optional()
-when(Cert, status == revoked).none(Assign.status == active)
+invariant(Cert).when(status == revoked).none(Assign.status == active)
 "#;
     let d = derive_src(src);
     assert!(

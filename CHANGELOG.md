@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Breaking
+
+- A rule over related rows has one form, `invariant(...).when(...).none/has(...)`; a
+  guard stays `holds(C, ...).none/has(...)`. The top-level `when(...)` rule is removed:
+  `when(Entity, conditions...).none(...)` and `when(Entity.col == v).none(...)` fail to
+  load with a message that gives the rewrite, as in ``write
+  `invariant(Cert).when(status == revoked).none(Assign.status == active)` ``. Its entity
+  is the leading argument, or else the entity of the first qualified column, and the rest
+  of the chain, `.label(...)` included, carries over as written. The rewritten rule
+  checks the same thing under the same name, `Quantifier_<Entity>_<n>`, as before. The
+  `quantifier_none` and `quantifier_guard` samples, the docs, and the skills use the
+  `invariant` form (#47).
+
 ### Added
 
 - `navigates(Screen, Screen)` declares a screen transition, with an optional
@@ -71,8 +84,8 @@
   an actor-to-control and a boundary-to-entity edge, so a BUC reads in about half the
   edges of its UC複合図 (clinic-ops billing: 46 against 88). `--buc` and `--usecase` scope it; clinic-ops ships one
   per BUC.
-- A business rule can carry a label: `.label("...")` on `forbidden`, `invariant`,
-  `required`, `exclusive`, `when(...).none/has(...)`, and `after(...).assert(...)`, as in
+- A business rule can carry a label: `.label("...")` on `forbidden`, `invariant` (with
+  `.then(...)` or `.has/.none(...)`), `required`, `exclusive`, and `after(...).assert(...)`, as in
   `invariant(Appointment).when(status == checkedin).then(checked_in_at == present).label("受付済の予約には受付時刻がある")`.
   `list --kind rule` writes every rule and condition as one table with the columns
   `kind,label,entities,rule,applies_to,site` (any `--format`), so a PdM can take the

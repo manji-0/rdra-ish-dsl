@@ -237,7 +237,6 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::Required { .. } => "required",
         TypedPredicate::Exclusive { .. } => "exclusive",
         TypedPredicate::Invariant { .. } => "invariant",
-        TypedPredicate::ForbiddenWhen { .. } => "when",
         TypedPredicate::CrossForbidden { .. } => "forbidden",
         TypedPredicate::CrossInvariant { .. } => "invariant",
     }

@@ -165,7 +165,7 @@ use case ([`triggers` and event-driven BUC chaining](./language-reference.md#tri
 |---|---|
 | `forbidden`, `invariant`, `required`, `exclusive` | An invariant over the present slots of the entity, evaluated in every reachable state. |
 | Multi-entity `forbidden`, `invariant` | An invariant over every combination of present slots. `.along(A, B)` restricts it to combinations that the `relate` owners link. |
-| `when(E, ...).has/none(R, ...)` | An invariant over the present slots of `E` and the related slots of `R`. A `relate` links them through its owner; without one, `R` is independent. |
+| `invariant(E).when(...).has/none(R.col == v)` | An invariant over the present slots of `E` and the related slots of `R`. A `relate` links them through its owner; without one, `R` is independent. |
 | `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. An unlinked optional child belongs to none. It holds vacuously at one instance. |
 | `relate(Child, Parent, 1..*:1)` | `MinCard_<Child>_<role>`: every present parent slot is owned by a present child, in every state. Info `MinCardNeedsCreate` names each use case that creates the parent and no child in the same transaction group. A pre-existing parent of a created child fails at the start and draws a warning; a pre-existing child of a pre-existing parent starts linked slot for slot. |
 | `col: T @check(expr)` | `Check_<Entity>_<column>_<n>`: no present slot makes `expr` false. A comparison over a null operand is unknown and passes (SQL semantics), so `qty: Int @null @check(qty >= 1)` holds while `qty` is null. A created slot starts at the base value: `@check(qty >= 1)` without `@default(1)` or a creating `sets` fails at creation. |
@@ -445,7 +445,7 @@ links count. Both forms get a real verdict, not a warning. `.along` needs a
 outside the scope is bound under the link, so a pair counts when some instances of the
 middle entities connect it.
 
-`when(E, ...).none(R, ...)` and `.has(R, ...)` evaluate over the present slots. At one
+`invariant(E).when(...).none(R.col == v)` and `.has(...)` evaluate over the present slots. At one
 instance per entity, `states` sees one `E` and one `R`. Use `verify` with
 `--instance-count 2` or more for rules that need two instances.
 

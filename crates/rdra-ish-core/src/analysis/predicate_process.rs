@@ -14,7 +14,7 @@ use super::comparison::resolve_comparison;
 use super::constraint::{
     arg_as_str, collect_entity_conditions, context_value_from_arg, process_after_predicate,
     process_forbidden as process_cross_forbidden, process_invariant as process_cross_invariant,
-    process_when_quantifier_predicate, resolve_entity_equals_from_comparison, rule_label,
+    resolve_entity_equals_from_comparison, rule_label,
 };
 use super::effect::parse_effect_value;
 use super::nodes::node_kind_tag_str;
@@ -38,7 +38,6 @@ fn resolve_predicate_args(
                         | "exclusive"
                         | "sets"
                         | "invariant"
-                        | "when"
                         | "after"
                         | "holds"
                 ) {
@@ -1423,12 +1422,6 @@ pub(crate) fn process_predicate(
         return;
     }
 
-    // Top-level `when(...)` quantifier predicate uses cross-entity path.
-    if pred.name == "when" {
-        process_when_quantifier_predicate(model, pred, ctx, diags);
-        return;
-    }
-
     // Unified forbidden/invariant: detect cross-entity vs single-entity form.
     // Cross-entity: first arg is Expr, `.along(...)`, two+ leading entity refs
     // (e.g. `forbidden(Order, Payment, Order.status == x, ...)`), or an invariant whose
@@ -1506,7 +1499,6 @@ pub(crate) fn process_predicate(
 fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraError> {
     let got = pred.args.len();
     let (expected, ok) = match pred.name.as_str() {
-        "when" => return None,
         "sets" => ("at least 2".into(), got >= 2),
         "after" => ("at least 1".into(), got >= 1),
         // Cross-entity `invariant` may be empty before `.when(...).none/has(...)`.

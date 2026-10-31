@@ -204,9 +204,6 @@ pub enum TypedPredicate {
     Invariant {
         entity: EntityKey,
     },
-    ForbiddenWhen {
-        entity: EntityKey,
-    },
     CrossForbidden {
         scope: Vec<EntityKey>,
     },

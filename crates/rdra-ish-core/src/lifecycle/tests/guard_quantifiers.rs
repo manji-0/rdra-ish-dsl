@@ -23,7 +23,7 @@ condition CertActive "有効な証明書にだけ割り当てる"
 holds(CertActive, ClientCertificate.status == active)
 applies_to(CertActive, Assign)
 {revoke_guard}
-when(ClientCertificate, status == revoked).none(TerminalCertAssignment.status == active)
+invariant(ClientCertificate).when(status == revoked).none(TerminalCertAssignment.status == active)
 {extra}
 "#
     )
@@ -61,16 +61,6 @@ fn a_none_guard_keeps_the_revoke_from_running_while_a_linked_row_matches() {
         &Scope::ALL,
     );
     assert!(!quantifier_violated(&two), "{:?}", two.diags);
-}
-
-#[test]
-fn a_one_entity_invariant_over_related_rows_is_checked() {
-    let one_entity = certificates("", "").replace(
-        "when(ClientCertificate, status == revoked)",
-        "invariant(ClientCertificate).when(status == revoked)",
-    );
-    assert!(one_entity.contains("invariant(ClientCertificate)"));
-    assert!(quantifier_violated(&derive_src(&one_entity)));
 }
 
 #[test]

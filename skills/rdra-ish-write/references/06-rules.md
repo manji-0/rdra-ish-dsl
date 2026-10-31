@@ -52,7 +52,7 @@ Also ask:
    cross-product; keep it off rules that truly forbid global co-existence.
 8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
-9. Add `when(...).none/has(...)` for to-many quantifiers (not `forbidden_when`).
+9. Add `invariant(Entity).when(...).none/has(Related.col == v)` for to-many quantifiers; a top-level `when(...)` no longer loads.
 10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after each
     step of the use case) and `property` for a temporal rule (only `verify` evaluates
     it; see skill `rdra-ish-verify`).
@@ -120,7 +120,7 @@ invariant(Order, Payment)
   .when(Order.status == paid)
   .then(Payment.status == captured)
 
-when(Order, status == cancelled).none(Payment.status == captured)
+invariant(Order).when(status == cancelled).none(Payment.status == captured)
 
 after(SellOut).assert(Stock.reorder == true)
 

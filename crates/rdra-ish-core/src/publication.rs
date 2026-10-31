@@ -222,8 +222,12 @@ fn entity_uses(model: &SemanticModel) -> Vec<EntityUse> {
         }
     }
     for q in &model.quantifier_constraints {
-        push(q.anchor, Use::Read("when"), &q.quantifier.site);
-        push(q.quantifier.related, Use::Read("when"), &q.quantifier.site);
+        push(q.anchor, Use::Read("invariant"), &q.quantifier.site);
+        push(
+            q.quantifier.related,
+            Use::Read("invariant"),
+            &q.quantifier.site,
+        );
     }
     for (_, fk) in model.foreign_keys() {
         push(fk.child, Use::Key(fk.parent), &fk.site);

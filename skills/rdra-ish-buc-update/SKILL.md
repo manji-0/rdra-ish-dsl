@@ -58,7 +58,7 @@ introduces.
 | New external system traffic | shared `extsystem`, then `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
 | New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
-| New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use multi-entity `forbidden` / `invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent; use `when(...).none/has`, `property`, and `after.assert` when quantifiers or temporal/postcondition checks matter |
+| New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use multi-entity `forbidden` / `invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent; use `invariant(...).when(...).none/has(...)`, `property`, and `after.assert` when quantifiers or temporal/postcondition checks matter |
 | Cross-system entity relation handling | BUC file that owns the coordinating use case |
 | Remove a use case | Remove its `contains`, `performs`, CRUD, `displays`, `raises`, `transitions`, and `sets`; check no other BUC uses it |
 

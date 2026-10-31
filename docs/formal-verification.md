@@ -68,7 +68,7 @@ action, and `Spec` allows stuttering.
 | `relate(Child, Parent, 1..*:1)` (child-side minimum) | `INVARIANT MinCard_<Child>_<role>`: `\A b0 \in <Parent>_Ids`, a present parent has `\E b1 \in <Child>_Ids` present with `<Child>_owner_<Parent>[b1] = b0`. Checked in every state, so a parent created without a child in the same transaction, or a deleted last child, is a counterexample. |
 | Pre-existing child of a `relate` | `Init` links the owner: `\in [<Child>_Ids -> <Parent>_Ids]` for N:1 (start `Any`), `[i \in <Child>_Ids \|-> i]` for 1:1 and for a child-side minimum (start `Identity`). An `.optional()` key under a created parent starts unlinked (`Base`). |
 | An action that creates a parent and updates an existing child | The action links the child. An `.optional()` key guards the assignment with an unlinked owner, so a linked child keeps its first parent. A mandatory key assigns without a guard, which moves the child. |
-| `when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
+| `invariant(...).when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's actions. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
@@ -89,8 +89,8 @@ forbidden(Item, stock < selling)
 after(DeliverOrder).assert(Order.status == delivered, Order.delivered_at == present)
 after(Sell).assert(Item.sold >= 1)
 
-when(Cert, status == revoked).none(Assign.status == active)
-// equivalent: when(Cert.status == revoked).none(Assign.status == active)
+invariant(Cert).when(status == revoked).none(Assign.status == active)
+// equivalent: invariant(Cert, Assign).when(Cert.status == revoked).none(Assign.status == active)
 
 forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured)
   .along(Order, Payment)
@@ -333,8 +333,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `now_coupon.rdra` | fail, fail | `now` and `Tick`; the invariant finds `expired_at < now` |
 | `cross_order_payment.rdra` | pass, pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave; Cancel deletes the pending Payment) |
 | `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2`; Cancel does not delete the Payment here |
-| `quantifier_none.rdra` | fail, fail | `when(...).none` (Revoke while Assign stays active) |
-| `quantifier_guard.rdra` | pass, pass | `holds(..).none(..)` on Revoke makes the `when(...).none` rule of `quantifier_none` hold |
+| `quantifier_none.rdra` | fail, fail | `invariant(...).when(...).none(...)` (Revoke while Assign stays active) |
+| `quantifier_guard.rdra` | pass, pass | `holds(..).none(..)` on Revoke makes the `.none(...)` rule of `quantifier_none` hold |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |

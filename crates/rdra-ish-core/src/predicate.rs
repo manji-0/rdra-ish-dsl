@@ -88,7 +88,6 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
         "sets" => Some(vec![vec!["usecase"], vec!["entity"]]),
         "forbidden" | "invariant" | "required" | "exclusive" => Some(vec![vec!["entity"]]),
-        "when" => Some(vec![]),
         _ => None,
     }
 }
@@ -102,7 +101,6 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
         "forbidden" => &["along", "by", "label"],
         "invariant" => &["when", "then", "has", "none", "along", "by", "label"],
         "required" | "exclusive" => &["label"],
-        "when" => &["has", "none", "label"],
         "holds" => &["has", "none"],
         "after" => &["assert", "label"],
         "exposes" => &["append", "upsert", "caller"],
@@ -181,5 +179,4 @@ pub const KNOWN_PREDICATES: &[&str] = &[
     "invariant",
     "required",
     "exclusive",
-    "when",
 ];

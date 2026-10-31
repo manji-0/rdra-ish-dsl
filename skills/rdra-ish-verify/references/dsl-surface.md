@@ -72,8 +72,8 @@ entity Assign "Assignment" {
 }
 relate(Assign, Cert, N:1)
 
-when(Cert, status == revoked).none(Assign.status == active)
-// equivalent: when(Cert.status == revoked).none(Assign.status == active)
+invariant(Cert).when(status == revoked).none(Assign.status == active)
+// equivalent: invariant(Cert, Assign).when(Cert.status == revoked).none(Assign.status == active)
 ```
 
 Prefer qualified columns. The check is `Quantifier_<Entity>_<n>` over the present

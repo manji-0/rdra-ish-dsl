@@ -3,7 +3,7 @@ name: rdra-ish-verify
 description: >-
   Formal-verify RDRA-ish models with TLA+/TLC. Use when the user asks about
   export --kind tla, verify --backend tlc, temporal property / always /
-  eventually / leads_to, after.assert, when().none/has, Int/Money/Decimal/now
+  eventually / leads_to, after.assert, invariant().when().none/has, Int/Money/Decimal/now
   arithmetic, multi-entity forbidden/invariant with .along, or whether TLC
   should complement rdra-ish states.
 license: MIT

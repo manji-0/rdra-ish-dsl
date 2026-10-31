@@ -790,44 +790,6 @@ pub(crate) fn process_invariant(
         .push(TypedPredicate::CrossInvariant { scope });
 }
 
-/// Top-level `when(...).none/has(...)` quantifier (replaces `forbidden_when`).
-pub(crate) fn process_when_quantifier_predicate(
-    model: &mut SemanticModel,
-    pred: &PredicateCall,
-    ctx: DiagCtxt,
-    diags: &mut Vec<Diagnostic>,
-) {
-    // Support both:
-    //   when(Cert, status == revoked).none(...)
-    //   when(Cert.status == revoked).none(...)
-    let (mut scope, first_condition) = collect_cross_scope_prefix(model, pred, ctx, diags);
-    let guards = collect_cross_chain_conditions(
-        model,
-        &scope,
-        &pred.name,
-        &pred.args[first_condition..],
-        ctx,
-        diags,
-    );
-    if guards.is_empty() {
-        return;
-    }
-    add_condition_entities_to_scope(&mut scope, &guards);
-    let Some(anchor) = scope.first().copied() else {
-        return;
-    };
-
-    let label = rule_label(pred, ctx, diags);
-    for cc in &pred.chain {
-        if matches!(cc.name.as_str(), "has" | "none") {
-            process_quantifier_chain(model, anchor, &guards, cc, label.clone(), ctx, diags);
-        }
-    }
-    model
-        .typed_predicates
-        .push(TypedPredicate::ForbiddenWhen { entity: anchor });
-}
-
 fn process_quantifier_chain(
     model: &mut SemanticModel,
     anchor: EntityKey,

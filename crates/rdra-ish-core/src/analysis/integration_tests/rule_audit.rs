@@ -98,14 +98,14 @@ const FORMS: &[(&str, Expect)] = &[
         Error,
     ),
     ("invariant().none(Ticket.status == pending)", Error),
-    // top-level when
+    // top-level when: removed, the message names the invariant to write
     (
         "when(Order, status == paid).none(Ticket.status == pending)",
-        Recorded,
+        Error,
     ),
     (
         "when(Order.status == paid).none(Ticket.status == pending)",
-        Recorded,
+        Error,
     ),
     // after
     ("after(Pay).assert(Order.status == paid)", Recorded),

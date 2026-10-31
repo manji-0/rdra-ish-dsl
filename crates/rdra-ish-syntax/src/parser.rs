@@ -7,7 +7,7 @@ use chumsky::Stream;
 use logos::Logos;
 
 use crate::ast::*;
-use crate::removed::migration_hint;
+use crate::removed::{migration_hint, removed_when};
 use crate::token::Token;
 
 // ── Lexer bridge ─────────────────────────────────────────────────────────────
@@ -1267,6 +1267,17 @@ pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
 
     let stream = Stream::from_iter(len..len + 1, tokens.into_iter());
     let (items, mut errors) = root_parser().parse_recovery(stream);
+    let mut items = items.unwrap_or_default();
+    items.retain(|item| match item {
+        Item::Predicate(call) => match removed_when(call, src) {
+            Some(msg) => {
+                errors.push(Simple::custom(call.span.clone(), msg));
+                false
+            }
+            None => true,
+        },
+        _ => true,
+    });
 
     for span in lex_errors {
         let snippet = src.get(span.clone()).unwrap_or("");
@@ -1277,7 +1288,7 @@ pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
     }
 
     let ast = Ast {
-        items: items.unwrap_or_default(),
+        items,
         comments,
         source: src.to_string(),
     };
@@ -2059,8 +2070,8 @@ performs(actor::Add, usecase::Add)
     }
 
     #[test]
-    fn test_parse_when_none_quantifier() {
-        let ast = parse_ok("when(Cert.status == revoked).none(Assign.status == active)");
+    fn test_parse_invariant_none_quantifier() {
+        let ast = parse_ok("invariant(Cert).when(status == revoked).none(Assign.status == active)");
         let pred = ast
             .items
             .iter()
@@ -2072,9 +2083,9 @@ performs(actor::Add, usecase::Add)
                 }
             })
             .expect("predicate not found");
-        assert_eq!(pred.name, "when");
-        assert_eq!(pred.chain.len(), 1);
-        assert_eq!(pred.chain[0].name, "none");
+        assert_eq!(pred.name, "invariant");
+        assert_eq!(pred.chain.len(), 2);
+        assert_eq!(pred.chain[1].name, "none");
     }
 
     /// 比較式 `stock < selling` が `PredicateArg::Expr(Cmp)` としてパースされること

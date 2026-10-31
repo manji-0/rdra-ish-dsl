@@ -145,7 +145,7 @@ entity Assign "割当" {
   id: Int @pk
   status: Enum(active, ended) @default(active)
 }
-when(Cert, status == revoked).none(Assign.status == active)
+invariant(Cert).when(status == revoked).none(Assign.status == active)
 "#,
     );
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
@@ -170,7 +170,7 @@ entity TerminalCertAssignment "Terminal Cert Assignment" {
   id: Int @pk
   status: Enum(active, inactive) @default(active)
 }
-when(ClientCertificate.status == revoked)
+invariant(ClientCertificate).when(ClientCertificate.status == revoked)
   .none(TerminalCertAssignment.status == active)
 "#,
     );
@@ -494,7 +494,7 @@ required(Order, total >= 0).label("合計は負でない")
 exclusive(Order, status == open, status == paid).label("開と入金済は両立しない")
 forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).label("取消注文は支払えない")
 invariant(Order, Payment).when(Payment.status == captured).then(Order.status == paid).label("支払済なら入金済")
-when(Order, status == cancelled).none(Payment, status == captured).label("取消注文に支払なし")
+invariant(Order).when(status == cancelled).none(Payment, status == captured).label("取消注文に支払なし")
 after(Pay).assert(Order.status == paid).label("支払後は入金済")
 "#,
     );

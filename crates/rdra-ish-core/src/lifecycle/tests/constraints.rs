@@ -459,7 +459,7 @@ entity TerminalCertAssignment "Terminal Cert Assignment" { id: Int @pk  status: 
 creates(RevokeCert, ClientCertificate)
 creates(AssignTerminal, TerminalCertAssignment)
 sets(RevokeCert, ClientCertificate, status == revoked)
-when(ClientCertificate.status == revoked)
+invariant(ClientCertificate).when(ClientCertificate.status == revoked)
   .none(TerminalCertAssignment.status == active)
 "#,
     );
