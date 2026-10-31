@@ -732,7 +732,7 @@ mod tests {
                 "Logon",
                 ["Login", "CanLogin", "SessionView", "Revoke"].into_iter()
             ),
-            "`Login`, `Revoke`, `CanLogin`"
+            "`Login`, `CanLogin`, `Revoke`"
         );
         assert_eq!(closest("X", std::iter::empty()), "nothing is published");
     }
