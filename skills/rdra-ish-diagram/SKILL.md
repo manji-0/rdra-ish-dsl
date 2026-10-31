@@ -19,7 +19,7 @@ Pick the one kind that answers the question, then load only its reference.
 | The question | Kind | Load |
 |---|---|---|
 | Who uses the system, and which external systems does it exchange events with? | `context` | `references/context-requirement-business.md` |
-| Which requirements, NFRs, and constraints exist, and what do they bind? | `requirement` | `references/context-requirement-business.md` |
+| Why are the BUCs built: which goals, through which requirements, and which are out of scope? | `requirement` | `references/context-requirement-business.md` |
 | Which BUCs make up each business, and which actors and external systems take part? | `business`, or `business --buc <BucId>` for one BUC | `references/context-requirement-business.md` |
 | What does each use case show, read, write, raise, and move, and who performs it? | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/usecase-and-flow.md` |
 | Which screen reaches which API or use case, and which entities does each touch (the main structural view)? | `robustness --buc <BucId>` or `robustness --usecase <UcId>` | `references/usecase-and-flow.md` |
@@ -46,7 +46,7 @@ reach. Prefer it before a whole-model diagram.
 | Kind | RDRA diagram | Carries | Leaves out |
 |---|---|---|---|
 | `context` | システムコンテキスト | The system boundary: one edge per actor labelled with its BUCs, one per external system and direction labelled with the events exchanged; every edge derived, no layer subgraphs | BUCs, use cases, events as nodes (named in edge labels and `%% derived`) |
-| `requirement` | 要求モデル | `motivates`, `achieves`, NFR `applies_to`, `constrains`, `qualifies` | ADRs; a requirement-to-actor link (not in the DSL) |
+| `requirement` | 要求モデル | A value tree: goals (metric, `baseline → target`), requirements (`achieves`), BUCs (`motivates`); an out-of-scope requirement apart | NFRs, constraints, qualities, entities, systems (`list --kind nfr` or `constraint`), ADRs |
 | `business` | ビジネスコンテキスト / BUC | Businesses holding BUCs, and each BUC's actors and external systems | Use cases, steps, events (named in `%% derived`) |
 | `usecase` | UC複合図 | Use cases with actors, screens, entities, events, external systems, timers, conditions, and transitions | APIs (CRUD folded into the use case), DTOs, permissions, media, fields, BUCs |
 | `robustness` | ロバストネス図 | Actors, boundaries (screens, external systems, timers), controls (APIs, or the use case), entities; edges only actor to screen to control to entity | Events and conditions (named in edge labels), states, DTOs, permissions, media, fields, BUCs |

@@ -150,7 +150,8 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
         } else if trimmed == "flowchart LR" || trimmed == "flowchart TD" {
             seen_type = true;
         } else if trimmed == "end"
-            || (trimmed.starts_with("subgraph layer_") && trimmed.ends_with("\"]"))
+            || ((trimmed.starts_with("subgraph layer_") || trimmed.starts_with("subgraph group_"))
+                && trimmed.ends_with("\"]"))
         {
         } else if let Some(rest) = trimmed.strip_prefix("subgraph ") {
             // A subgraph that is an element itself, such as a business holding its BUCs.
@@ -1338,45 +1339,114 @@ fn a_context_diagram_node_has_the_id_the_rdra_diagram_gives_it() {
     }
 }
 
+/// The requirement ids that sit in the diagram's `subgraph group_out_of_scope`.
+fn apart_requirements(text: &str) -> BTreeSet<String> {
+    let mut apart = BTreeSet::new();
+    let mut inside = false;
+    for line in text.lines().map(str::trim) {
+        if line.starts_with("subgraph group_out_of_scope[") {
+            inside = true;
+        } else if line == "end" {
+            inside = false;
+        } else if inside {
+            if let Some((id, _)) = line.split_once("[\"") {
+                apart.insert(id.to_string());
+            }
+        }
+    }
+    apart
+}
+
+/// The `-->` and `-.->` edges of `text` as `(arrow, from, label, to)`.
+fn arrows(text: &str) -> Vec<(String, String, String)> {
+    text.lines()
+        .map(str::trim)
+        .filter_map(|line| {
+            let (from, rest) = line.split_once(' ')?;
+            let (arrow, rest) = rest.split_once('|')?;
+            let (label, to) = rest.rsplit_once("| ")?;
+            ["-->", "-.->"]
+                .contains(&arrow)
+                .then(|| (arrow.to_string(), format!("{from} {label}"), to.to_string()))
+        })
+        .collect()
+}
+
 #[test]
 fn every_requirement_diagram_of_every_sample_keeps_the_contract() {
     let dir = scratch("diagram_contract_requirement");
-    let mut edges = BTreeSet::new();
+    let mut labels = BTreeSet::new();
+    let mut apart_seen = BTreeSet::new();
     for root in roots() {
         for scope in scopes(&root) {
             let args: Vec<&str> = scope.iter().map(String::as_str).collect();
             let text = diagram_with(&root, "requirement", &args, &dir.join("out"));
             let chart = checked("requirement", &text, &format!("{root} {scope:?}"));
+            // A value tree: goals, requirements, and BUCs, and no layer subgraph.
+            for kind in chart.nodes.values() {
+                assert!(
+                    ["goal", "requirement", "buc"].contains(&kind.as_str()),
+                    "{root} {scope:?}: a {kind} node\n{text}"
+                );
+            }
+            assert!(
+                !text.contains("subgraph layer_") && !text.contains("%% layers:"),
+                "{root} {scope:?}: a layer\n{text}"
+            );
             for (from, label, to) in &chart.edges {
                 let source = from.split_once("__").map_or("", |(kind, _)| kind);
                 let fits = match label.as_str() {
-                    "motivates" => source == "requirement" && to.starts_with("buc__"),
-                    "achieves" => source == "requirement" && to.starts_with("goal__"),
-                    "applies_to" => source == "nfr",
-                    "constrains" => source == "constraint",
-                    "qualifies" => {
-                        ["nfr", "constraint"].contains(&source) && to.starts_with("quality__")
+                    "motivates" => {
+                        source == "requirement"
+                            && to.starts_with("buc__")
+                            && !chart
+                                .derived
+                                .contains(&(from.clone(), label.clone(), to.clone()))
+                    }
+                    // `achieves(Requirement, Goal)` read from the goal: always derived, and
+                    // `via` names the requirement the edge ends at.
+                    "achieved_by" => {
+                        source == "goal"
+                            && to.starts_with("requirement__")
+                            && derived_vias(&text, from, to) == [to.clone()]
                     }
                     _ => false,
                 };
-                assert!(fits, "{root} {scope:?}: {from} -{label}-> {to}");
-                edges.insert(label.clone());
+                assert!(fits, "{root} {scope:?}: {from} -{label}-> {to}\n{text}");
+                labels.insert(label.clone());
             }
-            assert!(chart.derived.is_empty(), "{root} {scope:?}: a derived edge");
+            // A requirement apart has only dashed edges, and any other only solid ones.
+            let apart = apart_requirements(&text);
+            for (arrow, from_label, _) in arrows(&text) {
+                let from = from_label.split(' ').next().unwrap();
+                if from.starts_with("goal__") {
+                    continue;
+                }
+                assert_eq!(
+                    arrow == "-.->",
+                    apart.contains(from),
+                    "{root} {scope:?}: {from_label}\n{text}"
+                );
+            }
+            for id in &apart {
+                assert!(
+                    chart
+                        .nodes
+                        .get(id)
+                        .is_some_and(|kind| kind == "requirement"),
+                    "{root} {scope:?}: {id} apart is not a requirement"
+                );
+            }
+            apart_seen.extend(apart);
         }
     }
     assert_eq!(
-        edges,
-        BTreeSet::from(
-            [
-                "achieves",
-                "applies_to",
-                "constrains",
-                "motivates",
-                "qualifies"
-            ]
-            .map(String::from)
-        )
+        labels,
+        BTreeSet::from(["achieved_by", "motivates"].map(String::from))
+    );
+    assert!(
+        apart_seen.contains("requirement__ReqNoOnlineConsultation"),
+        "no sample draws a requirement apart: {apart_seen:?}"
     );
 }
 
@@ -1391,10 +1461,21 @@ fn a_requirement_diagram_draws_what_the_rdra_diagram_declares() {
         )
         .unwrap();
         for (id, kind) in &requirement.nodes {
+            // The out-of-scope subgraph is no element; its members are.
             assert_eq!(rdra.nodes.get(id), Some(kind), "{root}: {id}");
         }
-        for edge in &requirement.edges {
-            assert!(rdra.edges.contains(edge), "{root}: {edge:?} not in rdra");
+        for edge @ (from, label, to) in &requirement.edges {
+            // A derived `achieved_by` is the declared `achieves`, read from the goal.
+            let declared = if requirement.derived.contains(edge) {
+                assert_eq!(label, "achieved_by", "{root}: {edge:?}");
+                (to.clone(), "achieves".to_string(), from.clone())
+            } else {
+                edge.clone()
+            };
+            assert!(
+                rdra.edges.contains(&declared),
+                "{root}: {edge:?} not in rdra"
+            );
         }
     }
 }

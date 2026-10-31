@@ -461,7 +461,7 @@ relation, from which the RDRAGraph views can be derived.
 |---|---|---|---|---|
 | `rdra` (default) | RDRAGraph, the whole graph | Every element in its layer and every relation; `--node-kind` / `--edge-kind` narrow it | ADRs; columns (`er`), variation values and condition bodies (`condition`) | Everything reachable from the BUCs, and the states their use cases move between |
 | `context` | システムコンテキスト | The system boundary: one edge per actor, labelled with the BUCs it performs, and one edge per external system and direction, labelled with the events exchanged; every edge derived, no RDRA layer subgraphs | BUCs, use cases, and events as nodes; `%% derived` names the BUCs and events behind each label | The actors and external systems with an edge through the BUCs, and the systems they reach |
-| `requirement` | 要求モデル | Requirements and the BUCs they `motivate`; NFRs and constraints with what they `apply_to` or `constrain`, and the qualities they belong to | ADRs; a requirement-to-actor link, which the DSL does not have | What links to the BUCs, their use cases and APIs, the entities those read and write, and the systems that contain those APIs |
+| `requirement` | 要求モデル | A value tree, left to right: goals (with metric and `baseline → target`), the requirements that achieve them, and the BUCs those requirements `motivate`; a requirement with `status "out-of-scope"` is drawn apart in `やらないこと` with dashed edges | NFRs, constraints, qualities, entities, and systems (`list --kind nfr`, `list --kind constraint`), ADRs, and BUCs no requirement motivates; named in `omitted:` | The BUCs and the requirements that motivate them, with those requirements' goals |
 | `business` | ビジネスコンテキスト, ビジネスユースケース | Each business holding its BUCs, and the actors and external systems each BUC involves | Use cases, steps, and events, which `%% derived` names | The named BUCs and their businesses (the RDRA BUC diagram) |
 | `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `robustness` | ロバストネス図 | The use cases as an ICONIX robustness diagram: actors, boundaries (screens, external systems, timers), controls (APIs, or the use case itself), and the entities each control reads and writes | BUCs, steps, events (named in edge labels), conditions, states, media, permissions, fields, and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
@@ -528,15 +528,18 @@ The notes below say how each kind reads, in the order of the table.
   The whole model draws every actor, external system, and system; `--buc` draws those
   with an edge through the BUC's use cases, steps, and APIs, and labels an edge with the
   scoped BUCs only.
-- For `--kind requirement`, the nodes sit in the `rdra` layers. The edges are the
-  declared `motivates` (requirement to BUC), `achieves` (requirement to goal), `applies_to` (NFR to use case, API, or
-  system), `constrains` (constraint to use case, API, system, entity, or DTO), and
-  `qualifies` (NFR or constraint to quality). The whole model draws every requirement,
-  goal, NFR, quality, and constraint, linked or not; `--buc` draws those linked to the BUC, its
-  use cases and their APIs, the entities those read and write, and the systems that
-  contain those APIs, with the qualities of the NFRs and constraints it draws and the goals of the requirements
-  it draws. No `rdra-ish`
-  predicate links a requirement to the actor who holds it, so the diagram draws none.
+- For `--kind requirement`, the nodes sit in no layer subgraph, and the header has no
+  `layers:` line. The tree reads goal, requirement, BUC. A goal's label adds a second
+  line (`<br/>`) with its `metric` and `baseline → target`, whichever of them it has. The
+  edges are the declared `motivates` (requirement to BUC) and `achieves`, drawn from the
+  goal as `-->|achieved_by|` to the requirement and followed by
+  `%% derived <goal> -> <requirement> via <requirement>`. A requirement with
+  `status "out-of-scope"` sits in `subgraph group_out_of_scope["やらないこと"]`, and its
+  edges are dashed (`-.->`); every other edge is `-->`. The whole model draws every goal
+  and requirement, linked or not, and the BUCs a requirement motivates; `--buc` draws the
+  named BUCs, the requirements that motivate them, and those requirements' goals. NFRs,
+  constraints, qualities, entities, and systems are not drawn: the `omitted:` line names
+  them, and `list --kind nfr` and `list --kind constraint` write them as tables.
 - For `--kind business`, actors and external systems sit in システム価値, and each
   business is `subgraph business__<id>["<label>"]` inside システム外部環境, holding its
   BUCs. A BUC of no business, or of several, sits beside them, the latter with its
@@ -671,7 +674,7 @@ flowchart LR
 
 - The header comes first. `scope` is `whole`, `buc:<id>[,<id>]`, or
   `usecase:<id>[,<id>]`; `model` is the input paths as given. `layers:` (in the kinds
-  with RDRA layers: `rdra`, `context`, `requirement`, `business`, `usecase`) and `kinds:`
+  with RDRA layers: `rdra`, `business`, `usecase`) and `kinds:`
   list only what the body draws. `omitted:` names the node kinds linked to a drawn node
   that the kind leaves out, and in `rdra` the node and relation kinds a filter hid; it
   says `(none)` when there are none.

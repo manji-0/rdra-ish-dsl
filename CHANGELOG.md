@@ -106,6 +106,15 @@
 
 ### Changed
 
+- `diagram --kind requirement` is a value tree, left to right: goals, the requirements that
+  achieve them, and the BUCs those requirements motivate. A goal's label adds a second line
+  with its metric and `baseline → target`. A requirement with `status "out-of-scope"` sits in
+  `subgraph group_out_of_scope["やらないこと"]` with dashed edges. `achieves` is drawn from the
+  goal as `achieved_by`, with a `%% derived` line, so the goal sits left of the requirement.
+  NFRs, constraints, qualities, entities, and systems leave the diagram, and the `omitted:`
+  line names them; `list --kind nfr` and `list --kind constraint` give the tables. The
+  `%% layers:` header line is gone. `--buc` keeps the BUCs, the requirements that motivate
+  them, and their goals. clinic-ops: 39 nodes and 36 edges become 27 and 27.
 - `diagram --kind context` draws the system boundary and nothing else. An actor has one
   edge to the system, labelled with the labels of the BUCs it performs (`、`-joined), where
   it had a `performs` edge. An external system has one edge per direction, labelled with the

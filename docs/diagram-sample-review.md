@@ -106,107 +106,89 @@ rdra-ish diagram samples/clinic-ops \
 <!-- embed: ../samples/clinic-ops/out/requirement.mmd -->
 ```mermaid
 %% rdra-ish diagram=requirement scope=whole model=samples/clinic-ops
-%% layers: value=システム価値 environment=システム外部環境 system=システム
-%% kinds: requirement goal nfr quality constraint buc system entity
-%% omitted: (none)
+%% kinds: requirement goal buc
+%% omitted: actor nfr quality constraint business flow usecase event system entity
 flowchart LR
-  subgraph layer_value["システム価値"]
-    requirement__ReqChangeAppointmentAtDesk["予約の変更・取消を電話と窓口で受け付ける"]:::requirement
-    requirement__ReqEligibilityEveryVisit["受付のたびに保険資格を確認する"]:::requirement
-    requirement__ReqFollowUpAfterVisit["診察後の連絡と再診予約をケアプランで追う"]:::requirement
-    requirement__ReqHandOffAfterConsultation["診察終了で受診を会計計算へ引き渡す"]:::requirement
-    requirement__ReqInquiryBeforeDispense["疑わしい処方は医師への照会が済むまで調剤しない"]:::requirement
-    requirement__ReqMonthlyClaimByTenth["前月分のレセプトを翌月10日までに請求する"]:::requirement
+  requirement__ReqChangeAppointmentAtDesk["予約の変更・取消を電話と窓口で受け付ける"]:::requirement
+  requirement__ReqEligibilityEveryVisit["受付のたびに保険資格を確認する"]:::requirement
+  requirement__ReqFollowUpAfterVisit["診察後の連絡と再診予約をケアプランで追う"]:::requirement
+  requirement__ReqHandOffAfterConsultation["診察終了で受診を会計計算へ引き渡す"]:::requirement
+  requirement__ReqInquiryBeforeDispense["疑わしい処方は医師への照会が済むまで調剤しない"]:::requirement
+  requirement__ReqMonthlyClaimByTenth["前月分のレセプトを翌月10日までに請求する"]:::requirement
+  requirement__ReqPayAfterConsultation["会計は診察の後に一度で行う"]:::requirement
+  requirement__ReqProxyOrderNeedsPhysician["代行入力されたオーダは医師が確定するまで実施しない"]:::requirement
+  requirement__ReqRegisterEPrescription["院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"]:::requirement
+  requirement__ReqRegisterWithEligibility["新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"]:::requirement
+  requirement__ReqResolveAuditFindings["監査で見つかった問題を管理者が解決するまで追う"]:::requirement
+  requirement__ReqResubmitReturned["返戻レセプトを訂正して再請求する"]:::requirement
+  requirement__ReqSwiftCheckIn["再来患者は情報を入力し直さずに受付・案内される"]:::requirement
+  goal__SafeCare["診療の抜けと誤りを実施前に止める<br/>処方・オーダの確認漏れと診察後の連絡漏れの件数: 月20件 → 月5件以下"]:::goal
+  %% desc goal__SafeCare: 処方やオーダの確認漏れ、診察後の連絡漏れは、患者の安全と継続した治療を損なう。
+  goal__ShortWait["受付から診察までの待ち時間を短くする<br/>受付から診察開始までの中央値: 45分 → 30分"]:::goal
+  %% desc goal__ShortWait: 受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。
+  goal__TimelyClaims["会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"]:::goal
+  %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
+  buc__BucAppointmentScheduling["予約"]:::buc
+  %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
+  buc__BucBillingClaims["レセプト作成・請求"]:::buc
+  %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+  buc__BucClinicalEncounter["診察"]:::buc
+  buc__BucFollowupCare["フォローアップ"]:::buc
+  buc__BucOrdersResults["検体検査"]:::buc
+  buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
+  buc__BucPrescriptionFulfillment["処方"]:::buc
+  %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
+  buc__BucStaffAdministration["病院管理"]:::buc
+  buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
+  %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
+  buc__BucVisitPayment["計算・会計"]:::buc
+  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  subgraph group_out_of_scope["やらないこと"]
     requirement__ReqNoOnlineConsultation["オンライン診療は対象外とする"]:::requirement
-    requirement__ReqPayAfterConsultation["会計は診察の後に一度で行う"]:::requirement
-    requirement__ReqProxyOrderNeedsPhysician["代行入力されたオーダは医師が確定するまで実施しない"]:::requirement
-    requirement__ReqRegisterEPrescription["院外処方箋を電子処方箋管理サービスへ登録し、保険薬局を指定しない"]:::requirement
-    requirement__ReqRegisterWithEligibility["新患登録で保険情報と限度額情報をオンライン資格確認から取り込む"]:::requirement
-    requirement__ReqResolveAuditFindings["監査で見つかった問題を管理者が解決するまで追う"]:::requirement
-    requirement__ReqResubmitReturned["返戻レセプトを訂正して再請求する"]:::requirement
-    requirement__ReqSwiftCheckIn["再来患者は情報を入力し直さずに受付・案内される"]:::requirement
-    goal__SafeCare["診療の抜けと誤りを実施前に止める"]:::goal
-    %% desc goal__SafeCare: 処方やオーダの確認漏れ、診察後の連絡漏れは、患者の安全と継続した治療を損なう。
-    goal__ShortWait["受付から診察までの待ち時間を短くする"]:::goal
-    %% desc goal__ShortWait: 受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。
-    goal__TimelyClaims["会計から請求までの遅れと返戻を減らす"]:::goal
-    %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
-    nfr__ScheduleLookupLatency["予約枠検索の応答時間"]:::nfr
   end
-  subgraph layer_environment["システム外部環境"]
-    quality__Auditability["監査可能性"]:::quality
-    quality__Performance["性能"]:::quality
-    quality__Privacy["プライバシー"]:::quality
-    constraint__BillingAuditTrail["会計の監査証跡"]:::constraint
-    constraint__NoPharmacySteering["特定の保険薬局において調剤を受けるべき旨の指示等を行わない"]:::constraint
-    constraint__PatientDataPrivacy["患者情報の保護"]:::constraint
-    buc__BucAppointmentScheduling["予約"]:::buc
-    %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
-    buc__BucBillingClaims["レセプト作成・請求"]:::buc
-    %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
-    buc__BucClinicalEncounter["診察"]:::buc
-    buc__BucFollowupCare["フォローアップ"]:::buc
-    buc__BucOrdersResults["検体検査"]:::buc
-    buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
-    buc__BucPrescriptionFulfillment["処方"]:::buc
-    %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
-    buc__BucStaffAdministration["病院管理"]:::buc
-    buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
-    %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
-    buc__BucVisitPayment["計算・会計"]:::buc
-    %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
-  end
-  subgraph layer_system["システム"]
-    system__ClinicOpsSystem["外来業務システム"]:::system
-    entity__InsurancePolicy["保険資格"]:::entity
-    entity__PatientProfile["患者基本情報"]:::entity
-    entity__PaymentTransaction["精算"]:::entity
-    entity__Prescription["処方箋"]:::entity
-  end
-  constraint__BillingAuditTrail -.->|constrains| entity__PaymentTransaction
-  constraint__BillingAuditTrail -.->|constrains| system__ClinicOpsSystem
-  constraint__BillingAuditTrail -.->|qualifies| quality__Auditability
-  constraint__NoPharmacySteering -.->|constrains| entity__Prescription
-  constraint__PatientDataPrivacy -.->|constrains| entity__InsurancePolicy
-  constraint__PatientDataPrivacy -.->|constrains| entity__PatientProfile
-  constraint__PatientDataPrivacy -.->|qualifies| quality__Privacy
-  nfr__ScheduleLookupLatency -.->|applies_to| system__ClinicOpsSystem
-  nfr__ScheduleLookupLatency -.->|qualifies| quality__Performance
-  requirement__ReqChangeAppointmentAtDesk -.->|achieves| goal__ShortWait
-  requirement__ReqChangeAppointmentAtDesk -.->|motivates| buc__BucAppointmentScheduling
-  requirement__ReqEligibilityEveryVisit -.->|achieves| goal__ShortWait
-  requirement__ReqEligibilityEveryVisit -.->|motivates| buc__BucVisitCheckIn
-  requirement__ReqFollowUpAfterVisit -.->|achieves| goal__SafeCare
-  requirement__ReqFollowUpAfterVisit -.->|motivates| buc__BucFollowupCare
-  requirement__ReqHandOffAfterConsultation -.->|achieves| goal__TimelyClaims
-  requirement__ReqHandOffAfterConsultation -.->|motivates| buc__BucClinicalEncounter
-  requirement__ReqInquiryBeforeDispense -.->|achieves| goal__SafeCare
-  requirement__ReqInquiryBeforeDispense -.->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqMonthlyClaimByTenth -.->|achieves| goal__TimelyClaims
-  requirement__ReqMonthlyClaimByTenth -.->|motivates| buc__BucBillingClaims
+  goal__SafeCare -->|achieved_by| requirement__ReqFollowUpAfterVisit
+  %% derived goal__SafeCare -> requirement__ReqFollowUpAfterVisit via requirement__ReqFollowUpAfterVisit
+  goal__SafeCare -->|achieved_by| requirement__ReqInquiryBeforeDispense
+  %% derived goal__SafeCare -> requirement__ReqInquiryBeforeDispense via requirement__ReqInquiryBeforeDispense
+  goal__SafeCare -->|achieved_by| requirement__ReqProxyOrderNeedsPhysician
+  %% derived goal__SafeCare -> requirement__ReqProxyOrderNeedsPhysician via requirement__ReqProxyOrderNeedsPhysician
+  goal__SafeCare -->|achieved_by| requirement__ReqRegisterEPrescription
+  %% derived goal__SafeCare -> requirement__ReqRegisterEPrescription via requirement__ReqRegisterEPrescription
+  goal__ShortWait -->|achieved_by| requirement__ReqChangeAppointmentAtDesk
+  %% derived goal__ShortWait -> requirement__ReqChangeAppointmentAtDesk via requirement__ReqChangeAppointmentAtDesk
+  goal__ShortWait -->|achieved_by| requirement__ReqEligibilityEveryVisit
+  %% derived goal__ShortWait -> requirement__ReqEligibilityEveryVisit via requirement__ReqEligibilityEveryVisit
+  goal__ShortWait -->|achieved_by| requirement__ReqRegisterWithEligibility
+  %% derived goal__ShortWait -> requirement__ReqRegisterWithEligibility via requirement__ReqRegisterWithEligibility
+  goal__ShortWait -->|achieved_by| requirement__ReqSwiftCheckIn
+  %% derived goal__ShortWait -> requirement__ReqSwiftCheckIn via requirement__ReqSwiftCheckIn
+  goal__TimelyClaims -->|achieved_by| requirement__ReqHandOffAfterConsultation
+  %% derived goal__TimelyClaims -> requirement__ReqHandOffAfterConsultation via requirement__ReqHandOffAfterConsultation
+  goal__TimelyClaims -->|achieved_by| requirement__ReqMonthlyClaimByTenth
+  %% derived goal__TimelyClaims -> requirement__ReqMonthlyClaimByTenth via requirement__ReqMonthlyClaimByTenth
+  goal__TimelyClaims -->|achieved_by| requirement__ReqPayAfterConsultation
+  %% derived goal__TimelyClaims -> requirement__ReqPayAfterConsultation via requirement__ReqPayAfterConsultation
+  goal__TimelyClaims -->|achieved_by| requirement__ReqResolveAuditFindings
+  %% derived goal__TimelyClaims -> requirement__ReqResolveAuditFindings via requirement__ReqResolveAuditFindings
+  goal__TimelyClaims -->|achieved_by| requirement__ReqResubmitReturned
+  %% derived goal__TimelyClaims -> requirement__ReqResubmitReturned via requirement__ReqResubmitReturned
+  requirement__ReqChangeAppointmentAtDesk -->|motivates| buc__BucAppointmentScheduling
+  requirement__ReqEligibilityEveryVisit -->|motivates| buc__BucVisitCheckIn
+  requirement__ReqFollowUpAfterVisit -->|motivates| buc__BucFollowupCare
+  requirement__ReqHandOffAfterConsultation -->|motivates| buc__BucClinicalEncounter
+  requirement__ReqInquiryBeforeDispense -->|motivates| buc__BucPrescriptionFulfillment
+  requirement__ReqMonthlyClaimByTenth -->|motivates| buc__BucBillingClaims
   requirement__ReqNoOnlineConsultation -.->|motivates| buc__BucClinicalEncounter
-  requirement__ReqPayAfterConsultation -.->|achieves| goal__TimelyClaims
-  requirement__ReqPayAfterConsultation -.->|motivates| buc__BucVisitPayment
-  requirement__ReqProxyOrderNeedsPhysician -.->|achieves| goal__SafeCare
-  requirement__ReqProxyOrderNeedsPhysician -.->|motivates| buc__BucOrdersResults
-  requirement__ReqRegisterEPrescription -.->|achieves| goal__SafeCare
-  requirement__ReqRegisterEPrescription -.->|motivates| buc__BucPrescriptionFulfillment
-  requirement__ReqRegisterWithEligibility -.->|achieves| goal__ShortWait
-  requirement__ReqRegisterWithEligibility -.->|motivates| buc__BucPatientOnboarding
-  requirement__ReqResolveAuditFindings -.->|achieves| goal__TimelyClaims
-  requirement__ReqResolveAuditFindings -.->|motivates| buc__BucStaffAdministration
-  requirement__ReqResubmitReturned -.->|achieves| goal__TimelyClaims
-  requirement__ReqResubmitReturned -.->|motivates| buc__BucBillingClaims
-  requirement__ReqSwiftCheckIn -.->|achieves| goal__ShortWait
-  requirement__ReqSwiftCheckIn -.->|motivates| buc__BucVisitCheckIn
+  requirement__ReqPayAfterConsultation -->|motivates| buc__BucVisitPayment
+  requirement__ReqProxyOrderNeedsPhysician -->|motivates| buc__BucOrdersResults
+  requirement__ReqRegisterEPrescription -->|motivates| buc__BucPrescriptionFulfillment
+  requirement__ReqRegisterWithEligibility -->|motivates| buc__BucPatientOnboarding
+  requirement__ReqResolveAuditFindings -->|motivates| buc__BucStaffAdministration
+  requirement__ReqResubmitReturned -->|motivates| buc__BucBillingClaims
+  requirement__ReqSwiftCheckIn -->|motivates| buc__BucVisitCheckIn
   classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
   classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
-  classDef nfr fill:#fff3bf,stroke:#e67700,color:#000;
-  classDef quality fill:#fff3bf,stroke:#e67700,color:#000;
-  classDef constraint fill:#fff3bf,stroke:#e67700,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
-  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;
-  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
 How to read it:

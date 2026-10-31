@@ -10,7 +10,7 @@ requirements drive it, and how the business divides into BUCs.
 rdra-ish diagram src/ --kind context --format mermaid
 rdra-ish diagram src/ --kind context --buc <BucId> --format mermaid
 
-# 要求モデル — requirements, NFRs, constraints, and what they bind
+# 要求モデル — the value tree: goals, requirements, BUCs
 rdra-ish diagram src/ --kind requirement --format mermaid
 
 # ビジネスコンテキスト / BUC — businesses, their BUCs, and who takes part in each
@@ -38,16 +38,18 @@ rdra-ish diagram src/ --kind business --buc <BucId> --format mermaid
 
 ## Reading the Requirement Model
 
-- Requirements, goals, and NFRs sit in システム価値; qualities, constraints, and BUCs in
-  システム外部環境; use cases in システム境界; APIs, systems, entities, and DTOs in システム.
-- The edges are declared: `motivates` (requirement to BUC), `achieves` (requirement to
-  goal), `applies_to` (NFR to use
-  case, API, or system), `constrains` (constraint to use case, API, system, entity, or
-  DTO), and `qualifies` (NFR or constraint to quality).
-- The DSL has no requirement-to-actor link, so the diagram draws none; ADRs are left out
-  and named in `omitted:`.
-- `--buc` draws what links to the BUC, its use cases and their APIs, the entities those
-  read and write, and the systems containing those APIs.
+- Read it left to right: goal, requirement, BUC. There are no layer subgraphs. A goal
+  node adds its metric and `baseline → target` on a second line, so a goal without them is
+  unmeasured.
+- `requirement -->|motivates| buc` is declared. `goal -->|achieved_by| requirement` is the
+  declared `achieves` read from the goal, with a `%% derived` line.
+- A requirement with `status "out-of-scope"` is in `subgraph group_out_of_scope`
+  (`やらないこと`) with dashed edges: a non-goal, kept visible.
+- NFRs, constraints, qualities, entities, and systems are not drawn; `omitted:` names
+  them. Read them with `list --kind nfr --format markdown` and
+  `list --kind constraint --format markdown`.
+- A requirement with no goal edge, or a goal with no requirement, is a gap in the tree.
+- `--buc` draws the BUCs, the requirements that motivate them, and their goals.
 
 ## Reading the Business Diagram
 

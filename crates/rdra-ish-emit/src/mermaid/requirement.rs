@@ -1,130 +1,186 @@
-//! The requirement model (`--kind requirement`): the requirements with the BUCs they motivate
-//! and the goals they achieve,
-//! and the non-functional requirements and constraints with what they apply to or constrain
-//! and the quality each belongs to.
+//! The requirement model (`--kind requirement`): a value tree, left to right from the goals,
+//! through the requirements that achieve them, to the BUCs those requirements motivate. A
+//! requirement marked `status "out-of-scope"` is drawn apart, with dashed edges. NFRs,
+//! constraints, qualities, entities, and systems are another question; the header's
+//! `omitted:` line names them.
 
-use super::{
-    buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, render_layered_nodes, EdgeSet,
-};
-use crate::diagram_common::Header;
-use crate::{collect_object_graph_nodes, object_graph_rel_label, EmitError, Emitter, Scope, View};
-use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
+use super::{buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
+use crate::diagram_common::{class_defs, contract_id, desc_line, node_label, quote, Header};
+use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
+use rdra_ish_core::model::{Goal, NodeRef, RelKind, SemanticModel};
 use std::collections::HashSet;
 
 pub struct RequirementMermaidEmitter;
 
-/// Whether `rel` is an edge of the requirement model: a requirement's `motivates` or
-/// `achieves`, an NFR's `applies_to`, a constraint's `constrains`, or a `qualifies`.
-fn is_requirement_edge(rel: &rdra_ish_core::model::Relation) -> bool {
-    matches!(
-        (&rel.kind, &rel.from),
-        (
-            RelKind::Motivates | RelKind::Achieves,
-            NodeRef::Requirement(_)
-        ) | (RelKind::AppliesTo, NodeRef::Nfr(_))
-            | (RelKind::Constrains, NodeRef::Constraint(_))
-            | (RelKind::Qualifies, NodeRef::Nfr(_) | NodeRef::Constraint(_))
-    )
+/// The subgraph that holds the requirements marked `status "out-of-scope"`.
+const OUT_OF_SCOPE_GROUP: &str = "group_out_of_scope";
+
+fn is_out_of_scope(model: &SemanticModel, node: &NodeRef) -> bool {
+    matches!(node, NodeRef::Requirement(key)
+        if model.requirements.get(*key).is_some_and(|r| r.status.as_deref() == Some("out-of-scope")))
 }
 
-/// What a BUC scope reaches: its BUCs, use cases, steps, and APIs, the entities those use
-/// cases and APIs read and write, and the systems that contain those APIs.
-fn scope_of(model: &SemanticModel, ids: &[String]) -> HashSet<NodeRef> {
-    let mut scope = buc_scope(model, ids);
-    let reached: Vec<NodeRef> = model
-        .relations
-        .iter()
-        .filter_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
-            (
-                RelKind::Reads
-                | RelKind::Writes
-                | RelKind::Creates
-                | RelKind::Updates
-                | RelKind::Deletes,
-                from,
-                entity @ NodeRef::Entity(_),
-            ) if scope.contains(from) => Some(entity.clone()),
-            (RelKind::Contains, system @ NodeRef::System(_), api) if scope.contains(api) => {
-                Some(system.clone())
-            }
-            _ => None,
-        })
-        .collect();
-    scope.extend(reached);
-    scope
+/// `text` safe inside a node label that Mermaid renders as HTML.
+fn label_text(text: &str) -> String {
+    quote(text).replace('<', "#lt;").replace('>', "#gt;")
+}
+
+/// The second line of a goal's label: its metric with `baseline → target`, when it has them.
+fn measure(goal: &Goal) -> Option<String> {
+    let range = match (&goal.baseline, &goal.target) {
+        (Some(baseline), Some(target)) => Some(format!("{baseline} → {target}")),
+        (None, Some(target)) => Some(format!("→ {target}")),
+        (Some(baseline), None) => Some(format!("{baseline} →")),
+        (None, None) => None,
+    };
+    match (&goal.metric, range) {
+        (Some(metric), Some(range)) => Some(format!("{metric}: {range}")),
+        (Some(metric), None) => Some(metric.clone()),
+        (None, range) => range,
+    }
+}
+
+/// `node` with its `:::<kind>` and its `%% desc` line, at `indent`; a goal adds its measure
+/// under the label.
+fn declare_node(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str) {
+    let (Some(id), Some(label)) = (contract_id(model, node), node_label(model, node)) else {
+        return;
+    };
+    let mut text = label_text(label);
+    if let NodeRef::Goal(key) = node {
+        if let Some(measure) = model.goals.get(*key).and_then(measure) {
+            text.push_str(&format!("<br/>{}", label_text(&measure)));
+        }
+    }
+    let kind = node_kind_filter_name(node);
+    out.push_str(&format!("{indent}{id}[\"{text}\"]:::{kind}\n"));
+    if let Some(desc) = desc_line(model, node, &id) {
+        out.push_str(&format!("{indent}{desc}\n"));
+    }
 }
 
 impl Emitter for RequirementMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let scope = match &view.scope {
-            Scope::Bucs(ids) => Some(scope_of(model, ids)),
+            Scope::Bucs(ids) => Some(buc_scope(model, ids)),
             Scope::Whole | Scope::UseCases(_) => None,
         };
         let in_scope = |nr: &NodeRef| scope.as_ref().is_none_or(|set| set.contains(nr));
 
-        let mut edges = EdgeSet::default();
-        for rel in model
+        // The BUCs a requirement motivates, in the scope.
+        let motivated: Vec<(&NodeRef, &NodeRef)> = model
             .relations
             .iter()
-            .filter(|rel| is_requirement_edge(rel))
-        {
-            if !matches!(rel.kind, RelKind::Qualifies | RelKind::Achieves) && in_scope(&rel.to) {
-                let label = object_graph_rel_label(&rel.kind).to_string();
-                edges.add(model, (&rel.from, &rel.kind, label, &rel.to), None);
-            }
-        }
-        // Each quality of a drawn NFR or constraint and each goal of a drawn requirement; in the
-        // whole model every requirement element, linked or not.
-        let sources: HashSet<NodeRef> = edges.nodes.iter().cloned().collect();
-        for rel in model
-            .relations
+            .filter(|rel| {
+                rel.kind == RelKind::Motivates
+                    && matches!(rel.from, NodeRef::Requirement(_))
+                    && matches!(rel.to, NodeRef::Buc(_))
+                    && in_scope(&rel.to)
+            })
+            .map(|rel| (&rel.from, &rel.to))
+            .collect();
+        let mut drawn: HashSet<NodeRef> = motivated
             .iter()
-            .filter(|rel| matches!(rel.kind, RelKind::Qualifies | RelKind::Achieves))
-        {
-            if scope.is_none() || sources.contains(&rel.from) {
-                let label = object_graph_rel_label(&rel.kind).to_string();
-                edges.add(model, (&rel.from, &rel.kind, label, &rel.to), None);
-            }
-        }
-        let mut drawn: HashSet<NodeRef> = edges.nodes.iter().cloned().collect();
+            .flat_map(|(requirement, buc)| [(*requirement).clone(), (*buc).clone()])
+            .collect();
         if scope.is_none() {
             drawn.extend(collect_object_graph_nodes(model, &|nr| {
-                matches!(
-                    nr,
-                    NodeRef::Requirement(_)
-                        | NodeRef::Goal(_)
-                        | NodeRef::Nfr(_)
-                        | NodeRef::Quality(_)
-                        | NodeRef::Constraint(_)
-                )
+                matches!(nr, NodeRef::Requirement(_) | NodeRef::Goal(_))
             }));
         }
+        let achieved: Vec<(&NodeRef, &NodeRef)> = model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Achieves && drawn.contains(&rel.from))
+            .map(|rel| (&rel.from, &rel.to))
+            .collect();
+        drawn.extend(achieved.iter().map(|(_, goal)| (*goal).clone()));
         let nodes = collect_object_graph_nodes(model, &|nr| drawn.contains(nr));
 
         let mut body = String::new();
-        let layers = render_layered_nodes(&mut body, model, &nodes);
-        render_edges(&mut body, edges.into_graph_edges());
+        let (apart, tree): (Vec<&NodeRef>, Vec<&NodeRef>) =
+            nodes.iter().partition(|nr| is_out_of_scope(model, nr));
+        for node in tree {
+            declare_node(&mut body, model, node, "  ");
+        }
+        if !apart.is_empty() {
+            body.push_str(&format!(
+                "  subgraph {OUT_OF_SCOPE_GROUP}[\"やらないこと\"]\n"
+            ));
+            for node in apart {
+                declare_node(&mut body, model, node, "    ");
+            }
+            body.push_str("  end\n");
+        }
+
+        let arrow = |requirement: &NodeRef| {
+            if is_out_of_scope(model, requirement) {
+                "-.->"
+            } else {
+                "-->"
+            }
+        };
+        let mut edges: Vec<GraphEdge> = Vec::new();
+        for (requirement, buc) in motivated {
+            if let (Some(from), Some(to)) =
+                (contract_id(model, requirement), contract_id(model, buc))
+            {
+                edges.push(GraphEdge {
+                    from,
+                    label: "motivates".to_string(),
+                    to,
+                    arrow: arrow(requirement),
+                    derived: None,
+                });
+            }
+        }
+        // The model says `achieves(Requirement, Goal)`; the tree reads from the goal, so the
+        // edge is drawn the other way and says so.
+        for (requirement, goal) in achieved {
+            if let (Some(req_id), Some(goal_id)) =
+                (contract_id(model, requirement), contract_id(model, goal))
+            {
+                edges.push(GraphEdge {
+                    from: goal_id,
+                    label: "achieved_by".to_string(),
+                    to: req_id.clone(),
+                    arrow: arrow(requirement),
+                    derived: Some(format!("via {req_id}")),
+                });
+            }
+        }
+        render_edges(&mut body, edges);
+
         let kinds = kinds_by_layer(&nodes);
-        body.push_str(&crate::diagram_common::class_defs(&kinds));
+        body.push_str(&class_defs(&kinds));
+        let mut omitted = omitted_linked_kinds(
+            model,
+            |nr| {
+                drawn.contains(nr)
+                    || matches!(
+                        nr,
+                        NodeRef::Nfr(_) | NodeRef::Quality(_) | NodeRef::Constraint(_)
+                    )
+            },
+            &drawn,
+            &kinds,
+        );
+        for (kind, present) in [
+            ("nfr", !model.nfrs.is_empty()),
+            ("quality", !model.qualities.is_empty()),
+            ("constraint", !model.constraints.is_empty()),
+            ("entity", !model.entities.is_empty()),
+            ("system", !model.systems.is_empty()),
+        ] {
+            if present && !omitted.iter().any(|k| k == kind) {
+                omitted.push(kind.to_string());
+            }
+        }
         let header = Header {
             diagram: "requirement",
             view,
-            layers: Some(layers),
-            omitted: omitted_linked_kinds(
-                model,
-                |nr| {
-                    matches!(
-                        nr,
-                        NodeRef::Requirement(_)
-                            | NodeRef::Goal(_)
-                            | NodeRef::Nfr(_)
-                            | NodeRef::Quality(_)
-                            | NodeRef::Constraint(_)
-                    ) && drawn.contains(nr)
-                },
-                &drawn,
-                &kinds,
-            ),
+            layers: None,
+            omitted,
             kinds,
         };
         Ok(format!("{}flowchart LR\n{body}", header.render()))
@@ -137,8 +193,20 @@ mod tests {
     use crate::diagram_common::model_from;
 
     const SHOP: &str = r#"
-requirement ReqFast "Check out fast"
+requirement ReqFast "Pay fast"
 requirement ReqLoose "Nothing yet"
+requirement ReqVideo "No video payment"
+  status "out-of-scope"
+goal ShortWait "Short wait"
+  metric "Median wait"
+  baseline "45 min"
+  target "30 min"
+goal Unserved "Unserved"
+goal Bare "Bare"
+  metric "Complaints"
+goal Below "Below"
+  metric "Rate"
+  target "<5%"
 nfr Latency "Latency"
 quality Performance "Performance"
 quality Privacy "Privacy"
@@ -147,6 +215,7 @@ adr AdrOne "One system"
 system Shop "Shop"
 buc BucPay "Pay"
 buc BucShip "Ship"
+buc BucIdle "Idle"
 usecase Capture "Capture"
 usecase Dispatch "Dispatch"
 api CaptureApi "Capture API"
@@ -159,12 +228,14 @@ invokes(Capture, CaptureApi)
 updates(CaptureApi, Payment)
 updates(Dispatch, Parcel)
 motivates(ReqFast, BucPay)
+motivates(ReqFast, BucShip)
+motivates(ReqVideo, BucPay)
+achieves(ReqFast, ShortWait)
+achieves(ReqFast, Below)
 applies_to(Latency, CaptureApi)
-applies_to(Latency, Shop)
 qualifies(Latency, Performance)
 qualifies(Pii, Privacy)
 constrains(Pii, Payment)
-constrains(Pii, Parcel)
 decides(AdrOne, ReqFast)
 "#;
 
@@ -175,76 +246,106 @@ decides(AdrOne, ReqFast)
     }
 
     #[test]
-    fn each_requirement_element_links_what_it_motivates_applies_to_or_constrains() {
+    fn the_tree_runs_from_a_goal_through_a_requirement_to_a_buc() {
         let result = emit(View::whole());
         for edge in [
-            "  requirement__ReqFast -.->|motivates| buc__BucPay\n",
-            "  nfr__Latency -.->|applies_to| api__CaptureApi\n",
-            "  nfr__Latency -.->|applies_to| system__Shop\n",
-            "  nfr__Latency -.->|qualifies| quality__Performance\n",
-            "  constraint__Pii -.->|constrains| entity__Payment\n",
-            "  constraint__Pii -.->|qualifies| quality__Privacy\n",
+            "  goal__ShortWait -->|achieved_by| requirement__ReqFast\n  %% derived goal__ShortWait -> requirement__ReqFast via requirement__ReqFast\n",
+            "  requirement__ReqFast -->|motivates| buc__BucPay\n",
+            "  requirement__ReqFast -->|motivates| buc__BucShip\n",
         ] {
             assert!(result.contains(edge), "{edge}: {result}");
         }
+        for present in [
+            "  requirement__ReqFast[\"Pay fast\"]:::requirement\n",
+            "  requirement__ReqLoose[\"Nothing yet\"]:::requirement\n",
+            "  goal__Unserved[\"Unserved\"]:::goal\n",
+        ] {
+            assert!(result.contains(present), "{present}: {result}");
+        }
+        assert!(!result.contains("buc__BucIdle"), "{result}");
+        assert!(!result.contains("subgraph layer_"), "{result}");
+    }
+
+    #[test]
+    fn a_goal_adds_its_metric_and_baseline_to_target_under_its_label() {
+        let result = emit(View::whole());
+        for present in [
+            "  goal__ShortWait[\"Short wait<br/>Median wait: 45 min → 30 min\"]:::goal\n",
+            "  goal__Bare[\"Bare<br/>Complaints\"]:::goal\n",
+            "  goal__Below[\"Below<br/>Rate: → #lt;5%\"]:::goal\n",
+        ] {
+            assert!(result.contains(present), "{present}: {result}");
+        }
+    }
+
+    #[test]
+    fn an_out_of_scope_requirement_is_drawn_apart_with_dashed_edges() {
+        let result = emit(View::whole());
         assert!(
-            result.contains("    requirement__ReqLoose[\"Nothing yet\"]:::requirement\n"),
-            "{result}"
-        );
-        assert!(
-            result.starts_with(
-                "%% rdra-ish diagram=requirement scope=whole\n%% layers: value=システム価値 environment=システム外部環境 system=システム\n%% kinds: requirement nfr quality constraint buc api system entity\n%% omitted: adr\n"
+            result.contains(
+                "  subgraph group_out_of_scope[\"やらないこと\"]\n    requirement__ReqVideo[\"No video payment\"]:::requirement\n  end\n"
             ),
             "{result}"
         );
-    }
-
-    #[test]
-    fn a_goal_is_drawn_with_the_requirements_that_achieve_it() {
-        let src = format!(
-            "{SHOP}goal ShortWait \"Short wait\"\ngoal Unserved \"Unserved\"\nachieves(ReqFast, ShortWait)\n"
-        );
-        let whole = RequirementMermaidEmitter
-            .emit(&model_from(&src), &View::whole())
-            .unwrap();
-        for present in [
-            "  requirement__ReqFast -.->|achieves| goal__ShortWait\n",
-            "    goal__ShortWait[\"Short wait\"]:::goal\n",
-            "    goal__Unserved[\"Unserved\"]:::goal\n",
-        ] {
-            assert!(whole.contains(present), "{present}: {whole}");
-        }
-
-        let pay = RequirementMermaidEmitter
-            .emit(&model_from(&src), &View::bucs(vec!["BucPay".to_string()]))
-            .unwrap();
         assert!(
-            pay.contains("  requirement__ReqFast -.->|achieves| goal__ShortWait\n"),
-            "{pay}"
+            result.contains("  requirement__ReqVideo -.->|motivates| buc__BucPay\n"),
+            "{result}"
         );
-        assert!(!pay.contains("goal__Unserved"), "{pay}");
+        assert!(!result.contains("やらないこと\"]\n    requirement__ReqFast"));
     }
 
     #[test]
-    fn a_buc_scope_draws_what_reaches_its_use_cases_apis_entities_and_systems() {
-        let pay = emit(View::bucs(vec!["BucPay".to_string()]));
-        for present in [
-            "  requirement__ReqFast -.->|motivates| buc__BucPay\n",
-            "  nfr__Latency -.->|applies_to| system__Shop\n",
-            "  constraint__Pii -.->|constrains| entity__Payment\n",
-            "  constraint__Pii -.->|qualifies| quality__Privacy\n",
+    fn nfrs_constraints_qualities_entities_and_systems_leave_the_diagram() {
+        let result = emit(View::whole());
+        for absent in [
+            "nfr__",
+            "quality__",
+            "constraint__",
+            "entity__",
+            "system__",
+            "api__",
         ] {
-            assert!(pay.contains(present), "{present}: {pay}");
+            assert!(!result.contains(absent), "{absent}: {result}");
         }
-        for absent in ["entity__Parcel", "requirement__ReqLoose"] {
-            assert!(!pay.contains(absent), "{absent}: {pay}");
+        assert!(
+            result.starts_with(
+                "%% rdra-ish diagram=requirement scope=whole\n%% kinds: requirement goal buc\n"
+            ),
+            "{result}"
+        );
+        let omitted = result
+            .lines()
+            .find_map(|line| line.strip_prefix("%% omitted: "))
+            .unwrap();
+        for kind in ["adr", "nfr", "quality", "constraint", "entity", "system"] {
+            assert!(omitted.split(' ').any(|k| k == kind), "{kind}: {omitted}");
         }
+    }
 
+    #[test]
+    fn a_buc_scope_keeps_the_requirements_that_motivate_it_and_their_goals() {
         let ship = emit(View::bucs(vec!["BucShip".to_string()]));
-        assert!(ship.contains("  constraint__Pii -.->|constrains| entity__Parcel\n"));
         assert!(
-            !ship.contains("requirement__") && !ship.contains("nfr__"),
+            ship.starts_with("%% rdra-ish diagram=requirement scope=buc:BucShip\n"),
             "{ship}"
         );
+        for present in [
+            "  requirement__ReqFast -->|motivates| buc__BucShip\n",
+            "  goal__ShortWait -->|achieved_by| requirement__ReqFast\n",
+        ] {
+            assert!(ship.contains(present), "{present}: {ship}");
+        }
+        for absent in [
+            "buc__BucPay",
+            "requirement__ReqVideo",
+            "requirement__ReqLoose",
+            "goal__Unserved",
+        ] {
+            assert!(!ship.contains(absent), "{absent}: {ship}");
+        }
+
+        let pay = emit(View::bucs(vec!["BucPay".to_string()]));
+        assert!(pay.contains("group_out_of_scope"), "{pay}");
+        assert!(!pay.contains("buc__BucShip"), "{pay}");
     }
 }
