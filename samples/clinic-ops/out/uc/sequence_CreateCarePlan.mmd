@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:CreateCarePlan model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__CareCoordinator as 患者支援・地域連携担当
+  participant usecase__SignEncounter as 診療記録の署名
+  participant screen__CarePlanScreen as ケアプラン画面
+  participant api__CreateCarePlanApi as ケアプラン作成 API
+  participant entity__Encounter as 診療記録
+  participant entity__CarePlan as ケアプラン
+  actor__CareCoordinator ->> screen__CarePlanScreen: ケアプランの作成
+  usecase__SignEncounter ->> api__CreateCarePlanApi: 診療記録の署名
+  screen__CarePlanScreen ->> api__CreateCarePlanApi: ケアプラン作成 API
+  api__CreateCarePlanApi ->> entity__Encounter: read
+  api__CreateCarePlanApi ->> entity__CarePlan: create
+  api__CreateCarePlanApi -->> screen__CarePlanScreen: done

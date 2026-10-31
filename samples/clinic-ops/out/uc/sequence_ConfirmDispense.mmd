@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ConfirmDispense model=samples/clinic-ops
+%% kinds: extsystem screen api entity
+%% omitted: buc step medium event
+sequenceDiagram
+  participant extsystem__EPrescriptionService as 電子処方箋管理サービス
+  participant screen__PharmacyStatusScreen as 電子処方箋の状況画面
+  participant api__ConfirmDispenseApi as 調剤結果 API
+  participant entity__Prescription as 処方箋
+  extsystem__EPrescriptionService ->> api__ConfirmDispenseApi: 保険薬局での調剤完了
+  screen__PharmacyStatusScreen ->> api__ConfirmDispenseApi: 調剤結果 API
+  alt Prescription.status == 院外処方箋発行済
+    api__ConfirmDispenseApi ->> entity__Prescription: update status 院外処方箋発行済 -> 交付済, dispensed_at=set
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: done
+  else guard fails
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: rejected
+  end

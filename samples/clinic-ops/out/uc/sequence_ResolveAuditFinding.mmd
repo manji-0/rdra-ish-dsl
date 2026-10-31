@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:ResolveAuditFinding model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__AuditReviewScreen as 監査ログ画面
+  participant usecase__ResolveAuditFinding as 監査指摘の解決
+  participant entity__AuditEvent as 監査ログ
+  actor__ClinicAdmin ->> screen__AuditReviewScreen: 監査指摘の解決
+  screen__AuditReviewScreen ->> usecase__ResolveAuditFinding: 監査指摘の解決
+  usecase__ResolveAuditFinding ->> entity__AuditEvent: update is_resolved=true
+  usecase__ResolveAuditFinding -->> screen__AuditReviewScreen: done

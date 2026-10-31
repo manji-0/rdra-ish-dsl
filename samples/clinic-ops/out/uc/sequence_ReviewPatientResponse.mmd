@@ -1,0 +1,19 @@
+%% rdra-ish diagram=sequence scope=usecase:ReviewPatientResponse model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__CareCoordinator as 患者支援・地域連携担当
+  participant screen__CarePlanScreen as ケアプラン画面
+  participant usecase__ReviewPatientResponse as 患者応答の確認
+  participant entity__CarePlan as ケアプラン
+  participant entity__PatientMessage as 患者連絡
+  actor__CareCoordinator ->> screen__CarePlanScreen: 患者応答の確認
+  screen__CarePlanScreen ->> usecase__ReviewPatientResponse: 患者応答の確認
+  alt CarePlan.status == 作成済
+    Note over usecase__ReviewPatientResponse: transaction (inferred from FK)
+    usecase__ReviewPatientResponse ->> entity__CarePlan: update status 作成済 -> 経過観察中
+    usecase__ReviewPatientResponse ->> entity__PatientMessage: update status=msgread, read_at=set
+    usecase__ReviewPatientResponse -->> screen__CarePlanScreen: done
+  else guard fails
+    usecase__ReviewPatientResponse -->> screen__CarePlanScreen: rejected
+  end

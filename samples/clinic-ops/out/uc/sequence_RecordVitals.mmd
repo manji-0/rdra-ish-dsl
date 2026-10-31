@@ -1,0 +1,15 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordVitals model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant screen__VitalsScreen as バイタル入力画面
+  participant api__RecordVitalsApi as バイタル記録 API
+  participant entity__Encounter as 診療記録
+  participant entity__VitalSign as バイタル
+  actor__Nurse ->> screen__VitalsScreen: バイタルの記録
+  screen__VitalsScreen ->> api__RecordVitalsApi: バイタル記録 API
+  Note over api__RecordVitalsApi: transaction (API atomic boundary)
+  api__RecordVitalsApi ->> entity__Encounter: update
+  api__RecordVitalsApi ->> entity__VitalSign: create
+  api__RecordVitalsApi -->> screen__VitalsScreen: done

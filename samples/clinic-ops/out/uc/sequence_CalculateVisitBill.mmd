@@ -1,0 +1,24 @@
+%% rdra-ish diagram=sequence scope=usecase:CalculateVisitBill model=samples/clinic-ops
+%% kinds: actor screen api entity usecase extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__AccountsClerk as 医事課 会計担当
+  participant screen__BillCalculationScreen as 会計計算画面
+  participant api__CalculateVisitBillApi as 会計計算 API
+  participant entity__Charge as コスト（診療行為）
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__Appointment as 予約・受診
+  participant usecase__CallPatientForPayment as 会計の呼出
+  participant extsystem__PaymentGateway as 自動精算機・クレジット決済
+  actor__AccountsClerk ->> screen__BillCalculationScreen: 会計計算入力
+  screen__BillCalculationScreen ->> api__CalculateVisitBillApi: 会計計算 API
+  alt Appointment.status == 計算待ち
+    api__CalculateVisitBillApi ->> entity__Charge: read
+    api__CalculateVisitBillApi ->> entity__InsurancePolicy: read
+    api__CalculateVisitBillApi ->> entity__Appointment: update status 計算待ち -> 会計待ち
+    api__CalculateVisitBillApi -) usecase__CallPatientForPayment: 会計計算完了
+    api__CalculateVisitBillApi -) extsystem__PaymentGateway: 会計計算完了
+    api__CalculateVisitBillApi -->> screen__BillCalculationScreen: done
+  else guard fails
+    api__CalculateVisitBillApi -->> screen__BillCalculationScreen: rejected
+  end

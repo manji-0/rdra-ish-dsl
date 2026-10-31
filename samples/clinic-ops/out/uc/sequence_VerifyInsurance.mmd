@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:VerifyInsurance model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__InsuranceScreen as 保険資格登録画面
+  participant api__EligibilityApi as 保険資格登録 API
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__EligibilityCheck as 資格確認
+  actor__ReceptionClerk ->> screen__InsuranceScreen: 保険資格・限度額情報の登録（新患登録）
+  screen__InsuranceScreen ->> api__EligibilityApi: 保険資格登録 API
+  api__EligibilityApi ->> entity__InsurancePolicy: read
+  Note over api__EligibilityApi: transaction (API atomic boundary)
+  api__EligibilityApi ->> entity__InsurancePolicy: update verification_status=verified, verified_at=set, limit_category=obtained
+  api__EligibilityApi ->> entity__EligibilityCheck: create result=eligvalid, reference_no=set
+  api__EligibilityApi -->> screen__InsuranceScreen: done

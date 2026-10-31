@@ -78,8 +78,8 @@ business-facing. It explains how the BUC is carried out over time while leaving 
 APIs, events, and entities to describe concrete interaction and implementation effects:
 
 - inside a BUC, the flow diagram (`--kind flow --buc`) draws its steps in order with the
-  use cases each covers, and the UC複合図 (`--kind usecase --buc`) the actors, screens,
-  information, and events of those use cases;
+  use cases each covers, and the robustness diagram (`--kind robustness --buc`) the
+  screens, controls, and entities of those use cases;
 - flow predicates make UC order, alternatives, exceptions, and loops explicit in the
   model rather than only in diagram layout;
 - when a BUC hands off to another BUC, the event diagram (`--kind event`) shows
@@ -214,7 +214,7 @@ The practical reading is:
 1. Use BUCs to choose the business-value slice under review.
 2. Treat business flow as the concrete realization of that BUC.
 3. Use UCs to name the concrete interactions inside that flow.
-4. Use the flow, UC複合図, event, information, and state diagrams and the CRUD matrix
+4. Use the flow, robustness, sequence, event, and state diagrams and the CRUD matrix
    to review the flow from both business and design angles.
 
 This leads to a deliberate asymmetry:
@@ -228,6 +228,31 @@ This leads to a deliberate asymmetry:
 | What data or lifecycle effect does an action have? | CRUD, API, `sets`, `raises`, `transitions` |
 | What technical boundary carries the action? | Screen/API/System relationships |
 | What authority or medium constrains the action? | `has_permission`, `requires_permission`, `requires_medium`, screen-constraints CSV, and actor-permission audit |
+
+## Outputs By Reader
+
+<!-- derived-from #reading-the-three-together -->
+
+The four RDRA layers place elements in the `rdra` diagram. They do not order a document.
+A document follows its reader, and the outputs split between two readers.
+
+| Reader | Question | Outputs |
+|---|---|---|
+| Product manager | Why build it, for whom, and what counts as done? | `list --kind goal`, `list --kind actor`, `list --kind buc-roles`, `list --kind requirement` (with its `goals` and `bucs`), `diagram --kind requirement` (the goal, requirement, and BUC tree with the out-of-scope requirements), `diagram --kind context`, `diagram --kind business`, `diagram --kind flow --buc`, `list --kind rule`, `list --kind nfr` |
+| Engineer | What does each use case touch, in what order, under which rules? | `diagram --kind robustness --buc`, `diagram --kind sequence --usecase`, `diagram --kind state --entity` and `states`, `diagram --kind er`, `list --kind entity`, `list --kind rule`, `csv --kind api-matrix`, `list --kind actor-permission-audit`, `diagram --kind event`, `export --kind asyncapi` |
+
+An engineer reads in three steps:
+
+1. The robustness diagram of a BUC gives the structure: the screens, the controls they
+   call, and the entities each control reads and writes.
+2. The sequence diagram of a use case gives the processing: the guards, then each write
+   in order, then the events it raises.
+3. The state tables, the data model, and the rules give the specification each write must
+   keep.
+
+The UC複合図 and the whole RDRA diagram stay available for an RDRA review, but neither
+reader starts from them. `samples/clinic-ops/design-doc.md`
+and `samples/clinic-ops/prd.md` follow these two orders.
 
 ## Modeling Heuristics
 

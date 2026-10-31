@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:CloseCarePlan model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__CareCoordinator as 患者支援・地域連携担当
+  participant screen__CarePlanScreen as ケアプラン画面
+  participant usecase__CloseCarePlan as ケアプランの終了
+  participant entity__CarePlan as ケアプラン
+  actor__CareCoordinator ->> screen__CarePlanScreen: ケアプランの終了
+  screen__CarePlanScreen ->> usecase__CloseCarePlan: ケアプランの終了
+  alt CarePlan.status == 経過観察中
+    usecase__CloseCarePlan ->> entity__CarePlan: update status 経過観察中 -> 終了, closed_at=set
+    usecase__CloseCarePlan -->> screen__CarePlanScreen: done
+  else guard fails
+    usecase__CloseCarePlan -->> screen__CarePlanScreen: rejected
+  end

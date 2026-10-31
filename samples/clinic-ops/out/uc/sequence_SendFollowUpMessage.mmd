@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:SendFollowUpMessage model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__CareCoordinator as 患者支援・地域連携担当
+  participant screen__PatientMessageScreen as 患者連絡画面
+  participant api__SendFollowUpMessageApi as 患者連絡 API
+  participant entity__PatientMessage as 患者連絡
+  actor__CareCoordinator ->> screen__PatientMessageScreen: 患者への連絡
+  screen__PatientMessageScreen ->> api__SendFollowUpMessageApi: 患者連絡 API
+  api__SendFollowUpMessageApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: done

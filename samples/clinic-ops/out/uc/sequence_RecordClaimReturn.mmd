@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordClaimReturn model=samples/clinic-ops
+%% kinds: actor extsystem timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant extsystem__ClaimsReviewOrganization as 審査支払機関（支払基金・国保連）
+  participant timer__ReturnDownloadCheck as 返戻レセプトの取得（3か月以内）
+  participant screen__ClaimScreen as レセプト画面
+  participant api__ClaimResultApi as 審査結果 API
+  participant entity__ClaimStatement as レセプト
+  actor__ClaimsClerk ->> screen__ClaimScreen: 返戻レセプトの取込
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: 返戻
+  timer__ReturnDownloadCheck ->> api__ClaimResultApi: 返戻レセプトの取得（3か月以内）
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 審査中
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 審査中 -> 返戻, return_reason=set
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end

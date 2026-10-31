@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:ReviewClaimTransfer model=samples/clinic-ops
+%% kinds: actor extsystem screen usecase entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant extsystem__ClaimsReviewOrganization as 審査支払機関（支払基金・国保連）
+  participant screen__ClaimScreen as レセプト画面
+  participant usecase__ReviewClaimTransfer as 資格の振替・分割の確認
+  participant entity__ClaimStatement as レセプト
+  actor__ClaimsClerk ->> screen__ClaimScreen: 資格の振替・分割の確認
+  extsystem__ClaimsReviewOrganization ->> usecase__ReviewClaimTransfer: 資格の振替・分割
+  screen__ClaimScreen ->> usecase__ReviewClaimTransfer: 資格の振替・分割の確認
+  usecase__ReviewClaimTransfer ->> entity__ClaimStatement: read
+  usecase__ReviewClaimTransfer -->> screen__ClaimScreen: done

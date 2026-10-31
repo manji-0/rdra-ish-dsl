@@ -157,6 +157,18 @@
   holding one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`, with no states or transitions
   and so no `usecase` kind in the header. Read a model with `--entity`, or `--buc`, which
   still draws full models.
+- `samples/clinic-ops/design-sample.md`, which followed RDRA's four layers, is replaced by
+  two documents for two readers. `design-doc.md` (engineers) reads structure, processing,
+  then specification: the system context, a robustness diagram, use case table, and folded
+  sequence diagrams per BUC, then a state diagram per entity, data, rules, CRUD and
+  permissions, non-functional requirements, and events, with the UC複合図 in an appendix.
+  `prd.md` (PdM) holds the goals and metrics, the users and the BUCs each takes part in
+  (`list --kind buc-roles`), the requirement value tree and the requirements by goal with
+  the BUCs they motivate, the non-goals, the business flow and each BUC's flow, and the
+  rules. `scripts/gen-clinic-ops-docs.py` builds both from `list`/`csv` output and the
+  committed diagrams, so it no longer parses `.rdra`; clinic-ops commits a sequence diagram
+  for each of its 96 use cases, its whole ER diagram, the Prescription state table, and its
+  AsyncAPI export.
 - A rule or a condition body shows an `Enum` or variation value by its label when it has
   one: `ClinicalOrder.status == オーダ済` (was `== clordered`). This holds for the `rule`
   column of `list --kind rule`, the `body` column of `list --kind condition`, the guards of

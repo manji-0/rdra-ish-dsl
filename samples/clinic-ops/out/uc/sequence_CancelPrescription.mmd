@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:CancelPrescription model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__PrescriptionScreen as 処方画面
+  participant usecase__CancelPrescription as 処方の取消
+  participant entity__Prescription as 処方箋
+  actor__Clinician ->> screen__PrescriptionScreen: 処方の取消
+  screen__PrescriptionScreen ->> usecase__CancelPrescription: 処方の取消
+  alt Prescription.status == 処方入力中
+    usecase__CancelPrescription ->> entity__Prescription: update status 処方入力中 -> 取消
+    usecase__CancelPrescription -->> screen__PrescriptionScreen: done
+  else guard fails
+    usecase__CancelPrescription -->> screen__PrescriptionScreen: rejected
+  end

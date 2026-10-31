@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:PostPayment model=samples/clinic-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant extsystem__ClaimsReviewOrganization as 審査支払機関（支払基金・国保連）
+  participant screen__PaymentPostingScreen as 入金画面
+  participant api__PaymentPostApi as 入金 API
+  participant entity__ClaimStatement as レセプト
+  actor__ClaimsClerk ->> screen__PaymentPostingScreen: 診療報酬の入金
+  extsystem__ClaimsReviewOrganization ->> api__PaymentPostApi: 診療報酬の支払
+  screen__PaymentPostingScreen ->> api__PaymentPostApi: 入金 API
+  alt ClaimStatement.status == 審査中 and ClaimStatement.status == 査定 and ClaimStatement.status == 再審査請求中
+    api__PaymentPostApi ->> entity__ClaimStatement: update status 審査中 -> 支払済, status 査定 -> 支払済, status 再審査請求中 -> 支払済, paid_at=set
+    api__PaymentPostApi -->> screen__PaymentPostingScreen: done
+  else guard fails
+    api__PaymentPostApi -->> screen__PaymentPostingScreen: rejected
+  end

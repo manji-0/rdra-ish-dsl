@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:ExpireIntakeForms model=samples/clinic-ops
+%% kinds: actor timer screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant timer__IntakeExpiryCheck as 問診票の期限切れ確認（毎晩）
+  participant screen__IntakePortalScreen as 問診票ポータル画面
+  participant usecase__ExpireIntakeForms as 問診票の期限切れ
+  participant entity__IntakePacket as 問診票
+  actor__ReceptionClerk ->> screen__IntakePortalScreen: 問診票の期限切れ
+  timer__IntakeExpiryCheck ->> usecase__ExpireIntakeForms: 問診票の期限切れ確認（毎晩）
+  screen__IntakePortalScreen ->> usecase__ExpireIntakeForms: 問診票の期限切れ
+  alt IntakePacket.status == 送付済
+    usecase__ExpireIntakeForms ->> entity__IntakePacket: update status 送付済 -> 期限切れ
+    usecase__ExpireIntakeForms -->> screen__IntakePortalScreen: done
+  else guard fails
+    usecase__ExpireIntakeForms -->> screen__IntakePortalScreen: rejected
+  end

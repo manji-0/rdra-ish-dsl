@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReconcileBalance model=samples/clinic-ops
+%% kinds: actor timer screen api entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant timer__ReceivablesMonthlyReview as 未収金管理台帳の作成（毎月）
+  participant screen__BalanceScreen as 未収金画面
+  participant api__BalanceApi as 未収金 API
+  participant entity__PaymentTransaction as 精算
+  participant entity__AccountBalance as 未収金残高
+  actor__ClaimsClerk ->> screen__BalanceScreen: 未収金管理台帳の作成
+  timer__ReceivablesMonthlyReview ->> api__BalanceApi: 未収金管理台帳の作成（毎月）
+  screen__BalanceScreen ->> api__BalanceApi: 未収金 API
+  api__BalanceApi ->> entity__PaymentTransaction: read
+  api__BalanceApi ->> entity__AccountBalance: update is_closed=true, closed_at=set
+  api__BalanceApi -->> screen__BalanceScreen: done

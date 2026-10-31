@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ExpirePrescription model=samples/clinic-ops
+%% kinds: timer screen api entity
+%% omitted: buc
+sequenceDiagram
+  participant timer__PrescriptionUsePeriodCheck as 処方箋の使用期間切れ確認
+  participant screen__PharmacyStatusScreen as 電子処方箋の状況画面
+  participant api__ConfirmDispenseApi as 調剤結果 API
+  participant entity__Prescription as 処方箋
+  timer__PrescriptionUsePeriodCheck ->> api__ConfirmDispenseApi: 処方箋の使用期間切れ確認
+  screen__PharmacyStatusScreen ->> api__ConfirmDispenseApi: 調剤結果 API
+  alt Prescription.status == 院外処方箋発行済
+    api__ConfirmDispenseApi ->> entity__Prescription: update status 院外処方箋発行済 -> 使用期間切れ
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: done
+  else guard fails
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: rejected
+  end

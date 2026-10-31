@@ -1,0 +1,23 @@
+%% rdra-ish diagram=sequence scope=usecase:SendAppointmentNotice model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant usecase__BookAppointment as 予約の確定
+  participant usecase__CancelAppointment as 予約の取消
+  participant usecase__RescheduleAppointment as 予約の変更
+  participant usecase__ScheduleFollowUpVisit as 再診の予約
+  participant screen__AppointmentNoticeScreen as 予約通知画面
+  participant api__AppointmentNoticeApi as 予約通知 API
+  participant entity__Notification as 通知
+  participant entity__PatientMessage as 患者連絡
+  actor__ReceptionClerk ->> screen__AppointmentNoticeScreen: 予約の通知
+  usecase__BookAppointment ->> api__AppointmentNoticeApi: 予約確定
+  usecase__CancelAppointment ->> api__AppointmentNoticeApi: 予約取消
+  usecase__RescheduleAppointment ->> api__AppointmentNoticeApi: 予約変更
+  usecase__ScheduleFollowUpVisit ->> api__AppointmentNoticeApi: 予約確定
+  screen__AppointmentNoticeScreen ->> api__AppointmentNoticeApi: 予約通知 API
+  Note over api__AppointmentNoticeApi: transaction (API atomic boundary)
+  api__AppointmentNoticeApi ->> entity__Notification: create delivered_at=set
+  api__AppointmentNoticeApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__AppointmentNoticeApi -->> screen__AppointmentNoticeScreen: done

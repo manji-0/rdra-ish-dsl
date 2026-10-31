@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RequestReexamination model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant screen__ClaimScreen as レセプト画面
+  participant api__SubmitClaimApi as オンライン請求 API
+  participant entity__ClaimStatement as レセプト
+  actor__ClaimsClerk ->> screen__ClaimScreen: 再審査請求
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 査定
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 査定 -> 再審査請求中
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end

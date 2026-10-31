@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordEligibilityDeclaration model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__EligibilityScreen as 資格確認画面
+  participant api__EligibilityResultApi as 資格確認結果 API
+  participant entity__EligibilityCheck as 資格確認
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 被保険者資格申立書の受領
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 申立書で確認
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end

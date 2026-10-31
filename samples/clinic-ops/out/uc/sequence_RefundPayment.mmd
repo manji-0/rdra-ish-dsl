@@ -1,0 +1,19 @@
+%% rdra-ish diagram=sequence scope=usecase:RefundPayment model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__AccountsClerk as 医事課 会計担当
+  participant screen__PaymentWindowScreen as 会計窓口画面
+  participant usecase__RefundPayment as 還付・追加徴収
+  participant entity__AccountBalance as 未収金残高
+  participant entity__PaymentTransaction as 精算
+  actor__AccountsClerk ->> screen__PaymentWindowScreen: 還付・追加徴収
+  screen__PaymentWindowScreen ->> usecase__RefundPayment: 還付・追加徴収
+  alt PaymentTransaction.status == 収納済
+    Note over usecase__RefundPayment: transaction (inferred from FK)
+    usecase__RefundPayment ->> entity__AccountBalance: update
+    usecase__RefundPayment ->> entity__PaymentTransaction: update status 収納済 -> 還付済
+    usecase__RefundPayment -->> screen__PaymentWindowScreen: done
+  else guard fails
+    usecase__RefundPayment -->> screen__PaymentWindowScreen: rejected
+  end

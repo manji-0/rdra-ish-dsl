@@ -1,0 +1,15 @@
+%% rdra-ish diagram=sequence scope=usecase:RegisterPatient model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__PatientProfileScreen as 患者基本情報画面
+  participant api__RegisterPatientApi as 新患登録 API
+  participant entity__PatientAccount as 患者登録
+  participant entity__PatientProfile as 患者基本情報
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 新患登録
+  screen__PatientProfileScreen ->> api__RegisterPatientApi: 新患登録 API
+  Note over api__RegisterPatientApi: transaction (API atomic boundary)
+  api__RegisterPatientApi ->> entity__PatientAccount: create
+  api__RegisterPatientApi ->> entity__PatientProfile: create
+  api__RegisterPatientApi -->> screen__PatientProfileScreen: done

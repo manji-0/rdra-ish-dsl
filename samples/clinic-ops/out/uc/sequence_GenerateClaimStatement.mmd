@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:GenerateClaimStatement model=samples/clinic-ops
+%% kinds: actor timer screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant timer__MonthlyClaimCreation as 前月分レセプトの作成（月初）
+  participant screen__ClaimScreen as レセプト画面
+  participant api__GenerateClaimApi as レセプト作成 API
+  participant entity__Charge as コスト（診療行為）
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__ClaimStatement as レセプト
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプト作成
+  timer__MonthlyClaimCreation ->> api__GenerateClaimApi: 前月分レセプトの作成（月初）
+  screen__ClaimScreen ->> api__GenerateClaimApi: レセプト作成 API
+  api__GenerateClaimApi ->> entity__Charge: read
+  api__GenerateClaimApi ->> entity__InsurancePolicy: read
+  api__GenerateClaimApi ->> entity__ClaimStatement: create
+  api__GenerateClaimApi -->> screen__ClaimScreen: done

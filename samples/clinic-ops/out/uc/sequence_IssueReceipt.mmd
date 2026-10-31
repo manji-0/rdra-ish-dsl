@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:IssueReceipt model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__AccountsClerk as 医事課 会計担当
+  participant screen__PaymentWindowScreen as 会計窓口画面
+  participant api__ReceiptApi as 領収証 API
+  participant entity__PaymentTransaction as 精算
+  participant entity__Charge as コスト（診療行為）
+  participant entity__Appointment as 予約・受診
+  actor__AccountsClerk ->> screen__PaymentWindowScreen: 領収証・明細書の交付
+  screen__PaymentWindowScreen ->> api__ReceiptApi: 領収証 API
+  alt Appointment.status == 精算済
+    api__ReceiptApi ->> entity__PaymentTransaction: read
+    api__ReceiptApi ->> entity__Charge: read
+    api__ReceiptApi ->> entity__Appointment: update status 精算済 -> 完了, completed_at=set
+    api__ReceiptApi -->> screen__PaymentWindowScreen: done
+  else guard fails
+    api__ReceiptApi -->> screen__PaymentWindowScreen: rejected
+  end

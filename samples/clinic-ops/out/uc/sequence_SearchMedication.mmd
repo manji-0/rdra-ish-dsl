@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:SearchMedication model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__MedicationSearchScreen as 薬剤検索画面
+  participant api__MedicationCatalogApi as 薬剤マスタ API
+  participant entity__Medication as 薬剤
+  actor__Clinician ->> screen__MedicationSearchScreen: 薬剤の検索
+  screen__MedicationSearchScreen ->> api__MedicationCatalogApi: 薬剤マスタ API
+  api__MedicationCatalogApi ->> entity__Medication: read
+  api__MedicationCatalogApi -->> screen__MedicationSearchScreen: done

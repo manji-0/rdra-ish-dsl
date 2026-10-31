@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:VoidCharge model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant screen__ChargeWorklistScreen as コスト一覧画面
+  participant usecase__VoidCharge as コストの取消
+  participant entity__Charge as コスト（診療行為）
+  actor__ClaimsClerk ->> screen__ChargeWorklistScreen: コストの取消
+  screen__ChargeWorklistScreen ->> usecase__VoidCharge: コストの取消
+  usecase__VoidCharge ->> entity__Charge: update status=chargevoided
+  usecase__VoidCharge -->> screen__ChargeWorklistScreen: done

@@ -1,0 +1,21 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveLabResult model=samples/clinic-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant extsystem__OutsourcedLabSystem as 外注検査システム
+  participant screen__ResultReviewScreen as 検査結果確認画面
+  participant api__ReceiveLabResultApi as 検査結果受信 API
+  participant entity__ClinicalOrder as 検査オーダ
+  participant entity__LabResult as 検査結果
+  actor__Nurse ->> screen__ResultReviewScreen: 検査結果の受信
+  extsystem__OutsourcedLabSystem ->> api__ReceiveLabResultApi: 検査結果の受信
+  screen__ResultReviewScreen ->> api__ReceiveLabResultApi: 検査結果受信 API
+  alt ClinicalOrder.status == 採取済
+    Note over api__ReceiveLabResultApi: transaction (API atomic boundary)
+    api__ReceiveLabResultApi ->> entity__ClinicalOrder: update status 採取済 -> 結果受信, resulted_at=set
+    api__ReceiveLabResultApi ->> entity__LabResult: create received_at=set
+    api__ReceiveLabResultApi -->> screen__ResultReviewScreen: done
+  else guard fails
+    api__ReceiveLabResultApi -->> screen__ResultReviewScreen: rejected
+  end

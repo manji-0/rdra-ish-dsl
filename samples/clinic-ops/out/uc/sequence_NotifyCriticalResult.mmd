@@ -1,0 +1,17 @@
+%% rdra-ish diagram=sequence scope=usecase:NotifyCriticalResult model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant usecase__ReviewLabResult as 検査結果の確認
+  participant screen__CriticalNoticeScreen as 重要結果通知画面
+  participant api__CriticalNoticeApi as 重要結果通知 API
+  participant entity__Notification as 通知
+  participant entity__PatientMessage as 患者連絡
+  actor__Clinician ->> screen__CriticalNoticeScreen: 重要結果（パニック値）の通知
+  usecase__ReviewLabResult ->> api__CriticalNoticeApi: 検査結果の確認
+  screen__CriticalNoticeScreen ->> api__CriticalNoticeApi: 重要結果通知 API
+  Note over api__CriticalNoticeApi: transaction (API atomic boundary)
+  api__CriticalNoticeApi ->> entity__Notification: create delivered_at=set
+  api__CriticalNoticeApi ->> entity__PatientMessage: create status=msgsent, sent_at=set
+  api__CriticalNoticeApi -->> screen__CriticalNoticeScreen: done

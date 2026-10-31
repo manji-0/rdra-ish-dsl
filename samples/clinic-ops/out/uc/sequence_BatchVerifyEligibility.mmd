@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:BatchVerifyEligibility model=samples/clinic-ops
+%% kinds: actor timer screen api entity
+%% omitted: buc condition
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant timer__EligibilityBatchInquiry as 予約患者の資格の一括照会（来院前）
+  participant screen__EligibilityScreen as 資格確認画面
+  participant api__OnlineEligibilityApi as オンライン資格確認 API
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__EligibilityCheck as 資格確認
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 資格の一括照会
+  timer__EligibilityBatchInquiry ->> api__OnlineEligibilityApi: 予約患者の資格の一括照会（来院前）
+  screen__EligibilityScreen ->> api__OnlineEligibilityApi: オンライン資格確認 API
+  alt 予約済みの患者: Appointment.status == 予約済
+    api__OnlineEligibilityApi ->> entity__InsurancePolicy: read
+    api__OnlineEligibilityApi ->> entity__EligibilityCheck: create
+    api__OnlineEligibilityApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__OnlineEligibilityApi -->> screen__EligibilityScreen: rejected
+  end

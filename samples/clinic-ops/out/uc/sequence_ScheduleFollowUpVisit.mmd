@@ -1,0 +1,25 @@
+%% rdra-ish diagram=sequence scope=usecase:ScheduleFollowUpVisit model=samples/clinic-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__CareCoordinator as 患者支援・地域連携担当
+  participant screen__FollowUpScheduleScreen as 再診予約画面
+  participant api__FollowUpScheduleApi as 再診予約 API
+  participant entity__Appointment as 予約・受診
+  participant entity__ProviderSchedule as 診療枠
+  participant api__AppointmentNoticeApi as 予約通知 API
+  participant extsystem__MessagingGateway as 患者通知サービス
+  participant api__IntakeMessagingApi as 問診票送付 API
+  actor__CareCoordinator ->> screen__FollowUpScheduleScreen: 再診の予約
+  screen__FollowUpScheduleScreen ->> api__FollowUpScheduleApi: 再診予約 API
+  alt Appointment.status == 仮押さえ
+    Note over api__FollowUpScheduleApi: transaction (API atomic boundary)
+    api__FollowUpScheduleApi ->> entity__Appointment: create status 仮押さえ -> 予約済
+    api__FollowUpScheduleApi ->> entity__ProviderSchedule: update
+    api__FollowUpScheduleApi -) api__AppointmentNoticeApi: 予約確定
+    api__FollowUpScheduleApi -) extsystem__MessagingGateway: 予約確定
+    api__FollowUpScheduleApi -) api__IntakeMessagingApi: 予約確定
+    api__FollowUpScheduleApi -->> screen__FollowUpScheduleScreen: done
+  else guard fails
+    api__FollowUpScheduleApi -->> screen__FollowUpScheduleScreen: rejected
+  end

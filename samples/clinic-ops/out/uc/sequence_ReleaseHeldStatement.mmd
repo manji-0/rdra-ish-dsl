@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReleaseHeldStatement model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant screen__ClaimScreen as レセプト画面
+  participant api__ClaimEditApi as レセプト点検・訂正 API
+  participant entity__ClaimStatement as レセプト
+  actor__ClaimsClerk ->> screen__ClaimScreen: 保留レセプトの再提出準備
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 保留
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 保留 -> 院内点検中
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end

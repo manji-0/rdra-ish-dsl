@@ -1,0 +1,1207 @@
+{
+  "asyncapi": "3.1.0",
+  "channels": {
+    "EvAppointmentCancelled": {
+      "address": "EvAppointmentCancelled",
+      "messages": {
+        "EvAppointmentCancelled": {
+          "$ref": "#/components/messages/EvAppointmentCancelled"
+        }
+      },
+      "x-subscriber": [
+        "MessagingGateway"
+      ]
+    },
+    "EvAppointmentCheckedIn": {
+      "address": "EvAppointmentCheckedIn",
+      "messages": {
+        "EvAppointmentCheckedIn": {
+          "$ref": "#/components/messages/EvAppointmentCheckedIn"
+        }
+      },
+      "x-subscriber": [
+        "OnlineEligibilitySystem"
+      ]
+    },
+    "EvAppointmentRescheduled": {
+      "address": "EvAppointmentRescheduled",
+      "messages": {
+        "EvAppointmentRescheduled": {
+          "$ref": "#/components/messages/EvAppointmentRescheduled"
+        }
+      },
+      "x-subscriber": [
+        "MessagingGateway"
+      ]
+    },
+    "EvAppointmentScheduled": {
+      "address": "EvAppointmentScheduled",
+      "messages": {
+        "EvAppointmentScheduled": {
+          "$ref": "#/components/messages/EvAppointmentScheduled"
+        }
+      },
+      "x-subscriber": [
+        "MessagingGateway"
+      ]
+    },
+    "EvBillCalculated": {
+      "address": "EvBillCalculated",
+      "messages": {
+        "EvBillCalculated": {
+          "$ref": "#/components/messages/EvBillCalculated"
+        }
+      },
+      "x-subscriber": [
+        "PaymentGateway"
+      ]
+    },
+    "EvClaimAccepted": {
+      "address": "EvClaimAccepted",
+      "messages": {
+        "EvClaimAccepted": {
+          "$ref": "#/components/messages/EvClaimAccepted"
+        }
+      },
+      "x-publisher": [
+        "ClaimsReviewOrganization"
+      ]
+    },
+    "EvClaimAssessed": {
+      "address": "EvClaimAssessed",
+      "messages": {
+        "EvClaimAssessed": {
+          "$ref": "#/components/messages/EvClaimAssessed"
+        }
+      },
+      "x-publisher": [
+        "ClaimsReviewOrganization"
+      ]
+    },
+    "EvClaimReceiptError": {
+      "address": "EvClaimReceiptError",
+      "messages": {
+        "EvClaimReceiptError": {
+          "$ref": "#/components/messages/EvClaimReceiptError"
+        }
+      },
+      "x-publisher": [
+        "ClaimsReviewOrganization"
+      ]
+    },
+    "EvClaimReturned": {
+      "address": "EvClaimReturned",
+      "messages": {
+        "EvClaimReturned": {
+          "$ref": "#/components/messages/EvClaimReturned"
+        }
+      },
+      "x-publisher": [
+        "ClaimsReviewOrganization"
+      ]
+    },
+    "EvClaimStatementsSubmitted": {
+      "address": "EvClaimStatementsSubmitted",
+      "messages": {
+        "EvClaimStatementsSubmitted": {
+          "$ref": "#/components/messages/EvClaimStatementsSubmitted"
+        }
+      },
+      "x-subscriber": [
+        "ClaimsReviewOrganization"
+      ]
+    },
+    "EvClaimTransferred": {
+      "address": "EvClaimTransferred",
+      "messages": {
+        "EvClaimTransferred": {
+          "$ref": "#/components/messages/EvClaimTransferred"
+        }
+      },
+      "x-publisher": [
+        "ClaimsReviewOrganization"
+      ]
+    },
+    "EvClinicalOrderReviewed": {
+      "address": "EvClinicalOrderReviewed",
+      "messages": {
+        "EvClinicalOrderReviewed": {
+          "$ref": "#/components/messages/EvClinicalOrderReviewed"
+        }
+      }
+    },
+    "EvConsultationCompleted": {
+      "address": "EvConsultationCompleted",
+      "messages": {
+        "EvConsultationCompleted": {
+          "$ref": "#/components/messages/EvConsultationCompleted"
+        }
+      }
+    },
+    "EvEligibilityChecked": {
+      "address": "EvEligibilityChecked",
+      "messages": {
+        "EvEligibilityChecked": {
+          "$ref": "#/components/messages/EvEligibilityChecked"
+        }
+      },
+      "x-publisher": [
+        "OnlineEligibilitySystem"
+      ]
+    },
+    "EvEncounterSigned": {
+      "address": "EvEncounterSigned",
+      "messages": {
+        "EvEncounterSigned": {
+          "$ref": "#/components/messages/EvEncounterSigned"
+        }
+      }
+    },
+    "EvLabResultReceived": {
+      "address": "EvLabResultReceived",
+      "messages": {
+        "EvLabResultReceived": {
+          "$ref": "#/components/messages/EvLabResultReceived"
+        }
+      },
+      "x-publisher": [
+        "OutsourcedLabSystem"
+      ]
+    },
+    "EvPaymentSettled": {
+      "address": "EvPaymentSettled",
+      "messages": {
+        "EvPaymentSettled": {
+          "$ref": "#/components/messages/EvPaymentSettled"
+        }
+      },
+      "x-publisher": [
+        "PaymentGateway"
+      ]
+    },
+    "EvPharmacyInquiry": {
+      "address": "EvPharmacyInquiry",
+      "messages": {
+        "EvPharmacyInquiry": {
+          "$ref": "#/components/messages/EvPharmacyInquiry"
+        }
+      },
+      "x-publisher": [
+        "InsurancePharmacy"
+      ]
+    },
+    "EvPrescriptionDispensed": {
+      "address": "EvPrescriptionDispensed",
+      "messages": {
+        "EvPrescriptionDispensed": {
+          "$ref": "#/components/messages/EvPrescriptionDispensed"
+        }
+      },
+      "x-publisher": [
+        "EPrescriptionService"
+      ]
+    },
+    "EvPrescriptionIssued": {
+      "address": "EvPrescriptionIssued",
+      "messages": {
+        "EvPrescriptionIssued": {
+          "$ref": "#/components/messages/EvPrescriptionIssued"
+        }
+      },
+      "x-subscriber": [
+        "EPrescriptionService"
+      ]
+    },
+    "EvRemittance": {
+      "address": "EvRemittance",
+      "messages": {
+        "EvRemittance": {
+          "$ref": "#/components/messages/EvRemittance"
+        }
+      },
+      "x-publisher": [
+        "ClaimsReviewOrganization"
+      ]
+    }
+  },
+  "components": {
+    "messages": {
+      "EvAppointmentCancelled": {
+        "name": "EvAppointmentCancelled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAppointmentCancelled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "予約取消",
+        "x-rdra-ish-raised-by-usecases": [
+          "CancelAppointment"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "SendAppointmentNotice"
+        ]
+      },
+      "EvAppointmentCheckedIn": {
+        "name": "EvAppointmentCheckedIn",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAppointmentCheckedIn",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "受付完了",
+        "x-rdra-ish-raised-by-usecases": [
+          "CheckInPatient"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "apptcheckedin",
+            "to": "apptinconsult"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [
+          "BucClinicalEncounter"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "OpenEncounter",
+          "PrepareEncounter"
+        ]
+      },
+      "EvAppointmentRescheduled": {
+        "name": "EvAppointmentRescheduled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAppointmentRescheduled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "予約変更",
+        "x-rdra-ish-raised-by-usecases": [
+          "RescheduleAppointment"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "SendAppointmentNotice"
+        ]
+      },
+      "EvAppointmentScheduled": {
+        "name": "EvAppointmentScheduled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAppointmentScheduled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "予約確定",
+        "x-rdra-ish-raised-by-usecases": [
+          "BookAppointment",
+          "ScheduleFollowUpVisit"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucPatientOnboarding"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "SendAppointmentNotice",
+          "SendIntakeForms"
+        ]
+      },
+      "EvBillCalculated": {
+        "name": "EvBillCalculated",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvBillCalculated",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "会計計算完了",
+        "x-rdra-ish-raised-by-usecases": [
+          "CalculateVisitBill"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "CallPatientForPayment"
+        ]
+      },
+      "EvClaimAccepted": {
+        "name": "EvClaimAccepted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimAccepted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "レセプト受付",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "stmtsubmitted",
+            "to": "stmtunderreview"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveClaimAccepted"
+        ]
+      },
+      "EvClaimAssessed": {
+        "name": "EvClaimAssessed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimAssessed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "査定",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "stmtunderreview",
+            "to": "stmtassessed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordClaimAssessment"
+        ]
+      },
+      "EvClaimReceiptError": {
+        "name": "EvClaimReceiptError",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimReceiptError",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "受付不能・要確認",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "stmtsubmitted",
+            "to": "stmtreceipterror"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordReceiptError"
+        ]
+      },
+      "EvClaimReturned": {
+        "name": "EvClaimReturned",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimReturned",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "返戻",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "stmtunderreview",
+            "to": "stmtreturned"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordClaimReturn"
+        ]
+      },
+      "EvClaimStatementsSubmitted": {
+        "name": "EvClaimStatementsSubmitted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimStatementsSubmitted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "レセプト請求",
+        "x-rdra-ish-raised-by-usecases": [
+          "SubmitClaimStatements"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvClaimTransferred": {
+        "name": "EvClaimTransferred",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimTransferred",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "資格の振替・分割",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReviewClaimTransfer"
+        ]
+      },
+      "EvClinicalOrderReviewed": {
+        "name": "EvClinicalOrderReviewed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClinicalOrderReviewed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "検査結果の確認",
+        "x-rdra-ish-raised-by-usecases": [
+          "ReviewLabResult"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucFollowupCare"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "NotifyCriticalResult",
+          "NotifyPatientResult"
+        ]
+      },
+      "EvConsultationCompleted": {
+        "name": "EvConsultationCompleted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvConsultationCompleted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "診察終了",
+        "x-rdra-ish-raised-by-usecases": [
+          "CompleteConsultation"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucVisitPayment"
+        ],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvEligibilityChecked": {
+        "name": "EvEligibilityChecked",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvEligibilityChecked",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "資格確認結果",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "eligpending",
+            "to": "eliginvalid"
+          },
+          {
+            "from": "eligpending",
+            "to": "elignoinfo"
+          },
+          {
+            "from": "eligpending",
+            "to": "eligvalid"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveEligibilityInvalid",
+          "ReceiveEligibilityNoInfo",
+          "ReceiveEligibilityValid"
+        ]
+      },
+      "EvEncounterSigned": {
+        "name": "EvEncounterSigned",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvEncounterSigned",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "診療記録の署名",
+        "x-rdra-ish-raised-by-usecases": [
+          "SignEncounter"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucBillingClaims",
+          "BucFollowupCare"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "CreateCarePlan",
+          "CreateCharge"
+        ]
+      },
+      "EvLabResultReceived": {
+        "name": "EvLabResultReceived",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvLabResultReceived",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "検査結果の受信",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "clcollected",
+            "to": "clresulted"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveLabResult"
+        ]
+      },
+      "EvPaymentSettled": {
+        "name": "EvPaymentSettled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPaymentSettled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "自動精算機での精算完了",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "apptawaitingpay",
+            "to": "apptsettled"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "SettleAtKiosk"
+        ]
+      },
+      "EvPharmacyInquiry": {
+        "name": "EvPharmacyInquiry",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPharmacyInquiry",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "保険薬局からの疑義照会",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "rxissued",
+            "to": "rxissued"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "AnswerPharmacyInquiry"
+        ]
+      },
+      "EvPrescriptionDispensed": {
+        "name": "EvPrescriptionDispensed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPrescriptionDispensed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "保険薬局での調剤完了",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "rxissued",
+            "to": "rxdispensed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ConfirmDispense"
+        ]
+      },
+      "EvPrescriptionIssued": {
+        "name": "EvPrescriptionIssued",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPrescriptionIssued",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "電子処方箋の登録",
+        "x-rdra-ish-raised-by-usecases": [
+          "IssueOutsidePrescription"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvRemittance": {
+        "name": "EvRemittance",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRemittance",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "診療報酬の支払",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "stmtassessed",
+            "to": "stmtpaid"
+          },
+          {
+            "from": "stmtrereview",
+            "to": "stmtpaid"
+          },
+          {
+            "from": "stmtunderreview",
+            "to": "stmtpaid"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "PostPayment"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish event catalog",
+    "version": "0.1.0"
+  },
+  "operations": {
+    "consumeEvAppointmentCancelled": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentCancelled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentCancelled/messages/EvAppointmentCancelled"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "SendAppointmentNotice"
+      ]
+    },
+    "consumeEvAppointmentCheckedIn": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentCheckedIn"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentCheckedIn/messages/EvAppointmentCheckedIn"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "apptcheckedin",
+          "to": "apptinconsult"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [
+        "BucClinicalEncounter"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "OpenEncounter",
+        "PrepareEncounter"
+      ]
+    },
+    "consumeEvAppointmentRescheduled": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentRescheduled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentRescheduled/messages/EvAppointmentRescheduled"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "SendAppointmentNotice"
+      ]
+    },
+    "consumeEvAppointmentScheduled": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentScheduled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentScheduled/messages/EvAppointmentScheduled"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucPatientOnboarding"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "SendAppointmentNotice",
+        "SendIntakeForms"
+      ]
+    },
+    "consumeEvBillCalculated": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvBillCalculated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvBillCalculated/messages/EvBillCalculated"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "CallPatientForPayment"
+      ]
+    },
+    "consumeEvClaimAccepted": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimAccepted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimAccepted/messages/EvClaimAccepted"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "stmtsubmitted",
+          "to": "stmtunderreview"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveClaimAccepted"
+      ]
+    },
+    "consumeEvClaimAssessed": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimAssessed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimAssessed/messages/EvClaimAssessed"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "stmtunderreview",
+          "to": "stmtassessed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordClaimAssessment"
+      ]
+    },
+    "consumeEvClaimReceiptError": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimReceiptError"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimReceiptError/messages/EvClaimReceiptError"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "stmtsubmitted",
+          "to": "stmtreceipterror"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordReceiptError"
+      ]
+    },
+    "consumeEvClaimReturned": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimReturned"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimReturned/messages/EvClaimReturned"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "stmtunderreview",
+          "to": "stmtreturned"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordClaimReturn"
+      ]
+    },
+    "consumeEvClaimTransferred": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimTransferred"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimTransferred/messages/EvClaimTransferred"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReviewClaimTransfer"
+      ]
+    },
+    "consumeEvClinicalOrderReviewed": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClinicalOrderReviewed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClinicalOrderReviewed/messages/EvClinicalOrderReviewed"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucFollowupCare"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "NotifyCriticalResult",
+        "NotifyPatientResult"
+      ]
+    },
+    "consumeEvConsultationCompleted": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvConsultationCompleted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvConsultationCompleted/messages/EvConsultationCompleted"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucVisitPayment"
+      ],
+      "x-rdra-ish-triggers-usecases": []
+    },
+    "consumeEvEligibilityChecked": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvEligibilityChecked"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvEligibilityChecked/messages/EvEligibilityChecked"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "eligpending",
+          "to": "eliginvalid"
+        },
+        {
+          "from": "eligpending",
+          "to": "elignoinfo"
+        },
+        {
+          "from": "eligpending",
+          "to": "eligvalid"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveEligibilityInvalid",
+        "ReceiveEligibilityNoInfo",
+        "ReceiveEligibilityValid"
+      ]
+    },
+    "consumeEvEncounterSigned": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvEncounterSigned"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvEncounterSigned/messages/EvEncounterSigned"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucBillingClaims",
+        "BucFollowupCare"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "CreateCarePlan",
+        "CreateCharge"
+      ]
+    },
+    "consumeEvLabResultReceived": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvLabResultReceived"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvLabResultReceived/messages/EvLabResultReceived"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "clcollected",
+          "to": "clresulted"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveLabResult"
+      ]
+    },
+    "consumeEvPaymentSettled": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvPaymentSettled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPaymentSettled/messages/EvPaymentSettled"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "apptawaitingpay",
+          "to": "apptsettled"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "SettleAtKiosk"
+      ]
+    },
+    "consumeEvPharmacyInquiry": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvPharmacyInquiry"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPharmacyInquiry/messages/EvPharmacyInquiry"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "rxissued",
+          "to": "rxissued"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "AnswerPharmacyInquiry"
+      ]
+    },
+    "consumeEvPrescriptionDispensed": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvPrescriptionDispensed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPrescriptionDispensed/messages/EvPrescriptionDispensed"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "rxissued",
+          "to": "rxdispensed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ConfirmDispense"
+      ]
+    },
+    "consumeEvRemittance": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRemittance"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRemittance/messages/EvRemittance"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "stmtassessed",
+          "to": "stmtpaid"
+        },
+        {
+          "from": "stmtrereview",
+          "to": "stmtpaid"
+        },
+        {
+          "from": "stmtunderreview",
+          "to": "stmtpaid"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "PostPayment"
+      ]
+    },
+    "publishEvAppointmentCancelled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentCancelled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentCancelled/messages/EvAppointmentCancelled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "CancelAppointment"
+      ]
+    },
+    "publishEvAppointmentCheckedIn": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentCheckedIn"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentCheckedIn/messages/EvAppointmentCheckedIn"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "CheckInPatient"
+      ]
+    },
+    "publishEvAppointmentRescheduled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentRescheduled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentRescheduled/messages/EvAppointmentRescheduled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RescheduleAppointment"
+      ]
+    },
+    "publishEvAppointmentScheduled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAppointmentScheduled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppointmentScheduled/messages/EvAppointmentScheduled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "BookAppointment",
+        "ScheduleFollowUpVisit"
+      ]
+    },
+    "publishEvBillCalculated": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvBillCalculated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvBillCalculated/messages/EvBillCalculated"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "CalculateVisitBill"
+      ]
+    },
+    "publishEvClaimStatementsSubmitted": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvClaimStatementsSubmitted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimStatementsSubmitted/messages/EvClaimStatementsSubmitted"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "SubmitClaimStatements"
+      ]
+    },
+    "publishEvClinicalOrderReviewed": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvClinicalOrderReviewed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClinicalOrderReviewed/messages/EvClinicalOrderReviewed"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ReviewLabResult"
+      ]
+    },
+    "publishEvConsultationCompleted": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvConsultationCompleted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvConsultationCompleted/messages/EvConsultationCompleted"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "CompleteConsultation"
+      ]
+    },
+    "publishEvEncounterSigned": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvEncounterSigned"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvEncounterSigned/messages/EvEncounterSigned"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "SignEncounter"
+      ]
+    },
+    "publishEvPrescriptionIssued": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvPrescriptionIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPrescriptionIssued/messages/EvPrescriptionIssued"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "IssueOutsidePrescription"
+      ]
+    }
+  }
+}

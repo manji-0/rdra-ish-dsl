@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RegisterPerformedProcedure model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant screen__SpecimenScreen as 採血画面
+  participant api__PerformedProcedureApi as 実施登録 API
+  participant entity__ClinicalOrder as 検査オーダ
+  participant entity__Encounter as 診療記録
+  participant entity__Charge as コスト（診療行為）
+  actor__Nurse ->> screen__SpecimenScreen: 実施内容（コスト）の登録
+  screen__SpecimenScreen ->> api__PerformedProcedureApi: 実施登録 API
+  api__PerformedProcedureApi ->> entity__ClinicalOrder: read
+  api__PerformedProcedureApi ->> entity__Encounter: read
+  api__PerformedProcedureApi ->> entity__Charge: create status=chargeposted, posted_at=set, kind=insured, origin=performed
+  api__PerformedProcedureApi -->> screen__SpecimenScreen: done

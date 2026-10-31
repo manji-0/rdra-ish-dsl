@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveReferralLetter model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__ReferralScreen as 紹介状受付画面
+  participant api__ReferralLetterApi as 紹介状 API
+  participant entity__ReferralLetter as 紹介状・診療情報提供書
+  actor__ReceptionClerk ->> screen__ReferralScreen: 紹介状受付処理
+  screen__ReferralScreen ->> api__ReferralLetterApi: 紹介状 API
+  api__ReferralLetterApi ->> entity__ReferralLetter: create direction=inbound, received_at=set
+  api__ReferralLetterApi -->> screen__ReferralScreen: done

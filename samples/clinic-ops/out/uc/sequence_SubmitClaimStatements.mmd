@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:SubmitClaimStatements model=samples/clinic-ops
+%% kinds: actor timer screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant timer__MonthlyClaimDeadline as 前月分レセプトの請求（毎月5日～10日）
+  participant screen__ClaimScreen as レセプト画面
+  participant api__SubmitClaimApi as オンライン請求 API
+  participant entity__ClaimStatement as レセプト
+  participant extsystem__ClaimsReviewOrganization as 審査支払機関（支払基金・国保連）
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプト請求
+  timer__MonthlyClaimDeadline ->> api__SubmitClaimApi: 前月分レセプトの請求（毎月5日～10日）
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 院内点検中
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 院内点検中 -> 請求済, submitted_at=set
+    api__SubmitClaimApi -) extsystem__ClaimsReviewOrganization: レセプト請求
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end

@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:UpdateDemographics model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__PatientProfileScreen as 患者基本情報画面
+  participant api__UpdateDemographicsApi as 患者属性変更 API
+  participant entity__PatientProfile as 患者基本情報
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 患者属性の変更
+  screen__PatientProfileScreen ->> api__UpdateDemographicsApi: 患者属性変更 API
+  api__UpdateDemographicsApi ->> entity__PatientProfile: update
+  api__UpdateDemographicsApi -->> screen__PatientProfileScreen: done

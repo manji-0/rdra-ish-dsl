@@ -1,0 +1,21 @@
+%% rdra-ish diagram=sequence scope=usecase:OpenEncounter model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant usecase__CheckInPatient as 受付（初診・再診）
+  participant screen__EncounterWorkspaceScreen as 診療記録画面
+  participant api__OpenEncounterApi as 診療記録作成 API
+  participant entity__Appointment as 予約・受診
+  participant entity__Encounter as 診療記録
+  actor__Nurse ->> screen__EncounterWorkspaceScreen: 診療記録を開く
+  usecase__CheckInPatient ->> api__OpenEncounterApi: 受付完了
+  screen__EncounterWorkspaceScreen ->> api__OpenEncounterApi: 診療記録作成 API
+  alt Appointment.status == 受付済
+    Note over api__OpenEncounterApi: transaction (API atomic boundary)
+    api__OpenEncounterApi ->> entity__Appointment: update status 受付済 -> 診察中
+    api__OpenEncounterApi ->> entity__Encounter: create
+    api__OpenEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__OpenEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:EnterProxyOrder model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__MedicalClerk as 医師事務作業補助者
+  actor actor__Nurse as 看護師
+  participant screen__OrderEntryScreen as オーダ入力画面
+  participant api__ProxyOrderApi as 代行入力 API
+  participant entity__Encounter as 診療記録
+  participant entity__ClinicalOrder as 検査オーダ
+  actor__MedicalClerk ->> screen__OrderEntryScreen: 検体検査オーダの代行入力
+  actor__Nurse ->> screen__OrderEntryScreen: 検体検査オーダの代行入力
+  screen__OrderEntryScreen ->> api__ProxyOrderApi: 代行入力 API
+  api__ProxyOrderApi ->> entity__Encounter: read
+  api__ProxyOrderApi ->> entity__ClinicalOrder: create physician_confirmed=false
+  api__ProxyOrderApi -->> screen__OrderEntryScreen: done

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:CancelClinicalOrder model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__OrderEntryScreen as オーダ入力画面
+  participant usecase__CancelClinicalOrder as オーダの取消
+  participant entity__ClinicalOrder as 検査オーダ
+  actor__Clinician ->> screen__OrderEntryScreen: オーダの取消
+  screen__OrderEntryScreen ->> usecase__CancelClinicalOrder: オーダの取消
+  alt ClinicalOrder.status == オーダ済
+    usecase__CancelClinicalOrder ->> entity__ClinicalOrder: update status オーダ済 -> 取消
+    usecase__CancelClinicalOrder -->> screen__OrderEntryScreen: done
+  else guard fails
+    usecase__CancelClinicalOrder -->> screen__OrderEntryScreen: rejected
+  end

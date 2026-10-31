@@ -1,0 +1,19 @@
+%% rdra-ish diagram=sequence scope=usecase:AssignRoom model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant screen__RoomBoardScreen as 診察室ボード画面
+  participant api__AssignRoomApi as 診察室案内 API
+  participant entity__Room as 診察室
+  participant entity__Appointment as 予約・受診
+  actor__Nurse ->> screen__RoomBoardScreen: 診察室への案内
+  screen__RoomBoardScreen ->> api__AssignRoomApi: 診察室案内 API
+  alt Appointment.status == 受付済
+    Note over api__AssignRoomApi: transaction (API atomic boundary)
+    api__AssignRoomApi ->> entity__Room: update occupancy_status=roomoccupied
+    api__AssignRoomApi ->> entity__Appointment: update status 受付済 -> 受付済
+    api__AssignRoomApi -->> screen__RoomBoardScreen: done
+  else guard fails
+    api__AssignRoomApi -->> screen__RoomBoardScreen: rejected
+  end

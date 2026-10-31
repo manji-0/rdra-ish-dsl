@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:MarkNoShow model=samples/clinic-ops
+%% kinds: actor timer screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant timer__NoShowSweep as 未来院の確認（毎晩）
+  participant screen__AppointmentScreen as 予約画面
+  participant usecase__MarkNoShow as 未来院の処理
+  participant entity__Appointment as 予約・受診
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 未来院の処理
+  timer__NoShowSweep ->> usecase__MarkNoShow: 未来院の確認（毎晩）
+  screen__AppointmentScreen ->> usecase__MarkNoShow: 未来院の処理
+  alt Appointment.status == 予約済
+    usecase__MarkNoShow ->> entity__Appointment: update status 予約済 -> 未来院
+    usecase__MarkNoShow -->> screen__AppointmentScreen: done
+  else guard fails
+    usecase__MarkNoShow -->> screen__AppointmentScreen: rejected
+  end

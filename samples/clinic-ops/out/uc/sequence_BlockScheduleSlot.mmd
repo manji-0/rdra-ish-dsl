@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:BlockScheduleSlot model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__ScheduleAdminScreen as 診療枠管理画面
+  participant api__BlockScheduleSlotApi as 診療枠停止 API
+  participant entity__ProviderSchedule as 診療枠
+  actor__ClinicAdmin ->> screen__ScheduleAdminScreen: 診療枠の停止
+  screen__ScheduleAdminScreen ->> api__BlockScheduleSlotApi: 診療枠停止 API
+  api__BlockScheduleSlotApi ->> entity__ProviderSchedule: update blocked=true
+  api__BlockScheduleSlotApi -->> screen__ScheduleAdminScreen: done

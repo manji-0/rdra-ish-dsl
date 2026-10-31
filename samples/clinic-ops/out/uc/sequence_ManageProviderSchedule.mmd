@@ -1,0 +1,15 @@
+%% rdra-ish diagram=sequence scope=usecase:ManageProviderSchedule model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__ScheduleAdminScreen as 診療枠管理画面
+  participant api__ManageProviderScheduleApi as 診療枠管理 API
+  participant entity__Provider as 医師マスタ
+  participant entity__ProviderSchedule as 診療枠
+  actor__ClinicAdmin ->> screen__ScheduleAdminScreen: 診療枠の管理
+  screen__ScheduleAdminScreen ->> api__ManageProviderScheduleApi: 診療枠管理 API
+  Note over api__ManageProviderScheduleApi: transaction (API atomic boundary)
+  api__ManageProviderScheduleApi ->> entity__Provider: update
+  api__ManageProviderScheduleApi ->> entity__ProviderSchedule: create
+  api__ManageProviderScheduleApi -->> screen__ScheduleAdminScreen: done

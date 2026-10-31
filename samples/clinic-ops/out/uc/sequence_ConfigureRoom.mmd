@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:ConfigureRoom model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__RoomAdminScreen as 診察室管理画面
+  participant api__RoomAdminApi as 診察室管理 API
+  participant entity__Room as 診察室
+  actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の設定
+  screen__RoomAdminScreen ->> api__RoomAdminApi: 診察室管理 API
+  api__RoomAdminApi ->> entity__Room: create occupancy_status=roomavailable
+  api__RoomAdminApi -->> screen__RoomAdminScreen: done

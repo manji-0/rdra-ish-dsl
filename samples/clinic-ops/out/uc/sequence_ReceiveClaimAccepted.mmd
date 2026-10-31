@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveClaimAccepted model=samples/clinic-ops
+%% kinds: extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  participant extsystem__ClaimsReviewOrganization as 審査支払機関（支払基金・国保連）
+  participant screen__ClaimScreen as レセプト画面
+  participant api__ClaimResultApi as 審査結果 API
+  participant entity__ClaimStatement as レセプト
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: レセプト受付
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 請求済
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 請求済 -> 審査中
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end

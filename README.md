@@ -33,7 +33,7 @@ same way, and every kind in the language names the check or output that reviews 
 |---|---|
 | `check`, `lint` | Type errors, unresolved references, and gaps between layers |
 | `next` | The refinement stage of each BUC, the gaps that block the next stage, and its questions |
-| `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, UC複合図, business flow, information, conditions, state, events, ER, and the whole RDRA graph |
+| `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, robustness, sequence, UC複合図, business flow, information, conditions, state, events, ER, and the whole RDRA graph |
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
 | `export`, `verify` | OpenAPI, DBML, JSON Schema, AsyncAPI, and TLA+ with TLC |
@@ -111,7 +111,9 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 
 - `samples/incremental-order`: seven-step refinement walkthrough
 - `samples/ec-site`: compact end-to-end sample
-- `samples/clinic-ops`: larger model with APIs, events, and access constraints
+- `samples/clinic-ops`: larger model with APIs, events, and access constraints, with a
+  generated design document ([`design-doc.md`](./samples/clinic-ops/design-doc.md)) and PRD
+  ([`prd.md`](./samples/clinic-ops/prd.md))
 - `samples/personal-info`: personal data management sample
 - `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from
   `samples/formal-verification/`; check files individually)

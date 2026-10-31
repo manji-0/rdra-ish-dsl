@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:PrintSpecimenLabel model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant screen__SpecimenScreen as 採血画面
+  participant usecase__PrintSpecimenLabel as 採血管ラベル発行・貼付
+  participant entity__ClinicalOrder as 検査オーダ
+  actor__Nurse ->> screen__SpecimenScreen: 採血管ラベル発行・貼付
+  screen__SpecimenScreen ->> usecase__PrintSpecimenLabel: 採血管ラベル発行・貼付
+  usecase__PrintSpecimenLabel ->> entity__ClinicalOrder: read
+  usecase__PrintSpecimenLabel -->> screen__SpecimenScreen: done

@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:ReviewAuditEvents model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__AuditReviewScreen as 監査ログ画面
+  participant api__AuditApi as 監査 API
+  participant entity__AuditEvent as 監査ログ
+  participant entity__PatientAccount as 患者登録
+  actor__ClinicAdmin ->> screen__AuditReviewScreen: 監査ログの確認
+  screen__AuditReviewScreen ->> api__AuditApi: 監査 API
+  api__AuditApi ->> entity__AuditEvent: read
+  api__AuditApi ->> entity__PatientAccount: read
+  api__AuditApi -->> screen__AuditReviewScreen: done

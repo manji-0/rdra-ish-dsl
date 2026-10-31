@@ -1,0 +1,19 @@
+%% rdra-ish diagram=sequence scope=usecase:DocumentAssessment model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__DiagnosisScreen as 診断入力画面
+  participant api__DocumentAssessmentApi as 診察記録 API
+  participant entity__Encounter as 診療記録
+  participant entity__Diagnosis as 診断
+  actor__Clinician ->> screen__DiagnosisScreen: 診察・診断の記録
+  screen__DiagnosisScreen ->> api__DocumentAssessmentApi: 診察記録 API
+  alt Encounter.status == 記録中
+    Note over api__DocumentAssessmentApi: transaction (API atomic boundary)
+    api__DocumentAssessmentApi ->> entity__Encounter: update status 記録中 -> 記載済
+    api__DocumentAssessmentApi ->> entity__Diagnosis: create
+    api__DocumentAssessmentApi -->> screen__DiagnosisScreen: done
+  else guard fails
+    api__DocumentAssessmentApi -->> screen__DiagnosisScreen: rejected
+  end

@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:PlaceLabOrder model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__OrderEntryScreen as オーダ入力画面
+  participant api__OrderEntryApi as オーダ登録 API
+  participant entity__Encounter as 診療記録
+  participant entity__ClinicalOrder as 検査オーダ
+  actor__Clinician ->> screen__OrderEntryScreen: 検体検査オーダの登録
+  screen__OrderEntryScreen ->> api__OrderEntryApi: オーダ登録 API
+  api__OrderEntryApi ->> entity__Encounter: read
+  api__OrderEntryApi ->> entity__ClinicalOrder: create physician_confirmed=true
+  api__OrderEntryApi -->> screen__OrderEntryScreen: done

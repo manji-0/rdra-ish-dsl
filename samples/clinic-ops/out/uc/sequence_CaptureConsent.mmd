@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:CaptureConsent model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Patient as 患者
+  participant screen__ConsentScreen as 同意取得画面
+  participant api__ConsentApi as 同意 API
+  participant entity__ConsentRecord as 同意記録
+  actor__Patient ->> screen__ConsentScreen: 同意の取得
+  screen__ConsentScreen ->> api__ConsentApi: 同意 API
+  api__ConsentApi ->> entity__ConsentRecord: create signed_at=set, revoked=false
+  api__ConsentApi -->> screen__ConsentScreen: done

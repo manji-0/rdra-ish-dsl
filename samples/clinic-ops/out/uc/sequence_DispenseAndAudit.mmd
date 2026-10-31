@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:DispenseAndAudit model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Pharmacist as 薬剤師
+  participant screen__DispensingScreen as 調剤・監査画面
+  participant api__DispensingApi as 院内調剤 API
+  participant entity__Prescription as 処方箋
+  actor__Pharmacist ->> screen__DispensingScreen: 調剤・監査
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 引換券交付済
+    api__DispensingApi ->> entity__Prescription: update status 引換券交付済 -> 調剤・監査済
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end

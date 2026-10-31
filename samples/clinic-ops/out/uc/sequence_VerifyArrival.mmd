@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:VerifyArrival model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__CheckInScreen as 受付画面
+  participant api__VerifyArrivalApi as 到着確認 API
+  participant entity__Appointment as 予約・受診
+  participant entity__PatientAccount as 患者登録
+  participant entity__InsurancePolicy as 保険資格
+  actor__ReceptionClerk ->> screen__CheckInScreen: 予約票・診察券の確認
+  screen__CheckInScreen ->> api__VerifyArrivalApi: 到着確認 API
+  api__VerifyArrivalApi ->> entity__Appointment: read
+  api__VerifyArrivalApi ->> entity__PatientAccount: read
+  api__VerifyArrivalApi ->> entity__InsurancePolicy: read
+  api__VerifyArrivalApi -->> screen__CheckInScreen: done

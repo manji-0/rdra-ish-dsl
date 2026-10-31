@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:IssueReferralLetter model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__ReferralLetterScreen as 診療情報提供書画面
+  participant api__IssueReferralLetterApi as 診療情報提供書 API
+  participant entity__Encounter as 診療記録
+  participant entity__ReferralLetter as 紹介状・診療情報提供書
+  actor__Clinician ->> screen__ReferralLetterScreen: 診療情報提供書の作成・送信
+  screen__ReferralLetterScreen ->> api__IssueReferralLetterApi: 診療情報提供書 API
+  api__IssueReferralLetterApi ->> entity__Encounter: read
+  api__IssueReferralLetterApi ->> entity__ReferralLetter: create direction=outbound
+  api__IssueReferralLetterApi -->> screen__ReferralLetterScreen: done

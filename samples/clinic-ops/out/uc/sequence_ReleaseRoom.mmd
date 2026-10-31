@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:ReleaseRoom model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__RoomAdminScreen as 診察室管理画面
+  participant usecase__ReleaseRoom as 診察室の解放
+  participant entity__Room as 診察室
+  actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の解放
+  screen__RoomAdminScreen ->> usecase__ReleaseRoom: 診察室の解放
+  usecase__ReleaseRoom ->> entity__Room: update occupancy_status=roomavailable
+  usecase__ReleaseRoom -->> screen__RoomAdminScreen: done

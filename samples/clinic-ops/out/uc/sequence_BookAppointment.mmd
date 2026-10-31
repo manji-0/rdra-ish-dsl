@@ -1,0 +1,25 @@
+%% rdra-ish diagram=sequence scope=usecase:BookAppointment model=samples/clinic-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__AppointmentScreen as 予約画面
+  participant api__BookAppointmentApi as 予約確定 API
+  participant entity__Appointment as 予約・受診
+  participant entity__ProviderSchedule as 診療枠
+  participant api__AppointmentNoticeApi as 予約通知 API
+  participant extsystem__MessagingGateway as 患者通知サービス
+  participant api__IntakeMessagingApi as 問診票送付 API
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の確定
+  screen__AppointmentScreen ->> api__BookAppointmentApi: 予約確定 API
+  alt Appointment.status == 仮押さえ
+    Note over api__BookAppointmentApi: transaction (API atomic boundary)
+    api__BookAppointmentApi ->> entity__Appointment: update status 仮押さえ -> 予約済
+    api__BookAppointmentApi ->> entity__ProviderSchedule: update
+    api__BookAppointmentApi -) api__AppointmentNoticeApi: 予約確定
+    api__BookAppointmentApi -) extsystem__MessagingGateway: 予約確定
+    api__BookAppointmentApi -) api__IntakeMessagingApi: 予約確定
+    api__BookAppointmentApi -->> screen__AppointmentScreen: done
+  else guard fails
+    api__BookAppointmentApi -->> screen__AppointmentScreen: rejected
+  end

@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:DraftPrescription model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__PrescriptionScreen as 処方画面
+  participant api__DraftPrescriptionApi as 処方オーダ API
+  participant entity__Encounter as 診療記録
+  participant entity__Prescription as 処方箋
+  actor__Clinician ->> screen__PrescriptionScreen: 処方オーダの登録
+  screen__PrescriptionScreen ->> api__DraftPrescriptionApi: 処方オーダ API
+  api__DraftPrescriptionApi ->> entity__Encounter: read
+  api__DraftPrescriptionApi ->> entity__Prescription: create
+  api__DraftPrescriptionApi -->> screen__PrescriptionScreen: done

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:PrepareEncounter model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc medium permission event
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant usecase__CheckInPatient as 受付（初診・再診）
+  participant screen__CheckInScreen as 受付画面
+  participant api__PrepareEncounterApi as 診療準備 API
+  participant entity__Appointment as 予約・受診
+  participant entity__PatientProfile as 患者基本情報
+  actor__Nurse ->> screen__CheckInScreen: 診療の準備
+  usecase__CheckInPatient ->> api__PrepareEncounterApi: 受付完了
+  screen__CheckInScreen ->> api__PrepareEncounterApi: 診療準備 API
+  api__PrepareEncounterApi ->> entity__Appointment: read
+  api__PrepareEncounterApi ->> entity__PatientProfile: read
+  api__PrepareEncounterApi -->> screen__CheckInScreen: done

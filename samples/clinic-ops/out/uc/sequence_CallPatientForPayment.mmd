@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:CallPatientForPayment model=samples/clinic-ops
+%% kinds: actor usecase screen entity
+%% omitted: buc step medium event
+sequenceDiagram
+  actor actor__AccountsClerk as 医事課 会計担当
+  participant usecase__CalculateVisitBill as 会計計算入力
+  participant screen__PaymentWindowScreen as 会計窓口画面
+  participant usecase__CallPatientForPayment as 会計の呼出
+  participant entity__Appointment as 予約・受診
+  actor__AccountsClerk ->> screen__PaymentWindowScreen: 会計の呼出
+  usecase__CalculateVisitBill ->> usecase__CallPatientForPayment: 会計計算完了
+  screen__PaymentWindowScreen ->> usecase__CallPatientForPayment: 会計の呼出
+  usecase__CallPatientForPayment ->> entity__Appointment: read
+  usecase__CallPatientForPayment -->> screen__PaymentWindowScreen: done

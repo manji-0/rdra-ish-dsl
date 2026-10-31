@@ -1,0 +1,15 @@
+%% rdra-ish diagram=sequence scope=usecase:ReserveAppointment model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__AppointmentScreen as 予約画面
+  participant api__ReserveAppointmentApi as 予約仮押さえ API
+  participant entity__Appointment as 予約・受診
+  participant entity__ProviderSchedule as 診療枠
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の仮押さえ
+  screen__AppointmentScreen ->> api__ReserveAppointmentApi: 予約仮押さえ API
+  Note over api__ReserveAppointmentApi: transaction (API atomic boundary)
+  api__ReserveAppointmentApi ->> entity__Appointment: create
+  api__ReserveAppointmentApi ->> entity__ProviderSchedule: update
+  api__ReserveAppointmentApi -->> screen__AppointmentScreen: done

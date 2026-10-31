@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:IssueOutsidePrescription model=samples/clinic-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__PrescriptionScreen as 処方画面
+  participant api__IssuePrescriptionApi as 処方箋発行 API
+  participant entity__Prescription as 処方箋
+  participant extsystem__EPrescriptionService as 電子処方箋管理サービス
+  actor__Clinician ->> screen__PrescriptionScreen: 院外処方箋の発行
+  screen__PrescriptionScreen ->> api__IssuePrescriptionApi: 処方箋発行 API
+  alt Prescription.status == 処方入力中
+    api__IssuePrescriptionApi ->> entity__Prescription: update status 処方入力中 -> 院外処方箋発行済, sent_at=set
+    api__IssuePrescriptionApi -) extsystem__EPrescriptionService: 電子処方箋の登録
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: rejected
+  end

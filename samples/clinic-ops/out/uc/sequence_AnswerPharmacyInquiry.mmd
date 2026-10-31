@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:AnswerPharmacyInquiry model=samples/clinic-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant extsystem__InsurancePharmacy as 保険薬局
+  participant screen__PrescriptionScreen as 処方画面
+  participant api__PrescriptionInquiryApi as 疑義照会 API
+  participant entity__Prescription as 処方箋
+  actor__Clinician ->> screen__PrescriptionScreen: 保険薬局からの疑義照会への回答
+  extsystem__InsurancePharmacy ->> api__PrescriptionInquiryApi: 保険薬局からの疑義照会
+  screen__PrescriptionScreen ->> api__PrescriptionInquiryApi: 疑義照会 API
+  alt Prescription.status == 院外処方箋発行済
+    api__PrescriptionInquiryApi ->> entity__Prescription: update status 院外処方箋発行済 -> 院外処方箋発行済
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: rejected
+  end

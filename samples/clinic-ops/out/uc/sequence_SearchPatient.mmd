@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:SearchPatient model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__PatientSearchScreen as 患者検索画面
+  participant api__SearchPatientApi as 患者検索 API
+  participant entity__PatientAccount as 患者登録
+  participant entity__PatientProfile as 患者基本情報
+  actor__ReceptionClerk ->> screen__PatientSearchScreen: 患者の検索
+  screen__PatientSearchScreen ->> api__SearchPatientApi: 患者検索 API
+  api__SearchPatientApi ->> entity__PatientAccount: read
+  api__SearchPatientApi ->> entity__PatientProfile: read
+  api__SearchPatientApi -->> screen__PatientSearchScreen: done

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ConfirmProxyOrder model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Clinician as 医師
+  participant screen__OrderEntryScreen as オーダ入力画面
+  participant api__ConfirmOrderApi as オーダ確定 API
+  participant entity__ClinicalOrder as 検査オーダ
+  actor__Clinician ->> screen__OrderEntryScreen: 代行入力オーダの確定
+  screen__OrderEntryScreen ->> api__ConfirmOrderApi: オーダ確定 API
+  alt ClinicalOrder.status == オーダ済
+    api__ConfirmOrderApi ->> entity__ClinicalOrder: update status オーダ済 -> オーダ済, physician_confirmed=true
+    api__ConfirmOrderApi -->> screen__OrderEntryScreen: done
+  else guard fails
+    api__ConfirmOrderApi -->> screen__OrderEntryScreen: rejected
+  end

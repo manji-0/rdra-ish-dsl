@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:NotifyPatientResult model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__CareCoordinator as 患者支援・地域連携担当
+  participant usecase__ReviewLabResult as 検査結果の確認
+  participant screen__PatientMessageScreen as 患者連絡画面
+  participant api__NotifyPatientResultApi as 検査結果通知 API
+  participant entity__Notification as 通知
+  actor__CareCoordinator ->> screen__PatientMessageScreen: 検査結果の患者通知
+  usecase__ReviewLabResult ->> api__NotifyPatientResultApi: 検査結果の確認
+  screen__PatientMessageScreen ->> api__NotifyPatientResultApi: 検査結果通知 API
+  api__NotifyPatientResultApi ->> entity__Notification: create delivered_at=set
+  api__NotifyPatientResultApi -->> screen__PatientMessageScreen: done

@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:ApplySelectedTreatmentFee model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__AccountsClerk as 医事課 会計担当
+  participant screen__BillCalculationScreen as 会計計算画面
+  participant api__SelectedFeeApi as 選定療養費 API
+  participant entity__SelectedTreatmentFeeSetting as 選定療養費の設定
+  participant entity__Encounter as 診療記録
+  participant entity__Charge as コスト（診療行為）
+  actor__AccountsClerk ->> screen__BillCalculationScreen: 選定療養費の算定
+  screen__BillCalculationScreen ->> api__SelectedFeeApi: 選定療養費 API
+  alt 紹介状なしの初診で、除外に当たらない: Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診
+    api__SelectedFeeApi ->> entity__SelectedTreatmentFeeSetting: read
+    api__SelectedFeeApi ->> entity__Encounter: read
+    api__SelectedFeeApi ->> entity__Charge: create status=chargeposted, posted_at=set, origin=selectedfee
+    api__SelectedFeeApi -->> screen__BillCalculationScreen: done
+  else guard fails
+    api__SelectedFeeApi -->> screen__BillCalculationScreen: rejected
+  end

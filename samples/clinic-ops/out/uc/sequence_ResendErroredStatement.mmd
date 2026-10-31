@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:ResendErroredStatement model=samples/clinic-ops
+%% kinds: actor timer screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant timer__ErrorResendWindow as エラー分レセプトの再送（毎月11日・12日）
+  participant screen__ClaimScreen as レセプト画面
+  participant api__SubmitClaimApi as オンライン請求 API
+  participant entity__ClaimStatement as レセプト
+  actor__ClaimsClerk ->> screen__ClaimScreen: エラー分レセプトの再送
+  timer__ErrorResendWindow ->> api__SubmitClaimApi: エラー分レセプトの再送（毎月11日・12日）
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 受付不能・要確認
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 受付不能・要確認 -> 請求済
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end

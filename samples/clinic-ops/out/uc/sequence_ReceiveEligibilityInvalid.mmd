@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveEligibilityInvalid model=samples/clinic-ops
+%% kinds: extsystem screen api entity
+%% omitted: buc step event
+sequenceDiagram
+  participant extsystem__OnlineEligibilitySystem as オンライン資格確認等システム
+  participant screen__EligibilityScreen as 資格確認画面
+  participant api__EligibilityResultApi as 資格確認結果 API
+  participant entity__EligibilityCheck as 資格確認
+  extsystem__OnlineEligibilitySystem ->> api__EligibilityResultApi: 資格確認結果
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 無効
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end

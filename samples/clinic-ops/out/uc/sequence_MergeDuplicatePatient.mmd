@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:MergeDuplicatePatient model=samples/clinic-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant screen__PatientProfileScreen as 患者基本情報画面
+  participant usecase__MergeDuplicatePatient as 重複患者の統合
+  participant entity__PatientAccount as 患者登録
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 重複患者の統合
+  screen__PatientProfileScreen ->> usecase__MergeDuplicatePatient: 重複患者の統合
+  alt PatientAccount.status == 有効
+    usecase__MergeDuplicatePatient ->> entity__PatientAccount: update status 有効 -> 統合済
+    usecase__MergeDuplicatePatient -->> screen__PatientProfileScreen: done
+  else guard fails
+    usecase__MergeDuplicatePatient -->> screen__PatientProfileScreen: rejected
+  end
