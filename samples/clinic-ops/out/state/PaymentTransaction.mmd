@@ -1,0 +1,15 @@
+%% rdra-ish diagram=state scope=entity:PaymentTransaction model=samples/clinic-ops
+%% kinds: statemodel state usecase
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
+    [*] --> state__PaymentTransaction_payposted
+    state "収納済" as state__PaymentTransaction_payposted
+    state "還付済" as state__PaymentTransaction_payrefunded
+    %% transition usecase__RefundPayment
+    state__PaymentTransaction_payposted --> state__PaymentTransaction_payrefunded : 還付・追加徴収
+    state__PaymentTransaction_payrefunded --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__PaymentTransaction_payrefunded stateend

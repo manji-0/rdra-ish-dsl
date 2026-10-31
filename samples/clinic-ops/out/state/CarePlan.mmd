@@ -1,0 +1,18 @@
+%% rdra-ish diagram=state scope=entity:CarePlan model=samples/clinic-ops
+%% kinds: statemodel state usecase
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "CarePlan.status" as statemodel__CarePlan_status {
+    [*] --> state__CarePlan_careopen
+    state "作成済" as state__CarePlan_careopen
+    state "経過観察中" as state__CarePlan_caremonitoring
+    state "終了" as state__CarePlan_careclosed
+    %% transition usecase__ReviewPatientResponse
+    state__CarePlan_careopen --> state__CarePlan_caremonitoring : 患者応答の確認
+    %% transition usecase__CloseCarePlan
+    state__CarePlan_caremonitoring --> state__CarePlan_careclosed : ケアプランの終了
+    state__CarePlan_careclosed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__CarePlan_careclosed stateend

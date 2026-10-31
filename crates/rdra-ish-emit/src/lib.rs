@@ -42,8 +42,70 @@ pub enum Filter {
     Er,
 }
 
+/// What the lifecycle check found about the states of a state diagram, keyed by
+/// `(entity id, column, value)`. The emitter stays pure: the caller derives these.
+#[derive(Debug, Clone, Default)]
+pub struct StateMarks {
+    /// `UnreachableEnumVariant`: a declared value no reachable state holds.
+    pub unreachable: std::collections::BTreeSet<(String, String, String)>,
+    /// `Deadlock_*`: a state an instance cannot leave although it has a way out.
+    pub deadlock: std::collections::BTreeSet<(String, String, String)>,
+}
+
+impl StateMarks {
+    /// The unreachable and deadlocked states of a lifecycle report.
+    pub fn from_report(report: &rdra_ish_core::lifecycle::StatesReport) -> Self {
+        use rdra_ish_core::lifecycle::StateDiag;
+        let mut marks = Self::default();
+        let on_views = report
+            .views
+            .iter()
+            .flat_map(|view| view.diagnostics.iter().map(move |d| (Some(view), d)));
+        let on_report = report.diags.iter().map(|d| (None, &d.diag));
+        for (view, diag) in on_views.chain(on_report) {
+            match (diag, view) {
+                (StateDiag::UnreachableEnumVariant { column, variant }, Some(view)) => {
+                    // The column may come as `<entity>.<column>`.
+                    let bare = column
+                        .strip_prefix(&format!("{}.", view.entity_id))
+                        .unwrap_or(column);
+                    marks.unreachable.insert((
+                        view.entity_id.clone(),
+                        bare.to_string(),
+                        variant.clone(),
+                    ));
+                }
+                (
+                    StateDiag::Deadlock {
+                        entity,
+                        column,
+                        value,
+                        ..
+                    },
+                    _,
+                ) => {
+                    marks
+                        .deadlock
+                        .insert((entity.clone(), column.clone(), value.clone()));
+                }
+                _ => {}
+            }
+        }
+        marks
+    }
+}
+
+/// The state diagram's own options.
+#[derive(Debug, Clone, Default)]
+pub struct StateView {
+    /// Draw only these entities' state models (ids); empty means the scope decides.
+    pub entities: Vec<String>,
+    pub marks: StateMarks,
+}
+
 #[derive(Debug, Clone)]
 pub struct View {
+    pub state: StateView,
     pub scope: Scope,
     pub filter: Filter,
     /// The input paths as the user gave them, printed in the diagram header.
@@ -55,6 +117,7 @@ pub struct View {
 impl View {
     pub fn whole() -> Self {
         Self {
+            state: StateView::default(),
             scope: Scope::Whole,
             filter: Filter::None,
             model_path: None,
@@ -65,6 +128,7 @@ impl View {
 
     pub fn er() -> Self {
         Self {
+            state: StateView::default(),
             scope: Scope::Whole,
             filter: Filter::Er,
             model_path: None,
@@ -82,6 +146,7 @@ impl View {
             Scope::Bucs(buc_ids)
         };
         Self {
+            state: StateView::default(),
             scope,
             filter: Filter::None,
             model_path: None,
@@ -98,6 +163,7 @@ impl View {
             Scope::UseCases(usecase_ids)
         };
         Self {
+            state: StateView::default(),
             scope,
             filter: Filter::None,
             model_path: None,

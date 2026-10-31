@@ -190,7 +190,8 @@ fn test_state_diagram() {
             .collect::<Vec<_>>()
     );
 
-    let view = View::whole();
+    let mut view = View::whole();
+    view.state.entities = vec!["Order".to_string()];
     let mermaid = StateMermaidEmitter.emit(&model, &view).unwrap();
 
     assert!(

@@ -478,7 +478,14 @@ impl Emitter for StateMermaidEmitter {
                 .chain(model.entities.keys().map(NodeRef::Entity))
                 .collect(),
         };
-        let models = state_models(model, &in_scope);
+        let mut models = state_models(model, &in_scope);
+        let entities = &view.state.entities;
+        if !entities.is_empty() {
+            models.retain(|sm| entities.iter().any(|id| id == sm.entity_id));
+        }
+        // The whole model is an index; a BUC or an entity scope already narrows it to full models.
+        let index = matches!(view.scope, Scope::Whole | Scope::UseCases(_)) && entities.is_empty();
+        let marks = &view.state.marks;
         let starts = lifecycle_start_states(
             model,
             models.iter().map(|sm| (sm.entity, sm.column.to_string())),
@@ -486,6 +493,8 @@ impl Emitter for StateMermaidEmitter {
         );
 
         let mut body = String::new();
+        let mut classes = String::new();
+        let mut used_classes: Vec<&'static str> = Vec::new();
         let mut kinds: Vec<&'static str> = Vec::new();
         let mut add_kind = |kind: &'static str| {
             if !kinds.contains(&kind) {
@@ -493,9 +502,21 @@ impl Emitter for StateMermaidEmitter {
             }
         };
         for sm in &models {
+            let mark = |set: &BTreeSet<(String, String, String)>, v: &str| {
+                set.contains(&(
+                    sm.entity_id.to_string(),
+                    sm.column.to_string(),
+                    v.to_string(),
+                ))
+            };
+            // A value no transition names has no State node; an unreachable one is still drawn.
             let state_id = |variant: &str| {
                 state_key(model, sm.entity, variant)
                     .and_then(|sk| contract_id(model, &NodeRef::State(sk)))
+                    .or_else(|| {
+                        mark(&marks.unreachable, variant)
+                            .then(|| format!("state__{}_{variant}", sm.entity_id))
+                    })
             };
             let mut arms: Vec<(&str, &str, String, String)> = sm
                 .transitions
@@ -531,6 +552,7 @@ impl Emitter for StateMermaidEmitter {
                 .filter(|v| {
                     start_variants.contains(v)
                         || arms.iter().any(|(from, to, ..)| from == v || to == v)
+                        || mark(&marks.unreachable, v)
                 })
                 .collect();
 
@@ -539,16 +561,28 @@ impl Emitter for StateMermaidEmitter {
                 "  state \"{}.{}\" as statemodel__{}_{} {{\n",
                 sm.entity_id, sm.column, sm.entity_id, sm.column
             ));
+            if index {
+                add_kind("state");
+                body.push_str(&format!(
+                    "    state \"{} 状態 / {} 遷移 (--entity {})\" as index__{}_{}\n  }}\n",
+                    sm.variants.len(),
+                    arms.len(),
+                    sm.entity_id,
+                    sm.entity_id,
+                    sm.column
+                ));
+                continue;
+            }
             for variant in &start_variants {
                 if let Some(id) = state_id(variant) {
                     body.push_str(&format!("    [*] --> {id}\n"));
                 }
             }
             for variant in &drawn {
-                let key = state_key(model, sm.entity, variant);
-                if let (Some(key), Some(id)) = (key, state_id(variant)) {
+                if let Some(id) = state_id(variant) {
                     add_kind("state");
-                    let label = &model.states[key].label;
+                    let label = state_key(model, sm.entity, variant)
+                        .map_or(*variant, |key| model.states[key].label.as_str());
                     body.push_str(&format!("    state \"{}\" as {id}\n", quote(label)));
                 }
             }
@@ -564,8 +598,27 @@ impl Emitter for StateMermaidEmitter {
                 let leaves = arms
                     .iter()
                     .any(|(from, to, ..)| from == variant && to != variant);
-                if let (false, Some(id)) = (leaves, state_id(variant)) {
+                let Some(id) = state_id(variant) else {
+                    continue;
+                };
+                let unreachable = mark(&marks.unreachable, variant);
+                if !leaves && !unreachable {
                     body.push_str(&format!("    {id} --> [*]\n"));
+                }
+                let class = if mark(&marks.deadlock, variant) {
+                    Some("statedeadlock")
+                } else if unreachable {
+                    Some("stateunreachable")
+                } else if !leaves {
+                    Some("stateend")
+                } else {
+                    None
+                };
+                if let Some(class) = class {
+                    classes.push_str(&format!("  class {id} {class}\n"));
+                    if !used_classes.contains(&class) {
+                        used_classes.push(class);
+                    }
                 }
             }
             body.push_str("  }\n");
@@ -601,7 +654,27 @@ impl Emitter for StateMermaidEmitter {
             kinds,
             omitted,
         };
-        Ok(format!("{}stateDiagram-v2\n{body}", header.render()))
+        let legend = if index {
+            ""
+        } else {
+            "%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out\n"
+        };
+        let defs: String = [
+            (
+                "stateunreachable",
+                "fill:#fdd,stroke:#c00,stroke-dasharray:4 2,color:#600",
+            ),
+            ("statedeadlock", "fill:#fd9,stroke:#d60,color:#630"),
+            ("stateend", "fill:#dfd,stroke:#383,color:#141"),
+        ]
+        .iter()
+        .filter(|(name, _)| used_classes.contains(name))
+        .map(|(name, style)| format!("  classDef {name} {style}\n"))
+        .collect();
+        Ok(format!(
+            "{}{legend}stateDiagram-v2\n{body}{defs}{classes}",
+            header.render()
+        ))
     }
 }
 
@@ -751,6 +824,13 @@ mod tests {
     };
     use rdra_ish_core::build_model;
     use rdra_ish_syntax::parse;
+
+    /// A view that draws every state model whole, as `--entity` of each entity does.
+    fn all_entities(model: &SemanticModel) -> View {
+        let mut view = View::whole();
+        view.state.entities = model.entities.values().map(|e| e.id.clone()).collect();
+        view
+    }
 
     #[test]
     fn test_rdra_mermaid_layers() {
@@ -998,13 +1078,14 @@ transitions(Doc.status, Publish, draft -> published)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &View::whole().with_model_path("m.rdra"))
+            .emit(&model, &all_entities(&model).with_model_path("m.rdra"))
             .unwrap();
         assert_eq!(
             result,
-            "%% rdra-ish diagram=state scope=whole model=m.rdra\n\
+            "%% rdra-ish diagram=state scope=entity:Doc model=m.rdra\n\
              %% kinds: statemodel state usecase\n\
              %% omitted: Doc.kind (Enum without transitions)\n\
+             %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out\n\
              stateDiagram-v2\n  \
                state \"Doc.status\" as statemodel__Doc_status {\n    \
                  [*] --> state__Doc_draft\n    \
@@ -1013,7 +1094,9 @@ transitions(Doc.status, Publish, draft -> published)
                  %% transition usecase__Publish\n    \
                  state__Doc_draft --> state__Doc_published : 公開する\n    \
                  state__Doc_published --> [*]\n  \
-               }\n"
+               }\n  \
+               classDef stateend fill:#dfd,stroke:#383,color:#141\n  \
+               class state__Doc_published stateend\n"
         );
     }
 
@@ -1027,8 +1110,9 @@ entity Doc "文書" {
 usecase Publish "公開する"
 transitions(Doc.status, Publish, draft -> published)
 "#;
+        let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model_from(src), &View::whole())
+            .emit(&model, &all_entities(&model))
             .unwrap();
         assert!(
             result.contains("    state \"下書き\" as state__Doc_draft\n"),
@@ -1056,8 +1140,9 @@ applies_to(Reviewed, Publish)
 condition Traced "追跡のみ"
 applies_to(Traced, Publish)
 "#;
+        let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model_from(src), &View::whole())
+            .emit(&model, &all_entities(&model))
             .unwrap();
         assert!(
             result.contains(
@@ -1088,7 +1173,9 @@ transitions(Order.status, Reopen, closed -> open)
 transitions(Ticket.phase, Finish, new -> done)
 "#;
         let model = model_from(src);
-        let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        let result = StateMermaidEmitter
+            .emit(&model, &all_entities(&model))
+            .unwrap();
         assert_eq!(result.matches("as statemodel__").count(), 2, "{result}");
         let order = result
             .split("state \"Order.status\" as statemodel__Order_status {\n")
@@ -1158,7 +1245,9 @@ transitions(Doc.status, Publish, review -> published)
 transitions(Doc.status, Reopen, published -> review)
 "#;
         let model = model_from(src);
-        let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        let result = StateMermaidEmitter
+            .emit(&model, &all_entities(&model))
+            .unwrap();
         assert!(result.contains("[*] --> state__Doc_review"), "{result}");
         assert!(!result.contains("[*] --> state__Doc_draft"), "{result}");
     }
@@ -1176,7 +1265,9 @@ transitions(Acct.status, Freeze, active -> frozen)
 transitions(Acct.status, Thaw, frozen -> active)
 "#;
         let model = model_from(src);
-        let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        let result = StateMermaidEmitter
+            .emit(&model, &all_entities(&model))
+            .unwrap();
         assert!(result.contains("[*] --> state__Acct_active"), "{result}");
         assert!(!result.contains("[*] --> state__Acct_frozen"), "{result}");
     }
@@ -1433,6 +1524,7 @@ reads(UcA, EntityA)
 "#;
         let model = model_from(src);
         let view = View {
+            state: Default::default(),
             scope: crate::Scope::Bucs(vec!["BucA".to_string()]),
             filter: crate::Filter::Er,
             model_path: None,
@@ -1442,5 +1534,78 @@ reads(UcA, EntityA)
         let result = ErMermaidEmitter.emit(&model, &view).unwrap();
         assert!(result.contains("EntityA"), "EntityA should be included");
         assert!(!result.contains("EntityB"), "EntityB should be excluded");
+    }
+
+    const ANOMALIES: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped, lost) @default(pending)
+}
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Ship "発送"
+usecase Express "即日発送"
+buc BucOrder "Order"
+contains(BucOrder, Place)
+contains(BucOrder, Pay)
+contains(BucOrder, Ship)
+contains(BucOrder, Express)
+creates(Place, Order)
+updates(Pay, Order)
+updates(Ship, Order)
+updates(Express, Order)
+transitions(Order.status, Pay, pending -> paid)
+transitions(Order.status, Ship, paid -> shipped)
+transitions(Order.status, Express, pending -> shipped)
+condition Packed "梱包済み"
+holds(Packed, Order.status == pending)
+applies_to(Packed, Ship)
+"#;
+
+    fn anomaly_view(entities: &[&str]) -> View {
+        let model = model_from(ANOMALIES);
+        let report = rdra_ish_core::lifecycle::derive_states(
+            &model,
+            &rdra_ish_core::lifecycle::Scope::ALL,
+            rdra_ish_core::lifecycle::Caps::DEFAULT_PATTERNS,
+        );
+        let mut view = View::whole();
+        view.state.marks = crate::StateMarks::from_report(&report);
+        view.state.entities = entities.iter().map(|e| e.to_string()).collect();
+        view
+    }
+
+    #[test]
+    fn test_state_full_model_colours_unreachable_deadlock_and_end() {
+        let model = model_from(ANOMALIES);
+        let out = StateMermaidEmitter
+            .emit(&model, &anomaly_view(&["Order"]))
+            .unwrap();
+        assert!(out.contains("%% legend:"), "{out}");
+        assert!(
+            out.contains("class state__Order_lost stateunreachable"),
+            "{out}"
+        );
+        assert!(
+            out.contains("class state__Order_paid statedeadlock"),
+            "{out}"
+        );
+        assert!(out.contains("class state__Order_shipped stateend"), "{out}");
+        assert!(!out.contains("state__Order_lost --> [*]"), "{out}");
+        for name in ["stateunreachable", "statedeadlock", "stateend"] {
+            assert!(out.contains(&format!("classDef {name} ")), "{out}");
+        }
+        assert!(out.contains("scope=entity:Order"), "{out}");
+    }
+
+    #[test]
+    fn test_state_whole_model_is_an_index() {
+        let model = model_from(ANOMALIES);
+        let out = StateMermaidEmitter
+            .emit(&model, &anomaly_view(&[]))
+            .unwrap();
+        assert!(out.contains("4 状態 / 3 遷移 (--entity Order)"), "{out}");
+        assert!(!out.contains("-->"), "{out}");
+        assert!(!out.contains("class "), "{out}");
     }
 }

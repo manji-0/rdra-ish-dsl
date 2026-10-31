@@ -1,0 +1,28 @@
+%% rdra-ish diagram=state scope=entity:ClinicalOrder model=samples/clinic-ops
+%% kinds: statemodel state usecase
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "ClinicalOrder.status" as statemodel__ClinicalOrder_status {
+    [*] --> state__ClinicalOrder_clordered
+    state "オーダ済" as state__ClinicalOrder_clordered
+    state "採取済" as state__ClinicalOrder_clcollected
+    state "結果受信" as state__ClinicalOrder_clresulted
+    state "結果確認済" as state__ClinicalOrder_clreviewed
+    state "取消" as state__ClinicalOrder_clcancelled
+    %% transition usecase__ConfirmProxyOrder
+    state__ClinicalOrder_clordered --> state__ClinicalOrder_clordered : 代行入力オーダの確定
+    %% transition usecase__CollectSpecimen
+    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcollected : 採血 [医師が確定したオーダ]
+    %% transition usecase__CancelClinicalOrder
+    state__ClinicalOrder_clordered --> state__ClinicalOrder_clcancelled : オーダの取消
+    %% transition usecase__ReceiveLabResult
+    state__ClinicalOrder_clcollected --> state__ClinicalOrder_clresulted : 検査結果の受信
+    %% transition usecase__ReviewLabResult
+    state__ClinicalOrder_clresulted --> state__ClinicalOrder_clreviewed : 検査結果の確認
+    state__ClinicalOrder_clreviewed --> [*]
+    state__ClinicalOrder_clcancelled --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__ClinicalOrder_clreviewed stateend
+  class state__ClinicalOrder_clcancelled stateend

@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use rdra_ish_core::lifecycle::{derive_states_built, Caps, Scope as LifecycleScope};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     mermaid::{
@@ -11,12 +12,12 @@ use rdra_ish_emit::{
         RequirementMermaidEmitter, RobustnessMermaidEmitter, SequenceMermaidEmitter,
         StateMermaidEmitter, UsecaseMermaidEmitter,
     },
-    unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
+    unknown_diagram_filter_kinds, Emitter, Filter, Scope, StateMarks, StateView, View,
 };
 use std::fs;
 
 use crate::cli::DiagramKind;
-use crate::list_output::{note_state_errors, reject_state_errors};
+use crate::list_output::{note_state_errors, reject_state_errors_except_deadlock};
 use crate::load::reject_model_errors;
 use rdra_ish_core::{load_project, Project};
 
@@ -25,6 +26,7 @@ pub struct DiagramRequest {
     pub kind: DiagramKind,
     pub buc: Vec<String>,
     pub usecase: Vec<String>,
+    pub entity: Vec<String>,
     pub node_kind: Vec<String>,
     pub edge_kind: Vec<String>,
     pub out: PathBuf,
@@ -36,6 +38,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         kind,
         buc,
         usecase,
+        entity,
         node_kind,
         edge_kind,
         out,
@@ -48,8 +51,12 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         ..
     } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
+    let mut state = StateView::default();
     if kind.reads_lifecycle() {
-        reject_state_errors(&program, &model)?;
+        // A deadlock is coloured in the diagram, not a reason to refuse it.
+        reject_state_errors_except_deadlock(&program, &model)?;
+        let (report, _) = derive_states_built(&model, &LifecycleScope::ALL, Caps::DEFAULT_PATTERNS);
+        state.marks = StateMarks::from_report(&report);
     } else {
         note_state_errors(&program, &model);
     }
@@ -86,6 +93,28 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
+    if !entity.is_empty() {
+        if !matches!(kind, DiagramKind::State) {
+            anyhow::bail!("--entity applies only to --kind state");
+        }
+        if !buc.is_empty() {
+            anyhow::bail!("--entity and --buc cannot be combined; pass one of them");
+        }
+    }
+    for entity_id in &entity {
+        let Some((key, _)) = model.entities.iter().find(|(_, e)| e.id == *entity_id) else {
+            anyhow::bail!("unknown entity `{entity_id}`");
+        };
+        let modeled = model.entities[key]
+            .columns
+            .iter()
+            .any(|c| model.is_lifecycle_column(key, &c.name));
+        if !modeled {
+            anyhow::bail!("entity `{entity_id}` has no state model");
+        }
+    }
+    state.entities = entity;
+
     if (!node_kind.is_empty() || !edge_kind.is_empty()) && !matches!(kind, DiagramKind::Rdra) {
         anyhow::bail!("--node-kind and --edge-kind are currently supported only for --kind rdra");
     }
@@ -116,6 +145,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         .collect::<Vec<_>>()
         .join(",");
     let view = View {
+        state,
         scope,
         filter: match kind {
             DiagramKind::Er => Filter::Er,

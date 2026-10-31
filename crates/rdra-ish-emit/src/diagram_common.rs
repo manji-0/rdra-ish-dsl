@@ -165,6 +165,9 @@ pub(crate) struct Header<'a> {
 impl Header<'_> {
     pub(crate) fn render(&self) -> String {
         let scope = match &self.view.scope {
+            Scope::Whole if !self.view.state.entities.is_empty() => {
+                format!("entity:{}", self.view.state.entities.join(","))
+            }
             Scope::Whole => "whole".to_string(),
             Scope::Bucs(ids) => format!("buc:{}", ids.join(",")),
             Scope::UseCases(ids) => format!("usecase:{}", ids.join(",")),

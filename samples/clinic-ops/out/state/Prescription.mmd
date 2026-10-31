@@ -1,0 +1,46 @@
+%% rdra-ish diagram=state scope=entity:Prescription model=samples/clinic-ops
+%% kinds: statemodel state usecase
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Prescription.status" as statemodel__Prescription_status {
+    [*] --> state__Prescription_rxdrafted
+    state "処方入力中" as state__Prescription_rxdrafted
+    state "院外処方箋発行済" as state__Prescription_rxissued
+    state "引換券交付済" as state__Prescription_rxvoucher
+    state "疑義照会中" as state__Prescription_rxinquiry
+    state "調剤・監査済" as state__Prescription_rxaudited
+    state "服薬指導済" as state__Prescription_rxcounseled
+    state "交付済" as state__Prescription_rxdispensed
+    state "使用期間切れ" as state__Prescription_rxexpired
+    state "取消" as state__Prescription_rxcancelled
+    %% transition usecase__IssueOutsidePrescription
+    state__Prescription_rxdrafted --> state__Prescription_rxissued : 院外処方箋の発行
+    %% transition usecase__IssueInhouseVoucher
+    state__Prescription_rxdrafted --> state__Prescription_rxvoucher : 院内処方用引換券の交付
+    %% transition usecase__CancelPrescription
+    state__Prescription_rxdrafted --> state__Prescription_rxcancelled : 処方の取消
+    %% transition usecase__AnswerPharmacyInquiry
+    state__Prescription_rxissued --> state__Prescription_rxissued : 保険薬局からの疑義照会への回答
+    %% transition usecase__ConfirmDispense
+    state__Prescription_rxissued --> state__Prescription_rxdispensed : 保険薬局での調剤結果の受信
+    %% transition usecase__ExpirePrescription
+    state__Prescription_rxissued --> state__Prescription_rxexpired : 処方箋の使用期間切れ
+    %% transition usecase__RaisePrescriptionInquiry
+    state__Prescription_rxvoucher --> state__Prescription_rxinquiry : 疑義照会
+    %% transition usecase__DispenseAndAudit
+    state__Prescription_rxvoucher --> state__Prescription_rxaudited : 調剤・監査
+    %% transition usecase__AnswerPrescriptionInquiry
+    state__Prescription_rxinquiry --> state__Prescription_rxvoucher : 疑義照会への回答
+    %% transition usecase__CounselMedication
+    state__Prescription_rxaudited --> state__Prescription_rxcounseled : 服薬指導
+    %% transition usecase__HandOverMedication
+    state__Prescription_rxcounseled --> state__Prescription_rxdispensed : 薬剤交付
+    state__Prescription_rxdispensed --> [*]
+    state__Prescription_rxexpired --> [*]
+    state__Prescription_rxcancelled --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Prescription_rxdispensed stateend
+  class state__Prescription_rxexpired stateend
+  class state__Prescription_rxcancelled stateend

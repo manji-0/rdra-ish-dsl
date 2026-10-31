@@ -22,8 +22,8 @@ use render::{format_rows, format_sorted_id_labels};
 #[cfg(test)]
 pub(crate) use state_findings::state_consistency_findings;
 pub(crate) use state_findings::{
-    note_state_errors, reject_state_errors, render_violation, state_diag_message, state_findings,
-    Finding, TraceSource,
+    note_state_errors, reject_state_errors, reject_state_errors_except_deadlock, render_violation,
+    state_diag_message, state_findings, Finding, TraceSource,
 };
 
 macro_rules! list_id_label {

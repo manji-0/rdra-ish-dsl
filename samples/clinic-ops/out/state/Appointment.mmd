@@ -1,0 +1,52 @@
+%% rdra-ish diagram=state scope=entity:Appointment model=samples/clinic-ops
+%% kinds: statemodel state usecase
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Appointment.status" as statemodel__Appointment_status {
+    [*] --> state__Appointment_apptrequested
+    [*] --> state__Appointment_apptscheduled
+    state "仮押さえ" as state__Appointment_apptrequested
+    state "予約済" as state__Appointment_apptscheduled
+    state "受付済" as state__Appointment_apptcheckedin
+    state "診察中" as state__Appointment_apptinconsult
+    state "計算待ち" as state__Appointment_apptawaitingcalc
+    state "会計待ち" as state__Appointment_apptawaitingpay
+    state "精算済" as state__Appointment_apptsettled
+    state "完了" as state__Appointment_apptcompleted
+    state "取消" as state__Appointment_apptcancelled
+    state "未来院" as state__Appointment_apptnoshow
+    %% transition usecase__BookAppointment
+    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 予約の確定
+    %% transition usecase__ScheduleFollowUpVisit
+    state__Appointment_apptrequested --> state__Appointment_apptscheduled : 再診の予約
+    %% transition usecase__RescheduleAppointment
+    state__Appointment_apptscheduled --> state__Appointment_apptscheduled : 予約の変更
+    %% transition usecase__CheckInPatient
+    state__Appointment_apptscheduled --> state__Appointment_apptcheckedin : 受付（初診・再診）
+    %% transition usecase__CancelAppointment
+    state__Appointment_apptscheduled --> state__Appointment_apptcancelled : 予約の取消
+    %% transition usecase__MarkNoShow
+    state__Appointment_apptscheduled --> state__Appointment_apptnoshow : 未来院の処理
+    %% transition usecase__AssignRoom
+    state__Appointment_apptcheckedin --> state__Appointment_apptcheckedin : 診察室への案内
+    %% transition usecase__OpenEncounter
+    state__Appointment_apptcheckedin --> state__Appointment_apptinconsult : 診療記録を開く
+    %% transition usecase__CompleteConsultation
+    state__Appointment_apptinconsult --> state__Appointment_apptawaitingcalc : 診察終了
+    %% transition usecase__CalculateVisitBill
+    state__Appointment_apptawaitingcalc --> state__Appointment_apptawaitingpay : 会計計算入力
+    %% transition usecase__SettleAtKiosk
+    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 自動精算機での精算
+    %% transition usecase__SettleAtWindow
+    state__Appointment_apptawaitingpay --> state__Appointment_apptsettled : 会計窓口での精算
+    %% transition usecase__IssueReceipt
+    state__Appointment_apptsettled --> state__Appointment_apptcompleted : 領収証・明細書の交付
+    state__Appointment_apptcompleted --> [*]
+    state__Appointment_apptcancelled --> [*]
+    state__Appointment_apptnoshow --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Appointment_apptcompleted stateend
+  class state__Appointment_apptcancelled stateend
+  class state__Appointment_apptnoshow stateend

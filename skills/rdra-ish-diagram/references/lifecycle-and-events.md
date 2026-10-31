@@ -6,8 +6,11 @@ BUCs, reachable state patterns, or entity constraints.
 ## Commands
 
 ```sh
-# State diagram — whole model
+# State diagram — whole model, an index: one note per state model with its counts
 rdra-ish diagram src/ --kind state --format mermaid
+
+# State diagram — one entity's state models whole (every lifecycle column); repeatable
+rdra-ish diagram src/ --kind state --entity <EntityId> --format mermaid
 
 # State diagram — scoped to a BUC
 rdra-ish diagram src/ --kind state --buc <BucId> --format mermaid
@@ -47,6 +50,19 @@ rdra-ish verify src/ --backend tlc -o out/
 - `--buc <BucId>` draws each state model one of the BUC's use cases moves, whole.
 - The diagram draws the transitions, not reachability: run `check` to learn whether
   each state is reached (`Witness_*`) and left (`Deadlock_*`).
+
+## Reading the State Diagram
+
+- Without a scope the diagram is an index: each state model is a composite state holding
+  one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`. Run that `--entity` for the states.
+- `--entity <Entity>` and `--buc <BucId>` draw each state model whole: the states, a
+  transition per use case (`%% transition usecase__<id>` names it), `[*] -->` for the
+  start state and `--> [*]` for an end state.
+- A `class` line colours a state by the lifecycle check: `stateunreachable` (a value no
+  reachable state holds, drawn with no arrow), `statedeadlock` (an instance cannot leave
+  it, although it has a way out; the finding is `Deadlock_<Entity>_<column>_<value>`),
+  `stateend` (no transition out). The `%% legend:` line says so. A deadlock still draws
+  the diagram; `check` reports it as an error.
 
 ## Reading the Event Diagram
 

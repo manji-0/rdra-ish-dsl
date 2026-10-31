@@ -486,9 +486,27 @@ pub(crate) fn reject_state_errors(
     program: &ResolvedProgram,
     model: &SemanticModel,
 ) -> anyhow::Result<()> {
+    reject_errors_where(program, model, |_| true)
+}
+
+/// `reject_state_errors`, but a deadlock does not count: the state diagram colours it.
+pub(crate) fn reject_state_errors_except_deadlock(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+) -> anyhow::Result<()> {
+    reject_errors_where(program, model, |finding| {
+        !finding.name.starts_with("Deadlock_")
+    })
+}
+
+fn reject_errors_where(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    counts: impl Fn(&Finding) -> bool,
+) -> anyhow::Result<()> {
     let mut has_error = false;
     for finding in state_consistency_findings(program, model) {
-        if finding.severity == Severity::Error {
+        if finding.severity == Severity::Error && counts(&finding) {
             eprintln!("{finding}");
             has_error = true;
         }

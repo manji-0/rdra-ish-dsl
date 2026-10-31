@@ -918,6 +918,7 @@ fn usecase_scope_errors_say_what_to_pass() {
         kind,
         buc: buc.iter().map(|id| id.to_string()).collect(),
         usecase: usecase.iter().map(|id| id.to_string()).collect(),
+        entity: Vec::new(),
         node_kind: Vec::new(),
         edge_kind: Vec::new(),
         out: out.clone(),
@@ -947,6 +948,67 @@ fn usecase_scope_errors_say_what_to_pass() {
         let error = run_diagram(request).unwrap_err();
         assert_eq!(error.to_string(), message);
     }
+}
+
+#[test]
+fn entity_scope_errors_say_what_to_pass() {
+    use crate::cli::DiagramKind;
+    use crate::diagram::{run_diagram, DiagramRequest};
+    let out = std::env::temp_dir().join("rdra_ish_entity_scope_errors");
+    let request = |kind: DiagramKind, buc: &[&str], entity: &[&str]| DiagramRequest {
+        inputs: vec![errors_fixture("samples/ec-site")],
+        kind,
+        buc: buc.iter().map(|id| id.to_string()).collect(),
+        usecase: Vec::new(),
+        entity: entity.iter().map(|id| id.to_string()).collect(),
+        node_kind: Vec::new(),
+        edge_kind: Vec::new(),
+        out: out.clone(),
+    };
+    for (request, message) in [
+        (
+            request(DiagramKind::Er, &[], &["Order"]),
+            "--entity applies only to --kind state",
+        ),
+        (
+            request(DiagramKind::State, &["BucPayment"], &["Order"]),
+            "--entity and --buc cannot be combined; pass one of them",
+        ),
+        (
+            request(DiagramKind::State, &[], &["NoSuchEntity"]),
+            "unknown entity `NoSuchEntity`",
+        ),
+        (
+            request(DiagramKind::State, &[], &["Product"]),
+            "entity `Product` has no state model",
+        ),
+    ] {
+        let error = run_diagram(request).unwrap_err();
+        assert_eq!(error.to_string(), message);
+    }
+}
+
+#[test]
+fn a_deadlocked_model_still_draws_its_state_diagram_with_the_deadlock_coloured() {
+    use crate::cli::DiagramKind;
+    use crate::diagram::{run_diagram, DiagramRequest};
+    let out = std::env::temp_dir().join("rdra_ish_deadlock_state_diagram");
+    run_diagram(DiagramRequest {
+        inputs: vec![errors_fixture("samples/formal-verification/deadlock.rdra")],
+        kind: DiagramKind::State,
+        buc: Vec::new(),
+        usecase: Vec::new(),
+        entity: vec!["Order".to_string()],
+        node_kind: Vec::new(),
+        edge_kind: Vec::new(),
+        out: out.clone(),
+    })
+    .unwrap();
+    let text = std::fs::read_to_string(out.with_extension("mmd")).unwrap();
+    assert!(
+        text.contains("class state__Order_paid statedeadlock"),
+        "{text}"
+    );
 }
 
 #[test]

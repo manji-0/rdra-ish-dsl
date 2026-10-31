@@ -12,6 +12,14 @@
   works, so `--format markdown` pastes into a PRD or a design document. The columns are
   the BUC labels, so the table has as many columns as the model has BUCs.
   `rdra_ish_core::buc_handoffs` and `buc_participants` give the derivation.
+- `diagram --kind state --entity <Entity>` (repeatable, not with `--buc`) draws only that
+  entity's state models, every lifecycle column, whole. An unknown entity, or one with no
+  state model, is an error. clinic-ops ships one per entity under `out/state/`.
+- A full state diagram colours its states by what the lifecycle check found: `classDef`s
+  `stateunreachable` (a declared value no reachable state holds, drawn with no transition),
+  `statedeadlock` (a state an instance cannot leave although it has a way out), and
+  `stateend` (no transition out), with a `%% legend:` comment. `diagram --kind state` no
+  longer refuses a model whose only errors are deadlocks; it colours them.
 - A `goal` element holds the outcome the requirements serve: its description states the
   problem, and `metric`, `baseline`, `target`, and `window` say how it is measured.
   `achieves(Requirement, Goal)` links a requirement to a goal; a non-goal is a requirement
@@ -140,6 +148,10 @@
   `triggers <Id>`. The RDRA layer subgraphs and the `%% layers:` header line are gone. Node
   ids, `%% kinds:`, `%% omitted:`, `%% derived` (now `via` the BUC or event ids behind the
   label), and the synthesized `system__Model` stay. clinic-ops: 28 edges become 21.
+- `diagram --kind state` without a scope is an index: each state model is a composite state
+  holding one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`, with no states or transitions
+  and so no `usecase` kind in the header. Read a model with `--entity`, or `--buc`, which
+  still draws full models.
 - `diagram --kind state` labels each transition with the use case's label, then `[...]`
   with the label of each condition whose `holds` body guards it: `採血 [医師が確定したオーダ]`
   (was `usecase__CollectSpecimen`). The use case's id moves to a `%% transition <id>` line

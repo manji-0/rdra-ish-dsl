@@ -1,0 +1,20 @@
+%% rdra-ish diagram=state scope=entity:PatientAccount model=samples/clinic-ops
+%% kinds: statemodel state usecase
+%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "PatientAccount.status" as statemodel__PatientAccount_status {
+    [*] --> state__PatientAccount_patientactive
+    state "有効" as state__PatientAccount_patientactive
+    state "アーカイブ済" as state__PatientAccount_patientinactive
+    state "統合済" as state__PatientAccount_patientmerged
+    %% transition usecase__ArchivePatient
+    state__PatientAccount_patientactive --> state__PatientAccount_patientinactive : 患者のアーカイブ
+    %% transition usecase__MergeDuplicatePatient
+    state__PatientAccount_patientactive --> state__PatientAccount_patientmerged : 重複患者の統合
+    state__PatientAccount_patientinactive --> [*]
+    state__PatientAccount_patientmerged --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__PatientAccount_patientinactive stateend
+  class state__PatientAccount_patientmerged stateend

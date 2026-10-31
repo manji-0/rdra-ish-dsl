@@ -469,13 +469,13 @@ relation, from which the RDRAGraph views can be derived.
 | `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, and `repeats` edges, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens and entities | The flows the BUCs contain |
 | `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`) and use cases | The entities `er` draws for the BUCs |
 | `condition` | バリエーション・条件 | Each condition with the variations and state models it combines and what it applies to; each variation with its values | Entities (a state model stands for its column) | The conditions on the BUCs' use cases and their APIs, and what those combine |
-| `state` | 状態モデル | One composite state per state model, its states, the use case of each transition, start and end states | `Enum` columns that no `transitions` drive, named in `omitted:` | Each state model one of the BUCs' use cases moves, whole |
+| `state` | 状態モデル | Without a scope, an index: one composite state per state model holding one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`. With `--entity` or `--buc`, each state model whole: its states, the use case of each transition, start and end states, coloured by what the lifecycle check found | `Enum` columns that no `transitions` drive, named in `omitted:` | Each state model one of the BUCs' use cases moves, whole |
 | `event` | システム間連携（イベント） | `raises` and `triggers` between use cases, BUCs, external systems, events, and timers | States and transitions (`state`) | The events reachable from the BUCs and their links |
 | `er` | (RDRASpec logical data model) | Entities with their columns and `relate` cardinality, as an `erDiagram` | Variation values and state models, shown only as column types | The entities reachable from the BUCs |
 
-`state` is the one kind that reads the lifecycle (for its start states). It refuses to
-write while the lifecycle has errors; every other kind draws declared facts and writes
-with one stderr note.
+`state` is the one kind that reads the lifecycle (for its start states and the colours of
+its states). It refuses to write while the lifecycle has errors other than a deadlock,
+which it colours; every other kind draws declared facts and writes with one stderr note.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -484,6 +484,7 @@ with one stderr note.
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool, or hand it to a tool that redraws it. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Draw the part of the model the named BUCs reach, the union over every id. Applies to every kind; the [kinds](#kinds) table says what each one keeps. An unknown id is an error. |
 | `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase`, `robustness`, and `sequence`, and not together with `--buc`; an unknown id is an error. `sequence` needs exactly one. |
+| `--entity <id>` | string (repeatable) | — (whole model) | Draw only the named entities' state models, every lifecycle column, whole. Applies to `state`, and not together with `--buc`; an unknown entity, or one with no state model, is an error. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Draw only these node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). |
@@ -750,6 +751,24 @@ stateDiagram-v2
   state, one with no transition to another state.
 - `omitted:` names the `Enum` columns in scope that no `transitions` drive.
 - `--buc` draws each state model that one of the BUC's use cases moves, whole.
+  `--entity <Entity>` (repeatable, not with `--buc`) draws the named entities' state
+  models, every lifecycle column, whole. The header's scope reads `entity:<ids>`.
+- With neither, the diagram is an index. Each state model is its composite state holding
+  one note, `<n> 状態 / <m> 遷移 (--entity <Entity>)`, with `n` the declared values of
+  the column and `m` its transitions, and nothing else: no transition, no start or end
+  marker, no class. The header's kinds are `statemodel state`. Read a model's states with
+  the `--entity` named in its note.
+- A full model colours a state by what the lifecycle check found, one `class <state id>
+  <class>` line each, with the `classDef` of each class used and a `%% legend:` comment
+  before `stateDiagram-v2`:
+
+  | Class | State | Found by |
+  |---|---|---|
+  | `stateunreachable` | A declared value no reachable state holds, drawn with no transition | `UnreachableEnumVariant` (a `warning`) |
+  | `statedeadlock` | A state an instance cannot leave though it has a way out | `Deadlock_<Entity>_<column>_<value>` |
+  | `stateend` | A state with no transition to another state, the one drawn `--> [*]` | The transitions |
+
+  A state has one class, the first that applies in the order deadlock, unreachable, end.
 
 ---
 

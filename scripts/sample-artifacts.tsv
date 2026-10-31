@@ -48,6 +48,16 @@ samples/clinic-ops/out/rdra_buc_clinical_encounter.mmd	diagram samples/clinic-op
 samples/clinic-ops/out/requirement.mmd	diagram samples/clinic-ops --kind requirement --format mermaid
 samples/clinic-ops/out/screen_constraints.csv	csv samples/clinic-ops --kind screen-constraints
 samples/clinic-ops/out/state_whole.mmd	diagram samples/clinic-ops --kind state --format mermaid
+samples/clinic-ops/out/state/Appointment.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity Appointment
+samples/clinic-ops/out/state/CarePlan.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity CarePlan
+samples/clinic-ops/out/state/ClaimStatement.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity ClaimStatement
+samples/clinic-ops/out/state/ClinicalOrder.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity ClinicalOrder
+samples/clinic-ops/out/state/EligibilityCheck.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity EligibilityCheck
+samples/clinic-ops/out/state/Encounter.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity Encounter
+samples/clinic-ops/out/state/IntakePacket.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity IntakePacket
+samples/clinic-ops/out/state/PatientAccount.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity PatientAccount
+samples/clinic-ops/out/state/PaymentTransaction.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity PaymentTransaction
+samples/clinic-ops/out/state/Prescription.mmd	diagram samples/clinic-ops --kind state --format mermaid --entity Prescription
 samples/clinic-ops/out/states_appointment.txt	states samples/clinic-ops --format table --entity Appointment
 samples/clinic-ops/out/states_claim_statement.txt	states samples/clinic-ops --format table --entity ClaimStatement
 samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor

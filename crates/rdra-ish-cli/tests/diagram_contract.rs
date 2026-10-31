@@ -315,6 +315,12 @@ struct StateChart {
     transitions: Vec<(String, String, String, String)>,
     starts: Vec<String>,
     ends: Vec<String>,
+    /// An index form's one note per state model: (state model, label).
+    index_notes: Vec<(String, String)>,
+    /// (state, class) from the `class <state> <class>` lines.
+    classes: Vec<(String, String)>,
+    class_defs: BTreeSet<String>,
+    legend: bool,
 }
 
 fn parse_state(text: &str) -> Result<StateChart, String> {
@@ -337,7 +343,17 @@ fn parse_state(text: &str) -> Result<StateChart, String> {
                 .filter(|kind| *kind != "(none)")
                 .map(str::to_string)
                 .collect();
+        } else if trimmed.starts_with("%% legend: ") {
+            chart.legend = true;
         } else if trimmed.starts_with("%% ") {
+        } else if let Some(rest) = trimmed.strip_prefix("classDef ") {
+            let name = rest.split(' ').next().unwrap_or_default();
+            chart.class_defs.insert(name.to_string());
+        } else if let Some(rest) = trimmed.strip_prefix("class ") {
+            let (state, class) = rest
+                .split_once(' ')
+                .ok_or_else(|| format!("unparsed class line: {line}"))?;
+            chart.classes.push((state.to_string(), class.to_string()));
         } else if trimmed == "stateDiagram-v2" {
             seen_type = true;
         } else if trimmed == "}" {
@@ -366,10 +382,14 @@ fn parse_state(text: &str) -> Result<StateChart, String> {
             } else if let Some(id) = trimmed.strip_suffix(" --> [*]") {
                 chart.ends.push(id.to_string());
             } else if let Some(rest) = trimmed.strip_prefix("state \"") {
-                let (_, id) = rest
+                let (label, id) = rest
                     .split_once("\" as ")
                     .ok_or_else(|| format!("unparsed state: {line}"))?;
-                chart.states.insert(id.to_string(), model);
+                if id.starts_with("index__") {
+                    chart.index_notes.push((model, label.to_string()));
+                } else {
+                    chart.states.insert(id.to_string(), model);
+                }
             } else {
                 let (arm, _label) = trimmed
                     .split_once(" : ")
@@ -431,16 +451,29 @@ fn check_state(chart: &StateChart) -> Result<(), String> {
             .transitions
             .iter()
             .any(|(_, from, to, _)| from == state && to != state);
-        if leaves == chart.ends.contains(state) {
+        let unreachable = chart
+            .classes
+            .iter()
+            .any(|(id, class)| id == state && class == "stateunreachable");
+        if unreachable {
+            if leaves || chart.ends.contains(state) || chart.starts.contains(state) {
+                return Err(format!("{state}: an unreachable state has a way in or out"));
+            }
+        } else if leaves == chart.ends.contains(state) {
             return Err(format!(
                 "{state}: an end state must be one with no transition out"
             ));
         }
     }
+    check_state_index(chart)?;
+    check_state_classes(chart)?;
     let mut body_kinds = BTreeSet::new();
     for (kind, present) in [
         ("statemodel", !chart.models.is_empty()),
-        ("state", !chart.states.is_empty()),
+        (
+            "state",
+            !chart.states.is_empty() || !chart.index_notes.is_empty(),
+        ),
         ("usecase", !chart.transitions.is_empty()),
     ] {
         if present {
@@ -454,6 +487,91 @@ fn check_state(chart: &StateChart) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+/// An index form draws one `<n> 状態 / <m> 遷移 (--entity <Entity>)` note per state model and
+/// nothing else; a full model has no note.
+fn check_state_index(chart: &StateChart) -> Result<(), String> {
+    if chart.index_notes.is_empty() {
+        return Ok(());
+    }
+    if chart.index_notes.len() != chart.models.len()
+        || !chart.states.is_empty()
+        || !chart.transitions.is_empty()
+        || !chart.classes.is_empty()
+    {
+        return Err("an index draws one note per state model and no state".to_string());
+    }
+    for (model, label) in &chart.index_notes {
+        let entity = chart
+            .models
+            .iter()
+            .find(|(id, _)| id == model)
+            .and_then(|(_, label)| label.split('.').next())
+            .unwrap_or_default();
+        let counts = label
+            .strip_suffix(&format!(" (--entity {entity})"))
+            .and_then(|rest| rest.split_once(" 状態 / "))
+            .and_then(|(n, rest)| Some((n, rest.strip_suffix(" 遷移")?)))
+            .filter(|(n, m)| n.parse::<usize>().is_ok() && m.parse::<usize>().is_ok());
+        if counts.is_none() {
+            return Err(format!("index note of {model} is `{label}`"));
+        }
+    }
+    Ok(())
+}
+
+/// A class line colours a declared state by what the lifecycle check found; each class is
+/// defined, and the legend comment is there.
+fn check_state_classes(chart: &StateChart) -> Result<(), String> {
+    for (state, class) in &chart.classes {
+        if !chart.states.contains_key(state) {
+            return Err(format!("class of {state}, which is not declared"));
+        }
+        if !["stateunreachable", "statedeadlock", "stateend"].contains(&class.as_str()) {
+            return Err(format!("{state} has the class {class}"));
+        }
+        if !chart.class_defs.contains(class) {
+            return Err(format!("class {class} has no classDef"));
+        }
+        let leaves = chart
+            .transitions
+            .iter()
+            .any(|(_, from, to, _)| from == state && to != state);
+        let ok = match class.as_str() {
+            "stateend" => chart.ends.contains(state),
+            "statedeadlock" => leaves,
+            _ => true,
+        };
+        if !ok {
+            return Err(format!("{state} is wrongly {class}"));
+        }
+    }
+    let ends: BTreeSet<&String> = chart.ends.iter().collect();
+    let end_classed: BTreeSet<&String> = chart
+        .classes
+        .iter()
+        .filter(|(_, class)| class == "stateend")
+        .map(|(state, _)| state)
+        .collect();
+    if ends != end_classed {
+        return Err("an end state has no stateend class, or the reverse".to_string());
+    }
+    let full = !chart.models.is_empty() && chart.index_notes.is_empty();
+    if full && !chart.legend {
+        return Err("a full state model has no `%% legend:` line".to_string());
+    }
+    Ok(())
+}
+
+/// The entities whose state models the unscoped diagram indexes, from its model labels.
+fn indexed_entities(chart: &StateChart) -> Vec<String> {
+    let entities: BTreeSet<String> = chart
+        .models
+        .iter()
+        .filter_map(|(_, label)| label.split('.').next().map(str::to_string))
+        .collect();
+    entities.into_iter().collect()
 }
 
 #[test]
@@ -476,8 +594,45 @@ fn every_state_diagram_of_every_sample_keeps_the_contract() {
 }
 
 #[test]
+fn the_unscoped_state_diagram_is_an_index_and_each_entity_draws_its_models() {
+    let dir = scratch("diagram_contract_state_entity");
+    let mut full = 0;
+    for root in lifecycle_roots() {
+        let text = diagram(&root, "state", None, &dir.join("index"));
+        let index = parse_state(&text)
+            .and_then(|chart| check_state(&chart).map(|()| chart))
+            .unwrap_or_else(|error| panic!("{root}: {error}\n{text}"));
+        assert_eq!(index.index_notes.len(), index.models.len(), "{root}");
+        for entity in indexed_entities(&index) {
+            let text = diagram_with(&root, "state", &["--entity", &entity], &dir.join("full"));
+            let chart = parse_state(&text)
+                .and_then(|chart| check_state(&chart).map(|()| chart))
+                .unwrap_or_else(|error| panic!("{root} {entity}: {error}\n{text}"));
+            assert!(chart.index_notes.is_empty(), "{root} {entity}");
+            assert!(chart
+                .models
+                .iter()
+                .all(|(_, l)| l.starts_with(&format!("{entity}."))));
+            for (model, label) in &index.index_notes {
+                let Some((_, at)) = chart.models.iter().find(|(id, _)| id == model) else {
+                    continue;
+                };
+                let moves = chart.transitions.iter().filter(|t| &t.0 == model).count();
+                let drawn = chart.states.values().filter(|m| *m == model).count();
+                let (n, rest) = label.split_once(" 状態 / ").unwrap();
+                let m = rest.split_once(" 遷移").unwrap().0;
+                assert_eq!(m.parse::<usize>().unwrap(), moves, "{root} {at}");
+                assert!(n.parse::<usize>().unwrap() >= drawn, "{root} {at}");
+            }
+            full += 1;
+        }
+    }
+    assert!(full > 5, "only {full} entity diagrams");
+}
+
+#[test]
 fn the_state_contract_check_rejects_a_broken_diagram() {
-    let good = "%% rdra-ish diagram=state scope=whole\n%% kinds: statemodel state usecase\nstateDiagram-v2\n  state \"Doc.status\" as statemodel__Doc_status {\n    [*] --> state__Doc_draft\n    state \"draft\" as state__Doc_draft\n    state \"done\" as state__Doc_done\n    %% transition usecase__Publish\n    state__Doc_draft --> state__Doc_done : Publish\n    state__Doc_done --> [*]\n  }\n";
+    let good = "%% rdra-ish diagram=state scope=entity:Doc\n%% kinds: statemodel state usecase\n%% legend: stateunreachable = a, statedeadlock = b, stateend = c\nstateDiagram-v2\n  state \"Doc.status\" as statemodel__Doc_status {\n    [*] --> state__Doc_draft\n    state \"draft\" as state__Doc_draft\n    state \"done\" as state__Doc_done\n    %% transition usecase__Publish\n    state__Doc_draft --> state__Doc_done : Publish\n    state__Doc_done --> [*]\n  }\n  classDef stateend fill:#dfd\n  class state__Doc_done stateend\n";
     assert!(check_state(&parse_state(good).unwrap()).is_ok());
     for (broken, from, to) in [
         ("missing end", "    state__Doc_done --> [*]\n", ""),
@@ -498,6 +653,32 @@ fn the_state_contract_check_rejects_a_broken_diagram() {
         ),
         ("emoji-era id", "as state__Doc_done", "as Doc_done"),
         (
+            "no legend",
+            "%% legend: stateunreachable = a, statedeadlock = b, stateend = c\n",
+            "",
+        ),
+        ("no classDef", "  classDef stateend fill:#dfd\n", ""),
+        (
+            "end without its class",
+            "  class state__Doc_done stateend\n",
+            "",
+        ),
+        (
+            "end class on a state with a way out",
+            "  class state__Doc_done stateend\n",
+            "  class state__Doc_done stateend\n  class state__Doc_draft stateend\n",
+        ),
+        (
+            "deadlock on a state with no way out",
+            "  class state__Doc_done stateend\n",
+            "  class state__Doc_done statedeadlock\n",
+        ),
+        (
+            "unknown class",
+            "  class state__Doc_done stateend\n",
+            "  class state__Doc_done stateend\n  class state__Doc_draft stateweird\n",
+        ),
+        (
             "header kinds",
             "statemodel state usecase",
             "statemodel state",
@@ -515,12 +696,17 @@ fn a_state_and_its_use_cases_have_the_ids_the_rdra_diagram_gives_them() {
     let dir = scratch("diagram_contract_state_ids");
     for root in lifecycle_roots() {
         let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
-        let state = parse_state(&diagram(&root, "state", None, &dir.join("s"))).unwrap();
-        let ids = state
-            .states
-            .keys()
-            .chain(state.transitions.iter().map(|(_, _, _, usecase)| usecase));
-        for id in ids {
+        let index = parse_state(&diagram(&root, "state", None, &dir.join("i"))).unwrap();
+        let ids: Vec<String> = indexed_entities(&index)
+            .iter()
+            .flat_map(|entity| {
+                let text = diagram_with(&root, "state", &["--entity", entity], &dir.join("s"));
+                let state = parse_state(&text).unwrap();
+                let usecases: Vec<String> = state.transitions.iter().map(|t| t.3.clone()).collect();
+                state.states.into_keys().chain(usecases).collect::<Vec<_>>()
+            })
+            .collect();
+        for id in &ids {
             assert!(rdra.nodes.contains_key(id), "{root}: {id} not in rdra");
         }
     }

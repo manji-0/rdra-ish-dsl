@@ -180,6 +180,10 @@ pub(crate) enum Commands {
         /// together with --buc.
         #[arg(long)]
         usecase: Vec<String>,
+        /// Draw only these entities' state models (by id), every lifecycle column; repeatable.
+        /// Applies to --kind state, and not together with --buc.
+        #[arg(long)]
+        entity: Vec<String>,
         /// Filter graph diagrams to one or more node kinds; repeatable.
         /// Applies to --kind rdra.
         #[arg(long = "node-kind", alias = "kind-filter")]
@@ -454,12 +458,14 @@ mod tests {
                 format,
                 buc,
                 usecase,
+                entity,
                 node_kind,
                 edge_kind,
                 out,
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(usecase.is_empty());
+                assert!(entity.is_empty());
                 assert!(matches!(kind, DiagramKind::Rdra));
                 assert!(matches!(format, OutputFormat::Mermaid));
                 assert_eq!(buc, vec!["BucScheduling"]);

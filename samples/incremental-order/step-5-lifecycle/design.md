@@ -159,19 +159,11 @@ rdra-ish diagram samples/incremental-order/step-5-lifecycle/src --kind state --f
 <!-- embed: out/state.mmd -->
 ```mermaid
 %% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-5-lifecycle/src
-%% kinds: statemodel state usecase
+%% kinds: statemodel state
 %% omitted: (none)
 stateDiagram-v2
   state "Store.restock_status" as statemodel__Store_restock_status {
-    [*] --> state__Store_normal
-    state "normal" as state__Store_normal
-    state "scheduled" as state__Store_scheduled
-    state "blocked" as state__Store_blocked
-    %% transition usecase__ChangeNextRestockDate
-    state__Store_normal --> state__Store_scheduled : Change Next Restock Date
-    %% transition usecase__BlockScheduledRestock
-    state__Store_scheduled --> state__Store_blocked : Block Scheduled Restock
-    state__Store_blocked --> [*]
+    state "3 状態 / 2 遷移 (--entity Store)" as index__Store_restock_status
   }
 ```
 
