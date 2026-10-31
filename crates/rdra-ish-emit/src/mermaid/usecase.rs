@@ -220,8 +220,8 @@ impl Emitter for UsecaseMermaidEmitter {
         let layers = render_layered_nodes(&mut body, model, &nodes);
         render_edges(&mut body, edges.into_graph_edges());
 
-        let kinds = kinds_by_layer(&nodes);
-        body.push_str(&class_defs(&classes(model, &kinds, &nodes)));
+        let kinds = classes(model, &kinds_by_layer(&nodes), &nodes);
+        body.push_str(&class_defs(&kinds));
         let header = Header {
             diagram: "usecase",
             view,

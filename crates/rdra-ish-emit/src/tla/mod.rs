@@ -157,8 +157,6 @@ fn needs_fairness(ts: &TransitionSystem) -> bool {
         .any(|p| matches!(p.formula, Ltl::Eventually(_) | Ltl::LeadsTo(..)))
 }
 
-/// A TLA+ identifier: the qualifier dot of a foreign id becomes `__` (`Auth__Login`), and
-/// any other character outside `[A-Za-z0-9_]` becomes `_`.
 pub(crate) fn sanitize_ident(s: &str) -> String {
     let mut out: String = rdra_ish_core::model::slug(s)
         .chars()

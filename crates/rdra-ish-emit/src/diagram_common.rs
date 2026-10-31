@@ -137,7 +137,6 @@ pub(crate) fn quote(label: &str) -> String {
 }
 
 /// The node id of the encoding contract, `<kind token>__<DSL id>`, the same in every kind.
-/// `kind__id`; a stub's qualifier dot becomes `__` (`usecase__Auth__Login`).
 pub(crate) fn contract_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
     Some(format!(
         "{}__{}",
@@ -236,10 +235,8 @@ fn kind_style(kind: &str) -> &'static str {
     }
 }
 
-/// The class of a stub of another model's element: drawn dashed, by its qualified id.
 pub(crate) const FOREIGN_CLASS: &str = "foreign";
 
-/// The `:::class` a node is declared with: its kind, or `foreign` for a stub.
 pub(crate) fn node_class(model: &SemanticModel, node: &NodeRef) -> &'static str {
     if model.is_foreign(node) {
         FOREIGN_CLASS

@@ -43,8 +43,6 @@ fn is_strict_access_gap(error: &RdraError) -> bool {
     )
 }
 
-/// `Auth (auth, path ../auth-model), Pay (payments, path ../payments-model/model)`: each bound
-/// external system with its dependency, then any dependency nothing binds.
 fn environment_line(
     model: &rdra_ish_core::SemanticModel,
     dependencies: &[rdra_ish_core::Dependency],

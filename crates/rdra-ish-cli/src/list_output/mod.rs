@@ -56,8 +56,6 @@ pub(crate) fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> R
 
     format_rows(&headers, &rows, format, "lint issues")
 }
-/// Render one `list --kind`. `program` locates each row of `--kind dependency`; without it
-/// the file and line columns stay empty.
 pub(crate) fn list_elements(
     program: Option<&rdra_ish_core::ResolvedProgram>,
     model: &rdra_ish_core::SemanticModel,
@@ -91,8 +89,6 @@ pub(crate) fn list_elements(
     }
 }
 
-/// `list --kind dependency`: every relation with a foreign end, as `use` (the predicate), the
-/// foreign element, the local element, and the file and line of the predicate.
 fn format_dependencies(
     program: Option<&rdra_ish_core::ResolvedProgram>,
     model: &rdra_ish_core::SemanticModel,
@@ -134,6 +130,14 @@ fn format_dependencies(
             line,
         ]);
     }
-    rows.sort();
+    rows.sort_by_key(|r| {
+        (
+            r[3].clone(),
+            r[4].parse::<usize>().unwrap_or_default(),
+            r[0].clone(),
+            r[1].clone(),
+            r[2].clone(),
+        )
+    });
     format_rows(&headers, &rows, format, "dependency references")
 }

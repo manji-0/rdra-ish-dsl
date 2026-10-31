@@ -91,7 +91,8 @@ impl Emitter for ContextMermaidEmitter {
         for rel in &model.relations {
             // The outside node, the edge label, the node it goes through, and the use cases
             // behind it; `outbound` when the edge runs from the system.
-            let bound = |stub: &NodeRef| model.origin(stub).map(|o| NodeRef::ExtSystem(o.ext));
+            let bound = |stub: &NodeRef| model.bound_through(stub).map(NodeRef::ExtSystem);
+            let (bound_from, bound_to) = (bound(&rel.from), bound(&rel.to));
             let (outside, label, via, usecases, outbound) = match (&rel.kind, &rel.from, &rel.to) {
                 (RelKind::Performs, actor @ NodeRef::Actor(_), target) if in_scope(target) => {
                     let usecases = usecases_of(model, target);
@@ -104,14 +105,18 @@ impl Emitter for ContextMermaidEmitter {
                     )
                 }
                 (RelKind::Invokes | RelKind::Reads | RelKind::Shows, usecase, stub)
-                    if in_scope(usecase) && bound(stub).is_some() =>
+                    if in_scope(usecase) && bound_to.is_some() =>
                 {
-                    let Some(ext) = bound(stub) else { continue };
                     let label = format!("{} {}", object_graph_rel_label(&rel.kind), event_id(stub));
-                    (ext, label, stub, vec![usecase.clone()], true)
+                    (
+                        bound_to.clone().unwrap(),
+                        label,
+                        stub,
+                        vec![usecase.clone()],
+                        true,
+                    )
                 }
-                // A foreign event is raised by the external system it is bound through.
-                (RelKind::Triggers, event, target) if bound(event).is_some() => {
+                (RelKind::Triggers, event, target) if bound_from.is_some() => {
                     let usecases: Vec<NodeRef> = usecases_of(model, target)
                         .into_iter()
                         .filter(|usecase| in_scope(usecase))
@@ -119,9 +124,8 @@ impl Emitter for ContextMermaidEmitter {
                     if usecases.is_empty() {
                         continue;
                     }
-                    let Some(ext) = bound(event) else { continue };
                     let label = format!("raises {}", event_id(event));
-                    (ext, label, event, usecases, false)
+                    (bound_from.clone().unwrap(), label, event, usecases, false)
                 }
                 (RelKind::Raises, extsystem @ NodeRef::ExtSystem(_), event) => {
                     let usecases: Vec<NodeRef> = targets(model, event, RelKind::Triggers)

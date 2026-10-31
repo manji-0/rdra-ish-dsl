@@ -658,7 +658,6 @@ pub(crate) fn collect_object_graph_nodes(
             .filter(|nr| is_visible(nr)),
     );
 
-    // The stubs of another model's elements the product references, after every local kind.
     let mut referenced: Vec<NodeRef> = model
         .relations
         .iter()

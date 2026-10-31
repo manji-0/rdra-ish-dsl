@@ -289,7 +289,7 @@ fn kinds_by_layer(nodes: &[NodeRef]) -> Vec<&'static str> {
     kinds
 }
 
-/// The classes `class_defs` writes: the kinds, plus `foreign` when a stub is drawn.
+/// The kinds a diagram declares: the node kinds, plus `foreign` when a stub is drawn.
 fn classes(model: &SemanticModel, kinds: &[&'static str], nodes: &[NodeRef]) -> Vec<&'static str> {
     let mut classes = kinds.to_vec();
     if nodes.iter().any(|nr| model.is_foreign(nr)) {
@@ -426,7 +426,8 @@ impl Emitter for RdraMermaidEmitter {
             .chain(omitted_edges)
             .map(str::to_string)
             .collect();
-        body.push_str(&class_defs(&classes(model, &kinds, &visible_nodes)));
+        let kinds = classes(model, &kinds, &visible_nodes);
+        body.push_str(&class_defs(&kinds));
         let header = Header {
             diagram: "rdra",
             view,
