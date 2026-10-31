@@ -768,6 +768,9 @@ an exposed use case requires; the audit of local permissions ignores it. `reads`
 | `holds(SignedIn, Auth.SessionView.status == active)`, or `Auth.SessionView.status` in any comparison: a constraint, a `property`, `combines`, a `sets` value, or `.along` | `ForeignStateNeedsEnvironment`; a comparison on published data needs the environment, which a later release adds. A column the entity lacks is an unknown column, and a dotted path that is no binding, such as `Nope.Zz.yy`, is an undefined symbol |
 | `creates(Auth.Login, Order)` or any foreign element outside the entity position of a write | `ForeignOperand` with the argument position |
 | `extsystem A ... from own.Sys1` and `extsystem A__B ... from own.Sys2` where `A.B__C` and `A__B.C` both generate `A__B__C` | `ForeignSlugClash` |
+| `from auth.Nope` naming a system the dependency does not define | `UnknownForeignSystem`, with the dependency's systems |
+| `status == Auth.SessionView` where a comparison needs a column | `ForeignColumnMissing` |
+| `nope.Order.status` in a comparison, a qualifier that is no bound system and no module | undefined symbol |
 | `reads(X, Auth.Session)` after the owner wrote `shares(AuthSystem, Session)` | `DirectEntityReference` (warning) |
 | a local `entity Auth__SessionView` | `IdShadowsForeignSlug` |
 | a second `extsystem ... from auth.AuthSystem` | `DuplicateBinding` |

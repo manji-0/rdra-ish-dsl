@@ -343,13 +343,10 @@ fn a_second_binding_of_one_system_and_a_binding_of_a_transitive_dependency_are_r
         "{stderr}"
     );
     assert!(
-        stderr.contains("UnknownForeignName: 'payments' publishes no 'Nope'"),
+        stderr.contains("UnknownForeignSystem: dependency 'payments' defines no system 'Nope'"),
         "{stderr}"
     );
-    assert!(
-        stderr.contains("closest published names: `PaymentSystem`"),
-        "{stderr}"
-    );
+    assert!(stderr.contains("its systems: `PaymentSystem`"), "{stderr}");
     assert!(stderr.contains("UnknownDependency: 'idp' is not a [dependencies] entry of the manifest (auth, payments)"), "{stderr}");
 }
 
@@ -406,6 +403,14 @@ fn a_value_from_another_model_in_sets_is_checked() {
         (
             "sets(PlaceOrder, Order, status == Auth.SessionView.nope)",
             "57:35: unknown column: entity 'Auth.SessionView' has no column 'nope'",
+        ),
+        (
+            "sets(PlaceOrder, Order, status == Nope.Order.status)",
+            "57:35: undefined symbol: Nope.Order",
+        ),
+        (
+            "sets(PlaceOrder, Order, status == Auth.SessionView)",
+            "57:35: ForeignColumnMissing: 'Auth.SessionView' names a foreign entity, not a column",
         ),
     ];
     for (line, expected) in cases {
@@ -486,6 +491,34 @@ fn a_foreign_operand_outside_the_entity_position_of_a_write_is_foreign_operand()
             "updates(PlaceOrder, Auth.SessionView)",
             "ForeignWrite: `updates` on 'Auth.SessionView'",
         ),
+        (
+            "creates(Auth.SessionView, Order)",
+            "ForeignOperand: 'Auth.SessionView' cannot be argument 1 of `creates`",
+        ),
+        (
+            "writes(Auth.SessionView, Order)",
+            "ForeignOperand: 'Auth.SessionView' cannot be argument 1 of `writes`",
+        ),
+        (
+            "deletes(Pay.Charge, Order)",
+            "ForeignOperand: 'Pay.Charge' cannot be argument 1 of `deletes`",
+        ),
+        (
+            "sets(Auth.SessionView, Order, status == placed)",
+            "ForeignOperand: 'Auth.SessionView' cannot be argument 1 of `sets`",
+        ),
+        (
+            "transitions(Order.status, Auth.SessionView, draft -> placed)",
+            "ForeignOperand: 'Auth.SessionView' cannot be argument 2 of `transitions`",
+        ),
+        (
+            "owns(Auth.SessionView, Order)",
+            "ForeignOperand: 'Auth.SessionView' cannot be argument 1 of `owns`",
+        ),
+        (
+            "owns(ShopBackend, Auth.SessionView)",
+            "ForeignWrite: `owns` on 'Auth.SessionView'",
+        ),
     ];
     for (line, expected) in cases {
         let (code, stderr) = check_shop_with("cross_model_write_positions", line);
@@ -561,6 +594,36 @@ fn every_expression_site_names_the_foreign_entity_once() {
             "error[Forbidden_Order_0]",
             1,
         ),
+        (
+            "forbidden(Order, nope.mod.Order.status == placed)",
+            "57:18: undefined symbol: nope.mod.Order",
+            1,
+        ),
+        (
+            "condition Cond \"c\"\nholds(Cond, nope.Order.status == placed)",
+            "58:13: undefined symbol: nope.Order",
+            1,
+        ),
+        (
+            "condition Cond \"c\"\nholds(Cond, Auth.SessionView.nocol == active)",
+            "58:13: unknown column: entity 'Auth.SessionView' has no column 'nocol'",
+            1,
+        ),
+        (
+            "after(PlaceOrder).assert(Auth.SessionView.nocol == active)",
+            "57:26: unknown column: entity 'Auth.SessionView' has no column 'nocol'",
+            1,
+        ),
+        (
+            "after(PlaceOrder).assert(Auth.SessionView.status == active)",
+            "57:26: ForeignStateNeedsEnvironment: a comparison on 'Auth.SessionView'",
+            1,
+        ),
+        (
+            "forbidden(Order, Auth.SessionView == placed)",
+            "57:18: ForeignColumnMissing: 'Auth.SessionView' names a foreign entity, not a column",
+            1,
+        ),
     ];
     for (line, expected, errors) in cases {
         let (code, stderr) = check_shop_with("cross_model_expression_sites", line);
@@ -608,7 +671,7 @@ fn a_failed_binding_reports_once_and_a_missing_manifest_says_so() {
     let stderr = text(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stderr}");
     assert!(
-        stderr.contains("UnknownForeignName: 'auth' publishes no 'Nope'"),
+        stderr.contains("UnknownForeignSystem: dependency 'auth' defines no system 'Nope'"),
         "{stderr}"
     );
     assert_eq!(stderr.matches("error: ").count(), 1, "{stderr}");
