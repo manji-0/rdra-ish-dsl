@@ -1,5 +1,2 @@
 [model]
 name = "purchase"
-
-[dependencies]
-auth = { path = "../auth-model" }

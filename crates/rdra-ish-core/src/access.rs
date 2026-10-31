@@ -474,7 +474,7 @@ fn system_may_call(model: &SemanticModel, usecase: UseCaseKey) -> bool {
 fn collect_actor_permissions(model: &SemanticModel) -> HashMap<ActorKey, HashSet<PermissionKey>> {
     let mut by_actor: HashMap<ActorKey, HashSet<PermissionKey>> = HashMap::new();
     for rel in &model.relations {
-        if rel.kind == RelKind::HasPermission {
+        if rel.kind == RelKind::HasPermission && !model.is_foreign(&rel.to) {
             if let (NodeRef::Actor(actor), NodeRef::Permission(permission)) = (&rel.from, &rel.to) {
                 by_actor.entry(*actor).or_default().insert(*permission);
             }

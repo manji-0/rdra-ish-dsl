@@ -4,8 +4,8 @@ use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::{
-    CmpOpModel, EffectValue, TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty,
-    TemporalRhs,
+    CmpOpModel, EffectValue, SemanticModel, TemporalAtom, TemporalExpr, TemporalFormula,
+    TemporalProperty, TemporalRhs,
 };
 use rdra_ish_syntax::ast::{AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PropertyDecl};
 
@@ -27,6 +27,9 @@ pub(crate) fn register_property(
         return;
     }
 
+    if foreign_atoms(model, &decl.formula, ctx, diags) {
+        return;
+    }
     match lower_formula(&decl.formula) {
         Ok(formula) => {
             model.temporal_properties.push(TemporalProperty {
@@ -168,5 +171,49 @@ fn parse_effect_literal(name: &str) -> EffectValue {
         "null" => EffectValue::Null,
         "present" => EffectValue::Present,
         other => EffectValue::EnumVariant(other.to_string()),
+    }
+}
+
+/// Report every atom whose column belongs to another model, and say whether any did.
+fn foreign_atoms(
+    model: &SemanticModel,
+    formula: &AstTemporalFormula,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    fn walk(
+        model: &SemanticModel,
+        expr: &Expr,
+        ctx: DiagCtxt,
+        diags: &mut Vec<Diagnostic>,
+    ) -> bool {
+        match expr {
+            Expr::Cmp(cmp) => {
+                let mut found = false;
+                for operand in [&cmp.lhs, &cmp.rhs] {
+                    if let Operand::QualifiedColumn(qcol) = operand {
+                        found |= crate::binding::foreign_column_operand(model, qcol, ctx, diags);
+                    }
+                }
+                found
+            }
+            Expr::Not(inner) => walk(model, inner, ctx, diags),
+            Expr::And(a, b) | Expr::Or(a, b) => {
+                let left = walk(model, a, ctx, diags);
+                walk(model, b, ctx, diags) || left
+            }
+        }
+    }
+    match formula {
+        AstTemporalFormula::Always(e) | AstTemporalFormula::Eventually(e) => {
+            walk(model, e, ctx, diags)
+        }
+        AstTemporalFormula::LeadsTo {
+            antecedent,
+            consequent,
+        } => {
+            let left = walk(model, antecedent, ctx, diags);
+            walk(model, consequent, ctx, diags) || left
+        }
     }
 }

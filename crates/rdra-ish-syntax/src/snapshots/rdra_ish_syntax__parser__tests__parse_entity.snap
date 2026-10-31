@@ -207,6 +207,7 @@ Ast {
                     },
                 ],
                 variation_values: [],
+                binding: None,
                 span: 1..434,
             },
         ),

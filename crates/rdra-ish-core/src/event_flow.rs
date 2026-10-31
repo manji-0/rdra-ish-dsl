@@ -96,23 +96,29 @@ pub fn collect_timer_flows(model: &SemanticModel) -> Vec<TimerFlow> {
 /// `model.relations` を 1 パス走査してイベントキーに集約し、
 /// `triggers` 先 UseCase の `transitions` を下流の遷移として付ける。
 pub fn collect_event_flows(model: &SemanticModel) -> Vec<EventFlow> {
+    let flow = |ek, raised_by| EventFlow {
+        event: ek,
+        raised_by,
+        triggers_ucs: Vec::new(),
+        triggers_bucs: Vec::new(),
+        delivered_to: Vec::new(),
+        transitions: Vec::new(),
+    };
     let mut map: HashMap<EventKey, EventFlow> = model
         .events
         .keys()
-        .map(|ek| {
-            (
-                ek,
-                EventFlow {
-                    event: ek,
-                    raised_by: Vec::new(),
-                    triggers_ucs: Vec::new(),
-                    triggers_bucs: Vec::new(),
-                    delivered_to: Vec::new(),
-                    transitions: Vec::new(),
-                },
-            )
-        })
+        .map(|ek| (ek, flow(ek, Vec::new())))
         .collect();
+    // A foreign event the product reacts to is raised by the external system it is bound
+    // through; one it never names stays out.
+    for rel in &model.relations {
+        if let (RelKind::Triggers, NodeRef::Event(ek)) = (&rel.kind, &rel.from) {
+            if let Some(ext) = model.bound_through(&rel.from) {
+                map.entry(*ek)
+                    .or_insert_with(|| flow(*ek, vec![Raiser::ExtSystem(ext)]));
+            }
+        }
+    }
 
     for rel in &model.relations {
         match (&rel.kind, &rel.from, &rel.to) {

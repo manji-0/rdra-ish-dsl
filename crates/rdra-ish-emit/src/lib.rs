@@ -658,6 +658,23 @@ pub(crate) fn collect_object_graph_nodes(
             .filter(|nr| is_visible(nr)),
     );
 
+    let mut referenced: Vec<NodeRef> = model
+        .relations
+        .iter()
+        .flat_map(|rel| [&rel.from, &rel.to])
+        .filter(|nr| model.is_foreign(nr))
+        .cloned()
+        .collect::<std::collections::HashSet<_>>()
+        .into_iter()
+        .filter(|nr| is_visible(nr))
+        .collect();
+    referenced.sort_by_key(|nr| {
+        crate::diagram_common::node_id(model, nr)
+            .unwrap_or("")
+            .to_string()
+    });
+    nodes.extend(referenced);
+
     nodes
 }
 

@@ -17,6 +17,7 @@ pub(super) fn instance(kind: Kind, id: &str) -> InstanceDecl {
         usecase: UseCaseMetadata::default(),
         columns: Vec::new(),
         variation_values: Vec::new(),
+        binding: None,
         span: 0..0,
     }
 }
@@ -107,6 +108,7 @@ pub(super) fn simple_entity_model(ids: &[&str]) -> SemanticModel {
                 },
             ],
             variation_values: Vec::new(),
+            binding: None,
             span: 0..0,
         };
         register_instance(&mut model, &inst, DiagCtxt::new(0), &mut diags);

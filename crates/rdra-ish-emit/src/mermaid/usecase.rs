@@ -3,7 +3,7 @@
 //! systems, and timers around it, the conditions that apply to it, and the states it moves.
 
 use super::{
-    buc_members, kinds_by_layer, omitted_linked_kinds, render_edges, render_layered_nodes,
+    buc_members, classes, kinds_by_layer, omitted_linked_kinds, render_edges, render_layered_nodes,
     state_key, EdgeSet,
 };
 use crate::diagram_common::{class_defs, node_id, Header};
@@ -96,6 +96,9 @@ fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<
             (RelKind::Displays, usecase, NodeRef::Screen(_))
             | (RelKind::Raises, usecase, NodeRef::Event(_)) => usecases.contains(usecase),
             (kind, usecase, NodeRef::Entity(_)) if is_crud(kind) => usecases.contains(usecase),
+            (RelKind::Invokes, usecase, target) if model.is_foreign(target) => {
+                usecases.contains(usecase)
+            }
             _ => false,
         };
         if !kept {
@@ -217,7 +220,7 @@ impl Emitter for UsecaseMermaidEmitter {
         let layers = render_layered_nodes(&mut body, model, &nodes);
         render_edges(&mut body, edges.into_graph_edges());
 
-        let kinds = kinds_by_layer(&nodes);
+        let kinds = classes(model, &kinds_by_layer(&nodes), &nodes);
         body.push_str(&class_defs(&kinds));
         let header = Header {
             diagram: "usecase",

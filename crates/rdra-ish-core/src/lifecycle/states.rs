@@ -233,3 +233,34 @@ pub fn derive_states_built(
     };
     (report, built.ts)
 }
+
+/// The lifecycle findings of error severity at the default bounds and caps, each as
+/// `error[<name>]: <message>`, in report order. Empty when the lifecycle is clean.
+pub fn error_findings(model: &SemanticModel) -> Vec<String> {
+    let report = derive_states(model, &Scope::ALL, Caps::DEFAULT_PATTERNS);
+    let mut out = Vec::new();
+    let mut push = |name: String, diag: &StateDiag| {
+        let line = format!("error[{name}]: {diag}");
+        if !out.contains(&line) {
+            out.push(line);
+        }
+    };
+    for view in &report.views {
+        for diag in &view.diagnostics {
+            if diag.severity() == Severity::Error {
+                push(diag.name(&[&view.entity_id]), diag);
+            }
+        }
+    }
+    for d in &report.diags {
+        if d.diag.severity() == Severity::Error {
+            let ids: Vec<&str> = d
+                .entities
+                .iter()
+                .map(|ek| model.entities[*ek].id.as_str())
+                .collect();
+            push(d.diag.name(&ids), &d.diag);
+        }
+    }
+    out
+}

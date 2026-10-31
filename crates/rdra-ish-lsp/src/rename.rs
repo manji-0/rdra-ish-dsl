@@ -5,7 +5,7 @@ use std::path::Path;
 
 use crate::convert::span_to_range;
 use crate::refs::{
-    id_span_in_qref, instance_id_span, reference_at_offset, symbol_target, SymbolTarget,
+    id_span_in_qref, instance_id_span, reference_at_offset, symbol_target_at, SymbolTarget,
 };
 use crate::uri::{path_to_uri, paths_equal};
 use rdra_ish_core::WorkspaceAnalysis;
@@ -39,7 +39,7 @@ pub fn prepare_rename_range(
         .iter()
         .find(|(source_path, _, _)| paths_equal(source_path, path))?;
     let reference = reference_at_offset(ast, offset)?;
-    let target = symbol_target(&analysis.model, reference)?;
+    let target = symbol_target_at(&analysis.model, reference, text, offset)?;
     let span = rename_span_at_offset(ast, text, &target, offset)?;
     Some(span_to_range(text, span))
 }
@@ -61,13 +61,15 @@ pub fn workspace_rename(
         .find(|(source_path, _, _)| paths_equal(source_path, path))
         .ok_or(RenameError::NoSymbol)?;
     let reference = reference_at_offset(ast, offset).ok_or(RenameError::NoSymbol)?;
-    let target = symbol_target(&analysis.model, reference).ok_or(RenameError::NoSymbol)?;
+    let target =
+        symbol_target_at(&analysis.model, reference, text, offset).ok_or(RenameError::NoSymbol)?;
 
     if analysis
         .model
         .decl_sites
         .get(&target.kind, new_name)
         .is_some()
+        || is_foreign_slug(&analysis.model, new_name)
     {
         return Err(RenameError::Conflict);
     }
@@ -89,6 +91,19 @@ pub fn workspace_rename(
         document_changes: None,
         change_annotations: None,
     })
+}
+
+/// `Auth__Login`: the generated name of a stub, which no local id may take.
+fn is_foreign_slug(model: &rdra_ish_core::SemanticModel, name: &str) -> bool {
+    use rdra_ish_core::model::slug;
+    model
+        .use_cases
+        .foreign()
+        .map(|(_, u, _)| slug(&u.id))
+        .chain(model.events.foreign().map(|(_, e, _)| slug(&e.id)))
+        .chain(model.entities.foreign().map(|(_, e, _)| slug(&e.id)))
+        .chain(model.permissions.foreign().map(|(_, p, _)| slug(&p.id)))
+        .any(|s| s == name)
 }
 
 fn rename_edits_in_ast(
@@ -248,6 +263,136 @@ performs(Staff, Book)
 
         std::fs::remove_file(&file).ok();
         std::fs::remove_dir(root).ok();
+    }
+
+    #[test]
+    fn a_reference_to_a_bound_external_system_is_neither_renamed_nor_a_rename_target() {
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/xsys/shop-model");
+        let file = root.join("shop/checkout.rdra");
+        let src = std::fs::read_to_string(&file).unwrap();
+        let project = rdra_ish_core::load_project(std::slice::from_ref(&root), None).unwrap();
+        let analysis = rdra_ish_core::analyze_project(project);
+
+        let offset = src.find("usecase::Auth.Login").unwrap() + "usecase::Auth.".len();
+        assert!(matches!(
+            workspace_rename(&analysis, &file, offset, "SignIn"),
+            Err(RenameError::NoSymbol)
+        ));
+
+        let offset = src.find("usecase SignInAtCheckout").unwrap() + "usecase ".len();
+        let edit = workspace_rename(&analysis, &file, offset, "SignIn").unwrap();
+        let changes = edit.changes.expect("changes");
+        let edits = changes
+            .get(&path_to_uri(&file).unwrap())
+            .expect("file edits");
+        assert_eq!(edits.len(), 4, "{edits:?}");
+    }
+
+    #[test]
+    fn renaming_a_bound_external_system_rewrites_every_qualifier() {
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/xsys/shop-model");
+        let file = root.join("shop/checkout.rdra");
+        let src = std::fs::read_to_string(&file).unwrap();
+        let project = rdra_ish_core::load_project(std::slice::from_ref(&root), None).unwrap();
+        let analysis = rdra_ish_core::analyze_project(project);
+
+        let offset = src.find("extsystem Auth").unwrap() + "extsystem ".len();
+        let edit = workspace_rename(&analysis, &file, offset, "Authn").unwrap();
+        let changes = edit.changes.expect("changes");
+        let edits = changes
+            .get(&path_to_uri(&file).unwrap())
+            .expect("file edits");
+        assert_eq!(edits.len(), 4, "{edits:?}");
+
+        let mut renamed = src.clone();
+        let mut sorted: Vec<&TextEdit> = edits.iter().collect();
+        sorted.sort_by_key(|e| std::cmp::Reverse((e.range.start.line, e.range.start.character)));
+        for e in sorted {
+            let lines: Vec<&str> = renamed.lines().collect();
+            let offset_of = |line: usize, ch: usize| {
+                lines[..line].iter().map(|l| l.len() + 1).sum::<usize>() + ch
+            };
+            let (a, b) = (
+                offset_of(
+                    e.range.start.line as usize,
+                    e.range.start.character as usize,
+                ),
+                offset_of(e.range.end.line as usize, e.range.end.character as usize),
+            );
+            renamed.replace_range(a..b, &e.new_text);
+        }
+        assert!(!renamed.contains("Auth."), "{renamed}");
+        assert!(renamed.contains("usecase::Authn.Login") && renamed.contains("Authn.SessionView"));
+        let scratch = std::env::temp_dir().join("rdra-rename-authn");
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(scratch.join("shop-model/shop")).unwrap();
+        std::fs::create_dir_all(scratch.join(".git")).unwrap();
+        for dep in ["auth-model", "payments-model"] {
+            copy_dir(&root.join("..").join(dep), &scratch.join(dep));
+        }
+        std::fs::copy(root.join("rdra.toml"), scratch.join("shop-model/rdra.toml")).unwrap();
+        std::fs::write(scratch.join("shop-model/shop/checkout.rdra"), renamed).unwrap();
+        let project = rdra_ish_core::load_project(&[scratch.join("shop-model")], None).unwrap();
+        assert!(project.diags.is_empty(), "{:?}", project.diags);
+        let _ = std::fs::remove_dir_all(scratch);
+    }
+
+    fn copy_dir(from: &Path, to: &Path) {
+        std::fs::create_dir_all(to).unwrap();
+        for entry in std::fs::read_dir(from).unwrap() {
+            let entry = entry.unwrap();
+            let target = to.join(entry.file_name());
+            if entry.file_type().unwrap().is_dir() {
+                copy_dir(&entry.path(), &target);
+            } else {
+                std::fs::copy(entry.path(), target).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn the_qualifier_of_a_reference_renames_the_bound_external_system() {
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/xsys/shop-model");
+        let file = root.join("shop/checkout.rdra");
+        let src = std::fs::read_to_string(&file).unwrap();
+        let project = rdra_ish_core::load_project(std::slice::from_ref(&root), None).unwrap();
+        let analysis = rdra_ish_core::analyze_project(project);
+
+        let offset = src.find("Auth.CanLogin").unwrap() + 1;
+        let range = prepare_rename_range(&analysis, &file, offset).expect("renamable");
+        assert_eq!(
+            range.end.character - range.start.character,
+            "Auth".len() as u32
+        );
+        let edit = workspace_rename(&analysis, &file, offset, "Authn").unwrap();
+        let edits = edit
+            .changes
+            .expect("changes")
+            .remove(&path_to_uri(&file).unwrap())
+            .expect("file edits");
+        assert_eq!(edits.len(), 4, "{edits:?}");
+
+        let offset = src.find("Auth.CanLogin").unwrap() + "Auth.".len() + 1;
+        assert!(prepare_rename_range(&analysis, &file, offset).is_none());
+    }
+
+    #[test]
+    fn a_generated_foreign_name_is_refused_as_a_new_name() {
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/xsys/shop-model");
+        let file = root.join("shop/checkout.rdra");
+        let src = std::fs::read_to_string(&file).unwrap();
+        let project = rdra_ish_core::load_project(std::slice::from_ref(&root), None).unwrap();
+        let analysis = rdra_ish_core::analyze_project(project);
+
+        let offset = src.find("actor Shopper").unwrap() + "actor ".len();
+        assert!(matches!(
+            workspace_rename(&analysis, &file, offset, "Auth__Login"),
+            Err(RenameError::Conflict)
+        ));
     }
 
     #[test]

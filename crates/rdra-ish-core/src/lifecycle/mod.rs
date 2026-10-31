@@ -35,7 +35,7 @@ pub use findings::{
 pub use lasso::{LassoReplay, Loop};
 pub use restrict::Component;
 pub use select::{NotChecked, Scope, Selection, UnknownId};
-pub use states::{derive_states, derive_states_built, BoundsLine, StatesReport};
+pub use states::{derive_states, derive_states_built, error_findings, BoundsLine, StatesReport};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{

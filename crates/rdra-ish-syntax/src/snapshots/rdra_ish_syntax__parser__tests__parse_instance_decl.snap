@@ -64,6 +64,7 @@ Ast {
                 },
                 columns: [],
                 variation_values: [],
+                binding: None,
                 span: 0..65,
             },
         ),

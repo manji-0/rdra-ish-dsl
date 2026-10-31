@@ -13,6 +13,17 @@ pub struct ExtSystem {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+    pub binding: Option<Binding>,
+}
+
+/// The dependency and its system an external system stands for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding {
+    pub dep: std::string::String,
+    pub system: std::string::String,
+    /// Whether the dependency and system were found and the stubs inserted. A reference
+    /// through an unresolved binding reports nothing more: the binding's own error is enough.
+    pub resolved: bool,
 }
 
 #[derive(Debug, Clone)]

@@ -1,0 +1,56 @@
+// The product side of a cross-model reference: the shop binds the auth and payments systems
+// and references only what they publish.
+module shop.checkout
+
+extsystem Auth "Authentication" from auth.AuthSystem
+extsystem Pay "Payments" from payments.PaymentSystem
+
+system ShopBackend "Shop backend"
+actor Shopper "Shopper"
+permission CanCheckout "Can check out"
+has_permission(Shopper, CanCheckout)
+has_permission(Shopper, Auth.CanLogin)
+
+buc BucCheckout "Checkout"
+usecase SignInAtCheckout "Sign in at checkout"
+usecase StartCheckout "Start checkout"
+usecase PlaceOrder "Place order"
+usecase CapturePaymentForOrder "Capture the payment for an order"
+usecase MarkPaid "Mark the order paid"
+usecase CancelOrder "Cancel an order"
+contains(BucCheckout, SignInAtCheckout)
+contains(BucCheckout, StartCheckout)
+contains(BucCheckout, PlaceOrder)
+contains(BucCheckout, CapturePaymentForOrder)
+contains(BucCheckout, MarkPaid)
+contains(BucCheckout, CancelOrder)
+performs(Shopper, SignInAtCheckout)
+performs(Shopper, StartCheckout)
+performs(Shopper, PlaceOrder)
+performs(Shopper, CancelOrder)
+requires_permission(PlaceOrder, CanCheckout)
+
+// A use case calls a foreign use case.
+invokes(SignInAtCheckout, usecase::Auth.Login)
+
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, placed, paid, cancelled) @default(draft)
+}
+api OrderApi "Order API" method POST path "/orders"
+contains(ShopBackend, OrderApi)
+invokes(StartCheckout, OrderApi)
+creates(OrderApi, Order)
+// The shop reads published information and never writes it.
+reads(PlaceOrder, Auth.SessionView)
+transitions(Order.status, PlaceOrder, draft -> placed)
+
+event EvOrderPlaced "Order placed"
+raises(PlaceOrder, EvOrderPlaced)
+triggers(EvOrderPlaced, CapturePaymentForOrder)
+invokes(CapturePaymentForOrder, Pay.CapturePayment)
+
+// The shop learns the foreign outcome from a published event.
+triggers(Pay.EvPaymentCaptured, MarkPaid)
+transitions(Order.status, MarkPaid, placed -> paid)
+transitions(Order.status, CancelOrder, draft -> cancelled)

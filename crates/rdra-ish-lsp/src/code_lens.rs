@@ -27,6 +27,7 @@ pub fn code_lenses(
             continue;
         };
         let target = SymbolTarget {
+            bound_systems: Vec::new(),
             kind: inst.kind.name().to_string(),
             id: inst.id.clone(),
         };

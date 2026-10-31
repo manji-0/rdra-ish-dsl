@@ -1,0 +1,47 @@
+module payments.ledger
+
+system PaymentSystem "Payment System"
+actor Merchant "Merchant"
+permission CapturePayments "Can capture payments"
+permission RefundPayments "Can refund payments"
+has_permission(Merchant, RefundPayments)
+
+buc BucSettle "Settle"
+usecase CapturePayment "Capture a payment"
+usecase RefundPayment "Refund a payment"
+contains(BucSettle, CapturePayment)
+contains(BucSettle, RefundPayment)
+performs(Merchant, RefundPayment)
+requires_permission(CapturePayment, CapturePayments)
+requires_permission(RefundPayment, RefundPayments)
+
+api CaptureApi "Capture API" method POST path "/captures"
+contains(PaymentSystem, CaptureApi)
+invokes(CapturePayment, CaptureApi)
+
+entity Charge "Charge" {
+  id: Int @pk
+  amount: Money
+  status: Enum(captured, refunded) @default(captured)
+}
+creates(CaptureApi, Charge)
+transitions(Charge.status, RefundPayment, captured -> refunded)
+
+entity PaymentEntry "Payment entry" {
+  entry_id: Int @pk
+  charge_id: Int
+  kind: Enum(capture, refund)
+}
+creates(CaptureApi, PaymentEntry)
+sets(CapturePayment, PaymentEntry, kind == capture)
+creates(RefundPayment, PaymentEntry)
+sets(RefundPayment, PaymentEntry, kind == refund)
+
+event EvPaymentCaptured "Payment captured"
+raises(CapturePayment, EvPaymentCaptured)
+outbox(EvPaymentCaptured)
+
+exposes(PaymentSystem, CapturePayment).caller(system)
+exposes(PaymentSystem, EvPaymentCaptured)
+exposes(PaymentSystem, PaymentEntry).append()
+shares(PaymentSystem, Charge)

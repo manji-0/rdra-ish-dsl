@@ -480,6 +480,96 @@ pub enum RdraError {
     #[error("SharedInternalEntity: '{system}' shares internal entity '{entity}' with other models\n  hint: every use of '{entity}' in another model is a `DirectEntityReference` warning there; publish a projection with `exposes({system}, ...).upsert()` when you can, then delete this line")]
     SharedInternalEntity { system: String, entity: String },
 
+    #[error("BindingOnNonExtSystem: `from` binds only an `extsystem`; {kind} '{id}' cannot take it\n  hint: delete the `from` clause, or declare `extsystem {id} \"...\" from <dep>.<System>`")]
+    BindingOnNonExtSystem { kind: String, id: String },
+
+    #[error("UnknownDependency: '{dep}' is not a [dependencies] entry of the manifest ({known})\n  hint: {hint}")]
+    UnknownDependency {
+        dep: String,
+        known: String,
+        hint: String,
+    },
+
+    #[error("DuplicateBinding: {dep}.{system} is already bound as extsystem '{ext}'\n  hint: reference its elements as `{ext}.<Name>` and delete this declaration")]
+    DuplicateBinding {
+        dep: String,
+        system: String,
+        ext: String,
+    },
+
+    #[error("UnknownForeignName: '{qualifier}' publishes no '{name}'\n  hint: closest published names: {closest}")]
+    UnknownForeignName {
+        qualifier: String,
+        name: String,
+        closest: String,
+    },
+
+    #[error(
+        "UnknownForeignSystem: dependency '{dep}' defines no system '{system}'\n  hint: {hint}"
+    )]
+    UnknownForeignSystem {
+        dep: String,
+        system: String,
+        hint: String,
+    },
+
+    #[error("ForeignColumnMissing: '{id}' names a foreign {kind}, not a column\n  hint: a comparison needs a column: write `{id}.<column>`")]
+    ForeignColumnMissing { id: String, kind: String },
+
+    #[error("NotExposed: '{qualified}' is {what}\n  hint: {hint}")]
+    NotExposed {
+        qualified: String,
+        what: String,
+        hint: String,
+    },
+
+    #[error("ForeignWrite: `{predicate}` on '{id}' writes another model's data\n  hint: {hint}")]
+    ForeignWrite {
+        id: String,
+        dep: String,
+        predicate: String,
+        hint: String,
+    },
+
+    #[error("ForeignContained: '{id}' is a use case of external system '{ext}', so no BUC of this model contains it\n  hint: call it from one of your use cases with `invokes(<UseCase>, {id})`")]
+    ForeignContained { id: String, ext: String },
+
+    #[error("ForeignOperand: '{id}' cannot be argument {position} of `{predicate}`\n  hint: a foreign {kind} may appear only in {uses}")]
+    ForeignOperand {
+        id: String,
+        predicate: String,
+        position: usize,
+        kind: String,
+        uses: String,
+    },
+
+    #[error("ForeignStateNeedsEnvironment: a comparison on '{id}' reads another model's state, which this release cannot model\n  hint: react to an event the owner exposes, or read '{id}' in the use case with `reads`; guards and rules on published data arrive with the environment")]
+    ForeignStateNeedsEnvironment { id: String },
+
+    #[error("ForeignSlugClash: '{first}' and '{second}' both generate the identifier '{slug}'\n  hint: generated identifiers join the qualifier and the name with `__`; rename one external system so the two differ")]
+    ForeignSlugClash {
+        first: String,
+        second: String,
+        slug: String,
+    },
+
+    #[error("IdShadowsForeignSlug: '{id}' is the generated name of '{qualified}'\n  hint: rename '{id}'; generated identifiers of foreign elements join the qualifier with `__`")]
+    IdShadowsForeignSlug { id: String, qualified: String },
+
+    #[error("DirectEntityReference: `{predicate}` names '{id}', an internal entity {dep} shares\n  hint: a shared entity may change shape at any time; prefer a published projection when {dep} offers one")]
+    DirectEntityReference {
+        id: String,
+        dep: String,
+        predicate: String,
+    },
+
+    #[error("ForeignImport: module '{module}' belongs to dependency '{dep}', so it cannot be imported\n  hint: {hint}")]
+    ForeignImport {
+        module: String,
+        dep: String,
+        hint: String,
+    },
+
     #[error("{message}\n  hint: {hint}")]
     LintFinding {
         rule: &'static str,

@@ -249,12 +249,15 @@ fn format_import(import: &ImportDecl) -> String {
 }
 
 fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
-    let header = format!(
+    let mut header = format!(
         "{} {} {}",
         instance.kind.name(),
         instance.id,
         quote_string(&instance.label)
     );
+    if let Some(binding) = &instance.binding {
+        header.push_str(&format!(" from {}.{}", binding.dep, binding.system));
+    }
     let mut metadata = Vec::new();
     if let Some(description) = &instance.description {
         metadata.push(format!("  description {}", quote_string(description)));
@@ -776,6 +779,14 @@ mod tests {
         assert_eq!(
             formatted,
             "entity E \"E\" {\n  status: Enum(open \"受付中\", closed)\n}\n"
+        );
+    }
+
+    #[test]
+    fn keeps_a_binding_and_the_foreign_reference_forms() {
+        assert_formats_to(
+            "extsystem  Auth \"Authentication\"  from  auth.AuthSystem\ninvokes( SignIn ,usecase::Auth.Login )\nholds(SignedIn,Auth.SessionView.status==active)\n",
+            "extsystem Auth \"Authentication\" from auth.AuthSystem\n\ninvokes(SignIn, usecase::Auth.Login)\n\nholds(SignedIn, Auth.SessionView.status == active)\n",
         );
     }
 

@@ -1,0 +1,34 @@
+// Each foreign reference below is a mistake a product author can make. The test
+// crates/rdra-ish-cli/tests/cross_model.rs names the diagnostic `check` reports for each line.
+module mistakes
+import auth.session
+
+extsystem Auth "Authentication" from auth.AuthSystem
+extsystem Pay "Payments" from payments.PaymentSystem
+actor Shopper "Shopper"
+buc BucCheckout "Checkout"
+usecase SignInAtCheckout "Sign in at checkout"
+usecase PlaceOrder "Place order"
+usecase CancelOrder "Cancel an order"
+contains(BucCheckout, SignInAtCheckout)
+contains(BucCheckout, PlaceOrder)
+contains(BucCheckout, CancelOrder)
+performs(Shopper, SignInAtCheckout)
+performs(Shopper, PlaceOrder)
+performs(Shopper, CancelOrder)
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, placed) @default(draft)
+}
+creates(PlaceOrder, Order)
+transitions(Order.status, PlaceOrder, draft -> placed)
+
+invokes(SignInAtCheckout, Auth.Logon)
+invokes(SignInAtCheckout, Auth.Login)
+reads(PlaceOrder, Auth.Session)
+updates(PlaceOrder, Auth.SessionView)
+contains(BucCheckout, Auth.Login)
+reads(PlaceOrder, Pay.Charge)
+condition SignedIn "The session is active"
+holds(SignedIn, Auth.SessionView.status == active)
+applies_to(SignedIn, PlaceOrder)

@@ -45,7 +45,7 @@ fn test_purchase_fixture_builds_model() {
     let entry = root.join("buc/buc_purchase.rdra");
 
     let (program, _) = resolve(&[entry], std::slice::from_ref(&root));
-    let (model, diags) = build_merged_model(&program, &[root]);
+    let (model, diags) = build_merged_model(&program, &[root], None);
 
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(
@@ -79,7 +79,7 @@ fn test_buc_diagram() {
     let entry = root.join("buc/buc_purchase.rdra");
 
     let (program, _) = resolve(&[entry], std::slice::from_ref(&root));
-    let (model, diags) = build_merged_model(&program, &[root]);
+    let (model, diags) = build_merged_model(&program, &[root], None);
 
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(
@@ -118,7 +118,7 @@ fn test_relation_matrix_csv() {
     let entry = root.join("buc/buc_purchase.rdra");
 
     let (program, _) = resolve(&[entry], std::slice::from_ref(&root));
-    let (model, diags) = build_merged_model(&program, &[root]);
+    let (model, diags) = build_merged_model(&program, &[root], None);
 
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(
@@ -178,7 +178,7 @@ fn test_state_diagram() {
     let entry = root.join("buc/buc_purchase.rdra");
 
     let (program, _) = resolve(&[entry], std::slice::from_ref(&root));
-    let (model, diags) = build_merged_model(&program, &[root]);
+    let (model, diags) = build_merged_model(&program, &[root], None);
 
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(
@@ -268,7 +268,7 @@ fn test_purchase_fixture_er_snapshot() {
     let entry = root.join("buc/buc_purchase.rdra");
 
     let (program, _) = resolve(&[entry], std::slice::from_ref(&root));
-    let (model, diags) = build_merged_model(&program, &[root]);
+    let (model, diags) = build_merged_model(&program, &[root], None);
 
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(
@@ -291,7 +291,7 @@ fn test_purchase_fixture_entity_csv_snapshot() {
     let entry = root.join("buc/buc_purchase.rdra");
 
     let (program, _) = resolve(&[entry], std::slice::from_ref(&root));
-    let (model, diags) = build_merged_model(&program, &[root]);
+    let (model, diags) = build_merged_model(&program, &[root], None);
 
     let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert!(
@@ -321,7 +321,7 @@ fn errors_fixture_root() -> PathBuf {
 fn test_error_type_mismatch() {
     let path = errors_fixture_root().join("type_mismatch.rdra");
     let (program, _) = resolve(std::slice::from_ref(&path), &[errors_fixture_root()]);
-    let (_, diags) = build_merged_model(&program, &[errors_fixture_root()]);
+    let (_, diags) = build_merged_model(&program, &[errors_fixture_root()], None);
 
     let has_type_mismatch = diags
         .iter()
@@ -365,7 +365,7 @@ fn test_error_type_mismatch() {
 fn test_error_nm_relation() {
     let path = errors_fixture_root().join("nm_relation.rdra");
     let (program, _) = resolve(std::slice::from_ref(&path), &[errors_fixture_root()]);
-    let (_, diags) = build_merged_model(&program, &[errors_fixture_root()]);
+    let (_, diags) = build_merged_model(&program, &[errors_fixture_root()], None);
 
     let has_nm = diags
         .iter()
@@ -388,7 +388,7 @@ fn test_error_nm_relation() {
 fn test_error_duplicate() {
     let path = errors_fixture_root().join("duplicate.rdra");
     let (program, _) = resolve(std::slice::from_ref(&path), &[errors_fixture_root()]);
-    let (_, diags) = build_merged_model(&program, &[errors_fixture_root()]);
+    let (_, diags) = build_merged_model(&program, &[errors_fixture_root()], None);
 
     let has_dup = diags
         .iter()
@@ -462,7 +462,7 @@ fn test_duplicate_definition_across_files() {
     .unwrap();
 
     let (program, resolve_diags) = resolve(&[dir.join("main.rdra")], std::slice::from_ref(&dir));
-    let (_, model_diags) = build_merged_model(&program, std::slice::from_ref(&dir));
+    let (_, model_diags) = build_merged_model(&program, std::slice::from_ref(&dir), None);
 
     let all: Vec<_> = resolve_diags.iter().chain(model_diags.iter()).collect();
     let dup: Vec<_> = all

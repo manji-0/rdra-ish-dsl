@@ -33,6 +33,7 @@ pub fn analyze_workspace(
         include_paths.to_vec(),
         overlays_opt,
         None,
+        Vec::new(),
     ))
 }
 

@@ -69,6 +69,10 @@ impl ImportScopes {
         self.source_modules.get(&source_id).map(String::as_str)
     }
 
+    pub fn modules(&self) -> impl Iterator<Item = &str> + '_ {
+        self.module_sources.keys().map(String::as_str)
+    }
+
     /// Resolve all flat bindings for a local name under the file scope.
     pub fn resolve_flat_bindings(&self, source_id: SourceId, name: &str) -> Vec<FlatBinding> {
         let scope = self.scope_for(source_id);
@@ -234,6 +238,7 @@ fn push_export(exports: &mut SourceExports, id: String, kind: String) {
 /// Build import scopes from a resolved program's ASTs.
 pub fn build_import_scopes(
     sources: &[(PathBuf, String, rdra_ish_syntax::ast::Ast)],
+    foreign: &crate::binding::ForeignModules,
 ) -> (ImportScopes, Vec<ImportScopeDiagnostic>) {
     let mut scopes = ImportScopes::default();
     let mut diags = Vec::new();
@@ -312,6 +317,9 @@ pub fn build_import_scopes(
         for imp in imports {
             let module_path = imp.path.0.join(".");
             let Some(&mod_source) = scopes.module_sources.get(&module_path) else {
+                if foreign.dep_of_module(&module_path).is_some() {
+                    continue;
+                }
                 diags.push(ImportScopeDiagnostic {
                     source_id,
                     span: imp.span.clone(),
@@ -418,4 +426,33 @@ pub fn build_import_scopes(
     }
 
     (scopes, diags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_import_of_a_dependency_module_is_not_an_unknown_module() {
+        let (ast, errors) = rdra_ish_syntax::parse("module product\nimport auth.session\n");
+        assert!(errors.is_empty());
+        let sources = vec![(PathBuf::from("product.rdra"), String::new(), ast)];
+        let dep = std::sync::Arc::new(crate::binding::DependencySurface {
+            name: "auth".into(),
+            systems: vec![],
+            surface: Default::default(),
+            declared: Default::default(),
+            modules: vec!["auth.session".into()],
+            files: vec![],
+        });
+
+        let (_, diags) = build_import_scopes(&sources, &crate::binding::ForeignModules::of(&[dep]));
+        assert!(diags.is_empty(), "{diags:?}");
+
+        let (_, diags) = build_import_scopes(&sources, &Default::default());
+        assert!(
+            matches!(diags.as_slice(), [d] if matches!(d.kind, ImportScopeDiagKind::UnknownModule { .. })),
+            "{diags:?}"
+        );
+    }
 }

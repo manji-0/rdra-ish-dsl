@@ -57,6 +57,7 @@ pub(crate) fn format_lint_issues(issues: &[LintIssue], format: &ListFormat) -> R
     format_rows(&headers, &rows, format, "lint issues")
 }
 pub(crate) fn list_elements(
+    program: Option<&rdra_ish_core::ResolvedProgram>,
     model: &rdra_ish_core::SemanticModel,
     kind: &ListKind,
     format: &ListFormat,
@@ -84,5 +85,59 @@ pub(crate) fn list_elements(
         ListKind::ActorPermissionAudit => format_actor_permission_audit(model, format),
         ListKind::BusinessInputs => format_business_inputs(model, format),
         ListKind::Surface => Ok(rdra_ish_core::Surface::of(model).text()),
+        ListKind::Dependency => format_dependencies(program, model, format),
     }
+}
+
+fn format_dependencies(
+    program: Option<&rdra_ish_core::ResolvedProgram>,
+    model: &rdra_ish_core::SemanticModel,
+    format: &ListFormat,
+) -> Result<String> {
+    use rdra_ish_core::model::RelKind;
+    let headers = ["use", "foreign", "local", "file", "line"];
+    let mut rows: Vec<[String; 5]> = Vec::new();
+    for rel in &model.relations {
+        let (foreign, local) = match (model.is_foreign(&rel.from), model.is_foreign(&rel.to)) {
+            (true, _) => (&rel.from, &rel.to),
+            (_, true) => (&rel.to, &rel.from),
+            _ => continue,
+        };
+        let use_ = match rel.kind {
+            RelKind::Invokes => "invokes",
+            RelKind::Triggers => "triggers",
+            RelKind::HasPermission => "has_permission",
+            RelKind::Reads => "reads",
+            RelKind::Shows => "shows",
+            _ => continue,
+        };
+        let (file, line) = match (program, &rel.site) {
+            (Some(program), Some(site)) => (
+                site.path(program)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+                site.start_position(program)
+                    .map(|p| p.line.to_string())
+                    .unwrap_or_default(),
+            ),
+            _ => (String::new(), String::new()),
+        };
+        rows.push([
+            use_.to_string(),
+            node_ref::node_id(model, foreign).unwrap_or_default(),
+            node_ref::node_id(model, local).unwrap_or_default(),
+            file,
+            line,
+        ]);
+    }
+    rows.sort_by_key(|r| {
+        (
+            r[3].clone(),
+            r[4].parse::<usize>().unwrap_or_default(),
+            r[0].clone(),
+            r[1].clone(),
+            r[2].clone(),
+        )
+    });
+    format_rows(&headers, &rows, format, "dependency references")
 }

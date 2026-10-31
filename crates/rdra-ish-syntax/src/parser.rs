@@ -398,6 +398,13 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                 .then_ignore(just(Token::RBrace))),
     );
 
+    let binding = just(Token::Ident("from".to_string()))
+        .ignore_then(ident())
+        .then_ignore(just(Token::Dot))
+        .then(ident())
+        .map_with_span(|(dep, system), span| BindingDecl { dep, system, span })
+        .or_not();
+
     let description = just(Token::Ident("description".to_string()))
         .ignore_then(string_lit())
         .or_not();
@@ -412,6 +419,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
     kind_token()
         .then(ident())
         .then(string_lit())
+        .then(binding)
         .then(description)
         .then(requirement_metadata)
         .then(adr_metadata)
@@ -423,7 +431,16 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
         .try_map(
             |(
                 (
-                    ((((((((kind, id), label), description), requirement), adr), api), nfr), field),
+                    (
+                        (
+                            (
+                                ((((((kind, id), label), binding), description), requirement), adr),
+                                api,
+                            ),
+                            nfr,
+                        ),
+                        field,
+                    ),
                     usecase,
                 ),
                 body,
@@ -464,6 +481,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                     usecase: usecase.unwrap_or_default(),
                     columns,
                     variation_values,
+                    binding,
                     span,
                 })
             },
@@ -911,18 +929,22 @@ fn usecase_metadata() -> impl Parser<Token, UseCaseMetadata, Error = Simple<Toke
 /// Parse a reference to a declared element.
 ///
 /// Two forms are accepted:
-///   `usecase::Browse`       — kind-qualified (resolves unambiguously when
-///                             the same identifier is used for multiple kinds)
+///   `usecase::Browse` or `usecase::Auth.Login` — kind-qualified, with at most one
+///                             qualifier (a bound external system)
 ///   `Foo` or `a.Foo`        — plain or namespace-qualified (existing syntax)
 fn qref() -> impl Parser<Token, QRef, Error = Simple<Token>> + Clone {
-    // Typed form: `<kind_keyword> :: <ident>`
     let typed = kind_token()
         .then_ignore(just(Token::ColonColon))
         .then(ident())
-        .map_with_span(|(kind, name), span| QRef {
-            kind_qualifier: Some(kind),
-            parts: vec![name],
-            span,
+        .then(just(Token::Dot).ignore_then(ident()).or_not())
+        .map_with_span(|((kind, head), tail), span| {
+            let mut parts = vec![head];
+            parts.extend(tail);
+            QRef {
+                kind_qualifier: Some(kind),
+                parts,
+                span,
+            }
         });
 
     // Plain form: `ident ("." ident)*`
@@ -982,22 +1004,21 @@ fn transition_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> +
 fn operand() -> impl Parser<Token, Operand, Error = Simple<Token>> + Clone {
     let now = just(Token::Now).map(|_| Operand::Now);
     let int_lit = select! { Token::IntLit(s) => Operand::IntLit(s) };
-    let qualified_col = ident()
-        .map_with_span(|entity, span| {
-            (
-                entity.clone(),
-                QRef {
-                    kind_qualifier: None,
-                    parts: vec![entity],
-                    span,
-                },
-            )
-        })
-        .then_ignore(just(Token::Dot))
-        .then(ident())
-        .map_with_span(|((_entity_name, entity), column), span| {
+    let part = ident().map_with_span(|name, span: Span| (name, span));
+    let qualified_col = part
+        .clone()
+        .then(just(Token::Dot).ignore_then(part).repeated().at_least(1))
+        .map_with_span(|(head, mut tail), span| {
+            let (column, _) = tail.pop().expect("at least one dotted part");
+            let entity_end = tail.last().map_or(head.1.end, |(_, s)| s.end);
+            let mut parts = vec![head.0];
+            parts.extend(tail.into_iter().map(|(name, _)| name));
             Operand::QualifiedColumn(QualifiedColumnRef {
-                entity,
+                entity: QRef {
+                    kind_qualifier: None,
+                    parts,
+                    span: head.1.start..entity_end,
+                },
                 column,
                 span,
             })
@@ -1227,6 +1248,18 @@ pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
     let stream = Stream::from_iter(len..len + 1, tokens.into_iter());
     let (items, mut errors) = root_parser().parse_recovery(stream);
 
+    for err in errors.iter_mut() {
+        let before = src.get(..err.span().start).unwrap_or("").trim_end();
+        if matches!(err.reason(), chumsky::error::SimpleReason::Unexpected)
+            && before.ends_with("from")
+        {
+            let message = format!(
+                "{}; `from dep.System` goes right after the label of an `extsystem`, before `description`",
+                crate::parse_error::format_parse_error(err)
+            );
+            *err = Simple::custom(err.span(), message);
+        }
+    }
     for span in lex_errors {
         let snippet = src.get(span.clone()).unwrap_or("");
         errors.push(Simple::custom(
@@ -1664,6 +1697,29 @@ relate(Order, Customer, N:1)
 "#;
         let ast = parse_ok(src);
         insta::assert_debug_snapshot!(ast);
+    }
+
+    #[test]
+    fn parse_cross_model_forms() {
+        let src = r#"
+extsystem Auth "Authentication" from auth.AuthSystem
+invokes(SignIn, usecase::Auth.Login)
+holds(SignedIn, Auth.SessionView.status == active)
+"#;
+        let ast = parse_ok(src);
+        insta::assert_debug_snapshot!(ast);
+    }
+
+    #[test]
+    fn a_kind_qualified_reference_takes_one_qualifier_and_from_follows_the_label() {
+        let (_, errors) = parse("invokes(A, usecase::a.b.c)");
+        assert!(!errors.is_empty());
+        let (_, errors) = parse("extsystem Auth \"Auth\" description \"d\" from auth.AuthSystem");
+        let messages: Vec<String> = errors.iter().map(crate::format_parse_error).collect();
+        assert!(
+            messages.iter().any(|m| m.contains("`from dep.System` goes right after the label of an `extsystem`, before `description`")),
+            "{messages:?}"
+        );
     }
 
     #[test]

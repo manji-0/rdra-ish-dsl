@@ -1,0 +1,6 @@
+[model]
+name = "shop"
+
+[dependencies]
+auth = { path = "../auth-model" }
+payments = { path = "../payments-model/model" }

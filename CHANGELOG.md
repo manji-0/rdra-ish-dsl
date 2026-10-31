@@ -4,6 +4,29 @@
 
 ### Added
 
+- A product model binds another model's published system and references what it
+  publishes. `[dependencies] name = { path = "..." }` in `rdra.toml` loads the dependency
+  as its own model and fails closed on a missing path (`DependencyNotFound`), a cycle
+  (`DependencyCycle`), or an error in the dependency (`DependencyHasErrors`); a
+  dependency's dependency is checked but cannot be bound (`UnknownDependency`), and
+  `import` of a dependency's module is `ForeignImport`. `extsystem Auth "..." from
+  auth.AuthSystem` binds the system, and `Auth.Login`, `usecase::Auth.Login`, and
+  `Auth.SessionView.status` reference its stubs. `invokes` takes a foreign use case,
+  `triggers` a foreign event, `has_permission` a foreign permission, and `reads` and
+  `shows` a published entity; every other position is `ForeignWrite`,
+  `ForeignContained`, or `ForeignOperand`. A name the owner keeps internal is
+  `NotExposed`, an unknown one `UnknownForeignName`, a shared entity warns with
+  `DirectEntityReference`, a guard on foreign data is `ForeignStateNeedsEnvironment`, a
+  local id equal to a stub's generated name is `IdShadowsForeignSlug`, and a second
+  binding of one system is `DuplicateBinding`. `check` prints the environment once;
+  `list --kind dependency` lists each foreign reference with its site. The context,
+  event, usecase, and rdra diagrams draw referenced foreign elements as dashed stubs, and
+  AsyncAPI lists a foreign event as receive-only with `x-rdra-ish-external`; every other
+  output excludes them. A model without `[dependencies]` keeps every output unchanged. One
+  run loads one model: a nested directory with its own `rdra.toml` is not part of its
+  parent, inputs of two models are `ManifestConflict`, and the LSP analyses each open
+  document under its own manifest. A dependency path must be relative
+  (`DependencyPathAbsolute`), and a dependency's lifecycle errors fail the load too.
 - A condition guard may say that no related row, or some related row, matches:
   `holds(NoActiveAssignment, ClientCertificate.status == active).none(TerminalCertAssignment.status == active)`
   allows `Revoke` only while no linked assignment is active, and `.has(...)` requires one.

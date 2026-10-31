@@ -65,6 +65,26 @@ fn symbol_hover(model: &SemanticModel, ast: &Ast, offset: usize) -> Option<Marku
     let reference = reference_at_offset(ast, offset)?;
     let (kind, id) = match reference {
         ReferenceAt::Declaration { kind, id } => (kind.to_string(), id.to_string()),
+        ReferenceAt::Symbol(qref) if crate::refs::is_bound_reference(model, qref) => {
+            let qualified = qref.parts.join(".");
+            let LookupResult::Found(node) = model.symbols.lookup(&qualified) else {
+                return None;
+            };
+            let origin = model.origin(node)?;
+            let ext = &model.ext_systems[origin.ext];
+            let binding = ext.binding.as_ref()?;
+            return Some(MarkupContent {
+                kind: MarkupKind::Markdown,
+                value: format!(
+                    "**{}** `{qualified}`\n\nforeign: `{}` of `{}.{}`, bound as extsystem `{}`",
+                    node_ref_kind(node),
+                    origin.foreign_id,
+                    binding.dep,
+                    binding.system,
+                    ext.id
+                ),
+            });
+        }
         ReferenceAt::Symbol(qref) => {
             let id = qref.parts.last()?.clone();
             let kind = if let Some(kind) = &qref.kind_qualifier {
@@ -165,6 +185,24 @@ mod tests {
     use rdra_ish_syntax::parse;
 
     use super::*;
+
+    #[test]
+    fn hover_on_a_foreign_element_names_its_model_and_system() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/xsys/shop-model");
+        let src = std::fs::read_to_string(root.join("shop/checkout.rdra")).unwrap();
+        let project = rdra_ish_core::load_project(std::slice::from_ref(&root), None).unwrap();
+        let (ast, _) = parse(&src);
+        let offset = src.find("Auth.SessionView").unwrap() + "Auth.".len();
+        let hover = hover_content(&project.model, &ast, offset).expect("hover");
+        let HoverContents::Markup(markup) = hover.contents else {
+            panic!("markup");
+        };
+        assert_eq!(
+            markup.value,
+            "**entity** `Auth.SessionView`\n\nforeign: `SessionView` of `auth.AuthSystem`, bound as extsystem `Auth`"
+        );
+    }
 
     #[test]
     fn hovers_symbol_declaration() {

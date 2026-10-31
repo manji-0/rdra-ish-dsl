@@ -43,6 +43,42 @@ fn is_strict_access_gap(error: &RdraError) -> bool {
     )
 }
 
+fn environment_line(
+    model: &rdra_ish_core::SemanticModel,
+    dependencies: &[rdra_ish_core::Dependency],
+) -> String {
+    let path_of = |name: &str| {
+        dependencies
+            .iter()
+            .find(|d| d.name == name)
+            .map(|d| d.path.as_str())
+            .unwrap_or("?")
+    };
+    let mut bound: Vec<(String, String)> = model
+        .ext_systems
+        .values()
+        .filter_map(|x| {
+            let b = x.binding.as_ref()?;
+            Some((
+                x.id.clone(),
+                format!("{} ({}, path {})", x.id, b.dep, path_of(&b.dep)),
+            ))
+        })
+        .collect();
+    bound.sort();
+    let mut parts: Vec<String> = bound.into_iter().map(|(_, text)| text).collect();
+    for dep in dependencies {
+        if !model
+            .ext_systems
+            .values()
+            .any(|x| x.binding.as_ref().is_some_and(|b| b.dep == dep.name))
+        {
+            parts.push(format!("{} unbound (path {})", dep.name, dep.path));
+        }
+    }
+    parts.join(", ")
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -56,6 +92,7 @@ fn main() -> Result<()> {
                 program,
                 model,
                 diags,
+                dependencies,
                 ..
             } = load_project(&inputs, None)?;
 
@@ -71,6 +108,9 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
+            if !dependencies.is_empty() {
+                eprintln!("environment: {}", environment_line(&model, &dependencies));
+            }
             let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
             let lifecycle = state_findings(&program, &model, &scope);
@@ -153,7 +193,7 @@ fn main() -> Result<()> {
             reject_model_errors(&program, &diags)?;
             reject_state_errors(&program, &model)?;
 
-            let output = list_elements(&model, &kind, &format)?;
+            let output = list_elements(Some(&program), &model, &kind, &format)?;
             print!("{}", output);
         }
 

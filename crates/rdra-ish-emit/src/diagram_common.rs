@@ -141,7 +141,7 @@ pub(crate) fn contract_id(model: &SemanticModel, node: &NodeRef) -> Option<Strin
     Some(format!(
         "{}__{}",
         node_kind_filter_name(node),
-        node_id(model, node)?
+        rdra_ish_core::model::slug(node_id(model, node)?)
     ))
 }
 
@@ -212,7 +212,8 @@ pub(crate) fn class_defs(kinds: &[&str]) -> String {
         .collect()
 }
 
-/// Light fills with dark text and stroke, readable on a light or a dark page.
+/// Light fills with dark text and stroke, readable on a light or a dark page. A stub of
+/// another model's element is dashed.
 fn kind_style(kind: &str) -> &'static str {
     match kind {
         "actor" => "fill:#ffe3e3,stroke:#c92a2a,color:#000",
@@ -229,7 +230,18 @@ fn kind_style(kind: &str) -> &'static str {
         "entity" | "statemodel" => "fill:#fff9db,stroke:#5c940d,color:#000",
         "state" => "fill:#f8f9fa,stroke:#5c940d,color:#000",
         "variation" | "value" | "condition" => "fill:#f3d9fa,stroke:#862e9c,color:#000",
+        FOREIGN_CLASS => "fill:#f1f3f5,stroke:#333,color:#000,stroke-dasharray:4 2",
         _ => "fill:#f1f3f5,stroke:#333,color:#000",
+    }
+}
+
+pub(crate) const FOREIGN_CLASS: &str = "foreign";
+
+pub(crate) fn node_class(model: &SemanticModel, node: &NodeRef) -> &'static str {
+    if model.is_foreign(node) {
+        FOREIGN_CLASS
+    } else {
+        node_kind_filter_name(node)
     }
 }
 
@@ -274,7 +286,7 @@ pub(crate) fn declare_flow_node(
     let id = contract_id(model, &node_ref)?;
     let label = node_label(model, &node_ref)?;
     if declared.ids.insert(id.clone()) {
-        let kind = node_kind_filter_name(&node_ref);
+        let kind = node_class(model, &node_ref);
         out.push_str(&format!("  {id}[\"{}\"]:::{kind}\n", quote(label)));
         if let Some(desc) = desc_line(model, &node_ref, &id) {
             out.push_str(&format!("  {desc}\n"));

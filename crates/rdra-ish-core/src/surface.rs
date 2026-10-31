@@ -3,56 +3,108 @@
 use std::collections::BTreeMap;
 
 use crate::model::{
-    ColumnType, EffectValue, EntityKey, Exposed, ModelColumn, NodeRef, RelKind, SemanticModel,
-    UseCaseKey,
+    CallerKind, ColumnType, EffectValue, EntityKey, Exposed, ModelColumn, NodeRef, PublishMode,
+    RelKind, SemanticModel, UseCaseKey,
 };
 use crate::tx::infer_usecase_transactions;
 
-/// The published surface as lines of canonical text, sorted by kind and id so declaration
-/// order cannot change it. The format is frozen: a consumer's lock stores this text.
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceUseCase {
+    pub system: String,
+    pub id: String,
+    pub label: String,
+    pub caller: CallerKind,
+    pub requires: Vec<String>,
+    pub raises: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceEvent {
+    pub system: String,
+    pub id: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SurfaceEntity {
+    pub system: String,
+    pub id: String,
+    pub label: String,
+    pub mode: Option<PublishMode>,
+    pub columns: Vec<SurfaceColumn>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SurfaceColumn {
+    pub name: String,
+    pub col_type: ColumnType,
+    pub is_pk: bool,
+    pub is_unique: bool,
+    pub is_nullable: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SurfaceWriter {
+    pub entity: String,
+    pub usecase: Option<String>,
+    pub effects: Vec<String>,
+}
+
+/// The published surface, sorted by kind and id so declaration order cannot change it. The
+/// canonical text is frozen: a consumer's lock stores it.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Surface {
-    pub lines: Vec<String>,
+    pub use_cases: Vec<SurfaceUseCase>,
+    pub events: Vec<SurfaceEvent>,
+    pub entities: Vec<SurfaceEntity>,
+    pub writers: Vec<SurfaceWriter>,
+    pub shared: Vec<SurfaceEntity>,
+    /// The exposed writers of each shared entity, for the consumer's `ForeignWrite` hint. The
+    /// canonical text does not carry them.
+    pub shared_writers: Vec<SurfaceWriter>,
 }
 
 impl Surface {
     pub fn of(model: &SemanticModel) -> Surface {
         let publication = &model.publication;
-        let mut use_cases: BTreeMap<String, String> = BTreeMap::new();
-        let mut events: BTreeMap<String, String> = BTreeMap::new();
-        let mut entities: BTreeMap<String, (EntityKey, String)> = BTreeMap::new();
+        let system_id = |key| model.systems[key].id.clone();
+        let mut use_cases: BTreeMap<String, SurfaceUseCase> = BTreeMap::new();
+        let mut events: BTreeMap<String, SurfaceEvent> = BTreeMap::new();
+        let mut entities: BTreeMap<String, (EntityKey, SurfaceEntity)> = BTreeMap::new();
         for x in &publication.exposures {
             match x.item {
                 Exposed::UseCase { usecase, caller } => {
                     let uc = &model.use_cases[usecase];
-                    let mut line = format!(
-                        "usecase {} {} caller({})",
-                        uc.id,
-                        quoted(&uc.label),
-                        caller.as_str()
-                    );
                     let requires =
                         targets(model, usecase, RelKind::RequiresPermission, |n| match n {
                             NodeRef::Permission(k) => Some(model.permissions[*k].id.clone()),
                             _ => None,
                         });
-                    if !requires.is_empty() {
-                        line.push_str(&format!(" requires({})", requires.join(", ")));
-                    }
                     let raises = targets(model, usecase, RelKind::Raises, |n| match n {
                         NodeRef::Event(k) => Some(model.events[*k].id.clone()),
                         _ => None,
                     });
-                    if !raises.is_empty() {
-                        line.push_str(&format!(" raises({})", raises.join(", ")));
-                    }
-                    use_cases.insert(uc.id.clone(), line);
+                    use_cases.insert(
+                        uc.id.clone(),
+                        SurfaceUseCase {
+                            system: system_id(x.system),
+                            id: uc.id.clone(),
+                            label: uc.label.clone(),
+                            caller,
+                            requires,
+                            raises,
+                        },
+                    );
                 }
                 Exposed::Event(event) => {
                     let ev = &model.events[event];
                     events.insert(
                         ev.id.clone(),
-                        format!("event {} {}", ev.id, quoted(&ev.label)),
+                        SurfaceEvent {
+                            system: system_id(x.system),
+                            id: ev.id.clone(),
+                            label: ev.label.clone(),
+                        },
                     );
                 }
                 Exposed::Entity { entity, mode } => {
@@ -61,13 +113,13 @@ impl Surface {
                         e.id.clone(),
                         (
                             entity,
-                            format!(
-                                "entity {} {} {} {}",
-                                e.id,
-                                quoted(&e.label),
-                                mode.as_str(),
-                                columns_text(model, &e.columns)
-                            ),
+                            SurfaceEntity {
+                                system: system_id(x.system),
+                                id: e.id.clone(),
+                                label: e.label.clone(),
+                                mode: Some(mode),
+                                columns: surface_columns(model, &e.columns),
+                            },
                         ),
                     );
                 }
@@ -91,40 +143,106 @@ impl Surface {
                 }
             }
             for (uc, effects) in exposed {
-                writers.push(writer_line(entity_id, &uc, effects));
+                writers.push(writer(entity_id, Some(uc), effects));
             }
             if let Some(effects) = unexposed {
-                writers.push(writer_line(entity_id, "(unexposed)", effects));
+                writers.push(writer(entity_id, None, effects));
             }
         }
 
-        let mut shared: BTreeMap<String, String> = BTreeMap::new();
+        let mut shared: BTreeMap<String, SurfaceEntity> = BTreeMap::new();
+        let mut shared_writers = Vec::new();
         for s in &publication.shares {
             let e = &model.entities[s.entity];
+            for utx in &txs {
+                if utx.writes().any(|w| w.entity == s.entity)
+                    && publication.caller_of(utx.usecase).is_some()
+                {
+                    shared_writers.push(writer(
+                        &e.id,
+                        Some(model.use_cases[utx.usecase].id.clone()),
+                        Vec::new(),
+                    ));
+                }
+            }
             shared.insert(
                 e.id.clone(),
-                format!(
-                    "shared {} {} {}",
-                    e.id,
-                    quoted(&e.label),
-                    columns_text(model, &e.columns)
-                ),
+                SurfaceEntity {
+                    system: system_id(s.system),
+                    id: e.id.clone(),
+                    label: e.label.clone(),
+                    mode: None,
+                    columns: surface_columns(model, &e.columns),
+                },
             );
         }
 
-        let lines = use_cases
-            .into_values()
-            .chain(events.into_values())
-            .chain(entities.into_values().map(|(_, line)| line))
+        Surface {
+            use_cases: use_cases.into_values().collect(),
+            events: events.into_values().collect(),
+            entities: entities.into_values().map(|(_, e)| e).collect(),
+            writers,
+            shared: shared.into_values().collect(),
+            shared_writers,
+        }
+    }
+
+    pub fn lines(&self) -> Vec<String> {
+        let use_cases = self.use_cases.iter().map(|uc| {
+            let mut line = format!(
+                "usecase {} {} caller({})",
+                uc.id,
+                quoted(&uc.label),
+                uc.caller.as_str()
+            );
+            if !uc.requires.is_empty() {
+                line.push_str(&format!(" requires({})", uc.requires.join(", ")));
+            }
+            if !uc.raises.is_empty() {
+                line.push_str(&format!(" raises({})", uc.raises.join(", ")));
+            }
+            line
+        });
+        let events = self
+            .events
+            .iter()
+            .map(|ev| format!("event {} {}", ev.id, quoted(&ev.label)));
+        let entities = self.entities.iter().map(|e| {
+            format!(
+                "entity {} {} {} {}",
+                e.id,
+                quoted(&e.label),
+                e.mode.map_or("", PublishMode::as_str),
+                columns_text(&e.columns)
+            )
+        });
+        let writers = self.writers.iter().map(|w| {
+            let who = w.usecase.as_deref().unwrap_or("(unexposed)");
+            if w.effects.is_empty() {
+                format!("writer {} {who}", w.entity)
+            } else {
+                format!("writer {} {who}: {}", w.entity, w.effects.join(", "))
+            }
+        });
+        let shared = self.shared.iter().map(|e| {
+            format!(
+                "shared {} {} {}",
+                e.id,
+                quoted(&e.label),
+                columns_text(&e.columns)
+            )
+        });
+        use_cases
+            .chain(events)
+            .chain(entities)
             .chain(writers)
-            .chain(shared.into_values())
-            .collect();
-        Surface { lines }
+            .chain(shared)
+            .collect()
     }
 
     /// The lines joined with a newline after each; empty for a model that publishes nothing.
     pub fn text(&self) -> String {
-        self.lines.iter().map(|l| format!("{l}\n")).collect()
+        self.lines().iter().map(|l| format!("{l}\n")).collect()
     }
 }
 
@@ -162,13 +280,13 @@ fn quoted(label: &str) -> String {
     out
 }
 
-fn writer_line(entity: &str, writer: &str, mut effects: Vec<String>) -> String {
+fn writer(entity: &str, usecase: Option<String>, mut effects: Vec<String>) -> SurfaceWriter {
     effects.sort();
     effects.dedup();
-    if effects.is_empty() {
-        format!("writer {entity} {writer}")
-    } else {
-        format!("writer {entity} {writer}: {}", effects.join(", "))
+    SurfaceWriter {
+        entity: entity.to_string(),
+        usecase,
+        effects,
     }
 }
 
@@ -196,11 +314,29 @@ fn effect_value_text(value: &EffectValue) -> String {
     }
 }
 
-fn columns_text(model: &SemanticModel, columns: &[ModelColumn]) -> String {
+fn surface_columns(model: &SemanticModel, columns: &[ModelColumn]) -> Vec<SurfaceColumn> {
+    columns
+        .iter()
+        .map(|c| SurfaceColumn {
+            name: c.name.clone(),
+            col_type: match &c.col_type {
+                ColumnType::Variation(key) => {
+                    ColumnType::Enum(model.variations[*key].values.clone())
+                }
+                other => other.clone(),
+            },
+            is_pk: c.is_pk,
+            is_unique: c.is_unique,
+            is_nullable: c.is_nullable,
+        })
+        .collect()
+}
+
+fn columns_text(columns: &[SurfaceColumn]) -> String {
     let cols: Vec<String> = columns
         .iter()
         .map(|c| {
-            let mut text = format!("{}: {}", c.name, type_text(model, &c.col_type));
+            let mut text = format!("{}: {}", c.name, type_text(&c.col_type));
             if c.is_pk {
                 text.push_str(" @pk");
             }
@@ -220,7 +356,7 @@ fn columns_text(model: &SemanticModel, columns: &[ModelColumn]) -> String {
     }
 }
 
-fn type_text(model: &SemanticModel, col_type: &ColumnType) -> String {
+fn type_text(col_type: &ColumnType) -> String {
     match col_type {
         ColumnType::Int => "Int".to_string(),
         ColumnType::String => "String".to_string(),
@@ -230,7 +366,7 @@ fn type_text(model: &SemanticModel, col_type: &ColumnType) -> String {
         ColumnType::Bool => "Bool".to_string(),
         ColumnType::Decimal => "Decimal".to_string(),
         ColumnType::Enum(values) => format!("Enum({})", values.join(", ")),
-        ColumnType::Variation(key) => format!("Enum({})", model.variations[*key].values.join(", ")),
+        ColumnType::Variation(_) => unreachable!("surface columns carry no variation type"),
     }
 }
 

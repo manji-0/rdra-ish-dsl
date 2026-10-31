@@ -74,13 +74,17 @@ pub(super) fn predicate_arg_display(arg: &PredicateArg) -> String {
     }
 }
 
+/// Check each resolved argument's kind: a local argument against the signature, a foreign
+/// stub against `FOREIGN_OPERANDS`. `false` when a foreign stub was rejected.
 fn validate_predicate_arg_types(
+    model: &SemanticModel,
     pred: &PredicateCall,
     sig: &[Vec<&'static str>],
     resolved: &[Option<NodeRef>],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
-) {
+) -> bool {
+    let mut accepted = true;
     for (i, expected_kinds) in sig.iter().enumerate() {
         if matches!(
             expected_kinds.as_slice(),
@@ -89,6 +93,18 @@ fn validate_predicate_arg_types(
             continue;
         }
         if let Some(Some(node)) = resolved.get(i) {
+            if model.is_foreign(node) {
+                accepted &= crate::binding::check_foreign_operand(
+                    model,
+                    &pred.name,
+                    i,
+                    node,
+                    arg_span(&pred.args[i]),
+                    ctx,
+                    diags,
+                );
+                continue;
+            }
             let actual = node_kind_tag_str(node);
             if !expected_kinds.contains(&actual) {
                 push_error_arg(
@@ -106,6 +122,7 @@ fn validate_predicate_arg_types(
             }
         }
     }
+    accepted
 }
 
 fn validate_contains_pair(
@@ -271,6 +288,30 @@ fn process_transitions_predicate(
     let (entity_id, column) = match pred.args.first() {
         Some(PredicateArg::Ref(qref)) if qref.parts.len() == 2 => {
             (qref.parts[0].clone(), qref.parts[1].clone())
+        }
+        Some(PredicateArg::Ref(qref))
+            if qref.parts.len() == 3
+                && crate::binding::bound_ext(model, &qref.parts[0]).is_some() =>
+        {
+            let entity = QRef {
+                kind_qualifier: None,
+                parts: qref.parts[..2].to_vec(),
+                span: qref.span.clone(),
+            };
+            if let crate::binding::Foreign::Node(node) =
+                crate::binding::resolve_foreign(model, &entity, ctx, diags)
+            {
+                crate::binding::check_foreign_operand(
+                    model,
+                    "transitions",
+                    0,
+                    &node,
+                    qref.span.clone(),
+                    ctx,
+                    diags,
+                );
+            }
+            return;
         }
         Some(arg) => {
             push_error(
@@ -551,6 +592,13 @@ fn process_sets_predicate(
     let (origin, entity_key) = (*origin, *entity_key);
 
     if let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) {
+        for operand in [&cmp.lhs, &cmp.rhs] {
+            if let Operand::QualifiedColumn(qcol) = operand {
+                if crate::binding::foreign_column_operand(model, qcol, ctx, diags) {
+                    return;
+                }
+            }
+        }
         let entity_id = model.entities[entity_key].id.clone();
         let entity_cols = model.entities[entity_key].columns.clone();
 
@@ -606,7 +654,7 @@ fn process_sets_predicate(
                 }
                 Ok(None) => {
                     if let Some(prop) =
-                        resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
+                        resolve_comparison(model, &entity_cols, &entity_id, cmp, ctx, diags)
                     {
                         model.proposition_effects.push(PropositionEffect {
                             site: Some(ctx.locate(pred.span.clone())),
@@ -671,6 +719,7 @@ fn process_forbidden_predicate(
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) = collect_entity_conditions(
+        model,
         &model.variations,
         &entity_cols,
         &entity_id,
@@ -708,6 +757,7 @@ fn process_required_predicate(
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) = collect_entity_conditions(
+        model,
         &model.variations,
         &entity_cols,
         &entity_id,
@@ -745,6 +795,7 @@ fn process_exclusive_predicate(
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) = collect_entity_conditions(
+        model,
         &model.variations,
         &entity_cols,
         &entity_id,
@@ -817,7 +868,7 @@ fn process_invariant_predicate(
                         }
                         Ok(None) => {
                             if let Some(prop) =
-                                resolve_comparison(&entity_cols, &entity_id, cmp, ctx, diags)
+                                resolve_comparison(model, &entity_cols, &entity_id, cmp, ctx, diags)
                             {
                                 if is_guard {
                                     guard_comparisons.push(prop);
@@ -1337,7 +1388,9 @@ pub(crate) fn process_predicate(
     }
 
     let resolved = resolve_predicate_args(model, pred, &sig, ctx, diags);
-    validate_predicate_arg_types(pred, &sig, &resolved, ctx, diags);
+    if !validate_predicate_arg_types(model, pred, &sig, &resolved, ctx, diags) {
+        return;
+    }
     if !validate_contains_pair(pred, &resolved, ctx, diags)
         || !validate_trigger_pair(pred, &sig, &resolved, ctx, diags)
     {

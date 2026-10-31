@@ -195,6 +195,7 @@ fn is_consistency_diag(err: &RdraError) -> bool {
             | RdraError::PublishedEntityNeverWritten { .. }
             | RdraError::SharedInternalEntity { .. }
             | RdraError::SharedEntityAlsoExposed { .. }
+            | RdraError::DirectEntityReference { .. }
     )
 }
 
@@ -838,6 +839,11 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
     for rel in &model.relations {
         touch(rel.from.clone());
         touch(rel.to.clone());
+        for end in [&rel.from, &rel.to] {
+            if let Some(ext) = model.bound_through(end) {
+                touch(NodeRef::ExtSystem(ext));
+            }
+        }
     }
     for mapping in &model.field_mappings {
         touch(NodeRef::Field(mapping.field));

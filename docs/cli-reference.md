@@ -45,8 +45,11 @@ rdra-ish check <INPUTS...> [--strict] [--buc <ID>]... [--entity <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
-status `1` before running secondary consistency checks. Otherwise it reports unresolved
-model warnings and state-pattern findings. State diagnostics share severity with
+status `1` before running secondary consistency checks. Otherwise, when the manifest has
+`[dependencies]`, it prints the environment once, before the `bounds` line: each bound
+external system with its dependency and path, sorted by id, then any dependency nothing
+binds, as `environment: Auth (auth, path ../auth-model), Pay (payments, path ../payments-model/model)`.
+Then it reports unresolved model warnings and state-pattern findings. State diagnostics share severity with
 `states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
 run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`), or `OK: no errors in the selected scope, within <bounds>` under `--buc` or `--entity` (see [Partial runs](#partial-runs)). When the model has temporal `property` declarations,
 `check` prints a trailing `note:` that those were not model-checked (use
@@ -375,9 +378,28 @@ name = "shop"
 auth = { path = "../auth-model" }
 ```
 
-`[model] name` is required. The `[dependencies]` table is parsed and not used yet, so a
-manifest changes no output. A malformed manifest, or one without `[model] name`, makes every
-loading command exit `1` with a message that names `rdra.toml` and the line.
+`[model] name` is required. Each `[dependencies]` entry is `name = { path = "<dir>" }`,
+with the path relative to the manifest's directory; an absolute path is
+`DependencyPathAbsolute`, an entry without `path` is `DependencyNeedsPath`, and a `git`
+entry is `DependencyGitUnsupported` for now. A loading command loads the dependency as its
+own model first and fails closed: a path that is not a directory or has no `rdra.toml` is
+`DependencyNotFound`, a dependency that leads back to a model being loaded is
+`DependencyCycle`, and one whose own `check` reports an error, a semantic error or a
+lifecycle finding of error severity, is `DependencyHasErrors`, with the count and the first
+error as `check` prints it. Each message names `rdra.toml`, the dependency, and its path. A
+dependency's own dependencies are checked the same way and cannot be bound. One directory
+may be a dependency under several keys, in one manifest or across a diamond; each consumer
+binds it under its own key. A manifest without `[dependencies]` changes no output. A
+malformed manifest, or one without `[model] name`, makes every loading command exit `1`
+with a message that names `rdra.toml` and the line.
+
+One run loads one model. A directory input contributes its `.rdra` files except those
+under a nested directory with its own `rdra.toml`, which belong to that model. Inputs that
+belong to two models, or to a model and to none, are `ManifestConflict`, which names both
+manifests; run each model on its own. The LSP does the same per open document: a
+dependency's file opened under the product's root is analysed as its own model and never
+merged into the product. What a model binds and references is in
+[Referencing another model](./language-reference.md#referencing-another-model).
 
 A loading command finds the manifest like this:
 
@@ -388,8 +410,8 @@ A loading command finds the manifest like this:
 3. Stop after the first directory that holds `.git`, which is searched too, or at the
    filesystem root. A stray `rdra.toml` above a repository never applies.
 4. With several inputs, every input's manifest is read, so a malformed one fails the command
-   whatever the input order. When all are valid, the first input's manifest is the project's.
-   A later change will tighten how inputs from different models combine.
+   whatever the input order. When all are valid and the inputs belong to one model, that
+   manifest is the project's; see `ManifestConflict` above for inputs of two models.
 
 The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
 adds the open buffers, and derives the include paths from those files exactly as the CLI does.
@@ -906,7 +928,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `surface` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
+| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `surface` \| `dependency` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text; `dependency` lists one row per reference to a bound dependency's element, as `use` (the predicate), `foreign` (the qualified id), `local` (the local element), `file`, and `line`, sorted. |
 | `--format` | `table` \| `json` \| `csv` | `table` | Output format. `--kind surface` has the canonical text only, and any other `--format` exits `2`. |
 
 Output is written to stdout.

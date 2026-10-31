@@ -158,7 +158,7 @@ fn needs_fairness(ts: &TransitionSystem) -> bool {
 }
 
 pub(crate) fn sanitize_ident(s: &str) -> String {
-    let mut out: String = s
+    let mut out: String = rdra_ish_core::model::slug(s)
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '_' {

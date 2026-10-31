@@ -216,6 +216,52 @@ fn resolve_combines_target(
         actual: actual.to_string(),
         expected: "variation|Entity.column".to_string(),
     };
+    if qref.kind_qualifier.is_none()
+        && qref.parts.len() >= 2
+        && crate::binding::bound_ext(model, &qref.parts[0]).is_some()
+    {
+        let entity = QRef {
+            kind_qualifier: None,
+            parts: qref.parts[..2].to_vec(),
+            span: qref.span.clone(),
+        };
+        match crate::binding::resolve_foreign(model, &entity, ctx, diags) {
+            crate::binding::Foreign::Node(node) if qref.parts.len() == 2 => {
+                crate::binding::check_foreign_operand(
+                    model,
+                    "combines",
+                    1,
+                    &node,
+                    qref.span.clone(),
+                    ctx,
+                    diags,
+                );
+            }
+            crate::binding::Foreign::Node(NodeRef::Entity(entity)) => {
+                let column = &qref.parts[2];
+                let known = model.entities[entity]
+                    .columns
+                    .iter()
+                    .any(|c| &c.name == column);
+                let err = if known {
+                    RdraError::ForeignStateNeedsEnvironment {
+                        id: model.entities[entity].id.clone(),
+                    }
+                } else {
+                    RdraError::UnknownColumn {
+                        entity: model.entities[entity].id.clone(),
+                        col: column.clone(),
+                    }
+                };
+                push_error_qref(ctx, diags, qref, err);
+            }
+            crate::binding::Foreign::Node(other) => {
+                push_error_qref(ctx, diags, qref, mismatch(node_kind_tag_str(&other)));
+            }
+            _ => {}
+        }
+        return None;
+    }
     match (&qref.kind_qualifier, qref.parts.as_slice()) {
         (None, [_]) | (Some(Kind::Variation), _) => {
             match resolve_arg(model, &PredicateArg::Ref(qref.clone()), ctx, diags)? {
