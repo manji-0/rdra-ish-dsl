@@ -1355,7 +1355,8 @@ sets(Refund, Stock, stock < selling, false)
 The third argument is the bare comparison expression (no quotes); the fourth argument is
 the bare boolean literal `true` or `false`. Value equality (`col == variant`) must not use
 `, false` — that form is rejected (`SetsFalseOnEquals`); omit the fourth argument and set
-a different value instead. Once any `sets` drives a comparison, the comparison is a Bool
+a different value instead. Any other third argument, such as `status != paid`, or a
+comparison without `true` or `false`, sets nothing and is `SetsNoEffect`. Once any `sets` drives a comparison, the comparison is a Bool
 variable that only those `sets` change, and the Int columns no longer define it. A use case
 that drives a comparison to one truth while its own Int `sets` make it the other is
 `ContradictoryDrivenComparison`, an error.

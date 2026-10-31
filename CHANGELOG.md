@@ -351,6 +351,10 @@
 
 ### Fixed
 
+- A `sets` that records no effect is `SetsNoEffect`, an error. `sets(UC, E, status != paid)`,
+  `sets(UC, E, total < 3)` without `true` or `false`, a fourth argument other than `true` or
+  `false`, and a `sets` with no comparison all loaded without a diagnostic and changed
+  nothing, so the use case they describe left the column as it was.
 - `@check` and `@derived` take an Enum value: `@check(status == open or closed_at ==
   present)` loads, where `open` was read as a column and failed with `right-hand side
   column 'open' not found`. A `property` atom `Entity.qty == limit` over two Int columns

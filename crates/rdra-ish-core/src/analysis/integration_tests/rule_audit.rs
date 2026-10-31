@@ -124,9 +124,21 @@ const FORMS: &[(&str, Expect)] = &[
     ("maps_field(F, Nosuch.status)", Error),
     ("maps_field(F, status)", Error),
     ("maps_field(F, Order, status)", Error), // the removed three-argument form
+    // sets: a column effect, or a comparison driven true or false
+    ("sets(Pay, Order, status == paid)", Recorded),
+    ("sets(Pay, Order, status == paid, true)", Recorded),
+    ("sets(Pay, Order, total < 3, true)", Recorded),
+    ("sets(Pay, Order, total < 3, false)", Recorded),
+    ("sets(Pay, Order, status == paid, false)", Error),
+    ("sets(Pay, Order, status != paid)", Error),
+    ("sets(Pay, Order, total < 3)", Error),
+    ("sets(Pay, Order, total < 3, maybe)", Error),
+    ("sets(Pay, Order, status)", Error),
+    ("sets(Pay, Order)", Error),
 ];
 
-/// The rules a model records, its field mappings, and each condition body and its quantifiers.
+/// The rules a model records, its field mappings, its `sets` effects, and each condition body
+/// and its quantifiers.
 fn recorded(model: &SemanticModel) -> usize {
     let bodies: usize = model
         .conditions
@@ -134,7 +146,11 @@ fn recorded(model: &SemanticModel) -> usize {
         .filter_map(|c| c.body.as_ref())
         .map(|body| 1 + body.quantifiers.len())
         .sum();
-    business_rules(model).len() + model.field_mappings.len() + bodies
+    business_rules(model).len()
+        + model.field_mappings.len()
+        + model.column_effects.len()
+        + model.proposition_effects.len()
+        + bodies
 }
 
 fn outcome(line: &str) -> (Expect, String) {
@@ -191,7 +207,7 @@ fn every_rule_predicate_has_a_form_in_the_audit() {
     let labelled = KNOWN_PREDICATES
         .iter()
         .filter(|p| predicate_chain_methods(p).contains(&"label"));
-    for pred in labelled.chain(&["holds", "maps_field"]) {
+    for pred in labelled.chain(&["holds", "maps_field", "sets"]) {
         assert!(
             FORMS
                 .iter()

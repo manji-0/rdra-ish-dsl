@@ -283,6 +283,9 @@ pub enum RdraError {
     #[error("PostgreSQL type name '{name}' is not valid in sets(...); use `present` for a non-null nullable value\n  hint: declare display/storage types with entity annotations or DBML export inference")]
     PgTypeNameInSets { name: String },
 
+    #[error("sets({usecase}, {entity}, ...) sets nothing: the third argument must be `column == value`, or a comparison followed by `true` or `false`\n  hint: write `sets({usecase}, {entity}, status == paid)` to set a value, or `sets({usecase}, {entity}, stock < selling, true)` to drive a comparison")]
+    SetsNoEffect { usecase: String, entity: String },
+
     #[error("sets(..., {col} == {value}, false) is invalid: the fourth argument drives comparison propositions (e.g. `stock < selling`), not value equality\n  hint: omit `, false` and set a different value with `sets(..., {col} == other)`, or use a comparison proposition")]
     SetsFalseOnEquals { col: String, value: String },
 

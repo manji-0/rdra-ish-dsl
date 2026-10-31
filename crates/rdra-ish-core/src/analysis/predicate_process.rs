@@ -580,7 +580,26 @@ fn process_sets_predicate(
         return;
     };
     let (origin, entity_key) = (*origin, *entity_key);
+    let before = diags.len();
+    let recorded = record_sets_effect(model, pred, origin, entity_key, ctx, diags);
+    if !recorded {
+        let err = RdraError::SetsNoEffect {
+            usecase: model.use_cases[origin].id.clone(),
+            entity: model.entities[entity_key].id.clone(),
+        };
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+    }
+}
 
+/// Records the column effect or the driven comparison a `sets` states, and says whether it did.
+fn record_sets_effect(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    origin: UseCaseKey,
+    entity_key: EntityKey,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
     if let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) {
         let entity_id = model.entities[entity_key].id.clone();
         let entity_cols = model.entities[entity_key].columns.clone();
@@ -633,7 +652,7 @@ fn process_sets_predicate(
                             },
                         );
                     }
-                    return;
+                    return truth_str == "true";
                 }
                 Ok(None) => {
                     if let Some(prop) = resolve_comparison(
@@ -659,14 +678,19 @@ fn process_sets_predicate(
                                 prop,
                                 truth: truth_str == "true",
                             });
+                        return true;
                     }
-                    return;
+                    return false;
                 }
-                Err(()) => return,
+                Err(()) => return false,
             }
         }
 
-        // Column effect form: sets(UC, E, status == captured)
+        // Column effect form: sets(UC, E, status == captured). A fourth argument other than
+        // `true` or `false` is not this form.
+        if pred.args.len() > 3 {
+            return false;
+        }
         if let Ok(Some((col_name, value))) =
             super::constraint::resolve_entity_equals_from_comparison(
                 &model.variations,
@@ -689,8 +713,10 @@ fn process_sets_predicate(
                 entity: entity_key,
                 column: col_name,
             });
+            return true;
         }
     }
+    false
 }
 
 fn process_forbidden_predicate(
