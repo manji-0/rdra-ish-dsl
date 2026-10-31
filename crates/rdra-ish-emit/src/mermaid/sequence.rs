@@ -448,7 +448,7 @@ invokes(Pay, PayApi)
 reads(PayApi, Bill)
 updates(PayApi, Bill)
 creates(PayApi, Receipt)
-transitions(Bill.status, Pay, open -> paid)
+transitions(Pay, Bill.status, open -> paid)
 sets(Pay, Bill, paid_at == present)
 condition Billable "Billable bill"
 holds(Billable, Bill.status == open)

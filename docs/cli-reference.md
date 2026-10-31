@@ -491,7 +491,7 @@ which it colours; every other kind draws declared facts and writes with one stde
 | `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase`, `robustness`, and `sequence`, and not together with `--buc`; an unknown id is an error. `sequence` needs exactly one. |
 | `--entity <id>` | string (repeatable) | — (whole model) | Draw only the named entities' state models, every lifecycle column, whole. Applies to `state`, and not together with `--buc`; an unknown entity, or one with no state model, is an error. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Draw only these node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
-| `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
+| `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). |
 
 Notes:
@@ -663,13 +663,13 @@ be read back from the text. The `rdra` diagram shows each part:
   - Control: each `api` a use case `invokes`, and the use case itself when it reads or
     writes an entity directly or invokes no API. A use case with an API and direct CRUD
     draws both.
-  - Entity: each entity a control `reads`, `creates`, `updates`, `deletes`, or `writes`.
+  - Entity: each entity a control `reads`, `creates`, `updates`, or `deletes`.
   - Edges, labelled so a reader finds the use case without a use case node:
     `actor --> screen` (`uses`, the one relation from an actor, so unlabelled) (the actor performs a use case that displays the screen;
     one an event or a timer starts takes only its declared performer, as in `usecase`);
     `screen -->|<use case label>| control` (the use case displays the screen and the
     control is its API, or it); `control -->|CRUD letters| entity` (the union of the
-    control's operations on the entity, `writes` counting as `U`); and the dotted
+    control's operations on the entity); and the dotted
     `control -.->|<event label>| control`, `extsystem -.->|<event label>| control`,
     `control -.->|<event label>| extsystem`, and `timer -.->|<timer label>| control`
     when both ends are in scope.
@@ -870,7 +870,7 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [-o <OUT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API contract list including method/path/idempotency/mode/auth; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`, including `UseCase->Api` paths for API-level requirements; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U/W paths. |
+| `--kind` | `actor` \| `entity` \| `matrix` \| `api` \| `api-matrix` \| `screen-constraints` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` | `entity` | CSV kind. `actor` = actor list; `entity` = entity/column list; `matrix` = use-case × entity CRUD matrix; `api` = API contract list including method/path/idempotency/mode/auth; `api-matrix` = API × entity CRUD matrix; `screen-constraints` = screen × UC/API permission/medium paths; `permission-callables` = permission × callable UC/API list derived from `requires_permission`, including `UseCase->Api` paths for API-level requirements; `actor-permission-audit` = actor × permission assignment audit inferred from UC/API requirements; `business-inputs` = Actor x inferred input field x UseCase rows derived from C/U paths. |
 | `--format` | `csv` \| `markdown` | `csv` | `markdown` writes the same rows as a Markdown table, to paste into a design doc or a PRD, with the extension `.<kind>.md`. A `\|` in a cell is escaped and a line break becomes `<br>`. |
 | `-o`, `--out` | path | `out` | Output file path. A path with an extension is used as is (`-o x.dat` writes `x.dat`). Otherwise `.<kind>.csv` is appended to the path: `-o out` (the default) writes `out.matrix.csv` for `--kind matrix` and `out.entity.csv` for `--kind entity`, and `-o foo` writes `foo.matrix.csv`. |
 

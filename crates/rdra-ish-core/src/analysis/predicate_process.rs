@@ -190,78 +190,60 @@ fn process_maps_field_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let (Some(Some(NodeRef::Field(field))), Some(Some(NodeRef::Entity(entity)))) =
-        (resolved.first(), resolved.get(1))
-    else {
+    let Some(Some(NodeRef::Field(field))) = resolved.first() else {
         return;
     };
-    let entity_id = model.entities[*entity].id.clone();
-    let column = match pred.args.get(2) {
-        // `Entity.column`: the qualifier must name the mapped entity.
-        Some(PredicateArg::Ref(qref)) if qref.kind_qualifier.is_none() && qref.parts.len() > 1 => {
+    let field = *field;
+    let Some(arg) = pred.args.get(1) else {
+        return;
+    };
+    // `Entity.column`: every part but the last names the entity.
+    let (qref, column, path) = match arg {
+        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() > 1 => {
             let (column, path) = qref.parts.split_last().expect("more than one part");
-            let qualifier = PredicateArg::Ref(QRef {
-                kind_qualifier: None,
-                parts: path.to_vec(),
-                span: qref.span.clone(),
-            });
-            match resolve_arg(model, &qualifier, ctx, diags) {
-                Some(NodeRef::Entity(named)) if named == *entity => column.clone(),
-                Some(NodeRef::Entity(named)) => {
-                    let err = RdraError::MapsFieldOtherEntity {
-                        written: qref.parts.join("."),
-                        entity: entity_id,
-                        other: model.entities[named].id.clone(),
-                    };
-                    push_error(ctx, diags, qref.span.clone(), err);
-                    return;
-                }
-                Some(other) => {
-                    let err = RdraError::TypeMismatch {
-                        pred: pred.name.clone(),
-                        id: path.join("."),
-                        actual: node_kind_tag_str(&other).to_string(),
-                        expected: "entity".to_string(),
-                    };
-                    push_error(ctx, diags, qref.span.clone(), err);
-                    return;
-                }
-                None => return,
-            }
+            (qref, column.clone(), path)
         }
-        Some(arg) => match arg_as_str(arg) {
-            Some(column) => column,
-            None => {
-                let err = RdraError::TypeMismatch {
-                    pred: pred.name.clone(),
-                    id: predicate_arg_display(arg),
-                    actual: "argument".to_string(),
-                    expected: "column such as `Entity.column`".to_string(),
-                };
-                push_error(ctx, diags, arg_span(arg), err);
-                return;
-            }
-        },
+        other => {
+            let err = RdraError::TypeMismatch {
+                pred: pred.name.clone(),
+                id: predicate_arg_display(other),
+                actual: "argument".to_string(),
+                expected: "Entity.column".to_string(),
+            };
+            push_error(ctx, diags, arg_span(other), err);
+            return;
+        }
+    };
+    let qualifier = PredicateArg::Ref(QRef {
+        kind_qualifier: None,
+        parts: path.to_vec(),
+        span: qref.span.clone(),
+    });
+    let entity = match resolve_arg(model, &qualifier, ctx, diags) {
+        Some(NodeRef::Entity(entity)) => entity,
+        Some(other) => {
+            let err = RdraError::TypeMismatch {
+                pred: pred.name.clone(),
+                id: path.join("."),
+                actual: node_kind_tag_str(&other).to_string(),
+                expected: "entity".to_string(),
+            };
+            push_error(ctx, diags, qref.span.clone(), err);
+            return;
+        }
         None => return,
     };
-
-    if !model.entities[*entity]
+    if !model.entities[entity]
         .columns
         .iter()
         .any(|col| col.name == column)
     {
-        let span = pred
-            .args
-            .get(2)
-            .map(arg_span)
-            .filter(|s| !s.is_empty())
-            .unwrap_or_else(|| pred.span.clone());
         push_error(
             ctx,
             diags,
-            span,
+            qref.span.clone(),
             RdraError::UnknownColumn {
-                entity: entity_id,
+                entity: model.entities[entity].id.clone(),
                 col: column,
             },
         );
@@ -269,14 +251,19 @@ fn process_maps_field_predicate(
     }
 
     model.field_mappings.push(FieldMapping {
-        field: *field,
-        entity: *entity,
+        field,
+        entity,
+        column: column.clone(),
+    });
+    model.typed_predicates.push(TypedPredicate::MapsField {
+        field,
+        entity,
         column,
     });
     model.relations.push(Relation {
         site: Some(ctx.locate(pred.span.clone())),
-        from: NodeRef::Field(*field),
-        to: NodeRef::Entity(*entity),
+        from: NodeRef::Field(field),
+        to: NodeRef::Entity(entity),
         kind: RelKind::MapsField,
         options: RelationOptions::default(),
         via: None,
@@ -308,11 +295,11 @@ fn process_transitions_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some(Some(NodeRef::UseCase(usecase))) = resolved.get(1) else {
+    let Some(Some(NodeRef::UseCase(usecase))) = resolved.first() else {
         return;
     };
 
-    let (entity_id, column) = match pred.args.first() {
+    let (entity_id, column) = match pred.args.get(1) {
         Some(PredicateArg::Ref(qref)) if qref.parts.len() == 2 => {
             (qref.parts[0].clone(), qref.parts[1].clone())
         }
@@ -381,7 +368,7 @@ fn process_transitions_predicate(
         push_error(
             ctx,
             diags,
-            arg_span(&pred.args[0]),
+            arg_span(&pred.args[1]),
             RdraError::UndefinedSymbol {
                 id: entity_id.clone(),
             },
@@ -398,7 +385,7 @@ fn process_transitions_predicate(
         push_error(
             ctx,
             diags,
-            arg_span(&pred.args[0]),
+            arg_span(&pred.args[1]),
             RdraError::UnknownColumn {
                 entity: entity_id.clone(),
                 col: column.clone(),
@@ -410,7 +397,7 @@ fn process_transitions_predicate(
         push_error(
             ctx,
             diags,
-            arg_span(&pred.args[0]),
+            arg_span(&pred.args[1]),
             RdraError::TransitionsColumnNotEnum {
                 entity: entity_id.clone(),
                 col: column.clone(),
@@ -461,7 +448,7 @@ fn process_transitions_predicate(
         push_warning(
             ctx,
             diags,
-            arg_span(&pred.args[0]),
+            arg_span(&pred.args[1]),
             RdraError::MultipleLifecycleColumns {
                 entity: entity_id.clone(),
                 existing: existing.column.clone(),
@@ -968,7 +955,6 @@ fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
     let kind = match pred_name {
         "performs" => RelKind::Performs,
         "reads" => RelKind::Reads,
-        "writes" => RelKind::Writes,
         "creates" => RelKind::Creates,
         "updates" => RelKind::Updates,
         "deletes" => RelKind::Deletes,
@@ -1506,7 +1492,7 @@ fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraEr
         "forbidden" | "required" | "exclusive" => ("at least 1".into(), got >= 1),
         "holds" => ("at least 2".into(), got >= 2),
         "transitions" => ("3".into(), got == 3),
-        "maps_field" => ("3".into(), got == 3),
+        "maps_field" => ("2".into(), got == 2),
         "relate" => ("3".into(), got == 3),
         _ => {
             let n = sig.len();

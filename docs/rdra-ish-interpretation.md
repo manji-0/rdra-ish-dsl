@@ -127,7 +127,7 @@ split under a BUC.
 
 <!-- constrained-by ./language-reference.md#transitions-and-the-state-machine -->
 
-A use case moves a state; an event does not. `transitions(Order.status, CapturePay,
+A use case moves a state; an event does not. `transitions(CapturePay, Order.status,
 pending -> paid)` names the use case that drives the edge, as the 遷移UC column of the
 RDRA state sheet does. An event is the interface between use cases, or between a use
 case and an external system: a UC `raises` it and it `triggers` a downstream UC or BUC,

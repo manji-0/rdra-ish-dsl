@@ -125,6 +125,22 @@ An instance may also carry an optional description:
 default so diagrams stay compact. `rdra-ish diagram --kind rdra` writes each description as
 a `%% desc <id>: <text>` comment line after the node.
 
+### Metadata clause values
+
+A metadata clause is a keyword and one value: `description`, the requirement, ADR, NFR,
+goal, and constraint clauses, the API contract clauses, the field clauses, and the use
+case review clauses. Every clause takes the value in either of two forms:
+
+- a quoted string for free text: `rationale "Checkout failures block revenue."`,
+  `target "<=300"`;
+- a bare token for a single word or number: `priority must`, `metric p95_latency_ms`,
+  `target 300`, `slo 99.9`.
+
+`rdra-ish fmt` writes each value the way it was written, so `priority "must"` and
+`priority must` both stay as they are. Anything that is not one identifier or one
+number (spaces, `-`, `<`, `%`, non-ASCII text) needs the quotes. `required` alone takes
+`true` or `false`.
+
 ### Kind index
 
 | kind | Description | Reviewed by |
@@ -176,14 +192,13 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `qualifies` | `(Nfr \| Constraint, Quality)` | The non-functional requirement or constraint belongs to the given quality category. |
 | `constrains` | `(Constraint, UseCase \| Api \| System \| Entity \| Dto)` | The constraint applies to the target model element. Use this for audit/logging/retention/privacy rules that constrain system behavior or data handling. |
 | `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. |
-| `writes` | `(UseCase \| Api, Entity)` | The use case or API writes the entity (treated as an update for state derivation). |
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
 | `updates` | `(UseCase \| Api, Entity)` | The use case or API updates the entity. Produces a transition operation in state derivation. |
 | `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. |
 | `displays` | `(UseCase, Screen)` | The use case displays the screen. |
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `navigates` | `(Screen, Screen)` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
-| `maps_field` | `(Field, Entity, "column")` | Maps a screen field to a specific Entity column. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
+| `maps_field` | `(Field, Entity.column)` | Maps a screen field to a specific Entity column. The entity and the column must exist. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
 | `raises` | `(UseCase \| ExtSystem, Event)` | The use case or external system raises the event, which `triggers` hands to downstream use cases or BUCs. An external system raising an event is the inbound direction. |
 | `triggers` | `(Event \| Timer, UseCase \| Buc \| ExtSystem)` | The event or timer triggers a concrete use case or starts a BUC boundary. An event triggering an external system delivers the event to it (outbound). A timer cannot trigger an external system: the legal pairs are `Event` to any of the three and `Timer` to `UseCase` or `Buc`. |
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
@@ -206,7 +221,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `achieves` | `(Requirement, Goal)` | The requirement serves the goal. A requirement may achieve several goals. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). The child side, the `N` of `N:1` / `1:N` or the left of `1:1`, may be a range `lo..hi` with `lo` 0 or 1 and `hi` 1 or `*`: `relate(OrderLine, Order, 1..*:1)` says every `Order` has at least one `OrderLine`, and the lifecycle checks it as the invariant `MinCard_<Child>_<role>`. A range on the parent side is an error; write `.optional()` for a parent that may be absent. For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. For `1:1` the left end is the child: it holds the key column, marked unique. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
-| `transitions` | `(Entity.column, UseCase, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. |
+| `transitions` | `(UseCase, Entity.column, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each step of the use case leaves. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
 | `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
@@ -296,19 +311,20 @@ description:
 ```
 requirement ReqCheckout "Checkout must be reliable"
   description "The checkout flow must preserve customer intent."
-  priority "must"
+  priority must
   source "Customer interview"
   stakeholder "Store Operations"
   owner "Product Owner"
-  acceptance criteria "A payment timeout leaves the cart recoverable."
-  status "proposed"
-  risk "high"
+  acceptance_criteria "A payment timeout leaves the cart recoverable."
+  status proposed
+  risk high
   rationale "Checkout failures directly block revenue."
 ```
 
-`source`, `stakeholder`, and `acceptance criteria` may be repeated. Single-value
-fields use the last value when repeated. `acceptance_criteria "..."` is accepted as
-an identifier-friendly spelling of `acceptance criteria "..."`.
+`source`, `stakeholder`, and `acceptance_criteria` may be repeated. Single-value
+fields use the last value when repeated. `acceptance_criteria` is the only spelling:
+the two-word `acceptance criteria` (and a bare `acceptance`) fails to parse with a
+message that names it.
 
 Use `rdra-ish list --kind requirement` to review requirement metadata in table,
 CSV, or JSON form.
@@ -375,7 +391,7 @@ Supported NFR clauses are:
 | Clause | Description |
 |---|---|
 | `metric` | Metric name, such as `p95_latency_ms`, `error_rate`, or `availability_ratio`. |
-| `target` | Target value as a string literal, such as `"<=300"` or `"<0.1%"`. |
+| `target` | Target value, such as `300`, `"<=300"`, or `"<0.1%"`. |
 | `window` | Measurement window, such as `"5m"` or `"30d"`. |
 | `slo` | Service-level objective value or label. |
 | `availability` | Availability design or expectation, such as `multi_az` or `active_active`. |
@@ -554,8 +570,8 @@ entity Order "Order" {
 
 contains(CheckoutScreen, ShippingAddress)
 contains(CheckoutScreen, OrderTotal)
-maps_field(ShippingAddress, Order, "shipping_address")
-maps_field(OrderTotal, Order, "total")
+maps_field(ShippingAddress, Order.shipping_address)
+maps_field(OrderTotal, Order.total)
 ```
 
 Supported field clauses are:
@@ -567,7 +583,7 @@ Supported field clauses are:
 | `source` / `input` / `derived` | `actor` for actor-entered fields or `system` for system-derived fields by convention. Project-specific tokens are accepted. |
 
 `shows(Screen, Entity)` remains a coarse screen-to-entity information link.
-`maps_field(Field, Entity, "column")` is the fine-grained mapping when a concrete
+`maps_field(Field, Entity.column)` is the fine-grained mapping when a concrete
 screen item corresponds to a logical data column.
 
 ### Screen transitions
@@ -621,7 +637,7 @@ RequestCert, IssueCert, although in the real flow IssueCert runs only after
 ExecuteCertIssue raises `EvOrderExecuted`.
 
 ```rdra
-transitions(CertificateOrder.status, ExecuteCertIssue, requested -> executed)
+transitions(ExecuteCertIssue, CertificateOrder.status, requested -> executed)
 raises(ExecuteCertIssue, EvOrderExecuted)
 triggers(EvOrderExecuted, IssueCert)
 creates(IssueCert, ClientCertificate)
@@ -695,16 +711,16 @@ entity Session "Session" {                   // internal
   status: Enum(active, revoked) @default(active)
 }
 creates(SessionApi, Session)
-transitions(Session.status, Revoke, active -> revoked)
+transitions(Revoke, Session.status, active -> revoked)
 
 // Published information: a projection of Session that auth writes and never reads.
 entity SessionView "Session (published)" {
   session_id: Int @pk
   status: Enum(active, ended)
 }
-writes(SessionApi, SessionView)
+updates(SessionApi, SessionView)
 sets(Login, SessionView, status == active)
-writes(Revoke, SessionView)
+updates(Revoke, SessionView)
 sets(Revoke, SessionView, status == ended)
 
 exposes(AuthSystem, Login)                   // callable on behalf of an actor
@@ -722,13 +738,13 @@ or `.caller(any)` is not reported as having no actor, neither for its own permis
 
 `exposes(System, Entity).append()` or `.upsert()` publishes an entity. A published entity
 is a projection the owner writes and never reads, such as an append-only log or a silver
-table. `.append()` allows `creates` and `sets`; `.upsert()` also allows `updates` and
-`writes`. `deletes` and `transitions` are never allowed. The owner's `check` enforces
+table. `.append()` allows `creates` and `sets`; `.upsert()` also allows `updates`.
+`deletes` and `transitions` are never allowed. The owner's `check` enforces
 these rules:
 
 | Diagnostic | When |
 |---|---|
-| `PublishedEntityMutated` | an `append` entity gets `updates` or `writes`, or any published entity gets `deletes` or `transitions` |
+| `PublishedEntityMutated` | an `append` entity gets `updates`, or any published entity gets `deletes` or `transitions` |
 | `PublishedEntityReadByOwner` | the owner reads a published entity: `reads`, `shows`, `maps_field`, a `holds` body, `combines`, or a constraint (`forbidden`, `invariant`, `required`, `exclusive`, `when`, `after`) |
 | `PublishedEntityKeysInternal` | a `relate` joins a published entity to an internal one, in either direction |
 | `PublishedNotInSourceTx` | a use case writes a published entity but makes no internal change, or makes several internal transactions, so the published row has no one transaction to join; or it writes the published entity through an API that makes no internal change, because each API is its own transaction |
@@ -793,8 +809,8 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 - FK-grouped direct writes use the full `relate` graph for connectivity. Two written
   sibling entities that share an unwritten parent entity are still grouped as one
   inferred transaction.
-- `states` and `verify` run these transactions (`UsecaseTx::groups()`). A `writes(..)`
-  edge, and an entity a use case only `sets` or transitions, both count as an update. An
+- `states` and `verify` run these transactions (`UsecaseTx::groups()`). An entity a use
+  case only `sets` or transitions counts as an update. An
   entity written in its own transaction after an FK group raises `SeparateTxInferred`.
 
 **System boundary behaviour**:
@@ -1265,15 +1281,15 @@ patterns, and `export --kind tla` / `verify --backend tlc` check temporal proper
 
 ### `transitions` and the state machine
 
-`transitions(Order.status, CapturePay, pending -> paid)` declares one edge of an entity's
+`transitions(CapturePay, Order.status, pending -> paid)` declares one edge of an entity's
 state machine, driven by the use case `CapturePay`. It is the 遷移UC column of an RDRA
 state sheet: the use case moves the state, and events stay the interface between use
 cases. The Enum column is required; state labels are the Enum variants
 (case-insensitively). Two use cases that drive the same edge each get their own line:
 
 ```
-transitions(Order.status, CancelOrder,  pending -> cancelled)
-transitions(Order.status, ExpireOrder,  pending -> cancelled)
+transitions(CancelOrder, Order.status, pending -> cancelled)
+transitions(ExpireOrder, Order.status, pending -> cancelled)
 ```
 
 The second argument must be a use case. Passing an event, the earlier form, is a
@@ -1724,7 +1740,7 @@ to load with a message naming the replacement:
 | `timing` | `timer`. `belongs(...).when(...)` was removed; connect the timer with `triggers(Timer, UseCase)`. |
 | `uses` | Connect an external system through events: `raises(ExtSystem, Event)` inbound, `triggers(Event, ExtSystem)` outbound. |
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `medium` / `.by(...)` for Business-BUC context. |
-| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(Entity.col, UseCase, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for `lint` and the diagrams, which name it `state__{Entity}_{variant}`. |
+| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(UseCase, Entity.col, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for `lint` and the diagrams, which name it `state__{Entity}_{variant}`. |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 
 A top-level `when(...)` rule was removed too: a rule over related rows is an `invariant`,
@@ -1733,6 +1749,21 @@ and a guard is a `holds`. `when(Entity, conditions...).none(...)` and
 `invariant(Entity).when(...).none(...)`, whose entity is the leading argument or the entity
 of the first qualified column, with the rest of the chain, `.label(...)` included, as
 written.
+
+### Removed forms
+
+These spellings were removed so that each predicate has one form: the use case comes
+first, a column is always `Entity.column`, and each keyword is one word. A model that
+still uses one fails to load with a message that gives the rewritten line.
+`scripts/migrate-syntax-v2.py <workspace>` rewrites all four in place and is safe to run
+twice.
+
+| Removed | Use instead |
+|---|---|
+| `transitions(Entity.column, UseCase, from -> to)` | `transitions(UseCase, Entity.column, from -> to)`. |
+| `maps_field(Field, Entity, "column")`, `maps_field(Field, Entity, column)`, `maps_field(Field, Entity, Entity.column)` | `maps_field(Field, Entity.column)`. |
+| `acceptance criteria "..."`, `acceptance "..."` | `acceptance_criteria "..."`. |
+| `writes(UseCase \| Api, Entity)` | `updates`, or `creates` / `deletes` when that is what the use case does. `writes` was an update under another name; the CRUD matrix now shows `U` where it showed `W`. |
 
 ---
 

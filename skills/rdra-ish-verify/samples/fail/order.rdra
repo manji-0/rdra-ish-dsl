@@ -15,7 +15,7 @@ contains(BucOrderLifecycle, PlaceOrder)
 contains(BucOrderLifecycle, DeliverOrder)
 creates(PlaceOrder, Order)
 updates(DeliverOrder, Order)
-transitions(Order.status, DeliverOrder, pending -> delivered)
+transitions(DeliverOrder, Order.status, pending -> delivered)
 // Missing: sets(..., delivered_at, present)
 
 invariant(Order)

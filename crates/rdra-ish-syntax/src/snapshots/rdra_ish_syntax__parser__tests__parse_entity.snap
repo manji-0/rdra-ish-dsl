@@ -61,6 +61,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                bare_values: [],
                 columns: [
                     Column {
                         name: "id",

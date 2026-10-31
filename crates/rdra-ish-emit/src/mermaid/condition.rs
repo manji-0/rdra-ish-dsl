@@ -219,7 +219,7 @@ entity Order "Order" {
   id: Int @pk
   channel: Channel
 }
-transitions(Appointment.status, CheckIn, booked -> arrived)
+transitions(CheckIn, Appointment.status, booked -> arrived)
 contains(BucPay, Bill)
 contains(BucPay, CheckIn)
 contains(BucOther, Elsewhere)

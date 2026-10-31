@@ -1,6 +1,6 @@
 use super::keys::{EntityKey, UseCaseKey};
 
-/// `transitions(Entity.column, UseCase, from -> to)`: the use case moves the column.
+/// `transitions(UseCase, Entity.column, from -> to)`: the use case moves the column.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StateTransition {
     pub entity: EntityKey,

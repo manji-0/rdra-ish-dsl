@@ -269,8 +269,8 @@ event EncounterSigned "Encounter signed"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ClaimSubmission)
 triggers(EncounterSigned, SubmitClaim)
-transitions(Encounter.status, SignEncounter, draft -> signed)
-transitions(Claim.status, SubmitClaim, draft -> submitted)
+transitions(SignEncounter, Encounter.status, draft -> signed)
+transitions(SubmitClaim, Claim.status, draft -> submitted)
 outbox(EncounterSigned)
 "#,
         );

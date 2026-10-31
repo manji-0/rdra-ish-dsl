@@ -272,7 +272,6 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
     match kind {
         RelKind::Performs => "performs",
         RelKind::Reads => "reads",
-        RelKind::Writes => "writes",
         RelKind::Creates => "creates",
         RelKind::Updates => "updates",
         RelKind::Deletes => "deletes",
@@ -370,7 +369,6 @@ pub const KNOWN_DIAGRAM_NODE_KINDS: &[&str] = &[
 pub const KNOWN_DIAGRAM_EDGE_KINDS: &[&str] = &[
     "performs",
     "reads",
-    "writes",
     "creates",
     "updates",
     "deletes",
@@ -839,7 +837,7 @@ entity Entity "Entity" {
   id: Int @pk
   status: Enum(a, b)
 }
-transitions(Entity.status, Uc, a -> b)
+transitions(Uc, Entity.status, a -> b)
 "#,
         );
 

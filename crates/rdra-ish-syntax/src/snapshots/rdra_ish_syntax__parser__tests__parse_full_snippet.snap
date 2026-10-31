@@ -82,6 +82,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                bare_values: [],
                 columns: [],
                 variation_values: [],
                 span: 63..88,
@@ -144,6 +145,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                bare_values: [],
                 columns: [],
                 variation_values: [],
                 span: 89..123,
@@ -206,6 +208,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                bare_values: [],
                 columns: [
                     Column {
                         name: "id",

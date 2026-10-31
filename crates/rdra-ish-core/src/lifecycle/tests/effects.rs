@@ -38,8 +38,8 @@ usecase Cancel "キャンセル"
 creates(Place, Order)
 updates(usecase::Pay,    Order)
 updates(usecase::Cancel, Order)
-transitions(Order.status, usecase::Pay, pending -> paid)
-transitions(Order.status, usecase::Cancel, pending -> cancelled)
+transitions(usecase::Pay, Order.status, pending -> paid)
+transitions(usecase::Cancel, Order.status, pending -> cancelled)
 "#,
     );
     assert_eq!(
@@ -65,7 +65,7 @@ usecase Place      "注文確定"
 usecase DeliverUc  "配達確認"
 creates(Place,         Order)
 updates(usecase::DeliverUc, Order)
-transitions(Order.status, usecase::DeliverUc, pending -> delivered)
+transitions(usecase::DeliverUc, Order.status, pending -> delivered)
 sets(usecase::DeliverUc, Order, delivered_at == present)
 "#,
     );
@@ -87,9 +87,9 @@ usecase Place "注文"
 usecase Pay "支払"
 usecase Cancel "取消"
 creates(Place, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Cancel, pending -> cancelled)
-transitions(Order.status, Cancel, paid -> cancelled)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Cancel, Order.status, paid -> cancelled)
 "#,
     );
     let rows = d.rows("Order");
@@ -183,7 +183,7 @@ usecase Remove   "削除"
 creates(Create, Item)
 updates(Deactive, Item)
 deletes(Remove,   Item)
-transitions(Item.status, Deactive, active -> inactive)
+transitions(Deactive, Item.status, active -> inactive)
 "#,
     );
     let item = d.entity("Item");
@@ -208,7 +208,7 @@ usecase Ship "ship"
 creates(Place, Order)
 sets(Place, Order, status == shipped)
 updates(Ship, Order)
-transitions(Order.status, Ship, placed -> shipped)
+transitions(Ship, Order.status, placed -> shipped)
 "#,
     );
     let o = d.entity("Order");
@@ -237,7 +237,7 @@ usecase Place "place"
 usecase Close "close"
 usecase Reopen "reopen"
 creates(Place, Order)
-transitions(Order.status, Close, open -> closed)
+transitions(Close, Order.status, open -> closed)
 sets(Reopen, Order, status == open)
 "#,
     );
@@ -300,8 +300,8 @@ creates(Init, Order)
 creates(Init, Payment)
 updates(Flip, Order)
 updates(Flip, Payment)
-transitions(Order.status, Flip, pending -> paid)
-transitions(Payment.status, Flip, paid -> pending)
+transitions(Flip, Order.status, pending -> paid)
+transitions(Flip, Payment.status, paid -> pending)
 {relate}
 "#
         )

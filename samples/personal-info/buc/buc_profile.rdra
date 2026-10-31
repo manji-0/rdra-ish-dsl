@@ -81,12 +81,12 @@ creates(SetPrimaryAddressApi, AuditLog)
 // Account lifecycle: a system administrator suspends, restores, or deletes the account.
 performs(SysAdmin, SuspendAccount)
 updates(SuspendAccount, UserAccount)
-transitions(UserAccount.status, SuspendAccount, active -> suspended)
+transitions(SuspendAccount, UserAccount.status, active -> suspended)
 
 performs(SysAdmin, RestoreAccount)
 updates(RestoreAccount, UserAccount)
-transitions(UserAccount.status, RestoreAccount, suspended -> active)
+transitions(RestoreAccount, UserAccount.status, suspended -> active)
 
 performs(SysAdmin, DeleteAccount)
 updates(DeleteAccount, UserAccount)
-transitions(UserAccount.status, DeleteAccount, active -> deleted)
+transitions(DeleteAccount, UserAccount.status, active -> deleted)

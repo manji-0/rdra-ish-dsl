@@ -48,7 +48,7 @@ introduces.
 | New entity column | `shared/entities.rdra` |
 | New entity entirely | `shared/entities.rdra` + add `relate` if needed |
 | New value an actor chooses | shared `variation`, then type the column by it |
-| New state or state edge | the Enum variant on the entity, then `transitions(Entity.col, UseCase, from -> to)` next to the entity (cross-BUC) or in the BUC file; states are never declared |
+| New state or state edge | the Enum variant on the entity, then `transitions(UseCase, Entity.col, from -> to)` next to the entity (cross-BUC) or in the BUC file; states are never declared |
 | New event | `shared/entities.rdra` (if cross-BUC) or `buc/buc_<name>.rdra`, with its `raises` and its consumer |
 | New actor | `shared/actors.rdra` |
 | New system/API ownership | shared vocabulary for `system`, BUC/shared API file for `api`, then `contains(System, Api)` |
@@ -142,7 +142,7 @@ add CRUD predicates in the BUC file for the use cases that touch it.
 **Adding a state edge:**
 
 ```rdra
-transitions(Shipment.status, ShipOrder, packing -> shipped)
+transitions(ShipOrder, Shipment.status, packing -> shipped)
 ```
 
 The use case that moves the state is the second argument. A new state is a new Enum
@@ -176,7 +176,7 @@ field AddressField "Delivery address"
   source actor
 
 contains(OrderScreen, AddressField)
-maps_field(AddressField, Order, "address")
+maps_field(AddressField, Order.address)
 ```
 
 **Adding Business-BUC context:**

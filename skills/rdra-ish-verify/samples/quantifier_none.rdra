@@ -26,8 +26,8 @@ creates(Issue, Assign)
 updates(Revoke, Cert)
 updates(EndAssign, Assign)
 
-transitions(Cert.status, Revoke, active -> revoked)
-transitions(Assign.status, EndAssign, active -> ended)
+transitions(Revoke, Cert.status, active -> revoked)
+transitions(EndAssign, Assign.status, active -> ended)
 
 relate(Assign, Cert, N:1)
 

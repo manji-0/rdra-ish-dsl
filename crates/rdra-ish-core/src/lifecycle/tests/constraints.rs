@@ -27,8 +27,8 @@ usecase Place "注文"
 usecase Pay "支払"
 usecase Cancel "取消"
 creates(Place, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Cancel, pending -> cancelled)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Cancel, Order.status, pending -> cancelled)
 "#;
 
 #[test]
@@ -226,7 +226,7 @@ usecase Place "注文"
 usecase Capture "確定"
 creates(Place, Order)
 creates(Place, Payment)
-transitions(Payment.status, Capture, pending -> captured)
+transitions(Capture, Payment.status, pending -> captured)
 forbidden(Order, Payment, Order.status == open, Payment.status == captured)
 "#,
     );
@@ -252,8 +252,8 @@ creates(Place, Order)
 creates(Place, Payment)
 updates(Pay, Order)
 updates(Pay, Payment)
-transitions(Order.status, Pay, open -> paid)
-transitions(Payment.status, Pay, pending -> captured)
+transitions(Pay, Order.status, open -> paid)
+transitions(Pay, Payment.status, pending -> captured)
 invariant(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
 "#,
     );
@@ -358,7 +358,7 @@ fn after_assert_passes_on_the_transition_it_names() {
 usecase ExecuteCertIssue "Execute Cert Issue"
 entity CertificateOrder "Certificate Order" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
 creates(ExecuteCertIssue, CertificateOrder)
-transitions(CertificateOrder.status, ExecuteCertIssue, requested -> executed)
+transitions(ExecuteCertIssue, CertificateOrder.status, requested -> executed)
 after(ExecuteCertIssue).assert(CertificateOrder.status == executed)
 "#,
     );
@@ -396,7 +396,7 @@ usecase RequestCert "依頼"
 usecase ExecuteCertIssue "発行実行"
 usecase IssueCert "証明書作成"
 creates(RequestCert, CertificateOrder)
-transitions(CertificateOrder.status, ExecuteCertIssue, requested -> executed)
+transitions(ExecuteCertIssue, CertificateOrder.status, requested -> executed)
 creates(IssueCert, ClientCertificate)
 relate(ClientCertificate, CertificateOrder, N:1)
 after(IssueCert).assert(CertificateOrder.status == executed)
@@ -486,7 +486,7 @@ usecase Refund  "返金"
 creates(Place,   Order)
 updates(Deliver, Order)
 updates(Refund,  Order)
-transitions(Order.status, Deliver, pending -> delivered)
+transitions(Deliver, Order.status, pending -> delivered)
 sets(usecase::Refund, Order, refunded == true)
 sets(usecase::Refund, Order, refund_id == present)
 invariant(Order)

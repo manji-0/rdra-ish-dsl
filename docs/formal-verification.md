@@ -56,7 +56,7 @@ action, and `Spec` allows stuttering.
 | Use case | One operator `<UC>(p0, ...)` per transaction group of `UsecaseTx::groups()` (`<UC>_1`, `<UC>_2`, ... when the writes form several groups). `Next` is the disjunction of `\E` over the parameters. |
 | `creates` | `FirstAbsent(<E>_exists, p)` and `<E>_exists' = ... "present"`. A deleted slot is never reused. |
 | `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. |
-| `sets`, `transitions(E.col, UC, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
+| `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
 | Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
 | `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments. |
 | Comparison proposition driven by `sets(..., cmp, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |

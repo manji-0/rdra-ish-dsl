@@ -461,7 +461,7 @@ entity Order \"Order\" {{
 }}
 displays(PlaceOrder, Checkout)
 creates(PlaceOrder, Order)
-transitions(Order.status, PlaceOrder, pending -> paid)
+transitions(PlaceOrder, Order.status, pending -> paid)
 forbidden(Order, status == paid, paid_at == null)
 "
         );
@@ -614,7 +614,7 @@ entity Other \"Other\" {{
 }}
 displays(PlaceOrder, Checkout)
 creates(PlaceOrder, Order)
-transitions(Order.status, PlaceOrder, pending -> paid)
+transitions(PlaceOrder, Order.status, pending -> paid)
 sets(PlaceOrder, Order, paid_at == present)
 forbidden(Other, open == false)
 "

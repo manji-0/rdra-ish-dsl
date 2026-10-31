@@ -93,7 +93,7 @@ updates(CheckInPatientApi, PatientAccount)
 creates(OnlineEligibilityApi, EligibilityCheck)
 reads(OnlineEligibilityApi, InsurancePolicy)
 raises(CheckInPatient, EvAppointmentCheckedIn)
-transitions(Appointment.status, CheckInPatient, apptscheduled -> apptcheckedin)
+transitions(CheckInPatient, Appointment.status, apptscheduled -> apptcheckedin)
 sets(CheckInPatient, Appointment, checked_in_at == present)
 triggers(EvAppointmentCheckedIn, OnlineEligibilitySystem)
 
@@ -112,35 +112,35 @@ updates(EligibilityResultApi, EligibilityCheck)
 displays(ReceiveEligibilityValid, EligibilityScreen)
 invokes(ReceiveEligibilityValid, EligibilityResultApi)
 triggers(EvEligibilityChecked, ReceiveEligibilityValid)
-transitions(EligibilityCheck.result, ReceiveEligibilityValid, eligpending -> eligvalid)
+transitions(ReceiveEligibilityValid, EligibilityCheck.result, eligpending -> eligvalid)
 sets(ReceiveEligibilityValid, EligibilityCheck, reference_no == present)
 
 displays(ReceiveEligibilityInvalid, EligibilityScreen)
 invokes(ReceiveEligibilityInvalid, EligibilityResultApi)
 triggers(EvEligibilityChecked, ReceiveEligibilityInvalid)
-transitions(EligibilityCheck.result, ReceiveEligibilityInvalid, eligpending -> eliginvalid)
+transitions(ReceiveEligibilityInvalid, EligibilityCheck.result, eligpending -> eliginvalid)
 
 displays(ReceiveEligibilityNoInfo, EligibilityScreen)
 invokes(ReceiveEligibilityNoInfo, EligibilityResultApi)
 triggers(EvEligibilityChecked, ReceiveEligibilityNoInfo)
-transitions(EligibilityCheck.result, ReceiveEligibilityNoInfo, eligpending -> elignoinfo)
+transitions(ReceiveEligibilityNoInfo, EligibilityCheck.result, eligpending -> elignoinfo)
 
 // 無効 or 該当資格なし: the patient shows the current 資格 and the clerk queries again.
 displays(RecheckEligibility, EligibilityScreen)
 invokes(RecheckEligibility, EligibilityResultApi)
-transitions(EligibilityCheck.result, RecheckEligibility, eliginvalid -> eligpending)
-transitions(EligibilityCheck.result, RecheckEligibility, elignoinfo -> eligpending)
+transitions(RecheckEligibility, EligibilityCheck.result, eliginvalid -> eligpending)
+transitions(RecheckEligibility, EligibilityCheck.result, elignoinfo -> eligpending)
 
 // The system cannot answer: the patient fills in a 被保険者資格申立書
 // (mhlw-2023-online-shikaku-dekinai-baai.txt:36-37) and pays the usual share, 3割等 (:50).
 displays(RecordEligibilityDeclaration, EligibilityScreen)
 invokes(RecordEligibilityDeclaration, EligibilityResultApi)
-transitions(EligibilityCheck.result, RecordEligibilityDeclaration, eligpending -> eligdeclared)
+transitions(RecordEligibilityDeclaration, EligibilityCheck.result, eligpending -> eligdeclared)
 
 // システム障害時モード, on the spot or afterwards (mhlw-2023-online-shikaku-dekinai-baai.txt:80).
 displays(ConfirmEligibilityInOutageMode, EligibilityScreen)
 invokes(ConfirmEligibilityInOutageMode, EligibilityResultApi)
-transitions(EligibilityCheck.result, ConfirmEligibilityInOutageMode, eligpending -> eligvalid)
+transitions(ConfirmEligibilityInOutageMode, EligibilityCheck.result, eligpending -> eligvalid)
 
 displays(ReceiveReferralLetter, ReferralScreen)
 invokes(ReceiveReferralLetter, ReferralLetterApi)
@@ -153,7 +153,7 @@ invokes(AssignRoom, AssignRoomApi)
 updates(AssignRoomApi, Room)
 updates(AssignRoomApi, Appointment)
 // Only a checked-in visit is roomed. The self-transition is the guard; the status stays.
-transitions(Appointment.status, AssignRoom, apptcheckedin -> apptcheckedin)
+transitions(AssignRoom, Appointment.status, apptcheckedin -> apptcheckedin)
 sets(AssignRoom, Room, occupancy_status == roomoccupied)
 
 displays(PrepareEncounter, CheckInScreen)
@@ -198,14 +198,14 @@ requirement ReqSwiftCheckIn "再来患者は情報を入力し直さずに受付
   priority "must"
   source "モデルの想定（一次資料なし）"
   stakeholder "医事課 受付担当"
-  acceptance criteria "再来患者は 1 回の確認操作で受付され、診察室へ案内される。"
+  acceptance_criteria "再来患者は 1 回の確認操作で受付され、診察室へ案内される。"
   status "accepted"
 
 requirement ReqEligibilityEveryVisit "受付のたびに保険資格を確認する"
   priority "must"
   source "保険医療機関及び保険医療養担当規則 第3条 (egov-ryotan-kisoku-332M50000100015.txt:80)"
   stakeholder "医事課 受付担当"
-  acceptance criteria "受付は必ずオンライン資格確認を伴い、確認できない場合は被保険者資格申立書かシステム障害時モードで確認する。"
+  acceptance_criteria "受付は必ずオンライン資格確認を伴い、確認できない場合は被保険者資格申立書かシステム障害時モードで確認する。"
   status "accepted"
 
 motivates(ReqSwiftCheckIn, BucVisitCheckIn)
@@ -273,6 +273,6 @@ field ReferralReceivedField "紹介状の受領日時" access readonly required 
 
 contains(EligibilityScreen, EligibilityResultField)
 contains(ReferralScreen, ReferralReceivedField)
-maps_field(ArrivalTimeField, Appointment, "checked_in_at")
-maps_field(EligibilityResultField, EligibilityCheck, "result")
-maps_field(ReferralReceivedField, ReferralLetter, "received_at")
+maps_field(ArrivalTimeField, Appointment.checked_in_at)
+maps_field(EligibilityResultField, EligibilityCheck.result)
+maps_field(ReferralReceivedField, ReferralLetter.received_at)

@@ -257,7 +257,10 @@ fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
     );
     let mut metadata = Vec::new();
     if let Some(description) = &instance.description {
-        metadata.push(format!("  description {}", quote_string(description)));
+        metadata.push(format!(
+            "  description {}",
+            meta_value(instance, "description", description)
+        ));
     }
     metadata.extend(format_requirement_metadata(instance));
     metadata.extend(format_adr_metadata(instance));
@@ -305,28 +308,46 @@ fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
 fn format_requirement_metadata(instance: &InstanceDecl) -> Vec<String> {
     let mut lines = Vec::new();
     if let Some(value) = &instance.requirement.priority {
-        lines.push(format!("  priority {}", quote_string(value)));
+        lines.push(format!(
+            "  priority {}",
+            meta_value(instance, "priority", value)
+        ));
     }
     for value in &instance.requirement.sources {
-        lines.push(format!("  source {}", quote_string(value)));
+        lines.push(format!(
+            "  source {}",
+            meta_value(instance, "source", value)
+        ));
     }
     for value in &instance.requirement.stakeholders {
-        lines.push(format!("  stakeholder {}", quote_string(value)));
+        lines.push(format!(
+            "  stakeholder {}",
+            meta_value(instance, "stakeholder", value)
+        ));
     }
     if let Some(value) = &instance.requirement.owner {
-        lines.push(format!("  owner {}", quote_string(value)));
+        lines.push(format!("  owner {}", meta_value(instance, "owner", value)));
     }
     for value in &instance.requirement.acceptance_criteria {
-        lines.push(format!("  acceptance criteria {}", quote_string(value)));
+        lines.push(format!(
+            "  acceptance_criteria {}",
+            meta_value(instance, "acceptance_criteria", value)
+        ));
     }
     if let Some(value) = &instance.requirement.status {
-        lines.push(format!("  status {}", quote_string(value)));
+        lines.push(format!(
+            "  status {}",
+            meta_value(instance, "status", value)
+        ));
     }
     if let Some(value) = &instance.requirement.risk {
-        lines.push(format!("  risk {}", quote_string(value)));
+        lines.push(format!("  risk {}", meta_value(instance, "risk", value)));
     }
     if let Some(value) = &instance.requirement.rationale {
-        lines.push(format!("  rationale {}", quote_string(value)));
+        lines.push(format!(
+            "  rationale {}",
+            meta_value(instance, "rationale", value)
+        ));
     }
     lines
 }
@@ -334,25 +355,46 @@ fn format_requirement_metadata(instance: &InstanceDecl) -> Vec<String> {
 fn format_adr_metadata(instance: &InstanceDecl) -> Vec<String> {
     let mut lines = Vec::new();
     if let Some(value) = &instance.adr.status {
-        lines.push(format!("  adr_status {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  adr_status {}",
+            meta_value(instance, "adr_status", value)
+        ));
     }
     for value in &instance.adr.context {
-        lines.push(format!("  context {}", quote_string(value)));
+        lines.push(format!(
+            "  context {}",
+            meta_value(instance, "context", value)
+        ));
     }
     if let Some(value) = &instance.adr.decision {
-        lines.push(format!("  decision {}", quote_string(value)));
+        lines.push(format!(
+            "  decision {}",
+            meta_value(instance, "decision", value)
+        ));
     }
     for value in &instance.adr.consequences {
-        lines.push(format!("  consequence {}", quote_string(value)));
+        lines.push(format!(
+            "  consequence {}",
+            meta_value(instance, "consequence", value)
+        ));
     }
     for value in &instance.adr.accepted_options {
-        lines.push(format!("  accepted {}", quote_string(value)));
+        lines.push(format!(
+            "  accepted {}",
+            meta_value(instance, "accepted", value)
+        ));
     }
     for value in &instance.adr.rejected_options {
-        lines.push(format!("  rejected {}", quote_string(value)));
+        lines.push(format!(
+            "  rejected {}",
+            meta_value(instance, "rejected", value)
+        ));
     }
     for value in &instance.adr.reasons {
-        lines.push(format!("  reason {}", quote_string(value)));
+        lines.push(format!(
+            "  reason {}",
+            meta_value(instance, "reason", value)
+        ));
     }
     lines
 }
@@ -360,19 +402,25 @@ fn format_adr_metadata(instance: &InstanceDecl) -> Vec<String> {
 fn format_api_metadata(instance: &InstanceDecl) -> Vec<String> {
     let mut lines = Vec::new();
     if let Some(value) = &instance.api.method {
-        lines.push(format!("  method {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  method {}",
+            meta_value(instance, "method", value)
+        ));
     }
     if let Some(value) = &instance.api.path {
-        lines.push(format!("  path {}", quote_string(value)));
+        lines.push(format!("  path {}", meta_value(instance, "path", value)));
     }
     if let Some(value) = &instance.api.idempotency {
-        lines.push(format!("  idempotency {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  idempotency {}",
+            meta_value(instance, "idempotency", value)
+        ));
     }
     if let Some(value) = &instance.api.mode {
-        lines.push(format!("  mode {}", format_metadata_value(value)));
+        lines.push(format!("  mode {}", meta_value(instance, "mode", value)));
     }
     if let Some(value) = &instance.api.auth_scheme {
-        lines.push(format!("  auth {}", format_metadata_value(value)));
+        lines.push(format!("  auth {}", meta_value(instance, "auth", value)));
     }
     lines
 }
@@ -380,37 +428,64 @@ fn format_api_metadata(instance: &InstanceDecl) -> Vec<String> {
 fn format_nfr_metadata(instance: &InstanceDecl) -> Vec<String> {
     let mut lines = Vec::new();
     if let Some(value) = &instance.nfr.metric {
-        lines.push(format!("  metric {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  metric {}",
+            meta_value(instance, "metric", value)
+        ));
     }
     if let Some(value) = &instance.nfr.baseline {
-        lines.push(format!("  baseline {}", quote_string(value)));
+        lines.push(format!(
+            "  baseline {}",
+            meta_value(instance, "baseline", value)
+        ));
     }
     if let Some(value) = &instance.nfr.target {
-        lines.push(format!("  target {}", quote_string(value)));
+        lines.push(format!(
+            "  target {}",
+            meta_value(instance, "target", value)
+        ));
     }
     if let Some(value) = &instance.nfr.window {
-        lines.push(format!("  window {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  window {}",
+            meta_value(instance, "window", value)
+        ));
     }
     if let Some(value) = &instance.nfr.slo {
-        lines.push(format!("  slo {}", format_metadata_value(value)));
+        lines.push(format!("  slo {}", meta_value(instance, "slo", value)));
     }
     if let Some(value) = &instance.nfr.availability {
-        lines.push(format!("  availability {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  availability {}",
+            meta_value(instance, "availability", value)
+        ));
     }
     if let Some(value) = &instance.nfr.resilience {
-        lines.push(format!("  resilience {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  resilience {}",
+            meta_value(instance, "resilience", value)
+        ));
     }
     if let Some(value) = &instance.nfr.audit {
-        lines.push(format!("  audit {}", format_metadata_value(value)));
+        lines.push(format!("  audit {}", meta_value(instance, "audit", value)));
     }
     if let Some(value) = &instance.nfr.logging {
-        lines.push(format!("  logging {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  logging {}",
+            meta_value(instance, "logging", value)
+        ));
     }
     if let Some(value) = &instance.nfr.retention {
-        lines.push(format!("  retention {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  retention {}",
+            meta_value(instance, "retention", value)
+        ));
     }
     if let Some(value) = &instance.nfr.privacy {
-        lines.push(format!("  privacy {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  privacy {}",
+            meta_value(instance, "privacy", value)
+        ));
     }
     lines
 }
@@ -418,13 +493,19 @@ fn format_nfr_metadata(instance: &InstanceDecl) -> Vec<String> {
 fn format_field_metadata(instance: &InstanceDecl) -> Vec<String> {
     let mut lines = Vec::new();
     if let Some(value) = &instance.field.access {
-        lines.push(format!("  access {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  access {}",
+            meta_value(instance, "access", value)
+        ));
     }
     if let Some(value) = instance.field.required {
         lines.push(format!("  required {}", bool_cell(value)));
     }
     if let Some(value) = &instance.field.source {
-        lines.push(format!("  source {}", format_metadata_value(value)));
+        lines.push(format!(
+            "  source {}",
+            meta_value(instance, "source", value)
+        ));
     }
     lines
 }
@@ -432,19 +513,28 @@ fn format_field_metadata(instance: &InstanceDecl) -> Vec<String> {
 fn format_usecase_metadata(instance: &InstanceDecl) -> Vec<String> {
     let mut lines = Vec::new();
     for value in &instance.usecase.preconditions {
-        lines.push(format!("  precondition {}", quote_string(value)));
+        lines.push(format!(
+            "  precondition {}",
+            meta_value(instance, "precondition", value)
+        ));
     }
     for value in &instance.usecase.guards {
-        lines.push(format!("  guard {}", quote_string(value)));
+        lines.push(format!("  guard {}", meta_value(instance, "guard", value)));
     }
     for value in &instance.usecase.postconditions {
-        lines.push(format!("  postcondition {}", quote_string(value)));
+        lines.push(format!(
+            "  postcondition {}",
+            meta_value(instance, "postcondition", value)
+        ));
     }
     for value in &instance.usecase.alternatives {
-        lines.push(format!("  alternative {}", quote_string(value)));
+        lines.push(format!(
+            "  alternative {}",
+            meta_value(instance, "alternative", value)
+        ));
     }
     for value in &instance.usecase.errors {
-        lines.push(format!("  error {}", quote_string(value)));
+        lines.push(format!("  error {}", meta_value(instance, "error", value)));
     }
     lines
 }
@@ -501,7 +591,7 @@ fn format_annotation(annotation: &Annotation) -> String {
     }
 }
 
-fn format_predicate(predicate: &PredicateCall) -> String {
+pub(crate) fn format_predicate(predicate: &PredicateCall) -> String {
     let args = predicate
         .args
         .iter()
@@ -591,6 +681,19 @@ fn format_qref(qref: &QRef) -> String {
     }
 }
 
+/// A metadata value as it was written: bare when the source wrote it bare, else quoted.
+fn meta_value(instance: &InstanceDecl, keyword: &str, value: &str) -> String {
+    let bare = instance
+        .bare_values
+        .iter()
+        .any(|(k, v)| k == keyword && v == value);
+    if bare {
+        value.to_string()
+    } else {
+        quote_string(value)
+    }
+}
+
 fn format_metadata_value(value: &str) -> String {
     if is_identish(value) {
         value.to_string()
@@ -629,6 +732,34 @@ mod tests {
             formatted,
             "not idempotent"
         );
+    }
+
+    #[test]
+    fn keeps_the_use_case_first_and_entity_column_forms() {
+        assert_formats_to(
+            "transitions( Pay,Order.status, pending->paid )\n",
+            "transitions(Pay, Order.status, pending -> paid)\n",
+        );
+        assert_formats_to(
+            "maps_field( Total ,Order.total )\n",
+            "maps_field(Total, Order.total)\n",
+        );
+        assert_formats_to(
+            "requirement R \"R\"\n  acceptance_criteria \"Paid orders ship.\"\n  priority must\n",
+            "requirement R \"R\"\n  priority must\n  acceptance_criteria \"Paid orders ship.\"\n",
+        );
+    }
+
+    #[test]
+    fn a_removed_form_does_not_format() {
+        for src in [
+            "transitions(Order.status, Pay, pending -> paid)\n",
+            "maps_field(Total, Order, \"total\")\n",
+            "requirement R \"R\"\n  acceptance criteria \"x\"\n",
+            "writes(Pay, Order)\n",
+        ] {
+            assert!(format_source(src).is_err(), "{src}");
+        }
     }
 
     #[test]

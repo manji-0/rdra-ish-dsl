@@ -34,11 +34,11 @@ updates(DeliverOrder, Order)
 updates(CancelOrder, Order)
 updates(ReopenOrder, Order)
 
-transitions(Order.status, CapturePay, pending -> paid)
-transitions(Order.status, ShipOrder, paid -> shipped)
-transitions(Order.status, DeliverOrder, shipped -> delivered)
-transitions(Order.status, CancelOrder, pending -> cancelled)
-transitions(Order.status, ReopenOrder, cancelled -> pending)
+transitions(CapturePay, Order.status, pending -> paid)
+transitions(ShipOrder, Order.status, paid -> shipped)
+transitions(DeliverOrder, Order.status, shipped -> delivered)
+transitions(CancelOrder, Order.status, pending -> cancelled)
+transitions(ReopenOrder, Order.status, cancelled -> pending)
 
 sets(usecase::DeliverOrder, Order, delivered_at == present)
 

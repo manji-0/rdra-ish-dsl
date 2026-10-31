@@ -149,12 +149,12 @@ kinds fail to parse, with a hint naming the replacement.
 | `precedes/branches/excepts/repeats` | `(Step, Step)` | business flow order, alternatives, exceptions, loops |
 | `covers` | `(Step, UseCase\|Api\|Event\|Timer)` | business step covers model behavior |
 | `belongs` | `(Buc, Business)` | BUC ownership, optionally chained with `.by(Medium\|"text")` |
-| `reads/writes/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation |
+| `reads/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation |
 | `displays` | `(UseCase, Screen)` | UI path |
 | `shows` | `(Screen, Entity)` | screen data exposure |
 | `navigates` | `(Screen, Screen)` | screen transition, optionally `.via(UseCase)` for the operation that causes it |
 | `invokes` | `(UseCase, Api)` | UC delegates to an API boundary |
-| `maps_field` | `(Field, Entity, "column")` | screen field to logical data mapping |
+| `maps_field` | `(Field, Entity.column)` | screen field to logical data mapping |
 | `request/response/error_response` | `(Api, Dto)` | API payload contract |
 | `coordinates` | `(UseCase, Entity, Entity)` | UC coordinates cross-system consistency |
 | `compensates` | `(UseCase, UseCase)` | the first use case compensates the second |
@@ -162,7 +162,7 @@ kinds fail to parse, with a hint naming the replacement.
 | `raises` | `(UseCase\|ExtSystem, Event)` | a use case emits an event; an external system raising one is inbound |
 | `triggers` | `(Event\|Timer, UseCase\|Buc\|ExtSystem)` | an event or timer starts a use case or a BUC; an event delivered to an external system is outbound (a timer never triggers one) |
 | `outbox` | `(Event)` | the event is published outside the model, so it needs no local consumer |
-| `transitions` | `(Entity.col, UseCase, from -> to)` | the use case moves the Enum column from -> to |
+| `transitions` | `(UseCase, Entity.col, from -> to)` | the use case moves the Enum column from -> to |
 | `sets` | `(UseCase, Entity, col == val)` | explicit column effect |
 | `sets` | `(UseCase, Entity, col op rhs, true\|false)` | comparison proposition effect |
 | `forbidden` | `(Entity, col == val\|col op rhs, ...)` | forbidden reachable state combination |
@@ -234,7 +234,7 @@ import shared.actors.{Staff as S}
   permission gap an error.
 - Prefer `triggers(Event, Buc)` when an event starts a downstream BUC. Add
   `triggers(Event, UseCase)` later when the concrete entry action is known.
-- A use case drives each state change: `transitions(Order.status, CapturePay, pending ->
+- A use case drives each state change: `transitions(CapturePay, Order.status, pending ->
   paid)`. An event only connects use cases (or a use case and an external system), so
   declare one only when something consumes it.
 - Type a column by a `variation` (`method: PaymentMethod`) when an actor chooses its

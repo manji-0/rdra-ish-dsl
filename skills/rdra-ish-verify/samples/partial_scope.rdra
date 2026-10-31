@@ -32,7 +32,7 @@ creates(Place, Order)
 updates(Pay, Order)
 creates(Record, Audit)
 
-transitions(Order.status, Pay, pending -> paid)
+transitions(Pay, Order.status, pending -> paid)
 sets(Pay, Order, amount == 2)
 
 forbidden(Order, amount > 2)

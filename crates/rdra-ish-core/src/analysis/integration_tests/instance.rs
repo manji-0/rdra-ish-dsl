@@ -3,6 +3,7 @@ use crate::analysis::build_model;
 use crate::analysis::instance::register_instance;
 use crate::location::DiagCtxt;
 use crate::model::*;
+use crate::RdraError;
 use rdra_ish_syntax::ast::*;
 use rdra_ish_syntax::parse;
 
@@ -90,6 +91,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
         nfr: NfrMetadata::default(),
         field: FieldMetadata::default(),
         usecase: UseCaseMetadata::default(),
+        bare_values: Vec::new(),
         columns: vec![Column {
             name: "id".to_string(),
             col_type: ColType::Int,
@@ -155,8 +157,8 @@ entity Order "Order" {
 }
 contains(CheckoutScreen, ShippingAddress)
 contains(CheckoutScreen, OrderTotal)
-maps_field(ShippingAddress, Order, "shipping_address")
-maps_field(OrderTotal, Order, "total")
+maps_field(ShippingAddress, Order.shipping_address)
+maps_field(OrderTotal, Order.total)
 "#;
 
     let (ast, parse_errors) = parse(src);
@@ -178,6 +180,38 @@ maps_field(OrderTotal, Order, "total")
         .relations
         .iter()
         .any(|rel| matches!(rel.kind, RelKind::MapsField)));
+    assert_eq!(
+        model
+            .typed_predicates
+            .iter()
+            .filter(|p| matches!(p, TypedPredicate::MapsField { .. }))
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn maps_field_checks_the_entity_and_the_column_it_names() {
+    let base = "field F \"F\"\nentity Order \"Order\" {\n  id: Int @pk\n  total: Money\n}\n";
+    let errors = |line: &str| {
+        let (ast, parse_errors) = parse(&format!("{base}{line}\n"));
+        assert!(parse_errors.is_empty(), "{line}: {parse_errors:?}");
+        let (model, diags) = build_model(&ast);
+        assert!(model.field_mappings.is_empty(), "{line}");
+        diags.into_iter().map(|d| d.error).collect::<Vec<_>>()
+    };
+    assert!(matches!(
+        errors("maps_field(F, Order.ghost)").as_slice(),
+        [RdraError::UnknownColumn { entity, col }] if entity == "Order" && col == "ghost"
+    ));
+    assert!(matches!(
+        errors("maps_field(F, Ghost.total)").as_slice(),
+        [RdraError::UndefinedSymbol { id }] if id == "Ghost"
+    ));
+    assert!(matches!(
+        errors("maps_field(F, total)").as_slice(),
+        [RdraError::TypeMismatch { pred, expected, .. }] if pred == "maps_field" && expected == "Entity.column"
+    ));
 }
 
 #[test]

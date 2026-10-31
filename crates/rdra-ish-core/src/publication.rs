@@ -167,7 +167,6 @@ fn entity_uses(model: &SemanticModel) -> Vec<EntityUse> {
             RelKind::MapsField => Use::Read("maps_field"),
             RelKind::Creates => Use::Create,
             RelKind::Updates => Use::Update("updates"),
-            RelKind::Writes => Use::Update("writes"),
             RelKind::Deletes => Use::Delete,
             _ => continue,
         };
@@ -366,10 +365,7 @@ pub fn publication_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
                     .iter()
                     .find(|r| {
                         r.to == NodeRef::Entity(w.entity)
-                            && matches!(
-                                r.kind,
-                                RelKind::Creates | RelKind::Updates | RelKind::Writes
-                            )
+                            && matches!(r.kind, RelKind::Creates | RelKind::Updates)
                             && match (&r.from, w.via_api) {
                                 (NodeRef::Api(a), Some(via)) => *a == via,
                                 (NodeRef::UseCase(u), None) => *u == utx.usecase,

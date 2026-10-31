@@ -138,7 +138,7 @@ rdra-ish verify src/ --backend tlc   # requires tlc on PATH
 
 ## How To Fix
 
-- Use `transitions(Entity.col, UseCase, from -> to)` when a real lifecycle state
+- Use `transitions(UseCase, Entity.col, from -> to)` when a real lifecycle state
   machine exists; name the use case that drives each edge.
 - Use `sets(UseCase, Entity, column == value)` for Enum values without a
   state machine, Bool flags, nullable and Int columns, and derived lifecycle effects.

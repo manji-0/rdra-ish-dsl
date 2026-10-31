@@ -18,11 +18,11 @@ usecase Pay "支払い"
 usecase Prepare "準備"
 usecase Occupy "入室"
 creates(Book, Visit)
-transitions(Visit.status, Arrive, booked -> arrived)
+transitions(Arrive, Visit.status, booked -> arrived)
 creates(Open, Payment)
-transitions(Payment.status, Pay, open -> paid)
+transitions(Pay, Payment.status, open -> paid)
 creates(Prepare, Room)
-transitions(Room.state, Occupy, free -> busy)
+transitions(Occupy, Room.state, free -> busy)
 condition Ready "支払い可能"
 {body}
 applies_to(Ready, Pay)
@@ -123,7 +123,7 @@ fn an_unbound_atom_with_no_relate_is_an_independent_exists() {
     assert!(reaches_paid(&derive(&model)));
     let never_busy = model_from(
         &clinic("holds(Ready, Room.state == busy)", "")
-            .replace("transitions(Room.state, Occupy, free -> busy)", ""),
+            .replace("transitions(Occupy, Room.state, free -> busy)", ""),
     );
     assert!(!reaches_paid(&derive(&never_busy)));
 }
@@ -169,7 +169,7 @@ usecase Book "予約"
 usecase Arrive "到着"
 usecase Collect "徴収"
 creates(Book, Visit)
-transitions(Visit.status, Arrive, booked -> arrived)
+transitions(Arrive, Visit.status, booked -> arrived)
 creates(Collect, Payment)
 condition Covered "保険適用"
 holds(Covered, Payment.method == insurance, Visit.status == arrived)

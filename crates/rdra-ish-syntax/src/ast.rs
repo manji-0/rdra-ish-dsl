@@ -260,6 +260,9 @@ pub struct InstanceDecl {
     pub field: FieldMetadata,
     /// Non-empty only for `usecase` declarations.
     pub usecase: UseCaseMetadata,
+    /// `(clause keyword, value)` for each metadata value (and the description) written as a
+    /// bare token rather than a quoted string, so `fmt` writes it back the same way.
+    pub bare_values: Vec<(std::string::String, std::string::String)>,
     /// Non-empty only for `entity` declarations.
     /// DTO declarations also reuse this column shape for contract fields.
     pub columns: Vec<Column>,

@@ -224,7 +224,7 @@ requirement ReqCheckout "Checkout must be reliable"
   source "Support tickets"
   stakeholder "Store Operations"
   owner "Product Owner"
-  acceptance criteria "A payment timeout leaves the cart recoverable."
+  acceptance_criteria "A payment timeout leaves the cart recoverable."
   status "proposed"
   risk "high"
   rationale "Checkout failures directly block revenue."
@@ -574,7 +574,7 @@ entity Order "Order" {
   shipping_address: String
 }
 contains(CheckoutScreen, ShippingAddress)
-maps_field(ShippingAddress, Order, "shipping_address")
+maps_field(ShippingAddress, Order.shipping_address)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);
@@ -1071,7 +1071,7 @@ entity Appointment "予約" {
   checked_in_at: DateTime @null
 }
 usecase CheckIn "受付"
-transitions(Appointment.status, CheckIn, apptscheduled -> apptcheckedin)
+transitions(CheckIn, Appointment.status, apptscheduled -> apptcheckedin)
 condition BookedPatient "予約済みの患者"
 holds(BookedPatient, Appointment.status == apptscheduled)
 applies_to(BookedPatient, CheckIn)
@@ -1215,9 +1215,9 @@ contains(BucVisit, Expire)
 performs(Clerk, BucVisit)
 performs(Nurse, Cancel)
 triggers(Nightly, Expire)
-transitions(Appointment.status, Cancel, booked -> cancelled)
-transitions(Appointment.status, CheckIn, booked -> checkedin)
-transitions(Appointment.status, Expire, booked -> cancelled)
+transitions(Cancel, Appointment.status, booked -> cancelled)
+transitions(CheckIn, Appointment.status, booked -> checkedin)
+transitions(Expire, Appointment.status, booked -> cancelled)
 condition Paid "支払済み"
 holds(Paid, Appointment.paid == true)
 applies_to(Paid, CheckIn)

@@ -204,7 +204,7 @@ displays(PlaceOrder, Checkout)
 displays(PayOrder, Checkout)
 creates(PlaceOrder, Order)
 updates(PayOrder, Order)
-transitions(Order.status, PayOrder, pending -> paid)
+transitions(PayOrder, Order.status, pending -> paid)
 "#;
 
 fn gate<'a>(buc: &'a serde_json::Value, stage: &str) -> &'a serde_json::Value {
@@ -480,7 +480,7 @@ performs(Customer, BucOrder)
 contains(BucOrder, PlaceOrder)
 displays(PlaceOrder, S)
 creates(PlaceOrder, Order)
-transitions(Order.status, PlaceOrder, pending -> paid)
+transitions(PlaceOrder, Order.status, pending -> paid)
 "#,
     );
     let buc = &json(&[&src])["bucs"][0];

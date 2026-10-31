@@ -569,10 +569,10 @@ fn a_second_label_on_one_rule_is_an_error() {
 
 #[test]
 fn label_is_not_a_chain_method_of_other_predicates() {
-    let (_model, diags) = build_labelled("writes(Pay, Order).label(\"x\")\n");
+    let (_model, diags) = build_labelled("updates(Pay, Order).label(\"x\")\n");
     assert!(
         diags.iter().any(
-            |d| matches!(&d.error, RdraError::UnknownChainMethod { pred, name, .. } if pred == "writes" && name == "label")
+            |d| matches!(&d.error, RdraError::UnknownChainMethod { pred, name, .. } if pred == "updates" && name == "label")
         ),
         "{diags:?}"
     );

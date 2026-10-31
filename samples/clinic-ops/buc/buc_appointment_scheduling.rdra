@@ -80,7 +80,7 @@ invokes(BookAppointment, BookAppointmentApi)
 updates(BookAppointmentApi, Appointment)
 updates(BookAppointmentApi, ProviderSchedule)
 raises(BookAppointment, EvAppointmentScheduled)
-transitions(Appointment.status, BookAppointment, apptrequested -> apptscheduled)
+transitions(BookAppointment, Appointment.status, apptrequested -> apptscheduled)
 requires_permission(BookAppointment, ScheduleWrite)
 requires_medium(BookAppointment, FrontDeskTerminal)
 requires_medium(BookAppointment, PatientMobile)
@@ -91,7 +91,7 @@ invokes(RescheduleAppointment, RescheduleAppointmentApi)
 updates(RescheduleAppointmentApi, Appointment)
 updates(RescheduleAppointmentApi, ProviderSchedule)
 raises(RescheduleAppointment, EvAppointmentRescheduled)
-transitions(Appointment.status, RescheduleAppointment, apptscheduled -> apptscheduled)
+transitions(RescheduleAppointment, Appointment.status, apptscheduled -> apptscheduled)
 requires_permission(RescheduleAppointment, ScheduleWrite)
 requires_medium(RescheduleAppointment, FrontDeskTerminal)
 requires_medium(RescheduleAppointment, PatientMobile)
@@ -102,7 +102,7 @@ invokes(CancelAppointment, CancelAppointmentApi)
 updates(CancelAppointmentApi, Appointment)
 updates(CancelAppointmentApi, ProviderSchedule)
 raises(CancelAppointment, EvAppointmentCancelled)
-transitions(Appointment.status, CancelAppointment, apptscheduled -> apptcancelled)
+transitions(CancelAppointment, Appointment.status, apptscheduled -> apptcancelled)
 sets(CancelAppointment, Appointment, cancel_reason == present)
 requires_permission(CancelAppointment, ScheduleWrite)
 requires_medium(CancelAppointment, FrontDeskTerminal)
@@ -111,7 +111,7 @@ requires_permission(CancelAppointmentApi, ScheduleWrite)
 
 displays(MarkNoShow, AppointmentScreen)
 updates(MarkNoShow, Appointment)
-transitions(Appointment.status, MarkNoShow, apptscheduled -> apptnoshow)
+transitions(MarkNoShow, Appointment.status, apptscheduled -> apptnoshow)
 triggers(NoShowSweep, MarkNoShow)
 requires_permission(MarkNoShow, ScheduleWrite)
 requires_medium(MarkNoShow, FrontDeskTerminal)
@@ -180,7 +180,7 @@ requirement ReqChangeAppointmentAtDesk "予約の変更・取消を電話と窓�
   source "sapporo-city-hosp-yoyaku.md:102, :118"
   source "yokohama-cu-urahp-c16010-shiyousyo.txt:196-197"
   stakeholder "医事課 受付担当"
-  acceptance criteria "受付担当が予約の変更・取消を入力すると、患者に通知が届く。"
+  acceptance_criteria "受付担当が予約の変更・取消を入力すると、患者に通知が届く。"
   status "accepted"
 
 motivates(ReqChangeAppointmentAtDesk, BucAppointmentScheduling)

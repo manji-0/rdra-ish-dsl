@@ -38,7 +38,6 @@ pub enum NodeRef {
 pub enum RelKind {
     Performs,
     Reads,
-    Writes,
     Creates,
     Updates,
     Deletes,

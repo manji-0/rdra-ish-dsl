@@ -61,7 +61,7 @@ displays(OpenEncounter, EncounterWorkspaceScreen)
 invokes(OpenEncounter, OpenEncounterApi)
 creates(OpenEncounterApi, Encounter)
 updates(OpenEncounterApi, Appointment)
-transitions(Appointment.status, OpenEncounter, apptcheckedin -> apptinconsult)
+transitions(OpenEncounter, Appointment.status, apptcheckedin -> apptinconsult)
 triggers(EvAppointmentCheckedIn, BucClinicalEncounter)
 triggers(EvAppointmentCheckedIn, OpenEncounter)
 
@@ -74,19 +74,19 @@ displays(DocumentAssessment, DiagnosisScreen)
 invokes(DocumentAssessment, DocumentAssessmentApi)
 creates(DocumentAssessmentApi, Diagnosis)
 updates(DocumentAssessmentApi, Encounter)
-transitions(Encounter.status, DocumentAssessment, encopen -> encdocumented)
+transitions(DocumentAssessment, Encounter.status, encopen -> encdocumented)
 
 displays(SignEncounter, EncounterWorkspaceScreen)
 invokes(SignEncounter, SignEncounterApi)
 updates(SignEncounterApi, Encounter)
 raises(SignEncounter, EvEncounterSigned)
-transitions(Encounter.status, SignEncounter, encdocumented -> encsigned)
+transitions(SignEncounter, Encounter.status, encdocumented -> encsigned)
 sets(SignEncounter, Encounter, signed_at == present)
 
 displays(AmendEncounter, EncounterWorkspaceScreen)
 invokes(AmendEncounter, AmendEncounterApi)
 updates(AmendEncounterApi, Encounter)
-transitions(Encounter.status, AmendEncounter, encsigned -> encamended)
+transitions(AmendEncounter, Encounter.status, encsigned -> encamended)
 
 displays(IssueReferralLetter, ReferralLetterScreen)
 invokes(IssueReferralLetter, IssueReferralLetterApi)
@@ -100,14 +100,14 @@ displays(CompleteConsultation, EncounterWorkspaceScreen)
 invokes(CompleteConsultation, CompleteConsultationApi)
 updates(CompleteConsultationApi, Appointment)
 updates(CompleteConsultationApi, Room)
-transitions(Appointment.status, CompleteConsultation, apptinconsult -> apptawaitingcalc)
+transitions(CompleteConsultation, Appointment.status, apptinconsult -> apptawaitingcalc)
 sets(CompleteConsultation, Room, occupancy_status == roomcleaning)
 raises(CompleteConsultation, EvConsultationCompleted)
 
 // Screen fields
 field ReferralDirectionField "紹介の向き" access readonly required true source system
 contains(ReferralLetterScreen, ReferralDirectionField)
-maps_field(ReferralDirectionField, ReferralLetter, "direction")
+maps_field(ReferralDirectionField, ReferralLetter.direction)
 
 // Access constraints
 requires_permission(OpenEncounter, EncounterOpen)
@@ -192,7 +192,7 @@ requirement ReqHandOffAfterConsultation "診察終了で受診を会計計算へ
   source "診察終了後 (sendai-iji-gairai-shiyousyo.txt:176)"
   source "計算受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141)"
   stakeholder "医師"
-  acceptance criteria "診察終了の後、予約は計算待ちになり、会計計算入力より前に完了しない。"
+  acceptance_criteria "診察終了の後、予約は計算待ちになり、会計計算入力より前に完了しない。"
   status "accepted"
 
 motivates(ReqHandOffAfterConsultation, BucClinicalEncounter)

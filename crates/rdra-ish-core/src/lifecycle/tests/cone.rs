@@ -135,7 +135,7 @@ usecase Close "締める"
 usecase AddLine "追加"
 relate(Line, Order, N:1)
 creates(Open, Order)
-transitions(Order.status, Close, open -> closed)
+transitions(Close, Order.status, open -> closed)
 creates(AddLine, Line)
 "#;
     let model = model_from(src);

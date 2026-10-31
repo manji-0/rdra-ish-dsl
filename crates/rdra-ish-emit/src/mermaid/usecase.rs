@@ -37,7 +37,7 @@ impl Fact {
 pub(super) fn is_crud(kind: &RelKind) -> bool {
     matches!(
         kind,
-        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
+        RelKind::Reads | RelKind::Creates | RelKind::Updates | RelKind::Deletes
     )
 }
 
@@ -278,7 +278,7 @@ updates(CaptureApi, Order)
 updates(Capture, Order)
 displays(Capture, ResultScreen)
 shows(ResultScreen, Payment)
-transitions(Order.status, Capture, awaiting -> paid)
+transitions(Capture, Order.status, awaiting -> paid)
 "#;
 
     fn emit(view: View) -> String {

@@ -63,6 +63,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                bare_values: [],
                 columns: [],
                 variation_values: [],
                 span: 0..65,

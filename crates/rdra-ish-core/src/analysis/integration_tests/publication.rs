@@ -16,12 +16,12 @@ entity Session "Session" {{ id: Int @pk  status: Enum(active, revoked) @default(
 entity SessionView "Session (published)" {{ view_id: Int @pk  status: Enum(active, ended) }}
 entity LoginLog "Login log" {{ id: Int @pk  result: Enum(ok, failed) }}
 creates(Login, Session)
-writes(Login, SessionView)
+updates(Login, SessionView)
 sets(Login, SessionView, status == active)
 creates(Login, LoginLog)
 sets(Login, LoginLog, result == ok)
-transitions(Session.status, Revoke, active -> revoked)
-writes(Revoke, SessionView)
+transitions(Revoke, Session.status, active -> revoked)
+updates(Revoke, SessionView)
 sets(Revoke, SessionView, status == ended)
 exposes(Auth, Login)
 exposes(Auth, SessionView).upsert()
@@ -138,7 +138,7 @@ fn an_append_entity_is_never_updated_and_no_published_entity_is_deleted_or_trans
     );
     assert_eq!(
         publication_names(&owner(
-            "transitions(SessionView.status, Revoke, active -> ended)"
+            "transitions(Revoke, SessionView.status, active -> ended)"
         )),
         [("PublishedEntityMutated", false)]
     );
@@ -178,7 +178,7 @@ fn a_published_entity_keys_only_to_a_published_entity() {
 #[test]
 fn a_published_write_outside_an_internal_change_is_reported() {
     let names = publication_names(&owner(
-        "usecase Audit \"Audit\"\nperforms(User, Audit)\nwrites(Audit, SessionView)\nsets(Audit, SessionView, status == ended)",
+        "usecase Audit \"Audit\"\nperforms(User, Audit)\nupdates(Audit, SessionView)\nsets(Audit, SessionView, status == ended)",
     ));
     assert_eq!(names, [("PublishedNotInSourceTx", false)]);
     let two_groups = owner(

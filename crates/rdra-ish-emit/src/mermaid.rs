@@ -914,7 +914,7 @@ entity Order "Order" {
   status: Enum(awaiting, paid) @default(awaiting)
 }
 contains(BucPay, Capture)
-transitions(Order.status, Capture, awaiting -> paid)
+transitions(Capture, Order.status, awaiting -> paid)
 "#;
         let model = model_from(src);
         for view in [View::whole(), View::bucs(vec!["BucPay".to_string()])] {
@@ -1027,7 +1027,7 @@ entity Doc "文書" {
   kind: Enum(memo, report)
 }
 usecase Publish "公開する"
-transitions(Doc.status, Publish, draft -> published)
+transitions(Publish, Doc.status, draft -> published)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
@@ -1061,7 +1061,7 @@ entity Doc "文書" {
   status: Enum(draft "下書き", published) @default(draft)
 }
 usecase Publish "公開する"
-transitions(Doc.status, Publish, draft -> published)
+transitions(Publish, Doc.status, draft -> published)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
@@ -1086,7 +1086,7 @@ entity Doc "文書" {
   reviewed: Bool @default(false)
 }
 usecase Publish "公開する"
-transitions(Doc.status, Publish, draft -> published)
+transitions(Publish, Doc.status, draft -> published)
 condition Reviewed "レビュー済み"
 holds(Reviewed, Doc.reviewed == true)
 applies_to(Reviewed, Publish)
@@ -1120,10 +1120,10 @@ usecase Pay "Pay"
 usecase Close "Close"
 usecase Reopen "Reopen"
 usecase Finish "Finish"
-transitions(Order.status, Pay, open -> paid)
-transitions(Order.status, Close, paid -> closed)
-transitions(Order.status, Reopen, closed -> open)
-transitions(Ticket.phase, Finish, new -> done)
+transitions(Pay, Order.status, open -> paid)
+transitions(Close, Order.status, paid -> closed)
+transitions(Reopen, Order.status, closed -> open)
+transitions(Finish, Ticket.phase, new -> done)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
@@ -1165,9 +1165,9 @@ entity Parcel "Parcel" {
 }
 contains(BucPay, Pay)
 contains(BucShip, Ship)
-transitions(Order.status, Pay, open -> paid)
-transitions(Order.status, Ship, paid -> shipped)
-transitions(Parcel.status, Ship, packed -> sent)
+transitions(Pay, Order.status, open -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Ship, Parcel.status, packed -> sent)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
@@ -1194,8 +1194,8 @@ usecase Publish "公開"
 usecase Reopen "戻す"
 creates(Submit, Doc)
 sets(Submit, Doc, status == review)
-transitions(Doc.status, Publish, review -> published)
-transitions(Doc.status, Reopen, published -> review)
+transitions(Publish, Doc.status, review -> published)
+transitions(Reopen, Doc.status, published -> review)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
@@ -1214,8 +1214,8 @@ entity Acct "口座" {
 }
 usecase Freeze "凍結"
 usecase Thaw "解除"
-transitions(Acct.status, Freeze, active -> frozen)
-transitions(Acct.status, Thaw, frozen -> active)
+transitions(Freeze, Acct.status, active -> frozen)
+transitions(Thaw, Acct.status, frozen -> active)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
@@ -1238,7 +1238,7 @@ entity Pay "Pay" {
   status: Enum(open, paid) @default(open)
 }
 usecase Collect "Collect"
-transitions(Pay.status, Collect, open -> paid)
+transitions(Collect, Pay.status, open -> paid)
 condition Insured "Insured"
 holds(Insured, Pay.method == card, Pay.status == paid)
 applies_to(Insured, Collect)
@@ -1379,8 +1379,8 @@ event EncounterSigned "Encounter Signed" description "The doctor signed the reco
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, ReviewClaim)
 triggers(EncounterSigned, BucBillingClaims)
-transitions(Encounter.status, SignEncounter, pending -> signed)
-transitions(Claim.status, ReviewClaim, open -> reviewed)
+transitions(SignEncounter, Encounter.status, pending -> signed)
+transitions(ReviewClaim, Claim.status, open -> reviewed)
 "#;
         let model = model_from(src);
         let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
@@ -1507,9 +1507,9 @@ creates(Place, Order)
 updates(Pay, Order)
 updates(Ship, Order)
 updates(Express, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Ship, paid -> shipped)
-transitions(Order.status, Express, pending -> shipped)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Express, Order.status, pending -> shipped)
 condition Packed "梱包済み"
 holds(Packed, Order.status == pending)
 applies_to(Packed, Ship)

@@ -478,8 +478,8 @@ entity Ticket "チケット" {
 }
 usecase Close "閉じる"
 usecase StartWork "作業開始"
-transitions(Ticket.status, Close, open -> closed)
-transitions(Ticket.phase, StartWork, intake -> work)
+transitions(Close, Ticket.status, open -> closed)
+transitions(StartWork, Ticket.phase, intake -> work)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
@@ -525,8 +525,8 @@ raises(Pay, EvPay)
 #[test]
 fn transitions_keyed_by_an_event_names_the_codemod() {
     for line in [
-        "transitions(Order.status, EvPay, pending -> paid)",
-        "transitions(Order.status, event::EvPay, pending -> paid)",
+        "transitions(EvPay, Order.status, pending -> paid)",
+        "transitions(event::EvPay, Order.status, pending -> paid)",
     ] {
         let errors = event_origin_errors(line);
         assert!(

@@ -98,7 +98,7 @@ actions interleave: in each step the tool picks any enabled action and applies i
 - **A use case with no write has no action.**
 
 An action takes one parameter per entity it writes. A `creates` takes the lowest
-`absent` slot. An `updates`, `writes`, or `deletes` takes any `present` slot. The
+`absent` slot. An `updates` or `deletes` takes any `present` slot. The
 effects apply together to the pre-state:
 
 | Source | Effect and guard |
@@ -107,7 +107,7 @@ effects apply together to the pre-state:
 | `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. |
 | `sets(UC, E, col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
 | `sets(UC, E, cmp, bool)` | The comparison variable becomes `bool`. |
-| `transitions(E.col, UC, a -> b)` | Guard `col == a`, effect `col := b`. |
+| `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. |
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |
 | a column the use case does not write | Unchanged. |
 

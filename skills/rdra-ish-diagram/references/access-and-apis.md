@@ -39,7 +39,7 @@ rdra-ish csv src/ --kind actor-permission-audit
 
 - `business-inputs` lists actor -> input field -> use case rows. Rows come from modeled
   `field`/`maps_field` and inferred CRUD, so a missing row usually means no actor path,
-  no C/U/W operation, no mapping, or a field modeled as derived.
+  no C/U operation, no mapping, or a field modeled as derived.
 - `api-matrix` shows which entities each API operates. Pair it with explicit `owns`
   diagnostics when checking CRUD coverage and intended system ownership.
 

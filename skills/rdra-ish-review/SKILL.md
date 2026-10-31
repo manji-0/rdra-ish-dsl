@@ -126,7 +126,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 11. **Check screen fields and non-functional constraints**
     - Every `field` is contained by a `screen`; actor-entered fields should use
       `source actor`, system-derived fields should use `source system`
-    - `maps_field(Field, Entity, "column")` should reference a real column unless the
+    - `maps_field(Field, Entity.column)` should reference a real column unless the
       unmapped field is intentionally external or derived
     - `nfr`, `quality`, and `constraint` elements should be scoped with `applies_to`,
       `qualifies`, or `constrains`, especially for performance, availability, SLO,
@@ -239,7 +239,7 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | predicate | arg1 | arg2 | arg3 |
 |-----------|------|------|------|
 | `performs` | Actor | UseCase / Buc / Step | — |
-| `reads/writes/creates/updates/deletes` | UseCase / Api | Entity | — |
+| `reads/creates/updates/deletes` | UseCase / Api | Entity | — |
 | `displays` | UseCase | Screen | — |
 | `shows` | Screen | Entity | — |
 | `navigates` | Screen | Screen (`.via(UseCase)` optional) | — |
@@ -254,7 +254,7 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `motivates` | Requirement | Buc | — |
 | `achieves` | Requirement | Goal | — |
 | `request` / `response` / `error_response` | Api | Dto | — |
-| `maps_field` | Field | Entity | column string |
+| `maps_field` | Field | Entity.column | — |
 | `precedes` / `branches` / `excepts` / `repeats` | Step | Step | — |
 | `covers` | Step | UseCase / Api / Event / Timer | — |
 | `compensates` | UseCase | UseCase | — |
@@ -268,7 +268,7 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `requires_permission` | UseCase / Api | Permission | — |
 | `requires_medium` | UseCase / Api | Medium | — |
 | `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, child side may be a range such as `1..*`); `N:M` requires `.via(Junction)`; chain `.optional()`, `.role(x)`, `.key(cols)` |
-| `transitions` | Entity.col | UseCase | from -> to |
+| `transitions` | UseCase | Entity.col | from -> to |
 | `sets` | UseCase | Entity | `col == val` or comparison + bool |
 | `forbidden` | Entity | condition(s) | — |
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |

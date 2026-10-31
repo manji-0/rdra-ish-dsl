@@ -168,7 +168,7 @@ relate(Order, Customer, N:1)
 relate(Payment, Order, 1:1)
 contains(BucPay, Capture)
 updates(Capture, Payment)
-transitions(Order.status, Capture, pending -> paid)
+transitions(Capture, Order.status, pending -> paid)
 "#;
 
     fn emit(view: View) -> String {

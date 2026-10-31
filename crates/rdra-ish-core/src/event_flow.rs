@@ -338,11 +338,7 @@ pub fn api_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             r.from == NodeRef::Api(ak)
                 && matches!(
                     r.kind,
-                    RelKind::Reads
-                        | RelKind::Writes
-                        | RelKind::Creates
-                        | RelKind::Updates
-                        | RelKind::Deletes
+                    RelKind::Reads | RelKind::Creates | RelKind::Updates | RelKind::Deletes
                 )
         });
 
@@ -521,8 +517,8 @@ entity Claim "Claim" {
 event EncounterSigned "Encounter Signed"
 raises(SignEncounter, EncounterSigned)
 triggers(EncounterSigned, SubmitClaim)
-transitions(Encounter.status, SignEncounter, open -> signed)
-transitions(Claim.status, SubmitClaim, draft -> submitted)
+transitions(SignEncounter, Encounter.status, open -> signed)
+transitions(SubmitClaim, Claim.status, draft -> submitted)
 "#,
         );
 
@@ -546,7 +542,7 @@ entity Encounter "Encounter" {
 }
 event EncounterSigned "Encounter Signed"
 raises(SignEncounter, EncounterSigned)
-transitions(Encounter.status, SignEncounter, open -> signed)
+transitions(SignEncounter, Encounter.status, open -> signed)
 "#,
         );
 

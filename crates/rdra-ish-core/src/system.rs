@@ -419,7 +419,7 @@ fn api_operates_entity(model: &SemanticModel, api: ApiKey, entity: EntityKey) ->
 fn is_entity_operation(kind: &RelKind) -> bool {
     matches!(
         kind,
-        RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
+        RelKind::Reads | RelKind::Creates | RelKind::Updates | RelKind::Deletes
     )
 }
 

@@ -119,11 +119,11 @@ const FORMS: &[(&str, Expect)] = &[
     ("holds(Ready, Order.status == paid).none()", Error),
     ("holds(Ready, Order.status == paid).none(Ticket)", Error),
     // maps_field
-    ("maps_field(F, Order, status)", Recorded),
-    ("maps_field(F, Order, nosuch)", Error),
-    ("maps_field(F, Order, Order.status)", Recorded),
-    ("maps_field(F, Order, Order.nosuch)", Error),
-    ("maps_field(F, Order, Ticket.status)", Error),
+    ("maps_field(F, Order.status)", Recorded),
+    ("maps_field(F, Order.nosuch)", Error),
+    ("maps_field(F, Nosuch.status)", Error),
+    ("maps_field(F, status)", Error),
+    ("maps_field(F, Order, status)", Error), // the removed three-argument form
 ];
 
 /// The rules a model records, its field mappings, and each condition body and its quantifiers.

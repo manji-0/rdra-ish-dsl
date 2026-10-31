@@ -29,7 +29,7 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
 - Edges follow one grammar: `actor --> screen` (`uses`, unlabelled), then
   `screen -->|<use case label>| control`, then `control -->|CRUD| entity`. The use case
   label on the screen edge is how to find the use case. `CRUD` is the letters of the
-  control's operations on the entity, `writes` shown as `U`.
+  control's operations on the entity.
 - Dotted edges carry events and timers: `control -.->|<event>| control` when one use case
   raises an event that starts another, and between a control and an `extsystem` or a
   `timer`.
@@ -56,7 +56,7 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
   actors and external systems in システム価値; timers in システム外部環境; the entities it
   touches, the conditions on it, and the states it moves in システム. The ids are those of
   `rdra`.
-- Edges: `performs`, `displays`, `shows` (screen to entity), `reads` / `writes` /
+- Edges: `performs`, `displays`, `shows` (screen to entity), `reads` /
   `creates` / `updates` / `deletes`, `raises` / `triggers` (with the events' external
   systems), `applies_to` (condition to use case), and
   `transitions <Entity>.<column> <from>-><to>` to the state entered.

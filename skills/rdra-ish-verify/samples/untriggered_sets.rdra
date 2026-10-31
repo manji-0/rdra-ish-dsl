@@ -25,6 +25,6 @@ updates(Ship, Order)
 updates(Flag, Order)
 sets(Flag, Order, flagged == true)
 
-transitions(Order.status, Ship, placed -> shipped)
+transitions(Ship, Order.status, placed -> shipped)
 
 forbidden(Order, status == shipped, flagged == true)

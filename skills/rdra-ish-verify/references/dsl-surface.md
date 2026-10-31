@@ -107,7 +107,7 @@ invariant(Order, Payment)
 ## Effects That Feed Axes
 
 ```rdra
-transitions(Order.status, SubmitOrder, draft -> submitted)
+transitions(SubmitOrder, Order.status, draft -> submitted)
 sets(Restock, Item, stock == 3)
 sets(ReserveStock, Inventory, stock < selling, true)  // drives the comparison as a Bool
 ```

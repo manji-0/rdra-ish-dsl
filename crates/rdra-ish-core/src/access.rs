@@ -66,7 +66,6 @@ pub struct ScreenConstraintPattern {
 pub enum ActorInputOperation {
     Create,
     Update,
-    Write,
 }
 
 impl ActorInputOperation {
@@ -74,7 +73,6 @@ impl ActorInputOperation {
         match self {
             Self::Create => "create",
             Self::Update => "update",
-            Self::Write => "write",
         }
     }
 }
@@ -613,7 +611,6 @@ fn input_operation_from_relation(
     let operation = match rel.kind {
         RelKind::Creates => ActorInputOperation::Create,
         RelKind::Updates => ActorInputOperation::Update,
-        RelKind::Writes => ActorInputOperation::Write,
         _ => return None,
     };
     Some((entity, operation))

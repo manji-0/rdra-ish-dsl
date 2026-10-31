@@ -449,8 +449,8 @@ usecase CapturePayment "Capture Payment"
 contains(BucOrder, CapturePayment)
 updates(CapturePayment, Order)
 
-transitions(Order.status, CapturePayment, pending -> paid)
-transitions(Order.status, CancelOrder, pending -> cancelled)
+transitions(CapturePayment, Order.status, pending -> paid)
+transitions(CancelOrder, Order.status, pending -> cancelled)
 sets(CapturePayment, Order, paid_at == present)
 ```
 

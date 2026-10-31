@@ -25,8 +25,8 @@ Also ask:
 1. Add coarse `entity` declarations for the logical data structures, usually with
    only an `id: Int @pk` column. Business nouns that do not need persistence stay
    in labels and descriptions; there is no separate conceptual-model kind.
-2. Add direct UC CRUD predicates: `creates`, `reads`, `updates`, `deletes`, or
-   `writes`.
+2. Add direct UC CRUD predicates: `creates`, `reads`, `updates`, or
+   `deletes`.
 3. Prefer direct use-case CRUD here. Delay `api` until the boundary is meaningful.
 4. Keep column details, FK relations, `system`, and `coordinates` out unless already
    stable and necessary for review.

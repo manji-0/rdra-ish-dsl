@@ -352,7 +352,7 @@ impl Pred {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GuardWhy {
-    /// `transitions(E.col, UC, from -> to)`: the column is one of the `from` values.
+    /// `transitions(UC, E.col, from -> to)`: the column is one of the `from` values.
     TransitionFrom,
     /// The child param belongs to the parent param, or is unlinked before a created parent
     /// links it.

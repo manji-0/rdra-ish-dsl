@@ -168,7 +168,7 @@ At the later stages, add to the same file:
 ### Step 4 — Add lifecycle effects
 
 Name the use case that drives each state edge with
-`transitions(Order.status, CancelOrder, pending -> cancelled)`; states are the Enum
+`transitions(CancelOrder, Order.status, pending -> cancelled)`; states are the Enum
 variants and are never declared. For every use case that changes a nullable column, a
 `Bool` flag, an Int, or an inline `Enum` that has no `transitions`, add
 `sets(UseCase, Entity, column == value)`. A value the actor chooses and no use case

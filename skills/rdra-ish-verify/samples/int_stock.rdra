@@ -23,8 +23,8 @@ updates(Restock, Item)
 updates(ArchiveItem, Item)
 
 
-transitions(Item.status, Restock, active -> active)
-transitions(Item.status, ArchiveItem, active -> archived)
+transitions(Restock, Item.status, active -> active)
+transitions(ArchiveItem, Item.status, active -> archived)
 
 sets(Restock, Item, stock == 3)
 sets(Restock, Item, selling == 1)

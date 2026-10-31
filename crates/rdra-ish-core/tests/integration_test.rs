@@ -145,7 +145,7 @@ fn test_relation_matrix_csv() {
         "Browse should appear in matrix:\n{csv}"
     );
 
-    // AddToCart（writes=W）が含まれる
+    // AddToCart（updates=U）が含まれる
     assert!(
         csv.contains("AddToCart"),
         "AddToCart should appear in matrix:\n{csv}"
@@ -167,8 +167,8 @@ fn test_relation_matrix_csv() {
         "C (creates) should appear in matrix:\n{csv}"
     );
     assert!(
-        csv.contains('W'),
-        "W (writes) should appear in matrix:\n{csv}"
+        csv.contains('U'),
+        "U (updates) should appear in matrix:\n{csv}"
     );
 }
 

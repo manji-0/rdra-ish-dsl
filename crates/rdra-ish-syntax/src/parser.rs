@@ -7,6 +7,7 @@ use chumsky::Stream;
 use logos::Logos;
 
 use crate::ast::*;
+use crate::metadata::{metadata_clause, metadata_value, Metadata};
 use crate::removed::{migration_hint, removed_when};
 use crate::token::Token;
 
@@ -52,7 +53,7 @@ fn ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
 }
 
 /// Match a single `Token::StringLit` and return the inner string (quotes stripped).
-fn string_lit() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
+pub(crate) fn string_lit() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
     select! { Token::StringLit(s) => s }
 }
 
@@ -61,7 +62,7 @@ fn string_lit() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
 /// Path segments are namespace labels, so keyword-like names such as
 /// `buc.purchase` must remain valid even though `buc` is a declaration keyword
 /// elsewhere in the grammar.
-fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
+pub(crate) fn path_ident() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
     select! {
         Token::Ident(s) => s,
         Token::Actor => "actor".to_string(),
@@ -402,36 +403,17 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
     );
 
     let description = just(Token::Ident("description".to_string()))
-        .ignore_then(string_lit())
+        .ignore_then(metadata_value())
         .or_not();
-
-    let requirement_metadata = requirement_metadata().or_not();
-    let adr_metadata = adr_metadata().or_not();
-    let api_metadata = api_metadata().or_not();
-    let nfr_metadata = nfr_metadata().or_not();
-    let field_metadata = field_metadata().or_not();
-    let usecase_metadata = usecase_metadata().or_not();
 
     kind_token()
         .then(ident())
         .then(string_lit())
         .then(description)
-        .then(requirement_metadata)
-        .then(adr_metadata)
-        .then(api_metadata)
-        .then(nfr_metadata)
-        .then(field_metadata)
-        .then(usecase_metadata)
+        .then(metadata_clause().repeated())
         .then(body.or_not())
         .try_map(
-            |(
-                (
-                    ((((((((kind, id), label), description), requirement), adr), api), nfr), field),
-                    usecase,
-                ),
-                body,
-            ),
-             span| {
+            |(((((kind, id), label), description), clauses), body), span| {
                 let (columns, variation_values) = match body {
                     None => (Vec::new(), Vec::new()),
                     Some(DeclBody::Columns(columns)) => (columns, Vec::new()),
@@ -454,18 +436,27 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                         "a `variation` lists values (`cash \"Cash\"`), not columns",
                     ));
                 }
-                check_goal_metadata(&kind, &nfr, &span)?;
+                let mut metadata = Metadata::collect(&kind, clauses);
+                check_goal_metadata(&kind, &metadata.nfr, &span)?;
+                if let Some(description) = &description {
+                    if description.bare {
+                        metadata
+                            .bare_values
+                            .push(("description".to_string(), description.text.clone()));
+                    }
+                }
                 Ok(InstanceDecl {
                     kind,
                     id,
                     label,
-                    description,
-                    requirement: requirement.unwrap_or_default(),
-                    adr: adr.unwrap_or_default(),
-                    api: api.unwrap_or_default(),
-                    nfr: nfr.unwrap_or_default(),
-                    field: field.unwrap_or_default(),
-                    usecase: usecase.unwrap_or_default(),
+                    description: description.map(|d| d.text),
+                    requirement: metadata.requirement,
+                    adr: metadata.adr,
+                    api: metadata.api,
+                    nfr: metadata.nfr,
+                    field: metadata.field,
+                    usecase: metadata.usecase,
+                    bare_values: metadata.bare_values,
                     columns,
                     variation_values,
                     span,
@@ -474,14 +465,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
         )
 }
 
-fn check_goal_metadata(
-    kind: &Kind,
-    nfr: &Option<NfrMetadata>,
-    span: &Span,
-) -> Result<(), Simple<Token>> {
-    let Some(meta) = nfr else {
-        return Ok(());
-    };
+fn check_goal_metadata(kind: &Kind, meta: &NfrMetadata, span: &Span) -> Result<(), Simple<Token>> {
     if *kind == Kind::Goal {
         let extra = meta.slo.is_some()
             || meta.availability.is_some()
@@ -530,421 +514,6 @@ fn check_variation_values(
 enum DeclBody {
     Columns(Vec<Column>),
     Values(Vec<VariationValue>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum AdrMetadataEntry {
-    Status(String),
-    Context(String),
-    Decision(String),
-    Consequence(String),
-    AcceptedOption(String),
-    RejectedOption(String),
-    Reason(String),
-}
-
-fn adr_metadata_entry() -> impl Parser<Token, AdrMetadataEntry, Error = Simple<Token>> + Clone {
-    let status = just(Token::Ident("adr_status".to_string()))
-        .ignore_then(metadata_value())
-        .map(AdrMetadataEntry::Status);
-    let context = just(Token::Ident("context".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::Context);
-    let decision = just(Token::Ident("decision".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::Decision);
-    let consequence = just(Token::Ident("consequence".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::Consequence);
-    let accepted = just(Token::Ident("accepted".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::AcceptedOption);
-    let accepted_option = just(Token::Ident("accepted_option".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::AcceptedOption);
-    let rejected = just(Token::Ident("rejected".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::RejectedOption);
-    let rejected_option = just(Token::Ident("rejected_option".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::RejectedOption);
-    let reason = just(Token::Ident("reason".to_string()))
-        .ignore_then(string_lit())
-        .map(AdrMetadataEntry::Reason);
-
-    status
-        .or(context)
-        .or(decision)
-        .or(consequence)
-        .or(accepted_option)
-        .or(accepted)
-        .or(rejected_option)
-        .or(rejected)
-        .or(reason)
-}
-
-fn adr_metadata() -> impl Parser<Token, AdrMetadata, Error = Simple<Token>> + Clone {
-    adr_metadata_entry().repeated().at_least(1).map(|entries| {
-        let mut metadata = AdrMetadata::default();
-        for entry in entries {
-            match entry {
-                AdrMetadataEntry::Status(value) => metadata.status = Some(value),
-                AdrMetadataEntry::Context(value) => metadata.context.push(value),
-                AdrMetadataEntry::Decision(value) => metadata.decision = Some(value),
-                AdrMetadataEntry::Consequence(value) => metadata.consequences.push(value),
-                AdrMetadataEntry::AcceptedOption(value) => metadata.accepted_options.push(value),
-                AdrMetadataEntry::RejectedOption(value) => metadata.rejected_options.push(value),
-                AdrMetadataEntry::Reason(value) => metadata.reasons.push(value),
-            }
-        }
-        metadata
-    })
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum RequirementMetadataEntry {
-    Priority(String),
-    Source(String),
-    Stakeholder(String),
-    Owner(String),
-    AcceptanceCriterion(String),
-    Status(String),
-    Risk(String),
-    Rationale(String),
-}
-
-fn requirement_metadata_entry(
-) -> impl Parser<Token, RequirementMetadataEntry, Error = Simple<Token>> + Clone {
-    let priority = just(Token::Ident("priority".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::Priority);
-    let source = just(Token::Ident("source".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::Source);
-    let stakeholder = just(Token::Ident("stakeholder".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::Stakeholder);
-    let owner = just(Token::Ident("owner".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::Owner);
-    let acceptance = just(Token::Ident("acceptance".to_string()))
-        .ignore_then(just(Token::Ident("criteria".to_string())).or_not())
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::AcceptanceCriterion);
-    let acceptance_criteria = just(Token::Ident("acceptance_criteria".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::AcceptanceCriterion);
-    let status = just(Token::Ident("status".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::Status);
-    let risk = just(Token::Ident("risk".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::Risk);
-    let rationale = just(Token::Ident("rationale".to_string()))
-        .ignore_then(string_lit())
-        .map(RequirementMetadataEntry::Rationale);
-
-    priority
-        .or(source)
-        .or(stakeholder)
-        .or(owner)
-        .or(acceptance_criteria)
-        .or(acceptance)
-        .or(status)
-        .or(risk)
-        .or(rationale)
-}
-
-fn requirement_metadata() -> impl Parser<Token, RequirementMetadata, Error = Simple<Token>> + Clone
-{
-    requirement_metadata_entry()
-        .repeated()
-        .at_least(1)
-        .map(|entries| {
-            let mut metadata = RequirementMetadata::default();
-            for entry in entries {
-                match entry {
-                    RequirementMetadataEntry::Priority(value) => metadata.priority = Some(value),
-                    RequirementMetadataEntry::Source(value) => metadata.sources.push(value),
-                    RequirementMetadataEntry::Stakeholder(value) => {
-                        metadata.stakeholders.push(value)
-                    }
-                    RequirementMetadataEntry::Owner(value) => metadata.owner = Some(value),
-                    RequirementMetadataEntry::AcceptanceCriterion(value) => {
-                        metadata.acceptance_criteria.push(value);
-                    }
-                    RequirementMetadataEntry::Status(value) => metadata.status = Some(value),
-                    RequirementMetadataEntry::Risk(value) => metadata.risk = Some(value),
-                    RequirementMetadataEntry::Rationale(value) => metadata.rationale = Some(value),
-                }
-            }
-            metadata
-        })
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum ApiMetadataEntry {
-    Method(String),
-    Path(String),
-    Idempotency(String),
-    Mode(String),
-    AuthScheme(String),
-}
-
-fn metadata_value() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
-    path_ident().or(string_lit())
-}
-
-fn api_metadata_entry() -> impl Parser<Token, ApiMetadataEntry, Error = Simple<Token>> + Clone {
-    let method = just(Token::Ident("method".to_string()))
-        .ignore_then(metadata_value())
-        .map(ApiMetadataEntry::Method);
-    let path = just(Token::Ident("path".to_string()))
-        .ignore_then(string_lit())
-        .map(ApiMetadataEntry::Path);
-    let idempotency = just(Token::Ident("idempotency".to_string()))
-        .ignore_then(metadata_value())
-        .map(ApiMetadataEntry::Idempotency);
-    let mode = just(Token::Ident("mode".to_string()))
-        .ignore_then(metadata_value())
-        .map(ApiMetadataEntry::Mode);
-    let auth = just(Token::Ident("auth".to_string()))
-        .ignore_then(metadata_value())
-        .map(ApiMetadataEntry::AuthScheme);
-    let auth_scheme = just(Token::Ident("auth_scheme".to_string()))
-        .ignore_then(metadata_value())
-        .map(ApiMetadataEntry::AuthScheme);
-
-    method
-        .or(path)
-        .or(idempotency)
-        .or(mode)
-        .or(auth_scheme)
-        .or(auth)
-}
-
-fn api_metadata() -> impl Parser<Token, ApiMetadata, Error = Simple<Token>> + Clone {
-    api_metadata_entry().repeated().at_least(1).map(|entries| {
-        let mut metadata = ApiMetadata::default();
-        for entry in entries {
-            match entry {
-                ApiMetadataEntry::Method(value) => metadata.method = Some(value),
-                ApiMetadataEntry::Path(value) => metadata.path = Some(value),
-                ApiMetadataEntry::Idempotency(value) => metadata.idempotency = Some(value),
-                ApiMetadataEntry::Mode(value) => metadata.mode = Some(value),
-                ApiMetadataEntry::AuthScheme(value) => metadata.auth_scheme = Some(value),
-            }
-        }
-        metadata
-    })
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum NfrMetadataEntry {
-    Metric(String),
-    Baseline(String),
-    Target(String),
-    Window(String),
-    Slo(String),
-    Availability(String),
-    Resilience(String),
-    Audit(String),
-    Logging(String),
-    Retention(String),
-    Privacy(String),
-}
-
-fn nfr_metadata_entry() -> impl Parser<Token, NfrMetadataEntry, Error = Simple<Token>> + Clone {
-    let metric = just(Token::Ident("metric".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Metric);
-    let baseline = just(Token::Ident("baseline".to_string()))
-        .ignore_then(string_lit())
-        .map(NfrMetadataEntry::Baseline);
-    let target = just(Token::Ident("target".to_string()))
-        .ignore_then(string_lit())
-        .map(NfrMetadataEntry::Target);
-    let window = just(Token::Ident("window".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Window);
-    let slo = just(Token::Ident("slo".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Slo);
-    let availability = just(Token::Ident("availability".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Availability);
-    let resilience = just(Token::Ident("resilience".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Resilience);
-    let audit = just(Token::Ident("audit".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Audit);
-    let logging = just(Token::Ident("logging".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Logging);
-    let retention = just(Token::Ident("retention".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Retention);
-    let privacy = just(Token::Ident("privacy".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Privacy);
-    let privacy_classification = just(Token::Ident("privacy_classification".to_string()))
-        .ignore_then(metadata_value())
-        .map(NfrMetadataEntry::Privacy);
-
-    metric
-        .or(baseline)
-        .or(target)
-        .or(window)
-        .or(slo)
-        .or(availability)
-        .or(resilience)
-        .or(audit)
-        .or(logging)
-        .or(retention)
-        .or(privacy_classification)
-        .or(privacy)
-}
-
-fn nfr_metadata() -> impl Parser<Token, NfrMetadata, Error = Simple<Token>> + Clone {
-    nfr_metadata_entry().repeated().at_least(1).map(|entries| {
-        let mut metadata = NfrMetadata::default();
-        for entry in entries {
-            match entry {
-                NfrMetadataEntry::Metric(value) => metadata.metric = Some(value),
-                NfrMetadataEntry::Baseline(value) => metadata.baseline = Some(value),
-                NfrMetadataEntry::Target(value) => metadata.target = Some(value),
-                NfrMetadataEntry::Window(value) => metadata.window = Some(value),
-                NfrMetadataEntry::Slo(value) => metadata.slo = Some(value),
-                NfrMetadataEntry::Availability(value) => metadata.availability = Some(value),
-                NfrMetadataEntry::Resilience(value) => metadata.resilience = Some(value),
-                NfrMetadataEntry::Audit(value) => metadata.audit = Some(value),
-                NfrMetadataEntry::Logging(value) => metadata.logging = Some(value),
-                NfrMetadataEntry::Retention(value) => metadata.retention = Some(value),
-                NfrMetadataEntry::Privacy(value) => metadata.privacy = Some(value),
-            }
-        }
-        metadata
-    })
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum FieldMetadataEntry {
-    Access(String),
-    Required(bool),
-    Source(String),
-}
-
-fn bool_metadata_value() -> impl Parser<Token, bool, Error = Simple<Token>> + Clone {
-    just(Token::Ident("true".to_string()))
-        .to(true)
-        .or(just(Token::Ident("false".to_string())).to(false))
-}
-
-fn field_metadata_entry() -> impl Parser<Token, FieldMetadataEntry, Error = Simple<Token>> + Clone {
-    let access = just(Token::Ident("access".to_string()))
-        .ignore_then(metadata_value())
-        .map(FieldMetadataEntry::Access);
-    let required = just(Token::Ident("required".to_string()))
-        .ignore_then(bool_metadata_value())
-        .map(FieldMetadataEntry::Required);
-    let source = just(Token::Ident("source".to_string()))
-        .ignore_then(metadata_value())
-        .map(FieldMetadataEntry::Source);
-    let input = just(Token::Ident("input".to_string()))
-        .ignore_then(metadata_value())
-        .map(FieldMetadataEntry::Source);
-    let derived = just(Token::Ident("derived".to_string()))
-        .ignore_then(metadata_value())
-        .map(FieldMetadataEntry::Source);
-
-    access.or(required).or(source).or(input).or(derived)
-}
-
-fn field_metadata() -> impl Parser<Token, FieldMetadata, Error = Simple<Token>> + Clone {
-    field_metadata_entry()
-        .repeated()
-        .at_least(1)
-        .map(|entries| {
-            let mut metadata = FieldMetadata::default();
-            for entry in entries {
-                match entry {
-                    FieldMetadataEntry::Access(value) => metadata.access = Some(value),
-                    FieldMetadataEntry::Required(value) => metadata.required = Some(value),
-                    FieldMetadataEntry::Source(value) => metadata.source = Some(value),
-                }
-            }
-            metadata
-        })
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum UseCaseMetadataEntry {
-    Precondition(String),
-    Postcondition(String),
-    Guard(String),
-    Alternative(String),
-    Error(String),
-}
-
-fn usecase_metadata_entry(
-) -> impl Parser<Token, UseCaseMetadataEntry, Error = Simple<Token>> + Clone {
-    let precondition = just(Token::Ident("precondition".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Precondition);
-    let postcondition = just(Token::Ident("postcondition".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Postcondition);
-    let guard = just(Token::Ident("guard".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Guard);
-    let alternative = just(Token::Ident("alternative".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Alternative);
-    let alternative_flow = just(Token::Ident("alternative_flow".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Alternative);
-    let error = just(Token::Ident("error".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Error);
-    let error_condition = just(Token::Ident("error_condition".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Error);
-    let business_error = just(Token::Ident("business_error".to_string()))
-        .ignore_then(string_lit())
-        .map(UseCaseMetadataEntry::Error);
-
-    precondition
-        .or(postcondition)
-        .or(guard)
-        .or(alternative_flow)
-        .or(alternative)
-        .or(error_condition)
-        .or(business_error)
-        .or(error)
-}
-
-fn usecase_metadata() -> impl Parser<Token, UseCaseMetadata, Error = Simple<Token>> + Clone {
-    usecase_metadata_entry()
-        .repeated()
-        .at_least(1)
-        .map(|entries| {
-            let mut metadata = UseCaseMetadata::default();
-            for entry in entries {
-                match entry {
-                    UseCaseMetadataEntry::Precondition(value) => {
-                        metadata.preconditions.push(value);
-                    }
-                    UseCaseMetadataEntry::Postcondition(value) => {
-                        metadata.postconditions.push(value);
-                    }
-                    UseCaseMetadataEntry::Guard(value) => metadata.guards.push(value),
-                    UseCaseMetadataEntry::Alternative(value) => metadata.alternatives.push(value),
-                    UseCaseMetadataEntry::Error(value) => metadata.errors.push(value),
-                }
-            }
-            metadata
-        })
 }
 
 // ── Qualified reference ───────────────────────────────────────────────────────
@@ -1143,7 +712,7 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
 ///
 /// 比較式を **最優先** でパースし、続けて遷移 / カード / atom にフォールバックする。
 /// - `forbidden(E, status == cancelled)` → `PredicateArg::Expr`
-/// - `transitions(E.col, UseCase, a -> b)` の第3引数 → `PredicateArg::Transition`
+/// - `transitions(UseCase, E.col, a -> b)` の第3引数 → `PredicateArg::Transition`
 /// - `relate(A, B, N:1)` の第3引数 → `PredicateArg::Card`
 /// - `performs(A, B)` → `PredicateArg::Ref`
 fn predicate_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
@@ -1209,6 +778,15 @@ fn predicate_call() -> impl Parser<Token, PredicateCall, Error = Simple<Token>> 
             chain,
             span,
         })
+        .validate(
+            |pred, span, emit| match crate::removed::legacy_predicate(&pred) {
+                Some((rewritten, message)) => {
+                    emit(Simple::custom(span, message));
+                    rewritten
+                }
+                None => pred,
+            },
+        )
 }
 
 // ── Module declaration ────────────────────────────────────────────────────────
@@ -1324,7 +902,7 @@ priority "must"
 source "Customer interview"
 stakeholder "Store Operations"
 owner "Product Owner"
-acceptance criteria "A payment timeout leaves the cart recoverable."
+acceptance_criteria "A payment timeout leaves the cart recoverable."
 acceptance_criteria "A submitted order receives a stable order number."
 status "proposed"
 risk "high"
@@ -1596,7 +1174,7 @@ field OrderTotal "Order total"
   access readonly
   derived system
 contains(CheckoutScreen, ShippingAddress)
-maps_field(ShippingAddress, Order, "shipping_address")
+maps_field(ShippingAddress, Order.shipping_address)
 "#,
         );
 
@@ -2051,7 +1629,7 @@ performs(actor::Add, usecase::Add)
         };
         assert!(matches!(&pred.args[2], PredicateArg::Card(c) if c == "1..*:1"));
 
-        let trans = parse_ok("transitions(Order.status, CapturePay, pending -> paid)");
+        let trans = parse_ok("transitions(CapturePay, Order.status, pending -> paid)");
         let pred = trans
             .items
             .iter()

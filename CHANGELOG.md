@@ -14,6 +14,29 @@
   checks the same thing under the same name, `Quantifier_<Entity>_<n>`, as before. The
   `quantifier_none` and `quantifier_guard` samples, the docs, and the skills use the
   `invariant` form (#47).
+- Every predicate takes the use case first and names a column as `Entity.column`.
+  `transitions(UseCase, Entity.column, from -> to)` replaces `transitions(Entity.column,
+  UseCase, from -> to)`, and `maps_field(Field, Entity.column)` replaces the three-argument
+  `maps_field(Field, Entity, "column")` (also written `column` or `Entity.column`). The old
+  forms fail to parse with a message that gives the rewritten line, for example ``
+  `transitions` takes the use case first; write `transitions(Pay, Order.status, pending ->
+  paid)` ``. `maps_field` now reports an unknown entity (`UndefinedSymbol`), an unknown
+  column (`UnknownColumn`), and an argument that is not `Entity.column` (`TypeMismatch`).
+  `scripts/migrate-syntax-v2.py <workspace>` rewrites `.rdra` files in place, prints each
+  edit, and changes nothing on a second run; it takes any single file too, such as a
+  Markdown page, for review. The samples, test fixtures, docs, and skills are migrated
+  (#48).
+- `writes(UseCase | Api, Entity)` is removed. It was `updates` under another name, so it
+  fails to parse with ``use `updates` (or `creates`/`deletes`)``, and
+  `scripts/migrate-syntax-v2.py` rewrites it to `updates`. Two outputs differ for a model
+  that used it: the `csv --kind matrix` and `api-matrix` cell reads `U` where it read `W`,
+  and the `operation` column of `csv --kind business-inputs` and `list --kind
+  business-inputs` reads `update` where it read `write`. `--edge-kind writes` is an
+  unknown edge kind. State derivation, transactions, and
+  the publication checks already treated it as `updates` (#48).
+- The two-word `acceptance criteria "..."` (and `acceptance "..."`) is removed. Write
+  `acceptance_criteria "..."`; the old spelling fails to parse with a message that gives
+  the rewrite, and `rdra-ish fmt` writes `acceptance_criteria` (#48).
 
 ### Added
 
@@ -190,6 +213,14 @@
   test reads both. clinic-ops: the `rdra` diagram of `BucClinicalEncounter` keeps 159 of
   its 584 labels, the robustness diagram 19 of 24, the context diagram all 21, and the
   UC複合図 of the BUC 17 of 35 (#43).
+- Every metadata clause takes a quoted string or a bare token: `description`, the
+  requirement, ADR, goal, NFR, and constraint clauses, the API and field clauses, and the
+  use case review clauses. `priority must`, `target 300`, and `slo 99.9` parse, where
+  `priority` and `target` took only a string before. `rdra-ish fmt` writes each value the
+  way it was written, so `metric "p95"` is no longer rewritten to `metric p95`. A clause
+  may follow any other clause, and `source` on a `field` is the field's source whether
+  quoted or bare (a quoted `source "..."` on a field was read as requirement metadata)
+  (#48).
 - `diagram --kind business` is a business flow. Each business is a subgraph holding its BUCs,
   and an edge `BUC -->|<event label>| BUC` is a hand-off: a use case contained in the first
   BUC raises an event that triggers a use case contained in the second, or
@@ -306,9 +337,9 @@
     related entity, as `.none()` or `.none(Ticket)`, is `QuantifierWithoutCondition`, and
     `invariant().none(...)` with no entity in its scope or its `.when(...)` is
     `QuantifierScopeUnknown`.
-  - `maps_field(F, Order, Order.nosuch)` is `UnknownColumn`, and
-    `maps_field(F, Order, Ticket.status)` is `MapsFieldOtherEntity`. A qualified column was
-    not read at all, so `maps_field(F, Order, Order.status)` now maps the field.
+  - `maps_field(F, Order.nosuch)` is `UnknownColumn` and `maps_field(F, Nosuch.status)`
+    is `UndefinedSymbol`; a qualified column was not read at all (#48 then made
+    `maps_field(Field, Entity.column)` the only form).
 - `invariant(Order).when(status == paid).none(Ticket.status == pending)` is checked. A
   one-entity `invariant` takes the related entity of `.has/.none(...)` from its qualified
   columns, as `invariant(Order, Ticket)` does, and prints the same rule and TLA+ spec; it

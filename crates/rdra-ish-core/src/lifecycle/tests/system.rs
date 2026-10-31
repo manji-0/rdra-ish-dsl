@@ -63,7 +63,7 @@ relate(Payment, Order, N:1)
 creates(Place, Order)
 creates(Pay, Payment)
 updates(Pay, Order)
-transitions(Order.status, Pay, pending -> paid)
+transitions(Pay, Order.status, pending -> paid)
 sets(Pay, Payment, state == captured)
 forbidden(Order, Payment, Order.status == pending, Payment.state == captured)
 "#;
@@ -127,7 +127,7 @@ usecase MakeB "B"
 usecase FlipA "A2"
 creates(MakeA, A)
 creates(MakeB, B)
-transitions(A.s, FlipA, x -> y)
+transitions(FlipA, A.s, x -> y)
 "#;
     let model = model_from(src);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
@@ -232,7 +232,7 @@ buc B2 "終了"
 contains(B1, Open)
 contains(B2, Close)
 creates(Open, Order)
-transitions(Order.status, Close, open -> closed)
+transitions(Close, Order.status, open -> closed)
 "#;
     let model = model_from(src);
     let b1 = derive_scoped(&model, Bounds::STATES, &Scope::from_bucs(&["B1".into()]));

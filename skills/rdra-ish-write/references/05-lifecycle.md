@@ -36,7 +36,7 @@ Also ask:
 1. Add lifecycle columns such as `Enum(...)`, `Bool`, and nullable timestamp/value
    columns. Values an actor merely chooses are not lifecycle: type those columns by a
    `variation` and leave them out of `transitions`.
-2. Add `transitions(Entity.col, UseCase, from -> to)` for lifecycle movement, naming
+2. Add `transitions(UseCase, Entity.col, from -> to)` for lifecycle movement, naming
    the use case that drives each edge. States are not declared: each variant a
    `transitions` names, and each value a creating use case sets, is a state of the
    state model.
@@ -80,8 +80,8 @@ usecase SubmitOrder "Submit Order"
 usecase FulfillOrder "Fulfill Order"
 
 creates(CreateOrder, Order)
-transitions(Order.status, SubmitOrder, draft -> submitted)
-transitions(Order.status, FulfillOrder, submitted -> fulfilled)
+transitions(SubmitOrder, Order.status, draft -> submitted)
+transitions(FulfillOrder, Order.status, submitted -> fulfilled)
 sets(SubmitOrder, Order, submitted_at == present)
 ```
 

@@ -97,26 +97,26 @@ displays(IssueOutsidePrescription, PrescriptionScreen)
 invokes(IssueOutsidePrescription, IssuePrescriptionApi)
 updates(IssuePrescriptionApi, Prescription)
 raises(IssueOutsidePrescription, EvPrescriptionIssued)
-transitions(Prescription.status, IssueOutsidePrescription, rxdrafted -> rxissued)
+transitions(IssueOutsidePrescription, Prescription.status, rxdrafted -> rxissued)
 sets(IssueOutsidePrescription, Prescription, sent_at == present)
 triggers(EvPrescriptionIssued, EPrescriptionService)
 
 displays(IssueInhouseVoucher, PrescriptionScreen)
 invokes(IssueInhouseVoucher, IssuePrescriptionApi)
-transitions(Prescription.status, IssueInhouseVoucher, rxdrafted -> rxvoucher)
+transitions(IssueInhouseVoucher, Prescription.status, rxdrafted -> rxvoucher)
 
 displays(DispenseAndAudit, DispensingScreen)
 invokes(DispenseAndAudit, DispensingApi)
 updates(DispensingApi, Prescription)
-transitions(Prescription.status, DispenseAndAudit, rxvoucher -> rxaudited)
+transitions(DispenseAndAudit, Prescription.status, rxvoucher -> rxaudited)
 
 displays(CounselMedication, DispensingScreen)
 invokes(CounselMedication, DispensingApi)
-transitions(Prescription.status, CounselMedication, rxaudited -> rxcounseled)
+transitions(CounselMedication, Prescription.status, rxaudited -> rxcounseled)
 
 displays(HandOverMedication, DispensingScreen)
 invokes(HandOverMedication, DispensingApi)
-transitions(Prescription.status, HandOverMedication, rxcounseled -> rxdispensed)
+transitions(HandOverMedication, Prescription.status, rxcounseled -> rxdispensed)
 sets(HandOverMedication, Prescription, dispensed_at == present)
 
 // 薬剤師は、処方せん中に疑わしい点があるときは…確かめた後でなければ調剤してはならない
@@ -124,18 +124,18 @@ sets(HandOverMedication, Prescription, dispensed_at == present)
 // consent (:199). The 疑義照会 holds the 引換券 until the physician answers.
 displays(RaisePrescriptionInquiry, DispensingScreen)
 invokes(RaisePrescriptionInquiry, DispensingApi)
-transitions(Prescription.status, RaisePrescriptionInquiry, rxvoucher -> rxinquiry)
+transitions(RaisePrescriptionInquiry, Prescription.status, rxvoucher -> rxinquiry)
 
 displays(AnswerPrescriptionInquiry, PrescriptionScreen)
 invokes(AnswerPrescriptionInquiry, PrescriptionInquiryApi)
 updates(PrescriptionInquiryApi, Prescription)
-transitions(Prescription.status, AnswerPrescriptionInquiry, rxinquiry -> rxvoucher)
+transitions(AnswerPrescriptionInquiry, Prescription.status, rxinquiry -> rxvoucher)
 
 // The pharmacist of the 保険薬局 asks the issuing physician (egov-yakuzaishihou-335AC0000000146.txt:202).
 // The 処方箋 is already at the pharmacy, so the answer leaves its state as it is.
 displays(AnswerPharmacyInquiry, PrescriptionScreen)
 invokes(AnswerPharmacyInquiry, PrescriptionInquiryApi)
-transitions(Prescription.status, AnswerPharmacyInquiry, rxissued -> rxissued)
+transitions(AnswerPharmacyInquiry, Prescription.status, rxissued -> rxissued)
 raises(InsurancePharmacy, EvPharmacyInquiry)
 triggers(EvPharmacyInquiry, AnswerPharmacyInquiry)
 
@@ -144,19 +144,19 @@ invokes(ConfirmDispense, ConfirmDispenseApi)
 updates(ConfirmDispenseApi, Prescription)
 raises(EPrescriptionService, EvPrescriptionDispensed)
 triggers(EvPrescriptionDispensed, ConfirmDispense)
-transitions(Prescription.status, ConfirmDispense, rxissued -> rxdispensed)
+transitions(ConfirmDispense, Prescription.status, rxissued -> rxdispensed)
 sets(ConfirmDispense, Prescription, dispensed_at == present)
 
 // 使用期間は、交付の日を含めて四日以内 (egov-ryotan-kisoku-332M50000100015.txt:311), holidays included
 // (mhlw-shohousen-shiyoukikan.md:185). The DSL counts no days, so a timer moves an unused 処方箋.
 displays(ExpirePrescription, PharmacyStatusScreen)
 invokes(ExpirePrescription, ConfirmDispenseApi)
-transitions(Prescription.status, ExpirePrescription, rxissued -> rxexpired)
+transitions(ExpirePrescription, Prescription.status, rxissued -> rxexpired)
 triggers(PrescriptionUsePeriodCheck, ExpirePrescription)
 
 displays(CancelPrescription, PrescriptionScreen)
 updates(CancelPrescription, Prescription)
-transitions(Prescription.status, CancelPrescription, rxdrafted -> rxcancelled)
+transitions(CancelPrescription, Prescription.status, rxdrafted -> rxcancelled)
 
 // 特定の保険薬局への誘導の禁止 (egov-ryotan-kisoku-332M50000100015.txt:49).
 constraint NoPharmacySteering "特定の保険薬局において調剤を受けるべき旨の指示等を行わない"
@@ -215,9 +215,9 @@ field DispensedAtField "交付日時" access readonly required true source syste
 contains(PrescriptionScreen, UsePeriodField)
 contains(PrescriptionScreen, RefillLimitField)
 contains(DispensingScreen, DispensedAtField)
-maps_field(UsePeriodField, Prescription, "use_period_days")
-maps_field(RefillLimitField, Prescription, "refill_limit")
-maps_field(DispensedAtField, Prescription, "dispensed_at")
+maps_field(UsePeriodField, Prescription.use_period_days)
+maps_field(RefillLimitField, Prescription.refill_limit)
+maps_field(DispensedAtField, Prescription.dispensed_at)
 
 // Business flow
 flow PrescriptionFlow "処方の流れ"
@@ -273,14 +273,14 @@ requirement ReqRegisterEPrescription "院外処方箋を電子処方箋管理サ
   source "電子処方箋管理サービス (mhlw-denshi-shohousen-unyou.txt:28-30)"
   source "特定の保険薬局において調剤を受けるべき旨の指示等を行つてはならない (egov-ryotan-kisoku-332M50000100015.txt:49)"
   stakeholder "医師"
-  acceptance criteria "院外処方箋は紙を印刷する場合も電子処方箋管理サービスへ登録され、処方箋は薬局を持たない。"
+  acceptance_criteria "院外処方箋は紙を印刷する場合も電子処方箋管理サービスへ登録され、処方箋は薬局を持たない。"
   status "accepted"
 
 requirement ReqInquiryBeforeDispense "疑わしい処方は医師への照会が済むまで調剤しない"
   priority "must"
   source "確かめた後でなければ調剤してはならない (egov-yakuzaishihou-335AC0000000146.txt:202)"
   stakeholder "薬剤師"
-  acceptance criteria "疑義照会中の処方箋は、医師が回答するまで調剤・監査に進まない。"
+  acceptance_criteria "疑義照会中の処方箋は、医師が回答するまで調剤・監査に進まない。"
   status "accepted"
 
 motivates(ReqRegisterEPrescription, BucPrescriptionFulfillment)

@@ -9,14 +9,14 @@ entity Session "Session" {
   status: Enum(none, active, revoked) @default(none)
 }
 creates(Login, Session)
-transitions(Session.status, Login, none -> active)
-transitions(Session.status, Revoke, active -> revoked)
+transitions(Login, Session.status, none -> active)
+transitions(Revoke, Session.status, active -> revoked)
 
 entity SessionView "Session (published)" {
   view_id: Int @pk
   status: Enum(active, ended)
 }
-writes(Login, SessionView)
+updates(Login, SessionView)
 sets(Login, SessionView, status == active)
 
 entity LoginLog "Login log (published)" {
@@ -33,7 +33,7 @@ entity Stale "Stale projection" {
 updates(Revoke, LoginLog)            //=> PublishedEntityMutated: an append entity is never updated
 reads(Revoke, SessionView)           //=> PublishedEntityReadByOwner: the owner never reads what it publishes
 relate(SessionView, Session, N:1)    //=> PublishedEntityKeysInternal: a published row keys only to published rows
-writes(Audit, SessionView)           //=> PublishedNotInSourceTx: Audit changes no internal state
+updates(Audit, SessionView)           //=> PublishedNotInSourceTx: Audit changes no internal state
 sets(Audit, SessionView, status == ended)
 
 exposes(AuthSystem, Session)         //=> InternalEntityExposed: publish a projection instead

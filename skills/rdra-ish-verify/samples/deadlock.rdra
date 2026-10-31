@@ -25,9 +25,9 @@ updates(Pay, Order)
 updates(Ship, Order)
 updates(Express, Order)
 
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Ship, paid -> shipped)
-transitions(Order.status, Express, pending -> shipped)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Express, Order.status, pending -> shipped)
 
 condition Packed "梱包済み"
 holds(Packed, Order.status == pending)

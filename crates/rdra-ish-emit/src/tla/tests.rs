@@ -183,9 +183,9 @@ usecase Pay "Pay"
 usecase Occupy "Occ"
 usecase Prepare "Prep"
 creates(Open, Payment)
-transitions(Payment.status, Pay, open -> paid)
+transitions(Pay, Payment.status, open -> paid)
 creates(Prepare, Room)
-transitions(Room.state, Occupy, free -> busy)
+transitions(Occupy, Room.state, free -> busy)
 condition Quiet "Q"
 holds(Quiet, Payment.status == open).none(Room.state == busy)
 applies_to(Quiet, Pay)
@@ -308,7 +308,7 @@ usecase Init "Init"
 usecase Next "Next"
 creates(Init, E)
 updates(Next, E)
-transitions(E.status, Next, a -> b)
+transitions(Next, E.status, a -> b)
 "#;
     let tla = print(&system(src), PrintMode::Check, "M").tla;
     assert!(tla.contains("Init_2(p0) =="), "{tla}");
@@ -371,8 +371,8 @@ usecase Place "Place"
 usecase Close "Close"
 usecase Ship "Ship"
 creates(Place, Order)
-transitions(Address.status, Close, open -> closed)
-transitions(Order.status, Ship, pending -> shipped)
+transitions(Close, Address.status, open -> closed)
+transitions(Ship, Order.status, pending -> shipped)
 relate(Order, Address, N:1).role(ship_to)
 relate(Order, Address, N:1).role(bill_to)
 forbidden(Order, Address, Order.status == shipped, Address.status == closed)

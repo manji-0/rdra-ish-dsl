@@ -512,7 +512,7 @@ fn lint_structural_coverage(model: &SemanticModel, issues: &mut Vec<LintIssue>) 
                 &field.id,
                 "field-unmapped",
                 "screen field is not mapped to an Entity column",
-                "add maps_field(Field, Entity, \"column\") when the field has data lineage",
+                "add maps_field(Field, Entity.column) when the field has data lineage",
             );
         }
     }
@@ -1363,7 +1363,7 @@ entity Order "Order" {
   Id: Int @pk
   status: Enum(pending, paid)
 }
-transitions(Order.status, Place, pending -> paid)
+transitions(Place, Order.status, pending -> paid)
 "#,
         );
 
@@ -1469,7 +1469,7 @@ variation PaymentMethod "Payment Method" {
   cash
   card
 }
-transitions(Order.status, Pay, pending -> paid)
+transitions(Pay, Order.status, pending -> paid)
 sets(Place, Order, priority == high)
 "#,
         );
@@ -1556,7 +1556,7 @@ entity Pay "Pay" {
   status: Enum(open, paid) @default(open)
 }
 usecase Settle "Settle"
-transitions(Pay.status, Settle, open -> paid)
+transitions(Settle, Pay.status, open -> paid)
 condition Big "Big"
 holds(Big, Pay.amount > 100)
 condition ByCard "By card"

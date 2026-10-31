@@ -110,21 +110,21 @@ triggers(EvAppointmentScheduled, SendIntakeForms)
 
 displays(CompleteIntakeForms, IntakePortalScreen)
 updates(CompleteIntakeForms, IntakePacket)
-transitions(IntakePacket.status, CompleteIntakeForms, intakesent -> intakecompleted)
+transitions(CompleteIntakeForms, IntakePacket.status, intakesent -> intakecompleted)
 sets(CompleteIntakeForms, IntakePacket, completed_at == present)
 
 displays(ExpireIntakeForms, IntakePortalScreen)
 updates(ExpireIntakeForms, IntakePacket)
-transitions(IntakePacket.status, ExpireIntakeForms, intakesent -> intakeexpired)
+transitions(ExpireIntakeForms, IntakePacket.status, intakesent -> intakeexpired)
 triggers(IntakeExpiryCheck, ExpireIntakeForms)
 
 displays(MergeDuplicatePatient, PatientProfileScreen)
 updates(MergeDuplicatePatient, PatientAccount)
-transitions(PatientAccount.status, MergeDuplicatePatient, patientactive -> patientmerged)
+transitions(MergeDuplicatePatient, PatientAccount.status, patientactive -> patientmerged)
 
 displays(ArchivePatient, PatientProfileScreen)
 updates(ArchivePatient, PatientAccount)
-transitions(PatientAccount.status, ArchivePatient, patientactive -> patientinactive)
+transitions(ArchivePatient, PatientAccount.status, patientactive -> patientinactive)
 sets(ArchivePatient, PatientAccount, archived_at == present)
 
 // Access constraints
@@ -232,7 +232,7 @@ requirement ReqRegisterWithEligibility "新患登録で保険情報と限度額�
   source "新患登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:46, :51)"
   source "新患登録 (koseikan-2024-iji-shiyousyo.txt:92)"
   stakeholder "医事課 受付担当"
-  acceptance criteria "保険情報は手入力せずオンライン資格確認の結果を登録し、限度額情報は患者が同意した場合だけ取得する。"
+  acceptance_criteria "保険情報は手入力せずオンライン資格確認の結果を登録し、限度額情報は患者が同意した場合だけ取得する。"
   status "accepted"
 
 motivates(ReqRegisterWithEligibility, BucPatientOnboarding)

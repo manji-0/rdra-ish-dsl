@@ -35,7 +35,7 @@ Also ask:
 3. Add `navigates(FromScreen, ToScreen).via(UseCase)` for each move between screens the
    UI offers, naming the use case whose operation causes it. `diagram --kind screen`
    draws them, and fills the gaps with dashed `業務上の順番` edges from the flows.
-4. Add `contains(Screen, Field)` and `maps_field(Field, Entity, "column")` when
+4. Add `contains(Screen, Field)` and `maps_field(Field, Entity.column)` when
    screen item mapping matters.
 5. Introduce `api` plus `invokes(UseCase, Api)` when backend mediation or atomic
    consistency matters.
@@ -70,7 +70,7 @@ medium CustomerDevice "Customer Device"
 displays(PlaceOrder, CheckoutScreen)
 shows(CheckoutScreen, Order)
 contains(CheckoutScreen, OrderIdField)
-maps_field(OrderIdField, Order, "id")
+maps_field(OrderIdField, Order.id)
 invokes(PlaceOrder, OrderApi)
 contains(OrderSystem, OrderApi)
 request(OrderApi, PlaceOrderRequest)

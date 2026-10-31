@@ -259,11 +259,7 @@ fn use_case_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
     for rel in &model.relations {
         let crud = matches!(
             rel.kind,
-            RelKind::Creates
-                | RelKind::Reads
-                | RelKind::Updates
-                | RelKind::Deletes
-                | RelKind::Writes
+            RelKind::Creates | RelKind::Reads | RelKind::Updates | RelKind::Deletes
         );
         if !crud || !(rel.from == node || apis.contains(&rel.from)) {
             continue;

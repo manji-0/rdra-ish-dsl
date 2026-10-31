@@ -2,6 +2,7 @@
 
 pub mod ast;
 pub mod format;
+mod metadata;
 pub mod parse_error;
 pub mod parser;
 pub mod removed;

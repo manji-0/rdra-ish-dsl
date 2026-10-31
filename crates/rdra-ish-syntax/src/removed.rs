@@ -1,6 +1,7 @@
 //! Migration hints for keywords and predicates removed from the DSL.
 
 use crate::ast::{Expr, Operand, PredicateArg, PredicateCall, Span};
+use crate::format::format_predicate;
 
 const CONCEPTUAL: &str = "conceptual-model kinds were removed; model persistent structure with `entity` (and `dto` for payloads)";
 
@@ -23,7 +24,7 @@ const HINTS: &[(&str, &str)] = &[
     ),
     (
         "state",
-        "states are derived from the Enum column named in `transitions(Entity.col, ...)`; delete the declaration and list each state as a variant of the lifecycle Enum column",
+        "states are derived from the Enum column named in `transitions(UseCase, Entity.col, ...)`; delete the declaration and list each state as a variant of the lifecycle Enum column",
     ),
     ("concept", CONCEPTUAL),
     ("domain_object", CONCEPTUAL),
@@ -33,6 +34,10 @@ const HINTS: &[(&str, &str)] = &[
     (
         "maps_to",
         "removed with the conceptual-model kinds; model persistent structure with `entity`",
+    ),
+    (
+        "writes",
+        "use `updates` (or `creates`/`deletes`); `scripts/migrate-syntax-v2.py` rewrites it to `updates`",
     ),
 ];
 
@@ -115,6 +120,61 @@ fn first_entity(arg: &PredicateArg) -> Option<Span> {
         PredicateArg::Expr(expr) => in_expr(expr),
         _ => None,
     }
+}
+
+/// A predicate written in a removed form, rewritten to the current form, with the message
+/// that names the rewrite: `transitions(Entity.column, UseCase, a -> b)` (use case second)
+/// and `maps_field(Field, Entity, column)` (three arguments).
+pub(crate) fn legacy_predicate(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    match pred.name.as_str() {
+        "transitions" => legacy_transitions(pred),
+        "maps_field" => legacy_maps_field(pred),
+        _ => None,
+    }
+}
+
+fn legacy_transitions(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    let [PredicateArg::Ref(first), PredicateArg::Ref(second), _] = pred.args.as_slice() else {
+        return None;
+    };
+    // `Entity.column` first and a one-part use case second. A namespaced use case
+    // (`ns.Pay`) second is left to the type check.
+    if first.kind_qualifier.is_some() || first.parts.len() < 2 || second.parts.len() != 1 {
+        return None;
+    }
+    let mut rewritten = pred.clone();
+    rewritten.args.swap(0, 1);
+    let message = format!(
+        "`transitions` takes the use case first; write `{}`",
+        format_predicate(&rewritten)
+    );
+    Some((rewritten, message))
+}
+
+fn legacy_maps_field(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    let [field, entity, column] = pred.args.as_slice() else {
+        return None;
+    };
+    let column = match column {
+        PredicateArg::Lit(name) => Some(name.clone()),
+        PredicateArg::Ref(qref) => qref.parts.last().cloned(),
+        _ => None,
+    };
+    let (PredicateArg::Ref(entity), Some(column)) = (entity, column) else {
+        return Some((
+            pred.clone(),
+            "`maps_field` takes two arguments; write `maps_field(Field, Entity.column)`".into(),
+        ));
+    };
+    let mut target = entity.clone();
+    target.parts.push(column);
+    let mut rewritten = pred.clone();
+    rewritten.args = vec![field.clone(), PredicateArg::Ref(target)];
+    let message = format!(
+        "`maps_field` names the column as `Entity.column`; write `{}`",
+        format_predicate(&rewritten)
+    );
+    Some((rewritten, message))
 }
 
 #[cfg(test)]
@@ -244,7 +304,57 @@ mod tests {
     #[test]
     fn removed_words_stay_usable_as_column_names() {
         let (_, errs) =
-            parse("entity E \"E\" { condition: String\n  state: String\n  location: String\n  when: String }\n");
+            parse("entity E \"E\" { condition: String\n  state: String\n  location: String\n  when: String\n  writes: Int }\n");
         assert!(errs.is_empty(), "{errs:?}");
+    }
+
+    #[test]
+    fn writes_points_to_updates() {
+        assert_eq!(
+            messages("writes(Pay, Order)\n"),
+            vec!["`writes` is no longer supported; use `updates` (or `creates`/`deletes`); `scripts/migrate-syntax-v2.py` rewrites it to `updates`"]
+        );
+    }
+
+    #[test]
+    fn transitions_with_the_column_first_names_the_rewrite() {
+        assert_eq!(
+            messages("transitions(Order.status, Pay, pending -> paid)\n"),
+            vec!["`transitions` takes the use case first; write `transitions(Pay, Order.status, pending -> paid)`"]
+        );
+        assert_eq!(
+            messages("transitions(Order.status, usecase::Pay, pending -> paid)\n"),
+            vec!["`transitions` takes the use case first; write `transitions(usecase::Pay, Order.status, pending -> paid)`"]
+        );
+    }
+
+    #[test]
+    fn transitions_with_the_use_case_first_parses() {
+        assert!(messages("transitions(Pay, Order.status, pending -> paid)\n").is_empty());
+        assert!(messages("transitions(ns.Pay, Order.status, pending -> paid)\n").is_empty());
+    }
+
+    #[test]
+    fn maps_field_with_three_arguments_names_the_rewrite() {
+        for column in ["\"total\"", "total", "Order.total"] {
+            assert_eq!(
+                messages(&format!("maps_field(Total, Order, {column})\n")),
+                vec!["`maps_field` names the column as `Entity.column`; write `maps_field(Total, Order.total)`"],
+                "{column}"
+            );
+        }
+        assert!(messages("maps_field(Total, Order.total)\n").is_empty());
+    }
+
+    #[test]
+    fn a_legacy_predicate_is_kept_in_its_rewritten_form() {
+        let (ast, _) = parse("maps_field(Total, Order, \"total\")\n");
+        let Some(crate::ast::Item::Predicate(pred)) = ast.items.first() else {
+            panic!("no predicate");
+        };
+        assert_eq!(
+            crate::format::format_predicate(pred),
+            "maps_field(Total, Order.total)"
+        );
     }
 }

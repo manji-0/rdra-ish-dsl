@@ -26,9 +26,9 @@ updates(Pay, Order)
 updates(Ship, Order)
 updates(Refund, Order)
 
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Ship, paid -> shipped)
-transitions(Order.status, Refund, shipped -> refunded)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Refund, Order.status, shipped -> refunded)
 
 sets(Ship, Order, shipped_at == present)
 

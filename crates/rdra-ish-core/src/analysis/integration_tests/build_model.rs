@@ -12,7 +12,7 @@ entity Order "Order" {
   note: DateTime @null
 }
 usecase Pay "Pay"
-transitions(Order.status, Pay, open -> paid)
+transitions(Pay, Order.status, open -> paid)
 sets(Pay, Order, note == present)
 "#;
     let (ast, errors) = parse(src);
@@ -124,7 +124,7 @@ requirement ReqCheckout "Checkout must be reliable"
   source "Incident review"
   stakeholder "Store Operations"
   owner "Product Owner"
-  acceptance criteria "A payment timeout leaves the cart recoverable."
+  acceptance_criteria "A payment timeout leaves the cart recoverable."
   status "proposed"
   risk "high"
   rationale "Checkout failures directly block revenue."

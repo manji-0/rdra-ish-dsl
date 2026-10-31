@@ -26,6 +26,6 @@ creates(Ship, Shipment)
 updates(Ship, Order)
 creates(Reship, Shipment)
 
-transitions(Order.status, Ship, placed -> shipped)
+transitions(Ship, Order.status, placed -> shipped)
 
 relate(Shipment, Order, 1:1)

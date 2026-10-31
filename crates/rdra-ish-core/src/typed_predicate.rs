@@ -3,11 +3,11 @@
 use crate::model::{
     ActorKey, AdrKey, ApiKey, AppliesSource, AppliesToTarget, BucKey, BusinessKey,
     ConstrainsTarget, ConstraintKey, ContainedRef, ContainerRef, CoversTarget, DecidesTarget,
-    DtoKey, EntityKey, EntityTouchpoint, EventKey, FieldKey, GoalKey, MediumKey, NfrOrConstraint,
-    NodeRef, PerformTarget, PermissionKey, QualityKey, Raiser, RequirementKey, ScreenKey,
-    SemanticModel, StepKey, SystemKey, TriggerSource, TriggerTarget, TypedPredicate, UseCaseKey,
+    DtoKey, EntityKey, EntityTouchpoint, EventKey, GoalKey, MediumKey, NfrOrConstraint, NodeRef,
+    PerformTarget, PermissionKey, QualityKey, Raiser, RequirementKey, ScreenKey, SemanticModel,
+    StepKey, SystemKey, TriggerSource, TriggerTarget, TypedPredicate, UseCaseKey,
 };
-use rdra_ish_syntax::ast::{PredicateArg, PredicateCall};
+use rdra_ish_syntax::ast::PredicateCall;
 
 /// 述語名と解決済み引数から型付き述語を構築する。
 /// 引数の型が期待と一致しない場合は `None`。
@@ -26,15 +26,6 @@ pub fn build_typed_predicate(
             left: as_entity(resolved.get(1)?.as_ref()?)?,
             right: as_entity(resolved.get(2)?.as_ref()?)?,
         }),
-        "maps_field" => {
-            let (from, to) = pair(resolved)?;
-            let column = pred.args.get(2).and_then(arg_as_str)?.to_string();
-            Some(TypedPredicate::MapsField {
-                field: as_field(from)?,
-                entity: as_entity(to)?,
-                column,
-            })
-        }
         _ => {
             let (from, to) = pair(resolved)?;
             match name {
@@ -43,10 +34,6 @@ pub fn build_typed_predicate(
                     target: PerformTarget::from_node_ref(to)?,
                 }),
                 "reads" => Some(TypedPredicate::Reads {
-                    origin: EntityTouchpoint::from_node_ref(from)?,
-                    entity: as_entity(to)?,
-                }),
-                "writes" => Some(TypedPredicate::Writes {
                     origin: EntityTouchpoint::from_node_ref(from)?,
                     entity: as_entity(to)?,
                 }),
@@ -191,7 +178,6 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
     match pred {
         TypedPredicate::Performs { .. } => "performs",
         TypedPredicate::Reads { .. } => "reads",
-        TypedPredicate::Writes { .. } => "writes",
         TypedPredicate::Creates { .. } => "creates",
         TypedPredicate::Updates { .. } => "updates",
         TypedPredicate::Deletes { .. } => "deletes",
@@ -253,13 +239,6 @@ fn pair(resolved: &[Option<NodeRef>]) -> Option<(&NodeRef, &NodeRef)> {
     }
 }
 
-fn arg_as_str(arg: &PredicateArg) -> Option<&str> {
-    match arg {
-        PredicateArg::Lit(s) => Some(s.as_str()),
-        _ => None,
-    }
-}
-
 macro_rules! node_extractor {
     ($fn_name:ident, $variant:ident, $ty:ty) => {
         fn $fn_name(node: &NodeRef) -> Option<$ty> {
@@ -288,7 +267,6 @@ node_extractor!(as_goal, Goal, GoalKey);
 node_extractor!(as_quality, Quality, QualityKey);
 node_extractor!(as_constraint, Constraint, ConstraintKey);
 node_extractor!(as_system, System, SystemKey);
-node_extractor!(as_field, Field, FieldKey);
 node_extractor!(as_dto, Dto, DtoKey);
 
 #[cfg(test)]
@@ -321,7 +299,7 @@ performs(Staff, Book)
 creates(Book, Appointment)
 raises(Book, EvBook)
 triggers(EvBook, Notify)
-transitions(Appointment.status, Book, draft -> booked)
+transitions(Book, Appointment.status, draft -> booked)
 "#,
         );
 

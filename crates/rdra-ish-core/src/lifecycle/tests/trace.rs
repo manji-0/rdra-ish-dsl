@@ -21,10 +21,10 @@ usecase Pay "支払"
 usecase Ship "出荷"
 usecase Cancel "取消"
 creates(Place, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Ship, paid -> shipped)
-transitions(Order.status, Cancel, pending -> cancelled)
-transitions(Order.status, Cancel, paid -> cancelled)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Cancel, Order.status, paid -> cancelled)
 "#;
 
 #[test]
@@ -73,9 +73,9 @@ usecase Abort "中止"
 usecase Cancel "取消"
 creates(Place, Order)
 updates(Cancel, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Abort, pending -> cancelled)
-transitions(Order.status, Cancel, paid -> cancelled)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Abort, Order.status, pending -> cancelled)
+transitions(Cancel, Order.status, paid -> cancelled)
 after(Cancel).assert(Order.status == paid)
 "#,
     );
@@ -99,7 +99,7 @@ creates(Place, Order)
 creates(Place, Payment)
 creates(Retry, Payment)
 updates(Retry, Order)
-transitions(Order.status, Retry, pending -> retried)
+transitions(Retry, Order.status, pending -> retried)
 relate(Payment, Order, N:1)
 forbidden(Order, status == retried)
 "#,

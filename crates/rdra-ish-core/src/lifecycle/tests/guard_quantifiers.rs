@@ -16,8 +16,8 @@ usecase End "割当終了"
 usecase Revoke "失効"
 creates(Issue, ClientCertificate)
 creates(Assign, TerminalCertAssignment)
-transitions(TerminalCertAssignment.status, End, active -> ended)
-transitions(ClientCertificate.status, Revoke, active -> revoked)
+transitions(End, TerminalCertAssignment.status, active -> ended)
+transitions(Revoke, ClientCertificate.status, active -> revoked)
 relate(TerminalCertAssignment, ClientCertificate, N:1)
 condition CertActive "有効な証明書にだけ割り当てる"
 holds(CertActive, ClientCertificate.status == active)
@@ -87,7 +87,7 @@ fn a_has_guard_needs_some_linked_row_to_match() {
     };
     assert!(ended(&derive_src(&end_when("active"))));
     let revoked_only = end_when("revoked").replace(
-        "transitions(ClientCertificate.status, Revoke, active -> revoked)",
+        "transitions(Revoke, ClientCertificate.status, active -> revoked)",
         "",
     );
     assert!(!ended(&derive_src(&revoked_only)));
@@ -103,7 +103,7 @@ fn a_guard_over_an_unrelated_entity_quantifies_every_row() {
         if occupy {
             model
         } else {
-            model.replace("transitions(Room.state, Occupy, free -> busy)", "")
+            model.replace("transitions(Occupy, Room.state, free -> busy)", "")
         }
     };
     assert!(reaches_paid(&derive_src(&guarded("none", true))));

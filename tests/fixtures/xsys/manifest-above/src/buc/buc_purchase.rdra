@@ -40,7 +40,7 @@ reads(Browse, Product)
 
 displays(AddToCart, CartView)
 
-writes(AddToCart, OrderLine)
+updates(AddToCart, OrderLine)
 
 displays(Checkout, CheckoutForm)
 
@@ -48,8 +48,8 @@ creates(Checkout, Order)
 
 updates(ConfirmPayment, Order)
 
-transitions(Order.status, ConfirmPayment, draft -> paid)
+transitions(ConfirmPayment, Order.status, draft -> paid)
 
 updates(ShipOrder, Order)
 
-transitions(Order.status, ShipOrder, paid -> shipped)
+transitions(ShipOrder, Order.status, paid -> shipped)

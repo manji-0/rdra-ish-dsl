@@ -17,13 +17,13 @@ use std::collections::{BTreeMap, HashSet};
 
 pub struct RobustnessMermaidEmitter;
 
-/// `C`, `R`, `U`, `D` of the operations in `kinds`; `writes` counts as `U`.
+/// `C`, `R`, `U`, `D` of the operations in `kinds`.
 fn crud_letters(kinds: &[RelKind]) -> String {
     let has = |kind: RelKind| kinds.contains(&kind);
     [
         (has(RelKind::Creates), 'C'),
         (has(RelKind::Reads), 'R'),
-        (has(RelKind::Updates) || has(RelKind::Writes), 'U'),
+        (has(RelKind::Updates), 'U'),
         (has(RelKind::Deletes), 'D'),
     ]
     .into_iter()
@@ -256,7 +256,7 @@ contains(BucPay, Remind)
 displays(Pay, PayScreen)
 invokes(Pay, PayApi)
 creates(PayApi, Receipt)
-writes(PayApi, Bill)
+updates(PayApi, Bill)
 reads(PayApi, Bill)
 updates(Archive, Bill)
 raises(Pay, Paid)

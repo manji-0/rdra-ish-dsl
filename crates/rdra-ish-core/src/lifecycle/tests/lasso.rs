@@ -16,12 +16,12 @@ usecase Reopen "再開"
 usecase Drop "削除"
 creates(Place, Order)
 deletes(Drop, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Unpay, paid -> pending)
-transitions(Order.status, Ship, paid -> shipped)
-transitions(Order.status, Return, shipped -> paid)
-transitions(Order.status, Cancel, pending -> cancelled)
-transitions(Order.status, Reopen, cancelled -> pending)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Unpay, Order.status, paid -> pending)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Return, Order.status, shipped -> paid)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Reopen, Order.status, cancelled -> pending)
 property NeverShipped
   always(Order.status != shipped)
 property EventuallyShipped

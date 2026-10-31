@@ -44,11 +44,11 @@ requirement ReqOrder "Order processing must be reliable"
   stakeholder "Order Desk"
   owner "Product"
   status "proposed"
-  acceptance criteria "Order can be submitted and audited."
+  acceptance_criteria "Order can be submitted and audited."
 ```
 
-Requirement metadata values are string literals. `source`, `stakeholder`, and
-`acceptance criteria` may repeat.
+A metadata value is a quoted string for free text, or a bare word or number
+(`priority must`). `source`, `stakeholder`, and `acceptance_criteria` may repeat.
 
 ```rdra
 module buc.order

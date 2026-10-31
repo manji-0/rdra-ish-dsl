@@ -16,8 +16,8 @@ usecase SendClaim "送付"
 creates(CreateCharge, Charge)
 creates(GenerateClaim, Claim)
 updates(GenerateClaim, Charge)
-transitions(Charge.status, GenerateClaim, posted -> billed)
-transitions(Claim.status, SendClaim, draft -> sent)
+transitions(GenerateClaim, Charge.status, posted -> billed)
+transitions(SendClaim, Claim.status, draft -> sent)
 "#
     )
 }
@@ -119,7 +119,7 @@ creates(OpenSession, AccessSession)
 relate(AccessSession, Terminal, N:1)
 relate(TerminalCertAssignment, Terminal, N:1)
 relate(TerminalCertAssignment, ClientCertificate, N:1)
-transitions(ClientCertificate.status, Revoke, active -> revoked)
+transitions(Revoke, ClientCertificate.status, active -> revoked)
 condition CertActive "有効な証明書だけ割り当てる"
 holds(CertActive, ClientCertificate.status == active)
 applies_to(CertActive, AssignCert)
@@ -178,7 +178,7 @@ usecase Revoke "失効"
 usecase Spare "予備"
 creates(Issue, Cert)
 creates(Spare, Assign)
-transitions(Cert.status, Revoke, active -> revoked)
+transitions(Revoke, Cert.status, active -> revoked)
 relate(Assign, Cert, N:1).optional()
 invariant(Cert).when(status == revoked).none(Assign.status == active)
 "#;

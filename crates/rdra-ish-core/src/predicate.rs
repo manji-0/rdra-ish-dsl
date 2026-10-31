@@ -29,7 +29,7 @@ fn trigger_kinds(position: usize) -> Vec<&'static str> {
 pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
     match pred {
         "performs" => Some(vec![vec!["actor"], vec!["usecase", "buc", "step"]]),
-        "reads" | "writes" | "creates" | "updates" | "deletes" => {
+        "reads" | "creates" | "updates" | "deletes" => {
             Some(vec![vec!["usecase", "api"], vec!["entity"]])
         }
         "invokes" => Some(vec![vec!["usecase"], vec!["api"]]),
@@ -51,7 +51,7 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "displays" => Some(vec![vec!["usecase"], vec!["screen"]]),
         "shows" => Some(vec![vec!["screen"], vec!["entity"]]),
         "navigates" => Some(vec![vec!["screen"], vec!["screen"]]),
-        "maps_field" => Some(vec![vec!["field"], vec!["entity"], vec!["_col"]]),
+        "maps_field" => Some(vec![vec!["field"], vec!["_col"]]),
         "raises" => Some(vec![RAISE_SOURCES.to_vec(), vec!["event"]]),
         "triggers" => Some(vec![trigger_kinds(0), trigger_kinds(1)]),
         "outbox" => Some(vec![vec!["event"]]),
@@ -83,7 +83,7 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
                 "dto",
             ],
         ]),
-        "transitions" => Some(vec![vec!["_col"], vec!["usecase"], vec!["_val"]]),
+        "transitions" => Some(vec![vec!["usecase"], vec!["_col"], vec!["_val"]]),
         "after" => Some(vec![vec!["usecase"]]),
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
         "sets" => Some(vec![vec!["usecase"], vec!["entity"]]),
@@ -133,7 +133,6 @@ pub fn unknown_chain_method_hint(pred: &str, name: &str) -> String {
 pub const KNOWN_PREDICATES: &[&str] = &[
     "performs",
     "reads",
-    "writes",
     "creates",
     "updates",
     "deletes",

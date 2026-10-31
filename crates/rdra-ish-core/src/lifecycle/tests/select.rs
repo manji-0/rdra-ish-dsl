@@ -61,7 +61,7 @@ usecase Place "注文確定"
 usecase Pay "支払い"
 creates(Place, Order)
 updates(Pay, Order)
-transitions(Order.status, Pay, pending -> paid)
+transitions(Pay, Order.status, pending -> paid)
 condition Audited "監査済み"
 holds(Audited, Audit.score > 1)
 applies_to(Audited, Pay)

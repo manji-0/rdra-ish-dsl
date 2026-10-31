@@ -250,7 +250,7 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
 fn write_kind(rel: &RelKind) -> Option<WriteKind> {
     match rel {
         RelKind::Creates => Some(WriteKind::Creates),
-        RelKind::Updates | RelKind::Writes => Some(WriteKind::Updates),
+        RelKind::Updates => Some(WriteKind::Updates),
         RelKind::Deletes => Some(WriteKind::Deletes),
         _ => None,
     }
@@ -834,9 +834,9 @@ entity Audit   "監査" { id: Int @pk  seen: Bool }
 usecase Close "締める"
 usecase Book  "記帳する"
 usecase Open  "開く"
-transitions(Order.status, Close, open -> closed)
+transitions(Close, Order.status, open -> closed)
 sets(Close, Audit, seen == true)
-writes(Book, Ledger)
+updates(Book, Ledger)
 updates(Open, Order)
 creates(Open, Order)
 "#;

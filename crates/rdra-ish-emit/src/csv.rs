@@ -147,13 +147,6 @@ impl Emitter for RelationMatrixCsvEmitter {
                         continue;
                     }
                 }
-                RelKind::Writes => {
-                    if let (NodeRef::UseCase(uk), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*uk, *ek, 0b10000u8) // W
-                    } else {
-                        continue;
-                    }
-                }
                 RelKind::Creates => {
                     if let (NodeRef::UseCase(uk), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
                         (*uk, *ek, 0b00001u8) // C
@@ -277,13 +270,6 @@ impl Emitter for ApiEntityMatrixCsvEmitter {
                 RelKind::Reads => {
                     if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
                         (*ak, *ek, 0b00010u8)
-                    } else {
-                        continue;
-                    }
-                }
-                RelKind::Writes => {
-                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*ak, *ek, 0b10000u8)
                     } else {
                         continue;
                     }
@@ -621,9 +607,6 @@ fn bits_to_crud(bits: u8) -> String {
     }
     if bits & 0b01000 != 0 {
         s.push('D');
-    }
-    if bits & 0b10000 != 0 {
-        s.push('W');
     }
     s
 }

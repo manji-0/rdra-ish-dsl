@@ -116,16 +116,16 @@ triggers(MonthlyClaimCreation, GenerateClaimStatement)
 displays(InspectClaimStatement, ClaimScreen)
 invokes(InspectClaimStatement, ClaimEditApi)
 updates(ClaimEditApi, ClaimStatement)
-transitions(ClaimStatement.status, InspectClaimStatement, stmtdrafting -> stmtinspecting)
+transitions(InspectClaimStatement, ClaimStatement.status, stmtdrafting -> stmtinspecting)
 
 // 月遅れレセプト、保留レセプト…の再提出処理 (koseikan-2024-iji-shiyousyo.txt:237).
 displays(HoldClaimStatement, ClaimScreen)
 invokes(HoldClaimStatement, ClaimEditApi)
-transitions(ClaimStatement.status, HoldClaimStatement, stmtinspecting -> stmtonhold)
+transitions(HoldClaimStatement, ClaimStatement.status, stmtinspecting -> stmtonhold)
 
 displays(ReleaseHeldStatement, ClaimScreen)
 invokes(ReleaseHeldStatement, ClaimEditApi)
-transitions(ClaimStatement.status, ReleaseHeldStatement, stmtonhold -> stmtinspecting)
+transitions(ReleaseHeldStatement, ClaimStatement.status, stmtonhold -> stmtinspecting)
 
 // 各月分について翌月十日まで (egov-seikyu-meirei-351M50000100036.txt:55); 請求可能期間 5日～10日
 // (ssk-online-seikyu-sousa-tejunsho.txt:748). The timer is the deadline; the DSL has no calendar.
@@ -133,7 +133,7 @@ displays(SubmitClaimStatements, ClaimScreen)
 invokes(SubmitClaimStatements, SubmitClaimApi)
 updates(SubmitClaimApi, ClaimStatement)
 raises(SubmitClaimStatements, EvClaimStatementsSubmitted)
-transitions(ClaimStatement.status, SubmitClaimStatements, stmtinspecting -> stmtsubmitted)
+transitions(SubmitClaimStatements, ClaimStatement.status, stmtinspecting -> stmtsubmitted)
 sets(SubmitClaimStatements, ClaimStatement, submitted_at == present)
 triggers(MonthlyClaimDeadline, SubmitClaimStatements)
 triggers(EvClaimStatementsSubmitted, ClaimsReviewOrganization)
@@ -142,18 +142,18 @@ triggers(EvClaimStatementsSubmitted, ClaimsReviewOrganization)
 displays(RecordReceiptError, ClaimScreen)
 invokes(RecordReceiptError, ClaimResultApi)
 updates(ClaimResultApi, ClaimStatement)
-transitions(ClaimStatement.status, RecordReceiptError, stmtsubmitted -> stmtreceipterror)
+transitions(RecordReceiptError, ClaimStatement.status, stmtsubmitted -> stmtreceipterror)
 raises(ClaimsReviewOrganization, EvClaimReceiptError)
 triggers(EvClaimReceiptError, RecordReceiptError)
 
 displays(ResendErroredStatement, ClaimScreen)
 invokes(ResendErroredStatement, SubmitClaimApi)
-transitions(ClaimStatement.status, ResendErroredStatement, stmtreceipterror -> stmtsubmitted)
+transitions(ResendErroredStatement, ClaimStatement.status, stmtreceipterror -> stmtsubmitted)
 triggers(ErrorResendWindow, ResendErroredStatement)
 
 displays(ReceiveClaimAccepted, ClaimScreen)
 invokes(ReceiveClaimAccepted, ClaimResultApi)
-transitions(ClaimStatement.status, ReceiveClaimAccepted, stmtsubmitted -> stmtunderreview)
+transitions(ReceiveClaimAccepted, ClaimStatement.status, stmtsubmitted -> stmtunderreview)
 raises(ClaimsReviewOrganization, EvClaimAccepted)
 triggers(EvClaimAccepted, ReceiveClaimAccepted)
 
@@ -169,7 +169,7 @@ triggers(EvClaimTransferred, ReviewClaimTransfer)
 // downloaded within 3 months (mhlw-online-henrei-saiseikyu.txt:119), so a timer checks for it.
 displays(RecordClaimReturn, ClaimScreen)
 invokes(RecordClaimReturn, ClaimResultApi)
-transitions(ClaimStatement.status, RecordClaimReturn, stmtunderreview -> stmtreturned)
+transitions(RecordClaimReturn, ClaimStatement.status, stmtunderreview -> stmtreturned)
 sets(RecordClaimReturn, ClaimStatement, return_reason == present)
 raises(ClaimsReviewOrganization, EvClaimReturned)
 triggers(EvClaimReturned, RecordClaimReturn)
@@ -184,14 +184,14 @@ applies_to(TransferNotPossible, RecordClaimReturn)
 // 返戻ファイルを修正し、当月請求のレセプトと併せて再請求 (mhlw-online-henrei-saiseikyu.txt:105-111).
 displays(CorrectReturnedStatement, ClaimScreen)
 invokes(CorrectReturnedStatement, ClaimEditApi)
-transitions(ClaimStatement.status, CorrectReturnedStatement, stmtreturned -> stmtinspecting)
+transitions(CorrectReturnedStatement, ClaimStatement.status, stmtreturned -> stmtinspecting)
 sets(CorrectReturnedStatement, ClaimStatement, return_reason == null)
 
 // 査定: in principle not billed again (medicom-receipt-return.md:127, vendor article); 査定減点 is analysed
 // and reported (koseikan-2024-iji-shiyousyo.txt:239-241).
 displays(RecordClaimAssessment, ClaimScreen)
 invokes(RecordClaimAssessment, ClaimResultApi)
-transitions(ClaimStatement.status, RecordClaimAssessment, stmtunderreview -> stmtassessed)
+transitions(RecordClaimAssessment, ClaimStatement.status, stmtunderreview -> stmtassessed)
 raises(ClaimsReviewOrganization, EvClaimAssessed)
 triggers(EvClaimAssessed, RecordClaimAssessment)
 
@@ -199,16 +199,16 @@ triggers(EvClaimAssessed, RecordClaimAssessment)
 // (ssk-online-seikyu-sousa-tejunsho.txt:754). The period is a comment: a use case has no calendar guard.
 displays(RequestReexamination, ClaimScreen)
 invokes(RequestReexamination, SubmitClaimApi)
-transitions(ClaimStatement.status, RequestReexamination, stmtassessed -> stmtrereview)
+transitions(RequestReexamination, ClaimStatement.status, stmtassessed -> stmtrereview)
 
 // 診療翌々月に医療機関・薬局へ診療報酬等支払 (mhlw-2021-shikaku-kago-furikae.txt:34). A 査定 is paid at the
 // reduced amount; a 再審査 is paid at its result, 原審 or 復活 (koseikan-2024-iji-shiyousyo.txt:241).
 displays(PostPayment, PaymentPostingScreen)
 invokes(PostPayment, PaymentPostApi)
 updates(PaymentPostApi, ClaimStatement)
-transitions(ClaimStatement.status, PostPayment, stmtunderreview -> stmtpaid)
-transitions(ClaimStatement.status, PostPayment, stmtassessed -> stmtpaid)
-transitions(ClaimStatement.status, PostPayment, stmtrereview -> stmtpaid)
+transitions(PostPayment, ClaimStatement.status, stmtunderreview -> stmtpaid)
+transitions(PostPayment, ClaimStatement.status, stmtassessed -> stmtpaid)
+transitions(PostPayment, ClaimStatement.status, stmtrereview -> stmtpaid)
 sets(PostPayment, ClaimStatement, paid_at == present)
 raises(ClaimsReviewOrganization, EvRemittance)
 triggers(EvRemittance, PostPayment)
@@ -353,14 +353,14 @@ requirement ReqMonthlyClaimByTenth "前月分のレセプトを翌月10日まで
   source "各月分について翌月十日まで (egov-seikyu-meirei-351M50000100036.txt:55)"
   source "請求可能期間 5日～10日 (ssk-online-seikyu-sousa-tejunsho.txt:748)"
   stakeholder "医事課 レセプト担当"
-  acceptance criteria "前月分のレセプトは院内点検の後、毎月5日から10日の間に審査支払機関へ請求される。"
+  acceptance_criteria "前月分のレセプトは院内点検の後、毎月5日から10日の間に審査支払機関へ請求される。"
   status "accepted"
 
 requirement ReqResubmitReturned "返戻レセプトを訂正して再請求する"
   priority "must"
   source "返戻ファイルを修正し、当月請求のレセプトと併せて再請求 (mhlw-online-henrei-saiseikyu.txt:105-111, :119)"
   stakeholder "医事課 レセプト担当"
-  acceptance criteria "返戻は3か月以内に取り込まれ、訂正して当月分と併せて再請求される。査定は再請求せず再審査請求で争う。"
+  acceptance_criteria "返戻は3か月以内に取り込まれ、訂正して当月分と併せて再請求される。査定は再請求せず再審査請求で争う。"
   status "accepted"
 
 motivates(ReqMonthlyClaimByTenth, BucBillingClaims)

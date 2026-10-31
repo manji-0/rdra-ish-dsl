@@ -99,7 +99,7 @@ fn sets_value_is_checked_against_the_variation_values() {
 #[test]
 fn transitions_on_a_variation_column_is_an_error() {
     let src =
-        format!("{PAYMENT}usecase Pay \"Pay\"\ntransitions(Payment.method, Pay, cash -> card)\n");
+        format!("{PAYMENT}usecase Pay \"Pay\"\ntransitions(Pay, Payment.method, cash -> card)\n");
     let (_, diags) = build(&src);
     let errs = errors(&diags);
     assert!(
@@ -114,7 +114,7 @@ fn transitions_on_a_variation_column_is_an_error() {
 fn variation_column_adds_no_state_axis_while_an_inline_enum_does() {
     let lifecycle = r#"
 usecase Pay "Pay"
-transitions(Payment.status, Pay, pending -> posted)
+transitions(Pay, Payment.status, pending -> posted)
 "#;
     let as_variation = format!("{PAYMENT}{lifecycle}").replace(
         "status: Enum",

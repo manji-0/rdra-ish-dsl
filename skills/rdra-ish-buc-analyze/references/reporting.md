@@ -78,7 +78,7 @@ A good RDRA-ish analysis report does three things:
   invocations on both sides, or revise system ownership.
 - Explicit ownership drift: add missing API CRUD for `owns(System, Entity)` or revise
   the owner.
-- Missing field mapping: add `contains(Screen, Field)` / `maps_field(Field, Entity, "column")`
+- Missing field mapping: add `contains(Screen, Field)` / `maps_field(Field, Entity.column)`
   or mark the field as external/derived.
 - Missing API contract: add method/path DTO links and run OpenAPI export.
 - Missing NFR scope: add `applies_to`, `qualifies`, or `constrains`.

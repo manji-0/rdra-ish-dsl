@@ -25,8 +25,8 @@ invokes(Pay, CapturePaymentApi)
 updates(CapturePaymentApi, Payment)
 invokes(Pay, PayOrderApi)
 updates(PayOrderApi, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Payment.status, Pay, pending -> captured)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Pay, Payment.status, pending -> captured)
 {extra}
 "#
     )
@@ -73,8 +73,8 @@ usecase Open "Open"
 usecase Logout "Logout"
 creates(Open, Session)
 creates(Open, SessionView)
-transitions(Session.status, Logout, active -> ended)
-writes(Logout, SessionView)
+transitions(Logout, Session.status, active -> ended)
+updates(Logout, SessionView)
 sets(Logout, SessionView, status == ended)
 exposes(Auth, SessionView).upsert()
 "#;

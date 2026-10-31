@@ -34,7 +34,7 @@ entity Payment "Payment" {
 }
 usecase CheckIn "Check in"
 usecase Collect "Collect"
-transitions(Appointment.status, CheckIn, booked -> checkedin)
+transitions(CheckIn, Appointment.status, booked -> checkedin)
 "#;
 
 fn with(extra: &str) -> (SemanticModel, Vec<crate::Diagnostic>) {
@@ -189,7 +189,7 @@ entity Appointment "Appointment" {
 usecase CheckIn "Check in"
 condition C "C"
 combines(C, Appointment.status)
-transitions(Appointment.status, CheckIn, booked -> checkedin)
+transitions(CheckIn, Appointment.status, booked -> checkedin)
 "#,
     );
     assert!(
@@ -241,7 +241,7 @@ entity Appointment "Appointment" {
   status: Enum(booked, done) @default(booked)
 }
 usecase Finish "Finish"
-transitions(Appointment.status, Finish, booked -> done)
+transitions(Finish, Appointment.status, booked -> done)
 condition C "C"
 combines(C, Appointment.status)
 "#,

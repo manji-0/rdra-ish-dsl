@@ -63,7 +63,7 @@ updates(CalculateVisitBillApi, Appointment)
 reads(CalculateVisitBillApi, Charge)
 reads(CalculateVisitBillApi, InsurancePolicy)
 raises(CalculateVisitBill, EvBillCalculated)
-transitions(Appointment.status, CalculateVisitBill, apptawaitingcalc -> apptawaitingpay)
+transitions(CalculateVisitBill, Appointment.status, apptawaitingcalc -> apptawaitingpay)
 triggers(EvConsultationCompleted, BucVisitPayment)
 
 // 一部負担金 is the amount times the 負担割合 (egov-kenkou-hokenhou-211AC0000000070.txt:1204). With the
@@ -102,13 +102,13 @@ invokes(SettleAtWindow, SettlementApi)
 creates(SettlementApi, PaymentTransaction)
 updates(SettlementApi, Appointment)
 updates(SettlementApi, AccountBalance)
-transitions(Appointment.status, SettleAtWindow, apptawaitingpay -> apptsettled)
+transitions(SettleAtWindow, Appointment.status, apptawaitingpay -> apptsettled)
 sets(SettleAtWindow, PaymentTransaction, status == payposted)
 sets(SettleAtWindow, PaymentTransaction, processed_at == present)
 
 displays(SettleAtKiosk, KioskScreen)
 invokes(SettleAtKiosk, SettlementApi)
-transitions(Appointment.status, SettleAtKiosk, apptawaitingpay -> apptsettled)
+transitions(SettleAtKiosk, Appointment.status, apptawaitingpay -> apptsettled)
 sets(SettleAtKiosk, PaymentTransaction, status == payposted)
 sets(SettleAtKiosk, PaymentTransaction, processed_at == present)
 sets(SettleAtKiosk, PaymentTransaction, gateway_ref == present)
@@ -121,13 +121,13 @@ invokes(IssueReceipt, ReceiptApi)
 updates(ReceiptApi, Appointment)
 reads(ReceiptApi, PaymentTransaction)
 reads(ReceiptApi, Charge)
-transitions(Appointment.status, IssueReceipt, apptsettled -> apptcompleted)
+transitions(IssueReceipt, Appointment.status, apptsettled -> apptcompleted)
 sets(IssueReceipt, Appointment, completed_at == present)
 
 displays(RefundPayment, PaymentWindowScreen)
 updates(RefundPayment, PaymentTransaction)
 updates(RefundPayment, AccountBalance)
-transitions(PaymentTransaction.status, RefundPayment, payposted -> payrefunded)
+transitions(RefundPayment, PaymentTransaction.status, payposted -> payrefunded)
 
 // Access constraints
 requires_permission(CalculateVisitBill, BillCalculate)
@@ -158,7 +158,7 @@ requirement ReqPayAfterConsultation "会計は診察の後に一度で行う"
   priority "must"
   source "標準型電子カルテ 業務フロー: 計算受付・会計受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141-144)"
   stakeholder "医事課 会計担当"
-  acceptance criteria "受付では支払を受けず、会計計算入力の後に窓口または自動精算機で精算し、領収証を交付する。"
+  acceptance_criteria "受付では支払を受けず、会計計算入力の後に窓口または自動精算機で精算し、領収証を交付する。"
   status "accepted"
 
 motivates(ReqPayAfterConsultation, BucVisitPayment)
@@ -219,6 +219,6 @@ field KioskReferenceField "精算機の取引番号" access readonly required tr
 contains(PaymentWindowScreen, PaymentAmountField)
 contains(BillCalculationScreen, ChargeCodeField)
 contains(KioskScreen, KioskReferenceField)
-maps_field(PaymentAmountField, PaymentTransaction, "amount")
-maps_field(ChargeCodeField, Charge, "code")
-maps_field(KioskReferenceField, PaymentTransaction, "gateway_ref")
+maps_field(PaymentAmountField, PaymentTransaction.amount)
+maps_field(ChargeCodeField, Charge.code)
+maps_field(KioskReferenceField, PaymentTransaction.gateway_ref)

@@ -130,13 +130,6 @@ pub enum RdraError {
     #[error("after({usecase}) asserts nothing\n  hint: add `.assert(Entity.column == value)` for what holds after '{usecase}' runs")]
     AfterWithoutAssert { usecase: String },
 
-    #[error("maps_field names '{written}', a column of '{other}', but maps the field to '{entity}'\n  hint: write `{entity}.column`, or map the field to '{other}'")]
-    MapsFieldOtherEntity {
-        written: String,
-        entity: String,
-        other: String,
-    },
-
     #[error(".label(...) on {pred}(...) takes one quoted string\n  hint: write `.label(\"the rule in plain words\")`")]
     RuleLabelArg { pred: String },
 
@@ -272,7 +265,7 @@ pub enum RdraError {
         entity: String,
     },
 
-    #[error("transitions first argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(Order.status, CapturePayment, pending -> paid)`")]
+    #[error("transitions second argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(CapturePayment, Order.status, pending -> paid)`")]
     InvalidTransitionsColumnRef { got: String },
 
     #[error("transitions column '{col}' on entity '{entity}' must be an inline Enum column\n  hint: lifecycle transitions bind an inline Enum status/lifecycle column; a column typed by a variation is an attribute and has no lifecycle")]

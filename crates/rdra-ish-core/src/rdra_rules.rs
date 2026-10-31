@@ -176,7 +176,7 @@ pub const RDRA_RULES: &[RdraRule] = &[
         mechanism: Mechanism::Resolver("UnknownColumn"),
         hint: "name an existing Enum column of the entity in transitions(Entity.column, ...)",
         witness: w(
-            "usecase U \"U\"\nentity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\ntransitions(E.ghost, U, a -> b)\n",
+            "usecase U \"U\"\nentity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\ntransitions(U, E.ghost, a -> b)\n",
             "",
         ),
     },
@@ -197,9 +197,9 @@ pub const RDRA_RULES: &[RdraRule] = &[
         sheet: Sheet::State,
         column: "遷移UC",
         mechanism: Mechanism::Resolver("UndefinedSymbol"),
-        hint: "declare the use case or fix the name in transitions(Entity.column, UseCase, ...)",
+        hint: "declare the use case or fix the name in transitions(UseCase, Entity.column, ...)",
         witness: w(
-            "entity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\ntransitions(E.status, Ghost, a -> b)\n",
+            "entity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\ntransitions(Ghost, E.status, a -> b)\n",
             "",
         ),
     },
@@ -210,7 +210,7 @@ pub const RDRA_RULES: &[RdraRule] = &[
         mechanism: Mechanism::Resolver("InvalidEnumVariant"),
         hint: "use a variant declared in the column's Enum(...)",
         witness: w(
-            "usecase U \"U\"\nentity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\ntransitions(E.status, U, a -> ghost)\n",
+            "usecase U \"U\"\nentity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\ntransitions(U, E.status, a -> ghost)\n",
             "",
         ),
     },
@@ -312,7 +312,7 @@ pub const RDRA_RULES: &[RdraRule] = &[
         mechanism: Mechanism::TransitionUseCaseInBuc,
         hint: "add contains(Buc, UseCase) for the use case that transitions the state, or move the transition to a use case a BUC contains",
         witness: w(
-            with_buc!("usecase Stray \"Stray\"\napi Ap \"Ap\"\ninvokes(U, Ap)\nentity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\nupdates(Ap, E)\ntransitions(E.status, Stray, a -> b)\n"),
+            with_buc!("usecase Stray \"Stray\"\napi Ap \"Ap\"\ninvokes(U, Ap)\nentity E \"E\" {\n  id: Int @pk\n  status: Enum(a, b)\n}\nupdates(Ap, E)\ntransitions(Stray, E.status, a -> b)\n"),
             "Stray",
         ),
     },
@@ -523,7 +523,7 @@ contains(Checkout, Place)
 performs(Customer, Place)
 invokes(Place, PlaceApi)
 creates(PlaceApi, Order)
-transitions(Order.status, Place, pending -> paid)
+transitions(Place, Order.status, pending -> paid)
 raises(Place, EvPlaced)
 triggers(EvPlaced, Gateway)
 raises(Inbound, EvIn)

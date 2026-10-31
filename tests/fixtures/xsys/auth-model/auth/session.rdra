@@ -31,7 +31,7 @@ entity Session "Session" {
   status: Enum(active, revoked) @default(active)
 }
 creates(SessionApi, Session)
-transitions(Session.status, Revoke, active -> revoked)
+transitions(Revoke, Session.status, active -> revoked)
 
 // Published information: a projection of Session that auth writes in the same transaction
 // as Session and never reads.
@@ -40,9 +40,9 @@ entity SessionView "Session (published)" {
   account_id: Int
   status: Enum(active, ended)
 }
-writes(SessionApi, SessionView)
+updates(SessionApi, SessionView)
 sets(Login, SessionView, status == active)
-writes(Revoke, SessionView)
+updates(Revoke, SessionView)
 sets(Revoke, SessionView, status == ended)
 
 event EvLoggedIn "Logged in"

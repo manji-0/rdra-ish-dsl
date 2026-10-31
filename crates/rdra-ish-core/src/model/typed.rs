@@ -18,10 +18,6 @@ pub enum TypedPredicate {
         origin: EntityTouchpoint,
         entity: EntityKey,
     },
-    Writes {
-        origin: EntityTouchpoint,
-        entity: EntityKey,
-    },
     Creates {
         origin: EntityTouchpoint,
         entity: EntityKey,

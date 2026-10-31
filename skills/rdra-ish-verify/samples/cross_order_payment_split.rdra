@@ -33,9 +33,9 @@ invokes(Pay, CapturePaymentApi)
 updates(CapturePaymentApi, Payment)
 updates(Cancel, Order)
 
-transitions(Order.status, Pay, pending -> paid)
-transitions(Order.status, Cancel, pending -> cancelled)
-transitions(Payment.status, Pay, pending -> captured)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Pay, Payment.status, pending -> captured)
 
 relate(Payment, Order, N:1)
 

@@ -94,8 +94,8 @@ invokes(Pay, CapturePaymentApi)
 updates(CapturePaymentApi, Payment)
 invokes(Pay, PayOrderApi)
 updates(PayOrderApi, Order)
-transitions(Order.status, Pay, pending -> paid)
-transitions(Payment.status, Pay, pending -> captured)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Pay, Payment.status, pending -> captured)
 condition Settled "精算済み"
 holds(Settled, Order.status == paid)
 applies_to(Settled, Pay)
@@ -119,8 +119,8 @@ creates(Place, Order)
 creates(Place, Payment)
 updates(Close, Order)
 updates(Close, Payment)
-transitions(Order.status, Close, pending -> closed)
-transitions(Payment.status, Close, pending -> done)
+transitions(Close, Order.status, pending -> closed)
+transitions(Close, Payment.status, pending -> done)
 condition Settled "精算済み"
 holds(Settled, Payment.status == done)
 applies_to(Settled, Close)
@@ -153,7 +153,7 @@ usecase Touch "参照"
 creates(Place, Order)
 updates(Pay, Order)
 updates(Touch, Order)
-transitions(Order.status, Pay, pending -> paid)
+transitions(Pay, Order.status, pending -> paid)
 "#;
     let model = model_from(src);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
@@ -199,8 +199,8 @@ usecase Refund "返金"
 creates(Place, Order)
 updates(Ship, Order)
 updates(Refund, Order)
-transitions(Order.status, Ship, pending -> shipped)
-transitions(Order.status, Refund, shipped -> refunded)
+transitions(Ship, Order.status, pending -> shipped)
+transitions(Refund, Order.status, shipped -> refunded)
 condition Audited "監査済み"
 holds(Audited, Order.status == refunded)
 applies_to(Audited, Refund)

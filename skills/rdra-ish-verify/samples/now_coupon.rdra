@@ -20,6 +20,6 @@ creates(Issue, Coupon)
 updates(Expire, Coupon)
 
 
-transitions(Coupon.status, Expire, active -> expired)
+transitions(Expire, Coupon.status, active -> expired)
 
 forbidden(Coupon, expired_at < now)
