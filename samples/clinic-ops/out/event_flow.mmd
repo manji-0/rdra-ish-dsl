@@ -4,42 +4,55 @@
 flowchart LR
   event__EvAppointmentCancelled["予約取消"]:::event
   usecase__CancelAppointment["予約の取消"]:::usecase
+  %% desc usecase__CancelAppointment: 取消理由と予約枠更新。
   usecase__CancelAppointment -.->|raises| event__EvAppointmentCancelled
   usecase__SendAppointmentNotice["予約の通知"]:::usecase
+  %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
   event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
   extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
   event__EvAppointmentCheckedIn["受付完了"]:::event
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
   usecase__CheckInPatient -.->|raises| event__EvAppointmentCheckedIn
   usecase__OpenEncounter["診療記録を開く"]:::usecase
+  %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
   event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
   usecase__PrepareEncounter["診療の準備"]:::usecase
+  %% desc usecase__PrepareEncounter: 診療準備の参照情報。
   event__EvAppointmentCheckedIn -.->|triggers| usecase__PrepareEncounter
   buc__BucClinicalEncounter["診察"]:::buc
+  %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
   event__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
   extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
   event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
   event__EvAppointmentRescheduled["予約変更"]:::event
   usecase__RescheduleAppointment["予約の変更"]:::usecase
+  %% desc usecase__RescheduleAppointment: 予約を変更する。予約の状態は変わらない。
   usecase__RescheduleAppointment -.->|raises| event__EvAppointmentRescheduled
   event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
   event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
   event__EvAppointmentScheduled["予約確定"]:::event
   usecase__BookAppointment["予約の確定"]:::usecase
+  %% desc usecase__BookAppointment: 予約確定と予約枠更新。
   usecase__BookAppointment -.->|raises| event__EvAppointmentScheduled
   usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  %% desc usecase__ScheduleFollowUpVisit: 再診予約。
   usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
   event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
   usecase__SendIntakeForms["問診票の送付"]:::usecase
+  %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
   event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
   buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
+  %% desc buc__BucPatientOnboarding: 新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
   event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
   event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
   event__EvBillCalculated["会計計算完了"]:::event
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   usecase__CalculateVisitBill -.->|raises| event__EvBillCalculated
   usecase__CallPatientForPayment["会計の呼出"]:::usecase
+  %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
   event__EvBillCalculated -.->|triggers| usecase__CallPatientForPayment
   extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
@@ -47,110 +60,140 @@ flowchart LR
   extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
   usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
   event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
   event__EvClaimAssessed["査定"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAssessed
   usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  %% desc usecase__RecordClaimAssessment: 査定の取込。
   event__EvClaimAssessed -.->|triggers| usecase__RecordClaimAssessment
   event__EvClaimReceiptError["受付不能・要確認"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReceiptError
   usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
   event__EvClaimReceiptError -.->|triggers| usecase__RecordReceiptError
   event__EvClaimReturned["返戻"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
   event__EvClaimReturned -.->|triggers| usecase__RecordClaimReturn
   event__EvClaimStatementsSubmitted["レセプト請求"]:::event
   usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
   usecase__SubmitClaimStatements -.->|raises| event__EvClaimStatementsSubmitted
   event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
   event__EvClaimTransferred["資格の振替・分割"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
   usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
   event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
   event__EvClinicalOrderReviewed["検査結果の確認"]:::event
   usecase__ReviewLabResult["検査結果の確認"]:::usecase
+  %% desc usecase__ReviewLabResult: 結果確認と後続通知の起点。
   usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
   usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+  %% desc usecase__NotifyCriticalResult: 重要結果の患者通知。
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
   usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  %% desc usecase__NotifyPatientResult: 結果の患者通知。
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
   buc__BucFollowupCare["フォローアップ"]:::buc
+  %% desc buc__BucFollowupCare: 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
   event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
   event__EvConsultationCompleted["診察終了"]:::event
   usecase__CompleteConsultation["診察終了"]:::usecase
+  %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
   usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
   buc__BucVisitPayment["計算・会計"]:::buc
-  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   event__EvConsultationCompleted -.->|triggers| buc__BucVisitPayment
   event__EvEligibilityChecked["資格確認結果"]:::event
   extsystem__OnlineEligibilitySystem -.->|raises| event__EvEligibilityChecked
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityInvalid
   usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityNoInfo
   usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityValid
   event__EvEncounterSigned["診療記録の署名"]:::event
   usecase__SignEncounter["診療記録の署名"]:::usecase
+  %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
   usecase__SignEncounter -.->|raises| event__EvEncounterSigned
   usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
   event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
   usecase__CreateCharge["コスト情報の登録"]:::usecase
+  %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
   event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
   buc__BucBillingClaims["レセプト作成・請求"]:::buc
-  %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+  %% desc buc__BucBillingClaims: レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
   event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
   event__EvLabResultReceived["検査結果の受信"]:::event
   extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
   extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
   usecase__ReceiveLabResult["検査結果の受信"]:::usecase
+  %% desc usecase__ReceiveLabResult: 外注検査システムからの結果受信。
   event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
   event__EvPaymentSettled["自動精算機での精算完了"]:::event
   extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
   usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+  %% desc usecase__SettleAtKiosk: 自動精算機での精算。
   event__EvPaymentSettled -.->|triggers| usecase__SettleAtKiosk
   event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
   extsystem__InsurancePharmacy["保険薬局"]:::extsystem
   extsystem__InsurancePharmacy -.->|raises| event__EvPharmacyInquiry
   usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+  %% desc usecase__AnswerPharmacyInquiry: 保険薬局からの疑義照会への回答。
   event__EvPharmacyInquiry -.->|triggers| usecase__AnswerPharmacyInquiry
   event__EvPrescriptionDispensed["保険薬局での調剤完了"]:::event
   extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
   extsystem__EPrescriptionService -.->|raises| event__EvPrescriptionDispensed
   usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+  %% desc usecase__ConfirmDispense: 保険薬局での調剤結果の受信。
   event__EvPrescriptionDispensed -.->|triggers| usecase__ConfirmDispense
   event__EvPrescriptionIssued["電子処方箋の登録"]:::event
   usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+  %% desc usecase__IssueOutsidePrescription: 院外処方箋の発行と電子処方箋管理サービスへの登録。
   usecase__IssueOutsidePrescription -.->|raises| event__EvPrescriptionIssued
   event__EvPrescriptionIssued -.->|triggers| extsystem__EPrescriptionService
   event__EvRemittance["診療報酬の支払"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
   usecase__PostPayment["診療報酬の入金"]:::usecase
+  %% desc usecase__PostPayment: 診療翌々月の入金。
   event__EvRemittance -.->|triggers| usecase__PostPayment
   timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
   usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+  %% desc usecase__BatchVerifyEligibility: 予約済み患者（BookedPatient 条件）だけを一括照会する。
   timer__EligibilityBatchInquiry -.->|triggers| usecase__BatchVerifyEligibility
   timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
   usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
   timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
   timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
   usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
   timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
   timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
   usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
   timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
   timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
   timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
   timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
   usecase__MarkNoShow["未来院の処理"]:::usecase
+  %% desc usecase__MarkNoShow: タイマー起動の未来院処理。
   timer__NoShowSweep -.->|triggers| usecase__MarkNoShow
   timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
   usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
+  %% desc usecase__ExpirePrescription: 使用期間切れのタイマー処理。
   timer__PrescriptionUsePeriodCheck -.->|triggers| usecase__ExpirePrescription
   timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
   usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+  %% desc usecase__ReconcileBalance: 未収金管理台帳の作成。
   timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
   timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
   timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn

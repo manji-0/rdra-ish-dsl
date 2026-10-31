@@ -14,12 +14,15 @@ flowchart LR
     %% desc business__PatientAccess: 新患登録から予約、受付、フォローアップまでの患者に向き合う業務。
     business__RevenueCycle["医事会計"]:::business
     buc__BucBillingClaims["レセプト作成・請求"]:::buc
-    %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+    %% desc buc__BucBillingClaims: レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
     buc__BucClinicalEncounter["診察"]:::buc
+    %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
     buc__BucFollowupCare["フォローアップ"]:::buc
+    %% desc buc__BucFollowupCare: 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
     buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
+    %% desc buc__BucPatientOnboarding: 新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
     buc__BucVisitPayment["計算・会計"]:::buc
-    %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+    %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
     flow__ClaimCycleFlow["レセプトの月次サイクル"]:::flow
     flow__EncounterFlow["診察の流れ"]:::flow
     flow__FollowupFlow["フォローアップの流れ"]:::flow
@@ -101,53 +104,101 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__AmendEncounter["署名済み記録の修正"]:::usecase
+    %% desc usecase__AmendEncounter: 署名済み記録の修正。
     usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+    %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
     usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+    %% desc usecase__ArchivePatient: 患者アーカイブ状態。
     usecase__CalculateVisitBill["会計計算入力"]:::usecase
+    %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
     usecase__CallPatientForPayment["会計の呼出"]:::usecase
+    %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
     usecase__CaptureConsent["同意の取得"]:::usecase
+    %% desc usecase__CaptureConsent: 同意記録を作る。同意の有無は Bool、未回答は null で持つ。
     usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+    %% desc usecase__CloseCarePlan: ケアプラン終了。
     usecase__CompleteConsultation["診察終了"]:::usecase
+    %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
     usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+    %% desc usecase__CompleteIntakeForms: 問診完了イベント。
     usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+    %% desc usecase__CorrectReturnedStatement: 返戻の訂正と再請求。
     usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+    %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
     usecase__CreateCharge["コスト情報の登録"]:::usecase
+    %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
     usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+    %% desc usecase__DocumentAssessment: 診断記録と記録状態。
     usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+    %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
     usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+    %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
     usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+    %% desc usecase__HoldClaimStatement: 保留（月遅れ）。
     usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+    %% desc usecase__InspectClaimStatement: 院内点検。
     usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+    %% desc usecase__IssueReceipt: 領収証・明細書の交付で予約を完了にする。
     usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+    %% desc usecase__IssueReferralLetter: 診療情報提供書の作成・送信。
     usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+    %% desc usecase__MergeDuplicatePatient: 患者統合状態。
     usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+    %% desc usecase__NotifyPatientResult: 結果の患者通知。
     usecase__OpenEncounter["診療記録を開く"]:::usecase
+    %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
     usecase__PostPayment["診療報酬の入金"]:::usecase
+    %% desc usecase__PostPayment: 診療翌々月の入金。
     usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+    %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
     usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+    %% desc usecase__ReconcileBalance: 未収金管理台帳の作成。
     usecase__RecordClaimAssessment["査定の取込"]:::usecase
+    %% desc usecase__RecordClaimAssessment: 査定の取込。
     usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+    %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
     usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+    %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
     usecase__RecordVitals["バイタルの記録"]:::usecase
+    %% desc usecase__RecordVitals: バイタル記録。
     usecase__RefundPayment["還付・追加徴収"]:::usecase
+    %% desc usecase__RefundPayment: 保険の変更や計算誤りによる還付・追加徴収で精算を還付済にする。
     usecase__RegisterPatient["新患登録"]:::usecase
+    %% desc usecase__RegisterPatient: 新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。
     usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+    %% desc usecase__ReleaseHeldStatement: 保留レセプトの再提出準備。
     usecase__RequestReexamination["再審査請求"]:::usecase
+    %% desc usecase__RequestReexamination: 再審査請求。
     usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+    %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
     usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+    %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
     usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+    %% desc usecase__ReviewPatientResponse: 患者応答の確認。
     usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+    %% desc usecase__ScheduleFollowUpVisit: 再診予約。
     usecase__SearchPatient["患者の検索"]:::usecase
+    %% desc usecase__SearchPatient: 患者を検索する。参照だけの API で、患者の作成とは分ける。
     usecase__SendAppointmentNotice["予約の通知"]:::usecase
+    %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
     usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+    %% desc usecase__SendFollowUpMessage: 患者連絡。
     usecase__SendIntakeForms["問診票の送付"]:::usecase
+    %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
     usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+    %% desc usecase__SettleAtKiosk: 自動精算機での精算。
     usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+    %% desc usecase__SettleAtWindow: 会計窓口での精算。
     usecase__SignEncounter["診療記録の署名"]:::usecase
+    %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
     usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+    %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
     usecase__UpdateDemographics["患者属性の変更"]:::usecase
+    %% desc usecase__UpdateDemographics: 患者の属性を API で更新する。
     usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    %% desc usecase__VerifyInsurance: 保険資格の登録と限度額情報（適用区分）の取得。
     usecase__VoidCharge["コストの取消"]:::usecase
+    %% desc usecase__VoidCharge: コストの取消。
     screen__AppointmentNoticeScreen["予約通知画面"]:::screen
     screen__BalanceScreen["未収金画面"]:::screen
     screen__BillCalculationScreen["会計計算画面"]:::screen

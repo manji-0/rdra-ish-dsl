@@ -20,19 +20,33 @@ flowchart TD
   timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
   timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
   usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+  %% desc usecase__CorrectReturnedStatement: 返戻の訂正と再請求。
   usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
   usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+  %% desc usecase__HoldClaimStatement: 保留（月遅れ）。
   usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+  %% desc usecase__InspectClaimStatement: 院内点検。
   usecase__PostPayment["診療報酬の入金"]:::usecase
+  %% desc usecase__PostPayment: 診療翌々月の入金。
   usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
   usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  %% desc usecase__RecordClaimAssessment: 査定の取込。
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
   usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
   usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+  %% desc usecase__ReleaseHeldStatement: 保留レセプトの再提出準備。
   usecase__RequestReexamination["再審査請求"]:::usecase
+  %% desc usecase__RequestReexamination: 再審査請求。
   usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
   usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
   usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
   step__AssessStep -.->|covers| usecase__RecordClaimAssessment
   step__AssessStep -.->|covers| usecase__RequestReexamination
   step__AssessStep -->|precedes| step__PaidStep

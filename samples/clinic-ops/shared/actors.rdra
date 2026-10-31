@@ -13,14 +13,14 @@ actor ClaimsClerk       "医事課 レセプト担当" description "レセプト
 // 医師事務作業補助者 enters orders on the physician's behalf (mhlw-2020-dairi-nyuuryoku.txt:71-79);
 // the reception checks the orders the physician or medical clerk entered (sendai-iji-gairai-shiyousyo.txt:199).
 actor MedicalClerk      "医師事務作業補助者" description "医師の指示で電子カルテへ代行入力する。確定は医師が行う。"
-actor CareCoordinator   "患者支援・地域連携担当"
+actor CareCoordinator   "患者支援・地域連携担当" description "診療後のケアプランを作り、患者への連絡と再診予約を追う。"
 // 看護師 assists in care, and uses devices or gives medicine only on a physician's
 // instruction (egov-hokanhou-323AC0000000203.txt:29, :311).
 actor Nurse             "看護師" description "医師の指示の下で診療の補助を行う。"
-actor Clinician         "医師"
+actor Clinician         "医師" description "診察し、診断・オーダ・処方を出し、診療記録に署名する。"
 // 薬剤師 dispenses and audits in-house prescriptions (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:167-170).
-actor Pharmacist        "薬剤師"
-actor ClinicAdmin       "病院管理者"
+actor Pharmacist        "薬剤師" description "院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。"
+actor ClinicAdmin       "病院管理者" description "診療枠と診察室のマスタを管理し、監査の指摘を解決する。"
 
 // オンライン資格確認 is the first step of 初診受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:43).
 extsystem OnlineEligibilitySystem "オンライン資格確認等システム"

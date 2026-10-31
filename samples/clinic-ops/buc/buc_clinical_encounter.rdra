@@ -5,19 +5,19 @@ import shared.entities
 import shared.biz
 import shared.goals
 
-buc BucClinicalEncounter "診察"
+buc BucClinicalEncounter "診察" description "診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。"
 
-usecase OpenEncounter       "診療記録を開く"
-usecase RecordVitals        "バイタルの記録"
-usecase DocumentAssessment  "診察・診断の記録"
-usecase SignEncounter       "診療記録の署名"
-usecase AmendEncounter      "署名済み記録の修正"
+usecase OpenEncounter       "診療記録を開く" description "受付済の予約から診療記録を開く。"
+usecase RecordVitals        "バイタルの記録" description "バイタル記録。"
+usecase DocumentAssessment  "診察・診断の記録" description "診断記録と記録状態。"
+usecase SignEncounter       "診療記録の署名" description "署名でコスト情報登録とケアプラン作成を起動する。"
+usecase AmendEncounter      "署名済み記録の修正" description "署名済み記録の修正。"
 // 診療情報提供書の作成・送信 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:121); 紹介を希望した患者に紹介状を
 // 手渡す (sendai-iji-gairai-shiyousyo.txt:198).
-usecase IssueReferralLetter "診療情報提供書の作成・送信"
+usecase IssueReferralLetter "診療情報提供書の作成・送信" description "診療情報提供書の作成・送信。"
 // 診察終了後, the patient brings the papers to 計算受付 (sendai-iji-gairai-shiyousyo.txt:176,
 // mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141): the visit now waits for 会計計算.
-usecase CompleteConsultation "診察終了"
+usecase CompleteConsultation "診察終了" description "診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。"
 
 screen EncounterWorkspaceScreen "診療記録画面"
 screen VitalsScreen             "バイタル入力画面"

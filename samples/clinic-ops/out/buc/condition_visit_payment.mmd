@@ -25,7 +25,9 @@ flowchart LR
     variation__ReferralCategory__exempt["紹介状なし初診（救急搬送等の除外）"]:::value
   end
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__CopayCappedAtLimit -.->|combines| statemodel__Appointment_status
   condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio

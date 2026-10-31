@@ -18,12 +18,19 @@ flowchart TD
     end
   end
   usecase__AmendEncounter["署名済み記録の修正"]:::usecase
+  %% desc usecase__AmendEncounter: 署名済み記録の修正。
   usecase__CompleteConsultation["診察終了"]:::usecase
+  %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
   usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+  %% desc usecase__DocumentAssessment: 診断記録と記録状態。
   usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+  %% desc usecase__IssueReferralLetter: 診療情報提供書の作成・送信。
   usecase__OpenEncounter["診療記録を開く"]:::usecase
+  %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
   usecase__RecordVitals["バイタルの記録"]:::usecase
+  %% desc usecase__RecordVitals: バイタル記録。
   usecase__SignEncounter["診療記録の署名"]:::usecase
+  %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
   step__AmendStep -.->|covers| usecase__AmendEncounter
   step__AssessmentStep -->|branches| step__ReferralOutStep
   step__AssessmentStep -.->|covers| usecase__DocumentAssessment

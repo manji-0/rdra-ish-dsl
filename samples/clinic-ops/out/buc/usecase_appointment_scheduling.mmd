@@ -15,12 +15,19 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__BookAppointment["予約の確定"]:::usecase
+    %% desc usecase__BookAppointment: 予約確定と予約枠更新。
     usecase__CancelAppointment["予約の取消"]:::usecase
+    %% desc usecase__CancelAppointment: 取消理由と予約枠更新。
     usecase__MarkNoShow["未来院の処理"]:::usecase
+    %% desc usecase__MarkNoShow: タイマー起動の未来院処理。
     usecase__RescheduleAppointment["予約の変更"]:::usecase
+    %% desc usecase__RescheduleAppointment: 予約を変更する。予約の状態は変わらない。
     usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+    %% desc usecase__ReserveAppointment: 仮押さえで Appointment を作る。
     usecase__SearchAvailability["空き枠の検索"]:::usecase
+    %% desc usecase__SearchAvailability: 予約枠を検索する。参照だけの API。
     usecase__SendAppointmentNotice["予約の通知"]:::usecase
+    %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
     screen__AppointmentNoticeScreen["予約通知画面"]:::screen
     screen__AppointmentScreen["予約画面"]:::screen
     screen__ScheduleSearchScreen["空き枠検索画面"]:::screen

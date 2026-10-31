@@ -14,11 +14,17 @@ flowchart TD
     end
   end
   usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+  %% desc usecase__CloseCarePlan: ケアプラン終了。
   usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
   usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  %% desc usecase__NotifyPatientResult: 結果の患者通知。
   usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+  %% desc usecase__ReviewPatientResponse: 患者応答の確認。
   usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  %% desc usecase__ScheduleFollowUpVisit: 再診予約。
   usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+  %% desc usecase__SendFollowUpMessage: 患者連絡。
   step__CarePlanStep -->|branches| step__ResultNoticeStep
   step__CarePlanStep -.->|covers| usecase__CreateCarePlan
   step__CarePlanStep -->|precedes| step__FollowUpMsgStep

@@ -72,10 +72,15 @@ flowchart LR
     variation__ReferralDirection__outbound["紹介先へ送付"]:::value
   end
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
   usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+  %% desc usecase__BatchVerifyEligibility: 予約済み患者（BookedPatient 条件）だけを一括照会する。
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   usecase__CollectSpecimen["採血"]:::usecase
+  %% desc usecase__CollectSpecimen: 医師が確定したオーダだけを採取する。
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
   condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   condition__BookedPatient -.->|combines| statemodel__Appointment_status
   %% derived condition__BookedPatient -> statemodel__Appointment_status from holds

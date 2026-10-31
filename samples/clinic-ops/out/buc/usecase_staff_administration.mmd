@@ -5,14 +5,21 @@
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__ClinicAdmin["病院管理者"]:::actor
+    %% desc actor__ClinicAdmin: 診療枠と診察室のマスタを管理し、監査の指摘を解決する。
   end
   subgraph layer_boundary["システム境界"]
     usecase__BlockScheduleSlot["診療枠の停止"]:::usecase
+    %% desc usecase__BlockScheduleSlot: 診療枠の停止。
     usecase__ConfigureRoom["診察室の設定"]:::usecase
+    %% desc usecase__ConfigureRoom: 部屋の設定。
     usecase__ManageProviderSchedule["診療枠の管理"]:::usecase
+    %% desc usecase__ManageProviderSchedule: 診療枠の管理。
     usecase__ReleaseRoom["診察室の解放"]:::usecase
+    %% desc usecase__ReleaseRoom: 部屋の解放。
     usecase__ResolveAuditFinding["監査指摘の解決"]:::usecase
+    %% desc usecase__ResolveAuditFinding: 監査指摘の解決。
     usecase__ReviewAuditEvents["監査ログの確認"]:::usecase
+    %% desc usecase__ReviewAuditEvents: 監査イベントの確認。
     screen__AuditReviewScreen["監査ログ画面"]:::screen
     screen__RoomAdminScreen["診察室管理画面"]:::screen
     screen__ScheduleAdminScreen["診療枠管理画面"]:::screen

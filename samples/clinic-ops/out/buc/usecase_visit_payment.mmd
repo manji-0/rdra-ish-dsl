@@ -10,12 +10,19 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+    %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
     usecase__CalculateVisitBill["会計計算入力"]:::usecase
+    %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
     usecase__CallPatientForPayment["会計の呼出"]:::usecase
+    %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
     usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+    %% desc usecase__IssueReceipt: 領収証・明細書の交付で予約を完了にする。
     usecase__RefundPayment["還付・追加徴収"]:::usecase
+    %% desc usecase__RefundPayment: 保険の変更や計算誤りによる還付・追加徴収で精算を還付済にする。
     usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+    %% desc usecase__SettleAtKiosk: 自動精算機での精算。
     usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+    %% desc usecase__SettleAtWindow: 会計窓口での精算。
     screen__BillCalculationScreen["会計計算画面"]:::screen
     screen__KioskScreen["自動精算機画面"]:::screen
     screen__PaymentWindowScreen["会計窓口画面"]:::screen

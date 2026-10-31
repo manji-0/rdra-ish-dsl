@@ -5,15 +5,22 @@
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+    %% desc actor__CareCoordinator: 診療後のケアプランを作り、患者への連絡と再診予約を追う。
     extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
     usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+    %% desc usecase__CloseCarePlan: ケアプラン終了。
     usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+    %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
     usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+    %% desc usecase__NotifyPatientResult: 結果の患者通知。
     usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+    %% desc usecase__ReviewPatientResponse: 患者応答の確認。
     usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+    %% desc usecase__ScheduleFollowUpVisit: 再診予約。
     usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+    %% desc usecase__SendFollowUpMessage: 患者連絡。
     screen__CarePlanScreen["ケアプラン画面"]:::screen
     screen__FollowUpScheduleScreen["再診予約画面"]:::screen
     screen__PatientMessageScreen["患者連絡画面"]:::screen

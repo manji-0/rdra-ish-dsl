@@ -5,18 +5,26 @@
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Clinician["医師"]:::actor
+    %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
     actor__Nurse["看護師"]:::actor
     %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
     extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
     usecase__AmendEncounter["署名済み記録の修正"]:::usecase
+    %% desc usecase__AmendEncounter: 署名済み記録の修正。
     usecase__CompleteConsultation["診察終了"]:::usecase
+    %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
     usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+    %% desc usecase__DocumentAssessment: 診断記録と記録状態。
     usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+    %% desc usecase__IssueReferralLetter: 診療情報提供書の作成・送信。
     usecase__OpenEncounter["診療記録を開く"]:::usecase
+    %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
     usecase__RecordVitals["バイタルの記録"]:::usecase
+    %% desc usecase__RecordVitals: バイタル記録。
     usecase__SignEncounter["診療記録の署名"]:::usecase
+    %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
     screen__DiagnosisScreen["診断入力画面"]:::screen
     screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen

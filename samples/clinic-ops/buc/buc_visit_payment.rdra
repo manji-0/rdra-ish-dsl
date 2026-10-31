@@ -9,21 +9,21 @@ import shared.goals
 // 会計 follows the consultation: 計算受付 (本日内容の実施済み確認, 会計計算入力), then 会計受付
 // (患者呼び出し, 精算, 領収書発行) (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:141-144, :155-157).
 
-buc BucVisitPayment "計算・会計" description "診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。"
+buc BucVisitPayment "計算・会計" description "診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。"
 
 // オーダリングデータの確認、取込み and 診療費等の計算 (sendai-iji-gairai-shiyousyo.txt:183-186).
-usecase CalculateVisitBill       "会計計算入力"
-usecase ApplySelectedTreatmentFee "選定療養費の算定"
+usecase CalculateVisitBill       "会計計算入力" description "会計計算入力で予約を会計待ちにする。"
+usecase ApplySelectedTreatmentFee "選定療養費の算定" description "紹介状なし初診だけに選定療養費の Charge を作る。"
 // 計算処理終了後、患者を呼び出し (sendai-iji-gairai-shiyousyo.txt:191).
-usecase CallPatientForPayment    "会計の呼出"
+usecase CallPatientForPayment    "会計の呼出" description "会計の呼出（参照のみ）。"
 // 2番窓口または自動精算機で支払 (sendai-iji-gairai-shiyousyo.txt:191); 計算が複雑な場合は窓口 (:194).
-usecase SettleAtWindow           "会計窓口での精算"
-usecase SettleAtKiosk            "自動精算機での精算"
+usecase SettleAtWindow           "会計窓口での精算" description "会計窓口での精算。"
+usecase SettleAtKiosk            "自動精算機での精算" description "自動精算機での精算。"
 // 個別の費用ごとに区分して記載した領収証を無償で交付 (egov-ryotan-kisoku-332M50000100015.txt:117);
 // 会計のお知らせ、診療明細書 (sendai-iji-gairai-shiyousyo.txt:189).
-usecase IssueReceipt             "領収証・明細書の交付"
+usecase IssueReceipt             "領収証・明細書の交付" description "領収証・明細書の交付で予約を完了にする。"
 // 還付・追加徴収 after an insurance change or a calculation error (sendai-iji-gairai-shiyousyo.txt:196).
-usecase RefundPayment            "還付・追加徴収"
+usecase RefundPayment            "還付・追加徴収" description "保険の変更や計算誤りによる還付・追加徴収で精算を還付済にする。"
 
 screen BillCalculationScreen "会計計算画面"
 screen PaymentWindowScreen   "会計窓口画面"

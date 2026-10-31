@@ -5,14 +5,14 @@ import shared.entities
 import shared.biz
 import shared.goals
 
-buc BucFollowupCare "フォローアップ"
+buc BucFollowupCare "フォローアップ" description "診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。"
 
-usecase CreateCarePlan       "ケアプランの作成"
-usecase SendFollowUpMessage  "患者への連絡"
-usecase ReviewPatientResponse "患者応答の確認"
-usecase ScheduleFollowUpVisit "再診の予約"
-usecase CloseCarePlan        "ケアプランの終了"
-usecase NotifyPatientResult  "検査結果の患者通知"
+usecase CreateCarePlan       "ケアプランの作成" description "署名イベントからのケアプラン作成。"
+usecase SendFollowUpMessage  "患者への連絡" description "患者連絡。"
+usecase ReviewPatientResponse "患者応答の確認" description "患者応答の確認。"
+usecase ScheduleFollowUpVisit "再診の予約" description "再診予約。"
+usecase CloseCarePlan        "ケアプランの終了" description "ケアプラン終了。"
+usecase NotifyPatientResult  "検査結果の患者通知" description "結果の患者通知。"
 
 screen CarePlanScreen        "ケアプラン画面"
 screen PatientMessageScreen  "患者連絡画面"

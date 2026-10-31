@@ -88,10 +88,13 @@ flowchart LR
   actor__AccountsClerk["医事課 会計担当"]:::actor
   %% desc actor__AccountsClerk: 会計計算入力、患者の呼出、窓口精算、領収証・明細書の交付を行う事務職員。
   actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+  %% desc actor__CareCoordinator: 診療後のケアプランを作り、患者への連絡と再診予約を追う。
   actor__ClaimsClerk["医事課 レセプト担当"]:::actor
   %% desc actor__ClaimsClerk: レセプトの作成・院内点検・請求と、返戻・査定への対応を行う事務職員。
   actor__ClinicAdmin["病院管理者"]:::actor
+  %% desc actor__ClinicAdmin: 診療枠と診察室のマスタを管理し、監査の指摘を解決する。
   actor__Clinician["医師"]:::actor
+  %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
   actor__MedicalClerk["医師事務作業補助者"]:::actor
   %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
   actor__Nurse["看護師"]:::actor
@@ -99,6 +102,7 @@ flowchart LR
   actor__Patient["患者"]:::actor
   %% desc actor__Patient: 病院で診療を受ける人。
   actor__Pharmacist["薬剤師"]:::actor
+  %% desc actor__Pharmacist: 院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。
   actor__ReceptionClerk["医事課 受付担当"]:::actor
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
   extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
@@ -191,20 +195,25 @@ flowchart LR
   goal__TimelyClaims["会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"]:::goal
   %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
   buc__BucAppointmentScheduling["予約"]:::buc
-  %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
+  %% desc buc__BucAppointmentScheduling: 予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。
   buc__BucBillingClaims["レセプト作成・請求"]:::buc
-  %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+  %% desc buc__BucBillingClaims: レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
   buc__BucClinicalEncounter["診察"]:::buc
+  %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
   buc__BucFollowupCare["フォローアップ"]:::buc
+  %% desc buc__BucFollowupCare: 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
   buc__BucOrdersResults["検体検査"]:::buc
+  %% desc buc__BucOrdersResults: 検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
   buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
+  %% desc buc__BucPatientOnboarding: 新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
   buc__BucPrescriptionFulfillment["処方"]:::buc
-  %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
+  %% desc buc__BucPrescriptionFulfillment: 処方オーダから院外処方箋の発行、院内処方の調剤・監査・服薬指導・交付、疑義照会までを扱う。院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤される。病院は特定の保険薬局を指示しない（療担規則 第2条の5）ので、`Prescription` は薬局を持たない。使用期間は交付日を含めて4日以内で、日数は DSL で数えられないためタイマーで期限切れにする。薬剤師は疑わしい点があれば医師に問い合わせ、回答までは調剤しない。
   buc__BucStaffAdministration["病院管理"]:::buc
+  %% desc buc__BucStaffAdministration: 病院運営のマスタ（診療枠・診察室）と監査の業務を扱う。
   buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
-  %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
+  %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内を扱う。療養担当規則 第3条により受付のたびに資格を確認するので、`CheckInPatient` は必ずオンライン資格確認を伴い `EligibilityCheck` を作る。結果は 有効・無効・該当資格なし の 3 通りで、無効と該当資格なしは再確認へ戻る。システムが答えられない場合は被保険者資格申立書かシステム障害時モードで確認する。来院前には予約済み患者の一括照会を行う。受付では支払を受けない（会計は `BucVisitPayment`）。
   buc__BucVisitPayment["計算・会計"]:::buc
-  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   subgraph group_out_of_scope["やらないこと"]
     requirement__ReqNoOnlineConsultation["オンライン診療は対象外とする"]:::requirement
   end
@@ -270,27 +279,32 @@ rdra-ish diagram samples/clinic-ops --kind business --format mermaid --out sampl
 flowchart LR
   subgraph business__CareDelivery["診療"]
     buc__BucClinicalEncounter["診察"]:::buc
+    %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
     buc__BucOrdersResults["検体検査"]:::buc
+    %% desc buc__BucOrdersResults: 検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
     buc__BucPrescriptionFulfillment["処方"]:::buc
-    %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
+    %% desc buc__BucPrescriptionFulfillment: 処方オーダから院外処方箋の発行、院内処方の調剤・監査・服薬指導・交付、疑義照会までを扱う。院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤される。病院は特定の保険薬局を指示しない（療担規則 第2条の5）ので、`Prescription` は薬局を持たない。使用期間は交付日を含めて4日以内で、日数は DSL で数えられないためタイマーで期限切れにする。薬剤師は疑わしい点があれば医師に問い合わせ、回答までは調剤しない。
   end
   subgraph business__ClinicAdministration["病院管理"]
     buc__BucStaffAdministration["病院管理"]:::buc
+    %% desc buc__BucStaffAdministration: 病院運営のマスタ（診療枠・診察室）と監査の業務を扱う。
   end
   subgraph business__PatientAccess["患者受付"]
     %% desc business__PatientAccess: 新患登録から予約、受付、フォローアップまでの患者に向き合う業務。
     buc__BucAppointmentScheduling["予約"]:::buc
-    %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
+    %% desc buc__BucAppointmentScheduling: 予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。
     buc__BucFollowupCare["フォローアップ"]:::buc
+    %% desc buc__BucFollowupCare: 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
     buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
+    %% desc buc__BucPatientOnboarding: 新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
     buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
-    %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
+    %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内を扱う。療養担当規則 第3条により受付のたびに資格を確認するので、`CheckInPatient` は必ずオンライン資格確認を伴い `EligibilityCheck` を作る。結果は 有効・無効・該当資格なし の 3 通りで、無効と該当資格なしは再確認へ戻る。システムが答えられない場合は被保険者資格申立書かシステム障害時モードで確認する。来院前には予約済み患者の一括照会を行う。受付では支払を受けない（会計は `BucVisitPayment`）。
   end
   subgraph business__RevenueCycle["医事会計"]
     buc__BucBillingClaims["レセプト作成・請求"]:::buc
-    %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+    %% desc buc__BucBillingClaims: レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
     buc__BucVisitPayment["計算・会計"]:::buc
-    %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+    %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   end
   buc__BucAppointmentScheduling -->|予約確定| buc__BucPatientOnboarding
   %% derived buc__BucAppointmentScheduling -> buc__BucPatientOnboarding via event__EvAppointmentScheduled
@@ -399,15 +413,25 @@ flowchart TD
   end
   timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
   usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+  %% desc usecase__ArchivePatient: 患者アーカイブ状態。
   usecase__CaptureConsent["同意の取得"]:::usecase
+  %% desc usecase__CaptureConsent: 同意記録を作る。同意の有無は Bool、未回答は null で持つ。
   usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+  %% desc usecase__CompleteIntakeForms: 問診完了イベント。
   usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
   usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+  %% desc usecase__MergeDuplicatePatient: 患者統合状態。
   usecase__RegisterPatient["新患登録"]:::usecase
+  %% desc usecase__RegisterPatient: 新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。
   usecase__SearchPatient["患者の検索"]:::usecase
+  %% desc usecase__SearchPatient: 患者を検索する。参照だけの API で、患者の作成とは分ける。
   usecase__SendIntakeForms["問診票の送付"]:::usecase
+  %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
   usecase__UpdateDemographics["患者属性の変更"]:::usecase
+  %% desc usecase__UpdateDemographics: 患者の属性を API で更新する。
   usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+  %% desc usecase__VerifyInsurance: 保険資格の登録と限度額情報（適用区分）の取得。
   event__EvAppointmentScheduled["予約確定"]:::event
   step__ArchiveStep -.->|covers| usecase__ArchivePatient
   step__ConsentStep -.->|covers| usecase__CaptureConsent
@@ -465,15 +489,25 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+    %% desc usecase__ArchivePatient: 患者アーカイブ状態。
     usecase__CaptureConsent["同意の取得"]:::usecase
+    %% desc usecase__CaptureConsent: 同意記録を作る。同意の有無は Bool、未回答は null で持つ。
     usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+    %% desc usecase__CompleteIntakeForms: 問診完了イベント。
     usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+    %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
     usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+    %% desc usecase__MergeDuplicatePatient: 患者統合状態。
     usecase__RegisterPatient["新患登録"]:::usecase
+    %% desc usecase__RegisterPatient: 新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。
     usecase__SearchPatient["患者の検索"]:::usecase
+    %% desc usecase__SearchPatient: 患者を検索する。参照だけの API で、患者の作成とは分ける。
     usecase__SendIntakeForms["問診票の送付"]:::usecase
+    %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
     usecase__UpdateDemographics["患者属性の変更"]:::usecase
+    %% desc usecase__UpdateDemographics: 患者の属性を API で更新する。
     usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    %% desc usecase__VerifyInsurance: 保険資格の登録と限度額情報（適用区分）の取得。
     screen__ConsentScreen["同意取得画面"]:::screen
     screen__InsuranceScreen["保険資格登録画面"]:::screen
     screen__IntakePortalScreen["問診票ポータル画面"]:::screen
@@ -610,12 +644,19 @@ flowchart TD
   %% desc actor__ReceptionClerk: 初診・再診の受付、資格確認、紹介状の受付、予約を行う事務職員。
   timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
   usecase__BookAppointment["予約の確定"]:::usecase
+  %% desc usecase__BookAppointment: 予約確定と予約枠更新。
   usecase__CancelAppointment["予約の取消"]:::usecase
+  %% desc usecase__CancelAppointment: 取消理由と予約枠更新。
   usecase__MarkNoShow["未来院の処理"]:::usecase
+  %% desc usecase__MarkNoShow: タイマー起動の未来院処理。
   usecase__RescheduleAppointment["予約の変更"]:::usecase
+  %% desc usecase__RescheduleAppointment: 予約を変更する。予約の状態は変わらない。
   usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+  %% desc usecase__ReserveAppointment: 仮押さえで Appointment を作る。
   usecase__SearchAvailability["空き枠の検索"]:::usecase
+  %% desc usecase__SearchAvailability: 予約枠を検索する。参照だけの API。
   usecase__SendAppointmentNotice["予約の通知"]:::usecase
+  %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
   event__EvAppointmentCancelled["予約取消"]:::event
   actor__Patient -.->|performs| step__AvailabilityStep
   actor__ReceptionClerk -.->|performs| step__AvailabilityStep
@@ -670,12 +711,19 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__BookAppointment["予約の確定"]:::usecase
+    %% desc usecase__BookAppointment: 予約確定と予約枠更新。
     usecase__CancelAppointment["予約の取消"]:::usecase
+    %% desc usecase__CancelAppointment: 取消理由と予約枠更新。
     usecase__MarkNoShow["未来院の処理"]:::usecase
+    %% desc usecase__MarkNoShow: タイマー起動の未来院処理。
     usecase__RescheduleAppointment["予約の変更"]:::usecase
+    %% desc usecase__RescheduleAppointment: 予約を変更する。予約の状態は変わらない。
     usecase__ReserveAppointment["予約の仮押さえ"]:::usecase
+    %% desc usecase__ReserveAppointment: 仮押さえで Appointment を作る。
     usecase__SearchAvailability["空き枠の検索"]:::usecase
+    %% desc usecase__SearchAvailability: 予約枠を検索する。参照だけの API。
     usecase__SendAppointmentNotice["予約の通知"]:::usecase
+    %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
     screen__AppointmentNoticeScreen["予約通知画面"]:::screen
     screen__AppointmentScreen["予約画面"]:::screen
     screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
@@ -807,15 +855,25 @@ flowchart TD
     end
   end
   usecase__AssignRoom["診察室への案内"]:::usecase
+  %% desc usecase__AssignRoom: 受付済の受診だけを診察室へ案内する。予約の状態は変わらない。
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
   usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+  %% desc usecase__ConfirmEligibilityInOutageMode: システム障害時モードによる確認。
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
   usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
   usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
   usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+  %% desc usecase__ReceiveReferralLetter: 紹介状の受領と受付処理。
   usecase__RecheckEligibility["資格の再確認"]:::usecase
+  %% desc usecase__RecheckEligibility: 無効・該当資格なしからの再確認。
   usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+  %% desc usecase__RecordEligibilityDeclaration: 被保険者資格申立書による確認。
   usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+  %% desc usecase__VerifyArrival: 予約票・診察券を確認する（参照のみ）。
   step__ArrivalStep -.->|covers| usecase__VerifyArrival
   step__ArrivalStep -->|precedes| step__EligibilityStep
   step__DeclarationStep -.->|covers| usecase__ConfirmEligibilityInOutageMode
@@ -864,17 +922,29 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__AssignRoom["診察室への案内"]:::usecase
+    %% desc usecase__AssignRoom: 受付済の受診だけを診察室へ案内する。予約の状態は変わらない。
     usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+    %% desc usecase__BatchVerifyEligibility: 予約済み患者（BookedPatient 条件）だけを一括照会する。
     usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+    %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
     usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+    %% desc usecase__ConfirmEligibilityInOutageMode: システム障害時モードによる確認。
     usecase__PrepareEncounter["診療の準備"]:::usecase
+    %% desc usecase__PrepareEncounter: 診療準備の参照情報。
     usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+    %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
     usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+    %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
     usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+    %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
     usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+    %% desc usecase__ReceiveReferralLetter: 紹介状の受領と受付処理。
     usecase__RecheckEligibility["資格の再確認"]:::usecase
+    %% desc usecase__RecheckEligibility: 無効・該当資格なしからの再確認。
     usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+    %% desc usecase__RecordEligibilityDeclaration: 被保険者資格申立書による確認。
     usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+    %% desc usecase__VerifyArrival: 予約票・診察券を確認する（参照のみ）。
     screen__CheckInScreen["受付画面"]:::screen
     screen__EligibilityScreen["資格確認画面"]:::screen
     screen__ReferralScreen["紹介状受付画面"]:::screen
@@ -1037,12 +1107,19 @@ flowchart TD
     end
   end
   usecase__AmendEncounter["署名済み記録の修正"]:::usecase
+  %% desc usecase__AmendEncounter: 署名済み記録の修正。
   usecase__CompleteConsultation["診察終了"]:::usecase
+  %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
   usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+  %% desc usecase__DocumentAssessment: 診断記録と記録状態。
   usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+  %% desc usecase__IssueReferralLetter: 診療情報提供書の作成・送信。
   usecase__OpenEncounter["診療記録を開く"]:::usecase
+  %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
   usecase__RecordVitals["バイタルの記録"]:::usecase
+  %% desc usecase__RecordVitals: バイタル記録。
   usecase__SignEncounter["診療記録の署名"]:::usecase
+  %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
   step__AmendStep -.->|covers| usecase__AmendEncounter
   step__AssessmentStep -->|branches| step__ReferralOutStep
   step__AssessmentStep -.->|covers| usecase__DocumentAssessment
@@ -1079,18 +1156,26 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucCli
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Clinician["医師"]:::actor
+    %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
     actor__Nurse["看護師"]:::actor
     %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
     extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
     usecase__AmendEncounter["署名済み記録の修正"]:::usecase
+    %% desc usecase__AmendEncounter: 署名済み記録の修正。
     usecase__CompleteConsultation["診察終了"]:::usecase
+    %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
     usecase__DocumentAssessment["診察・診断の記録"]:::usecase
+    %% desc usecase__DocumentAssessment: 診断記録と記録状態。
     usecase__IssueReferralLetter["診療情報提供書の作成・送信"]:::usecase
+    %% desc usecase__IssueReferralLetter: 診療情報提供書の作成・送信。
     usecase__OpenEncounter["診療記録を開く"]:::usecase
+    %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
     usecase__RecordVitals["バイタルの記録"]:::usecase
+    %% desc usecase__RecordVitals: バイタル記録。
     usecase__SignEncounter["診療記録の署名"]:::usecase
+    %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
     screen__DiagnosisScreen["診断入力画面"]:::screen
     screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
     screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
@@ -1224,15 +1309,25 @@ flowchart TD
   actor__Nurse["看護師"]:::actor
   %% desc actor__Nurse: 医師の指示の下で診療の補助を行う。
   usecase__CancelClinicalOrder["オーダの取消"]:::usecase
+  %% desc usecase__CancelClinicalOrder: オーダ取消。
   usecase__CollectSpecimen["採血"]:::usecase
+  %% desc usecase__CollectSpecimen: 医師が確定したオーダだけを採取する。
   usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+  %% desc usecase__ConfirmProxyOrder: 医師による代行入力オーダの確定。
   usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+  %% desc usecase__EnterProxyOrder: 代行入力オーダは未確定で作られる。
   usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+  %% desc usecase__NotifyCriticalResult: 重要結果の患者通知。
   usecase__PlaceLabOrder["検体検査オーダの登録"]:::usecase
+  %% desc usecase__PlaceLabOrder: 医師が登録したオーダは確定済み。
   usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+  %% desc usecase__PrintSpecimenLabel: 採血管ラベルの発行（参照のみ）。
   usecase__ReceiveLabResult["検査結果の受信"]:::usecase
+  %% desc usecase__ReceiveLabResult: 外注検査システムからの結果受信。
   usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+  %% desc usecase__RegisterPerformedProcedure: 実施内容（コスト）の登録。
   usecase__ReviewLabResult["検査結果の確認"]:::usecase
+  %% desc usecase__ReviewLabResult: 結果確認と後続通知の起点。
   event__EvLabResultReceived["検査結果の受信"]:::event
   actor__MedicalClerk -.->|performs| step__ProxyOrderStep
   actor__Nurse -.->|performs| step__ProxyOrderStep
@@ -1281,6 +1376,7 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucOrd
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Clinician["医師"]:::actor
+    %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
     actor__MedicalClerk["医師事務作業補助者"]:::actor
     %% desc actor__MedicalClerk: 医師の指示で電子カルテへ代行入力する。確定は医師が行う。
     actor__Nurse["看護師"]:::actor
@@ -1289,15 +1385,25 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__CancelClinicalOrder["オーダの取消"]:::usecase
+    %% desc usecase__CancelClinicalOrder: オーダ取消。
     usecase__CollectSpecimen["採血"]:::usecase
+    %% desc usecase__CollectSpecimen: 医師が確定したオーダだけを採取する。
     usecase__ConfirmProxyOrder["代行入力オーダの確定"]:::usecase
+    %% desc usecase__ConfirmProxyOrder: 医師による代行入力オーダの確定。
     usecase__EnterProxyOrder["検体検査オーダの代行入力"]:::usecase
+    %% desc usecase__EnterProxyOrder: 代行入力オーダは未確定で作られる。
     usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+    %% desc usecase__NotifyCriticalResult: 重要結果の患者通知。
     usecase__PlaceLabOrder["検体検査オーダの登録"]:::usecase
+    %% desc usecase__PlaceLabOrder: 医師が登録したオーダは確定済み。
     usecase__PrintSpecimenLabel["採血管ラベル発行・貼付"]:::usecase
+    %% desc usecase__PrintSpecimenLabel: 採血管ラベルの発行（参照のみ）。
     usecase__ReceiveLabResult["検査結果の受信"]:::usecase
+    %% desc usecase__ReceiveLabResult: 外注検査システムからの結果受信。
     usecase__RegisterPerformedProcedure["実施内容（コスト）の登録"]:::usecase
+    %% desc usecase__RegisterPerformedProcedure: 実施内容（コスト）の登録。
     usecase__ReviewLabResult["検査結果の確認"]:::usecase
+    %% desc usecase__ReviewLabResult: 結果確認と後続通知の起点。
     screen__CriticalNoticeScreen["重要結果通知画面"]:::screen
     screen__OrderEntryScreen["オーダ入力画面"]:::screen
     screen__ResultReviewScreen["検査結果確認画面"]:::screen
@@ -1439,18 +1545,31 @@ flowchart TD
     end
   end
   actor__Clinician["医師"]:::actor
+  %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
   actor__Pharmacist["薬剤師"]:::actor
+  %% desc actor__Pharmacist: 院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。
   usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+  %% desc usecase__AnswerPharmacyInquiry: 保険薬局からの疑義照会への回答。
   usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
+  %% desc usecase__AnswerPrescriptionInquiry: 医師の回答で引換券へ戻す。
   usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+  %% desc usecase__ConfirmDispense: 保険薬局での調剤結果の受信。
   usecase__CounselMedication["服薬指導"]:::usecase
+  %% desc usecase__CounselMedication: 服薬指導。
   usecase__DispenseAndAudit["調剤・監査"]:::usecase
+  %% desc usecase__DispenseAndAudit: 薬剤師による調剤・監査。
   usecase__DraftPrescription["処方オーダの登録"]:::usecase
+  %% desc usecase__DraftPrescription: 処方オーダの作成。
   usecase__HandOverMedication["薬剤交付"]:::usecase
+  %% desc usecase__HandOverMedication: 薬剤交付。
   usecase__IssueInhouseVoucher["院内処方用引換券の交付"]:::usecase
+  %% desc usecase__IssueInhouseVoucher: 院内処方用引換券の交付。
   usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+  %% desc usecase__IssueOutsidePrescription: 院外処方箋の発行と電子処方箋管理サービスへの登録。
   usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
+  %% desc usecase__IssueRefillPrescription: リフィル処方箋の処方オーダ（使用回数の上限を記載）。
   usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+  %% desc usecase__RaisePrescriptionInquiry: 薬剤師による疑義照会。
   actor__Clinician -.->|performs| step__InquiryStep
   actor__Pharmacist -.->|performs| step__InquiryStep
   step__CounselStep -.->|covers| usecase__CounselMedication
@@ -1494,7 +1613,9 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucPre
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__Clinician["医師"]:::actor
+    %% desc actor__Clinician: 診察し、診断・オーダ・処方を出し、診療記録に署名する。
     actor__Pharmacist["薬剤師"]:::actor
+    %% desc actor__Pharmacist: 院内処方を調剤・監査し、服薬指導と交付を行う。疑わしい処方は医師に照会する。
     extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
     extsystem__InsurancePharmacy["保険薬局"]:::extsystem
   end
@@ -1503,19 +1624,33 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+    %% desc usecase__AnswerPharmacyInquiry: 保険薬局からの疑義照会への回答。
     usecase__AnswerPrescriptionInquiry["疑義照会への回答"]:::usecase
+    %% desc usecase__AnswerPrescriptionInquiry: 医師の回答で引換券へ戻す。
     usecase__CancelPrescription["処方の取消"]:::usecase
+    %% desc usecase__CancelPrescription: 処方の取消。
     usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+    %% desc usecase__ConfirmDispense: 保険薬局での調剤結果の受信。
     usecase__CounselMedication["服薬指導"]:::usecase
+    %% desc usecase__CounselMedication: 服薬指導。
     usecase__DispenseAndAudit["調剤・監査"]:::usecase
+    %% desc usecase__DispenseAndAudit: 薬剤師による調剤・監査。
     usecase__DraftPrescription["処方オーダの登録"]:::usecase
+    %% desc usecase__DraftPrescription: 処方オーダの作成。
     usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
+    %% desc usecase__ExpirePrescription: 使用期間切れのタイマー処理。
     usecase__HandOverMedication["薬剤交付"]:::usecase
+    %% desc usecase__HandOverMedication: 薬剤交付。
     usecase__IssueInhouseVoucher["院内処方用引換券の交付"]:::usecase
+    %% desc usecase__IssueInhouseVoucher: 院内処方用引換券の交付。
     usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+    %% desc usecase__IssueOutsidePrescription: 院外処方箋の発行と電子処方箋管理サービスへの登録。
     usecase__IssueRefillPrescription["リフィル処方箋の処方オーダ"]:::usecase
+    %% desc usecase__IssueRefillPrescription: リフィル処方箋の処方オーダ（使用回数の上限を記載）。
     usecase__RaisePrescriptionInquiry["疑義照会"]:::usecase
+    %% desc usecase__RaisePrescriptionInquiry: 薬剤師による疑義照会。
     usecase__SearchMedication["薬剤の検索"]:::usecase
+    %% desc usecase__SearchMedication: 薬剤を検索する。参照だけの API。
     screen__DispensingScreen["調剤・監査画面"]:::screen
     screen__MedicationSearchScreen["薬剤検索画面"]:::screen
     screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
@@ -1674,12 +1809,19 @@ flowchart TD
     end
   end
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   usecase__CallPatientForPayment["会計の呼出"]:::usecase
+  %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
   usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+  %% desc usecase__IssueReceipt: 領収証・明細書の交付で予約を完了にする。
   usecase__RefundPayment["還付・追加徴収"]:::usecase
+  %% desc usecase__RefundPayment: 保険の変更や計算誤りによる還付・追加徴収で精算を還付済にする。
   usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+  %% desc usecase__SettleAtKiosk: 自動精算機での精算。
   usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+  %% desc usecase__SettleAtWindow: 会計窓口での精算。
   event__EvPaymentSettled["自動精算機での精算完了"]:::event
   step__CalculationStep -.->|covers| usecase__ApplySelectedTreatmentFee
   step__CalculationStep -.->|covers| usecase__CalculateVisitBill
@@ -1723,12 +1865,19 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+    %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
     usecase__CalculateVisitBill["会計計算入力"]:::usecase
+    %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
     usecase__CallPatientForPayment["会計の呼出"]:::usecase
+    %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
     usecase__IssueReceipt["領収証・明細書の交付"]:::usecase
+    %% desc usecase__IssueReceipt: 領収証・明細書の交付で予約を完了にする。
     usecase__RefundPayment["還付・追加徴収"]:::usecase
+    %% desc usecase__RefundPayment: 保険の変更や計算誤りによる還付・追加徴収で精算を還付済にする。
     usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+    %% desc usecase__SettleAtKiosk: 自動精算機での精算。
     usecase__SettleAtWindow["会計窓口での精算"]:::usecase
+    %% desc usecase__SettleAtWindow: 会計窓口での精算。
     screen__BillCalculationScreen["会計計算画面"]:::screen
     screen__KioskScreen["自動精算機画面"]:::screen
     screen__PaymentWindowScreen["会計窓口画面"]:::screen
@@ -1869,19 +2018,33 @@ flowchart TD
   timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
   timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
   usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+  %% desc usecase__CorrectReturnedStatement: 返戻の訂正と再請求。
   usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
   usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+  %% desc usecase__HoldClaimStatement: 保留（月遅れ）。
   usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+  %% desc usecase__InspectClaimStatement: 院内点検。
   usecase__PostPayment["診療報酬の入金"]:::usecase
+  %% desc usecase__PostPayment: 診療翌々月の入金。
   usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
   usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  %% desc usecase__RecordClaimAssessment: 査定の取込。
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
   usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
   usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+  %% desc usecase__ReleaseHeldStatement: 保留レセプトの再提出準備。
   usecase__RequestReexamination["再審査請求"]:::usecase
+  %% desc usecase__RequestReexamination: 再審査請求。
   usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
   usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
   usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
   step__AssessStep -.->|covers| usecase__RecordClaimAssessment
   step__AssessStep -.->|covers| usecase__RequestReexamination
   step__AssessStep -->|precedes| step__PaidStep
@@ -1946,22 +2109,39 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__CorrectReturnedStatement["返戻レセプトの訂正（再請求）"]:::usecase
+    %% desc usecase__CorrectReturnedStatement: 返戻の訂正と再請求。
     usecase__CreateCharge["コスト情報の登録"]:::usecase
+    %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
     usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+    %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
     usecase__HoldClaimStatement["レセプトの保留（月遅れ）"]:::usecase
+    %% desc usecase__HoldClaimStatement: 保留（月遅れ）。
     usecase__InspectClaimStatement["レセプトの院内点検"]:::usecase
+    %% desc usecase__InspectClaimStatement: 院内点検。
     usecase__PostPayment["診療報酬の入金"]:::usecase
+    %% desc usecase__PostPayment: 診療翌々月の入金。
     usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+    %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
     usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+    %% desc usecase__ReconcileBalance: 未収金管理台帳の作成。
     usecase__RecordClaimAssessment["査定の取込"]:::usecase
+    %% desc usecase__RecordClaimAssessment: 査定の取込。
     usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+    %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
     usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+    %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
     usecase__ReleaseHeldStatement["保留レセプトの再提出準備"]:::usecase
+    %% desc usecase__ReleaseHeldStatement: 保留レセプトの再提出準備。
     usecase__RequestReexamination["再審査請求"]:::usecase
+    %% desc usecase__RequestReexamination: 再審査請求。
     usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+    %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
     usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+    %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
     usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+    %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
     usecase__VoidCharge["コストの取消"]:::usecase
+    %% desc usecase__VoidCharge: コストの取消。
     screen__BalanceScreen["未収金画面"]:::screen
     screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
     screen__ClaimScreen["レセプト画面"]:::screen
@@ -2154,11 +2334,17 @@ flowchart TD
     end
   end
   usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+  %% desc usecase__CloseCarePlan: ケアプラン終了。
   usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
   usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  %% desc usecase__NotifyPatientResult: 結果の患者通知。
   usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+  %% desc usecase__ReviewPatientResponse: 患者応答の確認。
   usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  %% desc usecase__ScheduleFollowUpVisit: 再診予約。
   usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+  %% desc usecase__SendFollowUpMessage: 患者連絡。
   step__CarePlanStep -->|branches| step__ResultNoticeStep
   step__CarePlanStep -.->|covers| usecase__CreateCarePlan
   step__CarePlanStep -->|precedes| step__FollowUpMsgStep
@@ -2193,15 +2379,22 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucFol
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+    %% desc actor__CareCoordinator: 診療後のケアプランを作り、患者への連絡と再診予約を追う。
     extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   end
   subgraph layer_boundary["システム境界"]
     usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+    %% desc usecase__CloseCarePlan: ケアプラン終了。
     usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+    %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
     usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+    %% desc usecase__NotifyPatientResult: 結果の患者通知。
     usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+    %% desc usecase__ReviewPatientResponse: 患者応答の確認。
     usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+    %% desc usecase__ScheduleFollowUpVisit: 再診予約。
     usecase__SendFollowUpMessage["患者への連絡"]:::usecase
+    %% desc usecase__SendFollowUpMessage: 患者連絡。
     screen__CarePlanScreen["ケアプラン画面"]:::screen
     screen__FollowUpScheduleScreen["再診予約画面"]:::screen
     screen__PatientMessageScreen["患者連絡画面"]:::screen
@@ -2298,14 +2491,21 @@ rdra-ish diagram samples/clinic-ops --kind usecase --format mermaid --buc BucSta
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__ClinicAdmin["病院管理者"]:::actor
+    %% desc actor__ClinicAdmin: 診療枠と診察室のマスタを管理し、監査の指摘を解決する。
   end
   subgraph layer_boundary["システム境界"]
     usecase__BlockScheduleSlot["診療枠の停止"]:::usecase
+    %% desc usecase__BlockScheduleSlot: 診療枠の停止。
     usecase__ConfigureRoom["診察室の設定"]:::usecase
+    %% desc usecase__ConfigureRoom: 部屋の設定。
     usecase__ManageProviderSchedule["診療枠の管理"]:::usecase
+    %% desc usecase__ManageProviderSchedule: 診療枠の管理。
     usecase__ReleaseRoom["診察室の解放"]:::usecase
+    %% desc usecase__ReleaseRoom: 部屋の解放。
     usecase__ResolveAuditFinding["監査指摘の解決"]:::usecase
+    %% desc usecase__ResolveAuditFinding: 監査指摘の解決。
     usecase__ReviewAuditEvents["監査ログの確認"]:::usecase
+    %% desc usecase__ReviewAuditEvents: 監査イベントの確認。
     screen__AuditReviewScreen["監査ログ画面"]:::screen
     screen__RoomAdminScreen["診察室管理画面"]:::screen
     screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
@@ -2557,42 +2757,55 @@ rdra-ish diagram samples/clinic-ops --kind event --format mermaid --out samples/
 flowchart LR
   event__EvAppointmentCancelled["予約取消"]:::event
   usecase__CancelAppointment["予約の取消"]:::usecase
+  %% desc usecase__CancelAppointment: 取消理由と予約枠更新。
   usecase__CancelAppointment -.->|raises| event__EvAppointmentCancelled
   usecase__SendAppointmentNotice["予約の通知"]:::usecase
+  %% desc usecase__SendAppointmentNotice: 予約イベントからの通知作成。
   event__EvAppointmentCancelled -.->|triggers| usecase__SendAppointmentNotice
   extsystem__MessagingGateway["患者通知サービス"]:::extsystem
   event__EvAppointmentCancelled -.->|triggers| extsystem__MessagingGateway
   event__EvAppointmentCheckedIn["受付完了"]:::event
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
   usecase__CheckInPatient -.->|raises| event__EvAppointmentCheckedIn
   usecase__OpenEncounter["診療記録を開く"]:::usecase
+  %% desc usecase__OpenEncounter: 受付済の予約から診療記録を開く。
   event__EvAppointmentCheckedIn -.->|triggers| usecase__OpenEncounter
   usecase__PrepareEncounter["診療の準備"]:::usecase
+  %% desc usecase__PrepareEncounter: 診療準備の参照情報。
   event__EvAppointmentCheckedIn -.->|triggers| usecase__PrepareEncounter
   buc__BucClinicalEncounter["診察"]:::buc
+  %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
   event__EvAppointmentCheckedIn -.->|triggers| buc__BucClinicalEncounter
   extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
   event__EvAppointmentCheckedIn -.->|triggers| extsystem__OnlineEligibilitySystem
   event__EvAppointmentRescheduled["予約変更"]:::event
   usecase__RescheduleAppointment["予約の変更"]:::usecase
+  %% desc usecase__RescheduleAppointment: 予約を変更する。予約の状態は変わらない。
   usecase__RescheduleAppointment -.->|raises| event__EvAppointmentRescheduled
   event__EvAppointmentRescheduled -.->|triggers| usecase__SendAppointmentNotice
   event__EvAppointmentRescheduled -.->|triggers| extsystem__MessagingGateway
   event__EvAppointmentScheduled["予約確定"]:::event
   usecase__BookAppointment["予約の確定"]:::usecase
+  %% desc usecase__BookAppointment: 予約確定と予約枠更新。
   usecase__BookAppointment -.->|raises| event__EvAppointmentScheduled
   usecase__ScheduleFollowUpVisit["再診の予約"]:::usecase
+  %% desc usecase__ScheduleFollowUpVisit: 再診予約。
   usecase__ScheduleFollowUpVisit -.->|raises| event__EvAppointmentScheduled
   event__EvAppointmentScheduled -.->|triggers| usecase__SendAppointmentNotice
   usecase__SendIntakeForms["問診票の送付"]:::usecase
+  %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
   event__EvAppointmentScheduled -.->|triggers| usecase__SendIntakeForms
   buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
+  %% desc buc__BucPatientOnboarding: 新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
   event__EvAppointmentScheduled -.->|triggers| buc__BucPatientOnboarding
   event__EvAppointmentScheduled -.->|triggers| extsystem__MessagingGateway
   event__EvBillCalculated["会計計算完了"]:::event
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   usecase__CalculateVisitBill -.->|raises| event__EvBillCalculated
   usecase__CallPatientForPayment["会計の呼出"]:::usecase
+  %% desc usecase__CallPatientForPayment: 会計の呼出（参照のみ）。
   event__EvBillCalculated -.->|triggers| usecase__CallPatientForPayment
   extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
   event__EvBillCalculated -.->|triggers| extsystem__PaymentGateway
@@ -2600,110 +2813,140 @@ flowchart LR
   extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAccepted
   usecase__ReceiveClaimAccepted["レセプト受付（審査へ）"]:::usecase
+  %% desc usecase__ReceiveClaimAccepted: 審査支払機関の受付で審査中になる。
   event__EvClaimAccepted -.->|triggers| usecase__ReceiveClaimAccepted
   event__EvClaimAssessed["査定"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimAssessed
   usecase__RecordClaimAssessment["査定の取込"]:::usecase
+  %% desc usecase__RecordClaimAssessment: 査定の取込。
   event__EvClaimAssessed -.->|triggers| usecase__RecordClaimAssessment
   event__EvClaimReceiptError["受付不能・要確認"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReceiptError
   usecase__RecordReceiptError["受付不能・要確認の確認"]:::usecase
+  %% desc usecase__RecordReceiptError: 受付不能・要確認の確認。
   event__EvClaimReceiptError -.->|triggers| usecase__RecordReceiptError
   event__EvClaimReturned["返戻"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimReturned
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
   event__EvClaimReturned -.->|triggers| usecase__RecordClaimReturn
   event__EvClaimStatementsSubmitted["レセプト請求"]:::event
   usecase__SubmitClaimStatements["レセプト請求"]:::usecase
+  %% desc usecase__SubmitClaimStatements: 毎月10日までの請求。
   usecase__SubmitClaimStatements -.->|raises| event__EvClaimStatementsSubmitted
   event__EvClaimStatementsSubmitted -.->|triggers| extsystem__ClaimsReviewOrganization
   event__EvClaimTransferred["資格の振替・分割"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvClaimTransferred
   usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  %% desc usecase__ReviewClaimTransfer: 資格の振替・分割の確認（参照のみ）。
   event__EvClaimTransferred -.->|triggers| usecase__ReviewClaimTransfer
   event__EvClinicalOrderReviewed["検査結果の確認"]:::event
   usecase__ReviewLabResult["検査結果の確認"]:::usecase
+  %% desc usecase__ReviewLabResult: 結果確認と後続通知の起点。
   usecase__ReviewLabResult -.->|raises| event__EvClinicalOrderReviewed
   usecase__NotifyCriticalResult["重要結果（パニック値）の通知"]:::usecase
+  %% desc usecase__NotifyCriticalResult: 重要結果の患者通知。
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyCriticalResult
   usecase__NotifyPatientResult["検査結果の患者通知"]:::usecase
+  %% desc usecase__NotifyPatientResult: 結果の患者通知。
   event__EvClinicalOrderReviewed -.->|triggers| usecase__NotifyPatientResult
   buc__BucFollowupCare["フォローアップ"]:::buc
+  %% desc buc__BucFollowupCare: 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
   event__EvClinicalOrderReviewed -.->|triggers| buc__BucFollowupCare
   event__EvConsultationCompleted["診察終了"]:::event
   usecase__CompleteConsultation["診察終了"]:::usecase
+  %% desc usecase__CompleteConsultation: 診察終了で予約を計算待ちにし、部屋を清掃中にし、会計を起動する。
   usecase__CompleteConsultation -.->|raises| event__EvConsultationCompleted
   buc__BucVisitPayment["計算・会計"]:::buc
-  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   event__EvConsultationCompleted -.->|triggers| buc__BucVisitPayment
   event__EvEligibilityChecked["資格確認結果"]:::event
   extsystem__OnlineEligibilitySystem -.->|raises| event__EvEligibilityChecked
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityInvalid
   usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityNoInfo
   usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
   event__EvEligibilityChecked -.->|triggers| usecase__ReceiveEligibilityValid
   event__EvEncounterSigned["診療記録の署名"]:::event
   usecase__SignEncounter["診療記録の署名"]:::usecase
+  %% desc usecase__SignEncounter: 署名でコスト情報登録とケアプラン作成を起動する。
   usecase__SignEncounter -.->|raises| event__EvEncounterSigned
   usecase__CreateCarePlan["ケアプランの作成"]:::usecase
+  %% desc usecase__CreateCarePlan: 署名イベントからのケアプラン作成。
   event__EvEncounterSigned -.->|triggers| usecase__CreateCarePlan
   usecase__CreateCharge["コスト情報の登録"]:::usecase
+  %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
   event__EvEncounterSigned -.->|triggers| usecase__CreateCharge
   buc__BucBillingClaims["レセプト作成・請求"]:::buc
-  %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+  %% desc buc__BucBillingClaims: レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
   event__EvEncounterSigned -.->|triggers| buc__BucBillingClaims
   event__EvEncounterSigned -.->|triggers| buc__BucFollowupCare
   event__EvLabResultReceived["検査結果の受信"]:::event
   extsystem__OutsourcedLabSystem["外注検査システム"]:::extsystem
   extsystem__OutsourcedLabSystem -.->|raises| event__EvLabResultReceived
   usecase__ReceiveLabResult["検査結果の受信"]:::usecase
+  %% desc usecase__ReceiveLabResult: 外注検査システムからの結果受信。
   event__EvLabResultReceived -.->|triggers| usecase__ReceiveLabResult
   event__EvPaymentSettled["自動精算機での精算完了"]:::event
   extsystem__PaymentGateway -.->|raises| event__EvPaymentSettled
   usecase__SettleAtKiosk["自動精算機での精算"]:::usecase
+  %% desc usecase__SettleAtKiosk: 自動精算機での精算。
   event__EvPaymentSettled -.->|triggers| usecase__SettleAtKiosk
   event__EvPharmacyInquiry["保険薬局からの疑義照会"]:::event
   extsystem__InsurancePharmacy["保険薬局"]:::extsystem
   extsystem__InsurancePharmacy -.->|raises| event__EvPharmacyInquiry
   usecase__AnswerPharmacyInquiry["保険薬局からの疑義照会への回答"]:::usecase
+  %% desc usecase__AnswerPharmacyInquiry: 保険薬局からの疑義照会への回答。
   event__EvPharmacyInquiry -.->|triggers| usecase__AnswerPharmacyInquiry
   event__EvPrescriptionDispensed["保険薬局での調剤完了"]:::event
   extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
   extsystem__EPrescriptionService -.->|raises| event__EvPrescriptionDispensed
   usecase__ConfirmDispense["保険薬局での調剤結果の受信"]:::usecase
+  %% desc usecase__ConfirmDispense: 保険薬局での調剤結果の受信。
   event__EvPrescriptionDispensed -.->|triggers| usecase__ConfirmDispense
   event__EvPrescriptionIssued["電子処方箋の登録"]:::event
   usecase__IssueOutsidePrescription["院外処方箋の発行"]:::usecase
+  %% desc usecase__IssueOutsidePrescription: 院外処方箋の発行と電子処方箋管理サービスへの登録。
   usecase__IssueOutsidePrescription -.->|raises| event__EvPrescriptionIssued
   event__EvPrescriptionIssued -.->|triggers| extsystem__EPrescriptionService
   event__EvRemittance["診療報酬の支払"]:::event
   extsystem__ClaimsReviewOrganization -.->|raises| event__EvRemittance
   usecase__PostPayment["診療報酬の入金"]:::usecase
+  %% desc usecase__PostPayment: 診療翌々月の入金。
   event__EvRemittance -.->|triggers| usecase__PostPayment
   timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
   usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+  %% desc usecase__BatchVerifyEligibility: 予約済み患者（BookedPatient 条件）だけを一括照会する。
   timer__EligibilityBatchInquiry -.->|triggers| usecase__BatchVerifyEligibility
   timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
   usecase__ResendErroredStatement["エラー分レセプトの再送"]:::usecase
+  %% desc usecase__ResendErroredStatement: 11日・12日のエラー分再送。
   timer__ErrorResendWindow -.->|triggers| usecase__ResendErroredStatement
   timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
   usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
   timer__IntakeExpiryCheck -.->|triggers| usecase__ExpireIntakeForms
   timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
   usecase__GenerateClaimStatement["レセプト作成"]:::usecase
+  %% desc usecase__GenerateClaimStatement: 月初のレセプト作成。
   timer__MonthlyClaimCreation -.->|triggers| usecase__GenerateClaimStatement
   timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
   timer__MonthlyClaimDeadline -.->|triggers| usecase__SubmitClaimStatements
   timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
   usecase__MarkNoShow["未来院の処理"]:::usecase
+  %% desc usecase__MarkNoShow: タイマー起動の未来院処理。
   timer__NoShowSweep -.->|triggers| usecase__MarkNoShow
   timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
   usecase__ExpirePrescription["処方箋の使用期間切れ"]:::usecase
+  %% desc usecase__ExpirePrescription: 使用期間切れのタイマー処理。
   timer__PrescriptionUsePeriodCheck -.->|triggers| usecase__ExpirePrescription
   timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
   usecase__ReconcileBalance["未収金管理台帳の作成"]:::usecase
+  %% desc usecase__ReconcileBalance: 未収金管理台帳の作成。
   timer__ReceivablesMonthlyReview -.->|triggers| usecase__ReconcileBalance
   timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
   timer__ReturnDownloadCheck -.->|triggers| usecase__RecordClaimReturn
@@ -2983,10 +3226,15 @@ flowchart LR
     variation__ReferralDirection__outbound["紹介先へ送付"]:::value
   end
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
   usecase__BatchVerifyEligibility["資格の一括照会"]:::usecase
+  %% desc usecase__BatchVerifyEligibility: 予約済み患者（BookedPatient 条件）だけを一括照会する。
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   usecase__CollectSpecimen["採血"]:::usecase
+  %% desc usecase__CollectSpecimen: 医師が確定したオーダだけを採取する。
   usecase__RecordClaimReturn["返戻レセプトの取込"]:::usecase
+  %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
   condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   condition__BookedPatient -.->|combines| statemodel__Appointment_status
   %% derived condition__BookedPatient -> statemodel__Appointment_status from holds

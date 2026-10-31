@@ -15,15 +15,25 @@ flowchart LR
   end
   subgraph layer_boundary["システム境界"]
     usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+    %% desc usecase__ArchivePatient: 患者アーカイブ状態。
     usecase__CaptureConsent["同意の取得"]:::usecase
+    %% desc usecase__CaptureConsent: 同意記録を作る。同意の有無は Bool、未回答は null で持つ。
     usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+    %% desc usecase__CompleteIntakeForms: 問診完了イベント。
     usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+    %% desc usecase__ExpireIntakeForms: 問診期限切れイベント。
     usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+    %% desc usecase__MergeDuplicatePatient: 患者統合状態。
     usecase__RegisterPatient["新患登録"]:::usecase
+    %% desc usecase__RegisterPatient: 新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。
     usecase__SearchPatient["患者の検索"]:::usecase
+    %% desc usecase__SearchPatient: 患者を検索する。参照だけの API で、患者の作成とは分ける。
     usecase__SendIntakeForms["問診票の送付"]:::usecase
+    %% desc usecase__SendIntakeForms: 問診パケットとメッセージ作成。
     usecase__UpdateDemographics["患者属性の変更"]:::usecase
+    %% desc usecase__UpdateDemographics: 患者の属性を API で更新する。
     usecase__VerifyInsurance["保険資格・限度額情報の登録（新患登録）"]:::usecase
+    %% desc usecase__VerifyInsurance: 保険資格の登録と限度額情報（適用区分）の取得。
     screen__ConsentScreen["同意取得画面"]:::screen
     screen__InsuranceScreen["保険資格登録画面"]:::screen
     screen__IntakePortalScreen["問診票ポータル画面"]:::screen

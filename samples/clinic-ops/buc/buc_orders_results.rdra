@@ -7,24 +7,24 @@ import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
-buc BucOrdersResults "検体検査"
+buc BucOrdersResults "検体検査" description "検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。"
 
 // 検体検査オーダの登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:108).
-usecase PlaceLabOrder       "検体検査オーダの登録"
+usecase PlaceLabOrder       "検体検査オーダの登録" description "医師が登録したオーダは確定済み。"
 // 看護師や医師事務作業補助者 enter the physician's 指示 into the chart as a 代行入力（代行オーダー）
 // (mhlw-2020-dairi-nyuuryoku.txt:71-79). The 指示 itself is the physician's alone (:9), and the
 // physician checks what the order needs before it is carried out (:15).
-usecase EnterProxyOrder     "検体検査オーダの代行入力"
-usecase ConfirmProxyOrder   "代行入力オーダの確定"
+usecase EnterProxyOrder     "検体検査オーダの代行入力" description "代行入力オーダは未確定で作られる。"
+usecase ConfirmProxyOrder   "代行入力オーダの確定" description "医師による代行入力オーダの確定。"
 // 採血管ラベル発行・貼付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:129).
-usecase PrintSpecimenLabel  "採血管ラベル発行・貼付"
-usecase CollectSpecimen     "採血"
+usecase PrintSpecimenLabel  "採血管ラベル発行・貼付" description "採血管ラベルの発行（参照のみ）。"
+usecase CollectSpecimen     "採血" description "医師が確定したオーダだけを採取する。"
 // 実施内容(コスト)の登録 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:152), which 会計計算 reads.
-usecase RegisterPerformedProcedure "実施内容（コスト）の登録"
-usecase ReceiveLabResult    "検査結果の受信"
-usecase ReviewLabResult     "検査結果の確認"
-usecase NotifyCriticalResult "重要結果（パニック値）の通知"
-usecase CancelClinicalOrder "オーダの取消"
+usecase RegisterPerformedProcedure "実施内容（コスト）の登録" description "実施内容（コスト）の登録。"
+usecase ReceiveLabResult    "検査結果の受信" description "外注検査システムからの結果受信。"
+usecase ReviewLabResult     "検査結果の確認" description "結果確認と後続通知の起点。"
+usecase NotifyCriticalResult "重要結果（パニック値）の通知" description "重要結果の患者通知。"
+usecase CancelClinicalOrder "オーダの取消" description "オーダ取消。"
 
 screen OrderEntryScreen      "オーダ入力画面"
 screen SpecimenScreen        "採血画面"

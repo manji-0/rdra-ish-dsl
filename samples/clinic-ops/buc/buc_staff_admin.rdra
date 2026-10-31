@@ -5,14 +5,14 @@ import shared.entities
 import shared.biz
 import shared.goals
 
-buc BucStaffAdministration "病院管理"
+buc BucStaffAdministration "病院管理" description "病院運営のマスタ（診療枠・診察室）と監査の業務を扱う。"
 
-usecase ManageProviderSchedule "診療枠の管理"
-usecase BlockScheduleSlot      "診療枠の停止"
-usecase ConfigureRoom          "診察室の設定"
-usecase ReleaseRoom            "診察室の解放"
-usecase ReviewAuditEvents      "監査ログの確認"
-usecase ResolveAuditFinding    "監査指摘の解決"
+usecase ManageProviderSchedule "診療枠の管理" description "診療枠の管理。"
+usecase BlockScheduleSlot      "診療枠の停止" description "診療枠の停止。"
+usecase ConfigureRoom          "診察室の設定" description "部屋の設定。"
+usecase ReleaseRoom            "診察室の解放" description "部屋の解放。"
+usecase ReviewAuditEvents      "監査ログの確認" description "監査イベントの確認。"
+usecase ResolveAuditFinding    "監査指摘の解決" description "監査指摘の解決。"
 
 screen ScheduleAdminScreen "診療枠管理画面"
 screen RoomAdminScreen     "診察室管理画面"

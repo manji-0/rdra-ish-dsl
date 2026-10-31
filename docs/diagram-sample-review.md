@@ -129,20 +129,25 @@ flowchart LR
   goal__TimelyClaims["会計から請求までの遅れと返戻を減らす<br/>請求したレセプトのうち返戻になった割合: 3% → 1%"]:::goal
   %% desc goal__TimelyClaims: 診察後の会計や請求に漏れや遅れがあると、収入が遅れ、返戻の訂正に事務の手間がかかる。
   buc__BucAppointmentScheduling["予約"]:::buc
-  %% desc buc__BucAppointmentScheduling: 空き枠の検索、仮押さえ、予約の確定・変更・取消と通知。
+  %% desc buc__BucAppointmentScheduling: 予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。
   buc__BucBillingClaims["レセプト作成・請求"]:::buc
-  %% desc buc__BucBillingClaims: 月ごとのレセプトの作成・院内点検・請求と、審査支払機関からの受付不能・返戻・査定・支払への対応。
+  %% desc buc__BucBillingClaims: レセプト（患者 × 診療月 × 保険者）の作成・院内点検・請求と、審査支払機関（支払基金・国保連）からの受付不能・返戻・査定・支払への対応を扱う。前月分は翌月10日までに請求し、受付不能・要確認は11日・12日に再送する。返戻は訂正して当月分と併せて再請求できるが、査定は再請求できず再審査請求で争う。資格が変わったレセプトは審査支払機関が振替・分割するので返戻にならないが、負担割合が異なる変更や公費の分割はできず返戻になる。支払は診療の翌々月。期間のうち DSL で表せないもの（10日、11・12日、5日〜月末、3か月、翌々月）はタイマーとコメントで示す。
   buc__BucClinicalEncounter["診察"]:::buc
+  %% desc buc__BucClinicalEncounter: 診療記録を開き、バイタル、診断、署名、診察終了までを扱う。診察終了 `CompleteConsultation` で予約は「計算待ち」になり、会計は計算受付へ移る。他院紹介では医師が診療情報提供書を作成・送信する。検査オーダは診察中に医師が出し、署名の後に診察終了とする。署名イベント `EvEncounterSigned` はカルテのコスト情報の登録とケアプラン作成を、診察終了イベント `EvConsultationCompleted` は計算・会計を起動する。
   buc__BucFollowupCare["フォローアップ"]:::buc
+  %% desc buc__BucFollowupCare: 診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。
   buc__BucOrdersResults["検体検査"]:::buc
+  %% desc buc__BucOrdersResults: 検査オーダーから結果確認、重要結果通知までを扱う。医師事務作業補助者や看護師がオーダを代行入力した場合、医師が確定するまで看護師は採血しない（保助看法 第37条）。この規則は `OrderConfirmedByPhysician` 条件と `forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)` で検証する。外注検査の結果は外注検査システムから届く。採血管ラベルの発行と実施内容（コスト）の登録が会計計算の入力になる。実施入力のコストは `Charge.origin` が `performed` で、カルテ由来（`chart`）や選定療養費（`selectedfee`）のコストと発生元で区別される。
   buc__BucPatientOnboarding["新患登録・患者情報管理"]:::buc
+  %% desc buc__BucPatientOnboarding: 新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。
   buc__BucPrescriptionFulfillment["処方"]:::buc
-  %% desc buc__BucPrescriptionFulfillment: 処方オーダ、院外処方箋の発行と電子処方箋管理サービスへの登録、院内処方の調剤・監査・服薬指導・交付、疑義照会。
+  %% desc buc__BucPrescriptionFulfillment: 処方オーダから院外処方箋の発行、院内処方の調剤・監査・服薬指導・交付、疑義照会までを扱う。院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤される。病院は特定の保険薬局を指示しない（療担規則 第2条の5）ので、`Prescription` は薬局を持たない。使用期間は交付日を含めて4日以内で、日数は DSL で数えられないためタイマーで期限切れにする。薬剤師は疑わしい点があれば医師に問い合わせ、回答までは調剤しない。
   buc__BucStaffAdministration["病院管理"]:::buc
+  %% desc buc__BucStaffAdministration: 病院運営のマスタ（診療枠・診察室）と監査の業務を扱う。
   buc__BucVisitCheckIn["受付（初診・再診）"]:::buc
-  %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内。会計は診察の後に行う。
+  %% desc buc__BucVisitCheckIn: 到着確認、資格確認、紹介状の受付、診察室への案内を扱う。療養担当規則 第3条により受付のたびに資格を確認するので、`CheckInPatient` は必ずオンライン資格確認を伴い `EligibilityCheck` を作る。結果は 有効・無効・該当資格なし の 3 通りで、無効と該当資格なしは再確認へ戻る。システムが答えられない場合は被保険者資格申立書かシステム障害時モードで確認する。来院前には予約済み患者の一括照会を行う。受付では支払を受けない（会計は `BucVisitPayment`）。
   buc__BucVisitPayment["計算・会計"]:::buc
-  %% desc buc__BucVisitPayment: 診察後の会計計算入力、患者の呼出、窓口または自動精算機での精算、領収証・明細書の交付。
+  %% desc buc__BucVisitPayment: 診察の後の会計計算入力、患者の呼出、会計窓口または自動精算機での精算、領収証・明細書の交付を扱う。一部負担金は負担割合で計算し、限度額情報があれば窓口での支払は自己負担限度額までになる（`CopayCappedAtLimit`）。紹介状なしの初診で除外に当たらない場合は選定療養費を自費の Charge として算定する（`UnreferredFirstVisit`）。金額は病院の設定 `SelectedTreatmentFeeSetting` に置き、モデルは数値を持たない。
   subgraph group_out_of_scope["やらないこと"]
     requirement__ReqNoOnlineConsultation["オンライン診療は対象外とする"]:::requirement
   end
@@ -359,15 +364,25 @@ flowchart TD
     end
   end
   usecase__AssignRoom["診察室への案内"]:::usecase
+  %% desc usecase__AssignRoom: 受付済の受診だけを診察室へ案内する。予約の状態は変わらない。
   usecase__CheckInPatient["受付（初診・再診）"]:::usecase
+  %% desc usecase__CheckInPatient: 受付で予約を受付済にし、同時にオンライン資格確認を作る。
   usecase__ConfirmEligibilityInOutageMode["システム障害時モードでの資格確認"]:::usecase
+  %% desc usecase__ConfirmEligibilityInOutageMode: システム障害時モードによる確認。
   usecase__ReceiveEligibilityInvalid["資格確認結果（無効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityInvalid: 資格確認結果「無効」の取込。
   usecase__ReceiveEligibilityNoInfo["資格確認結果（該当資格なし）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityNoInfo: 資格確認結果「該当資格なし」の取込。
   usecase__ReceiveEligibilityValid["資格確認結果（有効）の取込"]:::usecase
+  %% desc usecase__ReceiveEligibilityValid: 資格確認結果「有効」の取込。
   usecase__ReceiveReferralLetter["紹介状受付処理"]:::usecase
+  %% desc usecase__ReceiveReferralLetter: 紹介状の受領と受付処理。
   usecase__RecheckEligibility["資格の再確認"]:::usecase
+  %% desc usecase__RecheckEligibility: 無効・該当資格なしからの再確認。
   usecase__RecordEligibilityDeclaration["被保険者資格申立書の受領"]:::usecase
+  %% desc usecase__RecordEligibilityDeclaration: 被保険者資格申立書による確認。
   usecase__VerifyArrival["予約票・診察券の確認"]:::usecase
+  %% desc usecase__VerifyArrival: 予約票・診察券を確認する（参照のみ）。
   step__ArrivalStep -.->|covers| usecase__VerifyArrival
   step__ArrivalStep -->|precedes| step__EligibilityStep
   step__DeclarationStep -.->|covers| usecase__ConfirmEligibilityInOutageMode
@@ -491,7 +506,9 @@ flowchart LR
     variation__ReferralCategory__exempt["紹介状なし初診（救急搬送等の除外）"]:::value
   end
   usecase__ApplySelectedTreatmentFee["選定療養費の算定"]:::usecase
+  %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
   usecase__CalculateVisitBill["会計計算入力"]:::usecase
+  %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__CopayCappedAtLimit -.->|combines| statemodel__Appointment_status
   condition__CopayCappedAtLimit -.->|combines| variation__BurdenRatio
