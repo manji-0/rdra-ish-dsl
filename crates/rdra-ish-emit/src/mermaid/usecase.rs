@@ -96,7 +96,6 @@ fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<
             (RelKind::Displays, usecase, NodeRef::Screen(_))
             | (RelKind::Raises, usecase, NodeRef::Event(_)) => usecases.contains(usecase),
             (kind, usecase, NodeRef::Entity(_)) if is_crud(kind) => usecases.contains(usecase),
-            // A call to a foreign use case draws its stub.
             (RelKind::Invokes, usecase, target) if model.is_foreign(target) => {
                 usecases.contains(usecase)
             }

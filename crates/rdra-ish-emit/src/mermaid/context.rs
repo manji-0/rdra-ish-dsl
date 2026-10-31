@@ -103,7 +103,6 @@ impl Emitter for ContextMermaidEmitter {
                         false,
                     )
                 }
-                // A call to, or a read of, a bound external system's element.
                 (RelKind::Invokes | RelKind::Reads | RelKind::Shows, usecase, stub)
                     if in_scope(usecase) && bound(stub).is_some() =>
                 {
