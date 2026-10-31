@@ -480,6 +480,68 @@ pub enum RdraError {
     #[error("SharedInternalEntity: '{system}' shares internal entity '{entity}' with other models\n  hint: every use of '{entity}' in another model is a `DirectEntityReference` warning there; publish a projection with `exposes({system}, ...).upsert()` when you can, then delete this line")]
     SharedInternalEntity { system: String, entity: String },
 
+    #[error("BindingOnNonExtSystem: `from` binds only an `extsystem`; {kind} '{id}' cannot take it\n  hint: delete the `from` clause, or declare `extsystem {id} \"...\" from <dep>.<System>`")]
+    BindingOnNonExtSystem { kind: String, id: String },
+
+    #[error("UnknownDependency: '{dep}' is not a [dependencies] entry of the manifest ({known})\n  hint: add `{dep} = {{ path = \"...\" }}` under [dependencies]; a dependency of a dependency cannot be bound")]
+    UnknownDependency { dep: String, known: String },
+
+    #[error("DuplicateBinding: {dep}.{system} is already bound as extsystem '{ext}'\n  hint: reference its elements as `{ext}.<Name>` and delete this declaration")]
+    DuplicateBinding {
+        dep: String,
+        system: String,
+        ext: String,
+    },
+
+    #[error("UnknownForeignName: '{qualifier}' publishes no '{name}'\n  hint: the closest published names are {closest}")]
+    UnknownForeignName {
+        qualifier: String,
+        name: String,
+        closest: String,
+    },
+
+    #[error("NotExposed: '{qualified}' is {dep}'s internal {kind} '{name}', which it does not publish\n  hint: {hint}")]
+    NotExposed {
+        qualified: String,
+        dep: String,
+        kind: String,
+        name: String,
+        hint: String,
+    },
+
+    #[error("ForeignWrite: `{predicate}` on '{id}' writes another model's data\n  hint: {hint}")]
+    ForeignWrite {
+        id: String,
+        dep: String,
+        predicate: String,
+        hint: String,
+    },
+
+    #[error("ForeignContained: '{id}' is a use case of external system '{ext}', so no BUC of this model contains it\n  hint: call it from one of your use cases with `invokes(<UseCase>, {id})`")]
+    ForeignContained { id: String, ext: String },
+
+    #[error("ForeignOperand: '{id}' cannot be argument {position} of `{predicate}`\n  hint: a foreign {kind} may appear only in {uses}")]
+    ForeignOperand {
+        id: String,
+        predicate: String,
+        position: usize,
+        kind: String,
+        uses: String,
+    },
+
+    #[error("ForeignStateNeedsEnvironment: a guard on '{id}' reads another model's state, which this release cannot model\n  hint: react to an event the owner exposes, or read '{id}' in the use case with `reads`; guards on published data arrive with the environment")]
+    ForeignStateNeedsEnvironment { id: String },
+
+    #[error("IdShadowsForeignSlug: '{id}' is the generated name of '{qualified}'\n  hint: rename '{id}'; generated identifiers of foreign elements join the qualifier with `__`")]
+    IdShadowsForeignSlug { id: String, qualified: String },
+
+    #[error("DirectEntityReference: `{predicate}` names '{id}', an internal entity {dep} shares\n  hint: a shared entity may change shape at any time; prefer a published projection when {dep} offers one")]
+    DirectEntityReference {
+        id: String,
+        dep: String,
+        predicate: String,
+    },
+
     #[error("ForeignImport: module '{module}' belongs to dependency '{dep}', so it cannot be imported\n  hint: bind the system it publishes with `extsystem X \"...\" from {dep}.<System>` and reference its elements as `X.<Name>`")]
     ForeignImport { module: String, dep: String },
 

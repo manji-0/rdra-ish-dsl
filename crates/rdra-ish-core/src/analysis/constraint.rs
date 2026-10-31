@@ -201,6 +201,34 @@ fn resolve_entity_qref(
     diags: &mut Vec<Diagnostic>,
 ) -> Option<EntityKey> {
     let id = qref.parts.last()?.clone();
+    if let Some(found) = crate::binding::resolve_foreign_kind(model, qref, Kind::Entity, ctx, diags)
+    {
+        let NodeRef::Entity(entity) = found? else {
+            return None;
+        };
+        let node = NodeRef::Entity(entity);
+        if pred == "holds" {
+            push_error_qref(
+                ctx,
+                diags,
+                qref,
+                RdraError::ForeignStateNeedsEnvironment {
+                    id: model.entities[entity].id.clone(),
+                },
+            );
+            return None;
+        }
+        return crate::binding::check_foreign_operand(
+            model,
+            pred,
+            1,
+            &node,
+            qref.span.clone(),
+            ctx,
+            diags,
+        )
+        .then_some(entity);
+    }
     if let Some(kind) = &qref.kind_qualifier {
         if kind != &Kind::Entity {
             push_error_qref(

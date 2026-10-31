@@ -374,6 +374,11 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
 
     // 前向き BFS: ER entity-entity 関係を除くすべての forward 関係を辿る
     while let Some(current) = queue.pop() {
+        // A foreign stub is a leaf, and it brings the external system it is bound through.
+        if let Some(origin) = model.origin(&current) {
+            visited.insert(NodeRef::ExtSystem(origin.ext));
+            continue;
+        }
         for rel in &model.relations {
             if matches!(
                 rel.kind,
@@ -403,6 +408,11 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
         })
         .map(|rel| rel.from.clone())
         .collect();
+    for event in &inbound {
+        if let Some(origin) = model.origin(event) {
+            visited.insert(NodeRef::ExtSystem(origin.ext));
+        }
+    }
     visited.extend(inbound);
 
     // 第2パス: 起点 BUC に直接 performs している Actor と、閉包内へ入る Timer（triggers）/

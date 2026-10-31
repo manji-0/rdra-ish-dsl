@@ -282,6 +282,9 @@ fn resolve_qref(
             .import_scopes
             .resolve_namespaced(ctx.source_id, alias, name)
         {
+            _ if crate::binding::bound_ext(model, alias).is_some() => {
+                return crate::binding::resolve_foreign(model, qref, ctx, diags).flatten();
+            }
             Ok(b) => {
                 if b.is_empty() {
                     push_undefined(ctx, diags, qref.span.clone(), format!("{alias}.{name}"));

@@ -13,6 +13,16 @@ pub struct ExtSystem {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+    /// Set by `from dep.System`. An unbound external system keeps the event-only meaning.
+    pub binding: Option<Binding>,
+}
+
+/// `extsystem Auth "..." from auth.AuthSystem`: the dependency and its system this external
+/// system stands for. The stubs of what that system publishes carry `Origin { ext, .. }`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Binding {
+    pub dep: std::string::String,
+    pub system: std::string::String,
 }
 
 #[derive(Debug, Clone)]

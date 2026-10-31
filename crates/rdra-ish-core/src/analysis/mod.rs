@@ -63,6 +63,8 @@ pub fn build_model_items_with_scopes(
         }
     }
 
+    crate::binding::shadow_diagnostics(&model, &mut diags);
+
     for (source_id, item) in items {
         match item {
             Item::Predicate(pred) => {

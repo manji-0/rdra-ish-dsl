@@ -71,6 +71,17 @@ pub(crate) fn register_instance(
             },
         );
     }
+    if inst.kind != Kind::ExtSystem && inst.binding.is_some() {
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::BindingOnNonExtSystem {
+                kind: inst.kind.name().to_string(),
+                id: inst.id.clone(),
+            },
+        );
+    }
     if inst.kind != Kind::UseCase && !usecase_metadata_is_empty(&inst.usecase) {
         push_error(
             ctx,
@@ -96,7 +107,11 @@ pub(crate) fn register_instance(
                 id: inst.id.clone(),
                 label: inst.label.clone(),
                 description: inst.description.clone(),
+                binding: None,
             });
+            if let Some(decl) = &inst.binding {
+                crate::binding::bind(model, k, decl, ctx, diags);
+            }
             NodeRef::ExtSystem(k)
         }
         Kind::System => {

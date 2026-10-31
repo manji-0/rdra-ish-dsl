@@ -13,6 +13,25 @@ pub struct SystemBoundary {
     pub entities: Vec<EntityKey>,
 }
 
+/// How many local system boundaries an entity falls in. A foreign stub and an entity no API
+/// operates are `None`, so the cross-boundary checks never see them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SystemMembership {
+    None,
+    One(SystemKey),
+    Many,
+}
+
+impl SystemMembership {
+    pub fn of(systems: Option<&Vec<SystemKey>>) -> SystemMembership {
+        match systems.map(Vec::as_slice) {
+            None | Some([]) => SystemMembership::None,
+            Some([one]) => SystemMembership::One(*one),
+            Some(_) => SystemMembership::Many,
+        }
+    }
+}
+
 pub fn derive_system_boundaries(model: &SemanticModel) -> Vec<SystemBoundary> {
     let mut apis_by_system: HashMap<SystemKey, Vec<ApiKey>> = HashMap::new();
     for rel in &model.relations {
@@ -54,7 +73,10 @@ pub fn derive_system_boundaries(model: &SemanticModel) -> Vec<SystemBoundary> {
         }
         for rel in &model.relations {
             if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                if api_set.contains(ak) && is_entity_operation(&rel.kind) {
+                if api_set.contains(ak)
+                    && is_entity_operation(&rel.kind)
+                    && !model.is_foreign(&rel.to)
+                {
                     entity_set.insert(*ek);
                 }
             }
@@ -210,17 +232,12 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         let (NodeRef::Entity(from), NodeRef::Entity(to)) = (&rel.from, &rel.to) else {
             continue;
         };
-        let Some(from_systems) = boundary_systems_by_entity.get(from) else {
+        let (SystemMembership::One(from_system), SystemMembership::One(to_system)) = (
+            SystemMembership::of(boundary_systems_by_entity.get(from)),
+            SystemMembership::of(boundary_systems_by_entity.get(to)),
+        ) else {
             continue;
         };
-        let Some(to_systems) = boundary_systems_by_entity.get(to) else {
-            continue;
-        };
-        if from_systems.len() != 1 || to_systems.len() != 1 {
-            continue;
-        }
-        let from_system = from_systems[0];
-        let to_system = to_systems[0];
         if from_system != to_system && !has_coordination(model, *from, *to) {
             push_model_decl_diagnostic(
                 model,
@@ -240,7 +257,13 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 
     for coordination in &model.boundary_coordinations {
         let uc_id = usecase_id(model, coordination.usecase);
-        let Some(left_systems) = boundary_systems_by_entity.get(&coordination.left) else {
+        let left = SystemMembership::of(boundary_systems_by_entity.get(&coordination.left));
+        let right = SystemMembership::of(boundary_systems_by_entity.get(&coordination.right));
+        let cross = match (left, right) {
+            (SystemMembership::One(l), SystemMembership::One(r)) if l != r => Some((l, r)),
+            _ => None,
+        };
+        let Some((left_system, right_system)) = cross else {
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
@@ -255,42 +278,7 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
             );
             continue;
         };
-        let Some(right_systems) = boundary_systems_by_entity.get(&coordination.right) else {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "usecase",
-                &uc_id,
-                RdraError::CoordinationNotCrossSystem {
-                    usecase: uc_id.clone(),
-                    from: entity_id(model, coordination.left),
-                    to: entity_id(model, coordination.right),
-                },
-                true,
-            );
-            continue;
-        };
-        if left_systems.len() != 1
-            || right_systems.len() != 1
-            || left_systems[0] == right_systems[0]
-        {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "usecase",
-                &uc_id,
-                RdraError::CoordinationNotCrossSystem {
-                    usecase: uc_id.clone(),
-                    from: entity_id(model, coordination.left),
-                    to: entity_id(model, coordination.right),
-                },
-                true,
-            );
-            continue;
-        }
 
-        let left_system = left_systems[0];
-        let right_system = right_systems[0];
         if !usecase_invokes_api_for_entity_in_system(
             model,
             coordination.usecase,
