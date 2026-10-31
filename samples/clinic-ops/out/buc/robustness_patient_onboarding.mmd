@@ -1,0 +1,66 @@
+%% rdra-ish diagram=robustness scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% kinds: actor screen timer api usecase entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__Patient["患者"]:::actor
+  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  screen__ConsentScreen["同意取得画面"]:::screen
+  screen__InsuranceScreen["保険資格登録画面"]:::screen
+  screen__IntakePortalScreen["問診票ポータル画面"]:::screen
+  screen__PatientProfileScreen["患者基本情報画面"]:::screen
+  screen__PatientSearchScreen["患者検索画面"]:::screen
+  timer__IntakeExpiryCheck["問診票の期限切れ確認（毎晩）"]:::timer
+  api__ConsentApi["同意 API"]:::api
+  api__EligibilityApi["保険資格登録 API"]:::api
+  api__IntakeMessagingApi["問診票送付 API"]:::api
+  api__RegisterPatientApi["新患登録 API"]:::api
+  api__SearchPatientApi["患者検索 API"]:::api
+  api__UpdateDemographicsApi["患者属性変更 API"]:::api
+  usecase__ArchivePatient["患者のアーカイブ"]:::usecase
+  usecase__CompleteIntakeForms["問診票の回答"]:::usecase
+  usecase__ExpireIntakeForms["問診票の期限切れ"]:::usecase
+  usecase__MergeDuplicatePatient["重複患者の統合"]:::usecase
+  entity__ConsentRecord["同意記録"]:::entity
+  entity__EligibilityCheck["資格確認"]:::entity
+  entity__InsurancePolicy["保険資格"]:::entity
+  entity__IntakePacket["問診票"]:::entity
+  entity__PatientAccount["患者登録"]:::entity
+  entity__PatientMessage["患者連絡"]:::entity
+  entity__PatientProfile["患者基本情報"]:::entity
+  actor__Patient -->|uses| screen__ConsentScreen
+  actor__Patient -->|uses| screen__IntakePortalScreen
+  actor__ReceptionClerk -->|uses| screen__InsuranceScreen
+  actor__ReceptionClerk -->|uses| screen__IntakePortalScreen
+  actor__ReceptionClerk -->|uses| screen__PatientProfileScreen
+  actor__ReceptionClerk -->|uses| screen__PatientSearchScreen
+  api__ConsentApi -->|C| entity__ConsentRecord
+  api__EligibilityApi -->|C| entity__EligibilityCheck
+  api__EligibilityApi -->|RU| entity__InsurancePolicy
+  api__IntakeMessagingApi -->|C| entity__IntakePacket
+  api__IntakeMessagingApi -->|C| entity__PatientMessage
+  api__RegisterPatientApi -->|C| entity__PatientAccount
+  api__RegisterPatientApi -->|C| entity__PatientProfile
+  api__SearchPatientApi -->|R| entity__PatientAccount
+  api__SearchPatientApi -->|R| entity__PatientProfile
+  api__UpdateDemographicsApi -->|U| entity__PatientProfile
+  screen__ConsentScreen -->|同意の取得| api__ConsentApi
+  screen__InsuranceScreen -->|保険資格・限度額情報の登録（新患登録）| api__EligibilityApi
+  screen__IntakePortalScreen -->|問診票の回答| usecase__CompleteIntakeForms
+  screen__IntakePortalScreen -->|問診票の期限切れ| usecase__ExpireIntakeForms
+  screen__IntakePortalScreen -->|問診票の送付| api__IntakeMessagingApi
+  screen__PatientProfileScreen -->|患者のアーカイブ| usecase__ArchivePatient
+  screen__PatientProfileScreen -->|患者属性の変更| api__UpdateDemographicsApi
+  screen__PatientProfileScreen -->|新患登録| api__RegisterPatientApi
+  screen__PatientProfileScreen -->|重複患者の統合| usecase__MergeDuplicatePatient
+  screen__PatientSearchScreen -->|患者の検索| api__SearchPatientApi
+  timer__IntakeExpiryCheck -.->|問診票の期限切れ確認（毎晩）| usecase__ExpireIntakeForms
+  usecase__ArchivePatient -->|U| entity__PatientAccount
+  usecase__CompleteIntakeForms -->|U| entity__IntakePacket
+  usecase__ExpireIntakeForms -->|U| entity__IntakePacket
+  usecase__MergeDuplicatePatient -->|U| entity__PatientAccount
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

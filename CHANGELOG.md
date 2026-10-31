@@ -4,6 +4,14 @@
 
 ### Added
 
+- `diagram --kind robustness` draws the use cases as an ICONIX robustness diagram:
+  actors reach the screens they use, a screen reaches the API its use case invokes (or the
+  use case itself when it has no API or writes entities directly), and a control reaches
+  the entities it reads and writes, labelled `CRUD`. External systems and timers sit at the
+  boundary, and an event that joins two controls is a dotted edge. The grammar leaves out
+  an actor-to-control and a boundary-to-entity edge, so a BUC reads in about half the
+  edges of its UC複合図 (clinic-ops billing: 46 against 88). `--buc` and `--usecase` scope it; clinic-ops ships one
+  per BUC.
 - `list --format markdown`, `lint --format markdown`, and `csv --format markdown` write a
   Markdown table with the CSV columns, so a requirement list, a CRUD matrix, or a permission
   audit pastes into a design doc or a PRD as it is. `rdra_ish_emit::markdown` renders the

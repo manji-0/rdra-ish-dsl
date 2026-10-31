@@ -163,7 +163,7 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, context, requirement, business, usecase, flow, information,
+        /// Diagram kind: rdra, context, requirement, business, usecase, robustness, flow, information,
         /// condition, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
@@ -175,7 +175,7 @@ pub(crate) enum Commands {
         /// Applies to all diagram kinds.
         #[arg(long)]
         buc: Vec<String>,
-        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase, and not
+        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase and robustness, and not
         /// together with --buc.
         #[arg(long)]
         usecase: Vec<String>,
@@ -335,6 +335,9 @@ pub(crate) enum DiagramKind {
     /// UC複合図: each use case with its actors, screens, information, events, external
     /// systems, timers, conditions, and state transitions
     Usecase,
+    /// ロバストネス図: ICONIX boundary / control / entity of each use case, drawn actor ->
+    /// boundary -> control -> entity
+    Robustness,
     /// 業務フロー: each flow with its steps in order, their branches, exceptions, and
     /// repeats, what each step covers, and a lane per actor when steps are performed
     Flow,

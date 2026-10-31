@@ -1,0 +1,46 @@
+%% rdra-ish diagram=robustness scope=buc:BucFollowupCare model=samples/clinic-ops
+%% kinds: actor extsystem screen api usecase entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__CareCoordinator["患者支援・地域連携担当"]:::actor
+  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
+  screen__CarePlanScreen["ケアプラン画面"]:::screen
+  screen__FollowUpScheduleScreen["再診予約画面"]:::screen
+  screen__PatientMessageScreen["患者連絡画面"]:::screen
+  api__CreateCarePlanApi["ケアプラン作成 API"]:::api
+  api__FollowUpScheduleApi["再診予約 API"]:::api
+  api__NotifyPatientResultApi["検査結果通知 API"]:::api
+  api__SendFollowUpMessageApi["患者連絡 API"]:::api
+  usecase__CloseCarePlan["ケアプランの終了"]:::usecase
+  usecase__ReviewPatientResponse["患者応答の確認"]:::usecase
+  entity__Appointment["予約・受診"]:::entity
+  entity__CarePlan["ケアプラン"]:::entity
+  entity__Encounter["診療記録"]:::entity
+  entity__Notification["通知"]:::entity
+  entity__PatientMessage["患者連絡"]:::entity
+  entity__ProviderSchedule["診療枠"]:::entity
+  actor__CareCoordinator -->|uses| screen__CarePlanScreen
+  actor__CareCoordinator -->|uses| screen__FollowUpScheduleScreen
+  actor__CareCoordinator -->|uses| screen__PatientMessageScreen
+  api__CreateCarePlanApi -->|C| entity__CarePlan
+  api__CreateCarePlanApi -->|R| entity__Encounter
+  api__FollowUpScheduleApi -->|C| entity__Appointment
+  api__FollowUpScheduleApi -->|U| entity__ProviderSchedule
+  api__FollowUpScheduleApi -.->|予約確定| extsystem__MessagingGateway
+  api__NotifyPatientResultApi -->|C| entity__Notification
+  api__SendFollowUpMessageApi -->|C| entity__PatientMessage
+  screen__CarePlanScreen -->|ケアプランの作成| api__CreateCarePlanApi
+  screen__CarePlanScreen -->|ケアプランの終了| usecase__CloseCarePlan
+  screen__CarePlanScreen -->|患者応答の確認| usecase__ReviewPatientResponse
+  screen__FollowUpScheduleScreen -->|再診の予約| api__FollowUpScheduleApi
+  screen__PatientMessageScreen -->|患者への連絡| api__SendFollowUpMessageApi
+  screen__PatientMessageScreen -->|検査結果の患者通知| api__NotifyPatientResultApi
+  usecase__CloseCarePlan -->|U| entity__CarePlan
+  usecase__ReviewPatientResponse -->|U| entity__CarePlan
+  usecase__ReviewPatientResponse -->|U| entity__PatientMessage
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

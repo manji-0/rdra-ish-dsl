@@ -1,0 +1,63 @@
+%% rdra-ish diagram=robustness scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__Patient["患者"]:::actor
+  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  extsystem__MessagingGateway["患者通知サービス"]:::extsystem
+  screen__AppointmentNoticeScreen["予約通知画面"]:::screen
+  screen__AppointmentScreen["予約画面"]:::screen
+  screen__ScheduleSearchScreen["空き枠検索画面"]:::screen
+  timer__NoShowSweep["未来院の確認（毎晩）"]:::timer
+  api__AppointmentNoticeApi["予約通知 API"]:::api
+  api__BookAppointmentApi["予約確定 API"]:::api
+  api__CancelAppointmentApi["予約取消 API"]:::api
+  api__RescheduleAppointmentApi["予約変更 API"]:::api
+  api__ReserveAppointmentApi["予約仮押さえ API"]:::api
+  api__SearchAvailabilityApi["空き枠検索 API"]:::api
+  usecase__MarkNoShow["未来院の処理"]:::usecase
+  entity__Appointment["予約・受診"]:::entity
+  entity__ClinicLocation["施設"]:::entity
+  entity__Notification["通知"]:::entity
+  entity__PatientMessage["患者連絡"]:::entity
+  entity__Provider["医師マスタ"]:::entity
+  entity__ProviderSchedule["診療枠"]:::entity
+  actor__Patient -->|uses| screen__ScheduleSearchScreen
+  actor__ReceptionClerk -->|uses| screen__AppointmentNoticeScreen
+  actor__ReceptionClerk -->|uses| screen__AppointmentScreen
+  actor__ReceptionClerk -->|uses| screen__ScheduleSearchScreen
+  api__AppointmentNoticeApi -->|C| entity__Notification
+  api__AppointmentNoticeApi -->|C| entity__PatientMessage
+  api__BookAppointmentApi -->|U| entity__Appointment
+  api__BookAppointmentApi -->|U| entity__ProviderSchedule
+  api__BookAppointmentApi -.->|予約確定| api__AppointmentNoticeApi
+  api__BookAppointmentApi -.->|予約確定| extsystem__MessagingGateway
+  api__CancelAppointmentApi -->|U| entity__Appointment
+  api__CancelAppointmentApi -->|U| entity__ProviderSchedule
+  api__CancelAppointmentApi -.->|予約取消| api__AppointmentNoticeApi
+  api__CancelAppointmentApi -.->|予約取消| extsystem__MessagingGateway
+  api__RescheduleAppointmentApi -->|U| entity__Appointment
+  api__RescheduleAppointmentApi -->|U| entity__ProviderSchedule
+  api__RescheduleAppointmentApi -.->|予約変更| api__AppointmentNoticeApi
+  api__RescheduleAppointmentApi -.->|予約変更| extsystem__MessagingGateway
+  api__ReserveAppointmentApi -->|C| entity__Appointment
+  api__ReserveAppointmentApi -->|U| entity__ProviderSchedule
+  api__SearchAvailabilityApi -->|R| entity__ClinicLocation
+  api__SearchAvailabilityApi -->|R| entity__Provider
+  api__SearchAvailabilityApi -->|R| entity__ProviderSchedule
+  screen__AppointmentNoticeScreen -->|予約の通知| api__AppointmentNoticeApi
+  screen__AppointmentScreen -->|予約の仮押さえ| api__ReserveAppointmentApi
+  screen__AppointmentScreen -->|予約の取消| api__CancelAppointmentApi
+  screen__AppointmentScreen -->|予約の変更| api__RescheduleAppointmentApi
+  screen__AppointmentScreen -->|予約の確定| api__BookAppointmentApi
+  screen__AppointmentScreen -->|未来院の処理| usecase__MarkNoShow
+  screen__ScheduleSearchScreen -->|空き枠の検索| api__SearchAvailabilityApi
+  timer__NoShowSweep -.->|未来院の確認（毎晩）| usecase__MarkNoShow
+  usecase__MarkNoShow -->|U| entity__Appointment
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

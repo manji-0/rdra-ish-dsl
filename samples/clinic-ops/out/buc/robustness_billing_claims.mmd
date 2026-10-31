@@ -1,0 +1,83 @@
+%% rdra-ish diagram=robustness scope=buc:BucBillingClaims model=samples/clinic-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__ClaimsClerk["医事課 レセプト担当"]:::actor
+  extsystem__ClaimsReviewOrganization["審査支払機関（支払基金・国保連）"]:::extsystem
+  screen__BalanceScreen["未収金画面"]:::screen
+  screen__ChargeWorklistScreen["コスト一覧画面"]:::screen
+  screen__ClaimScreen["レセプト画面"]:::screen
+  screen__PaymentPostingScreen["入金画面"]:::screen
+  timer__ErrorResendWindow["エラー分レセプトの再送（毎月11日・12日）"]:::timer
+  timer__MonthlyClaimCreation["前月分レセプトの作成（月初）"]:::timer
+  timer__MonthlyClaimDeadline["前月分レセプトの請求（毎月5日～10日）"]:::timer
+  timer__ReceivablesMonthlyReview["未収金管理台帳の作成（毎月）"]:::timer
+  timer__ReturnDownloadCheck["返戻レセプトの取得（3か月以内）"]:::timer
+  api__BalanceApi["未収金 API"]:::api
+  api__ClaimEditApi["レセプト点検・訂正 API"]:::api
+  api__ClaimResultApi["審査結果 API"]:::api
+  api__CreateChargeApi["コスト登録 API"]:::api
+  api__GenerateClaimApi["レセプト作成 API"]:::api
+  api__PaymentPostApi["入金 API"]:::api
+  api__SubmitClaimApi["オンライン請求 API"]:::api
+  usecase__ReviewClaimTransfer["資格の振替・分割の確認"]:::usecase
+  usecase__VoidCharge["コストの取消"]:::usecase
+  entity__AccountBalance["未収金残高"]:::entity
+  entity__Charge["コスト（診療行為）"]:::entity
+  entity__ClaimStatement["レセプト"]:::entity
+  entity__Encounter["診療記録"]:::entity
+  entity__InsurancePolicy["保険資格"]:::entity
+  entity__PaymentTransaction["精算"]:::entity
+  actor__ClaimsClerk -->|uses| screen__BalanceScreen
+  actor__ClaimsClerk -->|uses| screen__ChargeWorklistScreen
+  actor__ClaimsClerk -->|uses| screen__ClaimScreen
+  actor__ClaimsClerk -->|uses| screen__PaymentPostingScreen
+  api__BalanceApi -->|R| entity__PaymentTransaction
+  api__BalanceApi -->|U| entity__AccountBalance
+  api__ClaimEditApi -->|U| entity__ClaimStatement
+  api__ClaimResultApi -->|U| entity__ClaimStatement
+  api__CreateChargeApi -->|C| entity__Charge
+  api__CreateChargeApi -->|R| entity__Encounter
+  api__GenerateClaimApi -->|C| entity__ClaimStatement
+  api__GenerateClaimApi -->|R| entity__Charge
+  api__GenerateClaimApi -->|R| entity__InsurancePolicy
+  api__PaymentPostApi -->|U| entity__ClaimStatement
+  api__SubmitClaimApi -->|U| entity__ClaimStatement
+  api__SubmitClaimApi -.->|レセプト請求| extsystem__ClaimsReviewOrganization
+  extsystem__ClaimsReviewOrganization -.->|レセプト受付| api__ClaimResultApi
+  extsystem__ClaimsReviewOrganization -.->|受付不能・要確認| api__ClaimResultApi
+  extsystem__ClaimsReviewOrganization -.->|査定| api__ClaimResultApi
+  extsystem__ClaimsReviewOrganization -.->|診療報酬の支払| api__PaymentPostApi
+  extsystem__ClaimsReviewOrganization -.->|資格の振替・分割| usecase__ReviewClaimTransfer
+  extsystem__ClaimsReviewOrganization -.->|返戻| api__ClaimResultApi
+  screen__BalanceScreen -->|未収金管理台帳の作成| api__BalanceApi
+  screen__ChargeWorklistScreen -->|コストの取消| usecase__VoidCharge
+  screen__ChargeWorklistScreen -->|コスト情報の登録| api__CreateChargeApi
+  screen__ClaimScreen -->|エラー分レセプトの再送| api__SubmitClaimApi
+  screen__ClaimScreen -->|レセプトの保留（月遅れ）| api__ClaimEditApi
+  screen__ClaimScreen -->|レセプトの院内点検| api__ClaimEditApi
+  screen__ClaimScreen -->|レセプト作成| api__GenerateClaimApi
+  screen__ClaimScreen -->|レセプト受付（審査へ）| api__ClaimResultApi
+  screen__ClaimScreen -->|レセプト請求| api__SubmitClaimApi
+  screen__ClaimScreen -->|保留レセプトの再提出準備| api__ClaimEditApi
+  screen__ClaimScreen -->|再審査請求| api__SubmitClaimApi
+  screen__ClaimScreen -->|受付不能・要確認の確認| api__ClaimResultApi
+  screen__ClaimScreen -->|査定の取込| api__ClaimResultApi
+  screen__ClaimScreen -->|資格の振替・分割の確認| usecase__ReviewClaimTransfer
+  screen__ClaimScreen -->|返戻レセプトの取込| api__ClaimResultApi
+  screen__ClaimScreen -->|返戻レセプトの訂正（再請求）| api__ClaimEditApi
+  screen__PaymentPostingScreen -->|診療報酬の入金| api__PaymentPostApi
+  timer__ErrorResendWindow -.->|エラー分レセプトの再送（毎月11日・12日）| api__SubmitClaimApi
+  timer__MonthlyClaimCreation -.->|前月分レセプトの作成（月初）| api__GenerateClaimApi
+  timer__MonthlyClaimDeadline -.->|前月分レセプトの請求（毎月5日～10日）| api__SubmitClaimApi
+  timer__ReceivablesMonthlyReview -.->|未収金管理台帳の作成（毎月）| api__BalanceApi
+  timer__ReturnDownloadCheck -.->|返戻レセプトの取得（3か月以内）| api__ClaimResultApi
+  usecase__ReviewClaimTransfer -->|R| entity__ClaimStatement
+  usecase__VoidCharge -->|U| entity__Charge
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

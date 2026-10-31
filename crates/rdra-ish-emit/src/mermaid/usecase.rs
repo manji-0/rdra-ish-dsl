@@ -34,7 +34,7 @@ impl Fact {
     }
 }
 
-fn is_crud(kind: &RelKind) -> bool {
+pub(super) fn is_crud(kind: &RelKind) -> bool {
     matches!(
         kind,
         RelKind::Reads | RelKind::Writes | RelKind::Creates | RelKind::Updates | RelKind::Deletes
@@ -43,7 +43,7 @@ fn is_crud(kind: &RelKind) -> bool {
 
 /// The use cases of the scope, sorted by id: every one, the named ones, or those a BUC
 /// contains, directly or through a step of one of its flows.
-fn scoped_use_cases(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
+pub(super) fn scoped_use_cases(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
     let named = |ids: &[String], node: &NodeRef| {
         node_id(model, node).is_some_and(|id| ids.iter().any(|wanted| wanted == id))
     };

@@ -626,6 +626,63 @@ fn a_usecase_diagram_draws_what_the_rdra_diagram_declares() {
 }
 
 #[test]
+fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar() {
+    let dir = scratch("diagram_contract_robustness");
+    let mut edges = 0;
+    for root in roots() {
+        let mut scopes = scopes(&root);
+        scopes.extend(
+            ids(&root, "usecase")
+                .into_iter()
+                .take(3)
+                .map(|usecase| vec!["--usecase".to_string(), usecase]),
+        );
+        for scope in scopes {
+            let args: Vec<&str> = scope.iter().map(String::as_str).collect();
+            let text = diagram_with(&root, "robustness", &args, &dir.join("out"));
+            let chart = checked("robustness", &text, &format!("{root} {scope:?}"));
+            let kind = |id: &String| chart.nodes[id].as_str();
+            let control = |id: &String| matches!(kind(id), "api" | "usecase");
+            let boundary = |id: &String| matches!(kind(id), "screen" | "extsystem" | "timer");
+            for (from, label, to) in &chart.edges {
+                let ok = match kind(from) {
+                    "actor" => kind(to) == "screen",
+                    "screen" => control(to),
+                    "api" | "usecase" => {
+                        matches!(kind(to), "entity") || control(to) || boundary(to)
+                    }
+                    "extsystem" | "timer" => control(to),
+                    _ => false,
+                };
+                assert!(
+                    ok && kind(from) != "entity",
+                    "{root} {scope:?}: {from} -{label}-> {to}"
+                );
+                if kind(to) == "entity" {
+                    assert!(control(from), "{root} {scope:?}: {from} -> {to}");
+                }
+            }
+            for kind in [
+                "dto",
+                "permission",
+                "medium",
+                "field",
+                "buc",
+                "event",
+                "state",
+            ] {
+                assert!(
+                    !chart.nodes.values().any(|k| k == kind),
+                    "{root} {scope:?}: a {kind} node\n{text}"
+                );
+            }
+            edges += chart.edges.len();
+        }
+    }
+    assert!(edges > 100, "only {edges} edges");
+}
+
+#[test]
 fn the_contract_check_rejects_a_misplaced_derived_line() {
     let good = "%% rdra-ish diagram=usecase scope=whole\n%% kinds: actor usecase\nflowchart LR\n  actor__A[\"A\"]:::actor\n  usecase__U[\"U\"]:::usecase\n  actor__A -.->|performs| usecase__U\n  %% derived actor__A -> usecase__U via buc__B\n  classDef actor stroke:#333;\n  classDef usecase stroke:#333;\n";
     let chart = parse_flowchart("usecase", good).unwrap();

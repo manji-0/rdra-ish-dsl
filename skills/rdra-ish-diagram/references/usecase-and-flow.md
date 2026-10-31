@@ -1,11 +1,15 @@
 # Use Cases and Business Flows
 
-Use this reference for what happens inside a BUC: the UC複合図 of its use cases and the
-business flow of its steps.
+Use this reference for what happens inside a BUC: the robustness diagram and the UC複合図
+of its use cases, and the business flow of its steps.
 
 ## Commands
 
 ```sh
+# ロバストネス図 — the use cases of one BUC, or the named use cases, as boundary / control / entity
+rdra-ish diagram src/ --kind robustness --buc <BucId> --format mermaid
+rdra-ish diagram src/ --kind robustness --usecase <UcId> --format mermaid
+
 # UC複合図 — the use cases of one BUC, or the named use cases
 rdra-ish diagram src/ --kind usecase --buc <BucId> --format mermaid
 rdra-ish diagram src/ --kind usecase --usecase <UcId> --format mermaid
@@ -13,6 +17,23 @@ rdra-ish diagram src/ --kind usecase --usecase <UcId> --format mermaid
 # 業務フロー — the flows of one BUC
 rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
 ```
+
+## Reading the ロバストネス図
+
+- Nodes: actors; boundaries (`screen`, `extsystem`, `timer`); controls (`api`, or
+  `usecase` when the use case has no API or reads and writes entities itself); `entity`.
+  A node's class says which; the ids are those of `rdra`.
+- Edges follow one grammar: `actor -->|uses| screen`, then
+  `screen -->|<use case label>| control`, then `control -->|CRUD| entity`. The use case
+  label on the screen edge is how to find the use case. `CRUD` is the letters of the
+  control's operations on the entity, `writes` shown as `U`.
+- Dotted edges carry events and timers: `control -.->|<event>| control` when one use case
+  raises an event that starts another, and between a control and an `extsystem` or a
+  `timer`.
+- There is no edge from an actor to a control or from a boundary to an entity. A use case
+  that displays no screen has no incoming screen edge, and its actor is not drawn.
+- Use it as the main structural view of a BUC. Reach for the UC複合図 when the conditions,
+  states, or what a screen shows matter.
 
 ## Reading the UC複合図
 

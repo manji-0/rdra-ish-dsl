@@ -22,6 +22,7 @@ Pick the one kind that answers the question, then load only its reference.
 | Which requirements, NFRs, and constraints exist, and what do they bind? | `requirement` | `references/context-requirement-business.md` |
 | Which BUCs make up each business, and which actors and external systems take part? | `business`, or `business --buc <BucId>` for one BUC | `references/context-requirement-business.md` |
 | What does each use case show, read, write, raise, and move, and who performs it? | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/usecase-and-flow.md` |
+| Which screen reaches which API or use case, and which entities does each touch (the main structural view)? | `robustness --buc <BucId>` or `robustness --usecase <UcId>` | `references/usecase-and-flow.md` |
 | In what order are a BUC's steps carried out, and which use cases carry each? | `flow --buc <BucId>` | `references/usecase-and-flow.md` |
 | How do the entities relate, and which hold a state model or a variation? | `information` | `references/information-and-data.md` |
 | Which conditions select business rules, and what values do the variations take? | `condition` | `references/information-and-data.md` |
@@ -47,6 +48,7 @@ reach. Prefer it before a whole-model diagram.
 | `requirement` | 要求モデル | `motivates`, NFR `applies_to`, `constrains`, `qualifies` | ADRs; a requirement-to-actor link (not in the DSL) |
 | `business` | ビジネスコンテキスト / BUC | Businesses holding BUCs, and each BUC's actors and external systems | Use cases, steps, events (named in `%% derived`) |
 | `usecase` | UC複合図 | Use cases with actors, screens, entities, events, external systems, timers, conditions, and transitions | APIs (CRUD folded into the use case), DTOs, permissions, media, fields, BUCs |
+| `robustness` | ロバストネス図 | Actors, boundaries (screens, external systems, timers), controls (APIs, or the use case), entities; edges only actor to screen to control to entity | Events and conditions (named in edge labels), states, DTOs, permissions, media, fields, BUCs |
 | `flow` | 業務フロー | Flows, steps, `precedes` / `branches` / `excepts` / `repeats`, `covers`, actor lanes | Screens and entities |
 | `information` | 情報モデル | Entities, `relate`, state models, variations | Columns (`er`) |
 | `condition` | バリエーション・条件 | Conditions with what they combine and apply to; variations with their values | Entities (a state model stands for its column) |
@@ -84,7 +86,7 @@ The others draw declared facts and print one note.
 - `references/reading-diagrams.md` — the encoding contract: header, ids, edges, `%%`
   lines, and how to redraw a diagram.
 - `references/context-requirement-business.md` — `context`, `requirement`, `business`.
-- `references/usecase-and-flow.md` — `usecase` (UC複合図) and `flow`.
+- `references/usecase-and-flow.md` — `usecase` (UC複合図), `robustness`, and `flow`.
 - `references/information-and-data.md` — `information`, `condition`, `er`, and the data
   exports.
 - `references/lifecycle-and-events.md` — `state`, `event`, `states`, `check`, and TLA+.

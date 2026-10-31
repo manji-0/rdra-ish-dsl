@@ -25,6 +25,16 @@ samples/clinic-ops/out/buc/usecase_prescription_fulfillment.mmd	diagram samples/
 samples/clinic-ops/out/buc/usecase_staff_administration.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucStaffAdministration
 samples/clinic-ops/out/buc/usecase_visit_check_in.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucVisitCheckIn
 samples/clinic-ops/out/buc/usecase_visit_payment.mmd	diagram samples/clinic-ops --kind usecase --format mermaid --buc BucVisitPayment
+samples/clinic-ops/out/buc/robustness_appointment_scheduling.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucAppointmentScheduling
+samples/clinic-ops/out/buc/robustness_billing_claims.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucBillingClaims
+samples/clinic-ops/out/buc/robustness_clinical_encounter.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucClinicalEncounter
+samples/clinic-ops/out/buc/robustness_followup_care.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucFollowupCare
+samples/clinic-ops/out/buc/robustness_orders_results.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucOrdersResults
+samples/clinic-ops/out/buc/robustness_patient_onboarding.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucPatientOnboarding
+samples/clinic-ops/out/buc/robustness_prescription_fulfillment.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucPrescriptionFulfillment
+samples/clinic-ops/out/buc/robustness_staff_administration.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucStaffAdministration
+samples/clinic-ops/out/buc/robustness_visit_check_in.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucVisitCheckIn
+samples/clinic-ops/out/buc/robustness_visit_payment.mmd	diagram samples/clinic-ops --kind robustness --format mermaid --buc BucVisitPayment
 samples/clinic-ops/out/business.mmd	diagram samples/clinic-ops --kind business --format mermaid
 samples/clinic-ops/out/condition.mmd	diagram samples/clinic-ops --kind condition --format mermaid
 samples/clinic-ops/out/context.mmd	diagram samples/clinic-ops --kind context --format mermaid

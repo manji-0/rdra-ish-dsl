@@ -1,4 +1,4 @@
-//! Mermaid emitters: RDRA全体図、システムコンテキスト、要求モデル、ビジネスコンテキスト、UC複合図、情報モデル、バリエーション・条件、業務フロー、ER図、状態遷移図、イベント図。
+//! Mermaid emitters: RDRA全体図、システムコンテキスト、要求モデル、ビジネスコンテキスト、UC複合図、ロバストネス図、情報モデル、バリエーション・条件、業務フロー、ER図、状態遷移図、イベント図。
 
 mod business;
 mod condition;
@@ -6,6 +6,7 @@ mod context;
 mod flow;
 mod information;
 mod requirement;
+mod robustness;
 mod usecase;
 
 pub use business::BusinessMermaidEmitter;
@@ -14,6 +15,7 @@ pub use context::ContextMermaidEmitter;
 pub use flow::FlowMermaidEmitter;
 pub use information::InformationMermaidEmitter;
 pub use requirement::RequirementMermaidEmitter;
+pub use robustness::RobustnessMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{

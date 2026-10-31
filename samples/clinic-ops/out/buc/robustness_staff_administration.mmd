@@ -1,0 +1,41 @@
+%% rdra-ish diagram=robustness scope=buc:BucStaffAdministration model=samples/clinic-ops
+%% kinds: actor screen api usecase entity
+%% omitted: buc medium permission
+flowchart LR
+  actor__ClinicAdmin["病院管理者"]:::actor
+  screen__AuditReviewScreen["監査ログ画面"]:::screen
+  screen__RoomAdminScreen["診察室管理画面"]:::screen
+  screen__ScheduleAdminScreen["診療枠管理画面"]:::screen
+  api__AuditApi["監査 API"]:::api
+  api__BlockScheduleSlotApi["診療枠停止 API"]:::api
+  api__ManageProviderScheduleApi["診療枠管理 API"]:::api
+  api__RoomAdminApi["診察室管理 API"]:::api
+  usecase__ReleaseRoom["診察室の解放"]:::usecase
+  usecase__ResolveAuditFinding["監査指摘の解決"]:::usecase
+  entity__AuditEvent["監査ログ"]:::entity
+  entity__PatientAccount["患者登録"]:::entity
+  entity__Provider["医師マスタ"]:::entity
+  entity__ProviderSchedule["診療枠"]:::entity
+  entity__Room["診察室"]:::entity
+  actor__ClinicAdmin -->|uses| screen__AuditReviewScreen
+  actor__ClinicAdmin -->|uses| screen__RoomAdminScreen
+  actor__ClinicAdmin -->|uses| screen__ScheduleAdminScreen
+  api__AuditApi -->|R| entity__AuditEvent
+  api__AuditApi -->|R| entity__PatientAccount
+  api__BlockScheduleSlotApi -->|U| entity__ProviderSchedule
+  api__ManageProviderScheduleApi -->|CU| entity__ProviderSchedule
+  api__ManageProviderScheduleApi -->|U| entity__Provider
+  api__RoomAdminApi -->|CU| entity__Room
+  screen__AuditReviewScreen -->|監査ログの確認| api__AuditApi
+  screen__AuditReviewScreen -->|監査指摘の解決| usecase__ResolveAuditFinding
+  screen__RoomAdminScreen -->|診察室の解放| usecase__ReleaseRoom
+  screen__RoomAdminScreen -->|診察室の設定| api__RoomAdminApi
+  screen__ScheduleAdminScreen -->|診療枠の停止| api__BlockScheduleSlotApi
+  screen__ScheduleAdminScreen -->|診療枠の管理| api__ManageProviderScheduleApi
+  usecase__ReleaseRoom -->|U| entity__Room
+  usecase__ResolveAuditFinding -->|U| entity__AuditEvent
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

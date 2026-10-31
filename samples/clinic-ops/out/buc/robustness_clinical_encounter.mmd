@@ -1,0 +1,51 @@
+%% rdra-ish diagram=robustness scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__Clinician["医師"]:::actor
+  actor__Nurse["看護師"]:::actor
+  screen__DiagnosisScreen["診断入力画面"]:::screen
+  screen__EncounterWorkspaceScreen["診療記録画面"]:::screen
+  screen__ReferralLetterScreen["診療情報提供書画面"]:::screen
+  screen__VitalsScreen["バイタル入力画面"]:::screen
+  api__AmendEncounterApi["記録修正 API"]:::api
+  api__CompleteConsultationApi["診察終了 API"]:::api
+  api__DocumentAssessmentApi["診察記録 API"]:::api
+  api__IssueReferralLetterApi["診療情報提供書 API"]:::api
+  api__OpenEncounterApi["診療記録作成 API"]:::api
+  api__RecordVitalsApi["バイタル記録 API"]:::api
+  api__SignEncounterApi["署名 API"]:::api
+  entity__Appointment["予約・受診"]:::entity
+  entity__Diagnosis["診断"]:::entity
+  entity__Encounter["診療記録"]:::entity
+  entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
+  entity__Room["診察室"]:::entity
+  entity__VitalSign["バイタル"]:::entity
+  actor__Clinician -->|uses| screen__DiagnosisScreen
+  actor__Clinician -->|uses| screen__EncounterWorkspaceScreen
+  actor__Clinician -->|uses| screen__ReferralLetterScreen
+  actor__Nurse -->|uses| screen__EncounterWorkspaceScreen
+  actor__Nurse -->|uses| screen__VitalsScreen
+  api__AmendEncounterApi -->|U| entity__Encounter
+  api__CompleteConsultationApi -->|U| entity__Appointment
+  api__CompleteConsultationApi -->|U| entity__Room
+  api__DocumentAssessmentApi -->|C| entity__Diagnosis
+  api__DocumentAssessmentApi -->|U| entity__Encounter
+  api__IssueReferralLetterApi -->|C| entity__ReferralLetter
+  api__IssueReferralLetterApi -->|R| entity__Encounter
+  api__OpenEncounterApi -->|C| entity__Encounter
+  api__OpenEncounterApi -->|U| entity__Appointment
+  api__RecordVitalsApi -->|C| entity__VitalSign
+  api__RecordVitalsApi -->|U| entity__Encounter
+  api__SignEncounterApi -->|U| entity__Encounter
+  screen__DiagnosisScreen -->|診察・診断の記録| api__DocumentAssessmentApi
+  screen__EncounterWorkspaceScreen -->|署名済み記録の修正| api__AmendEncounterApi
+  screen__EncounterWorkspaceScreen -->|診察終了| api__CompleteConsultationApi
+  screen__EncounterWorkspaceScreen -->|診療記録の署名| api__SignEncounterApi
+  screen__EncounterWorkspaceScreen -->|診療記録を開く| api__OpenEncounterApi
+  screen__ReferralLetterScreen -->|診療情報提供書の作成・送信| api__IssueReferralLetterApi
+  screen__VitalsScreen -->|バイタルの記録| api__RecordVitalsApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

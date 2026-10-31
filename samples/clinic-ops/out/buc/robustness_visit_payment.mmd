@@ -1,0 +1,55 @@
+%% rdra-ish diagram=robustness scope=buc:BucVisitPayment model=samples/clinic-ops
+%% kinds: actor extsystem screen api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__AccountsClerk["医事課 会計担当"]:::actor
+  extsystem__PaymentGateway["自動精算機・クレジット決済"]:::extsystem
+  screen__BillCalculationScreen["会計計算画面"]:::screen
+  screen__KioskScreen["自動精算機画面"]:::screen
+  screen__PaymentWindowScreen["会計窓口画面"]:::screen
+  api__CalculateVisitBillApi["会計計算 API"]:::api
+  api__ReceiptApi["領収証 API"]:::api
+  api__SelectedFeeApi["選定療養費 API"]:::api
+  api__SettlementApi["精算 API"]:::api
+  usecase__CallPatientForPayment["会計の呼出"]:::usecase
+  usecase__RefundPayment["還付・追加徴収"]:::usecase
+  entity__AccountBalance["未収金残高"]:::entity
+  entity__Appointment["予約・受診"]:::entity
+  entity__Charge["コスト（診療行為）"]:::entity
+  entity__Encounter["診療記録"]:::entity
+  entity__InsurancePolicy["保険資格"]:::entity
+  entity__PaymentTransaction["精算"]:::entity
+  entity__SelectedTreatmentFeeSetting["選定療養費の設定"]:::entity
+  actor__AccountsClerk -->|uses| screen__BillCalculationScreen
+  actor__AccountsClerk -->|uses| screen__PaymentWindowScreen
+  api__CalculateVisitBillApi -->|R| entity__Charge
+  api__CalculateVisitBillApi -->|R| entity__InsurancePolicy
+  api__CalculateVisitBillApi -->|U| entity__Appointment
+  api__CalculateVisitBillApi -.->|会計計算完了| extsystem__PaymentGateway
+  api__CalculateVisitBillApi -.->|会計計算完了| usecase__CallPatientForPayment
+  api__ReceiptApi -->|R| entity__Charge
+  api__ReceiptApi -->|R| entity__PaymentTransaction
+  api__ReceiptApi -->|U| entity__Appointment
+  api__SelectedFeeApi -->|C| entity__Charge
+  api__SelectedFeeApi -->|R| entity__Encounter
+  api__SelectedFeeApi -->|R| entity__SelectedTreatmentFeeSetting
+  api__SettlementApi -->|C| entity__PaymentTransaction
+  api__SettlementApi -->|U| entity__AccountBalance
+  api__SettlementApi -->|U| entity__Appointment
+  extsystem__PaymentGateway -.->|自動精算機での精算完了| api__SettlementApi
+  screen__BillCalculationScreen -->|会計計算入力| api__CalculateVisitBillApi
+  screen__BillCalculationScreen -->|選定療養費の算定| api__SelectedFeeApi
+  screen__KioskScreen -->|自動精算機での精算| api__SettlementApi
+  screen__PaymentWindowScreen -->|会計の呼出| usecase__CallPatientForPayment
+  screen__PaymentWindowScreen -->|会計窓口での精算| api__SettlementApi
+  screen__PaymentWindowScreen -->|還付・追加徴収| usecase__RefundPayment
+  screen__PaymentWindowScreen -->|領収証・明細書の交付| api__ReceiptApi
+  usecase__CallPatientForPayment -->|R| entity__Appointment
+  usecase__RefundPayment -->|U| entity__AccountBalance
+  usecase__RefundPayment -->|U| entity__PaymentTransaction
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

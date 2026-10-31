@@ -456,6 +456,7 @@ relation, from which the RDRAGraph views can be derived.
 | `requirement` | 要求モデル | Requirements and the BUCs they `motivate`; NFRs and constraints with what they `apply_to` or `constrain`, and the qualities they belong to | ADRs; a requirement-to-actor link, which the DSL does not have | What links to the BUCs, their use cases and APIs, the entities those read and write, and the systems that contain those APIs |
 | `business` | ビジネスコンテキスト, ビジネスユースケース | Each business holding its BUCs, and the actors and external systems each BUC involves | Use cases, steps, and events, which `%% derived` names | The named BUCs and their businesses (the RDRA BUC diagram) |
 | `usecase` | UC複合図 | Each use case with its actors, screens and what they show, the entities it reads and writes, its events, external systems, and timers, the conditions on it, and its transitions | BUCs, steps, media, permissions, fields, APIs (their CRUD is folded into the use case), and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
+| `robustness` | ロバストネス図 | The use cases as an ICONIX robustness diagram: actors, boundaries (screens, external systems, timers), controls (APIs, or the use case itself), and the entities each control reads and writes | BUCs, steps, events (named in edge labels), conditions, states, media, permissions, fields, and DTOs | The use cases the BUCs contain, directly or through a step; `--usecase` names use cases instead |
 | `flow` | 業務フロー | Each flow with its steps, their `precedes`, `branches`, `excepts`, and `repeats` edges, what each step `covers`, and a lane per actor | Actors without `performs(Actor, Step)`; screens and entities | The flows the BUCs contain |
 | `information` | 情報モデル | Entities with their `relate` links, state models, and the variations their columns take | Columns (`er`) and use cases | The entities `er` draws for the BUCs |
 | `condition` | バリエーション・条件 | Each condition with the variations and state models it combines and what it applies to; each variation with its values | Entities (a state model stands for its column) | The conditions on the BUCs' use cases and their APIs, and what those combine |
@@ -473,7 +474,7 @@ with one stderr note.
 | `--kind` | one of the [kinds](#kinds) | `rdra` | The diagram kind. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool, or hand it to a tool that redraws it. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Draw the part of the model the named BUCs reach, the union over every id. Applies to every kind; the [kinds](#kinds) table says what each one keeps. An unknown id is an error. |
-| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase` only, and not together with `--buc`; an unknown id is an error. |
+| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase` and `robustness`, and not together with `--buc`; an unknown id is an error. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Draw only these node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `writes`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
 | `-o`, `--out` | path | `out` | Output file path. The extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). |
@@ -587,6 +588,30 @@ The notes below say how each kind reads, in the order of the table.
 
 Every kind but `state` and `er` is a `flowchart`, written so that every fact it draws can
 be read back from the text. The `rdra` diagram shows each part:
+
+- For `--kind robustness`, nodes sit in one flat list in the order actor, boundary, control,
+  entity, each sorted by id, and the edge grammar is the whole point: an actor reaches a
+  screen, a screen reaches a control, a control reaches an entity, and nothing skips a
+  step. The kind is not layered, so the header has no `layers:` line.
+  - Boundary: a `screen` a use case `displays`; an `extsystem` that `raises` an event
+    starting a use case in scope, or that an event a use case in scope `raises` triggers;
+    a `timer` that `triggers` a use case in scope.
+  - Control: each `api` a use case `invokes`, and the use case itself when it reads or
+    writes an entity directly or invokes no API. A use case with an API and direct CRUD
+    draws both.
+  - Entity: each entity a control `reads`, `creates`, `updates`, `deletes`, or `writes`.
+  - Edges, labelled so a reader finds the use case without a use case node:
+    `actor -->|uses| screen` (the actor performs a use case that displays the screen;
+    one an event or a timer starts takes only its declared performer, as in `usecase`);
+    `screen -->|<use case label>| control` (the use case displays the screen and the
+    control is its API, or it); `control -->|CRUD letters| entity` (the union of the
+    control's operations on the entity, `writes` counting as `U`); and the dotted
+    `control -.->|<event label>| control`, `extsystem -.->|<event label>| control`,
+    `control -.->|<event label>| extsystem`, and `timer -.->|<timer label>| control`
+    when both ends are in scope.
+  - Never drawn: an edge from an actor to a control, or from a screen, an external system,
+    or a timer to an entity. An actor whose use cases display no screen has no edge and
+    is left out. Events, conditions, states, and `%% derived` lines are not drawn.
 
 ```
 %% rdra-ish diagram=rdra scope=buc:BucPayment model=samples/ec-site

@@ -1,0 +1,59 @@
+%% rdra-ish diagram=robustness scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__Clinician["医師"]:::actor
+  actor__Pharmacist["薬剤師"]:::actor
+  extsystem__EPrescriptionService["電子処方箋管理サービス"]:::extsystem
+  extsystem__InsurancePharmacy["保険薬局"]:::extsystem
+  screen__DispensingScreen["調剤・監査画面"]:::screen
+  screen__MedicationSearchScreen["薬剤検索画面"]:::screen
+  screen__PharmacyStatusScreen["電子処方箋の状況画面"]:::screen
+  screen__PrescriptionScreen["処方画面"]:::screen
+  timer__PrescriptionUsePeriodCheck["処方箋の使用期間切れ確認"]:::timer
+  api__ConfirmDispenseApi["調剤結果 API"]:::api
+  api__DispensingApi["院内調剤 API"]:::api
+  api__DraftPrescriptionApi["処方オーダ API"]:::api
+  api__IssuePrescriptionApi["処方箋発行 API"]:::api
+  api__MedicationCatalogApi["薬剤マスタ API"]:::api
+  api__PrescriptionInquiryApi["疑義照会 API"]:::api
+  usecase__CancelPrescription["処方の取消"]:::usecase
+  entity__Encounter["診療記録"]:::entity
+  entity__Medication["薬剤"]:::entity
+  entity__Prescription["処方箋"]:::entity
+  actor__Clinician -->|uses| screen__MedicationSearchScreen
+  actor__Clinician -->|uses| screen__PrescriptionScreen
+  actor__Pharmacist -->|uses| screen__DispensingScreen
+  api__ConfirmDispenseApi -->|U| entity__Prescription
+  api__DispensingApi -->|U| entity__Prescription
+  api__DraftPrescriptionApi -->|C| entity__Prescription
+  api__DraftPrescriptionApi -->|R| entity__Encounter
+  api__IssuePrescriptionApi -->|U| entity__Prescription
+  api__IssuePrescriptionApi -.->|電子処方箋の登録| extsystem__EPrescriptionService
+  api__MedicationCatalogApi -->|R| entity__Medication
+  api__PrescriptionInquiryApi -->|U| entity__Prescription
+  extsystem__EPrescriptionService -.->|保険薬局での調剤完了| api__ConfirmDispenseApi
+  extsystem__InsurancePharmacy -.->|保険薬局からの疑義照会| api__PrescriptionInquiryApi
+  screen__DispensingScreen -->|服薬指導| api__DispensingApi
+  screen__DispensingScreen -->|疑義照会| api__DispensingApi
+  screen__DispensingScreen -->|薬剤交付| api__DispensingApi
+  screen__DispensingScreen -->|調剤・監査| api__DispensingApi
+  screen__MedicationSearchScreen -->|薬剤の検索| api__MedicationCatalogApi
+  screen__PharmacyStatusScreen -->|保険薬局での調剤結果の受信| api__ConfirmDispenseApi
+  screen__PharmacyStatusScreen -->|処方箋の使用期間切れ| api__ConfirmDispenseApi
+  screen__PrescriptionScreen -->|リフィル処方箋の処方オーダ| api__DraftPrescriptionApi
+  screen__PrescriptionScreen -->|保険薬局からの疑義照会への回答| api__PrescriptionInquiryApi
+  screen__PrescriptionScreen -->|処方の取消| usecase__CancelPrescription
+  screen__PrescriptionScreen -->|処方オーダの登録| api__DraftPrescriptionApi
+  screen__PrescriptionScreen -->|疑義照会への回答| api__PrescriptionInquiryApi
+  screen__PrescriptionScreen -->|院内処方用引換券の交付| api__IssuePrescriptionApi
+  screen__PrescriptionScreen -->|院外処方箋の発行| api__IssuePrescriptionApi
+  timer__PrescriptionUsePeriodCheck -.->|処方箋の使用期間切れ確認| api__ConfirmDispenseApi
+  usecase__CancelPrescription -->|U| entity__Prescription
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

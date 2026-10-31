@@ -1,0 +1,69 @@
+%% rdra-ish diagram=robustness scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% kinds: actor extsystem screen timer api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__Nurse["看護師"]:::actor
+  actor__ReceptionClerk["医事課 受付担当"]:::actor
+  extsystem__OnlineEligibilitySystem["オンライン資格確認等システム"]:::extsystem
+  screen__CheckInScreen["受付画面"]:::screen
+  screen__EligibilityScreen["資格確認画面"]:::screen
+  screen__ReferralScreen["紹介状受付画面"]:::screen
+  screen__RoomBoardScreen["診察室ボード画面"]:::screen
+  timer__EligibilityBatchInquiry["予約患者の資格の一括照会（来院前）"]:::timer
+  api__AssignRoomApi["診察室案内 API"]:::api
+  api__CheckInPatientApi["受付 API"]:::api
+  api__EligibilityResultApi["資格確認結果 API"]:::api
+  api__OnlineEligibilityApi["オンライン資格確認 API"]:::api
+  api__PrepareEncounterApi["診療準備 API"]:::api
+  api__ReferralLetterApi["紹介状 API"]:::api
+  api__VerifyArrivalApi["到着確認 API"]:::api
+  entity__Appointment["予約・受診"]:::entity
+  entity__EligibilityCheck["資格確認"]:::entity
+  entity__InsurancePolicy["保険資格"]:::entity
+  entity__PatientAccount["患者登録"]:::entity
+  entity__PatientProfile["患者基本情報"]:::entity
+  entity__ReferralLetter["紹介状・診療情報提供書"]:::entity
+  entity__Room["診察室"]:::entity
+  actor__Nurse -->|uses| screen__CheckInScreen
+  actor__Nurse -->|uses| screen__RoomBoardScreen
+  actor__ReceptionClerk -->|uses| screen__CheckInScreen
+  actor__ReceptionClerk -->|uses| screen__EligibilityScreen
+  actor__ReceptionClerk -->|uses| screen__ReferralScreen
+  api__AssignRoomApi -->|U| entity__Appointment
+  api__AssignRoomApi -->|U| entity__Room
+  api__CheckInPatientApi -->|U| entity__Appointment
+  api__CheckInPatientApi -->|U| entity__PatientAccount
+  api__CheckInPatientApi -.->|受付完了| api__PrepareEncounterApi
+  api__CheckInPatientApi -.->|受付完了| extsystem__OnlineEligibilitySystem
+  api__EligibilityResultApi -->|U| entity__EligibilityCheck
+  api__OnlineEligibilityApi -->|C| entity__EligibilityCheck
+  api__OnlineEligibilityApi -->|R| entity__InsurancePolicy
+  api__OnlineEligibilityApi -.->|受付完了| api__PrepareEncounterApi
+  api__OnlineEligibilityApi -.->|受付完了| extsystem__OnlineEligibilitySystem
+  api__PrepareEncounterApi -->|R| entity__Appointment
+  api__PrepareEncounterApi -->|R| entity__PatientProfile
+  api__ReferralLetterApi -->|C| entity__ReferralLetter
+  api__VerifyArrivalApi -->|R| entity__Appointment
+  api__VerifyArrivalApi -->|R| entity__InsurancePolicy
+  api__VerifyArrivalApi -->|R| entity__PatientAccount
+  extsystem__OnlineEligibilitySystem -.->|資格確認結果| api__EligibilityResultApi
+  screen__CheckInScreen -->|予約票・診察券の確認| api__VerifyArrivalApi
+  screen__CheckInScreen -->|受付（初診・再診）| api__CheckInPatientApi
+  screen__CheckInScreen -->|受付（初診・再診）| api__OnlineEligibilityApi
+  screen__CheckInScreen -->|診療の準備| api__PrepareEncounterApi
+  screen__EligibilityScreen -->|システム障害時モードでの資格確認| api__EligibilityResultApi
+  screen__EligibilityScreen -->|被保険者資格申立書の受領| api__EligibilityResultApi
+  screen__EligibilityScreen -->|資格の一括照会| api__OnlineEligibilityApi
+  screen__EligibilityScreen -->|資格の再確認| api__EligibilityResultApi
+  screen__EligibilityScreen -->|資格確認結果（有効）の取込| api__EligibilityResultApi
+  screen__EligibilityScreen -->|資格確認結果（無効）の取込| api__EligibilityResultApi
+  screen__EligibilityScreen -->|資格確認結果（該当資格なし）の取込| api__EligibilityResultApi
+  screen__ReferralScreen -->|紹介状受付処理| api__ReferralLetterApi
+  screen__RoomBoardScreen -->|診察室への案内| api__AssignRoomApi
+  timer__EligibilityBatchInquiry -.->|予約患者の資格の一括照会（来院前）| api__OnlineEligibilityApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

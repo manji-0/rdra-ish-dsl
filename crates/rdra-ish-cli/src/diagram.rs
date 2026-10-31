@@ -8,7 +8,8 @@ use rdra_ish_emit::{
     mermaid::{
         BusinessMermaidEmitter, ConditionMermaidEmitter, ContextMermaidEmitter, ErMermaidEmitter,
         EventMermaidEmitter, FlowMermaidEmitter, InformationMermaidEmitter, RdraMermaidEmitter,
-        RequirementMermaidEmitter, StateMermaidEmitter, UsecaseMermaidEmitter,
+        RequirementMermaidEmitter, RobustnessMermaidEmitter, StateMermaidEmitter,
+        UsecaseMermaidEmitter,
     },
     unknown_diagram_filter_kinds, Emitter, Filter, Scope, View,
 };
@@ -60,8 +61,8 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     }
 
     if !usecase.is_empty() {
-        if !matches!(kind, DiagramKind::Usecase) {
-            anyhow::bail!("--usecase applies only to --kind usecase");
+        if !matches!(kind, DiagramKind::Usecase | DiagramKind::Robustness) {
+            anyhow::bail!("--usecase applies only to --kind usecase or robustness");
         }
         if !buc.is_empty() {
             anyhow::bail!("--usecase and --buc cannot be combined; pass one of them");
@@ -111,6 +112,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             | DiagramKind::Requirement
             | DiagramKind::Business
             | DiagramKind::Usecase
+            | DiagramKind::Robustness
             | DiagramKind::Information
             | DiagramKind::Condition
             | DiagramKind::Flow
@@ -145,6 +147,7 @@ fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Resul
         DiagramKind::Requirement => Ok(RequirementMermaidEmitter.emit(model, view)?),
         DiagramKind::Business => Ok(BusinessMermaidEmitter.emit(model, view)?),
         DiagramKind::Usecase => Ok(UsecaseMermaidEmitter.emit(model, view)?),
+        DiagramKind::Robustness => Ok(RobustnessMermaidEmitter.emit(model, view)?),
         DiagramKind::Information => Ok(InformationMermaidEmitter.emit(model, view)?),
         DiagramKind::Condition => Ok(ConditionMermaidEmitter.emit(model, view)?),
         DiagramKind::Flow => Ok(FlowMermaidEmitter.emit(model, view)?),

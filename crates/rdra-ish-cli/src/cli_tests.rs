@@ -881,7 +881,7 @@ fn usecase_scope_errors_say_what_to_pass() {
     for (request, message) in [
         (
             request(DiagramKind::Rdra, &[], &["Capture"]),
-            "--usecase applies only to --kind usecase",
+            "--usecase applies only to --kind usecase or robustness",
         ),
         (
             request(DiagramKind::Usecase, &["BucPayment"], &["Capture"]),
