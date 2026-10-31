@@ -429,3 +429,32 @@ pub fn build_import_scopes(
 
     (scopes, diags)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_import_of_a_dependency_module_is_not_an_unknown_module() {
+        let (ast, errors) = rdra_ish_syntax::parse("module product\nimport auth.session\n");
+        assert!(errors.is_empty());
+        let sources = vec![(PathBuf::from("product.rdra"), String::new(), ast)];
+        let dep = std::sync::Arc::new(crate::binding::DependencySurface {
+            name: "auth".into(),
+            systems: vec![],
+            surface: Default::default(),
+            declared: Default::default(),
+            modules: vec!["auth.session".into()],
+            files: vec![],
+        });
+
+        let (_, diags) = build_import_scopes(&sources, &crate::binding::ForeignModules::of(&[dep]));
+        assert!(diags.is_empty(), "{diags:?}");
+
+        let (_, diags) = build_import_scopes(&sources, &Default::default());
+        assert!(
+            matches!(diags.as_slice(), [d] if matches!(d.kind, ImportScopeDiagKind::UnknownModule { .. })),
+            "{diags:?}"
+        );
+    }
+}

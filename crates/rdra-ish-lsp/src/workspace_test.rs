@@ -13,6 +13,48 @@ mod tests {
     }
 
     #[test]
+    fn a_product_with_a_path_dependency_gets_the_cli_diagnostics_and_none_in_the_dependency() {
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/xsys/product-mistakes");
+        let project = load_project(std::slice::from_ref(&root), None).unwrap();
+        let analysis = analyze_project(project);
+
+        let names: Vec<String> = analysis
+            .diagnostics
+            .iter()
+            .map(|d| d.error.to_string().split(':').next().unwrap().to_string())
+            .collect();
+        for name in [
+            "ForeignImport",
+            "UnknownForeignName",
+            "NotExposed",
+            "ForeignWrite",
+            "ForeignContained",
+            "DirectEntityReference",
+            "ForeignStateNeedsEnvironment",
+        ] {
+            assert!(
+                names.contains(&name.to_string()),
+                "{name} missing from {names:?}"
+            );
+        }
+        for diag in &analysis.diagnostics {
+            let path = diag
+                .location
+                .as_ref()
+                .unwrap()
+                .path(&analysis.program)
+                .unwrap();
+            assert!(
+                path.ends_with("product-mistakes/mistakes.rdra"),
+                "{} is located in {}",
+                diag.error,
+                path.display()
+            );
+        }
+    }
+
+    #[test]
     fn analyze_workspace_reports_located_type_mismatch() {
         let root = std::env::temp_dir().join(format!(
             "rdra_lsp_test_{}",

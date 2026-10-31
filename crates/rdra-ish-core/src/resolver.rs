@@ -492,6 +492,48 @@ mod tests {
     }
 
     #[test]
+    fn an_import_of_a_dependency_module_is_foreign_import_and_loads_nothing() {
+        let dir = make_temp_dir("foreign_import");
+        write_file(
+            &dir.join("product/main.rdra"),
+            "module product.main\nimport auth.session\nusecase Checkout \"Checkout\"\n",
+        );
+        write_file(
+            &dir.join("auth/session.rdra"),
+            "module auth.session\nusecase Login \"Log in\"\n",
+        );
+        let dep = Arc::new(DependencySurface {
+            name: "auth".into(),
+            systems: vec![],
+            surface: Default::default(),
+            declared: Default::default(),
+            modules: vec![],
+            files: vec![dunce::canonicalize(dir.join("auth/session.rdra")).unwrap()],
+        });
+
+        let (program, diags) = resolve_overlaid(
+            &[dir.join("product/main.rdra")],
+            std::slice::from_ref(&dir),
+            None,
+            &ForeignModules::of(&[dep]),
+        );
+
+        assert_eq!(
+            program.sources.len(),
+            1,
+            "the dependency's file is not loaded"
+        );
+        let messages: Vec<String> = diags.iter().map(|d| d.error.to_string()).collect();
+        assert_eq!(messages.len(), 1, "{messages:?}");
+        assert!(
+            messages[0]
+                .starts_with("ForeignImport: module 'auth.session' belongs to dependency 'auth'"),
+            "{messages:?}"
+        );
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn test_resolve_single_file() {
         let dir = make_temp_dir("single");
         let entry = dir.join("main.rdra");

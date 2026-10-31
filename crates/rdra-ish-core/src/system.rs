@@ -463,6 +463,21 @@ fn system_ids(model: &SemanticModel, keys: &[SystemKey]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn membership_is_none_for_an_entity_in_no_boundary() {
+        let a = SystemKey::default();
+        assert_eq!(SystemMembership::of(None), SystemMembership::None);
+        assert_eq!(SystemMembership::of(Some(&vec![])), SystemMembership::None);
+        assert_eq!(
+            SystemMembership::of(Some(&vec![a])),
+            SystemMembership::One(a)
+        );
+        assert_eq!(
+            SystemMembership::of(Some(&vec![a, a])),
+            SystemMembership::Many
+        );
+    }
     use crate::analysis::build_model;
     use rdra_ish_syntax::parse;
 

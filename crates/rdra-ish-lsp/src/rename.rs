@@ -251,6 +251,32 @@ performs(Staff, Book)
     }
 
     #[test]
+    fn a_reference_to_a_bound_external_system_is_neither_renamed_nor_a_rename_target() {
+        let root =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/xsys/shop-model");
+        let file = root.join("shop/checkout.rdra");
+        let src = std::fs::read_to_string(&file).unwrap();
+        let project = rdra_ish_core::load_project(std::slice::from_ref(&root), None).unwrap();
+        let analysis = rdra_ish_core::analyze_project(project);
+
+        // The cursor on `Login` of `usecase::Auth.Login`: nothing to rename here.
+        let offset = src.find("usecase::Auth.Login").unwrap() + "usecase::Auth.".len();
+        assert!(matches!(
+            workspace_rename(&analysis, &file, offset, "SignIn"),
+            Err(RenameError::NoSymbol)
+        ));
+
+        // Renaming the local use case leaves the foreign references alone.
+        let offset = src.find("usecase SignInAtCheckout").unwrap() + "usecase ".len();
+        let edit = workspace_rename(&analysis, &file, offset, "SignIn").unwrap();
+        let changes = edit.changes.expect("changes");
+        let edits = changes
+            .get(&path_to_uri(&file).unwrap())
+            .expect("file edits");
+        assert_eq!(edits.len(), 4, "{edits:?}");
+    }
+
+    #[test]
     fn rejects_invalid_identifiers() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/purchase");
         let entry = root.join("buc/buc_purchase.rdra");

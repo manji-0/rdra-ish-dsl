@@ -203,7 +203,7 @@ pub(crate) fn bound_ext(model: &SemanticModel, alias: &str) -> Option<ExtSystemK
         .map(|(k, _)| k)
 }
 
-fn dependency<'m>(model: &'m SemanticModel, ext: ExtSystemKey) -> Option<&'m DependencySurface> {
+fn dependency(model: &SemanticModel, ext: ExtSystemKey) -> Option<&DependencySurface> {
     let binding = model.ext_systems[ext].binding.as_ref()?;
     model
         .dependencies
@@ -263,7 +263,7 @@ pub(crate) fn bind(
         );
         return;
     };
-    if !dep.systems.iter().any(|s| *s == decl.system) {
+    if !dep.systems.contains(&decl.system) {
         push_error(
             ctx,
             diags,
@@ -680,4 +680,60 @@ pub(crate) fn resolve_foreign_kind(
             false
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DIAGNOSTICS: &[&str] = &[
+        "UnknownDependency",
+        "DuplicateBinding",
+        "UnknownForeignName",
+        "NotExposed",
+        "ForeignWrite",
+        "ForeignContained",
+        "ForeignOperand",
+        "ForeignImport",
+        "ForeignStateNeedsEnvironment",
+        "IdShadowsForeignSlug",
+        "DirectEntityReference",
+        "BindingOnNonExtSystem",
+    ];
+
+    #[test]
+    fn the_operand_table_and_every_diagnostic_are_in_the_language_reference() {
+        let reference = include_str!("../../../docs/language-reference.md");
+        for o in FOREIGN_OPERANDS {
+            let row = format!(
+                "| `{}` | {} | {} | {} |",
+                o.predicate,
+                o.position + 1,
+                o.kind,
+                o.use_.as_str()
+            );
+            assert!(
+                reference.contains(&row),
+                "{row} missing from docs/language-reference.md"
+            );
+        }
+        for name in DIAGNOSTICS {
+            assert!(
+                reference.contains(&format!("`{name}`")),
+                "{name} missing from docs/language-reference.md"
+            );
+        }
+    }
+
+    #[test]
+    fn closest_names_are_nearest_first_and_at_most_three() {
+        assert_eq!(
+            closest(
+                "Logon",
+                ["Login", "CanLogin", "SessionView", "Revoke"].into_iter()
+            ),
+            "`Login`, `Revoke`, `CanLogin`"
+        );
+        assert_eq!(closest("X", std::iter::empty()), "nothing is published");
+    }
 }

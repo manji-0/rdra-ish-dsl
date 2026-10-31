@@ -28,3 +28,43 @@ fn fmt_write_keeps_comments() {
         "module a\n\n// sources/a.txt:12\nactor A \"a\" // trailing\n\n/* footer */\n"
     );
 }
+
+/// The cross-model forms survive `fmt` unchanged, and a second `fmt` changes nothing.
+#[test]
+fn fmt_round_trips_the_cross_model_forms() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("fmt_cli_cross_model");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("checkout.rdra");
+    let original = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/fixtures/xsys/shop-model/shop/checkout.rdra"),
+    )
+    .unwrap();
+    std::fs::write(&path, &original).unwrap();
+
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .args(["fmt", "--write"])
+            .arg(&path)
+            .output()
+            .expect("rdra-ish runs");
+        assert!(output.status.success());
+    }
+    let formatted = std::fs::read_to_string(&path).unwrap();
+    assert_eq!(formatted, original);
+    for form in [
+        "from auth.AuthSystem",
+        "usecase::Auth.Login",
+        "Auth.SessionView",
+        "Pay.EvPaymentCaptured",
+    ] {
+        assert!(formatted.contains(form), "{form} missing");
+    }
+    let check = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["fmt", "--check"])
+        .arg(&path)
+        .output()
+        .expect("rdra-ish runs");
+    assert!(check.status.success());
+}
