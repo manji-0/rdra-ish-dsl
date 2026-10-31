@@ -1,69 +1,69 @@
 module shared.entities
 
 variation CardBrand "Card Brand" {
-  visa       "Visa"
+  visa "Visa"
   mastercard "Mastercard"
-  amex       "American Express"
-  jcb        "JCB"
+  amex "American Express"
+  jcb "JCB"
 }
 
 // ── Account ──────────────────────────────────────────────
 entity UserAccount "User Account" {
-  id:            Int      @pk
-  email:         String   @unique
-  status:        Enum(provisioned, active, suspended, deleted) @default(provisioned)
-  created_at:    DateTime
+  id: Int @pk
+  email: String @unique
+  status: Enum(provisioned, active, suspended, deleted) @default(provisioned)
+  created_at: DateTime
   last_login_at: DateTime @null
 }
 
 // ── Personal Information ─────────────────────────────────
 entity PersonalInfo "Personal Information" {
-  id:          Int    @pk
-  given_name:  String @label("Given Name")
+  id: Int @pk
+  given_name: String @label("Given Name")
   family_name: String @label("Family Name")
-  birth_date:  Date   @null
-  phone:       String @null
+  birth_date: Date @null
+  phone: String @null
 }
 
 // ── Address ──────────────────────────────────────────────
 entity PostalAddress "Postal Address" {
-  id:          Int    @pk
+  id: Int @pk
   postal_code: String
-  prefecture:  String
-  city:        String
-  street:      String
-  building:    String @null
-  is_primary:  Bool
+  prefecture: String
+  city: String
+  street: String
+  building: String @null
+  is_primary: Bool
 }
 
 // ── Credit Card ──────────────────────────────────────────
 entity CreditCard "Credit Card" {
-  id:               Int    @pk
+  id: Int @pk
   card_number_hash: String @label("Card Number Hash")
-  last4:            String @label("Last 4 Digits")
-  brand:            CardBrand @label("Brand")
-  expires_month:    Int
-  expires_year:     Int
-  holder_name:      String @label("Cardholder Name")
-  is_primary:       Bool
+  last4: String @label("Last 4 Digits")
+  brand: CardBrand @label("Brand")
+  expires_month: Int
+  expires_year: Int
+  holder_name: String @label("Cardholder Name")
+  is_primary: Bool
 }
 
 // ── Password Credential ──────────────────────────────────
 entity PasswordCredential "Password Credential" {
-  id:            Int      @pk
+  id: Int @pk
   password_hash: String
-  salt:          String
-  algorithm:     String   @default("argon2id")
-  updated_at:    DateTime
+  salt: String
+  algorithm: String @default(argon2id)
+  updated_at: DateTime
 }
 
 // ── Audit Log ────────────────────────────────────────────
 entity AuditLog "Audit Log" {
-  id:           Int      @pk
-  action:       String   @label("Action Type")
-  target:       String   @label("Target")
+  id: Int @pk
+  action: String @label("Action Type")
+  target: String @label("Target")
   performed_at: DateTime
-  ip_address:   String   @null
+  ip_address: String @null
 }
 
 // ── ER relationships ─────────────────────────────────────

@@ -1,4 +1,4 @@
 module shared.actors
 
-actor User      "User"
-actor SysAdmin  "System Administrator"
+actor User "User"
+actor SysAdmin "System Administrator"

@@ -6,6 +6,7 @@ entity Order "注文" {
   id: Int @pk
   status: Enum(pending, paid, cancelled) @default(pending)
 }
+
 entity Payment "決済" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
@@ -34,7 +35,4 @@ transitions(Pay, Payment.status, pending -> captured)
 relate(Payment, Order, N:1)
 
 // Cancelled order must not coexist with a captured payment on the same link.
-forbidden(Order, Payment,
-  Order.status == cancelled,
-  Payment.status == captured)
-  .along(Order, Payment)
+forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)

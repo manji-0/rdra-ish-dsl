@@ -1,80 +1,80 @@
 module shared.entities
 
 variation PaymentMethod "Payment Method" {
-  credit_card   "Credit card"
+  credit_card "Credit card"
   bank_transfer "Bank transfer"
-  convenience   "Convenience store"
+  convenience "Convenience store"
 }
 
 // ── Products / Catalog ───────────────────────────────────
 entity Category "Category" {
-  id:   Int    @pk
+  id: Int @pk
   name: String
   slug: String @unique
 }
 
 entity Product "Product" {
-  id:          Int     @pk
-  sku:         String  @unique
-  name:        String
-  description: String  @null
-  price:       Decimal
-  stock:       Int
-  is_active:   Bool
+  id: Int @pk
+  sku: String @unique
+  name: String
+  description: String @null
+  price: Decimal
+  stock: Int
+  is_active: Bool
 }
 
 // ── Customers ────────────────────────────────────────────
 entity CustomerAccount "Customer Account" {
-  id:         Int      @pk
-  email:      String   @unique
-  name:       String
+  id: Int @pk
+  email: String @unique
+  name: String
   created_at: DateTime
 }
 
 entity ShippingAddress "Shipping Address" {
-  id:          Int    @pk
+  id: Int @pk
   postal_code: String
-  prefecture:  String
-  city:        String
-  street:      String
-  name:        String @label("Recipient Name")
+  prefecture: String
+  city: String
+  street: String
+  name: String @label("Recipient Name")
 }
 
 // ── Cart ──────────────────────────────────────────────────
 entity Cart "Cart" {
-  id:         Int      @pk
+  id: Int @pk
   created_at: DateTime
 }
 
 entity CartItem "Cart Item" {
-  id:  Int @pk
+  id: Int @pk
   qty: Int
 }
 
 // ── Orders ───────────────────────────────────────────────
 entity Order "Order" {
-  id:           Int      @pk
-  total:        Money
-  tax:          Money
-  status:       Enum(pending, awaiting_capture, paid, shipped, delivered, cancelled) @default(pending)
-  ordered_at:   DateTime
+  id: Int @pk
+  total: Money
+  tax: Money
+  status: Enum(pending, awaiting_capture, paid, shipped, delivered, cancelled) @default(pending)
+  ordered_at: DateTime
   delivered_at: DateTime @null
 }
 
 entity OrderLine "Order Line" {
-  id:         Int     @pk
-  qty:        Int
+  id: Int @pk
+  qty: Int
   unit_price: Decimal
 }
 
 // ── Payment ──────────────────────────────────────────────
 entity Payment "Payment" {
-  id:           Int      @pk
-  amount:       Money
-  method:       PaymentMethod @default(credit_card)
-  status:       Enum(pending, authorized, captured, failed, refunded) @default(pending)
+  id: Int @pk
+  amount: Money
+  method: PaymentMethod @default(credit_card)
+  status: Enum(pending, authorized, captured, failed, refunded) @default(pending)
   processed_at: DateTime @null
-  gateway_ref:  String   @null @label("Payment Gateway Reference")
+  gateway_ref: String @null @label("Payment Gateway Reference")
 }
 
 // ── ER relationships ─────────────────────────────────────

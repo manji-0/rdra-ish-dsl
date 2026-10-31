@@ -3,21 +3,21 @@ module shared.entities
 // Values an actor chooses from. They type attribute columns and move no lifecycle.
 variation ConsentType "同意の種類" {
   treatment "診療"
-  privacy   "個人情報"
-  billing   "請求"
+  privacy "個人情報"
+  billing "請求"
 }
 
 variation OrderType "オーダの種類" {
-  lab      "検体検査"
-  imaging  "画像検査"
+  lab "検体検査"
+  imaging "画像検査"
   referral "紹介"
 }
 
 // The patient pays at the 会計窓口 or the 自動精算機 (sendai-iji-gairai-shiyousyo.txt:191).
 // The insurer's share is paid through the 審査支払機関 on the レセプト, never at the window.
 variation PaymentMethod "支払方法" {
-  cash       "現金"
-  card       "クレジットカード"
+  cash "現金"
+  card "クレジットカード"
   // 還付・追加徴収 after an insurance change or a calculation error (sendai-iji-gairai-shiyousyo.txt:196).
   adjustment "還付・追加徴収"
 }
@@ -36,36 +36,36 @@ variation BurdenRatio "負担割合" {
 // patient's consent, mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:46).
 variation LimitCategory "限度額適用区分" {
   notobtained "限度額情報なし"
-  obtained    "適用区分を取得済"
+  obtained "適用区分を取得済"
 }
 
 // 初診 is a visit without a written referral from another institution (hyogo-senteiryoyo.md:72).
 // 救急搬送, 初診時にそのまま入院, 生活保護, 労災・自賠責 pay no 初診時選定療養費
 // (saigai-hosp-2022-senteiryoyo.txt:17-18).
 variation ReferralCategory "紹介の有無" {
-  revisit    "再診"
-  referred   "紹介状あり初診"
+  revisit "再診"
+  referred "紹介状あり初診"
   unreferred "紹介状なし初診"
-  exempt     "紹介状なし初診（救急搬送等の除外）"
+  exempt "紹介状なし初診（救急搬送等の除外）"
 }
 
 // Where a Charge comes from. Each 診療行為 is entered once, at its own source, so the three
 // origins never register the same cost twice.
 variation ChargeOrigin "コストの発生元" {
-  chart       "カルテ（指導・管理料・コメント）"
-  performed   "実施入力（検査・処置）"
+  chart "カルテ（指導・管理料・コメント）"
+  performed "実施入力（検査・処置）"
   selectedfee "選定療養費"
 }
 
 variation ChargeKind "診療費の種類" {
-  insured           "保険診療"
+  insured "保険診療"
   // 選定療養: a set amount the patient pays in full (egov-ryotan-kisoku-332M50000100015.txt:114).
   selectedtreatment "選定療養（自費）"
 }
 
 variation ReferralDirection "紹介の向き" {
   // 紹介状受付処理 (koseikan-2024-iji-shiyousyo.txt:101).
-  inbound  "紹介元から受領"
+  inbound "紹介元から受領"
   // 診療情報提供書の作成・送信 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:121).
   outbound "紹介先へ送付"
 }
@@ -75,54 +75,54 @@ variation ReferralDirection "紹介の向き" {
 // A change of 負担割合 cannot be moved at all (:70, 項番7), a 公費 レセプト cannot be split (:43-44,
 // 項番1), and such a レセプト is returned to the hospital after billing (:40).
 variation PayerChange "資格変更の種類" {
-  nochange      "資格変更なし"
-  sameratio     "負担割合が同じ資格への変更"
-  ratiochanged  "負担割合が異なる資格への変更"
+  nochange "資格変更なし"
+  sameratio "負担割合が同じ資格への変更"
+  ratiochanged "負担割合が異なる資格への変更"
   publicexpense "公費が関わる変更"
 }
 
 variation MessageChannel "連絡手段" {
-  email  "メール"
-  sms    "SMS"
+  email "メール"
+  sms "SMS"
   portal "患者ポータル"
 }
 
 variation AuditSeverity "監査指摘の重大度" {
-  low      "低"
+  low "低"
   moderate "中"
-  high     "高"
+  high "高"
 }
 
 // Patient master data
 entity PatientAccount "患者登録" {
-  id:                Int      @pk
-  medical_record_no: String   @unique
-  status:            Enum(active "有効", inactive "アーカイブ済", merged "統合済") @default(active)
-  created_at:        DateTime
-  archived_at:       DateTime @null
+  id: Int @pk
+  medical_record_no: String @unique
+  status: Enum(active "有効", inactive "アーカイブ済", merged "統合済") @default(active)
+  created_at: DateTime
+  archived_at: DateTime @null
 }
 
 entity PatientProfile "患者基本情報" {
-  id:                Int    @pk
-  legal_name:        String
-  preferred_name:    String @null
-  birth_date:        Date
-  phone:             String
-  email:             String @null
+  id: Int @pk
+  legal_name: String
+  preferred_name: String @null
+  birth_date: Date
+  phone: String
+  email: String @null
   emergency_contact: String @null
 }
 
 // 資格確認 that fails (無効, 該当資格なし) is the result of an EligibilityCheck, not a state of the policy.
 entity InsurancePolicy "保険資格" {
-  id:                  Int    @pk
-  payer_name:          String
-  payer_no:            String
-  member_no:           String
-  burden_ratio:        BurdenRatio   @default(thirty)
-  limit_category:      LimitCategory @default(notobtained)
+  id: Int @pk
+  payer_name: String
+  payer_no: String
+  member_no: String
+  burden_ratio: BurdenRatio @default(thirty)
+  limit_category: LimitCategory @default(notobtained)
   verification_status: Enum(unverified "未確認", verified "確認済") @default(unverified)
-  verified_at:         DateTime @null
-  active:              Bool
+  verified_at: DateTime @null
+  active: Bool
 }
 
 // One query to the オンライン資格確認等システム. The result values follow the 一括照会 result list:
@@ -130,56 +130,56 @@ entity InsurancePolicy "保険資格" {
 // When the system cannot answer, the patient fills in a 被保険者資格申立書
 // (mhlw-2023-online-shikaku-dekinai-baai.txt:36-37), or the hospital uses the システム障害時モード (:80).
 entity EligibilityCheck "資格確認" {
-  id:           Int      @pk
-  checked_at:   DateTime
-  result:       Enum(pending "照会中", valid "有効", invalid "無効", no_info "該当資格なし", declared "申立書で確認") @default(pending)
-  reference_no: String   @null
+  id: Int @pk
+  checked_at: DateTime
+  result: Enum(pending "照会中", valid "有効", invalid "無効", no_info "該当資格なし", declared "申立書で確認") @default(pending)
+  reference_no: String @null
 }
 
 entity ConsentRecord "同意記録" {
-  id:           Int      @pk
+  id: Int @pk
   consent_type: ConsentType @default(treatment)
-  signed_at:    DateTime @null
-  expires_at:   DateTime @null
-  revoked:      Bool
+  signed_at: DateTime @null
+  expires_at: DateTime @null
+  revoked: Bool
 }
 
 entity IntakePacket "問診票" {
-  id:           Int      @pk
-  status:       Enum(sent "送付済", completed "回答済", expired "期限切れ") @default(sent)
-  sent_at:      DateTime @null
+  id: Int @pk
+  status: Enum(sent "送付済", completed "回答済", expired "期限切れ") @default(sent)
+  sent_at: DateTime @null
   completed_at: DateTime @null
 }
 
 // Facility and schedule
 entity Provider "医師マスタ" {
-  id:         Int    @pk
+  id: Int @pk
   license_no: String @unique
-  name:       String
-  specialty:  String
-  active:     Bool
+  name: String
+  specialty: String
+  active: Bool
 }
 
 entity ClinicLocation "施設" {
-  id:          Int    @pk
-  name:        String
+  id: Int @pk
+  name: String
   postal_code: String
-  phone:       String
+  phone: String
 }
 
 entity Room "診察室" {
-  id:               Int    @pk
-  name:             String
+  id: Int @pk
+  name: String
   occupancy_status: Enum(available "空き", occupied "使用中", cleaning "清掃中") @default(available)
 }
 
 entity ProviderSchedule "診療枠" {
-  id:           Int      @pk
+  id: Int @pk
   service_date: Date
-  start_at:     DateTime
-  end_at:       DateTime
-  capacity:     Int
-  blocked:      Bool
+  start_at: DateTime
+  end_at: DateTime
+  capacity: Int
+  blocked: Bool
 }
 
 // Visit lifecycle
@@ -187,65 +187,65 @@ entity ProviderSchedule "診療枠" {
 // :2488). A visit waits for the calculation (awaiting_calc) and for payment (awaiting_pay),
 // is paid (settled), and completes when the 領収証 is handed over.
 entity Appointment "予約・受診" {
-  id:             Int      @pk
-  reason:         String
-  referral:       ReferralCategory @default(revisit)
-  status:         Enum(requested "仮押さえ", scheduled "予約済", checked_in "受付済", in_consult "診察中", awaiting_calc "計算待ち", awaiting_pay "会計待ち", settled "精算済", completed "完了", cancelled "取消", no_show "未来院") @default(requested)
-  scheduled_at:   DateTime
-  checked_in_at:  DateTime @null
-  completed_at:   DateTime @null
-  cancel_reason:  String   @null
+  id: Int @pk
+  reason: String
+  referral: ReferralCategory @default(revisit)
+  status: Enum(requested "仮押さえ", scheduled "予約済", checked_in "受付済", in_consult "診察中", awaiting_calc "計算待ち", awaiting_pay "会計待ち", settled "精算済", completed "完了", cancelled "取消", no_show "未来院") @default(requested)
+  scheduled_at: DateTime
+  checked_in_at: DateTime @null
+  completed_at: DateTime @null
+  cancel_reason: String @null
 }
 
 entity Encounter "診療記録" {
-  id:              Int      @pk
+  id: Int @pk
   chief_complaint: String
-  status:          Enum(open "記録中", documented "記載済", signed "署名済", amended "修正済") @default(open)
-  opened_at:       DateTime
-  signed_at:       DateTime @null
+  status: Enum(open "記録中", documented "記載済", signed "署名済", amended "修正済") @default(open)
+  opened_at: DateTime
+  signed_at: DateTime @null
 }
 
 entity VitalSign "バイタル" {
-  id:        Int      @pk
-  taken_at:  DateTime
-  height_cm: Decimal  @null
-  weight_kg: Decimal  @null
-  systolic:  Int      @null
-  diastolic: Int      @null
+  id: Int @pk
+  taken_at: DateTime
+  height_cm: Decimal @null
+  weight_kg: Decimal @null
+  systolic: Int @null
+  diastolic: Int @null
 }
 
 entity Diagnosis "診断" {
-  id:          Int    @pk
-  code:        String
+  id: Int @pk
+  code: String
   description: String
-  is_primary:  Bool
+  is_primary: Bool
 }
 
 // Orders, results, and prescriptions
 entity ClinicalOrder "検査オーダ" {
-  id:           Int      @pk
-  order_type:   OrderType @default(lab)
-  status:       Enum(ordered "オーダ済", collected "採取済", resulted "結果受信", reviewed "結果確認済", cancelled "取消") @default(ordered)
+  id: Int @pk
+  order_type: OrderType @default(lab)
+  status: Enum(ordered "オーダ済", collected "採取済", resulted "結果受信", reviewed "結果確認済", cancelled "取消") @default(ordered)
   // false while an order a 医師事務作業補助者 entered awaits the physician's confirmation.
   physician_confirmed: Bool
-  ordered_at:   DateTime
+  ordered_at: DateTime
   collected_at: DateTime @null
-  resulted_at:  DateTime @null
+  resulted_at: DateTime @null
 }
 
 entity LabResult "検査結果" {
-  id:          Int      @pk
+  id: Int @pk
   result_text: String
-  abnormal:    Bool
+  abnormal: Bool
   received_at: DateTime @null
   reviewed_at: DateTime @null
 }
 
 entity Medication "薬剤" {
-  id:       Int    @pk
-  name:     String
+  id: Int @pk
+  name: String
   strength: String
-  route:    String
+  route: String
 }
 
 // A physician who finds a drug necessary gives the patient a 処方箋 (egov-ishihou-323AC0000000201.txt:251).
@@ -254,16 +254,16 @@ entity Medication "薬剤" {
 // (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:117, :167-170). The hospital never tells the patient
 // which 保険薬局 to use (egov-ryotan-kisoku-332M50000100015.txt:49), so a 処方箋 names no pharmacy.
 entity Prescription "処方箋" {
-  id:              Int      @pk
-  directions:      String
-  status:          Enum(drafted "処方入力中", issued "院外処方箋発行済", voucher_issued "引換券交付済", in_inquiry "疑義照会中", audited "調剤・監査済", counseled "服薬指導済", dispensed "交付済", expired "使用期間切れ", cancelled "取消") @default(drafted)
-  issued_on:       Date
+  id: Int @pk
+  directions: String
+  status: Enum(drafted "処方入力中", issued "院外処方箋発行済", voucher_issued "引換券交付済", in_inquiry "疑義照会中", audited "調剤・監査済", counseled "服薬指導済", dispensed "交付済", expired "使用期間切れ", cancelled "取消") @default(drafted)
+  issued_on: Date
   // 交付の日を含めて四日以内, unless 長期の旅行等特殊の事情 (egov-ryotan-kisoku-332M50000100015.txt:311-312).
-  use_period_days: Int @default(4)
+  use_period_days: Int @default("4")
   // リフィル処方箋 carries the upper limit of its uses (egov-ryotan-kisoku-332M50000100015.txt:481).
-  refill_limit:    Int @null
-  sent_at:         DateTime @null
-  dispensed_at:    DateTime @null
+  refill_limit: Int @null
+  sent_at: DateTime @null
+  dispensed_at: DateTime @null
 }
 
 // Revenue cycle
@@ -271,13 +271,13 @@ entity Prescription "処方箋" {
 // (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:104), 実施内容(コスト) a test or treatment room enters
 // (:152), and 選定療養費. A charge exists once it is registered; there is no pending stage.
 entity Charge "コスト（診療行為）" {
-  id:        Int      @pk
-  code:      String
-  kind:      ChargeKind @default(insured)
-  origin:    ChargeOrigin @default(chart)
-  amount:    Money
+  id: Int @pk
+  code: String
+  kind: ChargeKind @default(insured)
+  origin: ChargeOrigin @default(chart)
+  amount: Money
   posted_at: DateTime @null
-  status:    Enum(posted "登録済", voided "取消") @default(posted)
+  status: Enum(posted "登録済", voided "取消") @default(posted)
 }
 
 // レセプト: one patient, one 診療月, one payer. 作成 and 院内点検 (koseikan-2024-iji-shiyousyo.txt:222-227),
@@ -288,37 +288,37 @@ entity Charge "コスト（診療行為）" {
 // (medicom-receipt-return.md:127, vendor article); the hospital may ask for 再審査
 // (koseikan-2024-iji-shiyousyo.txt:238, :241). 月遅れ・保留 レセプト are submitted later (:237).
 entity ClaimStatement "レセプト" {
-  id:            Int      @pk
+  id: Int @pk
   service_month: Date
-  status:        Enum(drafting "作成中", inspecting "院内点検中", on_hold "保留", submitted "請求済", receipt_error "受付不能・要確認", under_review "審査中", paid "支払済", returned "返戻", assessed "査定", rereview "再審査請求中") @default(drafting)
-  payer_change:  PayerChange @default(nochange)
-  submitted_at:  DateTime @null
-  paid_at:       DateTime @null
-  return_reason: String   @null
+  status: Enum(drafting "作成中", inspecting "院内点検中", on_hold "保留", submitted "請求済", receipt_error "受付不能・要確認", under_review "審査中", paid "支払済", returned "返戻", assessed "査定", rereview "再審査請求中") @default(drafting)
+  payer_change: PayerChange @default(nochange)
+  submitted_at: DateTime @null
+  paid_at: DateTime @null
+  return_reason: String @null
 }
 
 // One 収納 or its 還付. What the patient has not paid yet is the AccountBalance.
 entity PaymentTransaction "精算" {
-  id:           Int      @pk
-  amount:       Money
-  method:       PaymentMethod @default(card)
-  status:       Enum(posted "収納済", refunded "還付済") @default(posted)
+  id: Int @pk
+  amount: Money
+  method: PaymentMethod @default(card)
+  status: Enum(posted "収納済", refunded "還付済") @default(posted)
   processed_at: DateTime @null
-  gateway_ref:  String   @null
+  gateway_ref: String @null
 }
 
 // 未収金: what the patient still owes after 精算 (koseikan-2024-iji-shiyousyo.txt:214, :219).
 entity AccountBalance "未収金残高" {
-  id:        Int      @pk
-  balance:   Money
+  id: Int @pk
+  balance: Money
   is_closed: Bool
   closed_at: DateTime @null
 }
 
 // 紹介状 received at 初診受付 and 診療情報提供書 sent to another institution.
 entity ReferralLetter "紹介状・診療情報提供書" {
-  id:          Int      @pk
-  direction:   ReferralDirection @default(inbound)
+  id: Int @pk
+  direction: ReferralDirection @default(inbound)
   received_at: DateTime @null
 }
 
@@ -326,42 +326,42 @@ entity ReferralLetter "紹介状・診療情報提供書" {
 // and hospitals publish different amounts (7,000円 at hyogo-senteiryoyo.md:65, 7,700円 at
 // saigai-hosp-2022-senteiryoyo.txt:15). The hospital sets it here; the model holds no number.
 entity SelectedTreatmentFeeSetting "選定療養費の設定" {
-  id:               Int   @pk
-  first_visit_fee:  Money
+  id: Int @pk
+  first_visit_fee: Money
   return_visit_fee: Money
 }
 
 // Engagement, follow-up, and audit
 entity CarePlan "ケアプラン" {
-  id:        Int      @pk
-  goal:      String
-  status:    Enum(open "作成済", monitoring "経過観察中", closed "終了") @default(open)
+  id: Int @pk
+  goal: String
+  status: Enum(open "作成済", monitoring "経過観察中", closed "終了") @default(open)
   opened_at: DateTime
   closed_at: DateTime @null
 }
 
 // Drafts and send failures are not modelled (no primary source).
 entity PatientMessage "患者連絡" {
-  id:      Int      @pk
+  id: Int @pk
   channel: MessageChannel @default(portal)
-  status:  Enum(sent "送信済", read "既読") @default(sent)
+  status: Enum(sent "送信済", read "既読") @default(sent)
   sent_at: DateTime @null
   read_at: DateTime @null
 }
 
 // Delivered when delivered_at is set; queueing and failure are not modelled (no primary source).
 entity Notification "通知" {
-  id:           Int      @pk
-  topic:        String
+  id: Int @pk
+  topic: String
   delivered_at: DateTime @null
 }
 
 entity AuditEvent "監査ログ" {
-  id:          Int      @pk
-  action:      String
-  actor_id:    String
+  id: Int @pk
+  action: String
+  actor_id: String
   occurred_at: DateTime
-  severity:    AuditSeverity @default(low)
+  severity: AuditSeverity @default(low)
   is_resolved: Bool
 }
 
@@ -404,13 +404,13 @@ relate(AuditEvent, PatientAccount, N:1)
 // systems. Each lifecycle transition is declared in its BUC file, next to the
 // use case that drives it.
 
-event EvAppointmentScheduled   "予約確定"
+event EvAppointmentScheduled "予約確定"
 event EvAppointmentRescheduled "予約変更"
-event EvAppointmentCheckedIn   "受付完了"
-event EvAppointmentCancelled   "予約取消"
-event EvEncounterSigned     "診療記録の署名"
+event EvAppointmentCheckedIn "受付完了"
+event EvAppointmentCancelled "予約取消"
+event EvEncounterSigned "診療記録の署名"
 event EvConsultationCompleted "診察終了"
-event EvClinicalOrderReviewed  "検査結果の確認"
+event EvClinicalOrderReviewed "検査結果の確認"
 event EvPrescriptionDispensed "保険薬局での調剤完了"
 event EvLabResultReceived "検査結果の受信"
 event EvEligibilityChecked "資格確認結果"
@@ -427,39 +427,19 @@ event EvPharmacyInquiry "保険薬局からの疑義照会"
 event EvPrescriptionIssued "電子処方箋の登録"
 
 // State constraints
-invariant(Appointment)
-  .when(status == checked_in)
-  .then(checked_in_at == present)
-  .label("受付済の予約には受付時刻が記録されている")
+invariant(Appointment).when(status == checked_in).then(checked_in_at == present).label("受付済の予約には受付時刻が記録されている")
 
-invariant(Appointment)
-  .when(status == completed)
-  .then(completed_at == present)
-  .label("完了した予約には完了時刻が記録されている")
+invariant(Appointment).when(status == completed).then(completed_at == present).label("完了した予約には完了時刻が記録されている")
 
-invariant(Encounter)
-  .when(status == signed)
-  .then(signed_at == present)
-  .label("署名済の診療記録には署名時刻が記録されている")
+invariant(Encounter).when(status == signed).then(signed_at == present).label("署名済の診療記録には署名時刻が記録されている")
 
-invariant(ClinicalOrder)
-  .when(status == resulted)
-  .then(resulted_at == present)
-  .label("結果が出たオーダには結果日時が記録されている")
+invariant(ClinicalOrder).when(status == resulted).then(resulted_at == present).label("結果が出たオーダには結果日時が記録されている")
 
-invariant(Prescription)
-  .when(status == issued)
-  .then(sent_at == present)
-  .label("発行済の処方箋には送信日時が記録されている")
+invariant(Prescription).when(status == issued).then(sent_at == present).label("発行済の処方箋には送信日時が記録されている")
 
-invariant(ClaimStatement)
-  .when(status == paid)
-  .then(paid_at == present)
-  .label("支払済のレセプトには支払日時が記録されている")
+invariant(ClaimStatement).when(status == paid).then(paid_at == present).label("支払済のレセプトには支払日時が記録されている")
 
-forbidden(ClaimStatement, status == paid, return_reason == present)
-  .label("訂正した返戻は、再請求の前に返戻理由を消す")
+forbidden(ClaimStatement, status == paid, return_reason == present).label("訂正した返戻は、再請求の前に返戻理由を消す")
 
 // 看護師 collects a specimen only on the physician's instruction (egov-hokanhou-323AC0000000203.txt:311).
-forbidden(ClinicalOrder, status == collected, physician_confirmed == false)
-  .label("医師事務作業補助者が入力したオーダは、医師が確定してから検体を採取する")
+forbidden(ClinicalOrder, status == collected, physician_confirmed == false).label("医師事務作業補助者が入力したオーダは、医師が確定してから検体を採取する")

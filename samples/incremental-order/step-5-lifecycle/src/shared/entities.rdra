@@ -14,5 +14,4 @@ entity Organization "Organization" {
   name: String
 }
 
-
 relate(Store, Organization, N:1)

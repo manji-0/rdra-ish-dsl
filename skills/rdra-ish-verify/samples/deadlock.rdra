@@ -5,13 +5,13 @@
 // expect check: fail Deadlock_Order_status_paid
 // expect verify: tlc=ok fail Deadlock_Order_status_paid
 entity Order "注文" {
-  id:     Int @pk
+  id: Int @pk
   status: Enum(pending, paid, shipped) @default(pending)
 }
 
-usecase Place   "注文確定"
-usecase Pay     "支払い"
-usecase Ship    "発送"
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Ship "発送"
 usecase Express "即日発送"
 
 buc BucOrderShipping "Order shipping"

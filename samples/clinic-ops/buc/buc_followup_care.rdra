@@ -5,20 +5,21 @@ import shared.entities
 import shared.biz
 import shared.goals
 
-buc BucFollowupCare "フォローアップ" description "診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。"
+buc BucFollowupCare "フォローアップ"
+  description "診療後のケアプラン作成、患者連絡、患者応答確認、再診予約、ケアプラン終了を扱う。"
 
-usecase CreateCarePlan       "ケアプランの作成" description "署名イベントからのケアプラン作成。"
-usecase SendFollowUpMessage  "患者への連絡" description "患者連絡。"
+usecase CreateCarePlan "ケアプランの作成" description "署名イベントからのケアプラン作成。"
+usecase SendFollowUpMessage "患者への連絡" description "患者連絡。"
 usecase ReviewPatientResponse "患者応答の確認" description "患者応答の確認。"
 usecase ScheduleFollowUpVisit "再診の予約" description "再診予約。"
-usecase CloseCarePlan        "ケアプランの終了" description "ケアプラン終了。"
-usecase NotifyPatientResult  "検査結果の患者通知" description "結果の患者通知。"
+usecase CloseCarePlan "ケアプランの終了" description "ケアプラン終了。"
+usecase NotifyPatientResult "検査結果の患者通知" description "結果の患者通知。"
 
-screen CarePlanScreen        "ケアプラン画面"
-screen PatientMessageScreen  "患者連絡画面"
+screen CarePlanScreen "ケアプラン画面"
+screen PatientMessageScreen "患者連絡画面"
 screen FollowUpScheduleScreen "再診予約画面"
 
-api CreateCarePlanApi      "ケアプラン作成 API"
+api CreateCarePlanApi "ケアプラン作成 API"
 api SendFollowUpMessageApi "患者連絡 API"
 api FollowUpScheduleApi "再診予約 API"
 api NotifyPatientResultApi "検査結果通知 API"
@@ -109,12 +110,12 @@ requires_permission(NotifyPatientResultApi, PatientMessageSend)
 // Business flow. The care plan opens after the encounter; the patient is contacted, answers, and
 // is booked for a 再診 before the plan closes. A reviewed result is told to the patient on the way.
 flow FollowupFlow "フォローアップの流れ"
-step CarePlanStep     "ケアプランの作成"
+step CarePlanStep "ケアプランの作成"
 step ResultNoticeStep "検査結果の患者通知"
-step FollowUpMsgStep  "患者への連絡"
-step ResponseStep     "患者応答の確認"
-step RevisitStep      "再診の予約"
-step PlanCloseStep    "ケアプランの終了"
+step FollowUpMsgStep "患者への連絡"
+step ResponseStep "患者応答の確認"
+step RevisitStep "再診の予約"
+step PlanCloseStep "ケアプランの終了"
 contains(BucFollowupCare, FollowupFlow)
 contains(FollowupFlow, CarePlanStep)
 contains(FollowupFlow, ResultNoticeStep)

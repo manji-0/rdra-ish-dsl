@@ -4,8 +4,8 @@ import shared.biz
 import shared.entities
 
 quality Auditability "監査可能性"
-quality Performance  "性能"
-quality Privacy      "プライバシー"
+quality Performance "性能"
+quality Privacy "プライバシー"
 
 nfr ScheduleLookupLatency "予約枠検索の応答時間"
   metric p95_latency_ms
@@ -16,9 +16,9 @@ nfr ScheduleLookupLatency "予約枠検索の応答時間"
   resilience retryable
 
 constraint PatientDataPrivacy "患者情報の保護"
-  privacy restricted
   logging structured
   retention "10y"
+  privacy restricted
 
 constraint BillingAuditTrail "会計の監査証跡"
   audit enabled

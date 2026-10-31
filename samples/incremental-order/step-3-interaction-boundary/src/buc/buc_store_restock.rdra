@@ -4,7 +4,9 @@ import shared.biz
 import shared.actors
 import shared.entities
 
-buc BucStoreRestock "Maintain Store Restock" description "Keep restock dates and store organization assignments operationally correct."
+buc BucStoreRestock "Maintain Store Restock"
+  description "Keep restock dates and store organization assignments operationally correct."
+
 usecase ChangeNextRestockDate "Change Next Restock Date"
 usecase ChangeStoreParentOrganization "Change Store Parent Organization"
 screen StoreMaintenanceScreen "Store Maintenance"
@@ -13,8 +15,7 @@ api OrganizationLookupApi "Organization Lookup API"
 system StoreAdminSystem "Store Admin System"
 system OrganizationSystem "Organization System"
 
-belongs(BucStoreRestock, StoreOperations)
-  .by(OpsConsole)
+belongs(BucStoreRestock, StoreOperations).by(OpsConsole)
 performs(OpsStaff, BucStoreRestock)
 has_permission(OpsStaff, StoreMaintenanceWrite)
 contains(BucStoreRestock, ChangeNextRestockDate)

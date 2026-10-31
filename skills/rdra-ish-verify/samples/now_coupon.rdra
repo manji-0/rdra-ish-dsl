@@ -19,7 +19,6 @@ contains(BucCouponLifecycle, Expire)
 creates(Issue, Coupon)
 updates(Expire, Coupon)
 
-
 transitions(Expire, Coupon.status, active -> expired)
 
 forbidden(Coupon, expired_at < now)

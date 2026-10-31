@@ -204,7 +204,10 @@
   declarations, `fmt` keeps the author's blank lines (several become one) and adds none,
   so a `//` citation above a declaration stays attached to it. Ids are not aligned. An
   entity or variation whose only clause is `description` no longer prints the clause
-  inside its braces, where it failed to parse (#50).
+  inside its braces, where it failed to parse. Every `.rdra` file under `samples/` and
+  `skills/` is formatted, and `scripts/check-sample-artifacts.sh`, which CI runs, fails
+  when `fmt --check samples skills` does. Line sites quoted from
+  `cross_order_payment_split.rdra` move down by one (#50).
 - Every construct that takes a comparison reads its bare right-hand side by one rule:
   `forbidden`, `required`, `exclusive`, `invariant` (`.when`, `.then`, `.has`, `.none`),
   `holds`, `after(...).assert(...)`, `sets`, `property`, `@check`, and `@derived`. A

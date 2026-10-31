@@ -5,8 +5,8 @@
 entity Item "商品" {
   id: Int @pk
   status: Enum(active, archived) @default(active)
-  stock: Int @default(1)
-  selling: Int @default(1)
+  stock: Int @default("1")
+  selling: Int @default("1")
 }
 
 usecase CreateItem "商品登録"
@@ -21,7 +21,6 @@ contains(BucItemStock, ArchiveItem)
 creates(CreateItem, Item)
 updates(Restock, Item)
 updates(ArchiveItem, Item)
-
 
 transitions(Restock, Item.status, active -> active)
 transitions(ArchiveItem, Item.status, active -> archived)

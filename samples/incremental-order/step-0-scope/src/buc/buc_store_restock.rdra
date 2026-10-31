@@ -2,6 +2,7 @@ module buc.store_restock
 
 import shared.biz
 
-buc BucStoreRestock "Maintain Store Restock" description "Keep restock dates and store organization assignments operationally correct."
+buc BucStoreRestock "Maintain Store Restock"
+  description "Keep restock dates and store organization assignments operationally correct."
 
 belongs(BucStoreRestock, StoreOperations)

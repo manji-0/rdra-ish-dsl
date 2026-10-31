@@ -6,17 +6,17 @@ import shared.biz
 
 buc BucCard "Manage Credit Cards"
 
-usecase ListCards      "List Cards"
-usecase RegisterCard   "Register Card"
-usecase DeleteCard     "Delete Card"
+usecase ListCards "List Cards"
+usecase RegisterCard "Register Card"
+usecase DeleteCard "Delete Card"
 usecase SetPrimaryCard "Set Primary Card"
 
 screen CardListScreen "Card List Screen"
-screen CardAddScreen  "Card Registration Screen"
+screen CardAddScreen "Card Registration Screen"
 
-api ListCardsApi      "List Cards API"
-api RegisterCardApi   "Register Card API"
-api DeleteCardApi     "Delete Card API"
+api ListCardsApi "List Cards API"
+api RegisterCardApi "Register Card API"
+api DeleteCardApi "Delete Card API"
 api SetPrimaryCardApi "Set Primary Card API"
 
 performs(User, BucCard)

@@ -14,11 +14,8 @@ entity Organization "Organization" {
   name: String
 }
 
-
 relate(Store, Organization, N:1)
 
 forbidden(Store, restock_status == blocked, next_restock_date == present)
 
-invariant(Store)
-  .when(restock_status == scheduled)
-  .then(next_restock_date == present)
+invariant(Store).when(restock_status == scheduled).then(next_restock_date == present)

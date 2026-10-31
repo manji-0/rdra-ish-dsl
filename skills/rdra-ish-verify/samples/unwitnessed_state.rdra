@@ -5,14 +5,14 @@
 // expect check: fail Witness_Order_status_refunded Deadlock_Order_status_shipped
 // expect verify: tlc=ok fail Witness_Order_status_refunded Deadlock_Order_status_shipped
 entity Order "注文" {
-  id:         Int @pk
-  status:     Enum(pending, paid, shipped, refunded) @default(pending)
+  id: Int @pk
+  status: Enum(pending, paid, shipped, refunded) @default(pending)
   shipped_at: DateTime @null
 }
 
-usecase Place  "注文確定"
-usecase Pay    "支払い"
-usecase Ship   "発送"
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Ship "発送"
 usecase Refund "返金"
 
 buc BucOrderRefund "Order refund"

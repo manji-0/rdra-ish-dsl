@@ -7,6 +7,7 @@ entity Cert "証明書" {
   id: Int @pk
   status: Enum(active, revoked) @default(active)
 }
+
 entity Assign "割当" {
   id: Int @pk
   status: Enum(active, ended) @default(active)

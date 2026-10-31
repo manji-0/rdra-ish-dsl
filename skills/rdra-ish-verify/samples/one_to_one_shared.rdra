@@ -8,6 +8,7 @@ entity Order "注文" {
   id: Int @pk
   status: Enum(placed, shipped) @default(placed)
 }
+
 entity Shipment "出荷" {
   id: Int @pk
 }

@@ -3,7 +3,7 @@
 // forbidden reads it as its expression, qty >= 3, which no use case reaches.
 entity CartLine "カート明細" {
   id: Int @pk
-  qty: Int @default(1) @check(qty >= 1)
+  qty: Int @default("1") @check(qty >= 1)
   bulk: Bool @derived(qty >= 3)
 }
 

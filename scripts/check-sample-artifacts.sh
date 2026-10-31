@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Regenerate every committed sample artifact listed in scripts/sample-artifacts.tsv, and the
-# sample documents that embed them, and fail when the result differs from what is committed.
+# Check that every sample is formatted, regenerate every committed sample artifact listed in
+# scripts/sample-artifacts.tsv and the sample documents that embed them, and fail when the
+# result differs from what is committed.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -10,6 +11,9 @@ manifest="scripts/sample-artifacts.tsv"
 
 cargo build --quiet --bin rdra-ish
 bin="target/debug/rdra-ish"
+
+# Every sample and skill fixture is in the layout `fmt` writes.
+"$bin" fmt --check samples skills
 
 outputs=()
 while IFS=$'\t' read -r out cmd; do

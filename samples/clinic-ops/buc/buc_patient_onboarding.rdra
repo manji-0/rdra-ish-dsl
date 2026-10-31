@@ -5,33 +5,37 @@ import shared.entities
 import shared.biz
 import shared.goals
 
-buc BucPatientOnboarding "新患登録・患者情報管理" description "新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。"
+buc BucPatientOnboarding "新患登録・患者情報管理"
+  description "新患登録から問診送付までを扱う。新患登録では、オンライン資格確認で得た保険情報と、患者が同意した場合の限度額情報（適用区分）を `InsurancePolicy` に登録する。負担割合 `burden_ratio` と限度額適用区分 `limit_category` は actor が選ぶ値ではなく保険者が決める値なので、variation 型の属性として持つ。"
 
-usecase SearchPatient         "患者の検索" description "患者を検索する。参照だけの API で、患者の作成とは分ける。"
-usecase RegisterPatient       "新患登録" description "新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。"
-usecase UpdateDemographics    "患者属性の変更" description "患者の属性を API で更新する。"
+usecase SearchPatient "患者の検索" description "患者を検索する。参照だけの API で、患者の作成とは分ける。"
+usecase RegisterPatient "新患登録" description "新患の PatientAccount と PatientProfile を 1 つの API で同時に作る。"
+usecase UpdateDemographics "患者属性の変更" description "患者の属性を API で更新する。"
+
 // 新患登録 with the 保険情報 and, with consent, the 限度額情報 from the オンライン資格確認
 // (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:46, :51; koseikan-2024-iji-shiyousyo.txt:92).
-usecase VerifyInsurance       "保険資格・限度額情報の登録（新患登録）" description "保険資格の登録と限度額情報（適用区分）の取得。"
-usecase CaptureConsent        "同意の取得" description "同意記録を作る。同意の有無は Bool、未回答は null で持つ。"
-usecase SendIntakeForms       "問診票の送付" description "問診パケットとメッセージ作成。"
-usecase CompleteIntakeForms   "問診票の回答" description "問診完了イベント。"
-usecase ExpireIntakeForms     "問診票の期限切れ" description "問診期限切れイベント。"
+usecase VerifyInsurance "保険資格・限度額情報の登録（新患登録）"
+  description "保険資格の登録と限度額情報（適用区分）の取得。"
+
+usecase CaptureConsent "同意の取得" description "同意記録を作る。同意の有無は Bool、未回答は null で持つ。"
+usecase SendIntakeForms "問診票の送付" description "問診パケットとメッセージ作成。"
+usecase CompleteIntakeForms "問診票の回答" description "問診完了イベント。"
+usecase ExpireIntakeForms "問診票の期限切れ" description "問診期限切れイベント。"
 usecase MergeDuplicatePatient "重複患者の統合" description "患者統合状態。"
-usecase ArchivePatient        "患者のアーカイブ" description "患者アーカイブ状態。"
+usecase ArchivePatient "患者のアーカイブ" description "患者アーカイブ状態。"
 
-screen PatientSearchScreen  "患者検索画面"
+screen PatientSearchScreen "患者検索画面"
 screen PatientProfileScreen "患者基本情報画面"
-screen InsuranceScreen      "保険資格登録画面"
-screen ConsentScreen        "同意取得画面"
-screen IntakePortalScreen   "問診票ポータル画面"
+screen InsuranceScreen "保険資格登録画面"
+screen ConsentScreen "同意取得画面"
+screen IntakePortalScreen "問診票ポータル画面"
 
-api SearchPatientApi       "患者検索 API"
-api RegisterPatientApi     "新患登録 API"
-api UpdateDemographicsApi  "患者属性変更 API"
-api EligibilityApi       "保険資格登録 API"
-api ConsentApi           "同意 API"
-api IntakeMessagingApi   "問診票送付 API"
+api SearchPatientApi "患者検索 API"
+api RegisterPatientApi "新患登録 API"
+api UpdateDemographicsApi "患者属性変更 API"
+api EligibilityApi "保険資格登録 API"
+api ConsentApi "同意 API"
+api IntakeMessagingApi "問診票送付 API"
 
 performs(ReceptionClerk, SearchPatient)
 performs(ReceptionClerk, RegisterPatient)
@@ -168,12 +172,12 @@ requires_medium(ArchivePatient, FrontDeskTerminal)
 // the 問診票 goes out when the first appointment is booked (EvAppointmentScheduled).
 flow OnboardingFlow "新患登録の流れ"
 step NewPatientSearchStep "既存患者の検索"
-step RegisterStep         "新患登録"
-step InsuranceStep        "保険資格・限度額情報の登録"
-step ConsentStep          "同意の取得"
-step IntakeSendStep       "問診票の送付"
-step IntakeAnswerStep     "問診票の回答"
-step IntakeExpireStep     "問診票の期限切れ"
+step RegisterStep "新患登録"
+step InsuranceStep "保険資格・限度額情報の登録"
+step ConsentStep "同意の取得"
+step IntakeSendStep "問診票の送付"
+step IntakeAnswerStep "問診票の回答"
+step IntakeExpireStep "問診票の期限切れ"
 contains(BucPatientOnboarding, OnboardingFlow)
 contains(OnboardingFlow, NewPatientSearchStep)
 contains(OnboardingFlow, RegisterStep)
@@ -206,9 +210,9 @@ performs(Patient, IntakeAnswerStep)
 
 flow PatientMaintenanceFlow "患者情報の保守"
 step MaintainSearchStep "登録済み患者の検索"
-step DemographicsStep   "患者属性の変更"
-step MergeStep          "重複患者の統合"
-step ArchiveStep        "患者のアーカイブ"
+step DemographicsStep "患者属性の変更"
+step MergeStep "重複患者の統合"
+step ArchiveStep "患者のアーカイブ"
 contains(BucPatientOnboarding, PatientMaintenanceFlow)
 contains(PatientMaintenanceFlow, MaintainSearchStep)
 contains(PatientMaintenanceFlow, DemographicsStep)

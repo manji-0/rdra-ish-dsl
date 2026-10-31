@@ -7,15 +7,16 @@ import shared.goals
 
 // Sources cited as file:line are under ~/research/japan-hospital-operations/sources/.
 
-buc BucVisitCheckIn "受付（初診・再診）" description "到着確認、資格確認、紹介状の受付、診察室への案内を扱う。療養担当規則 第3条により受付のたびに資格を確認するので、`CheckInPatient` は必ずオンライン資格確認を伴い `EligibilityCheck` を作る。結果は 有効・無効・該当資格なし の 3 通りで、無効と該当資格なしは再確認へ戻る。システムが答えられない場合は被保険者資格申立書かシステム障害時モードで確認する。来院前には予約済み患者の一括照会を行う。受付では支払を受けない（会計は `BucVisitPayment`）。"
+buc BucVisitCheckIn "受付（初診・再診）"
+  description "到着確認、資格確認、紹介状の受付、診察室への案内を扱う。療養担当規則 第3条により受付のたびに資格を確認するので、`CheckInPatient` は必ずオンライン資格確認を伴い `EligibilityCheck` を作る。結果は 有効・無効・該当資格なし の 3 通りで、無効と該当資格なしは再確認へ戻る。システムが答えられない場合は被保険者資格申立書かシステム障害時モードで確認する。来院前には予約済み患者の一括照会を行う。受付では支払を受けない（会計は `BucVisitPayment`）。"
 
 // 予約票・診察券の確認 at 再診受付 (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:58); 到着の確認
 // (sendai-iji-gairai-shiyousyo.txt:169).
-usecase VerifyArrival     "予約票・診察券の確認" description "予約票・診察券を確認する（参照のみ）。"
+usecase VerifyArrival "予約票・診察券の確認" description "予約票・診察券を確認する（参照のみ）。"
 // Every 受付 checks the patient's 資格 (egov-ryotan-kisoku-332M50000100015.txt:80), with the
 // オンライン資格確認 first (mhlw-2024-hyojun-denshi-karte-gyomuflow.txt:43). A 資格 the 一括照会
 // found 無効 is checked again at 受付 (mhlw-2023-online-shikaku-tebiki-001085572.txt:366-367).
-usecase CheckInPatient    "受付（初診・再診）" description "受付で予約を受付済にし、同時にオンライン資格確認を作る。"
+usecase CheckInPatient "受付（初診・再診）" description "受付で予約を受付済にし、同時にオンライン資格確認を作る。"
 usecase BatchVerifyEligibility "資格の一括照会" description "予約済み患者（BookedPatient 条件）だけを一括照会する。"
 usecase ReceiveEligibilityValid "資格確認結果（有効）の取込" description "資格確認結果「有効」の取込。"
 usecase ReceiveEligibilityInvalid "資格確認結果（無効）の取込" description "資格確認結果「無効」の取込。"
@@ -26,21 +27,21 @@ usecase ConfirmEligibilityInOutageMode "システム障害時モードでの資�
 // 紹介状を受領し各診察室へ回付 (sendai-iji-gairai-shiyousyo.txt:171); 紹介状受付処理
 // (koseikan-2024-iji-shiyousyo.txt:101).
 usecase ReceiveReferralLetter "紹介状受付処理" description "紹介状の受領と受付処理。"
-usecase AssignRoom        "診察室への案内" description "受付済の受診だけを診察室へ案内する。予約の状態は変わらない。"
-usecase PrepareEncounter  "診療の準備" description "診療準備の参照情報。"
+usecase AssignRoom "診察室への案内" description "受付済の受診だけを診察室へ案内する。予約の状態は変わらない。"
+usecase PrepareEncounter "診療の準備" description "診療準備の参照情報。"
 
-screen CheckInScreen     "受付画面"
+screen CheckInScreen "受付画面"
 screen EligibilityScreen "資格確認画面"
-screen ReferralScreen    "紹介状受付画面"
-screen RoomBoardScreen   "診察室ボード画面"
+screen ReferralScreen "紹介状受付画面"
+screen RoomBoardScreen "診察室ボード画面"
 
-api VerifyArrivalApi     "到着確認 API"
-api CheckInPatientApi    "受付 API"
+api VerifyArrivalApi "到着確認 API"
+api CheckInPatientApi "受付 API"
 api OnlineEligibilityApi "オンライン資格確認 API"
 api EligibilityResultApi "資格確認結果 API"
-api ReferralLetterApi    "紹介状 API"
-api AssignRoomApi        "診察室案内 API"
-api PrepareEncounterApi  "診療準備 API"
+api ReferralLetterApi "紹介状 API"
+api AssignRoomApi "診察室案内 API"
+api PrepareEncounterApi "診療準備 API"
 
 performs(ReceptionClerk, VerifyArrival)
 performs(ReceptionClerk, CheckInPatient)
@@ -225,11 +226,11 @@ navigates(CheckInScreen, RoomBoardScreen).via(AssignRoom)
 
 // Business flow
 flow VisitCheckInFlow "受付の流れ"
-step ArrivalStep        "到着・予約票の確認"
-step EligibilityStep    "資格確認"
-step DeclarationStep    "資格を確認できない（申立書・障害時モード）"
-step ReferralStep       "紹介状あり（初診）"
-step RoomingStep        "診察室への案内"
+step ArrivalStep "到着・予約票の確認"
+step EligibilityStep "資格確認"
+step DeclarationStep "資格を確認できない（申立書・障害時モード）"
+step ReferralStep "紹介状あり（初診）"
+step RoomingStep "診察室への案内"
 
 contains(BucVisitCheckIn, VisitCheckInFlow)
 contains(VisitCheckInFlow, ArrivalStep)
@@ -265,11 +266,22 @@ performs(ReceptionClerk, ReferralStep)
 performs(Nurse, RoomingStep)
 
 // Screen fields
-field ArrivalTimeField "受付時刻" access readonly required true source system
-field EligibilityResultField "資格確認結果" access readonly required true source system
+field ArrivalTimeField "受付時刻"
+  access readonly
+  required true
+  source system
+
+field EligibilityResultField "資格確認結果"
+  access readonly
+  required true
+  source system
 
 contains(CheckInScreen, ArrivalTimeField)
-field ReferralReceivedField "紹介状の受領日時" access readonly required true source system
+
+field ReferralReceivedField "紹介状の受領日時"
+  access readonly
+  required true
+  source system
 
 contains(EligibilityScreen, EligibilityResultField)
 contains(ReferralScreen, ReferralReceivedField)

@@ -5,26 +5,27 @@ import shared.entities
 import shared.biz
 import shared.goals
 
-buc BucAppointmentScheduling "予約" description "予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。"
+buc BucAppointmentScheduling "予約"
+  description "予約検索、仮押さえ、予約確定、変更、取消、通知を扱う。予約枠と予約レコードを同時に更新する UC は専用 API を持ち、予約通知は AppointmentNoticeApi に分ける。予約済みの患者は、来院前に `BucVisitCheckIn` の一括照会の対象になる。"
 
-usecase SearchAvailability     "空き枠の検索" description "予約枠を検索する。参照だけの API。"
-usecase ReserveAppointment     "予約の仮押さえ" description "仮押さえで Appointment を作る。"
-usecase BookAppointment        "予約の確定" description "予約確定と予約枠更新。"
-usecase RescheduleAppointment  "予約の変更" description "予約を変更する。予約の状態は変わらない。"
-usecase CancelAppointment      "予約の取消" description "取消理由と予約枠更新。"
-usecase MarkNoShow             "未来院の処理" description "タイマー起動の未来院処理。"
-usecase SendAppointmentNotice  "予約の通知" description "予約イベントからの通知作成。"
+usecase SearchAvailability "空き枠の検索" description "予約枠を検索する。参照だけの API。"
+usecase ReserveAppointment "予約の仮押さえ" description "仮押さえで Appointment を作る。"
+usecase BookAppointment "予約の確定" description "予約確定と予約枠更新。"
+usecase RescheduleAppointment "予約の変更" description "予約を変更する。予約の状態は変わらない。"
+usecase CancelAppointment "予約の取消" description "取消理由と予約枠更新。"
+usecase MarkNoShow "未来院の処理" description "タイマー起動の未来院処理。"
+usecase SendAppointmentNotice "予約の通知" description "予約イベントからの通知作成。"
 
 screen ScheduleSearchScreen "空き枠検索画面"
-screen AppointmentScreen    "予約画面"
+screen AppointmentScreen "予約画面"
 screen AppointmentNoticeScreen "予約通知画面"
 
-api SearchAvailabilityApi    "空き枠検索 API"
-api ReserveAppointmentApi    "予約仮押さえ API"
-api BookAppointmentApi       "予約確定 API"
+api SearchAvailabilityApi "空き枠検索 API"
+api ReserveAppointmentApi "予約仮押さえ API"
+api BookAppointmentApi "予約確定 API"
 api RescheduleAppointmentApi "予約変更 API"
-api CancelAppointmentApi     "予約取消 API"
-api AppointmentNoticeApi     "予約通知 API"
+api CancelAppointmentApi "予約取消 API"
+api AppointmentNoticeApi "予約通知 API"
 
 performs(ReceptionClerk, BucAppointmentScheduling)
 performs(ReceptionClerk, SearchAvailability)
@@ -38,9 +39,7 @@ performs(ReceptionClerk, RescheduleAppointment)
 performs(ReceptionClerk, CancelAppointment)
 performs(ReceptionClerk, MarkNoShow)
 performs(ReceptionClerk, SendAppointmentNotice)
-belongs(BucAppointmentScheduling, PatientAccess)
-  .by(FrontDeskTerminal)
-  .by(PatientMobile)
+belongs(BucAppointmentScheduling, PatientAccess).by(FrontDeskTerminal).by(PatientMobile)
 contains(BucAppointmentScheduling, SearchAvailability)
 contains(BucAppointmentScheduling, ReserveAppointment)
 contains(BucAppointmentScheduling, BookAppointment)
@@ -136,12 +135,12 @@ triggers(EvAppointmentCancelled, MessagingGateway)
 // sweep marks an appointment nobody came to as 未来院.
 flow AppointmentFlow "予約の流れ"
 step AvailabilityStep "空き枠の検索"
-step ReserveStep      "仮押さえ"
-step BookStep         "予約確定"
-step NoticeStep       "予約の通知"
-step RescheduleStep   "予約の変更"
-step CancelStep       "予約の取消"
-step NoShowStep       "未来院の処理"
+step ReserveStep "仮押さえ"
+step BookStep "予約確定"
+step NoticeStep "予約の通知"
+step RescheduleStep "予約の変更"
+step CancelStep "予約の取消"
+step NoShowStep "未来院の処理"
 contains(BucAppointmentScheduling, AppointmentFlow)
 contains(AppointmentFlow, AvailabilityStep)
 contains(AppointmentFlow, ReserveStep)

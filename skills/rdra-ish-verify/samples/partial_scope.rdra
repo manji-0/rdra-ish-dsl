@@ -6,19 +6,19 @@
 // expect verify: fail DerivedColumnRead_Audit_score
 // expect verify --entity Order: tlc=ok
 entity Order "注文" {
-  id:     Int @pk
+  id: Int @pk
   status: Enum(pending, paid) @default(pending)
-  amount: Int @default(1)
+  amount: Int @default("1")
 }
 
 entity Audit "監査記録" {
-  id:    Int @pk
-  count: Int @default(0)
+  id: Int @pk
+  count: Int @default("0")
   score: Int @derived(count * 2)
 }
 
-usecase Place  "注文確定"
-usecase Pay    "支払い"
+usecase Place "注文確定"
+usecase Pay "支払い"
 usecase Record "監査記録"
 
 buc BucOrder "Order"

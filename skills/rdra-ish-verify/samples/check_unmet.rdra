@@ -6,7 +6,7 @@
 // expect verify: tlc=counterexample fail Check_CartLine_qty_0
 entity CartLine "カート明細" {
   id: Int @pk
-  qty: Int @default(1) @check(qty >= 1)
+  qty: Int @default("1") @check(qty >= 1)
 }
 
 usecase AddLine "明細追加"

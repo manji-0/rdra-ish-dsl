@@ -2,7 +2,7 @@
 // expect check: fail Inv_Order_0
 // expect verify: tlc=counterexample fail Inv_Order_0
 entity Order "注文" {
-  id:     Int @pk
+  id: Int @pk
   status: Enum(pending, delivered) @default(pending)
   delivered_at: DateTime @null
 }
@@ -18,6 +18,4 @@ updates(DeliverOrder, Order)
 transitions(DeliverOrder, Order.status, pending -> delivered)
 // Missing: sets(..., delivered_at, present)
 
-invariant(Order)
-  .when(status == delivered)
-  .then(delivered_at == present)
+invariant(Order).when(status == delivered).then(delivered_at == present)

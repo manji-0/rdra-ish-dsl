@@ -65,15 +65,15 @@ tlc_result: counterexample
 Error: TLC verification failed
 ...
 error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
-  rule: samples/cross_order_payment_split.rdra:43:1
+  rule: samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps, from TLC):
-    1. Place [Order#1, Payment#1]                            samples/cross_order_payment_split.rdra:16:1
+    1. Place [Order#1, Payment#1]                            samples/cross_order_payment_split.rdra:17:1
          + Order#1 (status=pending)
          + Payment#1 (status=pending, owner Order=Order#1)
-    2. Pay_1, transaction 1 of Pay [Payment#1]               samples/cross_order_payment_split.rdra:17:1
-         Payment#1.status: pending -> captured               samples/cross_order_payment_split.rdra:38:1
-    3. Cancel [Order#1]                                      samples/cross_order_payment_split.rdra:18:1
-         Order#1.status: pending -> cancelled                samples/cross_order_payment_split.rdra:37:1
+    2. Pay_1, transaction 1 of Pay [Payment#1]               samples/cross_order_payment_split.rdra:18:1
+         Payment#1.status: pending -> captured               samples/cross_order_payment_split.rdra:39:1
+    3. Cancel [Order#1]                                      samples/cross_order_payment_split.rdra:19:1
+         Order#1.status: pending -> cancelled                samples/cross_order_payment_split.rdra:38:1
 violated: Error: Invariant CrossForbidden_Order_0 is violated.
 ...
 ```

@@ -5,6 +5,7 @@
 entity Order "注文" {
   id: Int @pk
 }
+
 entity OrderLine "注文明細" {
   id: Int @pk
 }

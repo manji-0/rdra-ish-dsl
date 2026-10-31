@@ -7,22 +7,22 @@ import shared.biz
 buc BucCart "Add Products to Cart"
 
 usecase SearchProducts "Search Products"
-usecase ViewProduct    "View Product Details"
-usecase AddToCart      "Add to Cart"
+usecase ViewProduct "View Product Details"
+usecase AddToCart "Add to Cart"
 usecase UpdateCartItem "Change Cart Item Quantity"
 usecase RemoveCartItem "Remove from Cart"
-usecase ViewCart       "View Cart"
+usecase ViewCart "View Cart"
 
 screen ProductSearchScreen "Product Search Screen"
 screen ProductDetailScreen "Product Detail Screen"
-screen CartScreen          "Cart Screen"
+screen CartScreen "Cart Screen"
 
-api ProductSearchApi  "Product Search API"
-api ProductDetailApi  "Product Detail API"
-api AddToCartApi      "Add To Cart API"
+api ProductSearchApi "Product Search API"
+api ProductDetailApi "Product Detail API"
+api AddToCartApi "Add To Cart API"
 api UpdateCartItemApi "Update Cart Item API"
 api RemoveCartItemApi "Remove Cart Item API"
-api ViewCartApi       "View Cart API"
+api ViewCartApi "View Cart API"
 
 performs(Customer, BucCart)
 belongs(BucCart, EcShopping)

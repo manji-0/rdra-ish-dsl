@@ -56,15 +56,15 @@ A violated constraint or `after` assertion prints once, with a shortest countere
 
 ```
 error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
-  rule: cross_order_payment_split.rdra:43:1
+  rule: cross_order_payment_split.rdra:44:1
   counterexample (3 steps):
-    1. Place [Order#1, Payment#1]                            cross_order_payment_split.rdra:16:1
+    1. Place [Order#1, Payment#1]                            cross_order_payment_split.rdra:17:1
          + Order#1 (status=pending)
          + Payment#1 (status=pending, owner Order=Order#1)
-    2. Pay_1, transaction 1 of Pay [Payment#1]               cross_order_payment_split.rdra:17:1
-         Payment#1.status: pending -> captured               cross_order_payment_split.rdra:38:1
-    3. Cancel [Order#1]                                      cross_order_payment_split.rdra:18:1
-         Order#1.status: pending -> cancelled                cross_order_payment_split.rdra:37:1
+    2. Pay_1, transaction 1 of Pay [Payment#1]               cross_order_payment_split.rdra:18:1
+         Payment#1.status: pending -> captured               cross_order_payment_split.rdra:39:1
+    3. Cancel [Order#1]                                      cross_order_payment_split.rdra:19:1
+         Order#1.status: pending -> cancelled                cross_order_payment_split.rdra:38:1
 ```
 
 A step names the use case (`Pay_1, transaction 1 of Pay` for a split one), the instances
@@ -1014,15 +1014,15 @@ tlc_result: counterexample
 Error: TLC verification failed
 Cone_CrossForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_CrossForbidden_Order_0.tla):
 error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
-  rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:43:1
+  rule: skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps, from TLC):
-    1. Place [Order#1, Payment#1]                            skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:16:1
+    1. Place [Order#1, Payment#1]                            skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:17:1
          + Order#1 (status=pending)
          + Payment#1 (status=pending, owner Order=Order#1)
-    2. Pay_1, transaction 1 of Pay [Payment#1]               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:17:1
-         Payment#1.status: pending -> captured               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:38:1
-    3. Cancel [Order#1]                                      skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:18:1
-         Order#1.status: pending -> cancelled                skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:37:1
+    2. Pay_1, transaction 1 of Pay [Payment#1]               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:18:1
+         Payment#1.status: pending -> captured               skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:39:1
+    3. Cancel [Order#1]                                      skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:19:1
+         Order#1.status: pending -> cancelled                skills/rdra-ish-verify/samples/cross_order_payment_split.rdra:38:1
 violated: Error: Invariant CrossForbidden_Order_0 is violated.
 counterexample:
   State 1: Initial predicate

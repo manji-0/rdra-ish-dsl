@@ -3,7 +3,9 @@ module buc.store_restock
 import shared.biz
 import shared.actors
 
-buc BucStoreRestock "Maintain Store Restock" description "Keep restock dates and store organization assignments operationally correct."
+buc BucStoreRestock "Maintain Store Restock"
+  description "Keep restock dates and store organization assignments operationally correct."
+
 usecase ChangeNextRestockDate "Change Next Restock Date"
 usecase ChangeStoreParentOrganization "Change Store Parent Organization"
 

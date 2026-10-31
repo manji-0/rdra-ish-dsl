@@ -1,8 +1,8 @@
 module shared.biz
 
-business PatientAccess        "患者受付" description "新患登録から予約、受付、フォローアップまでの患者に向き合う業務。"
-business CareDelivery         "診療"
-business RevenueCycle         "医事会計"
+business PatientAccess "患者受付" description "新患登録から予約、受付、フォローアップまでの患者に向き合う業務。"
+business CareDelivery "診療"
+business RevenueCycle "医事会計"
 business ClinicAdministration "病院管理"
 
 system ClinicOpsSystem "外来業務システム"

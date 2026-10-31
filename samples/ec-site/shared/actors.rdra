@@ -1,6 +1,6 @@
 module shared.actors
 
-actor Customer       "Customer"
-actor Admin          "Administrator"
-extsystem PaymentGW  "Payment Gateway"
+actor Customer "Customer"
+actor Admin "Administrator"
+extsystem PaymentGW "Payment Gateway"
 extsystem ShippingSvc "Shipping Service"

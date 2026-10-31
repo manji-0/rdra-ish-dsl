@@ -6,24 +6,24 @@ import shared.biz
 
 buc BucOrder "Process Order"
 
-usecase SelectAddress    "Select Shipping Address"
-usecase ConfirmOrder     "Confirm Order Details"
-usecase PlaceOrder       "Place Order"
+usecase SelectAddress "Select Shipping Address"
+usecase ConfirmOrder "Confirm Order Details"
+usecase PlaceOrder "Place Order"
 usecase ViewOrderHistory "View Order History"
-usecase Cancel           "Cancel Order"
-usecase ShipOrder        "Ship Order"
-usecase DeliverOrder     "Confirm Delivery"
+usecase Cancel "Cancel Order"
+usecase ShipOrder "Ship Order"
+usecase DeliverOrder "Confirm Delivery"
 
 screen AddressSelectScreen "Address Selection Screen"
-screen OrderConfirmScreen  "Order Confirmation Screen"
+screen OrderConfirmScreen "Order Confirmation Screen"
 screen OrderCompleteScreen "Order Complete Screen"
-screen OrderHistoryScreen  "Order History Screen"
+screen OrderHistoryScreen "Order History Screen"
 
-api SelectAddressApi    "Select Address API"
-api ConfirmOrderApi     "Confirm Order API"
-api PlaceOrderApi       "Place Order API"
-api OrderHistoryApi     "Order History API"
-api CancelOrderApi      "Cancel Order API"
+api SelectAddressApi "Select Address API"
+api ConfirmOrderApi "Confirm Order API"
+api PlaceOrderApi "Place Order API"
+api OrderHistoryApi "Order History API"
+api CancelOrderApi "Cancel Order API"
 
 event EvOrderShipped "Order Shipped"
 

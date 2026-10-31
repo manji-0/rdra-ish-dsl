@@ -8,17 +8,17 @@ buc BucPayment "Make Payment"
 
 usecase InputPaymentInfo "Enter Payment Information"
 usecase AuthorizePayment "Authorize Payment"
-usecase Capture          "Capture Payment"
-usecase RefundPayment    "Refund Payment"
+usecase Capture "Capture Payment"
+usecase RefundPayment "Refund Payment"
 event EvPaymentAuthorized "Payment Authorized"
 
-screen PaymentInputScreen  "Payment Information Screen"
+screen PaymentInputScreen "Payment Information Screen"
 screen PaymentResultScreen "Payment Result Screen"
 
-api PaymentInputApi         "Payment Input API"
+api PaymentInputApi "Payment Input API"
 api PaymentAuthorizationApi "Payment Authorization API"
-api PaymentCaptureApi       "Payment Capture API"
-api PaymentRefundApi        "Payment Refund API"
+api PaymentCaptureApi "Payment Capture API"
+api PaymentRefundApi "Payment Refund API"
 
 performs(Customer, BucPayment)
 belongs(BucPayment, EcShopping)
