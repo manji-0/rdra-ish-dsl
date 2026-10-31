@@ -153,7 +153,13 @@ fn json_output_matches_the_snapshots() {
             if std::env::var_os("RDRA_ISH_BLESS").is_some() {
                 std::fs::write(&path, actual).unwrap();
             } else {
-                stale.push(step);
+                let first = actual
+                    .lines()
+                    .zip(expected.lines())
+                    .find(|(a, e)| a != e)
+                    .map(|(a, e)| format!("got {a:?}, want {e:?}"))
+                    .unwrap_or_else(|| format!("bytes {} vs {}", actual.len(), expected.len()));
+                stale.push(format!("{step}: {first}"));
             }
         }
     }
