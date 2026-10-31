@@ -47,8 +47,8 @@ pub fn slug(qualified: &str) -> String {
 }
 
 /// A slot map whose default views see local elements only. `get`, indexing, and
-/// `contains_key` take any key, so a relation endpoint may be a foreign stub. `iter_all` and
-/// `foreign` are the opt-in views.
+/// `contains_key` take any key, so a relation endpoint may be a foreign stub. `foreign` is
+/// the opt-in view.
 #[derive(Debug)]
 pub struct Partitioned<K: Key, V> {
     all: SlotMap<K, V>,
@@ -79,10 +79,6 @@ impl<K: Key, V> Partitioned<K, V> {
         self.all.get(key)
     }
 
-    pub fn get_mut(&mut self, key: K) -> Option<&mut V> {
-        self.all.get_mut(key)
-    }
-
     pub fn contains_key(&self, key: K) -> bool {
         self.all.contains_key(key)
     }
@@ -100,23 +96,12 @@ impl<K: Key, V> Partitioned<K, V> {
         self.all.iter().filter(move |(k, _)| self.is_local(*k))
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (K, &mut V)> + '_ {
-        let foreign = &self.foreign;
-        self.all
-            .iter_mut()
-            .filter(move |(k, _)| foreign.is_empty() || !foreign.contains_key(*k))
-    }
-
     pub fn keys(&self) -> impl Iterator<Item = K> + '_ {
         self.iter().map(|(k, _)| k)
     }
 
     pub fn values(&self) -> impl Iterator<Item = &V> + '_ {
         self.iter().map(|(_, v)| v)
-    }
-
-    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut V> + '_ {
-        self.iter_mut().map(|(_, v)| v)
     }
 
     /// The number of local elements.
@@ -126,13 +111,6 @@ impl<K: Key, V> Partitioned<K, V> {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    /// Every element, local and foreign, with the origin of each foreign one.
-    pub fn iter_all(&self) -> impl Iterator<Item = (K, &V, Option<&Origin>)> + '_ {
-        self.all
-            .iter()
-            .map(move |(k, v)| (k, v, self.foreign.get(k)))
     }
 
     /// The foreign stubs, each with its origin.
@@ -195,7 +173,6 @@ mod tests {
         assert!(map.contains_key(stub));
         assert_eq!(map.origin(stub), Some(&origin()));
         assert_eq!(map.origin(local), None);
-        assert_eq!(map.iter_all().count(), 2);
         assert_eq!(
             map.foreign().map(|(k, _, _)| k).collect::<Vec<_>>(),
             vec![stub]
