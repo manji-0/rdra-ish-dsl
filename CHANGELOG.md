@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## v0.4.0 - 2026-11-01
+
+Upgrading from v0.3.0: run `python3 scripts/migrate-syntax-v2.py <model dir>` to rewrite
+`transitions`, `maps_field`, `writes`, and `acceptance criteria`, then rewrite each top-level
+`when(...)` rule as the load error says. A model whose rules loaded but recorded nothing now
+fails to load. `writes` is gone, so `csv --kind matrix` and `api-matrix` print `U` where they
+printed `W`, the business-inputs operation `write` is `update`, and `--edge-kind writes` is
+an error. The Mermaid flowchart contract changed: each kind has its own node shape, and an
+edge whose ends imply its relation has no label. `engine_equivalence` still compares 8
+clinic-ops cones with TLC at 1 instance only (`VERIFY_FALLBACK`).
 
 ### Breaking
 

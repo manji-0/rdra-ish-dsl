@@ -877,7 +877,7 @@ checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
 name = "rdra-ish-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "rdra-ish-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "dunce",
  "insta",
@@ -910,7 +910,7 @@ dependencies = [
 
 [[package]]
 name = "rdra-ish-emit"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "csv",
  "insta",
@@ -922,7 +922,7 @@ dependencies = [
 
 [[package]]
 name = "rdra-ish-lsp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "dunce",
  "rdra-ish-core",
@@ -935,7 +935,7 @@ dependencies = [
 
 [[package]]
 name = "rdra-ish-syntax"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "chumsky",
  "insta",
