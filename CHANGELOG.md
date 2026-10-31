@@ -280,6 +280,27 @@
   over the pairs that some middle instances connect. It was `UnbindableScope` ("names an
   entity outside the scope"), although the language reference already allowed a junction
   entity there.
+- A rule that the model records nothing for is an error. Such rules loaded without a
+  diagnostic, were never checked, and were missing from `list --kind rule`, so a model with
+  one now fails to load where it passed (#45):
+  - `invariant(Order).when(status == paid)`, with neither `.then(...)` nor
+    `.has/.none(...)`, is `InvariantWithoutConsequence`, and `invariant(...).then(...)`
+    without `.when(...)` is `InvariantWithoutWhen`.
+  - `forbidden(Order)` and `required(Order)` with no condition are
+    `RuleWithoutCondition`, `exclusive(...)` with fewer than two conditions is
+    `ExclusiveNeedsTwo`, and `after(UC)` without `.assert(...)` is `AfterWithoutAssert`.
+  - A `.has(...)` or `.none(...)` on `invariant` or `holds` that names no condition on a
+    related entity, as `.none()` or `.none(Ticket)`, is `QuantifierWithoutCondition`, and
+    `invariant().none(...)` with no entity in its scope or its `.when(...)` is
+    `QuantifierScopeUnknown`.
+  - `maps_field(F, Order, Order.nosuch)` is `UnknownColumn`, and
+    `maps_field(F, Order, Ticket.status)` is `MapsFieldOtherEntity`. A qualified column was
+    not read at all, so `maps_field(F, Order, Order.status)` now maps the field.
+- `invariant(Order).when(status == paid).none(Ticket.status == pending)` is checked. A
+  one-entity `invariant` takes the related entity of `.has/.none(...)` from its qualified
+  columns, as `invariant(Order, Ticket)` does, and prints the same rule and TLA+ spec; it
+  was dropped. `invariant().when(Order.status == paid).none(...)` takes its entity from the
+  `.when(...)` columns; it was dropped as well.
 
 ## v0.3.0 - 2026-10-30
 

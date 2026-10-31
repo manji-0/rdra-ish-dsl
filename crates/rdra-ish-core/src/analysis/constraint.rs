@@ -683,6 +683,7 @@ pub(crate) fn process_forbidden(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
+    let before = diags.len();
     let (mut scope, first_condition) = collect_cross_scope_prefix(model, pred, ctx, diags);
     let mut conditions = Vec::new();
     for arg in pred.args.iter().skip(first_condition) {
@@ -692,6 +693,10 @@ pub(crate) fn process_forbidden(
     }
 
     if conditions.is_empty() {
+        let err = RdraError::RuleWithoutCondition {
+            pred: pred.name.clone(),
+        };
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
         return;
     }
 
@@ -718,6 +723,7 @@ pub(crate) fn process_invariant(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
+    let before = diags.len();
     let mut scope = Vec::new();
     for arg in &pred.args {
         if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
@@ -727,6 +733,7 @@ pub(crate) fn process_invariant(
 
     let mut guards = Vec::new();
     let mut requireds = Vec::new();
+    let mut quantified = false;
     let label = rule_label(pred, ctx, diags);
     for cc in &pred.chain {
         match cc.name.as_str() {
@@ -737,13 +744,33 @@ pub(crate) fn process_invariant(
                 model, &scope, &pred.name, &cc.args, ctx, diags,
             )),
             "has" | "none" => {
-                process_quantifier_chain(model, &scope, &guards, cc, label.clone(), ctx, diags)
+                quantified = true;
+                // The anchor is the first entity named, by the scope or else by a guard.
+                let mut anchor_scope = scope.clone();
+                add_condition_entities_to_scope(&mut anchor_scope, &guards);
+                let Some(&anchor) = anchor_scope.first() else {
+                    let err = RdraError::QuantifierScopeUnknown {
+                        method: cc.name.clone(),
+                    };
+                    push_error(ctx, diags, cc.span.clone(), err);
+                    continue;
+                };
+                process_quantifier_chain(model, anchor, &guards, cc, label.clone(), ctx, diags)
             }
             _ => {}
         }
     }
 
-    if guards.is_empty() || requireds.is_empty() {
+    if requireds.is_empty() {
+        if !quantified {
+            let err = RdraError::InvariantWithoutConsequence;
+            push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+        }
+        return;
+    }
+    if guards.is_empty() {
+        let err = RdraError::InvariantWithoutWhen;
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
         return;
     }
 
@@ -793,7 +820,7 @@ pub(crate) fn process_when_quantifier_predicate(
     let label = rule_label(pred, ctx, diags);
     for cc in &pred.chain {
         if matches!(cc.name.as_str(), "has" | "none") {
-            process_quantifier_chain(model, &[anchor], &guards, cc, label.clone(), ctx, diags);
+            process_quantifier_chain(model, anchor, &guards, cc, label.clone(), ctx, diags);
         }
     }
     model
@@ -803,16 +830,13 @@ pub(crate) fn process_when_quantifier_predicate(
 
 fn process_quantifier_chain(
     model: &mut SemanticModel,
-    anchor_scope: &[EntityKey],
+    anchor: EntityKey,
     guards: &[CrossEntityCondition],
     cc: &ChainCall,
     label: Option<String>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some(anchor) = anchor_scope.first().copied() else {
-        return;
-    };
     let Some(quantifier) = resolve_related_quantifier(model, anchor, cc, ctx, diags) else {
         return;
     };
@@ -827,8 +851,27 @@ fn process_quantifier_chain(
 }
 
 /// The related entity, conditions and kind of one `.has(...)` / `.none(...)` chain call. The
-/// related entity is the first one the conditions name other than `anchor`.
+/// related entity is the first one the conditions name other than `anchor`. `None` only with
+/// an error reported, so a quantifier is never dropped silently.
 pub(crate) fn resolve_related_quantifier(
+    model: &SemanticModel,
+    anchor: EntityKey,
+    cc: &ChainCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<crate::model::RelatedQuantifier> {
+    let before = diags.len();
+    let quantifier = related_quantifier(model, anchor, cc, ctx, diags);
+    if quantifier.is_none() {
+        let err = RdraError::QuantifierWithoutCondition {
+            method: cc.name.clone(),
+        };
+        push_error_unless_reported(ctx, diags, before, cc.span.clone(), err);
+    }
+    quantifier
+}
+
+fn related_quantifier(
     model: &SemanticModel,
     anchor: EntityKey,
     cc: &ChainCall,
@@ -994,6 +1037,7 @@ pub(crate) fn process_after_predicate(
         return;
     };
 
+    let before = diags.len();
     let mut scope = Vec::new();
     let mut requireds = Vec::new();
     for cc in &pred.chain {
@@ -1004,6 +1048,10 @@ pub(crate) fn process_after_predicate(
         }
     }
     if requireds.is_empty() {
+        let err = RdraError::AfterWithoutAssert {
+            usecase: model.use_cases[*anchor].id.clone(),
+        };
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
         return;
     }
 

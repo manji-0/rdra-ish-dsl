@@ -64,6 +64,16 @@ fn a_none_guard_keeps_the_revoke_from_running_while_a_linked_row_matches() {
 }
 
 #[test]
+fn a_one_entity_invariant_over_related_rows_is_checked() {
+    let one_entity = certificates("", "").replace(
+        "when(ClientCertificate, status == revoked)",
+        "invariant(ClientCertificate).when(status == revoked)",
+    );
+    assert!(one_entity.contains("invariant(ClientCertificate)"));
+    assert!(quantifier_violated(&derive_src(&one_entity)));
+}
+
+#[test]
 fn a_none_guard_still_lets_the_use_case_run_once_the_linked_rows_end() {
     let d = derive_src(&certificates(NO_ACTIVE_ASSIGNMENT, ""));
     assert!(d

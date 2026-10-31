@@ -427,3 +427,27 @@ fn decode_inverts_canon() {
         assert_eq!(names.decode(ts, &missing), None, "{name}");
     }
 }
+
+/// A one-entity `invariant` ranging over related rows takes its scope from their columns, so it
+/// prints the same spec as the form that names both entities.
+#[test]
+fn tla_one_entity_quantified_invariant_matches_the_two_entity_form() {
+    let src = sample("quantifier_none.rdra");
+    let line = src
+        .lines()
+        .find(|l| l.contains(".none("))
+        .expect("the quantifier rule");
+    let related = line.split(").none(").nth(1).expect("the related condition");
+    let spec = |rule: String| {
+        let model = src.replace(line, &rule);
+        print(&system(&model), PrintMode::Check, "RdraSpec").tla
+    };
+    let one = spec(format!(
+        "invariant(Cert).when(status == revoked).none({related}"
+    ));
+    let two = spec(format!(
+        "invariant(Cert, Assign).when(Cert.status == revoked).none({related}"
+    ));
+    assert!(one.contains("Quantifier_Cert_0"), "{one}");
+    assert_eq!(one, two);
+}

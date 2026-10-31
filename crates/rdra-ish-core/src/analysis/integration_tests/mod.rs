@@ -11,4 +11,5 @@ mod keys;
 mod nodes;
 mod predicate;
 mod publication;
+mod rule_audit;
 mod variation;

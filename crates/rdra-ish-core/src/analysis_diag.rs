@@ -9,6 +9,20 @@ pub(crate) fn push_error(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span,
     diags.push(Diagnostic::error_at(err, ctx.locate(span)));
 }
 
+/// Reports `err` unless an error was pushed since `before`, the `diags.len()` taken when the
+/// predicate started: a rule that records nothing says why, once.
+pub(crate) fn push_error_unless_reported(
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+    before: usize,
+    span: Span,
+    err: RdraError,
+) {
+    if !diags[before..].iter().any(|d| !d.is_warning) {
+        push_error(ctx, diags, span, err);
+    }
+}
+
 pub(crate) fn push_warning(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, err: RdraError) {
     diags.push(Diagnostic::warning_at(err, ctx.locate(span)));
 }

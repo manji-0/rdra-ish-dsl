@@ -109,6 +109,34 @@ pub enum RdraError {
     #[error(".by(...) picks a key on an .along(...) path, and this constraint has none\n  hint: add `.along(A, B)` before `.by(...)`, or drop `.by(...)`")]
     ByWithoutAlong,
 
+    #[error("{pred}(...) names no condition, so it states no rule\n  hint: add the condition it forbids or requires, such as `{pred}(Entity, column == value)`")]
+    RuleWithoutCondition { pred: String },
+
+    #[error("exclusive(...) names {got} condition(s) and needs two or more: it says at most one of them holds\n  hint: list the conditions that must not hold together, `exclusive(Entity, a == x, b == y)`")]
+    ExclusiveNeedsTwo { got: usize },
+
+    #[error("invariant(...) states no rule: it has no `.then(...)`, `.has(...)` or `.none(...)`\n  hint: add `.then(column == value)` for what must hold, or `.none(Related.column == value)` / `.has(...)` for what the related rows must not or must match")]
+    InvariantWithoutConsequence,
+
+    #[error("invariant(...).then(...) has no `.when(...)` to say which rows it holds on\n  hint: add `.when(column == value)`; for a rule on every row write `required(Entity, column == value)`")]
+    InvariantWithoutWhen,
+
+    #[error(".{method}(...) names no condition on a related entity\n  hint: write `.{method}(Related.column == value)`")]
+    QuantifierWithoutCondition { method: String },
+
+    #[error("invariant().{method}(...) has no entity to range over\n  hint: name it, `invariant(Entity).when(...).{method}(...)`, or qualify a `.when(...)` column as `Entity.column`")]
+    QuantifierScopeUnknown { method: String },
+
+    #[error("after({usecase}) asserts nothing\n  hint: add `.assert(Entity.column == value)` for what holds after '{usecase}' runs")]
+    AfterWithoutAssert { usecase: String },
+
+    #[error("maps_field names '{written}', a column of '{other}', but maps the field to '{entity}'\n  hint: write `{entity}.column`, or map the field to '{other}'")]
+    MapsFieldOtherEntity {
+        written: String,
+        entity: String,
+        other: String,
+    },
+
     #[error(".label(...) on {pred}(...) takes one quoted string\n  hint: write `.label(\"the rule in plain words\")`")]
     RuleLabelArg { pred: String },
 

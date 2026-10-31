@@ -1374,6 +1374,13 @@ reachable state space:
 
 Entity-local equality conditions are written as `column == value` comparison expressions.
 
+A rule that states nothing to check is an error, so no rule is dropped without a
+diagnostic: `forbidden(Order)` and `required(Order)` with no condition are
+`RuleWithoutCondition`, `exclusive` with fewer than two conditions is `ExclusiveNeedsTwo`,
+an `invariant` with neither `.then(...)` nor `.has/.none(...)` is
+`InvariantWithoutConsequence`, `.then(...)` without `.when(...)` is `InvariantWithoutWhen`,
+and `after(UseCase)` without `.assert(...)` is `AfterWithoutAssert`.
+
 ### Labelling a rule
 
 A constraint says what is forbidden or required, not why. `.label("...")` names the rule in
@@ -1616,7 +1623,12 @@ export (nullable ones add `null`). The export domain is a fixed approximation (d
 rule. It ranges over the present instances: `none` fails in a reachable state where the
 anchor condition holds and some related instance satisfies the related condition. A
 `relate` between the two entities links the related instance through its owner; without
-one, the related side is independent. `states` runs one instance per entity, so use
+one, the related side is independent. `invariant(Entity).when(...).has/none(...)` is the
+same rule: a one-entity `invariant` takes the related entity from the qualified columns of
+`.has/.none(...)`, as `invariant(Entity, Related)` does. A `.has(...)` or `.none(...)` that
+names no condition on a related entity, as `.none()` or `.none(Related)`, is
+`QuantifierWithoutCondition`, and `invariant()` with no entity in its scope or its
+`.when(...)` is `QuantifierScopeUnknown`. `states` runs one instance per entity, so use
 `verify --instance-count 2` for rules that need two related instances. To make a use case
 respect such a rule, put the same `.none(...)` on a `holds` guard (see Conditions).
 

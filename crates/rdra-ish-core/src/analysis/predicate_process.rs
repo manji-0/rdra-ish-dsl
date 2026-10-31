@@ -196,11 +196,56 @@ fn process_maps_field_predicate(
     else {
         return;
     };
-    let Some(column) = pred.args.get(2).and_then(arg_as_str) else {
-        return;
+    let entity_id = model.entities[*entity].id.clone();
+    let column = match pred.args.get(2) {
+        // `Entity.column`: the qualifier must name the mapped entity.
+        Some(PredicateArg::Ref(qref)) if qref.kind_qualifier.is_none() && qref.parts.len() > 1 => {
+            let (column, path) = qref.parts.split_last().expect("more than one part");
+            let qualifier = PredicateArg::Ref(QRef {
+                kind_qualifier: None,
+                parts: path.to_vec(),
+                span: qref.span.clone(),
+            });
+            match resolve_arg(model, &qualifier, ctx, diags) {
+                Some(NodeRef::Entity(named)) if named == *entity => column.clone(),
+                Some(NodeRef::Entity(named)) => {
+                    let err = RdraError::MapsFieldOtherEntity {
+                        written: qref.parts.join("."),
+                        entity: entity_id,
+                        other: model.entities[named].id.clone(),
+                    };
+                    push_error(ctx, diags, qref.span.clone(), err);
+                    return;
+                }
+                Some(other) => {
+                    let err = RdraError::TypeMismatch {
+                        pred: pred.name.clone(),
+                        id: path.join("."),
+                        actual: node_kind_tag_str(&other).to_string(),
+                        expected: "entity".to_string(),
+                    };
+                    push_error(ctx, diags, qref.span.clone(), err);
+                    return;
+                }
+                None => return,
+            }
+        }
+        Some(arg) => match arg_as_str(arg) {
+            Some(column) => column,
+            None => {
+                let err = RdraError::TypeMismatch {
+                    pred: pred.name.clone(),
+                    id: predicate_arg_display(arg),
+                    actual: "argument".to_string(),
+                    expected: "column such as `Entity.column`".to_string(),
+                };
+                push_error(ctx, diags, arg_span(arg), err);
+                return;
+            }
+        },
+        None => return,
     };
 
-    let entity_id = model.entities[*entity].id.clone();
     if !model.entities[*entity]
         .columns
         .iter()
@@ -668,6 +713,7 @@ fn process_forbidden_predicate(
         Some(Some(NodeRef::Entity(k))) => *k,
         _ => return,
     };
+    let before = diags.len();
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) = collect_entity_conditions(
@@ -681,7 +727,12 @@ fn process_forbidden_predicate(
         return;
     };
 
-    if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
+    if conditions.equals.is_empty() && conditions.comparisons.is_empty() {
+        let err = RdraError::RuleWithoutCondition {
+            pred: pred.name.clone(),
+        };
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+    } else {
         let label = rule_label(pred, ctx, diags);
         model.forbidden_constraints.push(ForbiddenConstraint {
             label,
@@ -707,6 +758,7 @@ fn process_required_predicate(
         Some(Some(NodeRef::Entity(k))) => *k,
         _ => return,
     };
+    let before = diags.len();
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) = collect_entity_conditions(
@@ -720,7 +772,12 @@ fn process_required_predicate(
         return;
     };
 
-    if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
+    if conditions.equals.is_empty() && conditions.comparisons.is_empty() {
+        let err = RdraError::RuleWithoutCondition {
+            pred: pred.name.clone(),
+        };
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+    } else {
         let label = rule_label(pred, ctx, diags);
         model.required_constraints.push(RequiredConstraint {
             label,
@@ -746,6 +803,7 @@ fn process_exclusive_predicate(
         Some(Some(NodeRef::Entity(k))) => *k,
         _ => return,
     };
+    let before = diags.len();
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let Some(conditions) = collect_entity_conditions(
@@ -759,7 +817,11 @@ fn process_exclusive_predicate(
         return;
     };
 
-    if conditions.equals.len() + conditions.comparisons.len() >= 2 {
+    let got = conditions.equals.len() + conditions.comparisons.len();
+    if got < 2 {
+        let err = RdraError::ExclusiveNeedsTwo { got };
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+    } else {
         let label = rule_label(pred, ctx, diags);
         model.exclusive_constraints.push(ExclusiveConstraint {
             label,
@@ -785,6 +847,7 @@ fn process_invariant_predicate(
         Some(Some(NodeRef::Entity(k))) => *k,
         _ => return,
     };
+    let before = diags.len();
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
     let mut guards: Vec<(String, EffectValue)> = Vec::new();
@@ -879,7 +942,13 @@ fn process_invariant_predicate(
 
     let has_guards = !guards.is_empty() || !guard_comparisons.is_empty();
     let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
-    if has_guards && has_requireds {
+    if !has_requireds {
+        let err = RdraError::InvariantWithoutConsequence;
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+    } else if !has_guards {
+        let err = RdraError::InvariantWithoutWhen;
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+    } else {
         let label = rule_label(pred, ctx, diags);
         model.entity_invariants.push(EntityInvariant {
             label,
@@ -1361,8 +1430,9 @@ pub(crate) fn process_predicate(
     }
 
     // Unified forbidden/invariant: detect cross-entity vs single-entity form.
-    // Cross-entity: first arg is Expr, `.along(...)`, or two+ leading entity refs
-    // (e.g. `forbidden(Order, Payment, Order.status == x, ...)`).
+    // Cross-entity: first arg is Expr, `.along(...)`, two+ leading entity refs
+    // (e.g. `forbidden(Order, Payment, Order.status == x, ...)`), or an invariant whose
+    // `.has/.none(...)` ranges over related rows, its scope inferred from their columns.
     // Single-entity: `forbidden(Order, status == x)`.
     if pred.name == "forbidden" || pred.name == "invariant" {
         let leading_entities = pred
@@ -1376,7 +1446,12 @@ pub(crate) fn process_predicate(
             .is_some_and(|a| matches!(a, PredicateArg::Expr(_)))
             || pred.chain.iter().any(|cc| cc.name == "along")
             || leading_entities >= 2
-            || (pred.name == "invariant" && pred.args.is_empty());
+            || (pred.name == "invariant"
+                && (pred.args.is_empty()
+                    || pred
+                        .chain
+                        .iter()
+                        .any(|cc| matches!(cc.name.as_str(), "has" | "none"))));
         if is_cross {
             match pred.name.as_str() {
                 "forbidden" => process_cross_forbidden(model, pred, ctx, diags),
