@@ -108,6 +108,8 @@ pub(crate) enum ListKind {
     Dto,
     Variation,
     Condition,
+    /// Business rules: every constraint predicate and condition, with its label, formula and site
+    Rule,
     /// Permission x callable UC/API list
     PermissionCallables,
     /// Actor x permission assignment audit inferred from UC/API requirements

@@ -551,3 +551,41 @@ pub(crate) fn format_conditions(
 
     format_rows(&headers, &rows, format, "conditions")
 }
+
+/// The business-rule table. `program` turns each rule's site into `file:line`; without it the
+/// site column is empty.
+pub(crate) fn format_rules(
+    model: &rdra_ish_core::SemanticModel,
+    program: Option<&rdra_ish_core::ResolvedProgram>,
+    format: &ListFormat,
+) -> Result<String> {
+    let headers = ["kind", "label", "entities", "rule", "applies_to", "site"];
+    let cwd = std::env::current_dir().ok();
+    let rows: Vec<[String; 6]> = rdra_ish_core::business_rules(model)
+        .into_iter()
+        .map(|rule| {
+            let site = program
+                .zip(rule.site.as_ref())
+                .and_then(|(program, site)| {
+                    let path = site.path(program)?;
+                    let line = site.start_position(program)?.line;
+                    let shown = cwd
+                        .as_deref()
+                        .and_then(|cwd| path.strip_prefix(cwd).ok())
+                        .unwrap_or(path);
+                    Some(format!("{}:{line}", shown.display()))
+                })
+                .unwrap_or_default();
+            [
+                rule.kind.to_string(),
+                optional_cell(&rule.label),
+                repeated_cell(&rule.entities),
+                rule.text,
+                repeated_cell(&rule.applies_to),
+                site,
+            ]
+        })
+        .collect();
+
+    format_rows(&headers, &rows, format, "rules")
+}

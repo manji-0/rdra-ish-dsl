@@ -3,6 +3,7 @@ use crate::analysis::build_model;
 use crate::analysis::constraint::{
     add_condition_entities_to_scope, cross_scope_semantics_from_chain, push_unique_entity,
 };
+use crate::diagnostics::RdraError;
 use crate::location::DiagCtxt;
 use crate::model::*;
 use rdra_ish_syntax::ast::*;
@@ -466,4 +467,113 @@ forbidden(Order, Payment, Order.nope == 1, Payment.amount > 1)
     let (_, diags) = build_model(&ast);
     let errs: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
     assert_eq!(errs.len(), 2, "one error per bad condition: {errs:?}");
+}
+
+const LABEL_BASE: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid, cancelled)  paid_at: DateTime @null  total: Int }
+entity Payment "支払い" { id: Int @pk  status: Enum(pending, captured)  amount: Int }
+entity Line "明細" { id: Int @pk  state: Enum(a, b) }
+relate(Line, Order, N:1)
+relate(Payment, Order, N:1)
+usecase Pay "支払"
+"#;
+
+fn build_labelled(extra: &str) -> (SemanticModel, Vec<crate::Diagnostic>) {
+    let (ast, parse_errors) = parse(&format!("{LABEL_BASE}{extra}"));
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    build_model(&ast)
+}
+
+#[test]
+fn a_label_lands_on_every_kind_of_rule() {
+    let (model, diags) = build_labelled(
+        r#"
+forbidden(Order, status == cancelled, paid_at == present).label("取消後は入金しない")
+invariant(Order).when(status == paid).then(paid_at == present).label("入金済には入金日時")
+required(Order, total >= 0).label("合計は負でない")
+exclusive(Order, status == open, status == paid).label("開と入金済は両立しない")
+forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).label("取消注文は支払えない")
+invariant(Order, Payment).when(Payment.status == captured).then(Order.status == paid).label("支払済なら入金済")
+when(Order, status == cancelled).none(Payment, status == captured).label("取消注文に支払なし")
+after(Pay).assert(Order.status == paid).label("支払後は入金済")
+"#,
+    );
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    let label = |l: &Option<String>| l.clone().unwrap();
+    assert_eq!(
+        label(&model.forbidden_constraints[0].label),
+        "取消後は入金しない"
+    );
+    assert_eq!(
+        label(&model.entity_invariants[0].label),
+        "入金済には入金日時"
+    );
+    assert_eq!(
+        label(&model.required_constraints[0].label),
+        "合計は負でない"
+    );
+    assert_eq!(
+        label(&model.exclusive_constraints[0].label),
+        "開と入金済は両立しない"
+    );
+    assert_eq!(
+        label(&model.cross_forbidden_constraints[0].label),
+        "取消注文は支払えない"
+    );
+    assert_eq!(
+        label(&model.cross_entity_invariants[0].label),
+        "支払済なら入金済"
+    );
+    assert_eq!(
+        label(&model.quantifier_constraints[0].label),
+        "取消注文に支払なし"
+    );
+    assert_eq!(label(&model.temporal_assertions[0].label), "支払後は入金済");
+}
+
+#[test]
+fn a_rule_without_label_has_none() {
+    let (model, diags) = build_labelled("forbidden(Order, status == cancelled)\n");
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    assert_eq!(model.forbidden_constraints[0].label, None);
+}
+
+#[test]
+fn a_label_that_is_not_one_string_is_an_error() {
+    for bad in [".label(foo)", ".label(\"a\", \"b\")", ".label()"] {
+        let (model, diags) =
+            build_labelled(&format!("forbidden(Order, status == cancelled){bad}\n"));
+        assert!(
+            diags.iter().any(
+                |d| matches!(&d.error, RdraError::RuleLabelArg { pred } if pred == "forbidden")
+            ),
+            "{bad}: {diags:?}"
+        );
+        assert_eq!(model.forbidden_constraints[0].label, None, "{bad}");
+    }
+}
+
+#[test]
+fn a_second_label_on_one_rule_is_an_error() {
+    let (_model, diags) = build_labelled(
+        "invariant(Order).when(status == paid).then(paid_at == present).label(\"a\").label(\"b\")\n",
+    );
+    assert!(
+        diags.iter().any(
+            |d| matches!(&d.error, RdraError::DuplicateRuleLabel { pred } if pred == "invariant")
+        ),
+        "{diags:?}"
+    );
+}
+
+#[test]
+fn label_is_not_a_chain_method_of_other_predicates() {
+    let (_model, diags) = build_labelled("writes(Pay, Order).label(\"x\")\n");
+    assert!(
+        diags.iter().any(
+            |d| matches!(&d.error, RdraError::UnknownChainMethod { pred, name, .. } if pred == "writes" && name == "label")
+        ),
+        "{diags:?}"
+    );
 }

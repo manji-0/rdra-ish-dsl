@@ -54,6 +54,7 @@ rdra-ish list src/ --kind nfr --format table
 rdra-ish list src/ --kind field --format table
 rdra-ish list src/ --kind api --format table
 rdra-ish list src/ --kind adr --format table
+rdra-ish list src/ --kind rule --format markdown
 rdra-ish csv src/ --kind matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish csv src/ --kind api-matrix

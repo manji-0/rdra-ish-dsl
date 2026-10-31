@@ -106,6 +106,12 @@ pub enum RdraError {
     #[error(".by(...) picks a key on an .along(...) path, and this constraint has none\n  hint: add `.along(A, B)` before `.by(...)`, or drop `.by(...)`")]
     ByWithoutAlong,
 
+    #[error(".label(...) on {pred}(...) takes one quoted string\n  hint: write `.label(\"the rule in plain words\")`")]
+    RuleLabelArg { pred: String },
+
+    #[error(".label(...) is written twice on one {pred}(...)\n  hint: keep one `.label(\"...\")`; it names the rule")]
+    DuplicateRuleLabel { pred: String },
+
     #[error("missing @pk: entity '{entity}' used as FK target has no @pk column\n  hint: add `id: Int @pk` (or another @pk column) to entity '{entity}'")]
     MissingPk { entity: String },
 

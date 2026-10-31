@@ -231,11 +231,12 @@ only the methods below, and any other name is an `unknown chain method` error
 |---|---|
 | `belongs` | `.by(...)` |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
-| `forbidden` | `.along(...)`, `.by(...)` |
-| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)` |
-| `when` | `.has(...)`, `.none(...)` |
+| `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
+| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
+| `required`, `exclusive` | `.label("...")` |
+| `when` | `.has(...)`, `.none(...)`, `.label("...")` |
 | `holds` | `.has(...)`, `.none(...)` |
-| `after` | `.assert(...)` |
+| `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | every other predicate (including `combines`) | none |
 
@@ -1305,6 +1306,31 @@ reachable state space:
 | `exclusive` | no reachable pattern may satisfy two or more listed conditions | Mutual exclusion |
 
 Entity-local equality conditions are written as `column == value` comparison expressions.
+
+### Labelling a rule
+
+A constraint says what is forbidden or required, not why. `.label("...")` names the rule in
+the business's words, on any of `forbidden`, `invariant`, `required`, `exclusive`,
+`when(...).none/has(...)`, and `after(...).assert(...)`, single- or multi-entity:
+
+```rdra
+entity Appointment "Appointment" {
+  id: Int @pk
+  status: Enum(scheduled, checkedin) @default(scheduled)
+  checked_in_at: DateTime @null
+}
+invariant(Appointment)
+  .when(status == checkedin)
+  .then(checked_in_at == present)
+  .label("A checked-in appointment records when the patient arrived")
+```
+
+The label takes one quoted string, and a rule takes one label (`RuleLabelArg`,
+`DuplicateRuleLabel`). State the rule in plain words, not as the formula. A violation of a
+labelled rule opens with `「label」: `, and `rdra-ish list --kind rule` lists every labelled
+rule next to the [conditions](#conditions) as one business-rule table. The invariant names
+(`Forbidden_Order_0`) do not change. `lint` reports an unlabelled rule as the `info` row
+`rule-unlabeled`.
 
 ### `forbidden` — tuple-variadic forbidden states
 

@@ -14,7 +14,7 @@ use super::comparison::resolve_comparison;
 use super::constraint::{
     arg_as_str, collect_entity_conditions, context_value_from_arg, process_after_predicate,
     process_forbidden as process_cross_forbidden, process_invariant as process_cross_invariant,
-    process_when_quantifier_predicate, resolve_entity_equals_from_comparison,
+    process_when_quantifier_predicate, resolve_entity_equals_from_comparison, rule_label,
 };
 use super::effect::parse_effect_value;
 use super::nodes::node_kind_tag_str;
@@ -682,7 +682,9 @@ fn process_forbidden_predicate(
     };
 
     if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
+        let label = rule_label(pred, ctx, diags);
         model.forbidden_constraints.push(ForbiddenConstraint {
+            label,
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             conditions: conditions.equals,
@@ -719,7 +721,9 @@ fn process_required_predicate(
     };
 
     if !conditions.equals.is_empty() || !conditions.comparisons.is_empty() {
+        let label = rule_label(pred, ctx, diags);
         model.required_constraints.push(RequiredConstraint {
+            label,
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             conditions: conditions.equals,
@@ -756,7 +760,9 @@ fn process_exclusive_predicate(
     };
 
     if conditions.equals.len() + conditions.comparisons.len() >= 2 {
+        let label = rule_label(pred, ctx, diags);
         model.exclusive_constraints.push(ExclusiveConstraint {
+            label,
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             conditions: conditions.equals,
@@ -874,7 +880,9 @@ fn process_invariant_predicate(
     let has_guards = !guards.is_empty() || !guard_comparisons.is_empty();
     let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
     if has_guards && has_requireds {
+        let label = rule_label(pred, ctx, diags);
         model.entity_invariants.push(EntityInvariant {
+            label,
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             guards,

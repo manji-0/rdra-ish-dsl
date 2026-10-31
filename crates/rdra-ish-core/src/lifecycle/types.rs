@@ -465,6 +465,8 @@ pub struct Invariant {
     pub body: Pred,
     /// The constraint as the author wrote it, for diagnostics.
     pub text: InvText,
+    /// The rule's `.label("...")`, which a violation names.
+    pub label: Option<String>,
     pub site: Site,
 }
 
@@ -530,6 +532,8 @@ pub struct AfterAssert {
     pub anchor: String,
     pub steps: Vec<AfterStep>,
     pub requireds: String,
+    /// The rule's `.label("...")`, which a violation names.
+    pub label: Option<String>,
     pub site: Site,
 }
 

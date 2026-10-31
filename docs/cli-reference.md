@@ -208,7 +208,7 @@ coverage findings such as orphan nodes, untraced requirements, unscoped NFRs or
 constraints, empty BUCs/flows, unmapped screen fields, unused APIs/DTOs, incomplete
 API method/path contracts, and naming convention warnings.
 
-It also emits two `info` rows:
+It also emits these `info` rows:
 
 - `coverage-score` is a lightweight 0-100 readiness signal. Empty models score `0`.
   Finding penalties are scaled by model size (`×25/elements`); each model layer with no
@@ -217,6 +217,10 @@ It also emits two `info` rows:
 - `stage-readiness` gives the stage of each BUC and the stage after it, as
   [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 5 (required
   stages complete)`.
+- `rule-unlabeled` marks a `forbidden`, `invariant`, `required`, `exclusive`,
+  `when(...).none/has(...)`, or `after(...).assert(...)` with no
+  [`.label("...")`](./language-reference.md#labelling-a-rule), so `list --kind rule` shows it
+  with an empty label. It is not shown in the editor.
 
 These rules are `warning` rows:
 
@@ -932,7 +936,7 @@ rdra-ish list <INPUTS...> [--kind <KIND>] [--format <FORMAT>]
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `surface` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
+| `--kind` | `actor` \| `entity` \| `requirement` \| `adr` \| `adr-impact` \| `nfr` \| `quality` \| `constraint` \| `buc` \| `flow` \| `step` \| `usecase` \| `field` \| `system` \| `api` \| `dto` \| `variation` \| `condition` \| `rule` \| `permission-callables` \| `actor-permission-audit` \| `business-inputs` \| `surface` | `actor` | The element kind to list. `actor` / `quality` / `buc` / `flow` / `step` / `system` / `variation` list id+label; `usecase` lists UC preconditions, guards, postconditions, alternatives, errors, and description; `requirement` lists requirement metadata; `adr` lists decision metadata plus impacted targets from `decides`; `adr-impact` lists one row per ADR-target pair; `nfr` and `constraint` list non-functional metadata; `field` lists screen-field metadata plus Entity.column mappings; `api` lists API contract metadata; `dto` lists DTO fields; `condition` lists the `holds` body, the variations and state models it combines (derived from the body, or from `combines` when there is none), and the targets of `applies_to`; `rule` lists the business rules as one table with the columns `kind,label,entities,rule,applies_to,site`: every `forbidden`, `invariant`, `required`, `exclusive`, `when(...).none/has(...)` (`quantifier`) and `after(...).assert(...)` with its `.label("...")` (empty when it has none), plus every condition with its label, `rule` is the formula, `applies_to` is the use case an `after` follows or the use cases and APIs a condition guards, and `site` is `file:line`; `entity` lists each column with type, PK/unique/index/FK flags, FK optionality/actions, check constraints, soft-delete/history/tenant markers, and derived expressions; `permission-callables` lists each permission with callable use case/API ids and API-level `UseCase->Api` paths derived from `requires_permission`; `actor-permission-audit` lists inferred actor-side assignment gaps; `business-inputs` lists inferred actor-entered fields; `surface` prints the published surface (`exposes` and `shares`) as canonical text. |
 | `--format` | `table` \| `json` \| `csv` \| `markdown` | `table` | Output format. `markdown` is a Markdown table with the CSV columns, to paste into a design doc or a PRD. `--kind surface` has the canonical text only, and any other `--format` exits `2`. |
 
 Output is written to stdout.

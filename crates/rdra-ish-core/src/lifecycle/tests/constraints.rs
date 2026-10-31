@@ -718,3 +718,45 @@ forbidden(Line, total > 3)
         d.diags
     );
 }
+
+#[test]
+fn a_violated_rule_names_its_label() {
+    let d = derive_src(&format!(
+        "{ORDER}\nforbidden(Order, status == cancelled).label(\"取消された注文は残さない\")"
+    ));
+    assert!(d.has("Order", |x| matches!(
+        x,
+        StateDiag::ConstraintViolated { name, label, .. }
+            if name == "Forbidden_Order_0" && label.as_deref() == Some("取消された注文は残さない")
+                && x.to_string().starts_with("「取消された注文は残さない」: Forbidden_Order_0 is violated")
+    )));
+}
+
+#[test]
+fn a_violated_rule_without_label_prints_no_prefix() {
+    let d = derive_src(&format!("{ORDER}\nforbidden(Order, status == cancelled)"));
+    assert!(d.has("Order", |x| matches!(
+        x,
+        StateDiag::ConstraintViolated { label: None, .. }
+    ) && x
+        .to_string()
+        .starts_with("Forbidden_Order_0 is violated")));
+}
+
+#[test]
+fn a_violated_after_assert_names_its_label() {
+    let d = derive_src(
+        r#"
+usecase ExecuteCertIssue "Execute Cert Issue"
+entity CertificateOrder "Certificate Order" { id: Int @pk  status: Enum(requested, executed) @default(requested) }
+creates(ExecuteCertIssue, CertificateOrder)
+after(ExecuteCertIssue).assert(CertificateOrder.status == executed).label("発行後は実行済")
+"#,
+    );
+    assert!(d.has("CertificateOrder", |x| matches!(
+        x,
+        StateDiag::AfterAssertViolated { label, .. } if label.as_deref() == Some("発行後は実行済")
+    ) && x
+        .to_string()
+        .starts_with("「発行後は実行済」: after(")));
+}

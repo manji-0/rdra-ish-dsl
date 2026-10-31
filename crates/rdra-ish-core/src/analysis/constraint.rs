@@ -29,6 +29,33 @@ pub(crate) fn arg_as_str(arg: &PredicateArg) -> Option<String> {
     }
 }
 
+/// The text of the rule's one `.label("...")` chain call. A second call, or an argument that is
+/// not a single string literal, is reported and the label is left unset.
+pub(crate) fn rule_label(
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<String> {
+    let mut calls = pred.chain.iter().filter(|cc| cc.name == "label");
+    let first = calls.next()?;
+    if let Some(second) = calls.next() {
+        let err = RdraError::DuplicateRuleLabel {
+            pred: pred.name.clone(),
+        };
+        push_error(ctx, diags, second.span.clone(), err);
+    }
+    match first.args.as_slice() {
+        [PredicateArg::Lit(text)] => Some(text.clone()),
+        _ => {
+            let err = RdraError::RuleLabelArg {
+                pred: pred.name.clone(),
+            };
+            push_error(ctx, diags, first.span.clone(), err);
+            None
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct EntityConditions {
     pub(crate) equals: Vec<(String, EffectValue)>,
@@ -670,9 +697,11 @@ pub(crate) fn process_forbidden(
 
     add_condition_entities_to_scope(&mut scope, &conditions);
     let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
+    let label = rule_label(pred, ctx, diags);
     model
         .cross_forbidden_constraints
         .push(CrossForbiddenConstraint {
+            label,
             site: Some(ctx.locate(pred.span.clone())),
             scope: scope.clone(),
             scope_semantics,
@@ -698,6 +727,7 @@ pub(crate) fn process_invariant(
 
     let mut guards = Vec::new();
     let mut requireds = Vec::new();
+    let label = rule_label(pred, ctx, diags);
     for cc in &pred.chain {
         match cc.name.as_str() {
             "when" => guards.extend(collect_cross_chain_conditions(
@@ -706,7 +736,9 @@ pub(crate) fn process_invariant(
             "then" => requireds.extend(collect_cross_chain_conditions(
                 model, &scope, &pred.name, &cc.args, ctx, diags,
             )),
-            "has" | "none" => process_quantifier_chain(model, &scope, &guards, cc, ctx, diags),
+            "has" | "none" => {
+                process_quantifier_chain(model, &scope, &guards, cc, label.clone(), ctx, diags)
+            }
             _ => {}
         }
     }
@@ -719,6 +751,7 @@ pub(crate) fn process_invariant(
     add_condition_entities_to_scope(&mut scope, &requireds);
     let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
     model.cross_entity_invariants.push(CrossEntityInvariant {
+        label,
         site: Some(ctx.locate(pred.span.clone())),
         scope: scope.clone(),
         scope_semantics,
@@ -757,9 +790,10 @@ pub(crate) fn process_when_quantifier_predicate(
         return;
     };
 
+    let label = rule_label(pred, ctx, diags);
     for cc in &pred.chain {
         if matches!(cc.name.as_str(), "has" | "none") {
-            process_quantifier_chain(model, &[anchor], &guards, cc, ctx, diags);
+            process_quantifier_chain(model, &[anchor], &guards, cc, label.clone(), ctx, diags);
         }
     }
     model
@@ -772,6 +806,7 @@ fn process_quantifier_chain(
     anchor_scope: &[EntityKey],
     guards: &[CrossEntityCondition],
     cc: &ChainCall,
+    label: Option<String>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
@@ -784,6 +819,7 @@ fn process_quantifier_chain(
     model
         .quantifier_constraints
         .push(crate::model::QuantifierConstraint {
+            label,
             anchor,
             guards: guards.to_vec(),
             quantifier,
@@ -972,9 +1008,11 @@ pub(crate) fn process_after_predicate(
     }
 
     add_condition_entities_to_scope(&mut scope, &requireds);
+    let label = rule_label(pred, ctx, diags);
     model
         .temporal_assertions
         .push(crate::model::TemporalAssertion {
+            label,
             site: Some(ctx.locate(pred.span.clone())),
             anchor: *anchor,
             scope,

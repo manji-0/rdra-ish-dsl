@@ -74,6 +74,8 @@ pub enum StateDiag {
         name: String,
         kind: InvKind,
         text: InvText,
+        /// The rule's `.label("...")`, when it has one.
+        label: Option<String>,
         pattern_desc: String,
         site: Site,
         trace: Trace,
@@ -85,6 +87,8 @@ pub enum StateDiag {
         name: String,
         anchor: String,
         requireds: String,
+        /// The rule's `.label("...")`, when it has one.
+        label: Option<String>,
         actual: String,
         site: Site,
         trace: Trace,
@@ -176,6 +180,13 @@ pub enum StateDiag {
         column: String,
         site: Site,
     },
+}
+
+/// `「label」: ` for a labelled rule, so a violation names the rule in the author's words.
+pub fn label_prefix(label: &Option<String>) -> String {
+    label
+        .as_ref()
+        .map_or_else(String::new, |label| format!("「{label}」: "))
 }
 
 impl StateDiag {
@@ -421,14 +432,26 @@ impl fmt::Display for StateDiag {
                 write!(f, "state cap {cap} reached; results are incomplete")
             }
             StateDiag::ConstraintViolated {
-                name, pattern_desc, ..
-            } => write!(f, "{name} is violated by a reachable state: {pattern_desc}"),
+                name,
+                label,
+                pattern_desc,
+                ..
+            } => write!(
+                f,
+                "{}{name} is violated by a reachable state: {pattern_desc}",
+                label_prefix(label)
+            ),
             StateDiag::AfterAssertViolated {
                 anchor,
                 requireds,
+                label,
                 actual,
                 ..
-            } => write!(f, "after({anchor}).assert({requireds}) fails: {actual}"),
+            } => write!(
+                f,
+                "{}after({anchor}).assert({requireds}) fails: {actual}",
+                label_prefix(label)
+            ),
             StateDiag::PropertyViolated {
                 name,
                 kind,

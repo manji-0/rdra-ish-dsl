@@ -56,7 +56,12 @@ Also ask:
 10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after each
     step of the use case) and `property` for a temporal rule (only `verify` evaluates
     it; see skill `rdra-ish-verify`).
-11. Keep implementation policy notes outside the DSL unless they can be expressed as
+11. End every rule with `.label("...")`: one quoted sentence that says the rule as the
+    business would, not as the formula. A comment above the rule is lost to
+    `rdra-ish list --kind rule`, the table a PRD takes its acceptance criteria from, and a
+    violation names the label. Keep a comment only for a citation (`file:line`).
+    `lint` `rule-unlabeled` lists the rules still without one.
+12. Keep implementation policy notes outside the DSL unless they can be expressed as
     state, effect, forbidden, invariant, required, exclusive, quantifier, property,
     or cross-entity predicates.
 
@@ -96,6 +101,7 @@ exclusive(Order, cancelled_at == present, paid_at == present)
 invariant(Order)
   .when(status == submitted)
   .then(submitted_at == present)
+  .label("A submitted order records when it was submitted")
 required(Order, total >= 0)
 
 // 3. Comparisons, cross-entity rules, quantifiers, postconditions, properties
@@ -135,6 +141,7 @@ Also run:
 
 ```sh
 rdra-ish check src/ --entity Order   # only Order's view and the rules that read it
+rdra-ish list src/ --kind rule --format markdown   # the business-rule table
 rdra-ish lint src/ --format table
 rdra-ish states src/ --format json --entity Order
 # two instances per entity and temporal properties (needs tlc on PATH)

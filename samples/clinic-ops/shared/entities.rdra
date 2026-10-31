@@ -430,30 +430,36 @@ event EvPrescriptionIssued "電子処方箋の登録"
 invariant(Appointment)
   .when(status == apptcheckedin)
   .then(checked_in_at == present)
+  .label("受付済の予約には受付時刻が記録されている")
 
 invariant(Appointment)
   .when(status == apptcompleted)
   .then(completed_at == present)
+  .label("完了した予約には完了時刻が記録されている")
 
 invariant(Encounter)
   .when(status == encsigned)
   .then(signed_at == present)
+  .label("署名済の診療記録には署名時刻が記録されている")
 
 invariant(ClinicalOrder)
   .when(status == clresulted)
   .then(resulted_at == present)
+  .label("結果が出たオーダには結果日時が記録されている")
 
 invariant(Prescription)
   .when(status == rxissued)
   .then(sent_at == present)
+  .label("発行済の処方箋には送信日時が記録されている")
 
 invariant(ClaimStatement)
   .when(status == stmtpaid)
   .then(paid_at == present)
+  .label("支払済のレセプトには支払日時が記録されている")
 
-// A corrected 返戻 clears its reason before it is billed again.
 forbidden(ClaimStatement, status == stmtpaid, return_reason == present)
+  .label("訂正した返戻は、再請求の前に返戻理由を消す")
 
-// 看護師 collects a specimen only on the physician's instruction (egov-hokanhou-323AC0000000203.txt:311),
-// so an order a 医師事務作業補助者 entered is confirmed by the physician first.
+// 看護師 collects a specimen only on the physician's instruction (egov-hokanhou-323AC0000000203.txt:311).
 forbidden(ClinicalOrder, status == clcollected, physician_confirmed == false)
+  .label("医師事務作業補助者が入力したオーダは、医師が確定してから検体を採取する")

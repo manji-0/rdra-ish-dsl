@@ -12,6 +12,15 @@
   an actor-to-control and a boundary-to-entity edge, so a BUC reads in about half the
   edges of its UC複合図 (clinic-ops billing: 46 against 88). `--buc` and `--usecase` scope it; clinic-ops ships one
   per BUC.
+- A business rule can carry a label: `.label("...")` on `forbidden`, `invariant`,
+  `required`, `exclusive`, `when(...).none/has(...)`, and `after(...).assert(...)`, as in
+  `invariant(Appointment).when(status == checkedin).then(checked_in_at == present).label("受付済の予約には受付時刻がある")`.
+  `list --kind rule` writes every rule and condition as one table with the columns
+  `kind,label,entities,rule,applies_to,site` (any `--format`), so a PdM can take the
+  acceptance criteria of a PRD from the model. A violation of a labelled rule opens with
+  `「label」: `, and the invariant names, which the TLA+ export shares, do not change.
+  `lint` adds the `info` rule `rule-unlabeled` for a rule without a label. clinic-ops
+  labels each of its rules in Japanese.
 - `list --format markdown`, `lint --format markdown`, and `csv --format markdown` write a
   Markdown table with the CSV columns, so a requirement list, a CRUD matrix, or a permission
   audit pastes into a design doc or a PRD as it is. `rdra_ish_emit::markdown` renders the

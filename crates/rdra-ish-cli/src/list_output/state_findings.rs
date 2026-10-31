@@ -4,8 +4,9 @@
 use std::fmt;
 
 use rdra_ish_core::lifecycle::{
-    derive_states_built, ActionOrigin, Blocked, BoundsLine, Caps, Change, GuardWhy, InvKind,
-    InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace, TraceStep,
+    derive_states_built, label_prefix, ActionOrigin, Blocked, BoundsLine, Caps, Change, GuardWhy,
+    InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace,
+    TraceStep,
 };
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
@@ -606,16 +607,22 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         StateDiag::ConstraintViolated {
             kind,
             text,
+            label,
             pattern_desc,
             ..
-        } => violation_message(kind, text, pattern_desc).unwrap_or_else(|| diag.to_string()),
+        } => violation_message(kind, text, pattern_desc).map_or_else(
+            || diag.to_string(),
+            |message| format!("{}{message}", label_prefix(label)),
+        ),
         StateDiag::AfterAssertViolated {
             anchor,
             requireds,
+            label,
             actual,
             ..
         } => format!(
-            "temporal assertion violated after '{anchor}': expected {requireds}, but found {actual}"
+            "{}temporal assertion violated after '{anchor}': expected {requireds}, but found {actual}",
+            label_prefix(label)
         ),
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }

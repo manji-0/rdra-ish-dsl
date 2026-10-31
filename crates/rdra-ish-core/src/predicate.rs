@@ -97,11 +97,12 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
     match pred {
         "belongs" => &["by"],
         "relate" => &["via", "role", "key", "optional", "on_delete", "on_update"],
-        "forbidden" => &["along", "by"],
-        "invariant" => &["when", "then", "has", "none", "along", "by"],
-        "when" => &["has", "none"],
+        "forbidden" => &["along", "by", "label"],
+        "invariant" => &["when", "then", "has", "none", "along", "by", "label"],
+        "required" | "exclusive" => &["label"],
+        "when" => &["has", "none", "label"],
         "holds" => &["has", "none"],
-        "after" => &["assert"],
+        "after" => &["assert", "label"],
         "exposes" => &["append", "upsert", "caller"],
         _ => &[],
     }

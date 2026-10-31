@@ -106,7 +106,7 @@ fn column_display(model: &SemanticModel, column: &QualifiedModelColumnRef) -> st
     format!("{}.{}", model.entities[column.entity].id, column.column)
 }
 
-fn body_condition_display(
+pub(crate) fn body_condition_display(
     model: &SemanticModel,
     condition: &CrossEntityCondition,
 ) -> std::string::String {

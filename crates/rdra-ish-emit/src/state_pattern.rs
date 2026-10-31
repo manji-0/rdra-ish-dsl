@@ -3,8 +3,9 @@
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::{
     lifecycle::{
-        derive_states, AbstractValue, ActionOrigin, AxisKind, Caps, Change, EntityStateResult,
-        InvKind, InvText, Provenance, Scope as SystemScope, Site, StateDiag, Trace,
+        derive_states, label_prefix, AbstractValue, ActionOrigin, AxisKind, Caps, Change,
+        EntityStateResult, InvKind, InvText, Provenance, Scope as SystemScope, Site, StateDiag,
+        Trace,
     },
     SemanticModel,
 };
@@ -177,16 +178,22 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         StateDiag::ConstraintViolated {
             kind,
             text,
+            label,
             pattern_desc,
             ..
-        } => violation_message(kind, text, pattern_desc).unwrap_or_else(|| d.to_string()),
+        } => violation_message(kind, text, pattern_desc).map_or_else(
+            || d.to_string(),
+            |message| format!("{}{message}", label_prefix(label)),
+        ),
         StateDiag::AfterAssertViolated {
             anchor,
             requireds,
+            label,
             actual,
             ..
         } => format!(
-            "temporal assertion violated after '{anchor}': expected ({requireds}) but found {actual}"
+            "{}temporal assertion violated after '{anchor}': expected ({requireds}) but found {actual}",
+            label_prefix(label)
         ),
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }

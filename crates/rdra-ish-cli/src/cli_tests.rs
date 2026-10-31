@@ -725,6 +725,7 @@ fn state_diag_message_formats_invariant_violation() {
             guards: "status=booked".to_string(),
             requireds: "booked_at=present".to_string(),
         },
+        label: None,
         pattern_desc: "status=booked, booked_at=null".to_string(),
         site: Site::bare(ModelRef::EntityInvariant(0)),
         trace: Trace::default(),
@@ -746,6 +747,7 @@ fn state_diag_message_formats_cross_invariant_violation() {
             guards: "Order.status=paid".to_string(),
             requireds: "Payment.status=captured".to_string(),
         },
+        label: None,
         pattern_desc: "Order(status=paid); Payment(status=pending)".to_string(),
         site: Site::bare(ModelRef::CrossInvariant(0)),
         trace: Trace::default(),
@@ -763,6 +765,7 @@ fn state_diag_message_formats_temporal_assertion_violation() {
         name: "AfterAssert_ExecuteCertIssue_0".to_string(),
         anchor: "ExecuteCertIssue".to_string(),
         requireds: "CertificateOrder.status=executed".to_string(),
+        label: None,
         actual: "CertificateOrder(status=pending)".to_string(),
         site: Site::bare(ModelRef::TemporalAssertion(0)),
         trace: Trace::default(),
@@ -784,6 +787,7 @@ fn state_diag_message_formats_quantifier_violation() {
             related: "TerminalCertAssignment".to_string(),
             constraint: "ClientCertificate when (status=revoked) none TerminalCertAssignment where (status=active)".to_string(),
         },
+        label: None,
         pattern_desc: "ClientCertificate(status=revoked); TerminalCertAssignment(status=active)"
             .to_string(),
         site: Site::bare(ModelRef::Quantifier(0)),
@@ -909,5 +913,75 @@ fn every_stage_review_command_parses() {
             Cli::try_parse_from(&argv)
                 .unwrap_or_else(|e| panic!("{}: `{command}`: {e}", id.slug()));
         }
+    }
+}
+
+const RULE_MODEL: &str = r#"
+entity Appointment "予約" {
+  id: Int @pk
+  status: Enum(apptscheduled, apptcheckedin)
+  checked_in_at: DateTime @null
+}
+usecase CheckIn "受付"
+transitions(Appointment.status, CheckIn, apptscheduled -> apptcheckedin)
+condition BookedPatient "予約済みの患者"
+holds(BookedPatient, Appointment.status == apptscheduled)
+applies_to(BookedPatient, CheckIn)
+invariant(Appointment).when(status == apptcheckedin).then(checked_in_at == present).label("受付済の予約には受付時刻がある")
+forbidden(Appointment, status == apptscheduled, checked_in_at == present)
+"#;
+
+fn rule_model() -> SemanticModel {
+    use rdra_ish_core::build_model;
+    let (ast, parse_errors) = rdra_ish_syntax::parse(RULE_MODEL);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    model
+}
+
+#[test]
+fn list_rule_markdown_lists_a_labelled_invariant_and_a_condition() {
+    let md = list_elements(&rule_model(), &ListKind::Rule, &ListFormat::Markdown).unwrap();
+
+    assert!(
+        md.contains("| kind | label | entities | rule | applies_to | site |"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| invariant | 受付済の予約には受付時刻がある | Appointment | when Appointment.status == apptcheckedin then Appointment.checked_in_at == present |"),
+        "{md}"
+    );
+    assert!(
+        md.contains("| condition | 予約済みの患者 | Appointment | Appointment.status == apptscheduled | CheckIn |"),
+        "{md}"
+    );
+    assert!(md.contains("| forbidden |  | Appointment |"), "{md}");
+}
+
+#[test]
+fn list_rule_json_carries_the_columns() {
+    let json = list_elements(&rule_model(), &ListKind::Rule, &ListFormat::Json).unwrap();
+    assert!(json.contains("\"kind\":\"invariant\""), "{json}");
+    assert!(json.contains("\"applies_to\":\"CheckIn\""), "{json}");
+}
+
+#[test]
+fn list_rule_site_is_file_and_line_from_a_loaded_project() {
+    let inputs = vec![errors_fixture("samples/clinic-ops")];
+    let Project { program, model, .. } = load_project(&inputs, None).expect("load clinic-ops");
+    let csv = crate::list_output::format_rules(&model, Some(&program), &ListFormat::Csv).unwrap();
+    let mut lines = csv.lines();
+    assert_eq!(
+        lines.next(),
+        Some("kind,label,entities,rule,applies_to,site")
+    );
+    for line in lines {
+        let site = line.rsplit(',').next().unwrap();
+        let (file, row) = site
+            .rsplit_once(':')
+            .unwrap_or_else(|| panic!("no site: {line}"));
+        assert!(file.ends_with(".rdra"), "{line}");
+        assert!(row.parse::<u32>().is_ok(), "{line}");
     }
 }

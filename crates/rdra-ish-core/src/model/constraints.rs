@@ -15,6 +15,9 @@ pub struct ForbiddenConstraint {
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 /// `invariant(Entity).when(col == val).then(col == val)` で宣言された不変条件。
@@ -33,6 +36,9 @@ pub struct EntityInvariant {
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 /// `required(Entity, col == val, ...)` で宣言された常時成立制約。
@@ -47,6 +53,9 @@ pub struct RequiredConstraint {
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 /// `exclusive(Entity, col == val, ...)` で宣言された相互排他制約。
@@ -61,6 +70,9 @@ pub struct ExclusiveConstraint {
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 // ── クロスエンティティ制約 ───────────────────────────────────────────────────
@@ -128,6 +140,9 @@ pub struct CrossForbiddenConstraint {
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 /// `invariant(EntityA, EntityB).when(...).then(...)`.
@@ -140,6 +155,9 @@ pub struct CrossEntityInvariant {
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 /// `after(UseCase).assert(...)` で宣言される時相アンカー制約。
@@ -151,6 +169,9 @@ pub struct TemporalAssertion {
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 /// to-many 関連先に対する量化制約。
@@ -179,6 +200,9 @@ pub struct QuantifierConstraint {
     pub anchor: EntityKey,
     pub guards: Vec<CrossEntityCondition>,
     pub quantifier: RelatedQuantifier,
+
+    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
+    pub label: Option<std::string::String>,
 }
 
 // ── Temporal properties (TLA+ / TLC) ──────────────────────────────────────────

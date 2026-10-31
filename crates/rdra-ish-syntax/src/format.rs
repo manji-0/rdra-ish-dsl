@@ -748,6 +748,15 @@ mod tests {
     }
 
     #[test]
+    fn formats_a_rule_label_as_written() {
+        let src = "invariant(Appointment).when(status == checkedin).then(checked_in_at == present).label(\"受付済の予約には受付時刻がある\")\n\nforbidden(A, B, A.status == x).along(A, B).label(\"x\")\n\nafter(Pay).assert(Order.status == paid).label(\"支払後は入金済\")\n\nwhen(Cert, status == revoked).none(Assign, status == active).label(\"失効後は割当なし\")\n";
+        let formatted = format_source(src).unwrap();
+        assert_eq!(formatted, src);
+        let (_ast, errors) = parse(&formatted);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
     fn formats_a_cardinality_range_as_written() {
         let formatted =
             format_source("relate(Line, Order, 1 .. *:1)\nrelate(Note, Order, 0..1:1)\n").unwrap();

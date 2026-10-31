@@ -61,6 +61,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every BUC has a `belongs` predicate
    - Every `extsystem` is connected through an event: `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)`
    - Every `timer` triggers a use case or BUC: `triggers(Timer, UseCase|Buc)`
+   - Every `forbidden`, `invariant`, `required`, `exclusive`, `when(...).none/has(...)`, and `after(...).assert(...)` carries a `.label("...")` in the business's words (`lint` `rule-unlabeled`)
    - Every `condition` is applied to a use case (`applies_to(Condition, UseCase)`) and either `combines` a variation or lifecycle column or has a `holds` body that names one (`lint` `condition-no-rdra-anchor`)
 
 6. **Check requirements, flow, and decision traceability**

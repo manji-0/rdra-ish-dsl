@@ -18,6 +18,7 @@ pub mod publication;
 pub mod rdra_rules;
 pub mod refinement;
 pub mod resolver;
+pub mod rules;
 pub mod surface;
 pub mod system;
 pub mod tx;
@@ -68,6 +69,7 @@ pub use publication::publication_diagnostics;
 pub use resolver::{
     build_merged_model, reachable_from_bucs, resolve, resolve_overlaid, ResolvedProgram,
 };
+pub use rules::{business_rules, BusinessRule};
 pub use surface::Surface;
 pub use system::{derive_system_boundaries, system_diagnostics, SystemBoundary};
 pub use tx::{

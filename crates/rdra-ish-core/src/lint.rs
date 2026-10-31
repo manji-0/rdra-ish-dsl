@@ -7,6 +7,7 @@ use crate::location::LocatedSpan;
 use crate::model::{node_ref_kind, ColumnType, NodeRef, RelKind, SemanticModel, StateKey, StepKey};
 use crate::rdra_rules::{owned_by_registry, rdra_findings};
 use crate::refinement::{assess, Assessment, Depth, Next, StageId};
+use crate::rules::business_rules;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LintSeverity {
@@ -242,6 +243,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_column_names(model, &mut findings);
     lint_enum_attributes(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
+    lint_rule_labels(model, &mut findings);
     findings.extend(rdra_findings(model));
     demote_premature(&mut findings, &assess(model, Depth::Structure));
     findings
@@ -683,6 +685,33 @@ fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
             ),
             "compare a column typed by a variation or a column some `transitions` moves, or use `combines` to link the condition for traceability",
         );
+    }
+}
+
+/// A constraint predicate without `.label("...")` has its meaning only in a comment, so the
+/// business-rule table lists it with an empty label.
+fn lint_rule_labels(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for rule in business_rules(model) {
+        if !rule.is_constraint() || rule.label.is_some() {
+            continue;
+        }
+        let mut issue = LintIssue::new(
+            LintSeverity::Info,
+            "rule-unlabeled",
+            rule.kind,
+            rule.entities.join("|"),
+            format!(
+                "{} on {} has no label: {}",
+                rule.kind,
+                rule.entities.join(", "),
+                rule.text
+            ),
+            "add `.label(\"the rule in plain words\")` so `list --kind rule` and a violation name it",
+        );
+        if let Some(site) = rule.site {
+            issue = issue.with_location(site);
+        }
+        issues.push(issue);
     }
 }
 
@@ -1402,5 +1431,38 @@ precedes(B, A)
         );
         assert!(cycles.iter().any(|i| i.subject_id == "A"));
         assert!(cycles.iter().any(|i| i.subject_id == "B"));
+    }
+}
+
+#[cfg(test)]
+mod rule_label_tests {
+    use super::*;
+    use crate::build_model;
+    use rdra_ish_syntax::parse;
+
+    #[test]
+    fn rule_unlabeled_is_info_and_fires_for_an_unlabelled_rule_only() {
+        let (ast, parse_errors) = parse(
+            r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid)  paid_at: DateTime @null }
+invariant(Order).when(status == paid).then(paid_at == present).label("入金済には入金日時")
+forbidden(Order, status == open, paid_at == present)
+"#,
+        );
+        assert!(parse_errors.is_empty(), "{parse_errors:?}");
+        let (model, diags) = build_model(&ast);
+        assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+
+        let unlabeled: Vec<LintIssue> = collect_findings(&model)
+            .into_iter()
+            .filter(|issue| issue.rule == "rule-unlabeled")
+            .collect();
+        assert_eq!(unlabeled.len(), 1, "{unlabeled:?}");
+        assert_eq!(unlabeled[0].severity, LintSeverity::Info);
+        assert_eq!(unlabeled[0].subject_kind, "forbidden");
+        assert!(unlabeled[0].location.is_some());
+        assert!(lint_review_diagnostics(&model)
+            .iter()
+            .all(|d| !d.error.to_string().contains("rule-unlabeled")));
     }
 }

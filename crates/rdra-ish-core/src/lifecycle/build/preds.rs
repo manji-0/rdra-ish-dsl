@@ -402,6 +402,7 @@ impl<'m> Builder<'m> {
                         binders: vec![self.ent_of[&ek]],
                         body,
                         text: InvText::Conditions(check.expr.display()),
+                        label: None,
                         site,
                     });
                 }
@@ -442,6 +443,7 @@ impl<'m> Builder<'m> {
         binding: &Binding,
         body: Pred,
         text: InvText,
+        label: Option<String>,
         site: Site,
     ) {
         let entity = self.model.entities[binding[0].0].id.clone();
@@ -451,6 +453,7 @@ impl<'m> Builder<'m> {
             binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
             body,
             text,
+            label,
             site,
         });
     }
@@ -463,7 +466,17 @@ impl<'m> Builder<'m> {
             let text = InvText::Conditions(local_display(&c.conditions, &c.comparisons));
             let b = Self::local_binding(c.entity);
             let body = Pred::Not(Box::new(Pred::And(conds)));
-            self.push_invariant("Forbidden", i, InvKind::Forbidden, &b, body, text, site);
+            let label = c.label.clone();
+            self.push_invariant(
+                "Forbidden",
+                i,
+                InvKind::Forbidden,
+                &b,
+                body,
+                text,
+                label,
+                site,
+            );
         }
         for (i, c) in model.entity_invariants.iter().enumerate() {
             let site = Site::new(ModelRef::EntityInvariant(i), &c.site);
@@ -475,7 +488,8 @@ impl<'m> Builder<'m> {
             };
             let b = Self::local_binding(c.entity);
             let body = implies(Pred::And(guards), Pred::And(reqs));
-            self.push_invariant("Inv", i, InvKind::Invariant, &b, body, text, site);
+            let label = c.label.clone();
+            self.push_invariant("Inv", i, InvKind::Invariant, &b, body, text, label, site);
         }
         for (i, c) in model.required_constraints.iter().enumerate() {
             let site = Site::new(ModelRef::Required(i), &c.site);
@@ -489,6 +503,7 @@ impl<'m> Builder<'m> {
                 &b,
                 Pred::And(conds),
                 text,
+                c.label.clone(),
                 site,
             );
         }
@@ -504,7 +519,17 @@ impl<'m> Builder<'m> {
             let text = InvText::Conditions(local_display(&c.conditions, &c.comparisons));
             let b = Self::local_binding(c.entity);
             let body = Pred::Not(Box::new(Pred::Or(pairs)));
-            self.push_invariant("Exclusive", i, InvKind::Exclusive, &b, body, text, site);
+            let label = c.label.clone();
+            self.push_invariant(
+                "Exclusive",
+                i,
+                InvKind::Exclusive,
+                &b,
+                body,
+                text,
+                label,
+                site,
+            );
         }
         self.column_checks();
         self.cross_invariants();
@@ -588,6 +613,7 @@ impl<'m> Builder<'m> {
                     parent,
                     role,
                 },
+                label: None,
                 site,
             });
         }
@@ -638,6 +664,7 @@ impl<'m> Builder<'m> {
                     parent,
                     role,
                 },
+                label: None,
                 site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
             });
         }
@@ -734,6 +761,7 @@ impl<'m> Builder<'m> {
                 &binding,
                 body,
                 text,
+                c.label.clone(),
                 site,
             );
         }
@@ -762,6 +790,7 @@ impl<'m> Builder<'m> {
                 &binding,
                 body,
                 text,
+                c.label.clone(),
                 site,
             );
         }
@@ -834,6 +863,7 @@ impl<'m> Builder<'m> {
                 &anchor,
                 implies(guards, inner),
                 text,
+                c.label.clone(),
                 site,
             );
         }
@@ -984,6 +1014,7 @@ impl<'m> Builder<'m> {
                 anchor,
                 steps,
                 requireds: cross_display(model, &ta.requireds),
+                label: ta.label.clone(),
                 site,
             });
         }
