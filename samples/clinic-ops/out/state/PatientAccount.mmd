@@ -1,6 +1,7 @@
 %% rdra-ish diagram=state scope=entity:PatientAccount model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PatientAccount.status" as statemodel__PatientAccount_status {

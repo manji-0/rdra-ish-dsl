@@ -176,7 +176,7 @@ flowchart LR
   screen__PatientProfileScreen -->|新患登録| api__RegisterPatientApi
   screen__PatientProfileScreen -->|重複患者の統合| usecase__MergeDuplicatePatient
   screen__PatientSearchScreen -->|患者の検索| api__SearchPatientApi
-  timer__IntakeExpiryCheck -.->|問診票の期限切れ確認（毎晩）| usecase__ExpireIntakeForms
+  timer__IntakeExpiryCheck -.-> usecase__ExpireIntakeForms
   usecase__ArchivePatient -->|U| entity__PatientAccount
   usecase__CompleteIntakeForms -->|U| entity__IntakePacket
   usecase__ExpireIntakeForms -->|U| entity__IntakePacket
@@ -504,7 +504,7 @@ flowchart LR
   screen__AppointmentScreen -->|予約の確定| api__BookAppointmentApi
   screen__AppointmentScreen -->|未来院の処理| usecase__MarkNoShow
   screen__ScheduleSearchScreen -->|空き枠の検索| api__SearchAvailabilityApi
-  timer__NoShowSweep -.->|未来院の確認（毎晩）| usecase__MarkNoShow
+  timer__NoShowSweep -.-> usecase__MarkNoShow
   usecase__MarkNoShow -->|U| entity__Appointment
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
@@ -803,7 +803,7 @@ flowchart LR
   screen__EligibilityScreen -->|資格確認結果（該当資格なし）の取込| api__EligibilityResultApi
   screen__ReferralScreen -->|紹介状受付処理| api__ReferralLetterApi
   screen__RoomBoardScreen -->|診察室への案内| api__AssignRoomApi
-  timer__EligibilityBatchInquiry -.->|予約患者の資格の一括照会（来院前）| api__OnlineEligibilityApi
+  timer__EligibilityBatchInquiry -.-> api__OnlineEligibilityApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
@@ -1809,7 +1809,7 @@ flowchart LR
   screen__PrescriptionScreen -->|疑義照会への回答| api__PrescriptionInquiryApi
   screen__PrescriptionScreen -->|院内処方用引換券の交付| api__IssuePrescriptionApi
   screen__PrescriptionScreen -->|院外処方箋の発行| api__IssuePrescriptionApi
-  timer__PrescriptionUsePeriodCheck -.->|処方箋の使用期間切れ確認| api__ConfirmDispenseApi
+  timer__PrescriptionUsePeriodCheck -.-> api__ConfirmDispenseApi
   usecase__CancelPrescription -->|U| entity__Prescription
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
@@ -2504,11 +2504,11 @@ flowchart LR
   screen__ClaimScreen -->|返戻レセプトの取込| api__ClaimResultApi
   screen__ClaimScreen -->|返戻レセプトの訂正（再請求）| api__ClaimEditApi
   screen__PaymentPostingScreen -->|診療報酬の入金| api__PaymentPostApi
-  timer__ErrorResendWindow -.->|エラー分レセプトの再送（毎月11日・12日）| api__SubmitClaimApi
-  timer__MonthlyClaimCreation -.->|前月分レセプトの作成（月初）| api__GenerateClaimApi
-  timer__MonthlyClaimDeadline -.->|前月分レセプトの請求（毎月5日～10日）| api__SubmitClaimApi
-  timer__ReceivablesMonthlyReview -.->|未収金管理台帳の作成（毎月）| api__BalanceApi
-  timer__ReturnDownloadCheck -.->|返戻レセプトの取得（3か月以内）| api__ClaimResultApi
+  timer__ErrorResendWindow -.-> api__SubmitClaimApi
+  timer__MonthlyClaimCreation -.-> api__GenerateClaimApi
+  timer__MonthlyClaimDeadline -.-> api__SubmitClaimApi
+  timer__ReceivablesMonthlyReview -.-> api__BalanceApi
+  timer__ReturnDownloadCheck -.-> api__ClaimResultApi
   usecase__ReviewClaimTransfer -->|R| entity__ClaimStatement
   usecase__VoidCharge -->|U| entity__Charge
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
@@ -3369,7 +3369,8 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=state scope=entity:Appointment model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
@@ -3481,7 +3482,8 @@ Entity: Appointment (予約・受診)
 ```mermaid
 %% rdra-ish diagram=state scope=entity:CarePlan model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "CarePlan.status" as statemodel__CarePlan_status {
@@ -3504,7 +3506,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:ClaimStatement model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ClaimStatement.status" as statemodel__ClaimStatement_status {
@@ -3585,7 +3588,8 @@ Entity: ClaimStatement (レセプト)
 ```mermaid
 %% rdra-ish diagram=state scope=entity:ClinicalOrder model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ClinicalOrder.status" as statemodel__ClinicalOrder_status {
@@ -3618,7 +3622,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:EligibilityCheck model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "EligibilityCheck.result" as statemodel__EligibilityCheck_result {
@@ -3656,7 +3661,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:Encounter model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Encounter.status" as statemodel__Encounter_status {
@@ -3682,7 +3688,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:IntakePacket model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "IntakePacket.status" as statemodel__IntakePacket_status {
@@ -3707,7 +3714,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:PatientAccount model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PatientAccount.status" as statemodel__PatientAccount_status {
@@ -3732,7 +3740,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:PaymentTransaction model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
@@ -3752,7 +3761,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:Prescription model=samples/clinic-ops
 %% kinds: statemodel state usecase
-%% omitted: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Prescription.status" as statemodel__Prescription_status {

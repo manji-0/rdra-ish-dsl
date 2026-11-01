@@ -52,7 +52,7 @@ flowchart LR
   screen__AppointmentScreen -->|予約の確定| api__BookAppointmentApi
   screen__AppointmentScreen -->|未来院の処理| usecase__MarkNoShow
   screen__ScheduleSearchScreen -->|空き枠の検索| api__SearchAvailabilityApi
-  timer__NoShowSweep -.->|未来院の確認（毎晩）| usecase__MarkNoShow
+  timer__NoShowSweep -.-> usecase__MarkNoShow
   usecase__MarkNoShow -->|U| entity__Appointment
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;

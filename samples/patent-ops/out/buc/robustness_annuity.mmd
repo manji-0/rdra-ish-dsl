@@ -34,13 +34,13 @@ flowchart LR
   screen__MaintenanceReviewScreen -->|権利を維持しない決定| api__MaintenanceApi
   screen__MaintenanceReviewScreen -->|権利維持要否の調査| usecase__ReviewMaintenance
   screen__MaintenanceReviewScreen -->|特許権の放棄| api__MaintenanceApi
-  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| api__AnnuityApi
-  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| usecase__EnterGracePeriod
-  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| usecase__RollOverAnnuityYear
-  timer__LatePaymentDeadline -.->|追納期限（納付期限の経過から6月）| api__AnnuityApi
-  timer__LatePaymentDeadline -.->|追納期限（納付期限の経過から6月）| usecase__LapseUnpaidPatent
-  timer__MaintenanceReview -.->|権利維持要否の調査（登録後3年目・6年目）| usecase__ReviewMaintenance
-  timer__TermExpiry -.->|存続期間の満了（出願から20年）| usecase__ExpirePatentTerm
+  timer__AnnuityDueDate -.-> api__AnnuityApi
+  timer__AnnuityDueDate -.-> usecase__EnterGracePeriod
+  timer__AnnuityDueDate -.-> usecase__RollOverAnnuityYear
+  timer__LatePaymentDeadline -.-> api__AnnuityApi
+  timer__LatePaymentDeadline -.-> usecase__LapseUnpaidPatent
+  timer__MaintenanceReview -.-> usecase__ReviewMaintenance
+  timer__TermExpiry -.-> usecase__ExpirePatentTerm
   usecase__EnterGracePeriod -->|U| entity__Patent
   usecase__ExpirePatentTerm -->|U| entity__Patent
   usecase__LapseUnpaidPatent -->|U| entity__Patent

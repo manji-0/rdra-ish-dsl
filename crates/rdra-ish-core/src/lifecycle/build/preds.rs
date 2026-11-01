@@ -1402,7 +1402,8 @@ pub(crate) fn effect_display(v: &EffectValue) -> String {
 fn local_display(eqs: &[(String, EffectValue)], cmps: &[ComparisonProp]) -> String {
     eqs.iter()
         .map(|(c, v)| format!("{c}={}", effect_display(v)))
-        .chain(cmps.iter().map(|p| format!("{}=true", p.display())))
+        // A comparison prints as written, `status != oa` or `status in (a, b)`.
+        .chain(cmps.iter().map(ComparisonProp::display))
         .collect::<Vec<_>>()
         .join(" AND ")
 }
@@ -1428,7 +1429,7 @@ fn cross_display(model: &crate::model::SemanticModel, conds: &[CrossEntityCondit
                 effect_display(value)
             ),
             CrossEntityCondition::Comparison(p) => format!(
-                "{}.{} {} {}=true",
+                "{}.{} {} {}",
                 model.entities[p.lhs.entity].id,
                 p.lhs.column,
                 p.op.as_str(),

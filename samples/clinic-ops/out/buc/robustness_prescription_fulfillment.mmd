@@ -48,7 +48,7 @@ flowchart LR
   screen__PrescriptionScreen -->|疑義照会への回答| api__PrescriptionInquiryApi
   screen__PrescriptionScreen -->|院内処方用引換券の交付| api__IssuePrescriptionApi
   screen__PrescriptionScreen -->|院外処方箋の発行| api__IssuePrescriptionApi
-  timer__PrescriptionUsePeriodCheck -.->|処方箋の使用期間切れ確認| api__ConfirmDispenseApi
+  timer__PrescriptionUsePeriodCheck -.-> api__ConfirmDispenseApi
   usecase__CancelPrescription -->|U| entity__Prescription
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;

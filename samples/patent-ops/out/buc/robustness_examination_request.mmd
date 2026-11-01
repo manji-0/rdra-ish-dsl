@@ -28,9 +28,9 @@ flowchart LR
   screen__ExaminationRequestScreen -->|審査請求の回復| api__ExaminationRequestApi
   screen__ExaminationRequestScreen -->|審査請求要否の判断| usecase__DecideExaminationRequest
   screen__ExaminationRequestScreen -->|早期審査の申出| api__ExaminationRequestApi
-  timer__ExamRequestDeadline -.->|審査請求期限（出願から3年）| api__ExaminationRequestApi
-  timer__ExamRequestDeadline -.->|審査請求期限（出願から3年）| usecase__DeemWithdrawnNoRequest
-  timer__ExamRequestReview -.->|審査請求要否の検討（審査請求期限の前）| usecase__DecideExaminationRequest
+  timer__ExamRequestDeadline -.-> api__ExaminationRequestApi
+  timer__ExamRequestDeadline -.-> usecase__DeemWithdrawnNoRequest
+  timer__ExamRequestReview -.-> usecase__DecideExaminationRequest
   usecase__DecideExaminationRequest -->|R| entity__PatentApplication
   usecase__DeemWithdrawnNoRequest -->|U| entity__PatentApplication
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;

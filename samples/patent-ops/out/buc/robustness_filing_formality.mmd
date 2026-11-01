@@ -46,10 +46,10 @@ flowchart LR
   screen__ApplicationDocketScreen -->|手続補正書の提出| api__FormalityApi
   screen__FilingScreen -->|国内優先権の主張| api__PriorityClaimApi
   screen__FilingScreen -->|電子出願| api__FilingApi
-  timer__FormalityAmendmentDeadline -.->|手続補正書の提出期限（指令書の発送日から2月）| api__FormalityApi
-  timer__PriorityBaseDeadline -.->|先の出願の取下げ擬制（先の出願から1年4月）| api__PriorityBaseApi
-  timer__PriorityClaimDeadline -.->|国内優先権の主張期限（先の出願から1年）| api__PriorityClaimApi
-  timer__PublicationCheck -.->|出願公開の確認（出願から1年6月）| api__ApplicationDocketApi
+  timer__FormalityAmendmentDeadline -.-> api__FormalityApi
+  timer__PriorityBaseDeadline -.-> api__PriorityBaseApi
+  timer__PriorityClaimDeadline -.-> api__PriorityClaimApi
+  timer__PublicationCheck -.-> api__ApplicationDocketApi
   usecase__RecordFilingReceipt -->|R| entity__PatentApplication
   usecase__RecordFilingReceipt -->|U| entity__DraftingOrder
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;

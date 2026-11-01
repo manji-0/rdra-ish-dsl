@@ -1,6 +1,7 @@
 %% rdra-ish diagram=state scope=whole model=samples/ec-site
 %% kinds: statemodel state
-%% omitted: Payment.status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Payment.status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 stateDiagram-v2
   state "Order.status" as statemodel__Order_status {
     state "6 状態 / 6 遷移 (--entity Order)" as index__Order_status

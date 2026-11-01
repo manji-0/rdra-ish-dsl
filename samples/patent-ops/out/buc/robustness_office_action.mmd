@@ -59,11 +59,11 @@ flowchart LR
   screen__OfficeActionScreen -->|期間経過後の延長請求| api__OfficeActionApi
   screen__ResponseDraftScreen -->|意見書・補正書の提出| api__ResponseFilingApi
   screen__ResponseDraftScreen -->|意見書・補正書案の作成| api__OfficeActionApi
-  timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| api__AppealApi
-  timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| usecase__FinalizeRejection
-  timer__LateExtensionDeadline -.->|期間経過後の延長請求の期限（応答期間の経過から2か月）| usecase__LapseResponse
-  timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| api__ResponseFilingApi
-  timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| usecase__ExpireResponseTerm
+  timer__AppealDeadline -.-> api__AppealApi
+  timer__AppealDeadline -.-> usecase__FinalizeRejection
+  timer__LateExtensionDeadline -.-> usecase__LapseResponse
+  timer__ResponseDeadline -.-> api__ResponseFilingApi
+  timer__ResponseDeadline -.-> usecase__ExpireResponseTerm
   usecase__CloseOfficeActionDocket -->|R| entity__PatentApplication
   usecase__CloseOfficeActionDocket -->|U| entity__OfficeAction
   usecase__ExpireResponseTerm -->|U| entity__OfficeAction

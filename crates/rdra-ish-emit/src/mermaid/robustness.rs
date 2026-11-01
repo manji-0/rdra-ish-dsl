@@ -11,7 +11,7 @@
 use super::usecase::{is_crud, scoped_use_cases};
 use super::{kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, node_label, node_line, quote, Header};
-use crate::{node_kind_filter_name, EmitError, Emitter, View};
+use crate::{node_kind_filter_name, object_graph_rel_label, EmitError, Emitter, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{BTreeMap, HashSet};
 
@@ -148,7 +148,11 @@ impl Emitter for RobustnessMermaidEmitter {
             if rel.kind != RelKind::Triggers {
                 continue;
             }
-            let label = edge_label(model, &rel.from);
+            // A timer edge is the one relation from a timer, so its label is left off.
+            let label = match &rel.from {
+                NodeRef::Timer(_) => object_graph_rel_label(&RelKind::Triggers).to_string(),
+                event => edge_label(model, event),
+            };
             let receivers = match &rel.to {
                 target @ NodeRef::UseCase(_) if in_scope.contains(target) => controls_for(target),
                 target @ NodeRef::ExtSystem(_) => vec![target.clone()],
@@ -315,7 +319,7 @@ triggers(Nightly, Remind)
             "  api__PayApi -.->|Paid| usecase__Reconcile\n",
             "  extsystem__Bank -.->|Wire| usecase__Archive\n",
             "  usecase__Archive -.->|Posted| extsystem__Bank\n",
-            "  timer__Nightly -.->|Nightly| usecase__Remind\n",
+            "  timer__Nightly -.-> usecase__Remind\n",
         ] {
             assert!(result.contains(line), "{line}{result}");
         }

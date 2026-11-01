@@ -811,6 +811,38 @@ fn the_unscoped_state_diagram_is_an_index_and_each_entity_draws_its_models() {
     assert!(full > 5, "only {full} entity diagrams");
 }
 
+/// The columns a state header line `%% <prefix>: <a> <b> (<why>)` names.
+fn header_columns(text: &str, prefix: &str) -> BTreeSet<String> {
+    text.lines()
+        .find_map(|line| line.strip_prefix(&format!("%% {prefix}: ")))
+        .and_then(|rest| rest.split_once(" ("))
+        .map(|(columns, _)| columns.split(' ').map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
+/// An Enum column a `sets` writes is a state axis of `check` even without `transitions`: the
+/// state diagram names it on `%% set-only:`, not on `omitted:` (#61).
+#[test]
+fn a_state_axis_set_by_sets_is_not_omitted() {
+    let dir = scratch("diagram_contract_state_set_only");
+    let mut set_only = 0;
+    for root in lifecycle_roots() {
+        let text = diagram(&root, "state", None, &dir.join("index"));
+        let (omitted, set) = (
+            header_columns(&text, "omitted"),
+            header_columns(&text, "set-only"),
+        );
+        assert!(omitted.is_disjoint(&set), "{root}\n{text}");
+        set_only += set.len();
+        if root == "samples/patent-ops" {
+            for column in ["OfficeAction.kind", "Patent.last_payment"] {
+                assert!(set.contains(column), "{root}: {column}\n{text}");
+            }
+        }
+    }
+    assert!(set_only >= 2, "only {set_only} set-only columns");
+}
+
 #[test]
 fn the_state_contract_check_rejects_a_broken_diagram() {
     let good = "%% rdra-ish diagram=state scope=entity:Doc\n%% kinds: statemodel state usecase\n%% legend: stateunreachable = a, statedeadlock = b, stateend = c\nstateDiagram-v2\n  state \"Doc.status\" as statemodel__Doc_status {\n    [*] --> state__Doc_draft\n    state \"draft\" as state__Doc_draft\n    state \"done\" as state__Doc_done\n    %% transition usecase__Publish\n    state__Doc_draft --> state__Doc_done : Publish\n    state__Doc_done --> [*]\n  }\n  classDef stateend fill:#dfd\n  class state__Doc_done stateend\n";
@@ -996,7 +1028,7 @@ fn a_usecase_diagram_draws_what_the_rdra_diagram_declares() {
 #[test]
 fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar() {
     let dir = scratch("diagram_contract_robustness");
-    let mut edges = 0;
+    let (mut edges, mut timers) = (0, 0);
     for root in roots() {
         let mut scopes = scopes(&root);
         scopes.extend(
@@ -1029,6 +1061,15 @@ fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar()
                 if kind(to) == "entity" {
                     assert!(control(from), "{root} {scope:?}: {from} -> {to}");
                 }
+                // A timer starts the use case, the one relation from a timer (#61, #43).
+                if kind(from) == "timer" {
+                    let edge = (from.clone(), label.clone(), to.clone());
+                    assert!(
+                        label == "triggers" && chart.unlabelled.contains(&edge),
+                        "{root} {scope:?}: {from} -{label}-> {to}"
+                    );
+                    timers += 1;
+                }
             }
             for kind in [
                 "dto",
@@ -1048,6 +1089,7 @@ fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar()
         }
     }
     assert!(edges > 100, "only {edges} edges");
+    assert!(timers > 5, "only {timers} timer edges");
 }
 
 /// The participant ids and the message endpoints of a `sequence` diagram, after checking its

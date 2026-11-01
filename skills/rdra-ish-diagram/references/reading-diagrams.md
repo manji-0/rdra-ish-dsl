@@ -71,7 +71,7 @@ flowchart LR
   the predicate's first argument to its second.
 - An unlabelled edge is the one relation that kind draws between those two kinds:
   `actor -> usecase` is `performs`, `buc -> usecase` is `contains`, `event -> usecase`
-  is `triggers`, a robustness `actor -> screen` is `uses`.
+  is `triggers`, a robustness `actor -> screen` is `uses` and `timer -> control` `triggers`.
   `rdra_ish_emit::implied_relation` gives the table. A pair with several relations keeps its label: a use case or API to an
   entity (the CRUD verb), step to step, entity to entity (the cardinality), API to DTO.
 - `-->` is hierarchy (`contains`, `belongs`, `owns`) and flow order (`precedes`,

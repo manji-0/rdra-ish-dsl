@@ -53,7 +53,7 @@ flowchart LR
   screen__PatientProfileScreen -->|新患登録| api__RegisterPatientApi
   screen__PatientProfileScreen -->|重複患者の統合| usecase__MergeDuplicatePatient
   screen__PatientSearchScreen -->|患者の検索| api__SearchPatientApi
-  timer__IntakeExpiryCheck -.->|問診票の期限切れ確認（毎晩）| usecase__ExpireIntakeForms
+  timer__IntakeExpiryCheck -.-> usecase__ExpireIntakeForms
   usecase__ArchivePatient -->|U| entity__PatientAccount
   usecase__CompleteIntakeForms -->|U| entity__IntakePacket
   usecase__ExpireIntakeForms -->|U| entity__IntakePacket

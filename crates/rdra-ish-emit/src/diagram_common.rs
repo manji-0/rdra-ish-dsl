@@ -433,13 +433,21 @@ pub const EDGE_RELATIONS: &[EdgeRelation] = &[
     ),
     // Labelled with the CRUD letters of the control's operations.
     rel("robustness", &["api", "usecase"], &["entity"], "crud", Data),
-    // Labelled with the event or timer.
+    // Labelled with the event.
     rel(
         "robustness",
-        &["api", "usecase", "extsystem", "timer"],
+        &["api", "usecase", "extsystem"],
         &["api", "usecase", "extsystem"],
         "event",
         Data,
+    ),
+    // A timer starts the use case: the one relation from a timer, so unlabelled.
+    rel(
+        "robustness",
+        &["timer"],
+        &["api", "usecase"],
+        "triggers",
+        Name,
     ),
     // event: what raises each event and what it triggers.
     rel(

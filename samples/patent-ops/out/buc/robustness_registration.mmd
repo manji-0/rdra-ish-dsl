@@ -25,7 +25,7 @@ flowchart LR
   screen__FeePaymentScreen -->|第1〜3年分の特許料の納付| api__FeePaymentApi
   screen__FeePaymentScreen -->|納付期間の延長請求| api__FeePaymentApi
   screen__FeePaymentScreen -->|設定登録の記録| api__RegistrationApi
-  timer__FirstFeeDeadline -.->|第1〜3年分の特許料の納付期限（査定謄本の送達から30日）| api__FeePaymentApi
+  timer__FirstFeeDeadline -.-> api__FeePaymentApi
   usecase__RecordRegistrationDismissal -->|U| entity__PatentApplication
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;

@@ -39,7 +39,8 @@ rdra-ish verify src/ --backend tlc -o out/
 
 - The header comes first (`%% rdra-ish diagram=state scope=... model=...`, `%% kinds:`);
   `%% omitted:` names the Enum columns that have no `transitions` and so are not
-  state models.
+  state models. One that a `sets` writes is a state axis of `check` all the same and is
+  named on `%% set-only:` instead, not on `omitted:`.
 - Each state model (a lifecycle column) is one composite state,
   `state "Order.status" as statemodel__Order_status { ... }`.
 - States are the Enum variants of that column, named `state__{Entity}_{variant}` (the

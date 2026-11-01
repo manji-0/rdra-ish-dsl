@@ -663,10 +663,10 @@ flowchart LR
   screen__ApplicationDocketScreen -->|手続補正書の提出| api__FormalityApi
   screen__FilingScreen -->|国内優先権の主張| api__PriorityClaimApi
   screen__FilingScreen -->|電子出願| api__FilingApi
-  timer__FormalityAmendmentDeadline -.->|手続補正書の提出期限（指令書の発送日から2月）| api__FormalityApi
-  timer__PriorityBaseDeadline -.->|先の出願の取下げ擬制（先の出願から1年4月）| api__PriorityBaseApi
-  timer__PriorityClaimDeadline -.->|国内優先権の主張期限（先の出願から1年）| api__PriorityClaimApi
-  timer__PublicationCheck -.->|出願公開の確認（出願から1年6月）| api__ApplicationDocketApi
+  timer__FormalityAmendmentDeadline -.-> api__FormalityApi
+  timer__PriorityBaseDeadline -.-> api__PriorityBaseApi
+  timer__PriorityClaimDeadline -.-> api__PriorityClaimApi
+  timer__PublicationCheck -.-> api__ApplicationDocketApi
   usecase__RecordFilingReceipt -->|R| entity__PatentApplication
   usecase__RecordFilingReceipt -->|U| entity__DraftingOrder
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
@@ -949,9 +949,9 @@ flowchart LR
   screen__ExaminationRequestScreen -->|審査請求の回復| api__ExaminationRequestApi
   screen__ExaminationRequestScreen -->|審査請求要否の判断| usecase__DecideExaminationRequest
   screen__ExaminationRequestScreen -->|早期審査の申出| api__ExaminationRequestApi
-  timer__ExamRequestDeadline -.->|審査請求期限（出願から3年）| api__ExaminationRequestApi
-  timer__ExamRequestDeadline -.->|審査請求期限（出願から3年）| usecase__DeemWithdrawnNoRequest
-  timer__ExamRequestReview -.->|審査請求要否の検討（審査請求期限の前）| usecase__DecideExaminationRequest
+  timer__ExamRequestDeadline -.-> api__ExaminationRequestApi
+  timer__ExamRequestDeadline -.-> usecase__DeemWithdrawnNoRequest
+  timer__ExamRequestReview -.-> usecase__DecideExaminationRequest
   usecase__DecideExaminationRequest -->|R| entity__PatentApplication
   usecase__DeemWithdrawnNoRequest -->|U| entity__PatentApplication
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
@@ -1188,11 +1188,11 @@ flowchart LR
   screen__OfficeActionScreen -->|期間経過後の延長請求| api__OfficeActionApi
   screen__ResponseDraftScreen -->|意見書・補正書の提出| api__ResponseFilingApi
   screen__ResponseDraftScreen -->|意見書・補正書案の作成| api__OfficeActionApi
-  timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| api__AppealApi
-  timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| usecase__FinalizeRejection
-  timer__LateExtensionDeadline -.->|期間経過後の延長請求の期限（応答期間の経過から2か月）| usecase__LapseResponse
-  timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| api__ResponseFilingApi
-  timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| usecase__ExpireResponseTerm
+  timer__AppealDeadline -.-> api__AppealApi
+  timer__AppealDeadline -.-> usecase__FinalizeRejection
+  timer__LateExtensionDeadline -.-> usecase__LapseResponse
+  timer__ResponseDeadline -.-> api__ResponseFilingApi
+  timer__ResponseDeadline -.-> usecase__ExpireResponseTerm
   usecase__CloseOfficeActionDocket -->|R| entity__PatentApplication
   usecase__CloseOfficeActionDocket -->|U| entity__OfficeAction
   usecase__ExpireResponseTerm -->|U| entity__OfficeAction
@@ -1644,7 +1644,7 @@ flowchart LR
   screen__FeePaymentScreen -->|第1〜3年分の特許料の納付| api__FeePaymentApi
   screen__FeePaymentScreen -->|納付期間の延長請求| api__FeePaymentApi
   screen__FeePaymentScreen -->|設定登録の記録| api__RegistrationApi
-  timer__FirstFeeDeadline -.->|第1〜3年分の特許料の納付期限（査定謄本の送達から30日）| api__FeePaymentApi
+  timer__FirstFeeDeadline -.-> api__FeePaymentApi
   usecase__RecordRegistrationDismissal -->|U| entity__PatentApplication
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
@@ -1812,13 +1812,13 @@ flowchart LR
   screen__MaintenanceReviewScreen -->|権利を維持しない決定| api__MaintenanceApi
   screen__MaintenanceReviewScreen -->|権利維持要否の調査| usecase__ReviewMaintenance
   screen__MaintenanceReviewScreen -->|特許権の放棄| api__MaintenanceApi
-  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| api__AnnuityApi
-  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| usecase__EnterGracePeriod
-  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| usecase__RollOverAnnuityYear
-  timer__LatePaymentDeadline -.->|追納期限（納付期限の経過から6月）| api__AnnuityApi
-  timer__LatePaymentDeadline -.->|追納期限（納付期限の経過から6月）| usecase__LapseUnpaidPatent
-  timer__MaintenanceReview -.->|権利維持要否の調査（登録後3年目・6年目）| usecase__ReviewMaintenance
-  timer__TermExpiry -.->|存続期間の満了（出願から20年）| usecase__ExpirePatentTerm
+  timer__AnnuityDueDate -.-> api__AnnuityApi
+  timer__AnnuityDueDate -.-> usecase__EnterGracePeriod
+  timer__AnnuityDueDate -.-> usecase__RollOverAnnuityYear
+  timer__LatePaymentDeadline -.-> api__AnnuityApi
+  timer__LatePaymentDeadline -.-> usecase__LapseUnpaidPatent
+  timer__MaintenanceReview -.-> usecase__ReviewMaintenance
+  timer__TermExpiry -.-> usecase__ExpirePatentTerm
   usecase__EnterGracePeriod -->|U| entity__Patent
   usecase__ExpirePatentTerm -->|U| entity__Patent
   usecase__LapseUnpaidPatent -->|U| entity__Patent
@@ -2274,7 +2274,8 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=state scope=entity:DraftingOrder model=samples/patent-ops
 %% kinds: statemodel state usecase
-%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% omitted: (none)
+%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "DraftingOrder.status" as statemodel__DraftingOrder_status {
@@ -2305,7 +2306,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:InventionDisclosure model=samples/patent-ops
 %% kinds: statemodel state usecase
-%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% omitted: (none)
+%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "InventionDisclosure.status" as statemodel__InventionDisclosure_status {
@@ -2349,7 +2351,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:InventorReward model=samples/patent-ops
 %% kinds: statemodel state usecase
-%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% omitted: (none)
+%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "InventorReward.status" as statemodel__InventorReward_status {
@@ -2377,7 +2380,8 @@ stateDiagram-v2
 ```mermaid
 %% rdra-ish diagram=state scope=entity:OfficeAction model=samples/patent-ops
 %% kinds: statemodel state usecase
-%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% omitted: (none)
+%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "OfficeAction.status" as statemodel__OfficeAction_status {
@@ -2486,7 +2490,8 @@ Entity: OfficeAction (拒絶理由通知)
 ```mermaid
 %% rdra-ish diagram=state scope=entity:Patent model=samples/patent-ops
 %% kinds: statemodel state usecase
-%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% omitted: (none)
+%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Patent.status" as statemodel__Patent_status {
@@ -2580,7 +2585,8 @@ Entity: Patent (特許権)
 ```mermaid
 %% rdra-ish diagram=state scope=entity:PatentApplication model=samples/patent-ops
 %% kinds: statemodel state usecase
-%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% omitted: (none)
+%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PatentApplication.status" as statemodel__PatentApplication_status {

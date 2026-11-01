@@ -696,8 +696,8 @@ be read back from the text. The `rdra` diagram shows each part:
     control is its API, or it); `control -->|CRUD letters| entity` (the union of the
     control's operations on the entity); and the dotted
     `control -.->|<event label>| control`, `extsystem -.->|<event label>| control`,
-    `control -.->|<event label>| extsystem`, and `timer -.->|<timer label>| control`
-    when both ends are in scope.
+    `control -.->|<event label>| extsystem`, and `timer -.-> control` (`triggers`, the one
+    relation from a timer, so unlabelled) when both ends are in scope.
   - Never drawn: an edge from an actor to a control, or from a screen, an external system,
     or a timer to an entity. An actor whose use cases display no screen has no edge and
     is left out. Events, conditions, states, and `%% derived` lines are not drawn.
@@ -776,7 +776,8 @@ flowchart LR
   So `performs`, `invokes`, `displays`, `shows`, `raises`, `triggers`, `contains`,
   `covers`, `belongs`, `motivates`, `achieves` / `achieved_by`, `applies_to`,
   `combines`, and the other single-relation pairs go unlabelled, as do the robustness
-  diagram's actor-to-screen `uses` and the information diagram's `statemodel`. A condition to
+  diagram's actor-to-screen `uses` and timer-to-control `triggers`, and the information
+  diagram's `statemodel`. A condition to
   a use case is two relations in `rdra`, `usecase`, and `condition`: the declared
   `applies_to` and the `when` derived from a `.when(Cond)` guard, so both are labelled there
   (`-.->|applies_to|`, `-.->|when|`); a condition to an API or a system stays unlabelled. A label stays
@@ -814,7 +815,8 @@ header and the id prefixes carry the kinds:
 ```
 %% rdra-ish diagram=state scope=whole model=samples/ec-site
 %% kinds: statemodel state usecase
-%% omitted: Payment.status (Enum without transitions)
+%% omitted: (none)
+%% set-only: Payment.status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 stateDiagram-v2
   state "Order.status" as statemodel__Order_status {
     [*] --> state__Order_pending
@@ -835,7 +837,11 @@ stateDiagram-v2
   by the id `--kind rdra` gives it, for tools that read the diagram.
 - `[*] -->` marks the start state the lifecycle gives the column. `--> [*]` marks an end
   state, one with no transition to another state.
-- `omitted:` names the `Enum` columns in scope that no `transitions` drive.
+- `omitted:` names the `Enum` columns in scope that no `transitions` drive and no `sets`
+  writes. One that a `sets` writes is still a state axis of `states` and `check`, so it is
+  named apart, on a `%% set-only: <Entity>.<column> ... (...)` line after `omitted:`, as
+  `Payment.status` above. It has no composite state either: without `transitions` it has no
+  states to draw.
 - `--buc` draws each state model that one of the BUC's use cases moves, whole.
   `--entity <Entity>` (repeatable, not with `--buc`) draws the named entities' state
   models, every lifecycle column, whole. The header's scope reads `entity:<ids>`.

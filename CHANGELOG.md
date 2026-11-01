@@ -203,6 +203,18 @@
   <from>-><to>` or `via chooses <Entity>.<column> <value>`. A condition to a use case is now
   two relations in those diagrams (`EDGE_RELATIONS`), so `applies_to` to a use case is
   labelled there too, `-.->|applies_to|`; to an API or a system it stays unlabelled.
+- Small display faults (#61). A violated rule printed each comparison with `=true` after it,
+  `then status != oa=true AND status != granted=true`; it now prints it as written, `then
+  status != oa AND status != granted`, and the same for `<`, `in (...)`, and `not in (...)`
+  (#53), in a single-entity and a multi-entity rule. The robustness diagram labelled each
+  timer-to-control edge with the timer's own label, which the timer node already shows; a
+  timer to a control is one relation (`triggers`), so per #43 the edge is unlabelled,
+  `timer__X -.-> usecase__Y`. The state diagram listed an Enum column that a `sets` writes,
+  such as patent-ops' `OfficeAction.kind` and `Patent.last_payment`, as `omitted: ... (Enum
+  without transitions)`, though `check` and `states` read it as a state axis. It is named on
+  its own header line, `%% set-only: <Entity>.<column> ...`, and `omitted:` keeps the Enum
+  columns nothing moves. It is still no state model: without `transitions` it has no states
+  to draw, as `information` and `condition` already treat it.
 
 ## v0.4.0 - 2026-11-01
 

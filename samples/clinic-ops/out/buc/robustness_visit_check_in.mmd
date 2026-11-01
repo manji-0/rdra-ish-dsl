@@ -60,7 +60,7 @@ flowchart LR
   screen__EligibilityScreen -->|資格確認結果（該当資格なし）の取込| api__EligibilityResultApi
   screen__ReferralScreen -->|紹介状受付処理| api__ReferralLetterApi
   screen__RoomBoardScreen -->|診察室への案内| api__AssignRoomApi
-  timer__EligibilityBatchInquiry -.->|予約患者の資格の一括照会（来院前）| api__OnlineEligibilityApi
+  timer__EligibilityBatchInquiry -.-> api__OnlineEligibilityApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

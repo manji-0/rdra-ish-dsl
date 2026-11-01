@@ -31,8 +31,8 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
   label on the screen edge is how to find the use case. `CRUD` is the letters of the
   control's operations on the entity.
 - Dotted edges carry events and timers: `control -.->|<event>| control` when one use case
-  raises an event that starts another, and between a control and an `extsystem` or a
-  `timer`.
+  raises an event that starts another, and between a control and an `extsystem`. An
+  unlabelled `timer -.-> control` is the timer that starts the use case (`triggers`).
 - There is no edge from an actor to a control or from a boundary to an entity. A use case
   that displays no screen has no incoming screen edge, and its actor is not drawn.
 - Use it as the main structural view of a BUC. Reach for the UC複合図 when the conditions,

@@ -764,6 +764,38 @@ forbidden(Line, total > 3)
     );
 }
 
+/// A comparison prints as written in a violation, `status != paid` or `status in (a, b)`,
+/// not `status != paid=true` (#61).
+#[test]
+fn a_violated_rule_prints_each_comparison_as_written() {
+    let d = derive_src(&format!(
+        r#"{ORDER}
+entity Ticket "Ticket" {{ id: Int @pk  status: Enum(open, done) @default(open) }}
+relate(Ticket, Order, N:1)
+creates(Place, Ticket)
+invariant(Order).when(status != pending).then(status != paid, status != cancelled)
+forbidden(Order, status in (paid, cancelled), note == null)
+forbidden(Order.status not in (pending), Ticket.status == open)
+"#
+    ));
+    let texts: Vec<String> = d
+        .diags
+        .iter()
+        .filter_map(|x| match &x.diag {
+            StateDiag::ConstraintViolated { text, .. } => Some(format!("{text:?}")),
+            _ => None,
+        })
+        .collect();
+    for want in [
+        "guards: \"status != pending\", requireds: \"status != paid AND status != cancelled\"",
+        "\"note=null AND status in (paid, cancelled)\"",
+        "\"Order.status not in (pending) AND Ticket.status=open\"",
+    ] {
+        assert!(texts.iter().any(|t| t.contains(want)), "{want}: {texts:#?}");
+    }
+    assert!(texts.iter().all(|t| !t.contains("=true")), "{texts:#?}");
+}
+
 #[test]
 fn a_violated_rule_names_its_label() {
     let d = derive_src(&format!(

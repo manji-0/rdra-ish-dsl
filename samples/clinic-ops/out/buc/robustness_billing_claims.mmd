@@ -67,11 +67,11 @@ flowchart LR
   screen__ClaimScreen -->|返戻レセプトの取込| api__ClaimResultApi
   screen__ClaimScreen -->|返戻レセプトの訂正（再請求）| api__ClaimEditApi
   screen__PaymentPostingScreen -->|診療報酬の入金| api__PaymentPostApi
-  timer__ErrorResendWindow -.->|エラー分レセプトの再送（毎月11日・12日）| api__SubmitClaimApi
-  timer__MonthlyClaimCreation -.->|前月分レセプトの作成（月初）| api__GenerateClaimApi
-  timer__MonthlyClaimDeadline -.->|前月分レセプトの請求（毎月5日～10日）| api__SubmitClaimApi
-  timer__ReceivablesMonthlyReview -.->|未収金管理台帳の作成（毎月）| api__BalanceApi
-  timer__ReturnDownloadCheck -.->|返戻レセプトの取得（3か月以内）| api__ClaimResultApi
+  timer__ErrorResendWindow -.-> api__SubmitClaimApi
+  timer__MonthlyClaimCreation -.-> api__GenerateClaimApi
+  timer__MonthlyClaimDeadline -.-> api__SubmitClaimApi
+  timer__ReceivablesMonthlyReview -.-> api__BalanceApi
+  timer__ReturnDownloadCheck -.-> api__ClaimResultApi
   usecase__ReviewClaimTransfer -->|R| entity__ClaimStatement
   usecase__VoidCharge -->|U| entity__Charge
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;

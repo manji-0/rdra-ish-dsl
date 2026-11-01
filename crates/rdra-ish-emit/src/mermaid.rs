@@ -632,7 +632,9 @@ impl Emitter for StateMermaidEmitter {
             body.push_str("  }\n");
         }
 
-        let mut unmodeled: Vec<String> = Vec::new();
+        // An Enum column no `transitions` drive is no state model. One a `sets` writes is still
+        // a state axis of `states` and `check`, so it is named apart from one that never moves.
+        let (mut unmodeled, mut set_only): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
         let mut entities: Vec<_> = model.entities.iter().collect();
         entities.sort_by_key(|(_, e)| &e.id);
         for (key, entity) in entities {
@@ -640,10 +642,19 @@ impl Emitter for StateMermaidEmitter {
                 continue;
             }
             for column in &entity.columns {
-                if matches!(column.col_type, ColumnType::Enum(_))
-                    && !model.is_lifecycle_column(key, &column.name)
+                if !matches!(column.col_type, ColumnType::Enum(_))
+                    || model.is_lifecycle_column(key, &column.name)
                 {
-                    unmodeled.push(format!("{}.{}", entity.id, column.name));
+                    continue;
+                }
+                let name = format!("{}.{}", entity.id, column.name);
+                let set = model
+                    .column_effects
+                    .iter()
+                    .any(|e| e.entity == key && e.column == column.name);
+                match set {
+                    true => set_only.push(name),
+                    false => unmodeled.push(name),
                 }
             }
         }
@@ -661,6 +672,14 @@ impl Emitter for StateMermaidEmitter {
             layers: None,
             kinds,
             omitted,
+        };
+        let set_only = if set_only.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "%% set-only: {} (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)\n",
+                set_only.join(" ")
+            )
         };
         let legend = if index {
             ""
@@ -680,7 +699,7 @@ impl Emitter for StateMermaidEmitter {
         .map(|(name, style)| format!("  classDef {name} {style}\n"))
         .collect();
         Ok(format!(
-            "{}{legend}stateDiagram-v2\n{body}{defs}{classes}",
+            "{}{set_only}{legend}stateDiagram-v2\n{body}{defs}{classes}",
             header.render()
         ))
     }
@@ -1040,6 +1059,30 @@ relate(Order, Customer, N:1)
         assert_eq!(
             empty,
             "%% rdra-ish diagram=er scope=whole\n%% kinds: (none)\n%% omitted: (none)\nerDiagram\n"
+        );
+    }
+
+    #[test]
+    fn test_state_mermaid_names_an_enum_a_sets_writes_apart_from_omitted() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published) @default(draft)
+  kind: Enum(memo, report) @default(memo)
+  tone: Enum(plain, formal)
+}
+usecase Publish "公開する"
+transitions(Publish, Doc.status, draft -> published)
+sets(Publish, Doc, kind == report)
+"#;
+        let model = model_from(src);
+        let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(
+            result.contains(
+                "%% omitted: Doc.tone (Enum without transitions)\n\
+                 %% set-only: Doc.kind (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)\n"
+            ),
+            "{result}"
         );
     }
 
