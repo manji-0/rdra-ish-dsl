@@ -147,9 +147,10 @@ Ast {
                             ],
                         ),
                         annotations: [
-                            Default(
-                                "active",
-                            ),
+                            Default {
+                                value: "active",
+                                quoted: false,
+                            },
                         ],
                         span: 211..262,
                     },

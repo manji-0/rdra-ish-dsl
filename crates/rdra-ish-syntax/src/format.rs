@@ -637,7 +637,9 @@ fn format_annotation(annotation: &Annotation) -> String {
         Annotation::IndexComposite(columns) => format!("@index({})", columns.join(", ")),
         Annotation::Check(expr) => format!("@check({})", format_column_expr(expr)),
         Annotation::Null => "@null".to_string(),
-        Annotation::Default(value) => format!("@default({})", format_metadata_value(value)),
+        Annotation::Default { value, .. } => {
+            format!("@default({})", format_metadata_value(value))
+        }
         Annotation::Label(value) => format!("@label({})", quote_string(value)),
         Annotation::SoftDelete => "@soft_delete".to_string(),
         Annotation::History => "@history".to_string(),

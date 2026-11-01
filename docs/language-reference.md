@@ -1146,7 +1146,8 @@ chooses(DraftResponse, OfficeAction.amendment, limited)
 - On the creating use case the listed values restrict the creation's own choice.
 
 A value that is not one of the variation's is `InvalidVariationValue`, whose hint lists the
-values. `.when` on the value-less form guards no value and is `ChoosesWhenWithoutValue`;
+values, and a quoted value, `chooses(UC, E.col, "a")`, is `QuotedValue` (write it bare).
+`.when` on the value-less form guards no value and is `ChoosesWhenWithoutValue`;
 write the value, or `applies_to(Cond, UC)` to guard the whole use case. Otherwise `.when`
 takes the same condition `transitions` arms take: `WhenRequiresCondition` and
 `WhenConditionWithoutBody` apply as for an arm.
@@ -1994,6 +1995,14 @@ the right-hand side: `status != Order.previous`. Writing it bare fails with
 ```
 
 `transitions(UseCase, Entity.col, from -> to)` and `@default(v)` take values only.
+
+A value of an Enum or a variation is always a bare token; a quoted string is free text, as
+in [metadata clauses](#metadata-clause-values). `chooses(Pay, Order.kind, "a")` and
+`@default("open")` on an Enum or variation column are `QuotedValue`, whose hint gives the
+bare spelling (`write chooses(Pay, Order.kind, a)`, `write @default(open)`). The comparisons
+above, `in (...)` / `not in (...)` lists, `transitions` endpoints, and the values of `Enum(...)`
+and `variation` declarations take no quoted value at all: a quoted one is a syntax error.
+`@default("4")` on an Int column, or a quoted default of a String column, stays as written.
 
 In **comparison expressions** (e.g. `stock < selling`, `expired_at < now`), column names
 on both sides are also bare identifiers. The right-hand side may additionally be an

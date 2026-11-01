@@ -128,6 +128,13 @@
 
 ### Changed
 
+- A quoted value of an Enum or a variation is `QuotedValue`, after #48's rule that a token
+  is bare and a quoted string is free text: `chooses(Pay, Order.kind, "a")` recorded `a`, and
+  `@default("open")` on an Enum or variation column loaded as `@default(open)`. The hint names
+  the bare rewrite (`write chooses(Pay, Order.kind, a)`). Every other place a value is
+  written (`transitions` endpoints, comparisons, `in` lists, `sets`, `Enum(...)`, `variation`
+  values) already took no quoted value; `rule_audit` now covers the quoted forms. A quoted
+  `@default` of an Int or String column is unchanged.
 - The default joint-state cap of a cone in `check`, `states`, and the generators is 65,536,
   up from 4,096 (#60). It no longer follows `--max-patterns` (it was 16 states per allowed
   pattern). A capped cone of 65,536 states costs about 0.1 s and 24 MB on a release build

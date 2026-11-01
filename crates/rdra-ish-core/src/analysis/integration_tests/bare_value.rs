@@ -330,3 +330,55 @@ fn transitions_read_values_named_like_columns() {
         .iter()
         .any(|t| t.from == "paid" && t.to == "open"));
 }
+
+/// A value is a bare token and a quoted string is free text (#48): a quoted `chooses` value or
+/// an Enum or variation `@default` is `QuotedValue`, naming the bare rewrite.
+#[test]
+fn a_quoted_value_is_rejected_with_its_bare_rewrite() {
+    let quoted = |extra: &str| -> Vec<(String, String)> {
+        let (_, diags) = with(extra);
+        errors(&diags)
+            .into_iter()
+            .filter_map(|e| match e {
+                RdraError::QuotedValue { value, rewrite, .. } => {
+                    Some((value.clone(), rewrite.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(
+        quoted("usecase V \"V\"\nupdates(V, E)\nchooses(V, E.method, \"card\")\n"),
+        [("card".to_string(), "chooses(V, E.method, card)".to_string())]
+    );
+    let entity = "entity Q \"Q\" {\n  id: Int @pk\n  s: Enum(x, y) @default(\"x\")\n  m: Method @default(\"cash\")\n  n: Int @default(\"4\")\n  t: String @default(\"hello\")\n}\n";
+    assert_eq!(
+        quoted(entity),
+        [
+            ("x".to_string(), "@default(x)".to_string()),
+            ("cash".to_string(), "@default(cash)".to_string()),
+        ]
+    );
+    // The bare forms load.
+    ok("usecase V \"V\"\nupdates(V, E)\nchooses(V, E.method, card)\n");
+    ok("entity Q \"Q\" {\n  id: Int @pk\n  s: Enum(x, y) @default(x)\n  m: Method @default(cash)\n}\n");
+}
+
+/// Every other place a value is written takes only a bare token: a quoted one does not parse.
+#[test]
+fn a_quoted_value_does_not_parse_where_the_grammar_takes_a_token() {
+    for extra in [
+        "transitions(U, E.status, \"pending\" -> paid)",
+        "transitions(U, E.status, pending -> \"paid\")",
+        "sets(U, E, status == \"paid\")",
+        "condition C \"C\"\nholds(C, E.status == \"paid\")",
+        "condition C \"C\"\nholds(C, E.status in (\"paid\", open))",
+        "condition C \"C\"\nholds(C, E.status not in (\"paid\"))",
+        "invariant(E).when(status == \"paid\").then(qty > 0)",
+        "entity Q \"Q\" {\n  id: Int @pk\n  s: Enum(\"x\", y)\n}",
+        "variation V \"V\" {\n  \"x\"\n}",
+    ] {
+        let (_, errors) = parse(&format!("{BASE}{extra}\n"));
+        assert!(!errors.is_empty(), "{extra} parsed");
+    }
+}

@@ -271,6 +271,13 @@ pub enum RdraError {
     #[error("chooses second argument must be `Entity.column`, got '{got}'\n  hint: write `chooses(DraftResponse, OfficeAction.amendment)` or `chooses(DraftResponse, OfficeAction.amendment, limited)`")]
     InvalidChoosesColumnRef { got: String },
 
+    #[error("{place} takes a value as a bare token, not the quoted string \"{value}\"\n  hint: write `{rewrite}`; a quoted string is free text")]
+    QuotedValue {
+        place: String,
+        value: String,
+        rewrite: String,
+    },
+
     #[error("chooses({usecase}, {entity}.{col}): '{col}' is not typed by a variation, so the actor has no values to pick from\n  hint: {hint}")]
     ChoosesNotVariation {
         usecase: String,

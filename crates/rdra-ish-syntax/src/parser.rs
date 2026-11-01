@@ -222,9 +222,13 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
     // @default(value)
     let at_default = just(Token::AtDefault)
         .ignore_then(just(Token::LParen))
-        .ignore_then(ann_value())
+        .ignore_then(
+            string_lit()
+                .map(|value| (value, true))
+                .or(ann_value().map(|value| (value, false))),
+        )
         .then_ignore(just(Token::RParen))
-        .map(Annotation::Default);
+        .map(|(value, quoted)| Annotation::Default { value, quoted });
 
     // @label("...")
     let at_label = just(Token::AtLabel)

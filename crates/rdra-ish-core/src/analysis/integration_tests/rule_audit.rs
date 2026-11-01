@@ -61,6 +61,10 @@ const FORMS: &[(&str, Expect)] = &[
         Recorded,
     ),
     ("invariant(Order).when(status == paid)", Error),
+    (
+        "invariant(Order).when(status == \"paid\").then(total > 0)",
+        Error,
+    ),
     ("invariant(Order).then(total > 0)", Error),
     ("invariant(Order)", Error),
     // invariant, one entity, quantified over related rows: the scope is inferred
@@ -120,6 +124,9 @@ const FORMS: &[(&str, Expect)] = &[
         "holds(Ready, Order.status == paid).none(Ticket.status == pending)",
         Recorded,
     ),
+    ("holds(Ready, Order.status == \"paid\")", Error),
+    ("holds(Ready, Order.status in (\"paid\", open))", Error),
+    ("holds(Ready, Order.kind not in (\"a\"))", Error),
     ("holds(Ready, Order.status == paid).none()", Error),
     ("holds(Ready, Order.status == paid).none(Ticket)", Error),
     // maps_field
@@ -130,6 +137,8 @@ const FORMS: &[(&str, Expect)] = &[
     ("maps_field(F, Order, status)", Error), // the removed three-argument form
     // sets: a column effect, or a comparison driven true or false
     ("sets(Pay, Order, status == paid)", Recorded),
+    ("sets(Pay, Order, status == \"paid\")", Error),
+    ("sets(Pay, Order, kind == \"a\")", Error),
     ("sets(Pay, Order, status == paid, true)", Recorded),
     ("sets(Pay, Order, total < 3, true)", Recorded),
     ("sets(Pay, Order, total < 3, false)", Recorded),
@@ -214,7 +223,8 @@ const FORMS: &[(&str, Expect)] = &[
     ("sets(Pay, Order, kind == a)\nchooses(Pay, Order.kind, b)", Error),
     ("chooses(Pay, Order.kind, c)", Error),
     ("chooses(Pay, Order.kind, A)", Error),
-    ("chooses(Pay, Order.kind, \"a\")", Recorded),
+    // A value is a bare token; a quoted string is free text (#48).
+    ("chooses(Pay, Order.kind, \"a\")", Error),
     ("chooses(Pay, Order.kind, Order.kind)", Error),
     ("chooses(Pay, Order.kind, a, b)", Error),
     ("chooses(Pay, Order.status, open)", Error),
@@ -246,6 +256,8 @@ const FORMS: &[(&str, Expect)] = &[
     ),
     // transitions: a `.when(Cond)` arm guard is a rule, so its condition must have a body
     ("transitions(Pay, Order.status, open -> paid)", Recorded),
+    ("transitions(Pay, Order.status, \"open\" -> paid)", Error),
+    ("transitions(Pay, Order.status, open -> \"paid\")", Error),
     (
         "holds(Ready, Ticket.status == done)\ntransitions(Pay, Order.status, open -> paid).when(Ready)",
         Recorded,

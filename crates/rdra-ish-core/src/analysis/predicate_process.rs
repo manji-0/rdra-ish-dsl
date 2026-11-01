@@ -571,6 +571,23 @@ fn process_chooses_predicate(
                 PredicateArg::Ref(q) if q.parts.len() == 1 && q.kind_qualifier.is_none() => {
                     q.parts[0].clone()
                 }
+                // A value is a token; a quoted string is free text (#48).
+                PredicateArg::Lit(value) => {
+                    push_error(
+                        ctx,
+                        diags,
+                        pred.span.clone(),
+                        RdraError::QuotedValue {
+                            place: "chooses".into(),
+                            value: value.clone(),
+                            rewrite: format!(
+                                "chooses({}, {entity_id}.{column}, {value})",
+                                model.use_cases[usecase].id
+                            ),
+                        },
+                    );
+                    return;
+                }
                 other => predicate_arg_display(other),
             };
             let variation = &model.variations[*variation];

@@ -30,7 +30,7 @@ pub(super) fn resolve_column_exprs(
         for ann in &col.annotations {
             let refuse = match ann {
                 Annotation::Check(_) => Some("@check"),
-                Annotation::Default(_) => Some("@default"),
+                Annotation::Default { .. } => Some("@default"),
                 Annotation::Pk | Annotation::PkComposite(_) => Some("@pk"),
                 Annotation::Unique | Annotation::UniqueComposite(_) => Some("@unique"),
                 _ => None,

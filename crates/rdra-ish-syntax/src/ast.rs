@@ -152,8 +152,11 @@ pub enum Annotation {
     Check(ColumnExpr),
     /// `@null`
     Null,
-    /// `@default(value)`
-    Default(std::string::String),
+    /// `@default(value)`: `quoted` when the value was written as a string, `@default("x")`.
+    Default {
+        value: std::string::String,
+        quoted: bool,
+    },
     /// `@label("...")`
     Label(std::string::String),
     /// `@soft_delete`

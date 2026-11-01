@@ -470,7 +470,21 @@ fn ast_column_to_model(
             // Resolved against the whole column list by `resolve_column_exprs`.
             Annotation::Check(_) | Annotation::Derived(_) => {}
             Annotation::Null => mc.is_nullable = true,
-            Annotation::Default(v) => {
+            Annotation::Default { value: v, quoted } => {
+                // A value of an Enum or a variation is a token; a quoted string is free text (#48).
+                if *quoted && matches!(mc.col_type, ColumnType::Enum(_) | ColumnType::Variation(_))
+                {
+                    push_error(
+                        ctx,
+                        diags,
+                        col.span.clone(),
+                        RdraError::QuotedValue {
+                            place: format!("@default on '{}'", col.name),
+                            value: v.clone(),
+                            rewrite: format!("@default({v})"),
+                        },
+                    );
+                }
                 if let ColumnType::Variation(key) = &mc.col_type {
                     if let Some(variation) = model.variations.get(*key) {
                         if !variation.values.iter().any(|value| value == v) {
