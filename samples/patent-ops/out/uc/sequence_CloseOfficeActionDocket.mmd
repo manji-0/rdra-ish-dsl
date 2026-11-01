@@ -1,17 +1,19 @@
 %% rdra-ish diagram=sequence scope=usecase:CloseOfficeActionDocket model=samples/patent-ops
 %% kinds: actor extsystem screen usecase entity
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__IpStaff as 知的財産部 担当者
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   participant screen__OfficeActionScreen as 中間処理画面
   participant usecase__CloseOfficeActionDocket as 中間処理案件の終了
+  participant entity__PatentApplication as 特許出願
   participant entity__OfficeAction as 拒絶理由通知
   actor__IpStaff ->> screen__OfficeActionScreen: 中間処理案件の終了
   extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 特許査定の謄本
   extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 拒絶査定の謄本
   screen__OfficeActionScreen ->> usecase__CloseOfficeActionDocket: 中間処理案件の終了
-  alt OfficeAction.status == 応答済
+  alt 出願の審査が終わっている: PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) and OfficeAction.status == 応答済
+    usecase__CloseOfficeActionDocket ->> entity__PatentApplication: read
     usecase__CloseOfficeActionDocket ->> entity__OfficeAction: update status 応答済 -> 案件終了
     usecase__CloseOfficeActionDocket -->> screen__OfficeActionScreen: done
   else guard fails

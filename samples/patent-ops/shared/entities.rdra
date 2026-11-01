@@ -101,9 +101,8 @@ entity DraftingOrder "出願依頼" {
 // date is the day the 願書 is filed (:452). The status is the main line of the prosecution; the
 // publication, the examination request, and the fees are separate columns because they run
 // alongside it. The exchange with the examiner during examination is the OfficeAction, so the
-// application stays `examining` from the request to the decision: one lifecycle with every
-// response state multiplied by every fee and publication column passes the 4096-state cap of
-// `check` (see README).
+// application stays `examining` from the request to the decision, and the response states are
+// not multiplied by every fee and publication column (see README).
 entity PatentApplication "特許出願" {
   id: Int @pk
   application_no: String
@@ -180,6 +179,8 @@ entity InventorReward "相当の利益" {
 relate(InventionDisclosure, Employee, N:1)
 relate(DraftingOrder, InventionDisclosure, N:1)
 relate(DraftingOrder, PatentFirm, N:1)
+// Optional so that `verify` stays practical; the filing should require the link (README, known
+// verification gaps).
 relate(PatentApplication, DraftingOrder, 1:1).optional()
 relate(PriorityClaim, PatentApplication, N:1)
 relate(DivisionalFiling, PatentApplication, N:1)

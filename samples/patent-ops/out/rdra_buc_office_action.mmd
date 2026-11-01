@@ -219,6 +219,7 @@ flowchart LR
     condition__AnnuityDue{"存続中で、維持すると決めた権利の次の年が未納"}:::condition
     condition__DivisionPossible{"分割できる時期である"}:::condition
     condition__EmployeeInventionReward{"職務発明である"}:::condition
+    condition__ExaminationOver{"出願の審査が終わっている"}:::condition
     condition__FirstFeesPaid{"第1〜3年分の特許料を納付している"}:::condition
     condition__FirstFeesUnpaid{"第1〜3年分の特許料を納付していない"}:::condition
     condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
@@ -228,6 +229,7 @@ flowchart LR
     condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
     condition__NotYetExtended{"納付期間をまだ延長していない"}:::condition
     condition__StillPending{"出願が係属している"}:::condition
+    condition__UnderExamination{"出願が審査中である"}:::condition
     condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
     condition__YearPaid{"存続中で、次の年が納付済"}:::condition
     condition__YearUnpaid{"次の年が未納"}:::condition
@@ -308,6 +310,9 @@ flowchart LR
   condition__EmployeeInventionReward -.-> usecase__DecideReward
   condition__EmployeeInventionReward -.-> variation__InventionCategory
   %% derived condition__EmployeeInventionReward -> variation__InventionCategory from holds
+  condition__ExaminationOver -.-> usecase__CloseOfficeActionDocket
+  condition__ExaminationOver -.-> entity__PatentApplication
+  %% derived condition__ExaminationOver -> entity__PatentApplication from holds
   condition__FirstFeesPaid -.-> usecase__RecordRegistration
   condition__FirstFeesPaid -.-> entity__PatentApplication
   %% derived condition__FirstFeesPaid -> entity__PatentApplication from holds
@@ -335,6 +340,9 @@ flowchart LR
   condition__StillPending -.-> usecase__RecordPublication
   condition__StillPending -.-> entity__PatentApplication
   %% derived condition__StillPending -> entity__PatentApplication from holds
+  condition__UnderExamination -.-> usecase__ReceiveOfficeAction
+  condition__UnderExamination -.-> entity__PatentApplication
+  %% derived condition__UnderExamination -> entity__PatentApplication from holds
   condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
   condition__WithinTermNotExtended -.-> entity__OfficeAction
   %% derived condition__WithinTermNotExtended -> entity__OfficeAction from holds
@@ -515,6 +523,7 @@ flowchart LR
   usecase__AbandonPatent -.-> permission__MaintenanceDecide
   usecase__AbandonPatent -.->|transitions Patent.status in_force->abandoned| state__Patent_abandoned
   usecase__CloseOfficeActionDocket -.-> screen__OfficeActionScreen
+  usecase__CloseOfficeActionDocket -.->|reads| entity__PatentApplication
   usecase__CloseOfficeActionDocket -.-> medium__IpWorkstation
   usecase__CloseOfficeActionDocket -.-> permission__DocketManage
   usecase__CloseOfficeActionDocket -.->|transitions OfficeAction.status answered->closed| state__OfficeAction_closed

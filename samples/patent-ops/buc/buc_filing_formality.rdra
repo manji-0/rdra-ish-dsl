@@ -68,6 +68,10 @@ contains(IpManagementSystem, FormalityApi)
 contains(IpManagementSystem, PriorityClaimApi)
 contains(IpManagementSystem, PriorityBaseApi)
 
+// The filing should check that the drafts were approved (DraftingOrder.status == approved) and link
+// the application to its order. Neither is modelled: the link puts the order, the disclosure,
+// and their columns into every cone that reads the application, and at the 2 instances of
+// `verify` nine cones pass 3,000,000 states. It is a known verification gap (see README).
 displays(FileApplication, FilingScreen)
 invokes(FileApplication, FilingApi)
 creates(FilingApi, PatentApplication)

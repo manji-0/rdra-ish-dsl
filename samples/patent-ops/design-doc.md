@@ -1225,6 +1225,7 @@ flowchart LR
   timer__LateExtensionDeadline -.->|期間経過後の延長請求の期限（応答期間の経過から2か月）| usecase__LapseResponse
   timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| api__ResponseFilingApi
   timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| usecase__ExpireResponseTerm
+  usecase__CloseOfficeActionDocket -->|R| entity__PatentApplication
   usecase__CloseOfficeActionDocket -->|U| entity__OfficeAction
   usecase__ExpireResponseTerm -->|U| entity__OfficeAction
   usecase__FinalizeRejection -->|U| entity__PatentApplication
@@ -1261,7 +1262,7 @@ flowchart LR
 
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
-| 拒絶理由通知の受領<br>`ReceiveOfficeAction` | 拒絶理由通知書を受け取り、応答期間の管理を始める。 | `OfficeActionScreen` | `OfficeActionIntakeApi` | （なし） |
+| 拒絶理由通知の受領<br>`ReceiveOfficeAction` | 拒絶理由通知書を受け取り、応答期間の管理を始める。 | `OfficeActionScreen` | `OfficeActionIntakeApi` | 出願が審査中である |
 | 応答方針の指示<br>`InstructResponse` | 知的財産部が発明者と相談し、弁理士に応答の方針を伝える（参照のみ）。 | `OfficeActionScreen` | `InstructResponse` | （なし） |
 | 意見書・補正書案の作成<br>`DraftResponse` | 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。 | `ResponseDraftScreen` | `OfficeActionApi` | 最初の拒絶理由通知である |
 | 限定した補正による応答案の作成<br>`DraftLimitedResponse` | 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。 | `ResponseDraftScreen` | `OfficeActionApi` | （なし） |
@@ -1275,7 +1276,7 @@ flowchart LR
 | 拒絶査定の受領<br>`ReceiveDecisionOfRejection` | 拒絶査定の謄本を受け取る。審判請求の期限（3月）が始まる。 | `DecisionScreen` | `DecisionApi` | （なし） |
 | 拒絶査定不服審判の請求<br>`RequestAppeal` | 審判を請求する。審判の中身はこのモデルの対象外で、出願はここで審判に引き渡される。 | `DecisionScreen` | `AppealApi` | （なし） |
 | 拒絶査定の確定<br>`FinalizeRejection` | 審判請求がないまま3月が過ぎ、拒絶査定が確定したことを記録する。 | （なし） | `FinalizeRejection` | （なし） |
-| 中間処理案件の終了<br>`CloseOfficeActionDocket` | 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。 | `OfficeActionScreen` | `CloseOfficeActionDocket` | （なし） |
+| 中間処理案件の終了<br>`CloseOfficeActionDocket` | 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。 | `OfficeActionScreen` | `CloseOfficeActionDocket` | 出願の審査が終わっている |
 | 分割出願<br>`FileDivisionalApplication` | 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。 | `OfficeActionScreen` | `DivisionalApi` | 分割できる時期である |
 
 <details><summary>拒絶理由通知の受領（ReceiveOfficeAction）のシーケンス図</summary>
@@ -1283,7 +1284,7 @@ flowchart LR
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:ReceiveOfficeAction model=samples/patent-ops
 %% kinds: actor extsystem screen api entity
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__PatentAttorney as 弁理士（特許事務所）
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
@@ -1294,9 +1295,13 @@ sequenceDiagram
   actor__PatentAttorney ->> screen__OfficeActionScreen: 拒絶理由通知の受領
   extsystem__Jpo ->> api__OfficeActionIntakeApi: 拒絶理由通知書
   screen__OfficeActionScreen ->> api__OfficeActionIntakeApi: 拒絶理由通知の受付 API
-  api__OfficeActionIntakeApi ->> entity__PatentApplication: read
-  api__OfficeActionIntakeApi ->> entity__OfficeAction: create kind=first
-  api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: done
+  alt 出願が審査中である: PatentApplication.status == 審査請求済（審査中）
+    api__OfficeActionIntakeApi ->> entity__PatentApplication: read
+    api__OfficeActionIntakeApi ->> entity__OfficeAction: create kind=first
+    api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: rejected
+  end
 ```
 
 </details>
@@ -1615,18 +1620,20 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:CloseOfficeActionDocket model=samples/patent-ops
 %% kinds: actor extsystem screen usecase entity
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__IpStaff as 知的財産部 担当者
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   participant screen__OfficeActionScreen as 中間処理画面
   participant usecase__CloseOfficeActionDocket as 中間処理案件の終了
+  participant entity__PatentApplication as 特許出願
   participant entity__OfficeAction as 拒絶理由通知
   actor__IpStaff ->> screen__OfficeActionScreen: 中間処理案件の終了
   extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 特許査定の謄本
   extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 拒絶査定の謄本
   screen__OfficeActionScreen ->> usecase__CloseOfficeActionDocket: 中間処理案件の終了
-  alt OfficeAction.status == 応答済
+  alt 出願の審査が終わっている: PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) and OfficeAction.status == 応答済
+    usecase__CloseOfficeActionDocket ->> entity__PatentApplication: read
     usecase__CloseOfficeActionDocket ->> entity__OfficeAction: update status 応答済 -> 案件終了
     usecase__CloseOfficeActionDocket -->> screen__OfficeActionScreen: done
   else guard fails
@@ -2454,7 +2461,7 @@ stateDiagram-v2
     %% transition usecase__ReceiveFinalOfficeAction
     state__OfficeAction_answered --> state__OfficeAction_open : 最後の拒絶理由通知の受領
     %% transition usecase__CloseOfficeActionDocket
-    state__OfficeAction_answered --> state__OfficeAction_closed : 中間処理案件の終了
+    state__OfficeAction_answered --> state__OfficeAction_closed : 中間処理案件の終了 [出願の審査が終わっている]
     state__OfficeAction_lapsed --> [*]
     state__OfficeAction_closed --> [*]
   }
@@ -2491,8 +2498,6 @@ Entity: OfficeAction (拒絶理由通知)
   first  lapsed    false     false          free       no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction
   first  overdue   true      false          free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
   final  open      false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  first  closed    false     false          free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
-  first  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
   first  drafted   false     true           free       no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  drafted   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  overdue   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
@@ -2501,15 +2506,17 @@ Entity: OfficeAction (拒絶理由通知)
   first  lapsed    true      false          limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
   first  overdue   false     true           free       no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  lapsed    true      false          free       no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
+  first  closed    false     false          free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
+  first  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
   final  drafted   false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  overdue   false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  open      true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   first  answered  false     true           free       no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  answered  false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  lapsed    false     true           limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  lapsed    false     true           free       no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  closed    true      false          free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
   first  closed    true      false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  lapsed    false     true           free       no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   final  answered  false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  open      false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  lapsed    false     false          limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
@@ -2517,11 +2524,11 @@ Entity: OfficeAction (拒絶理由通知)
   final  overdue   true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   first  closed    false     true           free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  closed    false     true           limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  final  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  drafted   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  overdue   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  answered  true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  lapsed    true      false          limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  answered  false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  lapsed    false     true           limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
   final  closed    true      false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
@@ -3055,26 +3062,28 @@ erDiagram
 | forbidden | 審査請求をしていない出願は早期審査の対象にならない | PatentApplication | PatentApplication.accelerated == true AND PatentApplication.exam_requested_at == null |  | samples/patent-ops/buc/buc_examination_request.rdra:107 |
 | condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true | DecideToFile | samples/patent-ops/buc/buc_filing_decision.rdra:69 |
 | forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:72 |
-| condition | 出願が係属している | PatentApplication | PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済) | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:128 |
-| condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:143 |
-| condition | 国内優先権の基礎とされ、まだ係属している出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:161 |
+| condition | 出願が係属している | PatentApplication | PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済) | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:132 |
+| condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:147 |
+| condition | 国内優先権の基礎とされ、まだ係属している出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:165 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | JudgeEmployeeInvention | samples/patent-ops/buc/buc_invention_disclosure.rdra:83 |
 | condition | 職務発明に当たらない | InventionDisclosure | InventionDisclosure.category == 職務発明に当たらない発明 | AcquireRightsByAssignment | samples/patent-ops/buc/buc_invention_disclosure.rdra:94 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | DecideReward | samples/patent-ops/buc/buc_inventor_reward.rdra:55 |
-| condition | 最初の拒絶理由通知である | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.kind == 最初 | DraftResponse | samples/patent-ops/buc/buc_office_action.rdra:143 |
-| condition | 応答期間内で、まだ延長していない | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false | RequestTermExtension | samples/patent-ops/buc/buc_office_action.rdra:159 |
-| condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:177 |
-| forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:208 |
-| exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:210 |
-| condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:259 |
+| condition | 出願が審査中である | PatentApplication | PatentApplication.status == 審査請求済（審査中） | ReceiveOfficeAction | samples/patent-ops/buc/buc_office_action.rdra:132 |
+| condition | 最初の拒絶理由通知である | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.kind == 最初 | DraftResponse | samples/patent-ops/buc/buc_office_action.rdra:148 |
+| condition | 応答期間内で、まだ延長していない | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false | RequestTermExtension | samples/patent-ops/buc/buc_office_action.rdra:164 |
+| condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:182 |
+| forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:213 |
+| exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:215 |
+| condition | 出願の審査が終わっている | PatentApplication | PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | CloseOfficeActionDocket | samples/patent-ops/buc/buc_office_action.rdra:256 |
+| condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:269 |
 | condition | 特許査定を受けた出願である | PatentApplication | PatentApplication.status == 特許査定 | FeePaymentApi | samples/patent-ops/buc/buc_registration.rdra:64 |
 | condition | 納付期間をまだ延長していない | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false | RequestFeePaymentExtension | samples/patent-ops/buc/buc_registration.rdra:73 |
 | condition | 第1〜3年分の特許料を納付している | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true | RecordRegistration | samples/patent-ops/buc/buc_registration.rdra:86 |
 | invariant | 特許料（第1〜3年分）を納付していない出願は設定登録されない | PatentApplication | when PatentApplication.status == 設定登録済 then PatentApplication.first_fees_paid == true |  | samples/patent-ops/buc/buc_registration.rdra:90 |
 | condition | 第1〜3年分の特許料を納付していない | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == false | RecordRegistrationDismissal | samples/patent-ops/buc/buc_registration.rdra:102 |
-| invariant | 発明者に通知していない相当の利益は支払わない | InventorReward | when InventorReward.status == 支払済 then InventorReward.notified_at == present |  | samples/patent-ops/shared/entities.rdra:223 |
-| invariant | 追納には特許料と同額の割増特許料を加える | Patent | when Patent.last_payment == 追納 then Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:226 |
-| forbidden | 期限内の納付には割増特許料を付けない | Patent | Patent.last_payment == 期限内の納付 AND Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:227 |
+| invariant | 発明者に通知していない相当の利益は支払わない | InventorReward | when InventorReward.status == 支払済 then InventorReward.notified_at == present |  | samples/patent-ops/shared/entities.rdra:224 |
+| invariant | 追納には特許料と同額の割増特許料を加える | Patent | when Patent.last_payment == 追納 then Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:227 |
+| forbidden | 期限内の納付には割増特許料を付けない | Patent | Patent.last_payment == 期限内の納付 AND Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:228 |
 
 ## 6. CRUD と権限
 

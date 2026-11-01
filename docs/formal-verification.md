@@ -145,7 +145,8 @@ unwitnessed states, its deadlocks, or its actions with no edge, and `verify` lis
 under `not checked:`. The
 pass ends with a `state models (BFS on N entity cones): ...` summary line. On clinic-ops
 this pass takes about 13 s and 350 MB; its largest cone is `Charge` (969,167
-states).
+states). On patent-ops the `OfficeAction` cone (4,818,909 states) stops at the cap, so
+its four stuck-state checks are listed under `not checked:` (see the sample's README).
 
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
@@ -291,10 +292,10 @@ The rules for each flag and for deferral are in
 
   At 2 instances, a cone whose BFS passes the test's cap of 200,000 states is compared at
   1 instance only. The test lists these cones in `VERIFY_FALLBACK` and fails when the list
-  changes. Today all of them are in `samples/clinic-ops` (states at 2 instances, measured
-  with `lifecycle_measure`):
+  changes. Today they are in `samples/clinic-ops` and `samples/patent-ops` (states at 2
+  instances, measured with `lifecycle_measure`):
 
-  | Cone (first target that reads it) | States |
+  | Cone (first target that reads it; clinic-ops unless named) | States |
   |---|---:|
   | entity `Charge` | 969,167 |
   | entity `Prescription` | 427,607 |
@@ -304,6 +305,9 @@ The rules for each flag and for deferral are in
   | invariant `Forbidden_ClinicalOrder_1` (also `Unique_LabResult_ClinicalOrder`) | 235,607 |
   | invariant `Inv_ClinicalOrder_3` | 235,607 |
   | entity `EligibilityCheck` | 223,901 |
+  | patent-ops entity `OfficeAction` | 4,818,909 |
+  | patent-ops invariant `Forbidden_OfficeAction_3` | 4,818,909 |
+  | patent-ops invariant `Exclusive_OfficeAction_0` | 2,153,523 |
 
   The other 31 clinic-ops cones at 2 instances (595,325 states in total, the largest
   `PatientMessage` at 169,203) are compared. CI runs the test with `cargo test --release`

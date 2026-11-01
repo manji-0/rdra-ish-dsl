@@ -70,6 +70,17 @@
   `DecideNotToFile` (出願しない決定) whose two arms from `searched` are the committee's choice.
   `DecideToFile` stays its own use case: only filing needs the company to own the right, and a
   condition guards every arm of its use case.
+- `samples/patent-ops` restores two guards it dropped to fit the old 4,096-state cap of `check`
+  (#60): an office action arrives only for an application under examination
+  (`UnderExamination`, citing 特許法48条の2), and the docket of an answered office action closes
+  only after the examination is over (`ExaminationOver`). Its largest cone at 1 instance grows
+  from 131 to 1,034 states. At the 2 instances of `verify` the `OfficeAction` cone reaches
+  4,818,909 states: TLC checks its invariants (`verify` takes about 75 s, up from 4 s), but the
+  BFS cap of 2,097,152 leaves its four stuck-state checks under `not checked:`, and
+  `engine_equivalence` compares three of its cones at 1 instance only (`VERIFY_FALLBACK`). The
+  third guard, that the filing checks the drafts were approved, stays out: it needs a required
+  link from the application to its drafting order, which takes three cones past 10,000,000
+  states at 2 instances. The README names both as known verification gaps (#51, condition 5).
 
 ### Fixed
 

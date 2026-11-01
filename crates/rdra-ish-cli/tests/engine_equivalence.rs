@@ -62,6 +62,9 @@ const VERIFY_FALLBACK: &[(&str, &str)] = &[
     ("samples/clinic-ops", "invariant Forbidden_ClinicalOrder_1"),
     ("samples/clinic-ops", "invariant Inv_ClinicalOrder_3"),
     ("samples/clinic-ops", "invariant Inv_Prescription_4"),
+    ("samples/patent-ops", "entity OfficeAction"),
+    ("samples/patent-ops", "invariant Forbidden_OfficeAction_3"),
+    ("samples/patent-ops", "invariant Exclusive_OfficeAction_0"),
 ];
 
 fn repo() -> PathBuf {

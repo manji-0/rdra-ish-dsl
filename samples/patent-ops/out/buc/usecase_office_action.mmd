@@ -76,8 +76,10 @@ flowchart LR
     state__PatentApplication_rejected((("拒絶査定"))):::state
     state__PatentApplication_rejection_final((("拒絶査定の確定"))):::state
     condition__DivisionPossible{"分割できる時期である"}:::condition
+    condition__ExaminationOver{"出願の審査が終わっている"}:::condition
     condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
     condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
+    condition__UnderExamination{"出願が審査中である"}:::condition
     condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
   end
   actor__IpStaff -.-> usecase__CloseOfficeActionDocket
@@ -94,8 +96,10 @@ flowchart LR
   actor__PatentAttorney -.-> usecase__RequestLateExtension
   actor__PatentAttorney -.-> usecase__RequestTermExtension
   condition__DivisionPossible -.-> usecase__FileDivisionalApplication
+  condition__ExaminationOver -.-> usecase__CloseOfficeActionDocket
   condition__FirstNoticeOnly -.-> usecase__DraftResponse
   condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
+  condition__UnderExamination -.-> usecase__ReceiveOfficeAction
   condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
   event__EvAppealRequested -.-> extsystem__Jpo
   event__EvDecisionOfRejection -.-> usecase__CloseOfficeActionDocket
@@ -117,6 +121,7 @@ flowchart LR
   timer__ResponseDeadline -.-> usecase__ExpireResponseTerm
   timer__ResponseDeadline -.-> usecase__FileResponse
   usecase__CloseOfficeActionDocket -.-> screen__OfficeActionScreen
+  usecase__CloseOfficeActionDocket -.->|reads| entity__PatentApplication
   usecase__CloseOfficeActionDocket -.->|transitions OfficeAction.status answered->closed| state__OfficeAction_closed
   usecase__CloseOfficeActionDocket -.->|updates| entity__OfficeAction
   usecase__DraftLimitedResponse -.-> screen__ResponseDraftScreen

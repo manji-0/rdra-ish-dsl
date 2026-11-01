@@ -14,6 +14,8 @@ flowchart LR
   %% holds condition__EmployeeInvention: InventionDisclosure.category == 職務発明
   condition__EmployeeInventionReward{"職務発明である"}:::condition
   %% holds condition__EmployeeInventionReward: InventionDisclosure.category == 職務発明
+  condition__ExaminationOver{"出願の審査が終わっている"}:::condition
+  %% holds condition__ExaminationOver: PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）)
   condition__ExaminationRequested{"審査請求をした出願である"}:::condition
   %% holds condition__ExaminationRequested: PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present
   condition__FirstFeesPaid{"第1〜3年分の特許料を納付している"}:::condition
@@ -44,6 +46,8 @@ flowchart LR
   %% holds condition__RightsAcquired: InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true
   condition__StillPending{"出願が係属している"}:::condition
   %% holds condition__StillPending: PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済)
+  condition__UnderExamination{"出願が審査中である"}:::condition
+  %% holds condition__UnderExamination: PatentApplication.status == 審査請求済（審査中）
   condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
   %% holds condition__WithinTermNotExtended: OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false
   condition__YearPaid{"存続中で、次の年が納付済"}:::condition
@@ -79,6 +83,8 @@ flowchart LR
   %% desc usecase__ApproveDraft: 発明者の確認を経た案を知的財産部が承認し、出願を指示する。
   usecase__ClaimDomesticPriority("国内優先権の主張"):::usecase
   %% desc usecase__ClaimDomesticPriority: 改良発明をまとめた後の出願で、1年以内の先の出願に基づく優先権を主張する。
+  usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
+  %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
   usecase__ConfirmDraftByInventor("発明者による内容確認"):::usecase
   %% desc usecase__ConfirmDraftByInventor: 発明者が案の技術内容を確かめ、確認済にする。
   usecase__DecideReward("相当の利益の決定"):::usecase
@@ -101,6 +107,8 @@ flowchart LR
   %% desc usecase__PayAnnuity: 次の年の特許料を納付期限までに納付する。
   usecase__PayLateAnnuity("追納"):::usecase
   %% desc usecase__PayLateAnnuity: 追納期間内に、特許料と同額の割増特許料を納付する。
+  usecase__ReceiveOfficeAction("拒絶理由通知の受領"):::usecase
+  %% desc usecase__ReceiveOfficeAction: 拒絶理由通知書を受け取り、応答期間の管理を始める。
   usecase__RecordPublication("出願公開の記録"):::usecase
   %% desc usecase__RecordPublication: 出願から1年6月で出願が公開されたことを記録する。
   usecase__RecordRegistration("設定登録の記録"):::usecase
@@ -138,6 +146,9 @@ flowchart LR
   condition__EmployeeInventionReward -.-> usecase__DecideReward
   condition__EmployeeInventionReward -.-> variation__InventionCategory
   %% derived condition__EmployeeInventionReward -> variation__InventionCategory from holds
+  condition__ExaminationOver -.-> usecase__CloseOfficeActionDocket
+  condition__ExaminationOver -.-> statemodel__PatentApplication_status
+  %% derived condition__ExaminationOver -> statemodel__PatentApplication_status from holds
   condition__ExaminationRequested -.-> usecase__RequestAcceleratedExamination
   condition__ExaminationRequested -.-> statemodel__PatentApplication_status
   %% derived condition__ExaminationRequested -> statemodel__PatentApplication_status from holds
@@ -183,6 +194,9 @@ flowchart LR
   condition__StillPending -.-> usecase__RecordPublication
   condition__StillPending -.-> statemodel__PatentApplication_status
   %% derived condition__StillPending -> statemodel__PatentApplication_status from holds
+  condition__UnderExamination -.-> usecase__ReceiveOfficeAction
+  condition__UnderExamination -.-> statemodel__PatentApplication_status
+  %% derived condition__UnderExamination -> statemodel__PatentApplication_status from holds
   condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
   condition__WithinTermNotExtended -.-> statemodel__OfficeAction_status
   %% derived condition__WithinTermNotExtended -> statemodel__OfficeAction_status from holds

@@ -113,9 +113,10 @@ contains(IpManagementSystem, DivisionalApi)
 contains(IpManagementSystem, AppealApi)
 
 // The application stays `examining` while notices and answers go back and forth; the notice itself
-// carries the response state. Nothing checks that the application is under examination when a
-// notice arrives: the 特許庁 sends it, and a guard on the application's state would put every
-// application state into the notice's state space.
+// carries the response state. 特許出願の審査は、その特許出願についての出願審査の請求をまつて行なう
+// (egov-tokkyohou-334AC0000000121.txt:677), so a notice comes only for an application under
+// examination. The guard puts the application's state into the notice's state space; at 2
+// instances that cone is the largest of the sample (see README).
 // The 指定期間 runs from the day after the notice is sent (jpo-tetuzuki-02-17-ippan-gensoku.txt:308) and
 // from the 発送日, not the day it is collected (pcinfo-guide-08-hassou-shorui.md:62).
 displays(ReceiveOfficeAction, OfficeActionScreen)
@@ -126,6 +127,10 @@ sets(ReceiveOfficeAction, OfficeAction, kind == first)
 raises(Jpo, EvOfficeAction)
 triggers(EvOfficeAction, BucOfficeAction)
 triggers(EvOfficeAction, ReceiveOfficeAction)
+
+condition UnderExamination "出願が審査中である"
+holds(UnderExamination, PatentApplication.status == examining)
+applies_to(UnderExamination, ReceiveOfficeAction)
 
 displays(InstructResponse, OfficeActionScreen)
 reads(InstructResponse, OfficeAction)
@@ -238,13 +243,18 @@ triggers(AppealDeadline, FinalizeRejection)
 
 // Housekeeping: an answered notice has a way out (a 最後の拒絶理由通知), so it is not an end state, and
 // `check` reports it as stuck once no further notice comes. The IP department closes the docket
-// when the decision arrives. Like the notice itself, the use case does not read the application's
-// state.
+// when the decision arrives: the guard reads the application, so a docket closes only once the
+// examination is over (査定, 取下げ, or 却下; the model's reading).
 displays(CloseOfficeActionDocket, OfficeActionScreen)
 updates(CloseOfficeActionDocket, OfficeAction)
 transitions(CloseOfficeActionDocket, OfficeAction.status, answered -> closed)
 triggers(EvDecisionToGrant, CloseOfficeActionDocket)
 triggers(EvDecisionOfRejection, CloseOfficeActionDocket)
+reads(CloseOfficeActionDocket, PatentApplication)
+
+condition ExaminationOver "出願の審査が終わっている"
+holds(ExaminationOver, PatentApplication.status not in (filed, formality_order, examining))
+applies_to(ExaminationOver, CloseOfficeActionDocket)
 
 // The three windows are 補正できる時期 (before the first notice and within each response period),
 // 30 days after the 特許査定謄本, and 3 months after the first 拒絶査定謄本. The DSL has no time window on a

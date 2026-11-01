@@ -39,10 +39,33 @@ reward occasions, the goals' numbers), the comment says the modeling is the mode
 - The patent attorney is an actor, not an external system (`AdrAttorneyAsActor`), so the review of
   drafts and the responses to office actions show in the business flows.
 - `PatentApplication` stays `examining` from the examination request to the decision, and the
-  office action and its response are their own lifecycle (`OfficeAction`). One lifecycle with every
-  response state times every fee and publication column passed the 4096-state cap of `check`. For
-  the same reason, use cases that the 特許庁 starts (a notice, the annuity docket) do not read the
-  application's state, and the filing does not move the drafting order: the filing receipt does.
+  office action and its response are their own lifecycle (`OfficeAction`), so the response states
+  are not multiplied by every fee and publication column. An office action arrives only for an
+  application under examination (`UnderExamination`), and the IP department closes an office
+  action's docket only after the examination is over (`ExaminationOver`). The filing does not move
+  the drafting order: the filing receipt does.
+
+## Known verification gaps
+
+The state space limits what this model says and how far `verify` checks it (#51, condition 5).
+Each figure is a cone size from `crates/rdra-ish-core/examples/lifecycle_measure.rs`.
+
+- **The filing does not check that the drafts were approved.** `FileApplication` should require
+  `DraftingOrder.status == approved`, and an application should require its drafting order
+  (`relate(PatentApplication, DraftingOrder, 1:1)` without `.optional()`). With the link optional,
+  `check` reports that `FileApplication` never runs under the guard. The required link adds the
+  order, the disclosure, and their columns to every cone that reads the application. `check` would
+  pass: its largest cone grows from 1,034 to 4,175 states, under the cap of 65,536. At the 2
+  instances of `verify`, the cones of `PatentApplication`, `Patent`, and `OfficeAction` pass
+  10,000,000 states (the measurement stopped there), and three more pass the BFS cap of 2,097,152.
+  Both are left out, so neither `check` nor `verify` checks that only approved drafts are filed.
+- **`OfficeAction` is checked by BFS at 1 instance only.** The two guards that read the application
+  (`UnderExamination`, `ExaminationOver`) put its state into the office action's cone, which reaches
+  1,034 states at 1 instance and 4,818,909 at 2. `verify` still runs TLC on the whole cone (its
+  invariants hold, in about 75 s), but its BFS stops at 2,097,152 states, so whether an office action
+  can get stuck at `open`, `drafted`, `overdue`, or `answered` is decided by `check` at 1 instance and
+  listed under `not checked:` by `verify`. `engine_equivalence` compares the office action's cones
+  with TLC at 1 instance only (`VERIFY_FALLBACK`).
 
 ## Diagnostics left in place
 

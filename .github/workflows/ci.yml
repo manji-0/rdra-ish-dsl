@@ -36,7 +36,7 @@ jobs:
 
   formal-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
       - uses: cachix/install-nix-action@v31
@@ -45,6 +45,6 @@ jobs:
         run: cargo build -p rdra-ish-cli --release
       - name: Check and verify every sample against its expect header
         run: scripts/verify-samples.sh target/release/rdra-ish
-        timeout-minutes: 5
+        timeout-minutes: 10
       - name: Lifecycle BFS and TLC agree on every sample
         run: RDRA_REQUIRE_TLC=1 cargo test --release -p rdra-ish-cli --test engine_equivalence
