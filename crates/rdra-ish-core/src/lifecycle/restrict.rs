@@ -68,6 +68,10 @@ impl TransitionSystem {
                 term(a, fp);
                 term(b, fp);
             }
+            Pred::In(a, vs) => {
+                term(a, fp);
+                vs.iter().for_each(|v| term(v, fp));
+            }
             Pred::Not(p) => self.pred_footprint(p, fp),
             Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| self.pred_footprint(p, fp)),
             Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
@@ -382,6 +386,10 @@ fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
             term(a);
             term(b);
         }
+        Pred::In(a, vs) => {
+            term(a);
+            vs.iter_mut().for_each(term);
+        }
         Pred::Not(p) => renumber_pred(p, at),
         Pred::And(ps) | Pred::Or(ps) => ps.iter_mut().for_each(|p| renumber_pred(p, at)),
         Pred::Forall { body, .. } | Pred::Exists { body, .. } => renumber_pred(body, at),
@@ -453,6 +461,7 @@ impl Remap {
             Pred::True => Pred::True,
             Pred::False => Pred::False,
             Pred::Cmp(a, op, b) => Pred::Cmp(self.term(a), *op, self.term(b)),
+            Pred::In(a, vs) => Pred::In(self.term(a), vs.iter().map(|v| self.term(v)).collect()),
             Pred::Not(x) => Pred::Not(Box::new(self.pred(x))),
             Pred::And(xs) => Pred::And(xs.iter().map(|x| self.pred(x)).collect()),
             Pred::Or(xs) => Pred::Or(xs.iter().map(|x| self.pred(x)).collect()),

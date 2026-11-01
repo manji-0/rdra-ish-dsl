@@ -64,6 +64,12 @@ impl TransitionSystem {
                 let rhs = self.operand(rhs, state, env);
                 compare(&lhs, *op, &rhs)
             }
+            Pred::In(lhs, values) => {
+                let lhs = self.operand(lhs, state, env);
+                values
+                    .iter()
+                    .any(|v| compare(&lhs, CmpOp::Eq, &self.operand(v, state, env)))
+            }
             Pred::Not(inner) => !self.eval(inner, state, env),
             Pred::And(parts) => parts.iter().all(|p| self.eval(p, state, env)),
             Pred::Or(parts) => parts.iter().any(|p| self.eval(p, state, env)),

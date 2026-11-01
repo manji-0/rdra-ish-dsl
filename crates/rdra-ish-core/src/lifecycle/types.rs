@@ -343,6 +343,7 @@ impl Pred {
         match self {
             Pred::True | Pred::False => false,
             Pred::Cmp(a, _, b) => term(a) || term(b),
+            Pred::In(a, vs) => term(a) || vs.iter().any(term),
             Pred::Not(p) => p.reads_next(),
             Pred::And(ps) | Pred::Or(ps) => ps.iter().any(Pred::reads_next),
             Pred::Forall { body, .. } | Pred::Exists { body, .. } => body.reads_next(),
@@ -442,6 +443,8 @@ pub enum Pred {
     True,
     False,
     Cmp(Term, CmpOp, Term),
+    /// `term` equals one of the values: `col in (a, b)`, which TLA+ writes as `\in {..}`.
+    In(Term, Vec<Term>),
     Not(Box<Pred>),
     And(Vec<Pred>),
     Or(Vec<Pred>),

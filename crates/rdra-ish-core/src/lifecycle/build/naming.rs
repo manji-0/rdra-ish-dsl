@@ -180,13 +180,17 @@ impl Named {
     }
 
     fn comparison(&mut self, ek: EntityKey, prop: &ComparisonProp) {
-        if let CmpRhs::Value(v) = &prop.rhs {
-            return self.value(ek, &prop.lhs_column, v);
+        match &prop.rhs {
+            CmpRhs::Value(v) => return self.value(ek, &prop.lhs_column, v),
+            CmpRhs::Values(vs) => {
+                return vs.iter().for_each(|v| self.value(ek, &prop.lhs_column, v));
+            }
+            _ => {}
         }
         self.number(ek, &prop.lhs_column);
         match &prop.rhs {
             CmpRhs::Column(c) => self.number(ek, c),
-            CmpRhs::IntLit(_) | CmpRhs::Value(_) => {}
+            CmpRhs::IntLit(_) | CmpRhs::Value(_) | CmpRhs::Values(_) => {}
             CmpRhs::Now => self.reads_now = true,
         }
     }
@@ -197,10 +201,7 @@ impl Named {
                 self.value(column.entity, &column.column, value)
             }
             CrossEntityCondition::Comparison(prop) => {
-                let ordered = !matches!(
-                    prop.op,
-                    crate::model::CmpOpModel::Eq | crate::model::CmpOpModel::Ne
-                );
+                let ordered = prop.op.is_ordered();
                 match &prop.rhs {
                     CrossCmpRhs::Column(c) if ordered => {
                         self.number(prop.lhs.entity, &prop.lhs.column);
@@ -212,6 +213,9 @@ impl Named {
                     }
                     CrossCmpRhs::IntLit(_) => self.number(prop.lhs.entity, &prop.lhs.column),
                     CrossCmpRhs::Value(v) => self.value(prop.lhs.entity, &prop.lhs.column, v),
+                    CrossCmpRhs::Values(vs) => vs
+                        .iter()
+                        .for_each(|v| self.value(prop.lhs.entity, &prop.lhs.column, v)),
                     CrossCmpRhs::Now => {
                         self.number(prop.lhs.entity, &prop.lhs.column);
                         self.reads_now = true;
@@ -227,12 +231,12 @@ impl Named {
                 let Some(ek) = property_entity(model, atom.entity.as_deref(), &atom.column) else {
                     return;
                 };
-                let ordered = !matches!(
-                    atom.op,
-                    crate::model::CmpOpModel::Eq | crate::model::CmpOpModel::Ne
-                );
+                let ordered = atom.op.is_ordered();
                 match &atom.rhs {
                     TemporalRhs::Value(v) if !ordered => self.value(ek, &atom.column, v),
+                    TemporalRhs::Values(vs) => {
+                        vs.iter().for_each(|v| self.value(ek, &atom.column, v))
+                    }
                     TemporalRhs::Column { entity, column } => {
                         let rk = property_entity(
                             model,

@@ -12,6 +12,10 @@ pub enum CmpOpModel {
     Ge,
     Eq,
     Ne,
+    /// `col in (a, b)`: the right-hand side is `Values`, read as `col == a or col == b`.
+    In,
+    /// `col not in (a, b)`: the right-hand side is `Values`, read as `col != a and col != b`.
+    NotIn,
 }
 
 impl CmpOpModel {
@@ -23,8 +27,27 @@ impl CmpOpModel {
             CmpOpModel::Ge => ">=",
             CmpOpModel::Eq => "==",
             CmpOpModel::Ne => "!=",
+            CmpOpModel::In => "in",
+            CmpOpModel::NotIn => "not in",
         }
     }
+
+    /// `<`, `>`, `<=`, `>=`.
+    pub fn is_ordered(&self) -> bool {
+        matches!(
+            self,
+            CmpOpModel::Lt | CmpOpModel::Gt | CmpOpModel::Le | CmpOpModel::Ge
+        )
+    }
+}
+
+/// `(a, b)`: the values of an `in` / `not in`, each shown by `show`.
+pub fn values_display(
+    values: &[EffectValue],
+    show: impl Fn(&EffectValue) -> std::string::String,
+) -> std::string::String {
+    let shown: Vec<_> = values.iter().map(show).collect();
+    format!("({})", shown.join(", "))
 }
 
 /// 比較式の右辺。
@@ -38,6 +61,8 @@ pub enum CmpRhs {
     Now,
     /// A value of the left-hand column's type (`status != open`, `@check(status == open)`).
     Value(EffectValue),
+    /// The values of `in` / `not in`, distinct and never empty (`status in (open, paid)`).
+    Values(Vec<EffectValue>),
 }
 
 impl CmpRhs {
@@ -48,6 +73,7 @@ impl CmpRhs {
             CmpRhs::IntLit(n) => n.to_string(),
             CmpRhs::Now => "now".to_string(),
             CmpRhs::Value(v) => v.literal(),
+            CmpRhs::Values(vs) => values_display(vs, EffectValue::literal),
         }
     }
 }

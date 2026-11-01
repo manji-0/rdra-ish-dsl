@@ -135,6 +135,49 @@ const FORMS: &[(&str, Expect)] = &[
     ("sets(Pay, Order, total < 3, maybe)", Error),
     ("sets(Pay, Order, status)", Error),
     ("sets(Pay, Order)", Error),
+    // sets leaves one value, so a set membership is an error in either form
+    ("sets(Pay, Order, status in (open, paid))", Error),
+    ("sets(Pay, Order, status not in (open))", Error),
+    ("sets(Pay, Order, Order.status in (paid))", Error),
+    ("sets(Pay, Order, status in (paid), true)", Error),
+    ("sets(Pay, Order, status not in (paid), false)", Error),
+    // set membership: wherever a comparison is a condition
+    ("forbidden(Order, status in (open, paid))", Recorded),
+    (
+        "forbidden(Order, status not in (open), total in (1, 2))",
+        Recorded,
+    ),
+    ("forbidden(Order, status in ())", Error),
+    ("forbidden(Order, status in (open, open))", Error),
+    ("forbidden(Order, status in (closed))", Error),
+    (
+        "forbidden(Order, Ticket, Order.status in (paid), Ticket.status not in (done))",
+        Recorded,
+    ),
+    ("required(Order, status not in (open))", Recorded),
+    ("exclusive(Order, status in (paid), total in (3))", Recorded),
+    (
+        "invariant(Order).when(status in (open, paid)).then(total not in (0))",
+        Recorded,
+    ),
+    (
+        "invariant(Order).when(status in (paid)).none(Ticket.status not in (done))",
+        Recorded,
+    ),
+    (
+        "invariant(Order).when(status not in (open)).has(Ticket.status in (done))",
+        Recorded,
+    ),
+    (
+        "invariant(Order, Ticket).when(Order.status in (paid)).then(Ticket.status in (done))",
+        Recorded,
+    ),
+    ("after(Pay).assert(Order.status in (paid))", Recorded),
+    ("holds(Ready, Order.status not in (open, paid))", Recorded),
+    (
+        "holds(Ready, Order.status in (paid)).none(Ticket.status in (pending))",
+        Recorded,
+    ),
 ];
 
 /// The rules a model records, its field mappings, its `sets` effects, and each condition body

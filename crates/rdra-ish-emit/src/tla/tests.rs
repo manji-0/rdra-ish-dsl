@@ -486,3 +486,31 @@ fn arms_from_one_state_are_a_choice_over_their_targets() {
     let single = print(&system(&sample("order.rdra")), PrintMode::Check, "M").tla;
     assert!(!single.contains("\\E v"), "{single}");
 }
+
+#[test]
+fn a_set_membership_is_in_and_notin() {
+    let src = r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+  qty: Int @default(0)
+}
+usecase Place "P"
+usecase Cancel "C"
+usecase Bump "B"
+creates(Place, Order)
+transitions(Cancel, Order.status, pending -> cancelled)
+sets(Bump, Order, qty == 2)
+condition Unpaid "U"
+holds(Unpaid, Order.status not in (paid))
+applies_to(Unpaid, Cancel)
+forbidden(Order, status in (paid, cancelled), qty in (1, 2))
+"#;
+    let tla = print(&system(src), PrintMode::Check, "M").tla;
+    assert!(tla.contains(r#"Order_status[p0] \notin {"paid"}"#), "{tla}");
+    assert!(
+        tla.contains(r#"Order_status[b0] \in {"paid", "cancelled"}"#),
+        "{tla}"
+    );
+    assert!(tla.contains(r#"Order_qty[b0] \in {1, 2}"#), "{tla}");
+}

@@ -298,6 +298,10 @@ pub enum CmpOp {
     Ge, // >=
     Eq, // ==
     Ne, // !=
+    /// `col in (a, b)`: the right-hand side is `Operand::Values`.
+    In,
+    /// `col not in (a, b)`: the right-hand side is `Operand::Values`.
+    NotIn,
 }
 
 impl CmpOp {
@@ -310,7 +314,14 @@ impl CmpOp {
             CmpOp::Ge => ">=",
             CmpOp::Eq => "==",
             CmpOp::Ne => "!=",
+            CmpOp::In => "in",
+            CmpOp::NotIn => "not in",
         }
+    }
+
+    /// `in` or `not in`, whose right-hand side is a list of values.
+    pub fn is_membership(&self) -> bool {
+        matches!(self, CmpOp::In | CmpOp::NotIn)
     }
 }
 
@@ -325,6 +336,9 @@ pub enum Operand {
     IntLit(std::string::String),
     /// The built-in temporal reference `now`.
     Now,
+    /// The values after `in` / `not in`, as written: bare words or integer literals. The
+    /// parser builds it only on the right of `CmpOp::In` / `CmpOp::NotIn`, never empty.
+    Values(Vec<std::string::String>),
 }
 
 /// A column reference qualified by an entity id.

@@ -329,6 +329,24 @@ pub enum RdraError {
         qualified: String,
     },
 
+    #[error("'{value}' is not a value of column '{col}'\n  hint: `in` and `not in` take values of '{col}': {allowed}")]
+    SetValueNotAValue {
+        col: String,
+        value: String,
+        allowed: String,
+    },
+
+    #[error(
+        "value '{value}' appears twice in the set of column '{col}'\n  hint: list each value once"
+    )]
+    DuplicateSetValue { col: String, value: String },
+
+    #[error("`in` / `not in` needs a column with a fixed set of values, but '{col}' has type {col_type}\n  hint: use it on an Enum, variation, Bool, Int, Money, Decimal, or @null column; compare other columns with `==`, `!=`, `<`, or `>`")]
+    SetColumnNotEnumerable { col: String, col_type: String },
+
+    #[error("sets(..., {col} in (...)) is invalid: a use case leaves one value, not a set\n  hint: write `sets(UseCase, Entity, {col} == value)`; `in` and `not in` belong in rules, `holds`, `after`, `@check`, and `property`")]
+    SetsMembership { col: String },
+
     #[error(
         "comparison with `now` requires a Date or DateTime column, but '{col}' has type {col_type}"
     )]

@@ -43,7 +43,11 @@ impl Ctx<'_> {
             Pred::True => "TRUE".to_string(),
             Pred::False => "FALSE".to_string(),
             Pred::Cmp(a, op, b) => self.cmp(a, *op, b),
-            Pred::Not(x) => format!("~({})", self.pred(x)),
+            Pred::In(a, values) => self.member(a, values, "\\in"),
+            Pred::Not(x) => match &**x {
+                Pred::In(a, values) => self.member(a, values, "\\notin"),
+                x => format!("~({})", self.pred(x)),
+            },
             Pred::And(xs) => self.join(xs, "/\\", "TRUE"),
             Pred::Or(xs) => self.join(xs, "\\/", "FALSE"),
             Pred::Forall { entity, body } => self.quantify(*entity, body, true),
@@ -127,6 +131,33 @@ impl Ctx<'_> {
             CmpOp::Ne => format!("{l} # {r}"),
             _ => "FALSE".to_string(),
         }
+    }
+
+    /// `slot \in {v, ..}` (or `\notin`), each value rendered as `cmp` renders it against the
+    /// slot.
+    fn member(&mut self, a: &Term, values: &[Term], op: &str) -> String {
+        let Some((slot, domain)) = self.slot(a) else {
+            let eqs = values
+                .iter()
+                .map(|v| Pred::Cmp(a.clone(), CmpOp::Eq, v.clone()))
+                .collect();
+            let any = self.pred(&Pred::Or(eqs));
+            return if op == "\\in" {
+                any
+            } else {
+                format!("~({any})")
+            };
+        };
+        let value = |v: &Term| match v {
+            Term::Int(n) => n.to_string(),
+            Term::Lit(x) if domain.is_numeric() => domain
+                .number(*x)
+                .map_or_else(|| NULL_INT.to_string(), |n| n.to_string()),
+            Term::Lit(x) => render_value(domain, *x),
+            _ => self.slot(v).map(|(s, _)| s).unwrap_or_default(),
+        };
+        let values: Vec<String> = values.iter().map(value).collect();
+        format!("{slot} {op} {{{}}}", values.join(", "))
     }
 
     /// Numeric comparison; a nullable operand is guarded out of every ordered comparison.

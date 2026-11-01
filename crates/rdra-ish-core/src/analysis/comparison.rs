@@ -64,6 +64,49 @@ pub(crate) fn resolve_bare_rhs(
     }
 }
 
+/// The values of `col in (..)` / `col not in (..)`, each a value of `col`'s type and listed
+/// once. The column has a fixed set of values (Enum, variation, Bool, or `@null`), or is
+/// Int-typed and takes integer literals.
+pub(crate) fn resolve_set_values(
+    variations: &SlotMap<VariationKey, Variation>,
+    col: &ModelColumn,
+    names: &[std::string::String],
+) -> Result<Vec<EffectValue>, RdraError> {
+    let numeric = type_category(&col.col_type) == "numeric";
+    let closed = matches!(
+        col.col_type,
+        ColumnType::Enum(_) | ColumnType::Variation(_) | ColumnType::Bool
+    );
+    if !(closed || numeric || col.is_nullable) {
+        return Err(RdraError::SetColumnNotEnumerable {
+            col: col.name.clone(),
+            col_type: format!("{:?}", col.col_type),
+        });
+    }
+    let mut values: Vec<EffectValue> = Vec::new();
+    for name in names {
+        let value = parse_effect_value(variations, col, name).map_err(|_| {
+            let mut allowed = column_values(variations, col);
+            if numeric {
+                allowed.insert(0, "integer literals".to_string());
+            }
+            RdraError::SetValueNotAValue {
+                col: col.name.clone(),
+                value: name.clone(),
+                allowed: allowed.join(", "),
+            }
+        })?;
+        if values.iter().any(|v| v.normalize() == value.normalize()) {
+            return Err(RdraError::DuplicateSetValue {
+                col: col.name.clone(),
+                value: name.clone(),
+            });
+        }
+        values.push(value);
+    }
+    Ok(values)
+}
+
 /// The values a bare right-hand side of `col` may name.
 fn column_values(
     variations: &SlotMap<VariationKey, Variation>,
@@ -115,6 +158,8 @@ pub(crate) fn to_model_op(op: &CmpOp) -> CmpOpModel {
         CmpOp::Ge => CmpOpModel::Ge,
         CmpOp::Eq => CmpOpModel::Eq,
         CmpOp::Ne => CmpOpModel::Ne,
+        CmpOp::In => CmpOpModel::In,
+        CmpOp::NotIn => CmpOpModel::NotIn,
     }
 }
 
@@ -177,6 +222,20 @@ pub(crate) fn resolve_comparison(
             return None;
         }
     };
+
+    if let Operand::Values(names) = &cmp.rhs {
+        return match resolve_set_values(variations, lhs_col, names) {
+            Ok(values) => Some(ComparisonProp {
+                lhs_column: lhs_col_name,
+                op: to_model_op(&cmp.op),
+                rhs: CmpRhs::Values(values),
+            }),
+            Err(err) => {
+                push_error_cmp(ctx, diags, cmp, err);
+                None
+            }
+        };
+    }
 
     let lhs_cat = type_category(&lhs_col.col_type);
 
@@ -353,6 +412,7 @@ pub(crate) fn resolve_comparison(
             }
             CmpRhs::Now
         }
+        Operand::Values(_) => unreachable!("a set is resolved above"),
     };
 
     Some(ComparisonProp {

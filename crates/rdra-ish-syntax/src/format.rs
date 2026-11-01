@@ -712,6 +712,7 @@ fn format_operand(operand: &Operand) -> String {
         }
         Operand::IntLit(value) => value.clone(),
         Operand::Now => "now".to_string(),
+        Operand::Values(values) => format!("({})", values.join(", ")),
     }
 }
 
@@ -723,6 +724,8 @@ fn format_cmp_op(op: &CmpOp) -> &'static str {
         CmpOp::Ge => ">=",
         CmpOp::Eq => "==",
         CmpOp::Ne => "!=",
+        CmpOp::In => "in",
+        CmpOp::NotIn => "not in",
     }
 }
 
@@ -966,6 +969,18 @@ mod tests {
         assert_formats_to(
             "actor A \"see http://x /* y */\"\n",
             "actor A \"see http://x /* y */\"\n",
+        );
+    }
+
+    #[test]
+    fn formats_set_membership() {
+        assert_formats_to(
+            "forbidden(Order,status  in(a,b))\n",
+            "forbidden(Order, status in (a, b))\n",
+        );
+        assert_formats_to(
+            "holds(C, Order.status not   in (a), Order.qty in (1,2))\n",
+            "holds(C, Order.status not in (a), Order.qty in (1, 2))\n",
         );
     }
 

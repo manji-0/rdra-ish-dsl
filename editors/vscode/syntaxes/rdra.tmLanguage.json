@@ -6,6 +6,7 @@
     { "include": "#comments" },
     { "include": "#strings" },
     { "include": "#keywords" },
+    { "include": "#operators" },
     { "include": "#identifiers" }
   ],
   "repository": {
@@ -37,6 +38,19 @@
         {
           "name": "keyword.control.rdra",
           "match": "\\b(actor|usecase|entity|api|buc|import|performs|invokes|contains|reads|creates|updates|deletes|relate|requires_permission|has_permission|exposes|shares)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "comment": "`in` is a keyword only before its value list, so a column may be named `in`.",
+          "name": "keyword.operator.membership.rdra",
+          "match": "\\b(?:not\\s+)?in(?=\\s*\\()"
+        },
+        {
+          "name": "keyword.operator.comparison.rdra",
+          "match": "==|!=|<=|>=|<|>"
         }
       ]
     },

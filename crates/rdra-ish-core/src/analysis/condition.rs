@@ -132,6 +132,9 @@ pub(crate) fn body_condition_display(
                 CrossCmpRhs::Value(v) => {
                     effect_value_display(model, prop.lhs.entity, &prop.lhs.column, v)
                 }
+                CrossCmpRhs::Values(vs) => values_display(vs, |v| {
+                    effect_value_display(model, prop.lhs.entity, &prop.lhs.column, v)
+                }),
             };
             format!(
                 "{} {} {}",

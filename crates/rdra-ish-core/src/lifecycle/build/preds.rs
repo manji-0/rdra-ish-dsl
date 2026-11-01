@@ -154,9 +154,13 @@ impl<'m> Builder<'m> {
             let var = self.prop_var[&(e, prop.axis_key())];
             return Pred::Cmp(Term::Slot { var, at }, CmpOp::Eq, Term::Lit(Value::TRUE));
         }
+        if let CmpRhs::Values(values) = &prop.rhs {
+            return self.member_atom(ek, at, &prop.lhs_column, prop.op, values, site);
+        }
         let what = prop.display();
         let op = cmp_op(prop.op);
         let rhs = match &prop.rhs {
+            CmpRhs::Values(_) => unreachable!("a set is read above"),
             CmpRhs::Value(v) => return self.value_atom(ek, at, &prop.lhs_column, op, v, site),
             CmpRhs::Column(c) if matches!(op, CmpOp::Eq | CmpOp::Ne) => {
                 return self.columns_eq(ek, at, &prop.lhs_column, op, c, site, what);
@@ -227,6 +231,28 @@ impl<'m> Builder<'m> {
         }
     }
 
+    /// `column in (values)`: some `column == value` holds; its negation for `not in`. When
+    /// each equality is one slot against one value, the set is one `Pred::In`.
+    fn member_atom(
+        &mut self,
+        ek: EntityKey,
+        at: At,
+        column: &str,
+        op: CmpOpModel,
+        values: &[EffectValue],
+        site: &Site,
+    ) -> Pred {
+        let eqs: Vec<Pred> = values
+            .iter()
+            .map(|v| self.eq_atom(ek, at, column, v, site))
+            .collect();
+        let any = one_slot_set(&eqs).unwrap_or(Pred::Or(eqs));
+        match op {
+            CmpOpModel::NotIn => Pred::Not(Box::new(any)),
+            _ => any,
+        }
+    }
+
     fn cross_atom(&mut self, cond: &CrossEntityCondition, binding: &Binding, site: &Site) -> Pred {
         match cond {
             CrossEntityCondition::Equals { column, value } => {
@@ -246,9 +272,14 @@ impl<'m> Builder<'m> {
                 let Some(lat) = at_of(binding, prop.lhs.entity) else {
                     return Pred::False;
                 };
+                if let CrossCmpRhs::Values(values) = &prop.rhs {
+                    let (ek, column) = (prop.lhs.entity, &prop.lhs.column);
+                    return self.member_atom(ek, lat, column, prop.op, values, site);
+                }
                 let op = cmp_op(prop.op);
                 let ordered = !matches!(op, CmpOp::Eq | CmpOp::Ne);
                 match &prop.rhs {
+                    CrossCmpRhs::Values(_) => unreachable!("a set is read above"),
                     CrossCmpRhs::Value(v) => {
                         self.value_atom(prop.lhs.entity, lat, &prop.lhs.column, op, v, site)
                     }
@@ -403,7 +434,7 @@ impl<'m> Builder<'m> {
             CmpRhs::Column(c) => Some(c.as_str()),
             CmpRhs::IntLit(_) | CmpRhs::Now => None,
             // `n == null` / `n == present` ask about null itself, so null is no unknown.
-            CmpRhs::Value(_) => return Vec::new(),
+            CmpRhs::Value(_) | CmpRhs::Values(_) => return Vec::new(),
         };
         std::iter::once(prop.lhs_column.as_str())
             .chain(rhs)
@@ -1156,6 +1187,9 @@ impl<'m> Builder<'m> {
                     return Pred::False;
                 };
                 let at = Self::bind(binding, ek);
+                if let TemporalRhs::Values(values) = &atom.rhs {
+                    return self.member_atom(ek, at, &atom.column, atom.op, values, site);
+                }
                 let op = cmp_op(atom.op);
                 let what = format!("property {property}: {}", atom.column);
                 match &atom.rhs {
@@ -1188,6 +1222,7 @@ impl<'m> Builder<'m> {
                         }
                     }
                     TemporalRhs::Value(_) => Pred::False,
+                    TemporalRhs::Values(_) => unreachable!("a set is read above"),
                 }
             }
         }
@@ -1275,6 +1310,10 @@ fn collect_vars(pred: &Pred, out: &mut Vec<VarId>) {
             term(a, out);
             term(b, out);
         }
+        Pred::In(a, vs) => {
+            term(a, out);
+            vs.iter().for_each(|v| term(v, out));
+        }
         Pred::Not(p) => collect_vars(p, out),
         Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| collect_vars(p, out)),
         Pred::Forall { body, .. } | Pred::Exists { body, .. } => collect_vars(body, out),
@@ -1296,7 +1335,27 @@ fn cmp_op(op: CmpOpModel) -> CmpOp {
         CmpOpModel::Le => CmpOp::Le,
         CmpOpModel::Gt => CmpOp::Gt,
         CmpOpModel::Ge => CmpOp::Ge,
+        CmpOpModel::In | CmpOpModel::NotIn => {
+            unreachable!("`in` / `not in` is read by `member_atom`")
+        }
     }
+}
+
+/// `t in (v, ..)` when each equality is `t == v` over one and the same slot.
+fn one_slot_set(eqs: &[Pred]) -> Option<Pred> {
+    let mut slot = None;
+    let mut values = Vec::new();
+    for eq in eqs {
+        let Pred::Cmp(t @ Term::Slot { .. }, CmpOp::Eq, v @ (Term::Lit(_) | Term::Int(_))) = eq
+        else {
+            return None;
+        };
+        if slot.get_or_insert(t) != &t {
+            return None;
+        }
+        values.push(v.clone());
+    }
+    Some(Pred::In(slot?.clone(), values))
 }
 
 pub(crate) fn effect_display(v: &EffectValue) -> String {
@@ -1323,6 +1382,7 @@ fn cross_rhs_display(model: &crate::model::SemanticModel, rhs: &CrossCmpRhs) -> 
         CrossCmpRhs::IntLit(n) => n.to_string(),
         CrossCmpRhs::Now => "now".to_string(),
         CrossCmpRhs::Value(v) => v.literal(),
+        CrossCmpRhs::Values(vs) => crate::model::values_display(vs, EffectValue::literal),
     }
 }
 

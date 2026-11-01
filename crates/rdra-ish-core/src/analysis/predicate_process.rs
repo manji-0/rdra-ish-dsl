@@ -601,6 +601,21 @@ fn record_sets_effect(
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
     if let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) {
+        // A use case leaves one value; `in` names several, in either form of `sets`.
+        if cmp.op.is_membership() {
+            let col = match &cmp.lhs {
+                Operand::Column(name) => name.clone(),
+                Operand::QualifiedColumn(q) => q.column.clone(),
+                _ => String::new(),
+            };
+            push_error(
+                ctx,
+                diags,
+                cmp.span.clone(),
+                RdraError::SetsMembership { col },
+            );
+            return false;
+        }
         let entity_id = model.entities[entity_key].id.clone();
         let entity_cols = model.entities[entity_key].columns.clone();
 
@@ -648,6 +663,7 @@ fn record_sets_effect(
                                     Operand::Column(v) | Operand::IntLit(v) => v.clone(),
                                     Operand::Now => "now".into(),
                                     Operand::QualifiedColumn(q) => q.column.clone(),
+                                    Operand::Values(vs) => format!("({})", vs.join(", ")),
                                 },
                             },
                         );

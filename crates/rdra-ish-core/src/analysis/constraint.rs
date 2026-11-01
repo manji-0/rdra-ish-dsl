@@ -10,7 +10,8 @@ use slotmap::SlotMap;
 
 use super::arg_resolve::resolve_arg;
 use super::comparison::{
-    is_order_op, resolve_bare_rhs, resolve_comparison, to_model_op, type_category, BareRhs,
+    is_order_op, resolve_bare_rhs, resolve_comparison, resolve_set_values, to_model_op,
+    type_category, BareRhs,
 };
 use super::effect::parse_effect_value;
 use super::nodes::node_kind_tag_str;
@@ -119,7 +120,7 @@ pub(crate) fn resolve_entity_equals_from_comparison(
         }
         Operand::IntLit(value) => value.clone(),
         Operand::Now => "now".to_string(),
-        Operand::QualifiedColumn(_) => return Ok(None),
+        Operand::QualifiedColumn(_) | Operand::Values(_) => return Ok(None),
     };
     match parse_effect_value(variations, &col, &value_lit) {
         Ok(value) => Ok(Some((col_str, value))),
@@ -453,7 +454,7 @@ fn resolve_cross_operand_column(
                 model_col,
             ))
         }
-        Operand::IntLit(_) | Operand::Now => None,
+        Operand::IntLit(_) | Operand::Now | Operand::Values(_) => None,
     }
 }
 
@@ -480,6 +481,20 @@ fn resolve_cross_comparison(
             return None;
         }
     };
+    if let Operand::Values(names) = &cmp.rhs {
+        return match resolve_set_values(&model.variations, &lhs_col, names) {
+            Ok(values) => Some(CrossComparisonProp {
+                lhs,
+                op: to_model_op(&cmp.op),
+                rhs: CrossCmpRhs::Values(values),
+            }),
+            Err(err) => {
+                push_error_cmp(ctx, diags, cmp, err);
+                None
+            }
+        };
+    }
+
     let lhs_cat = type_category(&lhs_col.col_type);
 
     if is_order_op(&cmp.op) && lhs_cat == "equality" {
@@ -585,6 +600,7 @@ fn resolve_cross_comparison(
             }
             CrossCmpRhs::Now
         }
+        Operand::Values(_) => unreachable!("a set is resolved above"),
     };
 
     Some(CrossComparisonProp {
@@ -974,7 +990,7 @@ fn temporal_equals_from_comparison(
         }
         Operand::IntLit(value) => value.clone(),
         Operand::Now => "now".to_string(),
-        Operand::QualifiedColumn(_) => return Ok(None),
+        Operand::QualifiedColumn(_) | Operand::Values(_) => return Ok(None),
     };
     match parse_effect_value(&model.variations, &model_col, &value_lit) {
         Ok(value) => Ok(Some(CrossEntityCondition::Equals { column, value })),

@@ -46,6 +46,10 @@ impl TransitionSystem {
                 term(a, out);
                 term(b, out);
             }
+            Pred::In(a, vs) => {
+                term(a, out);
+                vs.iter().for_each(|v| term(v, out));
+            }
             Pred::Not(p) => self.pred_reads(p, out),
             Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| self.pred_reads(p, out)),
             Pred::Forall { entity, body } | Pred::Exists { entity, body } => {

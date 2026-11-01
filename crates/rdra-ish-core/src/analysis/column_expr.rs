@@ -190,7 +190,7 @@ fn resolve_derived(
                     Some(ArithOperand::Column(name.clone()))
                 }
                 // The parser admits only a column or an integer.
-                Operand::QualifiedColumn(_) | Operand::Now => None,
+                Operand::QualifiedColumn(_) | Operand::Now | Operand::Values(_) => None,
             };
             let (lhs, rhs) = (operand(&arith.lhs), operand(&arith.rhs));
             Some(DerivedExpr::Arith(ArithExpr {

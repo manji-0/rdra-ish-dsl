@@ -9,6 +9,7 @@ mod constraint;
 mod diagnostics;
 mod instance;
 mod keys;
+mod membership;
 mod nodes;
 mod predicate;
 mod publication;

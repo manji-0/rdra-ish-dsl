@@ -629,12 +629,93 @@ fn cmp_op() -> impl Parser<Token, CmpOp, Error = Simple<Token>> + Clone {
     }
 }
 
-/// 比較式: `operand cmp_op operand`（例: `stock < selling`, `expired_at < now`）
+/// The span of each `in ()` / `not in ()`, which names no value.
+fn empty_sets(items: &[Item]) -> Vec<Span> {
+    fn expr(e: &Expr, out: &mut Vec<Span>) {
+        match e {
+            Expr::Cmp(cmp) => {
+                if matches!(&cmp.rhs, Operand::Values(values) if values.is_empty()) {
+                    out.push(cmp.span.clone());
+                }
+            }
+            Expr::Not(inner) => expr(inner, out),
+            Expr::And(a, b) | Expr::Or(a, b) => {
+                expr(a, out);
+                expr(b, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for item in items {
+        match item {
+            Item::Predicate(call) => {
+                let chained = call.chain.iter().flat_map(|c| c.args.iter());
+                for arg in call.args.iter().chain(chained) {
+                    if let PredicateArg::Expr(e) = arg {
+                        expr(e, &mut out);
+                    }
+                }
+            }
+            Item::Property(prop) => match &prop.formula {
+                AstTemporalFormula::Always(e) | AstTemporalFormula::Eventually(e) => {
+                    expr(e, &mut out)
+                }
+                AstTemporalFormula::LeadsTo {
+                    antecedent,
+                    consequent,
+                } => {
+                    expr(antecedent, &mut out);
+                    expr(consequent, &mut out);
+                }
+            },
+            Item::Instance(inst) => {
+                for ann in inst.columns.iter().flat_map(|c| c.annotations.iter()) {
+                    if let Annotation::Check(ColumnExpr::Logical(e))
+                    | Annotation::Derived(ColumnExpr::Logical(e)) = ann
+                    {
+                        expr(e, &mut out);
+                    }
+                }
+            }
+            Item::Module(..) | Item::Import(_) => {}
+        }
+    }
+    out
+}
+
+/// `in (a, b)` / `not in (a, b)` after a comparison's left operand. `in` is no keyword: it is
+/// read as one only here, so a column may still be named `in`.
+fn membership() -> impl Parser<Token, (CmpOp, Operand), Error = Simple<Token>> + Clone {
+    let in_word = select! { Token::Ident(s) if s == "in" => () };
+    let value = select! {
+        Token::Ident(s) => s,
+        Token::IntLit(s) => s,
+    };
+    just(Token::Not)
+        .or_not()
+        .then_ignore(in_word)
+        .then(
+            // `in ()` parses, so that `parse` reports it by name (`empty_sets`).
+            value
+                .separated_by(just(Token::Comma))
+                .delimited_by(just(Token::LParen), just(Token::RParen)),
+        )
+        .map(|(not, values)| {
+            let op = if not.is_some() {
+                CmpOp::NotIn
+            } else {
+                CmpOp::In
+            };
+            (op, Operand::Values(values))
+        })
+}
+
+/// 比較式: `operand cmp_op operand`（例: `stock < selling`, `expired_at < now`）, or
+/// `operand in (v, ...)` / `operand not in (v, ...)`.
 fn comparison() -> impl Parser<Token, Expr, Error = Simple<Token>> + Clone {
     operand()
-        .then(cmp_op())
-        .then(operand())
-        .map_with_span(|((lhs, op), rhs), span| Expr::Cmp(Comparison { lhs, op, rhs, span }))
+        .then(cmp_op().then(operand()).or(membership()))
+        .map_with_span(|(lhs, (op, rhs)), span| Expr::Cmp(Comparison { lhs, op, rhs, span }))
 }
 
 /// Logical expression for temporal properties: `and`/`or`/`not` (TLA `/\` `\/` `~` are aliases).
@@ -856,6 +937,13 @@ pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
         },
         _ => true,
     });
+
+    for span in empty_sets(&items) {
+        errors.push(Simple::custom(
+            span,
+            "`in` / `not in` takes at least one value: write `col in (a, b)`",
+        ));
+    }
 
     for span in lex_errors {
         let snippet = src.get(span.clone()).unwrap_or("");
@@ -1996,6 +2084,106 @@ performs(actor::Add, usecase::Add)
         assert!(errors.is_empty(), "{errors:?}");
         let (_, errors) = parse("module condition.shared\nimport condition.shared\n");
         assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    fn first_cmp(src: &str) -> Comparison {
+        let ast = parse_ok(src);
+        let pred = ast
+            .items
+            .iter()
+            .find_map(|i| match i {
+                Item::Predicate(p) => Some(p),
+                _ => None,
+            })
+            .expect("predicate not found");
+        pred.args
+            .iter()
+            .chain(pred.chain.iter().flat_map(|c| c.args.iter()))
+            .find_map(|a| match a {
+                PredicateArg::Expr(Expr::Cmp(cmp)) => Some(cmp.clone()),
+                _ => None,
+            })
+            .expect("comparison not found")
+    }
+
+    #[test]
+    fn parses_set_membership() {
+        let cmp = first_cmp("forbidden(E, status in (a, b))");
+        assert_eq!(cmp.lhs, Operand::Column("status".into()));
+        assert_eq!(cmp.op, CmpOp::In);
+        assert_eq!(cmp.rhs, Operand::Values(vec!["a".into(), "b".into()]));
+
+        let cmp = first_cmp("holds(C, E.status not in (a))");
+        assert!(matches!(cmp.lhs, Operand::QualifiedColumn(_)));
+        assert_eq!(cmp.op, CmpOp::NotIn);
+        assert_eq!(cmp.rhs, Operand::Values(vec!["a".into()]));
+
+        let cmp = first_cmp("invariant(E).when(qty in (1, 2)).then(x == y)");
+        assert_eq!(cmp.rhs, Operand::Values(vec!["1".into(), "2".into()]));
+    }
+
+    #[test]
+    fn an_empty_or_unclosed_set_does_not_parse() {
+        for src in [
+            "forbidden(E, status in ())",
+            "forbidden(E, status in (a,))",
+            "forbidden(E, status in a)",
+            "forbidden(E, status not (a))",
+            "forbidden(E, status == (a, b))",
+        ] {
+            let (_, errors) = parse(src);
+            assert!(!errors.is_empty(), "{src}");
+        }
+    }
+
+    #[test]
+    fn an_empty_set_names_the_missing_values() {
+        for src in [
+            "forbidden(E, status in ())",
+            "invariant(E).when(status not in ()).then(x == y)",
+            "property P always(E.status in ())",
+            "entity E \"E\" { id: Int @pk  s: Enum(a) @check(s in ()) }",
+        ] {
+            let (_, errors) = parse(src);
+            assert_eq!(errors.len(), 1, "{src}: {errors:?}");
+            assert!(
+                format!("{:?}", errors[0]).contains("takes at least one value"),
+                "{src}: {errors:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn set_membership_reads_in_logical_expressions() {
+        let ast = parse_ok("property P always(not E.status in (a) or E.status not in (b, c))");
+        let Some(Item::Property(prop)) = ast.items.first() else {
+            panic!("expected property");
+        };
+        let AstTemporalFormula::Always(Expr::Or(a, b)) = &prop.formula else {
+            panic!("expected always(or)");
+        };
+        assert!(
+            matches!(&**a, Expr::Not(inner) if matches!(&**inner, Expr::Cmp(c) if c.op == CmpOp::In))
+        );
+        assert!(matches!(&**b, Expr::Cmp(c) if c.op == CmpOp::NotIn));
+        let (_, errors) =
+            parse("entity E \"E\" { id: Int @pk  s: Enum(a, b) @check(s in (a, b)) }");
+        assert!(errors.is_empty(), "{errors:?}");
+    }
+
+    #[test]
+    fn in_stays_usable_as_a_column_name() {
+        let (_, errors) = parse("entity E \"E\" { id: Int @pk  in: Int }\n");
+        assert!(errors.is_empty(), "{errors:?}");
+        let cmp = first_cmp("forbidden(E, in > 3)");
+        assert_eq!(cmp.lhs, Operand::Column("in".into()));
+        let cmp = first_cmp("forbidden(E, in in (1, 2))");
+        assert_eq!(cmp.lhs, Operand::Column("in".into()));
+        assert_eq!(cmp.op, CmpOp::In);
+        let cmp = first_cmp("forbidden(E, x == in)");
+        assert_eq!(cmp.rhs, Operand::Column("in".into()));
+        let cmp = first_cmp("forbidden(E, E.in not in (a))");
+        assert_eq!(cmp.op, CmpOp::NotIn);
     }
 
     #[test]

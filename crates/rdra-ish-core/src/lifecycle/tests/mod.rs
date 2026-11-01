@@ -9,6 +9,7 @@ mod deadlock;
 mod effects;
 mod guard_quantifiers;
 mod lasso;
+mod membership;
 mod names;
 mod never_runs;
 mod owners;

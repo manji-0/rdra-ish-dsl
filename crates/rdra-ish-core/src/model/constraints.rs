@@ -95,6 +95,8 @@ pub enum CrossCmpRhs {
     Now,
     /// A value of the left-hand column's type (`Order.status != paid`).
     Value(EffectValue),
+    /// The values of `in` / `not in` (`Order.status in (open, paid)`).
+    Values(Vec<EffectValue>),
 }
 
 /// A comparison proposition that may reference columns on multiple entities.
@@ -223,6 +225,8 @@ pub struct TemporalAtom {
 pub enum TemporalRhs {
     /// Enum / Bool / null / present (and Int via EffectValue::Int).
     Value(EffectValue),
+    /// The values of `in` / `not in` (`Order.status in (open, paid)`).
+    Values(Vec<EffectValue>),
     /// Integer literal (`stock < 5`).
     IntLit(i64),
     /// Column reference (`stock < selling` or `Item.stock < Item.selling`).

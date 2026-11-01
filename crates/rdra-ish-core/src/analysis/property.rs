@@ -9,7 +9,7 @@ use crate::model::{
 };
 use rdra_ish_syntax::ast::{AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PropertyDecl};
 
-use super::comparison::{resolve_bare_rhs, BareRhs};
+use super::comparison::{resolve_bare_rhs, resolve_set_values, BareRhs};
 
 /// Why an atom does not lower: a message for `InvalidTemporalProperty`, or a comparison error
 /// reported as itself.
@@ -134,6 +134,8 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
         CmpOp::Gt => CmpOpModel::Gt,
         CmpOp::Le => CmpOpModel::Le,
         CmpOp::Ge => CmpOpModel::Ge,
+        CmpOp::In => CmpOpModel::In,
+        CmpOp::NotIn => CmpOpModel::NotIn,
     };
 
     let (entity, column) = match &cmp.lhs {
@@ -197,6 +199,7 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
                 "`now` is not supported in temporal property atoms".into(),
             ));
         }
+        Operand::Values(names) => set_rhs(model, entity.as_deref(), &column, names)?,
     };
 
     // Relational ops require numeric-ish rhs (IntLit or Column), not enum literals.
@@ -214,6 +217,32 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
         op,
         rhs,
     })
+}
+
+/// The values of `in` / `not in`, read by the left-hand column's type when the atom's entity
+/// and column resolve; otherwise by their spelling, and the lifecycle reports the column.
+fn set_rhs(
+    model: &SemanticModel,
+    entity: Option<&str>,
+    column: &str,
+    names: &[String],
+) -> Result<TemporalRhs, LowerError> {
+    let lhs = model
+        .property_entity(entity, column)
+        .and_then(|ek| model.entities[ek].columns.iter().find(|c| c.name == column));
+    let values = match lhs {
+        Some(lhs) => {
+            resolve_set_values(&model.variations, lhs, names).map_err(LowerError::Comparison)?
+        }
+        None => names
+            .iter()
+            .map(|name| match name.parse::<i64>() {
+                Ok(n) => EffectValue::Int(n),
+                Err(_) => parse_effect_literal(name),
+            })
+            .collect(),
+    };
+    Ok(TemporalRhs::Values(values))
 }
 
 fn parse_effect_literal(name: &str) -> EffectValue {

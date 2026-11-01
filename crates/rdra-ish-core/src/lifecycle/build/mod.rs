@@ -616,7 +616,7 @@ impl<'m> Builder<'m> {
                 Some((n, i)) => (n, Some(i)),
                 None => return,
             },
-            CmpRhs::Now | CmpRhs::Value(_) => return,
+            CmpRhs::Now | CmpRhs::Value(_) | CmpRhs::Values(_) => return,
         };
         let holds = match pe.prop.op {
             CmpOpModel::Lt => lhs < rhs,
@@ -625,6 +625,8 @@ impl<'m> Builder<'m> {
             CmpOpModel::Ge => lhs >= rhs,
             CmpOpModel::Eq => lhs == rhs,
             CmpOpModel::Ne => lhs != rhs,
+            // A driven comparison is never a set: `sets` rejects `in`.
+            CmpOpModel::In | CmpOpModel::NotIn => return,
         };
         if holds == pe.truth {
             return;
