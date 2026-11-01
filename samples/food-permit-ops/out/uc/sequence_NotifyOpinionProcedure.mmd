@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:NotifyOpinionProcedure model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__OpinionProcedureScreen as 聴聞・弁明画面
+  participant api__OpinionProcedureApi as 意見陳述 API
+  participant entity__Disposition as 不利益処分
+  actor__PermitClerk ->> screen__OpinionProcedureScreen: 聴聞・弁明の通知
+  screen__OpinionProcedureScreen ->> api__OpinionProcedureApi: 意見陳述 API
+  alt 意見陳述の手続を執る処分である: Disposition.procedure in (聴聞, 弁明の機会の付与) and Disposition.status == 処分案
+    api__OpinionProcedureApi ->> entity__Disposition: update status 処分案 -> 意見陳述の通知済
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: done
+  else guard fails
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: rejected
+  end

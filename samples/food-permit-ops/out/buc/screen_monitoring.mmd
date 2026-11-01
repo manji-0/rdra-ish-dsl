@@ -1,0 +1,9 @@
+%% rdra-ish diagram=screen scope=buc:BucMonitoring model=samples/food-permit-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__MonitoringPlanScreen["監視指導計画画面"]:::screen
+  screen__SiteVisitScreen["立入検査画面"]:::screen
+  screen__MonitoringPlanScreen -->|立入検査の予定| screen__SiteVisitScreen
+  %% via screen__MonitoringPlanScreen -> screen__SiteVisitScreen usecase__ScheduleSiteVisit
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

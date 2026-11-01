@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RegisterPermit model=samples/food-permit-ops
+%% kinds: actor usecase screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant usecase__GrantPermit as 許可の決定
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__PermitRegistrationApi as 営業許可登録 API
+  participant entity__BusinessPermit as 営業許可
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への登録
+  usecase__GrantPermit ->> api__PermitRegistrationApi: 営業許可の決定
+  screen__PermitLedgerScreen ->> api__PermitRegistrationApi: 営業許可登録 API
+  api__PermitRegistrationApi ->> entity__BusinessPermit: create
+  api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
+  api__PermitRegistrationApi -->> screen__PermitLedgerScreen: done

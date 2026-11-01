@@ -1,0 +1,336 @@
+%% rdra-ish diagram=rdra scope=buc:BucDisposition model=samples/food-permit-ops
+%% layers: environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: business buc flow step timer medium permission usecase screen field event api entity state variation condition
+%% omitted: (none)
+flowchart LR
+  subgraph layer_environment["システム外部環境"]
+    business__Supervision[\"監視指導と行政処分"/]:::business
+    %% desc business__Supervision: 監視指導計画と立入検査、整備改善命令・営業停止・許可取消と、その前の聴聞・弁明、違反の公表。
+    buc__BucDisposition["不利益処分と公表"]:::buc
+    %% desc buc__BucDisposition: 施設基準違反などで、行政庁は施設の整備改善を命じ、営業を停止し、許可を取り消す。取消の前には聴聞、ほかは弁明の機会を与える。ただし計測などで確かめた技術的基準の不充足に基準どおりにせよと命じる処分は、意見陳述を省ける。処分は理由を示して書面で行い、審査請求ができることを教える。違反者は公表する（練馬区は7日以上）。停止は定めた期間が過ぎると終わる。
+    flow__DispositionFlow["不利益処分の流れ"]:::flow
+    step__AppealPeriodStep["審査請求期間（3月）の経過"]:::step
+    step__DecideStep["処分の決定（理由の提示・教示）"]:::step
+    step__DropStep["処分の見送り"]:::step
+    step__OmittedStep["意見陳述を省いた整備改善命令"]:::step
+    step__OpinionNoticeStep["聴聞・弁明の通知"]:::step
+    step__OpinionStep["聴聞の実施・弁明書の受理"]:::step
+    step__ProposeStep["処分の起案（処分基準）"]:::step
+    step__PublishStep["違反の公表（7日以上）"]:::step
+    step__SuspensionEndStep["停止期間の満了"]:::step
+    timer__AppealPeriodEnd(("審査請求期間の経過（処分を知った日の翌日から3月）")):::timer
+    timer__PublicationPeriodEnd(("公表期間の経過（7日間以上）")):::timer
+    timer__SuspensionTermEnd(("営業停止期間の満了（処分で定めた期間）")):::timer
+    medium__HealthCenterTerminal["保健所の端末"]:::medium
+    permission__DispositionDecide["不利益処分の決定"]:::permission
+    permission__DispositionPropose["処分の起案"]:::permission
+    permission__OpinionProcedureManage["聴聞・弁明の手続"]:::permission
+    permission__PermitRegister["許可台帳と許可証の管理"]:::permission
+    permission__ViolationPublish["違反の公表"]:::permission
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__DecideRevocation("許可の取消の決定"):::usecase
+    %% desc usecase__DecideRevocation: 聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。
+    usecase__DecideSuspension("営業停止の決定"):::usecase
+    %% desc usecase__DecideSuspension: 弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。
+    usecase__DropDisposition("処分を見送る"):::usecase
+    %% desc usecase__DropDisposition: 意見陳述の結果、処分しないと決める。
+    usecase__EndPublication("公表の終了"):::usecase
+    %% desc usecase__EndPublication: 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。
+    usecase__FinalizeDisposition("審査請求期間の経過"):::usecase
+    %% desc usecase__FinalizeDisposition: 審査請求のないまま3月が過ぎたことを記録する。審査請求と訴訟の中身は対象外。
+    usecase__HoldHearing("聴聞の実施"):::usecase
+    %% desc usecase__HoldHearing: 聴聞の期日に名あて人の意見を聴き、記録する。取消の前には必ず行う。
+    usecase__LiftSuspension("営業停止期間の満了"):::usecase
+    %% desc usecase__LiftSuspension: 停止の期間が過ぎ、営業停止を終える。営業者は許可証を掲示して営業を再開できる。
+    usecase__NotifyOpinionProcedure("聴聞・弁明の通知"):::usecase
+    %% desc usecase__NotifyOpinionProcedure: 予定する処分の内容と根拠条項、原因となる事実、聴聞の期日または弁明書の提出期限を、名あて人に書面で通知する。
+    usecase__OrderImprovement("施設の整備改善命令"):::usecase
+    %% desc usecase__OrderImprovement: 施設基準に合わない設備の改善を命じる。計測などで確かめた不充足なら意見陳述を省いて命じられる。
+    usecase__ProposeDisposition("処分の起案"):::usecase
+    %% desc usecase__ProposeDisposition: 食品衛生監視員が違反の事実と処分基準から、処分の種類（整備改善命令・停止・取消）と意見陳述の手続（聴聞・弁明・省略）を起案する。
+    usecase__PublishViolation("違反の公表"):::usecase
+    %% desc usecase__PublishViolation: 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。
+    usecase__ReceiveExplanation("弁明書の受理"):::usecase
+    %% desc usecase__ReceiveExplanation: 停止や整備改善命令の前に、名あて人の弁明書を受け取る。期限までに出なければ、弁明の機会を与えたものとして手続を終える。
+    usecase__RevokePermit("許可台帳への取消の記録"):::usecase
+    %% desc usecase__RevokePermit: 取消の決定を台帳に記録し、許可を終わらせる。営業者は営業をやめる。
+    usecase__SuspendBusiness("許可台帳への営業停止の記録"):::usecase
+    %% desc usecase__SuspendBusiness: 停止の決定を台帳に記録する。営業者は停止の期間、営業をやめる。
+    screen__DecisionScreen["許可決定画面"]:::screen
+    screen__DispositionScreen["不利益処分画面"]:::screen
+    screen__InspectionScreen["施設検査画面"]:::screen
+    screen__OpinionProcedureScreen["聴聞・弁明画面"]:::screen
+    screen__PermitLedgerScreen["許可台帳画面"]:::screen
+    screen__PermitNoticeScreen["許可後の届出画面"]:::screen
+    screen__RenewalScreen["更新申請画面"]:::screen
+    field__CertificateField["許可証の交付"]:::field
+    field__ChangeResultField["変更届の判断"]:::field
+    field__DispositionKindField["処分の種類"]:::field
+    field__ExpiryNotifiedField["有効期間の満了日"]:::field
+    field__InspectionResultField["検査結果"]:::field
+    field__PermitStatusField["許可の状態"]:::field
+    field__ProcedureField["意見陳述の手続"]:::field
+    field__PublicationField["公表"]:::field
+    field__ReasonShownField["不許可の理由の提示"]:::field
+    field__SuccessionCauseField["承継の原因"]:::field
+    event__EvDispositionDecided>"不利益処分の決定"]:::event
+    event__EvRevocationDecided>"許可の取消の決定"]:::event
+    event__EvSuspensionDecided>"営業停止の決定"]:::event
+    event__EvViolationFound>"立入検査での違反の発見"]:::event
+  end
+  subgraph layer_system["システム"]
+    api__DispositionApi{{"処分決定 API"}}:::api
+    api__DispositionDraftApi{{"処分起案 API"}}:::api
+    api__OpinionProcedureApi{{"意見陳述 API"}}:::api
+    api__PermitApi{{"営業許可 API"}}:::api
+    api__PublicationApi{{"公表 API"}}:::api
+    entity__BusinessPermit[("営業許可")]:::entity
+    entity__ChangeNotice[("変更届")]:::entity
+    entity__Disposition[("不利益処分")]:::entity
+    entity__Inspection[("施設検査")]:::entity
+    entity__PermitApplication[("営業許可申請")]:::entity
+    entity__SuccessionNotice[("地位承継届")]:::entity
+    state__BusinessPermit_revoked((("取消"))):::state
+    state__BusinessPermit_suspended((("営業停止中"))):::state
+    state__BusinessPermit_valid((("有効"))):::state
+    state__Disposition_decided((("処分決定"))):::state
+    state__Disposition_dropped((("処分しない"))):::state
+    state__Disposition_finalized((("確定（審査請求期間の経過）"))):::state
+    state__Disposition_heard((("意見陳述の手続終了"))):::state
+    state__Disposition_notified((("意見陳述の通知済"))):::state
+    state__Disposition_proposed((("処分案"))):::state
+    variation__DispositionKind[\"処分の種類"\]:::variation
+    variation__OpinionProcedure[\"意見陳述の手続"\]:::variation
+    condition__DecidedUnpublished{"処分が決定していて、まだ公表していない"}:::condition
+    condition__ExplanationProcedure{"弁明の機会を与える処分である"}:::condition
+    condition__HearingProcedure{"聴聞を執る処分である"}:::condition
+    condition__ImprovementOrderKind{"施設の整備改善命令である"}:::condition
+    condition__NotRevocation{"取消ではない処分である"}:::condition
+    condition__OpinionOmitted{"意見陳述を省く処分である"}:::condition
+    condition__OpinionRequired{"意見陳述の手続を執る処分である"}:::condition
+    condition__Published{"公表中である"}:::condition
+    condition__RevocationKind{"許可の取消である"}:::condition
+    condition__SuspensionKind{"営業の停止である"}:::condition
+  end
+  api__DispositionApi -.->|updates| entity__Disposition
+  api__DispositionDraftApi -.->|creates| entity__Disposition
+  api__DispositionDraftApi -.->|reads| entity__BusinessPermit
+  api__OpinionProcedureApi -.-> permission__OpinionProcedureManage
+  api__OpinionProcedureApi -.->|updates| entity__Disposition
+  api__PermitApi -.->|updates| entity__BusinessPermit
+  api__PublicationApi -.-> permission__ViolationPublish
+  api__PublicationApi -.->|updates| entity__Disposition
+  buc__BucDisposition --> business__Supervision
+  buc__BucDisposition --> flow__DispositionFlow
+  buc__BucDisposition --> usecase__DecideRevocation
+  buc__BucDisposition --> usecase__DecideSuspension
+  buc__BucDisposition --> usecase__DropDisposition
+  buc__BucDisposition --> usecase__EndPublication
+  buc__BucDisposition --> usecase__FinalizeDisposition
+  buc__BucDisposition --> usecase__HoldHearing
+  buc__BucDisposition --> usecase__LiftSuspension
+  buc__BucDisposition --> usecase__NotifyOpinionProcedure
+  buc__BucDisposition --> usecase__OrderImprovement
+  buc__BucDisposition --> usecase__ProposeDisposition
+  buc__BucDisposition --> usecase__PublishViolation
+  buc__BucDisposition --> usecase__ReceiveExplanation
+  buc__BucDisposition --> usecase__RevokePermit
+  buc__BucDisposition --> usecase__SuspendBusiness
+  condition__DecidedUnpublished -.->|applies_to| usecase__PublishViolation
+  condition__DecidedUnpublished -.-> entity__Disposition
+  %% derived condition__DecidedUnpublished -> entity__Disposition from holds
+  condition__ExplanationProcedure -.->|applies_to| usecase__ReceiveExplanation
+  condition__ExplanationProcedure -.-> variation__OpinionProcedure
+  %% derived condition__ExplanationProcedure -> variation__OpinionProcedure from holds
+  condition__HearingProcedure -.->|applies_to| usecase__DecideRevocation
+  condition__HearingProcedure -.->|applies_to| usecase__HoldHearing
+  condition__HearingProcedure -.-> variation__OpinionProcedure
+  %% derived condition__HearingProcedure -> variation__OpinionProcedure from holds
+  condition__ImprovementOrderKind -.->|applies_to| usecase__OrderImprovement
+  condition__ImprovementOrderKind -.-> variation__DispositionKind
+  %% derived condition__ImprovementOrderKind -> variation__DispositionKind from holds
+  condition__ImprovementOrderKind -.-> variation__OpinionProcedure
+  %% derived condition__ImprovementOrderKind -> variation__OpinionProcedure from holds
+  condition__ImprovementOrderKind -.->|when| usecase__ProposeDisposition
+  %% derived condition__ImprovementOrderKind -> usecase__ProposeDisposition via chooses Disposition.procedure omitted
+  condition__NotRevocation -.-> variation__DispositionKind
+  %% derived condition__NotRevocation -> variation__DispositionKind from holds
+  condition__NotRevocation -.-> variation__OpinionProcedure
+  %% derived condition__NotRevocation -> variation__OpinionProcedure from holds
+  condition__NotRevocation -.->|when| usecase__ProposeDisposition
+  %% derived condition__NotRevocation -> usecase__ProposeDisposition via chooses Disposition.procedure explanation
+  condition__OpinionOmitted -.-> entity__Disposition
+  %% derived condition__OpinionOmitted -> entity__Disposition from holds
+  condition__OpinionOmitted -.-> variation__OpinionProcedure
+  %% derived condition__OpinionOmitted -> variation__OpinionProcedure from holds
+  condition__OpinionOmitted -.->|when| usecase__OrderImprovement
+  %% derived condition__OpinionOmitted -> usecase__OrderImprovement via transitions Disposition.status proposed->decided
+  condition__OpinionRequired -.->|applies_to| usecase__NotifyOpinionProcedure
+  condition__OpinionRequired -.-> variation__OpinionProcedure
+  %% derived condition__OpinionRequired -> variation__OpinionProcedure from holds
+  condition__Published -.->|applies_to| usecase__EndPublication
+  condition__RevocationKind -.->|applies_to| usecase__DecideRevocation
+  condition__RevocationKind -.-> variation__DispositionKind
+  %% derived condition__RevocationKind -> variation__DispositionKind from holds
+  condition__SuspensionKind -.->|applies_to| usecase__DecideSuspension
+  condition__SuspensionKind -.-> variation__DispositionKind
+  %% derived condition__SuspensionKind -> variation__DispositionKind from holds
+  entity__ChangeNotice ---|N:1| entity__BusinessPermit
+  entity__Disposition ---|N:1| entity__BusinessPermit
+  entity__Inspection ---|1:1| entity__PermitApplication
+  entity__SuccessionNotice ---|N:1| entity__BusinessPermit
+  event__EvDispositionDecided -.-> usecase__PublishViolation
+  event__EvRevocationDecided -.-> usecase__RevokePermit
+  event__EvSuspensionDecided -.-> usecase__SuspendBusiness
+  event__EvViolationFound -.-> buc__BucDisposition
+  event__EvViolationFound -.-> usecase__ProposeDisposition
+  field__CertificateField -.-> entity__BusinessPermit
+  field__ChangeResultField -.-> entity__ChangeNotice
+  field__DispositionKindField -.-> entity__Disposition
+  field__ExpiryNotifiedField -.-> entity__BusinessPermit
+  field__InspectionResultField -.-> entity__Inspection
+  field__PermitStatusField -.-> entity__BusinessPermit
+  field__ProcedureField -.-> entity__Disposition
+  field__PublicationField -.-> entity__Disposition
+  field__ReasonShownField -.-> entity__PermitApplication
+  field__SuccessionCauseField -.-> entity__SuccessionNotice
+  flow__DispositionFlow --> step__AppealPeriodStep
+  flow__DispositionFlow --> step__DecideStep
+  flow__DispositionFlow --> step__DropStep
+  flow__DispositionFlow --> step__OmittedStep
+  flow__DispositionFlow --> step__OpinionNoticeStep
+  flow__DispositionFlow --> step__OpinionStep
+  flow__DispositionFlow --> step__ProposeStep
+  flow__DispositionFlow --> step__PublishStep
+  flow__DispositionFlow --> step__SuspensionEndStep
+  screen__DecisionScreen --> field__ReasonShownField
+  screen__DecisionScreen -.-> screen__PermitLedgerScreen
+  screen__DispositionScreen --> field__DispositionKindField
+  screen__DispositionScreen --> field__PublicationField
+  screen__DispositionScreen -.-> screen__OpinionProcedureScreen
+  screen__DispositionScreen -.-> screen__PermitLedgerScreen
+  screen__InspectionScreen --> field__InspectionResultField
+  screen__InspectionScreen -.-> screen__DecisionScreen
+  screen__OpinionProcedureScreen --> field__ProcedureField
+  screen__OpinionProcedureScreen -.-> screen__DispositionScreen
+  screen__PermitLedgerScreen --> field__CertificateField
+  screen__PermitLedgerScreen -.-> screen__PermitNoticeScreen
+  screen__PermitLedgerScreen -.-> screen__RenewalScreen
+  screen__PermitNoticeScreen --> field__ChangeResultField
+  screen__PermitNoticeScreen --> field__SuccessionCauseField
+  screen__PermitNoticeScreen -.-> screen__PermitLedgerScreen
+  screen__RenewalScreen --> field__ExpiryNotifiedField
+  screen__RenewalScreen --> field__PermitStatusField
+  screen__RenewalScreen -.-> screen__InspectionScreen
+  step__AppealPeriodStep -.-> timer__AppealPeriodEnd
+  step__AppealPeriodStep -.-> usecase__FinalizeDisposition
+  step__DecideStep -.-> usecase__DecideRevocation
+  step__DecideStep -.-> usecase__DecideSuspension
+  step__DecideStep -.-> usecase__OrderImprovement
+  step__DecideStep -.-> usecase__RevokePermit
+  step__DecideStep -.-> usecase__SuspendBusiness
+  step__DecideStep -->|precedes| step__AppealPeriodStep
+  step__DecideStep -->|precedes| step__PublishStep
+  step__DecideStep -->|precedes| step__SuspensionEndStep
+  step__DropStep -.-> usecase__DropDisposition
+  step__OmittedStep -.-> usecase__OrderImprovement
+  step__OpinionNoticeStep -.-> usecase__NotifyOpinionProcedure
+  step__OpinionNoticeStep -->|precedes| step__OpinionStep
+  step__OpinionStep -->|branches| step__DropStep
+  step__OpinionStep -.-> usecase__HoldHearing
+  step__OpinionStep -.-> usecase__ReceiveExplanation
+  step__OpinionStep -->|precedes| step__DecideStep
+  step__ProposeStep -->|branches| step__OmittedStep
+  step__ProposeStep -.-> event__EvViolationFound
+  step__ProposeStep -.-> usecase__ProposeDisposition
+  step__ProposeStep -->|precedes| step__OpinionNoticeStep
+  step__PublishStep -.-> timer__PublicationPeriodEnd
+  step__PublishStep -.-> usecase__EndPublication
+  step__PublishStep -.-> usecase__PublishViolation
+  step__SuspensionEndStep -.-> timer__SuspensionTermEnd
+  step__SuspensionEndStep -.-> usecase__LiftSuspension
+  timer__AppealPeriodEnd -.-> usecase__FinalizeDisposition
+  timer__PublicationPeriodEnd -.-> usecase__EndPublication
+  timer__SuspensionTermEnd -.-> usecase__LiftSuspension
+  usecase__DecideRevocation -.-> screen__DispositionScreen
+  usecase__DecideRevocation -.-> api__DispositionApi
+  usecase__DecideRevocation -.-> event__EvDispositionDecided
+  usecase__DecideRevocation -.-> event__EvRevocationDecided
+  usecase__DecideRevocation -.-> medium__HealthCenterTerminal
+  usecase__DecideRevocation -.-> permission__DispositionDecide
+  usecase__DecideRevocation -.->|transitions Disposition.status heard->decided| state__Disposition_decided
+  usecase__DecideSuspension -.-> screen__DispositionScreen
+  usecase__DecideSuspension -.-> api__DispositionApi
+  usecase__DecideSuspension -.-> event__EvDispositionDecided
+  usecase__DecideSuspension -.-> event__EvSuspensionDecided
+  usecase__DecideSuspension -.-> medium__HealthCenterTerminal
+  usecase__DecideSuspension -.-> permission__DispositionDecide
+  usecase__DecideSuspension -.->|transitions Disposition.status heard->decided| state__Disposition_decided
+  usecase__DropDisposition -.-> screen__DispositionScreen
+  usecase__DropDisposition -.-> api__DispositionApi
+  usecase__DropDisposition -.-> medium__HealthCenterTerminal
+  usecase__DropDisposition -.-> permission__DispositionDecide
+  usecase__DropDisposition -.->|transitions Disposition.status heard->dropped| state__Disposition_dropped
+  usecase__EndPublication -.-> api__PublicationApi
+  usecase__FinalizeDisposition -.-> api__DispositionApi
+  usecase__FinalizeDisposition -.->|transitions Disposition.status decided->finalized| state__Disposition_finalized
+  usecase__HoldHearing -.-> screen__OpinionProcedureScreen
+  usecase__HoldHearing -.-> api__OpinionProcedureApi
+  usecase__HoldHearing -.-> medium__HealthCenterTerminal
+  usecase__HoldHearing -.-> permission__OpinionProcedureManage
+  usecase__HoldHearing -.->|transitions Disposition.status notified->heard| state__Disposition_heard
+  usecase__LiftSuspension -.-> api__PermitApi
+  usecase__LiftSuspension -.->|transitions BusinessPermit.status suspended->valid| state__BusinessPermit_valid
+  usecase__NotifyOpinionProcedure -.-> screen__OpinionProcedureScreen
+  usecase__NotifyOpinionProcedure -.-> api__OpinionProcedureApi
+  usecase__NotifyOpinionProcedure -.-> medium__HealthCenterTerminal
+  usecase__NotifyOpinionProcedure -.-> permission__OpinionProcedureManage
+  usecase__NotifyOpinionProcedure -.->|transitions Disposition.status proposed->notified| state__Disposition_notified
+  usecase__OrderImprovement -.-> screen__DispositionScreen
+  usecase__OrderImprovement -.-> api__DispositionApi
+  usecase__OrderImprovement -.-> event__EvDispositionDecided
+  usecase__OrderImprovement -.-> medium__HealthCenterTerminal
+  usecase__OrderImprovement -.-> permission__DispositionDecide
+  usecase__OrderImprovement -.->|transitions Disposition.status heard->decided| state__Disposition_decided
+  usecase__OrderImprovement -.->|transitions Disposition.status proposed->decided| state__Disposition_decided
+  usecase__ProposeDisposition -.-> screen__DispositionScreen
+  usecase__ProposeDisposition -.-> api__DispositionDraftApi
+  usecase__ProposeDisposition -.-> medium__HealthCenterTerminal
+  usecase__ProposeDisposition -.-> permission__DispositionPropose
+  usecase__PublishViolation -.-> screen__DispositionScreen
+  usecase__PublishViolation -.-> api__PublicationApi
+  usecase__PublishViolation -.-> medium__HealthCenterTerminal
+  usecase__PublishViolation -.-> permission__ViolationPublish
+  usecase__ReceiveExplanation -.-> screen__OpinionProcedureScreen
+  usecase__ReceiveExplanation -.-> api__OpinionProcedureApi
+  usecase__ReceiveExplanation -.-> medium__HealthCenterTerminal
+  usecase__ReceiveExplanation -.-> permission__OpinionProcedureManage
+  usecase__ReceiveExplanation -.->|transitions Disposition.status notified->heard| state__Disposition_heard
+  usecase__RevokePermit -.-> screen__PermitLedgerScreen
+  usecase__RevokePermit -.-> api__PermitApi
+  usecase__RevokePermit -.-> medium__HealthCenterTerminal
+  usecase__RevokePermit -.-> permission__PermitRegister
+  usecase__RevokePermit -.->|transitions BusinessPermit.status suspended->revoked| state__BusinessPermit_revoked
+  usecase__RevokePermit -.->|transitions BusinessPermit.status valid->revoked| state__BusinessPermit_revoked
+  usecase__SuspendBusiness -.-> screen__PermitLedgerScreen
+  usecase__SuspendBusiness -.-> api__PermitApi
+  usecase__SuspendBusiness -.-> medium__HealthCenterTerminal
+  usecase__SuspendBusiness -.-> permission__PermitRegister
+  usecase__SuspendBusiness -.->|transitions BusinessPermit.status valid->suspended| state__BusinessPermit_suspended
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef medium fill:#f1f3f5,stroke:#333,color:#000;
+  classDef permission fill:#f1f3f5,stroke:#333,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef field fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

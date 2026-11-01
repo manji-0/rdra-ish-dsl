@@ -1,0 +1,33 @@
+%% rdra-ish diagram=robustness scope=buc:BucPermitChanges model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+flowchart LR
+  actor__BusinessOperator(["営業者"]):::actor
+  actor__PermitClerk(["保健所 許可担当職員"]):::actor
+  screen__PermitNoticeScreen["許可後の届出画面"]:::screen
+  api__ChangeNoticeApi{{"変更届 API"}}:::api
+  api__ChangeReviewApi{{"変更届確認 API"}}:::api
+  api__ClosureApi{{"廃業届 API"}}:::api
+  api__SuccessionApi{{"地位承継届 API"}}:::api
+  api__SuccessionReviewApi{{"地位承継届受理 API"}}:::api
+  entity__BusinessPermit[("営業許可")]:::entity
+  entity__ChangeNotice[("変更届")]:::entity
+  entity__SuccessionNotice[("地位承継届")]:::entity
+  actor__BusinessOperator --> screen__PermitNoticeScreen
+  actor__PermitClerk --> screen__PermitNoticeScreen
+  api__ChangeNoticeApi -->|C| entity__ChangeNotice
+  api__ChangeNoticeApi -->|R| entity__BusinessPermit
+  api__ChangeReviewApi -->|U| entity__ChangeNotice
+  api__ClosureApi -->|U| entity__BusinessPermit
+  api__SuccessionApi -->|C| entity__SuccessionNotice
+  api__SuccessionApi -->|R| entity__BusinessPermit
+  api__SuccessionReviewApi -->|U| entity__SuccessionNotice
+  screen__PermitNoticeScreen -->|地位承継届の受理| api__SuccessionReviewApi
+  screen__PermitNoticeScreen -->|地位承継届の提出| api__SuccessionApi
+  screen__PermitNoticeScreen -->|変更届の提出| api__ChangeNoticeApi
+  screen__PermitNoticeScreen -->|変更届の確認| api__ChangeReviewApi
+  screen__PermitNoticeScreen -->|廃業届の提出| api__ClosureApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,619 @@
+{
+  "asyncapi": "3.1.0",
+  "channels": {
+    "EvApplicationReturned": {
+      "address": "EvApplicationReturned",
+      "messages": {
+        "EvApplicationReturned": {
+          "$ref": "#/components/messages/EvApplicationReturned"
+        }
+      },
+      "x-subscriber": [
+        "FoodSanitationSystem"
+      ]
+    },
+    "EvDispositionDecided": {
+      "address": "EvDispositionDecided",
+      "messages": {
+        "EvDispositionDecided": {
+          "$ref": "#/components/messages/EvDispositionDecided"
+        }
+      }
+    },
+    "EvNotificationAccepted": {
+      "address": "EvNotificationAccepted",
+      "messages": {
+        "EvNotificationAccepted": {
+          "$ref": "#/components/messages/EvNotificationAccepted"
+        }
+      },
+      "x-subscriber": [
+        "FoodSanitationSystem"
+      ]
+    },
+    "EvOnlineApplicationSubmitted": {
+      "address": "EvOnlineApplicationSubmitted",
+      "messages": {
+        "EvOnlineApplicationSubmitted": {
+          "$ref": "#/components/messages/EvOnlineApplicationSubmitted"
+        }
+      },
+      "x-publisher": [
+        "FoodSanitationSystem"
+      ]
+    },
+    "EvOnlineNotificationSubmitted": {
+      "address": "EvOnlineNotificationSubmitted",
+      "messages": {
+        "EvOnlineNotificationSubmitted": {
+          "$ref": "#/components/messages/EvOnlineNotificationSubmitted"
+        }
+      },
+      "x-publisher": [
+        "FoodSanitationSystem"
+      ]
+    },
+    "EvPermitGranted": {
+      "address": "EvPermitGranted",
+      "messages": {
+        "EvPermitGranted": {
+          "$ref": "#/components/messages/EvPermitGranted"
+        }
+      }
+    },
+    "EvPermitIssued": {
+      "address": "EvPermitIssued",
+      "messages": {
+        "EvPermitIssued": {
+          "$ref": "#/components/messages/EvPermitIssued"
+        }
+      },
+      "x-subscriber": [
+        "FoodSanitationSystem"
+      ]
+    },
+    "EvRenewalGranted": {
+      "address": "EvRenewalGranted",
+      "messages": {
+        "EvRenewalGranted": {
+          "$ref": "#/components/messages/EvRenewalGranted"
+        }
+      },
+      "x-subscriber": [
+        "FoodSanitationSystem"
+      ]
+    },
+    "EvRevocationDecided": {
+      "address": "EvRevocationDecided",
+      "messages": {
+        "EvRevocationDecided": {
+          "$ref": "#/components/messages/EvRevocationDecided"
+        }
+      }
+    },
+    "EvSuspensionDecided": {
+      "address": "EvSuspensionDecided",
+      "messages": {
+        "EvSuspensionDecided": {
+          "$ref": "#/components/messages/EvSuspensionDecided"
+        }
+      }
+    },
+    "EvViolationFound": {
+      "address": "EvViolationFound",
+      "messages": {
+        "EvViolationFound": {
+          "$ref": "#/components/messages/EvViolationFound"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "EvApplicationReturned": {
+        "name": "EvApplicationReturned",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvApplicationReturned",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "申請の差戻し",
+        "x-rdra-ish-raised-by-usecases": [
+          "DenyPermit",
+          "ReturnApplication"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvDispositionDecided": {
+        "name": "EvDispositionDecided",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDispositionDecided",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "不利益処分の決定",
+        "x-rdra-ish-raised-by-usecases": [
+          "DecideRevocation",
+          "DecideSuspension",
+          "OrderImprovement"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "PublishViolation"
+        ]
+      },
+      "EvNotificationAccepted": {
+        "name": "EvNotificationAccepted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvNotificationAccepted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "届出の受付（受付済）",
+        "x-rdra-ish-raised-by-usecases": [
+          "AcceptNotification"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvOnlineApplicationSubmitted": {
+        "name": "EvOnlineApplicationSubmitted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvOnlineApplicationSubmitted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "電子申請の提出（整理番号 LIC）",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucPermitApplication"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveOnlineApplication"
+        ]
+      },
+      "EvOnlineNotificationSubmitted": {
+        "name": "EvOnlineNotificationSubmitted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvOnlineNotificationSubmitted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "電子届出の提出（整理番号 NIF）",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucBusinessNotification"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveOnlineNotification"
+        ]
+      },
+      "EvPermitGranted": {
+        "name": "EvPermitGranted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPermitGranted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "営業許可の決定",
+        "x-rdra-ish-raised-by-usecases": [
+          "GrantPermit"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RegisterPermit"
+        ]
+      },
+      "EvPermitIssued": {
+        "name": "EvPermitIssued",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPermitIssued",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "許可の発行（発行済）",
+        "x-rdra-ish-raised-by-usecases": [
+          "RegisterPermit"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvRenewalGranted": {
+        "name": "EvRenewalGranted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRenewalGranted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "更新の許可",
+        "x-rdra-ish-raised-by-usecases": [
+          "RenewPermit"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "valid",
+            "to": "valid"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ExtendPermitTerm"
+        ]
+      },
+      "EvRevocationDecided": {
+        "name": "EvRevocationDecided",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRevocationDecided",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "許可の取消の決定",
+        "x-rdra-ish-raised-by-usecases": [
+          "DecideRevocation"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "suspended",
+            "to": "revoked"
+          },
+          {
+            "from": "valid",
+            "to": "revoked"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RevokePermit"
+        ]
+      },
+      "EvSuspensionDecided": {
+        "name": "EvSuspensionDecided",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvSuspensionDecided",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "営業停止の決定",
+        "x-rdra-ish-raised-by-usecases": [
+          "DecideSuspension"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "valid",
+            "to": "suspended"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "SuspendBusiness"
+        ]
+      },
+      "EvViolationFound": {
+        "name": "EvViolationFound",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvViolationFound",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "立入検査での違反の発見",
+        "x-rdra-ish-raised-by-usecases": [
+          "RecordViolation"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucDisposition"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "ProposeDisposition"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish event catalog",
+    "version": "0.1.0"
+  },
+  "operations": {
+    "consumeEvDispositionDecided": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDispositionDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDispositionDecided/messages/EvDispositionDecided"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "PublishViolation"
+      ]
+    },
+    "consumeEvOnlineApplicationSubmitted": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvOnlineApplicationSubmitted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvOnlineApplicationSubmitted/messages/EvOnlineApplicationSubmitted"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucPermitApplication"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveOnlineApplication"
+      ]
+    },
+    "consumeEvOnlineNotificationSubmitted": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvOnlineNotificationSubmitted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvOnlineNotificationSubmitted/messages/EvOnlineNotificationSubmitted"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucBusinessNotification"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveOnlineNotification"
+      ]
+    },
+    "consumeEvPermitGranted": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvPermitGranted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPermitGranted/messages/EvPermitGranted"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RegisterPermit"
+      ]
+    },
+    "consumeEvRenewalGranted": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRenewalGranted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRenewalGranted/messages/EvRenewalGranted"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "valid",
+          "to": "valid"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ExtendPermitTerm"
+      ]
+    },
+    "consumeEvRevocationDecided": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRevocationDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRevocationDecided/messages/EvRevocationDecided"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "suspended",
+          "to": "revoked"
+        },
+        {
+          "from": "valid",
+          "to": "revoked"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RevokePermit"
+      ]
+    },
+    "consumeEvSuspensionDecided": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvSuspensionDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSuspensionDecided/messages/EvSuspensionDecided"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "valid",
+          "to": "suspended"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "SuspendBusiness"
+      ]
+    },
+    "consumeEvViolationFound": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvViolationFound"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvViolationFound/messages/EvViolationFound"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucDisposition"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "ProposeDisposition"
+      ]
+    },
+    "publishEvApplicationReturned": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvApplicationReturned"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvApplicationReturned/messages/EvApplicationReturned"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DenyPermit",
+        "ReturnApplication"
+      ]
+    },
+    "publishEvDispositionDecided": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvDispositionDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDispositionDecided/messages/EvDispositionDecided"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DecideRevocation",
+        "DecideSuspension",
+        "OrderImprovement"
+      ]
+    },
+    "publishEvNotificationAccepted": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvNotificationAccepted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvNotificationAccepted/messages/EvNotificationAccepted"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "AcceptNotification"
+      ]
+    },
+    "publishEvPermitGranted": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvPermitGranted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPermitGranted/messages/EvPermitGranted"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "GrantPermit"
+      ]
+    },
+    "publishEvPermitIssued": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvPermitIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPermitIssued/messages/EvPermitIssued"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RegisterPermit"
+      ]
+    },
+    "publishEvRenewalGranted": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvRenewalGranted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRenewalGranted/messages/EvRenewalGranted"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RenewPermit"
+      ]
+    },
+    "publishEvRevocationDecided": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvRevocationDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRevocationDecided/messages/EvRevocationDecided"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DecideRevocation"
+      ]
+    },
+    "publishEvSuspensionDecided": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvSuspensionDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSuspensionDecided/messages/EvSuspensionDecided"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DecideSuspension"
+      ]
+    },
+    "publishEvViolationFound": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvViolationFound"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvViolationFound/messages/EvViolationFound"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RecordViolation"
+      ]
+    }
+  }
+}

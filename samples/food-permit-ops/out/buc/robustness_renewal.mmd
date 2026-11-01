@@ -1,0 +1,56 @@
+%% rdra-ish diagram=robustness scope=buc:BucRenewal model=samples/food-permit-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__BusinessOperator(["営業者"]):::actor
+  actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+  actor__PermitAuthority(["都道府県知事等（保健所設置市長・特別区長）"]):::actor
+  actor__PermitClerk(["保健所 許可担当職員"]):::actor
+  extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  screen__InspectionScreen["施設検査画面"]:::screen
+  screen__PermitLedgerScreen["許可台帳画面"]:::screen
+  screen__RenewalScreen["更新申請画面"]:::screen
+  timer__ExpiryNoticeDue(("満了通知の発送（有効期間満了の2か月前）")):::timer
+  timer__PermitTermEnd(("有効期間の満了（5年以上、自治体が定める）")):::timer
+  api__DecisionApi{{"許可決定 API"}}:::api
+  api__InspectionApi{{"施設検査 API"}}:::api
+  api__InspectionScheduleApi{{"施設検査予定 API"}}:::api
+  api__PermitTermApi{{"有効期間 API"}}:::api
+  api__RenewalApi{{"更新申請 API"}}:::api
+  usecase__SendExpiryNotice("満了通知の発送"):::usecase
+  entity__BusinessPermit[("営業許可")]:::entity
+  entity__Inspection[("施設検査")]:::entity
+  entity__PermitApplication[("営業許可申請")]:::entity
+  actor__BusinessOperator --> screen__RenewalScreen
+  actor__FoodSanitationInspector --> screen__InspectionScreen
+  actor__PermitAuthority --> screen__InspectionScreen
+  actor__PermitClerk --> screen__InspectionScreen
+  actor__PermitClerk --> screen__PermitLedgerScreen
+  api__DecisionApi -->|R| entity__Inspection
+  api__DecisionApi -->|U| entity__PermitApplication
+  api__DecisionApi -.->|更新の許可| api__PermitTermApi
+  api__DecisionApi -.->|更新の許可| extsystem__FoodSanitationSystem
+  api__InspectionApi -->|U| entity__Inspection
+  api__InspectionScheduleApi -->|C| entity__Inspection
+  api__InspectionScheduleApi -->|R| entity__PermitApplication
+  api__PermitTermApi -->|U| entity__BusinessPermit
+  api__RenewalApi -->|C| entity__PermitApplication
+  api__RenewalApi -->|R| entity__BusinessPermit
+  screen__InspectionScreen -->|施設検査の実施| api__InspectionApi
+  screen__InspectionScreen -->|施設検査の日程調整| api__InspectionScheduleApi
+  screen__InspectionScreen -->|更新の許可の決定| api__DecisionApi
+  screen__PermitLedgerScreen -->|有効期間の更新| api__PermitTermApi
+  screen__PermitLedgerScreen -->|満了通知の発送| api__PermitTermApi
+  screen__PermitLedgerScreen -->|満了通知の発送| usecase__SendExpiryNotice
+  screen__RenewalScreen -->|継続（更新）の申請| api__RenewalApi
+  timer__ExpiryNoticeDue -.-> api__PermitTermApi
+  timer__ExpiryNoticeDue -.-> usecase__SendExpiryNotice
+  timer__PermitTermEnd -.-> api__PermitTermApi
+  usecase__SendExpiryNotice -->|R| entity__BusinessPermit
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

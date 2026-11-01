@@ -1,0 +1,54 @@
+%% rdra-ish diagram=robustness scope=buc:BucInspectionDecision model=samples/food-permit-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: nfr buc step medium permission event condition
+flowchart LR
+  actor__BusinessOperator(["営業者"]):::actor
+  actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+  actor__PermitAuthority(["都道府県知事等（保健所設置市長・特別区長）"]):::actor
+  actor__PermitClerk(["保健所 許可担当職員"]):::actor
+  extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  screen__DecisionScreen["許可決定画面"]:::screen
+  screen__InspectionScreen["施設検査画面"]:::screen
+  screen__PermitLedgerScreen["許可台帳画面"]:::screen
+  api__DecisionApi{{"許可決定 API"}}:::api
+  api__InspectionApi{{"施設検査 API"}}:::api
+  api__InspectionScheduleApi{{"施設検査予定 API"}}:::api
+  api__OperatorPermitApi{{"営業者の届出 API"}}:::api
+  api__PermitApi{{"営業許可 API"}}:::api
+  api__PermitRegistrationApi{{"営業許可登録 API"}}:::api
+  api__ReinspectionApi{{"再検査申込み API"}}:::api
+  entity__BusinessPermit[("営業許可")]:::entity
+  entity__Inspection[("施設検査")]:::entity
+  entity__PermitApplication[("営業許可申請")]:::entity
+  actor__BusinessOperator --> screen__InspectionScreen
+  actor__BusinessOperator --> screen__PermitLedgerScreen
+  actor__FoodSanitationInspector --> screen__InspectionScreen
+  actor__PermitAuthority --> screen__DecisionScreen
+  actor__PermitClerk --> screen__InspectionScreen
+  actor__PermitClerk --> screen__PermitLedgerScreen
+  api__DecisionApi -->|R| entity__Inspection
+  api__DecisionApi -->|U| entity__PermitApplication
+  api__DecisionApi -.->|営業許可の決定| api__PermitRegistrationApi
+  api__DecisionApi -.->|申請の差戻し| extsystem__FoodSanitationSystem
+  api__InspectionApi -->|U| entity__Inspection
+  api__InspectionScheduleApi -->|C| entity__Inspection
+  api__InspectionScheduleApi -->|R| entity__PermitApplication
+  api__OperatorPermitApi -->|U| entity__BusinessPermit
+  api__PermitApi -->|U| entity__BusinessPermit
+  api__PermitRegistrationApi -->|C| entity__BusinessPermit
+  api__PermitRegistrationApi -.->|許可の発行（発行済）| extsystem__FoodSanitationSystem
+  api__ReinspectionApi -->|U| entity__Inspection
+  screen__DecisionScreen -->|不許可の決定| api__DecisionApi
+  screen__DecisionScreen -->|許可の決定| api__DecisionApi
+  screen__InspectionScreen -->|改善の報告と再検査の申込み| api__ReinspectionApi
+  screen__InspectionScreen -->|施設検査の実施| api__InspectionApi
+  screen__InspectionScreen -->|施設検査の日程調整| api__InspectionScheduleApi
+  screen__PermitLedgerScreen -->|営業の開始・再開| api__OperatorPermitApi
+  screen__PermitLedgerScreen -->|許可台帳への登録| api__PermitRegistrationApi
+  screen__PermitLedgerScreen -->|許可証の交付| api__PermitApi
+  screen__PermitLedgerScreen -->|食品衛生責任者の選定の届出| api__OperatorPermitApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

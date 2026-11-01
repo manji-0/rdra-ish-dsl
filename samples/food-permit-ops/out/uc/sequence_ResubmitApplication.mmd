@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ResubmitApplication model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__ApplicationScreen as 許可申請受付画面
+  participant api__ApplicationAmendApi as 申請の補正・取下げ API
+  participant entity__PermitApplication as 営業許可申請
+  actor__BusinessOperator ->> screen__ApplicationScreen: 補正した申請の再提出
+  screen__ApplicationScreen ->> api__ApplicationAmendApi: 申請の補正・取下げ API
+  alt PermitApplication.status == 差戻し・補正中
+    api__ApplicationAmendApi ->> entity__PermitApplication: update status 差戻し・補正中 -> 申請内容確認待
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: rejected
+  end

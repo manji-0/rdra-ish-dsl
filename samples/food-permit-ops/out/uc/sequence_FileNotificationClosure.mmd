@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:FileNotificationClosure model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__NotificationScreen as 営業届画面
+  participant api__NotificationReviewApi as 営業届受付 API
+  participant entity__BusinessNotification as 営業届
+  actor__BusinessOperator ->> screen__NotificationScreen: 届出営業の廃業届
+  screen__NotificationScreen ->> api__NotificationReviewApi: 営業届受付 API
+  alt BusinessNotification.status == 受付済
+    api__NotificationReviewApi ->> entity__BusinessNotification: update status 受付済 -> 廃業
+    api__NotificationReviewApi -->> screen__NotificationScreen: done
+  else guard fails
+    api__NotificationReviewApi -->> screen__NotificationScreen: rejected
+  end

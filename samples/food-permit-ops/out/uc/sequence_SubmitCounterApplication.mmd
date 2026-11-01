@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:SubmitCounterApplication model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__ApplicationScreen as 許可申請受付画面
+  participant api__ApplicationIntakeApi as 許可申請受付 API
+  participant entity__PermitApplication as 営業許可申請
+  actor__BusinessOperator ->> screen__ApplicationScreen: 許可申請書の提出（窓口）
+  screen__ApplicationScreen ->> api__ApplicationIntakeApi: 許可申請受付 API
+  api__ApplicationIntakeApi ->> entity__PermitApplication: create channel=counter, kind=new
+  api__ApplicationIntakeApi -->> screen__ApplicationScreen: done

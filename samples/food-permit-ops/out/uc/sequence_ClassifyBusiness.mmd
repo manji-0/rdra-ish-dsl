@@ -1,0 +1,23 @@
+%% rdra-ish diagram=sequence scope=usecase:ClassifyBusiness model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__ConsultationScreen as 事前相談記録画面
+  participant api__ClassificationApi as 営業の種類の判定 API
+  participant entity__Consultation as 事前相談
+  actor__FoodSanitationInspector ->> screen__ConsultationScreen: 営業の種類の判定
+  screen__ConsultationScreen ->> api__ClassificationApi: 営業の種類の判定 API
+  alt Consultation.status == 相談中
+    api__ClassificationApi ->> entity__Consultation: update
+    alt status 相談中 -> 許可が必要 [許可業種（施行令35条）である]
+      api__ClassificationApi ->> entity__Consultation: status = 許可が必要
+    else status 相談中 -> 届出が必要 [届出業種である]
+      api__ClassificationApi ->> entity__Consultation: status = 届出が必要
+    else status 相談中 -> 許可・届出とも不要 [届出も要らない営業（施行令35条の2）である]
+      api__ClassificationApi ->> entity__Consultation: status = 許可・届出とも不要
+    end
+    api__ClassificationApi -->> screen__ConsultationScreen: done
+  else guard fails
+    api__ClassificationApi -->> screen__ConsultationScreen: rejected
+  end

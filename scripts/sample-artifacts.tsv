@@ -292,6 +292,119 @@ samples/patent-ops/out/states_patent.txt	states samples/patent-ops --format tabl
 samples/patent-ops/out/asyncapi.json	export samples/patent-ops --kind asyncapi
 samples/patent-ops/out/er.mmd	diagram samples/patent-ops --kind er --format mermaid
 samples/patent-ops/out/transitions.md	list samples/patent-ops --kind transition --format markdown
+samples/food-permit-ops/out/actor_permission_audit.csv	csv samples/food-permit-ops --kind actor-permission-audit
+samples/food-permit-ops/out/api_matrix.csv	csv samples/food-permit-ops --kind api-matrix
+samples/food-permit-ops/out/buc/condition_disposition.mmd	diagram samples/food-permit-ops --kind condition --format mermaid --buc BucDisposition
+samples/food-permit-ops/out/buc/flow_business_notification.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucBusinessNotification
+samples/food-permit-ops/out/buc/flow_consultation.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucConsultation
+samples/food-permit-ops/out/buc/flow_disposition.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucDisposition
+samples/food-permit-ops/out/buc/flow_inspection_decision.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucInspectionDecision
+samples/food-permit-ops/out/buc/flow_monitoring.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucMonitoring
+samples/food-permit-ops/out/buc/flow_permit_application.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucPermitApplication
+samples/food-permit-ops/out/buc/flow_permit_changes.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucPermitChanges
+samples/food-permit-ops/out/buc/flow_renewal.mmd	diagram samples/food-permit-ops --kind flow --format mermaid --buc BucRenewal
+samples/food-permit-ops/out/buc/usecase_business_notification.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucBusinessNotification
+samples/food-permit-ops/out/buc/usecase_consultation.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucConsultation
+samples/food-permit-ops/out/buc/usecase_disposition.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucDisposition
+samples/food-permit-ops/out/buc/usecase_inspection_decision.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucInspectionDecision
+samples/food-permit-ops/out/buc/usecase_monitoring.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucMonitoring
+samples/food-permit-ops/out/buc/usecase_permit_application.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucPermitApplication
+samples/food-permit-ops/out/buc/usecase_permit_changes.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucPermitChanges
+samples/food-permit-ops/out/buc/usecase_renewal.mmd	diagram samples/food-permit-ops --kind usecase --format mermaid --buc BucRenewal
+samples/food-permit-ops/out/buc/robustness_business_notification.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucBusinessNotification
+samples/food-permit-ops/out/buc/robustness_consultation.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucConsultation
+samples/food-permit-ops/out/buc/robustness_disposition.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucDisposition
+samples/food-permit-ops/out/buc/robustness_inspection_decision.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucInspectionDecision
+samples/food-permit-ops/out/buc/robustness_monitoring.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucMonitoring
+samples/food-permit-ops/out/buc/robustness_permit_application.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucPermitApplication
+samples/food-permit-ops/out/buc/robustness_permit_changes.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucPermitChanges
+samples/food-permit-ops/out/buc/robustness_renewal.mmd	diagram samples/food-permit-ops --kind robustness --format mermaid --buc BucRenewal
+samples/food-permit-ops/out/buc/screen_business_notification.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucBusinessNotification
+samples/food-permit-ops/out/buc/screen_consultation.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucConsultation
+samples/food-permit-ops/out/buc/screen_disposition.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucDisposition
+samples/food-permit-ops/out/buc/screen_inspection_decision.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucInspectionDecision
+samples/food-permit-ops/out/buc/screen_monitoring.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucMonitoring
+samples/food-permit-ops/out/buc/screen_permit_application.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucPermitApplication
+samples/food-permit-ops/out/buc/screen_permit_changes.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucPermitChanges
+samples/food-permit-ops/out/buc/screen_renewal.mmd	diagram samples/food-permit-ops --kind screen --format mermaid --buc BucRenewal
+samples/food-permit-ops/out/uc/sequence_AcceptNotification.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase AcceptNotification
+samples/food-permit-ops/out/uc/sequence_AcceptSuccessionNotice.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase AcceptSuccessionNotice
+samples/food-permit-ops/out/uc/sequence_ApplyRenewal.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ApplyRenewal
+samples/food-permit-ops/out/uc/sequence_AppointHygieneManager.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase AppointHygieneManager
+samples/food-permit-ops/out/uc/sequence_ClassifyBusiness.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ClassifyBusiness
+samples/food-permit-ops/out/uc/sequence_ConductInspection.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ConductInspection
+samples/food-permit-ops/out/uc/sequence_DecideRevocation.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase DecideRevocation
+samples/food-permit-ops/out/uc/sequence_DecideSuspension.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase DecideSuspension
+samples/food-permit-ops/out/uc/sequence_DenyPermit.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase DenyPermit
+samples/food-permit-ops/out/uc/sequence_DraftMonitoringPlan.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase DraftMonitoringPlan
+samples/food-permit-ops/out/uc/sequence_DropDisposition.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase DropDisposition
+samples/food-permit-ops/out/uc/sequence_EndPublication.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase EndPublication
+samples/food-permit-ops/out/uc/sequence_ExpirePermit.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ExpirePermit
+samples/food-permit-ops/out/uc/sequence_ExtendPermitTerm.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ExtendPermitTerm
+samples/food-permit-ops/out/uc/sequence_FileChangeNotice.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase FileChangeNotice
+samples/food-permit-ops/out/uc/sequence_FileClosureNotice.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase FileClosureNotice
+samples/food-permit-ops/out/uc/sequence_FileNotificationClosure.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase FileNotificationClosure
+samples/food-permit-ops/out/uc/sequence_FileSuccessionNotice.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase FileSuccessionNotice
+samples/food-permit-ops/out/uc/sequence_FinalizeDisposition.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase FinalizeDisposition
+samples/food-permit-ops/out/uc/sequence_GrantPermit.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase GrantPermit
+samples/food-permit-ops/out/uc/sequence_HoldHearing.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase HoldHearing
+samples/food-permit-ops/out/uc/sequence_IssueCertificate.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase IssueCertificate
+samples/food-permit-ops/out/uc/sequence_LiftSuspension.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase LiftSuspension
+samples/food-permit-ops/out/uc/sequence_NotifyOpinionProcedure.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase NotifyOpinionProcedure
+samples/food-permit-ops/out/uc/sequence_OrderImprovement.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase OrderImprovement
+samples/food-permit-ops/out/uc/sequence_PayPermitFee.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase PayPermitFee
+samples/food-permit-ops/out/uc/sequence_ProposeDisposition.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ProposeDisposition
+samples/food-permit-ops/out/uc/sequence_PublishMonitoringPlan.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase PublishMonitoringPlan
+samples/food-permit-ops/out/uc/sequence_PublishViolation.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase PublishViolation
+samples/food-permit-ops/out/uc/sequence_ReceiveExplanation.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ReceiveExplanation
+samples/food-permit-ops/out/uc/sequence_ReceiveOnlineApplication.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ReceiveOnlineApplication
+samples/food-permit-ops/out/uc/sequence_ReceiveOnlineNotification.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ReceiveOnlineNotification
+samples/food-permit-ops/out/uc/sequence_RecordCompliance.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase RecordCompliance
+samples/food-permit-ops/out/uc/sequence_RecordViolation.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase RecordViolation
+samples/food-permit-ops/out/uc/sequence_RegisterPermit.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase RegisterPermit
+samples/food-permit-ops/out/uc/sequence_RenewPermit.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase RenewPermit
+samples/food-permit-ops/out/uc/sequence_RequestConsultation.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase RequestConsultation
+samples/food-permit-ops/out/uc/sequence_RequestReinspection.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase RequestReinspection
+samples/food-permit-ops/out/uc/sequence_ResubmitApplication.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ResubmitApplication
+samples/food-permit-ops/out/uc/sequence_ReturnApplication.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ReturnApplication
+samples/food-permit-ops/out/uc/sequence_ReviewApplication.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ReviewApplication
+samples/food-permit-ops/out/uc/sequence_ReviewChangeNotice.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ReviewChangeNotice
+samples/food-permit-ops/out/uc/sequence_ReviewFloorPlan.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ReviewFloorPlan
+samples/food-permit-ops/out/uc/sequence_RevokePermit.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase RevokePermit
+samples/food-permit-ops/out/uc/sequence_ScheduleInspection.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ScheduleInspection
+samples/food-permit-ops/out/uc/sequence_ScheduleSiteVisit.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase ScheduleSiteVisit
+samples/food-permit-ops/out/uc/sequence_SendExpiryNotice.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase SendExpiryNotice
+samples/food-permit-ops/out/uc/sequence_StartBusiness.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase StartBusiness
+samples/food-permit-ops/out/uc/sequence_SubmitCounterApplication.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase SubmitCounterApplication
+samples/food-permit-ops/out/uc/sequence_SubmitCounterNotification.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase SubmitCounterNotification
+samples/food-permit-ops/out/uc/sequence_SuspendBusiness.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase SuspendBusiness
+samples/food-permit-ops/out/uc/sequence_WithdrawApplication.mmd	diagram samples/food-permit-ops --kind sequence --format mermaid --usecase WithdrawApplication
+samples/food-permit-ops/out/business.mmd	diagram samples/food-permit-ops --kind business --format mermaid
+samples/food-permit-ops/out/condition.mmd	diagram samples/food-permit-ops --kind condition --format mermaid
+samples/food-permit-ops/out/context.mmd	diagram samples/food-permit-ops --kind context --format mermaid
+samples/food-permit-ops/out/event_flow.mmd	diagram samples/food-permit-ops --kind event --format mermaid
+samples/food-permit-ops/out/information.mmd	diagram samples/food-permit-ops --kind information --format mermaid
+samples/food-permit-ops/out/rdra_buc_disposition.mmd	diagram samples/food-permit-ops --kind rdra --format mermaid --buc BucDisposition
+samples/food-permit-ops/out/requirement.mmd	diagram samples/food-permit-ops --kind requirement --format mermaid
+samples/food-permit-ops/out/screen.mmd	diagram samples/food-permit-ops --kind screen --format mermaid
+samples/food-permit-ops/out/screen_constraints.csv	csv samples/food-permit-ops --kind screen-constraints
+samples/food-permit-ops/out/state_whole.mmd	diagram samples/food-permit-ops --kind state --format mermaid
+samples/food-permit-ops/out/state/Consultation.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity Consultation
+samples/food-permit-ops/out/state/PermitApplication.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity PermitApplication
+samples/food-permit-ops/out/state/Inspection.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity Inspection
+samples/food-permit-ops/out/state/BusinessPermit.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity BusinessPermit
+samples/food-permit-ops/out/state/ChangeNotice.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity ChangeNotice
+samples/food-permit-ops/out/state/SuccessionNotice.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity SuccessionNotice
+samples/food-permit-ops/out/state/BusinessNotification.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity BusinessNotification
+samples/food-permit-ops/out/state/MonitoringPlan.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity MonitoringPlan
+samples/food-permit-ops/out/state/SiteVisit.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity SiteVisit
+samples/food-permit-ops/out/state/Disposition.mmd	diagram samples/food-permit-ops --kind state --format mermaid --entity Disposition
+samples/food-permit-ops/out/states_permit_application.txt	states samples/food-permit-ops --format table --entity PermitApplication
+samples/food-permit-ops/out/states_business_permit.txt	states samples/food-permit-ops --format table --entity BusinessPermit
+samples/food-permit-ops/out/states_disposition.txt	states samples/food-permit-ops --format table --entity Disposition
+samples/food-permit-ops/out/asyncapi.json	export samples/food-permit-ops --kind asyncapi
+samples/food-permit-ops/out/er.mmd	diagram samples/food-permit-ops --kind er --format mermaid
+samples/food-permit-ops/out/transitions.md	list samples/food-permit-ops --kind transition --format markdown
 samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid

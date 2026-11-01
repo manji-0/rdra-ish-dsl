@@ -1,0 +1,35 @@
+%% rdra-ish diagram=state scope=whole model=samples/food-permit-ops
+%% kinds: statemodel state
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+stateDiagram-v2
+  state "BusinessNotification.status" as statemodel__BusinessNotification_status {
+    state "3 状態 / 2 遷移 (--entity BusinessNotification)" as index__BusinessNotification_status
+  }
+  state "BusinessPermit.status" as statemodel__BusinessPermit_status {
+    state "5 状態 / 9 遷移 (--entity BusinessPermit)" as index__BusinessPermit_status
+  }
+  state "ChangeNotice.status" as statemodel__ChangeNotice_status {
+    state "3 状態 / 2 遷移 (--entity ChangeNotice)" as index__ChangeNotice_status
+  }
+  state "Consultation.status" as statemodel__Consultation_status {
+    state "4 状態 / 3 遷移 (--entity Consultation)" as index__Consultation_status
+  }
+  state "Disposition.status" as statemodel__Disposition_status {
+    state "6 状態 / 9 遷移 (--entity Disposition)" as index__Disposition_status
+  }
+  state "Inspection.status" as statemodel__Inspection_status {
+    state "3 状態 / 3 遷移 (--entity Inspection)" as index__Inspection_status
+  }
+  state "MonitoringPlan.status" as statemodel__MonitoringPlan_status {
+    state "2 状態 / 1 遷移 (--entity MonitoringPlan)" as index__MonitoringPlan_status
+  }
+  state "PermitApplication.status" as statemodel__PermitApplication_status {
+    state "6 状態 / 11 遷移 (--entity PermitApplication)" as index__PermitApplication_status
+  }
+  state "SiteVisit.status" as statemodel__SiteVisit_status {
+    state "3 状態 / 2 遷移 (--entity SiteVisit)" as index__SiteVisit_status
+  }
+  state "SuccessionNotice.status" as statemodel__SuccessionNotice_status {
+    state "2 状態 / 1 遷移 (--entity SuccessionNotice)" as index__SuccessionNotice_status
+  }

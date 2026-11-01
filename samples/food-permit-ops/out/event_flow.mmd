@@ -1,0 +1,114 @@
+%% rdra-ish diagram=event scope=whole model=samples/food-permit-ops
+%% kinds: event usecase extsystem buc timer
+%% omitted: state transitions
+flowchart LR
+  event__EvApplicationReturned>"申請の差戻し"]:::event
+  usecase__DenyPermit("不許可の決定"):::usecase
+  %% desc usecase__DenyPermit: 施設基準に合わないか、補正に応じないか、欠格事由に当たる申請を、理由を示し、審査請求ができることを書面で教えて拒否する。
+  usecase__DenyPermit -.-> event__EvApplicationReturned
+  usecase__ReturnApplication("差戻し（補正の求め）"):::usecase
+  %% desc usecase__ReturnApplication: 記載の誤りや添付書類の不足があれば、期間を定めて補正を求め、申請を差し戻す。電子申請では申請者の依頼による差戻しもある。
+  usecase__ReturnApplication -.-> event__EvApplicationReturned
+  extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  event__EvApplicationReturned -.-> extsystem__FoodSanitationSystem
+  event__EvDispositionDecided>"不利益処分の決定"]:::event
+  usecase__DecideRevocation("許可の取消の決定"):::usecase
+  %% desc usecase__DecideRevocation: 聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。
+  usecase__DecideRevocation -.-> event__EvDispositionDecided
+  usecase__DecideSuspension("営業停止の決定"):::usecase
+  %% desc usecase__DecideSuspension: 弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。
+  usecase__DecideSuspension -.-> event__EvDispositionDecided
+  usecase__OrderImprovement("施設の整備改善命令"):::usecase
+  %% desc usecase__OrderImprovement: 施設基準に合わない設備の改善を命じる。計測などで確かめた不充足なら意見陳述を省いて命じられる。
+  usecase__OrderImprovement -.-> event__EvDispositionDecided
+  usecase__PublishViolation("違反の公表"):::usecase
+  %% desc usecase__PublishViolation: 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。
+  event__EvDispositionDecided -.-> usecase__PublishViolation
+  event__EvNotificationAccepted>"届出の受付（受付済）"]:::event
+  usecase__AcceptNotification("営業届の受付"):::usecase
+  %% desc usecase__AcceptNotification: 許可担当が記載を確かめて受け付ける。施設基準による審査と施設検査はない。
+  usecase__AcceptNotification -.-> event__EvNotificationAccepted
+  event__EvNotificationAccepted -.-> extsystem__FoodSanitationSystem
+  event__EvOnlineApplicationSubmitted>"電子申請の提出（整理番号 LIC）"]:::event
+  extsystem__FoodSanitationSystem -.-> event__EvOnlineApplicationSubmitted
+  usecase__ReceiveOnlineApplication("電子申請の受付"):::usecase
+  %% desc usecase__ReceiveOnlineApplication: 食品衛生申請等システムで提出された新規の許可申請を、管轄の保健所の確認待ち（申請内容確認待）として受け付ける。
+  event__EvOnlineApplicationSubmitted -.-> usecase__ReceiveOnlineApplication
+  buc__BucPermitApplication["営業許可の申請と受付"]:::buc
+  %% desc buc__BucPermitApplication: 営業者は開店の2〜3週間前（東京都は工事完成の10日前ころ）に、申請書と図面を保健所の窓口に出すか、食品衛生申請等システムで電子申請し、条例の手数料を納める。保健所は記載事項と添付書類を確かめ、足りなければ補正を求め（差戻し）、整えば施設検査に進める（検査待）。申請者は差戻しの間に取り下げられる。
+  event__EvOnlineApplicationSubmitted -.-> buc__BucPermitApplication
+  event__EvOnlineNotificationSubmitted>"電子届出の提出（整理番号 NIF）"]:::event
+  extsystem__FoodSanitationSystem -.-> event__EvOnlineNotificationSubmitted
+  usecase__ReceiveOnlineNotification("電子届出の受付"):::usecase
+  %% desc usecase__ReceiveOnlineNotification: 食品衛生申請等システムで出された営業届を、届出内容確認待として受け付ける。
+  event__EvOnlineNotificationSubmitted -.-> usecase__ReceiveOnlineNotification
+  buc__BucBusinessNotification["営業届出"]:::buc
+  %% desc buc__BucBusinessNotification: 許可業種でも届出不要の営業でもない営業は、あらかじめ営業所の名称・所在地などを届け出る。許可と違って施設基準はなく、施設検査も手数料も更新もない。届出営業者も食品衛生責任者を定め、廃業したら届け出る。
+  event__EvOnlineNotificationSubmitted -.-> buc__BucBusinessNotification
+  event__EvPermitGranted>"営業許可の決定"]:::event
+  usecase__GrantPermit("許可の決定"):::usecase
+  %% desc usecase__GrantPermit: 施設検査で施設基準に合うと認めた新規の申請に許可を与え、有効期間（5年以上）を付ける。
+  usecase__GrantPermit -.-> event__EvPermitGranted
+  usecase__RegisterPermit("許可台帳への登録"):::usecase
+  %% desc usecase__RegisterPermit: 許可の決定を受けて許可番号を付け、許可台帳に登録する。電子申請ではシステムの表示を発行済にする。
+  event__EvPermitGranted -.-> usecase__RegisterPermit
+  event__EvPermitIssued>"許可の発行（発行済）"]:::event
+  usecase__RegisterPermit -.-> event__EvPermitIssued
+  event__EvPermitIssued -.-> extsystem__FoodSanitationSystem
+  event__EvRenewalGranted>"更新の許可"]:::event
+  usecase__RenewPermit("更新の許可の決定"):::usecase
+  %% desc usecase__RenewPermit: 施設検査で施設基準に合うと認めた継続の申請に、許可がまだ有効なうちに許可を与える。
+  usecase__RenewPermit -.-> event__EvRenewalGranted
+  usecase__ExtendPermitTerm("有効期間の更新"):::usecase
+  %% desc usecase__ExtendPermitTerm: 更新の許可を受けて、台帳の有効期間を新しい期間に書き換え、満了通知の記録を消す。
+  event__EvRenewalGranted -.-> usecase__ExtendPermitTerm
+  event__EvRenewalGranted -.-> extsystem__FoodSanitationSystem
+  event__EvRevocationDecided>"許可の取消の決定"]:::event
+  usecase__DecideRevocation -.-> event__EvRevocationDecided
+  usecase__RevokePermit("許可台帳への取消の記録"):::usecase
+  %% desc usecase__RevokePermit: 取消の決定を台帳に記録し、許可を終わらせる。営業者は営業をやめる。
+  event__EvRevocationDecided -.-> usecase__RevokePermit
+  event__EvSuspensionDecided>"営業停止の決定"]:::event
+  usecase__DecideSuspension -.-> event__EvSuspensionDecided
+  usecase__SuspendBusiness("許可台帳への営業停止の記録"):::usecase
+  %% desc usecase__SuspendBusiness: 停止の決定を台帳に記録する。営業者は停止の期間、営業をやめる。
+  event__EvSuspensionDecided -.-> usecase__SuspendBusiness
+  event__EvViolationFound>"立入検査での違反の発見"]:::event
+  usecase__RecordViolation("違反の記録"):::usecase
+  %% desc usecase__RecordViolation: 立入検査で施設基準違反などを見つけたことを記録し、不利益処分の起案に回す。
+  usecase__RecordViolation -.-> event__EvViolationFound
+  usecase__ProposeDisposition("処分の起案"):::usecase
+  %% desc usecase__ProposeDisposition: 食品衛生監視員が違反の事実と処分基準から、処分の種類（整備改善命令・停止・取消）と意見陳述の手続（聴聞・弁明・省略）を起案する。
+  event__EvViolationFound -.-> usecase__ProposeDisposition
+  buc__BucDisposition["不利益処分と公表"]:::buc
+  %% desc buc__BucDisposition: 施設基準違反などで、行政庁は施設の整備改善を命じ、営業を停止し、許可を取り消す。取消の前には聴聞、ほかは弁明の機会を与える。ただし計測などで確かめた技術的基準の不充足に基準どおりにせよと命じる処分は、意見陳述を省ける。処分は理由を示して書面で行い、審査請求ができることを教える。違反者は公表する（練馬区は7日以上）。停止は定めた期間が過ぎると終わる。
+  event__EvViolationFound -.-> buc__BucDisposition
+  timer__AnnualPlanning(("翌年度の監視指導計画の策定（毎年度）")):::timer
+  usecase__DraftMonitoringPlan("監視指導計画の策定"):::usecase
+  %% desc usecase__DraftMonitoringPlan: 重点的に監視指導する項目、自主的な衛生管理の指導、関係機関との連携を定めた翌年度の計画を作る。
+  timer__AnnualPlanning -.-> usecase__DraftMonitoringPlan
+  timer__AppealPeriodEnd(("審査請求期間の経過（処分を知った日の翌日から3月）")):::timer
+  usecase__FinalizeDisposition("審査請求期間の経過"):::usecase
+  %% desc usecase__FinalizeDisposition: 審査請求のないまま3月が過ぎたことを記録する。審査請求と訴訟の中身は対象外。
+  timer__AppealPeriodEnd -.-> usecase__FinalizeDisposition
+  timer__ExpiryNoticeDue(("満了通知の発送（有効期間満了の2か月前）")):::timer
+  usecase__SendExpiryNotice("満了通知の発送"):::usecase
+  %% desc usecase__SendExpiryNotice: 有効期間が満了する前に、許可営業者に満了の時期と更新の手続を知らせる。
+  timer__ExpiryNoticeDue -.-> usecase__SendExpiryNotice
+  timer__PermitTermEnd(("有効期間の満了（5年以上、自治体が定める）")):::timer
+  usecase__ExpirePermit("有効期間の満了による失効"):::usecase
+  %% desc usecase__ExpirePermit: 更新されないまま有効期間が満了した許可を失効させる。営業者は営業をやめ、続けるなら新規の許可を受ける。
+  timer__PermitTermEnd -.-> usecase__ExpirePermit
+  timer__PublicationPeriodEnd(("公表期間の経過（7日間以上）")):::timer
+  usecase__EndPublication("公表の終了"):::usecase
+  %% desc usecase__EndPublication: 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。
+  timer__PublicationPeriodEnd -.-> usecase__EndPublication
+  timer__SuspensionTermEnd(("営業停止期間の満了（処分で定めた期間）")):::timer
+  usecase__LiftSuspension("営業停止期間の満了"):::usecase
+  %% desc usecase__LiftSuspension: 停止の期間が過ぎ、営業停止を終える。営業者は許可証を掲示して営業を再開できる。
+  timer__SuspensionTermEnd -.-> usecase__LiftSuspension
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;

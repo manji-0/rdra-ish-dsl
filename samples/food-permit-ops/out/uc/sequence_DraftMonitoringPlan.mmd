@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:DraftMonitoringPlan model=samples/food-permit-ops
+%% kinds: actor timer screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant timer__AnnualPlanning as 翌年度の監視指導計画の策定（毎年度）
+  participant screen__MonitoringPlanScreen as 監視指導計画画面
+  participant api__MonitoringPlanApi as 監視指導計画 API
+  participant entity__MonitoringPlan as 監視指導計画
+  actor__PermitClerk ->> screen__MonitoringPlanScreen: 監視指導計画の策定
+  timer__AnnualPlanning ->> api__MonitoringPlanApi: 翌年度の監視指導計画の策定（毎年度）
+  screen__MonitoringPlanScreen ->> api__MonitoringPlanApi: 監視指導計画 API
+  api__MonitoringPlanApi ->> entity__MonitoringPlan: create
+  api__MonitoringPlanApi -->> screen__MonitoringPlanScreen: done

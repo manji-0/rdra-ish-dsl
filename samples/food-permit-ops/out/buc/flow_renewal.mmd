@@ -1,0 +1,57 @@
+%% rdra-ish diagram=flow scope=buc:BucRenewal model=samples/food-permit-ops
+%% kinds: flow step lane timer usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__RenewalFlow["更新の流れ"]
+    step__ExpiryStep["満了による失効"]:::step
+    subgraph lane__RenewalFlow__BusinessOperator["営業者"]
+      %% lane lane__RenewalFlow__BusinessOperator: actor__BusinessOperator
+      step__RenewalApplyStep["継続の申請（満了の1か月〜2週間前）"]:::step
+    end
+    subgraph lane__RenewalFlow__FoodSanitationInspector["食品衛生監視員"]
+      %% lane lane__RenewalFlow__FoodSanitationInspector: actor__FoodSanitationInspector
+      step__RenewalInspectStep["更新前の施設検査"]:::step
+    end
+    subgraph lane__RenewalFlow__PermitAuthority["都道府県知事等（保健所設置市長・特別区長）"]
+      %% lane lane__RenewalFlow__PermitAuthority: actor__PermitAuthority
+      step__RenewalDecisionStep["更新の許可と有効期間の書換え"]:::step
+    end
+    subgraph lane__RenewalFlow__PermitClerk["保健所 許可担当職員"]
+      %% lane lane__RenewalFlow__PermitClerk: actor__PermitClerk
+      step__NoticeStep["満了通知（2か月前）"]:::step
+    end
+  end
+  timer__ExpiryNoticeDue(("満了通知の発送（有効期間満了の2か月前）")):::timer
+  timer__PermitTermEnd(("有効期間の満了（5年以上、自治体が定める）")):::timer
+  usecase__ApplyRenewal("継続（更新）の申請"):::usecase
+  %% desc usecase__ApplyRenewal: 有効な許可の営業者が、満了の前に継続の許可を申請する（窓口・電子）。手数料と施設検査は新規と同じ手順で進む。
+  usecase__ConductInspection("施設検査の実施"):::usecase
+  %% desc usecase__ConductInspection: 食品衛生監視員が施設を施設基準（共通基準・業種別基準）と照らし、衛生管理計画を確かめる。合わなければ改善を指示する。
+  usecase__ExpirePermit("有効期間の満了による失効"):::usecase
+  %% desc usecase__ExpirePermit: 更新されないまま有効期間が満了した許可を失効させる。営業者は営業をやめ、続けるなら新規の許可を受ける。
+  usecase__ExtendPermitTerm("有効期間の更新"):::usecase
+  %% desc usecase__ExtendPermitTerm: 更新の許可を受けて、台帳の有効期間を新しい期間に書き換え、満了通知の記録を消す。
+  usecase__RenewPermit("更新の許可の決定"):::usecase
+  %% desc usecase__RenewPermit: 施設検査で施設基準に合うと認めた継続の申請に、許可がまだ有効なうちに許可を与える。
+  usecase__ScheduleInspection("施設検査の日程調整"):::usecase
+  %% desc usecase__ScheduleInspection: 手数料の納付を確かめた検査待の申請について、施設検査の日を決める。
+  usecase__SendExpiryNotice("満了通知の発送"):::usecase
+  %% desc usecase__SendExpiryNotice: 有効期間が満了する前に、許可営業者に満了の時期と更新の手続を知らせる。
+  step__ExpiryStep -.-> timer__PermitTermEnd
+  step__ExpiryStep -.-> usecase__ExpirePermit
+  step__NoticeStep -.-> timer__ExpiryNoticeDue
+  step__NoticeStep -.-> usecase__SendExpiryNotice
+  step__NoticeStep -.->|excepts| step__ExpiryStep
+  step__NoticeStep -->|precedes| step__RenewalApplyStep
+  step__RenewalApplyStep -.-> usecase__ApplyRenewal
+  step__RenewalApplyStep -->|precedes| step__RenewalInspectStep
+  step__RenewalDecisionStep -.-> usecase__ExtendPermitTerm
+  step__RenewalDecisionStep -.-> usecase__RenewPermit
+  step__RenewalInspectStep -.-> usecase__ConductInspection
+  step__RenewalInspectStep -.-> usecase__ScheduleInspection
+  step__RenewalInspectStep -->|precedes| step__RenewalDecisionStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

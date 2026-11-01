@@ -1,0 +1,93 @@
+%% rdra-ish diagram=requirement scope=whole model=samples/food-permit-ops
+%% kinds: requirement goal buc
+%% omitted: nfr quality constraint business flow usecase event system entity
+flowchart LR
+  requirement__ReqClassifyBeforeConstruction[/"工事の前に営業の種類を判定し、許可業種なら施設基準を説明する"\]:::requirement
+  requirement__ReqDueProcessDisposition[/"不利益処分は処分基準に沿い、意見陳述の手続と理由の提示を経て行う"\]:::requirement
+  requirement__ReqFeeNotRefunded[/"納めた手数料は、取下げ・不許可でも還付しない"\]:::requirement
+  requirement__ReqHygieneManagerAfterPermit[/"申請時に食品衛生責任者が未定なら、許可後速やかに定めさせる"\]:::requirement
+  requirement__ReqKeepLedgerCurrent[/"許可後の変更・承継・廃業を届出で台帳に反映する"\]:::requirement
+  requirement__ReqNotificationWithoutStandard[/"届出は施設基準・施設検査・手数料・更新なしで受け付ける"\]:::requirement
+  requirement__ReqPermitOnlyCompliantFacility[/"施設基準に適合した施設にだけ許可し、不許可には理由を示す"\]:::requirement
+  requirement__ReqPlannedMonitoring[/"毎年度の計画を公表し、計画に沿って立入検査する"\]:::requirement
+  requirement__ReqPublishViolations[/"処分を決めた違反を一定期間公表する"\]:::requirement
+  requirement__ReqReceiveBothChannels[/"窓口と電子申請を同じ手順で受け付け、不備は補正を求める"\]:::requirement
+  requirement__ReqRenewBeforeExpiry[/"満了の前に通知し、満了日までに更新を終える。失効した許可は新規扱いとする"\]:::requirement
+  requirement__ReqStopOperationOnSanction[/"停止中と、取消・失効・廃業の後は営業させない"\]:::requirement
+  goal__DueProcess[/"不利益処分を手続どおりに行う<br/>意見陳述の手続または理由の提示を欠いた不利益処分の件数: 年1件 → 年0件"/]:::goal
+  %% desc goal__DueProcess: 取消は聴聞、停止と改善命令は弁明の機会を経て、理由を示して行う。手続を欠いた処分は取り消されうる。
+  goal__NoUnlicensedOperation[/"無許可営業をなくす<br/>有効な許可のない営業を立入検査で見つけた件数: 年12件 → 年0件"/]:::goal
+  %% desc goal__NoUnlicensedOperation: 有効期間が満了した許可や取り消された許可で営業を続けると無許可営業になる。満了前の通知と更新、停止・取消の後の確認で、許可のない営業を残さない。
+  goal__TimelyDecision[/"開店予定日までに許可する<br/>標準処理期間（15開庁日）内に許可・不許可を決めた申請の割合: 85% → 98%"/]:::goal
+  %% desc goal__TimelyDecision: 申請者は開店の2〜3週間前に申請する。標準処理期間のうちに施設検査と許可を終えないと、開店が遅れる。
+  buc__BucBusinessNotification["営業届出"]:::buc
+  %% desc buc__BucBusinessNotification: 許可業種でも届出不要の営業でもない営業は、あらかじめ営業所の名称・所在地などを届け出る。許可と違って施設基準はなく、施設検査も手数料も更新もない。届出営業者も食品衛生責任者を定め、廃業したら届け出る。
+  buc__BucConsultation["事前相談と営業の種類の判定"]:::buc
+  %% desc buc__BucConsultation: 営業者は施設の工事の前に図面を持って保健所に相談する。食品衛生監視員は営業の内容から、許可が要るか（施行令35条の32業種）、届出でよいか、どちらも要らないか（施行令35条の2）を判定し、許可業種なら施設基準と食品衛生責任者を説明する。
+  buc__BucDisposition["不利益処分と公表"]:::buc
+  %% desc buc__BucDisposition: 施設基準違反などで、行政庁は施設の整備改善を命じ、営業を停止し、許可を取り消す。取消の前には聴聞、ほかは弁明の機会を与える。ただし計測などで確かめた技術的基準の不充足に基準どおりにせよと命じる処分は、意見陳述を省ける。処分は理由を示して書面で行い、審査請求ができることを教える。違反者は公表する（練馬区は7日以上）。停止は定めた期間が過ぎると終わる。
+  buc__BucInspectionDecision["施設検査と許可・不許可"]:::buc
+  %% desc buc__BucInspectionDecision: 食品衛生監視員が施設を検査し、施設基準に合わなければ改善を指示して再検査する。行政庁は基準に合うと認めれば許可しなければならず、合わなければ理由を示して不許可にする。許可すると台帳に登録して許可証を交付し、営業者は許可証を掲示して営業を始める。食品衛生責任者が申請時に未定なら、許可後速やかに定める。
+  buc__BucMonitoring["監視指導計画と立入検査"]:::buc
+  %% desc buc__BucMonitoring: 都道府県知事等は毎年度、翌年度の監視指導計画を定めて公表し、計画に沿って食品衛生監視員に営業の場所を立入検査させる。違反を見つけたら、処分の起案に回す。
+  buc__BucPermitApplication["営業許可の申請と受付"]:::buc
+  %% desc buc__BucPermitApplication: 営業者は開店の2〜3週間前（東京都は工事完成の10日前ころ）に、申請書と図面を保健所の窓口に出すか、食品衛生申請等システムで電子申請し、条例の手数料を納める。保健所は記載事項と添付書類を確かめ、足りなければ補正を求め（差戻し）、整えば施設検査に進める（検査待）。申請者は差戻しの間に取り下げられる。
+  buc__BucPermitChanges["変更届・地位の承継・廃業届"]:::buc
+  %% desc buc__BucPermitChanges: 許可営業者は申請書の記載事項が変わったら速やかに（東京都は10日以内）変更届を出す。移転や営業者の交代は変更ではなく新規の申請になる。営業の譲渡・相続・合併・分割では許可営業者の地位が承継され、承継した者が遅滞なく届け出る。廃業したら許可証を添えて廃業届を出す。
+  buc__BucRenewal["有効期間の満了と更新"]:::buc
+  %% desc buc__BucRenewal: 許可には5年以上の有効期間が付く。満了の前に保健所が通知し（静岡市は2か月前）、営業者は満了前に継続（更新）の申請をする。更新でも施設検査があり、満了日までに許可を終える。更新しないまま満了すると許可は失効し、営業を続けると無許可営業になる。失効した許可は更新できず、新規の申請からやり直す。
+  subgraph group_out_of_scope["やらないこと"]
+    requirement__ReqNoAppealContents[/"審査請求と訴訟の中身は対象外とする"\]:::requirement
+    requirement__ReqNoFoodLabeling[/"食品表示は対象外とする"\]:::requirement
+    requirement__ReqNoFoodPoisoningInvestigation[/"食中毒の調査と、59条の廃棄命令は対象外とする"\]:::requirement
+    requirement__ReqNoImportedFood[/"輸入食品の届出は対象外とする"\]:::requirement
+    requirement__ReqNoOtherPermits[/"他法令の許可・届出は対象外とする"\]:::requirement
+  end
+  goal__DueProcess --> requirement__ReqDueProcessDisposition
+  %% derived goal__DueProcess -> requirement__ReqDueProcessDisposition via requirement__ReqDueProcessDisposition
+  goal__DueProcess --> requirement__ReqPublishViolations
+  %% derived goal__DueProcess -> requirement__ReqPublishViolations via requirement__ReqPublishViolations
+  goal__NoUnlicensedOperation --> requirement__ReqClassifyBeforeConstruction
+  %% derived goal__NoUnlicensedOperation -> requirement__ReqClassifyBeforeConstruction via requirement__ReqClassifyBeforeConstruction
+  goal__NoUnlicensedOperation --> requirement__ReqHygieneManagerAfterPermit
+  %% derived goal__NoUnlicensedOperation -> requirement__ReqHygieneManagerAfterPermit via requirement__ReqHygieneManagerAfterPermit
+  goal__NoUnlicensedOperation --> requirement__ReqKeepLedgerCurrent
+  %% derived goal__NoUnlicensedOperation -> requirement__ReqKeepLedgerCurrent via requirement__ReqKeepLedgerCurrent
+  goal__NoUnlicensedOperation --> requirement__ReqPermitOnlyCompliantFacility
+  %% derived goal__NoUnlicensedOperation -> requirement__ReqPermitOnlyCompliantFacility via requirement__ReqPermitOnlyCompliantFacility
+  goal__NoUnlicensedOperation --> requirement__ReqPlannedMonitoring
+  %% derived goal__NoUnlicensedOperation -> requirement__ReqPlannedMonitoring via requirement__ReqPlannedMonitoring
+  goal__NoUnlicensedOperation --> requirement__ReqRenewBeforeExpiry
+  %% derived goal__NoUnlicensedOperation -> requirement__ReqRenewBeforeExpiry via requirement__ReqRenewBeforeExpiry
+  goal__NoUnlicensedOperation --> requirement__ReqStopOperationOnSanction
+  %% derived goal__NoUnlicensedOperation -> requirement__ReqStopOperationOnSanction via requirement__ReqStopOperationOnSanction
+  goal__TimelyDecision --> requirement__ReqClassifyBeforeConstruction
+  %% derived goal__TimelyDecision -> requirement__ReqClassifyBeforeConstruction via requirement__ReqClassifyBeforeConstruction
+  goal__TimelyDecision --> requirement__ReqFeeNotRefunded
+  %% derived goal__TimelyDecision -> requirement__ReqFeeNotRefunded via requirement__ReqFeeNotRefunded
+  goal__TimelyDecision --> requirement__ReqNotificationWithoutStandard
+  %% derived goal__TimelyDecision -> requirement__ReqNotificationWithoutStandard via requirement__ReqNotificationWithoutStandard
+  goal__TimelyDecision --> requirement__ReqPermitOnlyCompliantFacility
+  %% derived goal__TimelyDecision -> requirement__ReqPermitOnlyCompliantFacility via requirement__ReqPermitOnlyCompliantFacility
+  goal__TimelyDecision --> requirement__ReqReceiveBothChannels
+  %% derived goal__TimelyDecision -> requirement__ReqReceiveBothChannels via requirement__ReqReceiveBothChannels
+  requirement__ReqClassifyBeforeConstruction --> buc__BucConsultation
+  requirement__ReqDueProcessDisposition --> buc__BucDisposition
+  requirement__ReqFeeNotRefunded --> buc__BucPermitApplication
+  requirement__ReqHygieneManagerAfterPermit --> buc__BucInspectionDecision
+  requirement__ReqKeepLedgerCurrent --> buc__BucPermitChanges
+  requirement__ReqNoAppealContents -.-> buc__BucDisposition
+  requirement__ReqNoFoodLabeling -.-> buc__BucConsultation
+  requirement__ReqNoFoodPoisoningInvestigation -.-> buc__BucDisposition
+  requirement__ReqNoImportedFood -.-> buc__BucConsultation
+  requirement__ReqNoOtherPermits -.-> buc__BucConsultation
+  requirement__ReqNotificationWithoutStandard --> buc__BucBusinessNotification
+  requirement__ReqPermitOnlyCompliantFacility --> buc__BucInspectionDecision
+  requirement__ReqPlannedMonitoring --> buc__BucMonitoring
+  requirement__ReqPublishViolations --> buc__BucDisposition
+  requirement__ReqReceiveBothChannels --> buc__BucPermitApplication
+  requirement__ReqRenewBeforeExpiry --> buc__BucRenewal
+  requirement__ReqStopOperationOnSanction --> buc__BucDisposition
+  classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

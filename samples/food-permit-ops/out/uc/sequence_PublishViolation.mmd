@@ -1,0 +1,22 @@
+%% rdra-ish diagram=sequence scope=usecase:PublishViolation model=samples/food-permit-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant usecase__DecideRevocation as 許可の取消の決定
+  participant usecase__DecideSuspension as 営業停止の決定
+  participant usecase__OrderImprovement as 施設の整備改善命令
+  participant screen__DispositionScreen as 不利益処分画面
+  participant api__PublicationApi as 公表 API
+  participant entity__Disposition as 不利益処分
+  actor__PermitClerk ->> screen__DispositionScreen: 違反の公表
+  usecase__DecideRevocation ->> api__PublicationApi: 不利益処分の決定
+  usecase__DecideSuspension ->> api__PublicationApi: 不利益処分の決定
+  usecase__OrderImprovement ->> api__PublicationApi: 不利益処分の決定
+  screen__DispositionScreen ->> api__PublicationApi: 公表 API
+  alt 処分が決定していて、まだ公表していない: Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表
+    api__PublicationApi ->> entity__Disposition: update publication=published
+    api__PublicationApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__PublicationApi -->> screen__DispositionScreen: rejected
+  end

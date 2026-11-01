@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:DecideRevocation model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant screen__DispositionScreen as 不利益処分画面
+  participant api__DispositionApi as 処分決定 API
+  participant entity__Disposition as 不利益処分
+  participant api__PublicationApi as 公表 API
+  participant api__PermitApi as 営業許可 API
+  actor__PermitAuthority ->> screen__DispositionScreen: 許可の取消の決定
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 聴聞を執る処分である: Disposition.procedure == 聴聞 and 許可の取消である: Disposition.kind == 許可の取消 and Disposition.status == 意見陳述の手続終了
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -) api__PermitApi: 許可の取消の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end

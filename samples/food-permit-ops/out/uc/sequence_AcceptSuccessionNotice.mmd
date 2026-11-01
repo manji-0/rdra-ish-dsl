@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:AcceptSuccessionNotice model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__PermitNoticeScreen as 許可後の届出画面
+  participant api__SuccessionReviewApi as 地位承継届受理 API
+  participant entity__SuccessionNotice as 地位承継届
+  actor__PermitClerk ->> screen__PermitNoticeScreen: 地位承継届の受理
+  screen__PermitNoticeScreen ->> api__SuccessionReviewApi: 地位承継届受理 API
+  alt SuccessionNotice.status == 受付
+    api__SuccessionReviewApi ->> entity__SuccessionNotice: update status 受付 -> 受理
+    api__SuccessionReviewApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__SuccessionReviewApi -->> screen__PermitNoticeScreen: rejected
+  end

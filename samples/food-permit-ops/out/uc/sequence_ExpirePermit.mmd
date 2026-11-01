@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:ExpirePermit model=samples/food-permit-ops
+%% kinds: timer api entity
+%% omitted: buc step
+sequenceDiagram
+  participant timer__PermitTermEnd as 有効期間の満了（5年以上、自治体が定める）
+  participant api__PermitTermApi as 有効期間 API
+  participant entity__BusinessPermit as 営業許可
+  timer__PermitTermEnd ->> api__PermitTermApi: 有効期間の満了（5年以上、自治体が定める）
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__PermitTermApi ->> entity__BusinessPermit: update status 有効 -> 失効（有効期間満了）, status 営業停止中 -> 失効（有効期間満了）, operating=false
+    api__PermitTermApi -->> timer__PermitTermEnd: done
+  else guard fails
+    api__PermitTermApi -->> timer__PermitTermEnd: rejected
+  end

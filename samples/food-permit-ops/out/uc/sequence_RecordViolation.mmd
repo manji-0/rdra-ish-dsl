@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordViolation model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__SiteVisitScreen as 立入検査画面
+  participant api__SiteVisitResultApi as 立入検査結果 API
+  participant entity__SiteVisit as 立入検査
+  participant api__DispositionDraftApi as 処分起案 API
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 違反の記録
+  screen__SiteVisitScreen ->> api__SiteVisitResultApi: 立入検査結果 API
+  alt SiteVisit.status == 予定
+    api__SiteVisitResultApi ->> entity__SiteVisit: update status 予定 -> 違反あり
+    api__SiteVisitResultApi -) api__DispositionDraftApi: 立入検査での違反の発見
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: rejected
+  end

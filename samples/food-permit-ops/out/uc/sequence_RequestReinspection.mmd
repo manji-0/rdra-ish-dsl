@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RequestReinspection model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__InspectionScreen as 施設検査画面
+  participant api__ReinspectionApi as 再検査申込み API
+  participant entity__Inspection as 施設検査
+  actor__BusinessOperator ->> screen__InspectionScreen: 改善の報告と再検査の申込み
+  screen__InspectionScreen ->> api__ReinspectionApi: 再検査申込み API
+  alt Inspection.status == 不適合（改善の指示）
+    api__ReinspectionApi ->> entity__Inspection: update status 不適合（改善の指示） -> 検査予定
+    api__ReinspectionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__ReinspectionApi -->> screen__InspectionScreen: rejected
+  end

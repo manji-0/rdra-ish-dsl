@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:AppointHygieneManager model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__OperatorPermitApi as 営業者の届出 API
+  participant entity__BusinessPermit as 営業許可
+  actor__BusinessOperator ->> screen__PermitLedgerScreen: 食品衛生責任者の選定の届出
+  screen__PermitLedgerScreen ->> api__OperatorPermitApi: 営業者の届出 API
+  alt 許可が有効である: BusinessPermit.status == 有効
+    api__OperatorPermitApi ->> entity__BusinessPermit: update hygiene_manager_appointed=true
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: rejected
+  end

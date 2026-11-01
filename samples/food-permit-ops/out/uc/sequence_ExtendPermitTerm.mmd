@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:ExtendPermitTerm model=samples/food-permit-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant usecase__RenewPermit as 更新の許可の決定
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__PermitTermApi as 有効期間 API
+  participant entity__BusinessPermit as 営業許可
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 有効期間の更新
+  usecase__RenewPermit ->> api__PermitTermApi: 更新の許可
+  screen__PermitLedgerScreen ->> api__PermitTermApi: 有効期間 API
+  alt BusinessPermit.status == 有効
+    api__PermitTermApi ->> entity__BusinessPermit: update status 有効 -> 有効
+    api__PermitTermApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitTermApi -->> screen__PermitLedgerScreen: rejected
+  end

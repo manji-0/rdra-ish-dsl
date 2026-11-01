@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:OrderImprovement model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant screen__DispositionScreen as 不利益処分画面
+  participant api__DispositionApi as 処分決定 API
+  participant entity__Disposition as 不利益処分
+  participant api__PublicationApi as 公表 API
+  actor__PermitAuthority ->> screen__DispositionScreen: 施設の整備改善命令
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 施設の整備改善命令である: Disposition.kind == 施設の整備改善命令 and Disposition.status in (意見陳述の手続終了, 処分案)
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, status 処分案 -> 処分決定 [意見陳述を省く処分である], reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end

@@ -1,0 +1,14 @@
+%% rdra-ish diagram=screen scope=buc:BucDisposition model=samples/food-permit-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__DispositionScreen["不利益処分画面"]:::screen
+  screen__OpinionProcedureScreen["聴聞・弁明画面"]:::screen
+  screen__PermitLedgerScreen["許可台帳画面"]:::screen
+  screen__DispositionScreen -->|営業停止の決定| screen__PermitLedgerScreen
+  screen__DispositionScreen -->|聴聞・弁明の通知| screen__OpinionProcedureScreen
+  screen__OpinionProcedureScreen -->|聴聞の実施| screen__DispositionScreen
+  %% via screen__DispositionScreen -> screen__OpinionProcedureScreen usecase__NotifyOpinionProcedure
+  %% via screen__DispositionScreen -> screen__PermitLedgerScreen usecase__DecideSuspension
+  %% via screen__OpinionProcedureScreen -> screen__DispositionScreen usecase__HoldHearing
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

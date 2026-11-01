@@ -1,0 +1,62 @@
+%% rdra-ish diagram=information scope=whole model=samples/food-permit-ops
+%% kinds: entity statemodel variation
+%% omitted: columns adr constraint usecase field api condition
+flowchart LR
+  entity__BusinessNotification[("営業届")]:::entity
+  entity__BusinessPermit[("営業許可")]:::entity
+  entity__ChangeNotice[("変更届")]:::entity
+  entity__Consultation[("事前相談")]:::entity
+  entity__Disposition[("不利益処分")]:::entity
+  entity__FeeSchedule[("手数料表")]:::entity
+  entity__Inspection[("施設検査")]:::entity
+  entity__MonitoringPlan[("監視指導計画")]:::entity
+  entity__PermitApplication[("営業許可申請")]:::entity
+  entity__SiteVisit[("立入検査")]:::entity
+  entity__SuccessionNotice[("地位承継届")]:::entity
+  statemodel__BusinessNotification_status[["BusinessNotification.status"]]:::statemodel
+  statemodel__BusinessPermit_status[["BusinessPermit.status"]]:::statemodel
+  statemodel__ChangeNotice_status[["ChangeNotice.status"]]:::statemodel
+  statemodel__Consultation_status[["Consultation.status"]]:::statemodel
+  statemodel__Disposition_status[["Disposition.status"]]:::statemodel
+  statemodel__Inspection_status[["Inspection.status"]]:::statemodel
+  statemodel__MonitoringPlan_status[["MonitoringPlan.status"]]:::statemodel
+  statemodel__PermitApplication_status[["PermitApplication.status"]]:::statemodel
+  statemodel__SiteVisit_status[["SiteVisit.status"]]:::statemodel
+  statemodel__SuccessionNotice_status[["SuccessionNotice.status"]]:::statemodel
+  variation__ApplicationKind[\"申請の種別"\]:::variation
+  variation__BusinessType[\"営業の種類"\]:::variation
+  variation__DispositionKind[\"処分の種類"\]:::variation
+  variation__NotifiedBusinessType[\"届出業種"\]:::variation
+  variation__OpinionProcedure[\"意見陳述の手続"\]:::variation
+  variation__PermitBusinessType[\"許可業種"\]:::variation
+  variation__SubmissionChannel[\"申請方法"\]:::variation
+  variation__SuccessionCause[\"承継の原因"\]:::variation
+  entity__BusinessNotification -.-> statemodel__BusinessNotification_status
+  entity__BusinessNotification -.->|variation business_type| variation__NotifiedBusinessType
+  entity__BusinessNotification -.->|variation channel| variation__SubmissionChannel
+  entity__BusinessPermit -.-> statemodel__BusinessPermit_status
+  entity__BusinessPermit -.->|variation business_type| variation__PermitBusinessType
+  entity__ChangeNotice ---|N:1| entity__BusinessPermit
+  entity__ChangeNotice -.-> statemodel__ChangeNotice_status
+  entity__Consultation -.-> statemodel__Consultation_status
+  entity__Consultation -.->|variation business_type| variation__BusinessType
+  entity__Disposition ---|N:1| entity__BusinessPermit
+  entity__Disposition -.-> statemodel__Disposition_status
+  entity__Disposition -.->|variation kind| variation__DispositionKind
+  entity__Disposition -.->|variation procedure| variation__OpinionProcedure
+  entity__FeeSchedule -.->|variation business_type| variation__PermitBusinessType
+  entity__Inspection ---|1:1| entity__PermitApplication
+  entity__Inspection -.-> statemodel__Inspection_status
+  entity__MonitoringPlan -.-> statemodel__MonitoringPlan_status
+  entity__PermitApplication -.-> statemodel__PermitApplication_status
+  entity__PermitApplication -.->|variation business_type| variation__PermitBusinessType
+  entity__PermitApplication -.->|variation channel| variation__SubmissionChannel
+  entity__PermitApplication -.->|variation kind| variation__ApplicationKind
+  entity__SiteVisit ---|N:1| entity__MonitoringPlan
+  entity__SiteVisit -.-> statemodel__SiteVisit_status
+  entity__SuccessionNotice ---|N:1| entity__BusinessPermit
+  entity__SuccessionNotice -.-> statemodel__SuccessionNotice_status
+  entity__SuccessionNotice -.->|variation cause| variation__SuccessionCause
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;

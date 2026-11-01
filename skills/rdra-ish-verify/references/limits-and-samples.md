@@ -47,7 +47,8 @@
 - **`WF_vars(Next)`**: fairness on whole `Next`, not per action; another instance's loop
   satisfies it. `.fair(UC, ...)` on a property adds weak fairness per instance on the listed
   use cases (no strong fairness). A property runs on the whole model, so a large model such as
-  patent-ops is too big for a temporal run at two instances.
+  patent-ops or food-permit-ops is too big for a temporal run at two instances, even for a
+  property that reads one small entity.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at the same bounds as TLC (capped at 2,097,152 states per cone).
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled

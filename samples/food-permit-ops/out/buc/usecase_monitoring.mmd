@@ -1,0 +1,75 @@
+%% rdra-ish diagram=usecase scope=buc:BucMonitoring model=samples/food-permit-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+    %% desc actor__FoodSanitationInspector: 事前相談で図面を見て営業の種類を判定し、許可前と更新前の施設検査、計画に沿った立入検査を行い、違反を見つけたら処分を起案する。
+    actor__PermitClerk(["保健所 許可担当職員"]):::actor
+    %% desc actor__PermitClerk: 許可申請・届出の受付と審査、差戻し、許可台帳と許可証、聴聞・弁明の事務、処分の公表、監視指導計画の取りまとめを行う。
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__AnnualPlanning(("翌年度の監視指導計画の策定（毎年度）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__DraftMonitoringPlan("監視指導計画の策定"):::usecase
+    %% desc usecase__DraftMonitoringPlan: 重点的に監視指導する項目、自主的な衛生管理の指導、関係機関との連携を定めた翌年度の計画を作る。
+    usecase__PublishMonitoringPlan("監視指導計画の公表"):::usecase
+    %% desc usecase__PublishMonitoringPlan: 定めた計画を公表し、厚生労働大臣と内閣総理大臣に報告する。
+    usecase__RecordCompliance("違反なしの記録"):::usecase
+    %% desc usecase__RecordCompliance: 立入検査で違反がなかったことを記録する。
+    usecase__RecordViolation("違反の記録"):::usecase
+    %% desc usecase__RecordViolation: 立入検査で施設基準違反などを見つけたことを記録し、不利益処分の起案に回す。
+    usecase__ScheduleSiteVisit("立入検査の予定"):::usecase
+    %% desc usecase__ScheduleSiteVisit: 公表した計画の重点項目と件数に沿って、立入検査する施設を決める。
+    screen__MonitoringPlanScreen["監視指導計画画面"]:::screen
+    screen__SiteVisitScreen["立入検査画面"]:::screen
+    event__EvViolationFound>"立入検査での違反の発見"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__MonitoringPlan[("監視指導計画")]:::entity
+    entity__SiteVisit[("立入検査")]:::entity
+    state__MonitoringPlan_drafted((("策定中"))):::state
+    state__MonitoringPlan_published((("公表済"))):::state
+    state__SiteVisit_compliant((("違反なし"))):::state
+    state__SiteVisit_planned((("予定"))):::state
+    state__SiteVisit_violation((("違反あり"))):::state
+    condition__PlanPublished{"監視指導計画が公表されている"}:::condition
+  end
+  actor__FoodSanitationInspector -.-> usecase__RecordCompliance
+  actor__FoodSanitationInspector -.-> usecase__RecordViolation
+  actor__FoodSanitationInspector -.-> usecase__ScheduleSiteVisit
+  actor__PermitClerk -.-> usecase__DraftMonitoringPlan
+  actor__PermitClerk -.-> usecase__PublishMonitoringPlan
+  condition__PlanPublished -.->|applies_to| usecase__ScheduleSiteVisit
+  timer__AnnualPlanning -.-> usecase__DraftMonitoringPlan
+  usecase__DraftMonitoringPlan -.->|creates| entity__MonitoringPlan
+  %% derived usecase__DraftMonitoringPlan -> entity__MonitoringPlan via api__MonitoringPlanApi
+  usecase__DraftMonitoringPlan -.-> screen__MonitoringPlanScreen
+  usecase__PublishMonitoringPlan -.-> screen__MonitoringPlanScreen
+  usecase__PublishMonitoringPlan -.->|transitions MonitoringPlan.status drafted->published| state__MonitoringPlan_published
+  usecase__PublishMonitoringPlan -.->|updates| entity__MonitoringPlan
+  %% derived usecase__PublishMonitoringPlan -> entity__MonitoringPlan via api__MonitoringPlanPublishApi
+  usecase__RecordCompliance -.-> screen__SiteVisitScreen
+  usecase__RecordCompliance -.->|transitions SiteVisit.status planned->compliant| state__SiteVisit_compliant
+  usecase__RecordCompliance -.->|updates| entity__SiteVisit
+  %% derived usecase__RecordCompliance -> entity__SiteVisit via api__SiteVisitResultApi
+  usecase__RecordViolation -.-> screen__SiteVisitScreen
+  usecase__RecordViolation -.-> event__EvViolationFound
+  usecase__RecordViolation -.->|transitions SiteVisit.status planned->violation| state__SiteVisit_violation
+  usecase__RecordViolation -.->|updates| entity__SiteVisit
+  %% derived usecase__RecordViolation -> entity__SiteVisit via api__SiteVisitResultApi
+  usecase__ScheduleSiteVisit -.->|creates| entity__SiteVisit
+  %% derived usecase__ScheduleSiteVisit -> entity__SiteVisit via api__SiteVisitApi
+  usecase__ScheduleSiteVisit -.-> screen__SiteVisitScreen
+  usecase__ScheduleSiteVisit -.->|reads| entity__MonitoringPlan
+  %% derived usecase__ScheduleSiteVisit -> entity__MonitoringPlan via api__SiteVisitApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

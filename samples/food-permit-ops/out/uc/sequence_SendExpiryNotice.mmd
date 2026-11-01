@@ -1,0 +1,17 @@
+%% rdra-ish diagram=sequence scope=usecase:SendExpiryNotice model=samples/food-permit-ops
+%% kinds: actor timer screen api usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant timer__ExpiryNoticeDue as 満了通知の発送（有効期間満了の2か月前）
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__PermitTermApi as 有効期間 API
+  participant usecase__SendExpiryNotice as 満了通知の発送
+  participant entity__BusinessPermit as 営業許可
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 満了通知の発送
+  timer__ExpiryNoticeDue ->> api__PermitTermApi: 満了通知の発送（有効期間満了の2か月前）
+  screen__PermitLedgerScreen ->> api__PermitTermApi: 有効期間 API
+  screen__PermitLedgerScreen ->> usecase__SendExpiryNotice: 満了通知の発送
+  api__PermitTermApi ->> entity__BusinessPermit: update
+  usecase__SendExpiryNotice ->> entity__BusinessPermit: read
+  api__PermitTermApi -->> screen__PermitLedgerScreen: done

@@ -1,0 +1,19 @@
+%% rdra-ish diagram=state scope=entity:BusinessNotification model=samples/food-permit-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "BusinessNotification.status" as statemodel__BusinessNotification_status {
+    [*] --> state__BusinessNotification_submitted
+    state "届出内容確認待" as state__BusinessNotification_submitted
+    state "受付済" as state__BusinessNotification_accepted
+    state "廃業" as state__BusinessNotification_closed
+    %% transition usecase__AcceptNotification
+    state__BusinessNotification_submitted --> state__BusinessNotification_accepted : 営業届の受付
+    %% transition usecase__FileNotificationClosure
+    state__BusinessNotification_accepted --> state__BusinessNotification_closed : 届出営業の廃業届
+    state__BusinessNotification_closed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__BusinessNotification_closed stateend

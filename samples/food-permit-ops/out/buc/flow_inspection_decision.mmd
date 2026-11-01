@@ -1,0 +1,65 @@
+%% rdra-ish diagram=flow scope=buc:BucInspectionDecision model=samples/food-permit-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__InspectionDecisionFlow["施設検査と許可の流れ"]
+    subgraph lane__InspectionDecisionFlow__BusinessOperator["営業者"]
+      %% lane lane__InspectionDecisionFlow__BusinessOperator: actor__BusinessOperator
+      step__HygieneManagerStep["食品衛生責任者の選定"]:::step
+      step__ImproveStep["改善と再検査"]:::step
+      step__OpenStep["許可証の掲示と営業の開始"]:::step
+    end
+    subgraph lane__InspectionDecisionFlow__FoodSanitationInspector["食品衛生監視員"]
+      %% lane lane__InspectionDecisionFlow__FoodSanitationInspector: actor__FoodSanitationInspector
+      step__InspectStep["施設検査"]:::step
+    end
+    subgraph lane__InspectionDecisionFlow__PermitAuthority["都道府県知事等（保健所設置市長・特別区長）"]
+      %% lane lane__InspectionDecisionFlow__PermitAuthority: actor__PermitAuthority
+      step__DenyStep["不許可（理由の提示）"]:::step
+      step__GrantStep["許可の決定"]:::step
+    end
+    subgraph lane__InspectionDecisionFlow__PermitClerk["保健所 許可担当職員"]
+      %% lane lane__InspectionDecisionFlow__PermitClerk: actor__PermitClerk
+      step__RegisterStep["台帳登録と許可証の交付"]:::step
+      step__ScheduleStep["検査日の調整"]:::step
+    end
+  end
+  usecase__AppointHygieneManager("食品衛生責任者の選定の届出"):::usecase
+  %% desc usecase__AppointHygieneManager: 申請時に食品衛生責任者を定めていなかった営業者が、許可後に定めて（講習会を受けて）届け出る。
+  usecase__ConductInspection("施設検査の実施"):::usecase
+  %% desc usecase__ConductInspection: 食品衛生監視員が施設を施設基準（共通基準・業種別基準）と照らし、衛生管理計画を確かめる。合わなければ改善を指示する。
+  usecase__DenyPermit("不許可の決定"):::usecase
+  %% desc usecase__DenyPermit: 施設基準に合わないか、補正に応じないか、欠格事由に当たる申請を、理由を示し、審査請求ができることを書面で教えて拒否する。
+  usecase__GrantPermit("許可の決定"):::usecase
+  %% desc usecase__GrantPermit: 施設検査で施設基準に合うと認めた新規の申請に許可を与え、有効期間（5年以上）を付ける。
+  usecase__IssueCertificate("許可証の交付"):::usecase
+  %% desc usecase__IssueCertificate: 許可証を営業者に交付する。
+  usecase__RegisterPermit("許可台帳への登録"):::usecase
+  %% desc usecase__RegisterPermit: 許可の決定を受けて許可番号を付け、許可台帳に登録する。電子申請ではシステムの表示を発行済にする。
+  usecase__RequestReinspection("改善の報告と再検査の申込み"):::usecase
+  %% desc usecase__RequestReinspection: 営業者が指示された箇所を直し、再検査を申し込む。
+  usecase__ScheduleInspection("施設検査の日程調整"):::usecase
+  %% desc usecase__ScheduleInspection: 手数料の納付を確かめた検査待の申請について、施設検査の日を決める。
+  usecase__StartBusiness("営業の開始・再開"):::usecase
+  %% desc usecase__StartBusiness: 営業者が許可証を掲示して営業を始める。営業停止の期間が終わった後の再開も同じ。
+  step__DenyStep -.-> usecase__DenyPermit
+  step__GrantStep -.-> usecase__GrantPermit
+  step__GrantStep -->|precedes| step__RegisterStep
+  step__HygieneManagerStep -.-> usecase__AppointHygieneManager
+  step__ImproveStep -.-> usecase__RequestReinspection
+  step__ImproveStep -->|repeats| step__InspectStep
+  step__InspectStep -->|branches| step__DenyStep
+  step__InspectStep -.-> usecase__ConductInspection
+  step__InspectStep -.->|excepts| step__ImproveStep
+  step__InspectStep -->|precedes| step__GrantStep
+  step__OpenStep -.-> usecase__StartBusiness
+  step__RegisterStep -->|branches| step__HygieneManagerStep
+  step__RegisterStep -.-> usecase__IssueCertificate
+  step__RegisterStep -.-> usecase__RegisterPermit
+  step__RegisterStep -->|precedes| step__OpenStep
+  step__ScheduleStep -.-> usecase__ScheduleInspection
+  step__ScheduleStep -->|precedes| step__InspectStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

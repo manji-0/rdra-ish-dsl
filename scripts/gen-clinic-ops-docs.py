@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Generate design-doc.md (engineers) and prd.md (PdM) for a sample: clinic-ops (the default) or
-patent-ops.
+"""Generate design-doc.md (engineers) and prd.md (PdM) for a sample: clinic-ops (the default),
+patent-ops, or food-permit-ops.
 
 Every fact comes from the model through the CLI: `list ... --format json` for the elements and
 their links, `list` and `csv` with `--format markdown` for the tables, and the diagrams that
@@ -10,7 +10,7 @@ sample in SAMPLES, the chapter order and the sentences that introduce each chapt
 scripts/check-sample-artifacts.sh runs it for each sample after regenerating the artifacts and
 fails when a document differs from what is committed:
 
-    python3 -I scripts/gen-clinic-ops-docs.py target/debug/rdra-ish [clinic-ops|patent-ops]
+    python3 -I scripts/gen-clinic-ops-docs.py target/debug/rdra-ish [clinic-ops|patent-ops|food-permit-ops]
 """
 import json
 import re
@@ -80,6 +80,33 @@ SAMPLES = {
 ''',
         'rdra_appendix': ('実体審査と中間処理 BUC の RDRA 全体図', 'rdra_buc_office_action.mmd'),
         'metrics_note': '実際の知的財産部で使うときは、その会社の実績で置き換える。',
+        'no_flow_note': '',
+    },
+    'food-permit-ops': {
+        'title': 'Food Permit Ops',
+        # The BUC chapters in the order a business runs from the consultation to a disposition.
+        'chapters': [
+            'BucConsultation', 'BucPermitApplication', 'BucInspectionDecision', 'BucRenewal',
+            'BucPermitChanges', 'BucBusinessNotification', 'BucMonitoring', 'BucDisposition',
+        ],
+        'state_tables': {'PermitApplication': 'states_permit_application.txt',
+                         'BusinessPermit': 'states_business_permit.txt', 'Disposition': 'states_disposition.txt'},
+        'subject': '題材は日本の保健所の食品営業許可業務（事前相談と営業の種類の判定、許可申請、施設検査、許可・不許可、有効期間と更新、変更・承継・廃業の届出、営業届出、監視指導と不利益処分）で、審査請求の中身・食品表示・輸入食品・食中毒調査・他法令の許可は対象外。',
+        'overview': '''対象は都道府県・保健所設置市・特別区の保健所が行う食品の営業許可業務である。業務を 8 の BUC に分け、内部システムは `PermitLedgerSystem`（営業許可台帳システム）1 つにまとめている。国の食品衛生申請等システムは外部システムとしてイベントでつなぐ。
+
+業務の骨格は食品衛生法 55 条の許可と、行政手続法の審査・処分の手続である。期間（有効期間、営業停止の期間、審査請求期間、公表期間）はタイマーで表し、期間が過ぎたときに起きること（失効・停止の終了・処分の確定・公表の終了）を状態で表す。標準処理期間は過ぎても状態が変わらないので NFR にしている。
+
+| 論点 | このモデル |
+|---|---|
+| 許可・届出・不要 | 営業の種類で決まる。許可は施行令35条の32業種、届出は法57条、どちらも要らない営業は施行令35条の2 |
+| 申請 | 窓口（紙）と電子申請（食品衛生申請等システム）が同じ状態を通る。手数料は条例で、電子申請でも別途納め、還付しない |
+| 審査 | 施設検査は自治体の運用（法令の明文はない）。基準に合わなければ改善して再検査。合えば許可しなければならず、不許可には理由を示す |
+| 有効期間と更新 | 5年以上で自治体が定める。満了前に継続の申請と施設検査をし、満了すれば失効して新規扱い |
+| 届出 | 営業届出には施設基準も更新もない。変更・承継・廃業は届け出る |
+| 処分 | 取消は聴聞、停止と整備改善命令は弁明の機会。計測で確かめた技術的基準の不充足に従えと命じる処分は意見陳述を省ける。理由を示し、審査請求（3月）を教示する |
+''',
+        'rdra_appendix': ('不利益処分と公表 BUC の RDRA 全体図', 'rdra_buc_disposition.mmd'),
+        'metrics_note': '実際の保健所で使うときは、その自治体の実績で置き換える。',
         'no_flow_note': '',
     },
 }

@@ -1,0 +1,21 @@
+%% rdra-ish diagram=sequence scope=usecase:ReviewChangeNotice model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__PermitNoticeScreen as 許可後の届出画面
+  participant api__ChangeReviewApi as 変更届確認 API
+  participant entity__ChangeNotice as 変更届
+  actor__PermitClerk ->> screen__PermitNoticeScreen: 変更届の確認
+  screen__PermitNoticeScreen ->> api__ChangeReviewApi: 変更届確認 API
+  alt ChangeNotice.status == 受付
+    api__ChangeReviewApi ->> entity__ChangeNotice: update
+    alt status 受付 -> 受理
+      api__ChangeReviewApi ->> entity__ChangeNotice: status = 受理
+    else status 受付 -> 新規申請が必要
+      api__ChangeReviewApi ->> entity__ChangeNotice: status = 新規申請が必要
+    end
+    api__ChangeReviewApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__ChangeReviewApi -->> screen__PermitNoticeScreen: rejected
+  end

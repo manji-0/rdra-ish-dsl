@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReviewApplication model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__ApplicationReviewScreen as 申請審査画面
+  participant api__ApplicationReviewApi as 申請審査 API
+  participant entity__PermitApplication as 営業許可申請
+  actor__PermitClerk ->> screen__ApplicationReviewScreen: 申請内容の確認と受理
+  screen__ApplicationReviewScreen ->> api__ApplicationReviewApi: 申請審査 API
+  alt 手数料が納められている: PermitApplication.fee_paid == true and PermitApplication.status == 申請内容確認待
+    api__ApplicationReviewApi ->> entity__PermitApplication: update status 申請内容確認待 -> 検査待
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: done
+  else guard fails
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: rejected
+  end

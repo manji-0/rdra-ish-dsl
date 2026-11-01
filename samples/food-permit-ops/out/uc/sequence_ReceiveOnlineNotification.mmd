@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveOnlineNotification model=samples/food-permit-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  participant screen__NotificationScreen as 営業届画面
+  participant api__NotificationApi as 営業届 API
+  participant entity__BusinessNotification as 営業届
+  actor__PermitClerk ->> screen__NotificationScreen: 電子届出の受付
+  extsystem__FoodSanitationSystem ->> api__NotificationApi: 電子届出の提出（整理番号 NIF）
+  screen__NotificationScreen ->> api__NotificationApi: 営業届 API
+  api__NotificationApi ->> entity__BusinessNotification: create channel=online
+  api__NotificationApi -->> screen__NotificationScreen: done

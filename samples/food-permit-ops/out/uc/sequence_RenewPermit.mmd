@@ -1,0 +1,22 @@
+%% rdra-ish diagram=sequence scope=usecase:RenewPermit model=samples/food-permit-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant screen__InspectionScreen as 施設検査画面
+  participant api__DecisionApi as 許可決定 API
+  participant entity__Inspection as 施設検査
+  participant entity__PermitApplication as 営業許可申請
+  participant api__PermitTermApi as 有効期間 API
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  actor__PermitAuthority ->> screen__InspectionScreen: 更新の許可の決定
+  screen__InspectionScreen ->> api__DecisionApi: 許可決定 API
+  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and PermitApplication.status == 検査待
+    api__DecisionApi ->> entity__Inspection: read
+    api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 許可
+    api__DecisionApi -) api__PermitTermApi: 更新の許可
+    api__DecisionApi -) extsystem__FoodSanitationSystem: 更新の許可
+    api__DecisionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__InspectionScreen: rejected
+  end

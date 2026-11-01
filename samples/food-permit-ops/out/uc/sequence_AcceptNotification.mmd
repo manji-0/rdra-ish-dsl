@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:AcceptNotification model=samples/food-permit-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__NotificationScreen as 営業届画面
+  participant api__NotificationReviewApi as 営業届受付 API
+  participant entity__BusinessNotification as 営業届
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  actor__PermitClerk ->> screen__NotificationScreen: 営業届の受付
+  screen__NotificationScreen ->> api__NotificationReviewApi: 営業届受付 API
+  alt BusinessNotification.status == 届出内容確認待
+    api__NotificationReviewApi ->> entity__BusinessNotification: update status 届出内容確認待 -> 受付済
+    api__NotificationReviewApi -) extsystem__FoodSanitationSystem: 届出の受付（受付済）
+    api__NotificationReviewApi -->> screen__NotificationScreen: done
+  else guard fails
+    api__NotificationReviewApi -->> screen__NotificationScreen: rejected
+  end

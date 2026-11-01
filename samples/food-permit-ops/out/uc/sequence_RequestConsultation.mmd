@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:RequestConsultation model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__ConsultationScreen as 事前相談記録画面
+  participant api__ConsultationApi as 事前相談 API
+  participant entity__Consultation as 事前相談
+  actor__BusinessOperator ->> screen__ConsultationScreen: 事前相談の申込み
+  screen__ConsultationScreen ->> api__ConsultationApi: 事前相談 API
+  api__ConsultationApi ->> entity__Consultation: create
+  api__ConsultationApi -->> screen__ConsultationScreen: done

@@ -1,0 +1,38 @@
+%% rdra-ish diagram=state scope=entity:Disposition model=samples/food-permit-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Disposition.status" as statemodel__Disposition_status {
+    [*] --> state__Disposition_proposed
+    state "処分案" as state__Disposition_proposed
+    state "意見陳述の通知済" as state__Disposition_notified
+    state "意見陳述の手続終了" as state__Disposition_heard
+    state "処分決定" as state__Disposition_decided
+    state "確定（審査請求期間の経過）" as state__Disposition_finalized
+    state "処分しない" as state__Disposition_dropped
+    %% transition usecase__NotifyOpinionProcedure
+    state__Disposition_proposed --> state__Disposition_notified : 聴聞・弁明の通知 [意見陳述の手続を執る処分である]
+    %% transition usecase__OrderImprovement
+    state__Disposition_proposed --> state__Disposition_decided : 施設の整備改善命令 [施設の整備改善命令である, 意見陳述を省く処分である]
+    %% transition usecase__HoldHearing
+    state__Disposition_notified --> state__Disposition_heard : 聴聞の実施 [聴聞を執る処分である]
+    %% transition usecase__ReceiveExplanation
+    state__Disposition_notified --> state__Disposition_heard : 弁明書の受理 [弁明の機会を与える処分である]
+    %% transition usecase__DecideRevocation
+    state__Disposition_heard --> state__Disposition_decided : 許可の取消の決定 [聴聞を執る処分である, 許可の取消である]
+    %% transition usecase__DecideSuspension
+    state__Disposition_heard --> state__Disposition_decided : 営業停止の決定 [営業の停止である]
+    %% transition usecase__OrderImprovement
+    state__Disposition_heard --> state__Disposition_decided : 施設の整備改善命令 [施設の整備改善命令である]
+    %% transition usecase__DropDisposition
+    state__Disposition_heard --> state__Disposition_dropped : 処分を見送る
+    %% transition usecase__FinalizeDisposition
+    state__Disposition_decided --> state__Disposition_finalized : 審査請求期間の経過
+    state__Disposition_finalized --> [*]
+    state__Disposition_dropped --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Disposition_finalized stateend
+  class state__Disposition_dropped stateend

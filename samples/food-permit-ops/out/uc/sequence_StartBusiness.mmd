@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:StartBusiness model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__OperatorPermitApi as 営業者の届出 API
+  participant entity__BusinessPermit as 営業許可
+  actor__BusinessOperator ->> screen__PermitLedgerScreen: 営業の開始・再開
+  screen__PermitLedgerScreen ->> api__OperatorPermitApi: 営業者の届出 API
+  alt 許可が有効で、許可証の交付を受けている: BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true
+    api__OperatorPermitApi ->> entity__BusinessPermit: update operating=true
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: rejected
+  end

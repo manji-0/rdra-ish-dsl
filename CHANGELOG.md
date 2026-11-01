@@ -141,6 +141,18 @@
   `samples.txt` (`check: ok`, `verify: tlc=ok`) and its diagrams, tables, `design-doc.md`, and
   `prd.md` are in `scripts/sample-artifacts.tsv`. `scripts/gen-clinic-ops-docs.py` takes the
   sample as a second argument (`clinic-ops` by default; its output is unchanged).
+- `samples/food-permit-ops`, the second soak of #51 condition 3, written without changing the
+  grammar, the parser, the core, or the emitters: the food business permit work of a Japanese
+  保健所, from the consultation and the classification of the business (permit, notification, or
+  neither) through the application on paper or through the 食品衛生申請等システム, the facility
+  inspection, the permit or its refusal, the term and its renewal, the change, succession, and
+  closure notices, and the business notification, to the monitoring plan, site visits, and the
+  adverse dispositions with their hearing or explanation and the publication of violations.
+  8 BUCs, 52 use cases, 11 entities, 10 state models, 6 timers, 12 labelled rules, and 236
+  `//` citations of primary sources. It is in `samples.txt` (`check: ok`, `verify: tlc=ok`), its
+  artifacts, `design-doc.md`, and `prd.md` are in `scripts/sample-artifacts.tsv`, and its README
+  lists the soak findings. It states no temporal property: the one it was written with reads a
+  421-state entity but runs on the whole model, which TLC did not finish.
 - `check --max-states <n>` and `states --max-states <n>` set the joint-state cap of each
   target cone, which the `bounds:` line prints (#60). `check` also takes `--max-patterns`,
   as `states` does. A cone past the cap is still the `StateCapReached` error, and its

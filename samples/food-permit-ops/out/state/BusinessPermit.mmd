@@ -1,0 +1,39 @@
+%% rdra-ish diagram=state scope=entity:BusinessPermit model=samples/food-permit-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "BusinessPermit.status" as statemodel__BusinessPermit_status {
+    [*] --> state__BusinessPermit_valid
+    state "有効" as state__BusinessPermit_valid
+    state "営業停止中" as state__BusinessPermit_suspended
+    state "失効（有効期間満了）" as state__BusinessPermit_expired
+    state "取消" as state__BusinessPermit_revoked
+    state "廃業" as state__BusinessPermit_closed
+    %% transition usecase__ExtendPermitTerm
+    state__BusinessPermit_valid --> state__BusinessPermit_valid : 有効期間の更新
+    %% transition usecase__SuspendBusiness
+    state__BusinessPermit_valid --> state__BusinessPermit_suspended : 許可台帳への営業停止の記録
+    %% transition usecase__ExpirePermit
+    state__BusinessPermit_valid --> state__BusinessPermit_expired : 有効期間の満了による失効
+    %% transition usecase__RevokePermit
+    state__BusinessPermit_valid --> state__BusinessPermit_revoked : 許可台帳への取消の記録
+    %% transition usecase__FileClosureNotice
+    state__BusinessPermit_valid --> state__BusinessPermit_closed : 廃業届の提出
+    %% transition usecase__LiftSuspension
+    state__BusinessPermit_suspended --> state__BusinessPermit_valid : 営業停止期間の満了
+    %% transition usecase__ExpirePermit
+    state__BusinessPermit_suspended --> state__BusinessPermit_expired : 有効期間の満了による失効
+    %% transition usecase__RevokePermit
+    state__BusinessPermit_suspended --> state__BusinessPermit_revoked : 許可台帳への取消の記録
+    %% transition usecase__FileClosureNotice
+    state__BusinessPermit_suspended --> state__BusinessPermit_closed : 廃業届の提出
+    state__BusinessPermit_expired --> [*]
+    state__BusinessPermit_revoked --> [*]
+    state__BusinessPermit_closed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__BusinessPermit_expired stateend
+  class state__BusinessPermit_revoked stateend
+  class state__BusinessPermit_closed stateend

@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:ReviewFloorPlan model=samples/food-permit-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__ConsultationScreen as 事前相談記録画面
+  participant usecase__ReviewFloorPlan as 図面の確認と施設基準の説明
+  participant entity__Consultation as 事前相談
+  actor__FoodSanitationInspector ->> screen__ConsultationScreen: 図面の確認と施設基準の説明
+  screen__ConsultationScreen ->> usecase__ReviewFloorPlan: 図面の確認と施設基準の説明
+  usecase__ReviewFloorPlan ->> entity__Consultation: read
+  usecase__ReviewFloorPlan -->> screen__ConsultationScreen: done

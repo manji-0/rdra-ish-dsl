@@ -1,0 +1,38 @@
+%% rdra-ish diagram=flow scope=buc:BucPermitChanges model=samples/food-permit-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__PermitChangesFlow["許可後の届出の流れ"]
+    subgraph lane__PermitChangesFlow__BusinessOperator["営業者"]
+      %% lane lane__PermitChangesFlow__BusinessOperator: actor__BusinessOperator
+      step__ChangeStep["変更届（10日以内）"]:::step
+      step__ClosureStep["廃業届（10日以内、許可証を添える）"]:::step
+      step__SuccessionStep["地位承継届（遅滞なく）"]:::step
+    end
+    subgraph lane__PermitChangesFlow__PermitClerk["保健所 許可担当職員"]
+      %% lane lane__PermitChangesFlow__PermitClerk: actor__PermitClerk
+      step__ChangeReviewStep["変更の確認（新規申請の要否）"]:::step
+    end
+  end
+  usecase__AcceptSuccessionNotice("地位承継届の受理"):::usecase
+  %% desc usecase__AcceptSuccessionNotice: 許可担当が承継を証する書面を確かめ、台帳の営業者を書き換える。
+  usecase__FileChangeNotice("変更届の提出"):::usecase
+  %% desc usecase__FileChangeNotice: 許可営業者が、申請書の記載事項（営業者の氏名・住所、施設の名称、食品衛生責任者など）や設備の変更を届け出る。
+  usecase__FileClosureNotice("廃業届の提出"):::usecase
+  %% desc usecase__FileClosureNotice: 許可営業者が営業をやめた日から10日以内に、許可証を添えて廃業を届け出る。許可はここで終わる。
+  usecase__FileSuccessionNotice("地位承継届の提出"):::usecase
+  %% desc usecase__FileSuccessionNotice: 営業を譲り受けた者、相続人、合併・分割で営業を承継した法人が、承継を証する書面を添えて届け出る。
+  usecase__ReviewChangeNotice("変更届の確認"):::usecase
+  %% desc usecase__ReviewChangeNotice: 許可担当が変更の内容を確かめ、届出で足りるか、新規の許可申請が必要かを判断する。
+  step__ChangeReviewStep -.-> usecase__ReviewChangeNotice
+  step__ChangeStep -->|branches| step__ClosureStep
+  step__ChangeStep -->|branches| step__SuccessionStep
+  step__ChangeStep -.-> usecase__FileChangeNotice
+  step__ChangeStep -->|precedes| step__ChangeReviewStep
+  step__ClosureStep -.-> usecase__FileClosureNotice
+  step__SuccessionStep -.-> usecase__AcceptSuccessionNotice
+  step__SuccessionStep -.-> usecase__FileSuccessionNotice
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

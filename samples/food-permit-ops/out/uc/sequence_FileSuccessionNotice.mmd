@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:FileSuccessionNotice model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__PermitNoticeScreen as 許可後の届出画面
+  participant api__SuccessionApi as 地位承継届 API
+  participant entity__BusinessPermit as 営業許可
+  participant entity__SuccessionNotice as 地位承継届
+  actor__BusinessOperator ->> screen__PermitNoticeScreen: 地位承継届の提出
+  screen__PermitNoticeScreen ->> api__SuccessionApi: 地位承継届 API
+  alt 許可が終わっていない（有効か停止中）: BusinessPermit.status in (有効, 営業停止中)
+    api__SuccessionApi ->> entity__BusinessPermit: read
+    api__SuccessionApi ->> entity__SuccessionNotice: create
+    api__SuccessionApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__SuccessionApi -->> screen__PermitNoticeScreen: rejected
+  end

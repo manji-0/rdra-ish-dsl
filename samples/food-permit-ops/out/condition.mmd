@@ -1,0 +1,244 @@
+%% rdra-ish diagram=condition scope=whole model=samples/food-permit-ops
+%% kinds: condition statemodel variation value usecase
+%% omitted: (none)
+flowchart LR
+  condition__AwaitingInspection{"申請が検査待で、まだ検査の予定がない"}:::condition
+  %% holds condition__AwaitingInspection: (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）))
+  condition__BeforeReview{"申請が確認待か差戻し中である"}:::condition
+  %% holds condition__BeforeReview: PermitApplication.status in (申請内容確認待, 差戻し・補正中)
+  condition__CertifiedAndValid{"許可が有効で、許可証の交付を受けている"}:::condition
+  %% holds condition__CertifiedAndValid: BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true
+  condition__CounterApplication{"窓口（紙）で出した申請である"}:::condition
+  %% holds condition__CounterApplication: PermitApplication.channel == 保健所の窓口（紙）
+  condition__DecidedUnpublished{"処分が決定していて、まだ公表していない"}:::condition
+  %% holds condition__DecidedUnpublished: Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表
+  condition__ExemptType{"届出も要らない営業（施行令35条の2）である"}:::condition
+  %% holds condition__ExemptType: Consultation.business_type == 常温で保存できる包装食品の販売（届出不要）
+  condition__ExplanationProcedure{"弁明の機会を与える処分である"}:::condition
+  %% holds condition__ExplanationProcedure: Disposition.procedure == 弁明の機会の付与
+  condition__FeePaid{"手数料が納められている"}:::condition
+  %% holds condition__FeePaid: PermitApplication.fee_paid == true
+  condition__HearingProcedure{"聴聞を執る処分である"}:::condition
+  %% holds condition__HearingProcedure: Disposition.procedure == 聴聞
+  condition__ImprovementOrderKind{"施設の整備改善命令である"}:::condition
+  %% holds condition__ImprovementOrderKind: Disposition.kind == 施設の整備改善命令
+  condition__InspectionPassed{"施設検査で施設基準に適合した"}:::condition
+  %% holds condition__InspectionPassed: Inspection.status == 適合
+  condition__NewApplication{"新規の申請である"}:::condition
+  %% holds condition__NewApplication: PermitApplication.kind == 新規
+  condition__NotRevocation{"取消ではない処分である"}:::condition
+  %% holds condition__NotRevocation: Disposition.kind in (施設の整備改善命令, 営業の停止)
+  condition__NotificationRequiredType{"届出業種である"}:::condition
+  %% holds condition__NotificationRequiredType: Consultation.business_type in (弁当販売業（届出）, 野菜果物販売業（届出）)
+  condition__OpinionOmitted{"意見陳述を省く処分である"}:::condition
+  %% holds condition__OpinionOmitted: Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号）
+  condition__OpinionRequired{"意見陳述の手続を執る処分である"}:::condition
+  %% holds condition__OpinionRequired: Disposition.procedure in (聴聞, 弁明の機会の付与)
+  condition__PermitNotEnded{"許可が終わっていない（有効か停止中）"}:::condition
+  %% holds condition__PermitNotEnded: BusinessPermit.status in (有効, 営業停止中)
+  condition__PermitRequiredType{"許可業種（施行令35条）である"}:::condition
+  %% holds condition__PermitRequiredType: Consultation.business_type in (飲食店営業, 食肉販売業, 菓子製造業)
+  condition__PermitValid{"許可が有効である"}:::condition
+  %% holds condition__PermitValid: BusinessPermit.status == 有効
+  condition__PlanPublished{"監視指導計画が公表されている"}:::condition
+  %% holds condition__PlanPublished: MonitoringPlan.status == 公表済
+  condition__Published{"公表中である"}:::condition
+  %% holds condition__Published: Disposition.publication == 公表中
+  condition__RenewalApplication{"継続（更新）の申請である"}:::condition
+  %% holds condition__RenewalApplication: PermitApplication.kind == 継続（更新）
+  condition__RevocationKind{"許可の取消である"}:::condition
+  %% holds condition__RevocationKind: Disposition.kind == 許可の取消
+  condition__SuspensionKind{"営業の停止である"}:::condition
+  %% holds condition__SuspensionKind: Disposition.kind == 営業の停止
+  statemodel__BusinessPermit_status[["BusinessPermit.status"]]:::statemodel
+  statemodel__Consultation_status[["Consultation.status"]]:::statemodel
+  statemodel__Disposition_status[["Disposition.status"]]:::statemodel
+  statemodel__Inspection_status[["Inspection.status"]]:::statemodel
+  statemodel__MonitoringPlan_status[["MonitoringPlan.status"]]:::statemodel
+  statemodel__PermitApplication_status[["PermitApplication.status"]]:::statemodel
+  subgraph variation__ApplicationKind["申請の種別"]
+    variation__ApplicationKind__new["新規"]:::value
+    variation__ApplicationKind__renewal["継続（更新）"]:::value
+  end
+  subgraph variation__BusinessType["営業の種類"]
+    variation__BusinessType__restaurant["飲食店営業"]:::value
+    variation__BusinessType__meat_retail["食肉販売業"]:::value
+    variation__BusinessType__confectionery["菓子製造業"]:::value
+    variation__BusinessType__bento_retail["弁当販売業（届出）"]:::value
+    variation__BusinessType__produce_retail["野菜果物販売業（届出）"]:::value
+    variation__BusinessType__packaged_retail["常温で保存できる包装食品の販売（届出不要）"]:::value
+  end
+  subgraph variation__DispositionKind["処分の種類"]
+    variation__DispositionKind__improvement_order["施設の整備改善命令"]:::value
+    variation__DispositionKind__suspension["営業の停止"]:::value
+    variation__DispositionKind__revocation["許可の取消"]:::value
+  end
+  subgraph variation__NotifiedBusinessType["届出業種"]
+    variation__NotifiedBusinessType__bento_retail["弁当販売業"]:::value
+    variation__NotifiedBusinessType__produce_retail["野菜果物販売業"]:::value
+  end
+  subgraph variation__OpinionProcedure["意見陳述の手続"]
+    variation__OpinionProcedure__hearing["聴聞"]:::value
+    variation__OpinionProcedure__explanation["弁明の機会の付与"]:::value
+    variation__OpinionProcedure__omitted["意見陳述の省略（行政手続法13条2項3号）"]:::value
+  end
+  subgraph variation__PermitBusinessType["許可業種"]
+    variation__PermitBusinessType__restaurant["飲食店営業"]:::value
+    variation__PermitBusinessType__meat_retail["食肉販売業"]:::value
+    variation__PermitBusinessType__confectionery["菓子製造業"]:::value
+  end
+  subgraph variation__SubmissionChannel["申請方法"]
+    variation__SubmissionChannel__counter["保健所の窓口（紙）"]:::value
+    variation__SubmissionChannel__online["食品衛生申請等システム（電子申請）"]:::value
+  end
+  subgraph variation__SuccessionCause["承継の原因"]
+    variation__SuccessionCause__transfer["営業の譲渡"]:::value
+    variation__SuccessionCause__inheritance["相続"]:::value
+    variation__SuccessionCause__merger["合併"]:::value
+    variation__SuccessionCause__split["分割"]:::value
+  end
+  usecase__AppointHygieneManager("食品衛生責任者の選定の届出"):::usecase
+  %% desc usecase__AppointHygieneManager: 申請時に食品衛生責任者を定めていなかった営業者が、許可後に定めて（講習会を受けて）届け出る。
+  usecase__ClassifyBusiness("営業の種類の判定"):::usecase
+  %% desc usecase__ClassifyBusiness: 営業の種類から、許可が必要か、届出が必要か、どちらも要らないかを判定する。結果は営業の種類で決まり、監視員が選ぶものではない（各結果に条件）。
+  usecase__DecideRevocation("許可の取消の決定"):::usecase
+  %% desc usecase__DecideRevocation: 聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。
+  usecase__DecideSuspension("営業停止の決定"):::usecase
+  %% desc usecase__DecideSuspension: 弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。
+  usecase__EndPublication("公表の終了"):::usecase
+  %% desc usecase__EndPublication: 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。
+  usecase__FileChangeNotice("変更届の提出"):::usecase
+  %% desc usecase__FileChangeNotice: 許可営業者が、申請書の記載事項（営業者の氏名・住所、施設の名称、食品衛生責任者など）や設備の変更を届け出る。
+  usecase__FileSuccessionNotice("地位承継届の提出"):::usecase
+  %% desc usecase__FileSuccessionNotice: 営業を譲り受けた者、相続人、合併・分割で営業を承継した法人が、承継を証する書面を添えて届け出る。
+  usecase__GrantPermit("許可の決定"):::usecase
+  %% desc usecase__GrantPermit: 施設検査で施設基準に合うと認めた新規の申請に許可を与え、有効期間（5年以上）を付ける。
+  usecase__HoldHearing("聴聞の実施"):::usecase
+  %% desc usecase__HoldHearing: 聴聞の期日に名あて人の意見を聴き、記録する。取消の前には必ず行う。
+  usecase__IssueCertificate("許可証の交付"):::usecase
+  %% desc usecase__IssueCertificate: 許可証を営業者に交付する。
+  usecase__NotifyOpinionProcedure("聴聞・弁明の通知"):::usecase
+  %% desc usecase__NotifyOpinionProcedure: 予定する処分の内容と根拠条項、原因となる事実、聴聞の期日または弁明書の提出期限を、名あて人に書面で通知する。
+  usecase__OrderImprovement("施設の整備改善命令"):::usecase
+  %% desc usecase__OrderImprovement: 施設基準に合わない設備の改善を命じる。計測などで確かめた不充足なら意見陳述を省いて命じられる。
+  usecase__PayPermitFee("許可申請手数料の納付"):::usecase
+  %% desc usecase__PayPermitFee: 営業者が条例の手数料を保健所に納める（電子申請でも別途納付）。納めた手数料は還付されない。
+  usecase__ProposeDisposition("処分の起案"):::usecase
+  %% desc usecase__ProposeDisposition: 食品衛生監視員が違反の事実と処分基準から、処分の種類（整備改善命令・停止・取消）と意見陳述の手続（聴聞・弁明・省略）を起案する。
+  usecase__PublishViolation("違反の公表"):::usecase
+  %% desc usecase__PublishViolation: 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。
+  usecase__ReceiveExplanation("弁明書の受理"):::usecase
+  %% desc usecase__ReceiveExplanation: 停止や整備改善命令の前に、名あて人の弁明書を受け取る。期限までに出なければ、弁明の機会を与えたものとして手続を終える。
+  usecase__RenewPermit("更新の許可の決定"):::usecase
+  %% desc usecase__RenewPermit: 施設検査で施設基準に合うと認めた継続の申請に、許可がまだ有効なうちに許可を与える。
+  usecase__ReviewApplication("申請内容の確認と受理"):::usecase
+  %% desc usecase__ReviewApplication: 許可担当が記載事項（営業者・施設・営業の種類・食品衛生責任者・図面・欠格事由の有無）と手数料の納付を確かめ、施設検査に進める（検査待）。
+  usecase__ScheduleInspection("施設検査の日程調整"):::usecase
+  %% desc usecase__ScheduleInspection: 手数料の納付を確かめた検査待の申請について、施設検査の日を決める。
+  usecase__ScheduleSiteVisit("立入検査の予定"):::usecase
+  %% desc usecase__ScheduleSiteVisit: 公表した計画の重点項目と件数に沿って、立入検査する施設を決める。
+  usecase__StartBusiness("営業の開始・再開"):::usecase
+  %% desc usecase__StartBusiness: 営業者が許可証を掲示して営業を始める。営業停止の期間が終わった後の再開も同じ。
+  usecase__WithdrawApplication("申請の取下げ"):::usecase
+  %% desc usecase__WithdrawApplication: 営業者が許可・不許可の前に申請を取り下げる。電子申請は保健所の差戻しを受けてから取り下げる。手数料は戻らない。
+  condition__AwaitingInspection -.->|applies_to| usecase__ScheduleInspection
+  condition__AwaitingInspection -.-> statemodel__Inspection_status
+  %% derived condition__AwaitingInspection -> statemodel__Inspection_status from holds
+  condition__AwaitingInspection -.-> statemodel__PermitApplication_status
+  %% derived condition__AwaitingInspection -> statemodel__PermitApplication_status from holds
+  condition__BeforeReview -.->|applies_to| usecase__PayPermitFee
+  condition__BeforeReview -.-> statemodel__PermitApplication_status
+  %% derived condition__BeforeReview -> statemodel__PermitApplication_status from holds
+  condition__CertifiedAndValid -.->|applies_to| usecase__StartBusiness
+  condition__CertifiedAndValid -.-> statemodel__BusinessPermit_status
+  %% derived condition__CertifiedAndValid -> statemodel__BusinessPermit_status from holds
+  condition__CounterApplication -.-> statemodel__PermitApplication_status
+  %% derived condition__CounterApplication -> statemodel__PermitApplication_status from when
+  condition__CounterApplication -.-> variation__SubmissionChannel
+  %% derived condition__CounterApplication -> variation__SubmissionChannel from holds
+  condition__CounterApplication -.->|when| usecase__WithdrawApplication
+  %% derived condition__CounterApplication -> usecase__WithdrawApplication via transitions PermitApplication.status submitted->withdrawn, transitions PermitApplication.status awaiting_inspection->withdrawn
+  condition__DecidedUnpublished -.->|applies_to| usecase__PublishViolation
+  condition__DecidedUnpublished -.-> statemodel__Disposition_status
+  %% derived condition__DecidedUnpublished -> statemodel__Disposition_status from holds
+  condition__ExemptType -.-> statemodel__Consultation_status
+  %% derived condition__ExemptType -> statemodel__Consultation_status from when
+  condition__ExemptType -.-> variation__BusinessType
+  %% derived condition__ExemptType -> variation__BusinessType from holds
+  condition__ExemptType -.->|when| usecase__ClassifyBusiness
+  %% derived condition__ExemptType -> usecase__ClassifyBusiness via transitions Consultation.status open->exempt
+  condition__ExplanationProcedure -.->|applies_to| usecase__ReceiveExplanation
+  condition__ExplanationProcedure -.-> variation__OpinionProcedure
+  %% derived condition__ExplanationProcedure -> variation__OpinionProcedure from holds
+  condition__FeePaid -.->|applies_to| usecase__ReviewApplication
+  condition__HearingProcedure -.->|applies_to| usecase__DecideRevocation
+  condition__HearingProcedure -.->|applies_to| usecase__HoldHearing
+  condition__HearingProcedure -.-> variation__OpinionProcedure
+  %% derived condition__HearingProcedure -> variation__OpinionProcedure from holds
+  condition__ImprovementOrderKind -.->|applies_to| usecase__OrderImprovement
+  condition__ImprovementOrderKind -.-> variation__DispositionKind
+  %% derived condition__ImprovementOrderKind -> variation__DispositionKind from holds
+  condition__ImprovementOrderKind -.-> variation__OpinionProcedure
+  %% derived condition__ImprovementOrderKind -> variation__OpinionProcedure from when
+  condition__ImprovementOrderKind -.->|when| usecase__ProposeDisposition
+  %% derived condition__ImprovementOrderKind -> usecase__ProposeDisposition via chooses Disposition.procedure omitted
+  condition__InspectionPassed -.->|applies_to| usecase__GrantPermit
+  condition__InspectionPassed -.->|applies_to| usecase__RenewPermit
+  condition__InspectionPassed -.-> statemodel__Inspection_status
+  %% derived condition__InspectionPassed -> statemodel__Inspection_status from holds
+  condition__NewApplication -.->|applies_to| usecase__GrantPermit
+  condition__NewApplication -.-> variation__ApplicationKind
+  %% derived condition__NewApplication -> variation__ApplicationKind from holds
+  condition__NotRevocation -.-> variation__DispositionKind
+  %% derived condition__NotRevocation -> variation__DispositionKind from holds
+  condition__NotRevocation -.-> variation__OpinionProcedure
+  %% derived condition__NotRevocation -> variation__OpinionProcedure from when
+  condition__NotRevocation -.->|when| usecase__ProposeDisposition
+  %% derived condition__NotRevocation -> usecase__ProposeDisposition via chooses Disposition.procedure explanation
+  condition__NotificationRequiredType -.-> statemodel__Consultation_status
+  %% derived condition__NotificationRequiredType -> statemodel__Consultation_status from when
+  condition__NotificationRequiredType -.-> variation__BusinessType
+  %% derived condition__NotificationRequiredType -> variation__BusinessType from holds
+  condition__NotificationRequiredType -.->|when| usecase__ClassifyBusiness
+  %% derived condition__NotificationRequiredType -> usecase__ClassifyBusiness via transitions Consultation.status open->notification_required
+  condition__OpinionOmitted -.-> statemodel__Disposition_status
+  %% derived condition__OpinionOmitted -> statemodel__Disposition_status from when
+  condition__OpinionOmitted -.-> variation__OpinionProcedure
+  %% derived condition__OpinionOmitted -> variation__OpinionProcedure from holds
+  condition__OpinionOmitted -.->|when| usecase__OrderImprovement
+  %% derived condition__OpinionOmitted -> usecase__OrderImprovement via transitions Disposition.status proposed->decided
+  condition__OpinionRequired -.->|applies_to| usecase__NotifyOpinionProcedure
+  condition__OpinionRequired -.-> variation__OpinionProcedure
+  %% derived condition__OpinionRequired -> variation__OpinionProcedure from holds
+  condition__PermitNotEnded -.->|applies_to| usecase__FileChangeNotice
+  condition__PermitNotEnded -.->|applies_to| usecase__FileSuccessionNotice
+  condition__PermitNotEnded -.-> statemodel__BusinessPermit_status
+  %% derived condition__PermitNotEnded -> statemodel__BusinessPermit_status from holds
+  condition__PermitRequiredType -.-> statemodel__Consultation_status
+  %% derived condition__PermitRequiredType -> statemodel__Consultation_status from when
+  condition__PermitRequiredType -.-> variation__BusinessType
+  %% derived condition__PermitRequiredType -> variation__BusinessType from holds
+  condition__PermitRequiredType -.->|when| usecase__ClassifyBusiness
+  %% derived condition__PermitRequiredType -> usecase__ClassifyBusiness via transitions Consultation.status open->permit_required
+  condition__PermitValid -.->|applies_to| usecase__AppointHygieneManager
+  condition__PermitValid -.->|applies_to| usecase__IssueCertificate
+  condition__PermitValid -.-> statemodel__BusinessPermit_status
+  %% derived condition__PermitValid -> statemodel__BusinessPermit_status from holds
+  condition__PlanPublished -.->|applies_to| usecase__ScheduleSiteVisit
+  condition__PlanPublished -.-> statemodel__MonitoringPlan_status
+  %% derived condition__PlanPublished -> statemodel__MonitoringPlan_status from holds
+  condition__Published -.->|applies_to| usecase__EndPublication
+  condition__RenewalApplication -.->|applies_to| usecase__RenewPermit
+  condition__RenewalApplication -.-> variation__ApplicationKind
+  %% derived condition__RenewalApplication -> variation__ApplicationKind from holds
+  condition__RevocationKind -.->|applies_to| usecase__DecideRevocation
+  condition__RevocationKind -.-> variation__DispositionKind
+  %% derived condition__RevocationKind -> variation__DispositionKind from holds
+  condition__SuspensionKind -.->|applies_to| usecase__DecideSuspension
+  condition__SuspensionKind -.-> variation__DispositionKind
+  %% derived condition__SuspensionKind -> variation__DispositionKind from holds
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef value fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

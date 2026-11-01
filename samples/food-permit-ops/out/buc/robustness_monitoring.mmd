@@ -1,0 +1,33 @@
+%% rdra-ish diagram=robustness scope=buc:BucMonitoring model=samples/food-permit-ops
+%% kinds: actor screen timer api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+  actor__PermitClerk(["保健所 許可担当職員"]):::actor
+  screen__MonitoringPlanScreen["監視指導計画画面"]:::screen
+  screen__SiteVisitScreen["立入検査画面"]:::screen
+  timer__AnnualPlanning(("翌年度の監視指導計画の策定（毎年度）")):::timer
+  api__MonitoringPlanApi{{"監視指導計画 API"}}:::api
+  api__MonitoringPlanPublishApi{{"監視指導計画公表 API"}}:::api
+  api__SiteVisitApi{{"立入検査予定 API"}}:::api
+  api__SiteVisitResultApi{{"立入検査結果 API"}}:::api
+  entity__MonitoringPlan[("監視指導計画")]:::entity
+  entity__SiteVisit[("立入検査")]:::entity
+  actor__FoodSanitationInspector --> screen__SiteVisitScreen
+  actor__PermitClerk --> screen__MonitoringPlanScreen
+  api__MonitoringPlanApi -->|C| entity__MonitoringPlan
+  api__MonitoringPlanPublishApi -->|U| entity__MonitoringPlan
+  api__SiteVisitApi -->|C| entity__SiteVisit
+  api__SiteVisitApi -->|R| entity__MonitoringPlan
+  api__SiteVisitResultApi -->|U| entity__SiteVisit
+  screen__MonitoringPlanScreen -->|監視指導計画の公表| api__MonitoringPlanPublishApi
+  screen__MonitoringPlanScreen -->|監視指導計画の策定| api__MonitoringPlanApi
+  screen__SiteVisitScreen -->|立入検査の予定| api__SiteVisitApi
+  screen__SiteVisitScreen -->|違反なしの記録| api__SiteVisitResultApi
+  screen__SiteVisitScreen -->|違反の記録| api__SiteVisitResultApi
+  timer__AnnualPlanning -.-> api__MonitoringPlanApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,12 @@
+%% rdra-ish diagram=screen scope=buc:BucInspectionDecision model=samples/food-permit-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__DecisionScreen["許可決定画面"]:::screen
+  screen__InspectionScreen["施設検査画面"]:::screen
+  screen__PermitLedgerScreen["許可台帳画面"]:::screen
+  screen__DecisionScreen -->|許可の決定| screen__PermitLedgerScreen
+  screen__InspectionScreen -->|施設検査の実施| screen__DecisionScreen
+  %% via screen__DecisionScreen -> screen__PermitLedgerScreen usecase__GrantPermit
+  %% via screen__InspectionScreen -> screen__DecisionScreen usecase__ConductInspection
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

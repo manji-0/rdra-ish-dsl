@@ -1,0 +1,21 @@
+%% rdra-ish diagram=state scope=entity:Inspection model=samples/food-permit-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Inspection.status" as statemodel__Inspection_status {
+    [*] --> state__Inspection_scheduled
+    state "検査予定" as state__Inspection_scheduled
+    state "適合" as state__Inspection_passed
+    state "不適合（改善の指示）" as state__Inspection_failed
+    %% transition usecase__ConductInspection
+    state__Inspection_scheduled --> state__Inspection_passed : 施設検査の実施
+    %% transition usecase__ConductInspection
+    state__Inspection_scheduled --> state__Inspection_failed : 施設検査の実施
+    %% transition usecase__RequestReinspection
+    state__Inspection_failed --> state__Inspection_scheduled : 改善の報告と再検査の申込み
+    state__Inspection_passed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Inspection_passed stateend

@@ -1,0 +1,36 @@
+%% rdra-ish diagram=flow scope=buc:BucBusinessNotification model=samples/food-permit-ops
+%% kinds: flow step lane usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__NotificationFlow["営業届出の流れ"]
+    subgraph lane__NotificationFlow__BusinessOperator["営業者"]
+      %% lane lane__NotificationFlow__BusinessOperator: actor__BusinessOperator
+      step__NotifiedClosureStep["廃業届"]:::step
+      step__NotifyStep["営業届の提出（営業の前）"]:::step
+    end
+    subgraph lane__NotificationFlow__PermitClerk["保健所 許可担当職員"]
+      %% lane lane__NotificationFlow__PermitClerk: actor__PermitClerk
+      step__AcceptStep["受付（受付済）"]:::step
+    end
+  end
+  usecase__AcceptNotification("営業届の受付"):::usecase
+  %% desc usecase__AcceptNotification: 許可担当が記載を確かめて受け付ける。施設基準による審査と施設検査はない。
+  usecase__FileNotificationClosure("届出営業の廃業届"):::usecase
+  %% desc usecase__FileNotificationClosure: 届出営業者が営業をやめたことを届け出る。
+  usecase__ReceiveOnlineNotification("電子届出の受付"):::usecase
+  %% desc usecase__ReceiveOnlineNotification: 食品衛生申請等システムで出された営業届を、届出内容確認待として受け付ける。
+  usecase__SubmitCounterNotification("営業届の提出（窓口）"):::usecase
+  %% desc usecase__SubmitCounterNotification: 営業者が営業を始める前に、保健所の窓口に営業届を出す。
+  event__EvOnlineNotificationSubmitted>"電子届出の提出（整理番号 NIF）"]:::event
+  step__AcceptStep -.-> usecase__AcceptNotification
+  step__AcceptStep -->|precedes| step__NotifiedClosureStep
+  step__NotifiedClosureStep -.-> usecase__FileNotificationClosure
+  step__NotifyStep -.-> event__EvOnlineNotificationSubmitted
+  step__NotifyStep -.-> usecase__ReceiveOnlineNotification
+  step__NotifyStep -.-> usecase__SubmitCounterNotification
+  step__NotifyStep -->|precedes| step__AcceptStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

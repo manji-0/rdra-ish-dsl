@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:EndPublication model=samples/food-permit-ops
+%% kinds: timer api entity
+%% omitted: buc step condition
+sequenceDiagram
+  participant timer__PublicationPeriodEnd as 公表期間の経過（7日間以上）
+  participant api__PublicationApi as 公表 API
+  participant entity__Disposition as 不利益処分
+  timer__PublicationPeriodEnd ->> api__PublicationApi: 公表期間の経過（7日間以上）
+  alt 公表中である: Disposition.publication == 公表中
+    api__PublicationApi ->> entity__Disposition: update publication=ended
+    api__PublicationApi -->> timer__PublicationPeriodEnd: done
+  else guard fails
+    api__PublicationApi -->> timer__PublicationPeriodEnd: rejected
+  end

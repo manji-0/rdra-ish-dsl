@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ProposeDisposition model=samples/food-permit-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant usecase__RecordViolation as 違反の記録
+  participant screen__DispositionScreen as 不利益処分画面
+  participant api__DispositionDraftApi as 処分起案 API
+  participant entity__BusinessPermit as 営業許可
+  participant entity__Disposition as 不利益処分
+  actor__FoodSanitationInspector ->> screen__DispositionScreen: 処分の起案
+  usecase__RecordViolation ->> api__DispositionDraftApi: 立入検査での違反の発見
+  screen__DispositionScreen ->> api__DispositionDraftApi: 処分起案 API
+  api__DispositionDraftApi ->> entity__BusinessPermit: read
+  api__DispositionDraftApi ->> entity__Disposition: create procedure in (聴聞, 弁明の機会の付与 [取消ではない処分である], 意見陳述の省略（行政手続法13条2項3号） [施設の整備改善命令である])
+  api__DispositionDraftApi -->> screen__DispositionScreen: done

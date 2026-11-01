@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:RevokePermit model=samples/food-permit-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant usecase__DecideRevocation as 許可の取消の決定
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__PermitApi as 営業許可 API
+  participant entity__BusinessPermit as 営業許可
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への取消の記録
+  usecase__DecideRevocation ->> api__PermitApi: 許可の取消の決定
+  screen__PermitLedgerScreen ->> api__PermitApi: 営業許可 API
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__PermitApi ->> entity__BusinessPermit: update status 有効 -> 取消, status 営業停止中 -> 取消, operating=false
+    api__PermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitApi -->> screen__PermitLedgerScreen: rejected
+  end

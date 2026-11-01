@@ -1,6 +1,7 @@
 samples/ec-site
 samples/clinic-ops
 samples/patent-ops
+samples/food-permit-ops
 samples/personal-info
 samples/api-contract
 samples/incremental-order/step-6-business-rules/src

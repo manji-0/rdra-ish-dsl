@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:PublishMonitoringPlan model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__MonitoringPlanScreen as 監視指導計画画面
+  participant api__MonitoringPlanPublishApi as 監視指導計画公表 API
+  participant entity__MonitoringPlan as 監視指導計画
+  actor__PermitClerk ->> screen__MonitoringPlanScreen: 監視指導計画の公表
+  screen__MonitoringPlanScreen ->> api__MonitoringPlanPublishApi: 監視指導計画公表 API
+  alt MonitoringPlan.status == 策定中
+    api__MonitoringPlanPublishApi ->> entity__MonitoringPlan: update status 策定中 -> 公表済
+    api__MonitoringPlanPublishApi -->> screen__MonitoringPlanScreen: done
+  else guard fails
+    api__MonitoringPlanPublishApi -->> screen__MonitoringPlanScreen: rejected
+  end

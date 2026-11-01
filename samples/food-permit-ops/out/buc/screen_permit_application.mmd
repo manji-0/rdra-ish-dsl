@@ -1,0 +1,11 @@
+%% rdra-ish diagram=screen scope=buc:BucPermitApplication model=samples/food-permit-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__ApplicationReviewScreen["申請審査画面"]:::screen
+  screen__ApplicationScreen["許可申請受付画面"]:::screen
+  screen__ApplicationReviewScreen -->|差戻し（補正の求め）| screen__ApplicationScreen
+  screen__ApplicationScreen -->|申請内容の確認と受理| screen__ApplicationReviewScreen
+  %% via screen__ApplicationReviewScreen -> screen__ApplicationScreen usecase__ReturnApplication
+  %% via screen__ApplicationScreen -> screen__ApplicationReviewScreen usecase__ReviewApplication
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

@@ -335,6 +335,7 @@ The rules for each flag and for deferral are in
 
 <!-- derived-from #approximations-and-limitations -->
 <!-- derived-from ../samples/patent-ops/README.md#known-verification-gaps -->
+<!-- derived-from ../samples/food-permit-ops/README.md#known-verification-gaps -->
 <!-- constrained-by ./language-reference.md#triggers-and-event-driven-buc-chaining -->
 A passing `check` or `verify` says nothing about what it does not explore. This section
 names each gap that 1.0 keeps, how to see it in a run, and what you can do about it. The
@@ -410,6 +411,14 @@ gaps.
   [Known verification gaps](../samples/patent-ops/README.md#known-verification-gaps) in the
   sample's README. What you can do: state such a rule only where its cone stays within the
   `verify` cap, or check it in a smaller model.
+- **food-permit-ops states no temporal property either.** Its property that a valid permit
+  without a 食品衛生責任者 ends with one appointed reads only `BusinessPermit`, a 421-state cone at
+  2 instances, but runs on the whole model: TLC found 6,877,496 distinct states in 300 s with
+  5,949,713 still queued. The sample also leaves out the guard that ties a renewal to a valid
+  permit (the application's cone grows from 14,197 to 429,485 states) and joins a disposition's
+  decision to the permit's ledger by an event. See it:
+  [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
+  you can do: as for patent-ops.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
   outside the selected BUCs, and those could reach, enable, or unblock a state. A missing
   witness, a use case that never runs, a deadlock, an arm never taken, and a value never

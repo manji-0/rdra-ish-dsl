@@ -1,0 +1,44 @@
+%% rdra-ish diagram=state scope=entity:PermitApplication model=samples/food-permit-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "PermitApplication.status" as statemodel__PermitApplication_status {
+    [*] --> state__PermitApplication_submitted
+    state "申請内容確認待" as state__PermitApplication_submitted
+    state "差戻し・補正中" as state__PermitApplication_returned
+    state "検査待" as state__PermitApplication_awaiting_inspection
+    state "許可" as state__PermitApplication_approved
+    state "不許可" as state__PermitApplication_denied
+    state "取下げ" as state__PermitApplication_withdrawn
+    %% transition usecase__ReturnApplication
+    state__PermitApplication_submitted --> state__PermitApplication_returned : 差戻し（補正の求め）
+    %% transition usecase__ReviewApplication
+    state__PermitApplication_submitted --> state__PermitApplication_awaiting_inspection : 申請内容の確認と受理 [手数料が納められている]
+    %% transition usecase__WithdrawApplication
+    state__PermitApplication_submitted --> state__PermitApplication_withdrawn : 申請の取下げ [窓口（紙）で出した申請である]
+    %% transition usecase__ResubmitApplication
+    state__PermitApplication_returned --> state__PermitApplication_submitted : 補正した申請の再提出
+    %% transition usecase__DenyPermit
+    state__PermitApplication_returned --> state__PermitApplication_denied : 不許可の決定
+    %% transition usecase__WithdrawApplication
+    state__PermitApplication_returned --> state__PermitApplication_withdrawn : 申請の取下げ
+    %% transition usecase__ReturnApplication
+    state__PermitApplication_awaiting_inspection --> state__PermitApplication_returned : 差戻し（補正の求め）
+    %% transition usecase__GrantPermit
+    state__PermitApplication_awaiting_inspection --> state__PermitApplication_approved : 許可の決定 [施設検査で施設基準に適合した, 新規の申請である]
+    %% transition usecase__RenewPermit
+    state__PermitApplication_awaiting_inspection --> state__PermitApplication_approved : 更新の許可の決定 [継続（更新）の申請である, 施設検査で施設基準に適合した]
+    %% transition usecase__DenyPermit
+    state__PermitApplication_awaiting_inspection --> state__PermitApplication_denied : 不許可の決定
+    %% transition usecase__WithdrawApplication
+    state__PermitApplication_awaiting_inspection --> state__PermitApplication_withdrawn : 申請の取下げ [窓口（紙）で出した申請である]
+    state__PermitApplication_approved --> [*]
+    state__PermitApplication_denied --> [*]
+    state__PermitApplication_withdrawn --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__PermitApplication_approved stateend
+  class state__PermitApplication_denied stateend
+  class state__PermitApplication_withdrawn stateend

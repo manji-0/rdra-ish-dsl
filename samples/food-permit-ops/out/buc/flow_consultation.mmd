@@ -1,0 +1,31 @@
+%% rdra-ish diagram=flow scope=buc:BucConsultation model=samples/food-permit-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__ConsultationFlow["事前相談の流れ"]
+    subgraph lane__ConsultationFlow__BusinessOperator["営業者"]
+      %% lane lane__ConsultationFlow__BusinessOperator: actor__BusinessOperator
+      step__ConsultStep["図面を持って相談（工事の前）"]:::step
+    end
+    subgraph lane__ConsultationFlow__FoodSanitationInspector["食品衛生監視員"]
+      %% lane lane__ConsultationFlow__FoodSanitationInspector: actor__FoodSanitationInspector
+      step__ClassifyStep["許可・届出・不要の判定"]:::step
+      step__PlanReviewStep["図面の確認と施設基準の説明"]:::step
+    end
+  end
+  usecase__ClassifyBusiness("営業の種類の判定"):::usecase
+  %% desc usecase__ClassifyBusiness: 営業の種類から、許可が必要か、届出が必要か、どちらも要らないかを判定する。結果は営業の種類で決まり、監視員が選ぶものではない（各結果に条件）。
+  usecase__RequestConsultation("事前相談の申込み"):::usecase
+  %% desc usecase__RequestConsultation: 営業者が施設の図面と営業の内容を持って保健所に相談する。相談で営業の種類を伝える。
+  usecase__ReviewFloorPlan("図面の確認と施設基準の説明"):::usecase
+  %% desc usecase__ReviewFloorPlan: 食品衛生監視員が図面を施設基準（共通基準・業種別基準）と照らし、足りない設備と、食品衛生責任者の資格（調理師・栄養士等か講習会の受講）を説明する（参照のみ）。
+  step__ClassifyStep -.-> usecase__ClassifyBusiness
+  step__ClassifyStep -->|repeats| step__PlanReviewStep
+  step__ConsultStep -.-> usecase__RequestConsultation
+  step__ConsultStep -->|precedes| step__PlanReviewStep
+  step__PlanReviewStep -.-> usecase__ReviewFloorPlan
+  step__PlanReviewStep -->|precedes| step__ClassifyStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

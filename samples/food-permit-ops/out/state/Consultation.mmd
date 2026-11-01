@@ -1,0 +1,26 @@
+%% rdra-ish diagram=state scope=entity:Consultation model=samples/food-permit-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Consultation.status" as statemodel__Consultation_status {
+    [*] --> state__Consultation_open
+    state "相談中" as state__Consultation_open
+    state "許可が必要" as state__Consultation_permit_required
+    state "届出が必要" as state__Consultation_notification_required
+    state "許可・届出とも不要" as state__Consultation_exempt
+    %% transition usecase__ClassifyBusiness
+    state__Consultation_open --> state__Consultation_permit_required : 営業の種類の判定 [許可業種（施行令35条）である]
+    %% transition usecase__ClassifyBusiness
+    state__Consultation_open --> state__Consultation_notification_required : 営業の種類の判定 [届出業種である]
+    %% transition usecase__ClassifyBusiness
+    state__Consultation_open --> state__Consultation_exempt : 営業の種類の判定 [届出も要らない営業（施行令35条の2）である]
+    state__Consultation_permit_required --> [*]
+    state__Consultation_notification_required --> [*]
+    state__Consultation_exempt --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Consultation_permit_required stateend
+  class state__Consultation_notification_required stateend
+  class state__Consultation_exempt stateend

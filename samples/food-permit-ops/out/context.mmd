@@ -1,0 +1,29 @@
+%% rdra-ish diagram=context scope=whole model=samples/food-permit-ops
+%% kinds: actor extsystem system
+%% omitted: step permission usecase event
+flowchart LR
+  actor__BusinessOperator(["営業者"]):::actor
+  %% desc actor__BusinessOperator: 飲食店などの営業を営もうとする者と、許可・届出を受けて営業する者。事前相談をし、許可を申請し、手数料を納め、施設検査を受け、許可後は変更・承継・廃業を届け出る。
+  actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+  %% desc actor__FoodSanitationInspector: 事前相談で図面を見て営業の種類を判定し、許可前と更新前の施設検査、計画に沿った立入検査を行い、違反を見つけたら処分を起案する。
+  actor__PermitAuthority(["都道府県知事等（保健所設置市長・特別区長）"]):::actor
+  %% desc actor__PermitAuthority: 許可・不許可と、整備改善命令・営業停止・許可取消の処分を決める行政庁。
+  actor__PermitClerk(["保健所 許可担当職員"]):::actor
+  %% desc actor__PermitClerk: 許可申請・届出の受付と審査、差戻し、許可台帳と許可証、聴聞・弁明の事務、処分の公表、監視指導計画の取りまとめを行う。
+  extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  system__PermitLedgerSystem["営業許可台帳システム（保健所）"]:::system
+  actor__BusinessOperator -.->|営業届出、事前相談と営業の種類の判定、施設検査と許可・不許可、営業許可の申請と受付、変更届・地位の承継・廃業届、有効期間の満了と更新| system__PermitLedgerSystem
+  %% derived actor__BusinessOperator -> system__PermitLedgerSystem via buc__BucBusinessNotification,buc__BucConsultation,buc__BucInspectionDecision,buc__BucPermitApplication,buc__BucPermitChanges,buc__BucRenewal
+  actor__FoodSanitationInspector -.->|事前相談と営業の種類の判定、不利益処分と公表、施設検査と許可・不許可、有効期間の満了と更新、監視指導計画と立入検査| system__PermitLedgerSystem
+  %% derived actor__FoodSanitationInspector -> system__PermitLedgerSystem via buc__BucConsultation,buc__BucDisposition,buc__BucInspectionDecision,buc__BucMonitoring,buc__BucRenewal
+  actor__PermitAuthority -.->|不利益処分と公表、施設検査と許可・不許可、有効期間の満了と更新| system__PermitLedgerSystem
+  %% derived actor__PermitAuthority -> system__PermitLedgerSystem via buc__BucDisposition,buc__BucInspectionDecision,buc__BucRenewal
+  actor__PermitClerk -.->|営業届出、不利益処分と公表、施設検査と許可・不許可、有効期間の満了と更新、監視指導計画と立入検査、営業許可の申請と受付、変更届・地位の承継・廃業届| system__PermitLedgerSystem
+  %% derived actor__PermitClerk -> system__PermitLedgerSystem via buc__BucBusinessNotification,buc__BucDisposition,buc__BucInspectionDecision,buc__BucMonitoring,buc__BucPermitApplication,buc__BucPermitChanges,buc__BucRenewal
+  extsystem__FoodSanitationSystem -.->|電子届出の提出（整理番号 NIF）、電子申請の提出（整理番号 LIC）| system__PermitLedgerSystem
+  %% derived extsystem__FoodSanitationSystem -> system__PermitLedgerSystem via event__EvOnlineApplicationSubmitted,event__EvOnlineNotificationSubmitted
+  system__PermitLedgerSystem -.->|届出の受付（受付済）、許可の発行（発行済）、申請の差戻し、更新の許可| extsystem__FoodSanitationSystem
+  %% derived system__PermitLedgerSystem -> extsystem__FoodSanitationSystem via event__EvApplicationReturned,event__EvNotificationAccepted,event__EvPermitIssued,event__EvRenewalGranted
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;

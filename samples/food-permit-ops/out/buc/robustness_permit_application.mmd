@@ -1,0 +1,37 @@
+%% rdra-ish diagram=robustness scope=buc:BucPermitApplication model=samples/food-permit-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__BusinessOperator(["営業者"]):::actor
+  actor__PermitClerk(["保健所 許可担当職員"]):::actor
+  extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  screen__ApplicationReviewScreen["申請審査画面"]:::screen
+  screen__ApplicationScreen["許可申請受付画面"]:::screen
+  api__ApplicationAmendApi{{"申請の補正・取下げ API"}}:::api
+  api__ApplicationIntakeApi{{"許可申請受付 API"}}:::api
+  api__ApplicationReviewApi{{"申請審査 API"}}:::api
+  api__FeePaymentApi{{"手数料納付 API"}}:::api
+  entity__FeeSchedule[("手数料表")]:::entity
+  entity__PermitApplication[("営業許可申請")]:::entity
+  actor__BusinessOperator --> screen__ApplicationScreen
+  actor__PermitClerk --> screen__ApplicationReviewScreen
+  actor__PermitClerk --> screen__ApplicationScreen
+  api__ApplicationAmendApi -->|U| entity__PermitApplication
+  api__ApplicationIntakeApi -->|C| entity__PermitApplication
+  api__ApplicationReviewApi -->|U| entity__PermitApplication
+  api__ApplicationReviewApi -.->|申請の差戻し| extsystem__FoodSanitationSystem
+  api__FeePaymentApi -->|R| entity__FeeSchedule
+  api__FeePaymentApi -->|U| entity__PermitApplication
+  extsystem__FoodSanitationSystem -.->|電子申請の提出（整理番号 LIC）| api__ApplicationIntakeApi
+  screen__ApplicationReviewScreen -->|差戻し（補正の求め）| api__ApplicationReviewApi
+  screen__ApplicationReviewScreen -->|申請内容の確認と受理| api__ApplicationReviewApi
+  screen__ApplicationScreen -->|申請の取下げ| api__ApplicationAmendApi
+  screen__ApplicationScreen -->|補正した申請の再提出| api__ApplicationAmendApi
+  screen__ApplicationScreen -->|許可申請手数料の納付| api__FeePaymentApi
+  screen__ApplicationScreen -->|許可申請書の提出（窓口）| api__ApplicationIntakeApi
+  screen__ApplicationScreen -->|電子申請の受付| api__ApplicationIntakeApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

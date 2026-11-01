@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:DropDisposition model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant screen__DispositionScreen as 不利益処分画面
+  participant api__DispositionApi as 処分決定 API
+  participant entity__Disposition as 不利益処分
+  actor__PermitAuthority ->> screen__DispositionScreen: 処分を見送る
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt Disposition.status == 意見陳述の手続終了
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分しない
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end

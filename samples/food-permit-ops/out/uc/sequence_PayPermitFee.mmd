@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:PayPermitFee model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__ApplicationScreen as 許可申請受付画面
+  participant api__FeePaymentApi as 手数料納付 API
+  participant entity__FeeSchedule as 手数料表
+  participant entity__PermitApplication as 営業許可申請
+  actor__BusinessOperator ->> screen__ApplicationScreen: 許可申請手数料の納付
+  screen__ApplicationScreen ->> api__FeePaymentApi: 手数料納付 API
+  alt 申請が確認待か差戻し中である: PermitApplication.status in (申請内容確認待, 差戻し・補正中)
+    api__FeePaymentApi ->> entity__FeeSchedule: read
+    api__FeePaymentApi ->> entity__PermitApplication: update fee_paid=true
+    api__FeePaymentApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__FeePaymentApi -->> screen__ApplicationScreen: rejected
+  end

@@ -1,0 +1,50 @@
+%% rdra-ish diagram=screen scope=whole model=samples/food-permit-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__ApplicationReviewScreen["申請審査画面"]:::screen
+  screen__ApplicationScreen["許可申請受付画面"]:::screen
+  screen__ConsultationScreen["事前相談記録画面"]:::screen
+  screen__DecisionScreen["許可決定画面"]:::screen
+  screen__DispositionScreen["不利益処分画面"]:::screen
+  screen__InspectionScreen["施設検査画面"]:::screen
+  screen__MonitoringPlanScreen["監視指導計画画面"]:::screen
+  screen__NotificationScreen["営業届画面"]:::screen
+  screen__OpinionProcedureScreen["聴聞・弁明画面"]:::screen
+  screen__PermitLedgerScreen["許可台帳画面"]:::screen
+  screen__PermitNoticeScreen["許可後の届出画面"]:::screen
+  screen__RenewalScreen["更新申請画面"]:::screen
+  screen__SiteVisitScreen["立入検査画面"]:::screen
+  screen__ApplicationReviewScreen -->|差戻し（補正の求め）| screen__ApplicationScreen
+  screen__ApplicationReviewScreen -->|申請内容の確認と受理| screen__InspectionScreen
+  screen__ApplicationScreen -->|申請内容の確認と受理| screen__ApplicationReviewScreen
+  screen__ConsultationScreen -->|営業の種類の判定| screen__ApplicationScreen
+  screen__ConsultationScreen -->|営業の種類の判定| screen__NotificationScreen
+  screen__DecisionScreen -->|許可の決定| screen__PermitLedgerScreen
+  screen__DispositionScreen -->|営業停止の決定| screen__PermitLedgerScreen
+  screen__DispositionScreen -->|聴聞・弁明の通知| screen__OpinionProcedureScreen
+  screen__InspectionScreen -->|施設検査の実施| screen__DecisionScreen
+  screen__MonitoringPlanScreen -->|立入検査の予定| screen__SiteVisitScreen
+  screen__OpinionProcedureScreen -->|聴聞の実施| screen__DispositionScreen
+  screen__PermitLedgerScreen -->|変更届の提出| screen__PermitNoticeScreen
+  screen__PermitLedgerScreen -->|満了通知の発送| screen__RenewalScreen
+  screen__PermitNoticeScreen -->|地位承継届の受理| screen__PermitLedgerScreen
+  screen__RenewalScreen -->|継続（更新）の申請| screen__InspectionScreen
+  screen__SiteVisitScreen -->|違反の記録| screen__DispositionScreen
+  %% via screen__ApplicationReviewScreen -> screen__ApplicationScreen usecase__ReturnApplication
+  %% via screen__ApplicationReviewScreen -> screen__InspectionScreen usecase__ReviewApplication
+  %% via screen__ApplicationScreen -> screen__ApplicationReviewScreen usecase__ReviewApplication
+  %% via screen__ConsultationScreen -> screen__ApplicationScreen usecase__ClassifyBusiness
+  %% via screen__ConsultationScreen -> screen__NotificationScreen usecase__ClassifyBusiness
+  %% via screen__DecisionScreen -> screen__PermitLedgerScreen usecase__GrantPermit
+  %% via screen__DispositionScreen -> screen__OpinionProcedureScreen usecase__NotifyOpinionProcedure
+  %% via screen__DispositionScreen -> screen__PermitLedgerScreen usecase__DecideSuspension
+  %% via screen__InspectionScreen -> screen__DecisionScreen usecase__ConductInspection
+  %% via screen__MonitoringPlanScreen -> screen__SiteVisitScreen usecase__ScheduleSiteVisit
+  %% via screen__OpinionProcedureScreen -> screen__DispositionScreen usecase__HoldHearing
+  %% via screen__PermitLedgerScreen -> screen__PermitNoticeScreen usecase__FileChangeNotice
+  %% via screen__PermitLedgerScreen -> screen__RenewalScreen usecase__SendExpiryNotice
+  %% via screen__PermitNoticeScreen -> screen__PermitLedgerScreen usecase__AcceptSuccessionNotice
+  %% via screen__RenewalScreen -> screen__InspectionScreen usecase__ApplyRenewal
+  %% via screen__SiteVisitScreen -> screen__DispositionScreen usecase__RecordViolation
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

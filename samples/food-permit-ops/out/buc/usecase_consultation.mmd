@@ -1,0 +1,56 @@
+%% rdra-ish diagram=usecase scope=buc:BucConsultation model=samples/food-permit-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__BusinessOperator(["営業者"]):::actor
+    %% desc actor__BusinessOperator: 飲食店などの営業を営もうとする者と、許可・届出を受けて営業する者。事前相談をし、許可を申請し、手数料を納め、施設検査を受け、許可後は変更・承継・廃業を届け出る。
+    actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+    %% desc actor__FoodSanitationInspector: 事前相談で図面を見て営業の種類を判定し、許可前と更新前の施設検査、計画に沿った立入検査を行い、違反を見つけたら処分を起案する。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__ClassifyBusiness("営業の種類の判定"):::usecase
+    %% desc usecase__ClassifyBusiness: 営業の種類から、許可が必要か、届出が必要か、どちらも要らないかを判定する。結果は営業の種類で決まり、監視員が選ぶものではない（各結果に条件）。
+    usecase__RequestConsultation("事前相談の申込み"):::usecase
+    %% desc usecase__RequestConsultation: 営業者が施設の図面と営業の内容を持って保健所に相談する。相談で営業の種類を伝える。
+    usecase__ReviewFloorPlan("図面の確認と施設基準の説明"):::usecase
+    %% desc usecase__ReviewFloorPlan: 食品衛生監視員が図面を施設基準（共通基準・業種別基準）と照らし、足りない設備と、食品衛生責任者の資格（調理師・栄養士等か講習会の受講）を説明する（参照のみ）。
+    screen__ConsultationScreen["事前相談記録画面"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__Consultation[("事前相談")]:::entity
+    state__Consultation_exempt((("許可・届出とも不要"))):::state
+    state__Consultation_notification_required((("届出が必要"))):::state
+    state__Consultation_open((("相談中"))):::state
+    state__Consultation_permit_required((("許可が必要"))):::state
+    condition__ExemptType{"届出も要らない営業（施行令35条の2）である"}:::condition
+    condition__NotificationRequiredType{"届出業種である"}:::condition
+    condition__PermitRequiredType{"許可業種（施行令35条）である"}:::condition
+  end
+  actor__BusinessOperator -.-> usecase__RequestConsultation
+  actor__FoodSanitationInspector -.-> usecase__ClassifyBusiness
+  actor__FoodSanitationInspector -.-> usecase__ReviewFloorPlan
+  condition__ExemptType -.->|when| usecase__ClassifyBusiness
+  %% derived condition__ExemptType -> usecase__ClassifyBusiness via transitions Consultation.status open->exempt
+  condition__NotificationRequiredType -.->|when| usecase__ClassifyBusiness
+  %% derived condition__NotificationRequiredType -> usecase__ClassifyBusiness via transitions Consultation.status open->notification_required
+  condition__PermitRequiredType -.->|when| usecase__ClassifyBusiness
+  %% derived condition__PermitRequiredType -> usecase__ClassifyBusiness via transitions Consultation.status open->permit_required
+  usecase__ClassifyBusiness -.-> screen__ConsultationScreen
+  usecase__ClassifyBusiness -.->|transitions Consultation.status open->exempt| state__Consultation_exempt
+  usecase__ClassifyBusiness -.->|transitions Consultation.status open->notification_required| state__Consultation_notification_required
+  usecase__ClassifyBusiness -.->|transitions Consultation.status open->permit_required| state__Consultation_permit_required
+  usecase__ClassifyBusiness -.->|updates| entity__Consultation
+  %% derived usecase__ClassifyBusiness -> entity__Consultation via api__ClassificationApi
+  usecase__RequestConsultation -.->|creates| entity__Consultation
+  %% derived usecase__RequestConsultation -> entity__Consultation via api__ConsultationApi
+  usecase__RequestConsultation -.-> screen__ConsultationScreen
+  usecase__ReviewFloorPlan -.-> screen__ConsultationScreen
+  usecase__ReviewFloorPlan -.->|reads| entity__Consultation
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

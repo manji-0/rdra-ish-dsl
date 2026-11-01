@@ -1,0 +1,77 @@
+%% rdra-ish diagram=usecase scope=buc:BucPermitChanges model=samples/food-permit-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__BusinessOperator(["営業者"]):::actor
+    %% desc actor__BusinessOperator: 飲食店などの営業を営もうとする者と、許可・届出を受けて営業する者。事前相談をし、許可を申請し、手数料を納め、施設検査を受け、許可後は変更・承継・廃業を届け出る。
+    actor__PermitClerk(["保健所 許可担当職員"]):::actor
+    %% desc actor__PermitClerk: 許可申請・届出の受付と審査、差戻し、許可台帳と許可証、聴聞・弁明の事務、処分の公表、監視指導計画の取りまとめを行う。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AcceptSuccessionNotice("地位承継届の受理"):::usecase
+    %% desc usecase__AcceptSuccessionNotice: 許可担当が承継を証する書面を確かめ、台帳の営業者を書き換える。
+    usecase__FileChangeNotice("変更届の提出"):::usecase
+    %% desc usecase__FileChangeNotice: 許可営業者が、申請書の記載事項（営業者の氏名・住所、施設の名称、食品衛生責任者など）や設備の変更を届け出る。
+    usecase__FileClosureNotice("廃業届の提出"):::usecase
+    %% desc usecase__FileClosureNotice: 許可営業者が営業をやめた日から10日以内に、許可証を添えて廃業を届け出る。許可はここで終わる。
+    usecase__FileSuccessionNotice("地位承継届の提出"):::usecase
+    %% desc usecase__FileSuccessionNotice: 営業を譲り受けた者、相続人、合併・分割で営業を承継した法人が、承継を証する書面を添えて届け出る。
+    usecase__ReviewChangeNotice("変更届の確認"):::usecase
+    %% desc usecase__ReviewChangeNotice: 許可担当が変更の内容を確かめ、届出で足りるか、新規の許可申請が必要かを判断する。
+    screen__PermitNoticeScreen["許可後の届出画面"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__BusinessPermit[("営業許可")]:::entity
+    entity__ChangeNotice[("変更届")]:::entity
+    entity__SuccessionNotice[("地位承継届")]:::entity
+    state__BusinessPermit_closed((("廃業"))):::state
+    state__BusinessPermit_suspended((("営業停止中"))):::state
+    state__BusinessPermit_valid((("有効"))):::state
+    state__ChangeNotice_accepted((("受理"))):::state
+    state__ChangeNotice_new_application_required((("新規申請が必要"))):::state
+    state__ChangeNotice_received((("受付"))):::state
+    state__SuccessionNotice_accepted((("受理"))):::state
+    state__SuccessionNotice_received((("受付"))):::state
+    condition__PermitNotEnded{"許可が終わっていない（有効か停止中）"}:::condition
+  end
+  actor__BusinessOperator -.-> usecase__AcceptSuccessionNotice
+  %% derived actor__BusinessOperator -> usecase__AcceptSuccessionNotice via step__SuccessionStep
+  actor__BusinessOperator -.-> usecase__FileChangeNotice
+  actor__BusinessOperator -.-> usecase__FileClosureNotice
+  actor__BusinessOperator -.-> usecase__FileSuccessionNotice
+  actor__PermitClerk -.-> usecase__AcceptSuccessionNotice
+  actor__PermitClerk -.-> usecase__ReviewChangeNotice
+  condition__PermitNotEnded -.->|applies_to| usecase__FileChangeNotice
+  condition__PermitNotEnded -.->|applies_to| usecase__FileSuccessionNotice
+  usecase__AcceptSuccessionNotice -.-> screen__PermitNoticeScreen
+  usecase__AcceptSuccessionNotice -.->|transitions SuccessionNotice.status received->accepted| state__SuccessionNotice_accepted
+  usecase__AcceptSuccessionNotice -.->|updates| entity__SuccessionNotice
+  %% derived usecase__AcceptSuccessionNotice -> entity__SuccessionNotice via api__SuccessionReviewApi
+  usecase__FileChangeNotice -.->|creates| entity__ChangeNotice
+  %% derived usecase__FileChangeNotice -> entity__ChangeNotice via api__ChangeNoticeApi
+  usecase__FileChangeNotice -.-> screen__PermitNoticeScreen
+  usecase__FileChangeNotice -.->|reads| entity__BusinessPermit
+  %% derived usecase__FileChangeNotice -> entity__BusinessPermit via api__ChangeNoticeApi
+  usecase__FileClosureNotice -.-> screen__PermitNoticeScreen
+  usecase__FileClosureNotice -.->|transitions BusinessPermit.status suspended->closed| state__BusinessPermit_closed
+  usecase__FileClosureNotice -.->|transitions BusinessPermit.status valid->closed| state__BusinessPermit_closed
+  usecase__FileClosureNotice -.->|updates| entity__BusinessPermit
+  %% derived usecase__FileClosureNotice -> entity__BusinessPermit via api__ClosureApi
+  usecase__FileSuccessionNotice -.->|creates| entity__SuccessionNotice
+  %% derived usecase__FileSuccessionNotice -> entity__SuccessionNotice via api__SuccessionApi
+  usecase__FileSuccessionNotice -.-> screen__PermitNoticeScreen
+  usecase__FileSuccessionNotice -.->|reads| entity__BusinessPermit
+  %% derived usecase__FileSuccessionNotice -> entity__BusinessPermit via api__SuccessionApi
+  usecase__ReviewChangeNotice -.-> screen__PermitNoticeScreen
+  usecase__ReviewChangeNotice -.->|transitions ChangeNotice.status received->accepted| state__ChangeNotice_accepted
+  usecase__ReviewChangeNotice -.->|transitions ChangeNotice.status received->new_application_required| state__ChangeNotice_new_application_required
+  usecase__ReviewChangeNotice -.->|updates| entity__ChangeNotice
+  %% derived usecase__ReviewChangeNotice -> entity__ChangeNotice via api__ChangeReviewApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

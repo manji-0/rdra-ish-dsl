@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:DenyPermit model=samples/food-permit-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: nfr buc step medium permission event
+sequenceDiagram
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant screen__DecisionScreen as 許可決定画面
+  participant api__DecisionApi as 許可決定 API
+  participant entity__Inspection as 施設検査
+  participant entity__PermitApplication as 営業許可申請
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  actor__PermitAuthority ->> screen__DecisionScreen: 不許可の決定
+  screen__DecisionScreen ->> api__DecisionApi: 許可決定 API
+  alt PermitApplication.status in (検査待, 差戻し・補正中)
+    api__DecisionApi ->> entity__Inspection: read
+    api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 不許可, status 差戻し・補正中 -> 不許可, reason_shown=true
+    api__DecisionApi -) extsystem__FoodSanitationSystem: 申請の差戻し
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end

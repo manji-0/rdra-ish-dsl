@@ -1,0 +1,129 @@
+%% rdra-ish diagram=usecase scope=buc:BucInspectionDecision model=samples/food-permit-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state condition
+%% omitted: nfr buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__BusinessOperator(["営業者"]):::actor
+    %% desc actor__BusinessOperator: 飲食店などの営業を営もうとする者と、許可・届出を受けて営業する者。事前相談をし、許可を申請し、手数料を納め、施設検査を受け、許可後は変更・承継・廃業を届け出る。
+    actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+    %% desc actor__FoodSanitationInspector: 事前相談で図面を見て営業の種類を判定し、許可前と更新前の施設検査、計画に沿った立入検査を行い、違反を見つけたら処分を起案する。
+    actor__PermitAuthority(["都道府県知事等（保健所設置市長・特別区長）"]):::actor
+    %% desc actor__PermitAuthority: 許可・不許可と、整備改善命令・営業停止・許可取消の処分を決める行政庁。
+    actor__PermitClerk(["保健所 許可担当職員"]):::actor
+    %% desc actor__PermitClerk: 許可申請・届出の受付と審査、差戻し、許可台帳と許可証、聴聞・弁明の事務、処分の公表、監視指導計画の取りまとめを行う。
+    extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AppointHygieneManager("食品衛生責任者の選定の届出"):::usecase
+    %% desc usecase__AppointHygieneManager: 申請時に食品衛生責任者を定めていなかった営業者が、許可後に定めて（講習会を受けて）届け出る。
+    usecase__ConductInspection("施設検査の実施"):::usecase
+    %% desc usecase__ConductInspection: 食品衛生監視員が施設を施設基準（共通基準・業種別基準）と照らし、衛生管理計画を確かめる。合わなければ改善を指示する。
+    usecase__DenyPermit("不許可の決定"):::usecase
+    %% desc usecase__DenyPermit: 施設基準に合わないか、補正に応じないか、欠格事由に当たる申請を、理由を示し、審査請求ができることを書面で教えて拒否する。
+    usecase__GrantPermit("許可の決定"):::usecase
+    %% desc usecase__GrantPermit: 施設検査で施設基準に合うと認めた新規の申請に許可を与え、有効期間（5年以上）を付ける。
+    usecase__IssueCertificate("許可証の交付"):::usecase
+    %% desc usecase__IssueCertificate: 許可証を営業者に交付する。
+    usecase__RegisterPermit("許可台帳への登録"):::usecase
+    %% desc usecase__RegisterPermit: 許可の決定を受けて許可番号を付け、許可台帳に登録する。電子申請ではシステムの表示を発行済にする。
+    usecase__RequestReinspection("改善の報告と再検査の申込み"):::usecase
+    %% desc usecase__RequestReinspection: 営業者が指示された箇所を直し、再検査を申し込む。
+    usecase__ScheduleInspection("施設検査の日程調整"):::usecase
+    %% desc usecase__ScheduleInspection: 手数料の納付を確かめた検査待の申請について、施設検査の日を決める。
+    usecase__StartBusiness("営業の開始・再開"):::usecase
+    %% desc usecase__StartBusiness: 営業者が許可証を掲示して営業を始める。営業停止の期間が終わった後の再開も同じ。
+    screen__DecisionScreen["許可決定画面"]:::screen
+    screen__InspectionScreen["施設検査画面"]:::screen
+    screen__PermitLedgerScreen["許可台帳画面"]:::screen
+    event__EvApplicationReturned>"申請の差戻し"]:::event
+    event__EvPermitGranted>"営業許可の決定"]:::event
+    event__EvPermitIssued>"許可の発行（発行済）"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__BusinessPermit[("営業許可")]:::entity
+    entity__Inspection[("施設検査")]:::entity
+    entity__PermitApplication[("営業許可申請")]:::entity
+    state__Inspection_failed((("不適合（改善の指示）"))):::state
+    state__Inspection_passed((("適合"))):::state
+    state__Inspection_scheduled((("検査予定"))):::state
+    state__PermitApplication_approved((("許可"))):::state
+    state__PermitApplication_awaiting_inspection((("検査待"))):::state
+    state__PermitApplication_denied((("不許可"))):::state
+    state__PermitApplication_returned((("差戻し・補正中"))):::state
+    condition__AwaitingInspection{"申請が検査待で、まだ検査の予定がない"}:::condition
+    condition__CertifiedAndValid{"許可が有効で、許可証の交付を受けている"}:::condition
+    condition__InspectionPassed{"施設検査で施設基準に適合した"}:::condition
+    condition__NewApplication{"新規の申請である"}:::condition
+    condition__PermitValid{"許可が有効である"}:::condition
+  end
+  actor__BusinessOperator -.-> usecase__AppointHygieneManager
+  actor__BusinessOperator -.-> usecase__RequestReinspection
+  actor__BusinessOperator -.-> usecase__StartBusiness
+  actor__FoodSanitationInspector -.-> usecase__ConductInspection
+  actor__FoodSanitationInspector -.-> usecase__ScheduleInspection
+  %% derived actor__FoodSanitationInspector -> usecase__ScheduleInspection via step__RenewalInspectStep
+  actor__PermitAuthority -.-> usecase__DenyPermit
+  actor__PermitAuthority -.-> usecase__GrantPermit
+  actor__PermitClerk -.-> usecase__IssueCertificate
+  actor__PermitClerk -.-> usecase__RegisterPermit
+  actor__PermitClerk -.-> usecase__ScheduleInspection
+  condition__AwaitingInspection -.->|applies_to| usecase__ScheduleInspection
+  condition__CertifiedAndValid -.->|applies_to| usecase__StartBusiness
+  condition__InspectionPassed -.->|applies_to| usecase__GrantPermit
+  condition__NewApplication -.->|applies_to| usecase__GrantPermit
+  condition__PermitValid -.->|applies_to| usecase__AppointHygieneManager
+  condition__PermitValid -.->|applies_to| usecase__IssueCertificate
+  event__EvApplicationReturned -.-> extsystem__FoodSanitationSystem
+  event__EvPermitGranted -.-> usecase__RegisterPermit
+  event__EvPermitIssued -.-> extsystem__FoodSanitationSystem
+  usecase__AppointHygieneManager -.-> screen__PermitLedgerScreen
+  usecase__AppointHygieneManager -.->|updates| entity__BusinessPermit
+  %% derived usecase__AppointHygieneManager -> entity__BusinessPermit via api__OperatorPermitApi
+  usecase__ConductInspection -.-> screen__InspectionScreen
+  usecase__ConductInspection -.->|transitions Inspection.status scheduled->failed| state__Inspection_failed
+  usecase__ConductInspection -.->|transitions Inspection.status scheduled->passed| state__Inspection_passed
+  usecase__ConductInspection -.->|updates| entity__Inspection
+  %% derived usecase__ConductInspection -> entity__Inspection via api__InspectionApi
+  usecase__DenyPermit -.-> screen__DecisionScreen
+  usecase__DenyPermit -.-> event__EvApplicationReturned
+  usecase__DenyPermit -.->|reads| entity__Inspection
+  %% derived usecase__DenyPermit -> entity__Inspection via api__DecisionApi
+  usecase__DenyPermit -.->|transitions PermitApplication.status awaiting_inspection->denied| state__PermitApplication_denied
+  usecase__DenyPermit -.->|transitions PermitApplication.status returned->denied| state__PermitApplication_denied
+  usecase__DenyPermit -.->|updates| entity__PermitApplication
+  %% derived usecase__DenyPermit -> entity__PermitApplication via api__DecisionApi
+  usecase__GrantPermit -.-> screen__DecisionScreen
+  usecase__GrantPermit -.-> event__EvPermitGranted
+  usecase__GrantPermit -.->|reads| entity__Inspection
+  %% derived usecase__GrantPermit -> entity__Inspection via api__DecisionApi
+  usecase__GrantPermit -.->|transitions PermitApplication.status awaiting_inspection->approved| state__PermitApplication_approved
+  usecase__GrantPermit -.->|updates| entity__PermitApplication
+  %% derived usecase__GrantPermit -> entity__PermitApplication via api__DecisionApi
+  usecase__IssueCertificate -.-> screen__PermitLedgerScreen
+  usecase__IssueCertificate -.->|updates| entity__BusinessPermit
+  %% derived usecase__IssueCertificate -> entity__BusinessPermit via api__PermitApi
+  usecase__RegisterPermit -.->|creates| entity__BusinessPermit
+  %% derived usecase__RegisterPermit -> entity__BusinessPermit via api__PermitRegistrationApi
+  usecase__RegisterPermit -.-> screen__PermitLedgerScreen
+  usecase__RegisterPermit -.-> event__EvPermitIssued
+  usecase__RequestReinspection -.-> screen__InspectionScreen
+  usecase__RequestReinspection -.->|transitions Inspection.status failed->scheduled| state__Inspection_scheduled
+  usecase__RequestReinspection -.->|updates| entity__Inspection
+  %% derived usecase__RequestReinspection -> entity__Inspection via api__ReinspectionApi
+  usecase__ScheduleInspection -.->|creates| entity__Inspection
+  %% derived usecase__ScheduleInspection -> entity__Inspection via api__InspectionScheduleApi
+  usecase__ScheduleInspection -.-> screen__InspectionScreen
+  usecase__ScheduleInspection -.->|reads| entity__PermitApplication
+  %% derived usecase__ScheduleInspection -> entity__PermitApplication via api__InspectionScheduleApi
+  usecase__StartBusiness -.-> screen__PermitLedgerScreen
+  usecase__StartBusiness -.->|updates| entity__BusinessPermit
+  %% derived usecase__StartBusiness -> entity__BusinessPermit via api__OperatorPermitApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

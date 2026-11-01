@@ -1,0 +1,89 @@
+%% rdra-ish diagram=flow scope=buc:BucDisposition model=samples/food-permit-ops
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__DispositionFlow["不利益処分の流れ"]
+    step__AppealPeriodStep["審査請求期間（3月）の経過"]:::step
+    step__SuspensionEndStep["停止期間の満了"]:::step
+    subgraph lane__DispositionFlow__FoodSanitationInspector["食品衛生監視員"]
+      %% lane lane__DispositionFlow__FoodSanitationInspector: actor__FoodSanitationInspector
+      step__ProposeStep["処分の起案（処分基準）"]:::step
+    end
+    subgraph lane__DispositionFlow__PermitAuthority["都道府県知事等（保健所設置市長・特別区長）"]
+      %% lane lane__DispositionFlow__PermitAuthority: actor__PermitAuthority
+      step__DecideStep["処分の決定（理由の提示・教示）"]:::step
+      step__DropStep["処分の見送り"]:::step
+      step__OmittedStep["意見陳述を省いた整備改善命令"]:::step
+    end
+    subgraph lane__DispositionFlow__PermitClerk["保健所 許可担当職員"]
+      %% lane lane__DispositionFlow__PermitClerk: actor__PermitClerk
+      step__OpinionNoticeStep["聴聞・弁明の通知"]:::step
+      step__OpinionStep["聴聞の実施・弁明書の受理"]:::step
+      step__PublishStep["違反の公表（7日以上）"]:::step
+    end
+  end
+  timer__AppealPeriodEnd(("審査請求期間の経過（処分を知った日の翌日から3月）")):::timer
+  timer__PublicationPeriodEnd(("公表期間の経過（7日間以上）")):::timer
+  timer__SuspensionTermEnd(("営業停止期間の満了（処分で定めた期間）")):::timer
+  usecase__DecideRevocation("許可の取消の決定"):::usecase
+  %% desc usecase__DecideRevocation: 聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。
+  usecase__DecideSuspension("営業停止の決定"):::usecase
+  %% desc usecase__DecideSuspension: 弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。
+  usecase__DropDisposition("処分を見送る"):::usecase
+  %% desc usecase__DropDisposition: 意見陳述の結果、処分しないと決める。
+  usecase__EndPublication("公表の終了"):::usecase
+  %% desc usecase__EndPublication: 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。
+  usecase__FinalizeDisposition("審査請求期間の経過"):::usecase
+  %% desc usecase__FinalizeDisposition: 審査請求のないまま3月が過ぎたことを記録する。審査請求と訴訟の中身は対象外。
+  usecase__HoldHearing("聴聞の実施"):::usecase
+  %% desc usecase__HoldHearing: 聴聞の期日に名あて人の意見を聴き、記録する。取消の前には必ず行う。
+  usecase__LiftSuspension("営業停止期間の満了"):::usecase
+  %% desc usecase__LiftSuspension: 停止の期間が過ぎ、営業停止を終える。営業者は許可証を掲示して営業を再開できる。
+  usecase__NotifyOpinionProcedure("聴聞・弁明の通知"):::usecase
+  %% desc usecase__NotifyOpinionProcedure: 予定する処分の内容と根拠条項、原因となる事実、聴聞の期日または弁明書の提出期限を、名あて人に書面で通知する。
+  usecase__OrderImprovement("施設の整備改善命令"):::usecase
+  %% desc usecase__OrderImprovement: 施設基準に合わない設備の改善を命じる。計測などで確かめた不充足なら意見陳述を省いて命じられる。
+  usecase__ProposeDisposition("処分の起案"):::usecase
+  %% desc usecase__ProposeDisposition: 食品衛生監視員が違反の事実と処分基準から、処分の種類（整備改善命令・停止・取消）と意見陳述の手続（聴聞・弁明・省略）を起案する。
+  usecase__PublishViolation("違反の公表"):::usecase
+  %% desc usecase__PublishViolation: 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。
+  usecase__ReceiveExplanation("弁明書の受理"):::usecase
+  %% desc usecase__ReceiveExplanation: 停止や整備改善命令の前に、名あて人の弁明書を受け取る。期限までに出なければ、弁明の機会を与えたものとして手続を終える。
+  usecase__RevokePermit("許可台帳への取消の記録"):::usecase
+  %% desc usecase__RevokePermit: 取消の決定を台帳に記録し、許可を終わらせる。営業者は営業をやめる。
+  usecase__SuspendBusiness("許可台帳への営業停止の記録"):::usecase
+  %% desc usecase__SuspendBusiness: 停止の決定を台帳に記録する。営業者は停止の期間、営業をやめる。
+  event__EvViolationFound>"立入検査での違反の発見"]:::event
+  step__AppealPeriodStep -.-> timer__AppealPeriodEnd
+  step__AppealPeriodStep -.-> usecase__FinalizeDisposition
+  step__DecideStep -.-> usecase__DecideRevocation
+  step__DecideStep -.-> usecase__DecideSuspension
+  step__DecideStep -.-> usecase__OrderImprovement
+  step__DecideStep -.-> usecase__RevokePermit
+  step__DecideStep -.-> usecase__SuspendBusiness
+  step__DecideStep -->|precedes| step__AppealPeriodStep
+  step__DecideStep -->|precedes| step__PublishStep
+  step__DecideStep -->|precedes| step__SuspensionEndStep
+  step__DropStep -.-> usecase__DropDisposition
+  step__OmittedStep -.-> usecase__OrderImprovement
+  step__OpinionNoticeStep -.-> usecase__NotifyOpinionProcedure
+  step__OpinionNoticeStep -->|precedes| step__OpinionStep
+  step__OpinionStep -->|branches| step__DropStep
+  step__OpinionStep -.-> usecase__HoldHearing
+  step__OpinionStep -.-> usecase__ReceiveExplanation
+  step__OpinionStep -->|precedes| step__DecideStep
+  step__ProposeStep -->|branches| step__OmittedStep
+  step__ProposeStep -.-> event__EvViolationFound
+  step__ProposeStep -.-> usecase__ProposeDisposition
+  step__ProposeStep -->|precedes| step__OpinionNoticeStep
+  step__PublishStep -.-> timer__PublicationPeriodEnd
+  step__PublishStep -.-> usecase__EndPublication
+  step__PublishStep -.-> usecase__PublishViolation
+  step__SuspensionEndStep -.-> timer__SuspensionTermEnd
+  step__SuspensionEndStep -.-> usecase__LiftSuspension
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

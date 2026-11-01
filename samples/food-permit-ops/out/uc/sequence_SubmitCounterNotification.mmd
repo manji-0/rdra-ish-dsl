@@ -1,0 +1,12 @@
+%% rdra-ish diagram=sequence scope=usecase:SubmitCounterNotification model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  participant screen__NotificationScreen as 営業届画面
+  participant api__NotificationApi as 営業届 API
+  participant entity__BusinessNotification as 営業届
+  actor__BusinessOperator ->> screen__NotificationScreen: 営業届の提出（窓口）
+  screen__NotificationScreen ->> api__NotificationApi: 営業届 API
+  api__NotificationApi ->> entity__BusinessNotification: create channel=counter
+  api__NotificationApi -->> screen__NotificationScreen: done

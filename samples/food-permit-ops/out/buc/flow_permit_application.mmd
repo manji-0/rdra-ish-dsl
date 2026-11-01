@@ -1,0 +1,50 @@
+%% rdra-ish diagram=flow scope=buc:BucPermitApplication model=samples/food-permit-ops
+%% kinds: flow step lane usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__PermitApplicationFlow["許可申請の流れ"]
+    subgraph lane__PermitApplicationFlow__BusinessOperator["営業者"]
+      %% lane lane__PermitApplicationFlow__BusinessOperator: actor__BusinessOperator
+      step__FeeStep["手数料の納付"]:::step
+      step__SubmitStep["申請書の提出（窓口・電子）"]:::step
+      step__WithdrawStep["取下げ"]:::step
+    end
+    subgraph lane__PermitApplicationFlow__PermitClerk["保健所 許可担当職員"]
+      %% lane lane__PermitApplicationFlow__PermitClerk: actor__PermitClerk
+      step__ReturnStep["差戻し・補正"]:::step
+      step__ReviewStep["申請内容の確認（申請内容確認待）"]:::step
+    end
+  end
+  usecase__PayPermitFee("許可申請手数料の納付"):::usecase
+  %% desc usecase__PayPermitFee: 営業者が条例の手数料を保健所に納める（電子申請でも別途納付）。納めた手数料は還付されない。
+  usecase__ReceiveOnlineApplication("電子申請の受付"):::usecase
+  %% desc usecase__ReceiveOnlineApplication: 食品衛生申請等システムで提出された新規の許可申請を、管轄の保健所の確認待ち（申請内容確認待）として受け付ける。
+  usecase__ResubmitApplication("補正した申請の再提出"):::usecase
+  %% desc usecase__ResubmitApplication: 営業者が差戻しを受けて申請を直し、再び確認待にする。
+  usecase__ReturnApplication("差戻し（補正の求め）"):::usecase
+  %% desc usecase__ReturnApplication: 記載の誤りや添付書類の不足があれば、期間を定めて補正を求め、申請を差し戻す。電子申請では申請者の依頼による差戻しもある。
+  usecase__ReviewApplication("申請内容の確認と受理"):::usecase
+  %% desc usecase__ReviewApplication: 許可担当が記載事項（営業者・施設・営業の種類・食品衛生責任者・図面・欠格事由の有無）と手数料の納付を確かめ、施設検査に進める（検査待）。
+  usecase__SubmitCounterApplication("許可申請書の提出（窓口）"):::usecase
+  %% desc usecase__SubmitCounterApplication: 営業者が許可申請書（新規）に図面と食品衛生責任者の資格を証する書類を添えて、保健所の窓口に出す。
+  usecase__WithdrawApplication("申請の取下げ"):::usecase
+  %% desc usecase__WithdrawApplication: 営業者が許可・不許可の前に申請を取り下げる。電子申請は保健所の差戻しを受けてから取り下げる。手数料は戻らない。
+  event__EvOnlineApplicationSubmitted>"電子申請の提出（整理番号 LIC）"]:::event
+  step__FeeStep -.-> usecase__PayPermitFee
+  step__FeeStep -->|precedes| step__ReviewStep
+  step__ReturnStep -->|branches| step__WithdrawStep
+  step__ReturnStep -.-> usecase__ResubmitApplication
+  step__ReturnStep -.-> usecase__ReturnApplication
+  step__ReturnStep -->|repeats| step__ReviewStep
+  step__ReviewStep -.-> usecase__ReviewApplication
+  step__ReviewStep -.->|excepts| step__ReturnStep
+  step__SubmitStep -.-> event__EvOnlineApplicationSubmitted
+  step__SubmitStep -.-> usecase__ReceiveOnlineApplication
+  step__SubmitStep -.-> usecase__SubmitCounterApplication
+  step__SubmitStep -->|precedes| step__FeeStep
+  step__WithdrawStep -.-> usecase__WithdrawApplication
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

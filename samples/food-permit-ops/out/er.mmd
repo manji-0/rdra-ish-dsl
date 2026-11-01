@@ -1,0 +1,81 @@
+%% rdra-ish diagram=er scope=whole model=samples/food-permit-ops
+%% kinds: entity
+%% omitted: (none)
+erDiagram
+  BusinessNotification {
+    Int id PK
+    NotifiedBusinessType business_type
+    SubmissionChannel channel
+    Enum status
+  }
+  BusinessPermit {
+    Int id PK
+    String permit_no
+    PermitBusinessType business_type
+    Date valid_until
+    Enum status
+    Bool operating
+    Bool certificate_issued
+    Bool hygiene_manager_appointed
+  }
+  ChangeNotice {
+    Int id PK
+    Enum status
+    Int businesspermit_id FK
+  }
+  Consultation {
+    Int id PK
+    BusinessType business_type
+    Enum status
+  }
+  Disposition {
+    Int id PK
+    DispositionKind kind
+    OpinionProcedure procedure
+    Enum status
+    Bool reason_shown
+    Enum publication
+    Int businesspermit_id FK
+  }
+  FeeSchedule {
+    Int id PK
+    PermitBusinessType business_type
+    Money new_fee
+    Money renewal_fee
+  }
+  Inspection {
+    Int id PK
+    Date inspected_on
+    Enum status
+    Int permitapplication_id FK
+  }
+  MonitoringPlan {
+    Int id PK
+    String fiscal_year
+    Enum status
+  }
+  PermitApplication {
+    Int id PK
+    ApplicationKind kind
+    SubmissionChannel channel
+    PermitBusinessType business_type
+    Enum status
+    Bool fee_paid
+    Bool reason_shown
+  }
+  SiteVisit {
+    Int id PK
+    Enum status
+    Int monitoringplan_id FK
+  }
+  SuccessionNotice {
+    Int id PK
+    SuccessionCause cause
+    Enum status
+    Int businesspermit_id FK
+  }
+  SiteVisit }o--|| MonitoringPlan : ""
+  Disposition }o--|| BusinessPermit : ""
+  Inspection ||--|| PermitApplication : ""
+  ChangeNotice }o--|| BusinessPermit : ""
+  SuccessionNotice }o--|| BusinessPermit : ""

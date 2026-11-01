@@ -1,0 +1,24 @@
+%% rdra-ish diagram=robustness scope=buc:BucConsultation model=samples/food-permit-ops
+%% kinds: actor screen api usecase entity
+%% omitted: buc step medium permission condition
+flowchart LR
+  actor__BusinessOperator(["営業者"]):::actor
+  actor__FoodSanitationInspector(["食品衛生監視員"]):::actor
+  screen__ConsultationScreen["事前相談記録画面"]:::screen
+  api__ClassificationApi{{"営業の種類の判定 API"}}:::api
+  api__ConsultationApi{{"事前相談 API"}}:::api
+  usecase__ReviewFloorPlan("図面の確認と施設基準の説明"):::usecase
+  entity__Consultation[("事前相談")]:::entity
+  actor__BusinessOperator --> screen__ConsultationScreen
+  actor__FoodSanitationInspector --> screen__ConsultationScreen
+  api__ClassificationApi -->|U| entity__Consultation
+  api__ConsultationApi -->|C| entity__Consultation
+  screen__ConsultationScreen -->|事前相談の申込み| api__ConsultationApi
+  screen__ConsultationScreen -->|営業の種類の判定| api__ClassificationApi
+  screen__ConsultationScreen -->|図面の確認と施設基準の説明| usecase__ReviewFloorPlan
+  usecase__ReviewFloorPlan -->|R| entity__Consultation
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

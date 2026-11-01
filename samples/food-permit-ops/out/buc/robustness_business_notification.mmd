@@ -1,0 +1,26 @@
+%% rdra-ish diagram=robustness scope=buc:BucBusinessNotification model=samples/food-permit-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__BusinessOperator(["営業者"]):::actor
+  actor__PermitClerk(["保健所 許可担当職員"]):::actor
+  extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  screen__NotificationScreen["営業届画面"]:::screen
+  api__NotificationApi{{"営業届 API"}}:::api
+  api__NotificationReviewApi{{"営業届受付 API"}}:::api
+  entity__BusinessNotification[("営業届")]:::entity
+  actor__BusinessOperator --> screen__NotificationScreen
+  actor__PermitClerk --> screen__NotificationScreen
+  api__NotificationApi -->|C| entity__BusinessNotification
+  api__NotificationReviewApi -->|U| entity__BusinessNotification
+  api__NotificationReviewApi -.->|届出の受付（受付済）| extsystem__FoodSanitationSystem
+  extsystem__FoodSanitationSystem -.->|電子届出の提出（整理番号 NIF）| api__NotificationApi
+  screen__NotificationScreen -->|営業届の受付| api__NotificationReviewApi
+  screen__NotificationScreen -->|営業届の提出（窓口）| api__NotificationApi
+  screen__NotificationScreen -->|届出営業の廃業届| api__NotificationReviewApi
+  screen__NotificationScreen -->|電子届出の受付| api__NotificationApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

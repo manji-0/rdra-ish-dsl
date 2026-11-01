@@ -1,0 +1,21 @@
+%% rdra-ish diagram=state scope=entity:ChangeNotice model=samples/food-permit-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "ChangeNotice.status" as statemodel__ChangeNotice_status {
+    [*] --> state__ChangeNotice_received
+    state "受付" as state__ChangeNotice_received
+    state "受理" as state__ChangeNotice_accepted
+    state "新規申請が必要" as state__ChangeNotice_new_application_required
+    %% transition usecase__ReviewChangeNotice
+    state__ChangeNotice_received --> state__ChangeNotice_accepted : 変更届の確認
+    %% transition usecase__ReviewChangeNotice
+    state__ChangeNotice_received --> state__ChangeNotice_new_application_required : 変更届の確認
+    state__ChangeNotice_accepted --> [*]
+    state__ChangeNotice_new_application_required --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__ChangeNotice_accepted stateend
+  class state__ChangeNotice_new_application_required stateend

@@ -1,0 +1,12 @@
+%% rdra-ish diagram=screen scope=buc:BucRenewal model=samples/food-permit-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__InspectionScreen["施設検査画面"]:::screen
+  screen__PermitLedgerScreen["許可台帳画面"]:::screen
+  screen__RenewalScreen["更新申請画面"]:::screen
+  screen__PermitLedgerScreen -->|満了通知の発送| screen__RenewalScreen
+  screen__RenewalScreen -->|継続（更新）の申請| screen__InspectionScreen
+  %% via screen__PermitLedgerScreen -> screen__RenewalScreen usecase__SendExpiryNotice
+  %% via screen__RenewalScreen -> screen__InspectionScreen usecase__ApplyRenewal
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

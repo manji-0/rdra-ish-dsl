@@ -1,0 +1,60 @@
+%% rdra-ish diagram=usecase scope=buc:BucBusinessNotification model=samples/food-permit-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__BusinessOperator(["営業者"]):::actor
+    %% desc actor__BusinessOperator: 飲食店などの営業を営もうとする者と、許可・届出を受けて営業する者。事前相談をし、許可を申請し、手数料を納め、施設検査を受け、許可後は変更・承継・廃業を届け出る。
+    actor__PermitClerk(["保健所 許可担当職員"]):::actor
+    %% desc actor__PermitClerk: 許可申請・届出の受付と審査、差戻し、許可台帳と許可証、聴聞・弁明の事務、処分の公表、監視指導計画の取りまとめを行う。
+    extsystem__FoodSanitationSystem[["食品衛生申請等システム（厚生労働省）"]]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AcceptNotification("営業届の受付"):::usecase
+    %% desc usecase__AcceptNotification: 許可担当が記載を確かめて受け付ける。施設基準による審査と施設検査はない。
+    usecase__FileNotificationClosure("届出営業の廃業届"):::usecase
+    %% desc usecase__FileNotificationClosure: 届出営業者が営業をやめたことを届け出る。
+    usecase__ReceiveOnlineNotification("電子届出の受付"):::usecase
+    %% desc usecase__ReceiveOnlineNotification: 食品衛生申請等システムで出された営業届を、届出内容確認待として受け付ける。
+    usecase__SubmitCounterNotification("営業届の提出（窓口）"):::usecase
+    %% desc usecase__SubmitCounterNotification: 営業者が営業を始める前に、保健所の窓口に営業届を出す。
+    screen__NotificationScreen["営業届画面"]:::screen
+    event__EvNotificationAccepted>"届出の受付（受付済）"]:::event
+    event__EvOnlineNotificationSubmitted>"電子届出の提出（整理番号 NIF）"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__BusinessNotification[("営業届")]:::entity
+    state__BusinessNotification_accepted((("受付済"))):::state
+    state__BusinessNotification_closed((("廃業"))):::state
+    state__BusinessNotification_submitted((("届出内容確認待"))):::state
+  end
+  actor__BusinessOperator -.-> usecase__FileNotificationClosure
+  actor__BusinessOperator -.-> usecase__SubmitCounterNotification
+  actor__PermitClerk -.-> usecase__AcceptNotification
+  actor__PermitClerk -.-> usecase__ReceiveOnlineNotification
+  event__EvNotificationAccepted -.-> extsystem__FoodSanitationSystem
+  event__EvOnlineNotificationSubmitted -.-> usecase__ReceiveOnlineNotification
+  extsystem__FoodSanitationSystem -.-> event__EvOnlineNotificationSubmitted
+  usecase__AcceptNotification -.-> screen__NotificationScreen
+  usecase__AcceptNotification -.-> event__EvNotificationAccepted
+  usecase__AcceptNotification -.->|transitions BusinessNotification.status submitted->accepted| state__BusinessNotification_accepted
+  usecase__AcceptNotification -.->|updates| entity__BusinessNotification
+  %% derived usecase__AcceptNotification -> entity__BusinessNotification via api__NotificationReviewApi
+  usecase__FileNotificationClosure -.-> screen__NotificationScreen
+  usecase__FileNotificationClosure -.->|transitions BusinessNotification.status accepted->closed| state__BusinessNotification_closed
+  usecase__FileNotificationClosure -.->|updates| entity__BusinessNotification
+  %% derived usecase__FileNotificationClosure -> entity__BusinessNotification via api__NotificationReviewApi
+  usecase__ReceiveOnlineNotification -.->|creates| entity__BusinessNotification
+  %% derived usecase__ReceiveOnlineNotification -> entity__BusinessNotification via api__NotificationApi
+  usecase__ReceiveOnlineNotification -.-> screen__NotificationScreen
+  usecase__SubmitCounterNotification -.->|creates| entity__BusinessNotification
+  %% derived usecase__SubmitCounterNotification -> entity__BusinessNotification via api__NotificationApi
+  usecase__SubmitCounterNotification -.-> screen__NotificationScreen
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;

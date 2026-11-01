@@ -1,0 +1,97 @@
+%% rdra-ish diagram=condition scope=buc:BucDisposition model=samples/food-permit-ops
+%% kinds: condition statemodel variation value usecase
+%% omitted: (none)
+flowchart LR
+  condition__DecidedUnpublished{"処分が決定していて、まだ公表していない"}:::condition
+  %% holds condition__DecidedUnpublished: Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表
+  condition__ExplanationProcedure{"弁明の機会を与える処分である"}:::condition
+  %% holds condition__ExplanationProcedure: Disposition.procedure == 弁明の機会の付与
+  condition__HearingProcedure{"聴聞を執る処分である"}:::condition
+  %% holds condition__HearingProcedure: Disposition.procedure == 聴聞
+  condition__ImprovementOrderKind{"施設の整備改善命令である"}:::condition
+  %% holds condition__ImprovementOrderKind: Disposition.kind == 施設の整備改善命令
+  condition__NotRevocation{"取消ではない処分である"}:::condition
+  %% holds condition__NotRevocation: Disposition.kind in (施設の整備改善命令, 営業の停止)
+  condition__OpinionOmitted{"意見陳述を省く処分である"}:::condition
+  %% holds condition__OpinionOmitted: Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号）
+  condition__OpinionRequired{"意見陳述の手続を執る処分である"}:::condition
+  %% holds condition__OpinionRequired: Disposition.procedure in (聴聞, 弁明の機会の付与)
+  condition__Published{"公表中である"}:::condition
+  %% holds condition__Published: Disposition.publication == 公表中
+  condition__RevocationKind{"許可の取消である"}:::condition
+  %% holds condition__RevocationKind: Disposition.kind == 許可の取消
+  condition__SuspensionKind{"営業の停止である"}:::condition
+  %% holds condition__SuspensionKind: Disposition.kind == 営業の停止
+  statemodel__Disposition_status[["Disposition.status"]]:::statemodel
+  subgraph variation__DispositionKind["処分の種類"]
+    variation__DispositionKind__improvement_order["施設の整備改善命令"]:::value
+    variation__DispositionKind__suspension["営業の停止"]:::value
+    variation__DispositionKind__revocation["許可の取消"]:::value
+  end
+  subgraph variation__OpinionProcedure["意見陳述の手続"]
+    variation__OpinionProcedure__hearing["聴聞"]:::value
+    variation__OpinionProcedure__explanation["弁明の機会の付与"]:::value
+    variation__OpinionProcedure__omitted["意見陳述の省略（行政手続法13条2項3号）"]:::value
+  end
+  usecase__DecideRevocation("許可の取消の決定"):::usecase
+  %% desc usecase__DecideRevocation: 聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。
+  usecase__DecideSuspension("営業停止の決定"):::usecase
+  %% desc usecase__DecideSuspension: 弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。
+  usecase__EndPublication("公表の終了"):::usecase
+  %% desc usecase__EndPublication: 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。
+  usecase__HoldHearing("聴聞の実施"):::usecase
+  %% desc usecase__HoldHearing: 聴聞の期日に名あて人の意見を聴き、記録する。取消の前には必ず行う。
+  usecase__NotifyOpinionProcedure("聴聞・弁明の通知"):::usecase
+  %% desc usecase__NotifyOpinionProcedure: 予定する処分の内容と根拠条項、原因となる事実、聴聞の期日または弁明書の提出期限を、名あて人に書面で通知する。
+  usecase__OrderImprovement("施設の整備改善命令"):::usecase
+  %% desc usecase__OrderImprovement: 施設基準に合わない設備の改善を命じる。計測などで確かめた不充足なら意見陳述を省いて命じられる。
+  usecase__ProposeDisposition("処分の起案"):::usecase
+  %% desc usecase__ProposeDisposition: 食品衛生監視員が違反の事実と処分基準から、処分の種類（整備改善命令・停止・取消）と意見陳述の手続（聴聞・弁明・省略）を起案する。
+  usecase__PublishViolation("違反の公表"):::usecase
+  %% desc usecase__PublishViolation: 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。
+  usecase__ReceiveExplanation("弁明書の受理"):::usecase
+  %% desc usecase__ReceiveExplanation: 停止や整備改善命令の前に、名あて人の弁明書を受け取る。期限までに出なければ、弁明の機会を与えたものとして手続を終える。
+  condition__DecidedUnpublished -.->|applies_to| usecase__PublishViolation
+  condition__DecidedUnpublished -.-> statemodel__Disposition_status
+  %% derived condition__DecidedUnpublished -> statemodel__Disposition_status from holds
+  condition__ExplanationProcedure -.->|applies_to| usecase__ReceiveExplanation
+  condition__ExplanationProcedure -.-> variation__OpinionProcedure
+  %% derived condition__ExplanationProcedure -> variation__OpinionProcedure from holds
+  condition__HearingProcedure -.->|applies_to| usecase__DecideRevocation
+  condition__HearingProcedure -.->|applies_to| usecase__HoldHearing
+  condition__HearingProcedure -.-> variation__OpinionProcedure
+  %% derived condition__HearingProcedure -> variation__OpinionProcedure from holds
+  condition__ImprovementOrderKind -.->|applies_to| usecase__OrderImprovement
+  condition__ImprovementOrderKind -.-> variation__DispositionKind
+  %% derived condition__ImprovementOrderKind -> variation__DispositionKind from holds
+  condition__ImprovementOrderKind -.-> variation__OpinionProcedure
+  %% derived condition__ImprovementOrderKind -> variation__OpinionProcedure from when
+  condition__ImprovementOrderKind -.->|when| usecase__ProposeDisposition
+  %% derived condition__ImprovementOrderKind -> usecase__ProposeDisposition via chooses Disposition.procedure omitted
+  condition__NotRevocation -.-> variation__DispositionKind
+  %% derived condition__NotRevocation -> variation__DispositionKind from holds
+  condition__NotRevocation -.-> variation__OpinionProcedure
+  %% derived condition__NotRevocation -> variation__OpinionProcedure from when
+  condition__NotRevocation -.->|when| usecase__ProposeDisposition
+  %% derived condition__NotRevocation -> usecase__ProposeDisposition via chooses Disposition.procedure explanation
+  condition__OpinionOmitted -.-> statemodel__Disposition_status
+  %% derived condition__OpinionOmitted -> statemodel__Disposition_status from when
+  condition__OpinionOmitted -.-> variation__OpinionProcedure
+  %% derived condition__OpinionOmitted -> variation__OpinionProcedure from holds
+  condition__OpinionOmitted -.->|when| usecase__OrderImprovement
+  %% derived condition__OpinionOmitted -> usecase__OrderImprovement via transitions Disposition.status proposed->decided
+  condition__OpinionRequired -.->|applies_to| usecase__NotifyOpinionProcedure
+  condition__OpinionRequired -.-> variation__OpinionProcedure
+  %% derived condition__OpinionRequired -> variation__OpinionProcedure from holds
+  condition__Published -.->|applies_to| usecase__EndPublication
+  condition__RevocationKind -.->|applies_to| usecase__DecideRevocation
+  condition__RevocationKind -.-> variation__DispositionKind
+  %% derived condition__RevocationKind -> variation__DispositionKind from holds
+  condition__SuspensionKind -.->|applies_to| usecase__DecideSuspension
+  condition__SuspensionKind -.-> variation__DispositionKind
+  %% derived condition__SuspensionKind -> variation__DispositionKind from holds
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef value fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

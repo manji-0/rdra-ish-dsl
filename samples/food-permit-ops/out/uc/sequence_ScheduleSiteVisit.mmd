@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:ScheduleSiteVisit model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__SiteVisitScreen as 立入検査画面
+  participant api__SiteVisitApi as 立入検査予定 API
+  participant entity__MonitoringPlan as 監視指導計画
+  participant entity__SiteVisit as 立入検査
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 立入検査の予定
+  screen__SiteVisitScreen ->> api__SiteVisitApi: 立入検査予定 API
+  alt 監視指導計画が公表されている: MonitoringPlan.status == 公表済
+    api__SiteVisitApi ->> entity__MonitoringPlan: read
+    api__SiteVisitApi ->> entity__SiteVisit: create
+    api__SiteVisitApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitApi -->> screen__SiteVisitScreen: rejected
+  end
