@@ -475,6 +475,27 @@ pub(crate) fn process_holds_predicate(
 
 /// After every predicate is processed: a `.when(Cond)` guard needs the condition's `holds`
 /// body, which may come later in the file than the guarded write.
+/// After every predicate is processed: a use case that `chooses` a column does not also
+/// `sets` it.
+pub(crate) fn check_choices(model: &SemanticModel, diags: &mut Vec<Diagnostic>) {
+    for choice in &model.column_choices {
+        let set = model.column_effects.iter().any(|e| {
+            (e.origin, e.entity, &e.column) == (choice.origin, choice.entity, &choice.column)
+        });
+        if set {
+            diags.push(Diagnostic {
+                error: RdraError::ChoosesAndSets {
+                    usecase: model.use_cases[choice.origin].id.clone(),
+                    entity: model.entities[choice.entity].id.clone(),
+                    col: choice.column.clone(),
+                },
+                is_warning: false,
+                location: choice.site.clone(),
+            });
+        }
+    }
+}
+
 /// Each guard that has its body becomes a `Guards` relation to the arm's use case, once.
 pub(crate) fn check_write_guards(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
     let mut guards: Vec<(ConditionKey, UseCaseKey)> = Vec::new();

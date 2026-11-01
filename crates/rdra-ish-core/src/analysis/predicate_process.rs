@@ -479,6 +479,102 @@ fn process_transitions_predicate(
     });
 }
 
+/// `chooses(UseCase, Entity.column)` on a column typed by a variation.
+fn process_chooses_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(Some(NodeRef::UseCase(usecase))) = resolved.first() else {
+        return;
+    };
+    let usecase = *usecase;
+    let (entity_id, column) = match pred.args.get(1) {
+        Some(PredicateArg::Ref(qref)) if qref.parts.len() == 2 && qref.kind_qualifier.is_none() => {
+            (qref.parts[0].clone(), qref.parts[1].clone())
+        }
+        Some(arg) => {
+            push_error(
+                ctx,
+                diags,
+                arg_span(arg),
+                RdraError::InvalidChoosesColumnRef {
+                    got: predicate_arg_display(arg),
+                },
+            );
+            return;
+        }
+        None => return,
+    };
+    let span = arg_span(&pred.args[1]);
+    let Some((entity, decl)) = model.entities.iter().find(|(_, e)| e.id == entity_id) else {
+        push_error(
+            ctx,
+            diags,
+            span,
+            RdraError::UndefinedSymbol { id: entity_id },
+        );
+        return;
+    };
+    let Some(col) = decl.columns.iter().find(|c| c.name == column) else {
+        push_error(
+            ctx,
+            diags,
+            span,
+            RdraError::UnknownColumn {
+                entity: entity_id,
+                col: column,
+            },
+        );
+        return;
+    };
+    let hint = match &col.col_type {
+        ColumnType::Variation(_) => None,
+        ColumnType::Enum(_) => Some(format!(
+            "an inline Enum is a state model: let the actor pick the next state with several `transitions({uc}, {entity_id}.{column}, from -> to)` arms from one state, or type the column by a `variation`",
+            uc = model.use_cases[usecase].id
+        )),
+        ColumnType::Bool => Some(format!(
+            "write `sets({uc}, {entity_id}, {column} == true)` for a fixed value, or type the column by a `variation` whose values the actor picks",
+            uc = model.use_cases[usecase].id
+        )),
+        _ => Some("declare a `variation` with the values the actor picks and type the column by it".to_string()),
+    };
+    if let Some(hint) = hint {
+        push_error(
+            ctx,
+            diags,
+            span,
+            RdraError::ChoosesNotVariation {
+                usecase: model.use_cases[usecase].id.clone(),
+                entity: entity_id,
+                col: column,
+                hint,
+            },
+        );
+        return;
+    }
+    let exists = model
+        .column_choices
+        .iter()
+        .any(|c| (c.origin, c.entity, c.column.as_str()) == (usecase, entity, column.as_str()));
+    if !exists {
+        model.column_choices.push(crate::model::ColumnChoice {
+            origin: usecase,
+            entity,
+            column: column.clone(),
+            site: Some(ctx.locate(pred.span.clone())),
+        });
+    }
+    model.typed_predicates.push(TypedPredicate::Chooses {
+        origin: usecase,
+        entity,
+        column,
+    });
+}
+
 /// The condition of a `.when(Cond)` chain, at most one: `Ok(None)` without one, `Err` after
 /// reporting a chain that names no condition. Whether the condition has a `holds` body is
 /// checked once every predicate is read (`holds` may come later in the file).
@@ -1553,6 +1649,7 @@ pub(crate) fn process_predicate(
         "shares" => process_shares_predicate(model, pred, &resolved, ctx),
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
+        "chooses" => process_chooses_predicate(model, pred, &resolved, ctx, diags),
         "combines" => {
             super::condition::process_combines_predicate(model, pred, &resolved, ctx, diags)
         }

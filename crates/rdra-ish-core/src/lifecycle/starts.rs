@@ -83,6 +83,7 @@ impl TransitionSystem {
                     var: v,
                     param: q,
                     values,
+                    ..
                 } if *v == var && *q == param => out.extend(values),
                 Effect::Transition {
                     var: v,

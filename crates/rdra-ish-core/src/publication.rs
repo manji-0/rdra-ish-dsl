@@ -178,6 +178,9 @@ fn entity_uses(model: &SemanticModel) -> Vec<EntityUse> {
     for e in &model.column_effects {
         push(e.entity, Use::Set, &e.site);
     }
+    for c in &model.column_choices {
+        push(c.entity, Use::Set, &c.site);
+    }
     for e in &model.proposition_effects {
         push(e.entity, Use::Set, &e.site);
     }

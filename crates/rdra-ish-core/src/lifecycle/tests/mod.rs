@@ -3,6 +3,7 @@
 mod arm_guards;
 mod bare_values;
 mod choice;
+mod chooses;
 mod conditions;
 mod cone;
 mod constraints;

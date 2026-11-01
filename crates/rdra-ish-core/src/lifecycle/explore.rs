@@ -455,9 +455,9 @@ impl TransitionSystem {
                         _ => choices.push((*var, *param, Cow::Owned(tos))),
                     }
                 }
-                Effect::Choose { var, param, values } => {
-                    choices.push((*var, *param, Cow::Borrowed(values)))
-                }
+                Effect::Choose {
+                    var, param, values, ..
+                } => choices.push((*var, *param, Cow::Borrowed(values))),
                 Effect::Tick => {
                     let now = self.now.expect("tick without a clock");
                     let v = s.get(self, now, 0);

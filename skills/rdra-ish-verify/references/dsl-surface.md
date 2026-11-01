@@ -152,7 +152,26 @@ lifecycle. `states` and the TLA+ export give it a variable only when a `sets`, a
 entity-local or multi-entity constraint, a condition body, an `after(UC).assert`, or a
 `property` names it. A created instance takes any value unless the creating use case sets
 it, and `@default` does not pin the choice, so TLC checks the rule against each value.
-A `transitions` on it is an error.
+An update keeps the value unless the use case `chooses` it, which again takes every value.
+A `transitions` on it is an error, and so is `chooses` on any other column.
+
+```rdra
+variation Scope "補正の範囲" {
+  limited "限定"
+  free "限定なし"
+}
+entity Notice "通知" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  scope: Scope
+}
+usecase Receive "受領"
+usecase Draft "応答案の作成"
+creates(Receive, Notice)
+sets(Receive, Notice, scope == limited)
+transitions(Draft, Notice.status, open -> drafted)
+chooses(Draft, Notice.scope)
+```
 
 ## Conditions
 

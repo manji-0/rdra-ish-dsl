@@ -35,7 +35,9 @@ Also ask:
 
 1. Add lifecycle columns such as `Enum(...)`, `Bool`, and nullable timestamp/value
    columns. Values an actor merely chooses are not lifecycle: type those columns by a
-   `variation` and leave them out of `transitions`.
+   `variation` and leave them out of `transitions`. A created row takes any value; an
+   update keeps it unless the use case lets the actor pick again with
+   `chooses(UseCase, Entity.column)`.
 2. Add `transitions(UseCase, Entity.col, from -> to)` for lifecycle movement, naming
    the use case that drives each edge. States are not declared: each variant a
    `transitions` names, and each value a creating use case sets, is a state of the
@@ -58,7 +60,8 @@ Also ask:
    outcome of a use case's choice, guard that arm instead:
    `transitions(UseCase, Entity.col, from -> to).when(Cond)`. The other arms stay free.
 8. Add `sets(UseCase, Entity, col == val)` for enum, nullable, boolean, and Int
-   effects not explained by transitions. A `sets` on a column that `transitions`
+   effects not explained by transitions (`chooses` and `sets` on one column in one use
+   case are an error). A `sets` on a column that `transitions`
    drives is an error unless the use case creates the entity.
 9. Add comparison-proposition `sets` when rules depend on a derived comparison and the
    model does not track the values. Prefer Int / Money / Decimal columns plus

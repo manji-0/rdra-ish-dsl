@@ -226,6 +226,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
 | `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
 | `sets` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
+| `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
 
 `relate(A, B, N:1)` generates a key column on `A` named `{role}_{parent key column}`.
 With the default role (the parent id in lowercase) and a parent key `id`, that is `b_id`.
@@ -1067,9 +1068,50 @@ What a variation column does differently from an inline `Enum`:
 | `states` | One axis; unreached variants are reported unreachable | No axis, no reachability check |
 | `transitions` | Allowed | Error (`TransitionsColumnNotEnum`): an attribute has no lifecycle |
 | TLA+ export | Status column of the lifecycle | An axis only when a `sets`, a constraint, an `after` assertion, or a `property` names the column; `Init` is a free choice over every value, so TLC checks them all |
+| update | A `transitions` arm or a `sets` moves it | Keeps its value, unless the use case `chooses` it |
 | `export --kind dbml` | One `Enum <Entity>_<column>` per column | One `Enum <VariationId>` shared by every column typed by it |
 | `export --kind json-schema`, `openapi` | `enum` of the variants | `enum` of the variation's values |
 | ER diagram, `csv --kind entity`, `list --kind entity` | Type `Enum` | Type is the variation id |
+
+#### Choosing a value again: `chooses`
+
+A created instance takes any value of a variation column, unless the creating use case
+`sets` it: the actor picks it. An update keeps the value. When a use case lets the actor
+pick again, say so with `chooses`:
+
+```rdra
+variation AmendmentScope "補正の範囲" {
+  limited "削除・減縮・誤記の訂正・釈明に限る補正"
+  free "限定のない補正"
+}
+entity OfficeAction "拒絶理由通知" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  amendment: AmendmentScope @default(limited)
+}
+usecase DraftResponse "応答案の作成"
+transitions(DraftResponse, OfficeAction.status, open -> drafted)
+chooses(DraftResponse, OfficeAction.amendment)
+```
+
+- After the use case the column holds any value of the variation, one run per value, in
+  `states`, `check`, and the TLA+ export (`\E v \in {"limited", "free"} : ...`). Two
+  `chooses` in one use case choose independently. Each run carries the use case's other
+  effects.
+- A `chooses` counts as a write of the entity, as a `sets` does, with no CRUD edge needed.
+- On the creating use case it is the creation's own choice and changes nothing.
+- `chooses` is a new predicate, not `sets(.., col == any)`: a variation may name a value
+  `any`, and `sets` fixes one value.
+- It takes no chain methods. It cannot restrict the values by state: to offer only some
+  values in some states, keep one use case per value that `sets` it, each with its own
+  `applies_to` guard.
+
+Only a variation-typed column is chosen. An inline `Enum` is a state model, and the actor
+picks the next state with several `transitions` arms from one state; a `Bool` takes a
+`sets`. Either is `ChoosesNotVariation`, whose hint names the form to write. A second
+argument that is not `Entity.column` is `InvalidChoosesColumnRef`; an unknown entity or
+column is `UndefinedSymbol` or `UnknownColumn`. A use case that both `chooses` and `sets`
+one column is `ChoosesAndSets`, and a derived column is `DerivedColumnWritten`.
 
 ### Conditions
 

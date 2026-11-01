@@ -665,6 +665,8 @@ fn is_column_set_by_path(
     }
     model.column_effects.iter().any(|effect| {
         effect.origin == usecase && effect.entity == entity && effect.column == column
+    }) || model.column_choices.iter().any(|choice| {
+        choice.origin == usecase && choice.entity == entity && choice.column == column
     })
 }
 

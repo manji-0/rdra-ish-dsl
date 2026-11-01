@@ -110,12 +110,13 @@ effects apply together to the pre-state:
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
 | `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |
+| `chooses(UC, E.col)` | The variation column takes any value of the variation: one successor per value, as on a creation. On a created instance it is the creation's choice. A column no rule, condition, assert, `property`, or `sets` reads has no variable, so nothing tells its values apart and the `chooses` adds no successor. |
 | a column the use case does not write | Unchanged. |
 
 A `creates(Api, E)` reached through `invokes(UC, Api)` counts as a creation by `UC`.
 
-**Choices.** An action has one successor per choice it makes. A `transitions` choice, and
-a variation column of a created instance, fork the post-state after every other effect has
+**Choices.** An action has one successor per choice it makes. A `transitions` choice, a
+`chooses`, and a variation column of a created instance, fork the post-state after every other effect has
 applied, so each successor carries the action's other effects. Two choices in one action
 multiply: each combination of one value per choice is a successor. The guards read the
 pre-state, so they hold or fail for every arm together, and `after(UC).assert` is checked

@@ -503,6 +503,7 @@ impl<'m> Builder<'m> {
             }
         }
         self.sets_effects(uc, &mut a);
+        self.chosen_columns(uc, &mut a);
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
         self.owner_bindings(&mut a);
@@ -569,6 +570,7 @@ impl<'m> Builder<'m> {
                         var,
                         param: p,
                         values,
+                        site: Some(site),
                     });
                 }
                 EffectRhs::None => {}
@@ -889,6 +891,34 @@ impl<'m> Builder<'m> {
         a.guards.extend(guards);
     }
 
+    /// `chooses(UC, E.col)`: the actor picks the variation column's value again, one successor
+    /// per value, as on a creation. On a created param it is the creation's own choice.
+    fn chosen_columns(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
+        for (idx, choice) in self.model.column_choices.iter().enumerate() {
+            if choice.origin != uc {
+                continue;
+            }
+            let Some(&e) = self.ent_of.get(&choice.entity) else {
+                continue;
+            };
+            let (Some(p), Some(&var)) =
+                (a.param_of(e), self.col_var.get(&(e, choice.column.clone())))
+            else {
+                continue;
+            };
+            if a.writes(var, p) {
+                continue;
+            }
+            let size = self.ts.vars[var.index()].domain.size(self.bounds);
+            a.effects.push(Effect::Choose {
+                var,
+                param: p,
+                values: (0..size).map(|i| Value(i as u8)).collect(),
+                site: Some(Site::new(ModelRef::ColumnChoice(idx), &choice.site)),
+            });
+        }
+    }
+
     /// Vision rule 5: an actor chooses a variation column's value, so a created instance takes
     /// any value unless the creating use case sets it. `@default` does not pin the choice.
     fn creation_choices(&mut self, a: &mut ActionDraft) {
@@ -912,6 +942,7 @@ impl<'m> Builder<'m> {
                     var,
                     param: p as u8,
                     values: (0..size).map(|i| Value(i as u8)).collect(),
+                    site: None,
                 });
             }
         }

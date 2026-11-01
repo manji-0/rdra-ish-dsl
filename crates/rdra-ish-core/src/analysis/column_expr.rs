@@ -202,23 +202,31 @@ fn resolve_derived(
     }
 }
 
-/// A `sets` naming a derived column: its value follows from its expression. `transitions`
-/// drive an Enum column, which no `@derived` derives.
+/// A `sets` or a `chooses` naming a derived column: its value follows from its expression.
+/// `transitions` drive an Enum column, which no `@derived` derives.
 pub(super) fn reject_derived_writes(model: &SemanticModel, diags: &mut Vec<Diagnostic>) {
-    for ce in &model.column_effects {
-        let derived = model.entities[ce.entity]
+    let sets = model
+        .column_effects
+        .iter()
+        .map(|ce| (ce.entity, &ce.column, ce.origin, &ce.site));
+    let choices = model
+        .column_choices
+        .iter()
+        .map(|c| (c.entity, &c.column, c.origin, &c.site));
+    for (entity, column, origin, site) in sets.chain(choices) {
+        let derived = model.entities[entity]
             .columns
             .iter()
-            .any(|c| c.name == ce.column && c.derived_expr.is_some());
+            .any(|c| c.name == *column && c.derived_expr.is_some());
         if !derived {
             continue;
         }
         let err = RdraError::DerivedColumnWritten {
-            entity: model.entities[ce.entity].id.clone(),
-            column: ce.column.clone(),
-            usecase: model.use_cases[ce.origin].id.clone(),
+            entity: model.entities[entity].id.clone(),
+            column: column.clone(),
+            usecase: model.use_cases[origin].id.clone(),
         };
-        diags.push(match &ce.site {
+        diags.push(match site {
             Some(site) => Diagnostic::error_at(err, site.clone()),
             None => Diagnostic::error(err),
         });

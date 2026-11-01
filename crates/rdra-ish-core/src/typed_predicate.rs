@@ -217,6 +217,7 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::Outbox { .. } => "outbox",
         TypedPredicate::MapsField { .. } => "maps_field",
         TypedPredicate::SetsColumn { .. } => "sets",
+        TypedPredicate::Chooses { .. } => "chooses",
         TypedPredicate::SetsProposition { .. } => "sets",
         TypedPredicate::After { .. } => "after",
         TypedPredicate::Forbidden { .. } => "forbidden",

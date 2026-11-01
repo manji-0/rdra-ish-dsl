@@ -46,8 +46,8 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
 - `alt <guards>` holds the work. The guards are the conditions with a `holds` body applied to
   the use case and the `from` states of each transitioned column (`status in (A, B)` for
   several); `else guard fails` replies `rejected`.
-- Each write names the operation, the lifecycle move (`status A -> B`), and the columns
-  `sets` fixes. Arms from one state to several are the actor's choice: an `alt` after the
+- Each write names the operation, the lifecycle move (`status A -> B`), the columns
+  `sets` fixes, and each column the actor picks again (`chooses`) as `col in (A, B)`. Arms from one state to several are the actor's choice: an `alt` after the
   write has one branch per arm (`status = B`, `else` `status = C`). An arm's own
   `.when(Cond)` follows its move in `[...]`, on the branch header or the write. A `Note over` names a transaction. An event the use case raises is a `-)`
   message to the control it triggers, shown as one message and not expanded.

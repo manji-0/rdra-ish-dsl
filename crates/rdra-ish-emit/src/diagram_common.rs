@@ -857,7 +857,9 @@ mod tests {
             "relate" => CARDINALITIES.to_vec(),
             // Not an edge: a rule, an entity property, or no relation of the model.
             "holds" | "exposes" | "shares" | "outbox" | "coordinates" | "after" | "sets"
-            | "forbidden" | "invariant" | "required" | "exclusive" | "when" => Vec::new(),
+            | "chooses" | "forbidden" | "invariant" | "required" | "exclusive" | "when" => {
+                Vec::new()
+            }
             // Drawn from the use case to the state it enters, labelled with the move.
             "transitions" => Vec::new(),
             _ => vec![predicate],

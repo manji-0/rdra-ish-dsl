@@ -263,13 +263,20 @@ fn isolated_group(w: UcWrite) -> TxGroup {
     }
 }
 
-/// Entities a use case changes through `sets` or `transitions`.
+/// Entities a use case changes through `sets`, `chooses`, or `transitions`.
 fn effect_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
     let mut out: Vec<EntityKey> = model
         .column_effects
         .iter()
         .filter(|e| e.origin == uc)
         .map(|e| e.entity)
+        .chain(
+            model
+                .column_choices
+                .iter()
+                .filter(|c| c.origin == uc)
+                .map(|c| c.entity),
+        )
         .chain(
             model
                 .proposition_effects

@@ -267,7 +267,9 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
                 };
                 (*var, *param, post)
             }
-            Effect::Choose { var, param, values } => (*var, *param, Post::Choose(values.clone())),
+            Effect::Choose {
+                var, param, values, ..
+            } => (*var, *param, Post::Choose(values.clone())),
             Effect::Tick => {
                 tick = true;
                 continue;

@@ -179,6 +179,11 @@ pub enum TypedPredicate {
         entity: EntityKey,
         column: std::string::String,
     },
+    Chooses {
+        origin: UseCaseKey,
+        entity: EntityKey,
+        column: std::string::String,
+    },
     SetsProposition {
         origin: UseCaseKey,
         entity: EntityKey,

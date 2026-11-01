@@ -257,6 +257,12 @@ impl TransitionSystem {
                         .position(|a| *a == arm)
                         .map(|i| sites[i].clone())
                 }
+                Effect::Choose {
+                    var: v,
+                    param,
+                    site: Some(site),
+                    ..
+                } if *v == var && slot(param) == at => Some(site.clone()),
                 _ => None,
             })
         };

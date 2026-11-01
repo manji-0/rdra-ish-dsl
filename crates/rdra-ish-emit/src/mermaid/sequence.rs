@@ -77,6 +77,25 @@ fn write_label(
             .filter(|e| !transitions.iter().any(|t| t.column == e.column))
             .map(|e| format!("{}={}", e.column, effect_value(&e.value))),
     );
+    // A `chooses`: the actor picks one of the variation's values.
+    parts.extend(
+        model
+            .column_choices
+            .iter()
+            .filter(|c| c.origin == usecase && c.entity == entity)
+            .map(|c| {
+                let values: Vec<&str> = model.entities[entity]
+                    .columns
+                    .iter()
+                    .find(|col| col.name == c.column)
+                    .and_then(|col| model.column_values(col))
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|v| model.value_display(entity, &c.column, v))
+                    .collect();
+                format!("{} in ({})", c.column, values.join(", "))
+            }),
+    );
     if parts.is_empty() {
         operation.to_string()
     } else {

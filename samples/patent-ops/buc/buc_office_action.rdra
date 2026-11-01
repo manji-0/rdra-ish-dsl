@@ -136,8 +136,10 @@ displays(InstructResponse, OfficeActionScreen)
 reads(InstructResponse, OfficeAction)
 reads(InstructResponse, PatentApplication)
 
-// An actor picks the scope of the amendment, but a variation keeps the value it was created with
-// when a use case updates the row, so each scope is its own use case that sets it.
+// The attorney picks the scope of the amendment, but a final notice admits `limited` only. One use
+// case with `chooses(DraftResponse, OfficeAction.amendment)` lets the attorney pick `free` on a final
+// notice too, and `check` reports Forbidden_OfficeAction_3 (the rule below) reachable: `chooses`
+// cannot restrict the values by state. So each scope stays its own use case that sets it.
 displays(DraftResponse, ResponseDraftScreen)
 invokes(DraftResponse, OfficeActionApi)
 updates(OfficeActionApi, OfficeAction)

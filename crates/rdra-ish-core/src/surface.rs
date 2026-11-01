@@ -178,12 +178,17 @@ fn effects_text(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -
         .iter()
         .filter(|e| e.origin == usecase && e.entity == entity)
         .map(|e| format!("{} == {}", e.column, effect_value_text(&e.value)));
+    let choices = model
+        .column_choices
+        .iter()
+        .filter(|c| c.origin == usecase && c.entity == entity)
+        .map(|c| format!("chooses {}", c.column));
     let propositions = model
         .proposition_effects
         .iter()
         .filter(|e| e.origin == usecase && e.entity == entity)
         .map(|e| format!("{} == {}", e.prop.display(), e.truth));
-    columns.chain(propositions).collect()
+    columns.chain(choices).chain(propositions).collect()
 }
 
 fn effect_value_text(value: &EffectValue) -> String {

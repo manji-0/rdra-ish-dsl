@@ -986,6 +986,10 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
         touch(NodeRef::UseCase(effect.origin));
         touch(NodeRef::Entity(effect.entity));
     }
+    for choice in &model.column_choices {
+        touch(NodeRef::UseCase(choice.origin));
+        touch(NodeRef::Entity(choice.entity));
+    }
     for effect in &model.proposition_effects {
         touch(NodeRef::UseCase(effect.origin));
         touch(NodeRef::Entity(effect.entity));

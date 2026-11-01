@@ -53,6 +53,7 @@ fn rule_stage(model: &SemanticModel, fact: &ModelRef) -> Option<StageId> {
         }
         ModelRef::Transition(_)
         | ModelRef::ColumnEffect(_)
+        | ModelRef::ColumnChoice(_)
         | ModelRef::PropositionEffect(_)
         | ModelRef::TemporalAssertion(_)
         | ModelRef::TemporalProperty(_)

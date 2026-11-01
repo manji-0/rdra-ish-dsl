@@ -72,6 +72,7 @@ pub fn build_model_items_with_scopes(
     column_expr::reject_derived_writes(&model, &mut diags);
     condition::derive_condition_links(&mut model, &mut diags);
     condition::check_write_guards(&mut model, &mut diags);
+    condition::check_choices(&model, &mut diags);
     resolve_foreign_keys(&mut model, &mut diags);
     resolve_along_links(&mut model, &mut diags);
     diags.extend(crate::event_flow::api_route_diagnostics(&model));

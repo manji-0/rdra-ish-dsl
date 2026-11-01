@@ -4,6 +4,24 @@
 
 ### Added
 
+- `chooses(UseCase, Entity.column)` lets the actor pick a variation column's value again on an
+  update (#54). After the use case the column holds any value of the variation, one run per
+  value, as on a creation: `states`, `check`, the TLA+ export (`\E v \in {..} : col' = [col
+  EXCEPT ![p] = v]` on the existing row), and `verify` share it, two `chooses` in one use case
+  choose independently, and a counterexample step cites the `chooses` line (a
+  `sets(.., col == present)` step now cites its `sets` too). A `chooses` counts as a write of
+  the entity, as a `sets` does; on the creating use case it is the creation's own choice. It is
+  a predicate of its own rather than `sets(.., col == any)`, since a variation may name a value
+  `any` and `sets` fixes one value. Only a variation-typed column is chosen: an inline `Enum` or
+  `Bool` is `ChoosesNotVariation`, whose hint names `transitions` arms or `sets`; a second
+  argument that is not `Entity.column` is `InvalidChoosesColumnRef`; `chooses` and `sets` of one
+  column in one use case is `ChoosesAndSets`. It takes no chain methods. The sequence diagram
+  writes the choice as `col in (A, B)`. `rule_audit` covers every form, and `engine_equivalence`
+  compares a fixture of choices with TLC. `samples/patent-ops` keeps `DraftResponse` and
+  `DraftLimitedResponse` apart: merged with `chooses(DraftResponse, OfficeAction.amendment)`,
+  `check` reports 「最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る」
+  (`Forbidden_OfficeAction_3`) reachable, since `chooses` cannot keep a final notice's
+  amendment `limited`; the sample's comment says so.
 - A guard per `transitions` arm (#62):
   `transitions(UC, Entity.col, from -> to).when(Cond)` takes the arm only while the `holds`
   body of the condition holds on the state the use case starts from. The use case runs when

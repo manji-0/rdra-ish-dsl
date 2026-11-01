@@ -632,6 +632,47 @@ fn bfs_and_tlc_agree_on_arm_guards() {
     check_fixture("arm_guards", ARM_GUARDS);
 }
 
+/// `chooses` (#54): an update re-picks two variation columns a creation pinned (one successor
+/// per pair of values), a rule each choice can break, a Bool another use case sets, and a
+/// `chooses` on the creating use case, which is the creation's own choice.
+const CHOOSES: &str = r#"
+variation Scope "補正の範囲" {
+  limited "限定"
+  free "限定なし"
+}
+variation Route "経路" {
+  mail "郵送"
+  online "電子"
+}
+entity Notice "通知" {
+  id: Int @pk
+  status: Enum(open, drafted, filed) @default(open)
+  final: Bool @default(false)
+  scope: Scope
+  route: Route
+}
+usecase Receive "受領"
+usecase Draft "応答案の作成"
+usecase File "提出"
+usecase Reopen "最後の通知"
+creates(Receive, Notice)
+sets(Receive, Notice, scope == limited)
+chooses(Receive, Notice.route)
+transitions(Draft, Notice.status, open -> drafted)
+chooses(Draft, Notice.scope)
+chooses(Draft, Notice.route)
+transitions(File, Notice.status, drafted -> filed)
+transitions(Reopen, Notice.status, filed -> open)
+sets(Reopen, Notice, final == true)
+forbidden(Notice, final == true, scope == free)
+forbidden(Notice, status == filed, route == mail, scope == free)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_chooses() {
+    check_fixture("chooses", CHOOSES);
+}
+
 /// A use case split into two transaction groups (one API each): an after-assert checked after
 /// each step, with the other group's entity universally bound, and a condition guard on the
 /// group whose entity it reads.

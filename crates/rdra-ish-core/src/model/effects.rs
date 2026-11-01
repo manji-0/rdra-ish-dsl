@@ -66,6 +66,18 @@ impl EffectValue {
     }
 }
 
+/// `chooses(UseCase, Entity.column)`: the actor picks the variation column's value when the
+/// use case runs, as on a creation; any value of the variation may follow.
+#[derive(Debug, Clone)]
+pub struct ColumnChoice {
+    pub origin: UseCaseKey,
+    pub entity: EntityKey,
+    pub column: std::string::String,
+
+    /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
 /// `sets(...)` 述語由来のカラム効果（解析後）
 #[derive(Debug, Clone)]
 pub struct ColumnEffect {

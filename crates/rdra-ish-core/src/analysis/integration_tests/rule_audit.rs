@@ -8,7 +8,11 @@ use crate::rules::business_rules;
 use rdra_ish_syntax::parse;
 
 const BASE: &str = r#"
-entity Order "Order" { id: Int @pk  status: Enum(open, paid) @default(open)  total: Int }
+variation Kind "Kind" {
+  a "A"
+  b "B"
+}
+entity Order "Order" { id: Int @pk  status: Enum(open, paid) @default(open)  total: Int  kind: Kind  rush: Bool }
 entity Ticket "Ticket" { id: Int @pk  status: Enum(pending, done) @default(pending) }
 relate(Ticket, Order, N:1)
 usecase Pay "Pay"
@@ -178,6 +182,19 @@ const FORMS: &[(&str, Expect)] = &[
         "holds(Ready, Order.status in (paid)).none(Ticket.status in (pending))",
         Recorded,
     ),
+    // chooses: the actor picks a variation column's value again; nothing else is a choice
+    ("chooses(Pay, Order.kind)", Recorded),
+    ("chooses(Pay, Order.status)", Error),
+    ("chooses(Pay, Order.rush)", Error),
+    ("chooses(Pay, Order.total)", Error),
+    ("chooses(Pay, Order.nosuch)", Error),
+    ("chooses(Pay, Nosuch.kind)", Error),
+    ("chooses(Pay, kind)", Error),
+    ("chooses(Pay, Order, kind)", Error),
+    ("chooses(Pay)", Error),
+    ("chooses(Order.kind, Pay)", Error),
+    ("chooses(Pay, Order.kind).when(Ready)", Error),
+    ("sets(Pay, Order, kind == a)\nchooses(Pay, Order.kind)", Error),
     // transitions: a `.when(Cond)` arm guard is a rule, so its condition must have a body
     ("transitions(Pay, Order.status, open -> paid)", Recorded),
     (
@@ -228,6 +245,7 @@ fn recorded(model: &SemanticModel) -> usize {
         + arm_guards
         + model.field_mappings.len()
         + model.column_effects.len()
+        + model.column_choices.len()
         + model.proposition_effects.len()
         + bodies
 }
@@ -269,6 +287,9 @@ fn line_parts(line: &str) -> usize {
     if line.starts_with("transitions(") {
         return line.matches(".when(").count();
     }
+    if line.starts_with("chooses(") {
+        return 1;
+    }
     let quantifiers = line.matches(".has(").count() + line.matches(".none(").count();
     let only_quantifier =
         quantifiers > 0 && !line.starts_with("holds(") && !line.contains(".then(");
@@ -293,7 +314,7 @@ fn every_rule_predicate_has_a_form_in_the_audit() {
     let labelled = KNOWN_PREDICATES
         .iter()
         .filter(|p| predicate_chain_methods(p).contains(&"label"));
-    for pred in labelled.chain(&["holds", "maps_field", "sets", "transitions"]) {
+    for pred in labelled.chain(&["holds", "maps_field", "sets", "chooses", "transitions"]) {
         assert!(
             FORMS
                 .iter()

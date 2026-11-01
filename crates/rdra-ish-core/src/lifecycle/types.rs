@@ -225,6 +225,8 @@ pub enum ModelRef {
     /// Index into `SemanticModel::state_transitions`.
     Transition(usize),
     ColumnEffect(usize),
+    /// Index into `SemanticModel::column_choices`.
+    ColumnChoice(usize),
     PropositionEffect(usize),
     Forbidden(usize),
     EntityInvariant(usize),
@@ -391,11 +393,13 @@ pub enum Effect {
         sites: Vec<Site>,
         conds: Vec<Vec<(ConditionKey, String)>>,
     },
-    /// One successor per value.
+    /// One successor per value. `site` is the `sets(.., col == present)` or `chooses` that
+    /// asks for it; a creation's own choice of a variation value has none.
     Choose {
         var: VarId,
         param: u8,
         values: Vec<Value>,
+        site: Option<Site>,
     },
     /// now := now + 1 while now < int_max.
     Tick,

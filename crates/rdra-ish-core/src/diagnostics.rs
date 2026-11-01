@@ -268,6 +268,24 @@ pub enum RdraError {
     #[error("transitions second argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(CapturePayment, Order.status, pending -> paid)`")]
     InvalidTransitionsColumnRef { got: String },
 
+    #[error("chooses second argument must be `Entity.column`, got '{got}'\n  hint: write `chooses(DraftResponse, OfficeAction.amendment)`")]
+    InvalidChoosesColumnRef { got: String },
+
+    #[error("chooses({usecase}, {entity}.{col}): '{col}' is not typed by a variation, so the actor has no values to pick from\n  hint: {hint}")]
+    ChoosesNotVariation {
+        usecase: String,
+        entity: String,
+        col: String,
+        hint: String,
+    },
+
+    #[error("{usecase} both chooses and sets {entity}.{col}\n  hint: keep `chooses({usecase}, {entity}.{col})` for the actor to pick the value, or `sets` to fix it, not both")]
+    ChoosesAndSets {
+        usecase: String,
+        entity: String,
+        col: String,
+    },
+
     #[error("`{pred}(...).when(...)` must name one condition, once\n  hint: declare `condition Name \"...\"` with `holds(Name, Entity.column == value)` and write `.when(Name)`; to guard every step of the use case write `applies_to(Name, UseCase)` instead")]
     WhenRequiresCondition { pred: String },
 
