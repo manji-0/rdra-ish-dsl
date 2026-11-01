@@ -15,7 +15,7 @@ use super::types::{
 use super::{Built, Scope, TransitionSystem};
 use crate::model::{
     CmpOpModel, CmpRhs, ColumnType, ConditionKey, EffectValue, EntityKey, Min, ModelColumn,
-    NodeRef, RelKind, SemanticModel, UseCaseKey,
+    NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use crate::tx::{infer_usecase_transactions, UcWrite, WriteKind};
@@ -295,7 +295,7 @@ impl<'m> Builder<'m> {
             .iter()
             .filter(|ce| ce.entity == ek && ce.column == col.name)
             .find_map(|ce| match &ce.value {
-                EffectValue::TypedPresent(t) => Some(t.clone()),
+                SetValue::Value(EffectValue::TypedPresent(t)) => Some(t.clone()),
                 _ => None,
             });
         let var = self.push_var(
@@ -514,6 +514,7 @@ impl<'m> Builder<'m> {
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
         self.owner_bindings(&mut a);
+        self.copy_effects(uc, &mut a, groups);
         let guards = self.condition_guards(uc, &a.params, groups, group);
         a.guards.extend(guards);
         self.arm_guards(&mut a);
@@ -539,6 +540,9 @@ impl<'m> Builder<'m> {
             if ce.origin != uc {
                 continue;
             }
+            let SetValue::Value(value) = &ce.value else {
+                continue;
+            };
             let Some(&e) = self.ent_of.get(&ce.entity) else {
                 continue;
             };
@@ -567,7 +571,7 @@ impl<'m> Builder<'m> {
                 continue;
             }
             let domain = decl.domain.clone();
-            match self.effect_value(&domain, &ce.value, &site, ce.entity) {
+            match self.effect_value(&domain, value, &site, ce.entity) {
                 EffectRhs::Value(v) => self.assign(a, uc, ce.entity, var, p, Rhs::Lit(v), site),
                 EffectRhs::AnyNonNull => {
                     let values: Vec<Value> = (1..domain.size(self.bounds))
@@ -603,6 +607,179 @@ impl<'m> Builder<'m> {
         }
     }
 
+    /// `sets(UC, E, column == F.source)`: the step leaves in `column` the value `F.source` holds
+    /// in the row of `F` it binds, read as a condition atom on `F` reads it. The copy is a
+    /// choice of the column's value that a successor guard pins to the source, so the explorer
+    /// and the TLA+ printer read it as they read an arm guard. It runs after the owner
+    /// bindings, so the parent a created child takes is already a param.
+    fn copy_effects(&mut self, uc: UseCaseKey, a: &mut ActionDraft, groups: &[Vec<EntityKey>]) {
+        let model = self.model;
+        for (idx, ce) in model.column_effects.iter().enumerate() {
+            let SetValue::Copy(source) = &ce.value else {
+                continue;
+            };
+            if ce.origin != uc {
+                continue;
+            }
+            let Some(&e) = self.ent_of.get(&ce.entity) else {
+                continue;
+            };
+            let (Some(p), Some(&var)) = (a.param_of(e), self.col_var.get(&(e, ce.column.clone())))
+            else {
+                continue;
+            };
+            let site = Site::new(ModelRef::ColumnEffect(idx), &ce.site);
+            // A state model starts at the values its creations name, so a lifecycle column
+            // takes no copied value, on a creation either.
+            let lifecycle = matches!(
+                self.ts.vars[var.index()].kind,
+                VarKind::Column {
+                    lifecycle: true,
+                    ..
+                }
+            );
+            if lifecycle {
+                self.diag(
+                    vec![ce.entity],
+                    StateDiag::DoubleModeledEnum {
+                        column: ce.column.clone(),
+                        usecase: model.use_cases[uc].id.clone(),
+                        site,
+                    },
+                );
+                continue;
+            }
+            let source_at = match self.copy_source(a, p, source.entity, groups) {
+                Ok(at) => at,
+                Err(reason) => {
+                    let source_id = &model.entities[source.entity].id;
+                    self.diag(
+                        vec![ce.entity],
+                        StateDiag::UnboundCopySource {
+                            usecase: model.use_cases[uc].id.clone(),
+                            column: format!("{}.{}", model.entities[ce.entity].id, ce.column),
+                            source: format!("{source_id}.{}", source.column),
+                            reason,
+                            site,
+                        },
+                    );
+                    continue;
+                }
+            };
+            let Some(&source_var) = self
+                .ent_of
+                .get(&source.entity)
+                .and_then(|s| self.col_var.get(&(*s, source.column.clone())))
+            else {
+                continue;
+            };
+            let copy = Pred::Cmp(
+                Term::Slot {
+                    var,
+                    at: At::Next(p),
+                },
+                CmpOp::Eq,
+                Term::Slot {
+                    var: source_var,
+                    at: source_at,
+                },
+            );
+            if a.guards.iter().any(|g| g.pred == copy) {
+                continue;
+            }
+            if let Some(old) = prior_write(a, var, p) {
+                let column = self.ts.var_name(var);
+                self.diag(
+                    vec![ce.entity],
+                    StateDiag::ConflictingEffects {
+                        usecase: model.use_cases[uc].id.clone(),
+                        column,
+                        sites: vec![old, site],
+                    },
+                );
+                continue;
+            }
+            let size = self.ts.vars[var.index()].domain.size(self.bounds);
+            a.effects.push(Effect::Choose {
+                var,
+                param: p,
+                values: (0..size).map(|i| Value(i as u8)).collect(),
+                sites: vec![site.clone(); size],
+                conds: Vec::new(),
+            });
+            a.guards.push(Guard {
+                pred: copy,
+                why: GuardWhy::Copy,
+                site,
+            });
+        }
+    }
+
+    /// The row of `source` a copy into param `p` reads, by the rule a condition atom follows:
+    /// a param of the action (on the pre-state, or in the successor when the action creates
+    /// it), else the parent `p` belongs to through a `relate`, which joins the action as a
+    /// `Parent` param that `p`'s owner names. Any other row is not bound to the step.
+    fn copy_source(
+        &mut self,
+        a: &mut ActionDraft,
+        p: u8,
+        source: EntityKey,
+        groups: &[Vec<EntityKey>],
+    ) -> Result<At, String> {
+        let model = self.model;
+        let Some(&s) = self.ent_of.get(&source) else {
+            return Err("it is published and has no state".to_string());
+        };
+        if let Some(q) = a.param_of(s) {
+            return Ok(match a.params[usize::from(q)].role {
+                ParamRole::New => At::Next(q),
+                ParamRole::Existing | ParamRole::Parent => At::Param(q),
+            });
+        }
+        let target = a.params[usize::from(p)].entity;
+        let target_id = &self.ts.entities[target.index()].id;
+        let source_id = &model.entities[source].id;
+        let owner = self
+            .owners
+            .iter()
+            .find(|(_, child, parent)| (*child, *parent) == (target, s))
+            .map(|(var, ..)| *var);
+        if let Some(var) = owner {
+            if a.params[usize::from(p)].role == ParamRole::New {
+                return Err(format!(
+                    "the {target_id} it creates is not linked to a {source_id}: the relate is optional and the use case does not write {source_id}"
+                ));
+            }
+            let q = a.param(s, ParamRole::Parent);
+            let site = self.ts.vars[var.index()].site.clone();
+            a.guards.push(Guard {
+                pred: Pred::Cmp(
+                    Term::Slot {
+                        var,
+                        at: At::Param(p),
+                    },
+                    CmpOp::Eq,
+                    Term::Index(At::Param(q)),
+                ),
+                why: GuardWhy::Owner,
+                site,
+            });
+            return Ok(At::Param(q));
+        }
+        let child = self
+            .owners
+            .iter()
+            .any(|(_, child, parent)| (*child, *parent) == (s, target));
+        let elsewhere = groups.iter().flatten().any(|ek| *ek == source);
+        Err(if elsewhere {
+            format!("the use case writes {source_id} in another transaction group, a step of its own; relate {target_id} to {source_id} so one step writes both")
+        } else if child {
+            format!("several {source_id} rows may belong to one {target_id}; copy from the row the {target_id} belongs to, or from one the use case writes")
+        } else {
+            format!("the use case does not write {source_id}, and no relate makes it the parent of {target_id}")
+        })
+    }
+
     /// A use case that drives a comparison and also sets every Int operand of it to a literal
     /// must drive the truth those literals give. Otherwise the model contradicts itself.
     fn check_driven_truth(&mut self, uc: UseCaseKey, idx: usize, site: &Site) {
@@ -611,7 +788,8 @@ impl<'m> Builder<'m> {
         let literal = |column: &str| {
             model.column_effects.iter().enumerate().find_map(|(i, ce)| {
                 match (ce.origin == uc && ce.entity == pe.entity && ce.column == column)
-                    .then(|| ce.value.normalize())
+                    .then(|| ce.value.literal().map(EffectValue::normalize))
+                    .flatten()
                 {
                     Some(EffectValue::Int(n)) => Some((*n, i)),
                     _ => None,
@@ -1139,6 +1317,33 @@ impl ActionDraft {
             } => *v == var && *p == param,
             _ => false,
         })
+    }
+}
+
+/// Before a copy into `var` of param `p`: drops a creation's free choice of the column, which
+/// the copy pins, and returns the site of any other write of it in the step, which conflicts
+/// with the copy.
+fn prior_write(a: &mut ActionDraft, var: VarId, p: u8) -> Option<Site> {
+    let at = a.effects.iter().position(|eff| match eff {
+        Effect::Assign {
+            var: v, param: q, ..
+        }
+        | Effect::Transition {
+            var: v, param: q, ..
+        }
+        | Effect::Choose {
+            var: v, param: q, ..
+        } => *v == var && *q == p,
+        _ => false,
+    })?;
+    match &a.effects[at] {
+        Effect::Choose { sites, .. } if sites.is_empty() => {
+            a.effects.remove(at);
+            None
+        }
+        Effect::Assign { site, .. } => Some(site.clone()),
+        Effect::Choose { sites, .. } | Effect::Transition { sites, .. } => sites.first().cloned(),
+        _ => None,
     }
 }
 

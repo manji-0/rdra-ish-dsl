@@ -1,7 +1,8 @@
 //! Exact cone-of-influence reduction. A var set S is closed when every action that writes a
-//! var in S has all the vars it reads in S. Then the reachable states of `restrict_to(S)` are
-//! exactly the reachable states of the whole system projected onto S, so a view or verdict
-//! that reads only S can be computed on the smaller system.
+//! var in S has all the vars it reads in S, where a copy's guard counts as read only when the
+//! var it pins is in S. Then the reachable states of `restrict_to(S)` are exactly the
+//! reachable states of the whole system projected onto S, so a view or verdict that reads only
+//! S can be computed on the smaller system.
 
 use std::collections::BTreeSet;
 
@@ -63,13 +64,14 @@ impl TransitionSystem {
 
     /// Guards, slot selection, transition sources, and the clock. Selecting a present slot
     /// reads its entity's existence; taking a new slot does not count as a read, so an entity
-    /// a target never reads is never out of slots (`restrict_to` drops that param).
+    /// a target never reads is never out of slots (`restrict_to` drops that param). A copy's
+    /// guard is read only with the var it pins (`copy_reads`).
     pub(crate) fn action_reads(&self, action: &Action) -> VarSet {
         let mut out = VarSet::new();
         for p in action.params.iter().filter(|p| p.role != ParamRole::New) {
             out.insert(self.entity(p.entity).exists);
         }
-        for g in &action.guards {
+        for g in action.guards.iter().filter(|g| g.copy_target().is_none()) {
             self.pred_reads(&g.pred, &mut out);
         }
         for eff in &action.effects {
@@ -109,9 +111,29 @@ impl TransitionSystem {
             .collect()
     }
 
+    /// Each copy guard of the action: the var it pins and what it reads. Without the pinned var
+    /// the guard always holds for some value of it, so the copy is read only with that var.
+    fn copy_reads(&self, action: &Action) -> Vec<(VarId, VarSet)> {
+        action
+            .guards
+            .iter()
+            .filter_map(|g| {
+                let target = g.copy_target()?;
+                let mut reads = VarSet::new();
+                self.pred_reads(&g.pred, &mut reads);
+                Some((target, reads))
+            })
+            .collect()
+    }
+
     /// The smallest closed set holding `seed` and everything the `keep` actions read.
     pub fn cone(&self, seed: &VarSet, keep: &BTreeSet<ActId>) -> VarSet {
         let reads: Vec<VarSet> = self.actions.iter().map(|a| self.action_reads(a)).collect();
+        let copies: Vec<(VarId, VarSet)> = self
+            .actions
+            .iter()
+            .flat_map(|a| self.copy_reads(a))
+            .collect();
         let writes: Vec<VarSet> = self.actions.iter().map(|a| self.action_writes(a)).collect();
         let mut s = seed.clone();
         let mut taken = vec![false; self.actions.len()];
@@ -123,6 +145,12 @@ impl TransitionSystem {
                     taken[i] = true;
                     grew = true;
                     s.extend(reads[i].iter().copied());
+                }
+            }
+            for (target, r) in &copies {
+                if s.contains(target) && !r.is_subset(&s) {
+                    s.extend(r.iter().copied());
+                    grew = true;
                 }
             }
             // A slot's vars mean nothing without its existence, and an owner var's domain

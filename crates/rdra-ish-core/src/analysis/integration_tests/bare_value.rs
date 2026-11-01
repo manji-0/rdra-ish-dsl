@@ -174,8 +174,8 @@ fn sets_reads_the_value() {
     let model = ok("sets(U, E, method == cash)\n");
     let ce = &model.column_effects[0];
     assert_eq!(
-        (ce.column.as_str(), &ce.value),
-        ("method", &variant("cash"))
+        (ce.column.as_str(), ce.value.literal()),
+        ("method", Some(&variant("cash")))
     );
 }
 

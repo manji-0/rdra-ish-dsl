@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use crate::model::{
     ColumnType, EffectValue, EntityKey, Exposed, ModelColumn, NodeRef, RelKind, SemanticModel,
-    UseCaseKey,
+    SetValue, UseCaseKey,
 };
 use crate::tx::infer_usecase_transactions;
 
@@ -177,7 +177,13 @@ fn effects_text(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -
         .column_effects
         .iter()
         .filter(|e| e.origin == usecase && e.entity == entity)
-        .map(|e| format!("{} == {}", e.column, effect_value_text(&e.value)));
+        .map(|e| match &e.value {
+            SetValue::Value(v) => format!("{} == {}", e.column, effect_value_text(v)),
+            SetValue::Copy(source) => format!(
+                "{} == {}.{}",
+                e.column, model.entities[source.entity].id, source.column
+            ),
+        });
     let choices = model
         .column_choices
         .iter()

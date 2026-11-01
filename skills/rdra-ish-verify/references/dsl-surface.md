@@ -131,6 +131,12 @@ one arm, every arm carries the use case's other effects, and its guards and
 `after(UC).assert` apply to each arm. Two values `sets` writes to one column in one use case
 are `ConflictingEffects`, not a choice.
 
+`sets(Register, Permit, kind == Application.kind)` copies the value of the row the step
+binds: a row of `Application` the use case writes in the same step, or the parent the permit
+belongs to through a `relate`. BFS and TLC read it the same way; TLA+ writes it as a choice of
+the column's value and the guard `Permit_kind'[p] = Application_kind[q]`. A source the step
+does not bind is `UnboundCopySource`.
+
 `.when(Cond)` on one `transitions` arm guards that arm only: the arm is taken only while the
 condition's `holds` body holds, the use case runs when some arm is enabled, and the choice
 among enabled arms stays free. A guarded arm that never fires while its use case runs is the

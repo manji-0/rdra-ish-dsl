@@ -331,6 +331,24 @@ impl Guard {
     pub fn reads_successor(&self) -> bool {
         self.pred.reads_next()
     }
+
+    /// The var a `GuardWhy::Copy` guard pins in the successor. The guard constrains nothing
+    /// else, so a system without that var drops it.
+    pub fn copy_target(&self) -> Option<VarId> {
+        match (&self.why, &self.pred) {
+            (
+                GuardWhy::Copy,
+                Pred::Cmp(
+                    Term::Slot {
+                        var,
+                        at: At::Next(_),
+                    },
+                    ..,
+                ),
+            ) => Some(*var),
+            _ => None,
+        }
+    }
 }
 
 impl Pred {
@@ -371,6 +389,8 @@ pub enum GuardWhy {
     /// arm, or a value, of the column whose guard held on the pre-state. `cond` is the first
     /// guarded arm's or value's condition.
     ArmCondition { cond: ConditionKey },
+    /// `sets(UC, E, column == F.source)`: the successor's column holds the source row's value.
+    Copy,
 }
 
 #[derive(Clone, Debug)]

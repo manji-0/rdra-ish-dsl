@@ -178,6 +178,7 @@ flowchart LR
   condition__SuspensionKind -.->|applies_to| usecase__DecideSuspension
   condition__SuspensionKind -.-> variation__DispositionKind
   %% derived condition__SuspensionKind -> variation__DispositionKind from holds
+  entity__BusinessPermit ---|N:1| entity__PermitApplication
   entity__ChangeNotice ---|N:1| entity__BusinessPermit
   entity__Disposition ---|N:1| entity__BusinessPermit
   entity__Inspection ---|1:1| entity__PermitApplication

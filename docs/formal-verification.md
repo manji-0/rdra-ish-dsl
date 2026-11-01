@@ -194,7 +194,7 @@ counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs t
 WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A property without `.fair` rests on
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
-`HygieneManagerEventuallyAppointed` runs on a 111-state cone and the whole `verify` takes
+`HygieneManagerEventuallyAppointed` runs on a 223-state cone and the whole `verify` takes
 3 s; on patent-ops `GrantEnds` runs on a 4,105-state cone. The test
 `a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares the
 cone verdict with the whole-model verdict on the temporal samples and on fixtures for each
@@ -494,7 +494,7 @@ gaps.
   a renewal to a valid permit (the application's cone grows from 14,197 to 429,485 states)
   and joins a disposition's decision to the permit's ledger by an event. Its temporal
   property, that a valid permit without a 食品衛生責任者 ends with one appointed, is checked on
-  a 111-state cone. See it:
+  a 223-state cone. See it:
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
   you can do: as for patent-ops.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases

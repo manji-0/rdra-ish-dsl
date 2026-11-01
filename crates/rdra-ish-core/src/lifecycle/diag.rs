@@ -250,6 +250,14 @@ pub enum StateDiag {
         reason: String,
         site: Site,
     },
+    /// `sets(UC, E, column == F.source)` where the step binds no one row of `F` to read.
+    UnboundCopySource {
+        usecase: String,
+        column: String,
+        source: String,
+        reason: String,
+        site: Site,
+    },
     /// `applies_to(Cond, UC)` with a `holds` body, where the guard has nothing to read.
     UnbindableCondition {
         condition: String,
@@ -365,6 +373,9 @@ impl StateDiag {
             StateDiag::UnbindableCondition {
                 condition, usecase, ..
             } => with("UnbindableCondition", &[condition, usecase]),
+            StateDiag::UnboundCopySource {
+                usecase, column, ..
+            } => with("UnboundCopySource", &[usecase, column]),
             StateDiag::ContradictoryDrivenComparison {
                 usecase,
                 proposition,
@@ -443,6 +454,7 @@ impl StateDiag {
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
+            | StateDiag::UnboundCopySource { .. }
             | StateDiag::UnsupportedComparison { .. }
             | StateDiag::DerivedColumnRead { .. }
             | StateDiag::UnresolvedPropertyAtom { .. } => Severity::Error,
@@ -730,6 +742,16 @@ impl fmt::Display for StateDiag {
                 reason,
                 ..
             } => write!(f, "condition {condition} on {usecase}: {reason}"),
+            StateDiag::UnboundCopySource {
+                usecase,
+                column,
+                source,
+                reason,
+                ..
+            } => write!(
+                f,
+                "{usecase} copies {source} into {column}, but binds no one row of it: {reason}"
+            ),
             StateDiag::ContradictoryDrivenComparison {
                 usecase,
                 proposition,

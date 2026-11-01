@@ -1555,10 +1555,61 @@ names `scripts/migrate-phase3.py`.
 | A number | `Int` column | Set the column to that value. |
 | `present` | `@null` column | Make the column non-null (value present). |
 | `null` | `@null` column | Make the column null. |
+| `Entity.column` | A column of the same type | Copy the value of another row's column (see below). |
 
 `sets` records which value a use case leaves, not how it is stored. A storage type name
 such as `timestamptz` is not a value; write `present` for a nullable column the use case
 fills. The storage type belongs on the column's type and the DBML export.
+
+### Copying a value from another row
+
+The right-hand side of `sets` may be a column written `Entity.column`. The use case then
+leaves in the target column the value that the source column holds:
+
+```
+relate(BusinessPermit, PermitApplication, N:1)
+creates(RegisterPermit, BusinessPermit)
+sets(RegisterPermit, BusinessPermit, business_type == PermitApplication.business_type)
+```
+
+The source is the row that the step already binds for its entity. The step reads it the
+way a `holds` atom on that entity reads it (see
+[Conditions as guards](./state-derivation.md#actions)):
+
+- **A row the step writes.** The use case writes the entity in the same transaction group.
+  The step reads an updated row before it changes it, and a created row as the step leaves
+  it. A copy within one row (`sets(UC, E, shadow == E.flag)`) reads that row.
+- **The target's parent.** A `relate` makes the source entity the parent of the target.
+  A child created under a mandatory relate reads the parent it is created under. An updated
+  child reads the parent that its foreign key names, and the use case waits while an
+  `.optional()` key is unlinked.
+
+Any other source is `UnboundCopySource`, an error, and the copy is not applied:
+
+- an entity that the use case does not write and that is not the target's parent;
+- a child of the target, because several rows may belong to one target row;
+- an entity that the use case writes in another transaction group, which is a step of its
+  own;
+- the parent of a created child under an `.optional()` relate, because the child is
+  created unlinked.
+
+Every value of the source must be a value of the target. The two columns are one Enum
+(the same variants), one variation, two Bool columns, two Int-typed columns (Int, Money,
+Decimal), two Date-typed columns (Date, DateTime), or two `@null` String columns. A
+nullable source needs a nullable target, and a `@derived` source is rejected. Any other
+pair is `SetsCopyMismatch`. Only `==` with a qualified column copies: `kind != Parent.kind`
+and a bare column (`qty == limit`) set nothing and are `SetsNoEffect`.
+
+A use case leaves one value per column. A copy and a literal `sets` of one column, or two
+copies from different columns, are `ConflictingEffects`. A copy and a `chooses` of one
+column are `ChoosesAndSets`. A copy into a lifecycle column is `DoubleModeledEnum`, on
+the creating use case too: a state model starts at the values that its creations name. A
+foreign key column is no copy source or target (`EffectOnNonStateColumn`). On a created row
+the copy replaces the actor's choice of a variation column and the `@default` of any other
+column.
+
+`check`, `states`, the TLA+ export, and `verify` read a copy the same way. TLA+ writes it as
+a choice of the column's value, then the guard `col'[p] = source[q]`.
 
 ### Driving comparison propositions with `drives`
 

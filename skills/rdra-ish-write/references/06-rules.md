@@ -56,7 +56,11 @@ Also ask:
 6. Add `forbidden(...)` or `invariant(...)` when a rule mentions columns
    from more than one entity; qualify columns as `Entity.column`.
 7. Add `.along(...)` when the intended semantics is relation-scoped rather than global
-   cross-product; keep it off rules that truly forbid global co-existence.
+   cross-product; keep it off rules that truly forbid global co-existence. A rule that a
+   row agrees with its parent (`forbidden(Permit, Application, Permit.kind !=
+   Application.kind).along(Permit, Application)`) holds only when the use case that
+   creates the row copies the value (`sets(Register, Permit, kind == Application.kind)`);
+   without the copy the value is a free choice and `check` reports the rule.
 8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
 9. Add `invariant(Entity).when(...).none/has(Related.col == v)` for to-many quantifiers; a top-level `when(...)` no longer loads.

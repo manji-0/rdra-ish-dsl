@@ -156,11 +156,15 @@ transitions(DenyPermit, PermitApplication.status, returned -> denied)
 sets(DenyPermit, PermitApplication, reason_shown == true)
 raises(DenyPermit, EvApplicationReturned)
 
-// The event gives no order (#30), so `check` also lets a permit be registered before any
-// application is granted; no rule reads both, so the over-approximation hides nothing here.
+// The event gives no order (#30), so `check` also lets a permit be registered before its
+// application is granted. The permit is registered under an application and takes its 営業の種類
+// (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:880). One permit per new application is
+// not modeled (README).
 displays(RegisterPermit, PermitLedgerScreen)
 invokes(RegisterPermit, PermitRegistrationApi)
 creates(PermitRegistrationApi, BusinessPermit)
+reads(PermitRegistrationApi, PermitApplication)
+sets(RegisterPermit, BusinessPermit, business_type == PermitApplication.business_type)
 raises(RegisterPermit, EvPermitIssued)
 triggers(EvPermitIssued, FoodSanitationSystem)
 
@@ -305,6 +309,10 @@ invariant(PermitApplication).when(status in (awaiting_inspection, approved)).the
 
 // 許可証を…掲示しなければならない (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:18).
 invariant(BusinessPermit).when(operating == true).then(certificate_issued == true).label("許可証の交付を受けてから営業する")
+
+// The 営業の種類 is a 記載事項 of the application (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:880), and
+// the permit is given for it.
+forbidden(BusinessPermit, PermitApplication, BusinessPermit.business_type != PermitApplication.business_type).along(BusinessPermit, PermitApplication).label("許可の営業の種類は申請の営業の種類と同じ")
 
 // Requirement traceability
 requirement ReqPermitOnlyCompliantFacility "施設基準に適合した施設にだけ許可し、不許可には理由を示す"

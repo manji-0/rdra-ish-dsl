@@ -75,6 +75,7 @@ pub fn build_model_items_with_scopes(
     condition::check_write_guards(&mut model, &mut diags);
     condition::check_choices(&model, &mut diags);
     resolve_foreign_keys(&mut model, &mut diags);
+    effect::reject_key_copies(&model, &mut diags);
     resolve_along_links(&mut model, &mut diags);
     diags.extend(crate::event_flow::api_route_diagnostics(&model));
     diags.extend(crate::publication::publication_diagnostics(&model));

@@ -845,7 +845,7 @@ fn push_column_effect(
     origin: UseCaseKey,
     entity: EntityKey,
     column: String,
-    value: EffectValue,
+    value: SetValue,
     ctx: DiagCtxt,
 ) {
     model.column_effects.push(ColumnEffect {
@@ -879,14 +879,22 @@ fn record_sets_effect(
     };
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
-    let Ok(Some((column, value))) = super::constraint::resolve_entity_equals_from_comparison(
+    let value = match super::constraint::resolve_entity_equals_from_comparison(
         &model.variations,
         &entity_cols,
         &entity_id,
         cmp,
         ctx,
         diags,
-    ) else {
+    ) {
+        Ok(Some((column, value))) => Some((column, SetValue::Value(value))),
+        Ok(None) => match super::effect::resolve_copy(model, entity_key, cmp, ctx, diags) {
+            Ok(copy) => copy.map(|(column, source)| (column, SetValue::Copy(source))),
+            Err(()) => None,
+        },
+        Err(()) => None,
+    };
+    let Some((column, value)) = value else {
         return false;
     };
     push_column_effect(model, pred, origin, entity_key, column, value, ctx);
@@ -930,6 +938,7 @@ fn record_drives_effect(
         diags,
     ) {
         Ok(Some((column, value))) if truth => {
+            let value = SetValue::Value(value);
             push_column_effect(model, pred, origin, entity_key, column, value, ctx);
             true
         }

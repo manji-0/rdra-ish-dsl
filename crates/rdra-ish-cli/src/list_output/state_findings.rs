@@ -326,6 +326,7 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
             )
         }
         (GuardWhy::Owner, _) => "the bound instances belong to each other (relate)".to_string(),
+        (GuardWhy::Copy, _) => "the column takes the value it copies (sets)".to_string(),
         (GuardWhy::Clock, _) => "now has room to tick".to_string(),
         (GuardWhy::TransitionFrom, _) => {
             "the column is in a from state of its transitions".to_string()
@@ -713,6 +714,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableScope { .. }
         | StateDiag::UnbindableCondition { .. }
+        | StateDiag::UnboundCopySource { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }

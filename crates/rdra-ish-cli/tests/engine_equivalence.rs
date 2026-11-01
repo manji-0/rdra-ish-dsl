@@ -960,6 +960,76 @@ fn bfs_and_tlc_agree_on_two_lifecycle_columns() {
     check_fixture("two_lifecycles", TWO_LIFECYCLES);
 }
 
+/// `sets(UC, E, column == F.source)` (#69): a permit created under its application copies the
+/// application's kind, and an update copies `staffed` from the application its owner names.
+/// Without the copies the permit's kind is a free choice and `staffed` keeps its default, so
+/// both rules break; with them the kind rule holds and the `staffed` rule breaks only while the
+/// application moves after the copy.
+const COPIES: &str = r#"
+variation Kind "種類" {
+  food "食品"
+  drink "飲料"
+}
+entity Application "申請" {
+  id: Int @pk
+  kind: Kind
+  status: Enum(submitted, approved) @default(submitted)
+  staffed: Bool @default(false)
+}
+entity Permit "許可" {
+  id: Int @pk
+  kind: Kind
+  staffed: Bool @default(false)
+}
+relate(Permit, Application, N:1)
+usecase Apply "申請"
+usecase Staff "責任者"
+usecase Approve "承認"
+usecase Register "登録"
+usecase Refresh "更新"
+creates(Apply, Application)
+sets(Staff, Application, staffed == true)
+transitions(Approve, Application.status, submitted -> approved)
+creates(Register, Permit)
+updates(Refresh, Permit)
+condition Approved "承認済み"
+holds(Approved, Application.status == approved)
+applies_to(Approved, Register)
+forbidden(Permit, Application, Permit.kind != Application.kind).along(Permit, Application)
+forbidden(Permit, Application, Permit.staffed == true, Application.staffed == false).along(Permit, Application)
+after(Refresh).assert(Permit.staffed == true)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_copies() {
+    check_fixture("no_copies", COPIES);
+    let copies = format!(
+        "{COPIES}\nsets(Register, Permit, kind == Application.kind)\nsets(Register, Permit, staffed == Application.staffed)\nsets(Refresh, Permit, staffed == Application.staffed)\n"
+    );
+    check_fixture("copies", &copies);
+    check_fixture("copy_in_one_step", COPY_IN_ONE_STEP);
+}
+
+/// A use case that creates an order and its invoice in one step copies the kind the order is
+/// created with: the guard reads the source in the successor, `Invoice_kind'[p] =
+/// Order_kind'[q]`.
+const COPY_IN_ONE_STEP: &str = r#"
+variation Kind "種類" {
+  food "食品"
+  drink "飲料"
+}
+entity Order "注文" { id: Int @pk  kind: Kind }
+entity Invoice "請求" { id: Int @pk  kind: Kind }
+relate(Invoice, Order, N:1)
+usecase Open "開始"
+usecase Reissue "再発行"
+creates(Open, Order)
+creates(Open, Invoice)
+sets(Open, Invoice, kind == Order.kind)
+creates(Reissue, Invoice)
+forbidden(Invoice, Order, Invoice.kind != Order.kind).along(Invoice, Order)
+"#;
+
 /// One inline model at both bounds.
 fn check_fixture(name: &str, src: &str) {
     let Some(tlc) = find_tlc() else {

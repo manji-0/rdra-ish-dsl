@@ -107,6 +107,8 @@ flowchart LR
   %% derived usecase__RegisterPermit -> entity__BusinessPermit via api__PermitRegistrationApi
   usecase__RegisterPermit -.-> screen__PermitLedgerScreen
   usecase__RegisterPermit -.-> event__EvPermitIssued
+  usecase__RegisterPermit -.->|reads| entity__PermitApplication
+  %% derived usecase__RegisterPermit -> entity__PermitApplication via api__PermitRegistrationApi
   usecase__RequestReinspection -.-> screen__InspectionScreen
   usecase__RequestReinspection -.->|transitions Inspection.status failed->scheduled| state__Inspection_scheduled
   usecase__RequestReinspection -.->|updates| entity__Inspection

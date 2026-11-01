@@ -6,6 +6,7 @@ mod column_expr;
 mod comparison;
 mod condition;
 mod constraint;
+mod copy;
 mod diagnostics;
 mod instance;
 mod keys;

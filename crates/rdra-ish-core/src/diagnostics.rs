@@ -335,8 +335,17 @@ pub enum RdraError {
     #[error("PostgreSQL type name '{name}' is not valid in sets(...); use `present` for a non-null nullable value\n  hint: declare display/storage types with entity annotations or DBML export inference")]
     PgTypeNameInSets { name: String },
 
-    #[error("sets({usecase}, {entity}, ...) sets nothing: the third argument must be `column == value`\n  hint: write `sets({usecase}, {entity}, status == paid)` to set a value, or `drives({usecase}, {entity}, stock < selling, true)` to drive a comparison true or false")]
+    #[error("sets({usecase}, {entity}, ...) sets nothing: the third argument must be `column == value` or `column == Entity.column`\n  hint: write `sets({usecase}, {entity}, status == paid)` to set a value, `sets({usecase}, {entity}, kind == Parent.kind)` to copy one, or `drives({usecase}, {entity}, stock < selling, true)` to drive a comparison true or false")]
     SetsNoEffect { usecase: String, entity: String },
+
+    #[error("sets(..., {target} == {copied}) cannot copy: the columns {reason}\n  hint: copy between columns of one Enum, one variation, Bool, Int-typed (Int, Money, Decimal) or Date-typed (Date, DateTime) columns; a nullable source needs a nullable target")]
+    SetsCopyMismatch {
+        /// `Entity.column (Type)` of the target.
+        target: String,
+        /// `Entity.column (Type)` of the source.
+        copied: String,
+        reason: String,
+    },
 
     #[error("drives({usecase}, {entity}, ...) drives nothing: the third argument must be a comparison and the fourth `true` or `false`\n  hint: write `drives({usecase}, {entity}, stock < selling, true)`, or `sets({usecase}, {entity}, status == paid)` to set a value")]
     DrivesNoEffect { usecase: String, entity: String },

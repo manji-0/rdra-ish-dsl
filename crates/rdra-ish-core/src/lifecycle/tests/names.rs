@@ -125,6 +125,13 @@ fn one_of_each() -> Vec<StateDiag> {
             reason: "nothing to read".into(),
             site: site(),
         },
+        StateDiag::UnboundCopySource {
+            usecase: "Register".into(),
+            column: "Permit.kind".into(),
+            source: "Line.kind".into(),
+            reason: "several Line rows".into(),
+            site: site(),
+        },
         StateDiag::ContradictoryDrivenComparison {
             usecase: "Pay".into(),
             proposition: "Order.amount > 3".into(),
@@ -190,6 +197,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
+            | StateDiag::UnboundCopySource { .. }
             | StateDiag::ContradictoryDrivenComparison { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::UnsupportedComparison { .. }

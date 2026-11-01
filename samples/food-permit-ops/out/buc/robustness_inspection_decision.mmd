@@ -36,6 +36,7 @@ flowchart LR
   api__OperatorPermitApi -->|U| entity__BusinessPermit
   api__PermitApi -->|U| entity__BusinessPermit
   api__PermitRegistrationApi -->|C| entity__BusinessPermit
+  api__PermitRegistrationApi -->|R| entity__PermitApplication
   api__PermitRegistrationApi -.->|許可の発行（発行済）| extsystem__FoodSanitationSystem
   api__ReinspectionApi -->|U| entity__Inspection
   screen__DecisionScreen -->|不許可の決定| api__DecisionApi

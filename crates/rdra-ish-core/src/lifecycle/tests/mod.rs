@@ -8,6 +8,7 @@ mod chooses;
 mod conditions;
 mod cone;
 mod constraints;
+mod copies;
 mod deadlock;
 mod effects;
 mod guard_quantifiers;

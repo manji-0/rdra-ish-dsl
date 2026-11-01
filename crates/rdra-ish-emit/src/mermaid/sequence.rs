@@ -11,7 +11,9 @@ use super::usecase::scoped_use_cases;
 use crate::diagram_common::{contract_id, node_label, Header};
 use crate::{node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{applied_bodies, condition_body_display};
-use rdra_ish_core::model::{EffectValue, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use rdra_ish_core::model::{
+    EffectValue, EntityKey, NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
+};
 use rdra_ish_core::{actors_for_usecase, infer_usecase_transactions, triggered_use_cases};
 use std::collections::HashSet;
 
@@ -75,7 +77,13 @@ fn write_label(
             .iter()
             .filter(|e| e.origin == usecase && e.entity == entity)
             .filter(|e| !transitions.iter().any(|t| t.column == e.column))
-            .map(|e| format!("{}={}", e.column, effect_value(&e.value))),
+            .map(|e| match &e.value {
+                SetValue::Value(v) => format!("{}={}", e.column, effect_value(v)),
+                SetValue::Copy(source) => format!(
+                    "{}={}.{}",
+                    e.column, model.entities[source.entity].id, source.column
+                ),
+            }),
     );
     // A `chooses`: the actor picks one of the variation's values, or of the listed ones.
     parts.extend(

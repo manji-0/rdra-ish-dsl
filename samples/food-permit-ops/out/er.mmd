@@ -17,6 +17,7 @@ erDiagram
     Bool operating
     Bool certificate_issued
     Bool hygiene_manager_appointed
+    Int permitapplication_id FK
   }
   ChangeNotice {
     Int id PK
@@ -77,5 +78,6 @@ erDiagram
   SiteVisit }o--|| MonitoringPlan : ""
   Disposition }o--|| BusinessPermit : ""
   Inspection ||--|| PermitApplication : ""
+  BusinessPermit }o--|| PermitApplication : ""
   ChangeNotice }o--|| BusinessPermit : ""
   SuccessionNotice }o--|| BusinessPermit : ""

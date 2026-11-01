@@ -70,6 +70,12 @@ Also ask:
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). A `sets` on a column that `transitions`
    drives is an error unless the use case creates the entity.
+   When the value comes from another row, copy it: `sets(Register, Permit, kind ==
+   Application.kind)`. The source must be a row the step binds: an entity the use case
+   writes in the same transaction group, or the parent of the target through a `relate`
+   (a created child reads the parent it is created under). Any other source is
+   `UnboundCopySource`; give the target a `relate` to the source instead of leaving the
+   value a free choice. The two columns hold one set of values (`SetsCopyMismatch`).
 9. Add `drives(UC, E, cmp, true|false)` when rules depend on a derived comparison and
    the model does not track the values. Prefer Int / Money / Decimal columns plus
    `sets(UC, E, col == N)` when the quantity itself must be checked: a comparison
@@ -113,6 +119,31 @@ triggers(NightlyExpiry, ExpireDrafts)
 condition CardPayment "The order is paid by card"
 holds(CardPayment, Payment.method == card)
 applies_to(CardPayment, CapturePayment)
+```
+
+A created row that copies a value from the row it is created under:
+
+```rdra
+variation Kind "Kind" {
+  food "Food"
+  drink "Drink"
+}
+entity Application "Application" {
+  id: Int @pk
+  kind: Kind
+}
+entity Permit "Permit" {
+  id: Int @pk
+  kind: Kind
+}
+relate(Permit, Application, N:1)
+
+usecase Apply "Apply"
+usecase Register "Register"
+
+creates(Apply, Application)
+creates(Register, Permit)
+sets(Register, Permit, kind == Application.kind)
 ```
 
 ## Validation

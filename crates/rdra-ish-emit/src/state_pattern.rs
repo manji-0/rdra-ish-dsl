@@ -207,6 +207,7 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableScope { .. }
         | StateDiag::UnbindableCondition { .. }
+        | StateDiag::UnboundCopySource { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }

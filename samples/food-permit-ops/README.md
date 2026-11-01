@@ -74,7 +74,12 @@ numbers), the comment says the modeling is the model's assumption.
   permit; `GrantPermit` raises the event that starts `RegisterPermit`; `RenewPermit` the one that
   starts `ExtendPermitTerm`. Written as one use case that moves both, each pair put the other
   entity's columns into the cone and `verify` stopped at its state cap (see below). Events impose
-  no order (#30), so `check` also lets the ledger move without the decision; no rule reads both.
+  no order (#30), so `check` also lets the ledger move without the decision; no rule reads the
+  status of both.
+- **The permit is registered under its application.** `relate(BusinessPermit,
+  PermitApplication, N:1)`, and `RegisterPermit` copies the application's 営業の種類 into the
+  permit (`sets(RegisterPermit, BusinessPermit, business_type == PermitApplication.business_type)`,
+  #69). The rule `許可の営業の種類は申請の営業の種類と同じ` reads both.
 - **The disposition has two lifecycle columns.** `Disposition.status` follows the procedure
   (処分案 to 確定) and `Disposition.publication` the publication (未公表, 公表中, 公表終了, and
   公表対象外 for a disposition not made). Each has its own `transitions` and its own state model;
@@ -90,17 +95,27 @@ Each figure is a cone size at the 2 instances of `verify`, from
 - **The one temporal property is checked on its cone.** `HygieneManagerEventuallyAppointed`
   says that a valid permit without a 食品衛生責任者 ends with one appointed or with the permit's
   end, under `.fair(AppointHygieneManager)`. `verify` checks it on the cone of what it reads
-  and of `AppointHygieneManager` (three columns, 111 states at 2 instances), not on the whole
+  and of `AppointHygieneManager` (223 states at 2 instances), not on the whole
   model, where TLC found 6,877,496 distinct states in 300 s with 5,949,713 still queued (#67).
   A property without `.fair` would still go to the whole model, which `verify` now stops at
   its budget as not decided.
+- **One permit per application is not modeled.** The permit belongs to its application through an
+  N:1 `relate`. A 1:1 `relate` needs a guard on `RegisterPermit` that no permit is registered for
+  the application yet (`.none(BusinessPermit.status in (...))`); without it `verify` at 2 instances
+  registers a second one, as with the inspections below. The guard
+  (`holds(..., PermitApplication.kind == new).none(...)`) takes the cone of `Disposition` from
+  13,231 to 248,032 states, over the 200,000 above which `engine_equivalence` compares a cone at 1
+  instance only.
+- **The copied 営業の種類 is state.** Since #69, `PermitApplication.business_type` and
+  `BusinessPermit.business_type` are variables, so the view of `PermitApplication` grows from
+  14,197 to 127,165 states and that of `BusinessPermit` from 421 to 12,373.
 - **A renewal is not tied to the permit it continues.** `ApplyRenewal` and `RenewPermit` should run
   only while the permit is valid. The guard puts every column of `BusinessPermit` into the cone of
-  `PermitApplication` and `Inspection`, which grows from 14,197 to 429,485 states. That is under the
-  `verify` cap of 2,097,152, but over the 200,000 above which `engine_equivalence` compares a cone
-  at 1 instance only. The model leaves the guard out. Only `ExtendPermitTerm`, a step from `valid` to
-  `valid`, keeps an expired permit from being extended, so `after(ExtendPermitTerm)` holds by
-  construction.
+  `PermitApplication` and `Inspection`, which grew from 14,197 to 429,485 states before #69. That
+  is under the `verify` cap of 2,097,152, but over the 200,000 above which `engine_equivalence`
+  compares a cone at 1 instance only. The model leaves the guard out. Only `ExtendPermitTerm`, a
+  step from `valid` to `valid`, keeps an expired permit from being extended, so
+  `after(ExtendPermitTerm)` holds by construction.
 - **The decision and the ledger are joined by events.** In the first draft the decision of a 取消
   or 停止 moved the disposition and the permit in one use case, and the renewal wrote the permit too.
   The cones of `PermitApplication`, `Inspection`, and `BusinessPermit` each passed 3,000,000 states,
@@ -149,8 +164,12 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
   publication is a lifecycle column, so this sample no longer shows it.
 - **(D) An API that creates and updates makes every use case that invokes it a creator**, which shows
   as a deadlock that "needs a free slot". Eight APIs were split into a create API and an update API.
-- **(M) A created row cannot copy a value from the row that caused it**, so `RegisterPermit` cannot
-  give the permit the application's `business_type`; the permit's type is a free choice.
+- **(G) A created row cannot copy a value from the row that caused it**, so `RegisterPermit` could
+  not give the permit the application's `business_type`, and the permit's type was a free choice.
+  Fixed by #69: `sets(RegisterPermit, BusinessPermit, business_type ==
+  PermitApplication.business_type)` copies it from the application the permit is registered under,
+  and a rule checks that the two agree. The 食品衛生責任者 is not copied: the application has no
+  column for it, and `hygiene_manager_appointed` still starts `false`.
 
 `scripts/gen-clinic-ops-docs.py target/debug/rdra-ish food-permit-ops` generates `design-doc.md` and
 `prd.md` from the model, in the same layout as clinic-ops and patent-ops.

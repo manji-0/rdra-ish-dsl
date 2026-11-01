@@ -106,6 +106,7 @@ effects apply together to the pre-state:
 | `creates(UC, E)` | The slot becomes `present`, with the columns at their base values. The creating use case's `sets` and transitions then apply. |
 | `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. |
 | `sets(UC, E, col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
+| `sets(UC, E, col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
 | `drives(UC, E, cmp, bool)` | The comparison variable becomes `bool`. |
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
 | `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
@@ -194,6 +195,27 @@ case can run before the use case that raises its event. A rule that depends on t
 order needs the precondition the order guarantees as a `condition` guard on the triggered
 use case ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 
+**Copies.** `sets(UC, E, col == F.src)` reads the row of `F` that a condition atom on `F`
+would read, with one restriction: the row must be bound to the step, never an independent
+witness.
+
+- When the action has a parameter for `F`, the copy reads that parameter: an updated or
+  parent parameter before the effects, a created one as the action leaves it.
+- When `F` is the parent of the target through a `relate`, and the action updates the
+  target, `F` joins the action as a parent parameter, with the owner guard
+  `owner[target] == F`. An unlinked `.optional()` owner fails that guard, so the action
+  waits. A created target under a mandatory `relate` already has its parent as a parameter
+  (see Owners).
+- Any other `F` is `UnboundCopySource`, an error, and the action has no copy. That
+  includes a child of the target, an entity of another transaction group, and the parent of
+  a created child under an `.optional()` key.
+
+The copy is a choice of the target's value, one successor per value of its domain, which
+the guard `col'[p] = src[q]` (`GuardWhy::Copy`) filters, as an arm guard filters a choice.
+The choice replaces a creation's choice of a variation column. A literal `sets` or a second
+copy of the same column in the action is `ConflictingEffects`. The analysis checks that every
+value of the source is a value of the target, so the guard always keeps one successor.
+
 **Clock.** When something compares a column to `now`, a `Tick` action adds one to
 `now` until it reaches the top of the Int range.
 
@@ -247,7 +269,9 @@ cone of influence:
   every action that writes one of them, every variable the action reads: its guards,
   the existence of the entities it selects, its transition sources, and the clock.
   Actions that write nothing in the set drop out, and an action keeps only its effects
-  on the set.
+  on the set. A copy's guard is read only when the cone holds the column it pins. Without
+  that column the guard holds for some value of the column, so the action drops it with
+  the column's choice.
 - **Exact.** The reachable states of the cone are the reachable states of the whole
   system projected onto the cone. The cone is not an approximation. The test
   `cone_exploration_equals_the_projection_of_the_whole_component` in
@@ -558,6 +582,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing. |
+| `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E, col == F.src)` names an `F` that the step binds to no one row: not written in the same transaction group and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
 | `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |

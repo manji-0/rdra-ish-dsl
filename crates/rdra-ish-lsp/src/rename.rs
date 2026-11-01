@@ -183,6 +183,32 @@ performs(Staff, Book)
         std::fs::remove_dir(root).ok();
     }
 
+    /// The source of a copy (`sets(UC, E, col == Src.col)`, #69) is a reference to `Src`.
+    #[test]
+    fn renames_the_source_entity_of_a_copy() {
+        let src = "variation K \"k\" {\n  a \"a\"\n  b \"b\"\n}\nentity Src \"s\" {\n  id: Int @pk\n  kind: K\n}\nentity Dst \"d\" {\n  id: Int @pk\n  kind: K\n}\nrelate(Dst, Src, N:1)\nusecase Make \"m\"\ncreates(Make, Dst)\nsets(Make, Dst, kind == Src.kind)\n";
+        let root = std::env::temp_dir().join(format!("rdra-rename-copy-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&root);
+        let file = root.join("sample.rdra");
+        std::fs::write(&file, src).unwrap();
+        let analysis = analyze_workspace(
+            std::slice::from_ref(&file),
+            std::slice::from_ref(&root),
+            &Default::default(),
+        );
+        let offset = src.rfind("Src.kind").unwrap();
+        let edit = workspace_rename(&analysis, &file, offset, "Origin").unwrap();
+        let uri = path_to_uri(&file).unwrap();
+        let edits = edit
+            .changes
+            .expect("changes")
+            .remove(&uri)
+            .expect("file edits");
+        std::fs::remove_dir_all(&root).ok();
+        // The declaration, the relate, and the copy.
+        assert_eq!(edits.len(), 3, "{edits:?}");
+    }
+
     #[test]
     fn rejects_invalid_identifiers() {
         let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/purchase");

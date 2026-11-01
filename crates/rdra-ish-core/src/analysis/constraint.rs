@@ -233,7 +233,7 @@ fn condition_entities(cond: &CrossEntityCondition, out: &mut Vec<EntityKey>) {
     }
 }
 
-fn resolve_entity_qref(
+pub(crate) fn resolve_entity_qref(
     model: &SemanticModel,
     pred: &str,
     qref: &QRef,
@@ -378,7 +378,7 @@ fn resolve_entity_scope_arg(
     }
 }
 
-fn find_entity_column(
+pub(crate) fn find_entity_column(
     model: &SemanticModel,
     entity: EntityKey,
     column: &str,

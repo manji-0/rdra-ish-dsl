@@ -209,9 +209,10 @@ impl TransitionSystem {
     }
 
     /// The system over `vars` only. An action stays when it writes a var in `vars` or is in
-    /// `keep`; it keeps every guard and param, and only its effects on `vars`. Invariants,
-    /// asserts, and properties stay when everything they read is in `vars`. For a closed
-    /// `vars` (see `cone`) its reachable states are the projection of this system's.
+    /// `keep`; it keeps every guard and param, except a copy's guard on a var outside `vars`,
+    /// and only its effects on `vars`. Invariants, asserts, and properties stay when everything
+    /// they read is in `vars`. For a closed `vars` (see `cone`) its reachable states are the
+    /// projection of this system's.
     pub fn restrict_to(&self, vars: &VarSet, keep: &BTreeSet<ActId>) -> TransitionSystem {
         let mut map = Remap {
             ent: vec![None; self.entities.len()],
@@ -272,6 +273,9 @@ impl TransitionSystem {
             }
             let mut action = action.clone();
             action.effects = effects;
+            action
+                .guards
+                .retain(|g| g.copy_target().is_none_or(|t| vars.contains(&t)));
             let action = drop_unread_new_params(action, |e| vars.contains(&self.entity(e).exists));
             map.act[i] = Some(ActId::at(out.actions.len()));
             out.actions.push(map.action(&action));

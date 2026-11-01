@@ -6,8 +6,8 @@ use std::collections::HashSet;
 
 use crate::analysis::applied_bodies;
 use crate::model::{
-    CheckExpr, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossEntityCondition,
-    DerivedExpr, EffectValue, EntityKey, SemanticModel, TemporalExpr, TemporalRhs,
+    CheckExpr, CmpRhs, ColumnType, ComparisonProp, ConditionKey, CrossCmpRhs, CrossEntityCondition,
+    DerivedExpr, EffectValue, EntityKey, SemanticModel, SetValue, TemporalExpr, TemporalRhs,
 };
 
 /// The conditions of every `.when(Cond)` guard, on a `transitions` arm or a `chooses` value.
@@ -33,7 +33,13 @@ impl Named {
     pub fn collect(model: &SemanticModel) -> Self {
         let mut n = Named::default();
         for ce in &model.column_effects {
-            n.value(ce.entity, &ce.column, &ce.value);
+            match &ce.value {
+                SetValue::Value(v) => n.value(ce.entity, &ce.column, v),
+                SetValue::Copy(source) => {
+                    n.typed(model, ce.entity, &ce.column);
+                    n.typed(model, source.entity, &source.column);
+                }
+            }
         }
         let local_eqs = model
             .forbidden_constraints
@@ -136,7 +142,7 @@ impl Named {
                     .flat_map(|body| body.read_conditions()),
             );
         for cond in cross {
-            n.cross(cond);
+            n.cross(model, cond);
         }
         // A guarded `chooses` value is read by its guard on the successor.
         for choice in &model.column_choices {
@@ -193,6 +199,27 @@ impl Named {
         self.numeric.insert((ek, column.to_string()));
     }
 
+    /// A column compared with or copied from another column: an Int var when it is Int- or
+    /// Date-typed.
+    fn typed(&mut self, model: &SemanticModel, ek: EntityKey, column: &str) {
+        let numeric = model.entities[ek].columns.iter().any(|c| {
+            c.name == column
+                && matches!(
+                    c.col_type,
+                    ColumnType::Int
+                        | ColumnType::Money
+                        | ColumnType::Decimal
+                        | ColumnType::Date
+                        | ColumnType::DateTime
+                )
+        });
+        if numeric {
+            self.number(ek, column);
+        } else {
+            self.name(ek, column);
+        }
+    }
+
     fn value(&mut self, ek: EntityKey, column: &str, value: &EffectValue) {
         if matches!(value, EffectValue::Int(_)) {
             self.number(ek, column);
@@ -217,7 +244,7 @@ impl Named {
         }
     }
 
-    fn cross(&mut self, cond: &CrossEntityCondition) {
+    fn cross(&mut self, model: &SemanticModel, cond: &CrossEntityCondition) {
         match cond {
             CrossEntityCondition::Equals { column, value } => {
                 self.value(column.entity, &column.column, value)
@@ -230,8 +257,8 @@ impl Named {
                         self.number(c.entity, &c.column);
                     }
                     CrossCmpRhs::Column(c) => {
-                        self.name(prop.lhs.entity, &prop.lhs.column);
-                        self.name(c.entity, &c.column);
+                        self.typed(model, prop.lhs.entity, &prop.lhs.column);
+                        self.typed(model, c.entity, &c.column);
                     }
                     CrossCmpRhs::IntLit(_) => self.number(prop.lhs.entity, &prop.lhs.column),
                     CrossCmpRhs::Value(v) => self.value(prop.lhs.entity, &prop.lhs.column, v),

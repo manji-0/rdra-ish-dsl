@@ -114,6 +114,7 @@ under it the values that step changed.
 | `UnbindableScope` | `.along(...)` names entities that no `relate` binds | Error. Declare the `relate`, or drop `.along` for a rule over every pair |
 | `AmbiguousOwnerLink` | Two keys join the `.along` pair | Error. Name one with `.by(role)` |
 | `UnbindableCondition` | A condition body is applied to a use case that writes nothing | Error. Apply it to a use case that writes, or drop the body |
+| `UnboundCopySource` | A `sets(UC, E, col == F.src)` copies from an `F` the step binds to no one row | Error. Relate `E` to `F` as its parent, or copy in the use case that writes `F` |
 | `ContradictoryDrivenComparison` | A use case drives a comparison one way while its own Int `sets` make it the other | Error. Fix the `sets` or drop the `drives` |
 | `DoubleModeledEnum` | A use case that does not create the entity `sets` a column that `transitions` drive | Error. Use a `transitions` arm instead |
 | `UnwrittenConstrainedVar` | A rule reads a column that no use case writes | Warning. The rule checks only the start value; add the `sets` or drop the rule |

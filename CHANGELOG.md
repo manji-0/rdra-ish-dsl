@@ -10,6 +10,26 @@
   (--deny-undecided fails the run)`. `verify --deny-undecided` makes that an error
   (`verification incomplete: ...`, exit 1). Findings a `--buc` or `--entity` scope leaves
   open do not count.
+- `sets(UseCase, Entity, column == Source.column)` copies a value from another row (#69).
+  The use case leaves in the column the value the source column holds in the row the step
+  binds, read as a `holds` atom on that entity reads it: a row the use case writes in the
+  same transaction group (before the step on an update, as the step leaves it on a
+  creation), or the target's parent through a `relate` (the parent a child is created
+  under, or the one an updated child's foreign key names; the use case waits while an
+  `.optional()` key is unlinked). Any other source is `UnboundCopySource`, an error: an
+  entity the step does not write that is not the parent, a child of the target, an entity of
+  another transaction group, or the parent of a child created unlinked. The two columns must
+  hold one set of values (one Enum, one variation, Bool, Int-typed, Date-typed, or nullable
+  Strings; a nullable source needs a nullable target), else `SetsCopyMismatch`. A copy and a
+  literal `sets` of one column are `ConflictingEffects`, and a copy with `chooses` is
+  `ChoosesAndSets`, and a copy into a lifecycle column is `DoubleModeledEnum`. `check`,
+  `states`, the TLA+ export, and `verify` read it the same way: a choice of the column's
+  value pinned by the guard `col'[p] = source[q]`, which a cone reads only when it holds the
+  copied column. The sequence diagram and `list --kind surface` show the source, and the LSP
+  renames it. Before, such a `sets` was `SetsNoEffect`.
+  `samples/food-permit-ops` registers each permit under its application
+  (`relate(BusinessPermit, PermitApplication, N:1)`), copies the application's
+  `business_type`, and checks that the two agree.
 
 - An entity may have several lifecycle columns (#68). Each Enum column that `transitions`
   names is its own state model in `check`, `states`, `lint`, the TLA+ export, `verify`, and
@@ -43,7 +63,7 @@
   the cone verdict with the whole-model verdict on the temporal samples and on fixtures for
   an entity looping outside the cone, a fair use case whose guard reads another entity, a
   guard that toggles forever, a cone that frees slots, and a cone that holds every written
-  var. food-permit-ops gets back `HygieneManagerEventuallyAppointed`, checked on a 111-state
+  var. food-permit-ops gets back `HygieneManagerEventuallyAppointed`, checked on a 223-state
   cone (its whole model found 6.9 million states in 300 s without finishing), and patent-ops
   gains `GrantEnds`, checked on a 4,105-state cone (its whole model explored 14 million
   states in 11 minutes without finishing). `lifecycle_measure` lists property cones too.
@@ -318,6 +338,10 @@
   the docs, skills, and tests is rewritten; no sample used it.
 
 ### Fixed
+
+- A multi-entity `==` or `!=` between two Int-typed or two Date-typed columns
+  (`Permit.fee != Application.fee`) left both columns without an Int variable, so the rule
+  was `UnsupportedComparison`. They are Int variables now, as in an order comparison.
 
 - A use case with several `transitions` from one state explored only the first arm and
   dropped the others with no diagnostic; their targets were reported as

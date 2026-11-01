@@ -91,6 +91,25 @@ pub struct ChosenValue {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
+/// What `sets(UC, E, column == rhs)` leaves in the column.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SetValue {
+    /// `column == value`: a literal of the column's type.
+    Value(EffectValue),
+    /// `column == F.source`: the value `F.source` holds in the row the step binds for `F`.
+    Copy(super::QualifiedModelColumnRef),
+}
+
+impl SetValue {
+    /// The literal, or `None` for a copy.
+    pub fn literal(&self) -> Option<&EffectValue> {
+        match self {
+            SetValue::Value(v) => Some(v),
+            SetValue::Copy(_) => None,
+        }
+    }
+}
+
 /// `sets(...)` 述語由来のカラム効果（解析後）
 #[derive(Debug, Clone)]
 pub struct ColumnEffect {
@@ -100,8 +119,8 @@ pub struct ColumnEffect {
     pub entity: EntityKey,
     /// 対象カラム名
     pub column: std::string::String,
-    /// 設定する抽象値
-    pub value: EffectValue,
+    /// The value the use case leaves: a literal, or a copy of another row's column.
+    pub value: SetValue,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
