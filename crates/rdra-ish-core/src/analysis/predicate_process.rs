@@ -295,7 +295,11 @@ fn process_transitions_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
+    let guard = when_condition(model, pred, ctx, diags);
     let Some(Some(NodeRef::UseCase(usecase))) = resolved.first() else {
+        return;
+    };
+    let Ok(guard) = guard else {
         return;
     };
 
@@ -464,6 +468,7 @@ fn process_transitions_predicate(
         column: column.clone(),
         from: from.clone(),
         to: to.clone(),
+        guard,
     });
     model.typed_predicates.push(TypedPredicate::Transitions {
         entity: entity_key,
@@ -472,6 +477,42 @@ fn process_transitions_predicate(
         from,
         to,
     });
+}
+
+/// The condition of a `.when(Cond)` chain, at most one: `Ok(None)` without one, `Err` after
+/// reporting a chain that names no condition. Whether the condition has a `holds` body is
+/// checked once every predicate is read (`holds` may come later in the file).
+pub(super) fn when_condition(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Result<Option<ConditionKey>, ()> {
+    let mut guard = Ok(None);
+    for (index, cc) in pred.chain.iter().filter(|cc| cc.name == "when").enumerate() {
+        let err = || RdraError::WhenRequiresCondition {
+            pred: pred.name.clone(),
+        };
+        if index > 0 || cc.args.len() != 1 {
+            push_error(ctx, diags, cc.span.clone(), err());
+            guard = Err(());
+            continue;
+        }
+        match resolve_arg(model, &cc.args[0], ctx, diags) {
+            Some(NodeRef::Condition(ck)) => guard = Ok(Some(ck)),
+            Some(_) => {
+                push_error(ctx, diags, cc.span.clone(), err());
+                guard = Err(());
+            }
+            // resolve_arg already reported an undefined or ambiguous reference.
+            None if matches!(cc.args.first(), Some(PredicateArg::Ref(_))) => guard = Err(()),
+            None => {
+                push_error(ctx, diags, cc.span.clone(), err());
+                guard = Err(());
+            }
+        }
+    }
+    guard
 }
 
 fn ensure_entity_variant_state(

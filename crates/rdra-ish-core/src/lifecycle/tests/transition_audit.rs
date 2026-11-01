@@ -105,6 +105,41 @@ applies_to(Never, Decide)",
     ),
     // an arm from a state nothing reaches
     ("transitions(Decide, Doc.status, secret -> file)", Explained),
+    // an arm guard that holds once another use case sets the flag (#62)
+    (
+        "condition Flagged \"Flagged\"
+holds(Flagged, Doc.flag == true)
+sets(Reopen, Doc, flag == true)
+transitions(Decide, Doc.status, searched -> file).when(Flagged)
+transitions(Decide, Doc.status, searched -> drop)",
+        Edges,
+    ),
+    // an arm guard on another entity, beside an unguarded arm
+    (
+        "entity Gate \"関門\" { id: Int @pk  open: Bool @default(false) }
+creates(Reopen, Gate)
+sets(Reopen, Gate, open == true)
+condition Open \"Open\"
+holds(Open, Gate.open == true)
+transitions(Decide, Doc.status, searched -> file).when(Open)
+transitions(Decide, Doc.status, searched -> drop)",
+        Edges,
+    ),
+    // an arm guard that never holds: the other arm runs, a warning names the guarded one
+    (
+        "condition Never \"Never\"
+holds(Never, Doc.flag == true)
+transitions(Decide, Doc.status, searched -> file).when(Never)
+transitions(Decide, Doc.status, searched -> drop)",
+        Explained,
+    ),
+    // the only arm, guarded by a guard that never holds: the use case never runs
+    (
+        "condition Never \"Never\"
+holds(Never, Doc.flag == true)
+transitions(Decide, Doc.status, searched -> file).when(Never)",
+        Explained,
+    ),
 ];
 
 /// The arms of `model` that no edge of the system takes. An arm is taken when an action of
@@ -157,6 +192,9 @@ fn explained(model: &SemanticModel, diags: &[Diag], i: usize) -> bool {
                     .strip_prefix(uc.as_str())
                     .is_some_and(|r| r.starts_with('_'))
         }
+        StateDiag::ArmNeverTaken {
+            action, from, to, ..
+        } => action == uc && from.eq_ignore_ascii_case(&st.from) && to.eq_ignore_ascii_case(&st.to),
         StateDiag::UnreachableEnumVariant { column, variant } => {
             *column == st.column && variant.eq_ignore_ascii_case(&st.from)
         }

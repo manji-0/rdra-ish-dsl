@@ -45,7 +45,8 @@ fn body_columns(condition: &CrossEntityCondition) -> Vec<&QualifiedModelColumnRe
 /// The variation and state-model links of `ck`, in first-mention order without duplicates.
 ///
 /// With a `holds` body, every operand column typed by a variation yields `Variation` and every
-/// operand on a lifecycle column yields `StateModel`. Without a body, the `combines`
+/// operand on a lifecycle column yields `StateModel`, and so does the column of each
+/// `transitions` arm the condition guards with `.when`. Without a body, the `combines`
 /// declarations are the links.
 pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<ConditionEdge> {
     let mut edges: Vec<ConditionEdge> = Vec::new();
@@ -75,6 +76,16 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
                         column: operand.column.clone(),
                     });
                 }
+            }
+            for st in model
+                .state_transitions
+                .iter()
+                .filter(|t| t.guard == Some(ck))
+            {
+                push(ConditionEdge::StateModel {
+                    entity: st.entity,
+                    column: st.column.clone(),
+                });
             }
         }
         None => {
@@ -218,6 +229,19 @@ pub fn guard_labels(model: &SemanticModel, uc: UseCaseKey) -> Vec<&str> {
         .filter(|(_, u, _)| *u == uc)
         .map(|(ck, ..)| model.conditions[ck].label.as_str())
         .collect()
+}
+
+/// The labels of the conditions that guard one `transitions` arm: those of its use case, in
+/// `guard_labels` order, then the arm's own `.when(Cond)`.
+pub fn transition_guard_labels<'m>(model: &'m SemanticModel, st: &StateTransition) -> Vec<&'m str> {
+    let mut labels = guard_labels(model, st.usecase);
+    if let Some(ck) = st.guard {
+        let label = model.conditions[ck].label.as_str();
+        if !labels.contains(&label) {
+            labels.push(label);
+        }
+    }
+    labels
 }
 
 /// Second argument of `combines`: a variation, or `Entity.column`.
@@ -447,6 +471,41 @@ pub(crate) fn process_holds_predicate(
     model
         .typed_predicates
         .push(TypedPredicate::Holds { condition });
+}
+
+/// After every predicate is processed: a `.when(Cond)` guard needs the condition's `holds`
+/// body, which may come later in the file than the guarded write.
+/// Each guard that has its body becomes a `Guards` relation to the arm's use case, once.
+pub(crate) fn check_write_guards(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
+    let mut guards: Vec<(ConditionKey, UseCaseKey)> = Vec::new();
+    for st in &model.state_transitions {
+        let Some(ck) = st.guard else { continue };
+        if model.conditions[ck].body.is_some() {
+            if !guards.contains(&(ck, st.usecase)) {
+                guards.push((ck, st.usecase));
+            }
+            continue;
+        }
+        diags.push(Diagnostic {
+            error: RdraError::WhenConditionWithoutBody {
+                pred: "transitions".into(),
+                usecase: model.use_cases[st.usecase].id.clone(),
+                condition: model.conditions[ck].id.clone(),
+            },
+            is_warning: false,
+            location: st.site.clone(),
+        });
+    }
+    for (ck, uc) in guards {
+        model.relations.push(Relation {
+            site: None,
+            from: NodeRef::Condition(ck),
+            to: NodeRef::UseCase(uc),
+            kind: RelKind::Guards,
+            options: RelationOptions::default(),
+            via: None,
+        });
+    }
 }
 
 /// After every predicate is processed: reject `combines` targets that are not lifecycle

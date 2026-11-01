@@ -621,10 +621,14 @@ pub(crate) fn format_conditions(
             let mut targets: Vec<String> = model
                 .relations
                 .iter()
-                .filter(|rel| rel.kind == RelKind::AppliesTo && rel.from == NodeRef::Condition(key))
+                .filter(|rel| {
+                    matches!(rel.kind, RelKind::AppliesTo | RelKind::Guards)
+                        && rel.from == NodeRef::Condition(key)
+                })
                 .filter_map(|rel| node_id(model, &rel.to))
                 .collect();
             targets.sort();
+            targets.dedup();
             [
                 condition.id.clone(),
                 condition.label.clone(),

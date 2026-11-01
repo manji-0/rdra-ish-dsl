@@ -7,8 +7,8 @@ use std::fmt;
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag};
 use super::explore::{Caps, ComponentRun};
-use super::findings::{Progress, Runs, Witness};
-use super::types::{ActionOrigin, EntId, ParamRole};
+use super::findings::{Progress, Runs, Taken, Witness};
+use super::types::{ActionOrigin, EntId, ParamRole, Site};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
 use crate::model::{EntityKey, SemanticModel};
@@ -63,6 +63,13 @@ pub enum Subject {
     },
     /// Whether an action can run.
     Runs { action: String },
+    /// Whether an action that runs can take one of its `.when` arms.
+    Arm {
+        action: String,
+        column: String,
+        from: String,
+        to: String,
+    },
     /// Whether an instance can get stuck at a state of a state model.
     Deadlock {
         entity: String,
@@ -92,6 +99,15 @@ impl fmt::Display for Undecided {
                 value,
             } => write!(f, "state {entity}.{column} = {value} is not decided: ")?,
             Subject::Runs { action } => write!(f, "whether {action} can run is not decided: ")?,
+            Subject::Arm {
+                action,
+                column,
+                from,
+                to,
+            } => write!(
+                f,
+                "whether {action} can take {column} {from} -> {to} is not decided: "
+            )?,
             Subject::Deadlock {
                 entity,
                 column,
@@ -125,6 +141,20 @@ struct RunsSoFar {
     /// The first complete cone's `NeverRuns`.
     never: Option<StateDiag>,
     /// The first capped cone: its entity and its cap.
+    capped: Option<(String, UndecidedWhy)>,
+    /// Each `.when` arm of the action, by its `transitions` site.
+    arms: Vec<ArmSoFar>,
+}
+
+/// What the entity cones that keep an action say about one of its `.when` arms.
+struct ArmSoFar {
+    site: Site,
+    subject: Subject,
+    /// Some cone took it.
+    taken: bool,
+    /// The first complete cone's `ArmNeverTaken`.
+    never: Option<StateDiag>,
+    /// The first capped cone that did not take it: its entity and its cap.
     capped: Option<(String, UndecidedWhy)>,
 }
 
@@ -170,6 +200,24 @@ impl TransitionSystem {
         out.tally.entity_cones = entity_cones.len();
         for (i, r) in runs.into_iter().enumerate() {
             if r.fired {
+                for arm in r.arms.into_iter().filter(|a| !a.taken) {
+                    if let Some(diag) = arm.never {
+                        let action = &self.actions[i];
+                        let entities = action
+                            .params
+                            .iter()
+                            .filter(|p| p.role != ParamRole::Parent)
+                            .map(|p| self.entity(p.entity).key)
+                            .collect();
+                        out.verdicts.push(Diag { entities, diag });
+                    } else if let Some((cone, why)) = arm.capped {
+                        out.undecided.push(Undecided {
+                            subject: arm.subject,
+                            cone: Some(cone),
+                            why,
+                        });
+                    }
+                }
                 continue;
             }
             if let Some(diag) = r.never {
@@ -310,6 +358,45 @@ impl TransitionSystem {
                 }
             }
         }
+        for arm in findings.arms {
+            let name = &run.system.actions()[arm.act.index()].name;
+            let at = self
+                .actions
+                .iter()
+                .position(|x| x.name == *name)
+                .expect("a cone action is an action of the system");
+            let arms = &mut runs[at].arms;
+            let i = match arms.iter().position(|a| a.site == arm.site) {
+                Some(i) => i,
+                None => {
+                    arms.push(ArmSoFar {
+                        site: arm.site.clone(),
+                        subject: Subject::Arm {
+                            action: name.clone(),
+                            column: arm.column.clone(),
+                            from: arm.from.clone(),
+                            to: arm.to.clone(),
+                        },
+                        taken: false,
+                        never: None,
+                        capped: None,
+                    });
+                    arms.len() - 1
+                }
+            };
+            match arm.taken {
+                Taken::Yes => arms[i].taken = true,
+                Taken::Never(diag) => {
+                    arms[i].never.get_or_insert(*diag);
+                }
+                Taken::NotDecided => {
+                    arms[i]
+                        .capped
+                        .get_or_insert_with(|| (decl.id.clone(), capped()));
+                }
+                Taken::Moot => {}
+            }
+        }
     }
 
     /// The diagnostic is a violation of this invariant or assert.
@@ -407,6 +494,19 @@ impl TargetExploration {
                 },
                 StateDiag::NeverRuns { action, .. } => Subject::Runs {
                     action: action.clone(),
+                },
+                // A left-out use case may enable the guard.
+                StateDiag::ArmNeverTaken {
+                    action,
+                    column,
+                    from,
+                    to,
+                    ..
+                } => Subject::Arm {
+                    action: action.clone(),
+                    column: column.clone(),
+                    from: from.clone(),
+                    to: to.clone(),
                 },
                 StateDiag::Deadlock {
                     entity,

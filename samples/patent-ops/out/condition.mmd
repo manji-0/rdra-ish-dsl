@@ -43,7 +43,7 @@ flowchart LR
   condition__PriorityBasePending{"先の出願が係属し、査定を受けていない"}:::condition
   %% holds condition__PriorityBasePending: PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）)
   condition__RightsAcquired{"会社が特許を受ける権利を取得している"}:::condition
-  %% holds condition__RightsAcquired: InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true
+  %% holds condition__RightsAcquired: InventionDisclosure.right_acquired == true
   condition__StillPending{"出願が係属している"}:::condition
   %% holds condition__StillPending: PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済)
   condition__UnderExamination{"出願が審査中である"}:::condition
@@ -89,8 +89,6 @@ flowchart LR
   %% desc usecase__ConfirmDraftByInventor: 発明者が案の技術内容を確かめ、確認済にする。
   usecase__DecideReward("相当の利益の決定"):::usecase
   %% desc usecase__DecideReward: 職務発明規程の基準で、職務発明の相当の利益を決める。
-  usecase__DecideToFile("出願の決定"):::usecase
-  %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
   usecase__DecideToLetLapse("権利を維持しない決定"):::usecase
   %% desc usecase__DecideToLetLapse: 維持しないと決め、以後の年金を納めない。
   usecase__DeemPriorityBaseWithdrawn("先の出願の取下げ擬制"):::usecase
@@ -188,9 +186,8 @@ flowchart LR
   condition__PriorityBasePending -.-> usecase__ClaimDomesticPriority
   condition__PriorityBasePending -.-> statemodel__PatentApplication_status
   %% derived condition__PriorityBasePending -> statemodel__PatentApplication_status from holds
-  condition__RightsAcquired -.-> usecase__DecideToFile
   condition__RightsAcquired -.-> statemodel__InventionDisclosure_status
-  %% derived condition__RightsAcquired -> statemodel__InventionDisclosure_status from holds
+  %% derived condition__RightsAcquired -> statemodel__InventionDisclosure_status from when
   condition__StillPending -.-> usecase__RecordPublication
   condition__StillPending -.-> statemodel__PatentApplication_status
   %% derived condition__StillPending -> statemodel__PatentApplication_status from holds

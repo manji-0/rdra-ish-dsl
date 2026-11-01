@@ -54,7 +54,9 @@ Also ask:
 7. Declare a `condition` for a business rule that selects when a use case applies.
    Without a body it is a trace link (`combines` its variation and lifecycle column);
    with `holds(Cond, Entity.col == value, ...)` it guards each use case it
-   `applies_to`, and `check` and TLC read the guard.
+   `applies_to`, and `check` and TLC read the guard. When the rule holds back only one
+   outcome of a use case's choice, guard that arm instead:
+   `transitions(UseCase, Entity.col, from -> to).when(Cond)`. The other arms stay free.
 8. Add `sets(UseCase, Entity, col == val)` for enum, nullable, boolean, and Int
    effects not explained by transitions. A `sets` on a column that `transitions`
    drives is an error unless the use case creates the entity.

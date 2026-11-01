@@ -69,6 +69,9 @@ pub enum RelKind {
     AppliesTo,
     /// 条件 to バリエーション / 状態モデル。Derived from `condition_edges`.
     Combines,
+    /// 条件 to the use case one of whose `transitions` arms it guards with `.when(Cond)`.
+    /// Derived from `StateTransition::guard`.
+    Guards,
     Qualifies,
     Constrains,
     MapsField,

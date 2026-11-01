@@ -1,6 +1,6 @@
-%% rdra-ish diagram=sequence scope=usecase:DecideNotToFile model=samples/patent-ops
+%% rdra-ish diagram=sequence scope=usecase:DecideFiling model=samples/patent-ops
 %% kinds: actor screen api entity usecase
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__ReviewCommittee as 発明審査委員会
   participant screen__FilingDecisionScreen as 出願審議画面
@@ -8,11 +8,13 @@ sequenceDiagram
   participant entity__InventionDisclosure as 発明届出
   participant api__DraftingOrderApi as 出願依頼 API
   participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
-  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 出願しない決定
+  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 出願可否の決定
   screen__FilingDecisionScreen ->> api__FilingDecisionApi: 出願可否 API
   alt InventionDisclosure.status == 調査済
     api__FilingDecisionApi ->> entity__InventionDisclosure: update
-    alt status 調査済 -> ノウハウとして秘匿
+    alt status 調査済 -> 出願決定 [会社が特許を受ける権利を取得している]
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願決定
+    else status 調査済 -> ノウハウとして秘匿
       api__FilingDecisionApi ->> entity__InventionDisclosure: status = ノウハウとして秘匿
     else status 調査済 -> 出願しない
       api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願しない

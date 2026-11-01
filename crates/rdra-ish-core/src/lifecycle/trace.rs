@@ -249,6 +249,7 @@ impl TransitionSystem {
                     param,
                     arms,
                     sites,
+                    ..
                 } if *v == var && slot(param) == at => {
                     // Of a choice, the arm the step took.
                     let arm = (pre.get(self, var, at), post.get(self, var, at));

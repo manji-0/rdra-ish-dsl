@@ -18,11 +18,10 @@ usecase RequestPriorArtSearch "先行技術調査の依頼"
 
 // 先行技術調査結果通知 (niigata-u-2023-hatsumei-flowchart.txt:136-138).
 usecase RecordPriorArtSearch "先行技術調査の結果の登録" description "調査の結果を届出に記録し、調査済にする。"
-// 発明審査委員会 meets 原則毎月１回 (niigata-u-2023-hatsumei-flowchart.txt:20-28); 帰属等の決定 (:214).
-usecase DecideToFile "出願の決定" description "発明審査委員会が、会社が権利を持つ発明を出願すると決める。"
 
-usecase DecideNotToFile "出願しない決定"
-  description "発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。"
+// 発明審査委員会 meets 原則毎月１回 (niigata-u-2023-hatsumei-flowchart.txt:20-28); 帰属等の決定 (:214).
+usecase DecideFiling "出願可否の決定"
+  description "発明審査委員会が、出願する、ノウハウとして秘匿する、出願しないのいずれかに決める。出願と決められるのは、会社が権利を持つ発明だけである。"
 
 usecase NotifyInventorOfDecision "決定の発明者への通知" description "決定を発明者に知らせる（参照のみ）。"
 
@@ -34,15 +33,13 @@ api FilingDecisionApi "出願可否 API"
 
 performs(IpStaff, RequestPriorArtSearch)
 performs(IpStaff, RecordPriorArtSearch)
-performs(ReviewCommittee, DecideToFile)
-performs(ReviewCommittee, DecideNotToFile)
+performs(ReviewCommittee, DecideFiling)
 performs(IpStaff, NotifyInventorOfDecision)
 belongs(BucFilingDecision, InventionManagement).by(IpWorkstation)
 
 contains(BucFilingDecision, RequestPriorArtSearch)
 contains(BucFilingDecision, RecordPriorArtSearch)
-contains(BucFilingDecision, DecideToFile)
-contains(BucFilingDecision, DecideNotToFile)
+contains(BucFilingDecision, DecideFiling)
 contains(BucFilingDecision, NotifyInventorOfDecision)
 contains(IpManagementSystem, PriorArtSearchApi)
 contains(IpManagementSystem, FilingDecisionApi)
@@ -56,26 +53,21 @@ displays(RecordPriorArtSearch, PriorArtSearchScreen)
 invokes(RecordPriorArtSearch, PriorArtSearchApi)
 transitions(RecordPriorArtSearch, InventionDisclosure.status, searching -> searched)
 
-// Three outcomes, two use cases. Only the decision to file needs the company to own the right, and a
-// condition guards every arm of its use case, so filing is its own use case. Not filing is one use
-// case whose two `transitions` arms from `searched` are the committee's choice: one run takes one.
-displays(DecideToFile, FilingDecisionScreen)
-invokes(DecideToFile, FilingDecisionApi)
+// Three outcomes, one use case: the three `transitions` arms from `searched` are the committee's
+// choice, and one run takes one. Only filing needs the company to own the right, so the guard sits
+// on that arm (`.when`); keeping it secret or not filing needs nothing more.
+displays(DecideFiling, FilingDecisionScreen)
+invokes(DecideFiling, FilingDecisionApi)
 updates(FilingDecisionApi, InventionDisclosure)
-transitions(DecideToFile, InventionDisclosure.status, searched -> decided_file)
-raises(DecideToFile, EvFilingDecided)
+transitions(DecideFiling, InventionDisclosure.status, searched -> decided_file).when(RightsAcquired)
+transitions(DecideFiling, InventionDisclosure.status, searched -> decided_secret)
+transitions(DecideFiling, InventionDisclosure.status, searched -> decided_abandon)
+raises(DecideFiling, EvFilingDecided)
 
 condition RightsAcquired "会社が特許を受ける権利を取得している"
-holds(RightsAcquired, InventionDisclosure.status == searched, InventionDisclosure.right_acquired == true)
-applies_to(RightsAcquired, DecideToFile)
+holds(RightsAcquired, InventionDisclosure.right_acquired == true)
 
 forbidden(InventionDisclosure, status == decided_file, right_acquired == false).label("会社が特許を受ける権利を取得していない発明は出願を決めない")
-
-displays(DecideNotToFile, FilingDecisionScreen)
-invokes(DecideNotToFile, FilingDecisionApi)
-transitions(DecideNotToFile, InventionDisclosure.status, searched -> decided_secret)
-transitions(DecideNotToFile, InventionDisclosure.status, searched -> decided_abandon)
-raises(DecideNotToFile, EvFilingDecided)
 
 displays(NotifyInventorOfDecision, FilingDecisionScreen)
 reads(NotifyInventorOfDecision, InventionDisclosure)
@@ -89,10 +81,8 @@ requires_permission(PriorArtSearchApi, PriorArtSearchManage)
 requires_permission(RecordPriorArtSearch, PriorArtSearchManage)
 requires_medium(RecordPriorArtSearch, IpWorkstation)
 
-requires_permission(DecideToFile, FilingDecide)
-requires_medium(DecideToFile, IpWorkstation)
-requires_permission(DecideNotToFile, FilingDecide)
-requires_medium(DecideNotToFile, IpWorkstation)
+requires_permission(DecideFiling, FilingDecide)
+requires_medium(DecideFiling, IpWorkstation)
 requires_permission(FilingDecisionApi, FilingDecide)
 
 requires_permission(NotifyInventorOfDecision, DisclosureReview)
@@ -136,8 +126,7 @@ precedes(CommitteeStep, DecisionNoticeStep)
 
 covers(SearchRequestStep, RequestPriorArtSearch)
 covers(SearchResultStep, RecordPriorArtSearch)
-covers(CommitteeStep, DecideToFile)
-covers(CommitteeStep, DecideNotToFile)
+covers(CommitteeStep, DecideFiling)
 covers(DecisionNoticeStep, NotifyInventorOfDecision)
 
 performs(IpStaff, SearchRequestStep)

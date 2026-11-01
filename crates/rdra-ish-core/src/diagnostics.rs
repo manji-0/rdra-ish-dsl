@@ -268,6 +268,16 @@ pub enum RdraError {
     #[error("transitions second argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(CapturePayment, Order.status, pending -> paid)`")]
     InvalidTransitionsColumnRef { got: String },
 
+    #[error("`{pred}(...).when(...)` must name one condition, once\n  hint: declare `condition Name \"...\"` with `holds(Name, Entity.column == value)` and write `.when(Name)`; to guard every step of the use case write `applies_to(Name, UseCase)` instead")]
+    WhenRequiresCondition { pred: String },
+
+    #[error("condition '{condition}' guards `{pred}({usecase}, ...)` with `.when({condition})` but has no `holds` body to guard with\n  hint: write `holds({condition}, Entity.column == value)`; a condition linked by `combines` only documents a variation or state model and cannot guard")]
+    WhenConditionWithoutBody {
+        pred: String,
+        usecase: String,
+        condition: String,
+    },
+
     #[error("transitions column '{col}' on entity '{entity}' must be an inline Enum column\n  hint: lifecycle transitions bind an inline Enum status/lifecycle column; a column typed by a variation is an attribute and has no lifecycle")]
     TransitionsColumnNotEnum { entity: String, col: String },
 

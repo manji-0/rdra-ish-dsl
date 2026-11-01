@@ -16,8 +16,7 @@ flowchart LR
   api__FilingDecisionApi -->|U| entity__InventionDisclosure
   api__FilingDecisionApi -.->|出願の決定| usecase__NotifyInventorOfDecision
   api__PriorArtSearchApi -->|U| entity__InventionDisclosure
-  screen__FilingDecisionScreen -->|出願しない決定| api__FilingDecisionApi
-  screen__FilingDecisionScreen -->|出願の決定| api__FilingDecisionApi
+  screen__FilingDecisionScreen -->|出願可否の決定| api__FilingDecisionApi
   screen__FilingDecisionScreen -->|決定の発明者への通知| usecase__NotifyInventorOfDecision
   screen__PriorArtSearchScreen -->|先行技術調査の依頼| api__PriorArtSearchApi
   screen__PriorArtSearchScreen -->|先行技術調査の結果の登録| api__PriorArtSearchApi

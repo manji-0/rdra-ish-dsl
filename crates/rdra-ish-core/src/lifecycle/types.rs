@@ -362,6 +362,9 @@ pub enum GuardWhy {
     Clock,
     /// `holds(Cond, ..)` of a condition that `applies_to` the use case.
     Condition { cond: ConditionKey },
+    /// `transitions(..).when(Cond)`: the successor takes an arm of the column whose guard
+    /// held on the pre-state. `cond` is the first guarded arm's condition.
+    ArmCondition { cond: ConditionKey },
 }
 
 #[derive(Clone, Debug)]
@@ -378,11 +381,15 @@ pub enum Effect {
     },
     /// var := the `to` of an arm whose `from` the pre-state holds. Arms that share a `from`
     /// are a choice: one successor per arm, forked like `Choose` after the other effects.
+    /// `conds[i]` names the `.when` conditions of arm `i`, key and id (any of them enables it;
+    /// empty when it is unguarded). A `GuardWhy::ArmCondition` guard of the action filters the
+    /// successors.
     Transition {
         var: VarId,
         param: u8,
         arms: Vec<(Value, Value)>,
         sites: Vec<Site>,
+        conds: Vec<Vec<(ConditionKey, String)>>,
     },
     /// One successor per value.
     Choose {

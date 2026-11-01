@@ -123,7 +123,9 @@ fn has_block(diag: &StateDiag) -> bool {
     diag.trace().is_some()
         || matches!(
             diag,
-            StateDiag::NoWitness { .. } | StateDiag::NeverRuns { .. }
+            StateDiag::NoWitness { .. }
+                | StateDiag::NeverRuns { .. }
+                | StateDiag::ArmNeverTaken { .. }
         )
 }
 
@@ -281,6 +283,32 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
             )
         }
         (GuardWhy::Condition { cond }, _) => format!("condition {}", model.conditions[cond].id),
+        (GuardWhy::ArmCondition { .. }, ModelRef::Transition(i)) => {
+            let st = &model.state_transitions[*i];
+            let guarded: Vec<String> = model
+                .state_transitions
+                .iter()
+                .filter(|t| {
+                    t.usecase == st.usecase && t.entity == st.entity && t.column == st.column
+                })
+                .map(|t| match t.guard {
+                    Some(ck) => format!("{} -> {} when {}", t.from, t.to, model.conditions[ck].id),
+                    None => format!("{} -> {}", t.from, t.to),
+                })
+                .collect();
+            format!(
+                "an arm of {}.{} whose guard holds ({})",
+                model.entities[st.entity].id,
+                st.column,
+                guarded.join(", ")
+            )
+        }
+        (GuardWhy::ArmCondition { cond }, _) => {
+            format!(
+                "condition {} on a transitions arm",
+                model.conditions[cond].id
+            )
+        }
         (GuardWhy::Owner, _) => "the bound instances belong to each other (relate)".to_string(),
         (GuardWhy::Clock, _) => "now has room to tick".to_string(),
         (GuardWhy::TransitionFrom, _) => {
@@ -315,6 +343,12 @@ pub(crate) fn render_violation(
     }
     if let Some(text) = render_deadlock(program, model, diag) {
         return Some(text);
+    }
+    if let StateDiag::ArmNeverTaken { site, .. } = diag {
+        return Some(format!(
+            "{diag}{}",
+            aligned(vec![("  arm:".to_string(), location(program, site))])
+        ));
     }
     if let StateDiag::NoWitness {
         entity,
@@ -648,6 +682,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         ),
         StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
+        | StateDiag::ArmNeverTaken { .. }
         | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }

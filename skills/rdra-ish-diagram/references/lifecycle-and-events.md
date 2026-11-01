@@ -45,7 +45,8 @@ rdra-ish verify src/ --backend tlc -o out/
 - States are the Enum variants of that column, named `state__{Entity}_{variant}` (the
   same id as in `--kind rdra`), in the Enum's order.
 - Arrows are the `transitions` arms, labelled with the label of the use case that drives
-  each one and `[...]` with the conditions that guard it. The line before each arrow names
+  each one and `[...]` with the conditions that guard it: the use case's `applies_to`
+  conditions, then the arm's own `.when(Cond)`. The line before each arrow names
   the use case by id (`%% transition usecase__Capture`).
 - `[*] -->` start edges come from the states a creating use case sets, or the start of a
   pre-existing entity. `--> [*]` marks an end state: one with no transition to another

@@ -45,6 +45,33 @@ pub struct ActionRuns {
     pub runs: Runs,
 }
 
+/// What the graph says about one `transitions(..).when(Cond)` arm of a use case that runs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Taken {
+    /// Some edge of the action moves an instance from the arm's `from` to its `to`.
+    Yes,
+    /// The action runs and some state holds the arm's `from`, but no edge of a complete
+    /// graph takes the arm: an `ArmNeverTaken` warning.
+    Never(Box<StateDiag>),
+    /// The action never runs here or no state holds `from`: `NeverRuns` and the witnesses
+    /// speak for the arm.
+    Moot,
+    /// No edge takes it, but a cap stopped the exploration, so it may still be taken.
+    NotDecided,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ArmTaken {
+    pub act: ActId,
+    /// The arm's `transitions` declaration.
+    pub site: Site,
+    /// `Entity.column`, `from`, and `to` as the model names them.
+    pub column: String,
+    pub from: String,
+    pub to: String,
+    pub taken: Taken,
+}
+
 /// What the graph says about one state of a state model that has a way out.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Progress {
@@ -112,6 +139,8 @@ pub struct StateModelFindings {
     pub runs: Vec<ActionRuns>,
     /// Each state of the entity's state models that is not an end state, in `witnesses` order.
     pub deadlocks: Vec<ValueProgress>,
+    /// Each guarded `transitions` arm on the entity's columns, in action and arm order.
+    pub arms: Vec<ArmTaken>,
 }
 
 impl TransitionSystem {
@@ -190,6 +219,7 @@ impl TransitionSystem {
             witnesses,
             runs: self.runs(e, g),
             deadlocks: self.deadlocks(e, &targets, g),
+            arms: self.guarded_arms(e, g),
         }
     }
 
@@ -206,6 +236,7 @@ impl TransitionSystem {
                         param,
                         arms,
                         sites,
+                        ..
                     } if *v == var => {
                         for ((from, to), site) in arms.iter().zip(sites) {
                             if *from == value && *to != value {
@@ -402,6 +433,91 @@ impl TransitionSystem {
                 },
             })
             .collect()
+    }
+
+    /// Whether each `.when` arm on a column of `e` labels an edge of `g`: some edge of its
+    /// action moves a present instance from `from` to `to`. An arm of an action that never
+    /// runs, or from a state no instance holds, is left to `NeverRuns` and the witnesses.
+    fn guarded_arms(&self, e: EntId, g: &Graph) -> Vec<ArmTaken> {
+        let mut out = Vec::new();
+        for act in self.action_ids() {
+            let action = &self.actions[act.index()];
+            for effect in &action.effects {
+                let Effect::Transition {
+                    var,
+                    param,
+                    arms,
+                    sites,
+                    conds,
+                } = effect
+                else {
+                    continue;
+                };
+                if action.params[usize::from(*param)].entity != e {
+                    continue;
+                }
+                for (((from, to), site), conds) in arms.iter().zip(sites).zip(conds) {
+                    if conds.is_empty() {
+                        continue;
+                    }
+                    let moves = |s: &State, t: &State| {
+                        (0..self.bounds.slots()).any(|k| {
+                            s.is_present(self, e, k)
+                                && s.get(self, *var, k) == *from
+                                && t.get(self, *var, k) == *to
+                        })
+                    };
+                    let mut fired = false;
+                    let mut taken = false;
+                    for (a, b, by) in g.edges() {
+                        if by != act {
+                            continue;
+                        }
+                        fired = true;
+                        if moves(&g.states[a as usize], &g.states[b as usize]) {
+                            taken = true;
+                            break;
+                        }
+                    }
+                    let at_from = || {
+                        g.states.iter().any(|s| {
+                            (0..self.bounds.slots())
+                                .any(|k| s.is_present(self, e, k) && s.get(self, *var, k) == *from)
+                        })
+                    };
+                    let (column, from_text, to_text) = (
+                        format!("{}.{}", self.entity(e).id, self.var_name(*var)),
+                        self.value_text(*var, *from),
+                        self.value_text(*var, *to),
+                    );
+                    let taken = if taken {
+                        Taken::Yes
+                    } else if !g.complete {
+                        Taken::NotDecided
+                    } else if fired && at_from() {
+                        Taken::Never(Box::new(StateDiag::ArmNeverTaken {
+                            action: action.name.clone(),
+                            column: column.clone(),
+                            from: from_text.clone(),
+                            to: to_text.clone(),
+                            conditions: conds.iter().map(|(_, id)| id.clone()).collect(),
+                            site: site.clone(),
+                        }))
+                    } else {
+                        Taken::Moot
+                    };
+                    out.push(ArmTaken {
+                        act,
+                        site: site.clone(),
+                        column,
+                        from: from_text,
+                        to: to_text,
+                        taken,
+                    });
+                }
+            }
+        }
+        out
     }
 
     /// The `NeverRuns` of `act`: only the checks of `moves` that hold in no state of `g`.

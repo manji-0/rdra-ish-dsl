@@ -390,7 +390,9 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
             (RelKind::Performs, _) => rel.to == buc_ref,
             (RelKind::Triggers, NodeRef::Timer(_))
             | (RelKind::Raises, NodeRef::ExtSystem(_))
-            | (RelKind::AppliesTo, NodeRef::Condition(_)) => visited.contains(&rel.to),
+            | (RelKind::AppliesTo | RelKind::Guards, NodeRef::Condition(_)) => {
+                visited.contains(&rel.to)
+            }
             _ => false,
         };
         if enters {

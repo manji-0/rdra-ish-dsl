@@ -58,7 +58,9 @@ impl Emitter for ConditionMermaidEmitter {
             matches!(nr, NodeRef::Condition(_))
                 && (targets_in_scope.is_none()
                     || model.relations.iter().any(|rel| {
-                        rel.kind == RelKind::AppliesTo && rel.from == *nr && visible(&rel.to)
+                        matches!(rel.kind, RelKind::AppliesTo | RelKind::Guards)
+                            && rel.from == *nr
+                            && visible(&rel.to)
                     }))
         });
 
@@ -88,16 +90,30 @@ impl Emitter for ConditionMermaidEmitter {
                         })
                     }
                 };
+                // The state model of a `.when` arm is derived from the arm.
+                let from_when = match &edge {
+                    ConditionEdge::StateModel { entity, column } => {
+                        model.state_transitions.iter().any(|t| {
+                            t.guard == Some(*key) && t.entity == *entity && t.column == *column
+                        })
+                    }
+                    ConditionEdge::Variation(_) => false,
+                };
                 if let Some(to) = to {
                     edges.push(GraphEdge {
                         from: id.clone(),
                         label: "combines".to_string(),
                         to,
                         arrow: "-.->",
-                        derived: derived.clone(),
+                        derived: match from_when {
+                            true => Some("from when".to_string()),
+                            false => derived.clone(),
+                        },
                     });
                 }
             }
+            // A `.when` guard is drawn on its arm in the state diagram; here it shows as the
+            // state model the condition combines.
             for rel in &model.relations {
                 if rel.kind != RelKind::AppliesTo || rel.from != *condition || !visible(&rel.to) {
                     continue;

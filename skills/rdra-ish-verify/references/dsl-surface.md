@@ -117,6 +117,29 @@ one arm, every arm carries the use case's other effects, and its guards and
 `after(UC).assert` apply to each arm. Two values `sets` writes to one column in one use case
 are `ConflictingEffects`, not a choice.
 
+`.when(Cond)` on one `transitions` arm guards that arm only: the arm is taken only while the
+condition's `holds` body holds, the use case runs when some arm is enabled, and the choice
+among enabled arms stays free. A guarded arm that never fires while its use case runs is the
+`ArmNeverTaken` warning (`Arm_<UseCase>_<from>_<to>`).
+
+```rdra
+entity Disclosure "届出" {
+  id: Int @pk
+  status: Enum(searched, file, secret) @default(searched)
+  acquired: Bool @default(false)
+}
+usecase Submit "届出"
+usecase Acquire "承継"
+usecase Decide "判断"
+creates(Submit, Disclosure)
+sets(Acquire, Disclosure, acquired == true)
+condition Acquired "権利を取得している"
+holds(Acquired, Disclosure.acquired == true)
+transitions(Decide, Disclosure.status, searched -> file).when(Acquired)
+transitions(Decide, Disclosure.status, searched -> secret)
+forbidden(Disclosure, status == file, acquired == false)
+```
+
 Use Int / Money / Decimal columns and `sets(UC, E, col == N)` when the quantity itself
 must be checked; `check` and TLC both evaluate a comparison on the values over
 `0..--int-range-max`. Drive the comparison with the four-argument `sets` only when the

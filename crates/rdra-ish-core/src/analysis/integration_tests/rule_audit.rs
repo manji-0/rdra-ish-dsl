@@ -178,6 +178,36 @@ const FORMS: &[(&str, Expect)] = &[
         "holds(Ready, Order.status in (paid)).none(Ticket.status in (pending))",
         Recorded,
     ),
+    // transitions: a `.when(Cond)` arm guard is a rule, so its condition must have a body
+    ("transitions(Pay, Order.status, open -> paid)", Recorded),
+    (
+        "holds(Ready, Ticket.status == done)\ntransitions(Pay, Order.status, open -> paid).when(Ready)",
+        Recorded,
+    ),
+    (
+        "transitions(Pay, Order.status, open -> paid).when(Ready)\nholds(Ready, Ticket.status == done)",
+        Recorded,
+    ),
+    ("transitions(Pay, Order.status, open -> paid).when(Ready)", Error),
+    ("transitions(Pay, Order.status, open -> paid).when(Nosuch)", Error),
+    ("transitions(Pay, Order.status, open -> paid).when(Order)", Error),
+    ("transitions(Pay, Order.status, open -> paid).when()", Error),
+    (
+        "holds(Ready, Ticket.status == done)\ntransitions(Pay, Order.status, open -> paid).when(Ready, Ready)",
+        Error,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\ntransitions(Pay, Order.status, open -> paid).when(Ready).when(Ready)",
+        Error,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\ntransitions(Pay, Order.status, open -> paid).when(Ticket.status == done)",
+        Error,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\ntransitions(Pay, Order.status, open -> paid).unless(Ready)",
+        Error,
+    ),
 ];
 
 /// The rules a model records, its field mappings, its `sets` effects, and each condition body
@@ -189,7 +219,13 @@ fn recorded(model: &SemanticModel) -> usize {
         .filter_map(|c| c.body.as_ref())
         .map(|body| 1 + body.quantifiers.len())
         .sum();
+    let arm_guards = model
+        .state_transitions
+        .iter()
+        .filter(|t| t.guard.is_some())
+        .count();
     business_rules(model).len()
+        + arm_guards
         + model.field_mappings.len()
         + model.column_effects.len()
         + model.proposition_effects.len()
@@ -223,9 +259,16 @@ fn outcome(line: &str) -> (Expect, String) {
     }
 }
 
-/// The parts a form records: one per `.has/.none(...)`, plus the rule or body itself unless the
-/// form is only a quantifier.
-fn parts(line: &str) -> usize {
+/// The parts a form records, line by line: one per `.has/.none(...)`, plus the rule or body
+/// itself unless the form is only a quantifier; a `transitions` arm records its `.when` guard.
+fn parts(form: &str) -> usize {
+    form.lines().map(line_parts).sum()
+}
+
+fn line_parts(line: &str) -> usize {
+    if line.starts_with("transitions(") {
+        return line.matches(".when(").count();
+    }
     let quantifiers = line.matches(".has(").count() + line.matches(".none(").count();
     let only_quantifier =
         quantifiers > 0 && !line.starts_with("holds(") && !line.contains(".then(");
@@ -250,7 +293,7 @@ fn every_rule_predicate_has_a_form_in_the_audit() {
     let labelled = KNOWN_PREDICATES
         .iter()
         .filter(|p| predicate_chain_methods(p).contains(&"label"));
-    for pred in labelled.chain(&["holds", "maps_field", "sets"]) {
+    for pred in labelled.chain(&["holds", "maps_field", "sets", "transitions"]) {
         assert!(
             FORMS
                 .iter()

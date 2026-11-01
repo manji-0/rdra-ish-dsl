@@ -1,7 +1,7 @@
 //! `list --kind transition`: the state-transition table behind the state diagram.
 
 use anyhow::Result;
-use rdra_ish_core::analysis::guard_labels;
+use rdra_ish_core::analysis::transition_guard_labels;
 use rdra_ish_core::{
     actors_for_usecase, state_label, state_models, ResolvedProgram, SemanticModel,
 };
@@ -52,7 +52,7 @@ pub(crate) fn format_transitions(
                 value(&t.from),
                 value(&t.to),
                 format!("{} ({})", usecase.label, usecase.id),
-                guard_labels(model, t.usecase).join("|"),
+                transition_guard_labels(model, t).join("|"),
                 actors.join("|"),
                 site_cell(program, t.site.as_ref()),
             ]);

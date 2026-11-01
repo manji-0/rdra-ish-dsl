@@ -61,10 +61,11 @@ fn write_label(
         })
         .map(|t| {
             format!(
-                "{} {} -> {}",
+                "{} {} -> {}{}",
                 t.column,
                 model.value_display(entity, &t.column, &t.from),
-                model.value_display(entity, &t.column, &t.to)
+                model.value_display(entity, &t.column, &t.to),
+                arm_guard(model, t)
             )
         })
         .collect();
@@ -83,29 +84,37 @@ fn write_label(
     }
 }
 
+/// ` [label]` of an arm's own `.when(Cond)`, or nothing (UML guard notation, as the state
+/// diagram writes it).
+fn arm_guard(model: &SemanticModel, t: &rdra_ish_core::StateTransition) -> String {
+    t.guard
+        .map(|ck| format!(" [{}]", model.conditions[ck].label))
+        .unwrap_or_default()
+}
+
+/// A choice on one column from one state: `(column, from, [(to, arm guard)])`.
+type Choice = (String, String, Vec<(String, String)>);
+
 /// The use case's choices on `entity`: each `(column, from)` with more than one arm, and the
-/// `to` of each arm in declaration order. One run takes one arm.
-fn choices(
-    model: &SemanticModel,
-    usecase: UseCaseKey,
-    entity: EntityKey,
-) -> Vec<(String, String, Vec<String>)> {
-    let mut groups: Vec<(String, String, Vec<String>)> = Vec::new();
+/// `to` of each arm in declaration order with its own guard. One run takes one arm.
+fn choices(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -> Vec<Choice> {
+    let mut groups: Vec<Choice> = Vec::new();
     for t in model
         .state_transitions
         .iter()
         .filter(|t| t.usecase == usecase && t.entity == entity)
     {
+        let arm = (t.to.clone(), arm_guard(model, t));
         match groups
             .iter_mut()
             .find(|(column, from, _)| *column == t.column && *from == t.from)
         {
             Some((_, _, tos)) => {
-                if !tos.contains(&t.to) {
-                    tos.push(t.to.clone());
+                if !tos.iter().any(|(to, _)| *to == t.to) {
+                    tos.push(arm);
                 }
             }
-            None => groups.push((t.column.clone(), t.from.clone(), vec![t.to.clone()])),
+            None => groups.push((t.column.clone(), t.from.clone(), vec![arm])),
         }
     }
     groups.retain(|(_, _, tos)| tos.len() > 1);
@@ -376,14 +385,18 @@ impl Emitter for SequenceMermaidEmitter {
                     for (column, from, tos) in choices(model, usecase_key, write.entity) {
                         let shown =
                             |v: &str| model.value_display(write.entity, &column, v).to_string();
-                        for (i, to) in tos.iter().enumerate() {
+                        for (i, (to, guard)) in tos.iter().enumerate() {
                             let keyword = if i == 0 { "alt" } else { "else" };
                             if i > 0 {
                                 script.depth -= 1;
                             }
                             script.push(format!(
                                 "{keyword} {}",
-                                text(&format!("{column} {} -> {}", shown(&from), shown(to)))
+                                text(&format!(
+                                    "{column} {} -> {}{guard}",
+                                    shown(&from),
+                                    shown(to)
+                                ))
                             ));
                             script.depth += 1;
                             script.send(
@@ -658,6 +671,36 @@ transitions(Decide, Doc.status, searched -> secret)
 transitions(Decide, Doc.status, held -> drop)
 sets(Decide, Doc, flag == true)
 "#;
+
+    /// An arm's own `.when(Cond)` heads its `alt` branch, and a single guarded arm carries it
+    /// on the write.
+    #[test]
+    fn an_arm_guard_heads_its_branch() {
+        let src =
+            format!("{CHOICE}condition Ready \"権利取得済\"\nholds(Ready, Doc.flag == true)\n")
+                .replace(
+                    "transitions(Decide, Doc.status, searched -> file)",
+                    "transitions(Decide, Doc.status, searched -> file).when(Ready)",
+                )
+                .replace(
+                    "transitions(Decide, Doc.status, held -> drop)",
+                    "transitions(Decide, Doc.status, held -> drop).when(Ready)",
+                );
+        let result = SequenceMermaidEmitter
+            .emit(
+                &model_from(&src),
+                &View::usecases(vec!["Decide".to_string()]),
+            )
+            .unwrap();
+        has_in_order(
+            &result,
+            &[
+                "update status held -> drop [権利取得済], flag=true\n",
+                "    alt status searched -> file [権利取得済]\n",
+                "    else status searched -> secret\n",
+            ],
+        );
+    }
 
     /// Arms from one state are the actor's choice: the guard names each source state once,
     /// the write carries the rest, and an `alt` holds one branch per arm.

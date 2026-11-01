@@ -198,6 +198,7 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
+        | StateDiag::ArmNeverTaken { .. }
         | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }

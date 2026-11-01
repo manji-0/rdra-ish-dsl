@@ -1,7 +1,7 @@
 %% rdra-ish diagram=usecase scope=buc:BucFilingDecision model=samples/patent-ops
 %% layers: value=システム価値 boundary=システム境界 system=システム
-%% kinds: actor usecase screen event entity state condition
-%% omitted: buc step medium permission field api
+%% kinds: actor usecase screen event entity state
+%% omitted: buc step medium permission field api condition
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__IpStaff(["知的財産部 担当者"]):::actor
@@ -10,10 +10,8 @@ flowchart LR
     %% desc actor__ReviewCommittee: 先行技術調査の結果を見て、発明を出願するか、ノウハウとして秘匿するか、出願しないかを決める。
   end
   subgraph layer_boundary["システム境界"]
-    usecase__DecideNotToFile("出願しない決定"):::usecase
-    %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。
-    usecase__DecideToFile("出願の決定"):::usecase
-    %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
+    usecase__DecideFiling("出願可否の決定"):::usecase
+    %% desc usecase__DecideFiling: 発明審査委員会が、出願する、ノウハウとして秘匿する、出願しないのいずれかに決める。出願と決められるのは、会社が権利を持つ発明だけである。
     usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
     %% desc usecase__NotifyInventorOfDecision: 決定を発明者に知らせる（参照のみ）。
     usecase__RecordPriorArtSearch("先行技術調査の結果の登録"):::usecase
@@ -32,26 +30,19 @@ flowchart LR
     state__InventionDisclosure_decided_secret((("ノウハウとして秘匿"))):::state
     state__InventionDisclosure_searched((("調査済"))):::state
     state__InventionDisclosure_searching((("先行技術調査中"))):::state
-    condition__RightsAcquired{"会社が特許を受ける権利を取得している"}:::condition
   end
   actor__IpStaff -.-> usecase__NotifyInventorOfDecision
   actor__IpStaff -.-> usecase__RecordPriorArtSearch
   actor__IpStaff -.-> usecase__RequestPriorArtSearch
-  actor__ReviewCommittee -.-> usecase__DecideNotToFile
-  actor__ReviewCommittee -.-> usecase__DecideToFile
-  condition__RightsAcquired -.-> usecase__DecideToFile
+  actor__ReviewCommittee -.-> usecase__DecideFiling
   event__EvFilingDecided -.-> usecase__NotifyInventorOfDecision
-  usecase__DecideNotToFile -.-> screen__FilingDecisionScreen
-  usecase__DecideNotToFile -.-> event__EvFilingDecided
-  usecase__DecideNotToFile -.->|transitions InventionDisclosure.status searched->decided_abandon| state__InventionDisclosure_decided_abandon
-  usecase__DecideNotToFile -.->|transitions InventionDisclosure.status searched->decided_secret| state__InventionDisclosure_decided_secret
-  usecase__DecideNotToFile -.->|updates| entity__InventionDisclosure
-  %% derived usecase__DecideNotToFile -> entity__InventionDisclosure via api__FilingDecisionApi
-  usecase__DecideToFile -.-> screen__FilingDecisionScreen
-  usecase__DecideToFile -.-> event__EvFilingDecided
-  usecase__DecideToFile -.->|transitions InventionDisclosure.status searched->decided_file| state__InventionDisclosure_decided_file
-  usecase__DecideToFile -.->|updates| entity__InventionDisclosure
-  %% derived usecase__DecideToFile -> entity__InventionDisclosure via api__FilingDecisionApi
+  usecase__DecideFiling -.-> screen__FilingDecisionScreen
+  usecase__DecideFiling -.-> event__EvFilingDecided
+  usecase__DecideFiling -.->|transitions InventionDisclosure.status searched->decided_abandon| state__InventionDisclosure_decided_abandon
+  usecase__DecideFiling -.->|transitions InventionDisclosure.status searched->decided_file| state__InventionDisclosure_decided_file
+  usecase__DecideFiling -.->|transitions InventionDisclosure.status searched->decided_secret| state__InventionDisclosure_decided_secret
+  usecase__DecideFiling -.->|updates| entity__InventionDisclosure
+  %% derived usecase__DecideFiling -> entity__InventionDisclosure via api__FilingDecisionApi
   usecase__NotifyInventorOfDecision -.-> screen__FilingDecisionScreen
   usecase__NotifyInventorOfDecision -.->|reads| entity__InventionDisclosure
   usecase__RecordPriorArtSearch -.-> screen__PriorArtSearchScreen
@@ -68,4 +59,3 @@ flowchart LR
   classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
   classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
-  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

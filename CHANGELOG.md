@@ -4,6 +4,33 @@
 
 ### Added
 
+- A guard per `transitions` arm (#62):
+  `transitions(UC, Entity.col, from -> to).when(Cond)` takes the arm only while the `holds`
+  body of the condition holds on the state the use case starts from. The use case runs when
+  some arm is enabled (and its `applies_to` guards hold), and the choice among the enabled
+  arms stays free. Unlike `applies_to`, which guards every step of the use case, `.when`
+  guards one arm: the use case still takes its other arms while the condition fails.
+  `.when` takes one condition, once; anything else is `WhenRequiresCondition`, an undefined
+  name is `UndefinedSymbol`, and a condition with no `holds` body (a `combines`-only trace
+  link) is `WhenConditionWithoutBody`. `states`, `check`, the TLA+ export, and `verify` share
+  the semantics: a column with a guarded arm gets one guard on the pre-state and the
+  successor, `\/ (col = a /\ col' = b /\ body)` over its arms, which the explorer applies to
+  the forked choice and TLC reads after the assignment. A guarded arm that is never taken
+  while its use case runs and its `from` state is reached is the new `ArmNeverTaken`
+  warning (`Arm_<UseCase>_<from>_<to>`; under a cap or `--buc` it is listed under
+  `not checked:` instead), and a use case whose every arm is blocked is
+  `NeverRuns` naming the arm guard. The state diagram writes the arm's guard in `[...]`
+  after the use case's own, the sequence diagram heads the arm's `alt` branch (or the
+  single write) with it, `list --kind transition` adds it to `guards`, and the condition
+  `combines` the arm's state model (`derived ... from when`), so the condition reaches its
+  BUC and `list --kind condition` and `list --kind rule` name the use case it guards.
+  `rule_audit` and `transition_audit` cover every `.when` form, and `engine_equivalence`
+  compares a fixture of arm guards (one on another entity, one that never holds) with TLC.
+  `samples/patent-ops` merges `DecideToFile` and `DecideNotToFile` into one `DecideFiling`
+  (出願可否の決定) with three arms from `searched`; only `decided_file` is guarded, by
+  `RightsAcquired`, and the rule 「会社が特許を受ける権利を取得していない発明は出願を決めない」
+  still holds (it breaks when the `.when` is removed). Its largest cone at 1 instance stays at
+  1,034 states.
 - Set membership in comparisons: `status in (paid, shipped)` holds when the column is one of
   the values (`==` on any), and `status not in (draft, cancelled)` when it is none (`!=` on
   each). It is accepted wherever a comparison is: `forbidden`, `required`, `exclusive`,
@@ -67,9 +94,8 @@
   Patent.status == 追納期間中`) and draws a choice as an `alt` with one branch per arm after
   the write.
 - `samples/patent-ops` folds `DecideToKeepSecret` and `DecideNotToFile` into one
-  `DecideNotToFile` (出願しない決定) whose two arms from `searched` are the committee's choice.
-  `DecideToFile` stays its own use case: only filing needs the company to own the right, and a
-  condition guards every arm of its use case.
+  `DecideNotToFile` (出願しない決定) whose two arms from `searched` are the committee's choice,
+  and, once `.when` guards one arm (#62), folds `DecideToFile` in too as `DecideFiling`.
 - `samples/patent-ops` restores two guards it dropped to fit the old 4,096-state cap of `check`
   (#60): an office action arrives only for an application under examination
   (`UnderExamination`, citing 特許法48条の2), and the docket of an answered office action closes

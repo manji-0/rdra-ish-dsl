@@ -144,6 +144,14 @@ fn one_of_each() -> Vec<StateDiag> {
             column: "status".into(),
             site: site(),
         },
+        StateDiag::ArmNeverTaken {
+            action: "Decide".into(),
+            column: "Doc.status".into(),
+            from: "searched".into(),
+            to: "file".into(),
+            conditions: vec!["Ready".into()],
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -162,6 +170,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::NeverRuns { .. }
+            | StateDiag::ArmNeverTaken { .. }
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }

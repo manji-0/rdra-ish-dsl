@@ -196,7 +196,9 @@ fn undecided_by_subject(undecided: &[Undecided]) -> BySubject<'_> {
     for u in undecided {
         match &u.subject {
             Subject::State { value, .. } => out.states.push((value.as_str(), u.why)),
-            Subject::Runs { action } => out.actions.push(action.as_str()),
+            Subject::Runs { action } | Subject::Arm { action, .. } => {
+                out.actions.push(action.as_str())
+            }
             Subject::Deadlock { value, .. } => out.deadlocks.push((value.as_str(), u.why)),
         }
     }

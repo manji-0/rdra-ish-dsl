@@ -518,8 +518,7 @@
         },
         "title": "出願の決定",
         "x-rdra-ish-raised-by-usecases": [
-          "DecideNotToFile",
-          "DecideToFile"
+          "DecideFiling"
         ],
         "x-rdra-ish-transitions": [],
         "x-rdra-ish-triggers-bucs": [
@@ -1195,8 +1194,7 @@
         }
       ],
       "x-rdra-ish-raised-by-usecases": [
-        "DecideNotToFile",
-        "DecideToFile"
+        "DecideFiling"
       ]
     },
     "publishEvFormalityAmendmentFiled": {

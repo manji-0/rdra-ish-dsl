@@ -174,10 +174,14 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
         let mut applies_to: Vec<String> = model
             .relations
             .iter()
-            .filter(|rel| rel.kind == RelKind::AppliesTo && rel.from == NodeRef::Condition(key))
+            .filter(|rel| {
+                matches!(rel.kind, RelKind::AppliesTo | RelKind::Guards)
+                    && rel.from == NodeRef::Condition(key)
+            })
             .filter_map(|rel| node_id(model, &rel.to))
             .collect();
         applies_to.sort();
+        applies_to.dedup();
         let site = condition
             .body
             .as_ref()

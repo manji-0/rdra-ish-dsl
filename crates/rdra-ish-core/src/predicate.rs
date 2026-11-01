@@ -105,6 +105,7 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
         "after" => &["assert", "label"],
         "exposes" => &["append", "upsert", "caller"],
         "navigates" => &["via"],
+        "transitions" => &["when"],
         _ => &[],
     }
 }

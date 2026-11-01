@@ -40,7 +40,7 @@ use std::sync::Mutex;
 
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, Runs, Scope, State,
-    StateDiag, StateModelFindings, Target, TransitionSystem, Witness,
+    StateDiag, StateModelFindings, Taken, Target, TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -306,7 +306,13 @@ fn finding_names(ts: &TransitionSystem, f: &StateModelFindings) -> Vec<String> {
         Progress::Stuck { diag, .. } => format!("{} {:?}", diag.name(&[]), diag.severity()),
         Progress::NotDecided => format!("not decided {}", value(d.var, d.value)),
     });
-    witnesses.chain(runs).chain(deadlocks).collect()
+    let arms = f.arms.iter().map(|a| match &a.taken {
+        Taken::Yes => format!("takes {:?}", a.site.fact),
+        Taken::Never(d) => format!("{d:?}"),
+        Taken::Moot => format!("moot {:?}", a.site.fact),
+        Taken::NotDecided => format!("not decided {:?}", a.site.fact),
+    });
+    witnesses.chain(runs).chain(deadlocks).chain(arms).collect()
 }
 
 fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeReport {
@@ -581,6 +587,49 @@ after(Decide).assert(Doc.status != drop)
 #[test]
 fn bfs_and_tlc_agree_on_transition_choices() {
     check_fixture("transition_choice", TRANSITION_CHOICE);
+}
+
+/// A guard per `transitions` arm (#62): of three arms from `searched`, filing needs the right
+/// on the row itself and the fast route needs an open gate on another entity (an `Exists`
+/// witness), beside an unguarded arm; a gate created closed and opened later; a guarded arm
+/// whose guard never holds; and a rule only the guard keeps.
+const ARM_GUARDS: &str = r#"
+entity Doc "届出" {
+  id: Int @pk
+  status: Enum(searched, file, secret, drop) @default(searched)
+  route: Enum(none, fast, slow) @default(none)
+  acquired: Bool @default(false)
+}
+entity Gate "関門" { id: Int @pk  open: Bool @default(false) }
+usecase Submit "届出"
+usecase Acquire "承継"
+usecase Build "関門の設置"
+usecase Open "開門"
+usecase Decide "判断"
+usecase Route "経路"
+creates(Submit, Doc)
+sets(Acquire, Doc, acquired == true)
+creates(Build, Gate)
+sets(Open, Gate, open == true)
+condition Acquired "権利を取得している"
+holds(Acquired, Doc.acquired == true)
+condition GateOpen "関門が開いている"
+holds(GateOpen, Gate.open == true)
+condition Never "起きない"
+holds(Never, Doc.acquired == true, Doc.status == drop)
+transitions(Decide, Doc.status, searched -> file).when(Acquired)
+transitions(Decide, Doc.status, searched -> secret)
+transitions(Decide, Doc.status, searched -> drop)
+transitions(Decide, Doc.status, secret -> drop).when(Never)
+transitions(Decide, Doc.status, secret -> file).when(Acquired)
+transitions(Route, Doc.route, none -> fast).when(GateOpen)
+transitions(Route, Doc.route, none -> slow)
+forbidden(Doc, status == file, acquired == false)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_arm_guards() {
+    check_fixture("arm_guards", ARM_GUARDS);
 }
 
 /// A use case split into two transaction groups (one API each): an after-assert checked after

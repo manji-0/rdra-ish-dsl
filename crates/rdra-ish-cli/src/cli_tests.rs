@@ -1256,6 +1256,32 @@ fn list_transition_markdown_has_a_row_per_transition_with_guards_and_actors() {
     );
 }
 
+/// An arm's own `.when(Cond)` joins the guards column of that arm's row only.
+#[test]
+fn list_transition_guards_name_the_guard_of_one_arm() {
+    let src = TRANSITION_MODEL.replace(
+        "transitions(Expire, Appointment.status, booked -> cancelled)",
+        "transitions(CheckIn, Appointment.status, booked -> cancelled).when(Late)\ncondition Late \"遅刻\"\nholds(Late, Appointment.paid == false)",
+    );
+    let (ast, parse_errors) = rdra_ish_syntax::parse(&src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = rdra_ish_core::build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    let csv = list_elements(&model, &ListKind::Transition, &ListFormat::Csv).unwrap();
+    let check_in: Vec<&str> = csv
+        .lines()
+        .filter(|row| row.contains("(CheckIn)"))
+        .collect();
+    assert!(
+        check_in[0].contains(",受付済 (checkedin),受付する (CheckIn),支払済み,"),
+        "{csv}"
+    );
+    assert!(
+        check_in[1].contains(",cancelled (cancelled),受付する (CheckIn),支払済み|遅刻,"),
+        "{csv}"
+    );
+}
+
 /// The arms of a choice (one use case, one `from`) are a row each, so the list shows every
 /// outcome the actor can pick.
 #[test]

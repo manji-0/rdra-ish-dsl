@@ -14,8 +14,8 @@ use super::types::{
 };
 use super::{Built, Scope, TransitionSystem};
 use crate::model::{
-    CmpOpModel, CmpRhs, ColumnType, EffectValue, EntityKey, Min, ModelColumn, NodeRef, RelKind,
-    SemanticModel, UseCaseKey,
+    CmpOpModel, CmpRhs, ColumnType, ConditionKey, EffectValue, EntityKey, Min, ModelColumn,
+    NodeRef, RelKind, SemanticModel, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use crate::tx::{infer_usecase_transactions, UcWrite, WriteKind};
@@ -508,6 +508,7 @@ impl<'m> Builder<'m> {
         self.owner_bindings(&mut a);
         let guards = self.condition_guards(uc, &a.params, groups, group);
         a.guards.extend(guards);
+        self.arm_guards(&mut a);
         Action {
             name,
             origin: ActionOrigin::UseCase {
@@ -764,27 +765,45 @@ impl<'m> Builder<'m> {
             };
             let arm = (Value(from), Value(to));
             let site = Site::new(ModelRef::Transition(idx), &st.site);
+            let guard: Vec<(ConditionKey, String)> = st
+                .guard
+                .map(|ck| (ck, model.conditions[ck].id.clone()))
+                .into_iter()
+                .collect();
             let existing = a.effects[first..].iter_mut().find_map(|eff| match eff {
                 Effect::Transition {
                     var: v,
                     arms,
                     sites,
+                    conds,
                     ..
-                } if *v == var => Some((arms, sites)),
+                } if *v == var => Some((arms, sites, conds)),
                 _ => None,
             });
             match existing {
-                Some((arms, sites)) => {
-                    if !arms.contains(&arm) {
+                Some((arms, sites, conds)) => match arms.iter().position(|x| *x == arm) {
+                    // The same arm declared again: either declaration enables it.
+                    Some(i) if conds[i].is_empty() => {}
+                    Some(i) if guard.is_empty() => conds[i].clear(),
+                    Some(i) => {
+                        for c in guard {
+                            if !conds[i].contains(&c) {
+                                conds[i].push(c);
+                            }
+                        }
+                    }
+                    None => {
                         arms.push(arm);
                         sites.push(site);
+                        conds.push(guard);
                     }
-                }
+                },
                 None => a.effects.push(Effect::Transition {
                     var,
                     param: p,
                     arms: vec![arm],
                     sites: vec![site],
+                    conds: vec![guard],
                 }),
             }
         }
@@ -794,6 +813,7 @@ impl<'m> Builder<'m> {
                 param,
                 arms,
                 sites,
+                ..
             } = eff
             else {
                 continue;
@@ -817,6 +837,56 @@ impl<'m> Builder<'m> {
                 site: sites[0].clone(),
             });
         }
+    }
+
+    /// One successor guard per column with a `.when(Cond)` arm: the step takes an arm whose
+    /// guard held on the pre-state, `\/ (col = from /\ col' = to /\ guard)` over the arms (an
+    /// unguarded arm's guard is true). It filters the choice the `Transition` effect forks, so
+    /// the use case runs when some arm is enabled, and a body on a created param reads it after
+    /// the step, as a use case's condition does.
+    fn arm_guards(&mut self, a: &mut ActionDraft) {
+        let model = self.model;
+        let mut guards = Vec::new();
+        for eff in &a.effects {
+            let Effect::Transition {
+                var,
+                param,
+                arms,
+                sites,
+                conds,
+            } = eff
+            else {
+                continue;
+            };
+            let Some(first) = conds.iter().position(|c| !c.is_empty()) else {
+                continue;
+            };
+            let slot = |at| Term::Slot { var: *var, at };
+            let mut any = Vec::new();
+            for (((from, to), site), conds) in arms.iter().zip(sites).zip(conds) {
+                let mut parts = vec![
+                    Pred::Cmp(slot(At::Param(*param)), CmpOp::Eq, Term::Lit(*from)),
+                    Pred::Cmp(slot(At::Next(*param)), CmpOp::Eq, Term::Lit(*to)),
+                ];
+                if !conds.is_empty() {
+                    let bodies = conds
+                        .iter()
+                        .filter_map(|(ck, _)| model.conditions[*ck].body.as_ref())
+                        .map(|body| self.body_pred(body, &a.params, site))
+                        .collect();
+                    parts.push(Pred::Or(bodies));
+                }
+                any.push(Pred::And(parts));
+            }
+            guards.push(Guard {
+                pred: Pred::Or(any),
+                why: GuardWhy::ArmCondition {
+                    cond: conds[first][0].0,
+                },
+                site: sites[first].clone(),
+            });
+        }
+        a.guards.extend(guards);
     }
 
     /// Vision rule 5: an actor chooses a variation column's value, so a created instance takes

@@ -301,6 +301,7 @@ pub(crate) fn object_graph_rel_label(kind: &RelKind) -> &'static str {
         RelKind::ErrorResponse => "error_response",
         RelKind::AppliesTo => "applies_to",
         RelKind::Combines => "combines",
+        RelKind::Guards => "when",
         RelKind::Qualifies => "qualifies",
         RelKind::Constrains => "constrains",
         RelKind::MapsField => "maps_field",

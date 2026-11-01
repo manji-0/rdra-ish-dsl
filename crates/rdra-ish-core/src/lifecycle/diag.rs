@@ -195,6 +195,19 @@ pub enum StateDiag {
         site: Site,
         why: Blocked,
     },
+    /// A `transitions(..).when(Cond)` arm whose use case runs and whose `from` state is
+    /// reached, but which no edge of any cone that keeps it takes: its guard never holds where
+    /// the use case could take it.
+    ArmNeverTaken {
+        action: String,
+        column: String,
+        from: String,
+        to: String,
+        /// The ids of the arm's `.when` conditions.
+        conditions: Vec<String>,
+        /// The `transitions` declaration.
+        site: Site,
+    },
     /// A present instance at a state of a state model that has a way out, from which no path
     /// moves it: no edge ever changes the column or deletes it. Reported once per state, at
     /// the first such reachable state, with a shortest trace to it.
@@ -282,6 +295,9 @@ impl StateDiag {
                 ..
             } => format!("Witness_{entity}_{column}_{value}"),
             StateDiag::NeverRuns { action, .. } => format!("Runs_{action}"),
+            StateDiag::ArmNeverTaken {
+                action, from, to, ..
+            } => format!("Arm_{action}_{from}_{to}"),
             StateDiag::Deadlock {
                 entity,
                 column,
@@ -381,7 +397,8 @@ impl StateDiag {
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
-            | StateDiag::NeverRuns { .. } => Severity::Warning,
+            | StateDiag::NeverRuns { .. }
+            | StateDiag::ArmNeverTaken { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -579,6 +596,18 @@ impl fmt::Display for StateDiag {
                     ),
                 }
             }
+            StateDiag::ArmNeverTaken {
+                action,
+                column,
+                from,
+                to,
+                conditions,
+                ..
+            } => write!(
+                f,
+                "{action} never takes {column} {from} -> {to}: wherever it could, its guard {} does not hold",
+                conditions.join(" or ")
+            ),
             StateDiag::Deadlock {
                 column,
                 value,

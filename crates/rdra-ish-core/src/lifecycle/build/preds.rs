@@ -995,48 +995,7 @@ impl<'m> Builder<'m> {
             .filter(|(_, u, body)| *u == uc && condition_group(body, groups) == group)
         {
             let site = Site::new(ModelRef::Condition(ck), &body.site);
-            let mut binding: Binding = params
-                .iter()
-                .enumerate()
-                .map(|(i, p)| {
-                    let at = match p.role {
-                        ParamRole::New => At::Next(i as u8),
-                        ParamRole::Existing | ParamRole::Parent => At::Param(i as u8),
-                    };
-                    (self.ts.entities[p.entity.index()].key, at)
-                })
-                .collect();
-            let mut witnesses = Vec::new();
-            for ek in body.conds.iter().flat_map(cond_entities) {
-                if at_of(&binding, ek).is_none() {
-                    binding.push((ek, At::Bound(witnesses.len() as u8)));
-                    witnesses.push(self.ent_of[&ek]);
-                }
-            }
-            let witness = |(_, at): (EntityKey, At)| matches!(at, At::Bound(_));
-            let mut parts = Vec::new();
-            for (i, &x) in binding.iter().enumerate() {
-                for &y in &binding[i + 1..] {
-                    if witness(x) || witness(y) {
-                        parts.extend(self.owner_link(x, y));
-                    }
-                }
-            }
-            parts.extend(
-                body.conds
-                    .iter()
-                    .map(|c| self.cross_atom(c, &binding, &site)),
-            );
-            for q in &body.quantifiers {
-                parts.push(self.quantified(q, &binding, witnesses.len() as u8, &site));
-            }
-            let pred = witnesses
-                .into_iter()
-                .rev()
-                .fold(Pred::And(parts), |inner, entity| Pred::Exists {
-                    entity,
-                    body: Box::new(inner),
-                });
+            let pred = self.body_pred(body, params, &site);
             guards.push(Guard {
                 pred,
                 why: GuardWhy::Condition { cond: ck },
@@ -1044,6 +1003,52 @@ impl<'m> Builder<'m> {
             });
         }
         guards
+    }
+
+    /// A `holds` body over an action's params, as [`Self::condition_guards`] reads it.
+    pub(super) fn body_pred(&mut self, body: &HoldsBody, params: &[Param], site: &Site) -> Pred {
+        let mut binding: Binding = params
+            .iter()
+            .enumerate()
+            .map(|(i, p)| {
+                let at = match p.role {
+                    ParamRole::New => At::Next(i as u8),
+                    ParamRole::Existing | ParamRole::Parent => At::Param(i as u8),
+                };
+                (self.ts.entities[p.entity.index()].key, at)
+            })
+            .collect();
+        let mut witnesses = Vec::new();
+        for ek in body.conds.iter().flat_map(cond_entities) {
+            if at_of(&binding, ek).is_none() {
+                binding.push((ek, At::Bound(witnesses.len() as u8)));
+                witnesses.push(self.ent_of[&ek]);
+            }
+        }
+        let witness = |(_, at): (EntityKey, At)| matches!(at, At::Bound(_));
+        let mut parts = Vec::new();
+        for (i, &x) in binding.iter().enumerate() {
+            for &y in &binding[i + 1..] {
+                if witness(x) || witness(y) {
+                    parts.extend(self.owner_link(x, y));
+                }
+            }
+        }
+        parts.extend(
+            body.conds
+                .iter()
+                .map(|c| self.cross_atom(c, &binding, site)),
+        );
+        for q in &body.quantifiers {
+            parts.push(self.quantified(q, &binding, witnesses.len() as u8, site));
+        }
+        witnesses
+            .into_iter()
+            .rev()
+            .fold(Pred::And(parts), |inner, entity| Pred::Exists {
+                entity,
+                body: Box::new(inner),
+            })
     }
 
     /// A body applied to a use case that writes nothing has no action to guard.
@@ -1248,7 +1253,13 @@ impl<'m> Builder<'m> {
             collect_vars(&step.post, &mut read);
         }
         let condition_guards = self.ts.actions.iter().flat_map(|a| a.guards.iter());
-        for g in condition_guards.filter(|g| matches!(g.why, GuardWhy::Condition { .. })) {
+        let read_by_condition = |g: &&Guard| {
+            matches!(
+                g.why,
+                GuardWhy::Condition { .. } | GuardWhy::ArmCondition { .. }
+            )
+        };
+        for g in condition_guards.filter(read_by_condition) {
             collect_vars(&g.pred, &mut read);
         }
         let written: HashSet<VarId> = self

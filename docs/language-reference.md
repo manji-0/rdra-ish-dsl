@@ -221,7 +221,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `achieves` | `(Requirement, Goal)` | The requirement serves the goal. A requirement may achieve several goals. |
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). The child side, the `N` of `N:1` / `1:N` or the left of `1:1`, may be a range `lo..hi` with `lo` 0 or 1 and `hi` 1 or `*`: `relate(OrderLine, Order, 1..*:1)` says every `Order` has at least one `OrderLine`, and the lifecycle checks it as the invariant `MinCard_<Child>_<role>`. A range on the parent side is an error; write `.optional()` for a parent that may be absent. For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. For `1:1` the left end is the child: it holds the key column, marked unique. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
-| `transitions` | `(UseCase, Entity.column, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. |
+| `transitions` | `(UseCase, Entity.column, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. `.when(Condition)` guards this arm only. See [Guard one arm](#guard-one-arm-when). |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each step of the use case leaves. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
 | `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
@@ -247,6 +247,7 @@ only the methods below, and any other name is an `unknown chain method` error
 |---|---|
 | `belongs` | `.by(...)` |
 | `navigates` | `.via(UseCase)`, at most once |
+| `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
 | `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
@@ -1319,9 +1320,9 @@ transitions(DecideFiling, Disclosure.status, searched -> decided_abandon)
   `searched -> drop` on `status`, and `none -> fast` and `none -> slow` on `route`, has four
   runs, one per pair. To tie a value of one column to a value of the other, split the use
   case, one per pair.
-- **Guards apply to every arm.** A condition applied to the use case guards each arm alike,
-  and the use case runs only from a state one of its arms leaves. When one outcome needs a
-  precondition the others do not, give that outcome its own use case.
+- **Use case guards apply to every arm.** A condition applied to the use case guards each
+  arm alike, and the use case runs only from a state one of its arms leaves. When one
+  outcome needs a precondition the others do not, guard that arm with `.when` (below).
 - **`after(UC).assert` holds after every arm.** An assert one arm breaks is violated, with a
   trace through that arm.
 - A repeated arm is one arm. Arms from different states stay one move per state: the
@@ -1329,6 +1330,47 @@ transitions(DecideFiling, Disclosure.status, searched -> decided_abandon)
 
 A `sets` is not a choice. Two `sets` of one use case with different values for one column
 are a `ConflictingEffects` error; keep one value or split the use case.
+
+#### Guard one arm: `.when`
+
+`.when(Condition)` on a `transitions` line guards that arm only. The condition is the RDRA
+条件 the arm depends on, with a label and a `holds` body:
+
+```rdra
+condition RightsAcquired "会社が特許を受ける権利を取得している"
+holds(RightsAcquired, InventionDisclosure.right_acquired == true)
+
+transitions(DecideFiling, InventionDisclosure.status, searched -> decided_file).when(RightsAcquired)
+transitions(DecideFiling, InventionDisclosure.status, searched -> decided_secret)
+transitions(DecideFiling, InventionDisclosure.status, searched -> decided_abandon)
+```
+
+- **The arm is enabled only while its guard holds** on the state the use case starts from.
+  The body reads the arm's own instance and any other entity the way an `applies_to` body
+  does, so a body atom on another entity needs some present instance that meets it.
+- **The use case runs when some arm is enabled**, and its `applies_to` guards hold. Among
+  the enabled arms the choice is free. Above, the committee can always keep the invention
+  secret or drop it, and can file only once the right is acquired.
+- **One arm, one guard.** `.when` takes one condition, once. To require several
+  comparisons, list them in the condition's `holds` body.
+- **A guarded single arm differs from `applies_to`.** `applies_to(Cond, UC)` guards every
+  step of the use case, from every state it leaves. `.when(Cond)` guards one arm: the use
+  case still takes its other arms, from the same state or another, while the condition
+  fails. The two coincide only when the arm is all the use case does.
+- The same arm declared twice with different guards is enabled when either guard holds.
+
+`.when` with no condition, with two conditions, twice, or with anything that is not a
+condition is `WhenRequiresCondition`; an undefined name is `UndefinedSymbol`. A condition
+without a `holds` body (one linked by `combines` only) is `WhenConditionWithoutBody`, since
+it has nothing to guard with.
+
+A guarded arm that is never taken while its use case runs and some instance reaches its
+`from` state is the `ArmNeverTaken` warning of `check` (`Arm_<UseCase>_<from>_<to>`): its
+guard never holds where the use case could take it. The state diagram writes the guard in
+`[...]` after the use case label, as it does for `applies_to`; the sequence diagram heads the
+arm's `alt` branch with it; and `list --kind transition` adds it to the `guards` column. In
+the condition diagram the condition `combines` the arm's state model, `derived ... from
+when`.
 
 The second argument must be a use case. Passing an event, the earlier form, is a
 `TypeMismatch` whose hint names the use case to write and `scripts/migrate-phase3.py`,

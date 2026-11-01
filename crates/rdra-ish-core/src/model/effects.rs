@@ -1,4 +1,4 @@
-use super::keys::{EntityKey, UseCaseKey};
+use super::keys::{ConditionKey, EntityKey, UseCaseKey};
 
 /// `transitions(UseCase, Entity.column, from -> to)`: the use case moves the column.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -8,6 +8,8 @@ pub struct StateTransition {
     pub usecase: UseCaseKey,
     pub from: std::string::String,
     pub to: std::string::String,
+    /// `.when(Cond)`: the arm is taken only while the condition's `holds` body holds.
+    pub guard: Option<ConditionKey>,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,

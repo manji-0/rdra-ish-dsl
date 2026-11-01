@@ -31,8 +31,8 @@ use crate::{
     view_node_visible, view_relation_visible, EmitError, Emitter, ObjectGraphLayer, Scope, View,
     OBJECT_GRAPH_LAYERS,
 };
-use rdra_ish_core::analysis::guard_labels;
-use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use rdra_ish_core::analysis::transition_guard_labels;
+use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel};
 use rdra_ish_core::{buc_members, state_key, state_models, StateModel};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -280,7 +280,9 @@ fn kinds_by_layer(nodes: &[NodeRef]) -> Vec<&'static str> {
 fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKind, GraphEdge)> {
     let mut edges = Vec::new();
     for rel in &model.relations {
-        if !visible.contains(&rel.from) || !visible.contains(&rel.to) {
+        // A `.when` guard is drawn on its arm (state diagram), not as a use case edge.
+        if rel.kind == RelKind::Guards || !visible.contains(&rel.from) || !visible.contains(&rel.to)
+        {
             continue;
         }
         let (Some(from), Some(to)) = (contract_id(model, &rel.from), contract_id(model, &rel.to))
@@ -484,7 +486,7 @@ impl Emitter for StateMermaidEmitter {
                         t.from.as_str(),
                         t.to.as_str(),
                         usecase,
-                        transition_label(model, t.usecase),
+                        transition_label(model, t),
                     ))
                 })
                 .collect();
@@ -636,10 +638,10 @@ impl Emitter for StateMermaidEmitter {
 }
 
 /// A transition's label: the use case's label, then `[...]` with the label of each condition
-/// that guards it (UML guard notation).
-fn transition_label(model: &SemanticModel, uc: UseCaseKey) -> String {
-    let guards = guard_labels(model, uc);
-    let label = quote(&model.use_cases[uc].label);
+/// that guards it, the use case's and the arm's own `.when` (UML guard notation).
+fn transition_label(model: &SemanticModel, t: &rdra_ish_core::StateTransition) -> String {
+    let guards = transition_guard_labels(model, t);
+    let label = quote(&model.use_cases[t.usecase].label);
     if guards.is_empty() {
         label
     } else {
@@ -1102,6 +1104,36 @@ applies_to(Traced, Publish)
                 "    %% transition usecase__Publish\n    state__Doc_draft --> state__Doc_published : 公開する [レビュー済み]\n"
             ),
             "a condition without a body guards nothing: {result}"
+        );
+    }
+
+    /// An arm's own `.when(Cond)` joins the use case's guards on that arm only.
+    #[test]
+    fn test_state_mermaid_names_the_guard_of_one_arm() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published, dropped) @default(draft)
+  reviewed: Bool @default(false)
+}
+usecase Decide "判断する"
+condition Reviewed "レビュー済み"
+holds(Reviewed, Doc.reviewed == true)
+transitions(Decide, Doc.status, draft -> published).when(Reviewed)
+transitions(Decide, Doc.status, draft -> dropped)
+"#;
+        let model = model_from(src);
+        let result = StateMermaidEmitter
+            .emit(&model, &all_entities(&model))
+            .unwrap();
+        assert!(
+            result
+                .contains("state__Doc_draft --> state__Doc_published : 判断する [レビュー済み]\n"),
+            "{result}"
+        );
+        assert!(
+            result.contains("state__Doc_draft --> state__Doc_dropped : 判断する\n"),
+            "{result}"
         );
     }
 

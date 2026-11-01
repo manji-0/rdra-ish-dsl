@@ -108,6 +108,7 @@ effects apply together to the pre-state:
 | `sets(UC, E, col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
 | `sets(UC, E, cmp, bool)` | The comparison variable becomes `bool`. |
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
+| `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |
 | a column the use case does not write | Unchanged. |
 
@@ -122,6 +123,16 @@ on every successor. In the TLA+ export a choice of transitions is
 `\E v \in (CASE col = a -> {b, c} [] ... [] OTHER -> {col}) : col' = [col EXCEPT ![p] = v]`;
 a column whose arms leave each state for one target keeps the deterministic `CASE`. A `sets`
 is never a choice: two values for one column in one use case are `ConflictingEffects`.
+
+**Arm guards.** `.when(Cond)` filters the successors of a choice: the explorer forks every
+arm from the pre-state, then keeps the successors whose arm guard held. So the use case
+runs when some arm is enabled, the choice among enabled arms stays free, and an action
+whose every arm is disabled has no successor, which `NeverRuns` reports with the arm guard
+as what blocks it. The TLA+ export writes the same guard after the assignment, as it writes
+every guard that reads the successor:
+`(col[p] = a /\ col'[p] = b /\ body) \/ (col[p] = a /\ col'[p] = c) \/ ...`. A guarded arm
+that no edge takes, while its use case runs and some instance holds its `from`, is the
+`ArmNeverTaken` warning; one cone that takes it is enough.
 
 **Owners.** An action that writes two entities joined by a `relate` binds them. A
 created child gets its parent's slot as its owner. An action that updates a child
@@ -511,6 +522,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `NoWitness { entity, column, value, into }` | `Witness_<entity>_<column>_<value>` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
 | `Deadlock { entity, column, value, at, exits, trace }` | `Deadlock_<entity>_<column>_<value>` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state, and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
 | `NeverRuns { action, origin, site, why }` | `Runs_<action>` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Crowded` (the guards hold only where a created entity has no free slot), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone, `--buc` drops use cases, or `--entity` selects no cone that keeps the action; those are listed under `not checked:`. |
+| `ArmNeverTaken { action, column, from, to, conditions, site }` | `Arm_<action>_<from>_<to>` | warning | A `transitions(..).when(Cond)` arm that no edge of any entity cone takes, while its action runs there and some present instance holds its `from`: the guard never holds where the use case could take the arm. One cone that takes it is enough. An action that never runs is `NeverRuns` instead, and a `from` no state holds is the witness check's. Not raised when a cap stopped the cones that keep the action or `--buc` drops use cases; those are listed under `not checked:` (`whether <action> can take <Entity.column> <from> -> <to> is not decided`). |
 | `UnwrittenConstrainedVar { column }` | `UnwrittenConstrainedVar_<E>_<column>` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | `NoCreationPath_<E>` | info | No use case creates the entity. It starts present. |
 | `MinCardNeedsCreate { usecase, child }` | `MinCardNeedsCreate_<E>_<usecase>_<child>` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
