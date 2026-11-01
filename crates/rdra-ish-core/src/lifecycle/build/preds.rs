@@ -893,6 +893,11 @@ impl<'m> Builder<'m> {
     /// `Has` is a witness among the related rows, `None` a universal over them. The related
     /// instance is `At::Bound(depth)`, linked to every entity of `binding` it has an owner var
     /// with; with no such relate the related rows are quantified independently.
+    ///
+    /// The quantifier ranges over the rows present in the pre-state. Its conditions read the
+    /// quantified row even where `binding` already holds the related entity (the instance a
+    /// use case creates or updates, a witness, or the anchor itself), so a guard on a use case
+    /// that creates the related entity never reads the instance being created.
     fn quantified(
         &mut self,
         q: &RelatedQuantifier,
@@ -900,7 +905,11 @@ impl<'m> Builder<'m> {
         depth: u8,
         site: &Site,
     ) -> Pred {
-        let mut inner = binding.clone();
+        let mut inner: Binding = binding
+            .iter()
+            .filter(|(ek, _)| *ek != q.related)
+            .copied()
+            .collect();
         inner.push((q.related, At::Bound(depth)));
         let conds = self.cross_all(&q.conditions, &inner, site);
         let links: Vec<Pred> = binding

@@ -157,6 +157,12 @@ case's action:
   relates to. Without a `relate`, the instance is independent.
 - In a use case with k groups, the first group that writes an entity the body reads
   carries the guard, else the first group.
+- A `.has(...)` or `.none(...)` on the body quantifies over the related instances
+  present in the pre-state, linked by a `relate` owner to the parameters and the other
+  instances. The instance a created parameter takes is absent there, so the quantifier
+  never reads it; an updated parameter's instance is present and is quantified with its
+  pre-state values. The quantified instance is its own binder even when the action or
+  another atom binds the same entity.
 - `applies_to(Condition, System)` adds no guard, and a condition with no body is a
   trace link.
 - A body applied to a use case that writes nothing is `UnbindableCondition`.

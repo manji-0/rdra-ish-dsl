@@ -63,6 +63,55 @@ fn a_none_guard_keeps_the_revoke_from_running_while_a_linked_row_matches() {
     assert!(!quantifier_violated(&two), "{:?}", two.diags);
 }
 
+/// Packing needs no sent parcel of the order; `last` records whether the latest step packed.
+/// Pack creates the entity its guard quantifies over (#63).
+const PACK_AFTER_SEND: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending)  last: Enum(none, pack, send) @default(none) }
+entity Parcel "荷物" { id: Int @pk  state: Enum(packed, sent) @default(packed) }
+relate(Parcel, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Pack "梱包"
+usecase Send "発送"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+creates(Pack, Parcel)
+sets(Pack, Order, last == pack)
+transitions(Send, Parcel.state, packed -> sent)
+sets(Send, Order, last == send)
+condition Packable "梱包可"
+holds(Packable, Order.status == paid).none(Parcel.state == sent)
+applies_to(Packable, Pack)
+invariant(Order).when(last == pack).none(Parcel.state == sent)
+"#;
+
+#[test]
+fn a_none_guard_on_the_created_entity_quantifies_the_existing_rows() {
+    let two = derive_scoped(&model_from(PACK_AFTER_SEND), Bounds::VERIFY, &Scope::ALL);
+    let violated = two.diags.iter().any(|d| {
+        matches!(
+            d.diag,
+            StateDiag::ConstraintViolated {
+                kind: InvKind::Quantifier,
+                ..
+            }
+        )
+    });
+    assert!(!violated, "{:?}", two.diags);
+    let without = derive_scoped(
+        &model_from(&PACK_AFTER_SEND.replace("applies_to(Packable, Pack)", "")),
+        Bounds::VERIFY,
+        &Scope::ALL,
+    );
+    assert!(without.diags.iter().any(|d| matches!(
+        d.diag,
+        StateDiag::ConstraintViolated {
+            kind: InvKind::Quantifier,
+            ..
+        }
+    )));
+}
+
 #[test]
 fn a_none_guard_still_lets_the_use_case_run_once_the_linked_rows_end() {
     let d = derive_src(&certificates(NO_ACTIVE_ASSIGNMENT, ""));

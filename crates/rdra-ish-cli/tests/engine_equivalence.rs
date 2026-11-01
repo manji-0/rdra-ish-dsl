@@ -707,6 +707,41 @@ fn bfs_and_tlc_agree_on_set_membership() {
     check_fixture("set_membership", SET_MEMBERSHIP);
 }
 
+/// A `.none` guard on the use case that creates the quantified entity (#63): the guard ranges
+/// over the parcels present before the step, never the one being created, and a `.has` guard
+/// on the use case that updates it ranges over every parcel, the updated one included.
+const CREATED_QUANTIFIER: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  last: Enum(none, pack, send) @default(none)
+}
+entity Parcel "荷物" { id: Int @pk  state: Enum(packed, sent) @default(packed) }
+relate(Parcel, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Pack "梱包"
+usecase Send "発送"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+creates(Pack, Parcel)
+sets(Pack, Order, last == pack)
+transitions(Send, Parcel.state, packed -> sent)
+sets(Send, Order, last == send)
+condition Packable "梱包可"
+holds(Packable, Order.status == paid).none(Parcel.state == sent)
+applies_to(Packable, Pack)
+condition Sendable "発送可"
+holds(Sendable, Order.status == paid).has(Parcel.state == packed)
+applies_to(Sendable, Send)
+invariant(Order).when(last == pack).none(Parcel.state == sent)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_guard_over_the_created_entity() {
+    check_fixture("created_quantifier", CREATED_QUANTIFIER);
+}
+
 /// One inline model at both bounds.
 fn check_fixture(name: &str, src: &str) {
     let Some(tlc) = find_tlc() else {

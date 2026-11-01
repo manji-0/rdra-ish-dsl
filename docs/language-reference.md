@@ -1114,6 +1114,10 @@ A body may end in `.has(Related.col == v)` or `.none(Related.col == v)` calls. T
 also needs some row (`has`), or no row (`none`), of the related entity to match. The rows are
 the ones the relate links to the instance the use case runs on, and every row when no relate
 joins the two entities. Like the `.none(...)` of an `invariant`, it ranges over the present rows.
+It reads them before the use case runs: on a use case that creates the related entity, the
+row being created is not one of them, and on a use case that updates a related row, that row
+is one of them, read as it was before the update. The quantified row is its own instance even
+when the body also reads its entity.
 
 ```rdra
 // Revoke only while no assignment of the certificate is active.
@@ -1674,7 +1678,9 @@ export (nullable ones add `null`). The export domain is a fixed approximation (d
 quantifier rule. It ranges over the present instances: `none` fails in a reachable state where the
 anchor condition holds and some related instance satisfies the related condition. A
 `relate` between the two entities links the related instance through its owner; without
-one, the related side is independent. A one-entity `invariant` takes the related entity
+one, the related side is independent. The related condition reads the related instance,
+also when the related entity is the anchor's own: `invariant(Task).when(status == done)
+.none(Task.status == open)` fails while one task is done and another open. A one-entity `invariant` takes the related entity
 from the qualified columns of `.has/.none(...)`, so it is the same rule as
 `invariant(Entity, Related)`, and `invariant()` takes its entity from the qualified
 columns of `.when(...)`. A `.has(...)` or `.none(...)` that

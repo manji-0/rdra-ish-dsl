@@ -448,6 +448,33 @@ fn quantifier_none_finds_a_revoked_cert_with_an_active_assignment() {
     assert!(violated(&d, "Cert", InvKind::Quantifier), "{:?}", d.diags);
 }
 
+/// The related entity is the anchor itself, with no relate between them: the conditions read
+/// every other row, not the anchor row (#63).
+#[test]
+fn quantifier_over_the_anchor_entity_reads_the_quantified_row() {
+    let model = model_from(
+        r#"
+entity Task "作業" { id: Int @pk  status: Enum(open, done) @default(open) }
+usecase Add "追加"
+usecase Finish "完了"
+creates(Add, Task)
+transitions(Finish, Task.status, open -> done)
+invariant(Task).when(status == done).none(Task.status == open)
+"#,
+    );
+    let d = derive_scoped(&model, Bounds::VERIFY, &Scope::ALL);
+    let found = d.diags.iter().any(|x| {
+        matches!(
+            x.diag,
+            StateDiag::ConstraintViolated {
+                kind: InvKind::Quantifier,
+                ..
+            }
+        )
+    });
+    assert!(found, "{:?}", d.diags);
+}
+
 #[test]
 fn quantifier_none_holds_when_the_related_condition_is_unreachable() {
     let d = derive_src(

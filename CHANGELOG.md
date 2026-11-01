@@ -89,6 +89,16 @@
   `UnreachableEnumVariant`, and a trace step cited the first arm whatever arm it took (#52).
   An audit test checks that every declared arm is an edge of the derived system, or that a
   `NeverRuns`, `UnreachableEnumVariant` of its source, or a `Deadlock` naming it says why.
+- A `.has(...)` or `.none(...)` read the wrong instance when its related entity was already
+  bound (#63). On a `holds` guard applied to a use case that creates the related entity, it
+  read the instance being created instead of the existing rows: `states` and `check` let the
+  use case run whatever the existing rows were, and the TLA+ export read the new instance
+  primed (`Parcel_state'[p1]`) before the action defined it, so TLC stopped with
+  `Parcel_state is undefined` at two instances. On a use case that updates the related entity
+  it read that one row, and on an `invariant` whose related entity is the anchor's own it read
+  the anchor row. The quantifier now always reads its own instance, over the rows present
+  before the step. A model may report findings it did not before (a rule on the anchor's own
+  entity), or lose findings that came from the guard not holding.
 
 ## v0.4.0 - 2026-11-01
 
