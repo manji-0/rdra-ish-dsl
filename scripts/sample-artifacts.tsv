@@ -219,7 +219,6 @@ samples/patent-ops/out/uc/sequence_DecideExaminationRequest.mmd	diagram samples/
 samples/patent-ops/out/uc/sequence_DecideNotToFile.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideNotToFile
 samples/patent-ops/out/uc/sequence_DecideReward.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideReward
 samples/patent-ops/out/uc/sequence_DecideToFile.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideToFile
-samples/patent-ops/out/uc/sequence_DecideToKeepSecret.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideToKeepSecret
 samples/patent-ops/out/uc/sequence_DecideToLetLapse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideToLetLapse
 samples/patent-ops/out/uc/sequence_DeemPriorityBaseWithdrawn.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DeemPriorityBaseWithdrawn
 samples/patent-ops/out/uc/sequence_DeemWithdrawnNoRequest.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DeemWithdrawnNoRequest

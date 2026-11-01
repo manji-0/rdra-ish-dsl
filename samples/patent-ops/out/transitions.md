@@ -8,11 +8,11 @@
 | InventionDisclosure | status | 受付待ち (submitted) | 差戻し (returned) | 届出書の差戻し (ReturnDisclosure) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_invention_disclosure.rdra:69 |
 | InventionDisclosure | status | 受付待ち (submitted) | 受付済 (accepted) | 届出の受付と付番 (AcceptDisclosure) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_invention_disclosure.rdra:65 |
 | InventionDisclosure | status | 差戻し (returned) | 受付待ち (submitted) | 届出書の再提出 (ResubmitDisclosure) |  | 発明者 | samples/patent-ops/buc/buc_invention_disclosure.rdra:74 |
-| InventionDisclosure | status | 受付済 (accepted) | 先行技術調査中 (searching) | 先行技術調査の依頼 (RequestPriorArtSearch) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_filing_decision.rdra:56 |
-| InventionDisclosure | status | 先行技術調査中 (searching) | 調査済 (searched) | 先行技術調査の結果の登録 (RecordPriorArtSearch) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_filing_decision.rdra:60 |
-| InventionDisclosure | status | 調査済 (searched) | 出願決定 (decided_file) | 出願の決定 (DecideToFile) | 会社が特許を受ける権利を取得している | 発明審査委員会 | samples/patent-ops/buc/buc_filing_decision.rdra:68 |
-| InventionDisclosure | status | 調査済 (searched) | ノウハウとして秘匿 (decided_secret) | ノウハウとしての秘匿の決定 (DecideToKeepSecret) |  | 発明審査委員会 | samples/patent-ops/buc/buc_filing_decision.rdra:79 |
-| InventionDisclosure | status | 調査済 (searched) | 出願しない (decided_abandon) | 不出願の決定 (DecideNotToFile) |  | 発明審査委員会 | samples/patent-ops/buc/buc_filing_decision.rdra:84 |
+| InventionDisclosure | status | 受付済 (accepted) | 先行技術調査中 (searching) | 先行技術調査の依頼 (RequestPriorArtSearch) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_filing_decision.rdra:53 |
+| InventionDisclosure | status | 先行技術調査中 (searching) | 調査済 (searched) | 先行技術調査の結果の登録 (RecordPriorArtSearch) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_filing_decision.rdra:57 |
+| InventionDisclosure | status | 調査済 (searched) | 出願決定 (decided_file) | 出願の決定 (DecideToFile) | 会社が特許を受ける権利を取得している | 発明審査委員会 | samples/patent-ops/buc/buc_filing_decision.rdra:65 |
+| InventionDisclosure | status | 調査済 (searched) | ノウハウとして秘匿 (decided_secret) | 出願しない決定 (DecideNotToFile) |  | 発明審査委員会 | samples/patent-ops/buc/buc_filing_decision.rdra:76 |
+| InventionDisclosure | status | 調査済 (searched) | 出願しない (decided_abandon) | 出願しない決定 (DecideNotToFile) |  | 発明審査委員会 | samples/patent-ops/buc/buc_filing_decision.rdra:77 |
 | InventorReward | status | 決定 (decided) | 通知済 (notified) | 発明者への通知 (NotifyReward) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_inventor_reward.rdra:61 |
 | InventorReward | status | 通知済 (notified) | 意見の申出あり (objected) | 発明者の意見の申出 (RecordInventorOpinion) |  | 発明者 | samples/patent-ops/buc/buc_inventor_reward.rdra:66 |
 | InventorReward | status | 通知済 (notified) | 支払済 (paid) | 相当の利益の支払 (PayReward) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_inventor_reward.rdra:74 |

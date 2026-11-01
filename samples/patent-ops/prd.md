@@ -329,12 +329,10 @@ flowchart TD
       step__CommitteeStep["発明審査委員会での審議"]:::step
     end
   end
-  usecase__DecideNotToFile("不出願の決定"):::usecase
-  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決める。
+  usecase__DecideNotToFile("出願しない決定"):::usecase
+  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。
   usecase__DecideToFile("出願の決定"):::usecase
   %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
-  usecase__DecideToKeepSecret("ノウハウとしての秘匿の決定"):::usecase
-  %% desc usecase__DecideToKeepSecret: 発明審査委員会が、出願せずノウハウとして秘匿すると決める。
   usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
   %% desc usecase__NotifyInventorOfDecision: 決定を発明者に知らせる（参照のみ）。
   usecase__RecordPriorArtSearch("先行技術調査の結果の登録"):::usecase
@@ -343,7 +341,6 @@ flowchart TD
   %% desc usecase__RequestPriorArtSearch: 受け付けた発明の先行技術調査を依頼し、届出を調査中にする。
   step__CommitteeStep -.-> usecase__DecideNotToFile
   step__CommitteeStep -.-> usecase__DecideToFile
-  step__CommitteeStep -.-> usecase__DecideToKeepSecret
   step__CommitteeStep -->|precedes| step__DecisionNoticeStep
   step__DecisionNoticeStep -.-> usecase__NotifyInventorOfDecision
   step__SearchRequestStep -.-> usecase__RequestPriorArtSearch
@@ -811,8 +808,8 @@ flowchart TD
 | condition | 審査請求をした出願である | PatentApplication | PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present | RequestAcceleratedExamination | samples/patent-ops/buc/buc_examination_request.rdra:79 |
 | invariant | 審査請求のない出願は審査されない | PatentApplication | when PatentApplication.exam_requested_at == null then PatentApplication.status != granted AND PatentApplication.status != rejected AND PatentApplication.status != rejection_final AND PatentApplication.status != appealed AND PatentApplication.status != registered |  | samples/patent-ops/buc/buc_examination_request.rdra:104 |
 | forbidden | 審査請求をしていない出願は早期審査の対象にならない | PatentApplication | PatentApplication.accelerated == true AND PatentApplication.exam_requested_at == null |  | samples/patent-ops/buc/buc_examination_request.rdra:107 |
-| condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true | DecideToFile | samples/patent-ops/buc/buc_filing_decision.rdra:72 |
-| forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:75 |
+| condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true | DecideToFile | samples/patent-ops/buc/buc_filing_decision.rdra:69 |
+| forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:72 |
 | condition | 出願が係属している | PatentApplication | PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済 | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:128 |
 | condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済 | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:144 |
 | condition | 国内優先権の基礎とされた出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:160 |

@@ -293,8 +293,7 @@ flowchart LR
   api__FilingDecisionApi -->|U| entity__InventionDisclosure
   api__FilingDecisionApi -.->|出願の決定| usecase__NotifyInventorOfDecision
   api__PriorArtSearchApi -->|U| entity__InventionDisclosure
-  screen__FilingDecisionScreen -->|ノウハウとしての秘匿の決定| api__FilingDecisionApi
-  screen__FilingDecisionScreen -->|不出願の決定| api__FilingDecisionApi
+  screen__FilingDecisionScreen -->|出願しない決定| api__FilingDecisionApi
   screen__FilingDecisionScreen -->|出願の決定| api__FilingDecisionApi
   screen__FilingDecisionScreen -->|決定の発明者への通知| usecase__NotifyInventorOfDecision
   screen__PriorArtSearchScreen -->|先行技術調査の依頼| api__PriorArtSearchApi
@@ -326,8 +325,7 @@ flowchart LR
 | 先行技術調査の依頼<br>`RequestPriorArtSearch` | 受け付けた発明の先行技術調査を依頼し、届出を調査中にする。 | `PriorArtSearchScreen` | `PriorArtSearchApi` | （なし） |
 | 先行技術調査の結果の登録<br>`RecordPriorArtSearch` | 調査の結果を届出に記録し、調査済にする。 | `PriorArtSearchScreen` | `PriorArtSearchApi` | （なし） |
 | 出願の決定<br>`DecideToFile` | 発明審査委員会が、会社が権利を持つ発明を出願すると決める。 | `FilingDecisionScreen` | `FilingDecisionApi` | 会社が特許を受ける権利を取得している |
-| ノウハウとしての秘匿の決定<br>`DecideToKeepSecret` | 発明審査委員会が、出願せずノウハウとして秘匿すると決める。 | `FilingDecisionScreen` | `FilingDecisionApi` | （なし） |
-| 不出願の決定<br>`DecideNotToFile` | 発明審査委員会が、出願しないと決める。 | `FilingDecisionScreen` | `FilingDecisionApi` | （なし） |
+| 出願しない決定<br>`DecideNotToFile` | 発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。 | `FilingDecisionScreen` | `FilingDecisionApi` | （なし） |
 | 決定の発明者への通知<br>`NotifyInventorOfDecision` | 決定を発明者に知らせる（参照のみ）。 | `FilingDecisionScreen` | `NotifyInventorOfDecision` | （なし） |
 
 <details><summary>先行技術調査の依頼（RequestPriorArtSearch）のシーケンス図</summary>
@@ -403,34 +401,7 @@ sequenceDiagram
 
 </details>
 
-<details><summary>ノウハウとしての秘匿の決定（DecideToKeepSecret）のシーケンス図</summary>
-
-```mermaid
-%% rdra-ish diagram=sequence scope=usecase:DecideToKeepSecret model=samples/patent-ops
-%% kinds: actor screen api entity usecase
-%% omitted: buc step medium permission event
-sequenceDiagram
-  actor actor__ReviewCommittee as 発明審査委員会
-  participant screen__FilingDecisionScreen as 出願審議画面
-  participant api__FilingDecisionApi as 出願可否 API
-  participant entity__InventionDisclosure as 発明届出
-  participant api__DraftingOrderApi as 出願依頼 API
-  participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
-  actor__ReviewCommittee ->> screen__FilingDecisionScreen: ノウハウとしての秘匿の決定
-  screen__FilingDecisionScreen ->> api__FilingDecisionApi: 出願可否 API
-  alt InventionDisclosure.status == 調査済
-    api__FilingDecisionApi ->> entity__InventionDisclosure: update status 調査済 -> ノウハウとして秘匿
-    api__FilingDecisionApi -) api__DraftingOrderApi: 出願の決定
-    api__FilingDecisionApi -) usecase__NotifyInventorOfDecision: 出願の決定
-    api__FilingDecisionApi -->> screen__FilingDecisionScreen: done
-  else guard fails
-    api__FilingDecisionApi -->> screen__FilingDecisionScreen: rejected
-  end
-```
-
-</details>
-
-<details><summary>不出願の決定（DecideNotToFile）のシーケンス図</summary>
+<details><summary>出願しない決定（DecideNotToFile）のシーケンス図</summary>
 
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:DecideNotToFile model=samples/patent-ops
@@ -443,10 +414,15 @@ sequenceDiagram
   participant entity__InventionDisclosure as 発明届出
   participant api__DraftingOrderApi as 出願依頼 API
   participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
-  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 不出願の決定
+  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 出願しない決定
   screen__FilingDecisionScreen ->> api__FilingDecisionApi: 出願可否 API
   alt InventionDisclosure.status == 調査済
-    api__FilingDecisionApi ->> entity__InventionDisclosure: update status 調査済 -> 出願しない
+    api__FilingDecisionApi ->> entity__InventionDisclosure: update
+    alt status 調査済 -> ノウハウとして秘匿
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = ノウハウとして秘匿
+    else status 調査済 -> 出願しない
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願しない
+    end
     api__FilingDecisionApi -) api__DraftingOrderApi: 出願の決定
     api__FilingDecisionApi -) usecase__NotifyInventorOfDecision: 出願の決定
     api__FilingDecisionApi -->> screen__FilingDecisionScreen: done
@@ -465,16 +441,14 @@ sequenceDiagram
 %% omitted: buc step medium permission event
 sequenceDiagram
   actor actor__IpStaff as 知的財産部 担当者
-  participant usecase__DecideNotToFile as 不出願の決定
+  participant usecase__DecideNotToFile as 出願しない決定
   participant usecase__DecideToFile as 出願の決定
-  participant usecase__DecideToKeepSecret as ノウハウとしての秘匿の決定
   participant screen__FilingDecisionScreen as 出願審議画面
   participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
   participant entity__InventionDisclosure as 発明届出
   actor__IpStaff ->> screen__FilingDecisionScreen: 決定の発明者への通知
   usecase__DecideNotToFile ->> usecase__NotifyInventorOfDecision: 出願の決定
   usecase__DecideToFile ->> usecase__NotifyInventorOfDecision: 出願の決定
-  usecase__DecideToKeepSecret ->> usecase__NotifyInventorOfDecision: 出願の決定
   screen__FilingDecisionScreen ->> usecase__NotifyInventorOfDecision: 決定の発明者への通知
   usecase__NotifyInventorOfDecision ->> entity__InventionDisclosure: read
   usecase__NotifyInventorOfDecision -->> screen__FilingDecisionScreen: done
@@ -550,9 +524,8 @@ flowchart LR
 %% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__IpStaff as 知的財産部 担当者
-  participant usecase__DecideNotToFile as 不出願の決定
+  participant usecase__DecideNotToFile as 出願しない決定
   participant usecase__DecideToFile as 出願の決定
-  participant usecase__DecideToKeepSecret as ノウハウとしての秘匿の決定
   participant screen__DraftingOrderScreen as 出願依頼画面
   participant api__DraftingOrderApi as 出願依頼 API
   participant entity__InventionDisclosure as 発明届出
@@ -561,7 +534,6 @@ sequenceDiagram
   actor__IpStaff ->> screen__DraftingOrderScreen: 特許事務所への出願依頼
   usecase__DecideNotToFile ->> api__DraftingOrderApi: 出願の決定
   usecase__DecideToFile ->> api__DraftingOrderApi: 出願の決定
-  usecase__DecideToKeepSecret ->> api__DraftingOrderApi: 出願の決定
   screen__DraftingOrderScreen ->> api__DraftingOrderApi: 出願依頼 API
   alt 出願と決まった発明である: InventionDisclosure.status == 出願決定
     api__DraftingOrderApi ->> entity__InventionDisclosure: read
@@ -2407,10 +2379,10 @@ stateDiagram-v2
     state__InventionDisclosure_searching --> state__InventionDisclosure_searched : 先行技術調査の結果の登録
     %% transition usecase__DecideToFile
     state__InventionDisclosure_searched --> state__InventionDisclosure_decided_file : 出願の決定 [会社が特許を受ける権利を取得している]
-    %% transition usecase__DecideToKeepSecret
-    state__InventionDisclosure_searched --> state__InventionDisclosure_decided_secret : ノウハウとしての秘匿の決定
     %% transition usecase__DecideNotToFile
-    state__InventionDisclosure_searched --> state__InventionDisclosure_decided_abandon : 不出願の決定
+    state__InventionDisclosure_searched --> state__InventionDisclosure_decided_secret : 出願しない決定
+    %% transition usecase__DecideNotToFile
+    state__InventionDisclosure_searched --> state__InventionDisclosure_decided_abandon : 出願しない決定
     state__InventionDisclosure_decided_file --> [*]
     state__InventionDisclosure_decided_secret --> [*]
     state__InventionDisclosure_decided_abandon --> [*]
@@ -3081,8 +3053,8 @@ erDiagram
 | condition | 審査請求をした出願である | PatentApplication | PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present | RequestAcceleratedExamination | samples/patent-ops/buc/buc_examination_request.rdra:79 |
 | invariant | 審査請求のない出願は審査されない | PatentApplication | when PatentApplication.exam_requested_at == null then PatentApplication.status != granted AND PatentApplication.status != rejected AND PatentApplication.status != rejection_final AND PatentApplication.status != appealed AND PatentApplication.status != registered |  | samples/patent-ops/buc/buc_examination_request.rdra:104 |
 | forbidden | 審査請求をしていない出願は早期審査の対象にならない | PatentApplication | PatentApplication.accelerated == true AND PatentApplication.exam_requested_at == null |  | samples/patent-ops/buc/buc_examination_request.rdra:107 |
-| condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true | DecideToFile | samples/patent-ops/buc/buc_filing_decision.rdra:72 |
-| forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:75 |
+| condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true | DecideToFile | samples/patent-ops/buc/buc_filing_decision.rdra:69 |
+| forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:72 |
 | condition | 出願が係属している | PatentApplication | PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済 | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:128 |
 | condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済 | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:144 |
 | condition | 国内優先権の基礎とされた出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:160 |
@@ -3158,7 +3130,7 @@ erDiagram
 | IpStaff | 知的財産部 担当者 | RightsJudge | 職務発明の判定・権利の承継 | true | true | ok | AcquireRightsByAssignment\|JudgeEmployeeInvention |  |
 | PatentAttorney | 弁理士（特許事務所） | DraftWrite | 出願書類の作成 | true | true | ok | DraftLimitedResponse\|DraftResponse\|SubmitDraft | DraftLimitedResponse->OfficeActionApi\|DraftResponse->OfficeActionApi\|RequestLateExtension->OfficeActionApi\|RequestTermExtension->OfficeActionApi |
 | PatentAttorney | 弁理士（特許事務所） | JpoProcedure | 特許庁への手続（代理人） | true | true | ok | ClaimDomesticPriority\|FileApplication\|FileDivisionalApplication\|FileResponse\|ReceiveFinalOfficeAction\|ReceiveFormalityOrder\|ReceiveOfficeAction\|RequestAcceleratedExamination\|RequestAppeal\|RequestExamination\|RequestLateExtension\|RequestTermExtension\|RestoreExaminationRequest\|SubmitFormalityAmendment\|WithdrawApplication | FileApplication->FilingApi\|FileDivisionalApplication->DivisionalApi\|FileResponse->ResponseFilingApi\|ReceiveFinalOfficeAction->ResponseFilingApi\|ReceiveFormalityOrder->FormalityApi\|ReceiveOfficeAction->OfficeActionIntakeApi\|RequestAcceleratedExamination->ExaminationRequestApi\|RequestAppeal->AppealApi\|RequestExamination->ExaminationRequestApi\|RestoreExaminationRequest->ExaminationRequestApi\|SubmitFormalityAmendment->FormalityApi\|WithdrawApplication->WithdrawalApi |
-| ReviewCommittee | 発明審査委員会 | FilingDecide | 出願可否の決定 | true | true | ok | DecideNotToFile\|DecideToFile\|DecideToKeepSecret | DecideNotToFile->FilingDecisionApi\|DecideToFile->FilingDecisionApi\|DecideToKeepSecret->FilingDecisionApi |
+| ReviewCommittee | 発明審査委員会 | FilingDecide | 出願可否の決定 | true | true | ok | DecideNotToFile\|DecideToFile | DecideNotToFile->FilingDecisionApi\|DecideToFile->FilingDecisionApi |
 
 ## 7. 非機能要件と制約
 
@@ -3276,15 +3248,12 @@ flowchart LR
   usecase__PayLateAnnuity -.-> event__EvFeesPaid
   event__EvFeesPaid -.-> extsystem__Jpo
   event__EvFilingDecided>"出願の決定"]:::event
-  usecase__DecideNotToFile("不出願の決定"):::usecase
-  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決める。
+  usecase__DecideNotToFile("出願しない決定"):::usecase
+  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。
   usecase__DecideNotToFile -.-> event__EvFilingDecided
   usecase__DecideToFile("出願の決定"):::usecase
   %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
   usecase__DecideToFile -.-> event__EvFilingDecided
-  usecase__DecideToKeepSecret("ノウハウとしての秘匿の決定"):::usecase
-  %% desc usecase__DecideToKeepSecret: 発明審査委員会が、出願せずノウハウとして秘匿すると決める。
-  usecase__DecideToKeepSecret -.-> event__EvFilingDecided
   usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
   %% desc usecase__NotifyInventorOfDecision: 決定を発明者に知らせる（参照のみ）。
   event__EvFilingDecided -.-> usecase__NotifyInventorOfDecision

@@ -94,15 +94,12 @@ flowchart LR
   usecase__PayLateAnnuity -.-> event__EvFeesPaid
   event__EvFeesPaid -.-> extsystem__Jpo
   event__EvFilingDecided>"出願の決定"]:::event
-  usecase__DecideNotToFile("不出願の決定"):::usecase
-  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決める。
+  usecase__DecideNotToFile("出願しない決定"):::usecase
+  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。
   usecase__DecideNotToFile -.-> event__EvFilingDecided
   usecase__DecideToFile("出願の決定"):::usecase
   %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
   usecase__DecideToFile -.-> event__EvFilingDecided
-  usecase__DecideToKeepSecret("ノウハウとしての秘匿の決定"):::usecase
-  %% desc usecase__DecideToKeepSecret: 発明審査委員会が、出願せずノウハウとして秘匿すると決める。
-  usecase__DecideToKeepSecret -.-> event__EvFilingDecided
   usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
   %% desc usecase__NotifyInventorOfDecision: 決定を発明者に知らせる（参照のみ）。
   event__EvFilingDecided -.-> usecase__NotifyInventorOfDecision

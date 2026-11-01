@@ -14,12 +14,10 @@ flowchart TD
       step__CommitteeStep["発明審査委員会での審議"]:::step
     end
   end
-  usecase__DecideNotToFile("不出願の決定"):::usecase
-  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決める。
+  usecase__DecideNotToFile("出願しない決定"):::usecase
+  %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。
   usecase__DecideToFile("出願の決定"):::usecase
   %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
-  usecase__DecideToKeepSecret("ノウハウとしての秘匿の決定"):::usecase
-  %% desc usecase__DecideToKeepSecret: 発明審査委員会が、出願せずノウハウとして秘匿すると決める。
   usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
   %% desc usecase__NotifyInventorOfDecision: 決定を発明者に知らせる（参照のみ）。
   usecase__RecordPriorArtSearch("先行技術調査の結果の登録"):::usecase
@@ -28,7 +26,6 @@ flowchart TD
   %% desc usecase__RequestPriorArtSearch: 受け付けた発明の先行技術調査を依頼し、届出を調査中にする。
   step__CommitteeStep -.-> usecase__DecideNotToFile
   step__CommitteeStep -.-> usecase__DecideToFile
-  step__CommitteeStep -.-> usecase__DecideToKeepSecret
   step__CommitteeStep -->|precedes| step__DecisionNoticeStep
   step__DecisionNoticeStep -.-> usecase__NotifyInventorOfDecision
   step__SearchRequestStep -.-> usecase__RequestPriorArtSearch

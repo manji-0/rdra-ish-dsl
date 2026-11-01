@@ -8,10 +8,15 @@ sequenceDiagram
   participant entity__InventionDisclosure as 発明届出
   participant api__DraftingOrderApi as 出願依頼 API
   participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
-  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 不出願の決定
+  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 出願しない決定
   screen__FilingDecisionScreen ->> api__FilingDecisionApi: 出願可否 API
   alt InventionDisclosure.status == 調査済
-    api__FilingDecisionApi ->> entity__InventionDisclosure: update status 調査済 -> 出願しない
+    api__FilingDecisionApi ->> entity__InventionDisclosure: update
+    alt status 調査済 -> ノウハウとして秘匿
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = ノウハウとして秘匿
+    else status 調査済 -> 出願しない
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願しない
+    end
     api__FilingDecisionApi -) api__DraftingOrderApi: 出願の決定
     api__FilingDecisionApi -) usecase__NotifyInventorOfDecision: 出願の決定
     api__FilingDecisionApi -->> screen__FilingDecisionScreen: done

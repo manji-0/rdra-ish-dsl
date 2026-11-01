@@ -10,12 +10,10 @@ flowchart LR
     %% desc actor__ReviewCommittee: 先行技術調査の結果を見て、発明を出願するか、ノウハウとして秘匿するか、出願しないかを決める。
   end
   subgraph layer_boundary["システム境界"]
-    usecase__DecideNotToFile("不出願の決定"):::usecase
-    %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決める。
+    usecase__DecideNotToFile("出願しない決定"):::usecase
+    %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決め、ノウハウとして秘匿するか、秘匿もせず出願しないかを選ぶ。
     usecase__DecideToFile("出願の決定"):::usecase
     %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
-    usecase__DecideToKeepSecret("ノウハウとしての秘匿の決定"):::usecase
-    %% desc usecase__DecideToKeepSecret: 発明審査委員会が、出願せずノウハウとして秘匿すると決める。
     usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
     %% desc usecase__NotifyInventorOfDecision: 決定を発明者に知らせる（参照のみ）。
     usecase__RecordPriorArtSearch("先行技術調査の結果の登録"):::usecase
@@ -41,12 +39,12 @@ flowchart LR
   actor__IpStaff -.-> usecase__RequestPriorArtSearch
   actor__ReviewCommittee -.-> usecase__DecideNotToFile
   actor__ReviewCommittee -.-> usecase__DecideToFile
-  actor__ReviewCommittee -.-> usecase__DecideToKeepSecret
   condition__RightsAcquired -.-> usecase__DecideToFile
   event__EvFilingDecided -.-> usecase__NotifyInventorOfDecision
   usecase__DecideNotToFile -.-> screen__FilingDecisionScreen
   usecase__DecideNotToFile -.-> event__EvFilingDecided
   usecase__DecideNotToFile -.->|transitions InventionDisclosure.status searched->decided_abandon| state__InventionDisclosure_decided_abandon
+  usecase__DecideNotToFile -.->|transitions InventionDisclosure.status searched->decided_secret| state__InventionDisclosure_decided_secret
   usecase__DecideNotToFile -.->|updates| entity__InventionDisclosure
   %% derived usecase__DecideNotToFile -> entity__InventionDisclosure via api__FilingDecisionApi
   usecase__DecideToFile -.-> screen__FilingDecisionScreen
@@ -54,11 +52,6 @@ flowchart LR
   usecase__DecideToFile -.->|transitions InventionDisclosure.status searched->decided_file| state__InventionDisclosure_decided_file
   usecase__DecideToFile -.->|updates| entity__InventionDisclosure
   %% derived usecase__DecideToFile -> entity__InventionDisclosure via api__FilingDecisionApi
-  usecase__DecideToKeepSecret -.-> screen__FilingDecisionScreen
-  usecase__DecideToKeepSecret -.-> event__EvFilingDecided
-  usecase__DecideToKeepSecret -.->|transitions InventionDisclosure.status searched->decided_secret| state__InventionDisclosure_decided_secret
-  usecase__DecideToKeepSecret -.->|updates| entity__InventionDisclosure
-  %% derived usecase__DecideToKeepSecret -> entity__InventionDisclosure via api__FilingDecisionApi
   usecase__NotifyInventorOfDecision -.-> screen__FilingDecisionScreen
   usecase__NotifyInventorOfDecision -.->|reads| entity__InventionDisclosure
   usecase__RecordPriorArtSearch -.-> screen__PriorArtSearchScreen

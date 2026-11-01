@@ -8,7 +8,7 @@
   patent application work of a Japanese company's IP department with an outside patent firm
   and the 特許庁 as an external system, from the invention disclosure through filing, the
   formality check, the examination request, office actions, registration, and annuities, to
-  the inventor's reward. 9 BUCs, 66 use cases, 14 timers for the statutory periods, 11 labelled
+  the inventor's reward. 9 BUCs, 65 use cases, 14 timers for the statutory periods, 11 labelled
   rules, and a `//` citation of the primary source for each rule, period, and fee. It is in
   `samples.txt` (`check: ok`, `verify: tlc=ok`) and its diagrams, tables, `design-doc.md`, and
   `prd.md` are in `scripts/sample-artifacts.tsv`. `scripts/gen-clinic-ops-docs.py` takes the
@@ -32,6 +32,10 @@
   (`alt Patent.status in (存続中, 追納期間中)` where it printed `Patent.status == 存続中 and
   Patent.status == 追納期間中`) and draws a choice as an `alt` with one branch per arm after
   the write.
+- `samples/patent-ops` folds `DecideToKeepSecret` and `DecideNotToFile` into one
+  `DecideNotToFile` (出願しない決定) whose two arms from `searched` are the committee's choice.
+  `DecideToFile` stays its own use case: only filing needs the company to own the right, and a
+  condition guards every arm of its use case.
 
 ### Fixed
 

@@ -3,9 +3,8 @@
 %% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__IpStaff as 知的財産部 担当者
-  participant usecase__DecideNotToFile as 不出願の決定
+  participant usecase__DecideNotToFile as 出願しない決定
   participant usecase__DecideToFile as 出願の決定
-  participant usecase__DecideToKeepSecret as ノウハウとしての秘匿の決定
   participant screen__DraftingOrderScreen as 出願依頼画面
   participant api__DraftingOrderApi as 出願依頼 API
   participant entity__InventionDisclosure as 発明届出
@@ -14,7 +13,6 @@ sequenceDiagram
   actor__IpStaff ->> screen__DraftingOrderScreen: 特許事務所への出願依頼
   usecase__DecideNotToFile ->> api__DraftingOrderApi: 出願の決定
   usecase__DecideToFile ->> api__DraftingOrderApi: 出願の決定
-  usecase__DecideToKeepSecret ->> api__DraftingOrderApi: 出願の決定
   screen__DraftingOrderScreen ->> api__DraftingOrderApi: 出願依頼 API
   alt 出願と決まった発明である: InventionDisclosure.status == 出願決定
     api__DraftingOrderApi ->> entity__InventionDisclosure: read
