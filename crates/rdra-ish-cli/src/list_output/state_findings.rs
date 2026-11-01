@@ -711,6 +711,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
+        | StateDiag::FairOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableScope { .. }
         | StateDiag::UnbindableCondition { .. }

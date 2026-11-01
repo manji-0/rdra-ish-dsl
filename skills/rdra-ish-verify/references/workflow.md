@@ -153,7 +153,9 @@ OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
 - Cite the name after the severity; it equals the `INVARIANT` or `PROPERTY` name in the
   `.cfg`.
 - Distinguish invariants (`forbidden`, `invariant`, keys, `@check`) from liveness
-  (`eventually` / `leads_to`, which need the fairness `WF_vars(Next)` adds).
+  (`eventually` / `leads_to`, which need the fairness `WF_vars(Next)` adds). A liveness
+  `ok` under `.fair(...)` holds only on runs that do not starve the listed use cases; say so,
+  as `verify` does in its `<P> assumes weak fairness per instance on ...` line.
 - An `UnbindableScope` error means a `.along(...)` names entities that no `relate`
   binds; declare the `relate`, or drop `.along` for a rule over every pair.
 - Prefer one coherent model per verify run.

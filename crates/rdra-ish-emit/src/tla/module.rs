@@ -4,9 +4,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rdra_ish_core::lifecycle::{
-    ActId, Action, Birth, Effect, EntId, Ltl, ParamRole, Pred, Rhs, Start, TransitionSystem, Value,
-    VarId, VarKind,
+    ActId, Action, ActionOrigin, Birth, Effect, EntId, Ltl, ParamRole, Pred, Rhs, Start,
+    TransitionSystem, Value, VarId, VarKind,
 };
+use rdra_ish_core::model::UseCaseKey;
 
 use super::pred::Ctx;
 use super::{domain_set, needs_fairness, render_value, TlaNames};
@@ -404,6 +405,42 @@ fn closed(
     format!("{quant}({present}) => ({inner})")
 }
 
+/// Weak fairness on each action of `ucs`, per instance it acts on: one `WF_vars` per binding
+/// of its `Existing` and `Parent` params, with the `New` slot inside, so the lowest absent slot
+/// moving on does not reset an instance's claim. A conjunction, one line per action.
+fn fairness(ts: &TransitionSystem, names: &TlaNames, ucs: &[UseCaseKey]) -> String {
+    let mut out = String::new();
+    for id in ts.action_ids() {
+        let a = &ts.actions()[id.index()];
+        if !matches!(&a.origin, ActionOrigin::UseCase { uc, .. } if ucs.contains(uc)) {
+            continue;
+        }
+        let bound = |new: bool| -> Vec<String> {
+            a.params
+                .iter()
+                .enumerate()
+                .filter(|(_, param)| (param.role == ParamRole::New) == new)
+                .map(|(p, param)| format!("p{p} \\in {}", names.ids(param.entity)))
+                .collect()
+        };
+        let (each, fresh) = (bound(false), bound(true));
+        let mut step = signature(names, id, a);
+        if !fresh.is_empty() {
+            step = format!("\\E {} : {step}", fresh.join(", "));
+        }
+        let wf = format!("WF_vars({step})");
+        match each.is_empty() {
+            true => out.push_str(&format!("  /\\ {wf}\n")),
+            false => out.push_str(&format!("  /\\ \\A {} : {wf}\n", each.join(", "))),
+        }
+    }
+    // A scope (`--buc`) can drop every action of the listed use cases; nothing is assumed then.
+    if out.is_empty() {
+        out.push_str("  TRUE\n");
+    }
+    out
+}
+
 fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     for (i, inv) in ts.invariants().iter().enumerate() {
         out.push_str(&format!(
@@ -449,7 +486,16 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
                 format!("(({present}) /\\ ({x})) ~> ({y})")
             }
         };
-        out.push_str(&format!("{} == {quant}{formula}\n", names.property(i)));
+        match names.fair(i) {
+            Some(fair) => {
+                out.push_str(&format!("{fair} ==\n{}", fairness(ts, names, &p.fair)));
+                out.push_str(&format!(
+                    "{} == {fair} => ({quant}{formula})\n",
+                    names.property(i)
+                ));
+            }
+            None => out.push_str(&format!("{} == {quant}{formula}\n", names.property(i))),
+        }
     }
     if !ts.invariants().is_empty() || !ts.after_asserts().is_empty() || !ts.properties().is_empty()
     {

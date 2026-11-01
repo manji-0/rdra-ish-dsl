@@ -553,6 +553,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `AfterAssertViolated { anchor, ... }` | `AfterAssert_<anchor>_<i>` | error | A step of the anchor use case ends in a state that fails the assertion. |
 | `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A temporal property fails on the lasso TLC found, replayed through the step relation. Only `verify` reports it; BFS does not check properties. |
 | `AssertOnInertUseCase { anchor }` | `AssertOnInertUseCase_<E>_<anchor>` | error | `after(UC).assert` names a use case with no action. |
+| `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action, so its fairness constrains no step. |
 | `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
 | `StateCapReached { cap, growth }` | `StateCapReached_<E>` | error | A cone exceeded `--max-states`. The message names the variables the reached states vary in and the use cases that reached the most of them. Raise the flag, narrow `--entity` or `--buc`, or drop the guard that pulls another entity into the cone. |
 

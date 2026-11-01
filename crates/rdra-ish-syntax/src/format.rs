@@ -253,6 +253,8 @@ fn format_property(prop: &PropertyDecl) -> String {
             format_expr(consequent)
         ),
     };
+    let chain: String = prop.chain.iter().map(format_chain_call).collect();
+    let formula = format!("{formula}{chain}");
     match &prop.label {
         Some(label) => format!(
             "property {} {}\n  {}",
@@ -994,6 +996,13 @@ mod tests {
         );
         assert!(formatted.contains("@derived(qty * 2)"), "{formatted}");
         assert_eq!(format_source(&formatted).unwrap(), formatted);
+    }
+
+    #[test]
+    fn formats_a_property_fair_chain() {
+        let src = "property GrantEnds\n  leads_to(A.status == granted, A.status == registered).fair(Pay, Register)\n";
+        let formatted = format_source(src).unwrap();
+        assert_eq!(formatted, src);
     }
 
     #[test]

@@ -4,6 +4,25 @@
 
 ### Added
 
+- `.fair(UseCase, ...)` on an `eventually` / `leads_to` property assumes each listed use case is
+  weakly fair per instance it acts on (#59). `WF_vars(Next)` alone holds on a run where one
+  instance loops forever, so `leads_to(granted, registered or dismissed)` failed while another
+  application amended its filing endlessly. The TLA+ export adds `Fair_<P>`, one
+  `\A p0 \in E_Ids : WF_vars(UC(p0))` per action of each listed use case (a created slot bound
+  inside with `\E`, each action of a split use case), and prints the property as
+  `Fair_<P> => (...)`, which `Spec` satisfies exactly when `Spec /\ Fair_<P>` satisfies the
+  property; `Spec`, the `.cfg`, and properties without `.fair` are unchanged. Per instance
+  rather than per use case, because `WF_vars(\E p : UC(p))` is met by the use case running on
+  any instance; weak fairness only; no model-wide switch, which would change every property's
+  verdict. `verify` prints `<P> assumes weak fairness per instance on ...`; `check` and `states`
+  evaluate no temporal property, with or without `.fair`. `.fair` on `always` is
+  `FairOnSafetyProperty`; an empty `.fair`, a non-use-case argument, a duplicate, or a second
+  `.fair` is `FairRequiresUseCases`; any other method is `UnknownChainMethod`; a listed use
+  case with no effect is `FairOnInertUseCase`. `rule_audit` covers the property forms, and
+  `samples/formal-verification/temporal_fair.rdra` checks the same `leads_to` with and without
+  `.fair`. patent-ops declares no temporal property: a whole-model run at two instances
+  explored 14 million states in 11 minutes without finishing.
+
 - `chooses(UseCase, Entity.column)` lets the actor pick a variation column's value again on an
   update (#54). After the use case the column holds any value of the variation, one run per
   value, as on a creation: `states`, `check`, the TLA+ export (`\E v \in {..} : col' = [col

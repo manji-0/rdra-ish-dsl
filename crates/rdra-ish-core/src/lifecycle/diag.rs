@@ -235,6 +235,13 @@ pub enum StateDiag {
     },
     /// `after(UC).assert` names a use case that changes nothing.
     AssertOnInertUseCase { anchor: String, site: Site },
+    /// `property ... .fair(UC)` names a use case that changes nothing, so its fairness
+    /// constrains no step.
+    FairOnInertUseCase {
+        property: String,
+        usecase: String,
+        site: Site,
+    },
     /// An Int literal outside the bounded domain `0..=max`.
     IntLiteralOutOfBounds { value: i64, max: u8, site: Site },
     /// A cross-entity constraint whose entities no relate path binds.
@@ -348,6 +355,9 @@ impl StateDiag {
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 with("AssertOnInertUseCase", &[anchor])
             }
+            StateDiag::FairOnInertUseCase {
+                property, usecase, ..
+            } => with("FairOnInertUseCase", &[property, usecase]),
             StateDiag::IntLiteralOutOfBounds { value, .. } => {
                 with("IntLiteralOutOfBounds", &[&value.to_string()])
             }
@@ -429,6 +439,7 @@ impl StateDiag {
             | StateDiag::NoWitness { .. }
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
+            | StateDiag::FairOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
@@ -672,6 +683,12 @@ impl fmt::Display for StateDiag {
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 write!(f, "after({anchor}).assert names a use case with no effect")
             }
+            StateDiag::FairOnInertUseCase {
+                property, usecase, ..
+            } => write!(
+                f,
+                "property {property}: .fair({usecase}) names a use case with no effect, so its fairness constrains no step"
+            ),
             StateDiag::IntLiteralOutOfBounds { value, max, .. } => {
                 write!(
                     f,

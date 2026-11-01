@@ -1791,8 +1791,9 @@ connectives `and` / `or` / `not` (`/\` `\/` `~` remain aliases). See [formal-ver
 The property label string is optional: `property StockOk always(Item.stock >= Item.selling)`.
 
 When any `eventually` / `leads_to` property is exported, the Spec includes
-`WF_vars(Next)` (fairness is on the whole `Next` disjunction — not configurable
-from the CLI). Temporal formulas are quantified over the present instances of each
+`WF_vars(Next)`: some step is taken while one can be, but no step in particular. Another
+instance's loop satisfies it, so a property about one instance can fail on a run that only
+ever moves the others. Temporal formulas are quantified over the present instances of each
 entity. `after(UseCase).assert(...)` becomes an independent TLA `PROPERTY`,
 `[][(\A p : UC(p) => post')]_vars`, that checks the state each step leaves and is **not**
 injected into the effects. Every constraint is its own `INVARIANT`; see
@@ -1819,6 +1820,52 @@ names no condition on a related entity, as `.none()` or `.none(Related)`, is
 `.when(...)` is `QuantifierScopeUnknown`. `states` runs one instance per entity, so use
 `verify --instance-count 2` for rules that need two related instances. To make a use case
 respect such a rule, put the same `.none(...)` on a `holds` guard (see Conditions).
+
+#### Fairness: `.fair(UseCase, ...)`
+
+`.fair(...)` after an `eventually` or `leads_to` names the use cases whose steps the property
+assumes are not starved:
+
+```
+property GrantEnds "a granted application is registered or dismissed"
+  leads_to(Application.status == granted, Application.status in (registered, dismissed)).fair(Register, Dismiss)
+```
+
+Each listed use case is weakly fair **per instance it acts on**: if its step on one
+application stays enabled, it is eventually taken on that application, however many steps
+other applications take meanwhile. The property then holds on every run that meets that
+assumption. In TLA+ the assumption is an operator, and the property is the implication:
+
+```
+Fair_GrantEnds ==
+  /\ \A p0 \in Application_Ids : WF_vars(Register(p0))
+  /\ \A p0 \in Application_Ids : WF_vars(Dismiss(p0))
+GrantEnds == Fair_GrantEnds => (\A b0 \in Application_Ids : ...)
+```
+
+The `\A` ranges over the instances the use case reads or creates under; an instance it
+creates is bound inside, `WF_vars(\E p1 \in Patent_Ids : Register(p0, p1))`, so the next
+free slot moving on does not reset an application's claim. A use case split into
+transaction groups is fair on each of its actions. `Spec`, the `.cfg`, and properties without
+`.fair` are unchanged; `Spec /\ Fair_P` satisfies `P` exactly when `Spec` satisfies
+`Fair_P => P`.
+
+- Per instance, not per use case: `WF_vars(\E p : Register(p))` is met when Register runs on
+  any application, so it does not promise that each application finishes.
+- Weak fairness only. A step that is enabled, disabled, and enabled again forever is not
+  forced; no strong fairness (`SF`) form exists.
+- No model-wide switch: fairness on every use case would change the verdict of every
+  existing property and assume every actor always acts, which hides real liveness gaps. Name
+  the use cases each property relies on.
+- `check` and `states` run BFS, which evaluates no temporal property, so `.fair` changes
+  nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
+  to its temporal runs.
+
+Errors: `.fair` on `always(...)` is `FairOnSafetyProperty` (fairness cannot change a safety
+verdict); a `.fair` with no argument, an argument that is not a use case, a use case listed
+twice, or a second `.fair` is `FairRequiresUseCases`; an undefined name is `UndefinedSymbol`;
+any other method after a property is `UnknownChainMethod`. A listed use case that changes
+nothing is `FairOnInertUseCase`.
 
 ### Comparison Expressions in Constraints
 

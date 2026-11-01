@@ -265,6 +265,8 @@ pub struct TemporalProperty {
     pub id: std::string::String,
     pub label: std::string::String,
     pub formula: TemporalFormula,
+    /// `.fair(UC, ...)`: the use cases assumed weakly fair per instance they act on.
+    pub fair: Vec<UseCaseKey>,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,

@@ -104,6 +104,11 @@ fn one_of_each() -> Vec<StateDiag> {
             anchor: "Noop".into(),
             site: site(),
         },
+        StateDiag::FairOnInertUseCase {
+            property: "Ends".into(),
+            usecase: "Noop".into(),
+            site: site(),
+        },
         StateDiag::IntLiteralOutOfBounds {
             value: -7,
             max: 5,
@@ -181,6 +186,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::ValueNeverChosen { .. }
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
+            | StateDiag::FairOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }

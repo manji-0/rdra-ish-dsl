@@ -4,11 +4,14 @@ use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::{
-    CmpOpModel, EffectValue, SemanticModel, TemporalAtom, TemporalExpr, TemporalFormula,
-    TemporalProperty, TemporalRhs,
+    CmpOpModel, EffectValue, NodeRef, SemanticModel, TemporalAtom, TemporalExpr, TemporalFormula,
+    TemporalProperty, TemporalRhs, UseCaseKey,
 };
-use rdra_ish_syntax::ast::{AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PropertyDecl};
+use rdra_ish_syntax::ast::{
+    AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PredicateArg, PropertyDecl,
+};
 
+use super::arg_resolve::resolve_arg;
 use super::comparison::{resolve_bare_rhs, resolve_set_values, BareRhs};
 
 /// Why an atom does not lower: a message for `InvalidTemporalProperty`, or a comparison error
@@ -42,6 +45,9 @@ pub(crate) fn register_property(
         return;
     }
 
+    let Ok(fair) = fair_use_cases(model, decl, ctx, diags) else {
+        return;
+    };
     match lower_formula(model, &decl.formula) {
         Ok(formula) => {
             model.temporal_properties.push(TemporalProperty {
@@ -49,6 +55,7 @@ pub(crate) fn register_property(
                 id: decl.id.clone(),
                 label: decl.label.clone().unwrap_or_else(|| decl.id.clone()),
                 formula,
+                fair,
             });
         }
         Err(LowerError::Comparison(err)) => push_error(ctx, diags, decl.span.clone(), err),
@@ -63,6 +70,56 @@ pub(crate) fn register_property(
                 },
             );
         }
+    }
+}
+
+/// The use cases of the one `.fair(...)` chain, `Err` after reporting any other chain, a
+/// `.fair` on `always`, or a `.fair` that names anything but distinct use cases.
+fn fair_use_cases(
+    model: &SemanticModel,
+    decl: &PropertyDecl,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Result<Vec<UseCaseKey>, ()> {
+    let mut fair = Vec::new();
+    let mut ok = true;
+    let id = || decl.id.clone();
+    for (index, cc) in decl.chain.iter().enumerate() {
+        if cc.name != "fair" {
+            let err = RdraError::UnknownChainMethod {
+                pred: "property".into(),
+                name: cc.name.clone(),
+                hint: "a property takes only `.fair(UseCase, ...)`".into(),
+            };
+            push_error(ctx, diags, cc.span.clone(), err);
+            ok = false;
+            continue;
+        }
+        if matches!(decl.formula, AstTemporalFormula::Always(_)) {
+            let err = RdraError::FairOnSafetyProperty { id: id() };
+            push_error(ctx, diags, cc.span.clone(), err);
+            ok = false;
+            continue;
+        }
+        let mut well_formed = index == 0 && !cc.args.is_empty();
+        for arg in &cc.args {
+            match resolve_arg(model, arg, ctx, diags) {
+                Some(NodeRef::UseCase(uk)) if !fair.contains(&uk) => fair.push(uk),
+                // resolve_arg already reported an undefined or ambiguous reference.
+                None if matches!(arg, PredicateArg::Ref(_)) => ok = false,
+                _ => well_formed = false,
+            }
+        }
+        if !well_formed {
+            let err = RdraError::FairRequiresUseCases { id: id() };
+            push_error(ctx, diags, cc.span.clone(), err);
+            ok = false;
+        }
+    }
+    if ok {
+        Ok(fair)
+    } else {
+        Err(())
     }
 }
 

@@ -73,6 +73,7 @@ action, and `Spec` allows stuttering.
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's actions. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
+| `property P ... .fair(UC, ...)` | `Fair_P`, one `WF_vars` per action of each listed use case and per instance it acts on (`\A p0 \in E_Ids : WF_vars(UC(p0))`, a created slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. |
 | Domain of every variable | `INVARIANT TypeOK`, kept apart from the business rules |
 
 Example temporal and Int syntax:
@@ -128,6 +129,14 @@ property, so `verify` runs each property alone: module `RdraSpec_<Property>`, th
 module text and fairness as the whole-model `RdraSpec`, and a `.cfg` with that one
 `PROPERTY`. The property runs start after the cone runs, at most two at a time, and share
 the cores.
+
+A property with `.fair(UC, ...)` (see
+[language-reference.md](./language-reference.md#fairness-fairusecase-)) runs the same way: its
+assumption is part of its own formula, `Fair_P => (...)`, so it needs no `Spec` of its own,
+and no cone has to keep the listed use cases. `verify` prints `<P> assumes weak fairness per
+instance on ...` under the `temporal properties:` line, since an `ok` for `P` holds only on the
+runs that do not starve them. `check` and `states` run BFS, which evaluates no temporal
+property, with or without `.fair`.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
 2,097,152 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
@@ -268,9 +277,15 @@ The rules for each flag and for deferral are in
 - **`now`.** `now` is a global Int clock with a `Tick` action. Nothing pins a column
   that `now` is compared to, so the clock can tick past it and TLC finds a violation of
   `forbidden(col < now)` (see `now_coupon.rdra`).
-- **`WF_vars(Next)`.** Fairness is on the whole `Next` disjunction, not per action. That
-  suffices for simple `eventually` and `leads_to` on small models. It does not replace
-  per-action weak fairness.
+- **`WF_vars(Next)`.** Fairness is on the whole `Next` disjunction, not per action. Another
+  instance's endless loop satisfies it, so a property about one instance fails on a run that
+  only moves the others (`temporal_fair.rdra`). `.fair(UC, ...)` adds weak fairness per
+  instance on the use cases a property names. There is no strong fairness: a step enabled and
+  disabled forever is not forced.
+- **Whole-model temporal runs.** A property runs on the whole model, not a cone, so its run
+  explores every reachable state at once. On `samples/patent-ops` at `InstanceCount=2` that
+  is more than tens of millions of states (the largest cone alone has 4.8 million), so
+  patent-ops declares no temporal property.
 - **`.along`.** An `.along` path needs a `relate` that binds each adjacent pair. Without
   one, the rule is `UnbindableScope`, an error in every command, not a dropped filter.
 - **Quantifiers.** `has` and `none` range over the `InstanceCount` ids. Where a `relate`
@@ -345,6 +360,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `quantifier_guard.rdra` | pass, pass | `holds(..).none(..)` on Revoke makes the `.none(...)` rule of `quantifier_none` hold |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
+| `temporal_fair.rdra` | pass, fail | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
 | `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `min_card_unmet.rdra` | fail, fail | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |

@@ -27,6 +27,8 @@ pub struct TlaNames {
     invariants: Vec<String>,
     after: Vec<String>,
     properties: Vec<String>,
+    /// `Fair_<property>` for a property with `.fair(...)`.
+    fair: Vec<Option<String>>,
 }
 
 struct Taken(HashSet<String>);
@@ -99,6 +101,11 @@ impl TlaNames {
             .iter()
             .map(|x| taken.claim(&x.name))
             .collect();
+        let fair = ts
+            .properties()
+            .iter()
+            .map(|x| (!x.fair.is_empty()).then(|| taken.claim(&format!("Fair_{}", x.name))))
+            .collect();
         TlaNames {
             vars,
             ids,
@@ -106,6 +113,7 @@ impl TlaNames {
             invariants,
             after,
             properties,
+            fair,
         }
     }
 
@@ -135,6 +143,11 @@ impl TlaNames {
 
     pub fn property(&self, i: usize) -> &str {
         &self.properties[i]
+    }
+
+    /// The operator that conjoins the fairness `properties()[i]` assumes, if it lists any.
+    pub fn fair(&self, i: usize) -> Option<&str> {
+        self.fair[i].as_deref()
     }
 
     pub fn invariant_index(&self, name: &str) -> Option<usize> {

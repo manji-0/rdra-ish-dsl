@@ -514,3 +514,50 @@ forbidden(Order, status in (paid, cancelled), qty in (1, 2))
     );
     assert!(tla.contains(r#"Order_qty[b0] \in {1, 2}"#), "{tla}");
 }
+
+const FAIR: &str = r#"
+entity App "App" { id: Int @pk  status: Enum(granted, registered) @default(granted) }
+entity Patent "Patent" { id: Int @pk }
+usecase File "File"
+usecase Register "Register"
+creates(File, App)
+transitions(Register, App.status, granted -> registered)
+creates(Register, Patent)
+relate(Patent, App, 1:1)
+property Ends leads_to(App.status == granted, App.status == registered).fair(Register)
+property Plain leads_to(App.status == granted, App.status == registered)
+"#;
+
+/// `.fair(UC)` is weak fairness per instance the use case acts on: `\A` over the slots it
+/// reads, `\E` over the slot it creates, so the lowest absent slot moving on does not reset an
+/// instance's claim. The property assumes it; Spec, the cfg, and a property without `.fair`
+/// stay as they are.
+#[test]
+fn a_fair_property_assumes_weak_fairness_per_instance() {
+    let bundle = print(&system(FAIR), PrintMode::Check, "M");
+    let tla = &bundle.tla;
+    assert!(
+        tla.contains(
+            "Fair_Ends ==\n  /\\ \\A p0 \\in App_Ids : WF_vars(\\E p1 \\in Patent_Ids : Register(p0, p1))\n\
+             Ends == Fair_Ends => (\\A b0 \\in App_Ids : "
+        ),
+        "{tla}"
+    );
+    assert!(tla.contains("\nPlain == \\A b0 \\in App_Ids : "), "{tla}");
+    assert!(tla.contains("Spec == Init /\\ [][Next]_vars /\\ WF_vars(Next)\n"));
+    assert!(bundle.cfg.contains("SPECIFICATION Spec\n"));
+    assert!(bundle.cfg.contains("PROPERTY Ends\nPROPERTY Plain\n"));
+}
+
+/// A use case split into transaction groups is fair on each of its actions.
+#[test]
+fn a_fair_split_use_case_is_fair_on_each_action() {
+    let split = FAIR.replace("relate(Patent, App, 1:1)\n", "");
+    let tla = print(&system(&split), PrintMode::Check, "M").tla;
+    assert!(
+        tla.contains(
+            "Fair_Ends ==\n  /\\ \\A p0 \\in App_Ids : WF_vars(Register_1(p0))\n  /\\ WF_vars(\\E p0 \\in Patent_Ids : Register_2(p0))\n"
+        ),
+        "{tla}"
+    );
+}

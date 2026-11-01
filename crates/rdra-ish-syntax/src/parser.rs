@@ -781,10 +781,12 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
         .ignore_then(ident())
         .then(string_lit().or_not())
         .then(formula)
-        .map_with_span(|((id, label), formula), span| PropertyDecl {
+        .then(chain_call().repeated())
+        .map_with_span(|(((id, label), formula), chain), span| PropertyDecl {
             id,
             label,
             formula,
+            chain,
             span,
         })
 }
@@ -1951,6 +1953,21 @@ performs(actor::Add, usecase::Add)
         };
         assert_eq!(prop.id, "PaidLeadsToShipped");
         assert!(matches!(&prop.formula, AstTemporalFormula::LeadsTo { .. }));
+    }
+
+    #[test]
+    fn test_parse_property_fair_chain() {
+        let ast = parse_ok(
+            r#"property GrantEnds
+  leads_to(A.status == granted, A.status == registered).fair(Pay, Register)
+"#,
+        );
+        let Item::Property(prop) = &ast.items[0] else {
+            panic!("expected Property");
+        };
+        assert_eq!(prop.chain.len(), 1);
+        assert_eq!(prop.chain[0].name, "fair");
+        assert_eq!(prop.chain[0].args.len(), 2);
     }
 
     #[test]

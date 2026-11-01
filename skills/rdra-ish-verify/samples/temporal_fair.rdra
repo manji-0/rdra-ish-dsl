@@ -1,0 +1,49 @@
+// The registration step of samples/patent-ops: the fees for years 1-3 are due within 30 days of
+// the grant (特許法108条), payment leads to registration (特許法66条), and an application whose
+// fees are not paid in time is dismissed (特許法18条). A granted application ends registered or
+// dismissed only when the use cases that end it are not starved. Another application can be
+// ordered to amend its filing and amend it forever: weak fairness on the whole `Next` holds on
+// that loop, so GrantEndsUnfair fails with a lasso.
+// `.fair(Register, Dismiss)` assumes each application's Register and Dismiss steps are taken
+// once they stay enabled, which rules the loop out, and GrantEnds holds.
+// expect check: ok
+// expect verify: tlc=counterexample fail GrantEndsUnfair
+entity Application "出願" {
+  id: Int @pk
+  status: Enum(filed, formality_order, granted, registered, dismissed) @default(filed)
+  fees_paid: Bool
+}
+
+usecase File "出願"
+usecase OrderAmendment "補正指令"
+usecase Amend "補正"
+usecase Grant "特許査定"
+usecase PayFees "特許料納付"
+usecase Register "設定登録"
+usecase Dismiss "不納による却下"
+
+creates(File, Application)
+transitions(OrderAmendment, Application.status, filed -> formality_order)
+transitions(Amend, Application.status, formality_order -> filed)
+transitions(Grant, Application.status, filed -> granted)
+sets(PayFees, Application, fees_paid == true)
+transitions(Register, Application.status, granted -> registered)
+transitions(Dismiss, Application.status, granted -> dismissed)
+
+condition Granted "特許査定を受けている"
+holds(Granted, Application.status == granted)
+applies_to(Granted, PayFees)
+
+condition Paid "特許料を納付している"
+holds(Paid, Application.status == granted, Application.fees_paid == true)
+applies_to(Paid, Register)
+
+condition Unpaid "特許料を納付していない"
+holds(Unpaid, Application.status == granted, Application.fees_paid == false)
+applies_to(Unpaid, Dismiss)
+
+property GrantEnds "a granted application is registered or dismissed"
+  leads_to(Application.status == granted, Application.status in (registered, dismissed)).fair(Register, Dismiss)
+
+property GrantEndsUnfair "the same claim without fairness"
+  leads_to(Application.status == granted, Application.status in (registered, dismissed))

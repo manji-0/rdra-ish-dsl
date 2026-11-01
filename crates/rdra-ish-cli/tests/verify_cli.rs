@@ -262,6 +262,34 @@ fn a_temporal_counterexample_prints_its_lasso_in_model_terms() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// `.fair(Register, Dismiss)` rules out the run where another application amends forever: the
+/// fair property holds, the same claim without it fails with a lasso, and verify names the
+/// assumption the passing verdict rests on.
+#[test]
+fn a_fair_property_holds_where_the_unfair_one_loops() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_fair");
+    let sample = repo().join("samples/formal-verification/temporal_fair.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("\n  GrantEnds assumes weak fairness per instance on Register, Dismiss\n"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("[GrantEnds]: ok"), "{stdout}");
+    assert!(
+        stdout.contains("[GrantEndsUnfair]: counterexample"),
+        "{stdout}"
+    );
+    assert!(!stderr.contains("error[GrantEnds]:"), "{stderr}");
+    assert!(stderr.contains("error[GrantEndsUnfair]:"), "{stderr}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `verify` states the bounds first, and a passing run ends with them in its `OK:` line.
 #[test]
 fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {

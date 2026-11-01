@@ -36,6 +36,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::ValueNeverChosen { .. }
         | StateDiag::Deadlock { .. }
         | StateDiag::AssertOnInertUseCase { .. }
+        | StateDiag::FairOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableCondition { .. }
         | StateDiag::DerivedColumnRead { .. }

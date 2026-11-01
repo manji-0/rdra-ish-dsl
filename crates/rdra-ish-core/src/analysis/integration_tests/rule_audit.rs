@@ -274,6 +274,52 @@ const FORMS: &[(&str, Expect)] = &[
         "holds(Ready, Ticket.status == done)\ntransitions(Pay, Order.status, open -> paid).unless(Ready)",
         Error,
     ),
+    // property: a temporal formula records the property and each `.fair` use case; fairness
+    // only weakens a progress claim, so it is an error on `always`, where it changes nothing
+    ("property P always(Order.status != paid)", Recorded),
+    ("property P eventually(Order.status == paid)", Recorded),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid)",
+        Recorded,
+    ),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).fair(Pay)",
+        Recorded,
+    ),
+    (
+        "usecase Ship \"Ship\"\nproperty P leads_to(Order.status == open, Order.status == paid).fair(Pay, Ship)",
+        Recorded,
+    ),
+    ("property P eventually(Order.status == paid).fair(Pay)", Recorded),
+    ("property P always(Order.status != paid).fair(Pay)", Error),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).fair(Nosuch)",
+        Error,
+    ),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).fair(Order)",
+        Error,
+    ),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).fair(Order.status == paid)",
+        Error,
+    ),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).fair()",
+        Error,
+    ),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).fair(Pay, Pay)",
+        Error,
+    ),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).fair(Pay).fair(Pay)",
+        Error,
+    ),
+    (
+        "property P leads_to(Order.status == open, Order.status == paid).when(Ready)",
+        Error,
+    ),
 ];
 
 /// The rules a model records, its field mappings, its `sets` effects, and each condition body
@@ -303,6 +349,11 @@ fn recorded(model: &SemanticModel) -> usize {
         + choices
         + model.proposition_effects.len()
         + bodies
+        + model
+            .temporal_properties
+            .iter()
+            .map(|p| 1 + p.fair.len())
+            .sum::<usize>()
 }
 
 fn outcome(line: &str) -> (Expect, String) {
@@ -334,12 +385,22 @@ fn outcome(line: &str) -> (Expect, String) {
 
 /// The parts a form records, line by line: one per `.has/.none(...)`, plus the rule or body
 /// itself unless the form is only a quantifier; a `transitions` arm records its `.when` guard,
-/// a `chooses` line its choice or value and its `.when` guard.
+/// a `chooses` line its choice or value and its `.when` guard, a `property` itself and each
+/// use case its `.fair` lists.
 fn parts(form: &str) -> usize {
     form.lines().map(line_parts).sum()
 }
 
 fn line_parts(line: &str) -> usize {
+    if line.starts_with("usecase ") {
+        return 0;
+    }
+    if line.starts_with("property ") {
+        let fair = line
+            .split_once(".fair(")
+            .map_or(0, |(_, rest)| rest.trim_end_matches(')').split(',').count());
+        return 1 + fair;
+    }
     if line.starts_with("transitions(") {
         return line.matches(".when(").count();
     }

@@ -379,6 +379,19 @@ fn run_tlc(
             "temporal properties: {n}, not checked: a scoped run has no whole-model run"
         ),
     }
+    // A verdict under `.fair(...)` holds only on the runs that do not starve those use cases.
+    for p in ts.properties().iter().filter(|p| !p.fair.is_empty()) {
+        let ucs: Vec<&str> = p
+            .fair
+            .iter()
+            .map(|uk| model.use_cases[*uk].id.as_str())
+            .collect();
+        println!(
+            "  {} assumes weak fairness per instance on {}",
+            p.name,
+            ucs.join(", ")
+        );
+    }
     // The whole-model module with every property, for a run by hand; verify runs each
     // property in its own copy of it.
     let whole = temporal.then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));

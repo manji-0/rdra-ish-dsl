@@ -428,6 +428,24 @@ after(Look).assert(Doc.status == a)
 }
 
 #[test]
+fn fairness_on_a_use_case_without_effects_is_an_error() {
+    let d = derive_src(
+        r#"
+usecase Look "見る"
+usecase Close "閉じる"
+entity Doc "D" { id: Int @pk  status: Enum(a, b) }
+transitions(Close, Doc.status, a -> b)
+property Closes leads_to(Doc.status == a, Doc.status == b).fair(Close, Look)
+"#,
+    );
+    assert!(d.has("Doc", |x| matches!(
+        x,
+        StateDiag::FairOnInertUseCase { property, usecase, .. }
+            if property == "Closes" && usecase == "Look"
+    )));
+}
+
+#[test]
 fn order_after_assert_holds() {
     let d = derive(&sample_model("samples/formal-verification/order.rdra"));
     assert_eq!(d.diags.len(), 0, "{:?}", d.diags);

@@ -519,6 +519,12 @@ pub enum RdraError {
         col: String,
     },
 
+    #[error("`.fair(...)` on property '{id}' must name one or more use cases, each once, in a single `.fair`\n  hint: write `.fair(UseCaseA, UseCaseB)`; each listed use case is weakly fair per instance it acts on")]
+    FairRequiresUseCases { id: String },
+
+    #[error("property '{id}' is `always(...)`, a safety property, and `.fair(...)` cannot change its verdict\n  hint: drop `.fair(...)`; fairness only rules out runs that starve a use case, which matters for `eventually` and `leads_to`")]
+    FairOnSafetyProperty { id: String },
+
     #[error("duplicate temporal property id '{id}'\n  hint: each `property` declaration must have a unique id")]
     DuplicateProperty { id: String },
 

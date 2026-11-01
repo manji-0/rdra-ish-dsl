@@ -44,7 +44,10 @@
   property its counterexample violates, and prints the lasso in model terms.
 - **`after.assert`**: independent `[][(\A p : UC(p) => post')]_vars` PROPERTY named
   `AfterAssert_<UC>_<n>` (not injected into the effects).
-- **`WF_vars(Next)`**: fairness on whole `Next`, not per action.
+- **`WF_vars(Next)`**: fairness on whole `Next`, not per action; another instance's loop
+  satisfies it. `.fair(UC, ...)` on a property adds weak fairness per instance on the listed
+  use cases (no strong fairness). A property runs on the whole model, so a large model such as
+  patent-ops is too big for a temporal run at two instances.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at the same bounds as TLC (capped at 2,097,152 states per cone).
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
@@ -94,6 +97,7 @@ expectations"). The table repeats each header; "ok" means the command passes.
 | `samples/quantifier_guard.rdra` | ok | `tlc=ok` | `holds(..).none(..)` guard on Revoke; the `.none(...)` rule holds |
 | `samples/untriggered_sets.rdra` | fail `Forbidden_Order_0` | `tlc=counterexample` | `sets` from a use case that drives no transition, next to `transitions` |
 | `samples/after_assert_unmet.rdra` | fail `AfterAssert_DeliverOrder_0` | `tlc=counterexample` | `after(UC).assert` whose postcondition the use case does not set |
+| `samples/temporal_fair.rdra` | ok | `tlc=counterexample`, `GrantEndsUnfair` | The same `leads_to` with and without `.fair(Register, Dismiss)`: another application amending forever breaks the unfair one only |
 | `samples/temporal_unmet.rdra` | ok | `tlc=counterexample`, `NeverShipped` and `PendingLeadsToDelivered` | An `always` and a `leads_to` property that both fail; Reopen lets an Order be cancelled and reopened forever, so the `leads_to` lasso loops back |
 | `samples/unwitnessed_state.rdra` | fail `Witness_Order_status_refunded Deadlock_Order_status_shipped` | `tlc=ok`, fails on the same names | A `transitions` endpoint no use case reaches, and a shipped Order whose only way out is Refund; Refund warns `Runs_Refund` |
 | `samples/deadlock.rdra` | fail `Deadlock_Order_status_paid` | `tlc=ok`, fails on the same name | A way out that never opens: Ship's condition holds only while `pending`; Ship warns `Runs_Ship` |

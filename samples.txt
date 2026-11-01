@@ -19,6 +19,7 @@ samples/formal-verification/order.rdra
 samples/formal-verification/partial_scope.rdra
 samples/formal-verification/quantifier_none.rdra
 samples/formal-verification/quantifier_guard.rdra
+samples/formal-verification/temporal_fair.rdra
 samples/formal-verification/temporal_unmet.rdra
 samples/formal-verification/untriggered_sets.rdra
 samples/formal-verification/unwitnessed_state.rdra

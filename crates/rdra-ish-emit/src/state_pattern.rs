@@ -203,6 +203,7 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
+        | StateDiag::FairOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableScope { .. }
         | StateDiag::UnbindableCondition { .. }

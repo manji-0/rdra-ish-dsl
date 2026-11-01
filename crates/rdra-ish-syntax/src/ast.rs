@@ -464,6 +464,8 @@ pub struct PropertyDecl {
     /// Optional display label; omitted in `property Id <formula>`.
     pub label: Option<std::string::String>,
     pub formula: AstTemporalFormula,
+    /// `.fair(UseCase, ...)` after the formula; the semantic layer rejects any other method.
+    pub chain: Vec<ChainCall>,
     pub span: Span,
 }
 

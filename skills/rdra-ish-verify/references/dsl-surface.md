@@ -24,13 +24,27 @@ property StockOk
 
 property EventuallyTerminal
   eventually(Order.status == delivered or Order.status == cancelled)
+
+usecase CapturePay "Pay"
+usecase ShipOrder "Ship"
+transitions(CapturePay, Order.status, pending -> paid)
+transitions(ShipOrder, Order.status, paid -> shipped)
+
+property ShippedOnceCaptured
+  leads_to(Order.status == paid, Order.status == shipped).fair(ShipOrder)
 ```
 
 - Label string after the name is **optional**.
 - Each atom names its entity (`Order.status`); an atom whose column no single entity
   owns is `UnresolvedPropertyAtom`.
 - Prefer `and` / `or` / `not` (`/\` `\/` `~` remain aliases).
-- Any `eventually` / `leads_to` causes `WF_vars(Next)` in the Spec.
+- Any `eventually` / `leads_to` causes `WF_vars(Next)` in the Spec: some step is taken,
+  not a step in particular, so another instance's loop satisfies it.
+- `.fair(UC, ...)` after an `eventually` / `leads_to` assumes each listed use case is weakly
+  fair per instance it acts on: `Fair_P == \A p0 \in E_Ids : WF_vars(UC(p0))` (a created
+  slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. On `always`
+  it is `FairOnSafetyProperty`; no argument, a non-use-case argument, a duplicate, or a second
+  `.fair` is `FairRequiresUseCases`; a use case that changes nothing is `FairOnInertUseCase`.
 - A property holds per present instance: `always x` is `[](present => x)`,
   `eventually x` is `[](present => <>x)`, and `leads_to x y` is `(present /\ x) ~> y`.
 - Only `verify` evaluates properties, each in its own TLC run on the whole model;

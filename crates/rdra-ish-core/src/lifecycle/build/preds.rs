@@ -1151,10 +1151,21 @@ impl<'m> Builder<'m> {
                     Ltl::LeadsTo(a, c)
                 }
             };
+            for uk in &prop.fair {
+                if !self.uc_actions.contains_key(uk) && !self.active_ucs.contains(uk) {
+                    let diag = StateDiag::FairOnInertUseCase {
+                        property: prop.id.clone(),
+                        usecase: model.use_cases[*uk].id.clone(),
+                        site: site.clone(),
+                    };
+                    self.diag(binding.iter().map(|(ek, _)| *ek).collect(), diag);
+                }
+            }
             self.ts.properties.push(Property {
                 name: prop.id.clone(),
                 binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
                 formula,
+                fair: prop.fair.clone(),
                 site,
             });
         }

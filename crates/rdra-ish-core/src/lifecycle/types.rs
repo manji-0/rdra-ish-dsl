@@ -575,6 +575,10 @@ pub struct Property {
     /// Entities the formula is quantified over per instance, outermost first.
     pub binders: Vec<EntId>,
     pub formula: Ltl,
+    /// `.fair(UC, ...)`: each action of these use cases is weakly fair per instance it acts
+    /// on. The TLA+ printer finds the actions by `ActionOrigin`, so a restriction that drops
+    /// or renumbers actions keeps the list valid.
+    pub fair: Vec<UseCaseKey>,
     pub site: Site,
 }
 
