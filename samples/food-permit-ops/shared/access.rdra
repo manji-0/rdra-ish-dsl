@@ -1,0 +1,21 @@
+module shared.access
+
+import shared.actors
+import shared.biz
+
+has_permission(BusinessOperator, ConsultationRequest)
+has_permission(BusinessOperator, ApplicationSubmit)
+has_permission(BusinessOperator, FeePay)
+
+has_permission(PermitClerk, ApplicationReview)
+has_permission(PermitClerk, PermitRegister)
+has_permission(PermitClerk, OpinionProcedureManage)
+has_permission(PermitClerk, ViolationPublish)
+has_permission(PermitClerk, MonitoringPlanManage)
+
+has_permission(FoodSanitationInspector, BusinessClassify)
+has_permission(FoodSanitationInspector, FacilityInspect)
+has_permission(FoodSanitationInspector, DispositionPropose)
+
+has_permission(PermitAuthority, PermitDecide)
+has_permission(PermitAuthority, DispositionDecide)

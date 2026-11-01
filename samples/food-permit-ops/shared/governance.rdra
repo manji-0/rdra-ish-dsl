@@ -1,0 +1,59 @@
+module shared.governance
+
+import shared.actors
+import shared.biz
+import shared.entities
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+quality Timeliness "迅速性"
+quality Fairness "手続の公正"
+quality Auditability "監査可能性"
+
+// 標準処理期間 is an NFR, not a timer. 行政手続法6条 asks the 行政庁 only to try to set it
+// (当該申請に対する処分をするまでに通常要すべき標準的な期間, egov-gyousei-tetsuzukihou-405AC0000000088.txt:170), and
+// nothing happens to the application when it passes: no state changes, so a timer would start no use
+// case. 大阪市 sets 15日（ただし、閉庁日は除く） (osaka-city-shobun-kobetsuhyou-a22.txt:46); 千葉県 総日数15日間
+// （土日・祝祭日を除く） (chiba-pref-eigyou-kyoka-tetsuzuki.md:82).
+nfr StandardProcessingPeriod "標準処理期間（申請の到達から許可・不許可まで15開庁日）"
+  metric processing_days
+  target "<=15"
+  window "1 application"
+  slo "98%"
+
+// The ledger keeps every permit and disposition. The retention is the model's assumption: a
+// revocation bars a new permit for 2 years (egov-shokuhin-eiseihou-322AC0000000233.txt:407), and the
+// longest permit seen is 7 years (kumamoto-pref-kyoka-yuukoukikan-youryou.txt:24).
+constraint PermitLedgerAudit "許可台帳と処分の記録"
+  audit enabled
+  retention "10y"
+
+// The 処分基準 are published (egov-gyousei-tetsuzukihou-405AC0000000088.txt:197), and each decision carries
+// its reasons (:176, :231). The model's reading: a reviewer can trace each decision to its procedure.
+constraint DispositionRecord "処分の手続の記録"
+  audit enabled
+  logging structured
+  retention "10y"
+
+applies_to(StandardProcessingPeriod, PermitLedgerSystem)
+qualifies(StandardProcessingPeriod, Timeliness)
+qualifies(PermitLedgerAudit, Auditability)
+qualifies(DispositionRecord, Fairness)
+constrains(PermitLedgerAudit, BusinessPermit)
+constrains(PermitLedgerAudit, PermitApplication)
+constrains(DispositionRecord, Disposition)
+
+// The system's own states: 未申請 is the 一時保存 (i2fas-faq.md:108), deleted after 30 days (:137);
+// 申請内容確認待, 検査待, 発行済 (:95); the 差戻し and 取下げ (:106, :108).
+adr AdrOnlineSystemExternal "食品衛生申請等システムを外部システムとして扱う"
+  description "電子申請をモデルのどこに置くかの決定記録。"
+  adr_status accepted
+  context "電子申請は厚生労働省の食品衛生申請等システムで受け付け、保健所はその上で申請を確認し、差し戻し、許可を発行済にする。一時保存と、一時保存の30日後の削除はシステムの中で起き、保健所は関わらない。"
+  decision "システムを extsystem とし、提出をイベントで受け取り、差戻しと発行をイベントで返す。申請の状態は保健所の台帳（PermitApplication）で持ち、状態名はシステムの表示に合わせる。"
+  consequence "紙と電子の申請が同じ状態モデルを通る。一時保存（未申請）はモデルの外になる。"
+  accepted "システムを外部システムにする"
+  rejected "システムの画面を保健所の画面としてモデルに入れる"
+  reason "システムは国が運用し、保健所はその画面を使うだけで、未申請の段階には関わらない。"
+
+decides(AdrOnlineSystemExternal, PermitApplication)
+decides(AdrOnlineSystemExternal, BusinessNotification)

@@ -1,0 +1,127 @@
+module buc.business_notification
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+buc BucBusinessNotification "営業届出"
+  description "許可業種でも届出不要の営業でもない営業は、あらかじめ営業所の名称・所在地などを届け出る。許可と違って施設基準はなく、施設検査も手数料も更新もない。届出営業者も食品衛生責任者を定め、廃業したら届け出る。"
+
+// あらかじめ…都道府県知事に届け出なければならない (egov-shokuhin-eiseihou-322AC0000000233.txt:415).
+usecase SubmitCounterNotification "営業届の提出（窓口）"
+  description "営業者が営業を始める前に、保健所の窓口に営業届を出す。"
+
+// 営業届出　NIF (i2fas-faq.md:95).
+usecase ReceiveOnlineNotification "電子届出の受付"
+  description "食品衛生申請等システムで出された営業届を、届出内容確認待として受け付ける。"
+
+// 届出は『受付済』のステータスになると手続き完了 (i2fas-faq.md:95).
+usecase AcceptNotification "営業届の受付"
+  description "許可担当が記載を確かめて受け付ける。施設基準による審査と施設検査はない。"
+
+// 許可営業者又は届出営業者は、廃業により (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:952).
+usecase FileNotificationClosure "届出営業の廃業届" description "届出営業者が営業をやめたことを届け出る。"
+
+screen NotificationScreen "営業届画面"
+
+api NotificationApi "営業届 API"
+  method POST
+  path "/notifications"
+
+api NotificationReviewApi "営業届受付 API"
+  method PATCH
+  path "/notifications/{id}"
+
+performs(BusinessOperator, SubmitCounterNotification)
+performs(PermitClerk, ReceiveOnlineNotification)
+performs(PermitClerk, AcceptNotification)
+performs(BusinessOperator, FileNotificationClosure)
+belongs(BucBusinessNotification, AfterPermit).by(HealthCenterCounter).by(OnlineApplication)
+
+contains(BucBusinessNotification, SubmitCounterNotification)
+contains(BucBusinessNotification, ReceiveOnlineNotification)
+contains(BucBusinessNotification, AcceptNotification)
+contains(BucBusinessNotification, FileNotificationClosure)
+contains(PermitLedgerSystem, NotificationApi)
+contains(PermitLedgerSystem, NotificationReviewApi)
+
+displays(SubmitCounterNotification, NotificationScreen)
+invokes(SubmitCounterNotification, NotificationApi)
+creates(NotificationApi, BusinessNotification)
+sets(SubmitCounterNotification, BusinessNotification, channel == counter)
+
+displays(ReceiveOnlineNotification, NotificationScreen)
+invokes(ReceiveOnlineNotification, NotificationApi)
+sets(ReceiveOnlineNotification, BusinessNotification, channel == online)
+raises(FoodSanitationSystem, EvOnlineNotificationSubmitted)
+triggers(EvOnlineNotificationSubmitted, BucBusinessNotification)
+triggers(EvOnlineNotificationSubmitted, ReceiveOnlineNotification)
+
+displays(AcceptNotification, NotificationScreen)
+invokes(AcceptNotification, NotificationReviewApi)
+updates(NotificationReviewApi, BusinessNotification)
+transitions(AcceptNotification, BusinessNotification.status, submitted -> accepted)
+raises(AcceptNotification, EvNotificationAccepted)
+triggers(EvNotificationAccepted, FoodSanitationSystem)
+
+displays(FileNotificationClosure, NotificationScreen)
+invokes(FileNotificationClosure, NotificationReviewApi)
+transitions(FileNotificationClosure, BusinessNotification.status, accepted -> closed)
+
+// Access constraints
+requires_permission(SubmitCounterNotification, ApplicationSubmit)
+requires_medium(SubmitCounterNotification, HealthCenterCounter)
+requires_permission(ReceiveOnlineNotification, ApplicationReview)
+requires_medium(ReceiveOnlineNotification, OnlineApplication)
+requires_permission(AcceptNotification, ApplicationReview)
+requires_medium(AcceptNotification, HealthCenterTerminal)
+requires_permission(FileNotificationClosure, ApplicationSubmit)
+requires_medium(FileNotificationClosure, HealthCenterCounter)
+
+field NotifiedTypeField "届出業種"
+  access editable
+  required true
+  source actor
+
+contains(NotificationScreen, NotifiedTypeField)
+maps_field(NotifiedTypeField, BusinessNotification.business_type)
+
+// Business flow
+flow NotificationFlow "営業届出の流れ"
+step NotifyStep "営業届の提出（営業の前）"
+step AcceptStep "受付（受付済）"
+step NotifiedClosureStep "廃業届"
+
+contains(BucBusinessNotification, NotificationFlow)
+contains(NotificationFlow, NotifyStep)
+contains(NotificationFlow, AcceptStep)
+contains(NotificationFlow, NotifiedClosureStep)
+
+precedes(NotifyStep, AcceptStep)
+precedes(AcceptStep, NotifiedClosureStep)
+
+covers(NotifyStep, SubmitCounterNotification)
+covers(NotifyStep, ReceiveOnlineNotification)
+covers(NotifyStep, EvOnlineNotificationSubmitted)
+covers(AcceptStep, AcceptNotification)
+covers(NotifiedClosureStep, FileNotificationClosure)
+
+performs(BusinessOperator, NotifyStep)
+performs(PermitClerk, AcceptStep)
+performs(BusinessOperator, NotifiedClosureStep)
+
+// Requirement traceability
+requirement ReqNotificationWithoutStandard "届出は施設基準・施設検査・手数料・更新なしで受け付ける"
+  priority "must"
+  source "届出 (egov-shokuhin-eiseihou-322AC0000000233.txt:415)"
+  source "要件（施設基準）はありません (mhlw-eigyou-todoke-sousetsu-shousai.txt:10)"
+  source "更新の必要はありません (mhlw-eigyou-todoke-sousetsu-shousai.txt:11)"
+  stakeholder "営業者"
+  acceptance_criteria "営業届は確認だけで受付済になり、有効期間による失効がない。"
+  status "accepted"
+
+motivates(ReqNotificationWithoutStandard, BucBusinessNotification)
+achieves(ReqNotificationWithoutStandard, TimelyDecision)

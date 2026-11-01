@@ -1,0 +1,185 @@
+module buc.renewal
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.inspection_decision
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+buc BucRenewal "有効期間の満了と更新"
+  description "許可には5年以上の有効期間が付く。満了の前に保健所が通知し（静岡市は2か月前）、営業者は満了前に継続（更新）の申請をする。更新でも施設検査があり、満了日までに許可を終える。更新しないまま満了すると許可は失効し、営業を続けると無許可営業になる。失効した許可は更新できず、新規の申請からやり直す。"
+
+// 「営業許可期間満了通知書」が郵送されます (shizuoka-city-kyoka-kikan-manryou.md:37).
+usecase SendExpiryNotice "満了通知の発送"
+  description "有効期間が満了する前に、許可営業者に満了の時期と更新の手続を知らせる。"
+
+// 有効期間満了に際し引き続き営業の許可を受けようとする (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:886); 許可期限
+// 満了日の約1か月前に継続申請 (tokyo-kyoka-todokede-gaiyou.md:55); 有効期間満了の2週間前までを目安 (osaka-city-eigyou-kyoka-tetsuzuki.md:131).
+// 大阪府 更新 12,800円 (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:378); 東京都 継続 8,900円 (tokyo-2026-tesuuryou.txt:7).
+usecase ApplyRenewal "継続（更新）の申請"
+  description "有効な許可の営業者が、満了の前に継続の許可を申請する（窓口・電子）。手数料と施設検査は新規と同じ手順で進む。"
+
+// 営業許可期限満了までに保健所の職員がお店に伺い、施設基準に合致しているかどうかを確認します
+// (tokyo-minamitama-kyoka-kigen-manryou.md:226); 有効期限満了日…までに手続きを完了 (osaka-city-eigyou-kyoka-tetsuzuki.md:63).
+usecase RenewPermit "更新の許可の決定"
+  description "施設検査で施設基準に合うと認めた継続の申請に、許可がまだ有効なうちに許可を与える。"
+
+usecase ExtendPermitTerm "有効期間の更新"
+  description "更新の許可を受けて、台帳の有効期間を新しい期間に書き換え、満了通知の記録を消す。"
+
+// 有効期間が切れた場合、新規に営業許可を取得するまで、営業することが (kawaguchi-city-kyoka-keizoku.md:116); 期限を過ぎて営業
+// すると無許可営業 (shizuoka-city-kyoka-kikan-manryou.md:36); 廃業扱い (mito-city-kyoka-koushin.md:49).
+usecase ExpirePermit "有効期間の満了による失効"
+  description "更新されないまま有効期間が満了した許可を失効させる。営業者は営業をやめ、続けるなら新規の許可を受ける。"
+
+screen RenewalScreen "更新申請画面"
+
+api RenewalApi "更新申請 API"
+  method POST
+  path "/permits/{id}/renewal"
+
+api PermitTermApi "有効期間 API"
+  method PATCH
+  path "/permits/{id}/term"
+
+performs(PermitClerk, SendExpiryNotice)
+performs(BusinessOperator, ApplyRenewal)
+performs(PermitAuthority, RenewPermit)
+performs(PermitClerk, ExtendPermitTerm)
+belongs(BucRenewal, Licensing).by(HealthCenterCounter).by(OnlineApplication).by(HealthCenterTerminal)
+
+contains(BucRenewal, SendExpiryNotice)
+contains(BucRenewal, ApplyRenewal)
+contains(BucRenewal, RenewPermit)
+contains(BucRenewal, ExtendPermitTerm)
+contains(BucRenewal, ExpirePermit)
+contains(PermitLedgerSystem, RenewalApi)
+contains(PermitLedgerSystem, PermitTermApi)
+
+displays(SendExpiryNotice, PermitLedgerScreen)
+invokes(SendExpiryNotice, PermitTermApi)
+reads(SendExpiryNotice, BusinessPermit)
+updates(PermitTermApi, BusinessPermit)
+triggers(ExpiryNoticeDue, SendExpiryNotice)
+
+// A renewal is an application like a new one, of the other kind. It should name the permit it
+// continues and run only while that permit is valid; the model does not link the two (README, known
+// verification gaps): the guard puts every column of the permit into the application's cone, which
+// grows from 14,197 to 429,485 states at the 2 instances of `verify`.
+displays(ApplyRenewal, RenewalScreen)
+invokes(ApplyRenewal, RenewalApi)
+creates(RenewalApi, PermitApplication)
+sets(ApplyRenewal, PermitApplication, kind == renewal)
+reads(RenewalApi, BusinessPermit)
+
+displays(RenewPermit, InspectionScreen)
+invokes(RenewPermit, DecisionApi)
+transitions(RenewPermit, PermitApplication.status, awaiting_inspection -> approved)
+raises(RenewPermit, EvRenewalGranted)
+triggers(EvRenewalGranted, ExtendPermitTerm)
+triggers(EvRenewalGranted, FoodSanitationSystem)
+
+condition RenewalApplication "継続（更新）の申請である"
+holds(RenewalApplication, PermitApplication.kind == renewal)
+applies_to(RenewalApplication, RenewPermit)
+applies_to(InspectionPassed, RenewPermit)
+
+// The new term is a step from `valid` to `valid`: only a permit still in force is extended, so an
+// expired one stays expired and its 営業者 applies anew.
+displays(ExtendPermitTerm, PermitLedgerScreen)
+invokes(ExtendPermitTerm, PermitTermApi)
+transitions(ExtendPermitTerm, BusinessPermit.status, valid -> valid)
+
+// Started by the timer, no performer. A suspension does not stop the term from running.
+invokes(ExpirePermit, PermitTermApi)
+transitions(ExpirePermit, BusinessPermit.status, valid -> expired)
+transitions(ExpirePermit, BusinessPermit.status, suspended -> expired)
+sets(ExpirePermit, BusinessPermit, operating == false)
+triggers(PermitTermEnd, ExpirePermit)
+
+// Access constraints
+requires_permission(SendExpiryNotice, PermitRegister)
+requires_medium(SendExpiryNotice, HealthCenterTerminal)
+requires_permission(ApplyRenewal, ApplicationSubmit)
+requires_medium(ApplyRenewal, OnlineApplication)
+requires_permission(RenewalApi, ApplicationSubmit)
+requires_permission(RenewPermit, PermitDecide)
+requires_medium(RenewPermit, HealthCenterTerminal)
+requires_permission(ExtendPermitTerm, PermitRegister)
+requires_medium(ExtendPermitTerm, HealthCenterTerminal)
+
+// Screen transitions: the model's assumption.
+navigates(PermitLedgerScreen, RenewalScreen).via(SendExpiryNotice)
+navigates(RenewalScreen, InspectionScreen).via(ApplyRenewal)
+
+field ExpiryNotifiedField "有効期間の満了日"
+  access readonly
+  required true
+  source system
+
+field PermitStatusField "許可の状態"
+  access readonly
+  required true
+  source system
+
+contains(RenewalScreen, ExpiryNotifiedField)
+contains(RenewalScreen, PermitStatusField)
+maps_field(ExpiryNotifiedField, BusinessPermit.valid_until)
+maps_field(PermitStatusField, BusinessPermit.status)
+
+// Business flow
+flow RenewalFlow "更新の流れ"
+step NoticeStep "満了通知（2か月前）"
+step RenewalApplyStep "継続の申請（満了の1か月〜2週間前）"
+step RenewalInspectStep "更新前の施設検査"
+step RenewalDecisionStep "更新の許可と有効期間の書換え"
+step ExpiryStep "満了による失効"
+
+contains(BucRenewal, RenewalFlow)
+contains(RenewalFlow, NoticeStep)
+contains(RenewalFlow, RenewalApplyStep)
+contains(RenewalFlow, RenewalInspectStep)
+contains(RenewalFlow, RenewalDecisionStep)
+contains(RenewalFlow, ExpiryStep)
+
+precedes(NoticeStep, RenewalApplyStep)
+precedes(RenewalApplyStep, RenewalInspectStep)
+precedes(RenewalInspectStep, RenewalDecisionStep)
+excepts(NoticeStep, ExpiryStep)
+
+covers(NoticeStep, SendExpiryNotice)
+covers(NoticeStep, ExpiryNoticeDue)
+covers(RenewalApplyStep, ApplyRenewal)
+covers(RenewalInspectStep, ScheduleInspection)
+covers(RenewalInspectStep, ConductInspection)
+covers(RenewalDecisionStep, RenewPermit)
+covers(RenewalDecisionStep, ExtendPermitTerm)
+covers(ExpiryStep, ExpirePermit)
+covers(ExpiryStep, PermitTermEnd)
+
+performs(PermitClerk, NoticeStep)
+performs(BusinessOperator, RenewalApplyStep)
+performs(FoodSanitationInspector, RenewalInspectStep)
+performs(PermitAuthority, RenewalDecisionStep)
+
+// Rules
+// A renewal goes only to a permit still in force; after expiry the 営業者 starts over with a new
+// application (toshima-ku-kyoka-go-tetsuzuki.md:39 for the permits of the old law).
+after(ExtendPermitTerm).assert(BusinessPermit.status == valid).label("失効した許可は更新できない")
+
+// Requirement traceability
+requirement ReqRenewBeforeExpiry "満了の前に通知し、満了日までに更新を終える。失効した許可は新規扱いとする"
+  priority "must"
+  source "五年を下らない有効期間 (egov-shokuhin-eiseihou-322AC0000000233.txt:410)"
+  source "満了通知書 (shizuoka-city-kyoka-kikan-manryou.md:37)"
+  source "満了日までに手続きを完了 (osaka-city-eigyou-kyoka-tetsuzuki.md:63)"
+  source "期限を過ぎて営業すると無許可営業 (shizuoka-city-kyoka-kikan-manryou.md:36)"
+  stakeholder "営業者"
+  stakeholder "保健所 許可担当職員"
+  acceptance_criteria "有効期間を書き換えるのは有効な許可だけで、失効した許可では営業していない。"
+  status "accepted"
+
+motivates(ReqRenewBeforeExpiry, BucRenewal)
+achieves(ReqRenewBeforeExpiry, NoUnlicensedOperation)

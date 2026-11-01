@@ -1,0 +1,247 @@
+module buc.permit_application
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.inspection_decision.{InspectionScreen}
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+buc BucPermitApplication "営業許可の申請と受付"
+  description "営業者は開店の2〜3週間前（東京都は工事完成の10日前ころ）に、申請書と図面を保健所の窓口に出すか、食品衛生申請等システムで電子申請し、条例の手数料を納める。保健所は記載事項と添付書類を確かめ、足りなければ補正を求め（差戻し）、整えば施設検査に進める（検査待）。申請者は差戻しの間に取り下げられる。"
+
+// 申請書をその施設の所在地を管轄する都道府県知事等に提出 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:874);
+// 図面 2部 (osaka-city-eigyou-kyoka-tetsuzuki.md:96), 食品衛生責任者の資格を証する書類 (:102). オープン予定日の2～3週間前
+// (:93); 施設工事完成予定日の10日くらい前 (tokyo-kyoka-todokede-gaiyou.md:34).
+usecase SubmitCounterApplication "許可申請書の提出（窓口）"
+  description "営業者が許可申請書（新規）に図面と食品衛生責任者の資格を証する書類を添えて、保健所の窓口に出す。"
+
+// 整理番号 LIC…管轄保健所にて申請・届出内容の確認待ち状態 (i2fas-faq.md:95).
+usecase ReceiveOnlineApplication "電子申請の受付"
+  description "食品衛生申請等システムで提出された新規の許可申請を、管轄の保健所の確認待ち（申請内容確認待）として受け付ける。"
+
+// 手数料: 大阪府条例7条 (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:37); 飲食店 新規 16,000円 (:376). The online
+// system does not collect it: 管轄保健所と相談の上、別途納付手続き (i2fas-faq.md:130).
+usecase PayPermitFee "許可申請手数料の納付"
+  description "営業者が条例の手数料を保健所に納める（電子申請でも別途納付）。納めた手数料は還付されない。"
+
+// 審査基準 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:163); 決済完了を保健所で確認後、担当者から施設検査の日程に
+// ついてご連絡します (tokyo-tachikawa-shinsei-system.md:219).
+usecase ReviewApplication "申請内容の確認と受理"
+  description "許可担当が記載事項（営業者・施設・営業の種類・食品衛生責任者・図面・欠格事由の有無）と手数料の納付を確かめ、施設検査に進める（検査待）。"
+
+// 相当の期間を定めて当該申請の補正を求め (egov-gyousei-tetsuzukihou-405AC0000000088.txt:173). Online: 保健所へ連絡し差戻しを
+// 依頼 (i2fas-faq.md:106).
+usecase ReturnApplication "差戻し（補正の求め）"
+  description "記載の誤りや添付書類の不足があれば、期間を定めて補正を求め、申請を差し戻す。電子申請では申請者の依頼による差戻しもある。"
+
+usecase ResubmitApplication "補正した申請の再提出" description "営業者が差戻しを受けて申請を直し、再び確認待にする。"
+
+// Online: 『検査待』…の間であれば、保健所から差戻していただくことで…[取下げ] (i2fas-faq.md:108). The withdrawal of a
+// paper application was not researched; that a paper applicant can withdraw at any point before the
+// decision is the model's assumption.
+usecase WithdrawApplication "申請の取下げ"
+  description "営業者が許可・不許可の前に申請を取り下げる。電子申請は保健所の差戻しを受けてから取り下げる。手数料は戻らない。"
+
+screen ApplicationScreen "許可申請受付画面"
+screen ApplicationReviewScreen "申請審査画面"
+
+api ApplicationIntakeApi "許可申請受付 API"
+  method POST
+  path "/permit-applications"
+
+api ApplicationReviewApi "申請審査 API"
+  method PATCH
+  path "/permit-applications/{id}"
+
+api FeePaymentApi "手数料納付 API"
+  method POST
+  path "/permit-applications/{id}/fee"
+
+api ApplicationAmendApi "申請の補正・取下げ API"
+  method PATCH
+  path "/permit-applications/{id}/amendment"
+
+performs(BusinessOperator, SubmitCounterApplication)
+performs(PermitClerk, ReceiveOnlineApplication)
+performs(BusinessOperator, PayPermitFee)
+performs(PermitClerk, ReviewApplication)
+performs(PermitClerk, ReturnApplication)
+performs(BusinessOperator, ResubmitApplication)
+performs(BusinessOperator, WithdrawApplication)
+belongs(BucPermitApplication, Licensing).by(HealthCenterCounter).by(OnlineApplication).by(HealthCenterTerminal)
+
+contains(BucPermitApplication, SubmitCounterApplication)
+contains(BucPermitApplication, ReceiveOnlineApplication)
+contains(BucPermitApplication, PayPermitFee)
+contains(BucPermitApplication, ReviewApplication)
+contains(BucPermitApplication, ReturnApplication)
+contains(BucPermitApplication, ResubmitApplication)
+contains(BucPermitApplication, WithdrawApplication)
+contains(PermitLedgerSystem, ApplicationIntakeApi)
+contains(PermitLedgerSystem, ApplicationReviewApi)
+contains(PermitLedgerSystem, FeePaymentApi)
+contains(PermitLedgerSystem, ApplicationAmendApi)
+
+displays(SubmitCounterApplication, ApplicationScreen)
+invokes(SubmitCounterApplication, ApplicationIntakeApi)
+creates(ApplicationIntakeApi, PermitApplication)
+sets(SubmitCounterApplication, PermitApplication, channel == counter)
+sets(SubmitCounterApplication, PermitApplication, kind == new)
+
+displays(ReceiveOnlineApplication, ApplicationScreen)
+invokes(ReceiveOnlineApplication, ApplicationIntakeApi)
+sets(ReceiveOnlineApplication, PermitApplication, channel == online)
+sets(ReceiveOnlineApplication, PermitApplication, kind == new)
+raises(FoodSanitationSystem, EvOnlineApplicationSubmitted)
+triggers(EvOnlineApplicationSubmitted, BucPermitApplication)
+triggers(EvOnlineApplicationSubmitted, ReceiveOnlineApplication)
+
+displays(PayPermitFee, ApplicationScreen)
+invokes(PayPermitFee, FeePaymentApi)
+updates(FeePaymentApi, PermitApplication)
+reads(FeePaymentApi, FeeSchedule)
+sets(PayPermitFee, PermitApplication, fee_paid == true)
+
+condition BeforeReview "申請が確認待か差戻し中である"
+holds(BeforeReview, PermitApplication.status in (submitted, returned))
+applies_to(BeforeReview, PayPermitFee)
+
+displays(ReviewApplication, ApplicationReviewScreen)
+invokes(ReviewApplication, ApplicationReviewApi)
+updates(ApplicationReviewApi, PermitApplication)
+transitions(ReviewApplication, PermitApplication.status, submitted -> awaiting_inspection)
+
+condition FeePaid "手数料が納められている"
+holds(FeePaid, PermitApplication.fee_paid == true)
+applies_to(FeePaid, ReviewApplication)
+
+displays(ReturnApplication, ApplicationReviewScreen)
+invokes(ReturnApplication, ApplicationReviewApi)
+transitions(ReturnApplication, PermitApplication.status, submitted -> returned)
+transitions(ReturnApplication, PermitApplication.status, awaiting_inspection -> returned)
+raises(ReturnApplication, EvApplicationReturned)
+triggers(EvApplicationReturned, FoodSanitationSystem)
+
+displays(ResubmitApplication, ApplicationScreen)
+invokes(ResubmitApplication, ApplicationAmendApi)
+updates(ApplicationAmendApi, PermitApplication)
+transitions(ResubmitApplication, PermitApplication.status, returned -> submitted)
+
+// Online, only from 差戻し; on paper, from any state before the decision (the model's assumption).
+displays(WithdrawApplication, ApplicationScreen)
+invokes(WithdrawApplication, ApplicationAmendApi)
+transitions(WithdrawApplication, PermitApplication.status, returned -> withdrawn)
+transitions(WithdrawApplication, PermitApplication.status, submitted -> withdrawn).when(CounterApplication)
+transitions(WithdrawApplication, PermitApplication.status, awaiting_inspection -> withdrawn).when(CounterApplication)
+
+condition CounterApplication "窓口（紙）で出した申請である"
+holds(CounterApplication, PermitApplication.channel == counter)
+
+// Access constraints
+requires_permission(SubmitCounterApplication, ApplicationSubmit)
+requires_medium(SubmitCounterApplication, HealthCenterCounter)
+requires_permission(ReceiveOnlineApplication, ApplicationReview)
+requires_medium(ReceiveOnlineApplication, OnlineApplication)
+requires_permission(PayPermitFee, FeePay)
+requires_medium(PayPermitFee, HealthCenterCounter)
+requires_permission(FeePaymentApi, FeePay)
+requires_permission(ReviewApplication, ApplicationReview)
+requires_medium(ReviewApplication, HealthCenterTerminal)
+requires_permission(ApplicationReviewApi, ApplicationReview)
+requires_permission(ReturnApplication, ApplicationReview)
+requires_medium(ReturnApplication, HealthCenterTerminal)
+requires_permission(ResubmitApplication, ApplicationSubmit)
+requires_permission(ApplicationAmendApi, ApplicationSubmit)
+requires_medium(ResubmitApplication, OnlineApplication)
+requires_permission(WithdrawApplication, ApplicationSubmit)
+requires_medium(WithdrawApplication, OnlineApplication)
+
+// Screen transitions: the model's assumption.
+navigates(ApplicationScreen, ApplicationReviewScreen).via(ReviewApplication)
+navigates(ApplicationReviewScreen, ApplicationScreen).via(ReturnApplication)
+navigates(ApplicationReviewScreen, InspectionScreen).via(ReviewApplication)
+
+field ChannelField "申請方法"
+  access readonly
+  required true
+  source system
+
+field ApplicationStatusField "申請の状態"
+  access readonly
+  required true
+  source system
+
+field FeePaidField "手数料の納付"
+  access editable
+  required true
+  source actor
+
+contains(ApplicationScreen, ChannelField)
+contains(ApplicationReviewScreen, ApplicationStatusField)
+contains(ApplicationReviewScreen, FeePaidField)
+maps_field(ChannelField, PermitApplication.channel)
+maps_field(ApplicationStatusField, PermitApplication.status)
+maps_field(FeePaidField, PermitApplication.fee_paid)
+
+// Business flow
+flow PermitApplicationFlow "許可申請の流れ"
+step SubmitStep "申請書の提出（窓口・電子）"
+step FeeStep "手数料の納付"
+step ReviewStep "申請内容の確認（申請内容確認待）"
+step ReturnStep "差戻し・補正"
+step WithdrawStep "取下げ"
+
+contains(BucPermitApplication, PermitApplicationFlow)
+contains(PermitApplicationFlow, SubmitStep)
+contains(PermitApplicationFlow, FeeStep)
+contains(PermitApplicationFlow, ReviewStep)
+contains(PermitApplicationFlow, ReturnStep)
+contains(PermitApplicationFlow, WithdrawStep)
+
+precedes(SubmitStep, FeeStep)
+precedes(FeeStep, ReviewStep)
+excepts(ReviewStep, ReturnStep)
+repeats(ReturnStep, ReviewStep)
+branches(ReturnStep, WithdrawStep)
+
+covers(SubmitStep, SubmitCounterApplication)
+covers(SubmitStep, ReceiveOnlineApplication)
+covers(SubmitStep, EvOnlineApplicationSubmitted)
+covers(FeeStep, PayPermitFee)
+covers(ReviewStep, ReviewApplication)
+covers(ReturnStep, ReturnApplication)
+covers(ReturnStep, ResubmitApplication)
+covers(WithdrawStep, WithdrawApplication)
+
+performs(BusinessOperator, SubmitStep)
+performs(BusinessOperator, FeeStep)
+performs(PermitClerk, ReviewStep)
+performs(PermitClerk, ReturnStep)
+performs(BusinessOperator, WithdrawStep)
+
+// Requirement traceability
+requirement ReqReceiveBothChannels "窓口と電子申請を同じ手順で受け付け、不備は補正を求める"
+  priority "must"
+  source "申請書の記載事項 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:874-888)"
+  source "補正を求め、又は…拒否 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:173)"
+  source "電子申請の状態と差戻し・取下げ (i2fas-faq.md:95, :106, :108)"
+  stakeholder "営業者"
+  stakeholder "保健所 許可担当職員"
+  acceptance_criteria "窓口と電子のどちらの申請も、手数料の納付を確かめてから検査待になり、差戻しの間に取り下げられる。"
+  status "accepted"
+
+motivates(ReqReceiveBothChannels, BucPermitApplication)
+achieves(ReqReceiveBothChannels, TimelyDecision)
+
+// 既納の手数料は、還付しない (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:40).
+requirement ReqFeeNotRefunded "納めた手数料は、取下げ・不許可でも還付しない"
+  priority "must"
+  source "既納の手数料は、還付しない (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:40)"
+  stakeholder "営業者"
+  acceptance_criteria "取下げ・不許可の申請にも手数料の納付の記録が残り、還付の手続はない。"
+  status "accepted"
+
+motivates(ReqFeeNotRefunded, BucPermitApplication)
+achieves(ReqFeeNotRefunded, TimelyDecision)

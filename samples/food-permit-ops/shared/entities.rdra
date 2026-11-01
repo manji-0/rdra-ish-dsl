@@ -1,0 +1,208 @@
+module shared.entities
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+// Values an actor chooses from. They type attribute columns and move no lifecycle.
+
+// The kinds a consultation sorts. Three of the 32 許可業種 of 施行令35条: 飲食店営業
+// (egov-shokuhin-eiseihou-shikourei-328CO0000000229.txt:197), 食肉販売業 (:201), 菓子製造業 (:217). Two
+// 届出業種 set by the 2020 notice (mhlw-2020-todoke-gyoushu-settei.txt:44-45). One 営業 that needs neither,
+// 公衆衛生に与える影響が少ない営業 (egov-shokuhin-eiseihou-shikourei-328CO0000000229.txt:262): the sale of
+// packaged food that keeps without refrigeration (:268). The model lists six of them; the rest behave
+// like one of the three groups.
+variation BusinessType "営業の種類" {
+  restaurant "飲食店営業"
+  meat_retail "食肉販売業"
+  confectionery "菓子製造業"
+  bento_retail "弁当販売業（届出）"
+  produce_retail "野菜果物販売業（届出）"
+  packaged_retail "常温で保存できる包装食品の販売（届出不要）"
+}
+
+// The 許可業種 a permit names. 一施設一許可: the permit that fits the facility's 営業形態 best
+// (mhlw-eigyou-kisei-qa.txt:131).
+variation PermitBusinessType "許可業種" {
+  restaurant "飲食店営業"
+  meat_retail "食肉販売業"
+  confectionery "菓子製造業"
+}
+
+variation NotifiedBusinessType "届出業種" {
+  bento_retail "弁当販売業"
+  produce_retail "野菜果物販売業"
+}
+
+// 申請書をその施設の所在地を管轄する都道府県知事等に提出 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:874),
+// on paper at the 保健所 or through the 食品衛生申請等システム (mhlw-shinsei-system-index.md:191).
+variation SubmissionChannel "申請方法" {
+  counter "保健所の窓口（紙）"
+  online "食品衛生申請等システム（電子申請）"
+}
+
+// 新規 and 継続 share one form (mhlw-2020-youshiki-kisaiyouryou.txt:31); a renewal is the application of
+// one who 有効期間満了に際し引き続き営業の許可を受けようとする (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:886).
+variation ApplicationKind "申請の種別" {
+  new "新規"
+  renewal "継続（更新）"
+}
+
+// 整備改善を命じ、又は…許可を取り消し、若しくは…禁止し、若しくは期間を定めて停止 (egov-shokuhin-eiseihou-322AC0000000233.txt:432);
+// 60条 has 取消・禁止・停止 (:429). The model leaves out the 禁止 and the 59条 orders to discard food; their
+// procedure is the 停止's.
+variation DispositionKind "処分の種類" {
+  improvement_order "施設の整備改善命令"
+  suspension "営業の停止"
+  revocation "許可の取消"
+}
+
+// 聴聞 for 許認可等を取り消す不利益処分 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:207), 弁明の機会の付与
+// otherwise (:216). None for an order to meet a 技術的な基準 whose breach was 計測、実験その他客観的な認定方法に
+// よって確認 (:224). Which applies follows from the kind of the disposition; the rules below tie them.
+variation OpinionProcedure "意見陳述の手続" {
+  hearing "聴聞"
+  explanation "弁明の機会の付与"
+  omitted "意見陳述の省略（行政手続法13条2項3号）"
+}
+
+// 営業を譲渡し、又は…相続、合併若しくは分割 (egov-shokuhin-eiseihou-322AC0000000233.txt:412).
+variation SuccessionCause "承継の原因" {
+  transfer "営業の譲渡"
+  inheritance "相続"
+  merger "合併"
+  split "分割"
+}
+
+// Fees are master data, not state. 大阪府: 飲食店営業 新規 16,000円, 露店 8,000円
+// (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:376); 更新 12,800円, 露店 6,400円 (:378). 東京都: 新規
+// 18,000円 (tokyo-2026-tesuuryou.txt:6), 継続 8,900円 (:7), from 令和８年４月１日 (:101). 既納の手数料は、還付しない
+// (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:40), so a withdrawn application keeps fee_paid. A
+// notification costs nothing (map.md:25).
+entity FeeSchedule "手数料表" {
+  id: Int @pk
+  business_type: PermitBusinessType
+  new_fee: Money
+  renewal_fee: Money
+}
+
+// 工事をはじめる前に、店舗の設計図面等を持参のうえ…食品衛生監視員に相談 (osaka-city-eigyou-kyoka-tetsuzuki.md:88);
+// 営業の種類として業種の選択に関すること…は保健所へ (mhlw-shinsei-system-index.md:233).
+entity Consultation "事前相談" {
+  id: Int @pk
+  business_type: BusinessType
+  status: Enum(open "相談中", permit_required "許可が必要", notification_required "届出が必要", exempt "許可・届出とも不要") @default(open)
+}
+
+// The 記載事項: 申請者, 施設, 営業の種類 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:880),
+// 食品衛生責任者 (:882), 図面 (:884), 欠格事由の有無 (:888). The status names follow the 食品衛生申請等システム:
+// 申請内容確認待, 検査待, 発行済 (i2fas-faq.md:95). The FAQ gives the names only, not their order: that the
+// content check comes before the inspection is the model's assumption.
+entity PermitApplication "営業許可申請" {
+  id: Int @pk
+  kind: ApplicationKind
+  channel: SubmissionChannel
+  business_type: PermitBusinessType
+  status: Enum(submitted "申請内容確認待", returned "差戻し・補正中", awaiting_inspection "検査待", approved "許可", denied "不許可", withdrawn "取下げ") @default(submitted)
+  fee_paid: Bool @default(false)
+  // 拒否する処分をする場合は…同時に、当該処分の理由を示さなければならない (egov-gyousei-tetsuzukihou-405AC0000000088.txt:176).
+  reason_shown: Bool @default(false)
+}
+
+// No statute requires an inspection before the permit: the law stops at 基準に合うと認めるとき
+// (egov-shokuhin-eiseihou-322AC0000000233.txt:402). The step comes from the 自治体's documents: 店舗の調査
+// (osaka-city-eigyou-kyoka-tetsuzuki.md:104-105), 施設基準を満たしていない場合は改善後、再検査
+// (tokyo-minamitama-kyoka-kigen-manryou.md:226). One record per application; a reinspection reopens it.
+entity Inspection "施設検査" {
+  id: Int @pk
+  inspected_on: Date
+  status: Enum(scheduled "検査予定", passed "適合", failed "不適合（改善の指示）") @default(scheduled)
+}
+
+// The permit, from the decision to its end. 有効期間 (egov-shokuhin-eiseihou-322AC0000000233.txt:410); 許可証を
+// 交付 (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:17) and 掲示 (:18). `operating` records whether the
+// business under the permit is open; the rules on it are the 無許可営業 rules (README).
+entity BusinessPermit "営業許可" {
+  id: Int @pk
+  permit_no: String
+  business_type: PermitBusinessType
+  valid_until: Date
+  status: Enum(valid "有効", suspended "営業停止中", expired "失効（有効期間満了）", revoked "取消", closed "廃業") @default(valid)
+  operating: Bool @default(false)
+  certificate_issued: Bool @default(false)
+  // 申請の時点で食品衛生責任者の選定が完了していない…場合にあっては、営業の許可後速やかに
+  // (mhlw-2019-seishokuhatsu1227-2-sekou.txt:431, :435).
+  hygiene_manager_appointed: Bool @default(false)
+}
+
+// 変更があつたときは…速やかに届け出なければならない (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:950);
+// 東京都 asks for it 10日以内 (tokyo-kyoka-todokede-gaiyou.md:73). 変更の程度や状況により新規の営業許可申請が必要
+// (:102).
+entity ChangeNotice "変更届" {
+  id: Int @pk
+  status: Enum(received "受付", accepted "受理", new_application_required "新規申請が必要") @default(received)
+}
+
+// 許可営業者の地位を承継した者は、遅滞なく…届け出なければならない (egov-shokuhin-eiseihou-322AC0000000233.txt:413).
+entity SuccessionNotice "地位承継届" {
+  id: Int @pk
+  cause: SuccessionCause
+  status: Enum(received "受付", accepted "受理") @default(received)
+}
+
+// 営業届出: あらかじめ…届け出なければならない (egov-shokuhin-eiseihou-322AC0000000233.txt:415). 許可とは異なり、要件
+// （施設基準）はありません (mhlw-eigyou-todoke-sousetsu-shousai.txt:10); 更新の必要はありません (:11). So the
+// notification has no inspection, no 有効期間, and no renewal. The online status names are 届出内容確認待 and
+// 受付済 (i2fas-faq.md:95, :108).
+entity BusinessNotification "営業届" {
+  id: Int @pk
+  business_type: NotifiedBusinessType
+  channel: SubmissionChannel
+  status: Enum(submitted "届出内容確認待", accepted "受付済", closed "廃業") @default(submitted)
+}
+
+// 都道府県等食品衛生監視指導計画 (egov-shokuhin-eiseihou-322AC0000000233.txt:181), published 遅滞なく (:192).
+entity MonitoringPlan "監視指導計画" {
+  id: Int @pk
+  fiscal_year: String
+  status: Enum(drafted "策定中", published "公表済") @default(drafted)
+}
+
+// 臨検し (egov-shokuhin-eiseihou-322AC0000000233.txt:226), as the plan sets (:236). 江戸川区 plans 4,000 a
+// year (edogawa-ku-2026-kanshi-shidou-keikaku.md:43).
+entity SiteVisit "立入検査" {
+  id: Int @pk
+  status: Enum(planned "予定", compliant "違反なし", violation "違反あり") @default(planned)
+}
+
+// A 不利益処分 from its draft to the end of the appeal period. The 処分基準 that guide the choice are
+// published by each 自治体 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:197; chiba-pref-shobun-13110-066.md:75,
+// chiba-pref-shobun-13110-067.md:82).
+entity Disposition "不利益処分" {
+  id: Int @pk
+  kind: DispositionKind
+  procedure: OpinionProcedure
+  status: Enum(proposed "処分案", notified "意見陳述の通知済", heard "意見陳述の手続終了", decided "処分決定", finalized "確定（審査請求期間の経過）", dropped "処分しない") @default(proposed)
+  // 不利益処分の理由を示さなければならない (egov-gyousei-tetsuzukihou-405AC0000000088.txt:231).
+  reason_shown: Bool @default(false)
+  // 違反した者の名称等を公表し (egov-shokuhin-eiseihou-322AC0000000233.txt:473).
+  publication: Enum(unpublished "未公表", published "公表中", ended "公表終了") @default(unpublished)
+}
+
+// ER relationships
+relate(Inspection, PermitApplication, 1:1)
+relate(ChangeNotice, BusinessPermit, N:1)
+relate(SuccessionNotice, BusinessPermit, N:1)
+relate(SiteVisit, MonitoringPlan, N:1)
+relate(Disposition, BusinessPermit, N:1)
+
+// Events: the interface between use cases, and between use cases and the 食品衛生申請等システム.
+event EvOnlineApplicationSubmitted "電子申請の提出（整理番号 LIC）"
+event EvOnlineNotificationSubmitted "電子届出の提出（整理番号 NIF）"
+event EvApplicationReturned "申請の差戻し"
+event EvPermitGranted "営業許可の決定"
+event EvRenewalGranted "更新の許可"
+event EvPermitIssued "許可の発行（発行済）"
+event EvNotificationAccepted "届出の受付（受付済）"
+event EvViolationFound "立入検査での違反の発見"
+event EvDispositionDecided "不利益処分の決定"
+event EvRevocationDecided "許可の取消の決定"
+event EvSuspensionDecided "営業停止の決定"

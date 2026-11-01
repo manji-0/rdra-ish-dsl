@@ -1,0 +1,168 @@
+module buc.consultation
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.permit_application.{ApplicationScreen}
+import buc.business_notification.{NotificationScreen}
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+buc BucConsultation "事前相談と営業の種類の判定"
+  description "営業者は施設の工事の前に図面を持って保健所に相談する。食品衛生監視員は営業の内容から、許可が要るか（施行令35条の32業種）、届出でよいか、どちらも要らないか（施行令35条の2）を判定し、許可業種なら施設基準と食品衛生責任者を説明する。"
+
+// 工事をはじめる前に、店舗の設計図面等を持参のうえ (osaka-city-eigyou-kyoka-tetsuzuki.md:88).
+usecase RequestConsultation "事前相談の申込み"
+  description "営業者が施設の図面と営業の内容を持って保健所に相談する。相談で営業の種類を伝える。"
+
+// 施設基準: 共通基準 and 業種別基準 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:860), set by each
+// 都道府県 by 条例 (egov-shokuhin-eiseihou-322AC0000000233.txt:399). 食品衛生責任者を定めること
+// (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:3220): a 調理師 or 栄養士, or one who took the
+// 講習会 (:3228).
+usecase ReviewFloorPlan "図面の確認と施設基準の説明"
+  description "食品衛生監視員が図面を施設基準（共通基準・業種別基準）と照らし、足りない設備と、食品衛生責任者の資格（調理師・栄養士等か講習会の受講）を説明する（参照のみ）。"
+
+// 許可: 施行令35条 (egov-shokuhin-eiseihou-shikourei-328CO0000000229.txt:195); 届出: 法57条
+// (egov-shokuhin-eiseihou-322AC0000000233.txt:415); neither: 施行令35条の2
+// (egov-shokuhin-eiseihou-shikourei-328CO0000000229.txt:262).
+usecase ClassifyBusiness "営業の種類の判定"
+  description "営業の種類から、許可が必要か、届出が必要か、どちらも要らないかを判定する。結果は営業の種類で決まり、監視員が選ぶものではない（各結果に条件）。"
+
+screen ConsultationScreen "事前相談記録画面"
+
+api ConsultationApi "事前相談 API"
+  method POST
+  path "/consultations"
+
+api ClassificationApi "営業の種類の判定 API"
+  method POST
+  path "/consultations/{id}/classification"
+
+performs(BusinessOperator, RequestConsultation)
+performs(FoodSanitationInspector, ReviewFloorPlan)
+performs(FoodSanitationInspector, ClassifyBusiness)
+belongs(BucConsultation, Licensing).by(HealthCenterCounter).by(HealthCenterTerminal)
+
+contains(BucConsultation, RequestConsultation)
+contains(BucConsultation, ReviewFloorPlan)
+contains(BucConsultation, ClassifyBusiness)
+contains(PermitLedgerSystem, ConsultationApi)
+contains(PermitLedgerSystem, ClassificationApi)
+
+displays(RequestConsultation, ConsultationScreen)
+invokes(RequestConsultation, ConsultationApi)
+creates(ConsultationApi, Consultation)
+
+displays(ReviewFloorPlan, ConsultationScreen)
+reads(ReviewFloorPlan, Consultation)
+
+// The result follows from the kind of business, so each arm is guarded by the group it belongs to.
+displays(ClassifyBusiness, ConsultationScreen)
+invokes(ClassifyBusiness, ClassificationApi)
+updates(ClassificationApi, Consultation)
+transitions(ClassifyBusiness, Consultation.status, open -> permit_required).when(PermitRequiredType)
+transitions(ClassifyBusiness, Consultation.status, open -> notification_required).when(NotificationRequiredType)
+transitions(ClassifyBusiness, Consultation.status, open -> exempt).when(ExemptType)
+
+condition PermitRequiredType "許可業種（施行令35条）である"
+holds(PermitRequiredType, Consultation.business_type in (restaurant, meat_retail, confectionery))
+
+condition NotificationRequiredType "届出業種である"
+holds(NotificationRequiredType, Consultation.business_type in (bento_retail, produce_retail))
+
+condition ExemptType "届出も要らない営業（施行令35条の2）である"
+holds(ExemptType, Consultation.business_type == packaged_retail)
+
+// Access constraints
+requires_permission(RequestConsultation, ConsultationRequest)
+requires_medium(RequestConsultation, HealthCenterCounter)
+requires_permission(ReviewFloorPlan, BusinessClassify)
+requires_medium(ReviewFloorPlan, HealthCenterCounter)
+requires_permission(ClassifyBusiness, BusinessClassify)
+requires_medium(ClassifyBusiness, HealthCenterTerminal)
+requires_permission(ClassificationApi, BusinessClassify)
+
+// Screen transitions: the model's assumption. A permit leads to the application, a notification
+// to the notification.
+navigates(ConsultationScreen, ApplicationScreen).via(ClassifyBusiness)
+navigates(ConsultationScreen, NotificationScreen).via(ClassifyBusiness)
+
+field BusinessTypeField "営業の種類"
+  access editable
+  required true
+  source actor
+
+field ClassificationField "判定（許可・届出・不要）"
+  access readonly
+  required true
+  source system
+
+contains(ConsultationScreen, BusinessTypeField)
+contains(ConsultationScreen, ClassificationField)
+maps_field(BusinessTypeField, Consultation.business_type)
+maps_field(ClassificationField, Consultation.status)
+
+// Business flow
+flow ConsultationFlow "事前相談の流れ"
+step ConsultStep "図面を持って相談（工事の前）"
+step PlanReviewStep "図面の確認と施設基準の説明"
+step ClassifyStep "許可・届出・不要の判定"
+
+contains(BucConsultation, ConsultationFlow)
+contains(ConsultationFlow, ConsultStep)
+contains(ConsultationFlow, PlanReviewStep)
+contains(ConsultationFlow, ClassifyStep)
+
+precedes(ConsultStep, PlanReviewStep)
+precedes(PlanReviewStep, ClassifyStep)
+repeats(ClassifyStep, PlanReviewStep)
+
+covers(ConsultStep, RequestConsultation)
+covers(PlanReviewStep, ReviewFloorPlan)
+covers(ClassifyStep, ClassifyBusiness)
+
+performs(BusinessOperator, ConsultStep)
+performs(FoodSanitationInspector, PlanReviewStep)
+performs(FoodSanitationInspector, ClassifyStep)
+
+// Requirement traceability
+requirement ReqClassifyBeforeConstruction "工事の前に営業の種類を判定し、許可業種なら施設基準を説明する"
+  priority "should"
+  source "工事をはじめる前に…相談 (osaka-city-eigyou-kyoka-tetsuzuki.md:88)"
+  source "業種の選択に関すること (mhlw-shinsei-system-index.md:233)"
+  source "一施設一許可 (mhlw-eigyou-kisei-qa.txt:131)"
+  stakeholder "営業者"
+  stakeholder "食品衛生監視員"
+  acceptance_criteria "相談ごとに、許可・届出・不要のいずれかが営業の種類から一意に決まる。"
+  status "accepted"
+
+motivates(ReqClassifyBeforeConstruction, BucConsultation)
+achieves(ReqClassifyBeforeConstruction, TimelyDecision)
+achieves(ReqClassifyBeforeConstruction, NoUnlicensedOperation)
+
+// Non-goals
+requirement ReqNoFoodLabeling "食品表示は対象外とする"
+  source "範囲の外: 食品表示 (map.md:16)"
+  stakeholder "営業者"
+  status "out-of-scope"
+  rationale "食品表示は食品表示法の手続で、営業の許可とは別の監視の対象になる。調査もしていない。"
+
+motivates(ReqNoFoodLabeling, BucConsultation)
+
+requirement ReqNoImportedFood "輸入食品の届出は対象外とする"
+  source "範囲の外: 輸入食品（27条の輸入届出） (map.md:16)"
+  source "食品又は添加物の輸入をする営業 は届出も要らない (egov-shokuhin-eiseihou-shikourei-328CO0000000229.txt:264)"
+  stakeholder "営業者"
+  status "out-of-scope"
+  rationale "輸入の営業は営業届出も要らず（施行令35条の2）、輸入の届出は検疫所が受ける国の手続で、保健所の許可業務ではない。判定では届出不要の一つとして扱うだけにする。"
+
+motivates(ReqNoImportedFood, BucConsultation)
+
+requirement ReqNoOtherPermits "他法令の許可・届出は対象外とする"
+  source "範囲の外: 他法令の許可（風営法・酒類）、消防・受動喫煙の手続 (map.md:16)"
+  stakeholder "営業者"
+  status "out-of-scope"
+  rationale "深夜酒類提供の届出、風俗営業の許可、酒類の販売免許、防火の届出は、警察・税務署・消防の手続で、食品衛生法の許可と同時に進んでも互いの要件にはならない。調査もしていない。"
+
+motivates(ReqNoOtherPermits, BucConsultation)

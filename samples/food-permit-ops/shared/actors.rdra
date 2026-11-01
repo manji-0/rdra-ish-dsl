@@ -1,0 +1,32 @@
+module shared.actors
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+// The permit is the 都道府県知事's (egov-shokuhin-eiseihou-322AC0000000233.txt:401); in a 保健所を設置する市
+// or a 特別区 it is the 市長 or 区長 (:516). The application goes to the 都道府県知事等 that has
+// jurisdiction over the facility (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:874), and the
+// counter is the 保健所. The split of the 保健所's staff into a clerk and a 食品衛生監視員 is the model's
+// assumption: the sources name the 食品衛生監視員 for the inspection (osaka-city-eigyou-kyoka-tetsuzuki.md:105)
+// and the supervision (egov-shokuhin-eiseihou-322AC0000000233.txt:236) only.
+
+// 営業を営もうとする者 (egov-shokuhin-eiseihou-322AC0000000233.txt:401) and, after the permit, the 許可営業者
+// (:412) or the 届出営業者 (:417).
+actor BusinessOperator "営業者"
+  description "飲食店などの営業を営もうとする者と、許可・届出を受けて営業する者。事前相談をし、許可を申請し、手数料を納め、施設検査を受け、許可後は変更・承継・廃業を届け出る。"
+
+// The model's assumption: the sources describe the counter's work, not who at the 保健所 does it.
+actor PermitClerk "保健所 許可担当職員"
+  description "許可申請・届出の受付と審査、差戻し、許可台帳と許可証、聴聞・弁明の事務、処分の公表、監視指導計画の取りまとめを行う。"
+
+// 食品衛生監視員が基準に合っているかどうか店舗を調査します (osaka-city-eigyou-kyoka-tetsuzuki.md:105); 監視指導を行わせ
+// なければならない (egov-shokuhin-eiseihou-322AC0000000233.txt:236).
+actor FoodSanitationInspector "食品衛生監視員"
+  description "事前相談で図面を見て営業の種類を判定し、許可前と更新前の施設検査、計画に沿った立入検査を行い、違反を見つけたら処分を起案する。"
+
+// 都道府県知事 (egov-shokuhin-eiseihou-322AC0000000233.txt:401, :432); 市長 or 区長 (:516). Whether the
+// 保健所長 decides by delegation (専決) is set by each 自治体 and was not researched.
+actor PermitAuthority "都道府県知事等（保健所設置市長・特別区長）"
+  description "許可・不許可と、整備改善命令・営業停止・許可取消の処分を決める行政庁。"
+
+// 食品衛生申請等システム: オンラインで営業許可申請、営業届出…をすることができる (mhlw-shinsei-system-index.md:191),
+// for 営業許可申請 from 令和３年６月１日 (mhlw-2020-shinsei-system-unyou.txt:21).
+extsystem FoodSanitationSystem "食品衛生申請等システム（厚生労働省）"

@@ -1,0 +1,169 @@
+module buc.monitoring
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+buc BucMonitoring "監視指導計画と立入検査"
+  description "都道府県知事等は毎年度、翌年度の監視指導計画を定めて公表し、計画に沿って食品衛生監視員に営業の場所を立入検査させる。違反を見つけたら、処分の起案に回す。"
+
+// 毎年度、翌年度の…計画 (egov-shokuhin-eiseihou-322AC0000000233.txt:181).
+usecase DraftMonitoringPlan "監視指導計画の策定"
+  description "重点的に監視指導する項目、自主的な衛生管理の指導、関係機関との連携を定めた翌年度の計画を作る。"
+
+// 遅滞なく、これを公表する (egov-shokuhin-eiseihou-322AC0000000233.txt:192).
+usecase PublishMonitoringPlan "監視指導計画の公表"
+  description "定めた計画を公表し、厚生労働大臣と内閣総理大臣に報告する。"
+
+// 計画の定めるところにより…監視指導を行わせなければならない (egov-shokuhin-eiseihou-322AC0000000233.txt:236); 年間立入検査予定数
+// は4,000件 (edogawa-ku-2026-kanshi-shidou-keikaku.md:43).
+usecase ScheduleSiteVisit "立入検査の予定"
+  description "公表した計画の重点項目と件数に沿って、立入検査する施設を決める。"
+
+// 臨検し、販売の用に供し…物品を検査させ (egov-shokuhin-eiseihou-322AC0000000233.txt:226).
+usecase RecordCompliance "違反なしの記録" description "立入検査で違反がなかったことを記録する。"
+
+usecase RecordViolation "違反の記録"
+  description "立入検査で施設基準違反などを見つけたことを記録し、不利益処分の起案に回す。"
+
+screen MonitoringPlanScreen "監視指導計画画面"
+screen SiteVisitScreen "立入検査画面"
+
+api MonitoringPlanApi "監視指導計画 API"
+  method POST
+  path "/monitoring-plans"
+
+api MonitoringPlanPublishApi "監視指導計画公表 API"
+  method PATCH
+  path "/monitoring-plans/{id}"
+
+api SiteVisitApi "立入検査予定 API"
+  method POST
+  path "/site-visits"
+
+api SiteVisitResultApi "立入検査結果 API"
+  method PATCH
+  path "/site-visits/{id}"
+
+performs(PermitClerk, DraftMonitoringPlan)
+performs(PermitClerk, PublishMonitoringPlan)
+performs(FoodSanitationInspector, ScheduleSiteVisit)
+performs(FoodSanitationInspector, RecordCompliance)
+performs(FoodSanitationInspector, RecordViolation)
+belongs(BucMonitoring, Supervision).by(HealthCenterTerminal).by(OnSite)
+
+contains(BucMonitoring, DraftMonitoringPlan)
+contains(BucMonitoring, PublishMonitoringPlan)
+contains(BucMonitoring, ScheduleSiteVisit)
+contains(BucMonitoring, RecordCompliance)
+contains(BucMonitoring, RecordViolation)
+contains(PermitLedgerSystem, MonitoringPlanApi)
+contains(PermitLedgerSystem, MonitoringPlanPublishApi)
+contains(PermitLedgerSystem, SiteVisitApi)
+contains(PermitLedgerSystem, SiteVisitResultApi)
+
+displays(DraftMonitoringPlan, MonitoringPlanScreen)
+invokes(DraftMonitoringPlan, MonitoringPlanApi)
+creates(MonitoringPlanApi, MonitoringPlan)
+triggers(AnnualPlanning, DraftMonitoringPlan)
+
+displays(PublishMonitoringPlan, MonitoringPlanScreen)
+invokes(PublishMonitoringPlan, MonitoringPlanPublishApi)
+updates(MonitoringPlanPublishApi, MonitoringPlan)
+transitions(PublishMonitoringPlan, MonitoringPlan.status, drafted -> published)
+
+displays(ScheduleSiteVisit, SiteVisitScreen)
+invokes(ScheduleSiteVisit, SiteVisitApi)
+creates(SiteVisitApi, SiteVisit)
+reads(SiteVisitApi, MonitoringPlan)
+
+condition PlanPublished "監視指導計画が公表されている"
+holds(PlanPublished, MonitoringPlan.status == published)
+applies_to(PlanPublished, ScheduleSiteVisit)
+
+displays(RecordCompliance, SiteVisitScreen)
+invokes(RecordCompliance, SiteVisitResultApi)
+updates(SiteVisitResultApi, SiteVisit)
+transitions(RecordCompliance, SiteVisit.status, planned -> compliant)
+
+displays(RecordViolation, SiteVisitScreen)
+invokes(RecordViolation, SiteVisitResultApi)
+transitions(RecordViolation, SiteVisit.status, planned -> violation)
+raises(RecordViolation, EvViolationFound)
+
+// Access constraints
+requires_permission(DraftMonitoringPlan, MonitoringPlanManage)
+requires_medium(DraftMonitoringPlan, HealthCenterTerminal)
+requires_permission(PublishMonitoringPlan, MonitoringPlanManage)
+requires_medium(PublishMonitoringPlan, HealthCenterTerminal)
+requires_permission(ScheduleSiteVisit, FacilityInspect)
+requires_medium(ScheduleSiteVisit, HealthCenterTerminal)
+requires_permission(RecordCompliance, FacilityInspect)
+requires_medium(RecordCompliance, OnSite)
+requires_permission(RecordViolation, FacilityInspect)
+requires_medium(RecordViolation, OnSite)
+requires_permission(SiteVisitApi, FacilityInspect)
+requires_permission(SiteVisitResultApi, FacilityInspect)
+
+// Screen transitions: the model's assumption.
+navigates(MonitoringPlanScreen, SiteVisitScreen).via(ScheduleSiteVisit)
+
+field PlanStatusField "計画の状態"
+  access readonly
+  required true
+  source system
+
+field SiteVisitResultField "立入検査の結果"
+  access editable
+  required true
+  source actor
+
+contains(MonitoringPlanScreen, PlanStatusField)
+contains(SiteVisitScreen, SiteVisitResultField)
+maps_field(PlanStatusField, MonitoringPlan.status)
+maps_field(SiteVisitResultField, SiteVisit.status)
+
+// Business flow
+flow MonitoringFlow "監視指導の流れ"
+step PlanStep "翌年度の計画の策定"
+step PublishPlanStep "計画の公表"
+step VisitStep "計画に沿った立入検査"
+step ViolationStep "違反の記録と処分の起案へ"
+
+contains(BucMonitoring, MonitoringFlow)
+contains(MonitoringFlow, PlanStep)
+contains(MonitoringFlow, PublishPlanStep)
+contains(MonitoringFlow, VisitStep)
+contains(MonitoringFlow, ViolationStep)
+
+precedes(PlanStep, PublishPlanStep)
+precedes(PublishPlanStep, VisitStep)
+excepts(VisitStep, ViolationStep)
+
+covers(PlanStep, DraftMonitoringPlan)
+covers(PlanStep, AnnualPlanning)
+covers(PublishPlanStep, PublishMonitoringPlan)
+covers(VisitStep, ScheduleSiteVisit)
+covers(VisitStep, RecordCompliance)
+covers(ViolationStep, RecordViolation)
+
+performs(PermitClerk, PlanStep)
+performs(PermitClerk, PublishPlanStep)
+performs(FoodSanitationInspector, VisitStep)
+performs(FoodSanitationInspector, ViolationStep)
+
+// Requirement traceability
+requirement ReqPlannedMonitoring "毎年度の計画を公表し、計画に沿って立入検査する"
+  priority "must"
+  source "監視指導計画 (egov-shokuhin-eiseihou-322AC0000000233.txt:181, :192)"
+  source "計画の定めるところにより監視指導 (egov-shokuhin-eiseihou-322AC0000000233.txt:236)"
+  stakeholder "食品衛生監視員"
+  stakeholder "保健所 許可担当職員"
+  acceptance_criteria "立入検査は公表済の計画の下でだけ予定される。"
+  status "accepted"
+
+motivates(ReqPlannedMonitoring, BucMonitoring)
+achieves(ReqPlannedMonitoring, NoUnlicensedOperation)

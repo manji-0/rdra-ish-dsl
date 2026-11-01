@@ -1,0 +1,437 @@
+module buc.disposition
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import shared.governance
+import buc.monitoring.{SiteVisitScreen, RecordViolation}
+import buc.inspection_decision.{PermitLedgerScreen, PermitApi}
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+buc BucDisposition "不利益処分と公表"
+  description "施設基準違反などで、行政庁は施設の整備改善を命じ、営業を停止し、許可を取り消す。取消の前には聴聞、ほかは弁明の機会を与える。ただし計測などで確かめた技術的基準の不充足に基準どおりにせよと命じる処分は、意見陳述を省ける。処分は理由を示して書面で行い、審査請求ができることを教える。違反者は公表する（練馬区は7日以上）。停止は定めた期間が過ぎると終わる。"
+
+// 整備改善を命じ、又は…許可を取り消し、若しくは…停止 (egov-shokuhin-eiseihou-322AC0000000233.txt:432). The kind and the
+// procedure are chosen together; 13条 ties them (see the rules below).
+usecase ProposeDisposition "処分の起案"
+  description "食品衛生監視員が違反の事実と処分基準から、処分の種類（整備改善命令・停止・取消）と意見陳述の手続（聴聞・弁明・省略）を起案する。"
+
+// 聴聞を行うべき期日までに相当な期間をおいて…書面により通知 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:242), with
+// 予定される不利益処分の内容及び根拠となる法令の条項 (:242 lists it first).
+usecase NotifyOpinionProcedure "聴聞・弁明の通知"
+  description "予定する処分の内容と根拠条項、原因となる事実、聴聞の期日または弁明書の提出期限を、名あて人に書面で通知する。"
+
+usecase HoldHearing "聴聞の実施" description "聴聞の期日に名あて人の意見を聴き、記録する。取消の前には必ず行う。"
+
+usecase ReceiveExplanation "弁明書の受理"
+  description "停止や整備改善命令の前に、名あて人の弁明書を受け取る。期限までに出なければ、弁明の機会を与えたものとして手続を終える。"
+
+// 許可の取消しの日から起算して二年を経過しない者 can be refused a new permit (egov-shokuhin-eiseihou-322AC0000000233.txt:407).
+usecase DecideRevocation "許可の取消の決定"
+  description "聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。"
+
+// 営業停止処分の期間について考慮する事項 (chiba-pref-shobun-13110-067.md:82).
+usecase DecideSuspension "営業停止の決定"
+  description "弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。"
+
+// 施設の整備改善を命じ (egov-shokuhin-eiseihou-322AC0000000233.txt:432).
+usecase OrderImprovement "施設の整備改善命令"
+  description "施設基準に合わない設備の改善を命じる。計測などで確かめた不充足なら意見陳述を省いて命じられる。"
+
+usecase RevokePermit "許可台帳への取消の記録"
+  description "取消の決定を台帳に記録し、許可を終わらせる。営業者は営業をやめる。"
+
+usecase SuspendBusiness "許可台帳への営業停止の記録"
+  description "停止の決定を台帳に記録する。営業者は停止の期間、営業をやめる。"
+
+usecase DropDisposition "処分を見送る" description "意見陳述の結果、処分しないと決める。"
+
+usecase LiftSuspension "営業停止期間の満了"
+  description "停止の期間が過ぎ、営業停止を終える。営業者は許可証を掲示して営業を再開できる。"
+
+// 処分があったことを知った日の翌日から起算して三月 (egov-gyousei-fufuku-shinsahou-426AC0000000068.txt:203).
+usecase FinalizeDisposition "審査請求期間の経過"
+  description "審査請求のないまま3月が過ぎたことを記録する。審査請求と訴訟の中身は対象外。"
+
+// 違反した者の名称等を公表し…努める (egov-shokuhin-eiseihou-322AC0000000233.txt:473); 公表内容は氏名、施設の名称、所在地、
+// 理由および内容 (nerima-ku-ihan-kouhyou.md:44).
+usecase PublishViolation "違反の公表"
+  description "処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。"
+
+usecase EndPublication "公表の終了" description "公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。"
+
+screen DispositionScreen "不利益処分画面"
+screen OpinionProcedureScreen "聴聞・弁明画面"
+
+api DispositionDraftApi "処分起案 API"
+  method POST
+  path "/dispositions"
+
+api DispositionApi "処分決定 API"
+  method PATCH
+  path "/dispositions/{id}"
+
+api OpinionProcedureApi "意見陳述 API"
+  method POST
+  path "/dispositions/{id}/opinion"
+
+api PublicationApi "公表 API"
+  method POST
+  path "/dispositions/{id}/publication"
+
+performs(FoodSanitationInspector, ProposeDisposition)
+performs(PermitClerk, NotifyOpinionProcedure)
+performs(PermitClerk, HoldHearing)
+performs(PermitClerk, ReceiveExplanation)
+performs(PermitAuthority, DecideRevocation)
+performs(PermitAuthority, DecideSuspension)
+performs(PermitClerk, RevokePermit)
+performs(PermitClerk, SuspendBusiness)
+performs(PermitAuthority, OrderImprovement)
+performs(PermitAuthority, DropDisposition)
+performs(PermitClerk, PublishViolation)
+belongs(BucDisposition, Supervision).by(HealthCenterTerminal)
+
+contains(BucDisposition, ProposeDisposition)
+contains(BucDisposition, NotifyOpinionProcedure)
+contains(BucDisposition, HoldHearing)
+contains(BucDisposition, ReceiveExplanation)
+contains(BucDisposition, DecideRevocation)
+contains(BucDisposition, DecideSuspension)
+contains(BucDisposition, RevokePermit)
+contains(BucDisposition, SuspendBusiness)
+contains(BucDisposition, OrderImprovement)
+contains(BucDisposition, DropDisposition)
+contains(BucDisposition, LiftSuspension)
+contains(BucDisposition, FinalizeDisposition)
+contains(BucDisposition, PublishViolation)
+contains(BucDisposition, EndPublication)
+contains(PermitLedgerSystem, DispositionDraftApi)
+contains(PermitLedgerSystem, DispositionApi)
+contains(PermitLedgerSystem, OpinionProcedureApi)
+contains(PermitLedgerSystem, PublicationApi)
+
+// The procedure follows from the kind: 聴聞 for a 取消 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:207), 弁明 otherwise
+// (:216), and none only for an order to meet a technical standard (:224). 聴聞 may also be chosen for
+// another kind when the 行政庁 sees fit (13条1項1号ニ, in the same article).
+displays(ProposeDisposition, DispositionScreen)
+invokes(ProposeDisposition, DispositionDraftApi)
+creates(DispositionDraftApi, Disposition)
+reads(DispositionDraftApi, BusinessPermit)
+chooses(ProposeDisposition, Disposition.procedure, hearing)
+chooses(ProposeDisposition, Disposition.procedure, explanation).when(NotRevocation)
+chooses(ProposeDisposition, Disposition.procedure, omitted).when(ImprovementOrderKind)
+triggers(EvViolationFound, BucDisposition)
+triggers(EvViolationFound, ProposeDisposition)
+
+condition NotRevocation "取消ではない処分である"
+holds(NotRevocation, Disposition.kind in (improvement_order, suspension))
+
+condition ImprovementOrderKind "施設の整備改善命令である"
+holds(ImprovementOrderKind, Disposition.kind == improvement_order)
+applies_to(ImprovementOrderKind, OrderImprovement)
+
+displays(NotifyOpinionProcedure, OpinionProcedureScreen)
+invokes(NotifyOpinionProcedure, OpinionProcedureApi)
+updates(OpinionProcedureApi, Disposition)
+transitions(NotifyOpinionProcedure, Disposition.status, proposed -> notified)
+
+condition OpinionRequired "意見陳述の手続を執る処分である"
+holds(OpinionRequired, Disposition.procedure in (hearing, explanation))
+applies_to(OpinionRequired, NotifyOpinionProcedure)
+
+displays(HoldHearing, OpinionProcedureScreen)
+invokes(HoldHearing, OpinionProcedureApi)
+transitions(HoldHearing, Disposition.status, notified -> heard)
+
+condition HearingProcedure "聴聞を執る処分である"
+holds(HearingProcedure, Disposition.procedure == hearing)
+applies_to(HearingProcedure, HoldHearing)
+applies_to(HearingProcedure, DecideRevocation)
+
+displays(ReceiveExplanation, OpinionProcedureScreen)
+invokes(ReceiveExplanation, OpinionProcedureApi)
+transitions(ReceiveExplanation, Disposition.status, notified -> heard)
+
+condition ExplanationProcedure "弁明の機会を与える処分である"
+holds(ExplanationProcedure, Disposition.procedure == explanation)
+applies_to(ExplanationProcedure, ReceiveExplanation)
+
+// The decision and the permit's ledger are two use cases joined by an event. In a first draft one
+// use case moved both, the permit's columns joined the disposition's cone, and with the renewal the
+// application's: three cones passed 3,000,000 states at 2 instances (README). The event gives no
+// order (#30), so `check` also lets the ledger record a 取消 or 停止 with no decision; no rule reads
+// both entities.
+displays(DecideRevocation, DispositionScreen)
+invokes(DecideRevocation, DispositionApi)
+updates(DispositionApi, Disposition)
+transitions(DecideRevocation, Disposition.status, heard -> decided)
+sets(DecideRevocation, Disposition, reason_shown == true)
+raises(DecideRevocation, EvDispositionDecided)
+raises(DecideRevocation, EvRevocationDecided)
+
+condition RevocationKind "許可の取消である"
+holds(RevocationKind, Disposition.kind == revocation)
+applies_to(RevocationKind, DecideRevocation)
+
+displays(DecideSuspension, DispositionScreen)
+invokes(DecideSuspension, DispositionApi)
+transitions(DecideSuspension, Disposition.status, heard -> decided)
+sets(DecideSuspension, Disposition, reason_shown == true)
+raises(DecideSuspension, EvDispositionDecided)
+raises(DecideSuspension, EvSuspensionDecided)
+
+condition SuspensionKind "営業の停止である"
+holds(SuspensionKind, Disposition.kind == suspension)
+applies_to(SuspensionKind, DecideSuspension)
+
+// A 取消 ends a permit that is valid or suspended; a 停止 starts only on a valid one.
+displays(RevokePermit, PermitLedgerScreen)
+invokes(RevokePermit, PermitApi)
+transitions(RevokePermit, BusinessPermit.status, valid -> revoked)
+transitions(RevokePermit, BusinessPermit.status, suspended -> revoked)
+sets(RevokePermit, BusinessPermit, operating == false)
+triggers(EvRevocationDecided, RevokePermit)
+
+displays(SuspendBusiness, PermitLedgerScreen)
+invokes(SuspendBusiness, PermitApi)
+transitions(SuspendBusiness, BusinessPermit.status, valid -> suspended)
+sets(SuspendBusiness, BusinessPermit, operating == false)
+triggers(EvSuspensionDecided, SuspendBusiness)
+
+// Without a hearing or an explanation only when the procedure was omitted (13条2項3号).
+displays(OrderImprovement, DispositionScreen)
+invokes(OrderImprovement, DispositionApi)
+transitions(OrderImprovement, Disposition.status, heard -> decided)
+transitions(OrderImprovement, Disposition.status, proposed -> decided).when(OpinionOmitted)
+sets(OrderImprovement, Disposition, reason_shown == true)
+raises(OrderImprovement, EvDispositionDecided)
+
+condition OpinionOmitted "意見陳述を省く処分である"
+holds(OpinionOmitted, Disposition.procedure == omitted)
+
+displays(DropDisposition, DispositionScreen)
+invokes(DropDisposition, DispositionApi)
+transitions(DropDisposition, Disposition.status, heard -> dropped)
+
+// Started by the timer, no performer.
+invokes(LiftSuspension, PermitApi)
+transitions(LiftSuspension, BusinessPermit.status, suspended -> valid)
+triggers(SuspensionTermEnd, LiftSuspension)
+
+// Started by the timer, no performer.
+invokes(FinalizeDisposition, DispositionApi)
+transitions(FinalizeDisposition, Disposition.status, decided -> finalized)
+triggers(AppealPeriodEnd, FinalizeDisposition)
+
+displays(PublishViolation, DispositionScreen)
+invokes(PublishViolation, PublicationApi)
+updates(PublicationApi, Disposition)
+sets(PublishViolation, Disposition, publication == published)
+triggers(EvDispositionDecided, PublishViolation)
+
+// An entity has one lifecycle column (`status`), so the publication is a set-only column: each use
+// case sets it, guarded on its current value.
+condition DecidedUnpublished "処分が決定していて、まだ公表していない"
+holds(DecidedUnpublished, Disposition.status in (decided, finalized), Disposition.publication == unpublished)
+applies_to(DecidedUnpublished, PublishViolation)
+
+// Started by the timer, no performer.
+invokes(EndPublication, PublicationApi)
+sets(EndPublication, Disposition, publication == ended)
+triggers(PublicationPeriodEnd, EndPublication)
+
+condition Published "公表中である"
+holds(Published, Disposition.publication == published)
+applies_to(Published, EndPublication)
+
+// Access constraints
+requires_permission(ProposeDisposition, DispositionPropose)
+requires_medium(ProposeDisposition, HealthCenterTerminal)
+requires_permission(NotifyOpinionProcedure, OpinionProcedureManage)
+requires_medium(NotifyOpinionProcedure, HealthCenterTerminal)
+requires_permission(OpinionProcedureApi, OpinionProcedureManage)
+requires_permission(HoldHearing, OpinionProcedureManage)
+requires_medium(HoldHearing, HealthCenterTerminal)
+requires_permission(ReceiveExplanation, OpinionProcedureManage)
+requires_medium(ReceiveExplanation, HealthCenterTerminal)
+requires_permission(DecideRevocation, DispositionDecide)
+requires_medium(DecideRevocation, HealthCenterTerminal)
+requires_permission(DecideSuspension, DispositionDecide)
+requires_medium(DecideSuspension, HealthCenterTerminal)
+requires_permission(RevokePermit, PermitRegister)
+requires_medium(RevokePermit, HealthCenterTerminal)
+requires_permission(SuspendBusiness, PermitRegister)
+requires_medium(SuspendBusiness, HealthCenterTerminal)
+requires_permission(OrderImprovement, DispositionDecide)
+requires_medium(OrderImprovement, HealthCenterTerminal)
+requires_permission(DropDisposition, DispositionDecide)
+requires_medium(DropDisposition, HealthCenterTerminal)
+requires_permission(PublishViolation, ViolationPublish)
+requires_medium(PublishViolation, HealthCenterTerminal)
+requires_permission(PublicationApi, ViolationPublish)
+
+// Screen transitions: the model's assumption.
+navigates(SiteVisitScreen, DispositionScreen).via(RecordViolation)
+navigates(DispositionScreen, OpinionProcedureScreen).via(NotifyOpinionProcedure)
+navigates(OpinionProcedureScreen, DispositionScreen).via(HoldHearing)
+navigates(DispositionScreen, PermitLedgerScreen).via(DecideSuspension)
+
+field DispositionKindField "処分の種類"
+  access editable
+  required true
+  source actor
+
+field ProcedureField "意見陳述の手続"
+  access editable
+  required true
+  source actor
+
+field PublicationField "公表"
+  access readonly
+  required true
+  source system
+
+contains(DispositionScreen, DispositionKindField)
+contains(DispositionScreen, PublicationField)
+contains(OpinionProcedureScreen, ProcedureField)
+maps_field(DispositionKindField, Disposition.kind)
+maps_field(ProcedureField, Disposition.procedure)
+maps_field(PublicationField, Disposition.publication)
+
+// Business flow
+flow DispositionFlow "不利益処分の流れ"
+step ProposeStep "処分の起案（処分基準）"
+step OpinionNoticeStep "聴聞・弁明の通知"
+step OpinionStep "聴聞の実施・弁明書の受理"
+step DecideStep "処分の決定（理由の提示・教示）"
+step OmittedStep "意見陳述を省いた整備改善命令"
+step DropStep "処分の見送り"
+step PublishStep "違反の公表（7日以上）"
+step SuspensionEndStep "停止期間の満了"
+step AppealPeriodStep "審査請求期間（3月）の経過"
+
+contains(BucDisposition, DispositionFlow)
+contains(DispositionFlow, ProposeStep)
+contains(DispositionFlow, OpinionNoticeStep)
+contains(DispositionFlow, OpinionStep)
+contains(DispositionFlow, DecideStep)
+contains(DispositionFlow, OmittedStep)
+contains(DispositionFlow, DropStep)
+contains(DispositionFlow, PublishStep)
+contains(DispositionFlow, SuspensionEndStep)
+contains(DispositionFlow, AppealPeriodStep)
+
+precedes(ProposeStep, OpinionNoticeStep)
+precedes(OpinionNoticeStep, OpinionStep)
+precedes(OpinionStep, DecideStep)
+branches(ProposeStep, OmittedStep)
+branches(OpinionStep, DropStep)
+precedes(DecideStep, PublishStep)
+precedes(DecideStep, SuspensionEndStep)
+precedes(DecideStep, AppealPeriodStep)
+
+covers(ProposeStep, ProposeDisposition)
+covers(ProposeStep, EvViolationFound)
+covers(OpinionNoticeStep, NotifyOpinionProcedure)
+covers(OpinionStep, HoldHearing)
+covers(OpinionStep, ReceiveExplanation)
+covers(DecideStep, DecideRevocation)
+covers(DecideStep, DecideSuspension)
+covers(DecideStep, RevokePermit)
+covers(DecideStep, SuspendBusiness)
+covers(DecideStep, OrderImprovement)
+covers(OmittedStep, OrderImprovement)
+covers(DropStep, DropDisposition)
+covers(PublishStep, PublishViolation)
+covers(PublishStep, EndPublication)
+covers(PublishStep, PublicationPeriodEnd)
+covers(SuspensionEndStep, LiftSuspension)
+covers(SuspensionEndStep, SuspensionTermEnd)
+covers(AppealPeriodStep, FinalizeDisposition)
+covers(AppealPeriodStep, AppealPeriodEnd)
+
+performs(FoodSanitationInspector, ProposeStep)
+performs(PermitClerk, OpinionNoticeStep)
+performs(PermitClerk, OpinionStep)
+performs(PermitAuthority, DecideStep)
+performs(PermitAuthority, OmittedStep)
+performs(PermitAuthority, DropStep)
+performs(PermitClerk, PublishStep)
+
+// Rules
+forbidden(Disposition, kind == revocation, procedure != hearing).label("許可の取消の前に聴聞を行う")
+
+forbidden(Disposition, procedure == omitted, kind != improvement_order).label("意見陳述を省けるのは技術的基準に従うよう命じる処分だけ")
+
+invariant(Disposition).when(status in (decided, finalized)).then(reason_shown == true).label("不利益処分は理由を示して行う")
+
+forbidden(Disposition, publication != unpublished, status not in (decided, finalized)).label("処分を決める前に公表しない")
+
+// 都道府県知事は…営業の全部若しくは一部を…期間を定めて停止 (egov-shokuhin-eiseihou-322AC0000000233.txt:432); a 60条
+// disposition broken by operating is punished under 81条 (map.md:33).
+forbidden(BusinessPermit, status == suspended, operating == true).label("営業停止中は営業しない")
+
+// 期限を過ぎて営業すると無許可営業 (shizuoka-city-kyoka-kikan-manryou.md:36); 2年以下の拘禁刑又は二百万円以下の罰金
+// (egov-shokuhin-eiseihou-322AC0000000233.txt:542).
+forbidden(BusinessPermit, status in (expired, revoked, closed), operating == true).label("許可なく営業しない（失効・取消・廃業の後の営業は無許可営業）")
+
+after(SuspendBusiness).assert(BusinessPermit.status == suspended, BusinessPermit.operating == false).label("停止を命じた許可では営業していない")
+
+// Requirement traceability
+requirement ReqDueProcessDisposition "不利益処分は処分基準に沿い、意見陳述の手続と理由の提示を経て行う"
+  priority "must"
+  source "処分基準 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:197)"
+  source "取消は聴聞、ほかは弁明の機会の付与 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:207, :216)"
+  source "技術的基準への適合を命じる処分の例外 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:224)"
+  source "理由の提示 (egov-gyousei-tetsuzukihou-405AC0000000088.txt:231)"
+  stakeholder "営業者"
+  stakeholder "都道府県知事等"
+  acceptance_criteria "取消はすべて聴聞を経ており、意見陳述を省いた処分は整備改善命令だけで、決定した処分には理由が示されている。"
+  status "accepted"
+
+motivates(ReqDueProcessDisposition, BucDisposition)
+achieves(ReqDueProcessDisposition, DueProcess)
+
+requirement ReqStopOperationOnSanction "停止中と、取消・失効・廃業の後は営業させない"
+  priority "must"
+  source "営業の禁止・停止 (egov-shokuhin-eiseihou-322AC0000000233.txt:429, :432)"
+  source "無許可営業 (shizuoka-city-kyoka-kikan-manryou.md:36; egov-shokuhin-eiseihou-322AC0000000233.txt:542)"
+  stakeholder "都道府県知事等"
+  stakeholder "食品衛生監視員"
+  acceptance_criteria "停止中・取消・失効・廃業の許可には営業中の記録がない。"
+  status "accepted"
+
+motivates(ReqStopOperationOnSanction, BucDisposition)
+achieves(ReqStopOperationOnSanction, NoUnlicensedOperation)
+
+requirement ReqPublishViolations "処分を決めた違反を一定期間公表する"
+  priority "should"
+  source "違反した者の名称等を公表 (egov-shokuhin-eiseihou-322AC0000000233.txt:473)"
+  source "7日間をくだらない期間 (nerima-ku-ihan-kouhyou.md:42)"
+  stakeholder "保健所 許可担当職員"
+  acceptance_criteria "公表は処分の決定の後に始まり、期間が過ぎると終わる。"
+  status "accepted"
+
+motivates(ReqPublishViolations, BucDisposition)
+achieves(ReqPublishViolations, DueProcess)
+
+// Non-goals
+requirement ReqNoAppealContents "審査請求と訴訟の中身は対象外とする"
+  source "処分があったことを知った日の翌日から起算して三月 (egov-gyousei-fufuku-shinsahou-426AC0000000068.txt:203)"
+  source "教示 (egov-gyousei-fufuku-shinsahou-426AC0000000068.txt:748)"
+  stakeholder "都道府県知事等"
+  status "out-of-scope"
+  rationale "審査請求ができる期間（処分を知った日の翌日から3月）とその教示だけを扱い、期間の経過で処分を確定として記録する。審査請求の審理、裁決、取消訴訟は審査庁・裁判所の手続で、調査もしていない。"
+
+motivates(ReqNoAppealContents, BucDisposition)
+
+requirement ReqNoFoodPoisoningInvestigation "食中毒の調査と、59条の廃棄命令は対象外とする"
+  source "範囲の外: 食中毒調査の中身 (map.md:16)"
+  stakeholder "食品衛生監視員"
+  status "out-of-scope"
+  rationale "食中毒の調査（法63条以降・施行令36〜37条）と、食品の廃棄・危害除去の命令（59条）は、許可の業務ではなく事件への対応で、調査もしていない。処分としては停止・取消と同じ手続を通る。"
+
+motivates(ReqNoFoodPoisoningInvestigation, BucDisposition)

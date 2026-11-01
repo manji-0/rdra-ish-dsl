@@ -1,0 +1,58 @@
+module shared.biz
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+business Licensing "営業許可"
+  description "事前相談と営業の種類の判定、許可申請の受付と審査、施設検査、許可・不許可、有効期間の満了と更新。"
+
+business AfterPermit "許可後・届出の手続" description "変更届、地位の承継、廃業届と、許可の要らない営業の営業届出。"
+
+business Supervision "監視指導と行政処分"
+  description "監視指導計画と立入検査、整備改善命令・営業停止・許可取消と、その前の聴聞・弁明、違反の公表。"
+
+// The 保健所's own ledger of permits. No source describes it; the model's assumption.
+system PermitLedgerSystem "営業許可台帳システム（保健所）"
+
+// Periods are timers. Each starts the use case that records what happens when the period passes.
+// The DSL has no calendar, so each timer's label carries the period and the comment its source.
+
+// 許可期限の2か月前になると「営業許可期間満了通知書」が郵送されます (shizuoka-city-kyoka-kikan-manryou.md:37). Not
+// every 自治体 sends one, and the lead time differs (map.md:26 lists 1 month for 豊島区).
+timer ExpiryNoticeDue "満了通知の発送（有効期間満了の2か月前）"
+// 五年を下らない有効期間 (egov-shokuhin-eiseihou-322AC0000000233.txt:410). The national guideline on how long
+// was announced as 別途通知する予定 (mhlw-2019-seishokuhatsu1227-2-sekou.txt:450) and was not found; the
+// 熊本県 要領 gives 5年 to a facility that meets the standard (kumamoto-pref-kyoka-yuukoukikan-youryou.txt:21)
+// and 5年から7年 by its 査定表 (:24). After expiry the permit is gone: 有効期間が切れた場合、新規に営業許可を
+// 取得するまで、営業することが (kawaguchi-city-kyoka-keizoku.md:116), 廃業扱い (mito-city-kyoka-koushin.md:49).
+timer PermitTermEnd "有効期間の満了（5年以上、自治体が定める）"
+// 期間を定めて停止 (egov-shokuhin-eiseihou-322AC0000000233.txt:432). The length weighs 違反原因の究明および原因の
+// 除去に要する日数 (chiba-pref-shobun-13110-067.md:83).
+timer SuspensionTermEnd "営業停止期間の満了（処分で定めた期間）"
+// 処分があったことを知った日の翌日から起算して三月 (egov-gyousei-fufuku-shinsahou-426AC0000000068.txt:203). The
+// appeal itself is out of scope (ReqNoAppealContents); the timer marks only the end of the period.
+timer AppealPeriodEnd "審査請求期間の経過（処分を知った日の翌日から3月）"
+// 行政処分等を行った日の翌日から起算して、7日間をくだらない期間 (nerima-ku-ihan-kouhyou.md:42).
+timer PublicationPeriodEnd "公表期間の経過（7日間以上）"
+// 毎年度、翌年度の…監視指導の実施に関する計画 (egov-shokuhin-eiseihou-322AC0000000233.txt:181).
+timer AnnualPlanning "翌年度の監視指導計画の策定（毎年度）"
+
+// The paper form is 全国統一 (mhlw-2020-youshiki-kisaiyouryou.txt:31).
+medium HealthCenterCounter "保健所の窓口（紙の申請書・届出書）"
+medium OnlineApplication "食品衛生申請等システム（電子申請・届出）"
+medium HealthCenterTerminal "保健所の端末"
+// 店舗の調査 (osaka-city-eigyou-kyoka-tetsuzuki.md:104); 臨検 (egov-shokuhin-eiseihou-322AC0000000233.txt:226).
+medium OnSite "営業施設での検査"
+
+permission ConsultationRequest "事前相談の申込み"
+permission BusinessClassify "営業の種類の判定"
+permission ApplicationSubmit "許可申請・届出の提出"
+permission FeePay "手数料の納付"
+permission ApplicationReview "申請・届出の受付と審査"
+permission FacilityInspect "施設検査・立入検査"
+permission PermitDecide "許可・不許可の決定"
+permission PermitRegister "許可台帳と許可証の管理"
+permission DispositionPropose "処分の起案"
+permission OpinionProcedureManage "聴聞・弁明の手続"
+permission DispositionDecide "不利益処分の決定"
+permission ViolationPublish "違反の公表"
+permission MonitoringPlanManage "監視指導計画の策定"

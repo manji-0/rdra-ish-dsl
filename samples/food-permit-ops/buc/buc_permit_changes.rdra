@@ -1,0 +1,183 @@
+module buc.permit_changes
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.inspection_decision.{PermitLedgerScreen}
+
+// Sources cited as file:line are under ~/research/japan-food-permit-operations/sources/.
+
+buc BucPermitChanges "変更届・地位の承継・廃業届"
+  description "許可営業者は申請書の記載事項が変わったら速やかに（東京都は10日以内）変更届を出す。移転や営業者の交代は変更ではなく新規の申請になる。営業の譲渡・相続・合併・分割では許可営業者の地位が承継され、承継した者が遅滞なく届け出る。廃業したら許可証を添えて廃業届を出す。"
+
+// 変更があつたときは…速やかに届け出 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:950); 10日以内
+// (tokyo-kyoka-todokede-gaiyou.md:73).
+usecase FileChangeNotice "変更届の提出"
+  description "許可営業者が、申請書の記載事項（営業者の氏名・住所、施設の名称、食品衛生責任者など）や設備の変更を届け出る。"
+
+// 変更の程度や状況により新規の営業許可申請が必要な場合 (tokyo-kyoka-todokede-gaiyou.md:102).
+usecase ReviewChangeNotice "変更届の確認"
+  description "許可担当が変更の内容を確かめ、届出で足りるか、新規の許可申請が必要かを判断する。"
+
+// 許可営業者の地位を承継する (egov-shokuhin-eiseihou-322AC0000000233.txt:412); 遅滞なく…届け出 (:413); 相続 needs the
+// 戸籍謄本 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:912), a merger the 登記事項証明書 (:925).
+usecase FileSuccessionNotice "地位承継届の提出"
+  description "営業を譲り受けた者、相続人、合併・分割で営業を承継した法人が、承継を証する書面を添えて届け出る。"
+
+usecase AcceptSuccessionNotice "地位承継届の受理"
+  description "許可担当が承継を証する書面を確かめ、台帳の営業者を書き換える。"
+
+// 廃業により営業を継続することができない (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:952); 10日以内
+// (tokyo-kyoka-todokede-gaiyou.md:108); 許可証を添えて (osaka-pref-shokuhin-eiseihou-sekou-jourei.md:22).
+usecase FileClosureNotice "廃業届の提出"
+  description "許可営業者が営業をやめた日から10日以内に、許可証を添えて廃業を届け出る。許可はここで終わる。"
+
+screen PermitNoticeScreen "許可後の届出画面"
+
+api ChangeNoticeApi "変更届 API"
+  method POST
+  path "/permits/{id}/changes"
+
+api ChangeReviewApi "変更届確認 API"
+  method PATCH
+  path "/change-notices/{id}"
+
+api SuccessionApi "地位承継届 API"
+  method POST
+  path "/permits/{id}/successions"
+
+api SuccessionReviewApi "地位承継届受理 API"
+  method PATCH
+  path "/succession-notices/{id}"
+
+api ClosureApi "廃業届 API"
+  method POST
+  path "/permits/{id}/closure"
+
+performs(BusinessOperator, FileChangeNotice)
+performs(PermitClerk, ReviewChangeNotice)
+performs(BusinessOperator, FileSuccessionNotice)
+performs(PermitClerk, AcceptSuccessionNotice)
+performs(BusinessOperator, FileClosureNotice)
+belongs(BucPermitChanges, AfterPermit).by(HealthCenterCounter).by(OnlineApplication).by(HealthCenterTerminal)
+
+contains(BucPermitChanges, FileChangeNotice)
+contains(BucPermitChanges, ReviewChangeNotice)
+contains(BucPermitChanges, FileSuccessionNotice)
+contains(BucPermitChanges, AcceptSuccessionNotice)
+contains(BucPermitChanges, FileClosureNotice)
+contains(PermitLedgerSystem, ChangeNoticeApi)
+contains(PermitLedgerSystem, ChangeReviewApi)
+contains(PermitLedgerSystem, SuccessionApi)
+contains(PermitLedgerSystem, SuccessionReviewApi)
+contains(PermitLedgerSystem, ClosureApi)
+
+displays(FileChangeNotice, PermitNoticeScreen)
+invokes(FileChangeNotice, ChangeNoticeApi)
+creates(ChangeNoticeApi, ChangeNotice)
+reads(ChangeNoticeApi, BusinessPermit)
+
+condition PermitNotEnded "許可が終わっていない（有効か停止中）"
+holds(PermitNotEnded, BusinessPermit.status in (valid, suspended))
+applies_to(PermitNotEnded, FileChangeNotice)
+applies_to(PermitNotEnded, FileSuccessionNotice)
+
+displays(ReviewChangeNotice, PermitNoticeScreen)
+invokes(ReviewChangeNotice, ChangeReviewApi)
+updates(ChangeReviewApi, ChangeNotice)
+transitions(ReviewChangeNotice, ChangeNotice.status, received -> accepted)
+transitions(ReviewChangeNotice, ChangeNotice.status, received -> new_application_required)
+
+// The successor takes over the permit as it stands, a suspension included (the model's reading of
+// 地位を承継する).
+displays(FileSuccessionNotice, PermitNoticeScreen)
+invokes(FileSuccessionNotice, SuccessionApi)
+creates(SuccessionApi, SuccessionNotice)
+reads(SuccessionApi, BusinessPermit)
+
+displays(AcceptSuccessionNotice, PermitNoticeScreen)
+invokes(AcceptSuccessionNotice, SuccessionReviewApi)
+updates(SuccessionReviewApi, SuccessionNotice)
+transitions(AcceptSuccessionNotice, SuccessionNotice.status, received -> accepted)
+
+displays(FileClosureNotice, PermitNoticeScreen)
+invokes(FileClosureNotice, ClosureApi)
+updates(ClosureApi, BusinessPermit)
+transitions(FileClosureNotice, BusinessPermit.status, valid -> closed)
+transitions(FileClosureNotice, BusinessPermit.status, suspended -> closed)
+sets(FileClosureNotice, BusinessPermit, operating == false)
+sets(FileClosureNotice, BusinessPermit, certificate_issued == false)
+
+// Access constraints
+requires_permission(FileChangeNotice, ApplicationSubmit)
+requires_medium(FileChangeNotice, HealthCenterCounter)
+requires_permission(ReviewChangeNotice, ApplicationReview)
+requires_medium(ReviewChangeNotice, HealthCenterTerminal)
+requires_permission(FileSuccessionNotice, ApplicationSubmit)
+requires_medium(FileSuccessionNotice, OnlineApplication)
+requires_permission(AcceptSuccessionNotice, ApplicationReview)
+requires_medium(AcceptSuccessionNotice, HealthCenterTerminal)
+requires_permission(FileClosureNotice, ApplicationSubmit)
+requires_medium(FileClosureNotice, HealthCenterCounter)
+
+// Screen transitions: the model's assumption.
+navigates(PermitLedgerScreen, PermitNoticeScreen).via(FileChangeNotice)
+navigates(PermitNoticeScreen, PermitLedgerScreen).via(AcceptSuccessionNotice)
+
+field ChangeResultField "変更届の判断"
+  access editable
+  required true
+  source actor
+
+field SuccessionCauseField "承継の原因"
+  access editable
+  required true
+  source actor
+
+contains(PermitNoticeScreen, ChangeResultField)
+contains(PermitNoticeScreen, SuccessionCauseField)
+maps_field(ChangeResultField, ChangeNotice.status)
+maps_field(SuccessionCauseField, SuccessionNotice.cause)
+
+// Business flow
+flow PermitChangesFlow "許可後の届出の流れ"
+step ChangeStep "変更届（10日以内）"
+step ChangeReviewStep "変更の確認（新規申請の要否）"
+step SuccessionStep "地位承継届（遅滞なく）"
+step ClosureStep "廃業届（10日以内、許可証を添える）"
+
+contains(BucPermitChanges, PermitChangesFlow)
+contains(PermitChangesFlow, ChangeStep)
+contains(PermitChangesFlow, ChangeReviewStep)
+contains(PermitChangesFlow, SuccessionStep)
+contains(PermitChangesFlow, ClosureStep)
+
+precedes(ChangeStep, ChangeReviewStep)
+branches(ChangeStep, SuccessionStep)
+branches(ChangeStep, ClosureStep)
+
+covers(ChangeStep, FileChangeNotice)
+covers(ChangeReviewStep, ReviewChangeNotice)
+covers(SuccessionStep, FileSuccessionNotice)
+covers(SuccessionStep, AcceptSuccessionNotice)
+covers(ClosureStep, FileClosureNotice)
+
+performs(BusinessOperator, ChangeStep)
+performs(PermitClerk, ChangeReviewStep)
+performs(BusinessOperator, SuccessionStep)
+performs(BusinessOperator, ClosureStep)
+
+// Requirement traceability
+requirement ReqKeepLedgerCurrent "許可後の変更・承継・廃業を届出で台帳に反映する"
+  priority "must"
+  source "変更の届出 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:950)"
+  source "地位の承継 (egov-shokuhin-eiseihou-322AC0000000233.txt:412-413)"
+  source "廃業の届出 (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:952)"
+  stakeholder "営業者"
+  stakeholder "保健所 許可担当職員"
+  acceptance_criteria "変更届と地位承継届は終わっていない許可にだけ出され、廃業した許可では営業していない。"
+  status "accepted"
+
+motivates(ReqKeepLedgerCurrent, BucPermitChanges)
+achieves(ReqKeepLedgerCurrent, NoUnlicensedOperation)

@@ -1,0 +1,28 @@
+module shared.goals
+
+// The goals state why the requirements exist. The metrics, baselines, and targets are assumed by
+// the model; no primary source gives them.
+
+// モデルの想定（一次資料なし）
+goal NoUnlicensedOperation "無許可営業をなくす"
+  description "有効期間が満了した許可や取り消された許可で営業を続けると無許可営業になる。満了前の通知と更新、停止・取消の後の確認で、許可のない営業を残さない。"
+  metric "有効な許可のない営業を立入検査で見つけた件数"
+  baseline "年12件"
+  target "年0件"
+  window "年次"
+
+// モデルの想定（一次資料なし）
+goal TimelyDecision "開店予定日までに許可する"
+  description "申請者は開店の2〜3週間前に申請する。標準処理期間のうちに施設検査と許可を終えないと、開店が遅れる。"
+  metric "標準処理期間（15開庁日）内に許可・不許可を決めた申請の割合"
+  baseline "85%"
+  target "98%"
+  window "四半期"
+
+// モデルの想定（一次資料なし）
+goal DueProcess "不利益処分を手続どおりに行う"
+  description "取消は聴聞、停止と改善命令は弁明の機会を経て、理由を示して行う。手続を欠いた処分は取り消されうる。"
+  metric "意見陳述の手続または理由の提示を欠いた不利益処分の件数"
+  baseline "年1件"
+  target "年0件"
+  window "年次"
