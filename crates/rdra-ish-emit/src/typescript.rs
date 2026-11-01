@@ -7,14 +7,12 @@ use rdra_ish_core::{
 };
 
 pub struct TypeScriptStateUnionEmitter {
-    pub cap: usize,
+    pub caps: Caps,
 }
 
 impl Default for TypeScriptStateUnionEmitter {
     fn default() -> Self {
-        Self {
-            cap: Caps::DEFAULT_PATTERNS,
-        }
+        Self { caps: Caps::STATES }
     }
 }
 
@@ -24,7 +22,7 @@ impl Emitter for TypeScriptStateUnionEmitter {
             Scope::Bucs(ids) => ids.clone(),
             Scope::Whole | Scope::UseCases(_) => vec![],
         };
-        let collections = collect_entity_state_variants(model, &buc_filter, self.cap);
+        let collections = collect_entity_state_variants(model, &buc_filter, self.caps);
         Ok(emit_typescript_state_unions(&collections))
     }
 }
@@ -169,7 +167,7 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
     #[test]
     fn typescript_state_union_snapshot() {
         let model = model_from(ORDER_SRC);
-        let collections = collect_entity_state_variants(&model, &[], Caps::DEFAULT_PATTERNS);
+        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
         insta::assert_snapshot!(emit_typescript_state_unions(&collections));
     }
 
@@ -180,7 +178,7 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
         let from_emitter = TypeScriptStateUnionEmitter::default()
             .emit(&model, &view)
             .unwrap();
-        let collections = collect_entity_state_variants(&model, &[], Caps::DEFAULT_PATTERNS);
+        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
         assert_eq!(from_emitter, emit_typescript_state_unions(&collections));
     }
 }

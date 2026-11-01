@@ -23,7 +23,7 @@ use list_output::{
     reject_state_errors, state_findings,
 };
 use load::{eprint_diagnostic, reject_model_errors};
-use rdra_ish_core::lifecycle::{Scope, Severity};
+use rdra_ish_core::lifecycle::{Caps, Scope, Severity};
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
@@ -51,6 +51,8 @@ fn main() -> Result<()> {
         Commands::Check {
             inputs,
             strict,
+            max_patterns,
+            max_states,
             scope,
         } => {
             let Project {
@@ -74,7 +76,8 @@ fn main() -> Result<()> {
 
             let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
-            let lifecycle = state_findings(&program, &model, &scope);
+            let caps = Caps::new(max_patterns, max_states);
+            let lifecycle = state_findings(&program, &model, &scope, caps);
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
                 let as_error = strict && is_strict_access_gap(&diag.error);
@@ -288,8 +291,9 @@ fn main() -> Result<()> {
             inputs,
             format,
             max_patterns,
+            max_states,
             scope,
-        } => run_states(&inputs, format, max_patterns, &scope)?,
+        } => run_states(&inputs, format, Caps::new(max_patterns, max_states), &scope)?,
 
         Commands::Verify {
             inputs,

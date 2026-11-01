@@ -236,7 +236,7 @@ impl TransitionSystem {
         let decl = self.entity(e);
         let local = run.system.local_entity(decl.key);
         let why = run.diags.iter().find_map(|d| match d.diag {
-            StateDiag::StateCapReached { cap } => Some(UndecidedWhy::StateCap(cap)),
+            StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
             StateDiag::PatternCapReached { cap, .. } => Some(UndecidedWhy::PatternCap(cap)),
             _ => None,
         });

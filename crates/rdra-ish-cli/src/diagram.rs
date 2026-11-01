@@ -55,7 +55,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     if kind.reads_lifecycle() {
         // A deadlock is coloured in the diagram, not a reason to refuse it.
         reject_state_errors_except_deadlock(&program, &model)?;
-        let (report, _) = derive_states_built(&model, &LifecycleScope::ALL, Caps::DEFAULT_PATTERNS);
+        let (report, _) = derive_states_built(&model, &LifecycleScope::ALL, Caps::STATES);
         state.marks = StateMarks::from_report(&report);
     } else {
         note_state_errors(&program, &model);

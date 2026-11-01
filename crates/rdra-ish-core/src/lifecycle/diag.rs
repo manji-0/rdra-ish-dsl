@@ -32,6 +32,73 @@ pub struct Diag {
     pub diag: StateDiag,
 }
 
+/// What a cone that hit its state cap varies in, read off the states it reached.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct CapGrowth {
+    /// Each variable of the cone, most distinct values reached first.
+    pub vars: Vec<VarSpread>,
+    /// Each use case with the number of reached states it reached first, most first.
+    pub usecases: Vec<(String, usize)>,
+}
+
+/// One variable of a capped cone: how many of its domain's values the reached states hold.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VarSpread {
+    /// `Entity.column`, `Entity._exists`, `Child._owner_Parent`, or `now`.
+    pub name: String,
+    pub reached: usize,
+    pub domain: usize,
+    /// `Int 0..N` for an Int column, `clock` for `now`; `None` for any other domain.
+    pub range: Option<String>,
+}
+
+impl CapGrowth {
+    /// How many varying variables and use cases the message names.
+    const SHOWN: usize = 8;
+}
+
+impl fmt::Display for CapGrowth {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let varying: Vec<&VarSpread> = self.vars.iter().filter(|v| v.reached > 1).collect();
+        write!(
+            f,
+            "the cone has {} variables, {} of them vary",
+            self.vars.len(),
+            varying.len()
+        )?;
+        if !varying.is_empty() {
+            let shown: Vec<String> = varying
+                .iter()
+                .take(Self::SHOWN)
+                .map(|v| {
+                    let range = v
+                        .range
+                        .as_ref()
+                        .map_or(String::new(), |r| format!(" ({r})"));
+                    format!("{} {}/{}{range}", v.name, v.reached, v.domain)
+                })
+                .collect();
+            let more = varying.len().saturating_sub(Self::SHOWN);
+            let more = if more > 0 {
+                format!(", and {more} more")
+            } else {
+                String::new()
+            };
+            write!(f, " (values reached/domain: {}{more})", shown.join(", "))?;
+        }
+        if !self.usecases.is_empty() {
+            let shown: Vec<String> = self
+                .usecases
+                .iter()
+                .take(Self::SHOWN)
+                .map(|(uc, n)| format!("{uc} {n}"))
+                .collect();
+            write!(f, "; new states first reached by: {}", shown.join(", "))?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StateDiag {
     /// A declared Enum value no reachable state holds.
@@ -66,8 +133,9 @@ pub enum StateDiag {
     },
     /// The entity's view exceeded the pattern cap; the component's exploration stopped.
     PatternCapReached { cap: usize, bound: usize },
-    /// The component's joint state count exceeded the cap; exploration stopped.
-    StateCapReached { cap: usize },
+    /// The component's joint state count exceeded the cap; exploration stopped. `growth`
+    /// names what the reached states vary in.
+    StateCapReached { cap: usize, growth: CapGrowth },
     /// A reachable state violates a state constraint. Each constraint reports its first
     /// violation, with a shortest trace to it.
     ConstraintViolated {
@@ -428,8 +496,8 @@ impl fmt::Display for StateDiag {
                     "pattern cap {cap} reached (bound {bound}); results are incomplete"
                 )
             }
-            StateDiag::StateCapReached { cap } => {
-                write!(f, "state cap {cap} reached; results are incomplete")
+            StateDiag::StateCapReached { cap, growth } => {
+                write!(f, "state cap {cap} reached; results are incomplete: {growth}")
             }
             StateDiag::ConstraintViolated {
                 name,

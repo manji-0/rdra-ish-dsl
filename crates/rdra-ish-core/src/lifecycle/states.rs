@@ -12,14 +12,14 @@ use super::{Bounds, TransitionSystem};
 use crate::model::{EntityKey, SemanticModel};
 
 impl Caps {
-    /// `--max-patterns` per entity view, and 16 joint states per allowed pattern for each
-    /// target cone. The largest cone of any sample reaches 126 states, under the 4096 default.
-    pub const fn per_cone(patterns: usize) -> Self {
-        Caps::new(patterns, patterns.saturating_mul(16))
-    }
+    /// What `check`, `states`, and the generators run at unless `--max-patterns` or
+    /// `--max-states` says otherwise. `examples/lifecycle_measure.rs` prints the largest cone of
+    /// each sample.
+    pub const STATES: Caps = Caps::new(Caps::DEFAULT_PATTERNS, Caps::DEFAULT_STATES);
 
-    /// For BFS at `Bounds::VERIFY`: 2^21 states per cone. The largest sample cone, clinic-ops
-    /// `Charge`, reaches 969,167.
+    /// For BFS at `Bounds::VERIFY`: 2^21 states per cone. A cone past it leaves its state-model
+    /// findings undecided; `engine_equivalence`'s `VERIFY_FALLBACK` names the sample cones
+    /// over 200,000 states there.
     pub const VERIFY: Caps = Caps::new(Caps::DEFAULT_PATTERNS, 1 << 21);
 }
 
@@ -39,10 +39,10 @@ pub struct BoundsLine {
 
 impl BoundsLine {
     /// What `states`, `check`, and the generators run at.
-    pub fn states(max_patterns: usize) -> Self {
+    pub fn states(caps: Caps) -> Self {
         BoundsLine {
             bounds: Bounds::STATES,
-            caps: Some(Caps::per_cone(max_patterns)),
+            caps: Some(caps),
             tla: false,
             scope: None,
         }
@@ -198,18 +198,17 @@ impl StatesReport {
 /// Builds the system for `scope` at `Bounds::STATES` and explores each selected target's
 /// cone. A `--buc` that drops use cases leaves the progress findings undecided; `--entity`
 /// does not, because each selected cone is exact.
-pub fn derive_states(model: &SemanticModel, scope: &Scope, max_patterns: usize) -> StatesReport {
-    derive_states_built(model, scope, max_patterns).0
+pub fn derive_states(model: &SemanticModel, scope: &Scope, caps: Caps) -> StatesReport {
+    derive_states_built(model, scope, caps).0
 }
 
 /// `derive_states`, and the system it explored, which names what the scope left out.
 pub fn derive_states_built(
     model: &SemanticModel,
     scope: &Scope,
-    max_patterns: usize,
+    caps: Caps,
 ) -> (StatesReport, TransitionSystem) {
     let bounds = Bounds::STATES;
-    let caps = Caps::per_cone(max_patterns);
     let built = TransitionSystem::build(model, bounds, scope);
     let mut run = built.ts.explore_targets(&built.selection.targets, caps);
     if !scope.bucs.is_empty() {

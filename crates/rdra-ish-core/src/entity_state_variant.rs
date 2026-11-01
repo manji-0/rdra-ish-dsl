@@ -2,7 +2,8 @@
 
 use crate::entity_lifecycle::link_entity_status_states;
 use crate::lifecycle::{
-    derive_states, AbstractValue, AxisKind, EntityStateResult, ReachablePattern, Scope, StateAxis,
+    derive_states, AbstractValue, AxisKind, Caps, EntityStateResult, ReachablePattern, Scope,
+    StateAxis,
 };
 use crate::model::{EntityKey, SemanticModel};
 use std::collections::BTreeMap;
@@ -55,11 +56,11 @@ pub struct EntityStateVariants {
 pub fn collect_entity_state_variants(
     model: &SemanticModel,
     buc_filter: &[String],
-    cap: usize,
+    caps: Caps,
 ) -> Vec<EntityStateVariants> {
     entity_state_variants(
         model,
-        &derive_states(model, &Scope::from_bucs(buc_filter), cap).views,
+        &derive_states(model, &Scope::from_bucs(buc_filter), caps).views,
     )
 }
 
@@ -191,7 +192,7 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
     #[test]
     fn collect_entity_state_variants_order() {
         let model = model_from(ORDER_SRC);
-        let collections = collect_entity_state_variants(&model, &[], Caps::DEFAULT_PATTERNS);
+        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
         assert_eq!(collections.len(), 1);
 
         let order = &collections[0];

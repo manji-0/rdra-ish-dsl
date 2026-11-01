@@ -79,7 +79,7 @@ fn every_witness_ends_in_its_pattern() {
 }
 
 fn derive_states_all(model: &SemanticModel) -> Vec<EntityStateResult> {
-    super::super::derive_states(model, &Scope::ALL, Caps::DEFAULT_PATTERNS).views
+    super::super::derive_states(model, &Scope::ALL, Caps::STATES).views
 }
 
 /// At both bounds, a witnessed state's first state holds it in a present slot, and no state
@@ -281,7 +281,7 @@ fn a_buc_scope_leaves_unwitnessed_states_and_dead_actions_undecided() {
     let report = super::super::derive_states(
         &model,
         &Scope::from_bucs(&["BucOrderRefund".to_string()]),
-        Caps::DEFAULT_PATTERNS,
+        Caps::STATES,
     );
     assert!(!report.has_errors(), "{:?}", report.diags);
     assert!(

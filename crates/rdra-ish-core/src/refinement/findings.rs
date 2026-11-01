@@ -71,7 +71,7 @@ pub(super) struct Attributed {
 }
 
 pub(super) fn attribute(model: &SemanticModel, facts: &[BucFacts]) -> Attributed {
-    let report = derive_states(model, &Scope::ALL, Caps::DEFAULT_PATTERNS);
+    let report = derive_states(model, &Scope::ALL, Caps::STATES);
     let entity_key = |id: &str| {
         model
             .entities

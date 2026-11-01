@@ -33,9 +33,23 @@
   `samples.txt` (`check: ok`, `verify: tlc=ok`) and its diagrams, tables, `design-doc.md`, and
   `prd.md` are in `scripts/sample-artifacts.tsv`. `scripts/gen-clinic-ops-docs.py` takes the
   sample as a second argument (`clinic-ops` by default; its output is unchanged).
+- `check --max-states <n>` and `states --max-states <n>` set the joint-state cap of each
+  target cone, which the `bounds:` line prints (#60). `check` also takes `--max-patterns`,
+  as `states` does. A cone past the cap is still the `StateCapReached` error, and its
+  message now names what the cone's reached states vary in: each variable with the values
+  it reached out of its domain (`Int 0..5` for an Int column, `clock` for `now`), and the
+  use cases that first reached the most states. A column of another entity in that list
+  is one a guard pulled into the cone.
 
 ### Changed
 
+- The default joint-state cap of a cone in `check`, `states`, and the generators is 65,536,
+  up from 4,096 (#60). It no longer follows `--max-patterns` (it was 16 states per allowed
+  pattern). A capped cone of 65,536 states costs about 0.1 s and 24 MB on a release build
+  and about 1.4 s on a debug build; no sample's cone comes near it, so their results and
+  run times are unchanged. `derive_states`, `derive_states_built`, `BoundsLine::states`,
+  `collect_entity_state_variants`, and the state-pattern and TypeScript emitters take a
+  `Caps` (`Caps::STATES` by default) where they took a pattern count.
 - Several `transitions` of one use case from one state on one column are a choice: one run
   of the use case takes exactly one arm, the actor's decision (#52). Every arm carries the
   use case's other effects (`sets`, creations, deletions, other transitions); two choice

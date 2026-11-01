@@ -79,7 +79,7 @@ pub(super) fn derive_scoped(model: &SemanticModel, bounds: Bounds, scope: &Scope
 
 /// What `states` derives: `Bounds::STATES`, each view and verdict on its own cone.
 pub(super) fn derive(model: &SemanticModel) -> Derived {
-    let report = super::derive_states(model, &Scope::ALL, Caps::DEFAULT_PATTERNS);
+    let report = super::derive_states(model, &Scope::ALL, Caps::STATES);
     Derived {
         views: report.views,
         diags: report.diags,

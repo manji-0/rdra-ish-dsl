@@ -25,7 +25,7 @@ fn check_prints_one_verdict_with_its_counterexample() {
     let file = "skills/rdra-ish-verify/samples/cross_order_payment_split.rdra";
     let expected = format!(
         "\
-bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
 error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
   rule: {file}:44:1
   counterexample (3 steps):
@@ -43,7 +43,7 @@ error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: mul
     assert_eq!(verdicts, 1, "a multi-entity rule prints once: {stderr}");
 }
 
-const BOUNDS: &str = "bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded";
+const BOUNDS: &str = "bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded";
 
 fn run(args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
@@ -480,4 +480,35 @@ fn check_rejects_a_manifest_without_a_model_name() {
     assert_eq!(code, Some(1));
     assert!(stderr.contains("rdra.toml:"), "{stderr}");
     assert!(!stderr.contains("panicked"), "{stderr}");
+}
+
+/// `--max-states` sets the cap the `bounds:` line prints, on `check` and on `states`, and a
+/// cone past it fails closed with a message that names what its states vary in.
+#[test]
+fn max_states_sets_the_cap_and_the_cap_names_what_grows() {
+    let sample = "samples/formal-verification/order.rdra";
+    for cmd in ["check", "states"] {
+        let out = run(&[cmd, "--max-states", "3", sample]);
+        assert_eq!(out.status.code(), Some(1), "{cmd}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(
+            stderr.lines().find(|l| l.starts_with("bounds:")),
+            Some(BOUNDS.replace("65536 states", "3 states").as_str()),
+            "{cmd}"
+        );
+    }
+    let out = run(&["check", "--max-states", "3", sample]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(
+            "error[StateCapReached_Order]: state derivation for entity 'Order': state cap 3 \
+             reached; results are incomplete: the cone has 3 variables, 2 of them vary (values \
+             reached/domain: Order._exists 2/3, Order.status 2/5); new states first reached by: \
+             CapturePay 1, PlaceOrder 1; raise --max-states, or narrow with --entity or --buc"
+        ),
+        "{stderr}"
+    );
+    assert!(run(&["check", "--max-states", "4096", sample])
+        .status
+        .success());
 }

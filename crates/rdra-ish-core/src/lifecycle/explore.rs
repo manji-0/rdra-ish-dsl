@@ -6,11 +6,13 @@ use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use super::cone::VarSet;
-use super::diag::{Diag, StateDiag};
+use super::diag::{CapGrowth, Diag, StateDiag, VarSpread};
 use super::expr::{Env, State};
 use super::restrict::Component;
 use super::trace::Trace;
-use super::types::{ActId, Action, Effect, EntId, InvKind, ParamRole, Rhs, Start, Value, VarId};
+use super::types::{
+    ActId, Action, Domain, Effect, EntId, InvKind, ParamRole, Rhs, Start, Value, VarId, VarKind,
+};
 use super::view::{describe_slot, pattern_bound};
 use super::TransitionSystem;
 
@@ -19,12 +21,15 @@ use super::TransitionSystem;
 pub struct Caps {
     /// Distinct view patterns per entity (`--max-patterns`).
     pub patterns: usize,
-    /// Joint states per component.
+    /// Joint states per component (`--max-states`).
     pub states: usize,
 }
 
 impl Caps {
     pub const DEFAULT_PATTERNS: usize = 256;
+    /// Joint states per target cone that `check`, `states`, and the generators explore by
+    /// default.
+    pub const DEFAULT_STATES: usize = 65_536;
 
     pub const fn new(patterns: usize, states: usize) -> Self {
         Caps { patterns, states }
@@ -913,6 +918,7 @@ impl<'t> Bfs<'t> {
                 entities,
                 diag: StateDiag::StateCapReached {
                     cap: self.caps.states,
+                    growth: self.growth(),
                 },
             });
             return false;
@@ -922,6 +928,57 @@ impl<'t> Bfs<'t> {
         self.states.push(s);
         self.parents.push(parent);
         true
+    }
+
+    /// What the reached states vary in: the distinct values of each variable, and the use
+    /// case of the edge that first reached each state.
+    fn growth(&self) -> CapGrowth {
+        let ts = self.ts;
+        let mut vars: Vec<VarSpread> = ts
+            .var_ids()
+            .map(|v| {
+                let decl = ts.var(v);
+                let slots = match decl.kind {
+                    VarKind::Now => 1,
+                    _ => ts.bounds.slots(),
+                };
+                let reached: BTreeSet<Value> = self
+                    .states
+                    .iter()
+                    .flat_map(|s| (0..slots).map(move |slot| s.get(ts, v, slot)))
+                    .collect();
+                let (name, range) = match &decl.kind {
+                    VarKind::Now => ("now".to_string(), Some("clock".to_string())),
+                    VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
+                        let range = matches!(decl.domain, Domain::Int | Domain::NullableInt)
+                            .then(|| format!("Int 0..{}", ts.bounds.int_max));
+                        let name = format!("{}.{}", ts.entity(*entity).id, ts.var_name(v));
+                        (name, range)
+                    }
+                    VarKind::Exists(_) | VarKind::Owner { .. } => (ts.var_name(v), None),
+                };
+                VarSpread {
+                    name,
+                    reached: reached.len(),
+                    domain: decl.domain.size(ts.bounds),
+                    range,
+                }
+            })
+            .collect();
+        vars.sort_by(|a, b| b.reached.cmp(&a.reached).then(a.name.cmp(&b.name)));
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for edge in self.parents.iter().flatten() {
+            let (act, _) = self.bindings.list[self.edges[*edge as usize].binding as usize];
+            *counts
+                .entry(ts.actions[act.index()].name.as_str())
+                .or_default() += 1;
+        }
+        let mut usecases: Vec<(String, usize)> = counts
+            .into_iter()
+            .map(|(name, n)| (name.to_string(), n))
+            .collect();
+        usecases.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        CapGrowth { vars, usecases }
     }
 
     /// Interns a view pattern; `None` when the pattern cap stops the run.

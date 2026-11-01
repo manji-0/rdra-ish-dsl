@@ -44,7 +44,7 @@ fn an_error_no_selected_cone_reads_is_deferred() {
         .collect();
     assert_eq!(names, ["Order", "Forbidden_Order_0"]);
 
-    let report = super::super::derive_states(&model, &scope(&model, &["Order"]), 256);
+    let report = super::super::derive_states(&model, &scope(&model, &["Order"]), Caps::STATES);
     assert!(!report.has_errors(), "{:?}", report.diags);
     let views: Vec<&str> = report.views.iter().map(|v| v.entity_id.as_str()).collect();
     assert_eq!(views, ["Order"]);
@@ -77,7 +77,7 @@ applies_to(Audited, Pay)
 #[test]
 fn an_entity_scope_leaves_only_unkept_use_cases_undecided() {
     let model = sample_model(PARTIAL);
-    let report = super::super::derive_states(&model, &scope(&model, &["Order"]), 256);
+    let report = super::super::derive_states(&model, &scope(&model, &["Order"]), Caps::STATES);
     let undecided: Vec<String> = report.undecided.iter().map(|u| u.to_string()).collect();
     assert_eq!(
         undecided,

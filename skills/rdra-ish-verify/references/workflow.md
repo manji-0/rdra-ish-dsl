@@ -140,7 +140,7 @@ selected cone reads is deferred rather than failing the run:
 
 ```text
 $ rdra-ish check samples/partial_scope.rdra --entity Order
-bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
 scope: --entity Order
 not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
   deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead

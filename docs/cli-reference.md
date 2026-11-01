@@ -41,7 +41,7 @@ Diagnostics are written to stderr. A load or consistency diagnostic is `error: .
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--buc <ID>]... [--entity <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--max-patterns <N>] [--max-states <N>] [--buc <ID>]... [--entity <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
@@ -128,6 +128,8 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | Option | Description |
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
+| `--max-patterns <n>` | Cap on each entity's distinct patterns within one target cone (default `256`). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
+| `--max-states <n>` | Cap on the joint states of one target cone (default `65536`), printed in the `bounds:` line. Past it, the run records a `StateCapReached` **error** that names what the cone's states vary in. Same as [`states`](#states). |
 | `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
 | `--entity <id>` | Check only the entity's view and the invariants and after-asserts that read it; repeatable. See [Partial runs](#partial-runs). |
 
@@ -154,7 +156,7 @@ so the whole model still fails:
 
 ```
 $ rdra-ish check samples/formal-verification/partial_scope.rdra --entity Order
-bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
 scope: --entity Order
 not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
   deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
@@ -1153,7 +1155,7 @@ Derive the reachable state patterns per entity, aggregated across BUCs. See
 [state-derivation.md](./state-derivation.md) for the algorithm.
 
 ```
-rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--entity <ID>]...
+rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--max-states <N>] [--entity <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -1161,7 +1163,8 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--format` | `table` \| `csv` \| `json` \| `typescript` | `table` | Output format. `typescript` (alias `type-script`) emits entity state unions. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
-| `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). The cone also stops after 16 joint states per allowed pattern (4096 at the default). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When a cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` or `StateCapReached` **error** is recorded (exit non-zero for all formats). |
+| `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
+| `--max-states` | unsigned integer | `65536` | Cap on the joint states of one target cone, printed in the `bounds:` line. When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example below). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |
 
 Output is written to stdout. In the table, each entity opens with an `axes:` line, the

@@ -61,7 +61,9 @@ A good RDRA-ish analysis report does three things:
   passed. Report everything under `not checked:` (a `--buc` or `--entity` scope, or a
   cap) as not checked.
 - When a cap stops the exploration (`PatternCapReached`, `StateCapReached`), say so and
-  narrow the analysis before drawing strong conclusions.
+  narrow the analysis before drawing strong conclusions. Name the columns and use cases the
+  `StateCapReached` message lists as growing the cone, and raise `--max-states` only after
+  saying why the cone is that large.
 
 ## Recommendation Patterns
 

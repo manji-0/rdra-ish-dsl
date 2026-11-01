@@ -1,6 +1,7 @@
 use clap::builder::{PossibleValue, TypedValueParser};
 use clap::error::ErrorKind;
 use clap::{Arg, Args, Command, Parser, Subcommand, ValueEnum};
+use rdra_ish_core::lifecycle::Caps;
 use std::ffi::OsStr;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -159,6 +160,14 @@ pub(crate) enum Commands {
         /// Treat permission / access consistency gaps as errors (exit 1)
         #[arg(long)]
         strict: bool,
+        /// Cap on each entity's distinct patterns within one target cone; past it is a
+        /// `PatternCapReached` error
+        #[arg(long, default_value_t = Caps::DEFAULT_PATTERNS)]
+        max_patterns: usize,
+        /// Cap on the joint states of each target cone; a cone past it is a
+        /// `StateCapReached` error
+        #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
+        max_states: usize,
         #[command(flatten)]
         scope: ScopeArgs,
     },
@@ -279,10 +288,14 @@ pub(crate) enum Commands {
         /// Output format: table, csv, json, or typescript
         #[arg(long, default_value = "table")]
         format: StatesFormat,
-        /// Cap on each entity's distinct patterns within one target cone (that cone also stops
-        /// after 16 joint states per allowed pattern)
-        #[arg(long, default_value_t = 256)]
+        /// Cap on each entity's distinct patterns within one target cone; past it is a
+        /// `PatternCapReached` error
+        #[arg(long, default_value_t = Caps::DEFAULT_PATTERNS)]
         max_patterns: usize,
+        /// Cap on the joint states of each target cone; a cone past it is a
+        /// `StateCapReached` error
+        #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
+        max_states: usize,
         #[command(flatten)]
         scope: ScopeArgs,
     },

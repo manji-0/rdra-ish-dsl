@@ -13,12 +13,12 @@ use rdra_ish_core::{
 // ── ヘルパー ─────────────────────────────────────────────────────────────────
 
 /// The entity views `states` prints for the view's BUC scope.
-fn derive_views(model: &SemanticModel, view: &View, cap: usize) -> Vec<EntityStateResult> {
+fn derive_views(model: &SemanticModel, view: &View, caps: Caps) -> Vec<EntityStateResult> {
     let scope = match &view.scope {
         Scope::Bucs(ids) => SystemScope::from_bucs(ids),
         Scope::Whole | Scope::UseCases(_) => SystemScope::ALL,
     };
-    derive_states(model, &scope, cap).views
+    derive_states(model, &scope, caps).views
 }
 
 /// BFS などで `AbstractValue` の表示文字列を取得する。
@@ -240,20 +240,18 @@ fn value_labels(model: &SemanticModel, r: &EntityStateResult) -> Vec<String> {
 // ── Table エミッタ ────────────────────────────────────────────────────────────
 
 pub struct StatePatternTableEmitter {
-    pub cap: usize,
+    pub caps: Caps,
 }
 
 impl Default for StatePatternTableEmitter {
     fn default() -> Self {
-        Self {
-            cap: Caps::DEFAULT_PATTERNS,
-        }
+        Self { caps: Caps::STATES }
     }
 }
 
 impl Emitter for StatePatternTableEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        Ok(render_table(&derive_views(model, view, self.cap), model))
+        Ok(render_table(&derive_views(model, view, self.caps), model))
     }
 }
 
@@ -405,20 +403,18 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
 // ── CSV エミッタ（long-form） ─────────────────────────────────────────────────
 
 pub struct StatePatternCsvEmitter {
-    pub cap: usize,
+    pub caps: Caps,
 }
 
 impl Default for StatePatternCsvEmitter {
     fn default() -> Self {
-        Self {
-            cap: Caps::DEFAULT_PATTERNS,
-        }
+        Self { caps: Caps::STATES }
     }
 }
 
 impl Emitter for StatePatternCsvEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        render_csv(&derive_views(model, view, self.cap))
+        render_csv(&derive_views(model, view, self.caps))
     }
 }
 
@@ -486,20 +482,18 @@ pub fn render_csv(results: &[EntityStateResult]) -> Result<String, EmitError> {
 // ── JSON エミッタ ─────────────────────────────────────────────────────────────
 
 pub struct StatePatternJsonEmitter {
-    pub cap: usize,
+    pub caps: Caps,
 }
 
 impl Default for StatePatternJsonEmitter {
     fn default() -> Self {
-        Self {
-            cap: Caps::DEFAULT_PATTERNS,
-        }
+        Self { caps: Caps::STATES }
     }
 }
 
 impl Emitter for StatePatternJsonEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        render_json(&derive_views(model, view, self.cap), model, &|_| None)
+        render_json(&derive_views(model, view, self.caps), model, &|_| None)
     }
 }
 

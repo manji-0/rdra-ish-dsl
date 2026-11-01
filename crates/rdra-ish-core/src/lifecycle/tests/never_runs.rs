@@ -24,8 +24,7 @@ fn never_runs(diags: &[Diag]) -> Vec<(&str, &Blocked)> {
 fn only_the_explained_sample_actions_never_run() {
     let mut found = Vec::new();
     for sample in SAMPLES {
-        let report =
-            super::super::derive_states(&load(sample), &Scope::ALL, Caps::DEFAULT_PATTERNS);
+        let report = super::super::derive_states(&load(sample), &Scope::ALL, Caps::STATES);
         for (action, why) in never_runs(&report.diags) {
             found.push((*sample, action.to_string(), why.clone()));
         }
@@ -158,7 +157,7 @@ transitions(Pay, Order.status, pending -> paid)
     let model = model_from(src);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let ts = &built.ts;
-    let run = ts.explore_targets(&ts.targets(), Caps::per_cone(Caps::DEFAULT_PATTERNS));
+    let run = ts.explore_targets(&ts.targets(), Caps::STATES);
     let order = run.cone_of(Target::Entity(
         ts.local_entity(model.entities.keys().next().unwrap()),
     ));

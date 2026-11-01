@@ -49,7 +49,7 @@ pub(crate) fn state_consistency_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
 ) -> Vec<Finding> {
-    state_findings(program, model, &Scope::ALL).findings
+    state_findings(program, model, &Scope::ALL, Caps::STATES).findings
 }
 
 /// What `check` prints of the lifecycle: the bounds and scope, the findings, and the
@@ -66,8 +66,9 @@ pub(crate) fn state_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
     scope: &Scope,
+    caps: Caps,
 ) -> StateFindings {
-    let (report, ts) = derive_states_built(model, scope, Caps::DEFAULT_PATTERNS);
+    let (report, ts) = derive_states_built(model, scope, caps);
     let on_views = report.views.iter().flat_map(|result| {
         let diags = result.diagnostics.iter().filter(|d| !has_block(d));
         diags.map(move |diag| {
@@ -622,6 +623,9 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             "pattern cap reached at {} while the theoretical state-space bound is {} (constraints on truncated set are not sound; raise --max-patterns or narrow --buc)",
             cap, bound
         ),
+        StateDiag::StateCapReached { .. } => format!(
+            "{diag}; raise --max-states, or narrow with --entity or --buc"
+        ),
         StateDiag::ConstraintViolated {
             kind,
             text,
@@ -642,8 +646,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             "{}temporal assertion violated after '{anchor}': expected {requireds}, but found {actual}",
             label_prefix(label)
         ),
-        StateDiag::StateCapReached { .. }
-        | StateDiag::NoWitness { .. }
+        StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
         | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }

@@ -139,6 +139,50 @@ sets(usecase::SetD, Multi, d == present)
 }
 
 #[test]
+fn state_cap_names_what_the_reached_states_vary_in() {
+    let model = model_from(
+        r#"
+entity Multi "マルチ" { id: Int @pk  a: String @null  b: String @null  n: Int @default("1") }
+usecase Create "生成"
+usecase SetA   "Aセット"
+usecase SetB   "Bセット"
+creates(Create, Multi)
+sets(usecase::SetA, Multi, a == present)
+sets(usecase::SetB, Multi, b == present)
+sets(usecase::SetB, Multi, n == 3)
+"#,
+    );
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
+    let run = built.ts.explore(Caps::new(usize::MAX, 3));
+    let growth = run
+        .diags()
+        .find_map(|d| match &d.diag {
+            StateDiag::StateCapReached { cap: 3, growth } => Some(growth.clone()),
+            _ => None,
+        })
+        .expect("the cap stops the run");
+    let spread = |name: &str| {
+        let v = growth.vars.iter().find(|v| v.name == name).expect(name);
+        (v.reached, v.domain, v.range.clone())
+    };
+    // absent at the start, then present after Create, then a set by SetA.
+    assert_eq!(spread("Multi._exists"), (2, 3, None));
+    assert_eq!(spread("Multi.a"), (2, 2, None));
+    assert_eq!(spread("Multi.b"), (1, 2, None));
+    assert_eq!(spread("Multi.n"), (1, 6, Some("Int 0..5".into())));
+    assert_eq!(growth.vars[0].reached, 2, "most values first");
+    assert_eq!(
+        growth.usecases,
+        vec![("Create".to_string(), 1), ("SetA".to_string(), 1)]
+    );
+    assert_eq!(
+        growth.to_string(),
+        "the cone has 4 variables, 2 of them vary (values reached/domain: Multi._exists 2/3, \
+         Multi.a 2/2); new states first reached by: Create 1, SetA 1"
+    );
+}
+
+#[test]
 fn nullable_column_reaches_present() {
     let d = derive_src(
         r#"

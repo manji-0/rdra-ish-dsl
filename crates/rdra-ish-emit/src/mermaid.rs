@@ -1520,7 +1520,7 @@ applies_to(Packed, Ship)
         let report = rdra_ish_core::lifecycle::derive_states(
             &model,
             &rdra_ish_core::lifecycle::Scope::ALL,
-            rdra_ish_core::lifecycle::Caps::DEFAULT_PATTERNS,
+            rdra_ish_core::lifecycle::Caps::STATES,
         );
         let mut view = View::whole();
         view.state.marks = crate::StateMarks::from_report(&report);

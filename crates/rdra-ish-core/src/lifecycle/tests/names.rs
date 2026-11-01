@@ -2,7 +2,7 @@
 
 use crate::lifecycle::trace::{Inst, Trace};
 use crate::lifecycle::types::{ActionOrigin, InvKind, InvText, LtlKind, ModelRef, Site};
-use crate::lifecycle::{Blocked, Exit, Loop, StateDiag};
+use crate::lifecycle::{Blocked, CapGrowth, Exit, Loop, StateDiag};
 
 /// One value of each variant, with key fields that hold characters a name cannot.
 fn one_of_each() -> Vec<StateDiag> {
@@ -37,7 +37,10 @@ fn one_of_each() -> Vec<StateDiag> {
             site: site(),
         },
         StateDiag::PatternCapReached { cap: 1, bound: 4 },
-        StateDiag::StateCapReached { cap: 1 },
+        StateDiag::StateCapReached {
+            cap: 1,
+            growth: CapGrowth::default(),
+        },
         StateDiag::ConstraintViolated {
             name: "Forbidden_Order_0".into(),
             kind: InvKind::Forbidden,
@@ -208,7 +211,10 @@ fn names_keep_the_checks_own_names() {
 
 #[test]
 fn one_finding_on_two_entity_views_keeps_two_names() {
-    let cap = StateDiag::StateCapReached { cap: 1 };
+    let cap = StateDiag::StateCapReached {
+        cap: 1,
+        growth: CapGrowth::default(),
+    };
     assert_eq!(cap.name(&["Order"]), "StateCapReached_Order");
     assert_eq!(cap.name(&["Payment"]), "StateCapReached_Payment");
     assert_eq!(StateDiag::NoCreationPath.name(&[]), "NoCreationPath");

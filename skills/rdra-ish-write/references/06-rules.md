@@ -166,7 +166,7 @@ says so:
 
 ```text
 $ rdra-ish check ../rdra-ish-verify/samples/fail/order.rdra
-bounds: 1 instance per entity, Int 0..5; 4096 states per cone; entities a check does not read are unbounded
+bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
 warning[UnwrittenConstrainedVar_Order_delivered_at]: state derivation for entity 'Order': delivered_at is constrained but no use case writes it
 error[Inv_Order_0]: invariant Inv_Order_0 is violated: invariant violated: when status=delivered then delivered_at=present is broken by delivered_at=null, status=delivered
   rule: ../rdra-ish-verify/samples/fail/order.rdra:21:1
