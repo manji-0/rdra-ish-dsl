@@ -89,7 +89,7 @@ transitions(ApproveDraft, DraftingOrder.status, drafted -> approved)
 raises(ApproveDraft, EvDraftApproved)
 
 condition InventorChecked "発明者が内容を確認している"
-holds(InventorChecked, DraftingOrder.status == drafted, DraftingOrder.inventor_checked == true)
+holds(InventorChecked, DraftingOrder.inventor_checked == true)
 applies_to(InventorChecked, ApproveDraft)
 
 // The inventor's check is the IP department's practice (keiyakuwatch-chizaibu-gyomu.md:152, 〔まとめ〕).

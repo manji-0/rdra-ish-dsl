@@ -83,7 +83,7 @@ raises(Jpo, EvRegistered)
 triggers(EvRegistered, RecordRegistration)
 
 condition FirstFeesPaid "第1〜3年分の特許料を納付している"
-holds(FirstFeesPaid, PatentApplication.status == granted, PatentApplication.first_fees_paid == true)
+holds(FirstFeesPaid, PatentApplication.first_fees_paid == true)
 applies_to(FirstFeesPaid, RecordRegistration)
 
 // 特許料を納付しなければ、特許権は発生しません（特許法66条） (keiyakuwatch-chizaibu-gyomu.md:165, 〔まとめ〕).
@@ -99,7 +99,7 @@ raises(Jpo, EvRegistrationDismissed)
 triggers(EvRegistrationDismissed, RecordRegistrationDismissal)
 
 condition FirstFeesUnpaid "第1〜3年分の特許料を納付していない"
-holds(FirstFeesUnpaid, PatentApplication.status == granted, PatentApplication.first_fees_paid == false)
+holds(FirstFeesUnpaid, PatentApplication.first_fees_paid == false)
 applies_to(FirstFeesUnpaid, RecordRegistrationDismissal)
 
 // Access constraints

@@ -10,7 +10,7 @@ sequenceDiagram
   actor__IpStaff ->> screen__FeePaymentScreen: 特許料の不納による却下の記録
   extsystem__Jpo ->> usecase__RecordRegistrationDismissal: 特許料の不納による却下
   screen__FeePaymentScreen ->> usecase__RecordRegistrationDismissal: 特許料の不納による却下の記録
-  alt 第1〜3年分の特許料を納付していない: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == false
+  alt 第1〜3年分の特許料を納付していない: PatentApplication.first_fees_paid == false and PatentApplication.status == 特許査定
     usecase__RecordRegistrationDismissal ->> entity__PatentApplication: update status 特許査定 -> 却下
     usecase__RecordRegistrationDismissal -->> screen__FeePaymentScreen: done
   else guard fails

@@ -9,7 +9,7 @@ sequenceDiagram
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   actor__PatentAttorney ->> screen__OfficeActionScreen: 期間経過後の延長請求
   screen__OfficeActionScreen ->> api__OfficeActionApi: 中間処理 API
-  alt 期間内に延長していない: OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false
+  alt 期間内に延長していない: OfficeAction.extended == false and OfficeAction.status == 期間経過（延長請求可）
     api__OfficeActionApi ->> entity__OfficeAction: update status 期間経過（延長請求可） -> 応答期間中, late_extended=true
     api__OfficeActionApi -) extsystem__Jpo: 期間延長請求書の提出
     api__OfficeActionApi -->> screen__OfficeActionScreen: done

@@ -668,10 +668,22 @@ fn lint_enum_attributes(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
 }
 
 /// A `holds` body that names neither a variation column nor a lifecycle column is not
-/// RDRA 条件: it combines no バリエーション and no 状態モデル.
+/// RDRA 条件: it combines no バリエーション and no 状態モデル. A body that guards a use case
+/// is exempt: it is the use case's rule, and a guard has no other way to be written. It
+/// guards one through `applies_to` a use case or an API, or `.when` on a `transitions` arm or
+/// a `chooses` value (those link the guarded column, so `condition_edges` is not empty).
 fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     for (key, condition) in &model.conditions {
         if condition.body.is_none() || !crate::analysis::condition_edges(model, key).is_empty() {
+            continue;
+        }
+        let guards = model.relations.iter().any(|rel| {
+            rel.from == NodeRef::Condition(key)
+                && (rel.kind == RelKind::Guards
+                    || (rel.kind == RelKind::AppliesTo
+                        && matches!(rel.to, NodeRef::UseCase(_) | NodeRef::Api(_))))
+        });
+        if guards {
             continue;
         }
         push_element_lint(
@@ -682,10 +694,10 @@ fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
             &condition.id,
             "condition-no-rdra-anchor",
             format!(
-                "condition {} has a body that names no variation column and no lifecycle column",
+                "condition {} has a body that guards no use case and names no variation column and no lifecycle column",
                 condition.id
             ),
-            "compare a column typed by a variation or a column some `transitions` moves, or use `combines` to link the condition for traceability",
+            "apply it to the use case it guards with `applies_to`, compare a column typed by a variation or a column some `transitions` moves, or use `combines` to link the condition for traceability",
         );
     }
 }
@@ -1577,6 +1589,53 @@ combines(Traceable, Method)
             .map(|i| i.subject_id)
             .collect();
         assert_eq!(flagged, vec!["Big".to_string()]);
+    }
+
+    /// A body that guards a use case is a rule the use case follows, whatever columns it
+    /// reads: `applies_to` a use case or an API, or `.when` on a `transitions` arm or a
+    /// `chooses` value. `applies_to` a system adds no guard, so it does not count.
+    #[test]
+    fn a_condition_body_that_guards_a_use_case_needs_no_rdra_anchor() {
+        let model = model_from(
+            r#"
+system Shop "Shop"
+entity Pay "Pay" {
+  Id: Int @pk
+  amount: Int
+  flagged: Bool @default(false)
+  status: Enum(open, paid, held) @default(open)
+}
+usecase Settle "Settle"
+usecase Hold "Hold"
+usecase Review "Review"
+api PayApi "Pay API"
+invokes(Review, PayApi)
+updates(PayApi, Pay)
+transitions(Settle, Pay.status, open -> paid)
+transitions(Hold, Pay.status, open -> held).when(Large)
+sets(Review, Pay, flagged == true)
+condition Big "Big"
+holds(Big, Pay.amount > 100)
+applies_to(Big, Settle)
+condition Large "Large"
+holds(Large, Pay.amount > 500)
+condition Suspicious "Suspicious"
+holds(Suspicious, Pay.flagged == false)
+applies_to(Suspicious, PayApi)
+condition SystemWide "System wide"
+holds(SystemWide, Pay.amount > 1)
+applies_to(SystemWide, Shop)
+condition Unused "Unused"
+holds(Unused, Pay.amount > 2)
+"#,
+        );
+        let mut flagged: Vec<_> = collect_findings(&model)
+            .into_iter()
+            .filter(|i| i.rule == "condition-no-rdra-anchor")
+            .map(|i| i.subject_id)
+            .collect();
+        flagged.sort();
+        assert_eq!(flagged, ["SystemWide", "Unused"]);
     }
 
     #[test]

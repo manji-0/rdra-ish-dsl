@@ -62,7 +62,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every `extsystem` is connected through an event: `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)`
    - Every `timer` triggers a use case or BUC: `triggers(Timer, UseCase|Buc)`
    - Every `forbidden`, `invariant`, `required`, `exclusive`, `invariant(...).when(...).none/has(...)`, and `after(...).assert(...)` carries a `.label("...")` in the business's words (`lint` `rule-unlabeled`)
-   - Every `condition` is applied to a use case (`applies_to(Condition, UseCase)`) and either `combines` a variation or lifecycle column or has a `holds` body that names one (`lint` `condition-no-rdra-anchor`)
+   - Every `condition` is applied to a use case (`applies_to(Condition, UseCase)`) and either `combines` a variation or lifecycle column or has a `holds` body that names one or guards a use case (`lint` `condition-no-rdra-anchor`); a guard needs no comparison on the state its use case already moves from
 
 6. **Check requirements, flow, and decision traceability**
    - Stable requirement metadata should include priority/source/stakeholder/owner

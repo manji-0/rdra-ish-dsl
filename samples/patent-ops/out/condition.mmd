@@ -19,9 +19,9 @@ flowchart LR
   condition__ExaminationRequested{"審査請求をした出願である"}:::condition
   %% holds condition__ExaminationRequested: PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present
   condition__FirstFeesPaid{"第1〜3年分の特許料を納付している"}:::condition
-  %% holds condition__FirstFeesPaid: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true
+  %% holds condition__FirstFeesPaid: PatentApplication.first_fees_paid == true
   condition__FirstFeesUnpaid{"第1〜3年分の特許料を納付していない"}:::condition
-  %% holds condition__FirstFeesUnpaid: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == false
+  %% holds condition__FirstFeesUnpaid: PatentApplication.first_fees_paid == false
   condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
   %% holds condition__FirstNoticeOnly: OfficeAction.kind == 最初
   condition__Granted{"特許査定を受けた出願である"}:::condition
@@ -29,13 +29,13 @@ flowchart LR
   condition__InForce{"特許権が存続している"}:::condition
   %% holds condition__InForce: Patent.status == 存続中
   condition__InventorChecked{"発明者が内容を確認している"}:::condition
-  %% holds condition__InventorChecked: DraftingOrder.status == 原稿受領, DraftingOrder.inventor_checked == true
+  %% holds condition__InventorChecked: DraftingOrder.inventor_checked == true
   condition__KeptRight{"維持すると決めた権利である"}:::condition
-  %% holds condition__KeptRight: Patent.status == 追納期間中, Patent.maintain == true
+  %% holds condition__KeptRight: Patent.maintain == true
   condition__NonEmployeeInvention{"職務発明に当たらない"}:::condition
   %% holds condition__NonEmployeeInvention: InventionDisclosure.category == 職務発明に当たらない発明
   condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
-  %% holds condition__NotExtendedWithinTerm: OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false
+  %% holds condition__NotExtendedWithinTerm: OfficeAction.extended == false
   condition__NotYetExtended{"納付期間をまだ延長していない"}:::condition
   %% holds condition__NotYetExtended: PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false
   condition__PriorityBase{"国内優先権の基礎とされ、まだ係属している出願である"}:::condition
@@ -53,7 +53,7 @@ flowchart LR
   condition__YearPaid{"存続中で、次の年が納付済"}:::condition
   %% holds condition__YearPaid: Patent.status == 存続中, Patent.next_year_paid == true
   condition__YearUnpaid{"次の年が未納"}:::condition
-  %% holds condition__YearUnpaid: Patent.status == 存続中, Patent.next_year_paid == false
+  %% holds condition__YearUnpaid: Patent.next_year_paid == false
   statemodel__DraftingOrder_status[["DraftingOrder.status"]]:::statemodel
   statemodel__InventionDisclosure_status[["InventionDisclosure.status"]]:::statemodel
   statemodel__OfficeAction_status[["OfficeAction.status"]]:::statemodel
@@ -153,11 +153,7 @@ flowchart LR
   condition__ExaminationRequested -.-> statemodel__PatentApplication_status
   %% derived condition__ExaminationRequested -> statemodel__PatentApplication_status from holds
   condition__FirstFeesPaid -.->|applies_to| usecase__RecordRegistration
-  condition__FirstFeesPaid -.-> statemodel__PatentApplication_status
-  %% derived condition__FirstFeesPaid -> statemodel__PatentApplication_status from holds
   condition__FirstFeesUnpaid -.->|applies_to| usecase__RecordRegistrationDismissal
-  condition__FirstFeesUnpaid -.-> statemodel__PatentApplication_status
-  %% derived condition__FirstFeesUnpaid -> statemodel__PatentApplication_status from holds
   condition__FirstNoticeOnly -.-> variation__AmendmentScope
   %% derived condition__FirstNoticeOnly -> variation__AmendmentScope from when
   condition__FirstNoticeOnly -.->|when| usecase__DraftResponse
@@ -169,17 +165,11 @@ flowchart LR
   condition__InForce -.-> statemodel__Patent_status
   %% derived condition__InForce -> statemodel__Patent_status from holds
   condition__InventorChecked -.->|applies_to| usecase__ApproveDraft
-  condition__InventorChecked -.-> statemodel__DraftingOrder_status
-  %% derived condition__InventorChecked -> statemodel__DraftingOrder_status from holds
   condition__KeptRight -.->|applies_to| usecase__PayLateAnnuity
-  condition__KeptRight -.-> statemodel__Patent_status
-  %% derived condition__KeptRight -> statemodel__Patent_status from holds
   condition__NonEmployeeInvention -.->|applies_to| usecase__AcquireRightsByAssignment
   condition__NonEmployeeInvention -.-> variation__InventionCategory
   %% derived condition__NonEmployeeInvention -> variation__InventionCategory from holds
   condition__NotExtendedWithinTerm -.->|applies_to| usecase__RequestLateExtension
-  condition__NotExtendedWithinTerm -.-> statemodel__OfficeAction_status
-  %% derived condition__NotExtendedWithinTerm -> statemodel__OfficeAction_status from holds
   condition__NotYetExtended -.->|applies_to| usecase__RequestFeePaymentExtension
   condition__NotYetExtended -.-> statemodel__PatentApplication_status
   %% derived condition__NotYetExtended -> statemodel__PatentApplication_status from holds
@@ -206,8 +196,6 @@ flowchart LR
   condition__YearPaid -.-> statemodel__Patent_status
   %% derived condition__YearPaid -> statemodel__Patent_status from holds
   condition__YearUnpaid -.->|applies_to| usecase__EnterGracePeriod
-  condition__YearUnpaid -.-> statemodel__Patent_status
-  %% derived condition__YearUnpaid -> statemodel__Patent_status from holds
   classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
   classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
   classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;

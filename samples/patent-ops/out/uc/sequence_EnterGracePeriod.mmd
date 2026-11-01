@@ -6,7 +6,7 @@ sequenceDiagram
   participant usecase__EnterGracePeriod as 納付期限の経過
   participant entity__Patent as 特許権
   timer__AnnuityDueDate ->> usecase__EnterGracePeriod: 第4年以後の特許料の納付期限（前年以前）
-  alt 次の年が未納: Patent.status == 存続中, Patent.next_year_paid == false
+  alt 次の年が未納: Patent.next_year_paid == false and Patent.status == 存続中
     usecase__EnterGracePeriod ->> entity__Patent: update status 存続中 -> 追納期間中
     usecase__EnterGracePeriod -->> timer__AnnuityDueDate: done
   else guard fails

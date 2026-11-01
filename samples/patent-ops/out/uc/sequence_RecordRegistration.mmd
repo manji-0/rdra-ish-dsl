@@ -11,7 +11,7 @@ sequenceDiagram
   actor__IpStaff ->> screen__FeePaymentScreen: 設定登録の記録
   extsystem__Jpo ->> api__RegistrationApi: 設定登録
   screen__FeePaymentScreen ->> api__RegistrationApi: 設定登録 API
-  alt 第1〜3年分の特許料を納付している: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true
+  alt 第1〜3年分の特許料を納付している: PatentApplication.first_fees_paid == true and PatentApplication.status == 特許査定
     Note over api__RegistrationApi: transaction (API atomic boundary)
     api__RegistrationApi ->> entity__PatentApplication: update status 特許査定 -> 設定登録済
     api__RegistrationApi ->> entity__Patent: create next_year_paid=true

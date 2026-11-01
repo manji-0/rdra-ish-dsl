@@ -9,7 +9,7 @@ flowchart LR
   condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
   %% holds condition__FirstNoticeOnly: OfficeAction.kind == 最初
   condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
-  %% holds condition__NotExtendedWithinTerm: OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false
+  %% holds condition__NotExtendedWithinTerm: OfficeAction.extended == false
   condition__UnderExamination{"出願が審査中である"}:::condition
   %% holds condition__UnderExamination: PatentApplication.status == 審査請求済（審査中）
   condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
@@ -43,8 +43,6 @@ flowchart LR
   condition__FirstNoticeOnly -.->|when| usecase__DraftResponse
   %% derived condition__FirstNoticeOnly -> usecase__DraftResponse via chooses OfficeAction.amendment free
   condition__NotExtendedWithinTerm -.->|applies_to| usecase__RequestLateExtension
-  condition__NotExtendedWithinTerm -.-> statemodel__OfficeAction_status
-  %% derived condition__NotExtendedWithinTerm -> statemodel__OfficeAction_status from holds
   condition__UnderExamination -.->|applies_to| usecase__ReceiveOfficeAction
   condition__UnderExamination -.-> statemodel__PatentApplication_status
   %% derived condition__UnderExamination -> statemodel__PatentApplication_status from holds

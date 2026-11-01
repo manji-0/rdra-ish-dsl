@@ -245,7 +245,9 @@ These rules are `warning` rows:
   `orphan-node` for those kinds. The "undefined" columns are `check` errors. See
   [RDRA lint rules](./language-reference.md#rdra-lint-rules).
 - `condition-no-rdra-anchor` warns on a [condition](./language-reference.md#conditions) whose
-  `holds` body names neither a variation-typed column nor a lifecycle column.
+  `holds` body names neither a variation-typed column nor a lifecycle column and guards no use
+  case. A body that `applies_to` a use case or an API, or that a `transitions` arm or a
+  `chooses` value names in `.when`, is a guard and is not flagged.
 
 Lint warnings do not fail the command. Existing parse/model errors are emitted as
 `semantic-error` rows and make the command exit with status `1`.

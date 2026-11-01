@@ -1226,7 +1226,13 @@ One function, `condition_edges`, gives a condition's links. With a body, an oper
 variation-typed column links the variation and an operand on a lifecycle column links the state
 model. Without a body, the `combines` declarations are the links. `list --kind condition`,
 the RDRA diagram, and `lint` all read it, so a body and its links cannot disagree. A body that
-names neither a variation column nor a lifecycle column is `lint` `condition-no-rdra-anchor`.
+names neither a variation column nor a lifecycle column, and guards no use case, is `lint`
+`condition-no-rdra-anchor`. A body guards a use case through `applies_to` a use case or an
+API, or through `.when` on a `transitions` arm or a `chooses` value; such a body is the use
+case's rule even when it reads only `Bool` or nullable columns, so it is not flagged. Do not
+add a comparison on the state the use case already moves from to anchor it: the transition
+already requires that state. `applies_to(Condition, System)` adds no guard, so it does not
+exempt the body.
 
 A body with `applies_to(Condition, UseCase)` is a guard on that use case: the use case runs
 only in a state where every comparison holds. `applies_to(Condition, Api)` guards each use

@@ -170,7 +170,7 @@ sets(RequestLateExtension, OfficeAction, late_extended == true)
 raises(RequestLateExtension, EvExtensionRequested)
 
 condition NotExtendedWithinTerm "期間内に延長していない"
-holds(NotExtendedWithinTerm, OfficeAction.status == overdue, OfficeAction.extended == false)
+holds(NotExtendedWithinTerm, OfficeAction.extended == false)
 applies_to(NotExtendedWithinTerm, RequestLateExtension)
 
 // Started by the timer, no performer.

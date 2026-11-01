@@ -135,6 +135,18 @@
   written (`transitions` endpoints, comparisons, `in` lists, `sets`, `Enum(...)`, `variation`
   values) already took no quoted value; `rule_audit` now covers the quoted forms. A quoted
   `@default` of an Int or String column is unchanged.
+- `lint` `condition-no-rdra-anchor` no longer flags a `holds` body that guards a use case
+  (#57): one that `applies_to` a use case or an API, or that a `transitions` arm or a `chooses`
+  value names in `.when`. A guard can be written only as a condition, so a guard that reads
+  only `Bool` or nullable columns had to compare the state its use case already moves from to
+  silence the warning. A body that guards nothing (none, or only `applies_to` a system) and
+  names neither a variation column nor a lifecycle column is still flagged; the message says
+  so and the hint names `applies_to`. patent-ops drops six such comparisons
+  (`FirstFeesPaid`, `FirstFeesUnpaid`, `NotExtendedWithinTerm`, `YearUnpaid`, `KeptRight`,
+  `InventorChecked`), each the only source state of the one use case its condition applies
+  to; its `check`, `states`, and `verify` results are unchanged, and its condition diagrams
+  lose the link those comparisons drew to the state model.
+
 - The default joint-state cap of a cone in `check`, `states`, and the generators is 65,536,
   up from 4,096 (#60). It no longer follows `--max-patterns` (it was 16 states per allowed
   pattern). A capped cone of 65,536 states costs about 0.1 s and 24 MB on a release build

@@ -12,7 +12,7 @@ sequenceDiagram
   actor__IpStaff ->> screen__AnnuityScreen: 追納
   timer__LatePaymentDeadline ->> api__AnnuityApi: 追納期限（納付期限の経過から6月）
   screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
-  alt 維持すると決めた権利である: Patent.status == 追納期間中, Patent.maintain == true
+  alt 維持すると決めた権利である: Patent.maintain == true and Patent.status == 追納期間中
     api__AnnuityApi ->> entity__FeeSchedule: read
     api__AnnuityApi ->> entity__Patent: update status 追納期間中 -> 存続中, last_payment=late, surcharge=set
     api__AnnuityApi -) extsystem__Jpo: 特許料の納付

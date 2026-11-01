@@ -792,12 +792,12 @@ flowchart TD
 | condition | 特許権が存続している | Patent | Patent.status == 存続中 | DecideToLetLapse | samples/patent-ops/buc/buc_annuity.rdra:84 |
 | condition | 存続中で、維持すると決めた権利の次の年が未納 | Patent | Patent.status == 存続中, Patent.maintain == true, Patent.next_year_paid == false | PayAnnuity | samples/patent-ops/buc/buc_annuity.rdra:99 |
 | condition | 存続中で、次の年が納付済 | Patent | Patent.status == 存続中, Patent.next_year_paid == true | RollOverAnnuityYear | samples/patent-ops/buc/buc_annuity.rdra:108 |
-| condition | 次の年が未納 | Patent | Patent.status == 存続中, Patent.next_year_paid == false | EnterGracePeriod | samples/patent-ops/buc/buc_annuity.rdra:117 |
-| condition | 維持すると決めた権利である | Patent | Patent.status == 追納期間中, Patent.maintain == true | PayLateAnnuity | samples/patent-ops/buc/buc_annuity.rdra:129 |
+| condition | 次の年が未納 | Patent | Patent.next_year_paid == false | EnterGracePeriod | samples/patent-ops/buc/buc_annuity.rdra:117 |
+| condition | 維持すると決めた権利である | Patent | Patent.maintain == true | PayLateAnnuity | samples/patent-ops/buc/buc_annuity.rdra:129 |
 | invariant | 追納期間内に特許料を納めた特許権は消滅しない | Patent | when Patent.status == 消滅（特許料の不納） then Patent.next_year_paid == false |  | samples/patent-ops/buc/buc_annuity.rdra:137 |
 | condition | 出願と決まった発明である | InventionDisclosure | InventionDisclosure.status == 出願決定 | RequestDrafting | samples/patent-ops/buc/buc_application_drafting.rdra:64 |
 | condition | 案が納品されている | DraftingOrder | DraftingOrder.status == 原稿受領 | ConfirmDraftByInventor | samples/patent-ops/buc/buc_application_drafting.rdra:78 |
-| condition | 発明者が内容を確認している | DraftingOrder | DraftingOrder.status == 原稿受領, DraftingOrder.inventor_checked == true | ApproveDraft | samples/patent-ops/buc/buc_application_drafting.rdra:92 |
+| condition | 発明者が内容を確認している | DraftingOrder | DraftingOrder.inventor_checked == true | ApproveDraft | samples/patent-ops/buc/buc_application_drafting.rdra:92 |
 | forbidden | 発明者が内容を確認していない出願書類は承認しない | DraftingOrder | DraftingOrder.status == 出願承認済 AND DraftingOrder.inventor_checked == false |  | samples/patent-ops/buc/buc_application_drafting.rdra:96 |
 | condition | 審査請求をした出願である | PatentApplication | PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present | RequestAcceleratedExamination | samples/patent-ops/buc/buc_examination_request.rdra:79 |
 | invariant | 審査請求のない出願は審査されない | PatentApplication | when PatentApplication.exam_requested_at == null then PatentApplication.status not in (granted, rejected, rejection_final, appealed, registered) |  | samples/patent-ops/buc/buc_examination_request.rdra:104 |
@@ -813,16 +813,16 @@ flowchart TD
 | condition | 出願が審査中である | PatentApplication | PatentApplication.status == 審査請求済（審査中） | ReceiveOfficeAction | samples/patent-ops/buc/buc_office_action.rdra:127 |
 | condition | 最初の拒絶理由通知である | OfficeAction | OfficeAction.kind == 最初 | DraftResponse | samples/patent-ops/buc/buc_office_action.rdra:145 |
 | condition | 応答期間内で、まだ延長していない | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false | RequestTermExtension | samples/patent-ops/buc/buc_office_action.rdra:155 |
-| condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:173 |
+| condition | 期間内に延長していない | OfficeAction | OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:173 |
 | forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:204 |
 | exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:206 |
 | condition | 出願の審査が終わっている | PatentApplication | PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | CloseOfficeActionDocket | samples/patent-ops/buc/buc_office_action.rdra:247 |
 | condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:260 |
 | condition | 特許査定を受けた出願である | PatentApplication | PatentApplication.status == 特許査定 | FeePaymentApi | samples/patent-ops/buc/buc_registration.rdra:64 |
 | condition | 納付期間をまだ延長していない | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false | RequestFeePaymentExtension | samples/patent-ops/buc/buc_registration.rdra:73 |
-| condition | 第1〜3年分の特許料を納付している | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true | RecordRegistration | samples/patent-ops/buc/buc_registration.rdra:86 |
+| condition | 第1〜3年分の特許料を納付している | PatentApplication | PatentApplication.first_fees_paid == true | RecordRegistration | samples/patent-ops/buc/buc_registration.rdra:86 |
 | invariant | 特許料（第1〜3年分）を納付していない出願は設定登録されない | PatentApplication | when PatentApplication.status == 設定登録済 then PatentApplication.first_fees_paid == true |  | samples/patent-ops/buc/buc_registration.rdra:90 |
-| condition | 第1〜3年分の特許料を納付していない | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == false | RecordRegistrationDismissal | samples/patent-ops/buc/buc_registration.rdra:102 |
+| condition | 第1〜3年分の特許料を納付していない | PatentApplication | PatentApplication.first_fees_paid == false | RecordRegistrationDismissal | samples/patent-ops/buc/buc_registration.rdra:102 |
 | invariant | 発明者に通知していない相当の利益は支払わない | InventorReward | when InventorReward.status == 支払済 then InventorReward.notified_at == present |  | samples/patent-ops/shared/entities.rdra:224 |
 | invariant | 追納には特許料と同額の割増特許料を加える | Patent | when Patent.last_payment == 追納 then Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:227 |
 | forbidden | 期限内の納付には割増特許料を付けない | Patent | Patent.last_payment == 期限内の納付 AND Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:228 |

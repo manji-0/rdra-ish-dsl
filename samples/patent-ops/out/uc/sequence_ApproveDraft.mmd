@@ -9,7 +9,7 @@ sequenceDiagram
   participant api__FilingApi as 出願 API
   actor__IpStaff ->> screen__DraftReviewScreen: 出願書類の承認
   screen__DraftReviewScreen ->> api__DraftReviewApi: 出願書類レビュー API
-  alt 発明者が内容を確認している: DraftingOrder.status == 原稿受領, DraftingOrder.inventor_checked == true
+  alt 発明者が内容を確認している: DraftingOrder.inventor_checked == true and DraftingOrder.status == 原稿受領
     api__DraftReviewApi ->> entity__DraftingOrder: update status 原稿受領 -> 出願承認済
     api__DraftReviewApi -) api__FilingApi: 出願書類の承認
     api__DraftReviewApi -->> screen__DraftReviewScreen: done

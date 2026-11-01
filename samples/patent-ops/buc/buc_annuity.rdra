@@ -114,7 +114,7 @@ transitions(EnterGracePeriod, Patent.status, in_force -> grace)
 triggers(AnnuityDueDate, EnterGracePeriod)
 
 condition YearUnpaid "次の年が未納"
-holds(YearUnpaid, Patent.status == in_force, Patent.next_year_paid == false)
+holds(YearUnpaid, Patent.next_year_paid == false)
 applies_to(YearUnpaid, EnterGracePeriod)
 
 displays(PayLateAnnuity, AnnuityScreen)
@@ -126,7 +126,7 @@ raises(PayLateAnnuity, EvFeesPaid)
 triggers(LatePaymentDeadline, PayLateAnnuity)
 
 condition KeptRight "維持すると決めた権利である"
-holds(KeptRight, Patent.status == grace, Patent.maintain == true)
+holds(KeptRight, Patent.maintain == true)
 applies_to(KeptRight, PayLateAnnuity)
 
 // Started by the timer, no performer.
