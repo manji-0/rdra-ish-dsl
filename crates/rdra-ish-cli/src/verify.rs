@@ -177,9 +177,38 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames, whole: &str) -> Vec<Jo
         .collect()
 }
 
+/// One TLC run of `job`; a cone run with a violation is rerun without the checks it has
+/// reported until a rerun reports no new one. With `-continue` TLC reports one violated check
+/// per state or step, the first in cfg order, so a check violated only where an earlier one
+/// is would otherwise go unreported. The reruns' violations and logs join the first run's.
 fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
+    let mut ran = run_cfg(tlc, dir, job, &format!("{}.cfg", job.module), workers)?;
+    let JobKind::Cone(cs) = &job.kind else {
+        return Ok(ran);
+    };
+    let mut reruns = 0;
+    while ran.outcome == Outcome::Counterexample {
+        let found = ran.run.violated_names();
+        if found.len() >= job.checks.len() {
+            break;
+        }
+        reruns += 1;
+        let cfg_name = format!("{}_rest{reruns}.cfg", job.module);
+        let cfg = tla::cfg_without(&cs.system, &cs.names, PrintMode::Safety, &found);
+        let path = dir.join(&cfg_name);
+        fs::write(&path, cfg).with_context(|| format!("failed to write {}", path.display()))?;
+        let more = run_cfg(tlc, dir, job, &cfg_name, workers)?;
+        ran.log.push_str(&more.log);
+        ran.run.violations.extend(more.run.violations);
+        if ran.run.violated_names().len() == found.len() {
+            break;
+        }
+    }
+    Ok(ran)
+}
+
+fn run_cfg(tlc: &Path, dir: &Path, job: &Job, cfg: &str, workers: &str) -> Result<Ran> {
     let tla = format!("{}.tla", job.module);
-    let cfg = format!("{}.cfg", job.module);
     let meta = dir.join(format!("{}.states", job.module));
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join(format!("{}.tmp", job.module));
@@ -190,13 +219,14 @@ fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
         .env(key, value)
         .args(["-workers", workers, "-metadir"])
         .arg(&meta);
-    // `-continue` reports every violated check of a cone, each with its own trace. A property
-    // run keeps TLC's default and stops at its first violation.
+    // `-continue` keeps a cone run going past a violation, so it reports more than one check,
+    // each with its own trace (see `run_job`). A property run keeps TLC's default and stops at
+    // its first violation.
     if job.heap() == Heap::Cone {
         command.arg("-continue");
     }
     let output = command
-        .args(["-config", &cfg, &tla])
+        .args(["-config", cfg, &tla])
         .current_dir(dir)
         .output()
         .with_context(|| format!("failed to execute {}", tlc.display()))?;

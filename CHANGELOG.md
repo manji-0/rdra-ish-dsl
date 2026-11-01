@@ -99,6 +99,12 @@
   the anchor row. The quantifier now always reads its own instance, over the rows present
   before the step. A model may report findings it did not before (a rule on the anchor's own
   entity), or lose findings that came from the guard not holding.
+- `verify` missed a rule that fails only in states (or steps) where another rule of the same
+  cone also fails (#64). TLC with `-continue` reports one violated check per state or step,
+  the first in the cfg, so the later rule never printed, while `check` and `states` (BFS)
+  reported both. A cone run with a violation is now rerun without the checks it has
+  reported until a rerun reports no new one, and the engine-equivalence test does the same.
+  `verify` may now report findings it did not before.
 
 ## v0.4.0 - 2026-11-01
 

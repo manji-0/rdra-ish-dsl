@@ -482,6 +482,45 @@ fn check_rejects_a_manifest_without_a_model_name() {
     assert!(!stderr.contains("panicked"), "{stderr}");
 }
 
+/// Two rules that fail in exactly the same states each print a verdict (#64).
+#[test]
+fn check_reports_every_rule_that_fails_in_the_same_state() {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("check_cli_same_state");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let model = dir.join("m.rdra");
+    std::fs::write(
+        &model,
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Parcel "荷物" { id: Int @pk  state: Enum(packed, sent) @default(packed) }
+relate(Parcel, Order, N:1)
+usecase Place "注文"
+usecase Pack "梱包"
+usecase Send "発送"
+creates(Place, Order)
+creates(Pack, Parcel)
+transitions(Send, Parcel.state, packed -> sent)
+forbidden(Parcel, state == sent)
+invariant(Order, Parcel).along(Parcel, Order).when(Parcel.state == sent).then(Order.status == paid)
+"#,
+    )
+    .unwrap();
+    let out = run(&["check", model.to_str().unwrap()]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(1), "{stderr}");
+    let verdicts: Vec<&str> = stderr
+        .lines()
+        .filter_map(|l| l.strip_prefix("error[")?.split(']').next())
+        .collect();
+    assert_eq!(
+        verdicts,
+        ["Forbidden_Parcel_0", "CrossInv_Order_0"],
+        "{stderr}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// `--max-states` sets the cap the `bounds:` line prints, on `check` and on `states`, and a
 /// cone past it fails closed with a message that names what its states vary in.
 #[test]

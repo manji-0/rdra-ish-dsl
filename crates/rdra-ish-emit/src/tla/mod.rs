@@ -12,6 +12,8 @@ mod pred;
 #[cfg(test)]
 mod tests;
 
+use std::collections::BTreeSet;
+
 use rdra_ish_core::lifecycle::{Domain, Ltl, TransitionSystem, Value};
 
 pub use names::{Decoder, TlaNames};
@@ -45,7 +47,7 @@ pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBu
     let module_name = sanitize_module_name(module_name);
     let names = TlaNames::new(ts);
     let tla = module::render(ts, &names, &module_name);
-    let cfg = render_cfg(ts, &names, mode);
+    let cfg = cfg_without(ts, &names, mode, &BTreeSet::new());
     TlaBundle {
         module_name,
         tla,
@@ -116,7 +118,16 @@ fn domain_set(ts: &TransitionSystem, names: &TlaNames, domain: &Domain) -> Strin
     }
 }
 
-fn render_cfg(ts: &TransitionSystem, names: &TlaNames, mode: PrintMode) -> String {
+/// The cfg of `mode` without the invariants and after-asserts `skip` names. With `-continue`
+/// TLC reports one violated check per state or step, the first in cfg order, so a check
+/// violated only where an earlier one is shows once the earlier one is dropped: `verify`
+/// reruns a cone without the checks it has reported until a run reports no new one.
+pub fn cfg_without(
+    ts: &TransitionSystem,
+    names: &TlaNames,
+    mode: PrintMode,
+    skip: &BTreeSet<String>,
+) -> String {
     let all = 0..ts.properties().len();
     let (safety, properties) = match mode {
         PrintMode::Check => (true, all),
@@ -131,7 +142,10 @@ fn render_cfg(ts: &TransitionSystem, names: &TlaNames, mode: PrintMode) -> Strin
     }
     if safety {
         for i in 0..ts.invariants().len() {
-            out.push_str(&format!("INVARIANT {}\n", names.invariant(i)));
+            let name = names.invariant(i);
+            if !skip.contains(name) {
+                out.push_str(&format!("INVARIANT {name}\n"));
+            }
         }
     }
     // TLC's deadlock check stays off. Every bounded model ends with no enabled action, since a
@@ -141,7 +155,10 @@ fn render_cfg(ts: &TransitionSystem, names: &TlaNames, mode: PrintMode) -> Strin
     out.push_str("CHECK_DEADLOCK FALSE\n");
     if safety {
         for i in 0..ts.after_asserts().len() {
-            out.push_str(&format!("PROPERTY {}\n", names.after(i)));
+            let name = names.after(i);
+            if !skip.contains(name) {
+                out.push_str(&format!("PROPERTY {name}\n"));
+            }
         }
     }
     for i in properties {

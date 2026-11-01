@@ -9,10 +9,11 @@
 //! cone that grows past the cap fails the test until it is listed.
 //!
 //! TLC stops at the first violation unless run with `-continue`, which explores the whole
-//! state space and reports every violated invariant and action property. One run per cone
-//! uses `-continue` on the Safety-mode cfg (temporal properties are excluded from the
-//! comparison) and dumps the graph; its distinct-state count must equal the BFS's, so it is
-//! known to have finished.
+//! state space but reports one violated check per state or step, the first in cfg order. One
+//! run per cone uses `-continue` on the Safety-mode cfg (temporal properties are excluded from
+//! the comparison) and dumps the graph; its distinct-state count must equal the BFS's, so it
+//! is known to have finished. As `verify` does, a run with a violation is followed by reruns
+//! without the checks reported so far, until a rerun reports no new one.
 //!
 //! Every trace TLC prints for a violation replays through the BFS step relation, and the
 //! check `explain` builds at its end is the one TLC named.
@@ -364,6 +365,19 @@ fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeRe
         );
     }
 
+    let mut parsed = parsed;
+    loop {
+        let found = parsed.violated_names();
+        if found.is_empty() {
+            break;
+        }
+        let cfg = tla::cfg_without(ts, names, PrintMode::Safety, &found);
+        let (_, more) = run_tlc(tlc, dir, &["-continue"], &check.tla, &cfg);
+        parsed.violations.extend(TlcRun::parse(&more).violations);
+        if parsed.violated_names().len() == found.len() {
+            break;
+        }
+    }
     let violated = parsed.violated_names();
     assert!(
         !violated.contains("TypeOK"),
@@ -659,9 +673,10 @@ fn bfs_and_tlc_agree_on_relinks() {
     check_fixture("relink", RELINK);
 }
 
-/// `in` / `not in` on an Enum, a Bool, an Int, and a nullable column, in a guard, local and
-/// cross-entity rules, a quantifier, and an after-assert. No two rules fail in the same states,
-/// and no guard quantifies over the entity its use case creates.
+/// `in` / `not in` on an Enum, a Bool, an Int, and a nullable column, in a guard, a guard's
+/// quantifier over the entity its use case creates, local and cross-entity rules, a
+/// quantifier, and an after-assert. The cross-entity rule and the quantifier fail in exactly
+/// the same states: a sent parcel of a cancelled order.
 const SET_MEMBERSHIP: &str = r#"
 entity Order "注文" {
   id: Int @pk
@@ -693,11 +708,11 @@ condition Open "未確定"
 holds(Open, Order.status not in (shipped, cancelled), Order.qty in (0, 2))
 applies_to(Open, Bump)
 condition Packable "梱包可"
-holds(Packable, Order.status in (paid, shipped))
+holds(Packable, Order.status in (paid, shipped)).none(Parcel.state in (sent))
 applies_to(Packable, Pack)
 forbidden(Order, status in (shipped, cancelled), rush in (true))
 invariant(Order).when(status not in (pending, cancelled)).then(paid_at in (present))
-invariant(Order, Parcel).when(Parcel.state in (sent)).then(Order.status in (paid, shipped, cancelled))
+invariant(Order, Parcel).when(Parcel.state in (sent)).then(Order.status in (paid, shipped))
 invariant(Order).when(status in (cancelled)).none(Parcel.state not in (packed))
 after(Ship).assert(Order.status in (shipped), Order.paid_at not in (null))
 "#;
@@ -740,6 +755,31 @@ invariant(Order).when(last == pack).none(Parcel.state == sent)
 #[test]
 fn bfs_and_tlc_agree_on_a_guard_over_the_created_entity() {
     check_fixture("created_quantifier", CREATED_QUANTIFIER);
+}
+
+/// Checks that fail only together (#64): the cross-entity invariant fails in exactly the
+/// states where the forbidden state does, and both after-asserts on every step of Send. TLC
+/// reports one check per state or step, the first in cfg order, so each later one shows only
+/// in a rerun without the earlier.
+const SIMULTANEOUS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Parcel "荷物" { id: Int @pk  state: Enum(packed, sent) @default(packed) }
+relate(Parcel, Order, N:1)
+usecase Place "注文"
+usecase Pack "梱包"
+usecase Send "発送"
+creates(Place, Order)
+creates(Pack, Parcel)
+transitions(Send, Parcel.state, packed -> sent)
+forbidden(Parcel, state == sent)
+invariant(Order, Parcel).along(Parcel, Order).when(Parcel.state == sent).then(Order.status == paid)
+after(Send).assert(Parcel.state == packed)
+after(Send).assert(Order.status == paid)
+"#;
+
+#[test]
+fn bfs_and_tlc_report_every_check_that_fails_in_the_same_state() {
+    check_fixture("simultaneous", SIMULTANEOUS);
 }
 
 /// One inline model at both bounds.

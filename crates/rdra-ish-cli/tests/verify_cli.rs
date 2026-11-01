@@ -143,6 +143,53 @@ fn a_tlc_counterexample_prints_in_model_terms() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// Two rules that fail in exactly the same states (#64): the cross-entity rule, listed after
+/// the forbidden state, still prints. TLC reports one violated check per state, so `verify`
+/// reruns the cone without the forbidden state to find it.
+const SAME_STATE_RULES: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Parcel "荷物" { id: Int @pk  state: Enum(packed, sent) @default(packed) }
+relate(Parcel, Order, N:1)
+usecase Place "注文"
+usecase Pack "梱包"
+usecase Send "発送"
+creates(Place, Order)
+creates(Pack, Parcel)
+transitions(Send, Parcel.state, packed -> sent)
+forbidden(Parcel, state == sent)
+invariant(Order, Parcel).along(Parcel, Order).when(Parcel.state == sent).then(Order.status == paid)
+"#;
+
+#[test]
+fn verify_reports_every_rule_that_fails_in_the_same_state() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_same_state");
+    let model = tmp.join("m.rdra");
+    std::fs::write(&model, SAME_STATE_RULES).unwrap();
+    let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    let cone = stderr
+        .split("\nCone_")
+        .find(|block| block.starts_with("CrossInv_Order_0 ("))
+        .unwrap_or_else(|| panic!("no block for the cross-entity cone\n{stderr}"));
+    for name in ["Forbidden_Parcel_0", "CrossInv_Order_0"] {
+        assert!(
+            cone.contains(&format!("error[{name}]: invariant {name} is violated: ")),
+            "{name} missing\n{stderr}"
+        );
+        assert!(
+            cone.contains(&format!("violated: Error: Invariant {name} is violated.")),
+            "{name}'s TLC line missing\n{stderr}"
+        );
+    }
+    assert!(!stderr.contains("BFS and TLC disagree"), "{stderr}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// Each temporal property runs in its own module and its lasso prints in model terms, named
 /// after the property. TLC picks the lasso, so only its shape is fixed: a leads_to that an
 /// endless cancel and reopen breaks loops back; an always may stutter or loop.

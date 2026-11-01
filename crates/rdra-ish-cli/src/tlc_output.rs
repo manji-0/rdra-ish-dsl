@@ -117,7 +117,6 @@ impl TlcRun {
         }
     }
 
-    #[allow(dead_code)] // read by tests/engine_equivalence.rs
     pub fn violated_names(&self) -> BTreeSet<String> {
         self.violations
             .iter()

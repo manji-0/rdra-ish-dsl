@@ -1003,7 +1003,10 @@ a witness, the deadlocks (errors and warnings at the bound), and the `NeverRuns`
 
 A failed run ends with `specs: <dir>`, the directory that holds the specs. Without `-o`
 it adds `(kept because a check failed)`. Each cone's TLC runs with `-continue`, so every
-violated check of a cone prints its own counterexample.
+violated check of a cone prints its own counterexample. TLC reports one violated check per
+state or step, the first in the cfg, so a cone run with a violation is rerun without the
+checks it has reported (`<module>_rest<n>.cfg` next to the spec) until a rerun reports no
+new one: a check that fails only where another does is reported too.
 
 Each violated invariant or `after` assertion of a cone prints once in model terms, through
 the renderer `check` uses, before TLC's own `violated: Error: ... is violated.` line and
