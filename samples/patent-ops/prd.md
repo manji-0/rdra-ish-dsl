@@ -555,10 +555,8 @@ flowchart TD
   timer__ResponseDeadline(("拒絶理由通知の応答期限（発送日から60日、延長で2か月）")):::timer
   usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
   %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
-  usecase__DraftLimitedResponse("限定した補正による応答案の作成"):::usecase
-  %% desc usecase__DraftLimitedResponse: 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。
   usecase__DraftResponse("意見書・補正書案の作成"):::usecase
-  %% desc usecase__DraftResponse: 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。
+  %% desc usecase__DraftResponse: 弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。
   usecase__ExpireResponseTerm("応答期間の経過"):::usecase
   %% desc usecase__ExpireResponseTerm: 応答のないまま応答期間が過ぎたことを記録する。その後2か月は期間経過後の延長を請求できる。
   usecase__FileDivisionalApplication("分割出願"):::usecase
@@ -586,7 +584,6 @@ flowchart TD
   usecase__RequestTermExtension("応答期間の延長請求"):::usecase
   %% desc usecase__RequestTermExtension: 応答期間内に期間延長請求書を出し、2か月延長する。
   step__DivisionStep -.-> usecase__FileDivisionalApplication
-  step__DraftingStep -.-> usecase__DraftLimitedResponse
   step__DraftingStep -.-> usecase__DraftResponse
   step__DraftingStep -.->|excepts| step__LateExtensionStep
   step__DraftingStep -->|precedes| step__ResponseStep
@@ -813,14 +810,14 @@ flowchart TD
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | JudgeEmployeeInvention | samples/patent-ops/buc/buc_invention_disclosure.rdra:83 |
 | condition | 職務発明に当たらない | InventionDisclosure | InventionDisclosure.category == 職務発明に当たらない発明 | AcquireRightsByAssignment | samples/patent-ops/buc/buc_invention_disclosure.rdra:94 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | DecideReward | samples/patent-ops/buc/buc_inventor_reward.rdra:55 |
-| condition | 出願が審査中である | PatentApplication | PatentApplication.status == 審査請求済（審査中） | ReceiveOfficeAction | samples/patent-ops/buc/buc_office_action.rdra:132 |
-| condition | 最初の拒絶理由通知である | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.kind == 最初 | DraftResponse | samples/patent-ops/buc/buc_office_action.rdra:150 |
-| condition | 応答期間内で、まだ延長していない | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false | RequestTermExtension | samples/patent-ops/buc/buc_office_action.rdra:166 |
-| condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:184 |
-| forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:215 |
-| exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:217 |
-| condition | 出願の審査が終わっている | PatentApplication | PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | CloseOfficeActionDocket | samples/patent-ops/buc/buc_office_action.rdra:258 |
-| condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:271 |
+| condition | 出願が審査中である | PatentApplication | PatentApplication.status == 審査請求済（審査中） | ReceiveOfficeAction | samples/patent-ops/buc/buc_office_action.rdra:127 |
+| condition | 最初の拒絶理由通知である | OfficeAction | OfficeAction.kind == 最初 | DraftResponse | samples/patent-ops/buc/buc_office_action.rdra:145 |
+| condition | 応答期間内で、まだ延長していない | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false | RequestTermExtension | samples/patent-ops/buc/buc_office_action.rdra:155 |
+| condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:173 |
+| forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:204 |
+| exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:206 |
+| condition | 出願の審査が終わっている | PatentApplication | PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | CloseOfficeActionDocket | samples/patent-ops/buc/buc_office_action.rdra:247 |
+| condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:260 |
 | condition | 特許査定を受けた出願である | PatentApplication | PatentApplication.status == 特許査定 | FeePaymentApi | samples/patent-ops/buc/buc_registration.rdra:64 |
 | condition | 納付期間をまだ延長していない | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false | RequestFeePaymentExtension | samples/patent-ops/buc/buc_registration.rdra:73 |
 | condition | 第1〜3年分の特許料を納付している | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true | RecordRegistration | samples/patent-ops/buc/buc_registration.rdra:86 |

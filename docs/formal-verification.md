@@ -306,8 +306,7 @@ The rules for each flag and for deferral are in
   | invariant `Inv_ClinicalOrder_3` | 235,607 |
   | entity `EligibilityCheck` | 223,901 |
   | patent-ops entity `OfficeAction` | 4,818,909 |
-  | patent-ops invariant `Forbidden_OfficeAction_3` | 4,818,909 |
-  | patent-ops invariant `Exclusive_OfficeAction_0` | 2,153,523 |
+  | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 4,818,909 |
 
   The other 31 clinic-ops cones at 2 instances (595,325 states in total, the largest
   `PatientMessage` at 169,203) are compared. CI runs the test with `cargo test --release`

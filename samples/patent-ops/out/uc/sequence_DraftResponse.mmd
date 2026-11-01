@@ -8,8 +8,8 @@ sequenceDiagram
   participant entity__OfficeAction as 拒絶理由通知
   actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書案の作成
   screen__ResponseDraftScreen ->> api__OfficeActionApi: 中間処理 API
-  alt 最初の拒絶理由通知である: OfficeAction.status == 応答期間中, OfficeAction.kind == 最初
-    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment=free
+  alt OfficeAction.status == 応答期間中
+    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment in (限定のない補正 [最初の拒絶理由通知である], 意見書のみ、または削除・減縮・誤記の訂正・釈明に限る補正)
     api__OfficeActionApi -->> screen__ResponseDraftScreen: done
   else guard fails
     api__OfficeActionApi -->> screen__ResponseDraftScreen: rejected

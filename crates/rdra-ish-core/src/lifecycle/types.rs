@@ -364,8 +364,9 @@ pub enum GuardWhy {
     Clock,
     /// `holds(Cond, ..)` of a condition that `applies_to` the use case.
     Condition { cond: ConditionKey },
-    /// `transitions(..).when(Cond)`: the successor takes an arm of the column whose guard
-    /// held on the pre-state. `cond` is the first guarded arm's condition.
+    /// `transitions(..).when(Cond)` or `chooses(.., value).when(Cond)`: the successor takes an
+    /// arm, or a value, of the column whose guard held on the pre-state. `cond` is the first
+    /// guarded arm's or value's condition.
     ArmCondition { cond: ConditionKey },
 }
 
@@ -393,13 +394,17 @@ pub enum Effect {
         sites: Vec<Site>,
         conds: Vec<Vec<(ConditionKey, String)>>,
     },
-    /// One successor per value. `site` is the `sets(.., col == present)` or `chooses` that
-    /// asks for it; a creation's own choice of a variation value has none.
+    /// One successor per value. `sites[i]` is the `sets(.., col == present)` or `chooses` line
+    /// that asks for value `i`; a creation's own choice of a variation value has none (empty).
+    /// `conds[i]` names the `.when` conditions of a `chooses(.., value)` line, as
+    /// `Transition::conds` does for an arm (empty, or empty throughout, when no value is
+    /// guarded); a `GuardWhy::ArmCondition` guard of the action filters the successors.
     Choose {
         var: VarId,
         param: u8,
         values: Vec<Value>,
-        site: Option<Site>,
+        sites: Vec<Site>,
+        conds: Vec<Vec<(ConditionKey, String)>>,
     },
     /// now := now + 1 while now < int_max.
     Tick,

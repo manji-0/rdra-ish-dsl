@@ -70,6 +70,12 @@ pub enum Subject {
         from: String,
         to: String,
     },
+    /// Whether an action that runs can pick one of its `.when` values of a `chooses`.
+    Choice {
+        action: String,
+        column: String,
+        value: String,
+    },
     /// Whether an instance can get stuck at a state of a state model.
     Deadlock {
         entity: String,
@@ -107,6 +113,14 @@ impl fmt::Display for Undecided {
             } => write!(
                 f,
                 "whether {action} can take {column} {from} -> {to} is not decided: "
+            )?,
+            Subject::Choice {
+                action,
+                column,
+                value,
+            } => write!(
+                f,
+                "whether {action} can choose {column} = {value} is not decided: "
             )?,
             Subject::Deadlock {
                 entity,
@@ -371,11 +385,18 @@ impl TransitionSystem {
                 None => {
                     arms.push(ArmSoFar {
                         site: arm.site.clone(),
-                        subject: Subject::Arm {
-                            action: name.clone(),
-                            column: arm.column.clone(),
-                            from: arm.from.clone(),
-                            to: arm.to.clone(),
+                        subject: match &arm.from {
+                            Some(from) => Subject::Arm {
+                                action: name.clone(),
+                                column: arm.column.clone(),
+                                from: from.clone(),
+                                to: arm.to.clone(),
+                            },
+                            None => Subject::Choice {
+                                action: name.clone(),
+                                column: arm.column.clone(),
+                                value: arm.to.clone(),
+                            },
                         },
                         taken: false,
                         never: None,
@@ -507,6 +528,16 @@ impl TargetExploration {
                     column: column.clone(),
                     from: from.clone(),
                     to: to.clone(),
+                },
+                StateDiag::ValueNeverChosen {
+                    action,
+                    column,
+                    value,
+                    ..
+                } => Subject::Choice {
+                    action: action.clone(),
+                    column: column.clone(),
+                    value: value.clone(),
                 },
                 StateDiag::Deadlock {
                     entity,

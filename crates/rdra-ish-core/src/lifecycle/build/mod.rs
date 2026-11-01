@@ -563,14 +563,15 @@ impl<'m> Builder<'m> {
             match self.effect_value(&domain, &ce.value, &site, ce.entity) {
                 EffectRhs::Value(v) => self.assign(a, uc, ce.entity, var, p, Rhs::Lit(v), site),
                 EffectRhs::AnyNonNull => {
-                    let values = (1..domain.size(self.bounds))
+                    let values: Vec<Value> = (1..domain.size(self.bounds))
                         .map(|i| Value(i as u8))
                         .collect();
                     a.effects.push(Effect::Choose {
                         var,
                         param: p,
+                        sites: vec![site; values.len()],
+                        conds: Vec::new(),
                         values,
-                        site: Some(site),
                     });
                 }
                 EffectRhs::None => {}
@@ -841,35 +842,66 @@ impl<'m> Builder<'m> {
         }
     }
 
-    /// One successor guard per column with a `.when(Cond)` arm: the step takes an arm whose
-    /// guard held on the pre-state, `\/ (col = from /\ col' = to /\ guard)` over the arms (an
-    /// unguarded arm's guard is true). It filters the choice the `Transition` effect forks, so
-    /// the use case runs when some arm is enabled, and a body on a created param reads it after
-    /// the step, as a use case's condition does.
+    /// One successor guard per column with a `.when(Cond)` arm or chosen value: the step takes
+    /// an arm whose guard held on the pre-state, `\/ (col = from /\ col' = to /\ guard)` over
+    /// the `transitions` arms, `\/ (col' = v /\ guard)` over the `chooses` values (an unguarded
+    /// arm's or value's guard is true). It filters the choice the `Transition` or `Choose`
+    /// effect forks, so the use case runs when some arm or value is enabled, and a body on a
+    /// created param reads it after the step, as a use case's condition does.
     fn arm_guards(&mut self, a: &mut ActionDraft) {
         let model = self.model;
         let mut guards = Vec::new();
         for eff in &a.effects {
-            let Effect::Transition {
-                var,
-                param,
-                arms,
-                sites,
-                conds,
-            } = eff
-            else {
+            // Each arm or value: its comparisons on the column, its site, its conditions.
+            let arms: Vec<GuardedArm> = match eff {
+                Effect::Transition {
+                    var,
+                    param,
+                    arms,
+                    sites,
+                    conds,
+                } => {
+                    let slot = |at| Term::Slot { var: *var, at };
+                    arms.iter()
+                        .zip(sites)
+                        .zip(conds)
+                        .map(|(((from, to), site), conds)| {
+                            let parts = vec![
+                                Pred::Cmp(slot(At::Param(*param)), CmpOp::Eq, Term::Lit(*from)),
+                                Pred::Cmp(slot(At::Next(*param)), CmpOp::Eq, Term::Lit(*to)),
+                            ];
+                            (parts, site, conds)
+                        })
+                        .collect()
+                }
+                Effect::Choose {
+                    var,
+                    param,
+                    values,
+                    sites,
+                    conds,
+                } => {
+                    let next = Term::Slot {
+                        var: *var,
+                        at: At::Next(*param),
+                    };
+                    values
+                        .iter()
+                        .zip(sites)
+                        .zip(conds)
+                        .map(|((v, site), conds)| {
+                            let parts = vec![Pred::Cmp(next.clone(), CmpOp::Eq, Term::Lit(*v))];
+                            (parts, site, conds)
+                        })
+                        .collect()
+                }
+                _ => continue,
+            };
+            let Some(first) = arms.iter().position(|(_, _, c)| !c.is_empty()) else {
                 continue;
             };
-            let Some(first) = conds.iter().position(|c| !c.is_empty()) else {
-                continue;
-            };
-            let slot = |at| Term::Slot { var: *var, at };
             let mut any = Vec::new();
-            for (((from, to), site), conds) in arms.iter().zip(sites).zip(conds) {
-                let mut parts = vec![
-                    Pred::Cmp(slot(At::Param(*param)), CmpOp::Eq, Term::Lit(*from)),
-                    Pred::Cmp(slot(At::Next(*param)), CmpOp::Eq, Term::Lit(*to)),
-                ];
+            for (mut parts, site, conds) in arms.iter().cloned() {
                 if !conds.is_empty() {
                     let bodies = conds
                         .iter()
@@ -883,18 +915,22 @@ impl<'m> Builder<'m> {
             guards.push(Guard {
                 pred: Pred::Or(any),
                 why: GuardWhy::ArmCondition {
-                    cond: conds[first][0].0,
+                    cond: arms[first].2[0].0,
                 },
-                site: sites[first].clone(),
+                site: arms[first].1.clone(),
             });
         }
         a.guards.extend(guards);
     }
 
     /// `chooses(UC, E.col)`: the actor picks the variation column's value again, one successor
-    /// per value, as on a creation. On a created param it is the creation's own choice.
+    /// per value, as on a creation; `chooses(UC, E.col, v)` lines list the values. A value
+    /// listed twice is enabled by either line, as a `transitions` arm declared twice: an
+    /// unguarded line clears its guards, guarded lines join theirs. On a created param it is
+    /// the creation's own choice.
     fn chosen_columns(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
-        for (idx, choice) in self.model.column_choices.iter().enumerate() {
+        let model = self.model;
+        for (idx, choice) in model.column_choices.iter().enumerate() {
             if choice.origin != uc {
                 continue;
             }
@@ -909,12 +945,52 @@ impl<'m> Builder<'m> {
             if a.writes(var, p) {
                 continue;
             }
-            let size = self.ts.vars[var.index()].domain.size(self.bounds);
+            let fact = ModelRef::ColumnChoice(idx);
+            let mut values = Vec::new();
+            let mut sites = Vec::new();
+            let mut conds: Vec<Vec<(ConditionKey, String)>> = Vec::new();
+            if choice.values.is_empty() {
+                let size = self.ts.vars[var.index()].domain.size(self.bounds);
+                values = (0..size).map(|i| Value(i as u8)).collect();
+                sites = vec![Site::new(fact.clone(), &choice.site); values.len()];
+                conds = vec![Vec::new(); values.len()];
+            }
+            let names = match &self.ts.vars[var.index()].domain {
+                Domain::Enum(names) => names.as_slice(),
+                _ => &[],
+            };
+            for chosen in &choice.values {
+                let Some(v) = variant_index(names, &chosen.value).map(Value) else {
+                    continue;
+                };
+                let guard: Vec<(ConditionKey, String)> = chosen
+                    .guard
+                    .map(|ck| (ck, model.conditions[ck].id.clone()))
+                    .into_iter()
+                    .collect();
+                match values.iter().position(|x| *x == v) {
+                    Some(i) if conds[i].is_empty() => {}
+                    Some(i) if guard.is_empty() => conds[i].clear(),
+                    Some(i) => {
+                        for c in guard {
+                            if !conds[i].contains(&c) {
+                                conds[i].push(c);
+                            }
+                        }
+                    }
+                    None => {
+                        values.push(v);
+                        sites.push(Site::new(fact.clone(), &chosen.site));
+                        conds.push(guard);
+                    }
+                }
+            }
             a.effects.push(Effect::Choose {
                 var,
                 param: p,
-                values: (0..size).map(|i| Value(i as u8)).collect(),
-                site: Some(Site::new(ModelRef::ColumnChoice(idx), &choice.site)),
+                values,
+                sites,
+                conds,
             });
         }
     }
@@ -942,7 +1018,8 @@ impl<'m> Builder<'m> {
                     var,
                     param: p as u8,
                     values: (0..size).map(|i| Value(i as u8)).collect(),
-                    site: None,
+                    sites: Vec::new(),
+                    conds: Vec::new(),
                 });
             }
         }
@@ -1065,6 +1142,10 @@ fn first_buc(model: &SemanticModel, uc: UseCaseKey) -> Option<crate::model::BucK
 }
 
 /// Declared casing wins: exact match first, then case-insensitive.
+/// An arm or chosen value under `.when`: its comparisons on the column, its site, and its
+/// conditions.
+type GuardedArm<'a> = (Vec<Pred>, &'a Site, &'a Vec<(ConditionKey, String)>);
+
 fn variant_index(values: &[String], name: &str) -> Option<u8> {
     values
         .iter()

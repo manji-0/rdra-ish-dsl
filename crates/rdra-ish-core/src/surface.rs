@@ -182,7 +182,22 @@ fn effects_text(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -
         .column_choices
         .iter()
         .filter(|c| c.origin == usecase && c.entity == entity)
-        .map(|c| format!("chooses {}", c.column));
+        .map(|c| {
+            let mut values: Vec<String> = Vec::new();
+            for v in &c.values {
+                let shown = match v.guard {
+                    Some(ck) => format!("{} when {}", v.value, model.conditions[ck].id),
+                    None => v.value.clone(),
+                };
+                if !values.contains(&shown) {
+                    values.push(shown);
+                }
+            }
+            match values.is_empty() {
+                true => format!("chooses {}", c.column),
+                false => format!("chooses {} in ({})", c.column, values.join(", ")),
+            }
+        });
     let propositions = model
         .proposition_effects
         .iter()

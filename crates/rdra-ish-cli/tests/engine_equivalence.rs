@@ -65,7 +65,6 @@ const VERIFY_FALLBACK: &[(&str, &str)] = &[
     ("samples/clinic-ops", "invariant Inv_Prescription_4"),
     ("samples/patent-ops", "entity OfficeAction"),
     ("samples/patent-ops", "invariant Forbidden_OfficeAction_3"),
-    ("samples/patent-ops", "invariant Exclusive_OfficeAction_0"),
 ];
 
 fn repo() -> PathBuf {
@@ -671,6 +670,56 @@ forbidden(Notice, status == filed, route == mail, scope == free)
 #[test]
 fn bfs_and_tlc_agree_on_chooses() {
     check_fixture("chooses", CHOOSES);
+}
+
+/// A guard per chosen value (#65): of three listed values, `free` needs a notice that is not
+/// final, `fast` needs an open gate on another entity (an `Exists` witness), `limited` is
+/// unguarded; a value whose guard never holds; listed values on the creating use case; and a
+/// rule only the guard keeps.
+const CHOICE_GUARDS: &str = r#"
+variation Scope "補正の範囲" {
+  limited "限定"
+  free "限定なし"
+  fast "早期"
+  none "補正なし"
+}
+entity Notice "通知" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  final: Bool @default(false)
+  scope: Scope
+}
+entity Gate "関門" { id: Int @pk  open: Bool @default(false) }
+usecase Receive "受領"
+usecase Draft "応答案の作成"
+usecase Reopen "最後の通知"
+usecase Build "関門の設置"
+usecase Open "開門"
+creates(Receive, Notice)
+chooses(Receive, Notice.scope, limited)
+chooses(Receive, Notice.scope, none)
+transitions(Draft, Notice.status, open -> drafted)
+transitions(Reopen, Notice.status, drafted -> open)
+sets(Reopen, Notice, final == true)
+sets(Reopen, Notice, scope == limited)
+creates(Build, Gate)
+sets(Open, Gate, open == true)
+condition NotFinal "最後の通知でない"
+holds(NotFinal, Notice.final == false)
+condition GateOpen "関門が開いている"
+holds(GateOpen, Gate.open == true)
+condition Never "起きない"
+holds(Never, Notice.final == true, Notice.status == drafted)
+chooses(Draft, Notice.scope, free).when(NotFinal)
+chooses(Draft, Notice.scope, fast).when(GateOpen)
+chooses(Draft, Notice.scope, limited)
+chooses(Draft, Notice.scope, none).when(Never)
+forbidden(Notice, final == true, scope == free)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_choice_guards() {
+    check_fixture("choice_guards", CHOICE_GUARDS);
 }
 
 /// A use case split into two transaction groups (one API each): an after-assert checked after

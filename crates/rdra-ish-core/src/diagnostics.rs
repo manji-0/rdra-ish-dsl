@@ -268,7 +268,7 @@ pub enum RdraError {
     #[error("transitions second argument must be `Entity.column`, got '{got}'\n  hint: write `transitions(CapturePayment, Order.status, pending -> paid)`")]
     InvalidTransitionsColumnRef { got: String },
 
-    #[error("chooses second argument must be `Entity.column`, got '{got}'\n  hint: write `chooses(DraftResponse, OfficeAction.amendment)`")]
+    #[error("chooses second argument must be `Entity.column`, got '{got}'\n  hint: write `chooses(DraftResponse, OfficeAction.amendment)` or `chooses(DraftResponse, OfficeAction.amendment, limited)`")]
     InvalidChoosesColumnRef { got: String },
 
     #[error("chooses({usecase}, {entity}.{col}): '{col}' is not typed by a variation, so the actor has no values to pick from\n  hint: {hint}")]
@@ -281,6 +281,20 @@ pub enum RdraError {
 
     #[error("{usecase} both chooses and sets {entity}.{col}\n  hint: keep `chooses({usecase}, {entity}.{col})` for the actor to pick the value, or `sets` to fix it, not both")]
     ChoosesAndSets {
+        usecase: String,
+        entity: String,
+        col: String,
+    },
+
+    #[error("chooses({usecase}, {entity}.{col}) both lists values and picks any value\n  hint: list every value the actor may pick with `chooses({usecase}, {entity}.{col}, value)` lines, or keep the one value-less `chooses({usecase}, {entity}.{col})` for any value, not both")]
+    ChoosesMixedForms {
+        usecase: String,
+        entity: String,
+        col: String,
+    },
+
+    #[error("`chooses({usecase}, {entity}.{col}).when(...)` guards no value\n  hint: name the value the condition enables, `chooses({usecase}, {entity}.{col}, value).when(Cond)`; to guard the whole use case write `applies_to(Cond, {usecase})`")]
+    ChoosesWhenWithoutValue {
         usecase: String,
         entity: String,
         col: String,

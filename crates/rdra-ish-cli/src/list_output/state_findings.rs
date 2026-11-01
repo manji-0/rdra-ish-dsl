@@ -126,6 +126,7 @@ fn has_block(diag: &StateDiag) -> bool {
             StateDiag::NoWitness { .. }
                 | StateDiag::NeverRuns { .. }
                 | StateDiag::ArmNeverTaken { .. }
+                | StateDiag::ValueNeverChosen { .. }
         )
 }
 
@@ -303,6 +304,23 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
                 guarded.join(", ")
             )
         }
+        (GuardWhy::ArmCondition { .. }, ModelRef::ColumnChoice(i)) => {
+            let choice = &model.column_choices[*i];
+            let values: Vec<String> = choice
+                .values
+                .iter()
+                .map(|v| match v.guard {
+                    Some(ck) => format!("{} when {}", v.value, model.conditions[ck].id),
+                    None => v.value.clone(),
+                })
+                .collect();
+            format!(
+                "a value of {}.{} whose guard holds ({})",
+                model.entities[choice.entity].id,
+                choice.column,
+                values.join(", ")
+            )
+        }
         (GuardWhy::ArmCondition { cond }, _) => {
             format!(
                 "condition {} on a transitions arm",
@@ -348,6 +366,12 @@ pub(crate) fn render_violation(
         return Some(format!(
             "{diag}{}",
             aligned(vec![("  arm:".to_string(), location(program, site))])
+        ));
+    }
+    if let StateDiag::ValueNeverChosen { site, .. } = diag {
+        return Some(format!(
+            "{diag}{}",
+            aligned(vec![("  value:".to_string(), location(program, site))])
         ));
     }
     if let StateDiag::NoWitness {
@@ -683,6 +707,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
         | StateDiag::ArmNeverTaken { .. }
+        | StateDiag::ValueNeverChosen { .. }
         | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }

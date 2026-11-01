@@ -1188,7 +1188,6 @@ flowchart LR
   screen__OfficeActionScreen -->|期間経過後の延長請求| api__OfficeActionApi
   screen__ResponseDraftScreen -->|意見書・補正書の提出| api__ResponseFilingApi
   screen__ResponseDraftScreen -->|意見書・補正書案の作成| api__OfficeActionApi
-  screen__ResponseDraftScreen -->|限定した補正による応答案の作成| api__OfficeActionApi
   timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| api__AppealApi
   timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| usecase__FinalizeRejection
   timer__LateExtensionDeadline -.->|期間経過後の延長請求の期限（応答期間の経過から2か月）| usecase__LapseResponse
@@ -1233,8 +1232,7 @@ flowchart LR
 |---|---|---|---|---|
 | 拒絶理由通知の受領<br>`ReceiveOfficeAction` | 拒絶理由通知書を受け取り、応答期間の管理を始める。 | `OfficeActionScreen` | `OfficeActionIntakeApi` | 出願が審査中である |
 | 応答方針の指示<br>`InstructResponse` | 知的財産部が発明者と相談し、弁理士に応答の方針を伝える（参照のみ）。 | `OfficeActionScreen` | `InstructResponse` | （なし） |
-| 意見書・補正書案の作成<br>`DraftResponse` | 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。 | `ResponseDraftScreen` | `OfficeActionApi` | 最初の拒絶理由通知である |
-| 限定した補正による応答案の作成<br>`DraftLimitedResponse` | 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。 | `ResponseDraftScreen` | `OfficeActionApi` | （なし） |
+| 意見書・補正書案の作成<br>`DraftResponse` | 弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。 | `ResponseDraftScreen` | `OfficeActionApi` | 最初の拒絶理由通知である |
 | 応答期間の延長請求<br>`RequestTermExtension` | 応答期間内に期間延長請求書を出し、2か月延長する。 | `OfficeActionScreen` | `OfficeActionApi` | 応答期間内で、まだ延長していない |
 | 応答期間の経過<br>`ExpireResponseTerm` | 応答のないまま応答期間が過ぎたことを記録する。その後2か月は期間経過後の延長を請求できる。 | （なし） | `ExpireResponseTerm` | （なし） |
 | 期間経過後の延長請求<br>`RequestLateExtension` | 応答期間の経過後2か月以内に延長を請求し、2か月の応答期間を得る。 | `OfficeActionScreen` | `OfficeActionApi` | 期間内に延長していない |
@@ -1309,31 +1307,8 @@ sequenceDiagram
   participant entity__OfficeAction as 拒絶理由通知
   actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書案の作成
   screen__ResponseDraftScreen ->> api__OfficeActionApi: 中間処理 API
-  alt 最初の拒絶理由通知である: OfficeAction.status == 応答期間中, OfficeAction.kind == 最初
-    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment=free
-    api__OfficeActionApi -->> screen__ResponseDraftScreen: done
-  else guard fails
-    api__OfficeActionApi -->> screen__ResponseDraftScreen: rejected
-  end
-```
-
-</details>
-
-<details><summary>限定した補正による応答案の作成（DraftLimitedResponse）のシーケンス図</summary>
-
-```mermaid
-%% rdra-ish diagram=sequence scope=usecase:DraftLimitedResponse model=samples/patent-ops
-%% kinds: actor screen api entity
-%% omitted: buc step medium permission
-sequenceDiagram
-  actor actor__PatentAttorney as 弁理士（特許事務所）
-  participant screen__ResponseDraftScreen as 応答案画面
-  participant api__OfficeActionApi as 中間処理 API
-  participant entity__OfficeAction as 拒絶理由通知
-  actor__PatentAttorney ->> screen__ResponseDraftScreen: 限定した補正による応答案の作成
-  screen__ResponseDraftScreen ->> api__OfficeActionApi: 中間処理 API
   alt OfficeAction.status == 応答期間中
-    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment=limited
+    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment in (限定のない補正 [最初の拒絶理由通知である], 意見書のみ、または削除・減縮・誤記の訂正・釈明に限る補正)
     api__OfficeActionApi -->> screen__ResponseDraftScreen: done
   else guard fails
     api__OfficeActionApi -->> screen__ResponseDraftScreen: rejected
@@ -2413,10 +2388,8 @@ stateDiagram-v2
     state "応答済" as state__OfficeAction_answered
     state "応答なしで期間満了" as state__OfficeAction_lapsed
     state "案件終了" as state__OfficeAction_closed
-    %% transition usecase__DraftLimitedResponse
-    state__OfficeAction_open --> state__OfficeAction_drafted : 限定した補正による応答案の作成
     %% transition usecase__DraftResponse
-    state__OfficeAction_open --> state__OfficeAction_drafted : 意見書・補正書案の作成 [最初の拒絶理由通知である]
+    state__OfficeAction_open --> state__OfficeAction_drafted : 意見書・補正書案の作成
     %% transition usecase__ExpireResponseTerm
     state__OfficeAction_open --> state__OfficeAction_overdue : 応答期間の経過
     %% transition usecase__ExpireResponseTerm
@@ -2447,61 +2420,61 @@ Entity: OfficeAction (拒絶理由通知)
   labels: kind[first=最初|final=最後], status[open=応答期間中|drafted=応答案作成済|overdue=期間経過（延長請求可）|answered=応答済|lapsed=応答なしで期間満了|closed=案件終了]
 
   KIND   STATUS    EXTENDED  LATE_EXTENDED  AMENDMENT  INITIAL  TERMINAL  VIA
-  ─────  ────────  ────────  ─────────────  ─────────  ───────  ────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ─────  ────────  ────────  ─────────────  ─────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
   first  open      false     false          limited    yes      no        BucOfficeAction/ReceiveOfficeAction
   first  open      false     false          free       yes      no        BucOfficeAction/ReceiveOfficeAction
   first  drafted   false     false          free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ReceiveOfficeAction
-  first  drafted   false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/ReceiveOfficeAction
-  first  overdue   false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction
+  first  drafted   false     false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ReceiveOfficeAction
+  first  overdue   false     false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction
   first  open      true      false          limited    no       no        BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
   first  overdue   false     false          free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction
   first  open      true      false          free       no       no        BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
   first  answered  false     false          free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
-  first  answered  false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
-  first  open      false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  first  lapsed    false     false          limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction
+  first  answered  false     false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
+  first  open      false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  lapsed    false     false          limited    no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction
   first  drafted   true      false          free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  drafted   true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  overdue   true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  open      false     true           free       no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  drafted   true      false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
+  first  overdue   true      false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
+  first  open      false     true           free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  lapsed    false     false          free       no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction
   first  overdue   true      false          free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  final  open      false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  first  drafted   false     true           free       no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  first  drafted   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  first  overdue   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  final  open      false     false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  first  drafted   false     true           free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  drafted   false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  overdue   false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  answered  true      false          free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  answered  true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  lapsed    true      false          limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  overdue   false     true           free       no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  answered  true      false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
+  first  lapsed    true      false          limited    no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
+  first  overdue   false     true           free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  lapsed    true      false          free       no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
   first  closed    false     false          free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
-  first  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
-  final  drafted   false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  overdue   false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  open      true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  first  answered  false     true           free       no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  first  answered  false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  first  lapsed    false     true           limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  first  lapsed    false     true           free       no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction
+  final  drafted   false     false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  overdue   false     false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  open      true      false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  first  answered  false     true           free       no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  answered  false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  lapsed    false     true           limited    no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  lapsed    false     true           free       no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
   first  closed    true      false          free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  first  closed    true      false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
-  final  answered  false     false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  open      false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  lapsed    false     false          limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  drafted   true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  overdue   true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  first  closed    false     true           free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  first  closed    false     true           limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
-  final  drafted   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  overdue   false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  answered  true      false          limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  lapsed    true      false          limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  answered  false     true           limited    no       no        BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  lapsed    false     true           limited    no       yes       BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  closed    true      false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
-  final  closed    false     true           limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftLimitedResponse, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  first  closed    true      false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestTermExtension
+  final  answered  false     false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  open      false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  lapsed    false     false          limited    no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  drafted   true      false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  overdue   true      false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  first  closed    false     true           free       no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  first  closed    false     true           limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension
+  final  drafted   false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  overdue   false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  answered  true      false          limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  lapsed    true      false          limited    no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  closed    false     false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  answered  false     true           limited    no       no        BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  lapsed    false     true           limited    no       yes       BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/LapseResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  closed    true      false          limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
+  final  closed    false     true           limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
 
   reachable: 54 / bound: 96
 ```
@@ -3037,14 +3010,14 @@ erDiagram
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | JudgeEmployeeInvention | samples/patent-ops/buc/buc_invention_disclosure.rdra:83 |
 | condition | 職務発明に当たらない | InventionDisclosure | InventionDisclosure.category == 職務発明に当たらない発明 | AcquireRightsByAssignment | samples/patent-ops/buc/buc_invention_disclosure.rdra:94 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | DecideReward | samples/patent-ops/buc/buc_inventor_reward.rdra:55 |
-| condition | 出願が審査中である | PatentApplication | PatentApplication.status == 審査請求済（審査中） | ReceiveOfficeAction | samples/patent-ops/buc/buc_office_action.rdra:132 |
-| condition | 最初の拒絶理由通知である | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.kind == 最初 | DraftResponse | samples/patent-ops/buc/buc_office_action.rdra:150 |
-| condition | 応答期間内で、まだ延長していない | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false | RequestTermExtension | samples/patent-ops/buc/buc_office_action.rdra:166 |
-| condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:184 |
-| forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:215 |
-| exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:217 |
-| condition | 出願の審査が終わっている | PatentApplication | PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | CloseOfficeActionDocket | samples/patent-ops/buc/buc_office_action.rdra:258 |
-| condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:271 |
+| condition | 出願が審査中である | PatentApplication | PatentApplication.status == 審査請求済（審査中） | ReceiveOfficeAction | samples/patent-ops/buc/buc_office_action.rdra:127 |
+| condition | 最初の拒絶理由通知である | OfficeAction | OfficeAction.kind == 最初 | DraftResponse | samples/patent-ops/buc/buc_office_action.rdra:145 |
+| condition | 応答期間内で、まだ延長していない | OfficeAction | OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false | RequestTermExtension | samples/patent-ops/buc/buc_office_action.rdra:155 |
+| condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:173 |
+| forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:204 |
+| exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:206 |
+| condition | 出願の審査が終わっている | PatentApplication | PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | CloseOfficeActionDocket | samples/patent-ops/buc/buc_office_action.rdra:247 |
+| condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:260 |
 | condition | 特許査定を受けた出願である | PatentApplication | PatentApplication.status == 特許査定 | FeePaymentApi | samples/patent-ops/buc/buc_registration.rdra:64 |
 | condition | 納付期間をまだ延長していない | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false | RequestFeePaymentExtension | samples/patent-ops/buc/buc_registration.rdra:73 |
 | condition | 第1〜3年分の特許料を納付している | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true | RecordRegistration | samples/patent-ops/buc/buc_registration.rdra:86 |
@@ -3106,7 +3079,7 @@ erDiagram
 | IpStaff | 知的財産部 担当者 | PriorArtSearchManage | 先行技術調査 | true | true | ok | RecordPriorArtSearch\|RequestPriorArtSearch | RecordPriorArtSearch->PriorArtSearchApi\|RequestPriorArtSearch->PriorArtSearchApi |
 | IpStaff | 知的財産部 担当者 | RewardManage | 相当の利益の管理 | true | true | ok | AnswerInventorOpinion\|DecideReward\|NotifyReward\|PayReward | DecideReward->RewardApi |
 | IpStaff | 知的財産部 担当者 | RightsJudge | 職務発明の判定・権利の承継 | true | true | ok | AcquireRightsByAssignment\|JudgeEmployeeInvention |  |
-| PatentAttorney | 弁理士（特許事務所） | DraftWrite | 出願書類の作成 | true | true | ok | DraftLimitedResponse\|DraftResponse\|SubmitDraft | DraftLimitedResponse->OfficeActionApi\|DraftResponse->OfficeActionApi\|RequestLateExtension->OfficeActionApi\|RequestTermExtension->OfficeActionApi |
+| PatentAttorney | 弁理士（特許事務所） | DraftWrite | 出願書類の作成 | true | true | ok | DraftResponse\|SubmitDraft | DraftResponse->OfficeActionApi\|RequestLateExtension->OfficeActionApi\|RequestTermExtension->OfficeActionApi |
 | PatentAttorney | 弁理士（特許事務所） | JpoProcedure | 特許庁への手続（代理人） | true | true | ok | ClaimDomesticPriority\|FileApplication\|FileDivisionalApplication\|FileResponse\|ReceiveFinalOfficeAction\|ReceiveFormalityOrder\|ReceiveOfficeAction\|RequestAcceleratedExamination\|RequestAppeal\|RequestExamination\|RequestLateExtension\|RequestTermExtension\|RestoreExaminationRequest\|SubmitFormalityAmendment\|WithdrawApplication | FileApplication->FilingApi\|FileDivisionalApplication->DivisionalApi\|FileResponse->ResponseFilingApi\|ReceiveFinalOfficeAction->ResponseFilingApi\|ReceiveFormalityOrder->FormalityApi\|ReceiveOfficeAction->OfficeActionIntakeApi\|RequestAcceleratedExamination->ExaminationRequestApi\|RequestAppeal->AppealApi\|RequestExamination->ExaminationRequestApi\|RestoreExaminationRequest->ExaminationRequestApi\|SubmitFormalityAmendment->FormalityApi\|WithdrawApplication->WithdrawalApi |
 | ReviewCommittee | 発明審査委員会 | FilingDecide | 出願可否の決定 | true | true | ok | DecideFiling | DecideFiling->FilingDecisionApi |
 

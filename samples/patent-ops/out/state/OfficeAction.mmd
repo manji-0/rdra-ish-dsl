@@ -11,10 +11,8 @@ stateDiagram-v2
     state "応答済" as state__OfficeAction_answered
     state "応答なしで期間満了" as state__OfficeAction_lapsed
     state "案件終了" as state__OfficeAction_closed
-    %% transition usecase__DraftLimitedResponse
-    state__OfficeAction_open --> state__OfficeAction_drafted : 限定した補正による応答案の作成
     %% transition usecase__DraftResponse
-    state__OfficeAction_open --> state__OfficeAction_drafted : 意見書・補正書案の作成 [最初の拒絶理由通知である]
+    state__OfficeAction_open --> state__OfficeAction_drafted : 意見書・補正書案の作成
     %% transition usecase__ExpireResponseTerm
     state__OfficeAction_open --> state__OfficeAction_overdue : 応答期間の経過
     %% transition usecase__ExpireResponseTerm

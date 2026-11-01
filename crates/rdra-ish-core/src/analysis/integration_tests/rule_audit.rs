@@ -195,6 +195,55 @@ const FORMS: &[(&str, Expect)] = &[
     ("chooses(Order.kind, Pay)", Error),
     ("chooses(Pay, Order.kind).when(Ready)", Error),
     ("sets(Pay, Order, kind == a)\nchooses(Pay, Order.kind)", Error),
+    // chooses with values: each line lists one value, a `.when(Cond)` guards it (#65)
+    ("chooses(Pay, Order.kind, a)", Recorded),
+    ("chooses(Pay, Order.kind, a)\nchooses(Pay, Order.kind, b)", Recorded),
+    ("chooses(Pay, Order.kind, a)\nchooses(Pay, Order.kind, a)", Recorded),
+    (
+        "holds(Ready, Ticket.status == done)\nchooses(Pay, Order.kind, a).when(Ready)\nchooses(Pay, Order.kind, b)",
+        Recorded,
+    ),
+    (
+        "chooses(Pay, Order.kind, a).when(Ready)\nholds(Ready, Ticket.status == done)",
+        Recorded,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\nchooses(Pay, Order.kind, a).when(Ready)\nchooses(Pay, Order.kind, a)",
+        Recorded,
+    ),
+    ("sets(Pay, Order, kind == a)\nchooses(Pay, Order.kind, b)", Error),
+    ("chooses(Pay, Order.kind, c)", Error),
+    ("chooses(Pay, Order.kind, A)", Error),
+    ("chooses(Pay, Order.kind, \"a\")", Recorded),
+    ("chooses(Pay, Order.kind, Order.kind)", Error),
+    ("chooses(Pay, Order.kind, a, b)", Error),
+    ("chooses(Pay, Order.status, open)", Error),
+    ("chooses(Pay, Order.kind)\nchooses(Pay, Order.kind, a)", Error),
+    ("chooses(Pay, Order.kind, a)\nchooses(Pay, Order.kind)", Error),
+    ("chooses(Pay, Order.kind, a).when(Ready)", Error),
+    ("chooses(Pay, Order.kind, a).when(Nosuch)", Error),
+    ("chooses(Pay, Order.kind, a).when(Order)", Error),
+    ("chooses(Pay, Order.kind, a).when()", Error),
+    (
+        "holds(Ready, Ticket.status == done)\nchooses(Pay, Order.kind, a).when(Ready, Ready)",
+        Error,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\nchooses(Pay, Order.kind, a).when(Ready).when(Ready)",
+        Error,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\nchooses(Pay, Order.kind, a).when(Ticket.status == done)",
+        Error,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\nchooses(Pay, Order.kind).when(Ready)",
+        Error,
+    ),
+    (
+        "holds(Ready, Ticket.status == done)\nchooses(Pay, Order.kind, a).unless(Ready)",
+        Error,
+    ),
     // transitions: a `.when(Cond)` arm guard is a rule, so its condition must have a body
     ("transitions(Pay, Order.status, open -> paid)", Recorded),
     (
@@ -241,11 +290,17 @@ fn recorded(model: &SemanticModel) -> usize {
         .iter()
         .filter(|t| t.guard.is_some())
         .count();
+    // The value-less `chooses` records the choice, the value form each listed value and guard.
+    let choices: usize = model
+        .column_choices
+        .iter()
+        .map(|c| c.values.len().max(1) + c.values.iter().filter(|v| v.guard.is_some()).count())
+        .sum();
     business_rules(model).len()
         + arm_guards
         + model.field_mappings.len()
         + model.column_effects.len()
-        + model.column_choices.len()
+        + choices
         + model.proposition_effects.len()
         + bodies
 }
@@ -278,7 +333,8 @@ fn outcome(line: &str) -> (Expect, String) {
 }
 
 /// The parts a form records, line by line: one per `.has/.none(...)`, plus the rule or body
-/// itself unless the form is only a quantifier; a `transitions` arm records its `.when` guard.
+/// itself unless the form is only a quantifier; a `transitions` arm records its `.when` guard,
+/// a `chooses` line its choice or value and its `.when` guard.
 fn parts(form: &str) -> usize {
     form.lines().map(line_parts).sum()
 }
@@ -288,7 +344,7 @@ fn line_parts(line: &str) -> usize {
         return line.matches(".when(").count();
     }
     if line.starts_with("chooses(") {
-        return 1;
+        return 1 + line.matches(".when(").count();
     }
     let quantifiers = line.matches(".has(").count() + line.matches(".none(").count();
     let only_quantifier =

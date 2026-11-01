@@ -152,6 +152,13 @@ fn one_of_each() -> Vec<StateDiag> {
             conditions: vec!["Ready".into()],
             site: site(),
         },
+        StateDiag::ValueNeverChosen {
+            action: "Draft".into(),
+            column: "Notice.scope".into(),
+            value: "free".into(),
+            conditions: vec!["NotFinal".into()],
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -171,6 +178,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::NoWitness { .. }
             | StateDiag::NeverRuns { .. }
             | StateDiag::ArmNeverTaken { .. }
+            | StateDiag::ValueNeverChosen { .. }
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }

@@ -18,12 +18,9 @@ usecase ReceiveOfficeAction "拒絶理由通知の受領" description "拒絶理
 usecase InstructResponse "応答方針の指示"
   description "知的財産部が発明者と相談し、弁理士に応答の方針を伝える（参照のみ）。"
 
-usecase DraftResponse "意見書・補正書案の作成"
-  description "最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。"
-
 // 請求項の削除, 特許請求の範囲の減縮, 誤記の訂正, 明りようでない記載の釈明 (egov-tokkyohou-334AC0000000121.txt:176-184).
-usecase DraftLimitedResponse "限定した補正による応答案の作成"
-  description "請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。"
+usecase DraftResponse "意見書・補正書案の作成"
+  description "弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。"
 
 // １通の請求で２か月…手数料は２，１００円 (jpo-tetuzuki-02-19-kyozetsu-outou.txt:56-57).
 usecase RequestTermExtension "応答期間の延長請求" description "応答期間内に期間延長請求書を出し、2か月延長する。"
@@ -77,7 +74,6 @@ api AppealApi "審判請求 API"
 performs(PatentAttorney, ReceiveOfficeAction)
 performs(IpStaff, InstructResponse)
 performs(PatentAttorney, DraftResponse)
-performs(PatentAttorney, DraftLimitedResponse)
 performs(PatentAttorney, RequestTermExtension)
 performs(PatentAttorney, RequestLateExtension)
 performs(PatentAttorney, FileResponse)
@@ -92,7 +88,6 @@ belongs(BucOfficeAction, Prosecution).by(AttorneyPortal).by(InternetFilingSoftwa
 contains(BucOfficeAction, ReceiveOfficeAction)
 contains(BucOfficeAction, InstructResponse)
 contains(BucOfficeAction, DraftResponse)
-contains(BucOfficeAction, DraftLimitedResponse)
 contains(BucOfficeAction, RequestTermExtension)
 contains(BucOfficeAction, ExpireResponseTerm)
 contains(BucOfficeAction, RequestLateExtension)
@@ -136,24 +131,18 @@ displays(InstructResponse, OfficeActionScreen)
 reads(InstructResponse, OfficeAction)
 reads(InstructResponse, PatentApplication)
 
-// The attorney picks the scope of the amendment, but a final notice admits `limited` only. One use
-// case with `chooses(DraftResponse, OfficeAction.amendment)` lets the attorney pick `free` on a final
-// notice too, and `check` reports Forbidden_OfficeAction_3 (the rule below) reachable: `chooses`
-// cannot restrict the values by state. So each scope stays its own use case that sets it.
+// The attorney picks the scope of the amendment. 特許法17条の2第5項 limits the amendment on the
+// 最後 notice to the four purposes (egov-tokkyohou-334AC0000000121.txt:176-184), so `free` is a choice
+// only on the first notice.
 displays(DraftResponse, ResponseDraftScreen)
 invokes(DraftResponse, OfficeActionApi)
 updates(OfficeActionApi, OfficeAction)
 transitions(DraftResponse, OfficeAction.status, open -> drafted)
-sets(DraftResponse, OfficeAction, amendment == free)
+chooses(DraftResponse, OfficeAction.amendment, free).when(FirstNoticeOnly)
+chooses(DraftResponse, OfficeAction.amendment, limited)
 
 condition FirstNoticeOnly "最初の拒絶理由通知である"
-holds(FirstNoticeOnly, OfficeAction.status == open, OfficeAction.kind == first)
-applies_to(FirstNoticeOnly, DraftResponse)
-
-displays(DraftLimitedResponse, ResponseDraftScreen)
-invokes(DraftLimitedResponse, OfficeActionApi)
-transitions(DraftLimitedResponse, OfficeAction.status, open -> drafted)
-sets(DraftLimitedResponse, OfficeAction, amendment == limited)
+holds(FirstNoticeOnly, OfficeAction.kind == first)
 
 // 提出できる期間延長請求書は１通のみ (jpo-tetuzuki-02-19-kyozetsu-outou.txt:57).
 displays(RequestTermExtension, OfficeActionScreen)
@@ -283,9 +272,6 @@ requires_permission(DraftResponse, DraftWrite)
 requires_medium(DraftResponse, AttorneyPortal)
 requires_permission(OfficeActionApi, DraftWrite)
 
-requires_permission(DraftLimitedResponse, DraftWrite)
-requires_medium(DraftLimitedResponse, AttorneyPortal)
-
 requires_permission(RequestTermExtension, JpoProcedure)
 requires_medium(RequestTermExtension, InternetFilingSoftware)
 
@@ -386,7 +372,6 @@ branches(PolicyStep, DivisionStep)
 covers(NoticeStep, ReceiveOfficeAction)
 covers(PolicyStep, InstructResponse)
 covers(DraftingStep, DraftResponse)
-covers(DraftingStep, DraftLimitedResponse)
 covers(ExtensionStep, RequestTermExtension)
 covers(LateExtensionStep, ExpireResponseTerm)
 covers(LateExtensionStep, RequestLateExtension)

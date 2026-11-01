@@ -37,7 +37,8 @@ Also ask:
    columns. Values an actor merely chooses are not lifecycle: type those columns by a
    `variation` and leave them out of `transitions`. A created row takes any value; an
    update keeps it unless the use case lets the actor pick again with
-   `chooses(UseCase, Entity.column)`.
+   `chooses(UseCase, Entity.column)`. To offer only some values, write one
+   `chooses(UseCase, Entity.column, value)` line per value.
 2. Add `transitions(UseCase, Entity.col, from -> to)` for lifecycle movement, naming
    the use case that drives each edge. States are not declared: each variant a
    `transitions` names, and each value a creating use case sets, is a state of the
@@ -59,6 +60,9 @@ Also ask:
    `applies_to`, and `check` and TLC read the guard. When the rule holds back only one
    outcome of a use case's choice, guard that arm instead:
    `transitions(UseCase, Entity.col, from -> to).when(Cond)`. The other arms stay free.
+   When it holds back one value the actor picks, guard that value:
+   `chooses(UseCase, Entity.col, value).when(Cond)` beside the unguarded values. Keep
+   one use case; do not split it per value.
 8. Add `sets(UseCase, Entity, col == val)` for enum, nullable, boolean, and Int
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). A `sets` on a column that `transitions`

@@ -1,7 +1,8 @@
 //! Every declared `transitions` arm is an edge of the derived system, or a diagnostic says why
 //! it is not: its use case never runs, its `from` state is unreachable, or the instance is
 //! stuck at `from` and the deadlock names the arm. An arm that is neither would drop a move of
-//! the model with nothing reported (#52).
+//! the model with nothing reported (#52). Likewise every value a `chooses(.., value)` line
+//! lists is picked by an edge, or its use case never runs or its guard never holds (#65).
 
 use super::cone::{load, SAMPLES};
 use super::*;
@@ -15,11 +16,17 @@ usecase Decide "Decide"
 usecase Reopen "Reopen"
 performs(A, Submit)
 performs(A, Decide)
+variation Scope "範囲" {
+  narrow "限定"
+  broad "限定なし"
+  nothing "なし"
+}
 entity Doc "届出" {
   id: Int @pk
   status: Enum(searched, file, secret, drop) @default(searched)
   route: Enum(none, fast, slow) @default(none)
   flag: Bool @default(false)
+  scope: Scope
 }
 entity Log "記録" { id: Int @pk }
 creates(Submit, Doc)
@@ -33,6 +40,9 @@ enum Expect {
     Explained,
 }
 use Expect::*;
+
+/// A rule that reads `scope`, so the system models the column the `chooses` forms pick.
+const READS_SCOPE: &str = "forbidden(Doc, status == drop, scope == nothing)";
 
 /// One form per way a use case can declare its arms.
 const FORMS: &[(&str, Expect)] = &[
@@ -140,6 +150,48 @@ holds(Never, Doc.flag == true)
 transitions(Decide, Doc.status, searched -> file).when(Never)",
         Explained,
     ),
+    // chosen values (#65): two listed values beside an arm
+    (
+        "transitions(Decide, Doc.status, searched -> file)
+chooses(Decide, Doc.scope, narrow)
+chooses(Decide, Doc.scope, broad)
+{READS_SCOPE}",
+        Edges,
+    ),
+    // a value guard that holds once another use case sets the flag
+    (
+        "condition Flagged \"Flagged\"
+holds(Flagged, Doc.flag == true)
+sets(Reopen, Doc, flag == true)
+chooses(Decide, Doc.scope, broad).when(Flagged)
+chooses(Decide, Doc.scope, narrow)
+{READS_SCOPE}",
+        Edges,
+    ),
+    // listed values on the creating use case
+    (
+        "chooses(Submit, Doc.scope, narrow)
+chooses(Submit, Doc.scope, nothing)
+{READS_SCOPE}",
+        Edges,
+    ),
+    // a value guard that never holds: the other value runs, a warning names the guarded one
+    (
+        "condition Never \"Never\"
+holds(Never, Doc.flag == true)
+chooses(Decide, Doc.scope, broad).when(Never)
+chooses(Decide, Doc.scope, narrow)
+{READS_SCOPE}",
+        Explained,
+    ),
+    // the only value, guarded by a guard that never holds: the use case never runs
+    (
+        "condition Never \"Never\"
+holds(Never, Doc.flag == true)
+chooses(Decide, Doc.scope, broad).when(Never)
+{READS_SCOPE}",
+        Explained,
+    ),
 ];
 
 /// The arms of `model` that no edge of the system takes. An arm is taken when an action of
@@ -178,6 +230,80 @@ fn untaken_arms(model: &SemanticModel, bounds: Bounds) -> Vec<usize> {
         }
     }
     (0..taken.len()).filter(|&i| !taken[i]).collect()
+}
+
+/// The listed values of `model` no edge picks, as `(choice, value)` indices. A value is picked
+/// when an action of its use case leaves some instance's column at it and changes the state.
+fn unpicked_values(model: &SemanticModel, bounds: Bounds) -> Vec<(usize, usize)> {
+    let built = TransitionSystem::build(model, bounds, &Scope::ALL);
+    let listed: Vec<(usize, usize)> = model
+        .column_choices
+        .iter()
+        .enumerate()
+        .flat_map(|(i, c)| (0..c.values.len()).map(move |j| (i, j)))
+        .collect();
+    let mut picked = vec![false; listed.len()];
+    for comp in built.ts.components() {
+        let run = built.ts.restrict(&comp).run(Caps::new(usize::MAX, 200_000));
+        assert!(run.complete, "a component does not finish");
+        let ts = &run.system;
+        for (n, &(i, j)) in listed.iter().enumerate() {
+            let choice = &model.column_choices[i];
+            let Some(var) = ts.var_ids().find(|&v| {
+                matches!(&ts.var(v).kind, VarKind::Column { entity, column, .. }
+                    if ts.entity(*entity).key == choice.entity && *column == choice.column)
+            }) else {
+                // No rule or guard reads the column, so the system does not model it.
+                picked[n] |= !built.ts.var_ids().any(|v| {
+                    matches!(&built.ts.var(v).kind, VarKind::Column { entity, column, .. }
+                        if built.ts.entity(*entity).key == choice.entity && *column == choice.column)
+                });
+                continue;
+            };
+            let Domain::Enum(values) = &ts.var(var).domain else {
+                continue;
+            };
+            let Some(v) = values.iter().position(|x| *x == choice.values[j].value) else {
+                continue;
+            };
+            let v = Value(v as u8);
+            picked[n] |= run.graph().edges().any(|(a, b, act)| {
+                let ActionOrigin::UseCase { uc, .. } = ts.actions()[act.index()].origin else {
+                    return false;
+                };
+                let (pre, post) = (&run.states[a as usize], &run.states[b as usize]);
+                uc == choice.origin
+                    && pre != post
+                    && (0..bounds.slots()).any(|k| post.get(ts, var, k) == v)
+            });
+        }
+    }
+    listed
+        .into_iter()
+        .zip(picked)
+        .filter(|(_, p)| !p)
+        .map(|(x, _)| x)
+        .collect()
+}
+
+/// Whether a diagnostic of `diags` says why value `j` of choice `i` is never picked: its use
+/// case never runs, or its guard never holds.
+fn value_explained(model: &SemanticModel, diags: &[Diag], (i, j): (usize, usize)) -> bool {
+    let choice = &model.column_choices[i];
+    let uc = &model.use_cases[choice.origin].id;
+    let value = &choice.values[j].value;
+    diags.iter().any(|d| match &d.diag {
+        StateDiag::NeverRuns { action, .. } => {
+            action == uc
+                || action
+                    .strip_prefix(uc.as_str())
+                    .is_some_and(|r| r.starts_with('_'))
+        }
+        StateDiag::ValueNeverChosen {
+            action, value: v, ..
+        } => action == uc && v == value,
+        _ => false,
+    })
 }
 
 /// Whether a diagnostic of `diags` says why arm `i` of `model` is not taken.
@@ -241,14 +367,37 @@ fn audit(name: &str, model: &SemanticModel, verify: bool) -> Vec<usize> {
             "{name}: arms {two:?} untaken at two instances, {untaken:?} at one"
         );
     }
+    let unpicked = unpicked_values(model, Bounds::STATES);
+    for &(i, j) in &unpicked {
+        let choice = &model.column_choices[i];
+        assert!(
+            value_explained(model, &diags, (i, j)),
+            "{name}: value {} of chooses({}, {}.{}) is no edge and no diagnostic says why",
+            choice.values[j].value,
+            model.use_cases[choice.origin].id,
+            model.entities[choice.entity].id,
+            choice.column,
+        );
+    }
+    if verify {
+        let two = unpicked_values(model, Bounds::VERIFY);
+        assert!(
+            two.iter().all(|x| unpicked.contains(x)),
+            "{name}: values {two:?} unpicked at two instances, {unpicked:?} at one"
+        );
+    }
     untaken
+        .into_iter()
+        .chain(unpicked.iter().map(|_| usize::MAX))
+        .collect()
 }
 
 #[test]
 fn every_form_takes_its_arms_or_says_why() {
     for (form, expect) in FORMS {
+        let form = form.replace("{READS_SCOPE}", READS_SCOPE);
         let model = model_from(&format!("{BASE}\n{form}\n"));
-        let untaken = audit(form, &model, true);
+        let untaken = audit(&form, &model, true);
         match expect {
             Edges => assert!(untaken.is_empty(), "{form}: arms {untaken:?} untaken"),
             Explained => assert!(!untaken.is_empty(), "{form}: every arm taken"),

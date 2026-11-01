@@ -1256,6 +1256,38 @@ fn list_transition_markdown_has_a_row_per_transition_with_guards_and_actors() {
     );
 }
 
+/// A condition that guards a `chooses` value combines the chosen variation and applies to the
+/// value's use case, as one that guards a `transitions` arm combines its state model.
+#[test]
+fn list_condition_names_the_use_case_and_variation_of_a_value_guard() {
+    let src = r#"
+variation Scope "範囲" {
+  limited "限定"
+  free "自由"
+}
+usecase Draft "応答案の作成"
+entity Notice "通知" {
+  id: Int @pk
+  final: Bool @default(false)
+  amendment: Scope
+}
+updates(Draft, Notice)
+condition NotFinal "最後の通知でない"
+holds(NotFinal, Notice.final == false)
+chooses(Draft, Notice.amendment, free).when(NotFinal)
+chooses(Draft, Notice.amendment, limited)
+"#;
+    let (ast, parse_errors) = rdra_ish_syntax::parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = rdra_ish_core::build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    let csv = list_elements(&model, &ListKind::Condition, &ListFormat::Csv).unwrap();
+    assert!(
+        csv.contains("NotFinal,最後の通知でない,Notice.final == false,Scope,,Draft"),
+        "{csv}"
+    );
+}
+
 /// An arm's own `.when(Cond)` joins the guards column of that arm's row only.
 #[test]
 fn list_transition_guards_name_the_guard_of_one_arm() {

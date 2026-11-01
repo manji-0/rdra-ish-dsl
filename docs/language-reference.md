@@ -227,6 +227,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
 | `sets` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 | `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
+| `chooses` | `(UseCase, Entity.column, value)` | One value the actor may pick; the lines of one use case and column list the choice. `.when(Condition)` guards this value only. See [Guard one value](#guard-one-value-when). |
 
 `relate(A, B, N:1)` generates a key column on `A` named `{role}_{parent key column}`.
 With the default role (the parent id in lowercase) and a parent key `id`, that is `b_id`.
@@ -249,6 +250,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `belongs` | `.by(...)` |
 | `navigates` | `.via(UseCase)`, at most once |
 | `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
+| `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
 | `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
@@ -1102,9 +1104,8 @@ chooses(DraftResponse, OfficeAction.amendment)
 - On the creating use case it is the creation's own choice and changes nothing.
 - `chooses` is a new predicate, not `sets(.., col == any)`: a variation may name a value
   `any`, and `sets` fixes one value.
-- It takes no chain methods. It cannot restrict the values by state: to offer only some
-  values in some states, keep one use case per value that `sets` it, each with its own
-  `applies_to` guard.
+- To offer only some values, list them, one `chooses(UC, E.col, value)` line each; to
+  offer a value only in some states, guard its line with `.when` (below).
 
 Only a variation-typed column is chosen. An inline `Enum` is a state model, and the actor
 picks the next state with several `transitions` arms from one state; a `Bool` takes a
@@ -1112,6 +1113,51 @@ picks the next state with several `transitions` arms from one state; a `Bool` ta
 argument that is not `Entity.column` is `InvalidChoosesColumnRef`; an unknown entity or
 column is `UndefinedSymbol` or `UnknownColumn`. A use case that both `chooses` and `sets`
 one column is `ChoosesAndSets`, and a derived column is `DerivedColumnWritten`.
+
+#### Guard one value: `.when`
+
+<!-- constrained-by #guard-one-arm-when -->
+
+The lines `chooses(UseCase, Entity.column, value)` of one use case and column list the
+values the actor may pick; `.when(Condition)` on a line offers that value only while the
+condition holds. A final office action admits only a limited amendment (特許法17条の2):
+
+```rdra
+condition FirstNoticeOnly "最初の拒絶理由通知である"
+holds(FirstNoticeOnly, OfficeAction.kind == first)
+
+chooses(DraftResponse, OfficeAction.amendment, free).when(FirstNoticeOnly)
+chooses(DraftResponse, OfficeAction.amendment, limited)
+```
+
+- **Only the listed values are choices.** The value-less `chooses(UC, E.col)` still offers
+  every value of the variation. One use case and column takes one form: a value-less line
+  beside value lines, in either order, is `ChoosesMixedForms`.
+- **A guarded value is a choice only while its guard holds**, read as a `transitions` arm
+  guard reads it ([Guard one arm](#guard-one-arm-when)): on the state the use case starts
+  from, so a guard that reads the chosen column itself sees the old value. An instance the
+  use case creates is read after the step, as an `applies_to` body reads it. Among the
+  enabled values the choice is free. Above, the attorney can always amend within the
+  limits, and can amend freely only on a first notice.
+- **No enabled value, no run.** A use case whose every listed value is guarded runs only
+  where some guard holds, as one whose every arm is guarded does.
+- **A value listed twice is enabled by either line**, as an arm declared twice is: an
+  unguarded line lifts the guard, two guards are joined with or. It is not an error.
+- On the creating use case the listed values restrict the creation's own choice.
+
+A value that is not one of the variation's is `InvalidVariationValue`, whose hint lists the
+values. `.when` on the value-less form guards no value and is `ChoosesWhenWithoutValue`;
+write the value, or `applies_to(Cond, UC)` to guard the whole use case. Otherwise `.when`
+takes the same condition `transitions` arms take: `WhenRequiresCondition` and
+`WhenConditionWithoutBody` apply as for an arm.
+
+A guarded value that is never chosen while its use case runs is the `ValueNeverChosen`
+warning of `check` (`Choice_<UseCase>_<Entity>_<column>_<value>`): its guard never holds
+where the use case runs. The sequence diagram writes the choice on the write, each guard in
+`[...]` after its value:
+`amendment in (限定のない補正 [最初の拒絶理由通知である], 削除・減縮・誤記の訂正・釈明に限る補正)`.
+`list --kind condition` adds the use case to the condition's `applies_to` column, and the
+condition `combines` the chosen variation, `derived ... from when` in the condition diagram.
 
 ### Conditions
 

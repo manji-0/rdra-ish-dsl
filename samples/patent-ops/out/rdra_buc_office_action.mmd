@@ -70,10 +70,8 @@ flowchart LR
     %% desc usecase__DecideReward: 職務発明規程の基準で、職務発明の相当の利益を決める。
     usecase__DecideToLetLapse("権利を維持しない決定"):::usecase
     %% desc usecase__DecideToLetLapse: 維持しないと決め、以後の年金を納めない。
-    usecase__DraftLimitedResponse("限定した補正による応答案の作成"):::usecase
-    %% desc usecase__DraftLimitedResponse: 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。
     usecase__DraftResponse("意見書・補正書案の作成"):::usecase
-    %% desc usecase__DraftResponse: 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。
+    %% desc usecase__DraftResponse: 弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。
     usecase__EnterGracePeriod("納付期限の経過"):::usecase
     %% desc usecase__EnterGracePeriod: 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。
     usecase__ExpirePatentTerm("存続期間の満了"):::usecase
@@ -215,6 +213,7 @@ flowchart LR
     state__Patent_grace((("追納期間中"))):::state
     state__Patent_in_force((("存続中"))):::state
     state__Patent_lapsed((("消滅（特許料の不納）"))):::state
+    variation__AmendmentScope[\"補正の範囲"\]:::variation
     variation__InventionCategory[\"発明の区分"\]:::variation
     condition__AnnuityDue{"存続中で、維持すると決めた権利の次の年が未納"}:::condition
     condition__DivisionPossible{"分割できる時期である"}:::condition
@@ -280,7 +279,6 @@ flowchart LR
   buc__BucOfficeAction --> business__Prosecution
   buc__BucOfficeAction --> flow__OfficeActionFlow
   buc__BucOfficeAction --> usecase__CloseOfficeActionDocket
-  buc__BucOfficeAction --> usecase__DraftLimitedResponse
   buc__BucOfficeAction --> usecase__DraftResponse
   buc__BucOfficeAction --> usecase__ExpireResponseTerm
   buc__BucOfficeAction --> usecase__FileDivisionalApplication
@@ -319,9 +317,8 @@ flowchart LR
   condition__FirstFeesUnpaid -.-> usecase__RecordRegistrationDismissal
   condition__FirstFeesUnpaid -.-> entity__PatentApplication
   %% derived condition__FirstFeesUnpaid -> entity__PatentApplication from holds
-  condition__FirstNoticeOnly -.-> usecase__DraftResponse
-  condition__FirstNoticeOnly -.-> entity__OfficeAction
-  %% derived condition__FirstNoticeOnly -> entity__OfficeAction from holds
+  condition__FirstNoticeOnly -.-> variation__AmendmentScope
+  %% derived condition__FirstNoticeOnly -> variation__AmendmentScope from holds
   condition__Granted -.-> api__FeePaymentApi
   condition__Granted -.-> entity__PatentApplication
   %% derived condition__Granted -> entity__PatentApplication from holds
@@ -443,7 +440,6 @@ flowchart LR
   step__DivisionStep -.-> usecase__FileDivisionalApplication
   step__DocketStep -.-> event__EvRegistered
   step__DocketStep -->|precedes| step__ReviewStep
-  step__DraftingStep -.-> usecase__DraftLimitedResponse
   step__DraftingStep -.-> usecase__DraftResponse
   step__DraftingStep -.->|excepts| step__LateExtensionStep
   step__DraftingStep -->|precedes| step__ResponseStep
@@ -536,11 +532,6 @@ flowchart LR
   usecase__DecideToLetLapse -.-> api__MaintenanceApi
   usecase__DecideToLetLapse -.-> medium__IpWorkstation
   usecase__DecideToLetLapse -.-> permission__MaintenanceDecide
-  usecase__DraftLimitedResponse -.-> screen__ResponseDraftScreen
-  usecase__DraftLimitedResponse -.-> api__OfficeActionApi
-  usecase__DraftLimitedResponse -.-> medium__AttorneyPortal
-  usecase__DraftLimitedResponse -.-> permission__DraftWrite
-  usecase__DraftLimitedResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
   usecase__DraftResponse -.-> screen__ResponseDraftScreen
   usecase__DraftResponse -.-> api__OfficeActionApi
   usecase__DraftResponse -.-> medium__AttorneyPortal

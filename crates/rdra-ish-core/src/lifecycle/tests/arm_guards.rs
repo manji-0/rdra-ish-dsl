@@ -252,3 +252,34 @@ fn a_scope_that_drops_use_cases_leaves_an_untaken_arm_undecided() {
         Subject::Arm { action, from, to, .. } if action == "Decide" && from == "searched" && to == "file"
     ) && u.why == UndecidedWhy::Scope));
 }
+
+/// An arm guard that reads a variation column nothing else reads still sees its value: the
+/// guard names the column, so the system models it (before, the column was left out and the
+/// guard never held).
+#[test]
+fn an_arm_guard_names_the_columns_it_reads() {
+    let d = derive_src(
+        r#"
+variation Kind "Kind" {
+  a "A"
+  b "B"
+}
+usecase Submit "Submit"
+usecase Decide "Decide"
+entity Doc "Doc" {
+  id: Int @pk
+  status: Enum(open, done, drop) @default(open)
+  kind: Kind
+}
+creates(Submit, Doc)
+condition IsB "B"
+holds(IsB, Doc.kind == b)
+transitions(Decide, Doc.status, open -> done).when(IsB)
+transitions(Decide, Doc.status, open -> drop)
+"#,
+    );
+    let rows = d.rows("Doc");
+    assert!(rows.iter().any(|r| r == "kind=b, status=done"), "{rows:?}");
+    assert!(!rows.iter().any(|r| r == "kind=a, status=done"), "{rows:?}");
+    assert!(arm_never_taken(&d).is_empty(), "{:?}", d.diags);
+}

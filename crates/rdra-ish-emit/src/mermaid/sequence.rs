@@ -77,30 +77,61 @@ fn write_label(
             .filter(|e| !transitions.iter().any(|t| t.column == e.column))
             .map(|e| format!("{}={}", e.column, effect_value(&e.value))),
     );
-    // A `chooses`: the actor picks one of the variation's values.
+    // A `chooses`: the actor picks one of the variation's values, or of the listed ones.
     parts.extend(
         model
             .column_choices
             .iter()
             .filter(|c| c.origin == usecase && c.entity == entity)
-            .map(|c| {
-                let values: Vec<&str> = model.entities[entity]
-                    .columns
-                    .iter()
-                    .find(|col| col.name == c.column)
-                    .and_then(|col| model.column_values(col))
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|v| model.value_display(entity, &c.column, v))
-                    .collect();
-                format!("{} in ({})", c.column, values.join(", "))
-            }),
+            .map(|c| format!("{} in ({})", c.column, chosen_values(model, c).join(", "))),
     );
     if parts.is_empty() {
         operation.to_string()
     } else {
         text(&format!("{operation} {}", parts.join(", ")))
     }
+}
+
+/// The values a `chooses` lets the actor pick, by their labels: every value of the variation,
+/// or the listed ones in declaration order, each with ` [label]` of its own `.when(Cond)` (UML
+/// guard notation, as for an arm). A value listed twice is enabled by either line: an
+/// unguarded line drops the guard, guarded lines join theirs with ` or `.
+fn chosen_values(model: &SemanticModel, c: &rdra_ish_core::model::ColumnChoice) -> Vec<String> {
+    let entity = c.entity;
+    if c.values.is_empty() {
+        return model.entities[entity]
+            .columns
+            .iter()
+            .find(|col| col.name == c.column)
+            .and_then(|col| model.column_values(col))
+            .unwrap_or_default()
+            .iter()
+            .map(|v| model.value_display(entity, &c.column, v).to_string())
+            .collect();
+    }
+    // Each value once: its guards' labels, `None` once an unguarded line enables it.
+    let mut values: Vec<(&str, Option<Vec<&str>>)> = Vec::new();
+    for v in &c.values {
+        let label = v.guard.map(|ck| model.conditions[ck].label.as_str());
+        match values.iter_mut().find(|(name, _)| *name == v.value) {
+            Some((_, guards)) => match (guards.as_mut(), label) {
+                (Some(gs), Some(l)) if !gs.contains(&l) => gs.push(l),
+                (Some(_), None) => *guards = None,
+                _ => {}
+            },
+            None => values.push((&v.value, label.map(|l| vec![l]))),
+        }
+    }
+    values
+        .into_iter()
+        .map(|(v, guards)| {
+            let shown = model.value_display(entity, &c.column, v);
+            match guards {
+                Some(gs) => format!("{shown} [{}]", gs.join(" or ")),
+                None => shown.to_string(),
+            }
+        })
+        .collect()
 }
 
 /// ` [label]` of an arm's own `.when(Cond)`, or nothing (UML guard notation, as the state
@@ -744,6 +775,50 @@ sets(Decide, Doc, flag == true)
                 "    usecase__Decide -->> actor__Board: done\n",
                 "  else guard fails\n",
             ],
+        );
+    }
+
+    /// A `chooses` writes the values the actor may pick: every value of the variation, or the
+    /// listed ones, each with its own `.when(Cond)` guard.
+    #[test]
+    fn a_choice_writes_its_values_with_their_guards() {
+        let base = r#"
+variation Scope "範囲" {
+  limited "限定"
+  free "自由"
+  none "なし"
+}
+actor Attorney "Attorney"
+usecase Draft "Draft"
+performs(Attorney, Draft)
+entity Notice "Notice" {
+  id: Int @pk
+  final: Bool @default(false)
+  amendment: Scope
+}
+updates(Draft, Notice)
+condition NotFinal "最後の通知でない"
+holds(NotFinal, Notice.final == false)
+"#;
+        let emit = |lines: &str| {
+            SequenceMermaidEmitter
+                .emit(
+                    &model_from(&format!("{base}{lines}\n")),
+                    &View::usecases(vec!["Draft".to_string()]),
+                )
+                .unwrap()
+        };
+        let any = emit("chooses(Draft, Notice.amendment)");
+        assert!(
+            any.contains("update amendment in (限定, 自由, なし)"),
+            "{any}"
+        );
+        let listed = emit(
+            "chooses(Draft, Notice.amendment, free).when(NotFinal)\nchooses(Draft, Notice.amendment, limited)",
+        );
+        assert!(
+            listed.contains("update amendment in (自由 [最後の通知でない], 限定)"),
+            "{listed}"
         );
     }
 

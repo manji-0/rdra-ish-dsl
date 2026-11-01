@@ -208,6 +208,18 @@ pub enum StateDiag {
         /// The `transitions` declaration.
         site: Site,
     },
+    /// A `chooses(.., value).when(Cond)` value whose use case runs, but which no edge of any
+    /// cone that keeps it picks: its guard never holds where the use case runs.
+    ValueNeverChosen {
+        action: String,
+        /// `Entity.column`.
+        column: String,
+        value: String,
+        /// The ids of the value's `.when` conditions.
+        conditions: Vec<String>,
+        /// The `chooses` line.
+        site: Site,
+    },
     /// A present instance at a state of a state model that has a way out, from which no path
     /// moves it: no edge ever changes the column or deletes it. Reported once per state, at
     /// the first such reachable state, with a shortest trace to it.
@@ -298,6 +310,12 @@ impl StateDiag {
             StateDiag::ArmNeverTaken {
                 action, from, to, ..
             } => format!("Arm_{action}_{from}_{to}"),
+            StateDiag::ValueNeverChosen {
+                action,
+                column,
+                value,
+                ..
+            } => format!("Choice_{action}_{column}_{value}"),
             StateDiag::Deadlock {
                 entity,
                 column,
@@ -398,7 +416,8 @@ impl StateDiag {
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::NeverRuns { .. }
-            | StateDiag::ArmNeverTaken { .. } => Severity::Warning,
+            | StateDiag::ArmNeverTaken { .. }
+            | StateDiag::ValueNeverChosen { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -606,6 +625,17 @@ impl fmt::Display for StateDiag {
             } => write!(
                 f,
                 "{action} never takes {column} {from} -> {to}: wherever it could, its guard {} does not hold",
+                conditions.join(" or ")
+            ),
+            StateDiag::ValueNeverChosen {
+                action,
+                column,
+                value,
+                conditions,
+                ..
+            } => write!(
+                f,
+                "{action} never chooses {column} = {value}: wherever it could, its guard {} does not hold",
                 conditions.join(" or ")
             ),
             StateDiag::Deadlock {

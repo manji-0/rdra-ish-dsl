@@ -9,6 +9,15 @@ use super::types::{
     ActId, ActionOrigin, Domain, Effect, EntId, ParamRole, Site, Value, VarId, VarKind,
 };
 use super::TransitionSystem;
+use crate::model::ConditionKey;
+
+/// A guarded arm `(from, to, site, conditions)`; a chosen value has no `from`.
+type GuardedArm<'a> = (
+    Option<Value>,
+    Value,
+    &'a Site,
+    &'a Vec<(ConditionKey, String)>,
+);
 
 /// What the graph says about one state of a state model.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,11 +72,12 @@ pub enum Taken {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ArmTaken {
     pub act: ActId,
-    /// The arm's `transitions` declaration.
+    /// The arm's `transitions` declaration, or the value's `chooses` line.
     pub site: Site,
-    /// `Entity.column`, `from`, and `to` as the model names them.
+    /// `Entity.column`, `from`, and `to` as the model names them. A `chooses` value has no
+    /// `from` and its value as `to`.
     pub column: String,
-    pub from: String,
+    pub from: Option<String>,
     pub to: String,
     pub taken: Taken,
 }
@@ -437,34 +447,73 @@ impl TransitionSystem {
 
     /// Whether each `.when` arm on a column of `e` labels an edge of `g`: some edge of its
     /// action moves a present instance from `from` to `to`. An arm of an action that never
-    /// runs, or from a state no instance holds, is left to `NeverRuns` and the witnesses.
+    /// runs, or from a state no instance holds, is left to `NeverRuns` and the witnesses. A
+    /// `.when` value of a `chooses` is taken when some edge of its action leaves a present
+    /// instance at the value with its row written (changed, or the edge a self-loop).
     fn guarded_arms(&self, e: EntId, g: &Graph) -> Vec<ArmTaken> {
         let mut out = Vec::new();
+        let row = &self.entity(e).columns;
         for act in self.action_ids() {
             let action = &self.actions[act.index()];
             for effect in &action.effects {
-                let Effect::Transition {
-                    var,
-                    param,
-                    arms,
-                    sites,
-                    conds,
-                } = effect
-                else {
-                    continue;
+                // Each guarded arm: (from, to, site, conditions); a chosen value has no `from`.
+                let (var, param, arms): (VarId, u8, Vec<GuardedArm>) = match effect {
+                    Effect::Transition {
+                        var,
+                        param,
+                        arms,
+                        sites,
+                        conds,
+                    } => (
+                        *var,
+                        *param,
+                        arms.iter()
+                            .zip(sites)
+                            .zip(conds)
+                            .map(|(((from, to), site), conds)| (Some(*from), *to, site, conds))
+                            .collect(),
+                    ),
+                    Effect::Choose {
+                        var,
+                        param,
+                        values,
+                        sites,
+                        conds,
+                    } => (
+                        *var,
+                        *param,
+                        values
+                            .iter()
+                            .zip(sites)
+                            .zip(conds)
+                            .map(|((to, site), conds)| (None, *to, site, conds))
+                            .collect(),
+                    ),
+                    _ => continue,
                 };
-                if action.params[usize::from(*param)].entity != e {
+                if action.params[usize::from(param)].entity != e {
                     continue;
                 }
-                for (((from, to), site), conds) in arms.iter().zip(sites).zip(conds) {
+                for (from, to, site, conds) in arms {
                     if conds.is_empty() {
                         continue;
                     }
                     let moves = |s: &State, t: &State| {
-                        (0..self.bounds.slots()).any(|k| {
-                            s.is_present(self, e, k)
-                                && s.get(self, *var, k) == *from
-                                && t.get(self, *var, k) == *to
+                        (0..self.bounds.slots()).any(|k| match from {
+                            Some(from) => {
+                                s.is_present(self, e, k)
+                                    && s.get(self, var, k) == from
+                                    && t.get(self, var, k) == to
+                            }
+                            None => {
+                                t.is_present(self, e, k)
+                                    && t.get(self, var, k) == to
+                                    && (s == t
+                                        || !s.is_present(self, e, k)
+                                        || row
+                                            .iter()
+                                            .any(|&c| s.get(self, c, k) != t.get(self, c, k)))
+                            }
                         })
                     };
                     let mut fired = false;
@@ -480,28 +529,39 @@ impl TransitionSystem {
                         }
                     }
                     let at_from = || {
+                        let Some(from) = from else { return true };
                         g.states.iter().any(|s| {
                             (0..self.bounds.slots())
-                                .any(|k| s.is_present(self, e, k) && s.get(self, *var, k) == *from)
+                                .any(|k| s.is_present(self, e, k) && s.get(self, var, k) == from)
                         })
                     };
                     let (column, from_text, to_text) = (
-                        format!("{}.{}", self.entity(e).id, self.var_name(*var)),
-                        self.value_text(*var, *from),
-                        self.value_text(*var, *to),
+                        format!("{}.{}", self.entity(e).id, self.var_name(var)),
+                        from.map(|from| self.value_text(var, from)),
+                        self.value_text(var, to),
                     );
+                    let conditions = conds.iter().map(|(_, id)| id.clone()).collect();
                     let taken = if taken {
                         Taken::Yes
                     } else if !g.complete {
                         Taken::NotDecided
                     } else if fired && at_from() {
-                        Taken::Never(Box::new(StateDiag::ArmNeverTaken {
-                            action: action.name.clone(),
-                            column: column.clone(),
-                            from: from_text.clone(),
-                            to: to_text.clone(),
-                            conditions: conds.iter().map(|(_, id)| id.clone()).collect(),
-                            site: site.clone(),
+                        Taken::Never(Box::new(match &from_text {
+                            Some(from) => StateDiag::ArmNeverTaken {
+                                action: action.name.clone(),
+                                column: column.clone(),
+                                from: from.clone(),
+                                to: to_text.clone(),
+                                conditions,
+                                site: site.clone(),
+                            },
+                            None => StateDiag::ValueNeverChosen {
+                                action: action.name.clone(),
+                                column: column.clone(),
+                                value: to_text.clone(),
+                                conditions,
+                                site: site.clone(),
+                            },
                         }))
                     } else {
                         Taken::Moot

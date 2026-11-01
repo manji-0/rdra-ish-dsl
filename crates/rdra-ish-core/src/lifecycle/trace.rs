@@ -260,9 +260,17 @@ impl TransitionSystem {
                 Effect::Choose {
                     var: v,
                     param,
-                    site: Some(site),
+                    values,
+                    sites,
                     ..
-                } if *v == var && slot(param) == at => Some(site.clone()),
+                } if *v == var && slot(param) == at => {
+                    // The line of the value the step picked.
+                    let value = post.get(self, var, at);
+                    values
+                        .iter()
+                        .position(|x| *x == value)
+                        .and_then(|i| sites.get(i).cloned())
+                }
                 _ => None,
             })
         };

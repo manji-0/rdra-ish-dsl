@@ -479,7 +479,8 @@ fn process_transitions_predicate(
     });
 }
 
-/// `chooses(UseCase, Entity.column)` on a column typed by a variation.
+/// `chooses(UseCase, Entity.column)` on a column typed by a variation, or
+/// `chooses(UseCase, Entity.column, value)` with an optional `.when(Cond)`: one listed value.
 fn process_chooses_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -487,10 +488,14 @@ fn process_chooses_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
+    let guard = when_condition(model, pred, ctx, diags);
     let Some(Some(NodeRef::UseCase(usecase))) = resolved.first() else {
         return;
     };
     let usecase = *usecase;
+    let Ok(guard) = guard else {
+        return;
+    };
     let (entity_id, column) = match pred.args.get(1) {
         Some(PredicateArg::Ref(qref)) if qref.parts.len() == 2 && qref.kind_qualifier.is_none() => {
             (qref.parts[0].clone(), qref.parts[1].clone())
@@ -556,17 +561,84 @@ fn process_chooses_predicate(
         );
         return;
     }
-    let exists = model
+    let ColumnType::Variation(variation) = &col.col_type else {
+        return;
+    };
+    let value = match pred.args.get(2) {
+        None => None,
+        Some(arg) => {
+            let written = match arg {
+                PredicateArg::Ref(q) if q.parts.len() == 1 && q.kind_qualifier.is_none() => {
+                    q.parts[0].clone()
+                }
+                other => predicate_arg_display(other),
+            };
+            let variation = &model.variations[*variation];
+            if !variation.values.contains(&written) {
+                push_error(
+                    ctx,
+                    diags,
+                    arg_span(arg),
+                    RdraError::InvalidVariationValue {
+                        variation: variation.id.clone(),
+                        value: written,
+                        allowed: variation.values.join(", "),
+                    },
+                );
+                return;
+            }
+            Some(written)
+        }
+    };
+    let site = Some(ctx.locate(pred.span.clone()));
+    let chosen = match value {
+        Some(value) => Some(crate::model::ChosenValue {
+            value,
+            guard,
+            site: site.clone(),
+        }),
+        None if guard.is_some() => {
+            push_error(
+                ctx,
+                diags,
+                pred.span.clone(),
+                RdraError::ChoosesWhenWithoutValue {
+                    usecase: model.use_cases[usecase].id.clone(),
+                    entity: entity_id,
+                    col: column,
+                },
+            );
+            return;
+        }
+        None => None,
+    };
+    let existing = model
         .column_choices
-        .iter()
-        .any(|c| (c.origin, c.entity, c.column.as_str()) == (usecase, entity, column.as_str()));
-    if !exists {
-        model.column_choices.push(crate::model::ColumnChoice {
+        .iter_mut()
+        .find(|c| (c.origin, c.entity, c.column.as_str()) == (usecase, entity, column.as_str()));
+    match existing {
+        // One form per use case and column: listed values, or the one value-less line.
+        Some(c) if c.values.is_empty() != chosen.is_none() => {
+            push_error(
+                ctx,
+                diags,
+                pred.span.clone(),
+                RdraError::ChoosesMixedForms {
+                    usecase: model.use_cases[usecase].id.clone(),
+                    entity: entity_id,
+                    col: column,
+                },
+            );
+            return;
+        }
+        Some(c) => c.values.extend(chosen),
+        None => model.column_choices.push(crate::model::ColumnChoice {
             origin: usecase,
             entity,
             column: column.clone(),
-            site: Some(ctx.locate(pred.span.clone())),
-        });
+            values: chosen.into_iter().collect(),
+            site,
+        }),
     }
     model.typed_predicates.push(TypedPredicate::Chooses {
         origin: usecase,
@@ -1682,6 +1754,7 @@ fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraEr
         "forbidden" | "required" | "exclusive" => ("at least 1".into(), got >= 1),
         "holds" => ("at least 2".into(), got >= 2),
         "transitions" => ("3".into(), got == 3),
+        "chooses" => ("2 or 3".into(), got == 2 || got == 3),
         "maps_field" => ("2".into(), got == 2),
         "relate" => ("3".into(), got == 3),
         _ => {

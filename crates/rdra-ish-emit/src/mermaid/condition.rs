@@ -5,7 +5,9 @@
 use super::{buc_scope, declare, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
 use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
-use rdra_ish_core::analysis::{condition_body_display, condition_edges, ConditionEdge};
+use rdra_ish_core::analysis::{
+    chosen_variation, condition_body_display, condition_edges, ConditionEdge,
+};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel, VariationKey};
 use std::collections::{BTreeMap, HashSet};
 
@@ -90,14 +92,18 @@ impl Emitter for ConditionMermaidEmitter {
                         })
                     }
                 };
-                // The state model of a `.when` arm is derived from the arm.
+                // The state model of a `.when` arm is derived from the arm, the variation of a
+                // `.when` value from its `chooses`.
                 let from_when = match &edge {
                     ConditionEdge::StateModel { entity, column } => {
                         model.state_transitions.iter().any(|t| {
                             t.guard == Some(*key) && t.entity == *entity && t.column == *column
                         })
                     }
-                    ConditionEdge::Variation(_) => false,
+                    ConditionEdge::Variation(vk) => model.column_choices.iter().any(|c| {
+                        c.values.iter().any(|v| v.guard == Some(*key))
+                            && chosen_variation(model, c) == Some(*vk)
+                    }),
                 };
                 if let Some(to) = to {
                     edges.push(GraphEdge {

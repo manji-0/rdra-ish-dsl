@@ -87,7 +87,7 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "after" => Some(vec![vec!["usecase"]]),
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
         "sets" => Some(vec![vec!["usecase"], vec!["entity"]]),
-        "chooses" => Some(vec![vec!["usecase"], vec!["_col"]]),
+        "chooses" => Some(vec![vec!["usecase"], vec!["_col"], vec!["_val"]]),
         "forbidden" | "invariant" | "required" | "exclusive" => Some(vec![vec!["entity"]]),
         _ => None,
     }
@@ -106,7 +106,7 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
         "after" => &["assert", "label"],
         "exposes" => &["append", "upsert", "caller"],
         "navigates" => &["via"],
-        "transitions" => &["when"],
+        "transitions" | "chooses" => &["when"],
         _ => &[],
     }
 }

@@ -199,6 +199,7 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
         | StateDiag::ArmNeverTaken { .. }
+        | StateDiag::ValueNeverChosen { .. }
         | StateDiag::Deadlock { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }

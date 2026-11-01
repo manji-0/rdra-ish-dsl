@@ -18,10 +18,8 @@ flowchart LR
   subgraph layer_boundary["システム境界"]
     usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
     %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
-    usecase__DraftLimitedResponse("限定した補正による応答案の作成"):::usecase
-    %% desc usecase__DraftLimitedResponse: 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。
     usecase__DraftResponse("意見書・補正書案の作成"):::usecase
-    %% desc usecase__DraftResponse: 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。
+    %% desc usecase__DraftResponse: 弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。
     usecase__ExpireResponseTerm("応答期間の経過"):::usecase
     %% desc usecase__ExpireResponseTerm: 応答のないまま応答期間が過ぎたことを記録する。その後2か月は期間経過後の延長を請求できる。
     usecase__FileDivisionalApplication("分割出願"):::usecase
@@ -77,7 +75,6 @@ flowchart LR
     state__PatentApplication_rejection_final((("拒絶査定の確定"))):::state
     condition__DivisionPossible{"分割できる時期である"}:::condition
     condition__ExaminationOver{"出願の審査が終わっている"}:::condition
-    condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
     condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
     condition__UnderExamination{"出願が審査中である"}:::condition
     condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
@@ -86,7 +83,6 @@ flowchart LR
   actor__IpStaff -.-> usecase__InstructResponse
   actor__IpStaff -.-> usecase__ReceiveDecisionOfRejection
   actor__IpStaff -.-> usecase__ReceiveDecisionToGrant
-  actor__PatentAttorney -.-> usecase__DraftLimitedResponse
   actor__PatentAttorney -.-> usecase__DraftResponse
   actor__PatentAttorney -.-> usecase__FileDivisionalApplication
   actor__PatentAttorney -.-> usecase__FileResponse
@@ -97,7 +93,6 @@ flowchart LR
   actor__PatentAttorney -.-> usecase__RequestTermExtension
   condition__DivisionPossible -.-> usecase__FileDivisionalApplication
   condition__ExaminationOver -.-> usecase__CloseOfficeActionDocket
-  condition__FirstNoticeOnly -.-> usecase__DraftResponse
   condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
   condition__UnderExamination -.-> usecase__ReceiveOfficeAction
   condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
@@ -124,10 +119,6 @@ flowchart LR
   usecase__CloseOfficeActionDocket -.->|reads| entity__PatentApplication
   usecase__CloseOfficeActionDocket -.->|transitions OfficeAction.status answered->closed| state__OfficeAction_closed
   usecase__CloseOfficeActionDocket -.->|updates| entity__OfficeAction
-  usecase__DraftLimitedResponse -.-> screen__ResponseDraftScreen
-  usecase__DraftLimitedResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
-  usecase__DraftLimitedResponse -.->|updates| entity__OfficeAction
-  %% derived usecase__DraftLimitedResponse -> entity__OfficeAction via api__OfficeActionApi
   usecase__DraftResponse -.-> screen__ResponseDraftScreen
   usecase__DraftResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
   usecase__DraftResponse -.->|updates| entity__OfficeAction

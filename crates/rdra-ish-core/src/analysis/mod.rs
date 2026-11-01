@@ -18,8 +18,8 @@ mod property;
 mod qref_util;
 
 pub use condition::{
-    applied_bodies, condition_body_display, condition_edges, guard_labels, transition_guard_labels,
-    ConditionEdge,
+    applied_bodies, chosen_variation, condition_body_display, condition_edges, guard_labels,
+    transition_guard_labels, ConditionEdge,
 };
 pub(crate) use condition::{body_condition_display, effect_value_display};
 use fk::{resolve_along_links, resolve_foreign_keys};

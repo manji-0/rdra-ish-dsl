@@ -15,13 +15,34 @@
   `any` and `sets` fixes one value. Only a variation-typed column is chosen: an inline `Enum` or
   `Bool` is `ChoosesNotVariation`, whose hint names `transitions` arms or `sets`; a second
   argument that is not `Entity.column` is `InvalidChoosesColumnRef`; `chooses` and `sets` of one
-  column in one use case is `ChoosesAndSets`. It takes no chain methods. The sequence diagram
-  writes the choice as `col in (A, B)`. `rule_audit` covers every form, and `engine_equivalence`
-  compares a fixture of choices with TLC. `samples/patent-ops` keeps `DraftResponse` and
-  `DraftLimitedResponse` apart: merged with `chooses(DraftResponse, OfficeAction.amendment)`,
-  `check` reports 「最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る」
-  (`Forbidden_OfficeAction_3`) reachable, since `chooses` cannot keep a final notice's
-  amendment `limited`; the sample's comment says so.
+  column in one use case is `ChoosesAndSets`. The sequence diagram writes the choice as
+  `col in (A, B)`. `rule_audit` covers every form, and `engine_equivalence` compares a fixture
+  of choices with TLC.
+- A guard per chosen value (#65): `chooses(UseCase, Entity.column, value)` lines list the
+  values the actor may pick, and `.when(Cond)` on a line offers that value only while the
+  condition's `holds` body holds, read as a `transitions(..).when(Cond)` arm guard reads it
+  (the state the use case starts from; a created instance after the step). The value-less
+  `chooses(UC, E.col)` still offers every value; both forms for one use case and column are
+  `ChoosesMixedForms`, a value outside the variation is `InvalidVariationValue` listing the
+  values, and `.when` on the value-less form is `ChoosesWhenWithoutValue`. A value listed
+  twice is enabled by either line, as a repeated arm is. The guard is built as an arm guard
+  is, `\/ (col' = v /\ body)` over the listed values, so `states`, `check`, the TLA+ export,
+  and `verify` share it: a use case with no enabled value does not run (`NeverRuns` names the
+  value guard), and a guarded value never chosen while its use case runs is the new
+  `ValueNeverChosen` warning (`Choice_<UseCase>_<Entity>_<column>_<value>`; under a cap or
+  `--buc`, `not checked:`). `.when` takes the condition `transitions` takes
+  (`WhenRequiresCondition`, `WhenConditionWithoutBody`); the condition `combines` the chosen
+  variation and applies to the use case in `list --kind condition`. The sequence diagram writes
+  each guard after its value,
+  `amendment in (限定のない補正 [最初の拒絶理由通知である], 削除・減縮・誤記の訂正・釈明に限る補正)`,
+  and a counterexample step cites the line of the value it picked. `rule_audit` and `transition_audit` cover every form, and
+  `engine_equivalence` compares a fixture of value guards with TLC. A `.when` condition body,
+  on an arm or a value, now names the columns it reads, so they become variables: an arm guard
+  on a variation column nothing else read never held before. `samples/patent-ops` merges
+  `DraftResponse` and `DraftLimitedResponse` into one `DraftResponse` that chooses
+  `amendment`, `free` only on a first notice (特許法17条の2), and
+  `Forbidden_OfficeAction_3` holds. Its `Exclusive_OfficeAction_0` now shares the cone of
+  `Forbidden_OfficeAction_3` (1,034 states at 1 instance), so `verify` runs 11 cones, not 12.
 - A guard per `transitions` arm (#62):
   `transitions(UC, Entity.col, from -> to).when(Cond)` takes the arm only while the `holds`
   body of the condition holds on the state the use case starts from. The use case runs when

@@ -46,7 +46,8 @@ fn body_columns(condition: &CrossEntityCondition) -> Vec<&QualifiedModelColumnRe
 ///
 /// With a `holds` body, every operand column typed by a variation yields `Variation` and every
 /// operand on a lifecycle column yields `StateModel`, and so does the column of each
-/// `transitions` arm the condition guards with `.when`. Without a body, the `combines`
+/// `transitions` arm the condition guards with `.when`; the variation of each `chooses` value
+/// it guards yields `Variation`. Without a body, the `combines`
 /// declarations are the links.
 pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<ConditionEdge> {
     let mut edges: Vec<ConditionEdge> = Vec::new();
@@ -87,6 +88,15 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
                     column: st.column.clone(),
                 });
             }
+            for choice in model
+                .column_choices
+                .iter()
+                .filter(|c| c.values.iter().any(|v| v.guard == Some(ck)))
+            {
+                if let Some(key) = chosen_variation(model, choice) {
+                    push(ConditionEdge::Variation(key));
+                }
+            }
         }
         None => {
             for decl in model.combines.iter().filter(|d| d.condition == ck) {
@@ -101,6 +111,18 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
         }
     }
     edges
+}
+
+/// The variation that types a `chooses` column.
+pub fn chosen_variation(model: &SemanticModel, choice: &ColumnChoice) -> Option<VariationKey> {
+    let column = model.entities[choice.entity]
+        .columns
+        .iter()
+        .find(|c| c.name == choice.column)?;
+    match column.col_type {
+        ColumnType::Variation(key) => Some(key),
+        _ => None,
+    }
 }
 
 /// `value` of `column` as a human reads it: an `Enum` or variation value by its label.
@@ -473,8 +495,6 @@ pub(crate) fn process_holds_predicate(
         .push(TypedPredicate::Holds { condition });
 }
 
-/// After every predicate is processed: a `.when(Cond)` guard needs the condition's `holds`
-/// body, which may come later in the file than the guarded write.
 /// After every predicate is processed: a use case that `chooses` a column does not also
 /// `sets` it.
 pub(crate) fn check_choices(model: &SemanticModel, diags: &mut Vec<Diagnostic>) {
@@ -496,25 +516,36 @@ pub(crate) fn check_choices(model: &SemanticModel, diags: &mut Vec<Diagnostic>) 
     }
 }
 
-/// Each guard that has its body becomes a `Guards` relation to the arm's use case, once.
+/// After every predicate is processed: a `.when(Cond)` guard, on a `transitions` arm or a
+/// `chooses` value, needs the condition's `holds` body, which may come later in the file than
+/// the guarded write. Each guard that has its body becomes a `Guards` relation to its use case,
+/// once.
 pub(crate) fn check_write_guards(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
+    let arms = model
+        .state_transitions
+        .iter()
+        .filter_map(|st| Some(("transitions", st.guard?, st.usecase, &st.site)));
+    let values = model.column_choices.iter().flat_map(|c| {
+        c.values
+            .iter()
+            .filter_map(move |v| Some(("chooses", v.guard?, c.origin, &v.site)))
+    });
     let mut guards: Vec<(ConditionKey, UseCaseKey)> = Vec::new();
-    for st in &model.state_transitions {
-        let Some(ck) = st.guard else { continue };
+    for (pred, ck, uc, site) in arms.chain(values) {
         if model.conditions[ck].body.is_some() {
-            if !guards.contains(&(ck, st.usecase)) {
-                guards.push((ck, st.usecase));
+            if !guards.contains(&(ck, uc)) {
+                guards.push((ck, uc));
             }
             continue;
         }
         diags.push(Diagnostic {
             error: RdraError::WhenConditionWithoutBody {
-                pred: "transitions".into(),
-                usecase: model.use_cases[st.usecase].id.clone(),
+                pred: pred.into(),
+                usecase: model.use_cases[uc].id.clone(),
                 condition: model.conditions[ck].id.clone(),
             },
             is_warning: false,
-            location: st.site.clone(),
+            location: site.clone(),
         });
     }
     for (ck, uc) in guards {

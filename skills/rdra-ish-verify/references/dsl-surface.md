@@ -152,8 +152,9 @@ lifecycle. `states` and the TLA+ export give it a variable only when a `sets`, a
 entity-local or multi-entity constraint, a condition body, an `after(UC).assert`, or a
 `property` names it. A created instance takes any value unless the creating use case sets
 it, and `@default` does not pin the choice, so TLC checks the rule against each value.
-An update keeps the value unless the use case `chooses` it, which again takes every value.
-A `transitions` on it is an error, and so is `chooses` on any other column.
+An update keeps the value unless the use case `chooses` it, which again takes every value,
+or only the values its `chooses(UC, E.col, value)` lines list. A `transitions` on it is an
+error, and so is `chooses` on any other column.
 
 ```rdra
 variation Scope "補正の範囲" {
@@ -171,6 +172,40 @@ creates(Receive, Notice)
 sets(Receive, Notice, scope == limited)
 transitions(Draft, Notice.status, open -> drafted)
 chooses(Draft, Notice.scope)
+```
+
+`.when(Cond)` on a `chooses(UC, E.col, value)` line offers that value only while the
+condition's `holds` body holds, read on the state the use case starts from, as an arm guard
+is; the use case runs when some listed value is enabled. One use case and column takes
+either the value-less line or value lines (`ChoosesMixedForms`). A guarded value never
+chosen while its use case runs is the `ValueNeverChosen` warning
+(`Choice_<UseCase>_<Entity>_<column>_<value>`).
+
+```rdra
+variation Scope "補正の範囲" {
+  limited "限定"
+  free "限定なし"
+}
+entity Notice "通知" {
+  id: Int @pk
+  status: Enum(open, drafted) @default(open)
+  final: Bool @default(false)
+  scope: Scope
+}
+usecase Receive "受領"
+usecase Draft "応答案の作成"
+usecase Reopen "最後の通知"
+creates(Receive, Notice)
+sets(Receive, Notice, scope == limited)
+transitions(Draft, Notice.status, open -> drafted)
+transitions(Reopen, Notice.status, drafted -> open)
+sets(Reopen, Notice, final == true)
+sets(Reopen, Notice, scope == limited)
+condition NotFinal "最後の通知でない"
+holds(NotFinal, Notice.final == false)
+chooses(Draft, Notice.scope, free).when(NotFinal)
+chooses(Draft, Notice.scope, limited)
+forbidden(Notice, final == true, scope == free)
 ```
 
 ## Conditions

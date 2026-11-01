@@ -221,7 +221,6 @@ samples/patent-ops/out/uc/sequence_DecideReward.mmd	diagram samples/patent-ops -
 samples/patent-ops/out/uc/sequence_DecideToLetLapse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideToLetLapse
 samples/patent-ops/out/uc/sequence_DeemPriorityBaseWithdrawn.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DeemPriorityBaseWithdrawn
 samples/patent-ops/out/uc/sequence_DeemWithdrawnNoRequest.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DeemWithdrawnNoRequest
-samples/patent-ops/out/uc/sequence_DraftLimitedResponse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DraftLimitedResponse
 samples/patent-ops/out/uc/sequence_DraftResponse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DraftResponse
 samples/patent-ops/out/uc/sequence_EnterGracePeriod.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase EnterGracePeriod
 samples/patent-ops/out/uc/sequence_ExpirePatentTerm.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ExpirePatentTerm

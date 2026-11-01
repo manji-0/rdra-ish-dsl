@@ -1,13 +1,24 @@
 //! Which columns something names (R-var): a column becomes a state var only when a `sets`,
-//! a constraint, an applied condition body, an assert, or a property reads or writes it.
+//! a constraint, an applied or `.when` condition body, a guarded `chooses` value, an assert,
+//! or a property reads or writes it.
 
 use std::collections::HashSet;
 
 use crate::analysis::applied_bodies;
 use crate::model::{
-    CheckExpr, CmpRhs, ComparisonProp, CrossCmpRhs, CrossEntityCondition, DerivedExpr, EffectValue,
-    EntityKey, SemanticModel, TemporalExpr, TemporalRhs,
+    CheckExpr, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossEntityCondition,
+    DerivedExpr, EffectValue, EntityKey, SemanticModel, TemporalExpr, TemporalRhs,
 };
+
+/// The conditions of every `.when(Cond)` guard, on a `transitions` arm or a `chooses` value.
+fn when_guards(model: &SemanticModel) -> impl Iterator<Item = ConditionKey> + '_ {
+    let arms = model.state_transitions.iter().filter_map(|t| t.guard);
+    let values = model
+        .column_choices
+        .iter()
+        .flat_map(|c| c.values.iter().filter_map(|v| v.guard));
+    arms.chain(values)
+}
 
 #[derive(Default)]
 pub(super) struct Named {
@@ -118,9 +129,20 @@ impl Named {
                 applied_bodies(model)
                     .into_iter()
                     .flat_map(|(_, _, body)| body.read_conditions()),
+            )
+            .chain(
+                when_guards(model)
+                    .filter_map(|ck| model.conditions[ck].body.as_ref())
+                    .flat_map(|body| body.read_conditions()),
             );
         for cond in cross {
             n.cross(cond);
+        }
+        // A guarded `chooses` value is read by its guard on the successor.
+        for choice in &model.column_choices {
+            if choice.values.iter().any(|v| v.guard.is_some()) {
+                n.any.insert((choice.entity, choice.column.clone()));
+            }
         }
         for (ek, entity) in &model.entities {
             for check in entity.columns.iter().flat_map(|c| &c.check_constraints) {

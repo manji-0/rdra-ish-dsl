@@ -67,14 +67,27 @@ impl EffectValue {
 }
 
 /// `chooses(UseCase, Entity.column)`: the actor picks the variation column's value when the
-/// use case runs, as on a creation; any value of the variation may follow.
+/// use case runs, as on a creation; any value of the variation may follow. With
+/// `chooses(UseCase, Entity.column, value)` lines, only the values they list may follow.
 #[derive(Debug, Clone)]
 pub struct ColumnChoice {
     pub origin: UseCaseKey,
     pub entity: EntityKey,
     pub column: std::string::String,
+    /// One per `chooses(.., value)` line, in declaration order; empty for the value-less form
+    /// (any value). A value listed twice keeps both lines.
+    pub values: Vec<ChosenValue>,
 
     /// Source site of the predicate/declaration that produced this fact.
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
+/// One `chooses(UseCase, Entity.column, value)` line.
+#[derive(Debug, Clone)]
+pub struct ChosenValue {
+    pub value: std::string::String,
+    /// `.when(Cond)`: the value is a choice only while the condition's `holds` body holds.
+    pub guard: Option<ConditionKey>,
     pub site: Option<crate::location::LocatedSpan>,
 }
 

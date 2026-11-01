@@ -33,6 +33,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
         | StateDiag::ArmNeverTaken { .. }
+        | StateDiag::ValueNeverChosen { .. }
         | StateDiag::Deadlock { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::IntLiteralOutOfBounds { .. }
