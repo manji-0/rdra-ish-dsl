@@ -3,7 +3,7 @@ use crate::location::{LocatedSpan, SourceId};
 use crate::model::SemanticModel;
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::{DiGraph, NodeIndex};
-use rdra_ish_syntax::{ast::*, format_parse_error, parse};
+use rdra_ish_syntax::{ast::*, format_parse_error, parse_with_deprecations, Parsed};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -71,17 +71,7 @@ pub fn resolve_overlaid(
 
         let id: SourceId = sources.len();
 
-        let (ast, parse_errs) = parse(&src);
-        for err in parse_errs {
-            let span = err.span().clone();
-            diags.push(Diagnostic::error_at(
-                RdraError::SyntaxError {
-                    path: canon.display().to_string(),
-                    msg: format_parse_error(&err),
-                },
-                LocatedSpan::new(id, span),
-            ));
-        }
+        let ast = take_parsed(parse_with_deprecations(&src), id, &canon, &mut diags);
         let ni = graph.add_node(id);
         path_to_id.insert(canon.clone(), id);
         node_indices.push(ni);
@@ -314,6 +304,36 @@ fn read_source(
     std::fs::read_to_string(path)
 }
 
+/// The AST of one parsed file, reporting its parse errors as errors and its deprecated forms
+/// (already rewritten in the AST) as `DeprecatedSyntax` warnings.
+fn take_parsed(
+    parsed: Parsed,
+    id: SourceId,
+    path: &std::path::Path,
+    diags: &mut Vec<Diagnostic>,
+) -> Ast {
+    let path = path.display().to_string();
+    for err in &parsed.errors {
+        diags.push(Diagnostic::error_at(
+            RdraError::SyntaxError {
+                path: path.clone(),
+                msg: format_parse_error(err),
+            },
+            LocatedSpan::new(id, err.span()),
+        ));
+    }
+    for deprecation in parsed.deprecations {
+        diags.push(Diagnostic::warning_at(
+            RdraError::DeprecatedSyntax {
+                path: path.clone(),
+                msg: deprecation.message,
+            },
+            LocatedSpan::new(id, deprecation.span),
+        ));
+    }
+    parsed.ast
+}
+
 /// Build a semantic model from located items collected across source files.
 pub fn build_merged_model(
     program: &ResolvedProgram,
@@ -512,6 +532,28 @@ mod tests {
     use super::*;
     use std::fs;
     use std::path::Path;
+
+    #[test]
+    fn a_deprecated_form_is_a_located_warning() {
+        let mut parsed = parse_with_deprecations("performs(Clerk, Pay)\n");
+        parsed.deprecations.push(rdra_ish_syntax::Deprecation {
+            span: 0..20,
+            message: "write `new(...)`".into(),
+        });
+        let mut diags = Vec::new();
+        let ast = take_parsed(parsed, 3, Path::new("m.rdra"), &mut diags);
+        assert_eq!(ast.items.len(), 1);
+        let [diag] = diags.as_slice() else {
+            panic!("{diags:?}");
+        };
+        assert!(diag.is_warning);
+        assert_eq!(
+            diag.error.to_string(),
+            "deprecated syntax in 'm.rdra': write `new(...)`"
+        );
+        let location = diag.location.as_ref().expect("located");
+        assert_eq!((location.source_id, location.span.clone()), (3, 0..20));
+    }
 
     /// Write a file, creating parent directories as needed.
     fn write_file(path: &Path, content: &str) {

@@ -180,6 +180,9 @@ pub enum RdraError {
     #[error("syntax error in '{path}': {msg}")]
     SyntaxError { path: String, msg: String },
 
+    #[error("deprecated syntax in '{path}': {msg}")]
+    DeprecatedSyntax { path: String, msg: String },
+
     #[error("circular import detected among files: {}", files.join(", "))]
     CircularImport { files: Vec<String> },
 

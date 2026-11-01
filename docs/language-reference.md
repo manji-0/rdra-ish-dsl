@@ -2072,11 +2072,31 @@ and a guard is a `holds`. `when(Entity, conditions...).none(...)` and
 of the first qualified column, with the rest of the chain, `.label(...)` included, as
 written.
 
-### Removed forms
+### Deprecated and removed forms
 
-These spellings were removed so that each predicate has one form: the use case comes
-first, a column is always `Entity.column`, and each keyword is one word. A model that
-still uses one fails to load with a message that gives the rewritten line.
+A form leaves the language in two stages:
+
+1. **Deprecated** in a minor release. The model still loads: the parser rewrites the form
+   to its current one, and the load reports a `DeprecatedSyntax` warning that names the
+   rewritten line, the version that deprecated the form, and the version that removes it.
+   `check` and the other commands still succeed. `lint` lists the warning under the rule
+   `deprecated-syntax`. `check --deny-deprecated` turns it into an error, for CI.
+   `rdra-ish fmt --write` rewrites every deprecated form in place.
+2. **Removed** no earlier than the next major release. A model that still uses the form
+   fails to load, with a message that gives the rewritten line.
+
+A deprecation warning looks like this:
+
+```text
+warning: model.rdra:3:1: deprecated syntax in 'model.rdra': `<predicate>` ...; write `<rewritten line>` (deprecated since 1.1.0, removed in 2.0.0; `rdra-ish fmt --write` rewrites it)
+```
+
+`LEGACY_FORMS` in `crates/rdra-ish-syntax/src/removed.rs` is the one list of these forms,
+with each form's status and versions. No form is deprecated now. The forms below were
+removed before 1.0, without a deprecated stage.
+
+These spellings were removed in 0.4.0 so that each predicate has one form: the use case
+comes first, a column is always `Entity.column`, and each keyword is one word.
 `scripts/migrate-syntax-v2.py <workspace>` rewrites all four in place and is safe to run
 twice.
 

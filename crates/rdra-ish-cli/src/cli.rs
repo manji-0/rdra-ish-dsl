@@ -160,6 +160,9 @@ pub(crate) enum Commands {
         /// Treat permission / access consistency gaps as errors (exit 1)
         #[arg(long)]
         strict: bool,
+        /// Treat a deprecated form (a `DeprecatedSyntax` warning) as an error (exit 1)
+        #[arg(long)]
+        deny_deprecated: bool,
         /// Cap on each entity's distinct patterns within one target cone; past it is a
         /// `PatternCapReached` error
         #[arg(long, default_value_t = Caps::DEFAULT_PATTERNS)]

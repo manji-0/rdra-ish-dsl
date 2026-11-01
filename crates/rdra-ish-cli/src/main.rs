@@ -22,7 +22,7 @@ use list_output::{
     format_lint_issues, format_rules, format_transitions, list_elements, note_state_errors,
     reject_state_errors, state_findings,
 };
-use load::{eprint_diagnostic, reject_model_errors};
+use load::{deny_deprecated, eprint_diagnostic, reject_model_errors};
 use rdra_ish_core::lifecycle::{Caps, Scope, Severity};
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
@@ -51,6 +51,7 @@ fn main() -> Result<()> {
         Commands::Check {
             inputs,
             strict,
+            deny_deprecated: deny,
             max_patterns,
             max_states,
             scope,
@@ -58,9 +59,12 @@ fn main() -> Result<()> {
             let Project {
                 program,
                 model,
-                diags,
+                mut diags,
                 ..
             } = load_project(&inputs, None)?;
+            if deny {
+                deny_deprecated(&mut diags);
+            }
 
             let mut has_error = false;
             for diag in &diags {

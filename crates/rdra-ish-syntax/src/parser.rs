@@ -8,7 +8,7 @@ use logos::Logos;
 
 use crate::ast::*;
 use crate::metadata::{metadata_clause, metadata_value, Metadata};
-use crate::removed::{migration_hint, removed_when};
+use crate::removed::{legacy_predicate, migration_hint, removed_when};
 use crate::token::Token;
 
 // ── Lexer bridge ─────────────────────────────────────────────────────────────
@@ -865,15 +865,6 @@ fn predicate_call() -> impl Parser<Token, PredicateCall, Error = Simple<Token>> 
             chain,
             span,
         })
-        .validate(
-            |pred, span, emit| match crate::removed::legacy_predicate(&pred) {
-                Some((rewritten, message)) => {
-                    emit(Simple::custom(span, message));
-                    rewritten
-                }
-                None => pred,
-            },
-        )
 }
 
 // ── Module declaration ────────────────────────────────────────────────────────
@@ -921,8 +912,33 @@ fn root_parser() -> impl Parser<Token, Vec<Item>, Error = Simple<Token>> {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/// Lex and parse `src`. Returns the best-effort AST and any lex/parse errors.
+/// Lex and parse `src`. Returns the best-effort AST and any lex/parse errors. A deprecated
+/// form is rewritten in the AST without an error; [`parse_with_deprecations`] also returns
+/// its warning.
 pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
+    let parsed = parse_with_deprecations(src);
+    (parsed.ast, parsed.errors)
+}
+
+/// The result of [`parse_with_deprecations`].
+#[derive(Debug)]
+pub struct Parsed {
+    pub ast: Ast,
+    pub errors: Vec<Simple<Token>>,
+    /// One warning per deprecated form, already rewritten to its current form in `ast`.
+    pub deprecations: Vec<Deprecation>,
+}
+
+/// A deprecated form the parser rewrote: where it was written and the warning naming the
+/// rewrite and the version it is removed in.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Deprecation {
+    pub span: Span,
+    pub message: String,
+}
+
+/// Lex and parse `src`, returning the warnings for deprecated forms beside the errors.
+pub fn parse_with_deprecations(src: &str) -> Parsed {
     let Lexed {
         tokens,
         comments,
@@ -944,6 +960,26 @@ pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
         _ => true,
     });
 
+    let mut deprecations = Vec::new();
+    for item in &mut items {
+        let Item::Predicate(call) = item else {
+            continue;
+        };
+        let Some(legacy) = legacy_predicate(call) else {
+            continue;
+        };
+        let span = call.span.clone();
+        *call = legacy.rewritten;
+        if legacy.deprecated {
+            deprecations.push(Deprecation {
+                span,
+                message: legacy.message,
+            });
+        } else {
+            errors.push(Simple::custom(span, legacy.message));
+        }
+    }
+
     for span in empty_sets(&items) {
         errors.push(Simple::custom(
             span,
@@ -964,7 +1000,11 @@ pub fn parse(src: &str) -> (Ast, Vec<Simple<Token>>) {
         comments,
         source: src.to_string(),
     };
-    (ast, errors)
+    Parsed {
+        ast,
+        errors,
+        deprecations,
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

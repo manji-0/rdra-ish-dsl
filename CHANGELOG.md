@@ -4,6 +4,17 @@
 
 ### Added
 
+- A deprecation stage for legacy syntax (#51, condition 2). A deprecated form still loads: the
+  parser rewrites it to the current form and the load reports a `DeprecatedSyntax` warning
+  naming the rewritten line, the version that deprecated it, and the version that removes it
+  (`write <new form> (deprecated since X, removed in Y; ...)`). `lint` lists
+  it under the rule `deprecated-syntax`; `check` exits as before unless `--deny-deprecated`
+  makes it an error; `fmt` prints the current form, so `fmt --write` is the migration. A form
+  is deprecated in a minor release and removed no earlier than the next major one.
+  `LEGACY_FORMS` in `crates/rdra-ish-syntax/src/removed.rs` lists every legacy form with its
+  status; the forms removed in 0.3.0 and 0.4.0 stay load errors, and no form is deprecated yet.
+  `language-reference.md` "Removed forms" is now "Deprecated and removed forms".
+
 - `.fair(UseCase, ...)` on an `eventually` / `leads_to` property assumes each listed use case is
   weakly fair per instance it acts on (#59). `WF_vars(Next)` alone holds on a run where one
   instance loops forever, so `leads_to(granted, registered or dismissed)` failed while another

@@ -138,6 +138,11 @@ pub fn lint_issues(model: &SemanticModel, semantic_diags: &[Diagnostic]) -> Vec<
 fn diagnostic_to_lint_issue(diag: &Diagnostic) -> LintIssue {
     let (rule, hint) = if let RdraError::LintFinding { rule, hint, .. } = &diag.error {
         (*rule, hint.as_str())
+    } else if matches!(diag.error, RdraError::DeprecatedSyntax { .. }) {
+        (
+            "deprecated-syntax",
+            "run `rdra-ish fmt --write` to rewrite it to the current form before the version that removes it",
+        )
     } else if !diag.is_warning {
         (
             "semantic-error",
@@ -1215,6 +1220,21 @@ mod tests {
         let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
         assert!(errors.is_empty(), "unexpected errors: {errors:?}");
         model
+    }
+
+    #[test]
+    fn a_deprecated_form_is_a_deprecated_syntax_warning() {
+        let issue = diagnostic_to_lint_issue(&Diagnostic::warning(RdraError::DeprecatedSyntax {
+            path: "m.rdra".into(),
+            msg: "write `new(...)`".into(),
+        }));
+        assert_eq!(issue.rule, "deprecated-syntax");
+        assert_eq!(issue.severity, LintSeverity::Warning);
+        assert!(
+            issue.hint.contains("rdra-ish fmt --write"),
+            "{}",
+            issue.hint
+        );
     }
 
     #[test]

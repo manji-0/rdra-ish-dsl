@@ -53,6 +53,21 @@ fn run(args: &[&str]) -> std::process::Output {
         .expect("rdra-ish runs")
 }
 
+/// `--deny-deprecated` fails only on a deprecated form, so a model with none still passes.
+#[test]
+fn deny_deprecated_leaves_a_model_without_deprecated_forms_passing() {
+    let check = run(&[
+        "check",
+        "--deny-deprecated",
+        "samples/formal-verification/check_met.rdra",
+    ]);
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+}
+
 /// `check` and `states` state the bounds on stderr, and a clean `check` repeats them in its
 /// `OK:` line.
 #[test]

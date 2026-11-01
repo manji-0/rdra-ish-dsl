@@ -11,4 +11,4 @@ pub mod token;
 pub use ast::*;
 pub use format::{format_ast, format_source, FormatError};
 pub use parse_error::format_parse_error;
-pub use parser::parse;
+pub use parser::{parse, parse_with_deprecations, Deprecation, Parsed};

@@ -1,52 +1,218 @@
-//! Migration hints for keywords and predicates removed from the DSL.
+//! Legacy forms of the DSL: what each one is rewritten to, and where it is in its life.
+//!
+//! [`LEGACY_FORMS`] is the single list. A form is first [`Status::Deprecated`]: it still
+//! loads, rewritten to the current form in the AST (so `fmt` prints the new form), with a
+//! warning that names the rewrite and the version it is removed in. Later it is
+//! [`Status::Removed`]: a load error naming the same rewrite. Only a [`Detect::Predicate`]
+//! form can be deprecated, since only a rewrite function keeps it loading.
+//!
+//! To deprecate a predicate form, add one row with `Detect::Predicate(rewrite_fn)` and
+//! `Status::Deprecated { .. }`, where `rewrite_fn` returns the call in its current form and
+//! a message ending in "write `<new form>`", or `None` when the call is not in the legacy
+//! form. To remove it, change the row's status to `Status::Removed`.
 
 use crate::ast::{Expr, Operand, PredicateArg, PredicateCall, Span};
 use crate::format::format_predicate;
 
+/// Where a legacy form is in its life.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Status {
+    /// Loads, rewritten to the current form, with a warning. Deprecated in a minor release,
+    /// removed no earlier than the next major one.
+    Deprecated {
+        since: &'static str,
+        removed_in: &'static str,
+    },
+    /// A load error naming the rewrite.
+    Removed { since: &'static str },
+}
+
+/// A rewrite of a predicate call: the call in its current form and the message naming it,
+/// or `None` when the call is not in the legacy form.
+pub type Rewrite = fn(&PredicateCall) -> Option<(PredicateCall, String)>;
+
+/// How the parser meets a legacy form.
+#[derive(Clone, Copy)]
+pub enum Detect {
+    /// A removed keyword or predicate name: the row's `id` is the word.
+    Keyword,
+    /// A call of the named predicate, rewritten by the function.
+    Predicate(&'static str, Rewrite),
+    /// Matched where it occurs in the grammar (the top-level `when(...)` rule, the two-word
+    /// `acceptance criteria`); the row documents it.
+    Grammar,
+}
+
+/// One legacy form.
+#[derive(Clone, Copy)]
+pub struct LegacyForm {
+    /// The keyword for a [`Detect::Keyword`] row; a stable name otherwise.
+    pub id: &'static str,
+    /// What to write instead. For a keyword, the message after "`<id>` is no longer supported; ".
+    pub instead: &'static str,
+    pub status: Status,
+    pub detect: Detect,
+}
+
 const CONCEPTUAL: &str = "conceptual-model kinds were removed; model persistent structure with `entity` (and `dto` for payloads)";
 
-const HINTS: &[(&str, &str)] = &[
-    (
+const fn removed_word(id: &'static str, since: &'static str, instead: &'static str) -> LegacyForm {
+    LegacyForm {
+        id,
+        instead,
+        status: Status::Removed { since },
+        detect: Detect::Keyword,
+    }
+}
+
+/// Every legacy form, deprecated or removed.
+pub const LEGACY_FORMS: &[LegacyForm] = &[
+    removed_word(
         "usagescene",
+        "0.3.0",
         "use `timer` for a schedule that starts a use case, and `medium` / `.by(...)` for Business-BUC context",
     ),
-    (
+    removed_word(
         "location",
+        "0.3.0",
         "no output consumed it. Delete the declaration and any `.where(...)` on `belongs`; keep `medium` / `.by(...)` for Business-BUC context",
     ),
-    (
+    removed_word(
         "timing",
+        "0.3.0",
         "use `timer`; `belongs(...).when(...)` was removed, connect the timer with `triggers(Timer, UseCase)`",
     ),
-    (
+    removed_word(
         "uses",
+        "0.3.0",
         "RDRA connects an external system to use cases through events: `raises(ExtSystem, Event)` for inbound, `triggers(Event, ExtSystem)` for outbound",
     ),
-    (
+    removed_word(
         "state",
+        "0.3.0",
         "states are derived from the Enum column named in `transitions(UseCase, Entity.col, ...)`; delete the declaration and list each state as a variant of the lifecycle Enum column",
     ),
-    ("concept", CONCEPTUAL),
-    ("domain_object", CONCEPTUAL),
-    ("aggregate", CONCEPTUAL),
-    ("value_object", CONCEPTUAL),
-    ("valueobject", CONCEPTUAL),
-    (
+    removed_word("concept", "0.3.0", CONCEPTUAL),
+    removed_word("domain_object", "0.3.0", CONCEPTUAL),
+    removed_word("aggregate", "0.3.0", CONCEPTUAL),
+    removed_word("value_object", "0.3.0", CONCEPTUAL),
+    removed_word("valueobject", "0.3.0", CONCEPTUAL),
+    removed_word(
         "maps_to",
+        "0.3.0",
         "removed with the conceptual-model kinds; model persistent structure with `entity`",
     ),
-    (
+    removed_word(
         "writes",
+        "0.4.0",
         "use `updates` (or `creates`/`deletes`); `scripts/migrate-syntax-v2.py` rewrites it to `updates`",
     ),
+    LegacyForm {
+        id: "transitions-column-first",
+        instead: "`transitions(UseCase, Entity.column, from -> to)`",
+        status: Status::Removed { since: "0.4.0" },
+        detect: Detect::Predicate("transitions", legacy_transitions),
+    },
+    LegacyForm {
+        id: "maps_field-three-arguments",
+        instead: "`maps_field(Field, Entity.column)`",
+        status: Status::Removed { since: "0.4.0" },
+        detect: Detect::Predicate("maps_field", legacy_maps_field),
+    },
+    LegacyForm {
+        id: "top-level-when",
+        instead: "`invariant(Entity).when(conditions...).none(...)`",
+        status: Status::Removed { since: "0.4.0" },
+        detect: Detect::Grammar,
+    },
+    LegacyForm {
+        id: "acceptance-criteria-two-words",
+        instead: "`acceptance_criteria \"...\"`",
+        status: Status::Removed { since: "0.4.0" },
+        detect: Detect::Grammar,
+    },
 ];
+
+/// The rows the parser consults: [`LEGACY_FORMS`], plus an example deprecated form in tests.
+fn legacy_forms() -> impl Iterator<Item = &'static LegacyForm> {
+    LEGACY_FORMS.iter().chain(example::FORMS)
+}
+
+#[cfg(not(test))]
+mod example {
+    pub(super) const FORMS: &[super::LegacyForm] = &[];
+}
+
+#[cfg(test)]
+mod example {
+    use super::*;
+
+    /// `old_pays(Order, Pay)` is deprecated in favour of `pays(Pay, Order)`.
+    pub(super) const FORMS: &[LegacyForm] = &[LegacyForm {
+        id: "test-old-pays",
+        instead: "`pays(UseCase, Entity)`",
+        status: Status::Deprecated {
+            since: "0.5.0",
+            removed_in: "1.0.0",
+        },
+        detect: Detect::Predicate("old_pays", old_pays),
+    }];
+
+    fn old_pays(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+        let [_, _] = pred.args.as_slice() else {
+            return None;
+        };
+        let mut rewritten = pred.clone();
+        rewritten.name = "pays".into();
+        rewritten.args.swap(0, 1);
+        let message = format!(
+            "`old_pays` takes the use case first as `pays`; write `{}`",
+            format_predicate(&rewritten)
+        );
+        Some((rewritten, message))
+    }
+}
 
 /// What to do instead of a removed keyword or predicate, if `word` is one.
 pub fn migration_hint(word: &str) -> Option<String> {
-    HINTS
-        .iter()
-        .find(|(removed, _)| *removed == word)
-        .map(|(removed, hint)| format!("`{removed}` is no longer supported; {hint}"))
+    legacy_forms()
+        .find(|form| matches!(form.detect, Detect::Keyword) && form.id == word)
+        .map(|form| format!("`{}` is no longer supported; {}", form.id, form.instead))
+}
+
+/// A predicate call written in a legacy form, rewritten to its current form.
+pub(crate) struct LegacyCall {
+    pub rewritten: PredicateCall,
+    /// For a removed form the error; for a deprecated one the warning.
+    pub message: String,
+    pub deprecated: bool,
+}
+
+/// The legacy form `pred` is written in, if any, rewritten to its current form.
+pub(crate) fn legacy_predicate(pred: &PredicateCall) -> Option<LegacyCall> {
+    legacy_forms().find_map(|form| {
+        let Detect::Predicate(name, rewrite) = form.detect else {
+            return None;
+        };
+        if name != pred.name {
+            return None;
+        }
+        let (rewritten, message) = rewrite(pred)?;
+        Some(match form.status {
+            Status::Removed { .. } => LegacyCall {
+                rewritten,
+                message,
+                deprecated: false,
+            },
+            Status::Deprecated { since, removed_in } => LegacyCall {
+                rewritten,
+                message: format!(
+                    "{message} (deprecated since {since}, removed in {removed_in}; `rdra-ish fmt --write` rewrites it)"
+                ),
+                deprecated: true,
+            },
+        })
+    })
 }
 
 /// The error for a removed top-level `when(...)` rule, naming the `invariant` to write: the
@@ -118,17 +284,6 @@ fn first_entity(arg: &PredicateArg) -> Option<Span> {
     }
     match arg {
         PredicateArg::Expr(expr) => in_expr(expr),
-        _ => None,
-    }
-}
-
-/// A predicate written in a removed form, rewritten to the current form, with the message
-/// that names the rewrite: `transitions(Entity.column, UseCase, a -> b)` (use case second)
-/// and `maps_field(Field, Entity, column)` (three arguments).
-pub(crate) fn legacy_predicate(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
-    match pred.name.as_str() {
-        "transitions" => legacy_transitions(pred),
-        "maps_field" => legacy_maps_field(pred),
         _ => None,
     }
 }
@@ -344,6 +499,70 @@ mod tests {
             );
         }
         assert!(messages("maps_field(Total, Order.total)\n").is_empty());
+    }
+
+    #[test]
+    fn a_deprecated_form_loads_rewritten_with_a_warning() {
+        let parsed = crate::parse_with_deprecations("old_pays(Order, Pay).label(\"x\")\n");
+        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
+        let messages: Vec<_> = parsed.deprecations.iter().map(|d| &d.message).collect();
+        assert_eq!(
+            messages,
+            vec![
+                "`old_pays` takes the use case first as `pays`; write `pays(Pay, Order).label(\"x\")` \
+                 (deprecated since 0.5.0, removed in 1.0.0; `rdra-ish fmt --write` rewrites it)"
+            ]
+        );
+        assert_eq!(parsed.deprecations[0].span, 0..31);
+        let Some(crate::ast::Item::Predicate(pred)) = parsed.ast.items.first() else {
+            panic!("no predicate");
+        };
+        assert_eq!(pred.name, "pays");
+    }
+
+    #[test]
+    fn fmt_rewrites_a_deprecated_form_to_the_current_one() {
+        assert_eq!(
+            crate::format_source("// paid\nold_pays(Order, Pay)\n").unwrap(),
+            "// paid\npays(Pay, Order)\n"
+        );
+    }
+
+    #[test]
+    fn a_deprecated_form_is_not_a_parse_error() {
+        assert!(messages("old_pays(Order, Pay)\n").is_empty());
+    }
+
+    #[test]
+    fn a_call_not_in_the_legacy_form_is_left_alone() {
+        let parsed = crate::parse_with_deprecations("old_pays(Order)\n");
+        assert!(parsed.deprecations.is_empty());
+        let Some(crate::ast::Item::Predicate(pred)) = parsed.ast.items.first() else {
+            panic!("no predicate");
+        };
+        assert_eq!(pred.name, "old_pays");
+    }
+
+    #[test]
+    fn legacy_form_ids_are_unique() {
+        let mut ids: Vec<_> = super::legacy_forms().map(|form| form.id).collect();
+        let len = ids.len();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), len);
+    }
+
+    #[test]
+    fn only_a_predicate_rewrite_can_be_deprecated() {
+        for form in super::legacy_forms() {
+            if matches!(form.status, super::Status::Deprecated { .. }) {
+                assert!(
+                    matches!(form.detect, super::Detect::Predicate(..)),
+                    "{} is deprecated but nothing rewrites it",
+                    form.id
+                );
+            }
+        }
     }
 
     #[test]

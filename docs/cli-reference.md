@@ -41,7 +41,7 @@ Diagnostics are written to stderr. A load or consistency diagnostic is `error: .
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--max-patterns <N>] [--max-states <N>] [--buc <ID>]... [--entity <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--buc <ID>]... [--entity <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
@@ -128,6 +128,7 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | Option | Description |
 |---|---|
 | `--strict` | Promote permission / access consistency gaps (`ActorPermissionMissing`, no-actor paths, etc.) from warnings to errors for exit. |
+| `--deny-deprecated` | Promote each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms) that still loads) to an error, so `check` prints it as `error:` and exits `1`. Without the flag a deprecated form does not change the exit status. |
 | `--max-patterns <n>` | Cap on each entity's distinct patterns within one target cone (default `256`). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
 | `--max-states <n>` | Cap on the joint states of one target cone (default `65536`), printed in the `bounds:` line. Past it, the run records a `StateCapReached` **error** that names what the cone's states vary in. Same as [`states`](#states). |
 | `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
@@ -248,6 +249,11 @@ These rules are `warning` rows:
   `holds` body names neither a variation-typed column nor a lifecycle column and guards no use
   case. A body that `applies_to` a use case or an API, or that a `transitions` arm or a
   `chooses` value names in `.when`, is a guard and is not flagged.
+
+- `deprecated-syntax` warns on a
+  [deprecated form](./language-reference.md#deprecated-and-removed-forms): the model loads
+  with the form rewritten, and the message names the rewrite and the version that removes
+  it. `fmt --write` rewrites it.
 
 Lint warnings do not fail the command. Existing parse/model errors are emitted as
 `semantic-error` rows and make the command exit with status `1`.
@@ -445,7 +451,9 @@ The formatter parses each `.rdra` file and prints a canonical source layout:
 
 This is an AST-based formatter. It preserves model structure, identifiers, labels,
 metadata values, columns, predicates, chains, tuples, and comparison expressions, and a
-second run changes nothing.
+second run changes nothing. A [deprecated form](./language-reference.md#deprecated-and-removed-forms)
+prints in its current form, so `fmt --write` is the migration for it; a removed form is a
+parse error, and `fmt` refuses the file.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
