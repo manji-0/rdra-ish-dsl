@@ -101,7 +101,8 @@ pub fn resolve_overlaid(
 
         sources.push((canon.clone(), src, ast));
 
-        // Enqueue unvisited dependencies.
+        // Enqueue unvisited dependencies. An import with no file at its path may name a
+        // module a loaded file declares; `build_import_scopes` reports it when none does.
         for imp in &imports {
             if let Some(dep_path) = resolve_import_path(&imp.path, include_paths) {
                 let dep_canon = dunce::canonicalize(&dep_path).unwrap_or(dep_path.clone());
@@ -109,17 +110,11 @@ pub fn resolve_overlaid(
                     queued.insert(dep_canon);
                     queue.push_back(dep_path);
                 }
-            } else {
-                diags.push(Diagnostic::error_at(
-                    RdraError::IoError {
-                        path: imp.path.0.join("/") + ".rdra",
-                        msg: "module file not found in include paths".to_string(),
-                    },
-                    LocatedSpan::new(id, imp.span.clone()),
-                ));
             }
         }
     }
+
+    let declared = declared_modules(&sources);
 
     // Second pass: add edges now that all SourceIds are assigned.
     let edge_info: Vec<(PathBuf, Vec<DottedName>)> = sources
@@ -144,13 +139,14 @@ pub fn resolve_overlaid(
         let from_id = *path_to_id.get(from_path).unwrap();
         let from_ni = node_indices[from_id];
         for dotted in imports {
-            if let Some(dep_path) = resolve_import_path(dotted, include_paths) {
-                if let Ok(dep_canon) = dunce::canonicalize(&dep_path) {
-                    if let Some(&to_id) = path_to_id.get(&dep_canon) {
-                        let to_ni = node_indices[to_id];
-                        graph.add_edge(from_ni, to_ni, ());
-                    }
-                }
+            let by_module = declared.get(&dotted.0.join(".")).copied();
+            let by_path = || {
+                let dep_path = resolve_import_path(dotted, include_paths)?;
+                let dep_canon = dunce::canonicalize(&dep_path).ok()?;
+                path_to_id.get(&dep_canon).copied()
+            };
+            if let Some(to_id) = by_module.or_else(by_path) {
+                graph.add_edge(from_ni, node_indices[to_id], ());
             }
         }
     }
@@ -191,6 +187,80 @@ pub fn resolve_overlaid(
         },
         diags,
     )
+}
+
+/// Each `module` path to the first loaded source that declares it. A second declarer is
+/// `DuplicateModule`, reported by `build_import_scopes`.
+fn declared_modules(sources: &[(PathBuf, String, Ast)]) -> HashMap<String, SourceId> {
+    let mut declared = HashMap::new();
+    for (id, (_, _, ast)) in sources.iter().enumerate() {
+        for item in &ast.items {
+            if let Item::Module(path, _) = item {
+                declared.entry(path.0.join(".")).or_insert(id);
+            }
+        }
+    }
+    declared
+}
+
+/// The modules loaded files declare that look like `module`: the same last segment, one last
+/// segment of four or more characters inside the other (`registration` and
+/// `buc_registration`), or at most two edits apart. Each is `<module> (<file>)`, the file relative to the include path nearest it.
+fn similar_modules(
+    program: &ResolvedProgram,
+    include_paths: &[PathBuf],
+    module: &str,
+) -> Vec<String> {
+    let bases: Vec<PathBuf> = include_paths
+        .iter()
+        .map(|base| dunce::canonicalize(base).unwrap_or_else(|_| base.clone()))
+        .collect();
+    let last = |m: &str| m.rsplit('.').next().unwrap_or(m).to_lowercase();
+    let wanted = last(module);
+    let mut found: Vec<String> = Vec::new();
+    for (path, _, ast) in &program.sources {
+        for item in &ast.items {
+            let Item::Module(declared, _) = item else {
+                continue;
+            };
+            let declared = declared.0.join(".");
+            let have = last(&declared);
+            let inside = |long: &str, short: &str| short.len() >= 4 && long.contains(short);
+            let like = have == wanted
+                || inside(&have, &wanted)
+                || inside(&wanted, &have)
+                || edit_distance(&declared, module) <= 2;
+            if !like || declared == module {
+                continue;
+            }
+            let shown = bases
+                .iter()
+                .filter_map(|base| path.strip_prefix(base).ok())
+                .min_by_key(|rel| rel.components().count())
+                .unwrap_or(path);
+            found.push(format!("{declared} ({})", shown.display()));
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut diag = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let next = (row[j + 1] + 1)
+                .min(row[j] + 1)
+                .min(diag + usize::from(ca != *cb));
+            diag = row[j + 1];
+            row[j + 1] = next;
+        }
+    }
+    row[b.len()]
 }
 
 /// Convert a dotted module path to a file path and search `include_paths`.
@@ -242,7 +312,7 @@ fn read_source(
 /// Build a semantic model from located items collected across source files.
 pub fn build_merged_model(
     program: &ResolvedProgram,
-    _include_paths: &[PathBuf],
+    include_paths: &[PathBuf],
 ) -> (SemanticModel, Vec<Diagnostic>) {
     let mut all_diags: Vec<Diagnostic> = vec![];
     let mut located_items: Vec<(SourceId, Item)> = Vec::new();
@@ -259,8 +329,13 @@ pub fn build_merged_model(
                 ));
             }
             crate::import_scope::ImportScopeDiagKind::UnknownModule { module } => {
+                let similar = similar_modules(program, include_paths, &module);
+                let similar = match similar.is_empty() {
+                    true => String::new(),
+                    false => format!("; similar modules: {}", similar.join(", ")),
+                };
                 all_diags.push(Diagnostic::error_at(
-                    RdraError::UnknownImportModule { module },
+                    RdraError::UnknownImportModule { module, similar },
                     LocatedSpan::new(d.source_id, d.span),
                 ));
             }
@@ -824,9 +899,71 @@ usecase Work "作業"
         assert!(
             model_diags.iter().any(|d| matches!(
                 &d.error,
-                RdraError::UnknownImportModule { module } if module == "missing.actors"
+                RdraError::UnknownImportModule { module, .. } if module == "missing.actors"
             )),
             "expected UnknownImportModule: {model_diags:?}"
+        );
+    }
+
+    /// `buc/buc_registration.rdra` declares `module buc.registration`: no file sits at
+    /// `buc/registration.rdra`, but the loaded file that declares the module answers the import.
+    #[test]
+    fn an_import_resolves_by_the_declared_module_of_a_loaded_file() {
+        let dir = make_temp_dir("module_by_declaration");
+        write_file(
+            &dir.join("buc/buc_registration.rdra"),
+            "module buc.registration\nscreen FeePaymentScreen \"納付\"\n",
+        );
+        write_file(
+            &dir.join("buc/buc_annuity.rdra"),
+            "module buc.annuity\nimport buc.registration.{FeePaymentScreen}\nscreen AnnuityScreen \"年金\"\nusecase Pay \"納付\"\nnavigates(AnnuityScreen, FeePaymentScreen).via(Pay)\n",
+        );
+        let entries = [
+            dir.join("buc/buc_annuity.rdra"),
+            dir.join("buc/buc_registration.rdra"),
+        ];
+        let (program, diags) = resolve(&entries, std::slice::from_ref(&dir));
+        assert!(diags.is_empty(), "{diags:?}");
+        assert_eq!(
+            program.import_graph.edge_count(),
+            1,
+            "the import is an edge"
+        );
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        assert!(model_diags.is_empty(), "{model_diags:?}");
+    }
+
+    /// An import no loaded file declares and no file path holds is one error, and it names the
+    /// loaded files that declare a module like it.
+    #[test]
+    fn an_unknown_module_names_the_files_that_declare_a_similar_one() {
+        let dir = make_temp_dir("module_similar");
+        write_file(
+            &dir.join("buc/buc_registration.rdra"),
+            "module buc.registration\nscreen FeePaymentScreen \"納付\"\n",
+        );
+        write_file(
+            &dir.join("buc/buc_annuity.rdra"),
+            "module buc.annuity\nimport buc.registraton.{FeePaymentScreen}\nscreen AnnuityScreen \"年金\"\n",
+        );
+        let entries = [
+            dir.join("buc/buc_annuity.rdra"),
+            dir.join("buc/buc_registration.rdra"),
+        ];
+        let (program, diags) = resolve(&entries, std::slice::from_ref(&dir));
+        assert!(
+            diags.is_empty(),
+            "the miss is reported once, below: {diags:?}"
+        );
+        let (_, model_diags) = build_merged_model(&program, &[dir]);
+        let messages: Vec<String> = model_diags
+            .iter()
+            .filter(|d| matches!(d.error, RdraError::UnknownImportModule { .. }))
+            .map(|d| d.error.to_string())
+            .collect();
+        assert_eq!(
+            messages,
+            ["unknown module 'buc.registraton'\n  hint: declare `module buc.registraton` in an included .rdra file, or fix the import path; similar modules: buc.registration (buc/buc_registration.rdra)"]
         );
     }
 

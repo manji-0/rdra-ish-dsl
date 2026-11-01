@@ -4,6 +4,7 @@ import shared.actors
 import shared.entities
 import shared.biz
 import shared.goals
+import buc.registration.{FeePaymentScreen}
 
 // Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
 // 中間処理: the exchange that answers a 拒絶理由通知書 (keiyakuwatch-chizaibu-gyomu.md:156, 〔まとめ〕).
@@ -307,6 +308,9 @@ requires_permission(DivisionalApi, JpoProcedure)
 navigates(OfficeActionScreen, ResponseDraftScreen).via(InstructResponse)
 navigates(ResponseDraftScreen, OfficeActionScreen).via(FileResponse)
 navigates(OfficeActionScreen, DecisionScreen).via(ReceiveDecisionOfRejection)
+// The first three years' fees are paid within 30 days of the 査定謄本 (egov-tokkyohou-334AC0000000121.txt:1468),
+// so recording the 特許査定 leads to the fee payment.
+navigates(DecisionScreen, FeePaymentScreen).via(ReceiveDecisionToGrant)
 
 // Screen fields
 field NoticeKindField "通知の種類（最初・最後）"

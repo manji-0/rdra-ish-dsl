@@ -125,4 +125,35 @@ reads(Customer, Order)
         assert!(!without.is_empty());
         assert_eq!(without, messages(true));
     }
+
+    /// The editor loads a workspace as `check` does, so an import resolves by the `module` a
+    /// loaded file declares, whatever the file is called.
+    #[test]
+    fn an_import_resolves_by_declared_module_in_the_workspace() {
+        let root = std::env::temp_dir().join(format!(
+            "rdra_lsp_module_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        write_file(
+            &root.join("buc/buc_registration.rdra"),
+            "module buc.registration\nscreen FeePaymentScreen \"Fee\"\n",
+        );
+        write_file(
+            &root.join("buc/buc_annuity.rdra"),
+            "module buc.annuity\nimport buc.registration.{FeePaymentScreen}\nscreen AnnuityScreen \"Annuity\"\nusecase Pay \"Pay\"\nnavigates(AnnuityScreen, FeePaymentScreen).via(Pay)\n",
+        );
+
+        let project = load_project(std::slice::from_ref(&root), None).unwrap();
+        let errors: Vec<String> = analyze_project(project)
+            .diagnostics
+            .iter()
+            .filter(|diag| !diag.is_warning)
+            .map(|diag| diag.error.to_string())
+            .collect();
+        let _ = fs::remove_dir_all(root);
+        assert!(errors.is_empty(), "{errors:?}");
+    }
 }

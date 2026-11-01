@@ -135,6 +135,20 @@
   written (`transitions` endpoints, comparisons, `in` lists, `sets`, `Enum(...)`, `variation`
   values) already took no quoted value; `rule_audit` now covers the quoted forms. A quoted
   `@default` of an Int or String column is unchanged.
+- An `import` resolves by the `module` a loaded file declares, whatever the file is called
+  (#56). `buc/buc_registration.rdra` with `module buc.registration` now answers
+  `import buc.registration.{FeePaymentScreen}`; it was `IO error reading
+  'buc/registration.rdra': module file not found in include paths`. A file not loaded yet is
+  still found at `<a>/<b>.rdra` under the include paths, and the import graph (and its
+  `CircularImport` check) follows module-resolved imports too. An import no loaded file
+  declares is now one error, `UnknownImportModule`, instead of that IO error plus
+  `UnknownImportModule`; its hint lists the loaded files that declare a similar module
+  (`similar modules: buc.registration (buc/buc_registration.rdra)`). The CLI and the LSP share
+  the resolver. patent-ops links three screens across BUCs with `navigates`
+  (`DecisionScreen` to `FeePaymentScreen`, `ApplicationDocketScreen` to
+  `ExaminationRequestScreen`, `FeePaymentScreen` to `RewardScreen`), which clears its three
+  `screen-no-transition` infos.
+
 - `lint` `condition-no-rdra-anchor` no longer flags a `holds` body that guards a use case
   (#57): one that `applies_to` a use case or an API, or that a `transitions` arm or a `chooses`
   value names in `.when`. A guard can be written only as a condition, so a guard that reads

@@ -4,6 +4,7 @@ import shared.actors
 import shared.entities
 import shared.biz
 import shared.goals
+import buc.filing_formality.{ApplicationDocketScreen, RecordFilingReceipt}
 
 // Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
 
@@ -58,6 +59,11 @@ contains(IpManagementSystem, WithdrawalApi)
 displays(DecideExaminationRequest, ExaminationRequestScreen)
 reads(DecideExaminationRequest, PatentApplication)
 triggers(ExamRequestReview, DecideExaminationRequest)
+
+// The period runs from the filing date (egov-tokkyohou-334AC0000000121.txt:680), so the docket the
+// filing receipt opens carries it; the IP department opening the request from that docket is the
+// model's assumption.
+navigates(ApplicationDocketScreen, ExaminationRequestScreen).via(RecordFilingReceipt)
 
 displays(RequestExamination, ExaminationRequestScreen)
 invokes(RequestExamination, ExaminationRequestApi)

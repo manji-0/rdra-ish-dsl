@@ -66,6 +66,10 @@ src/
     buc_<name>.rdra  # module buc.<name>
 ```
 
+An import names a module, not a file: with the directory loaded, `import buc.<name>.{Screen}`
+finds `buc/buc_<name>.rdra` by its `module` line, so a BUC can `navigates` to another BUC's
+screen.
+
 Growth pattern:
 
 ```text

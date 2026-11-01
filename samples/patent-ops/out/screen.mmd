@@ -18,18 +18,24 @@ flowchart LR
   screen__PriorArtSearchScreen["先行技術調査画面"]:::screen
   screen__ResponseDraftScreen["応答案画面"]:::screen
   screen__RewardScreen["相当の利益画面"]:::screen
+  screen__ApplicationDocketScreen -->|出願番号・出願日の記録| screen__ExaminationRequestScreen
+  screen__DecisionScreen -->|特許査定の受領| screen__FeePaymentScreen
   screen__DisclosureFormScreen -->|発明届出書の提出| screen__DisclosureReviewScreen
   screen__DisclosureReviewScreen -->|届出書の差戻し| screen__DisclosureFormScreen
   screen__DraftingOrderScreen -->|特許事務所への出願依頼| screen__DraftReviewScreen
+  screen__FeePaymentScreen -->|設定登録の記録| screen__RewardScreen
   screen__FilingScreen -->|電子出願| screen__ApplicationDocketScreen
   screen__MaintenanceReviewScreen -->|権利維持要否の調査| screen__AnnuityScreen
   screen__OfficeActionScreen -->|応答方針の指示| screen__ResponseDraftScreen
   screen__OfficeActionScreen -->|拒絶査定の受領| screen__DecisionScreen
   screen__PriorArtSearchScreen -->|先行技術調査の結果の登録| screen__FilingDecisionScreen
   screen__ResponseDraftScreen -->|意見書・補正書の提出| screen__OfficeActionScreen
+  %% via screen__ApplicationDocketScreen -> screen__ExaminationRequestScreen usecase__RecordFilingReceipt
+  %% via screen__DecisionScreen -> screen__FeePaymentScreen usecase__ReceiveDecisionToGrant
   %% via screen__DisclosureFormScreen -> screen__DisclosureReviewScreen usecase__SubmitInventionDisclosure
   %% via screen__DisclosureReviewScreen -> screen__DisclosureFormScreen usecase__ReturnDisclosure
   %% via screen__DraftingOrderScreen -> screen__DraftReviewScreen usecase__RequestDrafting
+  %% via screen__FeePaymentScreen -> screen__RewardScreen usecase__RecordRegistration
   %% via screen__FilingScreen -> screen__ApplicationDocketScreen usecase__FileApplication
   %% via screen__MaintenanceReviewScreen -> screen__AnnuityScreen usecase__ReviewMaintenance
   %% via screen__OfficeActionScreen -> screen__DecisionScreen usecase__ReceiveDecisionOfRejection

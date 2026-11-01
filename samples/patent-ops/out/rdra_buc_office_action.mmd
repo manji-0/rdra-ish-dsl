@@ -133,6 +133,7 @@ flowchart LR
     screen__AnnuityScreen["年金管理画面"]:::screen
     screen__ApplicationDocketScreen["出願案件・期限管理画面"]:::screen
     screen__DecisionScreen["査定画面"]:::screen
+    screen__ExaminationRequestScreen["審査請求画面"]:::screen
     screen__FeePaymentScreen["特許料納付画面"]:::screen
     screen__MaintenanceReviewScreen["権利維持要否画面"]:::screen
     screen__OfficeActionScreen["中間処理画面"]:::screen
@@ -141,6 +142,7 @@ flowchart LR
     field__AmendmentScopeField["補正の範囲"]:::field
     field__ApplicationNoField["出願番号"]:::field
     field__DecisionStatusField["査定"]:::field
+    field__ExamRequestedAtField["審査請求日"]:::field
     field__FirstFeesPaidField["第1〜3年分の納付"]:::field
     field__MaintainField["維持する"]:::field
     field__NextYearPaidField["次の年の納付"]:::field
@@ -389,6 +391,7 @@ flowchart LR
   field__AmendmentScopeField -.-> entity__OfficeAction
   field__ApplicationNoField -.-> entity__PatentApplication
   field__DecisionStatusField -.-> entity__PatentApplication
+  field__ExamRequestedAtField -.-> entity__PatentApplication
   field__FirstFeesPaidField -.-> entity__PatentApplication
   field__MaintainField -.-> entity__Patent
   field__NextYearPaidField -.-> entity__Patent
@@ -418,8 +421,12 @@ flowchart LR
   flow__RegistrationFlow --> step__RegistrationStep
   screen__AnnuityScreen --> field__NextYearPaidField
   screen__ApplicationDocketScreen --> field__ApplicationNoField
+  screen__ApplicationDocketScreen -.-> screen__ExaminationRequestScreen
   screen__DecisionScreen --> field__DecisionStatusField
+  screen__DecisionScreen -.-> screen__FeePaymentScreen
+  screen__ExaminationRequestScreen --> field__ExamRequestedAtField
   screen__FeePaymentScreen --> field__FirstFeesPaidField
+  screen__FeePaymentScreen -.-> screen__RewardScreen
   screen__MaintenanceReviewScreen --> field__MaintainField
   screen__MaintenanceReviewScreen -.-> screen__AnnuityScreen
   screen__OfficeActionScreen --> field__NoticeKindField

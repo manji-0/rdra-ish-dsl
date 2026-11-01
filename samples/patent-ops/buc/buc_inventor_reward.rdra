@@ -4,6 +4,7 @@ import shared.actors
 import shared.entities
 import shared.biz
 import shared.goals
+import buc.registration.{FeePaymentScreen, RecordRegistration}
 
 // Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
 
@@ -49,6 +50,10 @@ reads(RewardApi, InventionDisclosure)
 triggers(EvApplicationFiled, BucInventorReward)
 triggers(EvApplicationFiled, DecideReward)
 triggers(EvRegistered, DecideReward)
+
+// A reward at registration is one of the timings the BUC assumes (see its description): recording the
+// 設定登録 leads the IP department to decide it.
+navigates(FeePaymentScreen, RewardScreen).via(RecordRegistration)
 
 // 相当の利益 is owed for a 職務発明 whose right the employer takes (egov-tokkyohou-334AC0000000121.txt:382).
 condition EmployeeInventionReward "職務発明である"

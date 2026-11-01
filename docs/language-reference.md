@@ -56,8 +56,11 @@ import shared.actors.{Staff as S} // selective import with a local alias
 
 - `module <path>` declares the dotted module path of the current file. Each path must be
   unique across the loaded sources.
-- `import <path>` brings the module's declarations into flat scope. Unknown module paths
-  are errors. Two flat imports that bind the same local name **and same kind** to
+- `import <path>` brings the module's declarations into flat scope. An import names a
+  module, not a file: a loaded file that declares `module <path>` answers it whatever the file
+  is called, so `buc/buc_registration.rdra` with `module buc.registration` answers
+  `import buc.registration.{FeePaymentScreen}`. A module no loaded file declares is an error
+  (`UnknownImportModule`), whose hint lists the loaded files that declare a module like it. Two flat imports that bind the same local name **and same kind** to
   different modules are errors. Same id with different kinds (e.g. imported
   `event Capture` plus local `usecase Capture`) may coexist; use `kind::Id`.
 - `import <path> as <alias>` makes the imported names available under the alias namespace
@@ -72,8 +75,10 @@ import shared.actors.{Staff as S} // selective import with a local alias
 - Reusing the same `as` alias for two modules is an error (`DuplicateAlias`).
 
 When the CLI or the LSP loads a directory, it merges all `.rdra` files reachable from the
-entry files into a single semantic model, resolving imports against the include paths
-derived from the input layout. The include paths are the parent and the grandparent of each
+entry files into a single semantic model. An import is resolved first by the `module` lines of
+the loaded files. A file not loaded yet is found by its path: `import a.b` loads `a/b.rdra`
+from the include paths derived from the input layout, so load the directory when a module's
+file is named otherwise. The include paths are the parent and the grandparent of each
 entry file, after symlinks are resolved, so the CLI and the LSP resolve an import the same
 way. An `rdra.toml` above the inputs is discovered and parsed, and has no effect on
 resolution yet (see [Project manifest](./cli-reference.md#project-manifest)).

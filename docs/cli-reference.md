@@ -409,7 +409,9 @@ A loading command finds the manifest like this:
 The LSP loads a workspace the same way. It lists every `.rdra` file under the workspace roots,
 adds the open buffers, and derives the include paths from those files exactly as the CLI does.
 The workspace roots are no longer include paths of their own, so `import m.a.shared` from
-`m/a/b/c.rdra` reports "module file not found in include paths" in the editor, as `check` does.
+`m/a/b/c.rdra`, with no loaded file declaring `module m.a.shared`, reports "unknown module"
+in the editor, as `check` does. An import resolves by the `module` a loaded file declares
+before it is looked up by path, in both.
 A malformed `rdra.toml` clears the LSP's diagnostics and shows the error in a message, and in
 a diagnostic on an open `.rdra` file.
 
