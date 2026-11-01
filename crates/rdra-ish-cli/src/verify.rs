@@ -36,6 +36,15 @@ use crate::tlc_replay::{explain_property, explain_violation};
 
 /// `bounds` is `(--instance-count, --int-range-max)`; `budget` is `--temporal-budget`, the
 /// wall time a whole-model property run gets.
+/// What `verify` spends on a check it may not finish, and whether one it leaves undecided
+/// fails the run.
+pub struct Budget {
+    /// Seconds a temporal property's whole-model run gets.
+    pub temporal: Duration,
+    /// `--deny-undecided`: an undecided finding is an error, not a warning.
+    pub deny_undecided: bool,
+}
+
 pub fn run_verify(
     program: &ResolvedProgram,
     model: &SemanticModel,
@@ -43,7 +52,7 @@ pub fn run_verify(
     out: Option<PathBuf>,
     bounds: (u32, u32),
     scope: &Scope,
-    budget: Duration,
+    budget: Budget,
 ) -> Result<()> {
     match backend {
         VerifyBackend::Tlc => run_tlc(program, model, out, bounds, scope, budget),
@@ -585,7 +594,10 @@ fn run_tlc(
     out: Option<PathBuf>,
     (instance_count, int_range_max): (u32, u32),
     scope: &Scope,
-    budget: Duration,
+    Budget {
+        temporal: budget,
+        deny_undecided,
+    }: Budget,
 ) -> Result<()> {
     let bounds = tla_bounds(instance_count, int_range_max)?;
     let built = checked_system(model, bounds, scope)?;
@@ -634,7 +646,12 @@ fn run_tlc(
     if temporal {
         jobs.extend(property_jobs(&ts, &names));
     }
-    let bfs_errors = state_models(program, model, &ts, scope, &selection);
+    let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
+    let end = End {
+        bfs_errors,
+        capped,
+        deny_undecided,
+    };
 
     let mut index = String::new();
     for job in &jobs {
@@ -666,7 +683,7 @@ fn run_tlc(
         }
         println!("nothing to check");
         println!("tlc_result: ok");
-        return finish(bfs_errors, &line, &[]);
+        return end.finish(&line, &[]);
     }
     let tlc = find_tlc()?;
     let mut ran = run_cones(&tlc, &dir, &jobs)?;
@@ -729,7 +746,7 @@ fn run_tlc(
             let _ = fs::remove_dir_all(&dir);
         }
         println!("tlc_result: ok");
-        return finish(bfs_errors, &line, &undecided);
+        return end.finish(&line, &undecided);
     }
     eprintln!("tlc_result: {}", outcome.as_str());
     let failed: Vec<String> = jobs
@@ -769,14 +786,14 @@ fn run_tlc(
 /// BFS on each selected entity cone at the verify bounds: the `NoWitness` errors, the
 /// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered,
 /// then the `not checked:` block and one summary line. The exploration is dropped before TLC
-/// starts.
+/// starts. Returns the errors and the findings a cone left undecided at the state cap.
 fn state_models(
     program: &ResolvedProgram,
     model: &SemanticModel,
     ts: &TransitionSystem,
     scope: &Scope,
     selection: &Selection,
-) -> usize {
+) -> (usize, usize) {
     let entities: Vec<Target> = selection
         .targets
         .iter()
@@ -787,6 +804,8 @@ fn state_models(
     if !scope.bucs.is_empty() {
         run.defer_progress();
     }
+    // A finding `--buc` leaves open is the scope's choice, not a bound's.
+    let capped = run.undecided().iter().filter(|u| u.cone.is_some()).count();
     let not_checked = NotChecked {
         ts,
         model,
@@ -821,31 +840,66 @@ fn state_models(
             "use cases that never run"
         ),
     );
-    errors
+    (errors, capped)
 }
 
-/// The end of a run whose TLC checks passed: a BFS error still fails it. A temporal property
-/// the budget left undecided is listed, as the BFS cap lists the findings it leaves.
-fn finish(bfs_errors: usize, line: &BoundsLine, undecided: &[String]) -> Result<()> {
-    if !undecided.is_empty() {
-        println!(
-            "not checked: {} not decided",
-            match undecided.len() {
-                1 => "1 temporal property".to_string(),
-                n => format!("{n} temporal properties"),
+/// How a run whose TLC checks passed ends.
+struct End {
+    bfs_errors: usize,
+    /// Findings a BFS cone left undecided at the state cap.
+    capped: usize,
+    deny_undecided: bool,
+}
+
+impl End {
+    /// A BFS error still fails the run. A temporal property the budget left undecided is
+    /// listed, as the BFS cap lists the findings it leaves; what the bounds left undecided is
+    /// a warning, and an error under `--deny-undecided`.
+    fn finish(&self, line: &BoundsLine, undecided: &[String]) -> Result<()> {
+        if !undecided.is_empty() {
+            println!(
+                "not checked: {} not decided",
+                match undecided.len() {
+                    1 => "1 temporal property".to_string(),
+                    n => format!("{n} temporal properties"),
+                }
+            );
+            for u in undecided {
+                println!("{u}");
             }
-        );
-        for u in undecided {
-            println!("{u}");
         }
+        if self.bfs_errors > 0 {
+            bail!(
+                "verification failed: {} state-model error(s) from BFS on the entity cones",
+                self.bfs_errors
+            );
+        }
+        let open = [
+            (
+                self.capped,
+                "finding a cone stopped at the state cap left",
+                "findings a cone stopped at the state cap left",
+            ),
+            (
+                undecided.len(),
+                "temporal property the budget left",
+                "temporal properties the budget left",
+            ),
+        ]
+        .iter()
+        .filter(|(n, ..)| *n > 0)
+        .map(|(n, one, many)| format!("{n} {}", if *n == 1 { one } else { many }))
+        .collect::<Vec<_>>();
+        if !open.is_empty() {
+            let what = format!("{} undecided", open.join(" and "));
+            if self.deny_undecided {
+                bail!("verification incomplete: {what} (--deny-undecided)");
+            }
+            eprintln!("warning: {what}; the OK line holds only for what was decided (--deny-undecided fails the run)");
+        }
+        println!("{}", line.ok());
+        Ok(())
     }
-    if bfs_errors > 0 {
-        bail!(
-            "verification failed: {bfs_errors} state-model error(s) from BFS on the entity cones"
-        );
-    }
-    println!("{}", line.ok());
-    Ok(())
 }
 
 fn find_tlc() -> Result<PathBuf> {

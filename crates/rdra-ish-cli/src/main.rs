@@ -307,6 +307,7 @@ fn main() -> Result<()> {
             instance_count,
             int_range_max,
             temporal_budget,
+            deny_undecided,
             scope,
         } => {
             let Project {
@@ -324,7 +325,10 @@ fn main() -> Result<()> {
                 out,
                 (instance_count, int_range_max),
                 &scope,
-                std::time::Duration::from_secs(temporal_budget),
+                verify::Budget {
+                    temporal: std::time::Duration::from_secs(temporal_budget),
+                    deny_undecided,
+                },
             )?;
         }
     }

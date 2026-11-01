@@ -361,6 +361,29 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
         stdout.ends_with("OK: no errors within 2 instances per entity, Int 0..5\n"),
         "{stdout}"
     );
+    assert!(
+        stderr.contains("warning: 2 temporal properties the budget left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)\n"),
+        "{stderr}"
+    );
+
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[
+            sample.to_str().unwrap(),
+            "--temporal-budget",
+            "0",
+            "--deny-undecided",
+        ],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stderr.contains("verification incomplete: 2 temporal properties the budget left undecided (--deny-undecided)"),
+        "{stderr}"
+    );
+    assert!(!stdout.contains("OK:"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
 

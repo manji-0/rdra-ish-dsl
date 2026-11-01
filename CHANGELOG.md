@@ -4,6 +4,13 @@
 
 ### Added
 
+- `verify` warns on stderr when it leaves a finding undecided, a temporal property past
+  `--temporal-budget` or a finding a BFS cone left at its state cap: `warning: 2 temporal
+  properties the budget left undecided; the OK line holds only for what was decided
+  (--deny-undecided fails the run)`. `verify --deny-undecided` makes that an error
+  (`verification incomplete: ...`, exit 1). Findings a `--buc` or `--entity` scope leaves
+  open do not count.
+
 - An entity may have several lifecycle columns (#68). Each Enum column that `transitions`
   names is its own state model in `check`, `states`, `lint`, the TLA+ export, `verify`, and
   the state diagram (one block per column under `--entity`); guards, constraints, and

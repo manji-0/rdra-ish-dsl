@@ -322,6 +322,10 @@ pub(crate) enum Commands {
         /// it; past them the property is reported as not decided
         #[arg(long, default_value_t = 300)]
         temporal_budget: u64,
+        /// Treat a finding verify leaves undecided (a BFS cone stopped at the state cap, a
+        /// temporal property past `--temporal-budget`) as an error (exit 1)
+        #[arg(long)]
+        deny_undecided: bool,
         #[command(flatten)]
         scope: ScopeArgs,
     },

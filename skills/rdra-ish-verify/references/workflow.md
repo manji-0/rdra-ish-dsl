@@ -33,6 +33,9 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   temporal properties, the whole-model `RdraSpec` pair for a run by hand and a
   `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs
   under `--temporal-budget`.
+- A finding `verify` leaves undecided (a temporal property past `--temporal-budget`, or a
+  state, deadlock, or use case a BFS cone left at its cap) prints a `warning:` and passes.
+  In CI, add `--deny-undecided` so it fails instead.
 - Without `-o`, `verify` uses a temp dir. A passing run deletes it; a failed run ends
   with `specs: <dir> (kept because a check failed)`.
 - `verify --entity <E>` (repeatable) checks only `E`'s view and the invariants and

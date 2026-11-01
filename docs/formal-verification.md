@@ -181,7 +181,9 @@ cone, and the whole model only when neither decides:
    queue, seconds, about once a minute) and stops at `--temporal-budget` seconds (default
    300) or at the first progress line past 2,097,152 distinct states, after which the
    property is `not decided`, listed under `not checked:`, and the run still ends in `OK:`
-   with exit status 0, as a BFS cone at its cap does.
+   with exit status 0, as a BFS cone at its cap does, after a `warning:` on stderr that
+   counts what was left undecided. `--deny-undecided` makes that an error with exit
+   status 1.
 
 An `always` needs the first run only. A cone that frees an entity's slots (an action of the
 cone creates an entity the cone does not read, so the cone does not count its slots) can show
@@ -445,7 +447,8 @@ gaps.
   stops at `Caps::VERIFY`, 2^21 states. A cone that stops there decides none of these
   findings. TLC still checks its invariants. See it: each undecided finding under
   `not checked:` on stdout, as patent-ops prints for the four stuck-state checks of
-  `OfficeAction`. What you can do: rely on `check` at 1 instance for those findings, or
+  `OfficeAction`, and the `warning:` on stderr that counts them (`--deny-undecided` fails
+  the run instead). What you can do: rely on `check` at 1 instance for those findings, or
   shrink the cone, for example by removing a guard that pulls another entity's columns in.
 - **`check` stops at 65,536 states per cone.** A cone past the cap is the
   `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone.
@@ -473,7 +476,8 @@ gaps.
   model's `WF_vars(Next)` (see [Temporal properties on a cone](#temporal-properties-on-a-cone));
   so does a property whose cone frees an entity's slots and finds a counterexample. The
   whole-model run stops at `--temporal-budget` seconds (300 by default) or at 2,097,152
-  distinct states, and the property is then `not decided`, which does not fail the run. On
+  distinct states, and the property is then `not decided`, which warns and does not fail
+  the run unless `--deny-undecided` is given. On
   patent-ops and food-permit-ops at 2 instances a whole-model run does not finish (14
   million states in 11 minutes, and 6.9 million in 300 s). See it: `not decided` on the
   property's line and under `not checked:`. What you can do: add `.fair(...)` naming the
