@@ -4,6 +4,17 @@
 
 ### Added
 
+- `drives(UseCase, Entity, comparison, true | false)` drives a comparison proposition true or
+  false (#51, condition 4). It is what the four-argument `sets` did: `sets` assigned a value
+  with three arguments and drove a comparison with four, two meanings told apart by arity.
+  Now `sets` only assigns, and `drives` only drives. A `drives` records the same proposition
+  effect, so `states`, `check`, and the TLA+ export are unchanged. A value equality driven
+  true (`drives(Pay, Order, status == paid, true)`) still sets the value; driven false it is
+  `DrivesFalseOnEquals` (was `SetsFalseOnEquals`). A `drives` with a third argument that is
+  not a comparison, or a fourth that is not `true` or `false`, is `DrivesNoEffect`. A `sets`
+  with a comparison is `SetsNoEffect`, whose hint now names `drives`. A set membership in
+  either is `EffectMembership` (was `SetsMembership`), naming the predicate.
+
 - A deprecation stage for legacy syntax (#51, condition 2). A deprecated form still loads: the
   parser rewrites it to the current form and the load reports a `DeprecatedSyntax` warning
   naming the rewritten line, the version that deprecated it, and the version that removes it
@@ -12,7 +23,8 @@
   makes it an error; `fmt` prints the current form, so `fmt --write` is the migration. A form
   is deprecated in a minor release and removed no earlier than the next major one.
   `LEGACY_FORMS` in `crates/rdra-ish-syntax/src/removed.rs` lists every legacy form with its
-  status; the forms removed in 0.3.0 and 0.4.0 stay load errors, and no form is deprecated yet.
+  status; the forms removed in 0.3.0 and 0.4.0 stay load errors. The four-argument `sets` is
+  the first deprecated form (see Deprecated).
   `language-reference.md` "Removed forms" is now "Deprecated and removed forms".
 
 - `.fair(UseCase, ...)` on an `eventually` / `leads_to` property assumes each listed use case is
@@ -240,6 +252,14 @@
   third guard, that the filing checks the drafts were approved, stays out: it needs a required
   link from the application to its drafting order, which takes three cones past 10,000,000
   states at 2 instances. The README names both as known verification gaps (#51, condition 5).
+
+### Deprecated
+
+- `sets(UseCase, Entity, comparison, true | false)`, the four-argument `sets`, is deprecated
+  since 0.5.0 and removed in 2.0.0 (#51, condition 4); write `drives(...)` with the same
+  arguments. It still loads as `drives` with a `DeprecatedSyntax` warning, `lint` lists it as
+  `deprecated-syntax`, and `rdra-ish fmt --write` rewrites it. Every four-argument `sets` in
+  the docs, skills, and tests is rewritten; no sample used it.
 
 ### Fixed
 

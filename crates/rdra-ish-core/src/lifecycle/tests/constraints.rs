@@ -133,8 +133,8 @@ entity Item "I" { id: Int @pk  stock: Int  selling: Int  status: Enum(on, off) }
 usecase Make "作る"
 usecase Sell "売る"
 creates(Make, Item)
-sets(Make, Item, stock < selling, false)
-sets(Sell, Item, stock < selling, true)
+drives(Make, Item, stock < selling, false)
+drives(Sell, Item, stock < selling, true)
 forbidden(Item, status == on, stock < selling)
 "#,
     );
@@ -158,7 +158,7 @@ creates(Sell, Item)
 updates(Sell, Item)
 sets(Sell, Item, stock == 0)
 sets(Sell, Item, selling == 1)
-sets(Sell, Item, stock < selling, DRIVEN)
+drives(Sell, Item, stock < selling, DRIVEN)
 forbidden(Item, stock < selling)
 "#;
     let d = derive_src(&src.replace("DRIVEN", "false"));
@@ -661,7 +661,7 @@ entity Stock "在庫" {
 usecase ListItem "出品"
 creates(ListItem, Stock)
 sets(ListItem, Stock, status == on_sale)
-sets(ListItem, Stock, stock < selling, true)
+drives(ListItem, Stock, stock < selling, true)
 invariant(Stock)
   .when(status == on_sale)
   .then(stock < selling)

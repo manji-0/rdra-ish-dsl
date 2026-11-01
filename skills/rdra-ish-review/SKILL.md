@@ -272,7 +272,8 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `requires_medium` | UseCase / Api | Medium | — |
 | `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, child side may be a range such as `1..*`); `N:M` requires `.via(Junction)`; chain `.optional()`, `.role(x)`, `.key(cols)` |
 | `transitions` | UseCase | Entity.col | from -> to |
-| `sets` | UseCase | Entity | `col == val` or comparison + bool |
+| `sets` | UseCase | Entity | `col == val` |
+| `drives` | UseCase | Entity | comparison + `true` / `false` |
 | `forbidden` | Entity | condition(s) | — |
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
 | `required` | Entity | condition(s) | — |

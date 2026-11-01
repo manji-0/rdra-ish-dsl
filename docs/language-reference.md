@@ -25,7 +25,7 @@ same order:
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
 | Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
-| Lifecycle and rules | `transitions`, `sets`, and constraint declarations | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
+| Lifecycle and rules | `transitions`, `sets`, `drives`, and constraint declarations | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
 
 A kind is part of the language only when some review output consumes it. The
 [kind index](#kind-index) lists that output for every kind.
@@ -230,7 +230,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each step of the use case leaves. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
 | `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
-| `sets` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
+| `drives` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. Replaces the deprecated four-argument `sets`. |
 | `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
 | `chooses` | `(UseCase, Entity.column, value)` | One value the actor may pick; the lines of one use case and column list the choice. `.when(Condition)` guards this value only. See [Guard one value](#guard-one-value-when). |
 
@@ -1532,37 +1532,43 @@ names `scripts/migrate-phase3.py`.
 such as `timestamptz` is not a value; write `present` for a nullable column the use case
 fills. The storage type belongs on the column's type and the DBML export.
 
-### Driving comparison propositions with `sets`
+### Driving comparison propositions with `drives`
 
 A **comparison proposition** (`col op rhs`, e.g. `stock < selling`, `expired_at < now`) is
 evaluated on the Int values of its columns over `0..5` and on `now`. Change the columns
 with `sets(Restock, Stock, stock == 3)` and the comparison follows. When the model does
-not track the values, drive the truth value of the comparison instead with the
-four-argument form of `sets`:
+not track the values, drive the truth value of the comparison instead with `drives`:
 
 ```
 // Tell the model that Sell causes (stock < selling) to become true
-sets(Sell,   Stock, stock < selling, true)
+drives(Sell,   Stock, stock < selling, true)
 
 // Tell the model that Refund causes (stock < selling) to become false
-sets(Refund, Stock, stock < selling, false)
+drives(Refund, Stock, stock < selling, false)
 ```
 
 The third argument is the bare comparison expression (no quotes); the fourth argument is
-the bare boolean literal `true` or `false`. Value equality (`col == variant`) must not use
-`, false` — that form is rejected (`SetsFalseOnEquals`); omit the fourth argument and set
-a different value instead. Any other third argument, such as `status != paid`, or a
-comparison without `true` or `false`, sets nothing and is `SetsNoEffect`. A use case leaves
-one value, so a set membership (`status in (a, b)`) in either form of `sets` is
-`SetsMembership`. Once any `sets` drives a comparison, the comparison is a Bool
-variable that only those `sets` change, and the Int columns no longer define it. A use case
-that drives a comparison to one truth while its own Int `sets` make it the other is
+the bare boolean literal `true` or `false`. `sets` assigns a value and `drives` drives a
+comparison, so each predicate has one meaning. A value equality driven true
+(`drives(Pay, Order, status == paid, true)`) sets the value, as `sets(Pay, Order, status
+== paid)` does; driven `false` it names no value to leave and is `DrivesFalseOnEquals`.
+A `drives` whose third argument is not a comparison or whose fourth is not `true` or
+`false` is `DrivesNoEffect`; a `sets` with a comparison such as `stock < selling` or
+`status != paid` sets nothing and is `SetsNoEffect`, whose hint names `drives`. A use case
+leaves one value, so a set membership (`status in (a, b)`) in `sets` or `drives` is
+`EffectMembership`. Once any `drives` names a comparison, the comparison is a Bool
+variable that only those `drives` change, and the Int columns no longer define it. A use
+case that drives a comparison to one truth while its own Int `sets` make it the other is
 `ContradictoryDrivenComparison`, an error.
 
 | Fourth argument | Meaning |
 |---|---|
 | `true` | The comparison holds after this use case runs. |
 | `false` | The comparison does not hold after this use case runs. |
+
+`sets(UC, E, cmp, true|false)`, the four-argument `sets` that `drives` replaces, is
+deprecated since 0.5.0 and removed in 2.0.0; it still loads as `drives`, with a warning
+(see [Deprecated and removed forms](#deprecated-and-removed-forms)).
 
 ---
 
@@ -1932,8 +1938,8 @@ col == c`. `col not in (a, b, c)` holds when `col` is none of them; it is `col !
 col != b and col != c`. Every construct that takes a comparison takes a set membership:
 `forbidden`, `required`, `exclusive`, `invariant` with its `.when()`, `.then()`, `.has()`,
 and `.none()` (one entity or several, with `Entity.col in (...)`), `holds`,
-`after(...).assert(...)`, `@check`, `@derived`, and `property`. `sets` does not: a use case
-leaves one value (`SetsMembership`).
+`after(...).assert(...)`, `@check`, `@derived`, and `property`. `sets` and `drives` do not: a
+use case leaves one value (`EffectMembership`).
 
 ```rdra
 forbidden(Order, status in (paid, shipped), refund_id == present)
@@ -1976,17 +1982,17 @@ A comparison expression is evaluated on the values of its columns: Int, Money, D
 Date, and DateTime columns that it names become `0..5` variables, and `now` is a clock
 that ticks up to 5. Change the values with `sets(UC, Entity, col == N)`. To say that a
 use case makes the comparison true or false without modeling the values, drive it
-explicitly with `sets`, and the comparison becomes a Bool variable:
+explicitly with `drives`, and the comparison becomes a Bool variable:
 
 ```
 // Declare that the Sell use case causes (stock < selling) to become true
-sets(Sell,   Stock, stock < selling, true)
+drives(Sell,   Stock, stock < selling, true)
 
 // Declare that the Refund use case causes (stock < selling) to become false
-sets(Refund, Stock, stock < selling, false)
+drives(Refund, Stock, stock < selling, false)
 ```
 
-A comparison that no `sets` drives is not a variable. It reads the Int values, so a
+A comparison that no `drives` names is not a variable. It reads the Int values, so a
 `forbidden(Stock, stock < selling)` is violated in any reachable state where `stock` is
 below `selling`, and `required` and `exclusive` read the values the same way. `states`,
 `check`, and TLC read it the same way.
@@ -2088,12 +2094,17 @@ A form leaves the language in two stages:
 A deprecation warning looks like this:
 
 ```text
-warning: model.rdra:3:1: deprecated syntax in 'model.rdra': `<predicate>` ...; write `<rewritten line>` (deprecated since 1.1.0, removed in 2.0.0; `rdra-ish fmt --write` rewrites it)
+warning: model.rdra:14:1: deprecated syntax in 'model.rdra': `sets` with a true/false argument drives a comparison, which is now `drives`; write `drives(Sell, Stock, stock < selling, true)` (deprecated since 0.5.0, removed in 2.0.0; `rdra-ish fmt --write` rewrites it)
 ```
 
 `LEGACY_FORMS` in `crates/rdra-ish-syntax/src/removed.rs` is the one list of these forms,
-with each form's status and versions. No form is deprecated now. The forms below were
-removed before 1.0, without a deprecated stage.
+with each form's status and versions.
+
+| Deprecated | Since | Removed in | Use instead |
+|---|---|---|---|
+| `sets(UseCase, Entity, comparison, true \| false)` | 0.5.0 | 2.0.0 | `drives(UseCase, Entity, comparison, true \| false)`. `sets` assigns a value; a comparison driven true or false is [`drives`](#driving-comparison-propositions-with-drives). |
+
+The forms below were removed before 1.0, without a deprecated stage.
 
 These spellings were removed in 0.4.0 so that each predicate has one form: the use case
 comes first, a column is always `Entity.column`, and each keyword is one word.

@@ -335,11 +335,14 @@ pub enum RdraError {
     #[error("PostgreSQL type name '{name}' is not valid in sets(...); use `present` for a non-null nullable value\n  hint: declare display/storage types with entity annotations or DBML export inference")]
     PgTypeNameInSets { name: String },
 
-    #[error("sets({usecase}, {entity}, ...) sets nothing: the third argument must be `column == value`, or a comparison followed by `true` or `false`\n  hint: write `sets({usecase}, {entity}, status == paid)` to set a value, or `sets({usecase}, {entity}, stock < selling, true)` to drive a comparison")]
+    #[error("sets({usecase}, {entity}, ...) sets nothing: the third argument must be `column == value`\n  hint: write `sets({usecase}, {entity}, status == paid)` to set a value, or `drives({usecase}, {entity}, stock < selling, true)` to drive a comparison true or false")]
     SetsNoEffect { usecase: String, entity: String },
 
-    #[error("sets(..., {col} == {value}, false) is invalid: the fourth argument drives comparison propositions (e.g. `stock < selling`), not value equality\n  hint: omit `, false` and set a different value with `sets(..., {col} == other)`, or use a comparison proposition")]
-    SetsFalseOnEquals { col: String, value: String },
+    #[error("drives({usecase}, {entity}, ...) drives nothing: the third argument must be a comparison and the fourth `true` or `false`\n  hint: write `drives({usecase}, {entity}, stock < selling, true)`, or `sets({usecase}, {entity}, status == paid)` to set a value")]
+    DrivesNoEffect { usecase: String, entity: String },
+
+    #[error("drives(..., {col} == {value}, false) is invalid: a value equality driven false names no value to leave\n  hint: write `sets(..., {col} == other)` with the value the use case leaves; `drives` with `false` is for a comparison such as `stock < selling`")]
+    DrivesFalseOnEquals { col: String, value: String },
 
     #[error("entity '{entity}' already has transitions on column '{existing}', ignoring additional column '{column}'\n  hint: one Enum lifecycle column per entity is supported; move the other lifecycle to a separate entity or drop the extra `transitions`")]
     MultipleLifecycleColumns {
@@ -396,8 +399,8 @@ pub enum RdraError {
     #[error("`in` / `not in` needs a column with a fixed set of values, but '{col}' has type {col_type}\n  hint: use it on an Enum, variation, Bool, Int, Money, Decimal, or @null column; compare other columns with `==`, `!=`, `<`, or `>`")]
     SetColumnNotEnumerable { col: String, col_type: String },
 
-    #[error("sets(..., {col} in (...)) is invalid: a use case leaves one value, not a set\n  hint: write `sets(UseCase, Entity, {col} == value)`; `in` and `not in` belong in rules, `holds`, `after`, `@check`, and `property`")]
-    SetsMembership { col: String },
+    #[error("{pred}(..., {col} in (...)) is invalid: a use case leaves one value, not a set\n  hint: write `sets(UseCase, Entity, {col} == value)`; `in` and `not in` belong in rules, `holds`, `after`, `@check`, and `property`")]
+    EffectMembership { pred: String, col: String },
 
     #[error(
         "comparison with `now` requires a Date or DateTime column, but '{col}' has type {col_type}"
@@ -615,10 +618,10 @@ pub struct Diagnostic {
     pub location: Option<crate::location::LocatedSpan>,
 }
 
-/// Hint for `TypeMismatch`: an event passed where `transitions` or `sets` now takes a use case
+/// Hint for `TypeMismatch`: an event passed where `transitions`, `sets`, or `drives` now takes a use case
 /// names the migration; every other mismatch keeps the generic hint.
 fn type_mismatch_hint(pred: &str, id: &str, actual: &str) -> String {
-    if actual == "event" && matches!(pred, "transitions" | "sets") {
+    if actual == "event" && matches!(pred, "transitions" | "sets" | "drives") {
         let event = id.strip_prefix("event::").unwrap_or(id);
         format!(
             "`{pred}` takes the use case that drives the change, not an event; name the use case that raises `{event}`, or run `scripts/migrate-phase3.py` to rewrite the model"

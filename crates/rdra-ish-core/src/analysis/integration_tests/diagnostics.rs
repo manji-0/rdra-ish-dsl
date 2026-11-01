@@ -433,7 +433,7 @@ relate(Customer, Order, 1:N)
 }
 
 #[test]
-fn test_sets_false_on_equals_is_rejected() {
+fn test_drives_false_on_equals_is_rejected() {
     let src = r#"
 entity Order "注文" {
   id: Int @pk
@@ -443,8 +443,8 @@ entity Order "注文" {
 }
 usecase Pay "支払"
 usecase Refund "返金"
-sets(Pay, Order, status == paid, false)
-sets(Refund, Order, stock < selling, false)
+drives(Pay, Order, status == paid, false)
+drives(Refund, Order, stock < selling, false)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
@@ -456,7 +456,7 @@ sets(Refund, Order, stock < selling, false)
         errors[0]
             .error
             .to_string()
-            .contains("sets(..., status == paid, false)"),
+            .contains("drives(..., status == paid, false)"),
         "{}",
         errors[0].error
     );

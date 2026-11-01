@@ -445,7 +445,7 @@ entity Order \"Order\" {{
   qty: Int
   stock: Int
 }}
-sets(PlaceOrder, Order, qty > stock, false)
+drives(PlaceOrder, Order, qty > stock, false)
 forbidden(Order, qty > stock)
 "
         ),

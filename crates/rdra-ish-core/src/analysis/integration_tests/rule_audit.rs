@@ -135,25 +135,34 @@ const FORMS: &[(&str, Expect)] = &[
     ("maps_field(F, Nosuch.status)", Error),
     ("maps_field(F, status)", Error),
     ("maps_field(F, Order, status)", Error), // the removed three-argument form
-    // sets: a column effect, or a comparison driven true or false
+    // sets: a column effect
     ("sets(Pay, Order, status == paid)", Recorded),
     ("sets(Pay, Order, status == \"paid\")", Error),
     ("sets(Pay, Order, kind == \"a\")", Error),
-    ("sets(Pay, Order, status == paid, true)", Recorded),
-    ("sets(Pay, Order, total < 3, true)", Recorded),
-    ("sets(Pay, Order, total < 3, false)", Recorded),
-    ("sets(Pay, Order, status == paid, false)", Error),
     ("sets(Pay, Order, status != paid)", Error),
     ("sets(Pay, Order, total < 3)", Error),
-    ("sets(Pay, Order, total < 3, maybe)", Error),
     ("sets(Pay, Order, status)", Error),
     ("sets(Pay, Order)", Error),
-    // sets leaves one value, so a set membership is an error in either form
+    ("sets(Pay, Order, status == paid, Order)", Error),
+    // the deprecated four-argument sets loads as drives
+    ("sets(Pay, Order, total < 3, true)", Recorded),
+    ("sets(Pay, Order, status == paid, false)", Error),
+    // drives: a comparison driven true or false; `== value, true` sets the value
+    ("drives(Pay, Order, total < 3, true)", Recorded),
+    ("drives(Pay, Order, total < 3, false)", Recorded),
+    ("drives(Pay, Order, status == paid, true)", Recorded),
+    ("drives(Pay, Order, status == paid, false)", Error),
+    ("drives(Pay, Order, total < 3, maybe)", Error),
+    ("drives(Pay, Order, total < 3)", Error),
+    ("drives(Pay, Order, status, true)", Error),
+    ("drives(Pay, Order, total < nosuch, true)", Error),
+    ("drives(Pay, Order)", Error),
+    // a use case leaves one value, so a set membership is an error in sets and drives
     ("sets(Pay, Order, status in (open, paid))", Error),
     ("sets(Pay, Order, status not in (open))", Error),
     ("sets(Pay, Order, Order.status in (paid))", Error),
-    ("sets(Pay, Order, status in (paid), true)", Error),
-    ("sets(Pay, Order, status not in (paid), false)", Error),
+    ("drives(Pay, Order, status in (paid), true)", Error),
+    ("drives(Pay, Order, status not in (paid), false)", Error),
     // set membership: wherever a comparison is a condition
     ("forbidden(Order, status in (open, paid))", Recorded),
     (
@@ -443,7 +452,14 @@ fn every_rule_predicate_has_a_form_in_the_audit() {
     let labelled = KNOWN_PREDICATES
         .iter()
         .filter(|p| predicate_chain_methods(p).contains(&"label"));
-    for pred in labelled.chain(&["holds", "maps_field", "sets", "chooses", "transitions"]) {
+    for pred in labelled.chain(&[
+        "holds",
+        "maps_field",
+        "sets",
+        "drives",
+        "chooses",
+        "transitions",
+    ]) {
         assert!(
             FORMS
                 .iter()

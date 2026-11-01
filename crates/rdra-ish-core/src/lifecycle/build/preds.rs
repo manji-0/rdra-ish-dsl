@@ -146,7 +146,7 @@ impl<'m> Builder<'m> {
         Term::Int(n)
     }
 
-    /// A local comparison: the proposition var when `sets(.., cmp, bool)` drives it,
+    /// A local comparison: the proposition var when a `drives(.., cmp, bool)` names it,
     /// otherwise the comparison itself over the bounded Int domain.
     fn cmp_atom(&mut self, ek: EntityKey, at: At, prop: &ComparisonProp, site: &Site) -> Pred {
         let e = self.ent_of[&ek];

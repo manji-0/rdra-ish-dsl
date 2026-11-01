@@ -256,7 +256,7 @@ pub struct SemanticModel {
     pub column_effects: Vec<ColumnEffect>,
     /// `chooses(UseCase, Entity.column)`: variation columns the actor picks again.
     pub column_choices: Vec<ColumnChoice>,
-    /// `sets(origin, entity, <comparison_expr>, bool)` で宣言された比較命題の真偽効果
+    /// `drives(origin, entity, <comparison_expr>, bool)` で宣言された比較命題の真偽効果
     pub proposition_effects: Vec<PropositionEffect>,
     /// `forbidden(...)` 述語で宣言された禁止状態制約
     pub forbidden_constraints: Vec<ForbiddenConstraint>,

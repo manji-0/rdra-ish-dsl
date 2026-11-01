@@ -34,7 +34,7 @@ holds one value per slot.
 | A `@null` column of any other type | `null`, `present` | Always |
 | An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, a `@check`, an applied condition body, an `after` assertion, or a `property` names it |
 | A column typed by a [`variation`](./language-reference.md#variations) | the variation's values | Something names it, as for Int |
-| A comparison proposition (`stock < selling`) | `false`, `true` | `sets(UC, E, cmp, bool)` drives the comparison |
+| A comparison proposition (`stock < selling`) | `false`, `true` | `drives(UC, E, cmp, bool)` drives the comparison |
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
 | `now` | `0..5` | Something compares a column to `now` |
 
@@ -106,7 +106,7 @@ effects apply together to the pre-state:
 | `creates(UC, E)` | The slot becomes `present`, with the columns at their base values. The creating use case's `sets` and transitions then apply. |
 | `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. |
 | `sets(UC, E, col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
-| `sets(UC, E, cmp, bool)` | The comparison variable becomes `bool`. |
+| `drives(UC, E, cmp, bool)` | The comparison variable becomes `bool`. |
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
 | `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |

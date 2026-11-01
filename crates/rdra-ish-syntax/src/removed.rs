@@ -131,51 +131,21 @@ pub const LEGACY_FORMS: &[LegacyForm] = &[
         status: Status::Removed { since: "0.4.0" },
         detect: Detect::Grammar,
     },
-];
-
-/// The rows the parser consults: [`LEGACY_FORMS`], plus an example deprecated form in tests.
-fn legacy_forms() -> impl Iterator<Item = &'static LegacyForm> {
-    LEGACY_FORMS.iter().chain(example::FORMS)
-}
-
-#[cfg(not(test))]
-mod example {
-    pub(super) const FORMS: &[super::LegacyForm] = &[];
-}
-
-#[cfg(test)]
-mod example {
-    use super::*;
-
-    /// `old_pays(Order, Pay)` is deprecated in favour of `pays(Pay, Order)`.
-    pub(super) const FORMS: &[LegacyForm] = &[LegacyForm {
-        id: "test-old-pays",
-        instead: "`pays(UseCase, Entity)`",
+    LegacyForm {
+        id: "sets-four-arguments",
+        instead: "`drives(UseCase, Entity, comparison, true|false)`",
         status: Status::Deprecated {
             since: "0.5.0",
-            removed_in: "1.0.0",
+            removed_in: "2.0.0",
         },
-        detect: Detect::Predicate("old_pays", old_pays),
-    }];
-
-    fn old_pays(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
-        let [_, _] = pred.args.as_slice() else {
-            return None;
-        };
-        let mut rewritten = pred.clone();
-        rewritten.name = "pays".into();
-        rewritten.args.swap(0, 1);
-        let message = format!(
-            "`old_pays` takes the use case first as `pays`; write `{}`",
-            format_predicate(&rewritten)
-        );
-        Some((rewritten, message))
-    }
-}
+        detect: Detect::Predicate("sets", legacy_sets_truth),
+    },
+];
 
 /// What to do instead of a removed keyword or predicate, if `word` is one.
 pub fn migration_hint(word: &str) -> Option<String> {
-    legacy_forms()
+    LEGACY_FORMS
+        .iter()
         .find(|form| matches!(form.detect, Detect::Keyword) && form.id == word)
         .map(|form| format!("`{}` is no longer supported; {}", form.id, form.instead))
 }
@@ -190,7 +160,7 @@ pub(crate) struct LegacyCall {
 
 /// The legacy form `pred` is written in, if any, rewritten to its current form.
 pub(crate) fn legacy_predicate(pred: &PredicateCall) -> Option<LegacyCall> {
-    legacy_forms().find_map(|form| {
+    LEGACY_FORMS.iter().find_map(|form| {
         let Detect::Predicate(name, rewrite) = form.detect else {
             return None;
         };
@@ -301,6 +271,21 @@ fn legacy_transitions(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
     rewritten.args.swap(0, 1);
     let message = format!(
         "`transitions` takes the use case first; write `{}`",
+        format_predicate(&rewritten)
+    );
+    Some((rewritten, message))
+}
+
+/// `sets(UC, E, cmp, true|false)`: `sets` assigns a value, and a comparison driven true or
+/// false is `drives`. Every four-argument call is renamed; `drives` reports a bad argument.
+fn legacy_sets_truth(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    if pred.args.len() != 4 {
+        return None;
+    }
+    let mut rewritten = pred.clone();
+    rewritten.name = "drives".into();
+    let message = format!(
+        "`sets` with a true/false argument drives a comparison, which is now `drives`; write `{}`",
         format_predicate(&rewritten)
     );
     Some((rewritten, message))
@@ -502,50 +487,53 @@ mod tests {
     }
 
     #[test]
-    fn a_deprecated_form_loads_rewritten_with_a_warning() {
-        let parsed = crate::parse_with_deprecations("old_pays(Order, Pay).label(\"x\")\n");
+    fn four_argument_sets_loads_as_drives_with_a_warning() {
+        let src = "sets(Sell, Stock, stock < selling, true)\n";
+        let parsed = crate::parse_with_deprecations(src);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let messages: Vec<_> = parsed.deprecations.iter().map(|d| &d.message).collect();
         assert_eq!(
             messages,
             vec![
-                "`old_pays` takes the use case first as `pays`; write `pays(Pay, Order).label(\"x\")` \
-                 (deprecated since 0.5.0, removed in 1.0.0; `rdra-ish fmt --write` rewrites it)"
+                "`sets` with a true/false argument drives a comparison, which is now `drives`; \
+                 write `drives(Sell, Stock, stock < selling, true)` \
+                 (deprecated since 0.5.0, removed in 2.0.0; `rdra-ish fmt --write` rewrites it)"
             ]
         );
-        assert_eq!(parsed.deprecations[0].span, 0..31);
+        assert_eq!(parsed.deprecations[0].span, 0..src.len() - 1);
         let Some(crate::ast::Item::Predicate(pred)) = parsed.ast.items.first() else {
             panic!("no predicate");
         };
-        assert_eq!(pred.name, "pays");
+        assert_eq!(pred.name, "drives");
     }
 
     #[test]
-    fn fmt_rewrites_a_deprecated_form_to_the_current_one() {
+    fn fmt_rewrites_four_argument_sets_to_drives() {
         assert_eq!(
-            crate::format_source("// paid\nold_pays(Order, Pay)\n").unwrap(),
-            "// paid\npays(Pay, Order)\n"
+            crate::format_source("// sold out\nsets(Sell, Stock, stock < selling, false)\n")
+                .unwrap(),
+            "// sold out\ndrives(Sell, Stock, stock < selling, false)\n"
         );
     }
 
     #[test]
     fn a_deprecated_form_is_not_a_parse_error() {
-        assert!(messages("old_pays(Order, Pay)\n").is_empty());
+        assert!(messages("sets(Sell, Stock, stock < selling, true)\n").is_empty());
     }
 
     #[test]
-    fn a_call_not_in_the_legacy_form_is_left_alone() {
-        let parsed = crate::parse_with_deprecations("old_pays(Order)\n");
+    fn three_argument_sets_is_left_alone() {
+        let parsed = crate::parse_with_deprecations("sets(Pay, Order, status == paid)\n");
         assert!(parsed.deprecations.is_empty());
         let Some(crate::ast::Item::Predicate(pred)) = parsed.ast.items.first() else {
             panic!("no predicate");
         };
-        assert_eq!(pred.name, "old_pays");
+        assert_eq!(pred.name, "sets");
     }
 
     #[test]
     fn legacy_form_ids_are_unique() {
-        let mut ids: Vec<_> = super::legacy_forms().map(|form| form.id).collect();
+        let mut ids: Vec<_> = super::LEGACY_FORMS.iter().map(|form| form.id).collect();
         let len = ids.len();
         ids.sort();
         ids.dedup();
@@ -554,7 +542,7 @@ mod tests {
 
     #[test]
     fn only_a_predicate_rewrite_can_be_deprecated() {
-        for form in super::legacy_forms() {
+        for form in super::LEGACY_FORMS {
             if matches!(form.status, super::Status::Deprecated { .. }) {
                 assert!(
                     matches!(form.detect, super::Detect::Predicate(..)),

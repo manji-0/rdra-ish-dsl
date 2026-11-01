@@ -280,19 +280,19 @@ fn a_column_without_a_closed_set_of_values_is_an_error() {
 }
 
 #[test]
-fn sets_rejects_a_membership() {
-    for src in [
-        "sets(U, E, status in (open, paid))\n",
-        "sets(U, E, status not in (open))\n",
-        "sets(U, E, status in (open), true)\n",
-        "sets(U, E, status in (open), false)\n",
+fn sets_and_drives_reject_a_membership() {
+    for (src, pred) in [
+        ("sets(U, E, status in (open, paid))\n", "sets"),
+        ("sets(U, E, status not in (open))\n", "sets"),
+        ("drives(U, E, status in (open), true)\n", "drives"),
+        ("drives(U, E, status in (open), false)\n", "drives"),
     ] {
         let (model, diags) = with(src);
         let errs = errors(&diags);
         assert_eq!(errs.len(), 1, "{src}: {errs:?}");
         assert_eq!(
             format!("{:?}", errs[0]),
-            r#"SetsMembership { col: "status" }"#,
+            format!(r#"EffectMembership {{ pred: "{pred}", col: "status" }}"#),
             "{src}"
         );
         assert!(model.column_effects.is_empty(), "{src}");

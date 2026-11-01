@@ -123,7 +123,7 @@ invariant(Order, Payment)
 ```rdra
 transitions(SubmitOrder, Order.status, draft -> submitted)
 sets(Restock, Item, stock == 3)
-sets(ReserveStock, Inventory, stock < selling, true)  // drives the comparison as a Bool
+drives(ReserveStock, Inventory, stock < selling, true)  // drives the comparison as a Bool
 ```
 
 Several `transitions` of one use case from one state are the actor's choice: one run takes
@@ -156,8 +156,8 @@ forbidden(Disclosure, status == file, acquired == false)
 
 Use Int / Money / Decimal columns and `sets(UC, E, col == N)` when the quantity itself
 must be checked; `check` and TLC both evaluate a comparison on the values over
-`0..--int-range-max`. Drive the comparison with the four-argument `sets` only when the
-model does not track the values.
+`0..--int-range-max`. Drive the comparison with `drives(UC, E, cmp, true|false)` only when
+the model does not track the values.
 
 ## Variation columns
 

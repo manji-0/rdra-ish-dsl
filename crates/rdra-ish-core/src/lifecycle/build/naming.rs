@@ -298,7 +298,7 @@ pub(super) fn property_entity(
     model.property_entity(entity, column)
 }
 
-/// `sets(UC, E, cmp, bool)` drives this comparison, so it reads a proposition var.
+/// A `drives(UC, E, cmp, bool)` names this comparison, so it reads a proposition var.
 pub(super) fn is_driven(model: &SemanticModel, ek: EntityKey, prop: &ComparisonProp) -> bool {
     let key = prop.axis_key();
     model
@@ -308,7 +308,7 @@ pub(super) fn is_driven(model: &SemanticModel, ek: EntityKey, prop: &ComparisonP
 }
 
 /// Driven proposition keys of an entity, in the order `states` has listed them: constraint
-/// comparisons first, then the remaining `sets(.., cmp, bool)` keys.
+/// comparisons first, then the remaining `drives(.., cmp, bool)` keys.
 pub(super) fn driven_props(model: &SemanticModel, ek: EntityKey) -> Vec<String> {
     let constraint_props = model
         .forbidden_constraints

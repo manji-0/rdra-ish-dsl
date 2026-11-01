@@ -37,6 +37,7 @@ fn resolve_predicate_args(
                         | "required"
                         | "exclusive"
                         | "sets"
+                        | "drives"
                         | "invariant"
                         | "after"
                         | "holds"
@@ -800,12 +801,9 @@ fn process_sets_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let (Some(Some(NodeRef::UseCase(origin))), Some(Some(NodeRef::Entity(entity_key)))) =
-        (resolved.first(), resolved.get(1))
-    else {
+    let Some((origin, entity_key)) = effect_target(resolved) else {
         return;
     };
-    let (origin, entity_key) = (*origin, *entity_key);
     let before = diags.len();
     let recorded = record_sets_effect(model, pred, origin, entity_key, ctx, diags);
     if !recorded {
@@ -817,7 +815,91 @@ fn process_sets_predicate(
     }
 }
 
-/// Records the column effect or the driven comparison a `sets` states, and says whether it did.
+fn process_drives_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some((origin, entity_key)) = effect_target(resolved) else {
+        return;
+    };
+    let before = diags.len();
+    let recorded = record_drives_effect(model, pred, origin, entity_key, ctx, diags);
+    if !recorded {
+        let err = RdraError::DrivesNoEffect {
+            usecase: model.use_cases[origin].id.clone(),
+            entity: model.entities[entity_key].id.clone(),
+        };
+        push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
+    }
+}
+
+/// The use case and entity a `sets` or `drives` names first.
+fn effect_target(resolved: &[Option<NodeRef>]) -> Option<(UseCaseKey, EntityKey)> {
+    match (resolved.first(), resolved.get(1)) {
+        (Some(Some(NodeRef::UseCase(origin))), Some(Some(NodeRef::Entity(entity)))) => {
+            Some((*origin, *entity))
+        }
+        _ => None,
+    }
+}
+
+/// The comparison a `sets` or `drives` names third, or `None` after reporting a set
+/// membership: a use case leaves one value.
+fn effect_comparison<'a>(
+    pred: &'a PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<&'a Comparison> {
+    let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) else {
+        return None;
+    };
+    if cmp.op.is_membership() {
+        let col = match &cmp.lhs {
+            Operand::Column(name) => name.clone(),
+            Operand::QualifiedColumn(q) => q.column.clone(),
+            _ => String::new(),
+        };
+        push_error(
+            ctx,
+            diags,
+            cmp.span.clone(),
+            RdraError::EffectMembership {
+                pred: pred.name.clone(),
+                col,
+            },
+        );
+        return None;
+    }
+    Some(cmp)
+}
+
+fn push_column_effect(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    origin: UseCaseKey,
+    entity: EntityKey,
+    column: String,
+    value: EffectValue,
+    ctx: DiagCtxt,
+) {
+    model.column_effects.push(ColumnEffect {
+        site: Some(ctx.locate(pred.span.clone())),
+        origin,
+        entity,
+        column: column.clone(),
+        value,
+    });
+    model.typed_predicates.push(TypedPredicate::SetsColumn {
+        origin,
+        entity,
+        column,
+    });
+}
+
+/// Records the column effect `sets(UC, E, column == value)` states, and says whether it did.
 fn record_sets_effect(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -826,139 +908,106 @@ fn record_sets_effect(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
-    if let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) {
-        // A use case leaves one value; `in` names several, in either form of `sets`.
-        if cmp.op.is_membership() {
-            let col = match &cmp.lhs {
-                Operand::Column(name) => name.clone(),
+    if pred.args.len() > 3 {
+        return false;
+    }
+    let Some(cmp) = effect_comparison(pred, ctx, diags) else {
+        return false;
+    };
+    let entity_id = model.entities[entity_key].id.clone();
+    let entity_cols = model.entities[entity_key].columns.clone();
+    let Ok(Some((column, value))) = super::constraint::resolve_entity_equals_from_comparison(
+        &model.variations,
+        &entity_cols,
+        &entity_id,
+        cmp,
+        ctx,
+        diags,
+    ) else {
+        return false;
+    };
+    push_column_effect(model, pred, origin, entity_key, column, value, ctx);
+    true
+}
+
+/// Records the comparison `drives(UC, E, cmp, true|false)` drives, and says whether it did.
+/// A value equality (`status == paid, true`) sets the value, as `sets` does; driving one
+/// `false` is an error, since it names no value to leave.
+fn record_drives_effect(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    origin: UseCaseKey,
+    entity_key: EntityKey,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    let truth = match pred.args.get(3) {
+        Some(PredicateArg::Ref(q)) if q.kind_qualifier.is_none() && q.parts.len() == 1 => {
+            q.parts[0].as_str()
+        }
+        Some(PredicateArg::Lit(s)) => s.as_str(),
+        _ => return false,
+    };
+    let truth = match truth {
+        "true" => true,
+        "false" => false,
+        _ => return false,
+    };
+    let Some(cmp) = effect_comparison(pred, ctx, diags) else {
+        return false;
+    };
+    let entity_id = model.entities[entity_key].id.clone();
+    let entity_cols = model.entities[entity_key].columns.clone();
+    match super::constraint::resolve_entity_equals_from_comparison(
+        &model.variations,
+        &entity_cols,
+        &entity_id,
+        cmp,
+        ctx,
+        diags,
+    ) {
+        Ok(Some((column, value))) if truth => {
+            push_column_effect(model, pred, origin, entity_key, column, value, ctx);
+            true
+        }
+        Ok(Some((col, _))) => {
+            let value = match &cmp.rhs {
+                Operand::Column(v) | Operand::IntLit(v) => v.clone(),
+                Operand::Now => "now".into(),
                 Operand::QualifiedColumn(q) => q.column.clone(),
-                _ => String::new(),
+                Operand::Values(vs) => format!("({})", vs.join(", ")),
             };
             push_error(
                 ctx,
                 diags,
                 cmp.span.clone(),
-                RdraError::SetsMembership { col },
+                RdraError::DrivesFalseOnEquals { col, value },
             );
-            return false;
+            false
         }
-        let entity_id = model.entities[entity_key].id.clone();
-        let entity_cols = model.entities[entity_key].columns.clone();
-
-        // Fourth arg true/false drives comparison propositions (stock < selling, …).
-        // Value equality (status == paid) with `, true` falls through to a column effect;
-        // `, false` is invalid for value equality (would silently set the value).
-        let truth_str = match pred.args.get(3) {
-            Some(PredicateArg::Ref(q)) if q.kind_qualifier.is_none() && q.parts.len() == 1 => {
-                Some(q.parts[0].as_str().to_string())
-            }
-            Some(PredicateArg::Lit(s)) => Some(s.clone()),
-            _ => None,
-        };
-        if let Some(truth_str) = truth_str.filter(|s| s == "true" || s == "false") {
-            match super::constraint::resolve_entity_equals_from_comparison(
-                &model.variations,
-                &entity_cols,
-                &entity_id,
-                cmp,
-                ctx,
-                diags,
-            ) {
-                Ok(Some((col_name, value))) => {
-                    if truth_str == "true" {
-                        model.column_effects.push(ColumnEffect {
-                            site: Some(ctx.locate(pred.span.clone())),
-                            origin,
-                            entity: entity_key,
-                            column: col_name.clone(),
-                            value,
-                        });
-                        model.typed_predicates.push(TypedPredicate::SetsColumn {
-                            origin,
-                            entity: entity_key,
-                            column: col_name,
-                        });
-                    } else {
-                        push_error(
-                            ctx,
-                            diags,
-                            cmp.span.clone(),
-                            RdraError::SetsFalseOnEquals {
-                                col: col_name,
-                                value: match &cmp.rhs {
-                                    Operand::Column(v) | Operand::IntLit(v) => v.clone(),
-                                    Operand::Now => "now".into(),
-                                    Operand::QualifiedColumn(q) => q.column.clone(),
-                                    Operand::Values(vs) => format!("({})", vs.join(", ")),
-                                },
-                            },
-                        );
-                    }
-                    return truth_str == "true";
-                }
-                Ok(None) => {
-                    if let Some(prop) = resolve_comparison(
-                        &model.variations,
-                        &entity_cols,
-                        &entity_id,
-                        cmp,
-                        ctx,
-                        diags,
-                    ) {
-                        model.proposition_effects.push(PropositionEffect {
-                            site: Some(ctx.locate(pred.span.clone())),
-                            origin,
-                            entity: entity_key,
-                            prop: prop.clone(),
-                            truth: truth_str == "true",
-                        });
-                        model
-                            .typed_predicates
-                            .push(TypedPredicate::SetsProposition {
-                                origin,
-                                entity: entity_key,
-                                prop,
-                                truth: truth_str == "true",
-                            });
-                        return true;
-                    }
-                    return false;
-                }
-                Err(()) => return false,
-            }
-        }
-
-        // Column effect form: sets(UC, E, status == captured). A fourth argument other than
-        // `true` or `false` is not this form.
-        if pred.args.len() > 3 {
-            return false;
-        }
-        if let Ok(Some((col_name, value))) =
-            super::constraint::resolve_entity_equals_from_comparison(
-                &model.variations,
-                &entity_cols,
-                &entity_id,
-                cmp,
-                ctx,
-                diags,
-            )
-        {
-            model.column_effects.push(ColumnEffect {
+        Ok(None) => {
+            let Some(prop) =
+                resolve_comparison(&model.variations, &entity_cols, &entity_id, cmp, ctx, diags)
+            else {
+                return false;
+            };
+            model.proposition_effects.push(PropositionEffect {
                 site: Some(ctx.locate(pred.span.clone())),
                 origin,
                 entity: entity_key,
-                column: col_name.clone(),
-                value,
+                prop: prop.clone(),
+                truth,
             });
-            model.typed_predicates.push(TypedPredicate::SetsColumn {
+            model.typed_predicates.push(TypedPredicate::Drives {
                 origin,
                 entity: entity_key,
-                column: col_name,
+                prop,
+                truth,
             });
-            return true;
+            true
         }
+        Err(()) => false,
     }
-    false
 }
 
 fn process_forbidden_predicate(
@@ -1738,6 +1787,7 @@ pub(crate) fn process_predicate(
         "shares" => process_shares_predicate(model, pred, &resolved, ctx),
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
+        "drives" => process_drives_predicate(model, pred, &resolved, ctx, diags),
         "chooses" => process_chooses_predicate(model, pred, &resolved, ctx, diags),
         "combines" => {
             super::condition::process_combines_predicate(model, pred, &resolved, ctx, diags)
@@ -1765,6 +1815,7 @@ fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraEr
     let got = pred.args.len();
     let (expected, ok) = match pred.name.as_str() {
         "sets" => ("at least 2".into(), got >= 2),
+        "drives" => ("4".into(), got == 4),
         "after" => ("at least 1".into(), got >= 1),
         // Cross-entity `invariant` may be empty before `.when(...).none/has(...)`.
         "invariant" => ("0 or more".into(), true),

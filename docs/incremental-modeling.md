@@ -555,11 +555,11 @@ too many violations, prefer narrowing it into an `invariant` before adding more 
 
 Add comparison propositions and cross-entity constraints last. These rules are powerful
 but carry more modeling obligations: a comparison needs `sets` that move its columns (or
-`sets` that drive it), and a cross-entity rule ranges over every combination of the
+`drives` that drive it), and a cross-entity rule ranges over every combination of the
 participating entities' instances unless `.along` links them.
 
 ```rdra
-sets(SellItem, Inventory, stock < selling, true)
+drives(SellItem, Inventory, stock < selling, true)
 forbidden(Inventory, stock < selling)
 
 forbidden(Order, Payment,

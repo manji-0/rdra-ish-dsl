@@ -184,7 +184,7 @@ pub enum TypedPredicate {
         entity: EntityKey,
         column: std::string::String,
     },
-    SetsProposition {
+    Drives {
         origin: UseCaseKey,
         entity: EntityKey,
         prop: ComparisonProp,

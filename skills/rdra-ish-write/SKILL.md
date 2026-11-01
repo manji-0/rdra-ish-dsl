@@ -168,7 +168,7 @@ kinds fail to parse, with a hint naming the replacement.
 | `outbox` | `(Event)` | the event is published outside the model, so it needs no local consumer |
 | `transitions` | `(UseCase, Entity.col, from -> to)` | the use case moves the Enum column from -> to |
 | `sets` | `(UseCase, Entity, col == val)` | explicit column effect |
-| `sets` | `(UseCase, Entity, col op rhs, true\|false)` | comparison proposition effect |
+| `drives` | `(UseCase, Entity, col op rhs, true\|false)` | comparison proposition effect |
 | `forbidden` | `(Entity, col == val\|col op rhs, ...)` | forbidden reachable state combination |
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
 | `required` | `(Entity, col == val\|col op rhs, ...)` | always-required state facts |

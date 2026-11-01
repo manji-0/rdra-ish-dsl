@@ -45,7 +45,7 @@ Also ask:
    co-occurrences.
 4. Add `required(Entity, ...)` only for facts that truly apply to every reachable state.
 5. Use comparison propositions when rules depend on expressions such as
-   `stock < selling`, and add matching `sets(..., expr, true/false)` effects.
+   `stock < selling`, and add matching `drives(..., expr, true/false)` effects.
    On an Enum, variation, or Bool column, a bare right-hand side is a value
    (`status == paid`, `status != cancelled`) even when a column has the same name, so
    name values as plain words without a prefix. Compare two such columns with a
@@ -113,7 +113,7 @@ invariant(Order)
 required(Order, total >= 0)
 
 // 3. Comparisons, cross-entity rules, quantifiers, postconditions, properties
-sets(SellOut, Stock, stock < selling, true)
+drives(SellOut, Stock, stock < selling, true)
 sets(SellOut, Stock, reorder == true)
 invariant(Stock)
   .when(stock < selling)
@@ -192,7 +192,7 @@ error[Inv_Order_0]: invariant Inv_Order_0 is violated: invariant violated: when 
 - `NoWitness`, `Deadlock`, `NeverRuns`, `UnwrittenConstrainedVar`, and `NoCreationPath`
   findings are reviewed instead of ignored.
 - A comparison reads the Int values of its columns. Move them with `sets(UC, E, col == N)`,
-  or drive the comparison with `sets(..., expr, true/false)`. A use case that drives it one
+  or drive the comparison with `drives(..., expr, true/false)`. A use case that drives it one
   way while its own Int `sets` make it the other is `ContradictoryDrivenComparison`, an
   error.
 - The final model can explain BUC scope, actor authority, API/system boundaries,

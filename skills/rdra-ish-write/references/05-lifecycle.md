@@ -67,8 +67,8 @@ Also ask:
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). A `sets` on a column that `transitions`
    drives is an error unless the use case creates the entity.
-9. Add comparison-proposition `sets` when rules depend on a derived comparison and the
-   model does not track the values. Prefer Int / Money / Decimal columns plus
+9. Add `drives(UC, E, cmp, true|false)` when rules depend on a derived comparison and
+   the model does not track the values. Prefer Int / Money / Decimal columns plus
    `sets(UC, E, col == N)` when the quantity itself must be checked: a comparison
    reads those values in `states` and in TLA+.
 10. Add `after(UseCase).assert(...)` for a postcondition of that use case, and
@@ -152,7 +152,8 @@ temporal properties.
   concrete triggered use cases are contained by the downstream BUC.
 - `check` reports no `Witness_*` or `Deadlock_*` error, and each `Runs_*` warning is
   understood.
-- `sets` captures relevant enum, nullable, boolean, Int, and comparison effects.
+- `sets` captures relevant enum, nullable, boolean, and Int effects, and `drives` the
+  comparison effects.
 - AsyncAPI export is meaningful when events, raises/triggers/transitions, and
   outbox-like handoffs are part of the review.
 

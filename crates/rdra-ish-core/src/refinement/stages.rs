@@ -636,7 +636,7 @@ impl RuleTier {
                 "add `invariant({id}).when(...).then(...)` for facts that must co-occur, or a narrow `required({id}, ...)`"
             ),
             RuleTier::Advanced => format!(
-                "add a comparison such as `forbidden({id}, a < b)` driven by `sets`, or a rule over {id} and another entity"
+                "add a comparison such as `forbidden({id}, a < b)` driven by `sets` or `drives`, or a rule over {id} and another entity"
             ),
         }
     }

@@ -636,7 +636,7 @@ impl<'m> Builder<'m> {
             CmpOpModel::Ge => lhs >= rhs,
             CmpOpModel::Eq => lhs == rhs,
             CmpOpModel::Ne => lhs != rhs,
-            // A driven comparison is never a set: `sets` rejects `in`.
+            // A driven comparison is never a set: `drives` rejects `in`.
             CmpOpModel::In | CmpOpModel::NotIn => return,
         };
         if holds == pe.truth {

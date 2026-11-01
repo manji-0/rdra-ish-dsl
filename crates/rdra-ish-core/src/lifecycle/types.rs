@@ -113,7 +113,7 @@ pub enum VarKind {
         /// PostgreSQL type a `sets(.., present:<type>)` declared, for display only.
         pg_type: Option<String>,
     },
-    /// A comparison proposition that `sets(UC, E, cmp, bool)` drives.
+    /// A comparison proposition a `drives(UC, E, cmp, bool)` names.
     Prop {
         entity: EntId,
         key: String,

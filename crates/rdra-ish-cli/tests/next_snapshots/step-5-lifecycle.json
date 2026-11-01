@@ -180,7 +180,7 @@
               {
                 "id": "Store",
                 "kind": "entity",
-                "message": "add a comparison such as `forbidden(Store, a < b)` driven by `sets`, or a rule over Store and another entity"
+                "message": "add a comparison such as `forbidden(Store, a < b)` driven by `sets` or `drives`, or a rule over Store and another entity"
               }
             ],
             "notes": [],
