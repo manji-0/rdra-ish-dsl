@@ -271,6 +271,10 @@ pub const EDGE_RELATIONS: &[EdgeRelation] = &[
         "applies_to",
         Name,
     ),
+    // `.when(Cond)` on a `transitions` arm or a `chooses` value, derived: the use case
+    // drives the guarded write. With `applies_to`, a condition to a use case has two
+    // relations, so both are labelled.
+    rel("rdra", &["condition"], &["usecase"], "when", Name),
     rel(
         "rdra",
         &["condition"],
@@ -401,6 +405,7 @@ pub const EDGE_RELATIONS: &[EdgeRelation] = &[
     ),
     rel("usecase", &["event"], &["extsystem"], "triggers", Name),
     rel("usecase", &["condition"], &["usecase"], "applies_to", Name),
+    rel("usecase", &["condition"], &["usecase"], "when", Name),
     rel("usecase", &["usecase"], &["screen"], "displays", Name),
     rel(
         "usecase",
@@ -524,6 +529,7 @@ pub const EDGE_RELATIONS: &[EdgeRelation] = &[
         "applies_to",
         Name,
     ),
+    rel("condition", &["condition"], &["usecase"], "when", Name),
     // screen: a navigates is labelled with its `.via` use case, else `navigates`; a dashed
     // edge is 業務上の順番.
     rel("screen", &["screen"], &["screen"], "navigates", Name),

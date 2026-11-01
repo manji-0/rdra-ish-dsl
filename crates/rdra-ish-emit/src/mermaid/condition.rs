@@ -2,7 +2,7 @@
 //! variations and state models it combines and what it applies to, and each variation with
 //! its values.
 
-use super::{buc_scope, declare, omitted_linked_kinds, render_edges, GraphEdge};
+use super::{buc_scope, declare, guard_edge, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
 use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{
@@ -118,21 +118,25 @@ impl Emitter for ConditionMermaidEmitter {
                     });
                 }
             }
-            // A `.when` guard is drawn on its arm in the state diagram; here it shows as the
-            // state model the condition combines.
+            // What it applies to, and the use cases whose arm or value its `.when` guards.
             for rel in &model.relations {
-                if rel.kind != RelKind::AppliesTo || rel.from != *condition || !visible(&rel.to) {
+                if rel.from != *condition || !visible(&rel.to) {
                     continue;
                 }
-                if let Some(to) = contract_id(model, &rel.to) {
-                    targets.insert(rel.to.clone());
-                    edges.push(GraphEdge {
+                let edge = match rel.kind {
+                    RelKind::AppliesTo => contract_id(model, &rel.to).map(|to| GraphEdge {
                         from: id.clone(),
                         label: "applies_to".to_string(),
                         to,
                         arrow: "-.->",
                         derived: None,
-                    });
+                    }),
+                    RelKind::Guards => guard_edge(model, rel),
+                    _ => None,
+                };
+                if let Some(edge) = edge {
+                    targets.insert(rel.to.clone());
+                    edges.push(edge);
                 }
             }
         }
@@ -306,13 +310,49 @@ applies_to(Booked, CheckIn)
     fn a_condition_applies_to_use_cases_and_apis() {
         let result = emit(View::whole());
         for edge in [
-            "  condition__Booked -.-> usecase__CheckIn\n",
-            "  condition__Capped -.-> usecase__Bill\n",
+            "  condition__Booked -.->|applies_to| usecase__CheckIn\n",
+            "  condition__Capped -.->|applies_to| usecase__Bill\n",
             "  condition__Capped -.-> api__BillApi\n",
         ] {
             assert!(result.contains(edge), "{edge}: {result}");
         }
         assert!(result.contains("  api__BillApi{{\"Bill API\"}}:::api\n"));
+    }
+
+    #[test]
+    fn a_when_guard_is_a_derived_edge_to_the_use_case_naming_what_it_guards() {
+        let src = r#"
+variation Scope "Scope" {
+  free
+  limited
+}
+entity Notice "Notice" {
+  id: Int @pk
+  kind: Enum(first, last) @default(first)
+  amendment: Scope
+  status: Enum(open, drafted, closed) @default(open)
+}
+usecase Draft "Draft"
+condition FirstOnly "First notice"
+holds(FirstOnly, Notice.kind == first)
+transitions(Draft, Notice.status, open -> drafted).when(FirstOnly)
+transitions(Draft, Notice.status, open -> closed)
+chooses(Draft, Notice.amendment, free).when(FirstOnly)
+chooses(Draft, Notice.amendment, limited)
+"#;
+        let result = ConditionMermaidEmitter
+            .emit(&model_from(src), &View::whole())
+            .unwrap();
+        assert!(
+            result.contains(
+                "  condition__FirstOnly -.->|when| usecase__Draft\n  %% derived condition__FirstOnly -> usecase__Draft via transitions Notice.status open->drafted, chooses Notice.amendment free\n"
+            ),
+            "{result}"
+        );
+        assert!(
+            result.contains("  usecase__Draft(\"Draft\"):::usecase\n"),
+            "{result}"
+        );
     }
 
     #[test]

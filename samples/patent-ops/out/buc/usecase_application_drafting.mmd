@@ -44,9 +44,9 @@ flowchart LR
   actor__IpStaff -.-> usecase__RequestDraftRevision
   actor__IpStaff -.-> usecase__RequestDrafting
   actor__PatentAttorney -.-> usecase__SubmitDraft
-  condition__DecidedToFile -.-> usecase__RequestDrafting
-  condition__DraftDelivered -.-> usecase__ConfirmDraftByInventor
-  condition__InventorChecked -.-> usecase__ApproveDraft
+  condition__DecidedToFile -.->|applies_to| usecase__RequestDrafting
+  condition__DraftDelivered -.->|applies_to| usecase__ConfirmDraftByInventor
+  condition__InventorChecked -.->|applies_to| usecase__ApproveDraft
   event__EvFilingDecided -.-> usecase__RequestDrafting
   usecase__ApproveDraft -.-> screen__DraftReviewScreen
   usecase__ApproveDraft -.-> event__EvDraftApproved

@@ -52,8 +52,8 @@ flowchart LR
   actor__AccountsClerk -.-> usecase__IssueReceipt
   actor__AccountsClerk -.-> usecase__RefundPayment
   actor__AccountsClerk -.-> usecase__SettleAtWindow
-  condition__CopayCappedAtLimit -.-> usecase__CalculateVisitBill
-  condition__UnreferredFirstVisit -.-> usecase__ApplySelectedTreatmentFee
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
   event__EvBillCalculated -.-> extsystem__PaymentGateway
   event__EvBillCalculated -.-> usecase__CallPatientForPayment
   event__EvPaymentSettled -.-> usecase__SettleAtKiosk

@@ -71,7 +71,7 @@ flowchart LR
   actor__ReceptionClerk -.-> usecase__RecheckEligibility
   actor__ReceptionClerk -.-> usecase__RecordEligibilityDeclaration
   actor__ReceptionClerk -.-> usecase__VerifyArrival
-  condition__BookedPatient -.-> usecase__BatchVerifyEligibility
+  condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   event__EvAppointmentCheckedIn -.-> extsystem__OnlineEligibilitySystem
   event__EvAppointmentCheckedIn -.-> usecase__PrepareEncounter
   event__EvEligibilityChecked -.-> usecase__ReceiveEligibilityInvalid

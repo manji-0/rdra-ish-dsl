@@ -299,54 +299,56 @@ flowchart LR
   buc__BucRegistration --> usecase__RecordRegistration
   buc__BucRegistration --> usecase__RecordRegistrationDismissal
   buc__BucRegistration --> usecase__RequestFeePaymentExtension
-  condition__AnnuityDue -.-> usecase__PayAnnuity
+  condition__AnnuityDue -.->|applies_to| usecase__PayAnnuity
   condition__AnnuityDue -.-> entity__Patent
   %% derived condition__AnnuityDue -> entity__Patent from holds
-  condition__DivisionPossible -.-> usecase__FileDivisionalApplication
+  condition__DivisionPossible -.->|applies_to| usecase__FileDivisionalApplication
   condition__DivisionPossible -.-> entity__PatentApplication
   %% derived condition__DivisionPossible -> entity__PatentApplication from holds
-  condition__EmployeeInventionReward -.-> usecase__DecideReward
+  condition__EmployeeInventionReward -.->|applies_to| usecase__DecideReward
   condition__EmployeeInventionReward -.-> variation__InventionCategory
   %% derived condition__EmployeeInventionReward -> variation__InventionCategory from holds
-  condition__ExaminationOver -.-> usecase__CloseOfficeActionDocket
+  condition__ExaminationOver -.->|applies_to| usecase__CloseOfficeActionDocket
   condition__ExaminationOver -.-> entity__PatentApplication
   %% derived condition__ExaminationOver -> entity__PatentApplication from holds
-  condition__FirstFeesPaid -.-> usecase__RecordRegistration
+  condition__FirstFeesPaid -.->|applies_to| usecase__RecordRegistration
   condition__FirstFeesPaid -.-> entity__PatentApplication
   %% derived condition__FirstFeesPaid -> entity__PatentApplication from holds
-  condition__FirstFeesUnpaid -.-> usecase__RecordRegistrationDismissal
+  condition__FirstFeesUnpaid -.->|applies_to| usecase__RecordRegistrationDismissal
   condition__FirstFeesUnpaid -.-> entity__PatentApplication
   %% derived condition__FirstFeesUnpaid -> entity__PatentApplication from holds
   condition__FirstNoticeOnly -.-> variation__AmendmentScope
   %% derived condition__FirstNoticeOnly -> variation__AmendmentScope from holds
+  condition__FirstNoticeOnly -.->|when| usecase__DraftResponse
+  %% derived condition__FirstNoticeOnly -> usecase__DraftResponse via chooses OfficeAction.amendment free
   condition__Granted -.-> api__FeePaymentApi
   condition__Granted -.-> entity__PatentApplication
   %% derived condition__Granted -> entity__PatentApplication from holds
-  condition__InForce -.-> usecase__DecideToLetLapse
+  condition__InForce -.->|applies_to| usecase__DecideToLetLapse
   condition__InForce -.-> entity__Patent
   %% derived condition__InForce -> entity__Patent from holds
-  condition__KeptRight -.-> usecase__PayLateAnnuity
+  condition__KeptRight -.->|applies_to| usecase__PayLateAnnuity
   condition__KeptRight -.-> entity__Patent
   %% derived condition__KeptRight -> entity__Patent from holds
-  condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
+  condition__NotExtendedWithinTerm -.->|applies_to| usecase__RequestLateExtension
   condition__NotExtendedWithinTerm -.-> entity__OfficeAction
   %% derived condition__NotExtendedWithinTerm -> entity__OfficeAction from holds
-  condition__NotYetExtended -.-> usecase__RequestFeePaymentExtension
+  condition__NotYetExtended -.->|applies_to| usecase__RequestFeePaymentExtension
   condition__NotYetExtended -.-> entity__PatentApplication
   %% derived condition__NotYetExtended -> entity__PatentApplication from holds
-  condition__StillPending -.-> usecase__RecordPublication
+  condition__StillPending -.->|applies_to| usecase__RecordPublication
   condition__StillPending -.-> entity__PatentApplication
   %% derived condition__StillPending -> entity__PatentApplication from holds
-  condition__UnderExamination -.-> usecase__ReceiveOfficeAction
+  condition__UnderExamination -.->|applies_to| usecase__ReceiveOfficeAction
   condition__UnderExamination -.-> entity__PatentApplication
   %% derived condition__UnderExamination -> entity__PatentApplication from holds
-  condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
+  condition__WithinTermNotExtended -.->|applies_to| usecase__RequestTermExtension
   condition__WithinTermNotExtended -.-> entity__OfficeAction
   %% derived condition__WithinTermNotExtended -> entity__OfficeAction from holds
-  condition__YearPaid -.-> usecase__RollOverAnnuityYear
+  condition__YearPaid -.->|applies_to| usecase__RollOverAnnuityYear
   condition__YearPaid -.-> entity__Patent
   %% derived condition__YearPaid -> entity__Patent from holds
-  condition__YearUnpaid -.-> usecase__EnterGracePeriod
+  condition__YearUnpaid -.->|applies_to| usecase__EnterGracePeriod
   condition__YearUnpaid -.-> entity__Patent
   %% derived condition__YearUnpaid -> entity__Patent from holds
   entity__DivisionalFiling ---|N:1| entity__PatentApplication

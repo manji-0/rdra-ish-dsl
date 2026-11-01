@@ -97,7 +97,7 @@ flowchart LR
   actor__ClaimsClerk -.-> usecase__ReviewClaimTransfer
   actor__ClaimsClerk -.-> usecase__SubmitClaimStatements
   actor__ClaimsClerk -.-> usecase__VoidCharge
-  condition__TransferNotPossible -.-> usecase__RecordClaimReturn
+  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   event__EvClaimAccepted -.-> usecase__ReceiveClaimAccepted
   event__EvClaimAssessed -.-> usecase__RecordClaimAssessment
   event__EvClaimReceiptError -.-> usecase__RecordReceiptError

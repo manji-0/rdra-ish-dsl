@@ -511,11 +511,11 @@ flowchart LR
   %% desc usecase__ApplySelectedTreatmentFee: 紹介状なし初診だけに選定療養費の Charge を作る。
   usecase__CalculateVisitBill("会計計算入力"):::usecase
   %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
-  condition__CopayCappedAtLimit -.-> usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__CopayCappedAtLimit -.-> statemodel__Appointment_status
   condition__CopayCappedAtLimit -.-> variation__BurdenRatio
   condition__CopayCappedAtLimit -.-> variation__LimitCategory
-  condition__UnreferredFirstVisit -.-> usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
   condition__UnreferredFirstVisit -.-> variation__ChargeKind
   %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
   condition__UnreferredFirstVisit -.-> variation__ReferralCategory

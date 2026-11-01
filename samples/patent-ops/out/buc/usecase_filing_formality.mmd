@@ -67,9 +67,9 @@ flowchart LR
   actor__PatentAttorney -.-> usecase__FileApplication
   actor__PatentAttorney -.-> usecase__ReceiveFormalityOrder
   actor__PatentAttorney -.-> usecase__SubmitFormalityAmendment
-  condition__PriorityBase -.-> usecase__DeemPriorityBaseWithdrawn
-  condition__PriorityBasePending -.-> usecase__ClaimDomesticPriority
-  condition__StillPending -.-> usecase__RecordPublication
+  condition__PriorityBase -.->|applies_to| usecase__DeemPriorityBaseWithdrawn
+  condition__PriorityBasePending -.->|applies_to| usecase__ClaimDomesticPriority
+  condition__StillPending -.->|applies_to| usecase__RecordPublication
   event__EvApplicationDismissed -.-> usecase__RecordDismissal
   event__EvApplicationFiled -.-> extsystem__Jpo
   event__EvDraftApproved -.-> usecase__FileApplication

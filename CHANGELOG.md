@@ -189,6 +189,13 @@
   reported both. A cone run with a violation is now rerun without the checks it has
   reported until a rerun reports no new one, and the engine-equivalence test does the same.
   `verify` may now report findings it did not before.
+- The `rdra`, `usecase`, and `condition` diagrams lost the condition-to-use-case edge of a
+  `.when(Cond)` guard on a `transitions` arm or a `chooses` value (#62, #65 made it a derived
+  relation, which the diagrams skipped). It is drawn again as a dashed `-.->|when|` edge,
+  followed by `%% derived <condition> -> <usecase> via transitions <Entity>.<column>
+  <from>-><to>` or `via chooses <Entity>.<column> <value>`. A condition to a use case is now
+  two relations in those diagrams (`EDGE_RELATIONS`), so `applies_to` to a use case is
+  labelled there too, `-.->|applies_to|`; to an API or a system it stays unlabelled.
 
 ## v0.4.0 - 2026-11-01
 

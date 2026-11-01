@@ -1443,6 +1443,7 @@ fn every_condition_diagram_of_every_sample_keeps_the_contract() {
                     "applies_to" => ["usecase__", "api__", "system__"]
                         .iter()
                         .any(|kind| to.starts_with(kind)),
+                    "when" => to.starts_with("usecase__"),
                     _ => false,
                 };
                 assert!(
@@ -1463,6 +1464,58 @@ fn every_condition_diagram_of_every_sample_keeps_the_contract() {
     }
     assert!(derived >= 8, "only {derived} combines read from holds");
     assert!(values > 40, "only {values} values drawn");
+}
+
+/// A `.when(Cond)` on a `transitions` arm or a `chooses` value is drawn as a `when` edge from
+/// the condition to the use case in each diagram that draws `applies_to`, labelled because a
+/// condition to a use case is two relations there, and derived from the arms and values it
+/// guards: the same edges in every kind.
+#[test]
+fn a_when_guard_is_a_labelled_derived_edge_wherever_applies_to_is_drawn() {
+    let dir = scratch("diagram_contract_when");
+    let mut guards = 0;
+    for root in roots() {
+        let mut drawn: Vec<BTreeSet<(String, String, String)>> = Vec::new();
+        for kind in ["rdra", "usecase", "condition"] {
+            assert_eq!(
+                rdra_ish_emit::implied_relation(kind, "condition", "usecase"),
+                None,
+                "{kind}: a condition to a use case is `applies_to` or `when`"
+            );
+            let text = diagram(&root, kind, None, &dir.join(kind));
+            let chart = checked(kind, &text, &format!("{root} {kind}"));
+            let when: BTreeSet<_> = chart
+                .edges
+                .iter()
+                .filter(|(_, label, _)| label == "when")
+                .cloned()
+                .collect();
+            for edge @ (from, _, to) in &when {
+                assert!(
+                    from.starts_with("condition__") && to.starts_with("usecase__"),
+                    "{root} {kind}: {edge:?}"
+                );
+                assert!(chart.derived.contains(edge), "{root} {kind}: {edge:?}");
+                assert_eq!(chart.arrows[edge], "-.->", "{root} {kind}: {edge:?}");
+                let vias = derived_vias(&text, from, to);
+                assert!(
+                    !vias.is_empty()
+                        && vias.iter().all(|via| {
+                            let via = via.trim();
+                            via.starts_with("transitions ") || via.starts_with("chooses ")
+                        }),
+                    "{root} {kind}: {edge:?} via {vias:?}"
+                );
+            }
+            drawn.push(when);
+        }
+        assert!(
+            drawn.windows(2).all(|pair| pair[0] == pair[1]),
+            "{root}: rdra, usecase, and condition draw different `when` edges: {drawn:?}"
+        );
+        guards += drawn[0].len();
+    }
+    assert!(guards >= 2, "only {guards} `when` edges drawn");
 }
 
 #[test]

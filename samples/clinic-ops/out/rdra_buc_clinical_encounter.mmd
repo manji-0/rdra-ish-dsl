@@ -472,14 +472,14 @@ flowchart LR
   buc__BucVisitPayment --> usecase__RefundPayment
   buc__BucVisitPayment --> usecase__SettleAtKiosk
   buc__BucVisitPayment --> usecase__SettleAtWindow
-  condition__CopayCappedAtLimit -.-> usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__CopayCappedAtLimit -.-> entity__Appointment
   condition__CopayCappedAtLimit -.-> variation__BurdenRatio
   condition__CopayCappedAtLimit -.-> variation__LimitCategory
-  condition__TransferNotPossible -.-> usecase__RecordClaimReturn
+  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   condition__TransferNotPossible -.-> entity__ClaimStatement
   condition__TransferNotPossible -.-> variation__PayerChange
-  condition__UnreferredFirstVisit -.-> usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
   condition__UnreferredFirstVisit -.-> variation__ChargeKind
   %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
   condition__UnreferredFirstVisit -.-> variation__ReferralCategory

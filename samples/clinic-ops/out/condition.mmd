@@ -81,20 +81,20 @@ flowchart LR
   %% desc usecase__CollectSpecimen: 医師が確定したオーダだけを採取する。
   usecase__RecordClaimReturn("返戻レセプトの取込"):::usecase
   %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
-  condition__BookedPatient -.-> usecase__BatchVerifyEligibility
+  condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   condition__BookedPatient -.-> statemodel__Appointment_status
   %% derived condition__BookedPatient -> statemodel__Appointment_status from holds
-  condition__CopayCappedAtLimit -.-> usecase__CalculateVisitBill
+  condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__CopayCappedAtLimit -.-> statemodel__Appointment_status
   condition__CopayCappedAtLimit -.-> variation__BurdenRatio
   condition__CopayCappedAtLimit -.-> variation__LimitCategory
-  condition__OrderConfirmedByPhysician -.-> usecase__CollectSpecimen
+  condition__OrderConfirmedByPhysician -.->|applies_to| usecase__CollectSpecimen
   condition__OrderConfirmedByPhysician -.-> statemodel__ClinicalOrder_status
   %% derived condition__OrderConfirmedByPhysician -> statemodel__ClinicalOrder_status from holds
-  condition__TransferNotPossible -.-> usecase__RecordClaimReturn
+  condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   condition__TransferNotPossible -.-> statemodel__ClaimStatement_status
   condition__TransferNotPossible -.-> variation__PayerChange
-  condition__UnreferredFirstVisit -.-> usecase__ApplySelectedTreatmentFee
+  condition__UnreferredFirstVisit -.->|applies_to| usecase__ApplySelectedTreatmentFee
   condition__UnreferredFirstVisit -.-> variation__ChargeKind
   %% derived condition__UnreferredFirstVisit -> variation__ChargeKind from holds
   condition__UnreferredFirstVisit -.-> variation__ReferralCategory

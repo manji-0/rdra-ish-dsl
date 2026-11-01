@@ -1,7 +1,7 @@
 %% rdra-ish diagram=usecase scope=buc:BucFilingDecision model=samples/patent-ops
 %% layers: value=システム価値 boundary=システム境界 system=システム
-%% kinds: actor usecase screen event entity state
-%% omitted: buc step medium permission field api condition
+%% kinds: actor usecase screen event entity state condition
+%% omitted: buc step medium permission field api
 flowchart LR
   subgraph layer_value["システム価値"]
     actor__IpStaff(["知的財産部 担当者"]):::actor
@@ -30,11 +30,14 @@ flowchart LR
     state__InventionDisclosure_decided_secret((("ノウハウとして秘匿"))):::state
     state__InventionDisclosure_searched((("調査済"))):::state
     state__InventionDisclosure_searching((("先行技術調査中"))):::state
+    condition__RightsAcquired{"会社が特許を受ける権利を取得している"}:::condition
   end
   actor__IpStaff -.-> usecase__NotifyInventorOfDecision
   actor__IpStaff -.-> usecase__RecordPriorArtSearch
   actor__IpStaff -.-> usecase__RequestPriorArtSearch
   actor__ReviewCommittee -.-> usecase__DecideFiling
+  condition__RightsAcquired -.->|when| usecase__DecideFiling
+  %% derived condition__RightsAcquired -> usecase__DecideFiling via transitions InventionDisclosure.status searched->decided_file
   event__EvFilingDecided -.-> usecase__NotifyInventorOfDecision
   usecase__DecideFiling -.-> screen__FilingDecisionScreen
   usecase__DecideFiling -.-> event__EvFilingDecided
@@ -59,3 +62,4 @@ flowchart LR
   classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
   classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

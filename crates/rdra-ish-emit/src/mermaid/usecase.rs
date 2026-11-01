@@ -3,8 +3,8 @@
 //! systems, and timers around it, the conditions that apply to it, and the states it moves.
 
 use super::{
-    buc_members, kinds_by_layer, omitted_linked_kinds, render_edges, render_layered_nodes,
-    state_key, EdgeSet,
+    buc_members, guard_edge, kinds_by_layer, omitted_linked_kinds, render_edges,
+    render_layered_nodes, state_key, EdgeSet,
 };
 use crate::diagram_common::{class_defs, node_id, Header};
 use crate::{collect_object_graph_nodes, object_graph_rel_label, EmitError, Emitter, Scope, View};
@@ -211,11 +211,20 @@ impl Emitter for UsecaseMermaidEmitter {
         let mut drawn: HashSet<NodeRef> = usecases.clone();
         drawn.extend(left);
         drawn.extend(edges.nodes.iter().cloned());
+        // A condition that guards an arm or a value of the use case, derived from its `.when`.
+        let guards: Vec<&Relation> = model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Guards && usecases.contains(&rel.to))
+            .collect();
+        drawn.extend(guards.iter().map(|rel| rel.from.clone()));
         let nodes = collect_object_graph_nodes(model, &|nr| drawn.contains(nr));
 
         let mut body = String::new();
         let layers = render_layered_nodes(&mut body, model, &nodes);
-        render_edges(&mut body, "usecase", edges.into_graph_edges());
+        let mut graph_edges = edges.into_graph_edges();
+        graph_edges.extend(guards.into_iter().filter_map(|rel| guard_edge(model, rel)));
+        render_edges(&mut body, "usecase", graph_edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));

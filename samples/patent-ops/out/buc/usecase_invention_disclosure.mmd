@@ -43,8 +43,8 @@ flowchart LR
   actor__IpStaff -.-> usecase__ResubmitDisclosure
   %% derived actor__IpStaff -> usecase__ResubmitDisclosure via step__ReturnStep
   actor__IpStaff -.-> usecase__ReturnDisclosure
-  condition__EmployeeInvention -.-> usecase__JudgeEmployeeInvention
-  condition__NonEmployeeInvention -.-> usecase__AcquireRightsByAssignment
+  condition__EmployeeInvention -.->|applies_to| usecase__JudgeEmployeeInvention
+  condition__NonEmployeeInvention -.->|applies_to| usecase__AcquireRightsByAssignment
   event__EvDisclosureSubmitted -.-> usecase__AcceptDisclosure
   usecase__AcceptDisclosure -.-> screen__DisclosureReviewScreen
   usecase__AcceptDisclosure -.->|transitions InventionDisclosure.status submitted->accepted| state__InventionDisclosure_accepted

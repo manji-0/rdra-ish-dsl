@@ -63,7 +63,9 @@ rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid
   `rdra`.
 - Edges: `performs`, `displays`, `shows` (screen to entity), `reads` /
   `creates` / `updates` / `deletes`, `raises` / `triggers` (with the events' external
-  systems), `applies_to` (condition to use case), and
+  systems), `-.->|applies_to|` (condition to use case), `-.->|when|` (a condition whose
+  `.when(Cond)` guards a `transitions` arm or `chooses` value of the use case, followed by
+  `%% derived ... via transitions ...` or `via chooses ...`), and
   `transitions <Entity>.<column> <from>-><to>` to the state entered.
 - APIs are folded into the use case that invokes them: an API's CRUD is drawn from the
   use case, followed by `%% derived <uc> -> <entity> via api__<Api>`. An actor who

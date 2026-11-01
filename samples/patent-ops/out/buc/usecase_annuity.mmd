@@ -62,11 +62,11 @@ flowchart LR
   actor__IpStaff -.-> usecase__PayLateAnnuity
   actor__IpStaff -.-> usecase__RestorePatent
   actor__IpStaff -.-> usecase__ReviewMaintenance
-  condition__AnnuityDue -.-> usecase__PayAnnuity
-  condition__InForce -.-> usecase__DecideToLetLapse
-  condition__KeptRight -.-> usecase__PayLateAnnuity
-  condition__YearPaid -.-> usecase__RollOverAnnuityYear
-  condition__YearUnpaid -.-> usecase__EnterGracePeriod
+  condition__AnnuityDue -.->|applies_to| usecase__PayAnnuity
+  condition__InForce -.->|applies_to| usecase__DecideToLetLapse
+  condition__KeptRight -.->|applies_to| usecase__PayLateAnnuity
+  condition__YearPaid -.->|applies_to| usecase__RollOverAnnuityYear
+  condition__YearUnpaid -.->|applies_to| usecase__EnterGracePeriod
   event__EvFeesPaid -.-> extsystem__Jpo
   event__EvRestorationRequested -.-> extsystem__Jpo
   event__EvWithdrawalFiled -.-> extsystem__Jpo

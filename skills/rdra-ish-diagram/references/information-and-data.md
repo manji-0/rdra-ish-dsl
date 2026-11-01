@@ -38,7 +38,11 @@ rdra-ish export src/ --kind json-schema --out out/json-schema.json
 
 - There are no layers. Each condition links an unlabelled `-.->` (`combines`) to each variation
   and state model (`statemodel__<Entity>_<column>`) it combines, and one (`applies_to`) to the
-  use cases, APIs, and systems it applies to.
+  APIs and systems it applies to. To a use case the edge is labelled, `-.->|applies_to|`,
+  because a condition can also guard one: a `.when(Cond)` on a `transitions` arm or a
+  `chooses` value of the use case draws `-.->|when|`, followed by `%% derived <condition> ->
+  <usecase> via transitions <Entity>.<column> <from>-><to>` (or `via chooses
+  <Entity>.<column> <value>`).
 - A condition with a `holds` body has a `%% holds <id>: <body>` line, and each link read
   from that body is followed by `%% derived <from> -> <to> from holds`. A link without it
   is a `combines` declaration.

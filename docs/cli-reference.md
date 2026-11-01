@@ -578,7 +578,10 @@ The notes below say how each kind reads, in the order of the table.
   that invokes it (`via api__<Api>`), and an actor drawn performing the use cases of the
   BUC or step it performs (`via buc__<Buc>` or `via step__<Step>`). A use case that an
   event or a timer starts gets no derived actor: only a `performs(Actor, UseCase)` draws
-  who performs it. A declared edge wins over a derived one. APIs, DTOs, permissions, media, fields, and BUCs are not drawn;
+  who performs it. A condition is drawn with its `-.->|applies_to|` edge to a use case, and
+  with a derived `-.->|when|` edge to a use case whose `transitions` arm or `chooses` value
+  its `.when(Cond)` guards (the `%% derived ... via transitions ...` / `via chooses ...`
+  line of `rdra`). A declared edge wins over a derived one. APIs, DTOs, permissions, media, fields, and BUCs are not drawn;
   `omitted:` names the ones linked to a drawn use case or screen.
 - For `--kind flow`, the type line is `flowchart TD` and there are no layers. Each flow is
   `subgraph flow__<id>["<label>"]` holding its steps; the whole model also draws a step
@@ -618,7 +621,12 @@ The notes below say how each kind reads, in the order of the table.
   (`statemodel__<Entity>_<column>`, the composite state id of `--kind state`). A link
   read from the `holds` body rather than a `combines` declaration is followed by
   `%% derived <from> -> <to> from holds`, as in `rdra`. Unlabelled `-.->` (`applies_to`) edges go to
-  the use cases, APIs, and systems it applies to. Each variation is
+  the APIs and systems it applies to, and `-.->|applies_to|` edges to the use cases. A
+  condition that guards a `transitions` arm or a `chooses` value with `.when(Cond)` has a
+  derived `-.->|when|` edge to that use case, followed by `%% derived <condition> ->
+  <usecase> via transitions <Entity>.<column> <from>-><to>` or `via chooses
+  <Entity>.<column> <value>` (`, `-joined when it guards more than one), as in `rdra` and
+  `usecase`. Each variation is
   `subgraph variation__<id>["<label>"]` holding one
   `variation__<Variation>__<value>["<value label>"]:::value` node per value, its label
   the value's label or else its name. The whole model draws every variation, a
@@ -768,7 +776,10 @@ flowchart LR
   So `performs`, `invokes`, `displays`, `shows`, `raises`, `triggers`, `contains`,
   `covers`, `belongs`, `motivates`, `achieves` / `achieved_by`, `applies_to`,
   `combines`, and the other single-relation pairs go unlabelled, as do the robustness
-  diagram's actor-to-screen `uses` and the information diagram's `statemodel`. A label stays
+  diagram's actor-to-screen `uses` and the information diagram's `statemodel`. A condition to
+  a use case is two relations in `rdra`, `usecase`, and `condition`: the declared
+  `applies_to` and the `when` derived from a `.when(Cond)` guard, so both are labelled there
+  (`-.->|applies_to|`, `-.->|when|`); a condition to an API or a system stays unlabelled. A label stays
   where it says something the ends do not: the CRUD verb (`reads`, `writes`, `creates`,
   `updates`, `deletes`) and the API's `request` / `response` / `error_response`, a
   step order (`precedes`, `branches`, `excepts`, `repeats`), a relate's cardinality
@@ -790,6 +801,7 @@ flowchart LR
   | `%% desc <id>: <text>` | A node with a `description`, its lines joined by a space | every flowchart |
   | `%% derived <from> -> <to> via <ids>` | An edge rdra-ish derived through the nodes it names | `business`, `usecase`, `context` |
   | `%% derived <from> -> <to> from holds` | A condition's `combines` link read from its `holds` body | `rdra`, `condition` |
+  | `%% derived <from> -> <to> via transitions <Entity>.<column> <from>-><to>` / `via chooses <Entity>.<column> <value>` | A `when` edge: the `transitions` arms and `chooses` values of the use case that the condition's `.when` guards, `, `-joined | `rdra`, `usecase`, `condition` |
   | `%% holds <id>: <body>` | A condition with a `holds` body | `condition` |
   | `%% lane <lane>: actor__<id>` | A lane subgraph's first line: the actor who performs its steps | `flow` |
   | `%% synthesized system__Model: <reason>` | The synthesized system node | `context` |

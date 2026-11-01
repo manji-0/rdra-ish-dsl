@@ -22,6 +22,8 @@ flowchart LR
   end
   usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
   %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
+  usecase__DraftResponse("意見書・補正書案の作成"):::usecase
+  %% desc usecase__DraftResponse: 弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。
   usecase__FileDivisionalApplication("分割出願"):::usecase
   %% desc usecase__FileDivisionalApplication: 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。
   usecase__ReceiveOfficeAction("拒絶理由通知の受領"):::usecase
@@ -30,21 +32,23 @@ flowchart LR
   %% desc usecase__RequestLateExtension: 応答期間の経過後2か月以内に延長を請求し、2か月の応答期間を得る。
   usecase__RequestTermExtension("応答期間の延長請求"):::usecase
   %% desc usecase__RequestTermExtension: 応答期間内に期間延長請求書を出し、2か月延長する。
-  condition__DivisionPossible -.-> usecase__FileDivisionalApplication
+  condition__DivisionPossible -.->|applies_to| usecase__FileDivisionalApplication
   condition__DivisionPossible -.-> statemodel__PatentApplication_status
   %% derived condition__DivisionPossible -> statemodel__PatentApplication_status from holds
-  condition__ExaminationOver -.-> usecase__CloseOfficeActionDocket
+  condition__ExaminationOver -.->|applies_to| usecase__CloseOfficeActionDocket
   condition__ExaminationOver -.-> statemodel__PatentApplication_status
   %% derived condition__ExaminationOver -> statemodel__PatentApplication_status from holds
   condition__FirstNoticeOnly -.-> variation__AmendmentScope
   %% derived condition__FirstNoticeOnly -> variation__AmendmentScope from when
-  condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
+  condition__FirstNoticeOnly -.->|when| usecase__DraftResponse
+  %% derived condition__FirstNoticeOnly -> usecase__DraftResponse via chooses OfficeAction.amendment free
+  condition__NotExtendedWithinTerm -.->|applies_to| usecase__RequestLateExtension
   condition__NotExtendedWithinTerm -.-> statemodel__OfficeAction_status
   %% derived condition__NotExtendedWithinTerm -> statemodel__OfficeAction_status from holds
-  condition__UnderExamination -.-> usecase__ReceiveOfficeAction
+  condition__UnderExamination -.->|applies_to| usecase__ReceiveOfficeAction
   condition__UnderExamination -.-> statemodel__PatentApplication_status
   %% derived condition__UnderExamination -> statemodel__PatentApplication_status from holds
-  condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
+  condition__WithinTermNotExtended -.->|applies_to| usecase__RequestTermExtension
   condition__WithinTermNotExtended -.-> statemodel__OfficeAction_status
   %% derived condition__WithinTermNotExtended -> statemodel__OfficeAction_status from holds
   classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

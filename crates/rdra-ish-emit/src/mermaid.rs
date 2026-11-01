@@ -32,7 +32,7 @@ use crate::{
     OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::analysis::transition_guard_labels;
-use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel};
+use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, Relation, SemanticModel};
 use rdra_ish_core::{buc_members, state_key, state_models, StateModel};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -275,14 +275,63 @@ fn kinds_by_layer(nodes: &[NodeRef]) -> Vec<&'static str> {
     kinds
 }
 
+/// What a `when` edge from `condition` to `usecase` is derived from: `via` and each
+/// `transitions` arm (`transitions <Entity>.<column> <from>-><to>`) and `chooses` value
+/// (`chooses <Entity>.<column> <value>`) of the use case that `.when(condition)` guards,
+/// in declaration order, `, `-joined.
+fn guard_derivation(model: &SemanticModel, condition: &NodeRef, usecase: &NodeRef) -> String {
+    let (NodeRef::Condition(ck), NodeRef::UseCase(uk)) = (condition, usecase) else {
+        return String::new();
+    };
+    let entity = |key| model.entities.get(key).map_or("", |e| e.id.as_str());
+    let arms = model
+        .state_transitions
+        .iter()
+        .filter(|t| t.guard == Some(*ck) && t.usecase == *uk)
+        .map(|t| {
+            format!(
+                "transitions {}.{} {}->{}",
+                entity(t.entity),
+                t.column,
+                t.from,
+                t.to
+            )
+        });
+    let values = model
+        .column_choices
+        .iter()
+        .filter(|c| c.origin == *uk)
+        .flat_map(|c| {
+            c.values
+                .iter()
+                .filter(|v| v.guard == Some(*ck))
+                .map(move |v| format!("chooses {}.{} {}", entity(c.entity), c.column, v.value))
+        });
+    format!("via {}", arms.chain(values).collect::<Vec<_>>().join(", "))
+}
+
+/// The `when` edge of a `Guards` relation: a condition to the use case whose arm or value
+/// it guards, followed by the `%% derived` line naming them.
+fn guard_edge(model: &SemanticModel, rel: &Relation) -> Option<GraphEdge> {
+    Some(GraphEdge {
+        from: contract_id(model, &rel.from)?,
+        label: object_graph_rel_label(&RelKind::Guards).to_string(),
+        to: contract_id(model, &rel.to)?,
+        arrow: rdra_arrow(&RelKind::Guards),
+        derived: Some(guard_derivation(model, &rel.from, &rel.to)),
+    })
+}
+
 /// Every relation between two visible nodes, with `transitions` drawn from the use case to
 /// the state it enters. Each comes with its kind, so the caller can apply `--edge-kind`.
 fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKind, GraphEdge)> {
     let mut edges = Vec::new();
     for rel in &model.relations {
-        // A `.when` guard is drawn on its arm (state diagram), not as a use case edge.
-        if rel.kind == RelKind::Guards || !visible.contains(&rel.from) || !visible.contains(&rel.to)
-        {
+        if !visible.contains(&rel.from) || !visible.contains(&rel.to) {
+            continue;
+        }
+        if rel.kind == RelKind::Guards {
+            edges.extend(guard_edge(model, rel).map(|edge| (RelKind::Guards, edge)));
             continue;
         }
         let (Some(from), Some(to)) = (contract_id(model, &rel.from), contract_id(model, &rel.to))
@@ -1300,9 +1349,40 @@ applies_to(Insured, Collect)
             "{result}"
         );
         assert!(
-            result.contains("condition__Insured -.-> usecase__Collect"),
+            result.contains("condition__Insured -.->|applies_to| usecase__Collect"),
             "{result}"
         );
+    }
+
+    #[test]
+    fn test_rdra_mermaid_draws_a_when_guard_from_the_condition_to_the_use_case() {
+        let src = r#"
+entity Pay "Pay" {
+  id: Int @pk
+  insured: Bool
+  status: Enum(open, paid, waived) @default(open)
+}
+usecase Collect "Collect"
+condition Insured "Insured"
+holds(Insured, Pay.insured == true)
+transitions(Collect, Pay.status, open -> waived).when(Insured)
+transitions(Collect, Pay.status, open -> paid)
+"#;
+        let model = model_from(src);
+        let result = RdraMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(
+            result.contains(
+                "  condition__Insured -.->|when| usecase__Collect\n  \
+                 %% derived condition__Insured -> usecase__Collect via transitions Pay.status open->waived\n"
+            ),
+            "{result}"
+        );
+        let usecase = UsecaseMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        assert!(
+            usecase.contains("  condition__Insured -.->|when| usecase__Collect\n"),
+            "{usecase}"
+        );
+        assert!(usecase.contains("condition__Insured{\"Insured\"}:::condition"));
     }
 
     #[test]

@@ -41,9 +41,9 @@ flowchart LR
   actor__IpStaff -.-> usecase__RecordRegistration
   actor__IpStaff -.-> usecase__RecordRegistrationDismissal
   actor__IpStaff -.-> usecase__RequestFeePaymentExtension
-  condition__FirstFeesPaid -.-> usecase__RecordRegistration
-  condition__FirstFeesUnpaid -.-> usecase__RecordRegistrationDismissal
-  condition__NotYetExtended -.-> usecase__RequestFeePaymentExtension
+  condition__FirstFeesPaid -.->|applies_to| usecase__RecordRegistration
+  condition__FirstFeesUnpaid -.->|applies_to| usecase__RecordRegistrationDismissal
+  condition__NotYetExtended -.->|applies_to| usecase__RequestFeePaymentExtension
   event__EvExtensionRequested -.-> extsystem__Jpo
   event__EvFeesPaid -.-> extsystem__Jpo
   event__EvRegistered -.-> usecase__RecordRegistration

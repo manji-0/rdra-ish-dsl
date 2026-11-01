@@ -87,12 +87,16 @@ flowchart LR
   %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
   usecase__ConfirmDraftByInventor("発明者による内容確認"):::usecase
   %% desc usecase__ConfirmDraftByInventor: 発明者が案の技術内容を確かめ、確認済にする。
+  usecase__DecideFiling("出願可否の決定"):::usecase
+  %% desc usecase__DecideFiling: 発明審査委員会が、出願する、ノウハウとして秘匿する、出願しないのいずれかに決める。出願と決められるのは、会社が権利を持つ発明だけである。
   usecase__DecideReward("相当の利益の決定"):::usecase
   %% desc usecase__DecideReward: 職務発明規程の基準で、職務発明の相当の利益を決める。
   usecase__DecideToLetLapse("権利を維持しない決定"):::usecase
   %% desc usecase__DecideToLetLapse: 維持しないと決め、以後の年金を納めない。
   usecase__DeemPriorityBaseWithdrawn("先の出願の取下げ擬制"):::usecase
   %% desc usecase__DeemPriorityBaseWithdrawn: 優先権の基礎とした先の出願が、その出願から1年4月で取り下げたものとみなされたことを記録する。
+  usecase__DraftResponse("意見書・補正書案の作成"):::usecase
+  %% desc usecase__DraftResponse: 弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。
   usecase__EnterGracePeriod("納付期限の経過"):::usecase
   %% desc usecase__EnterGracePeriod: 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。
   usecase__FileDivisionalApplication("分割出願"):::usecase
@@ -124,80 +128,84 @@ flowchart LR
   usecase__RollOverAnnuityYear("納付年度の更新"):::usecase
   %% desc usecase__RollOverAnnuityYear: 納付済の年が始まり、次の年の特許料が未納になる。
   api__FeePaymentApi{{"特許料納付 API"}}:::api
-  condition__AnnuityDue -.-> usecase__PayAnnuity
+  condition__AnnuityDue -.->|applies_to| usecase__PayAnnuity
   condition__AnnuityDue -.-> statemodel__Patent_status
   %% derived condition__AnnuityDue -> statemodel__Patent_status from holds
-  condition__DecidedToFile -.-> usecase__RequestDrafting
+  condition__DecidedToFile -.->|applies_to| usecase__RequestDrafting
   condition__DecidedToFile -.-> statemodel__InventionDisclosure_status
   %% derived condition__DecidedToFile -> statemodel__InventionDisclosure_status from holds
-  condition__DivisionPossible -.-> usecase__FileDivisionalApplication
+  condition__DivisionPossible -.->|applies_to| usecase__FileDivisionalApplication
   condition__DivisionPossible -.-> statemodel__PatentApplication_status
   %% derived condition__DivisionPossible -> statemodel__PatentApplication_status from holds
-  condition__DraftDelivered -.-> usecase__ConfirmDraftByInventor
+  condition__DraftDelivered -.->|applies_to| usecase__ConfirmDraftByInventor
   condition__DraftDelivered -.-> statemodel__DraftingOrder_status
   %% derived condition__DraftDelivered -> statemodel__DraftingOrder_status from holds
-  condition__EmployeeInvention -.-> usecase__JudgeEmployeeInvention
+  condition__EmployeeInvention -.->|applies_to| usecase__JudgeEmployeeInvention
   condition__EmployeeInvention -.-> variation__InventionCategory
   %% derived condition__EmployeeInvention -> variation__InventionCategory from holds
-  condition__EmployeeInventionReward -.-> usecase__DecideReward
+  condition__EmployeeInventionReward -.->|applies_to| usecase__DecideReward
   condition__EmployeeInventionReward -.-> variation__InventionCategory
   %% derived condition__EmployeeInventionReward -> variation__InventionCategory from holds
-  condition__ExaminationOver -.-> usecase__CloseOfficeActionDocket
+  condition__ExaminationOver -.->|applies_to| usecase__CloseOfficeActionDocket
   condition__ExaminationOver -.-> statemodel__PatentApplication_status
   %% derived condition__ExaminationOver -> statemodel__PatentApplication_status from holds
-  condition__ExaminationRequested -.-> usecase__RequestAcceleratedExamination
+  condition__ExaminationRequested -.->|applies_to| usecase__RequestAcceleratedExamination
   condition__ExaminationRequested -.-> statemodel__PatentApplication_status
   %% derived condition__ExaminationRequested -> statemodel__PatentApplication_status from holds
-  condition__FirstFeesPaid -.-> usecase__RecordRegistration
+  condition__FirstFeesPaid -.->|applies_to| usecase__RecordRegistration
   condition__FirstFeesPaid -.-> statemodel__PatentApplication_status
   %% derived condition__FirstFeesPaid -> statemodel__PatentApplication_status from holds
-  condition__FirstFeesUnpaid -.-> usecase__RecordRegistrationDismissal
+  condition__FirstFeesUnpaid -.->|applies_to| usecase__RecordRegistrationDismissal
   condition__FirstFeesUnpaid -.-> statemodel__PatentApplication_status
   %% derived condition__FirstFeesUnpaid -> statemodel__PatentApplication_status from holds
   condition__FirstNoticeOnly -.-> variation__AmendmentScope
   %% derived condition__FirstNoticeOnly -> variation__AmendmentScope from when
+  condition__FirstNoticeOnly -.->|when| usecase__DraftResponse
+  %% derived condition__FirstNoticeOnly -> usecase__DraftResponse via chooses OfficeAction.amendment free
   condition__Granted -.-> api__FeePaymentApi
   condition__Granted -.-> statemodel__PatentApplication_status
   %% derived condition__Granted -> statemodel__PatentApplication_status from holds
-  condition__InForce -.-> usecase__DecideToLetLapse
+  condition__InForce -.->|applies_to| usecase__DecideToLetLapse
   condition__InForce -.-> statemodel__Patent_status
   %% derived condition__InForce -> statemodel__Patent_status from holds
-  condition__InventorChecked -.-> usecase__ApproveDraft
+  condition__InventorChecked -.->|applies_to| usecase__ApproveDraft
   condition__InventorChecked -.-> statemodel__DraftingOrder_status
   %% derived condition__InventorChecked -> statemodel__DraftingOrder_status from holds
-  condition__KeptRight -.-> usecase__PayLateAnnuity
+  condition__KeptRight -.->|applies_to| usecase__PayLateAnnuity
   condition__KeptRight -.-> statemodel__Patent_status
   %% derived condition__KeptRight -> statemodel__Patent_status from holds
-  condition__NonEmployeeInvention -.-> usecase__AcquireRightsByAssignment
+  condition__NonEmployeeInvention -.->|applies_to| usecase__AcquireRightsByAssignment
   condition__NonEmployeeInvention -.-> variation__InventionCategory
   %% derived condition__NonEmployeeInvention -> variation__InventionCategory from holds
-  condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
+  condition__NotExtendedWithinTerm -.->|applies_to| usecase__RequestLateExtension
   condition__NotExtendedWithinTerm -.-> statemodel__OfficeAction_status
   %% derived condition__NotExtendedWithinTerm -> statemodel__OfficeAction_status from holds
-  condition__NotYetExtended -.-> usecase__RequestFeePaymentExtension
+  condition__NotYetExtended -.->|applies_to| usecase__RequestFeePaymentExtension
   condition__NotYetExtended -.-> statemodel__PatentApplication_status
   %% derived condition__NotYetExtended -> statemodel__PatentApplication_status from holds
-  condition__PriorityBase -.-> usecase__DeemPriorityBaseWithdrawn
+  condition__PriorityBase -.->|applies_to| usecase__DeemPriorityBaseWithdrawn
   condition__PriorityBase -.-> statemodel__PatentApplication_status
   %% derived condition__PriorityBase -> statemodel__PatentApplication_status from holds
-  condition__PriorityBasePending -.-> usecase__ClaimDomesticPriority
+  condition__PriorityBasePending -.->|applies_to| usecase__ClaimDomesticPriority
   condition__PriorityBasePending -.-> statemodel__PatentApplication_status
   %% derived condition__PriorityBasePending -> statemodel__PatentApplication_status from holds
   condition__RightsAcquired -.-> statemodel__InventionDisclosure_status
   %% derived condition__RightsAcquired -> statemodel__InventionDisclosure_status from when
-  condition__StillPending -.-> usecase__RecordPublication
+  condition__RightsAcquired -.->|when| usecase__DecideFiling
+  %% derived condition__RightsAcquired -> usecase__DecideFiling via transitions InventionDisclosure.status searched->decided_file
+  condition__StillPending -.->|applies_to| usecase__RecordPublication
   condition__StillPending -.-> statemodel__PatentApplication_status
   %% derived condition__StillPending -> statemodel__PatentApplication_status from holds
-  condition__UnderExamination -.-> usecase__ReceiveOfficeAction
+  condition__UnderExamination -.->|applies_to| usecase__ReceiveOfficeAction
   condition__UnderExamination -.-> statemodel__PatentApplication_status
   %% derived condition__UnderExamination -> statemodel__PatentApplication_status from holds
-  condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
+  condition__WithinTermNotExtended -.->|applies_to| usecase__RequestTermExtension
   condition__WithinTermNotExtended -.-> statemodel__OfficeAction_status
   %% derived condition__WithinTermNotExtended -> statemodel__OfficeAction_status from holds
-  condition__YearPaid -.-> usecase__RollOverAnnuityYear
+  condition__YearPaid -.->|applies_to| usecase__RollOverAnnuityYear
   condition__YearPaid -.-> statemodel__Patent_status
   %% derived condition__YearPaid -> statemodel__Patent_status from holds
-  condition__YearUnpaid -.-> usecase__EnterGracePeriod
+  condition__YearUnpaid -.->|applies_to| usecase__EnterGracePeriod
   condition__YearUnpaid -.-> statemodel__Patent_status
   %% derived condition__YearUnpaid -> statemodel__Patent_status from holds
   classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

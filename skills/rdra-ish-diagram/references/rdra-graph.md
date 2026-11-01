@@ -40,6 +40,10 @@ rdra-ish diagram src/ --kind rdra --format mermaid --node-kind api --node-kind d
 - A condition's `combines` link read from its `holds` body is followed by
   `%% derived ... from holds`; it points at the entity, where `condition` points at the
   state model.
+- A condition to a use case is labelled: `-.->|applies_to|` as declared, or `-.->|when|`
+  when its `.when(Cond)` guards a `transitions` arm or a `chooses` value of the use case,
+  followed by `%% derived ... via transitions <Entity>.<column> <from>-><to>` (or `via
+  chooses <Entity>.<column> <value>`).
 - `omitted:` names the node and relation kinds `--node-kind` / `--edge-kind` hid.
 
 ## When To Use

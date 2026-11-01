@@ -47,7 +47,7 @@ flowchart LR
   actor__PatentAttorney -.-> usecase__RequestExamination
   actor__PatentAttorney -.-> usecase__RestoreExaminationRequest
   actor__PatentAttorney -.-> usecase__WithdrawApplication
-  condition__ExaminationRequested -.-> usecase__RequestAcceleratedExamination
+  condition__ExaminationRequested -.->|applies_to| usecase__RequestAcceleratedExamination
   event__EvAcceleratedExamRequested -.-> extsystem__Jpo
   event__EvExaminationRequested -.-> extsystem__Jpo
   event__EvRestorationRequested -.-> extsystem__Jpo

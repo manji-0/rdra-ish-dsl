@@ -39,7 +39,7 @@ flowchart LR
   actor__IpStaff -.-> usecase__DecideReward
   actor__IpStaff -.-> usecase__NotifyReward
   actor__IpStaff -.-> usecase__PayReward
-  condition__EmployeeInventionReward -.-> usecase__DecideReward
+  condition__EmployeeInventionReward -.->|applies_to| usecase__DecideReward
   event__EvApplicationFiled -.-> extsystem__Jpo
   event__EvApplicationFiled -.-> usecase__DecideReward
   event__EvRegistered -.-> usecase__DecideReward
