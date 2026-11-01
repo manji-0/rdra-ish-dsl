@@ -732,7 +732,7 @@ flowchart LR
 | 出願の却下の記録<br>`RecordDismissal` | 補正がなく出願が却下されたことを記録する。 | `ApplicationDocketScreen` | `ApplicationDocketApi` | （なし） |
 | 出願公開の記録<br>`RecordPublication` | 出願から1年6月で出願が公開されたことを記録する。 | `ApplicationDocketScreen` | `ApplicationDocketApi` | 出願が係属している |
 | 国内優先権の主張<br>`ClaimDomesticPriority` | 改良発明をまとめた後の出願で、1年以内の先の出願に基づく優先権を主張する。 | `FilingScreen` | `PriorityClaimApi` | 先の出願が係属し、査定を受けていない |
-| 先の出願の取下げ擬制<br>`DeemPriorityBaseWithdrawn` | 優先権の基礎とした先の出願が、その出願から1年4月で取り下げたものとみなされたことを記録する。 | （なし） | `PriorityBaseApi` | 国内優先権の基礎とされた出願である |
+| 先の出願の取下げ擬制<br>`DeemPriorityBaseWithdrawn` | 優先権の基礎とした先の出願が、その出願から1年4月で取り下げたものとみなされたことを記録する。 | （なし） | `PriorityBaseApi` | 国内優先権の基礎とされ、まだ係属している出願である |
 
 <details><summary>電子出願（FileApplication）のシーケンス図</summary>
 
@@ -884,7 +884,7 @@ sequenceDiagram
   extsystem__Jpo ->> api__ApplicationDocketApi: 出願公開
   timer__PublicationCheck ->> api__ApplicationDocketApi: 出願公開の確認（出願から1年6月）
   screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
-  alt 出願が係属している: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済
+  alt 出願が係属している: PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済)
     api__ApplicationDocketApi ->> entity__PatentApplication: update published_at=set
     api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
   else guard fails
@@ -911,7 +911,7 @@ sequenceDiagram
   actor__PatentAttorney ->> screen__FilingScreen: 国内優先権の主張
   timer__PriorityClaimDeadline ->> api__PriorityClaimApi: 国内優先権の主張期限（先の出願から1年）
   screen__FilingScreen ->> api__PriorityClaimApi: 国内優先権 API
-  alt 先の出願が係属し、査定を受けていない: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済
+  alt 先の出願が係属し、査定を受けていない: PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）)
     Note over api__PriorityClaimApi: transaction (API atomic boundary)
     api__PriorityClaimApi ->> entity__PatentApplication: update priority_base=true
     api__PriorityClaimApi ->> entity__PriorityClaim: create
@@ -935,7 +935,7 @@ sequenceDiagram
   participant api__PriorityBaseApi as 先の出願の取下げ擬制 API
   participant entity__PatentApplication as 特許出願
   timer__PriorityBaseDeadline ->> api__PriorityBaseApi: 先の出願の取下げ擬制（先の出願から1年4月）
-  alt 国内優先権の基礎とされた出願である: PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 and PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
+  alt 国内優先権の基礎とされ、まだ係属している出願である: PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) and PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
     api__PriorityBaseApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（国内優先権の基礎）, status 審査請求済（審査中） -> 取下げ擬制（国内優先権の基礎）
     api__PriorityBaseApi -->> timer__PriorityBaseDeadline: done
   else guard fails
@@ -1650,7 +1650,7 @@ sequenceDiagram
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   actor__PatentAttorney ->> screen__OfficeActionScreen: 分割出願
   screen__OfficeActionScreen ->> api__DivisionalApi: 分割出願 API
-  alt 分割できる時期である: PatentApplication.status != 手続補正指令への対応中, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済, PatentApplication.status != 却下, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 取下げ・放棄
+  alt 分割できる時期である: PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定)
     api__DivisionalApi ->> entity__DivisionalFiling: create
     api__DivisionalApi -) extsystem__Jpo: 分割出願
     api__DivisionalApi -->> screen__OfficeActionScreen: done
@@ -2655,7 +2655,7 @@ stateDiagram-v2
     %% transition usecase__DeemWithdrawnNoRequest
     state__PatentApplication_filed --> state__PatentApplication_deemed_withdrawn : 審査請求期間の経過
     %% transition usecase__DeemPriorityBaseWithdrawn
-    state__PatentApplication_filed --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされた出願である]
+    state__PatentApplication_filed --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされ、まだ係属している出願である]
     %% transition usecase__WithdrawApplication
     state__PatentApplication_filed --> state__PatentApplication_withdrawn : 出願の取下げ・放棄
     %% transition usecase__SubmitFormalityAmendment
@@ -2667,7 +2667,7 @@ stateDiagram-v2
     %% transition usecase__ReceiveDecisionOfRejection
     state__PatentApplication_examining --> state__PatentApplication_rejected : 拒絶査定の受領
     %% transition usecase__DeemPriorityBaseWithdrawn
-    state__PatentApplication_examining --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされた出願である]
+    state__PatentApplication_examining --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされ、まだ係属している出願である]
     %% transition usecase__WithdrawApplication
     state__PatentApplication_examining --> state__PatentApplication_withdrawn : 出願の取下げ・放棄
     %% transition usecase__RecordRegistration
@@ -3051,13 +3051,13 @@ erDiagram
 | condition | 発明者が内容を確認している | DraftingOrder | DraftingOrder.status == 原稿受領, DraftingOrder.inventor_checked == true | ApproveDraft | samples/patent-ops/buc/buc_application_drafting.rdra:92 |
 | forbidden | 発明者が内容を確認していない出願書類は承認しない | DraftingOrder | DraftingOrder.status == 出願承認済 AND DraftingOrder.inventor_checked == false |  | samples/patent-ops/buc/buc_application_drafting.rdra:96 |
 | condition | 審査請求をした出願である | PatentApplication | PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present | RequestAcceleratedExamination | samples/patent-ops/buc/buc_examination_request.rdra:79 |
-| invariant | 審査請求のない出願は審査されない | PatentApplication | when PatentApplication.exam_requested_at == null then PatentApplication.status != granted AND PatentApplication.status != rejected AND PatentApplication.status != rejection_final AND PatentApplication.status != appealed AND PatentApplication.status != registered |  | samples/patent-ops/buc/buc_examination_request.rdra:104 |
+| invariant | 審査請求のない出願は審査されない | PatentApplication | when PatentApplication.exam_requested_at == null then PatentApplication.status not in (granted, rejected, rejection_final, appealed, registered) |  | samples/patent-ops/buc/buc_examination_request.rdra:104 |
 | forbidden | 審査請求をしていない出願は早期審査の対象にならない | PatentApplication | PatentApplication.accelerated == true AND PatentApplication.exam_requested_at == null |  | samples/patent-ops/buc/buc_examination_request.rdra:107 |
 | condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true | DecideToFile | samples/patent-ops/buc/buc_filing_decision.rdra:69 |
 | forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:72 |
-| condition | 出願が係属している | PatentApplication | PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済 | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:128 |
-| condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済 | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:144 |
-| condition | 国内優先権の基礎とされた出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:160 |
+| condition | 出願が係属している | PatentApplication | PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済) | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:128 |
+| condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:143 |
+| condition | 国内優先権の基礎とされ、まだ係属している出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:161 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | JudgeEmployeeInvention | samples/patent-ops/buc/buc_invention_disclosure.rdra:83 |
 | condition | 職務発明に当たらない | InventionDisclosure | InventionDisclosure.category == 職務発明に当たらない発明 | AcquireRightsByAssignment | samples/patent-ops/buc/buc_invention_disclosure.rdra:94 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | DecideReward | samples/patent-ops/buc/buc_inventor_reward.rdra:55 |
@@ -3066,7 +3066,7 @@ erDiagram
 | condition | 期間内に延長していない | OfficeAction | OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false | RequestLateExtension | samples/patent-ops/buc/buc_office_action.rdra:177 |
 | forbidden | 最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る | OfficeAction | OfficeAction.kind == 最後 AND OfficeAction.amendment == 限定のない補正 |  | samples/patent-ops/buc/buc_office_action.rdra:208 |
 | exclusive | 期間内に延長した応答期間は、経過後に重ねて延長できない | OfficeAction | at most one of: OfficeAction.extended == true, OfficeAction.late_extended == true |  | samples/patent-ops/buc/buc_office_action.rdra:210 |
-| condition | 分割できる時期である | PatentApplication | PatentApplication.status != 手続補正指令への対応中, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済, PatentApplication.status != 却下, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 取下げ・放棄 | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:259 |
+| condition | 分割できる時期である | PatentApplication | PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定) | FileDivisionalApplication | samples/patent-ops/buc/buc_office_action.rdra:259 |
 | condition | 特許査定を受けた出願である | PatentApplication | PatentApplication.status == 特許査定 | FeePaymentApi | samples/patent-ops/buc/buc_registration.rdra:64 |
 | condition | 納付期間をまだ延長していない | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false | RequestFeePaymentExtension | samples/patent-ops/buc/buc_registration.rdra:73 |
 | condition | 第1〜3年分の特許料を納付している | PatentApplication | PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true | RecordRegistration | samples/patent-ops/buc/buc_registration.rdra:86 |

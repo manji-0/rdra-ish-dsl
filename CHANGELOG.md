@@ -4,6 +4,26 @@
 
 ### Added
 
+- Set membership in comparisons: `status in (paid, shipped)` holds when the column is one of
+  the values (`==` on any), and `status not in (draft, cancelled)` when it is none (`!=` on
+  each). It is accepted wherever a comparison is: `forbidden`, `required`, `exclusive`,
+  `invariant` with `.when/.then/.has/.none` (one entity or several, `Entity.col in (...)`),
+  `holds`, `after(...).assert`, `@check`, `@derived`, and `property`. Each value is read by the
+  left-hand column's type as a bare right-hand side of `==` is; the column is Enum,
+  variation-typed, Bool, or `@null`, and an Int, Money, or Decimal column takes integer
+  literals (`qty in (1, 2)`). A value of another type is `SetValueNotAValue`, which lists the
+  column's values, a repeated value is `DuplicateSetValue`, any other column type is
+  `SetColumnNotEnumerable`, and `in ()` is a parse error. `sets` leaves one value, so `sets`
+  with `in` in either form is `SetsMembership`. `states`, `check`, and TLC read the same
+  disjunction, and the TLA+ export writes `\in {"a", "b"}` and `\notin`. `list --kind rule`,
+  `list --kind condition`, the sequence diagram's guards, and violations print the set as
+  written. `in` is a keyword only before its `(`, so a column may still be named `in`; the
+  VS Code grammar highlights `in` / `not in` there. The long `!=` chains of patent-ops
+  (`StillPending`, `PriorityBasePending`, `DivisionPossible`, and the rule
+  「審査請求のない出願は審査されない」) are rewritten with `in` / `not in`, and the guard of
+  `DeemPriorityBaseWithdrawn` now names the states in which the earlier application is no
+  longer pending (#53).
+
 - `samples/patent-ops`, a second domain written without changing the language (#51): the
   patent application work of a Japanese company's IP department with an outside patent firm
   and the 特許庁 as an external system, from the invention disclosure through filing, the

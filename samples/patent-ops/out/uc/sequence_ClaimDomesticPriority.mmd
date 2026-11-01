@@ -12,7 +12,7 @@ sequenceDiagram
   actor__PatentAttorney ->> screen__FilingScreen: 国内優先権の主張
   timer__PriorityClaimDeadline ->> api__PriorityClaimApi: 国内優先権の主張期限（先の出願から1年）
   screen__FilingScreen ->> api__PriorityClaimApi: 国内優先権 API
-  alt 先の出願が係属し、査定を受けていない: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済
+  alt 先の出願が係属し、査定を受けていない: PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）)
     Note over api__PriorityClaimApi: transaction (API atomic boundary)
     api__PriorityClaimApi ->> entity__PatentApplication: update priority_base=true
     api__PriorityClaimApi ->> entity__PriorityClaim: create

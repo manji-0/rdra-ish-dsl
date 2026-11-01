@@ -100,8 +100,8 @@ raises(WithdrawApplication, EvWithdrawalFiled)
 triggers(EvWithdrawalFiled, Jpo)
 
 // 特許出願の審査は、その特許出願についての出願審査の請求をまつて行なう (egov-tokkyohou-334AC0000000121.txt:677).
-// The DSL has no `status in { ... }`, so the consequence lists each state of the examination.
-invariant(PatentApplication).when(exam_requested_at == null).then(status != granted, status != rejected, status != rejection_final, status != appealed, status != registered).label("審査請求のない出願は審査されない")
+// The consequence names each state that an examination leads to.
+invariant(PatentApplication).when(exam_requested_at == null).then(status not in (granted, rejected, rejection_final, appealed, registered)).label("審査請求のない出願は審査されない")
 
 // 早期審査 needs the 審査請求 (jpo-souki-guideline.txt:86).
 forbidden(PatentApplication, accelerated == true, exam_requested_at == null).label("審査請求をしていない出願は早期審査の対象にならない")

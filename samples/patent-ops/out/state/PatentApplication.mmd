@@ -24,7 +24,7 @@ stateDiagram-v2
     %% transition usecase__DeemWithdrawnNoRequest
     state__PatentApplication_filed --> state__PatentApplication_deemed_withdrawn : 審査請求期間の経過
     %% transition usecase__DeemPriorityBaseWithdrawn
-    state__PatentApplication_filed --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされた出願である]
+    state__PatentApplication_filed --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされ、まだ係属している出願である]
     %% transition usecase__WithdrawApplication
     state__PatentApplication_filed --> state__PatentApplication_withdrawn : 出願の取下げ・放棄
     %% transition usecase__SubmitFormalityAmendment
@@ -36,7 +36,7 @@ stateDiagram-v2
     %% transition usecase__ReceiveDecisionOfRejection
     state__PatentApplication_examining --> state__PatentApplication_rejected : 拒絶査定の受領
     %% transition usecase__DeemPriorityBaseWithdrawn
-    state__PatentApplication_examining --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされた出願である]
+    state__PatentApplication_examining --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされ、まだ係属している出願である]
     %% transition usecase__WithdrawApplication
     state__PatentApplication_examining --> state__PatentApplication_withdrawn : 出願の取下げ・放棄
     %% transition usecase__RecordRegistration

@@ -12,7 +12,7 @@ sequenceDiagram
   extsystem__Jpo ->> api__ApplicationDocketApi: 出願公開
   timer__PublicationCheck ->> api__ApplicationDocketApi: 出願公開の確認（出願から1年6月）
   screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
-  alt 出願が係属している: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済
+  alt 出願が係属している: PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済)
     api__ApplicationDocketApi ->> entity__PatentApplication: update published_at=set
     api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
   else guard fails

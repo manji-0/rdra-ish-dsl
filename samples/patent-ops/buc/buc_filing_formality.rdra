@@ -125,12 +125,11 @@ triggers(EvPublished, RecordPublication)
 triggers(PublicationCheck, RecordPublication)
 
 condition StillPending "出願が係属している"
-holds(StillPending, PatentApplication.status != dismissed, PatentApplication.status != withdrawn, PatentApplication.status != deemed_withdrawn, PatentApplication.status != priority_withdrawn, PatentApplication.status != registered)
+holds(StillPending, PatentApplication.status not in (dismissed, withdrawn, deemed_withdrawn, priority_withdrawn, registered))
 applies_to(StillPending, RecordPublication)
 
 // The base must be the company's own application filed 一年以内 before (egov-tokkyohou-334AC0000000121.txt:541)
 // and still pending; a granted, refused, withdrawn, or dismissed application cannot be the base.
-// The DSL has no `in { ... }`, so the guard lists the states that block it.
 displays(ClaimDomesticPriority, FilingScreen)
 invokes(ClaimDomesticPriority, PriorityClaimApi)
 creates(PriorityClaimApi, PriorityClaim)
@@ -141,23 +140,25 @@ triggers(EvPriorityClaimed, Jpo)
 triggers(PriorityClaimDeadline, ClaimDomesticPriority)
 
 condition PriorityBasePending "先の出願が係属し、査定を受けていない"
-holds(PriorityBasePending, PatentApplication.status != dismissed, PatentApplication.status != withdrawn, PatentApplication.status != deemed_withdrawn, PatentApplication.status != priority_withdrawn, PatentApplication.status != granted, PatentApplication.status != rejected, PatentApplication.status != rejection_final, PatentApplication.status != appealed, PatentApplication.status != registered)
+holds(PriorityBasePending, PatentApplication.status in (filed, formality_order, examining))
 applies_to(PriorityBasePending, ClaimDomesticPriority)
 
 // 取り下げたものとみなす (egov-tokkyohou-334AC0000000121.txt:558) after 一年四月
 // (egov-tokkyohou-shikoukisoku-335M50000400010.txt:696). Started by the timer, no performer. An
-// earlier application that is no longer pending at the deadline is left as it is (the proviso of
-// 42条 was not extracted; the model's reading).
+// earlier application that is no longer pending at the deadline (granted, finally refused,
+// registered, withdrawn, or dismissed) is left as it is (the proviso of 42条 was not extracted;
+// the model's reading). A base in formality_order is not deemed withdrawn in the model.
 invokes(DeemPriorityBaseWithdrawn, PriorityBaseApi)
 updates(PriorityBaseApi, PatentApplication)
 transitions(DeemPriorityBaseWithdrawn, PatentApplication.status, filed -> priority_withdrawn)
 transitions(DeemPriorityBaseWithdrawn, PatentApplication.status, examining -> priority_withdrawn)
 triggers(PriorityBaseDeadline, DeemPriorityBaseWithdrawn)
 
-// `status != withdrawn` repeats what the arms already require; without an atom on a lifecycle or
-// variation column, `lint` reports the guard as condition-no-rdra-anchor.
-condition PriorityBase "国内優先権の基礎とされた出願である"
-holds(PriorityBase, PatentApplication.priority_base == true, PatentApplication.status != withdrawn)
+// The `not in` names the states in which the base is no longer pending. The arms already start only
+// from filed or examining, so it changes no reachable state; it states the reading, and it is the
+// atom on a lifecycle column that `lint` needs (condition-no-rdra-anchor).
+condition PriorityBase "国内優先権の基礎とされ、まだ係属している出願である"
+holds(PriorityBase, PatentApplication.priority_base == true, PatentApplication.status not in (granted, rejection_final, registered, dismissed, deemed_withdrawn, priority_withdrawn, withdrawn))
 applies_to(PriorityBase, DeemPriorityBaseWithdrawn)
 
 // Access constraints

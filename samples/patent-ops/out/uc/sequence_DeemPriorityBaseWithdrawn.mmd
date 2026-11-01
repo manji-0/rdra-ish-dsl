@@ -6,7 +6,7 @@ sequenceDiagram
   participant api__PriorityBaseApi as 先の出願の取下げ擬制 API
   participant entity__PatentApplication as 特許出願
   timer__PriorityBaseDeadline ->> api__PriorityBaseApi: 先の出願の取下げ擬制（先の出願から1年4月）
-  alt 国内優先権の基礎とされた出願である: PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 and PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
+  alt 国内優先権の基礎とされ、まだ係属している出願である: PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) and PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
     api__PriorityBaseApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（国内優先権の基礎）, status 審査請求済（審査中） -> 取下げ擬制（国内優先権の基礎）
     api__PriorityBaseApi -->> timer__PriorityBaseDeadline: done
   else guard fails

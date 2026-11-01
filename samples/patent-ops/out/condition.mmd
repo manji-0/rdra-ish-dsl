@@ -7,7 +7,7 @@ flowchart LR
   condition__DecidedToFile{"出願と決まった発明である"}:::condition
   %% holds condition__DecidedToFile: InventionDisclosure.status == 出願決定
   condition__DivisionPossible{"分割できる時期である"}:::condition
-  %% holds condition__DivisionPossible: PatentApplication.status != 手続補正指令への対応中, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済, PatentApplication.status != 却下, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 取下げ・放棄
+  %% holds condition__DivisionPossible: PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定)
   condition__DraftDelivered{"案が納品されている"}:::condition
   %% holds condition__DraftDelivered: DraftingOrder.status == 原稿受領
   condition__EmployeeInvention{"職務発明である"}:::condition
@@ -36,14 +36,14 @@ flowchart LR
   %% holds condition__NotExtendedWithinTerm: OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false
   condition__NotYetExtended{"納付期間をまだ延長していない"}:::condition
   %% holds condition__NotYetExtended: PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false
-  condition__PriorityBase{"国内優先権の基礎とされた出願である"}:::condition
-  %% holds condition__PriorityBase: PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄
+  condition__PriorityBase{"国内優先権の基礎とされ、まだ係属している出願である"}:::condition
+  %% holds condition__PriorityBase: PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄)
   condition__PriorityBasePending{"先の出願が係属し、査定を受けていない"}:::condition
-  %% holds condition__PriorityBasePending: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済
+  %% holds condition__PriorityBasePending: PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）)
   condition__RightsAcquired{"会社が特許を受ける権利を取得している"}:::condition
   %% holds condition__RightsAcquired: InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true
   condition__StillPending{"出願が係属している"}:::condition
-  %% holds condition__StillPending: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済
+  %% holds condition__StillPending: PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済)
   condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
   %% holds condition__WithinTermNotExtended: OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false
   condition__YearPaid{"存続中で、次の年が納付済"}:::condition

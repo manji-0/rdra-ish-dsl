@@ -247,8 +247,8 @@ triggers(EvDecisionToGrant, CloseOfficeActionDocket)
 triggers(EvDecisionOfRejection, CloseOfficeActionDocket)
 
 // The three windows are 補正できる時期 (before the first notice and within each response period),
-// 30 days after the 特許査定謄本, and 3 months after the first 拒絶査定謄本. The DSL has no `in { ... }` and
-// no time window on a guard, so the guard lists the states in which division is not possible.
+// 30 days after the 特許査定謄本, and 3 months after the first 拒絶査定謄本. The DSL has no time window on a
+// guard, so the guard names the states in which one of the windows can be open.
 displays(FileDivisionalApplication, OfficeActionScreen)
 invokes(FileDivisionalApplication, DivisionalApi)
 creates(DivisionalApi, DivisionalFiling)
@@ -256,7 +256,7 @@ raises(FileDivisionalApplication, EvDivisionalFiled)
 triggers(EvDivisionalFiled, Jpo)
 
 condition DivisionPossible "分割できる時期である"
-holds(DivisionPossible, PatentApplication.status != formality_order, PatentApplication.status != rejection_final, PatentApplication.status != appealed, PatentApplication.status != registered, PatentApplication.status != dismissed, PatentApplication.status != deemed_withdrawn, PatentApplication.status != priority_withdrawn, PatentApplication.status != withdrawn)
+holds(DivisionPossible, PatentApplication.status in (filed, examining, granted, rejected))
 applies_to(DivisionPossible, FileDivisionalApplication)
 
 // Access constraints

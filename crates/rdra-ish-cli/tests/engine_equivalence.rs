@@ -656,6 +656,54 @@ fn bfs_and_tlc_agree_on_relinks() {
     check_fixture("relink", RELINK);
 }
 
+/// `in` / `not in` on an Enum, a Bool, an Int, and a nullable column, in a guard, local and
+/// cross-entity rules, a quantifier, and an after-assert. No two rules fail in the same states,
+/// and no guard quantifies over the entity its use case creates.
+const SET_MEMBERSHIP: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped, cancelled) @default(pending)
+  rush: Bool
+  qty: Int @default(0)
+  paid_at: DateTime @null
+}
+entity Parcel "荷物" { id: Int @pk  state: Enum(packed, sent) @default(packed) }
+relate(Parcel, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Cancel "取消"
+usecase Bump "増量"
+usecase Pack "梱包"
+usecase Send "発送"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order, paid_at == present)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Cancel, Order.status, paid -> cancelled)
+sets(Bump, Order, qty == 2)
+sets(Bump, Order, rush == true)
+creates(Pack, Parcel)
+transitions(Send, Parcel.state, packed -> sent)
+condition Open "未確定"
+holds(Open, Order.status not in (shipped, cancelled), Order.qty in (0, 2))
+applies_to(Open, Bump)
+condition Packable "梱包可"
+holds(Packable, Order.status in (paid, shipped))
+applies_to(Packable, Pack)
+forbidden(Order, status in (shipped, cancelled), rush in (true))
+invariant(Order).when(status not in (pending, cancelled)).then(paid_at in (present))
+invariant(Order, Parcel).when(Parcel.state in (sent)).then(Order.status in (paid, shipped, cancelled))
+invariant(Order).when(status in (cancelled)).none(Parcel.state not in (packed))
+after(Ship).assert(Order.status in (shipped), Order.paid_at not in (null))
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_set_membership() {
+    check_fixture("set_membership", SET_MEMBERSHIP);
+}
+
 /// One inline model at both bounds.
 fn check_fixture(name: &str, src: &str) {
     let Some(tlc) = find_tlc() else {

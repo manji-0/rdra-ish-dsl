@@ -56,7 +56,7 @@ flowchart LR
     state__PatentApplication_filed((("出願済（方式審査）"))):::state
     state__PatentApplication_formality_order((("手続補正指令への対応中"))):::state
     state__PatentApplication_priority_withdrawn((("取下げ擬制（国内優先権の基礎）"))):::state
-    condition__PriorityBase{"国内優先権の基礎とされた出願である"}:::condition
+    condition__PriorityBase{"国内優先権の基礎とされ、まだ係属している出願である"}:::condition
     condition__PriorityBasePending{"先の出願が係属し、査定を受けていない"}:::condition
     condition__StillPending{"出願が係属している"}:::condition
   end
