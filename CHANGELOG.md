@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `samples/patent-ops`, a second domain written without changing the language (#51): the
+  patent application work of a Japanese company's IP department with an outside patent firm
+  and the 特許庁 as an external system, from the invention disclosure through filing, the
+  formality check, the examination request, office actions, registration, and annuities, to
+  the inventor's reward. 9 BUCs, 66 use cases, 14 timers for the statutory periods, 11 labelled
+  rules, and a `//` citation of the primary source for each rule, period, and fee. It is in
+  `samples.txt` (`check: ok`, `verify: tlc=ok`) and its diagrams, tables, `design-doc.md`, and
+  `prd.md` are in `scripts/sample-artifacts.tsv`. `scripts/gen-clinic-ops-docs.py` takes the
+  sample as a second argument (`clinic-ops` by default; its output is unchanged).
+
 ## v0.4.0 - 2026-11-01
 
 Upgrading from v0.3.0: run `python3 scripts/migrate-syntax-v2.py <model dir>` to rewrite

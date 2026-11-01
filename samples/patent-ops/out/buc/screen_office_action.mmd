@@ -1,0 +1,14 @@
+%% rdra-ish diagram=screen scope=buc:BucOfficeAction model=samples/patent-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__DecisionScreen["査定画面"]:::screen
+  screen__OfficeActionScreen["中間処理画面"]:::screen
+  screen__ResponseDraftScreen["応答案画面"]:::screen
+  screen__OfficeActionScreen -->|応答方針の指示| screen__ResponseDraftScreen
+  screen__OfficeActionScreen -->|拒絶査定の受領| screen__DecisionScreen
+  screen__ResponseDraftScreen -->|意見書・補正書の提出| screen__OfficeActionScreen
+  %% via screen__OfficeActionScreen -> screen__DecisionScreen usecase__ReceiveDecisionOfRejection
+  %% via screen__OfficeActionScreen -> screen__ResponseDraftScreen usecase__InstructResponse
+  %% via screen__ResponseDraftScreen -> screen__OfficeActionScreen usecase__FileResponse
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

@@ -1,0 +1,81 @@
+%% rdra-ish diagram=requirement scope=whole model=samples/patent-ops
+%% kinds: requirement goal buc
+%% omitted: actor nfr quality constraint business flow usecase event system entity
+flowchart LR
+  requirement__ReqAnswerWithinTerm[/"拒絶理由通知には応答期間内に、必要なら延長して応答する"\]:::requirement
+  requirement__ReqExamRequestWithinThreeYears[/"審査請求の要否を出願から3年以内に決めて請求する"\]:::requirement
+  requirement__ReqFairReward[/"相当の利益を基準で決め、通知し、意見を聴いて支払う"\]:::requirement
+  requirement__ReqFirstFeesWithin30Days[/"特許査定から30日以内に第1〜3年分の特許料を納付する"\]:::requirement
+  requirement__ReqFormalityWithinTerm[/"手続補正指令には指定期間内に手続補正書を出す"\]:::requirement
+  requirement__ReqInventorReviewedDraft[/"発明者が確認した出願書類だけを出願する"\]:::requirement
+  requirement__ReqNoMissedAnnuity[/"年金を納付漏れなく、維持の要否を調べてから納付する"\]:::requirement
+  requirement__ReqRightsFromTheStart[/"職務発明の特許を受ける権利を発生した時から会社が持つ"\]:::requirement
+  requirement__ReqSearchBeforeDecision[/"先行技術を調べてから出願可否を決める"\]:::requirement
+  goal__LeanPortfolio[/"費用を価値のある発明と権利に絞る<br/>維持要否の調査を経ずに納付した年金の件数: 年30件 → 年0件"/]:::goal
+  %% desc goal__LeanPortfolio: 審査請求料と年金は件数と請求項の数で増える。出願、審査請求、権利の維持を調べてから決めないと、使わない権利に費用を払い続ける。
+  goal__NoLostRights[/"期限の徒過で権利を失わない<br/>期限の徒過による取下げ擬制・却下・消滅の件数: 年2件 → 年0件"/]:::goal
+  %% desc goal__NoLostRights: 審査請求、手続補正、拒絶理由通知への応答、特許料の納付には期限があり、過ぎると出願は取り下げたものとみなされ、却下され、特許権は消滅する。
+  goal__PromptFiling[/"発明を早く確実に出願につなげる<br/>発明届出の受付から出願までの日数の中央値: 150日 → 90日"/]:::goal
+  %% desc goal__PromptFiling: 届出から出願までが長いと、他社に先に出願され、発明者の届出の意欲も下がる。
+  buc__BucAnnuity["年金管理と権利の維持"]:::buc
+  %% desc buc__BucAnnuity: 設定登録の後、第4年以後の特許料（年金）を前年以前に納付する。知的財産部は登録後3年目・6年目などに維持の要否を調べ、維持しない権利は納付をやめる。納付期限を過ぎても6月以内なら同額の割増特許料とともに追納でき、追納しなければ特許権は期限の経過の時に遡って消滅する。故意でなければ回復できる。特許権は放棄でき、出願から20年で満了する。
+  buc__BucApplicationDrafting["特許事務所への依頼と出願書類の作成"]:::buc
+  %% desc buc__BucApplicationDrafting: 出願と決まった発明について特許事務所に明細書の作成を依頼し、納品された出願書類（願書・明細書・特許請求の範囲・要約書・図面）を発明者と知的財産部が確かめ、修正を依頼し、承認する。発明者の確認を経ない書類は承認しない（`InventorChecked`）。
+  buc__BucExaminationRequest["審査請求と早期審査"]:::buc
+  %% desc buc__BucExaminationRequest: 出願は審査請求がなければ審査されない。知的財産部は期限の前に審査請求の要否を決め、弁理士が出願から3年以内に請求する。請求がなければ出願は取り下げたものとみなされ、故意でなければ回復できる。審査請求をした出願は早期審査を申し出られる。出願は係属している間、取り下げ・放棄できる。
+  buc__BucFilingDecision["先行技術調査と出願可否の判断"]:::buc
+  %% desc buc__BucFilingDecision: 受け付けた発明について先行技術を調べ、発明審査委員会が出願する、ノウハウとして秘匿する、出願しないのいずれかに決める。会社が特許を受ける権利を取得していない発明は出願と決めない（`RightsAcquired`）。決定は発明者に知らせる。
+  buc__BucFilingFormality["出願と方式審査"]:::buc
+  %% desc buc__BucFilingFormality: 承認された出願書類を弁理士がインターネット出願ソフトで出願し、受領書の出願番号と出願日を記録する。方式の不備には手続補正指令書が届き、発送日から2月以内に手続補正書を出さなければ出願は却下される。出願から1年6月で出願公開される。先の出願から1年以内なら国内優先権を主張でき、先の出願は1年4月で取り下げたものとみなされる。
+  buc__BucInventionDisclosure["発明届出と権利の取得"]:::buc
+  %% desc buc__BucInventionDisclosure: 発明者が発明届出書を出し、知的財産部が付番して記載を確かめ、不備があれば差し戻す。職務発明は職務発明規程により特許を受ける権利が発生した時から会社に帰属し、職務発明に当たらない発明は個別の譲渡で取得する（`EmployeeInvention`・`NonEmployeeInvention`）。
+  buc__BucInventorReward["相当の利益"]:::buc
+  %% desc buc__BucInventorReward: 職務発明について会社が特許を受ける権利を取得したとき、発明者は相当の利益を受ける。会社は職務発明規程の基準で額を決め、発明者に通知し、意見を聴いてから支払う。基準は協議・開示・意見の聴取の状況を考えて不合理であってはならない。支払の時期（出願時・登録時・実施時）はモデルの想定。
+  buc__BucOfficeAction["実体審査と中間処理"]:::buc
+  %% desc buc__BucOfficeAction: 審査官は拒絶理由を見つけなければ特許査定をし、見つければ拒絶理由通知で意見書を出す機会を与える。弁理士が知的財産部の方針で意見書・補正書を作って応答期間（国内居住者は発送日から60日）内に出し、期間内の請求で2か月、期間経過後2か月以内の請求でも2か月延長できる（両方はできない、`exclusive`）。最後の拒絶理由通知への補正は請求項の削除・減縮・誤記の訂正・釈明に限る（`FirstNoticeOnly`）。拒絶査定には謄本の送達から3月以内に審判を請求できる（審判の中身は対象外）。分割出願は補正できる時期・特許査定から30日・最初の拒絶査定から3月にできる。
+  buc__BucRegistration["特許料の納付と設定登録"]:::buc
+  %% desc buc__BucRegistration: 特許査定の謄本の送達から30日以内（請求で30日延長できる）に第1〜3年分の特許料を一時に納付すると、特許権の設定の登録がされ、特許権が発生する。納付しなければ設定登録されず、手続は却下される（`FirstFeesPaid`・`FirstFeesUnpaid`）。
+  subgraph group_out_of_scope["やらないこと"]
+    requirement__ReqNoAppealContents[/"審判・審決取消訴訟の中身は対象外とする"\]:::requirement
+    requirement__ReqNoDesignTrademark[/"意匠・商標・実用新案は対象外とする"\]:::requirement
+    requirement__ReqNoForeignFiling[/"外国出願・PCT 国際出願は対象外とする"\]:::requirement
+  end
+  goal__LeanPortfolio --> requirement__ReqExamRequestWithinThreeYears
+  %% derived goal__LeanPortfolio -> requirement__ReqExamRequestWithinThreeYears via requirement__ReqExamRequestWithinThreeYears
+  goal__LeanPortfolio --> requirement__ReqNoMissedAnnuity
+  %% derived goal__LeanPortfolio -> requirement__ReqNoMissedAnnuity via requirement__ReqNoMissedAnnuity
+  goal__LeanPortfolio --> requirement__ReqSearchBeforeDecision
+  %% derived goal__LeanPortfolio -> requirement__ReqSearchBeforeDecision via requirement__ReqSearchBeforeDecision
+  goal__NoLostRights --> requirement__ReqAnswerWithinTerm
+  %% derived goal__NoLostRights -> requirement__ReqAnswerWithinTerm via requirement__ReqAnswerWithinTerm
+  goal__NoLostRights --> requirement__ReqExamRequestWithinThreeYears
+  %% derived goal__NoLostRights -> requirement__ReqExamRequestWithinThreeYears via requirement__ReqExamRequestWithinThreeYears
+  goal__NoLostRights --> requirement__ReqFirstFeesWithin30Days
+  %% derived goal__NoLostRights -> requirement__ReqFirstFeesWithin30Days via requirement__ReqFirstFeesWithin30Days
+  goal__NoLostRights --> requirement__ReqFormalityWithinTerm
+  %% derived goal__NoLostRights -> requirement__ReqFormalityWithinTerm via requirement__ReqFormalityWithinTerm
+  goal__NoLostRights --> requirement__ReqNoMissedAnnuity
+  %% derived goal__NoLostRights -> requirement__ReqNoMissedAnnuity via requirement__ReqNoMissedAnnuity
+  goal__PromptFiling --> requirement__ReqFairReward
+  %% derived goal__PromptFiling -> requirement__ReqFairReward via requirement__ReqFairReward
+  goal__PromptFiling --> requirement__ReqInventorReviewedDraft
+  %% derived goal__PromptFiling -> requirement__ReqInventorReviewedDraft via requirement__ReqInventorReviewedDraft
+  goal__PromptFiling --> requirement__ReqRightsFromTheStart
+  %% derived goal__PromptFiling -> requirement__ReqRightsFromTheStart via requirement__ReqRightsFromTheStart
+  goal__PromptFiling --> requirement__ReqSearchBeforeDecision
+  %% derived goal__PromptFiling -> requirement__ReqSearchBeforeDecision via requirement__ReqSearchBeforeDecision
+  requirement__ReqAnswerWithinTerm --> buc__BucOfficeAction
+  requirement__ReqExamRequestWithinThreeYears --> buc__BucExaminationRequest
+  requirement__ReqFairReward --> buc__BucInventorReward
+  requirement__ReqFirstFeesWithin30Days --> buc__BucRegistration
+  requirement__ReqFormalityWithinTerm --> buc__BucFilingFormality
+  requirement__ReqInventorReviewedDraft --> buc__BucApplicationDrafting
+  requirement__ReqNoAppealContents -.-> buc__BucOfficeAction
+  requirement__ReqNoDesignTrademark -.-> buc__BucAnnuity
+  requirement__ReqNoForeignFiling -.-> buc__BucInventionDisclosure
+  requirement__ReqNoMissedAnnuity --> buc__BucAnnuity
+  requirement__ReqRightsFromTheStart --> buc__BucInventionDisclosure
+  requirement__ReqSearchBeforeDecision --> buc__BucFilingDecision
+  classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

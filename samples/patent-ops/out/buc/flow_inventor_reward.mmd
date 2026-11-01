@@ -1,0 +1,41 @@
+%% rdra-ish diagram=flow scope=buc:BucInventorReward model=samples/patent-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__RewardFlow["相当の利益の流れ"]
+    subgraph lane__RewardFlow__Inventor["発明者"]
+      %% lane lane__RewardFlow__Inventor: actor__Inventor
+      step__OpinionStep["意見の申出"]:::step
+    end
+    subgraph lane__RewardFlow__IpStaff["知的財産部 担当者"]
+      %% lane lane__RewardFlow__IpStaff: actor__IpStaff
+      step__OpinionAnswerStep["意見への回答"]:::step
+      step__RewardDecisionStep["基準による決定"]:::step
+      step__RewardNoticeStep["発明者への通知"]:::step
+      step__RewardPaymentStep["支払"]:::step
+    end
+  end
+  usecase__AnswerInventorOpinion("意見への回答"):::usecase
+  %% desc usecase__AnswerInventorOpinion: 発明者の意見に回答し、必要なら額を見直して通知し直す。
+  usecase__DecideReward("相当の利益の決定"):::usecase
+  %% desc usecase__DecideReward: 職務発明規程の基準で、職務発明の相当の利益を決める。
+  usecase__NotifyReward("発明者への通知"):::usecase
+  %% desc usecase__NotifyReward: 決めた相当の利益と基準を発明者に知らせる。
+  usecase__PayReward("相当の利益の支払"):::usecase
+  %% desc usecase__PayReward: 通知した相当の利益を支払う。
+  usecase__RecordInventorOpinion("発明者の意見の申出"):::usecase
+  %% desc usecase__RecordInventorOpinion: 発明者が相当の利益について意見（質問・不服を含む）を出す。
+  step__OpinionAnswerStep -.-> usecase__AnswerInventorOpinion
+  step__OpinionAnswerStep -->|repeats| step__RewardNoticeStep
+  step__OpinionStep -.-> usecase__RecordInventorOpinion
+  step__OpinionStep -->|precedes| step__OpinionAnswerStep
+  step__RewardDecisionStep -.-> usecase__DecideReward
+  step__RewardDecisionStep -->|precedes| step__RewardNoticeStep
+  step__RewardNoticeStep -->|branches| step__OpinionStep
+  step__RewardNoticeStep -.-> usecase__NotifyReward
+  step__RewardNoticeStep -->|precedes| step__RewardPaymentStep
+  step__RewardPaymentStep -.-> usecase__PayReward
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

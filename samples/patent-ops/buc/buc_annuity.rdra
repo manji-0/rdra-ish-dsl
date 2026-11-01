@@ -1,0 +1,273 @@
+// expect check: ok
+// expect verify: tlc=ok
+module buc.annuity
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+// 年金の納付期限管理も、知財部の重要な仕事 (keiyakuwatch-chizaibu-gyomu.md:165-166, 〔まとめ〕).
+
+buc BucAnnuity "年金管理と権利の維持"
+  description "設定登録の後、第4年以後の特許料（年金）を前年以前に納付する。知的財産部は登録後3年目・6年目などに維持の要否を調べ、維持しない権利は納付をやめる。納付期限を過ぎても6月以内なら同額の割増特許料とともに追納でき、追納しなければ特許権は期限の経過の時に遡って消滅する。故意でなければ回復できる。特許権は放棄でき、出願から20年で満了する。"
+
+// 権利維持要否調査票 (niigata-u-2023-hatsumei-flowchart.txt:184-198), 登録後３年目及び６年目 (:207-208).
+usecase ReviewMaintenance "権利維持要否の調査"
+  description "発明者と事業部門に権利の活用状況を聞き、維持の要否を調べる（参照のみ）。"
+
+usecase DecideToLetLapse "権利を維持しない決定" description "維持しないと決め、以後の年金を納めない。"
+// 第四年以後の各年分の特許料は、前年以前に納付 (egov-tokkyohou-334AC0000000121.txt:1470).
+usecase PayAnnuity "年金の納付" description "次の年の特許料を納付期限までに納付する。"
+usecase RollOverAnnuityYear "納付年度の更新" description "納付済の年が始まり、次の年の特許料が未納になる。"
+usecase EnterGracePeriod "納付期限の経過" description "次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。"
+// 六月以内にその特許料を追納; 同額の割増特許料 (egov-tokkyohou-334AC0000000121.txt:1537, :1539).
+usecase PayLateAnnuity "追納" description "追納期間内に、特許料と同額の割増特許料を納付する。"
+
+// 遡つて消滅したものとみなす (egov-tokkyohou-334AC0000000121.txt:1545).
+usecase LapseUnpaidPatent "追納期間の経過による消滅"
+  description "追納期間が過ぎ、特許権が納付期限の経過の時に遡って消滅したことを記録する。"
+
+// 故意に…納付しなかつたと認められる場合は、この限りでない (egov-tokkyohou-334AC0000000121.txt:1553); within
+// 2 months and at most 1 year after the late-payment period
+// (egov-tokkyohou-shikoukisoku-335M50000400010.txt:1824-1825).
+usecase RestorePatent "特許権の回復"
+  description "納付しなかったことが故意でないとき、特許料と割増特許料を納めて特許権を回復する。"
+
+// その特許権を放棄することができる (egov-tokkyohou-334AC0000000121.txt:1206).
+usecase AbandonPatent "特許権の放棄" description "特許権を放棄する。専用実施権者・質権者があればその承諾を得る。"
+// 二十年をもつて終了 (egov-tokkyohou-334AC0000000121.txt:845).
+usecase ExpirePatentTerm "存続期間の満了" description "出願から20年で特許権の存続期間が満了したことを記録する。"
+
+screen AnnuityScreen "年金管理画面"
+screen MaintenanceReviewScreen "権利維持要否画面"
+
+api AnnuityApi "年金 API"
+api MaintenanceApi "権利維持 API"
+
+performs(IpStaff, BucAnnuity)
+performs(IpStaff, ReviewMaintenance)
+performs(IpStaff, DecideToLetLapse)
+performs(IpStaff, PayAnnuity)
+performs(IpStaff, PayLateAnnuity)
+performs(IpStaff, RestorePatent)
+performs(IpStaff, AbandonPatent)
+belongs(BucAnnuity, RightsMaintenance).by(IpWorkstation).by(InternetFilingSoftware)
+
+contains(BucAnnuity, ReviewMaintenance)
+contains(BucAnnuity, DecideToLetLapse)
+contains(BucAnnuity, PayAnnuity)
+contains(BucAnnuity, RollOverAnnuityYear)
+contains(BucAnnuity, EnterGracePeriod)
+contains(BucAnnuity, PayLateAnnuity)
+contains(BucAnnuity, LapseUnpaidPatent)
+contains(BucAnnuity, RestorePatent)
+contains(BucAnnuity, AbandonPatent)
+contains(BucAnnuity, ExpirePatentTerm)
+contains(IpManagementSystem, AnnuityApi)
+contains(IpManagementSystem, MaintenanceApi)
+
+triggers(EvRegistered, BucAnnuity)
+
+displays(ReviewMaintenance, MaintenanceReviewScreen)
+reads(ReviewMaintenance, Patent)
+reads(ReviewMaintenance, InventionDisclosure)
+triggers(MaintenanceReview, ReviewMaintenance)
+
+displays(DecideToLetLapse, MaintenanceReviewScreen)
+invokes(DecideToLetLapse, MaintenanceApi)
+updates(MaintenanceApi, Patent)
+sets(DecideToLetLapse, Patent, maintain == false)
+
+condition InForce "特許権が存続している"
+holds(InForce, Patent.status == in_force)
+applies_to(InForce, DecideToLetLapse)
+
+// 4th-6th year 10,300円 + 800円×請求項, and more later (egov-tokkyohou-shikourei-335CO0000000016.txt:80, :83, :86).
+displays(PayAnnuity, AnnuityScreen)
+invokes(PayAnnuity, AnnuityApi)
+updates(AnnuityApi, Patent)
+reads(AnnuityApi, FeeSchedule)
+sets(PayAnnuity, Patent, next_year_paid == true)
+sets(PayAnnuity, Patent, last_payment == regular)
+sets(PayAnnuity, Patent, surcharge == null)
+raises(PayAnnuity, EvFeesPaid)
+triggers(AnnuityDueDate, PayAnnuity)
+
+condition AnnuityDue "存続中で、維持すると決めた権利の次の年が未納"
+holds(AnnuityDue, Patent.status == in_force, Patent.maintain == true, Patent.next_year_paid == false)
+applies_to(AnnuityDue, PayAnnuity)
+
+// Started by the timer, no performer.
+updates(RollOverAnnuityYear, Patent)
+sets(RollOverAnnuityYear, Patent, next_year_paid == false)
+triggers(AnnuityDueDate, RollOverAnnuityYear)
+
+condition YearPaid "存続中で、次の年が納付済"
+holds(YearPaid, Patent.status == in_force, Patent.next_year_paid == true)
+applies_to(YearPaid, RollOverAnnuityYear)
+
+// Started by the timer, no performer.
+updates(EnterGracePeriod, Patent)
+transitions(EnterGracePeriod, Patent.status, in_force -> grace)
+triggers(AnnuityDueDate, EnterGracePeriod)
+
+condition YearUnpaid "次の年が未納"
+holds(YearUnpaid, Patent.status == in_force, Patent.next_year_paid == false)
+applies_to(YearUnpaid, EnterGracePeriod)
+
+displays(PayLateAnnuity, AnnuityScreen)
+invokes(PayLateAnnuity, AnnuityApi)
+transitions(PayLateAnnuity, Patent.status, grace -> in_force)
+sets(PayLateAnnuity, Patent, last_payment == late)
+sets(PayLateAnnuity, Patent, surcharge == present)
+raises(PayLateAnnuity, EvFeesPaid)
+triggers(LatePaymentDeadline, PayLateAnnuity)
+
+condition KeptRight "維持すると決めた権利である"
+holds(KeptRight, Patent.status == grace, Patent.maintain == true)
+applies_to(KeptRight, PayLateAnnuity)
+
+// Started by the timer, no performer.
+updates(LapseUnpaidPatent, Patent)
+transitions(LapseUnpaidPatent, Patent.status, grace -> lapsed)
+triggers(LatePaymentDeadline, LapseUnpaidPatent)
+
+invariant(Patent).when(status == lapsed).then(next_year_paid == false).label("追納期間内に特許料を納めた特許権は消滅しない")
+
+// 回復 needs the 特許料 and the 割増特許料 (egov-tokkyohou-334AC0000000121.txt:1553). Whether the
+// non-payment was 故意 is the 特許庁's finding; the model does not record it.
+displays(RestorePatent, AnnuityScreen)
+invokes(RestorePatent, AnnuityApi)
+transitions(RestorePatent, Patent.status, lapsed -> in_force)
+sets(RestorePatent, Patent, last_payment == late)
+sets(RestorePatent, Patent, surcharge == present)
+raises(RestorePatent, EvRestorationRequested)
+
+displays(AbandonPatent, MaintenanceReviewScreen)
+invokes(AbandonPatent, MaintenanceApi)
+transitions(AbandonPatent, Patent.status, in_force -> abandoned)
+raises(AbandonPatent, EvWithdrawalFiled)
+
+// Started by the timer, no performer.
+updates(ExpirePatentTerm, Patent)
+transitions(ExpirePatentTerm, Patent.status, in_force -> expired)
+transitions(ExpirePatentTerm, Patent.status, grace -> expired)
+triggers(TermExpiry, ExpirePatentTerm)
+
+// Access constraints
+requires_permission(ReviewMaintenance, MaintenanceDecide)
+requires_medium(ReviewMaintenance, IpWorkstation)
+
+requires_permission(DecideToLetLapse, MaintenanceDecide)
+requires_medium(DecideToLetLapse, IpWorkstation)
+requires_permission(MaintenanceApi, MaintenanceDecide)
+
+requires_permission(PayAnnuity, FeePay)
+requires_medium(PayAnnuity, InternetFilingSoftware)
+requires_permission(AnnuityApi, FeePay)
+
+requires_permission(PayLateAnnuity, FeePay)
+requires_medium(PayLateAnnuity, InternetFilingSoftware)
+
+requires_permission(RestorePatent, FeePay)
+requires_medium(RestorePatent, InternetFilingSoftware)
+
+requires_permission(AbandonPatent, MaintenanceDecide)
+requires_medium(AbandonPatent, InternetFilingSoftware)
+
+// Screen transitions: the model's assumption.
+navigates(MaintenanceReviewScreen, AnnuityScreen).via(ReviewMaintenance)
+
+// Screen fields
+field NextYearPaidField "次の年の納付"
+  access readonly
+  required true
+  source system
+
+field MaintainField "維持する"
+  access editable
+  required true
+  source actor
+
+contains(AnnuityScreen, NextYearPaidField)
+contains(MaintenanceReviewScreen, MaintainField)
+maps_field(NextYearPaidField, Patent.next_year_paid)
+maps_field(MaintainField, Patent.maintain)
+
+// Business flow
+flow AnnuityFlow "年金管理の流れ"
+step DocketStep "年金管理の開始"
+step ReviewStep "権利維持要否の調査（3年目・6年目）"
+step PaymentStep "年金の納付（前年以前）"
+step GraceStep "追納（6月・割増）"
+step LapseStep "消滅"
+step RestoreStep "回復"
+step AbandonStep "放棄"
+step ExpiryStep "存続期間の満了（20年）"
+
+contains(BucAnnuity, AnnuityFlow)
+contains(AnnuityFlow, DocketStep)
+contains(AnnuityFlow, ReviewStep)
+contains(AnnuityFlow, PaymentStep)
+contains(AnnuityFlow, GraceStep)
+contains(AnnuityFlow, LapseStep)
+contains(AnnuityFlow, RestoreStep)
+contains(AnnuityFlow, AbandonStep)
+contains(AnnuityFlow, ExpiryStep)
+
+precedes(DocketStep, ReviewStep)
+precedes(ReviewStep, PaymentStep)
+repeats(PaymentStep, ReviewStep)
+excepts(PaymentStep, GraceStep)
+repeats(GraceStep, PaymentStep)
+excepts(GraceStep, LapseStep)
+precedes(LapseStep, RestoreStep)
+branches(ReviewStep, AbandonStep)
+precedes(PaymentStep, ExpiryStep)
+
+covers(DocketStep, EvRegistered)
+covers(ReviewStep, ReviewMaintenance)
+covers(ReviewStep, DecideToLetLapse)
+covers(ReviewStep, MaintenanceReview)
+covers(PaymentStep, PayAnnuity)
+covers(PaymentStep, RollOverAnnuityYear)
+covers(PaymentStep, AnnuityDueDate)
+covers(GraceStep, EnterGracePeriod)
+covers(GraceStep, PayLateAnnuity)
+covers(LapseStep, LapseUnpaidPatent)
+covers(LapseStep, LatePaymentDeadline)
+covers(RestoreStep, RestorePatent)
+covers(AbandonStep, AbandonPatent)
+covers(ExpiryStep, ExpirePatentTerm)
+covers(ExpiryStep, TermExpiry)
+
+performs(IpStaff, ReviewStep)
+performs(IpStaff, PaymentStep)
+performs(IpStaff, GraceStep)
+performs(IpStaff, RestoreStep)
+performs(IpStaff, AbandonStep)
+
+// Requirement traceability
+requirement ReqNoMissedAnnuity "年金を納付漏れなく、維持の要否を調べてから納付する"
+  priority "must"
+  source "知財部では、支払い漏れがおきないよう管理する必要がある (keiyakuwatch-chizaibu-gyomu.md:136)"
+  source "前年以前に納付 (egov-tokkyohou-334AC0000000121.txt:1470)"
+  source "登録後３年目及び６年目に調査実施 (niigata-u-2023-hatsumei-flowchart.txt:207-208)"
+  stakeholder "知的財産部"
+  acceptance_criteria "特許権ごとに次の年の納付期限が管理され、維持する権利は期限までに納付される。期限を過ぎた権利は追納期限まで追われ、追納には割増特許料を加える。"
+  status "accepted"
+
+motivates(ReqNoMissedAnnuity, BucAnnuity)
+achieves(ReqNoMissedAnnuity, NoLostRights)
+achieves(ReqNoMissedAnnuity, LeanPortfolio)
+
+// Non-goal: other kinds of rights.
+requirement ReqNoDesignTrademark "意匠・商標・実用新案は対象外とする"
+  source "モデルの想定（調査の範囲外）"
+  stakeholder "知的財産部"
+  status "out-of-scope"
+  rationale "特許だけを扱う。意匠・商標・実用新案は出願・審査・登録料の期限と料金の体系が別で（商標の更新など）、調査もしていない。"
+
+motivates(ReqNoDesignTrademark, BucAnnuity)

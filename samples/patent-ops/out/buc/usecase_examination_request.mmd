@@ -1,0 +1,96 @@
+%% rdra-ish diagram=usecase scope=buc:BucExaminationRequest model=samples/patent-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+    %% desc actor__PatentAttorney: 社外の特許事務所の弁理士。出願書類を作り、代理人として電子出願し、特許庁からの通知に応答する。
+    extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__ExamRequestDeadline(("審査請求期限（出願から3年）")):::timer
+    timer__ExamRequestReview(("審査請求要否の検討（審査請求期限の前）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__DecideExaminationRequest("審査請求要否の判断"):::usecase
+    %% desc usecase__DecideExaminationRequest: 期限の前に、審査請求をするかを決める（参照のみ）。
+    usecase__DeemWithdrawnNoRequest("審査請求期間の経過"):::usecase
+    %% desc usecase__DeemWithdrawnNoRequest: 出願から3年以内に審査請求がなかった出願を、取り下げたものとみなされたとして記録する。
+    usecase__RequestAcceleratedExamination("早期審査の申出"):::usecase
+    %% desc usecase__RequestAcceleratedExamination: 審査請求をした出願について、早期審査に関する事情説明書を出す。
+    usecase__RequestExamination("出願審査の請求"):::usecase
+    %% desc usecase__RequestExamination: 出願から3年以内に出願審査請求書を出す。
+    usecase__RestoreExaminationRequest("審査請求の回復"):::usecase
+    %% desc usecase__RestoreExaminationRequest: 期間内に請求できなかったことが故意でないとき、回復理由書とともに審査請求をする。
+    usecase__WithdrawApplication("出願の取下げ・放棄"):::usecase
+    %% desc usecase__WithdrawApplication: 係属している出願を取り下げる、または放棄する。
+    screen__ExaminationRequestScreen["審査請求画面"]:::screen
+    event__EvAcceleratedExamRequested>"早期審査に関する事情説明書の提出"]:::event
+    event__EvExaminationRequested>"出願審査請求書の提出"]:::event
+    event__EvRestorationRequested>"回復の手続"]:::event
+    event__EvWithdrawalFiled>"取下書・放棄書の提出"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__FeeSchedule[("料金表")]:::entity
+    entity__PatentApplication[("特許出願")]:::entity
+    state__PatentApplication_deemed_withdrawn((("取下げ擬制（審査請求なし）"))):::state
+    state__PatentApplication_examining((("審査請求済（審査中）"))):::state
+    state__PatentApplication_filed((("出願済（方式審査）"))):::state
+    state__PatentApplication_withdrawn((("取下げ・放棄"))):::state
+    condition__ExaminationRequested{"審査請求をした出願である"}:::condition
+  end
+  actor__IpStaff -.-> usecase__DecideExaminationRequest
+  actor__PatentAttorney -.-> usecase__RequestAcceleratedExamination
+  actor__PatentAttorney -.-> usecase__RequestExamination
+  actor__PatentAttorney -.-> usecase__RestoreExaminationRequest
+  actor__PatentAttorney -.-> usecase__WithdrawApplication
+  condition__ExaminationRequested -.-> usecase__RequestAcceleratedExamination
+  event__EvAcceleratedExamRequested -.-> extsystem__Jpo
+  event__EvExaminationRequested -.-> extsystem__Jpo
+  event__EvRestorationRequested -.-> extsystem__Jpo
+  event__EvWithdrawalFiled -.-> extsystem__Jpo
+  timer__ExamRequestDeadline -.-> usecase__DeemWithdrawnNoRequest
+  timer__ExamRequestDeadline -.-> usecase__RequestExamination
+  timer__ExamRequestReview -.-> usecase__DecideExaminationRequest
+  usecase__DecideExaminationRequest -.-> screen__ExaminationRequestScreen
+  usecase__DecideExaminationRequest -.->|reads| entity__PatentApplication
+  usecase__DeemWithdrawnNoRequest -.->|transitions PatentApplication.status filed->deemed_withdrawn| state__PatentApplication_deemed_withdrawn
+  usecase__DeemWithdrawnNoRequest -.->|updates| entity__PatentApplication
+  usecase__RequestAcceleratedExamination -.-> screen__ExaminationRequestScreen
+  usecase__RequestAcceleratedExamination -.-> event__EvAcceleratedExamRequested
+  usecase__RequestAcceleratedExamination -.->|reads| entity__FeeSchedule
+  %% derived usecase__RequestAcceleratedExamination -> entity__FeeSchedule via api__ExaminationRequestApi
+  usecase__RequestAcceleratedExamination -.->|updates| entity__PatentApplication
+  %% derived usecase__RequestAcceleratedExamination -> entity__PatentApplication via api__ExaminationRequestApi
+  usecase__RequestExamination -.-> screen__ExaminationRequestScreen
+  usecase__RequestExamination -.-> event__EvExaminationRequested
+  usecase__RequestExamination -.->|reads| entity__FeeSchedule
+  %% derived usecase__RequestExamination -> entity__FeeSchedule via api__ExaminationRequestApi
+  usecase__RequestExamination -.->|transitions PatentApplication.status filed->examining| state__PatentApplication_examining
+  usecase__RequestExamination -.->|updates| entity__PatentApplication
+  %% derived usecase__RequestExamination -> entity__PatentApplication via api__ExaminationRequestApi
+  usecase__RestoreExaminationRequest -.-> screen__ExaminationRequestScreen
+  usecase__RestoreExaminationRequest -.-> event__EvRestorationRequested
+  usecase__RestoreExaminationRequest -.->|reads| entity__FeeSchedule
+  %% derived usecase__RestoreExaminationRequest -> entity__FeeSchedule via api__ExaminationRequestApi
+  usecase__RestoreExaminationRequest -.->|transitions PatentApplication.status deemed_withdrawn->examining| state__PatentApplication_examining
+  usecase__RestoreExaminationRequest -.->|updates| entity__PatentApplication
+  %% derived usecase__RestoreExaminationRequest -> entity__PatentApplication via api__ExaminationRequestApi
+  usecase__WithdrawApplication -.-> screen__ExaminationRequestScreen
+  usecase__WithdrawApplication -.-> event__EvWithdrawalFiled
+  usecase__WithdrawApplication -.->|transitions PatentApplication.status examining->withdrawn| state__PatentApplication_withdrawn
+  usecase__WithdrawApplication -.->|transitions PatentApplication.status filed->withdrawn| state__PatentApplication_withdrawn
+  usecase__WithdrawApplication -.->|updates| entity__PatentApplication
+  %% derived usecase__WithdrawApplication -> entity__PatentApplication via api__WithdrawalApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -1,0 +1,37 @@
+%% rdra-ish diagram=state scope=entity:OfficeAction model=samples/patent-ops
+%% kinds: statemodel state usecase
+%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "OfficeAction.status" as statemodel__OfficeAction_status {
+    [*] --> state__OfficeAction_open
+    state "応答期間中" as state__OfficeAction_open
+    state "応答案作成済" as state__OfficeAction_drafted
+    state "期間経過（延長請求可）" as state__OfficeAction_overdue
+    state "応答済" as state__OfficeAction_answered
+    state "応答なしで期間満了" as state__OfficeAction_lapsed
+    state "案件終了" as state__OfficeAction_closed
+    %% transition usecase__DraftLimitedResponse
+    state__OfficeAction_open --> state__OfficeAction_drafted : 限定した補正による応答案の作成
+    %% transition usecase__DraftResponse
+    state__OfficeAction_open --> state__OfficeAction_drafted : 意見書・補正書案の作成 [最初の拒絶理由通知である]
+    %% transition usecase__ExpireResponseTerm
+    state__OfficeAction_open --> state__OfficeAction_overdue : 応答期間の経過
+    %% transition usecase__ExpireResponseTerm
+    state__OfficeAction_drafted --> state__OfficeAction_overdue : 応答期間の経過
+    %% transition usecase__FileResponse
+    state__OfficeAction_drafted --> state__OfficeAction_answered : 意見書・補正書の提出
+    %% transition usecase__RequestLateExtension
+    state__OfficeAction_overdue --> state__OfficeAction_open : 期間経過後の延長請求 [期間内に延長していない]
+    %% transition usecase__LapseResponse
+    state__OfficeAction_overdue --> state__OfficeAction_lapsed : 応答なしでの期間満了
+    %% transition usecase__ReceiveFinalOfficeAction
+    state__OfficeAction_answered --> state__OfficeAction_open : 最後の拒絶理由通知の受領
+    %% transition usecase__CloseOfficeActionDocket
+    state__OfficeAction_answered --> state__OfficeAction_closed : 中間処理案件の終了
+    state__OfficeAction_lapsed --> [*]
+    state__OfficeAction_closed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__OfficeAction_lapsed stateend
+  class state__OfficeAction_closed stateend

@@ -1,0 +1,31 @@
+%% rdra-ish diagram=robustness scope=buc:BucApplicationDrafting model=samples/patent-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__Inventor(["発明者"]):::actor
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+  screen__DraftReviewScreen["出願書類レビュー画面"]:::screen
+  screen__DraftingOrderScreen["出願依頼画面"]:::screen
+  api__DraftReviewApi{{"出願書類レビュー API"}}:::api
+  api__DraftingOrderApi{{"出願依頼 API"}}:::api
+  entity__DraftingOrder[("出願依頼")]:::entity
+  entity__InventionDisclosure[("発明届出")]:::entity
+  entity__PatentFirm[("特許事務所")]:::entity
+  actor__Inventor --> screen__DraftReviewScreen
+  actor__IpStaff --> screen__DraftReviewScreen
+  actor__IpStaff --> screen__DraftingOrderScreen
+  actor__PatentAttorney --> screen__DraftReviewScreen
+  api__DraftReviewApi -->|U| entity__DraftingOrder
+  api__DraftingOrderApi -->|C| entity__DraftingOrder
+  api__DraftingOrderApi -->|R| entity__InventionDisclosure
+  api__DraftingOrderApi -->|R| entity__PatentFirm
+  screen__DraftReviewScreen -->|出願書類の修正依頼| api__DraftReviewApi
+  screen__DraftReviewScreen -->|出願書類の承認| api__DraftReviewApi
+  screen__DraftReviewScreen -->|出願書類案の納品| api__DraftReviewApi
+  screen__DraftReviewScreen -->|発明者による内容確認| api__DraftReviewApi
+  screen__DraftingOrderScreen -->|特許事務所への出願依頼| api__DraftingOrderApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:JudgeEmployeeInvention model=samples/patent-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant screen__DisclosureReviewScreen as 届出受付画面
+  participant api__DisclosureReviewApi as 届出受付 API
+  participant entity__InventionDisclosure as 発明届出
+  actor__IpStaff ->> screen__DisclosureReviewScreen: 職務発明の判定
+  screen__DisclosureReviewScreen ->> api__DisclosureReviewApi: 届出受付 API
+  alt 職務発明である: InventionDisclosure.category == 職務発明
+    api__DisclosureReviewApi ->> entity__InventionDisclosure: update right_acquired=true
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: done
+  else guard fails
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: rejected
+  end

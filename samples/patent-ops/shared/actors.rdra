@@ -1,0 +1,34 @@
+module shared.actors
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+// The chain of work is 知財担当者 → (出願依頼) → 特許事務所 → (出願手続き) → 特許庁
+// (keiyakuwatch-chizaibu-gyomu.md:100, a vendor article 〔まとめ〕). A university flowchart has the
+// lanes 発明者, 知的財産係, 発明審査委員会, 特許事務所, 特許庁 (niigata-u-2023-hatsumei-flowchart.txt:7-35,
+// the lane of each box is lost in the text copy). No primary source describes a company's lanes,
+// so the lanes below follow these two secondary sources.
+
+// 従業者等 who made the invention (egov-tokkyohou-334AC0000000121.txt:380).
+actor Inventor "発明者"
+  description "職務として発明をした従業者。発明届出書を出し、出願書類の内容を確かめ、相当の利益について意見を述べる。"
+
+// 知財担当者: 社内で知的財産を見いだし、権利化の方向性を決定する (keiyakuwatch-chizaibu-gyomu.md:99, 〔まとめ〕).
+actor IpStaff "知的財産部 担当者"
+  description "発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。"
+
+// 発明審査委員会 meets 原則毎月１回 (niigata-u-2023-hatsumei-flowchart.txt:20-28, a university's
+// committee). Whether a company has such a committee is the model's assumption.
+actor ReviewCommittee "発明審査委員会"
+  description "先行技術調査の結果を見て、発明を出願するか、ノウハウとして秘匿するか、出願しないかを決める。"
+
+// The patent attorney drafts 特許請求の範囲 from the 明細書 the inventor and the liaison draft
+// (nihon-u-kawai-2011-meisaisho.txt:136-138, a journal article 〔論文〕) and files for the company.
+// The office is an actor, not an external system: the IP department reviews and approves its
+// drafts on shared screens, so its work belongs in the business flows (AdrAttorneyAsActor).
+actor PatentAttorney "弁理士（特許事務所）"
+  description "社外の特許事務所の弁理士。出願書類を作り、代理人として電子出願し、特許庁からの通知に応答する。"
+
+// 特許庁 is reached through the インターネット出願ソフト (jpo-tetuzuki-01-02-online.txt:27); a document
+// filed online reaches the office when it is recorded in the office's file
+// (egov-tokureihou-402AC0000000030.txt:39, :41). Notices come back by オンライン発送
+// (pcinfo-guide-08-hassou-shorui.md:17).
+extsystem Jpo "特許庁（インターネット出願ソフト・オンライン発送）"

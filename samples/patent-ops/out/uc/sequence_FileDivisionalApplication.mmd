@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:FileDivisionalApplication model=samples/patent-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant screen__OfficeActionScreen as 中間処理画面
+  participant api__DivisionalApi as 分割出願 API
+  participant entity__DivisionalFiling as 分割出願
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 分割出願
+  screen__OfficeActionScreen ->> api__DivisionalApi: 分割出願 API
+  alt 分割できる時期である: PatentApplication.status != 手続補正指令への対応中, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済, PatentApplication.status != 却下, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 取下げ・放棄
+    api__DivisionalApi ->> entity__DivisionalFiling: create
+    api__DivisionalApi -) extsystem__Jpo: 分割出願
+    api__DivisionalApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__DivisionalApi -->> screen__OfficeActionScreen: rejected
+  end

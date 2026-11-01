@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordDismissal model=samples/patent-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant screen__ApplicationDocketScreen as 出願案件・期限管理画面
+  participant api__ApplicationDocketApi as 出願案件 API
+  participant entity__PatentApplication as 特許出願
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願の却下の記録
+  extsystem__Jpo ->> api__ApplicationDocketApi: 却下処分
+  screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
+  alt PatentApplication.status == 手続補正指令への対応中
+    api__ApplicationDocketApi ->> entity__PatentApplication: update status 手続補正指令への対応中 -> 却下
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: rejected
+  end

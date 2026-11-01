@@ -1,0 +1,44 @@
+%% rdra-ish diagram=flow scope=buc:BucInventionDisclosure model=samples/patent-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__DisclosureFlow["発明届出の流れ"]
+    subgraph lane__DisclosureFlow__Inventor["発明者"]
+      %% lane lane__DisclosureFlow__Inventor: actor__Inventor
+      step__SubmitStep["発明届出書の提出"]:::step
+    end
+    subgraph lane__DisclosureFlow__IpStaff["知的財産部 担当者"]
+      %% lane lane__DisclosureFlow__IpStaff: actor__IpStaff
+      step__AcceptStep["受付と付番"]:::step
+      step__AssignmentStep["権利の譲受け"]:::step
+      step__EmployeeStep["職務発明の判定"]:::step
+      step__ReturnStep["差戻しと再提出"]:::step
+    end
+  end
+  usecase__AcceptDisclosure("届出の受付と付番"):::usecase
+  %% desc usecase__AcceptDisclosure: 知的財産部が付番し、記載に不備がなければ受け付ける。
+  usecase__AcquireRightsByAssignment("特許を受ける権利の譲受け"):::usecase
+  %% desc usecase__AcquireRightsByAssignment: 職務発明に当たらない発明について、発明者から特許を受ける権利の譲渡を受ける。
+  usecase__JudgeEmployeeInvention("職務発明の判定"):::usecase
+  %% desc usecase__JudgeEmployeeInvention: 職務発明と判定し、規程により会社が発生時から特許を受ける権利を持つことを記録する。
+  usecase__ResubmitDisclosure("届出書の再提出"):::usecase
+  %% desc usecase__ResubmitDisclosure: 発明者が不備を直した届出書を出し直す。
+  usecase__ReturnDisclosure("届出書の差戻し"):::usecase
+  %% desc usecase__ReturnDisclosure: 記載に不備がある届出書を発明者に差し戻す。
+  usecase__SubmitInventionDisclosure("発明届出書の提出"):::usecase
+  %% desc usecase__SubmitInventionDisclosure: 発明者が発明届出書を出す。届出は受付待ちになる。
+  step__AcceptStep -->|branches| step__AssignmentStep
+  step__AcceptStep -.-> usecase__AcceptDisclosure
+  step__AcceptStep -->|precedes| step__EmployeeStep
+  step__AssignmentStep -.-> usecase__AcquireRightsByAssignment
+  step__EmployeeStep -.-> usecase__JudgeEmployeeInvention
+  step__ReturnStep -.-> usecase__ResubmitDisclosure
+  step__ReturnStep -.-> usecase__ReturnDisclosure
+  step__ReturnStep -->|repeats| step__SubmitStep
+  step__SubmitStep -.-> usecase__SubmitInventionDisclosure
+  step__SubmitStep -.->|excepts| step__ReturnStep
+  step__SubmitStep -->|precedes| step__AcceptStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

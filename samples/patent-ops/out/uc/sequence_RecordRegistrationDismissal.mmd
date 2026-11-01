@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordRegistrationDismissal model=samples/patent-ops
+%% kinds: actor extsystem screen usecase entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant screen__FeePaymentScreen as 特許料納付画面
+  participant usecase__RecordRegistrationDismissal as 特許料の不納による却下の記録
+  participant entity__PatentApplication as 特許出願
+  actor__IpStaff ->> screen__FeePaymentScreen: 特許料の不納による却下の記録
+  extsystem__Jpo ->> usecase__RecordRegistrationDismissal: 特許料の不納による却下
+  screen__FeePaymentScreen ->> usecase__RecordRegistrationDismissal: 特許料の不納による却下の記録
+  alt 第1〜3年分の特許料を納付していない: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == false
+    usecase__RecordRegistrationDismissal ->> entity__PatentApplication: update status 特許査定 -> 却下
+    usecase__RecordRegistrationDismissal -->> screen__FeePaymentScreen: done
+  else guard fails
+    usecase__RecordRegistrationDismissal -->> screen__FeePaymentScreen: rejected
+  end

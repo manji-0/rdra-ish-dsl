@@ -1,0 +1,426 @@
+module buc.office_action
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+// 中間処理: the exchange that answers a 拒絶理由通知書 (keiyakuwatch-chizaibu-gyomu.md:156, 〔まとめ〕).
+
+buc BucOfficeAction "実体審査と中間処理"
+  description "審査官は拒絶理由を見つけなければ特許査定をし、見つければ拒絶理由通知で意見書を出す機会を与える。弁理士が知的財産部の方針で意見書・補正書を作って応答期間（国内居住者は発送日から60日）内に出し、期間内の請求で2か月、期間経過後2か月以内の請求でも2か月延長できる（両方はできない、`exclusive`）。最後の拒絶理由通知への補正は請求項の削除・減縮・誤記の訂正・釈明に限る（`FirstNoticeOnly`）。拒絶査定には謄本の送達から3月以内に審判を請求できる（審判の中身は対象外）。分割出願は補正できる時期・特許査定から30日・最初の拒絶査定から3月にできる。"
+
+// 拒絶の理由を通知し、相当の期間を指定して、意見書を提出する機会 (egov-tokkyohou-334AC0000000121.txt:731).
+usecase ReceiveOfficeAction "拒絶理由通知の受領" description "拒絶理由通知書を受け取り、応答期間の管理を始める。"
+
+// 拒絶通知に対する意見書・補正書案検討 (niigata-u-2023-hatsumei-flowchart.txt:164-166, a university flowchart).
+usecase InstructResponse "応答方針の指示"
+  description "知的財産部が発明者と相談し、弁理士に応答の方針を伝える（参照のみ）。"
+
+usecase DraftResponse "意見書・補正書案の作成"
+  description "最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。"
+
+// 請求項の削除, 特許請求の範囲の減縮, 誤記の訂正, 明りようでない記載の釈明 (egov-tokkyohou-334AC0000000121.txt:176-184).
+usecase DraftLimitedResponse "限定した補正による応答案の作成"
+  description "請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。"
+
+// １通の請求で２か月…手数料は２，１００円 (jpo-tetuzuki-02-19-kyozetsu-outou.txt:56-57).
+usecase RequestTermExtension "応答期間の延長請求" description "応答期間内に期間延長請求書を出し、2か月延長する。"
+
+usecase ExpireResponseTerm "応答期間の経過"
+  description "応答のないまま応答期間が過ぎたことを記録する。その後2か月は期間経過後の延長を請求できる。"
+
+// 応答期間に２か月を加えた期間内に請求すれば２か月の延長…５１，０００円 (jpo-tetuzuki-02-19-kyozetsu-outou.txt:64-67).
+usecase RequestLateExtension "期間経過後の延長請求"
+  description "応答期間の経過後2か月以内に延長を請求し、2か月の応答期間を得る。"
+
+usecase LapseResponse "応答なしでの期間満了" description "期間経過後の延長も請求できなくなったことを記録する。"
+usecase FileResponse "意見書・補正書の提出" description "知的財産部が確かめた案を弁理士が特許庁に出す。"
+
+// 最後に受けた拒絶理由通知 (egov-tokkyohou-334AC0000000121.txt:166).
+usecase ReceiveFinalOfficeAction "最後の拒絶理由通知の受領"
+  description "応答の後に最後の拒絶理由通知書を受け取り、補正の範囲が限られた応答期間を始める。"
+
+// 拒絶の理由を発見しないときは、特許をすべき旨の査定 (egov-tokkyohou-334AC0000000121.txt:738).
+usecase ReceiveDecisionToGrant "特許査定の受領"
+  description "特許査定の謄本を受け取る。特許料の納付期限（30日）が始まる。"
+
+// 拒絶をすべき旨の査定 (egov-tokkyohou-334AC0000000121.txt:714).
+usecase ReceiveDecisionOfRejection "拒絶査定の受領"
+  description "拒絶査定の謄本を受け取る。審判請求の期限（3月）が始まる。"
+
+// 三月以内に拒絶査定不服審判を請求することができる (egov-tokkyohou-334AC0000000121.txt:1714).
+usecase RequestAppeal "拒絶査定不服審判の請求"
+  description "審判を請求する。審判の中身はこのモデルの対象外で、出願はここで審判に引き渡される。"
+
+usecase FinalizeRejection "拒絶査定の確定" description "審判請求がないまま3月が過ぎ、拒絶査定が確定したことを記録する。"
+
+usecase CloseOfficeActionDocket "中間処理案件の終了"
+  description "査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。"
+
+// 分割 (egov-tokkyohou-334AC0000000121.txt:610, :612, :614).
+usecase FileDivisionalApplication "分割出願"
+  description "補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。"
+
+screen OfficeActionScreen "中間処理画面"
+screen ResponseDraftScreen "応答案画面"
+screen DecisionScreen "査定画面"
+
+api OfficeActionIntakeApi "拒絶理由通知の受付 API"
+api OfficeActionApi "中間処理 API"
+api ResponseFilingApi "応答提出 API"
+api DecisionApi "査定 API"
+api DivisionalApi "分割出願 API"
+api AppealApi "審判請求 API"
+
+performs(PatentAttorney, ReceiveOfficeAction)
+performs(IpStaff, InstructResponse)
+performs(PatentAttorney, DraftResponse)
+performs(PatentAttorney, DraftLimitedResponse)
+performs(PatentAttorney, RequestTermExtension)
+performs(PatentAttorney, RequestLateExtension)
+performs(PatentAttorney, FileResponse)
+performs(PatentAttorney, ReceiveFinalOfficeAction)
+performs(IpStaff, ReceiveDecisionToGrant)
+performs(IpStaff, ReceiveDecisionOfRejection)
+performs(PatentAttorney, RequestAppeal)
+performs(IpStaff, CloseOfficeActionDocket)
+performs(PatentAttorney, FileDivisionalApplication)
+belongs(BucOfficeAction, Prosecution).by(AttorneyPortal).by(InternetFilingSoftware).by(IpWorkstation)
+
+contains(BucOfficeAction, ReceiveOfficeAction)
+contains(BucOfficeAction, InstructResponse)
+contains(BucOfficeAction, DraftResponse)
+contains(BucOfficeAction, DraftLimitedResponse)
+contains(BucOfficeAction, RequestTermExtension)
+contains(BucOfficeAction, ExpireResponseTerm)
+contains(BucOfficeAction, RequestLateExtension)
+contains(BucOfficeAction, LapseResponse)
+contains(BucOfficeAction, FileResponse)
+contains(BucOfficeAction, ReceiveFinalOfficeAction)
+contains(BucOfficeAction, ReceiveDecisionToGrant)
+contains(BucOfficeAction, ReceiveDecisionOfRejection)
+contains(BucOfficeAction, RequestAppeal)
+contains(BucOfficeAction, FinalizeRejection)
+contains(BucOfficeAction, CloseOfficeActionDocket)
+contains(BucOfficeAction, FileDivisionalApplication)
+contains(IpManagementSystem, OfficeActionIntakeApi)
+contains(IpManagementSystem, OfficeActionApi)
+contains(IpManagementSystem, ResponseFilingApi)
+contains(IpManagementSystem, DecisionApi)
+contains(IpManagementSystem, DivisionalApi)
+contains(IpManagementSystem, AppealApi)
+
+// The application stays `examining` while notices and answers go back and forth; the notice itself
+// carries the response state. Nothing checks that the application is under examination when a
+// notice arrives: the 特許庁 sends it, and a guard on the application's state would put every
+// application state into the notice's state space.
+// The 指定期間 runs from the day after the notice is sent (jpo-tetuzuki-02-17-ippan-gensoku.txt:308) and
+// from the 発送日, not the day it is collected (pcinfo-guide-08-hassou-shorui.md:62).
+displays(ReceiveOfficeAction, OfficeActionScreen)
+invokes(ReceiveOfficeAction, OfficeActionIntakeApi)
+creates(OfficeActionIntakeApi, OfficeAction)
+reads(OfficeActionIntakeApi, PatentApplication)
+sets(ReceiveOfficeAction, OfficeAction, kind == first)
+raises(Jpo, EvOfficeAction)
+triggers(EvOfficeAction, BucOfficeAction)
+triggers(EvOfficeAction, ReceiveOfficeAction)
+
+displays(InstructResponse, OfficeActionScreen)
+reads(InstructResponse, OfficeAction)
+reads(InstructResponse, PatentApplication)
+
+// An actor picks the scope of the amendment, but a variation keeps the value it was created with
+// when a use case updates the row, so each scope is its own use case that sets it.
+displays(DraftResponse, ResponseDraftScreen)
+invokes(DraftResponse, OfficeActionApi)
+updates(OfficeActionApi, OfficeAction)
+transitions(DraftResponse, OfficeAction.status, open -> drafted)
+sets(DraftResponse, OfficeAction, amendment == free)
+
+condition FirstNoticeOnly "最初の拒絶理由通知である"
+holds(FirstNoticeOnly, OfficeAction.status == open, OfficeAction.kind == first)
+applies_to(FirstNoticeOnly, DraftResponse)
+
+displays(DraftLimitedResponse, ResponseDraftScreen)
+invokes(DraftLimitedResponse, OfficeActionApi)
+transitions(DraftLimitedResponse, OfficeAction.status, open -> drafted)
+sets(DraftLimitedResponse, OfficeAction, amendment == limited)
+
+// 提出できる期間延長請求書は１通のみ (jpo-tetuzuki-02-19-kyozetsu-outou.txt:57).
+displays(RequestTermExtension, OfficeActionScreen)
+invokes(RequestTermExtension, OfficeActionApi)
+sets(RequestTermExtension, OfficeAction, extended == true)
+raises(RequestTermExtension, EvExtensionRequested)
+triggers(EvExtensionRequested, Jpo)
+
+condition WithinTermNotExtended "応答期間内で、まだ延長していない"
+holds(WithinTermNotExtended, OfficeAction.status == open, OfficeAction.extended == false, OfficeAction.late_extended == false)
+applies_to(WithinTermNotExtended, RequestTermExtension)
+
+// Started by the timer, no performer.
+updates(ExpireResponseTerm, OfficeAction)
+transitions(ExpireResponseTerm, OfficeAction.status, open -> overdue)
+transitions(ExpireResponseTerm, OfficeAction.status, drafted -> overdue)
+triggers(ResponseDeadline, ExpireResponseTerm)
+
+// （１）の延長が認められたときは、応答期間経過後の延長請求はできません (jpo-tetuzuki-02-19-kyozetsu-outou.txt:72);
+// nor after answering within the period (:73).
+displays(RequestLateExtension, OfficeActionScreen)
+invokes(RequestLateExtension, OfficeActionApi)
+transitions(RequestLateExtension, OfficeAction.status, overdue -> open)
+sets(RequestLateExtension, OfficeAction, late_extended == true)
+raises(RequestLateExtension, EvExtensionRequested)
+
+condition NotExtendedWithinTerm "期間内に延長していない"
+holds(NotExtendedWithinTerm, OfficeAction.status == overdue, OfficeAction.extended == false)
+applies_to(NotExtendedWithinTerm, RequestLateExtension)
+
+// Started by the timer, no performer.
+updates(LapseResponse, OfficeAction)
+transitions(LapseResponse, OfficeAction.status, overdue -> lapsed)
+triggers(LateExtensionDeadline, LapseResponse)
+
+displays(FileResponse, ResponseDraftScreen)
+invokes(FileResponse, ResponseFilingApi)
+updates(ResponseFilingApi, OfficeAction)
+transitions(FileResponse, OfficeAction.status, drafted -> answered)
+raises(FileResponse, EvResponseFiled)
+triggers(EvResponseFiled, Jpo)
+triggers(ResponseDeadline, FileResponse)
+
+// Whether a notice is the 最後 one is the examiner's call; the 審査基準 that decides it was not
+// obtained, so the model takes the label on the notice as given (the law's wording only, :166).
+// The new notice reopens the record and clears the previous answer and extensions.
+displays(ReceiveFinalOfficeAction, OfficeActionScreen)
+invokes(ReceiveFinalOfficeAction, ResponseFilingApi)
+transitions(ReceiveFinalOfficeAction, OfficeAction.status, answered -> open)
+sets(ReceiveFinalOfficeAction, OfficeAction, kind == final)
+sets(ReceiveFinalOfficeAction, OfficeAction, extended == false)
+sets(ReceiveFinalOfficeAction, OfficeAction, late_extended == false)
+sets(ReceiveFinalOfficeAction, OfficeAction, amendment == limited)
+raises(Jpo, EvFinalOfficeAction)
+triggers(EvFinalOfficeAction, ReceiveFinalOfficeAction)
+
+// An amendment beyond the limits is 却下 by the examiner (egov-tokkyohou-334AC0000000121.txt:746);
+// the model keeps such a draft from being made at all.
+forbidden(OfficeAction, kind == final, amendment == free).label("最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る")
+
+exclusive(OfficeAction, extended == true, late_extended == true).label("期間内に延長した応答期間は、経過後に重ねて延長できない")
+
+displays(ReceiveDecisionToGrant, DecisionScreen)
+invokes(ReceiveDecisionToGrant, DecisionApi)
+updates(DecisionApi, PatentApplication)
+transitions(ReceiveDecisionToGrant, PatentApplication.status, examining -> granted)
+raises(Jpo, EvDecisionToGrant)
+triggers(EvDecisionToGrant, ReceiveDecisionToGrant)
+
+// After a 拒絶理由通知 left unanswered, or after an answer that did not remove the reason.
+displays(ReceiveDecisionOfRejection, DecisionScreen)
+invokes(ReceiveDecisionOfRejection, DecisionApi)
+transitions(ReceiveDecisionOfRejection, PatentApplication.status, examining -> rejected)
+raises(Jpo, EvDecisionOfRejection)
+triggers(EvDecisionOfRejection, ReceiveDecisionOfRejection)
+
+displays(RequestAppeal, DecisionScreen)
+invokes(RequestAppeal, AppealApi)
+updates(AppealApi, PatentApplication)
+transitions(RequestAppeal, PatentApplication.status, rejected -> appealed)
+raises(RequestAppeal, EvAppealRequested)
+triggers(EvAppealRequested, Jpo)
+triggers(AppealDeadline, RequestAppeal)
+
+// Started by the timer, no performer.
+updates(FinalizeRejection, PatentApplication)
+transitions(FinalizeRejection, PatentApplication.status, rejected -> rejection_final)
+triggers(AppealDeadline, FinalizeRejection)
+
+// Housekeeping: an answered notice has a way out (a 最後の拒絶理由通知), so it is not an end state, and
+// `check` reports it as stuck once no further notice comes. The IP department closes the docket
+// when the decision arrives. Like the notice itself, the use case does not read the application's
+// state.
+displays(CloseOfficeActionDocket, OfficeActionScreen)
+updates(CloseOfficeActionDocket, OfficeAction)
+transitions(CloseOfficeActionDocket, OfficeAction.status, answered -> closed)
+triggers(EvDecisionToGrant, CloseOfficeActionDocket)
+triggers(EvDecisionOfRejection, CloseOfficeActionDocket)
+
+// The three windows are 補正できる時期 (before the first notice and within each response period),
+// 30 days after the 特許査定謄本, and 3 months after the first 拒絶査定謄本. The DSL has no `in { ... }` and
+// no time window on a guard, so the guard lists the states in which division is not possible.
+displays(FileDivisionalApplication, OfficeActionScreen)
+invokes(FileDivisionalApplication, DivisionalApi)
+creates(DivisionalApi, DivisionalFiling)
+raises(FileDivisionalApplication, EvDivisionalFiled)
+triggers(EvDivisionalFiled, Jpo)
+
+condition DivisionPossible "分割できる時期である"
+holds(DivisionPossible, PatentApplication.status != formality_order, PatentApplication.status != rejection_final, PatentApplication.status != appealed, PatentApplication.status != registered, PatentApplication.status != dismissed, PatentApplication.status != deemed_withdrawn, PatentApplication.status != priority_withdrawn, PatentApplication.status != withdrawn)
+applies_to(DivisionPossible, FileDivisionalApplication)
+
+// Access constraints
+requires_permission(ReceiveOfficeAction, JpoProcedure)
+requires_medium(ReceiveOfficeAction, InternetFilingSoftware)
+requires_permission(OfficeActionIntakeApi, JpoProcedure)
+
+requires_permission(InstructResponse, DocketManage)
+requires_medium(InstructResponse, IpWorkstation)
+
+requires_permission(DraftResponse, DraftWrite)
+requires_medium(DraftResponse, AttorneyPortal)
+requires_permission(OfficeActionApi, DraftWrite)
+
+requires_permission(DraftLimitedResponse, DraftWrite)
+requires_medium(DraftLimitedResponse, AttorneyPortal)
+
+requires_permission(RequestTermExtension, JpoProcedure)
+requires_medium(RequestTermExtension, InternetFilingSoftware)
+
+requires_permission(RequestLateExtension, JpoProcedure)
+requires_medium(RequestLateExtension, InternetFilingSoftware)
+
+requires_permission(FileResponse, JpoProcedure)
+requires_medium(FileResponse, InternetFilingSoftware)
+requires_permission(ResponseFilingApi, JpoProcedure)
+
+requires_permission(ReceiveFinalOfficeAction, JpoProcedure)
+requires_medium(ReceiveFinalOfficeAction, InternetFilingSoftware)
+
+requires_permission(ReceiveDecisionToGrant, DocketManage)
+requires_medium(ReceiveDecisionToGrant, IpWorkstation)
+requires_permission(DecisionApi, DocketManage)
+
+requires_permission(ReceiveDecisionOfRejection, DocketManage)
+requires_medium(ReceiveDecisionOfRejection, IpWorkstation)
+
+requires_permission(RequestAppeal, JpoProcedure)
+requires_medium(RequestAppeal, InternetFilingSoftware)
+requires_permission(AppealApi, JpoProcedure)
+
+requires_permission(CloseOfficeActionDocket, DocketManage)
+requires_medium(CloseOfficeActionDocket, IpWorkstation)
+
+requires_permission(FileDivisionalApplication, JpoProcedure)
+requires_medium(FileDivisionalApplication, InternetFilingSoftware)
+requires_permission(DivisionalApi, JpoProcedure)
+
+// Screen transitions: the model's assumption.
+navigates(OfficeActionScreen, ResponseDraftScreen).via(InstructResponse)
+navigates(ResponseDraftScreen, OfficeActionScreen).via(FileResponse)
+navigates(OfficeActionScreen, DecisionScreen).via(ReceiveDecisionOfRejection)
+
+// Screen fields
+field NoticeKindField "通知の種類（最初・最後）"
+  access readonly
+  required true
+  source system
+
+field AmendmentScopeField "補正の範囲"
+  access editable
+  required true
+  source actor
+
+field DecisionStatusField "査定"
+  access readonly
+  required true
+  source system
+
+contains(OfficeActionScreen, NoticeKindField)
+contains(ResponseDraftScreen, AmendmentScopeField)
+contains(DecisionScreen, DecisionStatusField)
+maps_field(NoticeKindField, OfficeAction.kind)
+maps_field(AmendmentScopeField, OfficeAction.amendment)
+maps_field(DecisionStatusField, PatentApplication.status)
+
+// Business flow
+flow OfficeActionFlow "実体審査と中間処理の流れ"
+step NoticeStep "拒絶理由通知の受領（60日）"
+step PolicyStep "応答方針の指示"
+step DraftingStep "意見書・補正書案の作成"
+step ExtensionStep "応答期間の延長（2か月）"
+step LateExtensionStep "期間経過後の延長（2か月）"
+step ResponseStep "意見書・補正書の提出"
+step FinalNoticeStep "最後の拒絶理由通知"
+step GrantStep "特許査定"
+step RejectionStep "拒絶査定（審判請求は3月以内）"
+step DivisionStep "分割出願"
+
+contains(BucOfficeAction, OfficeActionFlow)
+contains(OfficeActionFlow, NoticeStep)
+contains(OfficeActionFlow, PolicyStep)
+contains(OfficeActionFlow, DraftingStep)
+contains(OfficeActionFlow, ExtensionStep)
+contains(OfficeActionFlow, LateExtensionStep)
+contains(OfficeActionFlow, ResponseStep)
+contains(OfficeActionFlow, FinalNoticeStep)
+contains(OfficeActionFlow, GrantStep)
+contains(OfficeActionFlow, RejectionStep)
+contains(OfficeActionFlow, DivisionStep)
+
+precedes(NoticeStep, PolicyStep)
+precedes(PolicyStep, DraftingStep)
+branches(PolicyStep, ExtensionStep)
+repeats(ExtensionStep, DraftingStep)
+excepts(DraftingStep, LateExtensionStep)
+repeats(LateExtensionStep, DraftingStep)
+precedes(DraftingStep, ResponseStep)
+precedes(ResponseStep, GrantStep)
+branches(ResponseStep, FinalNoticeStep)
+repeats(FinalNoticeStep, PolicyStep)
+excepts(ResponseStep, RejectionStep)
+branches(PolicyStep, DivisionStep)
+
+covers(NoticeStep, ReceiveOfficeAction)
+covers(PolicyStep, InstructResponse)
+covers(DraftingStep, DraftResponse)
+covers(DraftingStep, DraftLimitedResponse)
+covers(ExtensionStep, RequestTermExtension)
+covers(LateExtensionStep, ExpireResponseTerm)
+covers(LateExtensionStep, RequestLateExtension)
+covers(LateExtensionStep, LapseResponse)
+covers(LateExtensionStep, LateExtensionDeadline)
+covers(ResponseStep, FileResponse)
+covers(ResponseStep, ResponseDeadline)
+covers(FinalNoticeStep, ReceiveFinalOfficeAction)
+covers(GrantStep, ReceiveDecisionToGrant)
+covers(GrantStep, CloseOfficeActionDocket)
+covers(RejectionStep, ReceiveDecisionOfRejection)
+covers(RejectionStep, RequestAppeal)
+covers(RejectionStep, FinalizeRejection)
+covers(RejectionStep, AppealDeadline)
+covers(DivisionStep, FileDivisionalApplication)
+
+performs(PatentAttorney, NoticeStep)
+performs(IpStaff, PolicyStep)
+performs(PatentAttorney, DraftingStep)
+performs(PatentAttorney, ExtensionStep)
+performs(PatentAttorney, LateExtensionStep)
+performs(PatentAttorney, ResponseStep)
+performs(PatentAttorney, FinalNoticeStep)
+performs(IpStaff, GrantStep)
+performs(IpStaff, RejectionStep)
+performs(PatentAttorney, DivisionStep)
+
+// Requirement traceability
+requirement ReqAnswerWithinTerm "拒絶理由通知には応答期間内に、必要なら延長して応答する"
+  priority "must"
+  source "相当の期間を指定して、意見書を提出する機会 (egov-tokkyohou-334AC0000000121.txt:731)"
+  source "国内居住者：６０日 (jpo-2016-kyozetu-entyou-zu01.txt:59)"
+  source "期間延長 (jpo-tetuzuki-02-19-kyozetsu-outou.txt:56-57, :64-67, :72-73)"
+  stakeholder "弁理士"
+  stakeholder "知的財産部"
+  acceptance_criteria "拒絶理由通知ごとに応答期限が管理され、期間内の延長と期間経過後の延長は合わせて一度までで、最後の拒絶理由通知への補正は限定した範囲に収まる。"
+  status "accepted"
+
+motivates(ReqAnswerWithinTerm, BucOfficeAction)
+achieves(ReqAnswerWithinTerm, NoLostRights)
+
+// Non-goal: what happens inside the 審判 and in court.
+requirement ReqNoAppealContents "審判・審決取消訴訟の中身は対象外とする"
+  source "モデルの想定（調査の範囲外）"
+  stakeholder "知的財産部"
+  status "out-of-scope"
+  rationale "拒絶査定不服審判は請求の期限（謄本の送達から3月）と請求の事実だけを扱う。前置審査、審判での拒絶理由、審決、審決取消訴訟、無効審判は手続も担当（審判部・裁判所・訴訟代理人）も別で、調査もしていない。"
+
+motivates(ReqNoAppealContents, BucOfficeAction)

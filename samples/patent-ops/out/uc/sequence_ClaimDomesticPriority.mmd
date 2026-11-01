@@ -1,0 +1,23 @@
+%% rdra-ish diagram=sequence scope=usecase:ClaimDomesticPriority model=samples/patent-ops
+%% kinds: actor timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant timer__PriorityClaimDeadline as 国内優先権の主張期限（先の出願から1年）
+  participant screen__FilingScreen as 出願画面
+  participant api__PriorityClaimApi as 国内優先権 API
+  participant entity__PatentApplication as 特許出願
+  participant entity__PriorityClaim as 国内優先権の主張
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__PatentAttorney ->> screen__FilingScreen: 国内優先権の主張
+  timer__PriorityClaimDeadline ->> api__PriorityClaimApi: 国内優先権の主張期限（先の出願から1年）
+  screen__FilingScreen ->> api__PriorityClaimApi: 国内優先権 API
+  alt 先の出願が係属し、査定を受けていない: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済
+    Note over api__PriorityClaimApi: transaction (API atomic boundary)
+    api__PriorityClaimApi ->> entity__PatentApplication: update priority_base=true
+    api__PriorityClaimApi ->> entity__PriorityClaim: create
+    api__PriorityClaimApi -) extsystem__Jpo: 国内優先権を主張した出願
+    api__PriorityClaimApi -->> screen__FilingScreen: done
+  else guard fails
+    api__PriorityClaimApi -->> screen__FilingScreen: rejected
+  end

@@ -1,0 +1,44 @@
+%% rdra-ish diagram=flow scope=buc:BucApplicationDrafting model=samples/patent-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__DraftingFlow["出願書類の作成の流れ"]
+    subgraph lane__DraftingFlow__Inventor["発明者"]
+      %% lane lane__DraftingFlow__Inventor: actor__Inventor
+      step__InventorCheckStep["発明者による確認"]:::step
+    end
+    subgraph lane__DraftingFlow__IpStaff["知的財産部 担当者"]
+      %% lane lane__DraftingFlow__IpStaff: actor__IpStaff
+      step__ApprovalStep["承認"]:::step
+      step__OrderStep["特許事務所への依頼"]:::step
+      step__RevisionStep["修正依頼"]:::step
+    end
+    subgraph lane__DraftingFlow__PatentAttorney["弁理士（特許事務所）"]
+      %% lane lane__DraftingFlow__PatentAttorney: actor__PatentAttorney
+      step__DraftStep["出願書類案の納品"]:::step
+    end
+  end
+  usecase__ApproveDraft("出願書類の承認"):::usecase
+  %% desc usecase__ApproveDraft: 発明者の確認を経た案を知的財産部が承認し、出願を指示する。
+  usecase__ConfirmDraftByInventor("発明者による内容確認"):::usecase
+  %% desc usecase__ConfirmDraftByInventor: 発明者が案の技術内容を確かめ、確認済にする。
+  usecase__RequestDraftRevision("出願書類の修正依頼"):::usecase
+  %% desc usecase__RequestDraftRevision: 知的財産部が案の修正を弁理士に依頼する。発明者の確認はやり直しになる。
+  usecase__RequestDrafting("特許事務所への出願依頼"):::usecase
+  %% desc usecase__RequestDrafting: 出願と決まった発明の届出をもとに、特許事務所へ明細書の作成と出願を依頼する。
+  usecase__SubmitDraft("出願書類案の納品"):::usecase
+  %% desc usecase__SubmitDraft: 弁理士が出願書類の案を納品する。修正の依頼を受けた案も出し直す。
+  step__ApprovalStep -.-> usecase__ApproveDraft
+  step__DraftStep -.-> usecase__SubmitDraft
+  step__DraftStep -->|precedes| step__InventorCheckStep
+  step__InventorCheckStep -.-> usecase__ConfirmDraftByInventor
+  step__InventorCheckStep -.->|excepts| step__RevisionStep
+  step__InventorCheckStep -->|precedes| step__ApprovalStep
+  step__OrderStep -.-> usecase__RequestDrafting
+  step__OrderStep -->|precedes| step__DraftStep
+  step__RevisionStep -.-> usecase__RequestDraftRevision
+  step__RevisionStep -->|repeats| step__DraftStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

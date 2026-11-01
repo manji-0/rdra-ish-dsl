@@ -1,0 +1,72 @@
+%% rdra-ish diagram=flow scope=buc:BucAnnuity model=samples/patent-ops
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__AnnuityFlow["年金管理の流れ"]
+    step__DocketStep["年金管理の開始"]:::step
+    step__ExpiryStep["存続期間の満了（20年）"]:::step
+    step__LapseStep["消滅"]:::step
+    subgraph lane__AnnuityFlow__IpStaff["知的財産部 担当者"]
+      %% lane lane__AnnuityFlow__IpStaff: actor__IpStaff
+      step__AbandonStep["放棄"]:::step
+      step__GraceStep["追納（6月・割増）"]:::step
+      step__PaymentStep["年金の納付（前年以前）"]:::step
+      step__RestoreStep["回復"]:::step
+      step__ReviewStep["権利維持要否の調査（3年目・6年目）"]:::step
+    end
+  end
+  timer__AnnuityDueDate(("第4年以後の特許料の納付期限（前年以前）")):::timer
+  timer__LatePaymentDeadline(("追納期限（納付期限の経過から6月）")):::timer
+  timer__MaintenanceReview(("権利維持要否の調査（登録後3年目・6年目）")):::timer
+  timer__TermExpiry(("存続期間の満了（出願から20年）")):::timer
+  usecase__AbandonPatent("特許権の放棄"):::usecase
+  %% desc usecase__AbandonPatent: 特許権を放棄する。専用実施権者・質権者があればその承諾を得る。
+  usecase__DecideToLetLapse("権利を維持しない決定"):::usecase
+  %% desc usecase__DecideToLetLapse: 維持しないと決め、以後の年金を納めない。
+  usecase__EnterGracePeriod("納付期限の経過"):::usecase
+  %% desc usecase__EnterGracePeriod: 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。
+  usecase__ExpirePatentTerm("存続期間の満了"):::usecase
+  %% desc usecase__ExpirePatentTerm: 出願から20年で特許権の存続期間が満了したことを記録する。
+  usecase__LapseUnpaidPatent("追納期間の経過による消滅"):::usecase
+  %% desc usecase__LapseUnpaidPatent: 追納期間が過ぎ、特許権が納付期限の経過の時に遡って消滅したことを記録する。
+  usecase__PayAnnuity("年金の納付"):::usecase
+  %% desc usecase__PayAnnuity: 次の年の特許料を納付期限までに納付する。
+  usecase__PayLateAnnuity("追納"):::usecase
+  %% desc usecase__PayLateAnnuity: 追納期間内に、特許料と同額の割増特許料を納付する。
+  usecase__RestorePatent("特許権の回復"):::usecase
+  %% desc usecase__RestorePatent: 納付しなかったことが故意でないとき、特許料と割増特許料を納めて特許権を回復する。
+  usecase__ReviewMaintenance("権利維持要否の調査"):::usecase
+  %% desc usecase__ReviewMaintenance: 発明者と事業部門に権利の活用状況を聞き、維持の要否を調べる（参照のみ）。
+  usecase__RollOverAnnuityYear("納付年度の更新"):::usecase
+  %% desc usecase__RollOverAnnuityYear: 納付済の年が始まり、次の年の特許料が未納になる。
+  event__EvRegistered>"設定登録"]:::event
+  step__AbandonStep -.-> usecase__AbandonPatent
+  step__DocketStep -.-> event__EvRegistered
+  step__DocketStep -->|precedes| step__ReviewStep
+  step__ExpiryStep -.-> timer__TermExpiry
+  step__ExpiryStep -.-> usecase__ExpirePatentTerm
+  step__GraceStep -.-> usecase__EnterGracePeriod
+  step__GraceStep -.-> usecase__PayLateAnnuity
+  step__GraceStep -.->|excepts| step__LapseStep
+  step__GraceStep -->|repeats| step__PaymentStep
+  step__LapseStep -.-> timer__LatePaymentDeadline
+  step__LapseStep -.-> usecase__LapseUnpaidPatent
+  step__LapseStep -->|precedes| step__RestoreStep
+  step__PaymentStep -.-> timer__AnnuityDueDate
+  step__PaymentStep -.-> usecase__PayAnnuity
+  step__PaymentStep -.-> usecase__RollOverAnnuityYear
+  step__PaymentStep -.->|excepts| step__GraceStep
+  step__PaymentStep -->|precedes| step__ExpiryStep
+  step__PaymentStep -->|repeats| step__ReviewStep
+  step__RestoreStep -.-> usecase__RestorePatent
+  step__ReviewStep -->|branches| step__AbandonStep
+  step__ReviewStep -.-> timer__MaintenanceReview
+  step__ReviewStep -.-> usecase__DecideToLetLapse
+  step__ReviewStep -.-> usecase__ReviewMaintenance
+  step__ReviewStep -->|precedes| step__PaymentStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

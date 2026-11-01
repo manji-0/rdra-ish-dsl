@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:RequestLateExtension model=samples/patent-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant screen__OfficeActionScreen as 中間処理画面
+  participant api__OfficeActionApi as 中間処理 API
+  participant entity__OfficeAction as 拒絶理由通知
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 期間経過後の延長請求
+  screen__OfficeActionScreen ->> api__OfficeActionApi: 中間処理 API
+  alt 期間内に延長していない: OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false
+    api__OfficeActionApi ->> entity__OfficeAction: update status 期間経過（延長請求可） -> 応答期間中, late_extended=true
+    api__OfficeActionApi -) extsystem__Jpo: 期間延長請求書の提出
+    api__OfficeActionApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__OfficeActionScreen: rejected
+  end

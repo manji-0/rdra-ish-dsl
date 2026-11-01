@@ -1,0 +1,185 @@
+module buc.examination_request
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+
+buc BucExaminationRequest "審査請求と早期審査"
+  description "出願は審査請求がなければ審査されない。知的財産部は期限の前に審査請求の要否を決め、弁理士が出願から3年以内に請求する。請求がなければ出願は取り下げたものとみなされ、故意でなければ回復できる。審査請求をした出願は早期審査を申し出られる。出願は係属している間、取り下げ・放棄できる。"
+
+// 審査請求要否 (niigata-u-2023-hatsumei-flowchart.txt:218); 審査請求すべきか否か (chuo-u-hatsumei-flow.txt:119).
+usecase DecideExaminationRequest "審査請求要否の判断" description "期限の前に、審査請求をするかを決める（参照のみ）。"
+// 何人も、その日から三年以内に (egov-tokkyohou-334AC0000000121.txt:680); 審査請求料 138,000円 + 4,000円×請求項
+// (egov-tesuuryourei-335CO0000000020.txt:70-71). The request cannot be withdrawn (:684).
+usecase RequestExamination "出願審査の請求" description "出願から3年以内に出願審査請求書を出す。"
+
+// 出願審査の請求がなされていること; 同時でも構いません (jpo-souki-guideline.txt:86-87).
+usecase RequestAcceleratedExamination "早期審査の申出"
+  description "審査請求をした出願について、早期審査に関する事情説明書を出す。"
+
+// 取り下げたものとみなす (egov-tokkyohou-334AC0000000121.txt:686).
+usecase DeemWithdrawnNoRequest "審査請求期間の経過"
+  description "出願から3年以内に審査請求がなかった出願を、取り下げたものとみなされたとして記録する。"
+
+// 故意によるものでない (jpo-tetuzuki-02-13-shinsaseikyu.txt:26); 2月以内で期間経過後1年以内 (:27;
+// egov-tokkyohou-334AC0000000121.txt:688, egov-tokkyohou-shikoukisoku-335M50000400010.txt:726);
+// 回復手数料 212,100円 (jpo-tetuzuki-02-13-shinsaseikyu.txt:34).
+usecase RestoreExaminationRequest "審査請求の回復"
+  description "期間内に請求できなかったことが故意でないとき、回復理由書とともに審査請求をする。"
+
+// 係属している間、出願の取下げ又は放棄 (jpo-tetuzuki-02-16-kakushu-todoke.txt:499).
+usecase WithdrawApplication "出願の取下げ・放棄" description "係属している出願を取り下げる、または放棄する。"
+
+screen ExaminationRequestScreen "審査請求画面"
+
+api ExaminationRequestApi "審査請求 API"
+api WithdrawalApi "取下げ・放棄 API"
+
+performs(IpStaff, DecideExaminationRequest)
+performs(PatentAttorney, RequestExamination)
+performs(PatentAttorney, RequestAcceleratedExamination)
+performs(PatentAttorney, RestoreExaminationRequest)
+performs(PatentAttorney, WithdrawApplication)
+belongs(BucExaminationRequest, Prosecution).by(IpWorkstation).by(InternetFilingSoftware)
+
+contains(BucExaminationRequest, DecideExaminationRequest)
+contains(BucExaminationRequest, RequestExamination)
+contains(BucExaminationRequest, RequestAcceleratedExamination)
+contains(BucExaminationRequest, DeemWithdrawnNoRequest)
+contains(BucExaminationRequest, RestoreExaminationRequest)
+contains(BucExaminationRequest, WithdrawApplication)
+contains(IpManagementSystem, ExaminationRequestApi)
+contains(IpManagementSystem, WithdrawalApi)
+
+// When the reminder fires is the model's assumption; the IP department decides before the period ends.
+displays(DecideExaminationRequest, ExaminationRequestScreen)
+reads(DecideExaminationRequest, PatentApplication)
+triggers(ExamRequestReview, DecideExaminationRequest)
+
+displays(RequestExamination, ExaminationRequestScreen)
+invokes(RequestExamination, ExaminationRequestApi)
+updates(ExaminationRequestApi, PatentApplication)
+reads(ExaminationRequestApi, FeeSchedule)
+transitions(RequestExamination, PatentApplication.status, filed -> examining)
+sets(RequestExamination, PatentApplication, exam_requested_at == present)
+raises(RequestExamination, EvExaminationRequested)
+triggers(EvExaminationRequested, Jpo)
+triggers(ExamRequestDeadline, RequestExamination)
+
+displays(RequestAcceleratedExamination, ExaminationRequestScreen)
+invokes(RequestAcceleratedExamination, ExaminationRequestApi)
+sets(RequestAcceleratedExamination, PatentApplication, accelerated == true)
+raises(RequestAcceleratedExamination, EvAcceleratedExamRequested)
+triggers(EvAcceleratedExamRequested, Jpo)
+
+condition ExaminationRequested "審査請求をした出願である"
+holds(ExaminationRequested, PatentApplication.status == examining, PatentApplication.exam_requested_at == present)
+applies_to(ExaminationRequested, RequestAcceleratedExamination)
+
+// Started by the timer, no performer.
+updates(DeemWithdrawnNoRequest, PatentApplication)
+transitions(DeemWithdrawnNoRequest, PatentApplication.status, filed -> deemed_withdrawn)
+triggers(ExamRequestDeadline, DeemWithdrawnNoRequest)
+
+displays(RestoreExaminationRequest, ExaminationRequestScreen)
+invokes(RestoreExaminationRequest, ExaminationRequestApi)
+transitions(RestoreExaminationRequest, PatentApplication.status, deemed_withdrawn -> examining)
+sets(RestoreExaminationRequest, PatentApplication, exam_requested_at == present)
+raises(RestoreExaminationRequest, EvRestorationRequested)
+triggers(EvRestorationRequested, Jpo)
+
+displays(WithdrawApplication, ExaminationRequestScreen)
+invokes(WithdrawApplication, WithdrawalApi)
+updates(WithdrawalApi, PatentApplication)
+transitions(WithdrawApplication, PatentApplication.status, filed -> withdrawn)
+transitions(WithdrawApplication, PatentApplication.status, examining -> withdrawn)
+raises(WithdrawApplication, EvWithdrawalFiled)
+triggers(EvWithdrawalFiled, Jpo)
+
+// 特許出願の審査は、その特許出願についての出願審査の請求をまつて行なう (egov-tokkyohou-334AC0000000121.txt:677).
+// The DSL has no `status in { ... }`, so the consequence lists each state of the examination.
+invariant(PatentApplication).when(exam_requested_at == null).then(status != granted, status != rejected, status != rejection_final, status != appealed, status != registered).label("審査請求のない出願は審査されない")
+
+// 早期審査 needs the 審査請求 (jpo-souki-guideline.txt:86).
+forbidden(PatentApplication, accelerated == true, exam_requested_at == null).label("審査請求をしていない出願は早期審査の対象にならない")
+
+// Access constraints
+requires_permission(DecideExaminationRequest, DocketManage)
+requires_medium(DecideExaminationRequest, IpWorkstation)
+
+requires_permission(RequestExamination, JpoProcedure)
+requires_medium(RequestExamination, InternetFilingSoftware)
+requires_permission(ExaminationRequestApi, JpoProcedure)
+
+requires_permission(RequestAcceleratedExamination, JpoProcedure)
+requires_medium(RequestAcceleratedExamination, InternetFilingSoftware)
+
+requires_permission(RestoreExaminationRequest, JpoProcedure)
+requires_medium(RestoreExaminationRequest, InternetFilingSoftware)
+
+requires_permission(WithdrawApplication, JpoProcedure)
+requires_medium(WithdrawApplication, InternetFilingSoftware)
+requires_permission(WithdrawalApi, JpoProcedure)
+
+// Screen fields
+field ExamRequestedAtField "審査請求日"
+  access readonly
+  required false
+  source system
+
+contains(ExaminationRequestScreen, ExamRequestedAtField)
+maps_field(ExamRequestedAtField, PatentApplication.exam_requested_at)
+
+// Business flow
+flow ExaminationRequestFlow "審査請求の流れ"
+step ExamDecisionStep "審査請求要否の判断"
+step ExamRequestStep "審査請求（3年以内）"
+step AcceleratedStep "早期審査の申出"
+step DeemedWithdrawnStep "取下げ擬制"
+step RestorationStep "審査請求の回復"
+step WithdrawalStep "取下げ・放棄"
+
+contains(BucExaminationRequest, ExaminationRequestFlow)
+contains(ExaminationRequestFlow, ExamDecisionStep)
+contains(ExaminationRequestFlow, ExamRequestStep)
+contains(ExaminationRequestFlow, AcceleratedStep)
+contains(ExaminationRequestFlow, DeemedWithdrawnStep)
+contains(ExaminationRequestFlow, RestorationStep)
+contains(ExaminationRequestFlow, WithdrawalStep)
+
+precedes(ExamDecisionStep, ExamRequestStep)
+branches(ExamRequestStep, AcceleratedStep)
+branches(ExamDecisionStep, WithdrawalStep)
+excepts(ExamDecisionStep, DeemedWithdrawnStep)
+precedes(DeemedWithdrawnStep, RestorationStep)
+
+covers(ExamDecisionStep, DecideExaminationRequest)
+covers(ExamDecisionStep, ExamRequestReview)
+covers(ExamRequestStep, RequestExamination)
+covers(AcceleratedStep, RequestAcceleratedExamination)
+covers(DeemedWithdrawnStep, DeemWithdrawnNoRequest)
+covers(DeemedWithdrawnStep, ExamRequestDeadline)
+covers(RestorationStep, RestoreExaminationRequest)
+covers(WithdrawalStep, WithdrawApplication)
+
+performs(IpStaff, ExamDecisionStep)
+performs(PatentAttorney, ExamRequestStep)
+performs(PatentAttorney, AcceleratedStep)
+performs(PatentAttorney, RestorationStep)
+performs(PatentAttorney, WithdrawalStep)
+
+// Requirement traceability
+requirement ReqExamRequestWithinThreeYears "審査請求の要否を出願から3年以内に決めて請求する"
+  priority "must"
+  source "その日から三年以内に (egov-tokkyohou-334AC0000000121.txt:680)"
+  source "取り下げたものとみなす (egov-tokkyohou-334AC0000000121.txt:686)"
+  stakeholder "知的財産部"
+  acceptance_criteria "出願ごとに審査請求期限が管理され、期限の前に要否が決まり、請求する出願は期限内に請求される。"
+  status "accepted"
+
+motivates(ReqExamRequestWithinThreeYears, BucExaminationRequest)
+achieves(ReqExamRequestWithinThreeYears, NoLostRights)
+achieves(ReqExamRequestWithinThreeYears, LeanPortfolio)

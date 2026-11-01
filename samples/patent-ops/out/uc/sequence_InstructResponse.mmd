@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:InstructResponse model=samples/patent-ops
+%% kinds: actor screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant screen__OfficeActionScreen as 中間処理画面
+  participant usecase__InstructResponse as 応答方針の指示
+  participant entity__OfficeAction as 拒絶理由通知
+  participant entity__PatentApplication as 特許出願
+  actor__IpStaff ->> screen__OfficeActionScreen: 応答方針の指示
+  screen__OfficeActionScreen ->> usecase__InstructResponse: 応答方針の指示
+  usecase__InstructResponse ->> entity__OfficeAction: read
+  usecase__InstructResponse ->> entity__PatentApplication: read
+  usecase__InstructResponse -->> screen__OfficeActionScreen: done

@@ -32,8 +32,10 @@ done <"$manifest"
 
 # The documents that embed the artifacts above.
 python3 -I scripts/embed-sample-artifacts.py
-python3 -I scripts/gen-clinic-ops-docs.py "$bin"
+python3 -I scripts/gen-clinic-ops-docs.py "$bin" clinic-ops
+python3 -I scripts/gen-clinic-ops-docs.py "$bin" patent-ops
 outputs+=(samples/incremental-order/step-*/design.md samples/clinic-ops/design-doc.md samples/clinic-ops/prd.md
+  samples/patent-ops/design-doc.md samples/patent-ops/prd.md
   docs/diagram-sample-review.md)
 
 if ! git diff --quiet -- "${outputs[@]}"; then

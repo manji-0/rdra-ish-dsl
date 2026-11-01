@@ -1,0 +1,9 @@
+%% rdra-ish diagram=screen scope=buc:BucAnnuity model=samples/patent-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__AnnuityScreen["年金管理画面"]:::screen
+  screen__MaintenanceReviewScreen["権利維持要否画面"]:::screen
+  screen__MaintenanceReviewScreen -->|権利維持要否の調査| screen__AnnuityScreen
+  %% via screen__MaintenanceReviewScreen -> screen__AnnuityScreen usecase__ReviewMaintenance
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

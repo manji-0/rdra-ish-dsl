@@ -1,0 +1,30 @@
+%% rdra-ish diagram=robustness scope=buc:BucFilingDecision model=samples/patent-ops
+%% kinds: actor screen api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  actor__ReviewCommittee(["発明審査委員会"]):::actor
+  screen__FilingDecisionScreen["出願審議画面"]:::screen
+  screen__PriorArtSearchScreen["先行技術調査画面"]:::screen
+  api__FilingDecisionApi{{"出願可否 API"}}:::api
+  api__PriorArtSearchApi{{"先行技術調査 API"}}:::api
+  usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
+  entity__InventionDisclosure[("発明届出")]:::entity
+  actor__IpStaff --> screen__FilingDecisionScreen
+  actor__IpStaff --> screen__PriorArtSearchScreen
+  actor__ReviewCommittee --> screen__FilingDecisionScreen
+  api__FilingDecisionApi -->|U| entity__InventionDisclosure
+  api__FilingDecisionApi -.->|出願の決定| usecase__NotifyInventorOfDecision
+  api__PriorArtSearchApi -->|U| entity__InventionDisclosure
+  screen__FilingDecisionScreen -->|ノウハウとしての秘匿の決定| api__FilingDecisionApi
+  screen__FilingDecisionScreen -->|不出願の決定| api__FilingDecisionApi
+  screen__FilingDecisionScreen -->|出願の決定| api__FilingDecisionApi
+  screen__FilingDecisionScreen -->|決定の発明者への通知| usecase__NotifyInventorOfDecision
+  screen__PriorArtSearchScreen -->|先行技術調査の依頼| api__PriorArtSearchApi
+  screen__PriorArtSearchScreen -->|先行技術調査の結果の登録| api__PriorArtSearchApi
+  usecase__NotifyInventorOfDecision -->|R| entity__InventionDisclosure
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

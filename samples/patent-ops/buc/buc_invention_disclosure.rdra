@@ -1,0 +1,193 @@
+module buc.invention_disclosure
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+// The in-house steps before filing come from university documents and secondary sources only
+// (〔公式・大学〕〔大学〕〔まとめ〕); no company's own procedure was found. The legal basis is 35条.
+
+buc BucInventionDisclosure "発明届出と権利の取得"
+  description "発明者が発明届出書を出し、知的財産部が付番して記載を確かめ、不備があれば差し戻す。職務発明は職務発明規程により特許を受ける権利が発生した時から会社に帰属し、職務発明に当たらない発明は個別の譲渡で取得する（`EmployeeInvention`・`NonEmployeeInvention`）。"
+
+// 発明の届出（従業員が発明した際の届出） is part of a 職務発明規程 (jpo-2015-shokumu-cyusyou-pamphlet.txt:78).
+usecase SubmitInventionDisclosure "発明届出書の提出" description "発明者が発明届出書を出す。届出は受付待ちになる。"
+// 届出受付番号を付番のうえ、発明届出書の記載内容を事務的に確認 (osaka-u-2022-hatsumeitodoke-toriatsukai.txt:15).
+usecase AcceptDisclosure "届出の受付と付番" description "知的財産部が付番し、記載に不備がなければ受け付ける。"
+// 記載事項不備の有無等…連絡 and the inventor corrects it (osaka-u-2022-hatsumeitodoke-toriatsukai.txt:16-17).
+usecase ReturnDisclosure "届出書の差戻し" description "記載に不備がある届出書を発明者に差し戻す。"
+usecase ResubmitDisclosure "届出書の再提出" description "発明者が不備を直した届出書を出し直す。"
+
+// 職務発明の判定・承継の判定 (chuo-u-hatsumei-flow.txt:99-100).
+usecase JudgeEmployeeInvention "職務発明の判定"
+  description "職務発明と判定し、規程により会社が発生時から特許を受ける権利を持つことを記録する。"
+
+usecase AcquireRightsByAssignment "特許を受ける権利の譲受け"
+  description "職務発明に当たらない発明について、発明者から特許を受ける権利の譲渡を受ける。"
+
+screen DisclosureFormScreen "発明届出書画面"
+screen DisclosureReviewScreen "届出受付画面"
+
+api SubmitDisclosureApi "発明届出 API"
+api DisclosureReviewApi "届出受付 API"
+api ResubmitDisclosureApi "届出書再提出 API"
+
+performs(Inventor, SubmitInventionDisclosure)
+performs(Inventor, ResubmitDisclosure)
+performs(IpStaff, AcceptDisclosure)
+performs(IpStaff, ReturnDisclosure)
+performs(IpStaff, JudgeEmployeeInvention)
+performs(IpStaff, AcquireRightsByAssignment)
+belongs(BucInventionDisclosure, InventionManagement).by(InventorPortal).by(IpWorkstation)
+
+contains(BucInventionDisclosure, SubmitInventionDisclosure)
+contains(BucInventionDisclosure, AcceptDisclosure)
+contains(BucInventionDisclosure, ReturnDisclosure)
+contains(BucInventionDisclosure, ResubmitDisclosure)
+contains(BucInventionDisclosure, JudgeEmployeeInvention)
+contains(BucInventionDisclosure, AcquireRightsByAssignment)
+contains(IpManagementSystem, SubmitDisclosureApi)
+contains(IpManagementSystem, DisclosureReviewApi)
+contains(IpManagementSystem, ResubmitDisclosureApi)
+
+displays(SubmitInventionDisclosure, DisclosureFormScreen)
+invokes(SubmitInventionDisclosure, SubmitDisclosureApi)
+creates(SubmitDisclosureApi, InventionDisclosure)
+reads(SubmitDisclosureApi, Employee)
+raises(SubmitInventionDisclosure, EvDisclosureSubmitted)
+triggers(EvDisclosureSubmitted, AcceptDisclosure)
+
+displays(AcceptDisclosure, DisclosureReviewScreen)
+invokes(AcceptDisclosure, DisclosureReviewApi)
+updates(DisclosureReviewApi, InventionDisclosure)
+transitions(AcceptDisclosure, InventionDisclosure.status, submitted -> accepted)
+
+displays(ReturnDisclosure, DisclosureReviewScreen)
+invokes(ReturnDisclosure, DisclosureReviewApi)
+transitions(ReturnDisclosure, InventionDisclosure.status, submitted -> returned)
+
+displays(ResubmitDisclosure, DisclosureFormScreen)
+invokes(ResubmitDisclosure, ResubmitDisclosureApi)
+updates(ResubmitDisclosureApi, InventionDisclosure)
+transitions(ResubmitDisclosure, InventionDisclosure.status, returned -> submitted)
+
+// その特許を受ける権利は、その発生した時から当該使用者等に帰属する (egov-tokkyohou-334AC0000000121.txt:380),
+// when the 規程 says so in advance. The model assumes the company has such a 規程.
+displays(JudgeEmployeeInvention, DisclosureReviewScreen)
+invokes(JudgeEmployeeInvention, DisclosureReviewApi)
+sets(JudgeEmployeeInvention, InventionDisclosure, right_acquired == true)
+
+condition EmployeeInvention "職務発明である"
+holds(EmployeeInvention, InventionDisclosure.category == employee)
+applies_to(EmployeeInvention, JudgeEmployeeInvention)
+
+// For an invention that is not a 職務発明, a rule giving the right to the employer in advance is void
+// (egov-tokkyohou-334AC0000000121.txt:378), so the company needs a 権利譲渡書
+// (niigata-u-2023-hatsumei-flowchart.txt:139).
+displays(AcquireRightsByAssignment, DisclosureReviewScreen)
+invokes(AcquireRightsByAssignment, DisclosureReviewApi)
+sets(AcquireRightsByAssignment, InventionDisclosure, right_acquired == true)
+
+condition NonEmployeeInvention "職務発明に当たらない"
+holds(NonEmployeeInvention, InventionDisclosure.category == nonemployee)
+applies_to(NonEmployeeInvention, AcquireRightsByAssignment)
+
+// Access constraints
+requires_permission(SubmitInventionDisclosure, DisclosureSubmit)
+requires_medium(SubmitInventionDisclosure, InventorPortal)
+requires_permission(SubmitDisclosureApi, DisclosureSubmit)
+
+requires_permission(ResubmitDisclosure, DisclosureSubmit)
+requires_medium(ResubmitDisclosure, InventorPortal)
+requires_permission(ResubmitDisclosureApi, DisclosureSubmit)
+
+requires_permission(AcceptDisclosure, DisclosureReview)
+requires_medium(AcceptDisclosure, IpWorkstation)
+requires_permission(DisclosureReviewApi, DisclosureReview)
+
+requires_permission(ReturnDisclosure, DisclosureReview)
+requires_medium(ReturnDisclosure, IpWorkstation)
+
+requires_permission(JudgeEmployeeInvention, RightsJudge)
+requires_medium(JudgeEmployeeInvention, IpWorkstation)
+
+requires_permission(AcquireRightsByAssignment, RightsJudge)
+requires_medium(AcquireRightsByAssignment, IpWorkstation)
+
+// Screen transitions: the model's assumption (no source describes the screens). The form the
+// inventor sends opens on the IP department's review screen.
+navigates(DisclosureFormScreen, DisclosureReviewScreen).via(SubmitInventionDisclosure)
+navigates(DisclosureReviewScreen, DisclosureFormScreen).via(ReturnDisclosure)
+
+// Screen fields
+field DisclosureTitleField "発明の名称"
+  access editable
+  required true
+  source actor
+
+field InventionCategoryField "発明の区分"
+  access editable
+  required true
+  source actor
+
+contains(DisclosureFormScreen, DisclosureTitleField)
+contains(DisclosureReviewScreen, InventionCategoryField)
+maps_field(DisclosureTitleField, InventionDisclosure.title)
+maps_field(InventionCategoryField, InventionDisclosure.category)
+
+// Business flow
+flow DisclosureFlow "発明届出の流れ"
+step SubmitStep "発明届出書の提出"
+step ReturnStep "差戻しと再提出"
+step AcceptStep "受付と付番"
+step EmployeeStep "職務発明の判定"
+step AssignmentStep "権利の譲受け"
+
+contains(BucInventionDisclosure, DisclosureFlow)
+contains(DisclosureFlow, SubmitStep)
+contains(DisclosureFlow, ReturnStep)
+contains(DisclosureFlow, AcceptStep)
+contains(DisclosureFlow, EmployeeStep)
+contains(DisclosureFlow, AssignmentStep)
+
+precedes(SubmitStep, AcceptStep)
+excepts(SubmitStep, ReturnStep)
+repeats(ReturnStep, SubmitStep)
+precedes(AcceptStep, EmployeeStep)
+branches(AcceptStep, AssignmentStep)
+
+covers(SubmitStep, SubmitInventionDisclosure)
+covers(ReturnStep, ReturnDisclosure)
+covers(ReturnStep, ResubmitDisclosure)
+covers(AcceptStep, AcceptDisclosure)
+covers(EmployeeStep, JudgeEmployeeInvention)
+covers(AssignmentStep, AcquireRightsByAssignment)
+
+performs(Inventor, SubmitStep)
+performs(IpStaff, ReturnStep)
+performs(IpStaff, AcceptStep)
+performs(IpStaff, EmployeeStep)
+performs(IpStaff, AssignmentStep)
+
+// Requirement traceability
+requirement ReqRightsFromTheStart "職務発明の特許を受ける権利を発生した時から会社が持つ"
+  priority "must"
+  source "その発生した時から当該使用者等に帰属する (egov-tokkyohou-334AC0000000121.txt:380)"
+  source "発明の届出 (jpo-2015-shokumu-cyusyou-pamphlet.txt:78)"
+  stakeholder "知的財産部"
+  acceptance_criteria "受け付けた届出は職務発明か否かを判定し、職務発明は規程により、それ以外は譲渡によって会社が権利を取得してから出願を決める。"
+  status "accepted"
+
+motivates(ReqRightsFromTheStart, BucInventionDisclosure)
+achieves(ReqRightsFromTheStart, PromptFiling)
+
+// Non-goal: rights abroad.
+requirement ReqNoForeignFiling "外国出願・PCT 国際出願は対象外とする"
+  source "モデルの想定（調査の範囲外）"
+  stakeholder "知的財産部"
+  status "out-of-scope"
+  rationale "国内の特許庁への手続だけを扱う。パリ条約の優先権、PCT の国際段階・国内移行、各国の代理人とのやり取りは期限と手続の体系が別で、調査もしていない。"
+
+motivates(ReqNoForeignFiling, BucInventionDisclosure)

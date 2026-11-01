@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:LapseResponse model=samples/patent-ops
+%% kinds: timer usecase entity
+%% omitted: buc step
+sequenceDiagram
+  participant timer__LateExtensionDeadline as 期間経過後の延長請求の期限（応答期間の経過から2か月）
+  participant usecase__LapseResponse as 応答なしでの期間満了
+  participant entity__OfficeAction as 拒絶理由通知
+  timer__LateExtensionDeadline ->> usecase__LapseResponse: 期間経過後の延長請求の期限（応答期間の経過から2か月）
+  alt OfficeAction.status == 期間経過（延長請求可）
+    usecase__LapseResponse ->> entity__OfficeAction: update status 期間経過（延長請求可） -> 応答なしで期間満了
+    usecase__LapseResponse -->> timer__LateExtensionDeadline: done
+  else guard fails
+    usecase__LapseResponse -->> timer__LateExtensionDeadline: rejected
+  end

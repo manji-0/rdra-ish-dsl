@@ -1,0 +1,78 @@
+%% rdra-ish diagram=usecase scope=buc:BucFilingDecision model=samples/patent-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    actor__ReviewCommittee(["発明審査委員会"]):::actor
+    %% desc actor__ReviewCommittee: 先行技術調査の結果を見て、発明を出願するか、ノウハウとして秘匿するか、出願しないかを決める。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__DecideNotToFile("不出願の決定"):::usecase
+    %% desc usecase__DecideNotToFile: 発明審査委員会が、出願しないと決める。
+    usecase__DecideToFile("出願の決定"):::usecase
+    %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
+    usecase__DecideToKeepSecret("ノウハウとしての秘匿の決定"):::usecase
+    %% desc usecase__DecideToKeepSecret: 発明審査委員会が、出願せずノウハウとして秘匿すると決める。
+    usecase__NotifyInventorOfDecision("決定の発明者への通知"):::usecase
+    %% desc usecase__NotifyInventorOfDecision: 決定を発明者に知らせる（参照のみ）。
+    usecase__RecordPriorArtSearch("先行技術調査の結果の登録"):::usecase
+    %% desc usecase__RecordPriorArtSearch: 調査の結果を届出に記録し、調査済にする。
+    usecase__RequestPriorArtSearch("先行技術調査の依頼"):::usecase
+    %% desc usecase__RequestPriorArtSearch: 受け付けた発明の先行技術調査を依頼し、届出を調査中にする。
+    screen__FilingDecisionScreen["出願審議画面"]:::screen
+    screen__PriorArtSearchScreen["先行技術調査画面"]:::screen
+    event__EvFilingDecided>"出願の決定"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__InventionDisclosure[("発明届出")]:::entity
+    state__InventionDisclosure_accepted((("受付済"))):::state
+    state__InventionDisclosure_decided_abandon((("出願しない"))):::state
+    state__InventionDisclosure_decided_file((("出願決定"))):::state
+    state__InventionDisclosure_decided_secret((("ノウハウとして秘匿"))):::state
+    state__InventionDisclosure_searched((("調査済"))):::state
+    state__InventionDisclosure_searching((("先行技術調査中"))):::state
+    condition__RightsAcquired{"会社が特許を受ける権利を取得している"}:::condition
+  end
+  actor__IpStaff -.-> usecase__NotifyInventorOfDecision
+  actor__IpStaff -.-> usecase__RecordPriorArtSearch
+  actor__IpStaff -.-> usecase__RequestPriorArtSearch
+  actor__ReviewCommittee -.-> usecase__DecideNotToFile
+  actor__ReviewCommittee -.-> usecase__DecideToFile
+  actor__ReviewCommittee -.-> usecase__DecideToKeepSecret
+  condition__RightsAcquired -.-> usecase__DecideToFile
+  event__EvFilingDecided -.-> usecase__NotifyInventorOfDecision
+  usecase__DecideNotToFile -.-> screen__FilingDecisionScreen
+  usecase__DecideNotToFile -.-> event__EvFilingDecided
+  usecase__DecideNotToFile -.->|transitions InventionDisclosure.status searched->decided_abandon| state__InventionDisclosure_decided_abandon
+  usecase__DecideNotToFile -.->|updates| entity__InventionDisclosure
+  %% derived usecase__DecideNotToFile -> entity__InventionDisclosure via api__FilingDecisionApi
+  usecase__DecideToFile -.-> screen__FilingDecisionScreen
+  usecase__DecideToFile -.-> event__EvFilingDecided
+  usecase__DecideToFile -.->|transitions InventionDisclosure.status searched->decided_file| state__InventionDisclosure_decided_file
+  usecase__DecideToFile -.->|updates| entity__InventionDisclosure
+  %% derived usecase__DecideToFile -> entity__InventionDisclosure via api__FilingDecisionApi
+  usecase__DecideToKeepSecret -.-> screen__FilingDecisionScreen
+  usecase__DecideToKeepSecret -.-> event__EvFilingDecided
+  usecase__DecideToKeepSecret -.->|transitions InventionDisclosure.status searched->decided_secret| state__InventionDisclosure_decided_secret
+  usecase__DecideToKeepSecret -.->|updates| entity__InventionDisclosure
+  %% derived usecase__DecideToKeepSecret -> entity__InventionDisclosure via api__FilingDecisionApi
+  usecase__NotifyInventorOfDecision -.-> screen__FilingDecisionScreen
+  usecase__NotifyInventorOfDecision -.->|reads| entity__InventionDisclosure
+  usecase__RecordPriorArtSearch -.-> screen__PriorArtSearchScreen
+  usecase__RecordPriorArtSearch -.->|transitions InventionDisclosure.status searching->searched| state__InventionDisclosure_searched
+  usecase__RecordPriorArtSearch -.->|updates| entity__InventionDisclosure
+  %% derived usecase__RecordPriorArtSearch -> entity__InventionDisclosure via api__PriorArtSearchApi
+  usecase__RequestPriorArtSearch -.-> screen__PriorArtSearchScreen
+  usecase__RequestPriorArtSearch -.->|transitions InventionDisclosure.status accepted->searching| state__InventionDisclosure_searching
+  usecase__RequestPriorArtSearch -.->|updates| entity__InventionDisclosure
+  %% derived usecase__RequestPriorArtSearch -> entity__InventionDisclosure via api__PriorArtSearchApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -1,0 +1,26 @@
+%% rdra-ish diagram=sequence scope=usecase:RequestDrafting model=samples/patent-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant usecase__DecideNotToFile as 不出願の決定
+  participant usecase__DecideToFile as 出願の決定
+  participant usecase__DecideToKeepSecret as ノウハウとしての秘匿の決定
+  participant screen__DraftingOrderScreen as 出願依頼画面
+  participant api__DraftingOrderApi as 出願依頼 API
+  participant entity__InventionDisclosure as 発明届出
+  participant entity__PatentFirm as 特許事務所
+  participant entity__DraftingOrder as 出願依頼
+  actor__IpStaff ->> screen__DraftingOrderScreen: 特許事務所への出願依頼
+  usecase__DecideNotToFile ->> api__DraftingOrderApi: 出願の決定
+  usecase__DecideToFile ->> api__DraftingOrderApi: 出願の決定
+  usecase__DecideToKeepSecret ->> api__DraftingOrderApi: 出願の決定
+  screen__DraftingOrderScreen ->> api__DraftingOrderApi: 出願依頼 API
+  alt 出願と決まった発明である: InventionDisclosure.status == 出願決定
+    api__DraftingOrderApi ->> entity__InventionDisclosure: read
+    api__DraftingOrderApi ->> entity__PatentFirm: read
+    api__DraftingOrderApi ->> entity__DraftingOrder: create
+    api__DraftingOrderApi -->> screen__DraftingOrderScreen: done
+  else guard fails
+    api__DraftingOrderApi -->> screen__DraftingOrderScreen: rejected
+  end

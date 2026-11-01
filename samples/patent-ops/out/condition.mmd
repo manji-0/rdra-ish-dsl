@@ -1,0 +1,200 @@
+%% rdra-ish diagram=condition scope=whole model=samples/patent-ops
+%% kinds: condition statemodel variation value usecase api
+%% omitted: (none)
+flowchart LR
+  condition__AnnuityDue{"存続中で、維持すると決めた権利の次の年が未納"}:::condition
+  %% holds condition__AnnuityDue: Patent.status == 存続中, Patent.maintain == true, Patent.next_year_paid == false
+  condition__DecidedToFile{"出願と決まった発明である"}:::condition
+  %% holds condition__DecidedToFile: InventionDisclosure.status == 出願決定
+  condition__DivisionPossible{"分割できる時期である"}:::condition
+  %% holds condition__DivisionPossible: PatentApplication.status != 手続補正指令への対応中, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済, PatentApplication.status != 却下, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 取下げ・放棄
+  condition__DraftDelivered{"案が納品されている"}:::condition
+  %% holds condition__DraftDelivered: DraftingOrder.status == 原稿受領
+  condition__EmployeeInvention{"職務発明である"}:::condition
+  %% holds condition__EmployeeInvention: InventionDisclosure.category == 職務発明
+  condition__EmployeeInventionReward{"職務発明である"}:::condition
+  %% holds condition__EmployeeInventionReward: InventionDisclosure.category == 職務発明
+  condition__ExaminationRequested{"審査請求をした出願である"}:::condition
+  %% holds condition__ExaminationRequested: PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present
+  condition__FirstFeesPaid{"第1〜3年分の特許料を納付している"}:::condition
+  %% holds condition__FirstFeesPaid: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true
+  condition__FirstFeesUnpaid{"第1〜3年分の特許料を納付していない"}:::condition
+  %% holds condition__FirstFeesUnpaid: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == false
+  condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
+  %% holds condition__FirstNoticeOnly: OfficeAction.status == 応答期間中, OfficeAction.kind == 最初
+  condition__Granted{"特許査定を受けた出願である"}:::condition
+  %% holds condition__Granted: PatentApplication.status == 特許査定
+  condition__InForce{"特許権が存続している"}:::condition
+  %% holds condition__InForce: Patent.status == 存続中
+  condition__InventorChecked{"発明者が内容を確認している"}:::condition
+  %% holds condition__InventorChecked: DraftingOrder.status == 原稿受領, DraftingOrder.inventor_checked == true
+  condition__KeptRight{"維持すると決めた権利である"}:::condition
+  %% holds condition__KeptRight: Patent.status == 追納期間中, Patent.maintain == true
+  condition__NonEmployeeInvention{"職務発明に当たらない"}:::condition
+  %% holds condition__NonEmployeeInvention: InventionDisclosure.category == 職務発明に当たらない発明
+  condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
+  %% holds condition__NotExtendedWithinTerm: OfficeAction.status == 期間経過（延長請求可）, OfficeAction.extended == false
+  condition__NotYetExtended{"納付期間をまだ延長していない"}:::condition
+  %% holds condition__NotYetExtended: PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false
+  condition__PriorityBase{"国内優先権の基礎とされた出願である"}:::condition
+  %% holds condition__PriorityBase: PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄
+  condition__PriorityBasePending{"先の出願が係属し、査定を受けていない"}:::condition
+  %% holds condition__PriorityBasePending: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 特許査定, PatentApplication.status != 拒絶査定, PatentApplication.status != 拒絶査定の確定, PatentApplication.status != 拒絶査定不服審判を請求, PatentApplication.status != 設定登録済
+  condition__RightsAcquired{"会社が特許を受ける権利を取得している"}:::condition
+  %% holds condition__RightsAcquired: InventionDisclosure.status == 調査済, InventionDisclosure.right_acquired == true
+  condition__StillPending{"出願が係属している"}:::condition
+  %% holds condition__StillPending: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済
+  condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
+  %% holds condition__WithinTermNotExtended: OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false
+  condition__YearPaid{"存続中で、次の年が納付済"}:::condition
+  %% holds condition__YearPaid: Patent.status == 存続中, Patent.next_year_paid == true
+  condition__YearUnpaid{"次の年が未納"}:::condition
+  %% holds condition__YearUnpaid: Patent.status == 存続中, Patent.next_year_paid == false
+  statemodel__DraftingOrder_status[["DraftingOrder.status"]]:::statemodel
+  statemodel__InventionDisclosure_status[["InventionDisclosure.status"]]:::statemodel
+  statemodel__OfficeAction_status[["OfficeAction.status"]]:::statemodel
+  statemodel__PatentApplication_status[["PatentApplication.status"]]:::statemodel
+  statemodel__Patent_status[["Patent.status"]]:::statemodel
+  subgraph variation__AcceleratedGround["早期審査の事情"]
+    variation__AcceleratedGround__working["実施関連出願"]:::value
+    variation__AcceleratedGround__foreign["外国関連出願"]:::value
+    variation__AcceleratedGround__sme["中小企業・個人・大学等の出願"]:::value
+  end
+  subgraph variation__AmendmentScope["補正の範囲"]
+    variation__AmendmentScope__limited["意見書のみ、または削除・減縮・誤記の訂正・釈明に限る補正"]:::value
+    variation__AmendmentScope__free["限定のない補正"]:::value
+  end
+  subgraph variation__InventionCategory["発明の区分"]
+    variation__InventionCategory__employee["職務発明"]:::value
+    variation__InventionCategory__nonemployee["職務発明に当たらない発明"]:::value
+  end
+  subgraph variation__RewardOccasion["相当の利益の時期"]
+    variation__RewardOccasion__filing["出願時"]:::value
+    variation__RewardOccasion__registration["登録時"]:::value
+    variation__RewardOccasion__exploitation["実施・ライセンス時"]:::value
+  end
+  usecase__AcquireRightsByAssignment("特許を受ける権利の譲受け"):::usecase
+  %% desc usecase__AcquireRightsByAssignment: 職務発明に当たらない発明について、発明者から特許を受ける権利の譲渡を受ける。
+  usecase__ApproveDraft("出願書類の承認"):::usecase
+  %% desc usecase__ApproveDraft: 発明者の確認を経た案を知的財産部が承認し、出願を指示する。
+  usecase__ClaimDomesticPriority("国内優先権の主張"):::usecase
+  %% desc usecase__ClaimDomesticPriority: 改良発明をまとめた後の出願で、1年以内の先の出願に基づく優先権を主張する。
+  usecase__ConfirmDraftByInventor("発明者による内容確認"):::usecase
+  %% desc usecase__ConfirmDraftByInventor: 発明者が案の技術内容を確かめ、確認済にする。
+  usecase__DecideReward("相当の利益の決定"):::usecase
+  %% desc usecase__DecideReward: 職務発明規程の基準で、職務発明の相当の利益を決める。
+  usecase__DecideToFile("出願の決定"):::usecase
+  %% desc usecase__DecideToFile: 発明審査委員会が、会社が権利を持つ発明を出願すると決める。
+  usecase__DecideToLetLapse("権利を維持しない決定"):::usecase
+  %% desc usecase__DecideToLetLapse: 維持しないと決め、以後の年金を納めない。
+  usecase__DeemPriorityBaseWithdrawn("先の出願の取下げ擬制"):::usecase
+  %% desc usecase__DeemPriorityBaseWithdrawn: 優先権の基礎とした先の出願が、その出願から1年4月で取り下げたものとみなされたことを記録する。
+  usecase__DraftResponse("意見書・補正書案の作成"):::usecase
+  %% desc usecase__DraftResponse: 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。
+  usecase__EnterGracePeriod("納付期限の経過"):::usecase
+  %% desc usecase__EnterGracePeriod: 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。
+  usecase__FileDivisionalApplication("分割出願"):::usecase
+  %% desc usecase__FileDivisionalApplication: 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。
+  usecase__JudgeEmployeeInvention("職務発明の判定"):::usecase
+  %% desc usecase__JudgeEmployeeInvention: 職務発明と判定し、規程により会社が発生時から特許を受ける権利を持つことを記録する。
+  usecase__PayAnnuity("年金の納付"):::usecase
+  %% desc usecase__PayAnnuity: 次の年の特許料を納付期限までに納付する。
+  usecase__PayLateAnnuity("追納"):::usecase
+  %% desc usecase__PayLateAnnuity: 追納期間内に、特許料と同額の割増特許料を納付する。
+  usecase__RecordPublication("出願公開の記録"):::usecase
+  %% desc usecase__RecordPublication: 出願から1年6月で出願が公開されたことを記録する。
+  usecase__RecordRegistration("設定登録の記録"):::usecase
+  %% desc usecase__RecordRegistration: 設定登録で特許権が発生したことを記録し、第4年分からの年金管理を始める。
+  usecase__RecordRegistrationDismissal("特許料の不納による却下の記録"):::usecase
+  %% desc usecase__RecordRegistrationDismissal: 納付期間内に特許料を納めず、手続が却下されたことを記録する。
+  usecase__RequestAcceleratedExamination("早期審査の申出"):::usecase
+  %% desc usecase__RequestAcceleratedExamination: 審査請求をした出願について、早期審査に関する事情説明書を出す。
+  usecase__RequestDrafting("特許事務所への出願依頼"):::usecase
+  %% desc usecase__RequestDrafting: 出願と決まった発明の届出をもとに、特許事務所へ明細書の作成と出願を依頼する。
+  usecase__RequestFeePaymentExtension("納付期間の延長請求"):::usecase
+  %% desc usecase__RequestFeePaymentExtension: 第1〜3年分の特許料の納付期間を、30日以内に限り延長するよう請求する。
+  usecase__RequestLateExtension("期間経過後の延長請求"):::usecase
+  %% desc usecase__RequestLateExtension: 応答期間の経過後2か月以内に延長を請求し、2か月の応答期間を得る。
+  usecase__RequestTermExtension("応答期間の延長請求"):::usecase
+  %% desc usecase__RequestTermExtension: 応答期間内に期間延長請求書を出し、2か月延長する。
+  usecase__RollOverAnnuityYear("納付年度の更新"):::usecase
+  %% desc usecase__RollOverAnnuityYear: 納付済の年が始まり、次の年の特許料が未納になる。
+  api__FeePaymentApi{{"特許料納付 API"}}:::api
+  condition__AnnuityDue -.-> usecase__PayAnnuity
+  condition__AnnuityDue -.-> statemodel__Patent_status
+  %% derived condition__AnnuityDue -> statemodel__Patent_status from holds
+  condition__DecidedToFile -.-> usecase__RequestDrafting
+  condition__DecidedToFile -.-> statemodel__InventionDisclosure_status
+  %% derived condition__DecidedToFile -> statemodel__InventionDisclosure_status from holds
+  condition__DivisionPossible -.-> usecase__FileDivisionalApplication
+  condition__DivisionPossible -.-> statemodel__PatentApplication_status
+  %% derived condition__DivisionPossible -> statemodel__PatentApplication_status from holds
+  condition__DraftDelivered -.-> usecase__ConfirmDraftByInventor
+  condition__DraftDelivered -.-> statemodel__DraftingOrder_status
+  %% derived condition__DraftDelivered -> statemodel__DraftingOrder_status from holds
+  condition__EmployeeInvention -.-> usecase__JudgeEmployeeInvention
+  condition__EmployeeInvention -.-> variation__InventionCategory
+  %% derived condition__EmployeeInvention -> variation__InventionCategory from holds
+  condition__EmployeeInventionReward -.-> usecase__DecideReward
+  condition__EmployeeInventionReward -.-> variation__InventionCategory
+  %% derived condition__EmployeeInventionReward -> variation__InventionCategory from holds
+  condition__ExaminationRequested -.-> usecase__RequestAcceleratedExamination
+  condition__ExaminationRequested -.-> statemodel__PatentApplication_status
+  %% derived condition__ExaminationRequested -> statemodel__PatentApplication_status from holds
+  condition__FirstFeesPaid -.-> usecase__RecordRegistration
+  condition__FirstFeesPaid -.-> statemodel__PatentApplication_status
+  %% derived condition__FirstFeesPaid -> statemodel__PatentApplication_status from holds
+  condition__FirstFeesUnpaid -.-> usecase__RecordRegistrationDismissal
+  condition__FirstFeesUnpaid -.-> statemodel__PatentApplication_status
+  %% derived condition__FirstFeesUnpaid -> statemodel__PatentApplication_status from holds
+  condition__FirstNoticeOnly -.-> usecase__DraftResponse
+  condition__FirstNoticeOnly -.-> statemodel__OfficeAction_status
+  %% derived condition__FirstNoticeOnly -> statemodel__OfficeAction_status from holds
+  condition__Granted -.-> api__FeePaymentApi
+  condition__Granted -.-> statemodel__PatentApplication_status
+  %% derived condition__Granted -> statemodel__PatentApplication_status from holds
+  condition__InForce -.-> usecase__DecideToLetLapse
+  condition__InForce -.-> statemodel__Patent_status
+  %% derived condition__InForce -> statemodel__Patent_status from holds
+  condition__InventorChecked -.-> usecase__ApproveDraft
+  condition__InventorChecked -.-> statemodel__DraftingOrder_status
+  %% derived condition__InventorChecked -> statemodel__DraftingOrder_status from holds
+  condition__KeptRight -.-> usecase__PayLateAnnuity
+  condition__KeptRight -.-> statemodel__Patent_status
+  %% derived condition__KeptRight -> statemodel__Patent_status from holds
+  condition__NonEmployeeInvention -.-> usecase__AcquireRightsByAssignment
+  condition__NonEmployeeInvention -.-> variation__InventionCategory
+  %% derived condition__NonEmployeeInvention -> variation__InventionCategory from holds
+  condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
+  condition__NotExtendedWithinTerm -.-> statemodel__OfficeAction_status
+  %% derived condition__NotExtendedWithinTerm -> statemodel__OfficeAction_status from holds
+  condition__NotYetExtended -.-> usecase__RequestFeePaymentExtension
+  condition__NotYetExtended -.-> statemodel__PatentApplication_status
+  %% derived condition__NotYetExtended -> statemodel__PatentApplication_status from holds
+  condition__PriorityBase -.-> usecase__DeemPriorityBaseWithdrawn
+  condition__PriorityBase -.-> statemodel__PatentApplication_status
+  %% derived condition__PriorityBase -> statemodel__PatentApplication_status from holds
+  condition__PriorityBasePending -.-> usecase__ClaimDomesticPriority
+  condition__PriorityBasePending -.-> statemodel__PatentApplication_status
+  %% derived condition__PriorityBasePending -> statemodel__PatentApplication_status from holds
+  condition__RightsAcquired -.-> usecase__DecideToFile
+  condition__RightsAcquired -.-> statemodel__InventionDisclosure_status
+  %% derived condition__RightsAcquired -> statemodel__InventionDisclosure_status from holds
+  condition__StillPending -.-> usecase__RecordPublication
+  condition__StillPending -.-> statemodel__PatentApplication_status
+  %% derived condition__StillPending -> statemodel__PatentApplication_status from holds
+  condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
+  condition__WithinTermNotExtended -.-> statemodel__OfficeAction_status
+  %% derived condition__WithinTermNotExtended -> statemodel__OfficeAction_status from holds
+  condition__YearPaid -.-> usecase__RollOverAnnuityYear
+  condition__YearPaid -.-> statemodel__Patent_status
+  %% derived condition__YearPaid -> statemodel__Patent_status from holds
+  condition__YearUnpaid -.-> usecase__EnterGracePeriod
+  condition__YearUnpaid -.-> statemodel__Patent_status
+  %% derived condition__YearUnpaid -> statemodel__Patent_status from holds
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef value fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;

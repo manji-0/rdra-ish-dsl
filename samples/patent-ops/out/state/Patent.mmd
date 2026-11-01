@@ -1,0 +1,32 @@
+%% rdra-ish diagram=state scope=entity:Patent model=samples/patent-ops
+%% kinds: statemodel state usecase
+%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Patent.status" as statemodel__Patent_status {
+    [*] --> state__Patent_in_force
+    state "存続中" as state__Patent_in_force
+    state "追納期間中" as state__Patent_grace
+    state "消滅（特許料の不納）" as state__Patent_lapsed
+    state "放棄" as state__Patent_abandoned
+    state "存続期間満了" as state__Patent_expired
+    %% transition usecase__EnterGracePeriod
+    state__Patent_in_force --> state__Patent_grace : 納付期限の経過 [次の年が未納]
+    %% transition usecase__AbandonPatent
+    state__Patent_in_force --> state__Patent_abandoned : 特許権の放棄
+    %% transition usecase__ExpirePatentTerm
+    state__Patent_in_force --> state__Patent_expired : 存続期間の満了
+    %% transition usecase__PayLateAnnuity
+    state__Patent_grace --> state__Patent_in_force : 追納 [維持すると決めた権利である]
+    %% transition usecase__LapseUnpaidPatent
+    state__Patent_grace --> state__Patent_lapsed : 追納期間の経過による消滅
+    %% transition usecase__ExpirePatentTerm
+    state__Patent_grace --> state__Patent_expired : 存続期間の満了
+    %% transition usecase__RestorePatent
+    state__Patent_lapsed --> state__Patent_in_force : 特許権の回復
+    state__Patent_abandoned --> [*]
+    state__Patent_expired --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Patent_abandoned stateend
+  class state__Patent_expired stateend

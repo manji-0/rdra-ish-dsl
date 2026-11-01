@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveDecisionToGrant model=samples/patent-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant screen__DecisionScreen as 査定画面
+  participant api__DecisionApi as 査定 API
+  participant entity__PatentApplication as 特許出願
+  actor__IpStaff ->> screen__DecisionScreen: 特許査定の受領
+  extsystem__Jpo ->> api__DecisionApi: 特許査定の謄本
+  screen__DecisionScreen ->> api__DecisionApi: 査定 API
+  alt PatentApplication.status == 審査請求済（審査中）
+    api__DecisionApi ->> entity__PatentApplication: update status 審査請求済（審査中） -> 特許査定
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end

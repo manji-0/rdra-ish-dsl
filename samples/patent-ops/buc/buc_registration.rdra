@@ -1,0 +1,167 @@
+module buc.registration
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+
+buc BucRegistration "特許料の納付と設定登録"
+  description "特許査定の謄本の送達から30日以内（請求で30日延長できる）に第1〜3年分の特許料を一時に納付すると、特許権の設定の登録がされ、特許権が発生する。納付しなければ設定登録されず、手続は却下される（`FirstFeesPaid`・`FirstFeesUnpaid`）。"
+
+// 第一年から第三年までの各年分の特許料は…三十日以内に一時に (egov-tokkyohou-334AC0000000121.txt:1468);
+// 4,300円 + 300円×請求項 a year (egov-tokkyohou-shikourei-335CO0000000016.txt:76-78).
+usecase PayFirstAnnuities "第1〜3年分の特許料の納付"
+  description "特許査定の謄本の送達から30日以内に、第1〜3年分の特許料を一時に納付する。"
+
+// 三十日以内を限り、第一項に規定する期間を延長 (egov-tokkyohou-334AC0000000121.txt:1473); 2,100円
+// (egov-tesuuryourei-335CO0000000020.txt:12-13).
+usecase RequestFeePaymentExtension "納付期間の延長請求"
+  description "第1〜3年分の特許料の納付期間を、30日以内に限り延長するよう請求する。"
+
+// 納付があつたときは、特許権の設定の登録をする (egov-tokkyohou-334AC0000000121.txt:823); 特許権は、設定の登録により
+// 発生する (:821). The patent's record opens here, once per application; years 1-3 are paid, so the
+// coming year is paid when it opens.
+usecase RecordRegistration "設定登録の記録"
+  description "設定登録で特許権が発生したことを記録し、第4年分からの年金管理を始める。"
+
+// 第百八条第一項に規定する期間内に特許料を納付しないときは、その手続を却下することができる
+// (egov-tokkyohou-334AC0000000121.txt:202).
+usecase RecordRegistrationDismissal "特許料の不納による却下の記録"
+  description "納付期間内に特許料を納めず、手続が却下されたことを記録する。"
+
+screen FeePaymentScreen "特許料納付画面"
+
+api FeePaymentApi "特許料納付 API"
+api RegistrationApi "設定登録 API"
+
+performs(IpStaff, BucRegistration)
+performs(IpStaff, PayFirstAnnuities)
+performs(IpStaff, RequestFeePaymentExtension)
+performs(IpStaff, RecordRegistration)
+performs(IpStaff, RecordRegistrationDismissal)
+belongs(BucRegistration, RightsMaintenance).by(IpWorkstation).by(InternetFilingSoftware)
+
+contains(BucRegistration, PayFirstAnnuities)
+contains(BucRegistration, RequestFeePaymentExtension)
+contains(BucRegistration, RecordRegistration)
+contains(BucRegistration, RecordRegistrationDismissal)
+contains(IpManagementSystem, FeePaymentApi)
+contains(IpManagementSystem, RegistrationApi)
+
+displays(PayFirstAnnuities, FeePaymentScreen)
+invokes(PayFirstAnnuities, FeePaymentApi)
+updates(FeePaymentApi, PatentApplication)
+reads(FeePaymentApi, FeeSchedule)
+sets(PayFirstAnnuities, PatentApplication, first_fees_paid == true)
+raises(PayFirstAnnuities, EvFeesPaid)
+triggers(EvFeesPaid, Jpo)
+triggers(EvDecisionToGrant, BucRegistration)
+triggers(FirstFeeDeadline, PayFirstAnnuities)
+
+condition Granted "特許査定を受けた出願である"
+holds(Granted, PatentApplication.status == granted)
+applies_to(Granted, FeePaymentApi)
+
+displays(RequestFeePaymentExtension, FeePaymentScreen)
+invokes(RequestFeePaymentExtension, FeePaymentApi)
+sets(RequestFeePaymentExtension, PatentApplication, fee_period_extended == true)
+raises(RequestFeePaymentExtension, EvExtensionRequested)
+
+condition NotYetExtended "納付期間をまだ延長していない"
+holds(NotYetExtended, PatentApplication.status == granted, PatentApplication.fee_period_extended == false)
+applies_to(NotYetExtended, RequestFeePaymentExtension)
+
+displays(RecordRegistration, FeePaymentScreen)
+invokes(RecordRegistration, RegistrationApi)
+updates(RegistrationApi, PatentApplication)
+creates(RegistrationApi, Patent)
+transitions(RecordRegistration, PatentApplication.status, granted -> registered)
+sets(RecordRegistration, Patent, next_year_paid == true)
+raises(Jpo, EvRegistered)
+triggers(EvRegistered, RecordRegistration)
+
+condition FirstFeesPaid "第1〜3年分の特許料を納付している"
+holds(FirstFeesPaid, PatentApplication.status == granted, PatentApplication.first_fees_paid == true)
+applies_to(FirstFeesPaid, RecordRegistration)
+
+// 特許料を納付しなければ、特許権は発生しません（特許法66条） (keiyakuwatch-chizaibu-gyomu.md:165, 〔まとめ〕).
+invariant(PatentApplication).when(status == registered).then(first_fees_paid == true).label("特許料（第1〜3年分）を納付していない出願は設定登録されない")
+
+// A late payment for a reason not of the payer's making is possible within 14 days of the reason
+// ending and 6 months of the period (egov-tokkyohou-334AC0000000121.txt:1475); the model does not
+// model that relief.
+displays(RecordRegistrationDismissal, FeePaymentScreen)
+updates(RecordRegistrationDismissal, PatentApplication)
+transitions(RecordRegistrationDismissal, PatentApplication.status, granted -> dismissed)
+raises(Jpo, EvRegistrationDismissed)
+triggers(EvRegistrationDismissed, RecordRegistrationDismissal)
+
+condition FirstFeesUnpaid "第1〜3年分の特許料を納付していない"
+holds(FirstFeesUnpaid, PatentApplication.status == granted, PatentApplication.first_fees_paid == false)
+applies_to(FirstFeesUnpaid, RecordRegistrationDismissal)
+
+// Access constraints
+requires_permission(PayFirstAnnuities, FeePay)
+requires_medium(PayFirstAnnuities, InternetFilingSoftware)
+requires_permission(FeePaymentApi, FeePay)
+
+requires_permission(RequestFeePaymentExtension, FeePay)
+requires_medium(RequestFeePaymentExtension, InternetFilingSoftware)
+
+requires_permission(RecordRegistration, DocketManage)
+requires_medium(RecordRegistration, IpWorkstation)
+requires_permission(RegistrationApi, DocketManage)
+
+requires_permission(RecordRegistrationDismissal, DocketManage)
+requires_medium(RecordRegistrationDismissal, IpWorkstation)
+
+// Screen fields
+field FirstFeesPaidField "第1〜3年分の納付"
+  access readonly
+  required true
+  source system
+
+contains(FeePaymentScreen, FirstFeesPaidField)
+maps_field(FirstFeesPaidField, PatentApplication.first_fees_paid)
+
+// Business flow
+flow RegistrationFlow "設定登録の流れ"
+step FirstFeeStep "第1〜3年分の納付（30日）"
+step FeeExtensionStep "納付期間の延長（30日）"
+step RegistrationStep "設定登録"
+step FeeDismissalStep "不納による却下"
+
+contains(BucRegistration, RegistrationFlow)
+contains(RegistrationFlow, FirstFeeStep)
+contains(RegistrationFlow, FeeExtensionStep)
+contains(RegistrationFlow, RegistrationStep)
+contains(RegistrationFlow, FeeDismissalStep)
+
+precedes(FirstFeeStep, RegistrationStep)
+branches(FeeExtensionStep, FirstFeeStep)
+excepts(FirstFeeStep, FeeDismissalStep)
+
+covers(FirstFeeStep, PayFirstAnnuities)
+covers(FirstFeeStep, FirstFeeDeadline)
+covers(FeeExtensionStep, RequestFeePaymentExtension)
+covers(RegistrationStep, RecordRegistration)
+covers(FeeDismissalStep, RecordRegistrationDismissal)
+
+performs(IpStaff, FirstFeeStep)
+performs(IpStaff, FeeExtensionStep)
+performs(IpStaff, RegistrationStep)
+performs(IpStaff, FeeDismissalStep)
+
+// Requirement traceability
+requirement ReqFirstFeesWithin30Days "特許査定から30日以内に第1〜3年分の特許料を納付する"
+  priority "must"
+  source "三十日以内に一時に納付しなければならない (egov-tokkyohou-334AC0000000121.txt:1468)"
+  source "特許権の設定の登録をする (egov-tokkyohou-334AC0000000121.txt:823)"
+  stakeholder "知的財産部"
+  acceptance_criteria "特許査定を受けた出願ごとに納付期限が管理され、期限（延長した場合はその期限）までに第1〜3年分が納付される。未納の出願は設定登録されない。"
+  status "accepted"
+
+motivates(ReqFirstFeesWithin30Days, BucRegistration)
+achieves(ReqFirstFeesWithin30Days, NoLostRights)

@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:RestoreExaminationRequest model=samples/patent-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant screen__ExaminationRequestScreen as 審査請求画面
+  participant api__ExaminationRequestApi as 審査請求 API
+  participant entity__FeeSchedule as 料金表
+  participant entity__PatentApplication as 特許出願
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 審査請求の回復
+  screen__ExaminationRequestScreen ->> api__ExaminationRequestApi: 審査請求 API
+  alt PatentApplication.status == 取下げ擬制（審査請求なし）
+    api__ExaminationRequestApi ->> entity__FeeSchedule: read
+    api__ExaminationRequestApi ->> entity__PatentApplication: update status 取下げ擬制（審査請求なし） -> 審査請求済（審査中）, exam_requested_at=set
+    api__ExaminationRequestApi -) extsystem__Jpo: 回復の手続
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: rejected
+  end

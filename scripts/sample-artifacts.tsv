@@ -168,6 +168,133 @@ samples/clinic-ops/out/asyncapi.json	export samples/clinic-ops --kind asyncapi
 samples/clinic-ops/out/er.mmd	diagram samples/clinic-ops --kind er --format mermaid
 samples/clinic-ops/out/states_prescription.txt	states samples/clinic-ops --format table --entity Prescription
 samples/clinic-ops/out/transitions.md	list samples/clinic-ops --kind transition --format markdown
+samples/patent-ops/out/actor_permission_audit.csv	csv samples/patent-ops --kind actor-permission-audit
+samples/patent-ops/out/api_matrix.csv	csv samples/patent-ops --kind api-matrix
+samples/patent-ops/out/buc/condition_office_action.mmd	diagram samples/patent-ops --kind condition --format mermaid --buc BucOfficeAction
+samples/patent-ops/out/buc/flow_annuity.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucAnnuity
+samples/patent-ops/out/buc/flow_application_drafting.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucApplicationDrafting
+samples/patent-ops/out/buc/flow_examination_request.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucExaminationRequest
+samples/patent-ops/out/buc/flow_filing_decision.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucFilingDecision
+samples/patent-ops/out/buc/flow_filing_formality.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucFilingFormality
+samples/patent-ops/out/buc/flow_invention_disclosure.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucInventionDisclosure
+samples/patent-ops/out/buc/flow_inventor_reward.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucInventorReward
+samples/patent-ops/out/buc/flow_office_action.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucOfficeAction
+samples/patent-ops/out/buc/flow_registration.mmd	diagram samples/patent-ops --kind flow --format mermaid --buc BucRegistration
+samples/patent-ops/out/buc/usecase_annuity.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucAnnuity
+samples/patent-ops/out/buc/usecase_application_drafting.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucApplicationDrafting
+samples/patent-ops/out/buc/usecase_examination_request.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucExaminationRequest
+samples/patent-ops/out/buc/usecase_filing_decision.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucFilingDecision
+samples/patent-ops/out/buc/usecase_filing_formality.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucFilingFormality
+samples/patent-ops/out/buc/usecase_invention_disclosure.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucInventionDisclosure
+samples/patent-ops/out/buc/usecase_inventor_reward.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucInventorReward
+samples/patent-ops/out/buc/usecase_office_action.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucOfficeAction
+samples/patent-ops/out/buc/usecase_registration.mmd	diagram samples/patent-ops --kind usecase --format mermaid --buc BucRegistration
+samples/patent-ops/out/buc/robustness_annuity.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucAnnuity
+samples/patent-ops/out/buc/robustness_application_drafting.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucApplicationDrafting
+samples/patent-ops/out/buc/robustness_examination_request.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucExaminationRequest
+samples/patent-ops/out/buc/robustness_filing_decision.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucFilingDecision
+samples/patent-ops/out/buc/robustness_filing_formality.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucFilingFormality
+samples/patent-ops/out/buc/robustness_invention_disclosure.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucInventionDisclosure
+samples/patent-ops/out/buc/robustness_inventor_reward.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucInventorReward
+samples/patent-ops/out/buc/robustness_office_action.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucOfficeAction
+samples/patent-ops/out/buc/robustness_registration.mmd	diagram samples/patent-ops --kind robustness --format mermaid --buc BucRegistration
+samples/patent-ops/out/buc/screen_annuity.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucAnnuity
+samples/patent-ops/out/buc/screen_application_drafting.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucApplicationDrafting
+samples/patent-ops/out/buc/screen_examination_request.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucExaminationRequest
+samples/patent-ops/out/buc/screen_filing_decision.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucFilingDecision
+samples/patent-ops/out/buc/screen_filing_formality.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucFilingFormality
+samples/patent-ops/out/buc/screen_invention_disclosure.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucInventionDisclosure
+samples/patent-ops/out/buc/screen_inventor_reward.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucInventorReward
+samples/patent-ops/out/buc/screen_office_action.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucOfficeAction
+samples/patent-ops/out/buc/screen_registration.mmd	diagram samples/patent-ops --kind screen --format mermaid --buc BucRegistration
+samples/patent-ops/out/uc/sequence_AbandonPatent.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase AbandonPatent
+samples/patent-ops/out/uc/sequence_AcceptDisclosure.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase AcceptDisclosure
+samples/patent-ops/out/uc/sequence_AcquireRightsByAssignment.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase AcquireRightsByAssignment
+samples/patent-ops/out/uc/sequence_AnswerInventorOpinion.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase AnswerInventorOpinion
+samples/patent-ops/out/uc/sequence_ApproveDraft.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ApproveDraft
+samples/patent-ops/out/uc/sequence_ClaimDomesticPriority.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ClaimDomesticPriority
+samples/patent-ops/out/uc/sequence_CloseOfficeActionDocket.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase CloseOfficeActionDocket
+samples/patent-ops/out/uc/sequence_ConfirmDraftByInventor.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ConfirmDraftByInventor
+samples/patent-ops/out/uc/sequence_DecideExaminationRequest.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideExaminationRequest
+samples/patent-ops/out/uc/sequence_DecideNotToFile.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideNotToFile
+samples/patent-ops/out/uc/sequence_DecideReward.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideReward
+samples/patent-ops/out/uc/sequence_DecideToFile.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideToFile
+samples/patent-ops/out/uc/sequence_DecideToKeepSecret.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideToKeepSecret
+samples/patent-ops/out/uc/sequence_DecideToLetLapse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DecideToLetLapse
+samples/patent-ops/out/uc/sequence_DeemPriorityBaseWithdrawn.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DeemPriorityBaseWithdrawn
+samples/patent-ops/out/uc/sequence_DeemWithdrawnNoRequest.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DeemWithdrawnNoRequest
+samples/patent-ops/out/uc/sequence_DraftLimitedResponse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DraftLimitedResponse
+samples/patent-ops/out/uc/sequence_DraftResponse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase DraftResponse
+samples/patent-ops/out/uc/sequence_EnterGracePeriod.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase EnterGracePeriod
+samples/patent-ops/out/uc/sequence_ExpirePatentTerm.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ExpirePatentTerm
+samples/patent-ops/out/uc/sequence_ExpireResponseTerm.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ExpireResponseTerm
+samples/patent-ops/out/uc/sequence_FileApplication.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase FileApplication
+samples/patent-ops/out/uc/sequence_FileDivisionalApplication.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase FileDivisionalApplication
+samples/patent-ops/out/uc/sequence_FileResponse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase FileResponse
+samples/patent-ops/out/uc/sequence_FinalizeRejection.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase FinalizeRejection
+samples/patent-ops/out/uc/sequence_InstructResponse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase InstructResponse
+samples/patent-ops/out/uc/sequence_JudgeEmployeeInvention.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase JudgeEmployeeInvention
+samples/patent-ops/out/uc/sequence_LapseResponse.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase LapseResponse
+samples/patent-ops/out/uc/sequence_LapseUnpaidPatent.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase LapseUnpaidPatent
+samples/patent-ops/out/uc/sequence_NotifyInventorOfDecision.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase NotifyInventorOfDecision
+samples/patent-ops/out/uc/sequence_NotifyReward.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase NotifyReward
+samples/patent-ops/out/uc/sequence_PayAnnuity.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase PayAnnuity
+samples/patent-ops/out/uc/sequence_PayFirstAnnuities.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase PayFirstAnnuities
+samples/patent-ops/out/uc/sequence_PayLateAnnuity.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase PayLateAnnuity
+samples/patent-ops/out/uc/sequence_PayReward.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase PayReward
+samples/patent-ops/out/uc/sequence_ReceiveDecisionOfRejection.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ReceiveDecisionOfRejection
+samples/patent-ops/out/uc/sequence_ReceiveDecisionToGrant.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ReceiveDecisionToGrant
+samples/patent-ops/out/uc/sequence_ReceiveFinalOfficeAction.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ReceiveFinalOfficeAction
+samples/patent-ops/out/uc/sequence_ReceiveFormalityOrder.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ReceiveFormalityOrder
+samples/patent-ops/out/uc/sequence_ReceiveOfficeAction.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ReceiveOfficeAction
+samples/patent-ops/out/uc/sequence_RecordDismissal.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RecordDismissal
+samples/patent-ops/out/uc/sequence_RecordFilingReceipt.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RecordFilingReceipt
+samples/patent-ops/out/uc/sequence_RecordInventorOpinion.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RecordInventorOpinion
+samples/patent-ops/out/uc/sequence_RecordPriorArtSearch.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RecordPriorArtSearch
+samples/patent-ops/out/uc/sequence_RecordPublication.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RecordPublication
+samples/patent-ops/out/uc/sequence_RecordRegistration.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RecordRegistration
+samples/patent-ops/out/uc/sequence_RecordRegistrationDismissal.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RecordRegistrationDismissal
+samples/patent-ops/out/uc/sequence_RequestAcceleratedExamination.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestAcceleratedExamination
+samples/patent-ops/out/uc/sequence_RequestAppeal.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestAppeal
+samples/patent-ops/out/uc/sequence_RequestDraftRevision.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestDraftRevision
+samples/patent-ops/out/uc/sequence_RequestDrafting.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestDrafting
+samples/patent-ops/out/uc/sequence_RequestExamination.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestExamination
+samples/patent-ops/out/uc/sequence_RequestFeePaymentExtension.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestFeePaymentExtension
+samples/patent-ops/out/uc/sequence_RequestLateExtension.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestLateExtension
+samples/patent-ops/out/uc/sequence_RequestPriorArtSearch.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestPriorArtSearch
+samples/patent-ops/out/uc/sequence_RequestTermExtension.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RequestTermExtension
+samples/patent-ops/out/uc/sequence_RestoreExaminationRequest.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RestoreExaminationRequest
+samples/patent-ops/out/uc/sequence_RestorePatent.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RestorePatent
+samples/patent-ops/out/uc/sequence_ResubmitDisclosure.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ResubmitDisclosure
+samples/patent-ops/out/uc/sequence_ReturnDisclosure.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ReturnDisclosure
+samples/patent-ops/out/uc/sequence_ReviewMaintenance.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase ReviewMaintenance
+samples/patent-ops/out/uc/sequence_RollOverAnnuityYear.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase RollOverAnnuityYear
+samples/patent-ops/out/uc/sequence_SubmitDraft.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase SubmitDraft
+samples/patent-ops/out/uc/sequence_SubmitFormalityAmendment.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase SubmitFormalityAmendment
+samples/patent-ops/out/uc/sequence_SubmitInventionDisclosure.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase SubmitInventionDisclosure
+samples/patent-ops/out/uc/sequence_WithdrawApplication.mmd	diagram samples/patent-ops --kind sequence --format mermaid --usecase WithdrawApplication
+samples/patent-ops/out/business.mmd	diagram samples/patent-ops --kind business --format mermaid
+samples/patent-ops/out/condition.mmd	diagram samples/patent-ops --kind condition --format mermaid
+samples/patent-ops/out/context.mmd	diagram samples/patent-ops --kind context --format mermaid
+samples/patent-ops/out/event_flow.mmd	diagram samples/patent-ops --kind event --format mermaid
+samples/patent-ops/out/information.mmd	diagram samples/patent-ops --kind information --format mermaid
+samples/patent-ops/out/rdra_buc_office_action.mmd	diagram samples/patent-ops --kind rdra --format mermaid --buc BucOfficeAction
+samples/patent-ops/out/requirement.mmd	diagram samples/patent-ops --kind requirement --format mermaid
+samples/patent-ops/out/screen.mmd	diagram samples/patent-ops --kind screen --format mermaid
+samples/patent-ops/out/screen_constraints.csv	csv samples/patent-ops --kind screen-constraints
+samples/patent-ops/out/state_whole.mmd	diagram samples/patent-ops --kind state --format mermaid
+samples/patent-ops/out/state/InventionDisclosure.mmd	diagram samples/patent-ops --kind state --format mermaid --entity InventionDisclosure
+samples/patent-ops/out/state/DraftingOrder.mmd	diagram samples/patent-ops --kind state --format mermaid --entity DraftingOrder
+samples/patent-ops/out/state/PatentApplication.mmd	diagram samples/patent-ops --kind state --format mermaid --entity PatentApplication
+samples/patent-ops/out/state/OfficeAction.mmd	diagram samples/patent-ops --kind state --format mermaid --entity OfficeAction
+samples/patent-ops/out/state/Patent.mmd	diagram samples/patent-ops --kind state --format mermaid --entity Patent
+samples/patent-ops/out/state/InventorReward.mmd	diagram samples/patent-ops --kind state --format mermaid --entity InventorReward
+samples/patent-ops/out/states_patent_application.txt	states samples/patent-ops --format table --entity PatentApplication
+samples/patent-ops/out/states_office_action.txt	states samples/patent-ops --format table --entity OfficeAction
+samples/patent-ops/out/states_patent.txt	states samples/patent-ops --format table --entity Patent
+samples/patent-ops/out/asyncapi.json	export samples/patent-ops --kind asyncapi
+samples/patent-ops/out/er.mmd	diagram samples/patent-ops --kind er --format mermaid
+samples/patent-ops/out/transitions.md	list samples/patent-ops --kind transition --format markdown
 samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid

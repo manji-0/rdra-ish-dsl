@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveFinalOfficeAction model=samples/patent-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant screen__OfficeActionScreen as 中間処理画面
+  participant api__ResponseFilingApi as 応答提出 API
+  participant entity__OfficeAction as 拒絶理由通知
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 最後の拒絶理由通知の受領
+  extsystem__Jpo ->> api__ResponseFilingApi: 最後の拒絶理由通知書
+  screen__OfficeActionScreen ->> api__ResponseFilingApi: 応答提出 API
+  alt OfficeAction.status == 応答済
+    api__ResponseFilingApi ->> entity__OfficeAction: update status 応答済 -> 応答期間中, kind=final, extended=false, late_extended=false, amendment=limited
+    api__ResponseFilingApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__ResponseFilingApi -->> screen__OfficeActionScreen: rejected
+  end

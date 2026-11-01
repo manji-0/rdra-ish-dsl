@@ -1,0 +1,28 @@
+module shared.goals
+
+// The goals state why the requirements exist. The metrics, baselines, and targets are
+// assumed by the model; no primary source gives them.
+
+// モデルの想定（一次資料なし）
+goal NoLostRights "期限の徒過で権利を失わない"
+  description "審査請求、手続補正、拒絶理由通知への応答、特許料の納付には期限があり、過ぎると出願は取り下げたものとみなされ、却下され、特許権は消滅する。"
+  metric "期限の徒過による取下げ擬制・却下・消滅の件数"
+  baseline "年2件"
+  target "年0件"
+  window "年次"
+
+// モデルの想定（一次資料なし）
+goal PromptFiling "発明を早く確実に出願につなげる"
+  description "届出から出願までが長いと、他社に先に出願され、発明者の届出の意欲も下がる。"
+  metric "発明届出の受付から出願までの日数の中央値"
+  baseline "150日"
+  target "90日"
+  window "四半期"
+
+// モデルの想定（一次資料なし）
+goal LeanPortfolio "費用を価値のある発明と権利に絞る"
+  description "審査請求料と年金は件数と請求項の数で増える。出願、審査請求、権利の維持を調べてから決めないと、使わない権利に費用を払い続ける。"
+  metric "維持要否の調査を経ずに納付した年金の件数"
+  baseline "年30件"
+  target "年0件"
+  window "年次"

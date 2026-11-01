@@ -1,0 +1,227 @@
+module shared.entities
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+
+// Values an actor chooses from. They type attribute columns and move no lifecycle.
+
+// 職務発明: an invention within the employee's duties (egov-tokkyohou-334AC0000000121.txt:376). For any
+// other invention, a rule that hands the right to the employer in advance is void (:378), so the
+// company takes it over by an individual assignment (権利譲渡書, niigata-u-2023-hatsumei-flowchart.txt:139).
+// 職務発明の判定 is a step of the university flow (chuo-u-hatsumei-flow.txt:99).
+variation InventionCategory "発明の区分" {
+  employee "職務発明"
+  nonemployee "職務発明に当たらない発明"
+}
+
+// After the 最後の拒絶理由通知 a claim amendment is limited to 請求項の削除, 特許請求の範囲の減縮, 誤記の訂正,
+// 明りようでない記載の釈明 (egov-tokkyohou-334AC0000000121.txt:166, :176-184).
+variation AmendmentScope "補正の範囲" {
+  limited "意見書のみ、または削除・減縮・誤記の訂正・釈明に限る補正"
+  free "限定のない補正"
+}
+
+// 早期審査 for 実施関連出願, 外国関連出願, and 中小企業・個人・大学等 (jpo-souki-guideline.txt:49, :53, :56).
+variation AcceleratedGround "早期審査の事情" {
+  working "実施関連出願"
+  foreign "外国関連出願"
+  sme "中小企業・個人・大学等の出願"
+}
+
+// When the company gives 相当の利益 is set by its 職務発明規程 (jpo-2015-shokumu-cyusyou-pamphlet.txt:77-81
+// lists what a 規程 contains). The occasions below are the model's assumption.
+variation RewardOccasion "相当の利益の時期" {
+  filing "出願時"
+  registration "登録時"
+  exploitation "実施・ライセンス時"
+}
+
+// Masters. No use case creates them.
+entity Employee "従業者" {
+  id: Int @pk
+  employee_no: String @unique
+  name: String
+  department: String
+}
+
+entity PatentFirm "特許事務所" {
+  id: Int @pk
+  name: String
+  // 得意な技術分野、外国出願への対応の可否、所属弁理士数 are criteria for choosing a firm
+  // (keiyakuwatch-chizaibu-gyomu.md:147, 〔まとめ〕).
+  technical_field: String
+}
+
+// Fees are master data, not state: the amounts change by 政令, and the model only needs to know
+// that a payment was made, not how much. The amounts at the time of the research:
+// 出願料 14,000円 (egov-tesuuryourei-335CO0000000020.txt:43-44); 審査請求料 138,000円 + 4,000円×請求項
+// (:70-71); 期間延長 2,100円 (:12-13); 期間経過後の延長 51,000円 (:67-68); 回復 212,100円 (:76-77);
+// 特許料 第1〜3年 4,300円 + 300円×請求項 (egov-tokkyohou-shikourei-335CO0000000016.txt:76-78),
+// 第4〜6年 10,300円 + 800円, 第7〜9年 24,800円 + 1,900円, 第10年以後 59,400円 + 4,600円
+// (:80, :83, :86; jpo-ryokin-ichiran-pdf.txt:219, :222). 中小企業 pay half the 審査請求料
+// (jpo-tetuzuki-02-21-genmen.txt:103-105) and half the 特許料 of years 1-10
+// (egov-tokkyohou-shikourei-335CO0000000016.txt:209).
+entity FeeSchedule "料金表" {
+  id: Int @pk
+  filing_fee: Money
+  exam_request_base: Money
+  exam_request_per_claim: Money
+  annuity_base: Money
+  annuity_per_claim: Money
+  extension_fee: Money
+  late_extension_fee: Money
+  restoration_fee: Money
+}
+
+// 発明提案書 (発明届出書・発明説明書) is the basis of the 明細書 (keiyakuwatch-chizaibu-gyomu.md:145-146,
+// 〔まとめ〕). The 知的財産室 numbers it and checks it for missing entries, and the inventor corrects
+// it (osaka-u-2022-hatsumeitodoke-toriatsukai.txt:15-17). After the 先行技術調査
+// (niigata-u-2023-hatsumei-flowchart.txt:129) the committee decides whether to file. Keeping an
+// invention as know-how instead of filing is the model's assumption: no source names it.
+entity InventionDisclosure "発明届出" {
+  id: Int @pk
+  title: String
+  category: InventionCategory
+  submitted_on: Date
+  status: Enum(submitted "受付待ち", returned "差戻し", accepted "受付済", searching "先行技術調査中", searched "調査済", decided_file "出願決定", decided_secret "ノウハウとして秘匿", decided_abandon "出願しない") @default(submitted)
+  // 特許を受ける権利 is the company's: from the start for a 職務発明 under the 規程
+  // (egov-tokkyohou-334AC0000000121.txt:380), by assignment otherwise.
+  right_acquired: Bool
+}
+
+// 明細書の作成を特許事務所へ依頼し、納品された出願書類を評価する (keiyakuwatch-chizaibu-gyomu.md:147-148,
+// 〔まとめ〕), checking it with the inventor (:152); 明細書作成内容確認 (niigata-u-2023-hatsumei-flowchart.txt:226).
+entity DraftingOrder "出願依頼" {
+  id: Int @pk
+  requested_on: Date
+  status: Enum(requested "依頼済", drafted "原稿受領", revising "修正依頼中", approved "出願承認済", filed "出願済") @default(requested)
+  inventor_checked: Bool
+}
+
+// 願書 with 明細書, 特許請求の範囲, 必要な図面, 要約書 (egov-tokkyohou-334AC0000000121.txt:397). The filing
+// date is the day the 願書 is filed (:452). The status is the main line of the prosecution; the
+// publication, the examination request, and the fees are separate columns because they run
+// alongside it. The exchange with the examiner during examination is the OfficeAction, so the
+// application stays `examining` from the request to the decision: one lifecycle with every
+// response state multiplied by every fee and publication column passes the 4096-state cap of
+// `check` (see README).
+entity PatentApplication "特許出願" {
+  id: Int @pk
+  application_no: String
+  filed_on: Date
+  claim_count: Int
+  status: Enum(filed "出願済（方式審査）", formality_order "手続補正指令への対応中", examining "審査請求済（審査中）", granted "特許査定", rejected "拒絶査定", rejection_final "拒絶査定の確定", appealed "拒絶査定不服審判を請求", registered "設定登録済", dismissed "却下", deemed_withdrawn "取下げ擬制（審査請求なし）", priority_withdrawn "取下げ擬制（国内優先権の基礎）", withdrawn "取下げ・放棄") @default(filed)
+  exam_requested_at: DateTime @null
+  published_at: DateTime @null
+  accelerated: Bool
+  accelerated_ground: AcceleratedGround
+  // The application is the base of a 国内優先権 claimed by a later application.
+  priority_base: Bool
+  first_fees_paid: Bool
+  fee_period_extended: Bool
+}
+
+// A 国内優先権 claim: the later application names an earlier application of the company, filed
+// within 一年 before (egov-tokkyohou-334AC0000000121.txt:541), as its base. The later application is
+// filed like any other and is not linked here; the base is marked by PatentApplication.priority_base.
+entity PriorityClaim "国内優先権の主張" {
+  id: Int @pk
+  claimed_on: Date
+}
+
+// 分割: within the time an amendment can be made, 30 days from the 特許査定謄本, or 3 months from the
+// first 拒絶査定謄本 (egov-tokkyohou-334AC0000000121.txt:610, :612, :614). The new application has its
+// own 審査請求 period of 30 days (:682); the model records only the filing.
+entity DivisionalFiling "分割出願" {
+  id: Int @pk
+  filed_on: Date
+}
+
+// 拒絶理由通知 with a 相当の期間 for the 意見書 (egov-tokkyohou-334AC0000000121.txt:731). Each 最初の
+// 拒絶理由通知 is a record; a 最後の拒絶理由通知 reopens the record it follows (the model's assumption).
+entity OfficeAction "拒絶理由通知" {
+  id: Int @pk
+  dispatched_on: Date
+  kind: Enum(first "最初", final "最後") @default(first)
+  status: Enum(open "応答期間中", drafted "応答案作成済", overdue "期間経過（延長請求可）", answered "応答済", lapsed "応答なしで期間満了", closed "案件終了") @default(open)
+  extended: Bool
+  late_extended: Bool
+  amendment: AmendmentScope @default(limited)
+}
+
+// 特許権は、設定の登録により発生する (egov-tokkyohou-334AC0000000121.txt:821). The annuity of each year
+// from the 4th is paid before the year starts (:1470); late payment within 6 months carries a
+// 割増特許料 of the same amount (:1537, :1539). 回復 is possible unless the non-payment was 故意
+// (:1553), within 2 months and at most 1 year after the late-payment period
+// (egov-tokkyohou-shikoukisoku-335M50000400010.txt:1824-1825).
+entity Patent "特許権" {
+  id: Int @pk
+  patent_no: String
+  registered_on: Date
+  status: Enum(in_force "存続中", grace "追納期間中", lapsed "消滅（特許料の不納）", abandoned "放棄", expired "存続期間満了") @default(in_force)
+  // Whether the coming year's annuity is paid.
+  next_year_paid: Bool
+  maintain: Bool @default(true)
+  last_payment: Enum(none "未納付", regular "期限内の納付", late "追納") @default(none)
+  annuity_amount: Money
+  surcharge: Money @null
+}
+
+// 相当の利益 (egov-tokkyohou-334AC0000000121.txt:382), set by a standard reached through 協議, 開示, and
+// 意見の聴取 (:384; jlt-shokumu-hatsumei-shishin.md:39, :41, :43).
+entity InventorReward "相当の利益" {
+  id: Int @pk
+  occasion: RewardOccasion
+  amount: Money
+  status: Enum(decided "決定", notified "通知済", objected "意見の申出あり", paid "支払済") @default(decided)
+  notified_at: DateTime @null
+}
+
+// ER relationships
+relate(InventionDisclosure, Employee, N:1)
+relate(DraftingOrder, InventionDisclosure, N:1)
+relate(DraftingOrder, PatentFirm, N:1)
+relate(PatentApplication, DraftingOrder, 1:1).optional()
+relate(PriorityClaim, PatentApplication, N:1)
+relate(DivisionalFiling, PatentApplication, N:1)
+relate(OfficeAction, PatentApplication, N:1)
+relate(Patent, PatentApplication, 1:1)
+relate(InventorReward, InventionDisclosure, N:1)
+
+// Events: the interface between use cases, and between use cases and the 特許庁. Each lifecycle
+// transition is declared in its BUC file, next to the use case that drives it.
+
+event EvDisclosureSubmitted "発明届出の提出"
+event EvFilingDecided "出願の決定"
+event EvDraftApproved "出願書類の承認"
+event EvApplicationFiled "特許願の提出"
+event EvFilingReceipt "受領書（出願番号）"
+event EvFormalityOrder "手続補正指令書（方式）"
+event EvFormalityAmendmentFiled "手続補正書の提出"
+event EvApplicationDismissed "却下処分"
+event EvPublished "出願公開"
+event EvPriorityClaimed "国内優先権を主張した出願"
+event EvExaminationRequested "出願審査請求書の提出"
+event EvAcceleratedExamRequested "早期審査に関する事情説明書の提出"
+event EvOfficeAction "拒絶理由通知書"
+event EvFinalOfficeAction "最後の拒絶理由通知書"
+event EvExtensionRequested "期間延長請求書の提出"
+event EvResponseFiled "意見書・手続補正書の提出"
+event EvDecisionToGrant "特許査定の謄本"
+event EvDecisionOfRejection "拒絶査定の謄本"
+event EvAppealRequested "拒絶査定不服審判の請求"
+event EvDivisionalFiled "分割出願"
+event EvWithdrawalFiled "取下書・放棄書の提出"
+event EvRestorationRequested "回復の手続"
+event EvFeesPaid "特許料の納付"
+event EvRegistered "設定登録"
+event EvRegistrationDismissed "特許料の不納による却下"
+
+// State constraints
+
+// 協議・開示・意見の聴取 (egov-tokkyohou-334AC0000000121.txt:384): the inventor is told the 相当の利益
+// before it is paid.
+invariant(InventorReward).when(status == paid).then(notified_at == present).label("発明者に通知していない相当の利益は支払わない")
+
+// A late payment carries a 割増特許料 of the same amount (egov-tokkyohou-334AC0000000121.txt:1539).
+invariant(Patent).when(last_payment == late).then(surcharge == present).label("追納には特許料と同額の割増特許料を加える")
+forbidden(Patent, last_payment == regular, surcharge == present).label("期限内の納付には割増特許料を付けない")

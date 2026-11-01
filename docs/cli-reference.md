@@ -852,8 +852,8 @@ embed the artifacts: `scripts/embed-sample-artifacts.py` copies each file into t
 block under its `<!-- embed: <path> -->` line in the step `design.md` files and
 `docs/diagram-sample-review.md`, and fails when a command those documents print is not
 the manifest row for its `--out`; `scripts/gen-clinic-ops-docs.py` writes
-`samples/clinic-ops/design-doc.md` and `samples/clinic-ops/prd.md` from `list` and `csv`
-output and the committed diagrams. The script fails if a tracked file changes. A generator change
+`design-doc.md` and `prd.md` for `samples/clinic-ops` and `samples/patent-ops` (the sample is
+its second argument) from `list` and `csv` output and the committed diagrams. The script fails if a tracked file changes. A generator change
 therefore shows up as a diff of Mermaid diagrams, CSV review tables,
 state-pattern output, and exports such as OpenAPI, AsyncAPI, DBML, and JSON Schema. After
 an intended change, run the script and commit the regenerated files.

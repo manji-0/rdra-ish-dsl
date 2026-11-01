@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:DeemPriorityBaseWithdrawn model=samples/patent-ops
+%% kinds: timer api entity
+%% omitted: buc step condition
+sequenceDiagram
+  participant timer__PriorityBaseDeadline as 先の出願の取下げ擬制（先の出願から1年4月）
+  participant api__PriorityBaseApi as 先の出願の取下げ擬制 API
+  participant entity__PatentApplication as 特許出願
+  timer__PriorityBaseDeadline ->> api__PriorityBaseApi: 先の出願の取下げ擬制（先の出願から1年4月）
+  alt 国内優先権の基礎とされた出願である: PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 and PatentApplication.status == 出願済（方式審査） and PatentApplication.status == 審査請求済（審査中）
+    api__PriorityBaseApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（国内優先権の基礎）, status 審査請求済（審査中） -> 取下げ擬制（国内優先権の基礎）
+    api__PriorityBaseApi -->> timer__PriorityBaseDeadline: done
+  else guard fails
+    api__PriorityBaseApi -->> timer__PriorityBaseDeadline: rejected
+  end

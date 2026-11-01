@@ -1,0 +1,9 @@
+%% rdra-ish diagram=screen scope=buc:BucFilingDecision model=samples/patent-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__FilingDecisionScreen["出願審議画面"]:::screen
+  screen__PriorArtSearchScreen["先行技術調査画面"]:::screen
+  screen__PriorArtSearchScreen -->|先行技術調査の結果の登録| screen__FilingDecisionScreen
+  %% via screen__PriorArtSearchScreen -> screen__FilingDecisionScreen usecase__RecordPriorArtSearch
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

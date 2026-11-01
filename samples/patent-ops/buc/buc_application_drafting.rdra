@@ -1,0 +1,178 @@
+module buc.application_drafting
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+// The steps come from a vendor article 〔まとめ〕, a journal article 〔論文〕, and a university flowchart;
+// no primary source describes how a company orders and reviews a draft.
+
+buc BucApplicationDrafting "特許事務所への依頼と出願書類の作成"
+  description "出願と決まった発明について特許事務所に明細書の作成を依頼し、納品された出願書類（願書・明細書・特許請求の範囲・要約書・図面）を発明者と知的財産部が確かめ、修正を依頼し、承認する。発明者の確認を経ない書類は承認しない（`InventorChecked`）。"
+
+// 発明提案書をもとに、明細書の作成を特許事務所へ依頼 (keiyakuwatch-chizaibu-gyomu.md:147, 〔まとめ〕);
+// 出願依頼（明細書作成・出願） (niigata-u-2023-hatsumei-flowchart.txt:141-142).
+usecase RequestDrafting "特許事務所への出願依頼"
+  description "出願と決まった発明の届出をもとに、特許事務所へ明細書の作成と出願を依頼する。"
+
+// 明細書・図面 by the inventor and the liaison, 特許請求の範囲 by the attorney
+// (nihon-u-kawai-2011-meisaisho.txt:136-138, 〔論文〕).
+usecase SubmitDraft "出願書類案の納品" description "弁理士が出願書類の案を納品する。修正の依頼を受けた案も出し直す。"
+// 発明者とも連携して、出願書類の内容をしっかりチェック (keiyakuwatch-chizaibu-gyomu.md:152, 〔まとめ〕);
+// 明細書作成内容確認 (niigata-u-2023-hatsumei-flowchart.txt:50-52).
+usecase ConfirmDraftByInventor "発明者による内容確認" description "発明者が案の技術内容を確かめ、確認済にする。"
+
+usecase RequestDraftRevision "出願書類の修正依頼"
+  description "知的財産部が案の修正を弁理士に依頼する。発明者の確認はやり直しになる。"
+
+// 特許事務所から納品された出願書類を評価 (keiyakuwatch-chizaibu-gyomu.md:148, 〔まとめ〕).
+usecase ApproveDraft "出願書類の承認" description "発明者の確認を経た案を知的財産部が承認し、出願を指示する。"
+
+screen DraftingOrderScreen "出願依頼画面"
+screen DraftReviewScreen "出願書類レビュー画面"
+
+api DraftingOrderApi "出願依頼 API"
+api DraftReviewApi "出願書類レビュー API"
+
+performs(IpStaff, RequestDrafting)
+performs(PatentAttorney, SubmitDraft)
+performs(Inventor, ConfirmDraftByInventor)
+performs(IpStaff, RequestDraftRevision)
+performs(IpStaff, ApproveDraft)
+belongs(BucApplicationDrafting, Prosecution).by(IpWorkstation).by(AttorneyPortal)
+
+contains(BucApplicationDrafting, RequestDrafting)
+contains(BucApplicationDrafting, SubmitDraft)
+contains(BucApplicationDrafting, ConfirmDraftByInventor)
+contains(BucApplicationDrafting, RequestDraftRevision)
+contains(BucApplicationDrafting, ApproveDraft)
+contains(IpManagementSystem, DraftingOrderApi)
+contains(IpManagementSystem, DraftReviewApi)
+
+displays(RequestDrafting, DraftingOrderScreen)
+invokes(RequestDrafting, DraftingOrderApi)
+creates(DraftingOrderApi, DraftingOrder)
+reads(DraftingOrderApi, InventionDisclosure)
+reads(DraftingOrderApi, PatentFirm)
+triggers(EvFilingDecided, BucApplicationDrafting)
+triggers(EvFilingDecided, RequestDrafting)
+
+// The event is raised for every outcome of the committee, so the order needs the outcome itself.
+condition DecidedToFile "出願と決まった発明である"
+holds(DecidedToFile, InventionDisclosure.status == decided_file)
+applies_to(DecidedToFile, RequestDrafting)
+
+displays(SubmitDraft, DraftReviewScreen)
+invokes(SubmitDraft, DraftReviewApi)
+updates(DraftReviewApi, DraftingOrder)
+transitions(SubmitDraft, DraftingOrder.status, requested -> drafted)
+transitions(SubmitDraft, DraftingOrder.status, revising -> drafted)
+
+displays(ConfirmDraftByInventor, DraftReviewScreen)
+invokes(ConfirmDraftByInventor, DraftReviewApi)
+sets(ConfirmDraftByInventor, DraftingOrder, inventor_checked == true)
+
+condition DraftDelivered "案が納品されている"
+holds(DraftDelivered, DraftingOrder.status == drafted)
+applies_to(DraftDelivered, ConfirmDraftByInventor)
+
+displays(RequestDraftRevision, DraftReviewScreen)
+invokes(RequestDraftRevision, DraftReviewApi)
+transitions(RequestDraftRevision, DraftingOrder.status, drafted -> revising)
+sets(RequestDraftRevision, DraftingOrder, inventor_checked == false)
+
+displays(ApproveDraft, DraftReviewScreen)
+invokes(ApproveDraft, DraftReviewApi)
+transitions(ApproveDraft, DraftingOrder.status, drafted -> approved)
+raises(ApproveDraft, EvDraftApproved)
+
+condition InventorChecked "発明者が内容を確認している"
+holds(InventorChecked, DraftingOrder.status == drafted, DraftingOrder.inventor_checked == true)
+applies_to(InventorChecked, ApproveDraft)
+
+// The inventor's check is the IP department's practice (keiyakuwatch-chizaibu-gyomu.md:152, 〔まとめ〕).
+forbidden(DraftingOrder, status == approved, inventor_checked == false).label("発明者が内容を確認していない出願書類は承認しない")
+
+// Access constraints
+requires_permission(RequestDrafting, DraftingManage)
+requires_medium(RequestDrafting, IpWorkstation)
+requires_permission(DraftingOrderApi, DraftingManage)
+
+requires_permission(SubmitDraft, DraftWrite)
+requires_medium(SubmitDraft, AttorneyPortal)
+
+requires_permission(ConfirmDraftByInventor, DraftConfirm)
+requires_medium(ConfirmDraftByInventor, InventorPortal)
+
+requires_permission(RequestDraftRevision, DraftingManage)
+requires_medium(RequestDraftRevision, IpWorkstation)
+
+requires_permission(ApproveDraft, DraftingManage)
+requires_medium(ApproveDraft, IpWorkstation)
+
+// Screen transitions: the model's assumption.
+navigates(DraftingOrderScreen, DraftReviewScreen).via(RequestDrafting)
+
+// Screen fields
+field PatentFirmField "依頼先の特許事務所"
+  access editable
+  required true
+  source actor
+
+field InventorCheckField "発明者の確認"
+  access editable
+  required true
+  source actor
+
+contains(DraftingOrderScreen, PatentFirmField)
+contains(DraftReviewScreen, InventorCheckField)
+maps_field(PatentFirmField, PatentFirm.name)
+maps_field(InventorCheckField, DraftingOrder.inventor_checked)
+
+// Business flow
+flow DraftingFlow "出願書類の作成の流れ"
+step OrderStep "特許事務所への依頼"
+step DraftStep "出願書類案の納品"
+step InventorCheckStep "発明者による確認"
+step RevisionStep "修正依頼"
+step ApprovalStep "承認"
+
+contains(BucApplicationDrafting, DraftingFlow)
+contains(DraftingFlow, OrderStep)
+contains(DraftingFlow, DraftStep)
+contains(DraftingFlow, InventorCheckStep)
+contains(DraftingFlow, RevisionStep)
+contains(DraftingFlow, ApprovalStep)
+
+precedes(OrderStep, DraftStep)
+precedes(DraftStep, InventorCheckStep)
+precedes(InventorCheckStep, ApprovalStep)
+excepts(InventorCheckStep, RevisionStep)
+repeats(RevisionStep, DraftStep)
+
+covers(OrderStep, RequestDrafting)
+covers(DraftStep, SubmitDraft)
+covers(InventorCheckStep, ConfirmDraftByInventor)
+covers(RevisionStep, RequestDraftRevision)
+covers(ApprovalStep, ApproveDraft)
+
+performs(IpStaff, OrderStep)
+performs(PatentAttorney, DraftStep)
+performs(Inventor, InventorCheckStep)
+performs(IpStaff, RevisionStep)
+performs(IpStaff, ApprovalStep)
+
+// Requirement traceability
+requirement ReqInventorReviewedDraft "発明者が確認した出願書類だけを出願する"
+  priority "must"
+  source "発明者とも連携して、出願書類の内容をしっかりチェック (keiyakuwatch-chizaibu-gyomu.md:152)"
+  source "明細書作成内容確認 (niigata-u-2023-hatsumei-flowchart.txt:226)"
+  stakeholder "知的財産部"
+  stakeholder "発明者"
+  acceptance_criteria "出願書類は発明者の確認の後にだけ承認でき、修正を依頼した案は発明者がもう一度確かめる。"
+  status "accepted"
+
+motivates(ReqInventorReviewedDraft, BucApplicationDrafting)
+achieves(ReqInventorReviewedDraft, PromptFiling)

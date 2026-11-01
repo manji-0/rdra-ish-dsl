@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:AbandonPatent model=samples/patent-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant screen__MaintenanceReviewScreen as 権利維持要否画面
+  participant api__MaintenanceApi as 権利維持 API
+  participant entity__Patent as 特許権
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 特許権の放棄
+  screen__MaintenanceReviewScreen ->> api__MaintenanceApi: 権利維持 API
+  alt Patent.status == 存続中
+    api__MaintenanceApi ->> entity__Patent: update status 存続中 -> 放棄
+    api__MaintenanceApi -) extsystem__Jpo: 取下書・放棄書の提出
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: done
+  else guard fails
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: rejected
+  end

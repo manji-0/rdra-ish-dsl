@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Generate samples/clinic-ops/design-doc.md (engineers) and samples/clinic-ops/prd.md (PdM).
+"""Generate design-doc.md (engineers) and prd.md (PdM) for a sample: clinic-ops (the default) or
+patent-ops.
 
 Every fact comes from the model through the CLI: `list ... --format json` for the elements and
 their links, `list` and `csv` with `--format markdown` for the tables, and the diagrams that
-scripts/sample-artifacts.tsv commits under samples/clinic-ops/out/. The script holds only the
-chapter order and the sentences that introduce each chapter.
+scripts/sample-artifacts.tsv commits under samples/<sample>/out/. The script holds only, per
+sample in SAMPLES, the chapter order and the sentences that introduce each chapter.
 
-scripts/check-sample-artifacts.sh runs it after regenerating the artifacts and fails when a
-document differs from what is committed:
+scripts/check-sample-artifacts.sh runs it for each sample after regenerating the artifacts and
+fails when a document differs from what is committed:
 
-    python3 -I scripts/gen-clinic-ops-docs.py target/debug/rdra-ish
+    python3 -I scripts/gen-clinic-ops-docs.py target/debug/rdra-ish [clinic-ops|patent-ops]
 """
 import json
 import re
@@ -19,20 +20,75 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SAMPLE = ROOT / 'samples/clinic-ops'
-OUT = SAMPLE / 'out'
 BIN = Path(sys.argv[1] if len(sys.argv) > 1 else 'target/debug/rdra-ish').resolve()
-MODEL = 'samples/clinic-ops'
+NAME = sys.argv[2] if len(sys.argv) > 2 else 'clinic-ops'
 
-# The BUC chapters in the order a visit runs through the hospital.
-CHAPTERS = [
-    'BucPatientOnboarding', 'BucAppointmentScheduling', 'BucVisitCheckIn', 'BucClinicalEncounter',
-    'BucOrdersResults', 'BucPrescriptionFulfillment', 'BucVisitPayment', 'BucBillingClaims',
-    'BucFollowupCare', 'BucStaffAdministration',
-]
-# The lifecycles whose reachable states the design document also lists, by committed table.
-STATE_TABLES = {'Appointment': 'states_appointment.txt', 'Prescription': 'states_prescription.txt',
-                'ClaimStatement': 'states_claim_statement.txt'}
+# Per sample: the chapter order (`chapters`), the lifecycles whose reachable states the design
+# document also lists by committed table (`state_tables`), and the sentences that are about the
+# domain rather than the model.
+SAMPLES = {
+    'clinic-ops': {
+        'title': 'Clinic Ops',
+        # The BUC chapters in the order a visit runs through the hospital.
+        'chapters': [
+            'BucPatientOnboarding', 'BucAppointmentScheduling', 'BucVisitCheckIn', 'BucClinicalEncounter',
+            'BucOrdersResults', 'BucPrescriptionFulfillment', 'BucVisitPayment', 'BucBillingClaims',
+            'BucFollowupCare', 'BucStaffAdministration',
+        ],
+        'state_tables': {'Appointment': 'states_appointment.txt', 'Prescription': 'states_prescription.txt',
+                         'ClaimStatement': 'states_claim_statement.txt'},
+        'subject': '題材は日本の病院の外来業務（受付、資格確認、診察、検査、処方、計算・会計、レセプト請求）で、入院は対象外。',
+        'overview': '''対象は病院の外来業務である。業務を 10 の BUC に分け、内部システムは `ClinicOpsSystem` 1 つにまとめている。院外の仕組み（オンライン資格確認、精算機、外注検査、電子処方箋、保険薬局、審査支払機関、患者への通知）は外部システムとしてイベントでつなぐ。
+
+米国型の診療所モデルとの主な違いは次のとおりである。
+
+| 論点 | このモデル |
+|---|---|
+| 支払の時点 | 受付では支払わない。診察の後に計算受付・会計受付で精算する |
+| 窓口負担 | 負担割合（3割・2割）で計算し、限度額情報があれば自己負担限度額までを窓口で受け取る |
+| 資格確認 | 受付のたびにオンライン資格確認等システムで確認する。来院前の一括照会、申立書、システム障害時モードがある |
+| 請求 | レセプトを月ごとに審査支払機関（支払基金・国保連）へ請求する。返戻は再請求でき、査定は再審査請求で争う |
+| 処方 | 院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤する。院内処方は薬剤師が調剤・監査する |
+| 紹介 | 紹介状なしの初診は選定療養費（自費）の対象。救急搬送などは除外 |
+''',
+        'rdra_appendix': ('診察 BUC の RDRA 全体図', 'rdra_buc_clinical_encounter.mmd'),
+        'metrics_note': '実際の病院で使うときは、その病院の実績で置き換える。',
+        'no_flow_note': '業務フローを持たない BUC（病院管理）は載せていない。',
+    },
+    'patent-ops': {
+        'title': 'Patent Ops',
+        # The BUC chapters in the order an invention runs from the disclosure to the lapse of the right.
+        'chapters': [
+            'BucInventionDisclosure', 'BucFilingDecision', 'BucApplicationDrafting', 'BucFilingFormality',
+            'BucExaminationRequest', 'BucOfficeAction', 'BucRegistration', 'BucAnnuity', 'BucInventorReward',
+        ],
+        'state_tables': {'PatentApplication': 'states_patent_application.txt',
+                         'OfficeAction': 'states_office_action.txt', 'Patent': 'states_patent.txt'},
+        'subject': '題材は日本の企業の特許出願業務（発明届出、出願可否の判断、特許事務所への依頼、出願と方式審査、審査請求、拒絶理由通知への応答、特許料と年金、相当の利益）で、外国出願・審判の中身・意匠と商標は対象外。',
+        'overview': '''対象は企業の知的財産部が社外の特許事務所と進める特許出願業務である。業務を 9 の BUC に分け、内部システムは `IpManagementSystem`（知財管理システム）1 つにまとめている。特許事務所の弁理士はアクターとして業務フローに現れ、特許庁は外部システムとしてイベントでつなぐ。
+
+業務の骨格は法定の期限である。期限は状態ではなくタイマー（期限管理）で表し、期限が過ぎたときに法が起こすこと（取下げ擬制・却下・消滅）を状態で表す。
+
+| 論点 | このモデル |
+|---|---|
+| 権利の帰属 | 職務発明は職務発明規程により特許を受ける権利が発生時から会社に帰属する。職務発明でない発明は譲渡を受ける |
+| 出願前 | 先行技術調査の後、発明審査委員会が出願・ノウハウとして秘匿・不出願を決める。出願書類は発明者の確認を経て承認する |
+| 方式 | 手続補正指令には発送日から2月以内に補正する。しなければ却下される |
+| 審査請求 | 出願から3年以内。なければ取下げ擬制で、故意でなければ回復できる。早期審査は審査請求済みが要件 |
+| 中間処理 | 拒絶理由通知の応答期間は60日。期間内の延長（2か月）と期間経過後の延長（2か月）はどちらか一度。最後の拒絶理由通知への補正は限定される |
+| 登録と維持 | 特許査定から30日以内に第1〜3年分を納付して設定登録。第4年以後は前年以前に納付し、6月以内なら割増特許料で追納できる。追納しなければ遡って消滅する |
+''',
+        'rdra_appendix': ('実体審査と中間処理 BUC の RDRA 全体図', 'rdra_buc_office_action.mmd'),
+        'metrics_note': '実際の知的財産部で使うときは、その会社の実績で置き換える。',
+        'no_flow_note': '',
+    },
+}
+CONF = SAMPLES[NAME]
+MODEL = f'samples/{NAME}'
+SAMPLE = ROOT / MODEL
+OUT = SAMPLE / 'out'
+CHAPTERS = CONF['chapters']
+STATE_TABLES = CONF['state_tables']
 
 
 def cli(*args):
@@ -102,15 +158,15 @@ def stem(buc):
     return ''.join('_' + c.lower() if c.isupper() else c for c in buc[3:]).lstrip('_')
 
 
-HEAD = '''<!-- derived-from ../../docs/language-reference.md -->
+HEAD = f'''<!-- derived-from ../../docs/language-reference.md -->
 <!-- derived-from ../../docs/cli-reference.md -->
 
-`scripts/gen-clinic-ops-docs.py` が `samples/clinic-ops/` のモデルから CLI を通して生成する。図・表・説明文を手で直さず、`.rdra` を直して `scripts/check-sample-artifacts.sh` を実行する。題材は日本の病院の外来業務（受付、資格確認、診察、検査、処方、計算・会計、レセプト請求）で、入院は対象外。業務規則は `.rdra` の `//` コメントに一次資料の出典（ファイル名:行）を付けている。
+`scripts/gen-clinic-ops-docs.py` が `{MODEL}/` のモデルから CLI を通して生成する。図・表・説明文を手で直さず、`.rdra` を直して `scripts/check-sample-artifacts.sh` を実行する。{CONF['subject']}業務規則は `.rdra` の `//` コメントに一次資料の出典（ファイル名:行）を付けている。
 '''
 
 # ── design-doc.md ──────────────────────────────────────────────────────────────
 
-d = ['# Clinic Ops 設計書\n\n', HEAD, '''
+d = [f"# {CONF['title']} 設計書\n\n", HEAD, '''
 この文書は実装するエンジニア向けである。構造、処理、仕様の順に読む。
 
 1. BUC ごとのロバストネス図で、画面・制御・エンティティの構造をつかむ。
@@ -121,19 +177,7 @@ d = ['# Clinic Ops 設計書\n\n', HEAD, '''
 
 ## 1. 概要
 
-対象は病院の外来業務である。業務を 10 の BUC に分け、内部システムは `ClinicOpsSystem` 1 つにまとめている。院外の仕組み（オンライン資格確認、精算機、外注検査、電子処方箋、保険薬局、審査支払機関、患者への通知）は外部システムとしてイベントでつなぐ。
-
-米国型の診療所モデルとの主な違いは次のとおりである。
-
-| 論点 | このモデル |
-|---|---|
-| 支払の時点 | 受付では支払わない。診察の後に計算受付・会計受付で精算する |
-| 窓口負担 | 負担割合（3割・2割）で計算し、限度額情報があれば自己負担限度額までを窓口で受け取る |
-| 資格確認 | 受付のたびにオンライン資格確認等システムで確認する。来院前の一括照会、申立書、システム障害時モードがある |
-| 請求 | レセプトを月ごとに審査支払機関（支払基金・国保連）へ請求する。返戻は再請求でき、査定は再審査請求で争う |
-| 処方 | 院外処方箋は電子処方箋管理サービスへ登録し、患者が選ぶ保険薬局で調剤する。院内処方は薬剤師が調剤・監査する |
-| 紹介 | 紹介状なしの初診は選定療養費（自費）の対象。救急搬送などは除外 |
-
+''', CONF['overview'], '''
 ### システムコンテキスト図
 
 システムを使う actor と、イベントでつながる外部システムを示す。actor からシステムへの線は、actor が担う BUC の UC が呼ぶ API から導出される。
@@ -220,7 +264,7 @@ d.append('''## 9. 付録
 RDRA の層ごとの図である。設計の読み順には入れていない。
 
 - BUC 別の UC複合図: ''' + ', '.join(f"[{bucs[b]['label']}](out/buc/usecase_{stem(b)}.mmd)" for b in CHAPTERS) + '''
-- 診察 BUC の RDRA 全体図: [`out/rdra_buc_clinical_encounter.mmd`](out/rdra_buc_clinical_encounter.mmd)
+- ''' + CONF['rdra_appendix'][0] + f": [`out/{CONF['rdra_appendix'][1]}`](out/{CONF['rdra_appendix'][1]})" + '''
 
 ''')
 d.append(folded('業務の流れ図（ビジネスコンテキスト）', mermaid('business.mmd')))
@@ -231,12 +275,12 @@ d.append('\n' + folded('全画面の画面遷移図', mermaid('screen.mmd')))
 in_scope = [r for r in requirements if r['status'] != 'out-of-scope']
 out_of_scope = [r for r in requirements if r['status'] == 'out-of-scope']
 
-p = ['# Clinic Ops PRD\n\n', HEAD, '''
+p = [f"# {CONF['title']} PRD\n\n", HEAD, '''
 この文書はプロダクトマネージャー向けである。なぜ作るか、誰のためか、何を満たせばよいかを示す。画面・API・データの設計は [設計書](design-doc.md) にある。
 
 ## 1. 背景と目的
 
-成功指標の現状値と目標値はモデルが置いた想定の数字で、一次資料はない。実際の病院で使うときは、その病院の実績で置き換える。
+成功指標の現状値と目標値はモデルが置いた想定の数字で、一次資料はない。''' + CONF['metrics_note'] + '''
 
 ''']
 for g in goals:
@@ -283,7 +327,7 @@ p.append('''
 次の図は業務の流れである。業務ごとに BUC をまとめ、ある BUC から次の BUC への引き渡しを、引き渡すイベントのラベルで示す。
 
 ''' + mermaid('business.mmd') + '''
-この後の節は BUC ごとの業務フローである。手順、分岐、例外と、各手順を担う UC を示す。業務フローを持たない BUC（病院管理）は載せていない。
+この後の節は BUC ごとの業務フローである。手順、分岐、例外と、各手順を担う UC を示す。''' + CONF['no_flow_note'] + '''
 
 ''')
 for buc in CHAPTERS:

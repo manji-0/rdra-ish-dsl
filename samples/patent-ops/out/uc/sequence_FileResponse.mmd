@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:FileResponse model=samples/patent-ops
+%% kinds: actor timer screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant timer__ResponseDeadline as 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  participant screen__ResponseDraftScreen as 応答案画面
+  participant api__ResponseFilingApi as 応答提出 API
+  participant entity__OfficeAction as 拒絶理由通知
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書の提出
+  timer__ResponseDeadline ->> api__ResponseFilingApi: 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  screen__ResponseDraftScreen ->> api__ResponseFilingApi: 応答提出 API
+  alt OfficeAction.status == 応答案作成済
+    api__ResponseFilingApi ->> entity__OfficeAction: update status 応答案作成済 -> 応答済
+    api__ResponseFilingApi -) extsystem__Jpo: 意見書・手続補正書の提出
+    api__ResponseFilingApi -->> screen__ResponseDraftScreen: done
+  else guard fails
+    api__ResponseFilingApi -->> screen__ResponseDraftScreen: rejected
+  end

@@ -1,0 +1,21 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordRegistration model=samples/patent-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant screen__FeePaymentScreen as 特許料納付画面
+  participant api__RegistrationApi as 設定登録 API
+  participant entity__PatentApplication as 特許出願
+  participant entity__Patent as 特許権
+  actor__IpStaff ->> screen__FeePaymentScreen: 設定登録の記録
+  extsystem__Jpo ->> api__RegistrationApi: 設定登録
+  screen__FeePaymentScreen ->> api__RegistrationApi: 設定登録 API
+  alt 第1〜3年分の特許料を納付している: PatentApplication.status == 特許査定, PatentApplication.first_fees_paid == true
+    Note over api__RegistrationApi: transaction (API atomic boundary)
+    api__RegistrationApi ->> entity__PatentApplication: update status 特許査定 -> 設定登録済
+    api__RegistrationApi ->> entity__Patent: create next_year_paid=true
+    api__RegistrationApi -->> screen__FeePaymentScreen: done
+  else guard fails
+    api__RegistrationApi -->> screen__FeePaymentScreen: rejected
+  end

@@ -1,0 +1,23 @@
+%% rdra-ish diagram=state scope=entity:InventorReward model=samples/patent-ops
+%% kinds: statemodel state usecase
+%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "InventorReward.status" as statemodel__InventorReward_status {
+    [*] --> state__InventorReward_decided
+    state "決定" as state__InventorReward_decided
+    state "通知済" as state__InventorReward_notified
+    state "意見の申出あり" as state__InventorReward_objected
+    state "支払済" as state__InventorReward_paid
+    %% transition usecase__NotifyReward
+    state__InventorReward_decided --> state__InventorReward_notified : 発明者への通知
+    %% transition usecase__RecordInventorOpinion
+    state__InventorReward_notified --> state__InventorReward_objected : 発明者の意見の申出
+    %% transition usecase__PayReward
+    state__InventorReward_notified --> state__InventorReward_paid : 相当の利益の支払
+    %% transition usecase__AnswerInventorOpinion
+    state__InventorReward_objected --> state__InventorReward_notified : 意見への回答
+    state__InventorReward_paid --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__InventorReward_paid stateend

@@ -1,0 +1,39 @@
+%% rdra-ish diagram=screen scope=whole model=samples/patent-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__AnnuityScreen["年金管理画面"]:::screen
+  screen__ApplicationDocketScreen["出願案件・期限管理画面"]:::screen
+  screen__DecisionScreen["査定画面"]:::screen
+  screen__DisclosureFormScreen["発明届出書画面"]:::screen
+  screen__DisclosureReviewScreen["届出受付画面"]:::screen
+  screen__DraftReviewScreen["出願書類レビュー画面"]:::screen
+  screen__DraftingOrderScreen["出願依頼画面"]:::screen
+  screen__ExaminationRequestScreen["審査請求画面"]:::screen
+  screen__FeePaymentScreen["特許料納付画面"]:::screen
+  screen__FilingDecisionScreen["出願審議画面"]:::screen
+  screen__FilingScreen["出願画面"]:::screen
+  screen__MaintenanceReviewScreen["権利維持要否画面"]:::screen
+  screen__OfficeActionScreen["中間処理画面"]:::screen
+  screen__PriorArtSearchScreen["先行技術調査画面"]:::screen
+  screen__ResponseDraftScreen["応答案画面"]:::screen
+  screen__RewardScreen["相当の利益画面"]:::screen
+  screen__DisclosureFormScreen -->|発明届出書の提出| screen__DisclosureReviewScreen
+  screen__DisclosureReviewScreen -->|届出書の差戻し| screen__DisclosureFormScreen
+  screen__DraftingOrderScreen -->|特許事務所への出願依頼| screen__DraftReviewScreen
+  screen__FilingScreen -->|電子出願| screen__ApplicationDocketScreen
+  screen__MaintenanceReviewScreen -->|権利維持要否の調査| screen__AnnuityScreen
+  screen__OfficeActionScreen -->|応答方針の指示| screen__ResponseDraftScreen
+  screen__OfficeActionScreen -->|拒絶査定の受領| screen__DecisionScreen
+  screen__PriorArtSearchScreen -->|先行技術調査の結果の登録| screen__FilingDecisionScreen
+  screen__ResponseDraftScreen -->|意見書・補正書の提出| screen__OfficeActionScreen
+  %% via screen__DisclosureFormScreen -> screen__DisclosureReviewScreen usecase__SubmitInventionDisclosure
+  %% via screen__DisclosureReviewScreen -> screen__DisclosureFormScreen usecase__ReturnDisclosure
+  %% via screen__DraftingOrderScreen -> screen__DraftReviewScreen usecase__RequestDrafting
+  %% via screen__FilingScreen -> screen__ApplicationDocketScreen usecase__FileApplication
+  %% via screen__MaintenanceReviewScreen -> screen__AnnuityScreen usecase__ReviewMaintenance
+  %% via screen__OfficeActionScreen -> screen__DecisionScreen usecase__ReceiveDecisionOfRejection
+  %% via screen__OfficeActionScreen -> screen__ResponseDraftScreen usecase__InstructResponse
+  %% via screen__PriorArtSearchScreen -> screen__FilingDecisionScreen usecase__RecordPriorArtSearch
+  %% via screen__ResponseDraftScreen -> screen__OfficeActionScreen usecase__FileResponse
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

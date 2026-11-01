@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:RequestFeePaymentExtension model=samples/patent-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant screen__FeePaymentScreen as 特許料納付画面
+  participant api__FeePaymentApi as 特許料納付 API
+  participant entity__FeeSchedule as 料金表
+  participant entity__PatentApplication as 特許出願
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__IpStaff ->> screen__FeePaymentScreen: 納付期間の延長請求
+  screen__FeePaymentScreen ->> api__FeePaymentApi: 特許料納付 API
+  alt 特許査定を受けた出願である: PatentApplication.status == 特許査定 and 納付期間をまだ延長していない: PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false
+    api__FeePaymentApi ->> entity__FeeSchedule: read
+    api__FeePaymentApi ->> entity__PatentApplication: update fee_period_extended=true
+    api__FeePaymentApi -) extsystem__Jpo: 期間延長請求書の提出
+    api__FeePaymentApi -->> screen__FeePaymentScreen: done
+  else guard fails
+    api__FeePaymentApi -->> screen__FeePaymentScreen: rejected
+  end

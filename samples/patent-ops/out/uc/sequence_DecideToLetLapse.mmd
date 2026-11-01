@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:DecideToLetLapse model=samples/patent-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant screen__MaintenanceReviewScreen as 権利維持要否画面
+  participant api__MaintenanceApi as 権利維持 API
+  participant entity__Patent as 特許権
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 権利を維持しない決定
+  screen__MaintenanceReviewScreen ->> api__MaintenanceApi: 権利維持 API
+  alt 特許権が存続している: Patent.status == 存続中
+    api__MaintenanceApi ->> entity__Patent: update maintain=false
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: done
+  else guard fails
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: rejected
+  end

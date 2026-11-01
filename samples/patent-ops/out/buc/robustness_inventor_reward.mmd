@@ -1,0 +1,28 @@
+%% rdra-ish diagram=robustness scope=buc:BucInventorReward model=samples/patent-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__Inventor(["発明者"]):::actor
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  screen__RewardScreen["相当の利益画面"]:::screen
+  api__OpinionApi{{"意見の申出 API"}}:::api
+  api__RewardApi{{"相当の利益 API"}}:::api
+  entity__InventionDisclosure[("発明届出")]:::entity
+  entity__InventorReward[("相当の利益")]:::entity
+  actor__Inventor --> screen__RewardScreen
+  actor__IpStaff --> screen__RewardScreen
+  api__OpinionApi -->|U| entity__InventorReward
+  api__RewardApi -->|C| entity__InventorReward
+  api__RewardApi -->|R| entity__InventionDisclosure
+  extsystem__Jpo -.->|設定登録| api__RewardApi
+  screen__RewardScreen -->|意見への回答| api__OpinionApi
+  screen__RewardScreen -->|発明者の意見の申出| api__OpinionApi
+  screen__RewardScreen -->|発明者への通知| api__OpinionApi
+  screen__RewardScreen -->|相当の利益の支払| api__OpinionApi
+  screen__RewardScreen -->|相当の利益の決定| api__RewardApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,65 @@
+%% rdra-ish diagram=state scope=entity:PatentApplication model=samples/patent-ops
+%% kinds: statemodel state usecase
+%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "PatentApplication.status" as statemodel__PatentApplication_status {
+    [*] --> state__PatentApplication_filed
+    state "出願済（方式審査）" as state__PatentApplication_filed
+    state "手続補正指令への対応中" as state__PatentApplication_formality_order
+    state "審査請求済（審査中）" as state__PatentApplication_examining
+    state "特許査定" as state__PatentApplication_granted
+    state "拒絶査定" as state__PatentApplication_rejected
+    state "拒絶査定の確定" as state__PatentApplication_rejection_final
+    state "拒絶査定不服審判を請求" as state__PatentApplication_appealed
+    state "設定登録済" as state__PatentApplication_registered
+    state "却下" as state__PatentApplication_dismissed
+    state "取下げ擬制（審査請求なし）" as state__PatentApplication_deemed_withdrawn
+    state "取下げ擬制（国内優先権の基礎）" as state__PatentApplication_priority_withdrawn
+    state "取下げ・放棄" as state__PatentApplication_withdrawn
+    %% transition usecase__ReceiveFormalityOrder
+    state__PatentApplication_filed --> state__PatentApplication_formality_order : 手続補正指令書の受領
+    %% transition usecase__RequestExamination
+    state__PatentApplication_filed --> state__PatentApplication_examining : 出願審査の請求
+    %% transition usecase__DeemWithdrawnNoRequest
+    state__PatentApplication_filed --> state__PatentApplication_deemed_withdrawn : 審査請求期間の経過
+    %% transition usecase__DeemPriorityBaseWithdrawn
+    state__PatentApplication_filed --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされた出願である]
+    %% transition usecase__WithdrawApplication
+    state__PatentApplication_filed --> state__PatentApplication_withdrawn : 出願の取下げ・放棄
+    %% transition usecase__SubmitFormalityAmendment
+    state__PatentApplication_formality_order --> state__PatentApplication_filed : 手続補正書の提出
+    %% transition usecase__RecordDismissal
+    state__PatentApplication_formality_order --> state__PatentApplication_dismissed : 出願の却下の記録
+    %% transition usecase__ReceiveDecisionToGrant
+    state__PatentApplication_examining --> state__PatentApplication_granted : 特許査定の受領
+    %% transition usecase__ReceiveDecisionOfRejection
+    state__PatentApplication_examining --> state__PatentApplication_rejected : 拒絶査定の受領
+    %% transition usecase__DeemPriorityBaseWithdrawn
+    state__PatentApplication_examining --> state__PatentApplication_priority_withdrawn : 先の出願の取下げ擬制 [国内優先権の基礎とされた出願である]
+    %% transition usecase__WithdrawApplication
+    state__PatentApplication_examining --> state__PatentApplication_withdrawn : 出願の取下げ・放棄
+    %% transition usecase__RecordRegistration
+    state__PatentApplication_granted --> state__PatentApplication_registered : 設定登録の記録 [第1〜3年分の特許料を納付している]
+    %% transition usecase__RecordRegistrationDismissal
+    state__PatentApplication_granted --> state__PatentApplication_dismissed : 特許料の不納による却下の記録 [第1〜3年分の特許料を納付していない]
+    %% transition usecase__FinalizeRejection
+    state__PatentApplication_rejected --> state__PatentApplication_rejection_final : 拒絶査定の確定
+    %% transition usecase__RequestAppeal
+    state__PatentApplication_rejected --> state__PatentApplication_appealed : 拒絶査定不服審判の請求
+    %% transition usecase__RestoreExaminationRequest
+    state__PatentApplication_deemed_withdrawn --> state__PatentApplication_examining : 審査請求の回復
+    state__PatentApplication_rejection_final --> [*]
+    state__PatentApplication_appealed --> [*]
+    state__PatentApplication_registered --> [*]
+    state__PatentApplication_dismissed --> [*]
+    state__PatentApplication_priority_withdrawn --> [*]
+    state__PatentApplication_withdrawn --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__PatentApplication_rejection_final stateend
+  class state__PatentApplication_appealed stateend
+  class state__PatentApplication_registered stateend
+  class state__PatentApplication_dismissed stateend
+  class state__PatentApplication_priority_withdrawn stateend
+  class state__PatentApplication_withdrawn stateend

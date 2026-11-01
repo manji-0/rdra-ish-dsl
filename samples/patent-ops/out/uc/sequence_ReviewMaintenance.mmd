@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReviewMaintenance model=samples/patent-ops
+%% kinds: actor timer screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__MaintenanceReview as 権利維持要否の調査（登録後3年目・6年目）
+  participant screen__MaintenanceReviewScreen as 権利維持要否画面
+  participant usecase__ReviewMaintenance as 権利維持要否の調査
+  participant entity__Patent as 特許権
+  participant entity__InventionDisclosure as 発明届出
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 権利維持要否の調査
+  timer__MaintenanceReview ->> usecase__ReviewMaintenance: 権利維持要否の調査（登録後3年目・6年目）
+  screen__MaintenanceReviewScreen ->> usecase__ReviewMaintenance: 権利維持要否の調査
+  usecase__ReviewMaintenance ->> entity__Patent: read
+  usecase__ReviewMaintenance ->> entity__InventionDisclosure: read
+  usecase__ReviewMaintenance -->> screen__MaintenanceReviewScreen: done

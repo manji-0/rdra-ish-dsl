@@ -1,0 +1,127 @@
+%% rdra-ish diagram=usecase scope=buc:BucAnnuity model=samples/patent-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__AnnuityDueDate(("第4年以後の特許料の納付期限（前年以前）")):::timer
+    timer__LatePaymentDeadline(("追納期限（納付期限の経過から6月）")):::timer
+    timer__MaintenanceReview(("権利維持要否の調査（登録後3年目・6年目）")):::timer
+    timer__TermExpiry(("存続期間の満了（出願から20年）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AbandonPatent("特許権の放棄"):::usecase
+    %% desc usecase__AbandonPatent: 特許権を放棄する。専用実施権者・質権者があればその承諾を得る。
+    usecase__DecideToLetLapse("権利を維持しない決定"):::usecase
+    %% desc usecase__DecideToLetLapse: 維持しないと決め、以後の年金を納めない。
+    usecase__EnterGracePeriod("納付期限の経過"):::usecase
+    %% desc usecase__EnterGracePeriod: 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。
+    usecase__ExpirePatentTerm("存続期間の満了"):::usecase
+    %% desc usecase__ExpirePatentTerm: 出願から20年で特許権の存続期間が満了したことを記録する。
+    usecase__LapseUnpaidPatent("追納期間の経過による消滅"):::usecase
+    %% desc usecase__LapseUnpaidPatent: 追納期間が過ぎ、特許権が納付期限の経過の時に遡って消滅したことを記録する。
+    usecase__PayAnnuity("年金の納付"):::usecase
+    %% desc usecase__PayAnnuity: 次の年の特許料を納付期限までに納付する。
+    usecase__PayLateAnnuity("追納"):::usecase
+    %% desc usecase__PayLateAnnuity: 追納期間内に、特許料と同額の割増特許料を納付する。
+    usecase__RestorePatent("特許権の回復"):::usecase
+    %% desc usecase__RestorePatent: 納付しなかったことが故意でないとき、特許料と割増特許料を納めて特許権を回復する。
+    usecase__ReviewMaintenance("権利維持要否の調査"):::usecase
+    %% desc usecase__ReviewMaintenance: 発明者と事業部門に権利の活用状況を聞き、維持の要否を調べる（参照のみ）。
+    usecase__RollOverAnnuityYear("納付年度の更新"):::usecase
+    %% desc usecase__RollOverAnnuityYear: 納付済の年が始まり、次の年の特許料が未納になる。
+    screen__AnnuityScreen["年金管理画面"]:::screen
+    screen__MaintenanceReviewScreen["権利維持要否画面"]:::screen
+    event__EvFeesPaid>"特許料の納付"]:::event
+    event__EvRestorationRequested>"回復の手続"]:::event
+    event__EvWithdrawalFiled>"取下書・放棄書の提出"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__FeeSchedule[("料金表")]:::entity
+    entity__InventionDisclosure[("発明届出")]:::entity
+    entity__Patent[("特許権")]:::entity
+    state__Patent_abandoned((("放棄"))):::state
+    state__Patent_expired((("存続期間満了"))):::state
+    state__Patent_grace((("追納期間中"))):::state
+    state__Patent_in_force((("存続中"))):::state
+    state__Patent_lapsed((("消滅（特許料の不納）"))):::state
+    condition__AnnuityDue{"存続中で、維持すると決めた権利の次の年が未納"}:::condition
+    condition__InForce{"特許権が存続している"}:::condition
+    condition__KeptRight{"維持すると決めた権利である"}:::condition
+    condition__YearPaid{"存続中で、次の年が納付済"}:::condition
+    condition__YearUnpaid{"次の年が未納"}:::condition
+  end
+  actor__IpStaff -.-> usecase__AbandonPatent
+  actor__IpStaff -.-> usecase__DecideToLetLapse
+  actor__IpStaff -.-> usecase__PayAnnuity
+  actor__IpStaff -.-> usecase__PayLateAnnuity
+  actor__IpStaff -.-> usecase__RestorePatent
+  actor__IpStaff -.-> usecase__ReviewMaintenance
+  condition__AnnuityDue -.-> usecase__PayAnnuity
+  condition__InForce -.-> usecase__DecideToLetLapse
+  condition__KeptRight -.-> usecase__PayLateAnnuity
+  condition__YearPaid -.-> usecase__RollOverAnnuityYear
+  condition__YearUnpaid -.-> usecase__EnterGracePeriod
+  event__EvFeesPaid -.-> extsystem__Jpo
+  event__EvRestorationRequested -.-> extsystem__Jpo
+  event__EvWithdrawalFiled -.-> extsystem__Jpo
+  timer__AnnuityDueDate -.-> usecase__EnterGracePeriod
+  timer__AnnuityDueDate -.-> usecase__PayAnnuity
+  timer__AnnuityDueDate -.-> usecase__RollOverAnnuityYear
+  timer__LatePaymentDeadline -.-> usecase__LapseUnpaidPatent
+  timer__LatePaymentDeadline -.-> usecase__PayLateAnnuity
+  timer__MaintenanceReview -.-> usecase__ReviewMaintenance
+  timer__TermExpiry -.-> usecase__ExpirePatentTerm
+  usecase__AbandonPatent -.-> screen__MaintenanceReviewScreen
+  usecase__AbandonPatent -.-> event__EvWithdrawalFiled
+  usecase__AbandonPatent -.->|transitions Patent.status in_force->abandoned| state__Patent_abandoned
+  usecase__AbandonPatent -.->|updates| entity__Patent
+  %% derived usecase__AbandonPatent -> entity__Patent via api__MaintenanceApi
+  usecase__DecideToLetLapse -.-> screen__MaintenanceReviewScreen
+  usecase__DecideToLetLapse -.->|updates| entity__Patent
+  %% derived usecase__DecideToLetLapse -> entity__Patent via api__MaintenanceApi
+  usecase__EnterGracePeriod -.->|transitions Patent.status in_force->grace| state__Patent_grace
+  usecase__EnterGracePeriod -.->|updates| entity__Patent
+  usecase__ExpirePatentTerm -.->|transitions Patent.status grace->expired| state__Patent_expired
+  usecase__ExpirePatentTerm -.->|transitions Patent.status in_force->expired| state__Patent_expired
+  usecase__ExpirePatentTerm -.->|updates| entity__Patent
+  usecase__LapseUnpaidPatent -.->|transitions Patent.status grace->lapsed| state__Patent_lapsed
+  usecase__LapseUnpaidPatent -.->|updates| entity__Patent
+  usecase__PayAnnuity -.-> screen__AnnuityScreen
+  usecase__PayAnnuity -.-> event__EvFeesPaid
+  usecase__PayAnnuity -.->|reads| entity__FeeSchedule
+  %% derived usecase__PayAnnuity -> entity__FeeSchedule via api__AnnuityApi
+  usecase__PayAnnuity -.->|updates| entity__Patent
+  %% derived usecase__PayAnnuity -> entity__Patent via api__AnnuityApi
+  usecase__PayLateAnnuity -.-> screen__AnnuityScreen
+  usecase__PayLateAnnuity -.-> event__EvFeesPaid
+  usecase__PayLateAnnuity -.->|reads| entity__FeeSchedule
+  %% derived usecase__PayLateAnnuity -> entity__FeeSchedule via api__AnnuityApi
+  usecase__PayLateAnnuity -.->|transitions Patent.status grace->in_force| state__Patent_in_force
+  usecase__PayLateAnnuity -.->|updates| entity__Patent
+  %% derived usecase__PayLateAnnuity -> entity__Patent via api__AnnuityApi
+  usecase__RestorePatent -.-> screen__AnnuityScreen
+  usecase__RestorePatent -.-> event__EvRestorationRequested
+  usecase__RestorePatent -.->|reads| entity__FeeSchedule
+  %% derived usecase__RestorePatent -> entity__FeeSchedule via api__AnnuityApi
+  usecase__RestorePatent -.->|transitions Patent.status lapsed->in_force| state__Patent_in_force
+  usecase__RestorePatent -.->|updates| entity__Patent
+  %% derived usecase__RestorePatent -> entity__Patent via api__AnnuityApi
+  usecase__ReviewMaintenance -.-> screen__MaintenanceReviewScreen
+  usecase__ReviewMaintenance -.->|reads| entity__InventionDisclosure
+  usecase__ReviewMaintenance -.->|reads| entity__Patent
+  usecase__RollOverAnnuityYear -.->|updates| entity__Patent
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

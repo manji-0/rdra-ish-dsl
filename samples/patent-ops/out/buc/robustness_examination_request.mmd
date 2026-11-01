@@ -1,0 +1,42 @@
+%% rdra-ish diagram=robustness scope=buc:BucExaminationRequest model=samples/patent-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+  extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  screen__ExaminationRequestScreen["審査請求画面"]:::screen
+  timer__ExamRequestDeadline(("審査請求期限（出願から3年）")):::timer
+  timer__ExamRequestReview(("審査請求要否の検討（審査請求期限の前）")):::timer
+  api__ExaminationRequestApi{{"審査請求 API"}}:::api
+  api__WithdrawalApi{{"取下げ・放棄 API"}}:::api
+  usecase__DecideExaminationRequest("審査請求要否の判断"):::usecase
+  usecase__DeemWithdrawnNoRequest("審査請求期間の経過"):::usecase
+  entity__FeeSchedule[("料金表")]:::entity
+  entity__PatentApplication[("特許出願")]:::entity
+  actor__IpStaff --> screen__ExaminationRequestScreen
+  actor__PatentAttorney --> screen__ExaminationRequestScreen
+  api__ExaminationRequestApi -->|R| entity__FeeSchedule
+  api__ExaminationRequestApi -->|U| entity__PatentApplication
+  api__ExaminationRequestApi -.->|出願審査請求書の提出| extsystem__Jpo
+  api__ExaminationRequestApi -.->|回復の手続| extsystem__Jpo
+  api__ExaminationRequestApi -.->|早期審査に関する事情説明書の提出| extsystem__Jpo
+  api__WithdrawalApi -->|U| entity__PatentApplication
+  api__WithdrawalApi -.->|取下書・放棄書の提出| extsystem__Jpo
+  screen__ExaminationRequestScreen -->|出願の取下げ・放棄| api__WithdrawalApi
+  screen__ExaminationRequestScreen -->|出願審査の請求| api__ExaminationRequestApi
+  screen__ExaminationRequestScreen -->|審査請求の回復| api__ExaminationRequestApi
+  screen__ExaminationRequestScreen -->|審査請求要否の判断| usecase__DecideExaminationRequest
+  screen__ExaminationRequestScreen -->|早期審査の申出| api__ExaminationRequestApi
+  timer__ExamRequestDeadline -.->|審査請求期限（出願から3年）| api__ExaminationRequestApi
+  timer__ExamRequestDeadline -.->|審査請求期限（出願から3年）| usecase__DeemWithdrawnNoRequest
+  timer__ExamRequestReview -.->|審査請求要否の検討（審査請求期限の前）| usecase__DecideExaminationRequest
+  usecase__DecideExaminationRequest -->|R| entity__PatentApplication
+  usecase__DeemWithdrawnNoRequest -->|U| entity__PatentApplication
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

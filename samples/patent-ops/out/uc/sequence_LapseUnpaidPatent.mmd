@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:LapseUnpaidPatent model=samples/patent-ops
+%% kinds: timer usecase entity
+%% omitted: buc step
+sequenceDiagram
+  participant timer__LatePaymentDeadline as 追納期限（納付期限の経過から6月）
+  participant usecase__LapseUnpaidPatent as 追納期間の経過による消滅
+  participant entity__Patent as 特許権
+  timer__LatePaymentDeadline ->> usecase__LapseUnpaidPatent: 追納期限（納付期限の経過から6月）
+  alt Patent.status == 追納期間中
+    usecase__LapseUnpaidPatent ->> entity__Patent: update status 追納期間中 -> 消滅（特許料の不納）
+    usecase__LapseUnpaidPatent -->> timer__LatePaymentDeadline: done
+  else guard fails
+    usecase__LapseUnpaidPatent -->> timer__LatePaymentDeadline: rejected
+  end

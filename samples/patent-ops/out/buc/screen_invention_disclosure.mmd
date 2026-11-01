@@ -1,0 +1,11 @@
+%% rdra-ish diagram=screen scope=buc:BucInventionDisclosure model=samples/patent-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__DisclosureFormScreen["発明届出書画面"]:::screen
+  screen__DisclosureReviewScreen["届出受付画面"]:::screen
+  screen__DisclosureFormScreen -->|発明届出書の提出| screen__DisclosureReviewScreen
+  screen__DisclosureReviewScreen -->|届出書の差戻し| screen__DisclosureFormScreen
+  %% via screen__DisclosureFormScreen -> screen__DisclosureReviewScreen usecase__SubmitInventionDisclosure
+  %% via screen__DisclosureReviewScreen -> screen__DisclosureFormScreen usecase__ReturnDisclosure
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

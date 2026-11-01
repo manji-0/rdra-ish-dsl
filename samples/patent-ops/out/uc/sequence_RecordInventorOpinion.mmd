@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordInventorOpinion model=samples/patent-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Inventor as 発明者
+  participant screen__RewardScreen as 相当の利益画面
+  participant api__OpinionApi as 意見の申出 API
+  participant entity__InventorReward as 相当の利益
+  actor__Inventor ->> screen__RewardScreen: 発明者の意見の申出
+  screen__RewardScreen ->> api__OpinionApi: 意見の申出 API
+  alt InventorReward.status == 通知済
+    api__OpinionApi ->> entity__InventorReward: update status 通知済 -> 意見の申出あり
+    api__OpinionApi -->> screen__RewardScreen: done
+  else guard fails
+    api__OpinionApi -->> screen__RewardScreen: rejected
+  end

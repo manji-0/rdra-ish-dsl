@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:SubmitFormalityAmendment model=samples/patent-ops
+%% kinds: actor timer screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant timer__FormalityAmendmentDeadline as 手続補正書の提出期限（指令書の発送日から2月）
+  participant screen__ApplicationDocketScreen as 出願案件・期限管理画面
+  participant api__FormalityApi as 方式補正 API
+  participant entity__PatentApplication as 特許出願
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__PatentAttorney ->> screen__ApplicationDocketScreen: 手続補正書の提出
+  timer__FormalityAmendmentDeadline ->> api__FormalityApi: 手続補正書の提出期限（指令書の発送日から2月）
+  screen__ApplicationDocketScreen ->> api__FormalityApi: 方式補正 API
+  alt PatentApplication.status == 手続補正指令への対応中
+    api__FormalityApi ->> entity__PatentApplication: update status 手続補正指令への対応中 -> 出願済（方式審査）
+    api__FormalityApi -) extsystem__Jpo: 手続補正書の提出
+    api__FormalityApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__FormalityApi -->> screen__ApplicationDocketScreen: rejected
+  end

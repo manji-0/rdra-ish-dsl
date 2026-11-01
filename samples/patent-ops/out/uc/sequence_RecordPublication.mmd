@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordPublication model=samples/patent-ops
+%% kinds: actor extsystem timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant timer__PublicationCheck as 出願公開の確認（出願から1年6月）
+  participant screen__ApplicationDocketScreen as 出願案件・期限管理画面
+  participant api__ApplicationDocketApi as 出願案件 API
+  participant entity__PatentApplication as 特許出願
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願公開の記録
+  extsystem__Jpo ->> api__ApplicationDocketApi: 出願公開
+  timer__PublicationCheck ->> api__ApplicationDocketApi: 出願公開の確認（出願から1年6月）
+  screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
+  alt 出願が係属している: PatentApplication.status != 却下, PatentApplication.status != 取下げ・放棄, PatentApplication.status != 取下げ擬制（審査請求なし）, PatentApplication.status != 取下げ擬制（国内優先権の基礎）, PatentApplication.status != 設定登録済
+    api__ApplicationDocketApi ->> entity__PatentApplication: update published_at=set
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: rejected
+  end

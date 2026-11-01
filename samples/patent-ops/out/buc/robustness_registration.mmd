@@ -1,0 +1,36 @@
+%% rdra-ish diagram=robustness scope=buc:BucRegistration model=samples/patent-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  screen__FeePaymentScreen["特許料納付画面"]:::screen
+  timer__FirstFeeDeadline(("第1〜3年分の特許料の納付期限（査定謄本の送達から30日）")):::timer
+  api__FeePaymentApi{{"特許料納付 API"}}:::api
+  api__RegistrationApi{{"設定登録 API"}}:::api
+  usecase__RecordRegistrationDismissal("特許料の不納による却下の記録"):::usecase
+  entity__FeeSchedule[("料金表")]:::entity
+  entity__Patent[("特許権")]:::entity
+  entity__PatentApplication[("特許出願")]:::entity
+  actor__IpStaff --> screen__FeePaymentScreen
+  api__FeePaymentApi -->|R| entity__FeeSchedule
+  api__FeePaymentApi -->|U| entity__PatentApplication
+  api__FeePaymentApi -.->|期間延長請求書の提出| extsystem__Jpo
+  api__FeePaymentApi -.->|特許料の納付| extsystem__Jpo
+  api__RegistrationApi -->|C| entity__Patent
+  api__RegistrationApi -->|U| entity__PatentApplication
+  extsystem__Jpo -.->|特許料の不納による却下| usecase__RecordRegistrationDismissal
+  extsystem__Jpo -.->|設定登録| api__RegistrationApi
+  screen__FeePaymentScreen -->|特許料の不納による却下の記録| usecase__RecordRegistrationDismissal
+  screen__FeePaymentScreen -->|第1〜3年分の特許料の納付| api__FeePaymentApi
+  screen__FeePaymentScreen -->|納付期間の延長請求| api__FeePaymentApi
+  screen__FeePaymentScreen -->|設定登録の記録| api__RegistrationApi
+  timer__FirstFeeDeadline -.->|第1〜3年分の特許料の納付期限（査定謄本の送達から30日）| api__FeePaymentApi
+  usecase__RecordRegistrationDismissal -->|U| entity__PatentApplication
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

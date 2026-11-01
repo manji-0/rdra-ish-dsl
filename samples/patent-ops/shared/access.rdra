@@ -1,0 +1,24 @@
+module shared.access
+
+import shared.actors
+import shared.biz
+
+has_permission(Inventor, DisclosureSubmit)
+has_permission(Inventor, DraftConfirm)
+has_permission(Inventor, OpinionSubmit)
+
+has_permission(IpStaff, DisclosureReview)
+has_permission(IpStaff, RightsJudge)
+has_permission(IpStaff, PriorArtSearchManage)
+has_permission(IpStaff, DraftingManage)
+has_permission(IpStaff, DocketManage)
+has_permission(IpStaff, FeePay)
+has_permission(IpStaff, MaintenanceDecide)
+has_permission(IpStaff, RewardManage)
+
+has_permission(ReviewCommittee, FilingDecide)
+
+// The attorney files and answers as the company's 代理人, so the 特許庁 procedures are its own; the
+// IP department pays the fees itself (the model's assumption: many companies pay through the firm).
+has_permission(PatentAttorney, DraftWrite)
+has_permission(PatentAttorney, JpoProcedure)

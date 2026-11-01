@@ -1,0 +1,75 @@
+%% rdra-ish diagram=usecase scope=buc:BucInventorReward model=samples/patent-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Inventor(["発明者"]):::actor
+    %% desc actor__Inventor: 職務として発明をした従業者。発明届出書を出し、出願書類の内容を確かめ、相当の利益について意見を述べる。
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AnswerInventorOpinion("意見への回答"):::usecase
+    %% desc usecase__AnswerInventorOpinion: 発明者の意見に回答し、必要なら額を見直して通知し直す。
+    usecase__DecideReward("相当の利益の決定"):::usecase
+    %% desc usecase__DecideReward: 職務発明規程の基準で、職務発明の相当の利益を決める。
+    usecase__NotifyReward("発明者への通知"):::usecase
+    %% desc usecase__NotifyReward: 決めた相当の利益と基準を発明者に知らせる。
+    usecase__PayReward("相当の利益の支払"):::usecase
+    %% desc usecase__PayReward: 通知した相当の利益を支払う。
+    usecase__RecordInventorOpinion("発明者の意見の申出"):::usecase
+    %% desc usecase__RecordInventorOpinion: 発明者が相当の利益について意見（質問・不服を含む）を出す。
+    screen__RewardScreen["相当の利益画面"]:::screen
+    event__EvApplicationFiled>"特許願の提出"]:::event
+    event__EvRegistered>"設定登録"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__InventionDisclosure[("発明届出")]:::entity
+    entity__InventorReward[("相当の利益")]:::entity
+    state__InventorReward_decided((("決定"))):::state
+    state__InventorReward_notified((("通知済"))):::state
+    state__InventorReward_objected((("意見の申出あり"))):::state
+    state__InventorReward_paid((("支払済"))):::state
+    condition__EmployeeInventionReward{"職務発明である"}:::condition
+  end
+  actor__Inventor -.-> usecase__RecordInventorOpinion
+  actor__IpStaff -.-> usecase__AnswerInventorOpinion
+  actor__IpStaff -.-> usecase__DecideReward
+  actor__IpStaff -.-> usecase__NotifyReward
+  actor__IpStaff -.-> usecase__PayReward
+  condition__EmployeeInventionReward -.-> usecase__DecideReward
+  event__EvApplicationFiled -.-> extsystem__Jpo
+  event__EvApplicationFiled -.-> usecase__DecideReward
+  event__EvRegistered -.-> usecase__DecideReward
+  extsystem__Jpo -.-> event__EvRegistered
+  usecase__AnswerInventorOpinion -.-> screen__RewardScreen
+  usecase__AnswerInventorOpinion -.->|transitions InventorReward.status objected->notified| state__InventorReward_notified
+  usecase__AnswerInventorOpinion -.->|updates| entity__InventorReward
+  %% derived usecase__AnswerInventorOpinion -> entity__InventorReward via api__OpinionApi
+  usecase__DecideReward -.->|creates| entity__InventorReward
+  %% derived usecase__DecideReward -> entity__InventorReward via api__RewardApi
+  usecase__DecideReward -.-> screen__RewardScreen
+  usecase__DecideReward -.->|reads| entity__InventionDisclosure
+  %% derived usecase__DecideReward -> entity__InventionDisclosure via api__RewardApi
+  usecase__NotifyReward -.-> screen__RewardScreen
+  usecase__NotifyReward -.->|transitions InventorReward.status decided->notified| state__InventorReward_notified
+  usecase__NotifyReward -.->|updates| entity__InventorReward
+  %% derived usecase__NotifyReward -> entity__InventorReward via api__OpinionApi
+  usecase__PayReward -.-> screen__RewardScreen
+  usecase__PayReward -.->|transitions InventorReward.status notified->paid| state__InventorReward_paid
+  usecase__PayReward -.->|updates| entity__InventorReward
+  %% derived usecase__PayReward -> entity__InventorReward via api__OpinionApi
+  usecase__RecordInventorOpinion -.-> screen__RewardScreen
+  usecase__RecordInventorOpinion -.->|transitions InventorReward.status notified->objected| state__InventorReward_objected
+  usecase__RecordInventorOpinion -.->|updates| entity__InventorReward
+  %% derived usecase__RecordInventorOpinion -> entity__InventorReward via api__OpinionApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

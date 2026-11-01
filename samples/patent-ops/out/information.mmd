@@ -1,0 +1,47 @@
+%% rdra-ish diagram=information scope=whole model=samples/patent-ops
+%% kinds: entity statemodel variation
+%% omitted: columns adr constraint usecase field api condition
+flowchart LR
+  entity__DivisionalFiling[("分割出願")]:::entity
+  entity__DraftingOrder[("出願依頼")]:::entity
+  entity__Employee[("従業者")]:::entity
+  entity__FeeSchedule[("料金表")]:::entity
+  entity__InventionDisclosure[("発明届出")]:::entity
+  entity__InventorReward[("相当の利益")]:::entity
+  entity__OfficeAction[("拒絶理由通知")]:::entity
+  entity__Patent[("特許権")]:::entity
+  entity__PatentApplication[("特許出願")]:::entity
+  entity__PatentFirm[("特許事務所")]:::entity
+  entity__PriorityClaim[("国内優先権の主張")]:::entity
+  statemodel__DraftingOrder_status[["DraftingOrder.status"]]:::statemodel
+  statemodel__InventionDisclosure_status[["InventionDisclosure.status"]]:::statemodel
+  statemodel__InventorReward_status[["InventorReward.status"]]:::statemodel
+  statemodel__OfficeAction_status[["OfficeAction.status"]]:::statemodel
+  statemodel__PatentApplication_status[["PatentApplication.status"]]:::statemodel
+  statemodel__Patent_status[["Patent.status"]]:::statemodel
+  variation__AcceleratedGround[\"早期審査の事情"\]:::variation
+  variation__AmendmentScope[\"補正の範囲"\]:::variation
+  variation__InventionCategory[\"発明の区分"\]:::variation
+  variation__RewardOccasion[\"相当の利益の時期"\]:::variation
+  entity__DivisionalFiling ---|N:1| entity__PatentApplication
+  entity__DraftingOrder ---|N:1| entity__InventionDisclosure
+  entity__DraftingOrder ---|N:1| entity__PatentFirm
+  entity__DraftingOrder -.-> statemodel__DraftingOrder_status
+  entity__InventionDisclosure ---|N:1| entity__Employee
+  entity__InventionDisclosure -.-> statemodel__InventionDisclosure_status
+  entity__InventionDisclosure -.->|variation category| variation__InventionCategory
+  entity__InventorReward ---|N:1| entity__InventionDisclosure
+  entity__InventorReward -.-> statemodel__InventorReward_status
+  entity__InventorReward -.->|variation occasion| variation__RewardOccasion
+  entity__OfficeAction ---|N:1| entity__PatentApplication
+  entity__OfficeAction -.-> statemodel__OfficeAction_status
+  entity__OfficeAction -.->|variation amendment| variation__AmendmentScope
+  entity__Patent ---|1:1| entity__PatentApplication
+  entity__Patent -.-> statemodel__Patent_status
+  entity__PatentApplication ---|1:1| entity__DraftingOrder
+  entity__PatentApplication -.-> statemodel__PatentApplication_status
+  entity__PatentApplication -.->|variation accelerated_ground| variation__AcceleratedGround
+  entity__PriorityClaim ---|N:1| entity__PatentApplication
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;

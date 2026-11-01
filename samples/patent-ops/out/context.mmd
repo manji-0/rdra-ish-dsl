@@ -1,0 +1,29 @@
+%% rdra-ish diagram=context scope=whole model=samples/patent-ops
+%% kinds: actor extsystem system
+%% omitted: buc step permission usecase event
+flowchart LR
+  actor__Inventor(["発明者"]):::actor
+  %% desc actor__Inventor: 職務として発明をした従業者。発明届出書を出し、出願書類の内容を確かめ、相当の利益について意見を述べる。
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+  actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+  %% desc actor__PatentAttorney: 社外の特許事務所の弁理士。出願書類を作り、代理人として電子出願し、特許庁からの通知に応答する。
+  actor__ReviewCommittee(["発明審査委員会"]):::actor
+  %% desc actor__ReviewCommittee: 先行技術調査の結果を見て、発明を出願するか、ノウハウとして秘匿するか、出願しないかを決める。
+  extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  system__IpManagementSystem["知財管理システム"]:::system
+  actor__Inventor -.->|特許事務所への依頼と出願書類の作成、発明届出と権利の取得、相当の利益| system__IpManagementSystem
+  %% derived actor__Inventor -> system__IpManagementSystem via buc__BucApplicationDrafting,buc__BucInventionDisclosure,buc__BucInventorReward
+  actor__IpStaff -.->|年金管理と権利の維持、特許事務所への依頼と出願書類の作成、審査請求と早期審査、先行技術調査と出願可否の判断、出願と方式審査、発明届出と権利の取得、相当の利益、実体審査と中間処理、特許料の納付と設定登録| system__IpManagementSystem
+  %% derived actor__IpStaff -> system__IpManagementSystem via buc__BucAnnuity,buc__BucApplicationDrafting,buc__BucExaminationRequest,buc__BucFilingDecision,buc__BucFilingFormality,buc__BucInventionDisclosure,buc__BucInventorReward,buc__BucOfficeAction,buc__BucRegistration
+  actor__PatentAttorney -.->|特許事務所への依頼と出願書類の作成、審査請求と早期審査、出願と方式審査、実体審査と中間処理| system__IpManagementSystem
+  %% derived actor__PatentAttorney -> system__IpManagementSystem via buc__BucApplicationDrafting,buc__BucExaminationRequest,buc__BucFilingFormality,buc__BucOfficeAction
+  actor__ReviewCommittee -.->|先行技術調査と出願可否の判断| system__IpManagementSystem
+  %% derived actor__ReviewCommittee -> system__IpManagementSystem via buc__BucFilingDecision
+  extsystem__Jpo -.->|受領書（出願番号）、手続補正指令書（方式）、却下処分、出願公開、拒絶理由通知書、最後の拒絶理由通知書、特許査定の謄本、拒絶査定の謄本、設定登録、特許料の不納による却下| system__IpManagementSystem
+  %% derived extsystem__Jpo -> system__IpManagementSystem via event__EvApplicationDismissed,event__EvDecisionOfRejection,event__EvDecisionToGrant,event__EvFilingReceipt,event__EvFinalOfficeAction,event__EvFormalityOrder,event__EvOfficeAction,event__EvPublished,event__EvRegistered,event__EvRegistrationDismissed
+  system__IpManagementSystem -.->|出願審査請求書の提出、早期審査に関する事情説明書の提出、回復の手続、取下書・放棄書の提出、特許願の提出、手続補正書の提出、国内優先権を主張した出願、期間延長請求書の提出、意見書・手続補正書の提出、拒絶査定不服審判の請求、分割出願、特許料の納付| extsystem__Jpo
+  %% derived system__IpManagementSystem -> extsystem__Jpo via event__EvAcceleratedExamRequested,event__EvAppealRequested,event__EvApplicationFiled,event__EvDivisionalFiled,event__EvExaminationRequested,event__EvExtensionRequested,event__EvFeesPaid,event__EvFormalityAmendmentFiled,event__EvPriorityClaimed,event__EvResponseFiled,event__EvRestorationRequested,event__EvWithdrawalFiled
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;

@@ -1,0 +1,39 @@
+%% rdra-ish diagram=state scope=entity:InventionDisclosure model=samples/patent-ops
+%% kinds: statemodel state usecase
+%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "InventionDisclosure.status" as statemodel__InventionDisclosure_status {
+    [*] --> state__InventionDisclosure_submitted
+    state "受付待ち" as state__InventionDisclosure_submitted
+    state "差戻し" as state__InventionDisclosure_returned
+    state "受付済" as state__InventionDisclosure_accepted
+    state "先行技術調査中" as state__InventionDisclosure_searching
+    state "調査済" as state__InventionDisclosure_searched
+    state "出願決定" as state__InventionDisclosure_decided_file
+    state "ノウハウとして秘匿" as state__InventionDisclosure_decided_secret
+    state "出願しない" as state__InventionDisclosure_decided_abandon
+    %% transition usecase__ReturnDisclosure
+    state__InventionDisclosure_submitted --> state__InventionDisclosure_returned : 届出書の差戻し
+    %% transition usecase__AcceptDisclosure
+    state__InventionDisclosure_submitted --> state__InventionDisclosure_accepted : 届出の受付と付番
+    %% transition usecase__ResubmitDisclosure
+    state__InventionDisclosure_returned --> state__InventionDisclosure_submitted : 届出書の再提出
+    %% transition usecase__RequestPriorArtSearch
+    state__InventionDisclosure_accepted --> state__InventionDisclosure_searching : 先行技術調査の依頼
+    %% transition usecase__RecordPriorArtSearch
+    state__InventionDisclosure_searching --> state__InventionDisclosure_searched : 先行技術調査の結果の登録
+    %% transition usecase__DecideToFile
+    state__InventionDisclosure_searched --> state__InventionDisclosure_decided_file : 出願の決定 [会社が特許を受ける権利を取得している]
+    %% transition usecase__DecideToKeepSecret
+    state__InventionDisclosure_searched --> state__InventionDisclosure_decided_secret : ノウハウとしての秘匿の決定
+    %% transition usecase__DecideNotToFile
+    state__InventionDisclosure_searched --> state__InventionDisclosure_decided_abandon : 不出願の決定
+    state__InventionDisclosure_decided_file --> [*]
+    state__InventionDisclosure_decided_secret --> [*]
+    state__InventionDisclosure_decided_abandon --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__InventionDisclosure_decided_file stateend
+  class state__InventionDisclosure_decided_secret stateend
+  class state__InventionDisclosure_decided_abandon stateend

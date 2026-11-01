@@ -1,0 +1,56 @@
+%% rdra-ish diagram=robustness scope=buc:BucAnnuity model=samples/patent-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  screen__AnnuityScreen["年金管理画面"]:::screen
+  screen__MaintenanceReviewScreen["権利維持要否画面"]:::screen
+  timer__AnnuityDueDate(("第4年以後の特許料の納付期限（前年以前）")):::timer
+  timer__LatePaymentDeadline(("追納期限（納付期限の経過から6月）")):::timer
+  timer__MaintenanceReview(("権利維持要否の調査（登録後3年目・6年目）")):::timer
+  timer__TermExpiry(("存続期間の満了（出願から20年）")):::timer
+  api__AnnuityApi{{"年金 API"}}:::api
+  api__MaintenanceApi{{"権利維持 API"}}:::api
+  usecase__EnterGracePeriod("納付期限の経過"):::usecase
+  usecase__ExpirePatentTerm("存続期間の満了"):::usecase
+  usecase__LapseUnpaidPatent("追納期間の経過による消滅"):::usecase
+  usecase__ReviewMaintenance("権利維持要否の調査"):::usecase
+  usecase__RollOverAnnuityYear("納付年度の更新"):::usecase
+  entity__FeeSchedule[("料金表")]:::entity
+  entity__InventionDisclosure[("発明届出")]:::entity
+  entity__Patent[("特許権")]:::entity
+  actor__IpStaff --> screen__AnnuityScreen
+  actor__IpStaff --> screen__MaintenanceReviewScreen
+  api__AnnuityApi -->|R| entity__FeeSchedule
+  api__AnnuityApi -->|U| entity__Patent
+  api__AnnuityApi -.->|回復の手続| extsystem__Jpo
+  api__AnnuityApi -.->|特許料の納付| extsystem__Jpo
+  api__MaintenanceApi -->|U| entity__Patent
+  api__MaintenanceApi -.->|取下書・放棄書の提出| extsystem__Jpo
+  screen__AnnuityScreen -->|年金の納付| api__AnnuityApi
+  screen__AnnuityScreen -->|特許権の回復| api__AnnuityApi
+  screen__AnnuityScreen -->|追納| api__AnnuityApi
+  screen__MaintenanceReviewScreen -->|権利を維持しない決定| api__MaintenanceApi
+  screen__MaintenanceReviewScreen -->|権利維持要否の調査| usecase__ReviewMaintenance
+  screen__MaintenanceReviewScreen -->|特許権の放棄| api__MaintenanceApi
+  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| api__AnnuityApi
+  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| usecase__EnterGracePeriod
+  timer__AnnuityDueDate -.->|第4年以後の特許料の納付期限（前年以前）| usecase__RollOverAnnuityYear
+  timer__LatePaymentDeadline -.->|追納期限（納付期限の経過から6月）| api__AnnuityApi
+  timer__LatePaymentDeadline -.->|追納期限（納付期限の経過から6月）| usecase__LapseUnpaidPatent
+  timer__MaintenanceReview -.->|権利維持要否の調査（登録後3年目・6年目）| usecase__ReviewMaintenance
+  timer__TermExpiry -.->|存続期間の満了（出願から20年）| usecase__ExpirePatentTerm
+  usecase__EnterGracePeriod -->|U| entity__Patent
+  usecase__ExpirePatentTerm -->|U| entity__Patent
+  usecase__LapseUnpaidPatent -->|U| entity__Patent
+  usecase__ReviewMaintenance -->|R| entity__InventionDisclosure
+  usecase__ReviewMaintenance -->|R| entity__Patent
+  usecase__RollOverAnnuityYear -->|U| entity__Patent
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:ExpirePatentTerm model=samples/patent-ops
+%% kinds: timer usecase entity
+%% omitted: buc step
+sequenceDiagram
+  participant timer__TermExpiry as 存続期間の満了（出願から20年）
+  participant usecase__ExpirePatentTerm as 存続期間の満了
+  participant entity__Patent as 特許権
+  timer__TermExpiry ->> usecase__ExpirePatentTerm: 存続期間の満了（出願から20年）
+  alt Patent.status == 存続中 and Patent.status == 追納期間中
+    usecase__ExpirePatentTerm ->> entity__Patent: update status 存続中 -> 存続期間満了, status 追納期間中 -> 存続期間満了
+    usecase__ExpirePatentTerm -->> timer__TermExpiry: done
+  else guard fails
+    usecase__ExpirePatentTerm -->> timer__TermExpiry: rejected
+  end

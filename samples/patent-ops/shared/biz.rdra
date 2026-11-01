@@ -1,0 +1,81 @@
+module shared.biz
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+
+business InventionManagement "発明の管理"
+  description "発明届出の受付、職務発明の判定、出願可否の判断、相当の利益の手続。"
+
+business Prosecution "権利化"
+  description "特許事務所への依頼、出願、方式審査、審査請求、拒絶理由通知への応答（中間処理）。"
+
+business RightsMaintenance "権利の維持" description "特許料の納付と設定登録、年金の管理、消滅と回復。"
+
+system IpManagementSystem "知財管理システム"
+
+// Periods are not state. Each one is a timer: the 期限管理 that the IP department keeps for it
+// (知財部では、支払い漏れがおきないよう管理する必要がある, keiyakuwatch-chizaibu-gyomu.md:136, 〔まとめ〕).
+// A deadline timer starts the work that must be done by then; an expiry timer starts the use
+// case that records what the law makes happen when the period passes. The DSL has no calendar,
+// so each timer's label carries the period and the comment its source.
+
+// 審査請求要否 is decided before the period ends (niigata-u-2023-hatsumei-flowchart.txt:218, a
+// university flowchart). When the reminder fires is the model's assumption.
+timer ExamRequestReview "審査請求要否の検討（審査請求期限の前）"
+// その日から三年以内 (egov-tokkyohou-334AC0000000121.txt:680); without a request the application
+// 取り下げたものとみなす (:686).
+timer ExamRequestDeadline "審査請求期限（出願から3年）"
+// 指令書発送日の日から２月以内に…手続補正書を提出 (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:337).
+timer FormalityAmendmentDeadline "手続補正書の提出期限（指令書の発送日から2月）"
+// 特許出願の日から一年六月を経過したときは…出願公開 (egov-tokkyohou-334AC0000000121.txt:762).
+timer PublicationCheck "出願公開の確認（出願から1年6月）"
+// 先の出願の日から一年以内 (egov-tokkyohou-334AC0000000121.txt:541).
+timer PriorityClaimDeadline "国内優先権の主張期限（先の出願から1年）"
+// The earlier application 取り下げたものとみなす (egov-tokkyohou-334AC0000000121.txt:558) after
+// 一年四月 (egov-tokkyohou-shikoukisoku-335M50000400010.txt:696).
+timer PriorityBaseDeadline "先の出願の取下げ擬制（先の出願から1年4月）"
+// 国内居住者：６０日 (jpo-2016-kyozetu-entyou-zu01.txt:59), counted from the day after the notice is
+// sent (jpo-tetuzuki-02-17-ippan-gensoku.txt:308); one request extends it by 2か月
+// (jpo-tetuzuki-02-19-kyozetsu-outou.txt:56). The current 便覧 text of 60日 was not obtained; the
+// number is from the 2016 operation chart.
+timer ResponseDeadline "拒絶理由通知の応答期限（発送日から60日、延長で2か月）"
+// 応答期間に２か月を加えた期間内に請求すれば２か月の延長 (jpo-tetuzuki-02-19-kyozetsu-outou.txt:64-66).
+timer LateExtensionDeadline "期間経過後の延長請求の期限（応答期間の経過から2か月）"
+// 謄本の送達があつた日から三月以内に拒絶査定不服審判 (egov-tokkyohou-334AC0000000121.txt:1714).
+timer AppealDeadline "拒絶査定不服審判の請求期限（謄本の送達から3月）"
+// 第一年から第三年までの各年分の特許料は…三十日以内に一時に (egov-tokkyohou-334AC0000000121.txt:1468),
+// extendable by 三十日 on request (:1473).
+timer FirstFeeDeadline "第1〜3年分の特許料の納付期限（査定謄本の送達から30日）"
+// 第四年以後の各年分の特許料は、前年以前に納付 (egov-tokkyohou-334AC0000000121.txt:1470).
+timer AnnuityDueDate "第4年以後の特許料の納付期限（前年以前）"
+// 期間の経過後六月以内にその特許料を追納 (egov-tokkyohou-334AC0000000121.txt:1537); otherwise the right
+// 遡つて消滅したものとみなす (:1545).
+timer LatePaymentDeadline "追納期限（納付期限の経過から6月）"
+// 特許出願の日から二十年をもつて終了 (egov-tokkyohou-334AC0000000121.txt:845).
+timer TermExpiry "存続期間の満了（出願から20年）"
+// 権利維持要否 is surveyed 登録後３年目及び６年目 (niigata-u-2023-hatsumei-flowchart.txt:207-208, a
+// university's practice); 維持年金の要否検討 (:221-222). A company's cycle is the model's assumption.
+timer MaintenanceReview "権利維持要否の調査（登録後3年目・6年目）"
+
+// 発明届出書 is sent to the 知的財産室 by e-mail at one university
+// (osaka-u-2022-hatsumeitodoke-toriatsukai.txt:11-12); a company portal is the model's assumption.
+medium InventorPortal "社内ポータル（発明届出）"
+medium IpWorkstation "知的財産部の端末"
+// How a company and its patent firm share drafts is not in the sources: the model's assumption.
+medium AttorneyPortal "特許事務所との案件共有ポータル"
+// インターネット出願ソフト (jpo-tetuzuki-01-02-online.txt:27).
+medium InternetFilingSoftware "インターネット出願ソフト"
+
+permission DisclosureSubmit "発明届出"
+permission DisclosureReview "発明届出の受付"
+permission RightsJudge "職務発明の判定・権利の承継"
+permission PriorArtSearchManage "先行技術調査"
+permission FilingDecide "出願可否の決定"
+permission DraftingManage "出願依頼と出願書類の承認"
+permission DraftConfirm "出願書類の内容確認"
+permission DraftWrite "出願書類の作成"
+permission JpoProcedure "特許庁への手続（代理人）"
+permission DocketManage "期限管理"
+permission FeePay "特許料の納付"
+permission MaintenanceDecide "権利維持の判断"
+permission RewardManage "相当の利益の管理"
+permission OpinionSubmit "意見の申出"

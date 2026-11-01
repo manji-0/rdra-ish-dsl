@@ -1,0 +1,93 @@
+%% rdra-ish diagram=flow scope=buc:BucOfficeAction model=samples/patent-ops
+%% kinds: flow step lane timer usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__OfficeActionFlow["実体審査と中間処理の流れ"]
+    subgraph lane__OfficeActionFlow__IpStaff["知的財産部 担当者"]
+      %% lane lane__OfficeActionFlow__IpStaff: actor__IpStaff
+      step__GrantStep["特許査定"]:::step
+      step__PolicyStep["応答方針の指示"]:::step
+      step__RejectionStep["拒絶査定（審判請求は3月以内）"]:::step
+    end
+    subgraph lane__OfficeActionFlow__PatentAttorney["弁理士（特許事務所）"]
+      %% lane lane__OfficeActionFlow__PatentAttorney: actor__PatentAttorney
+      step__DivisionStep["分割出願"]:::step
+      step__DraftingStep["意見書・補正書案の作成"]:::step
+      step__ExtensionStep["応答期間の延長（2か月）"]:::step
+      step__FinalNoticeStep["最後の拒絶理由通知"]:::step
+      step__LateExtensionStep["期間経過後の延長（2か月）"]:::step
+      step__NoticeStep["拒絶理由通知の受領（60日）"]:::step
+      step__ResponseStep["意見書・補正書の提出"]:::step
+    end
+  end
+  timer__AppealDeadline(("拒絶査定不服審判の請求期限（謄本の送達から3月）")):::timer
+  timer__LateExtensionDeadline(("期間経過後の延長請求の期限（応答期間の経過から2か月）")):::timer
+  timer__ResponseDeadline(("拒絶理由通知の応答期限（発送日から60日、延長で2か月）")):::timer
+  usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
+  %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
+  usecase__DraftLimitedResponse("限定した補正による応答案の作成"):::usecase
+  %% desc usecase__DraftLimitedResponse: 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。
+  usecase__DraftResponse("意見書・補正書案の作成"):::usecase
+  %% desc usecase__DraftResponse: 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。
+  usecase__ExpireResponseTerm("応答期間の経過"):::usecase
+  %% desc usecase__ExpireResponseTerm: 応答のないまま応答期間が過ぎたことを記録する。その後2か月は期間経過後の延長を請求できる。
+  usecase__FileDivisionalApplication("分割出願"):::usecase
+  %% desc usecase__FileDivisionalApplication: 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。
+  usecase__FileResponse("意見書・補正書の提出"):::usecase
+  %% desc usecase__FileResponse: 知的財産部が確かめた案を弁理士が特許庁に出す。
+  usecase__FinalizeRejection("拒絶査定の確定"):::usecase
+  %% desc usecase__FinalizeRejection: 審判請求がないまま3月が過ぎ、拒絶査定が確定したことを記録する。
+  usecase__InstructResponse("応答方針の指示"):::usecase
+  %% desc usecase__InstructResponse: 知的財産部が発明者と相談し、弁理士に応答の方針を伝える（参照のみ）。
+  usecase__LapseResponse("応答なしでの期間満了"):::usecase
+  %% desc usecase__LapseResponse: 期間経過後の延長も請求できなくなったことを記録する。
+  usecase__ReceiveDecisionOfRejection("拒絶査定の受領"):::usecase
+  %% desc usecase__ReceiveDecisionOfRejection: 拒絶査定の謄本を受け取る。審判請求の期限（3月）が始まる。
+  usecase__ReceiveDecisionToGrant("特許査定の受領"):::usecase
+  %% desc usecase__ReceiveDecisionToGrant: 特許査定の謄本を受け取る。特許料の納付期限（30日）が始まる。
+  usecase__ReceiveFinalOfficeAction("最後の拒絶理由通知の受領"):::usecase
+  %% desc usecase__ReceiveFinalOfficeAction: 応答の後に最後の拒絶理由通知書を受け取り、補正の範囲が限られた応答期間を始める。
+  usecase__ReceiveOfficeAction("拒絶理由通知の受領"):::usecase
+  %% desc usecase__ReceiveOfficeAction: 拒絶理由通知書を受け取り、応答期間の管理を始める。
+  usecase__RequestAppeal("拒絶査定不服審判の請求"):::usecase
+  %% desc usecase__RequestAppeal: 審判を請求する。審判の中身はこのモデルの対象外で、出願はここで審判に引き渡される。
+  usecase__RequestLateExtension("期間経過後の延長請求"):::usecase
+  %% desc usecase__RequestLateExtension: 応答期間の経過後2か月以内に延長を請求し、2か月の応答期間を得る。
+  usecase__RequestTermExtension("応答期間の延長請求"):::usecase
+  %% desc usecase__RequestTermExtension: 応答期間内に期間延長請求書を出し、2か月延長する。
+  step__DivisionStep -.-> usecase__FileDivisionalApplication
+  step__DraftingStep -.-> usecase__DraftLimitedResponse
+  step__DraftingStep -.-> usecase__DraftResponse
+  step__DraftingStep -.->|excepts| step__LateExtensionStep
+  step__DraftingStep -->|precedes| step__ResponseStep
+  step__ExtensionStep -.-> usecase__RequestTermExtension
+  step__ExtensionStep -->|repeats| step__DraftingStep
+  step__FinalNoticeStep -.-> usecase__ReceiveFinalOfficeAction
+  step__FinalNoticeStep -->|repeats| step__PolicyStep
+  step__GrantStep -.-> usecase__CloseOfficeActionDocket
+  step__GrantStep -.-> usecase__ReceiveDecisionToGrant
+  step__LateExtensionStep -.-> timer__LateExtensionDeadline
+  step__LateExtensionStep -.-> usecase__ExpireResponseTerm
+  step__LateExtensionStep -.-> usecase__LapseResponse
+  step__LateExtensionStep -.-> usecase__RequestLateExtension
+  step__LateExtensionStep -->|repeats| step__DraftingStep
+  step__NoticeStep -.-> usecase__ReceiveOfficeAction
+  step__NoticeStep -->|precedes| step__PolicyStep
+  step__PolicyStep -->|branches| step__DivisionStep
+  step__PolicyStep -->|branches| step__ExtensionStep
+  step__PolicyStep -.-> usecase__InstructResponse
+  step__PolicyStep -->|precedes| step__DraftingStep
+  step__RejectionStep -.-> timer__AppealDeadline
+  step__RejectionStep -.-> usecase__FinalizeRejection
+  step__RejectionStep -.-> usecase__ReceiveDecisionOfRejection
+  step__RejectionStep -.-> usecase__RequestAppeal
+  step__ResponseStep -->|branches| step__FinalNoticeStep
+  step__ResponseStep -.-> timer__ResponseDeadline
+  step__ResponseStep -.-> usecase__FileResponse
+  step__ResponseStep -.->|excepts| step__RejectionStep
+  step__ResponseStep -->|precedes| step__GrantStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

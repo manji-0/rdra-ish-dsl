@@ -1,0 +1,81 @@
+%% rdra-ish diagram=usecase scope=buc:BucApplicationDrafting model=samples/patent-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Inventor(["発明者"]):::actor
+    %% desc actor__Inventor: 職務として発明をした従業者。発明届出書を出し、出願書類の内容を確かめ、相当の利益について意見を述べる。
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+    %% desc actor__PatentAttorney: 社外の特許事務所の弁理士。出願書類を作り、代理人として電子出願し、特許庁からの通知に応答する。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__ApproveDraft("出願書類の承認"):::usecase
+    %% desc usecase__ApproveDraft: 発明者の確認を経た案を知的財産部が承認し、出願を指示する。
+    usecase__ConfirmDraftByInventor("発明者による内容確認"):::usecase
+    %% desc usecase__ConfirmDraftByInventor: 発明者が案の技術内容を確かめ、確認済にする。
+    usecase__RequestDraftRevision("出願書類の修正依頼"):::usecase
+    %% desc usecase__RequestDraftRevision: 知的財産部が案の修正を弁理士に依頼する。発明者の確認はやり直しになる。
+    usecase__RequestDrafting("特許事務所への出願依頼"):::usecase
+    %% desc usecase__RequestDrafting: 出願と決まった発明の届出をもとに、特許事務所へ明細書の作成と出願を依頼する。
+    usecase__SubmitDraft("出願書類案の納品"):::usecase
+    %% desc usecase__SubmitDraft: 弁理士が出願書類の案を納品する。修正の依頼を受けた案も出し直す。
+    screen__DraftReviewScreen["出願書類レビュー画面"]:::screen
+    screen__DraftingOrderScreen["出願依頼画面"]:::screen
+    event__EvDraftApproved>"出願書類の承認"]:::event
+    event__EvFilingDecided>"出願の決定"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__DraftingOrder[("出願依頼")]:::entity
+    entity__InventionDisclosure[("発明届出")]:::entity
+    entity__PatentFirm[("特許事務所")]:::entity
+    state__DraftingOrder_approved((("出願承認済"))):::state
+    state__DraftingOrder_drafted((("原稿受領"))):::state
+    state__DraftingOrder_requested((("依頼済"))):::state
+    state__DraftingOrder_revising((("修正依頼中"))):::state
+    condition__DecidedToFile{"出願と決まった発明である"}:::condition
+    condition__DraftDelivered{"案が納品されている"}:::condition
+    condition__InventorChecked{"発明者が内容を確認している"}:::condition
+  end
+  actor__Inventor -.-> usecase__ConfirmDraftByInventor
+  actor__IpStaff -.-> usecase__ApproveDraft
+  actor__IpStaff -.-> usecase__RequestDraftRevision
+  actor__IpStaff -.-> usecase__RequestDrafting
+  actor__PatentAttorney -.-> usecase__SubmitDraft
+  condition__DecidedToFile -.-> usecase__RequestDrafting
+  condition__DraftDelivered -.-> usecase__ConfirmDraftByInventor
+  condition__InventorChecked -.-> usecase__ApproveDraft
+  event__EvFilingDecided -.-> usecase__RequestDrafting
+  usecase__ApproveDraft -.-> screen__DraftReviewScreen
+  usecase__ApproveDraft -.-> event__EvDraftApproved
+  usecase__ApproveDraft -.->|transitions DraftingOrder.status drafted->approved| state__DraftingOrder_approved
+  usecase__ApproveDraft -.->|updates| entity__DraftingOrder
+  %% derived usecase__ApproveDraft -> entity__DraftingOrder via api__DraftReviewApi
+  usecase__ConfirmDraftByInventor -.-> screen__DraftReviewScreen
+  usecase__ConfirmDraftByInventor -.->|updates| entity__DraftingOrder
+  %% derived usecase__ConfirmDraftByInventor -> entity__DraftingOrder via api__DraftReviewApi
+  usecase__RequestDraftRevision -.-> screen__DraftReviewScreen
+  usecase__RequestDraftRevision -.->|transitions DraftingOrder.status drafted->revising| state__DraftingOrder_revising
+  usecase__RequestDraftRevision -.->|updates| entity__DraftingOrder
+  %% derived usecase__RequestDraftRevision -> entity__DraftingOrder via api__DraftReviewApi
+  usecase__RequestDrafting -.->|creates| entity__DraftingOrder
+  %% derived usecase__RequestDrafting -> entity__DraftingOrder via api__DraftingOrderApi
+  usecase__RequestDrafting -.-> screen__DraftingOrderScreen
+  usecase__RequestDrafting -.->|reads| entity__InventionDisclosure
+  %% derived usecase__RequestDrafting -> entity__InventionDisclosure via api__DraftingOrderApi
+  usecase__RequestDrafting -.->|reads| entity__PatentFirm
+  %% derived usecase__RequestDrafting -> entity__PatentFirm via api__DraftingOrderApi
+  usecase__SubmitDraft -.-> screen__DraftReviewScreen
+  usecase__SubmitDraft -.->|transitions DraftingOrder.status requested->drafted| state__DraftingOrder_drafted
+  usecase__SubmitDraft -.->|transitions DraftingOrder.status revising->drafted| state__DraftingOrder_drafted
+  usecase__SubmitDraft -.->|updates| entity__DraftingOrder
+  %% derived usecase__SubmitDraft -> entity__DraftingOrder via api__DraftReviewApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

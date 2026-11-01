@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:DraftResponse model=samples/patent-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant screen__ResponseDraftScreen as 応答案画面
+  participant api__OfficeActionApi as 中間処理 API
+  participant entity__OfficeAction as 拒絶理由通知
+  actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書案の作成
+  screen__ResponseDraftScreen ->> api__OfficeActionApi: 中間処理 API
+  alt 最初の拒絶理由通知である: OfficeAction.status == 応答期間中, OfficeAction.kind == 最初
+    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment=free
+    api__OfficeActionApi -->> screen__ResponseDraftScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__ResponseDraftScreen: rejected
+  end

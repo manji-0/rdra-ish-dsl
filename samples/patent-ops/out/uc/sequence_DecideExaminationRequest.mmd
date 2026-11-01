@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:DecideExaminationRequest model=samples/patent-ops
+%% kinds: actor timer screen usecase entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__ExamRequestReview as 審査請求要否の検討（審査請求期限の前）
+  participant screen__ExaminationRequestScreen as 審査請求画面
+  participant usecase__DecideExaminationRequest as 審査請求要否の判断
+  participant entity__PatentApplication as 特許出願
+  actor__IpStaff ->> screen__ExaminationRequestScreen: 審査請求要否の判断
+  timer__ExamRequestReview ->> usecase__DecideExaminationRequest: 審査請求要否の検討（審査請求期限の前）
+  screen__ExaminationRequestScreen ->> usecase__DecideExaminationRequest: 審査請求要否の判断
+  usecase__DecideExaminationRequest ->> entity__PatentApplication: read
+  usecase__DecideExaminationRequest -->> screen__ExaminationRequestScreen: done

@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:RestorePatent model=samples/patent-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant screen__AnnuityScreen as 年金管理画面
+  participant api__AnnuityApi as 年金 API
+  participant entity__FeeSchedule as 料金表
+  participant entity__Patent as 特許権
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__IpStaff ->> screen__AnnuityScreen: 特許権の回復
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt Patent.status == 消滅（特許料の不納）
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 消滅（特許料の不納） -> 存続中, last_payment=late, surcharge=set
+    api__AnnuityApi -) extsystem__Jpo: 回復の手続
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end

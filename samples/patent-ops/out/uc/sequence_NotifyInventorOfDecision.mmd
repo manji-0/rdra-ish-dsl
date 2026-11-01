@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:NotifyInventorOfDecision model=samples/patent-ops
+%% kinds: actor usecase screen entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant usecase__DecideNotToFile as 不出願の決定
+  participant usecase__DecideToFile as 出願の決定
+  participant usecase__DecideToKeepSecret as ノウハウとしての秘匿の決定
+  participant screen__FilingDecisionScreen as 出願審議画面
+  participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
+  participant entity__InventionDisclosure as 発明届出
+  actor__IpStaff ->> screen__FilingDecisionScreen: 決定の発明者への通知
+  usecase__DecideNotToFile ->> usecase__NotifyInventorOfDecision: 出願の決定
+  usecase__DecideToFile ->> usecase__NotifyInventorOfDecision: 出願の決定
+  usecase__DecideToKeepSecret ->> usecase__NotifyInventorOfDecision: 出願の決定
+  screen__FilingDecisionScreen ->> usecase__NotifyInventorOfDecision: 決定の発明者への通知
+  usecase__NotifyInventorOfDecision ->> entity__InventionDisclosure: read
+  usecase__NotifyInventorOfDecision -->> screen__FilingDecisionScreen: done

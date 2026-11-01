@@ -1,0 +1,66 @@
+%% rdra-ish diagram=flow scope=buc:BucFilingFormality model=samples/patent-ops
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__FilingFlow["出願と方式審査の流れ"]
+    step__PriorityBaseStep["先の出願の取下げ擬制（1年4月）"]:::step
+    subgraph lane__FilingFlow__IpStaff["知的財産部 担当者"]
+      %% lane lane__FilingFlow__IpStaff: actor__IpStaff
+      step__DismissalStep["却下"]:::step
+      step__PublicationStep["出願公開（1年6月）"]:::step
+      step__ReceiptStep["出願番号・出願日の記録"]:::step
+    end
+    subgraph lane__FilingFlow__PatentAttorney["弁理士（特許事務所）"]
+      %% lane lane__FilingFlow__PatentAttorney: actor__PatentAttorney
+      step__FilingStep["電子出願"]:::step
+      step__FormalityStep["手続補正指令への対応（2月）"]:::step
+      step__PriorityStep["国内優先権の主張（1年）"]:::step
+    end
+  end
+  timer__FormalityAmendmentDeadline(("手続補正書の提出期限（指令書の発送日から2月）")):::timer
+  timer__PriorityBaseDeadline(("先の出願の取下げ擬制（先の出願から1年4月）")):::timer
+  timer__PriorityClaimDeadline(("国内優先権の主張期限（先の出願から1年）")):::timer
+  timer__PublicationCheck(("出願公開の確認（出願から1年6月）")):::timer
+  usecase__ClaimDomesticPriority("国内優先権の主張"):::usecase
+  %% desc usecase__ClaimDomesticPriority: 改良発明をまとめた後の出願で、1年以内の先の出願に基づく優先権を主張する。
+  usecase__DeemPriorityBaseWithdrawn("先の出願の取下げ擬制"):::usecase
+  %% desc usecase__DeemPriorityBaseWithdrawn: 優先権の基礎とした先の出願が、その出願から1年4月で取り下げたものとみなされたことを記録する。
+  usecase__FileApplication("電子出願"):::usecase
+  %% desc usecase__FileApplication: 承認された出願書類を、代理人の弁理士がインターネット出願ソフトで特許庁に出す。
+  usecase__ReceiveFormalityOrder("手続補正指令書の受領"):::usecase
+  %% desc usecase__ReceiveFormalityOrder: 方式の不備を指摘する手続補正指令書を受け取り、出願を補正待ちにする。
+  usecase__RecordDismissal("出願の却下の記録"):::usecase
+  %% desc usecase__RecordDismissal: 補正がなく出願が却下されたことを記録する。
+  usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
+  %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。
+  usecase__RecordPublication("出願公開の記録"):::usecase
+  %% desc usecase__RecordPublication: 出願から1年6月で出願が公開されたことを記録する。
+  usecase__SubmitFormalityAmendment("手続補正書の提出"):::usecase
+  %% desc usecase__SubmitFormalityAmendment: 指令書の発送日から2月以内に手続補正書を出す。
+  event__EvFilingReceipt>"受領書（出願番号）"]:::event
+  step__DismissalStep -.-> usecase__RecordDismissal
+  step__FilingStep -.-> usecase__FileApplication
+  step__FilingStep -->|precedes| step__ReceiptStep
+  step__FormalityStep -.-> timer__FormalityAmendmentDeadline
+  step__FormalityStep -.-> usecase__ReceiveFormalityOrder
+  step__FormalityStep -.-> usecase__SubmitFormalityAmendment
+  step__FormalityStep -.->|excepts| step__DismissalStep
+  step__FormalityStep -->|repeats| step__ReceiptStep
+  step__PriorityBaseStep -.-> timer__PriorityBaseDeadline
+  step__PriorityBaseStep -.-> usecase__DeemPriorityBaseWithdrawn
+  step__PriorityStep -.-> timer__PriorityClaimDeadline
+  step__PriorityStep -.-> usecase__ClaimDomesticPriority
+  step__PriorityStep -->|precedes| step__PriorityBaseStep
+  step__PublicationStep -.-> timer__PublicationCheck
+  step__PublicationStep -.-> usecase__RecordPublication
+  step__ReceiptStep -->|branches| step__PriorityStep
+  step__ReceiptStep -.-> event__EvFilingReceipt
+  step__ReceiptStep -.-> usecase__RecordFilingReceipt
+  step__ReceiptStep -.->|excepts| step__FormalityStep
+  step__ReceiptStep -->|precedes| step__PublicationStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReceiveOfficeAction model=samples/patent-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant screen__OfficeActionScreen as 中間処理画面
+  participant api__OfficeActionIntakeApi as 拒絶理由通知の受付 API
+  participant entity__PatentApplication as 特許出願
+  participant entity__OfficeAction as 拒絶理由通知
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 拒絶理由通知の受領
+  extsystem__Jpo ->> api__OfficeActionIntakeApi: 拒絶理由通知書
+  screen__OfficeActionScreen ->> api__OfficeActionIntakeApi: 拒絶理由通知の受付 API
+  api__OfficeActionIntakeApi ->> entity__PatentApplication: read
+  api__OfficeActionIntakeApi ->> entity__OfficeAction: create kind=first
+  api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: done

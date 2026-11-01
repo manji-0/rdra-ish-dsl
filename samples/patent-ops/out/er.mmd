@@ -1,0 +1,107 @@
+%% rdra-ish diagram=er scope=whole model=samples/patent-ops
+%% kinds: entity
+%% omitted: (none)
+erDiagram
+  DivisionalFiling {
+    Int id PK
+    Date filed_on
+    Int patentapplication_id FK
+  }
+  DraftingOrder {
+    Int id PK
+    Date requested_on
+    Enum status
+    Bool inventor_checked
+    Int inventiondisclosure_id FK
+    Int patentfirm_id FK
+  }
+  Employee {
+    Int id PK
+    String employee_no
+    String name
+    String department
+  }
+  FeeSchedule {
+    Int id PK
+    Money filing_fee
+    Money exam_request_base
+    Money exam_request_per_claim
+    Money annuity_base
+    Money annuity_per_claim
+    Money extension_fee
+    Money late_extension_fee
+    Money restoration_fee
+  }
+  InventionDisclosure {
+    Int id PK
+    String title
+    InventionCategory category
+    Date submitted_on
+    Enum status
+    Bool right_acquired
+    Int employee_id FK
+  }
+  InventorReward {
+    Int id PK
+    RewardOccasion occasion
+    Money amount
+    Enum status
+    DateTime notified_at
+    Int inventiondisclosure_id FK
+  }
+  OfficeAction {
+    Int id PK
+    Date dispatched_on
+    Enum kind
+    Enum status
+    Bool extended
+    Bool late_extended
+    AmendmentScope amendment
+    Int patentapplication_id FK
+  }
+  Patent {
+    Int id PK
+    String patent_no
+    Date registered_on
+    Enum status
+    Bool next_year_paid
+    Bool maintain
+    Enum last_payment
+    Money annuity_amount
+    Money surcharge
+    Int patentapplication_id FK
+  }
+  PatentApplication {
+    Int id PK
+    String application_no
+    Date filed_on
+    Int claim_count
+    Enum status
+    DateTime exam_requested_at
+    DateTime published_at
+    Bool accelerated
+    AcceleratedGround accelerated_ground
+    Bool priority_base
+    Bool first_fees_paid
+    Bool fee_period_extended
+    Int draftingorder_id FK
+  }
+  PatentFirm {
+    Int id PK
+    String name
+    String technical_field
+  }
+  PriorityClaim {
+    Int id PK
+    Date claimed_on
+    Int patentapplication_id FK
+  }
+  Patent ||--|| PatentApplication : ""
+  InventorReward }o--|| InventionDisclosure : ""
+  InventionDisclosure }o--|| Employee : ""
+  DraftingOrder }o--|| PatentFirm : ""
+  DraftingOrder }o--|| InventionDisclosure : ""
+  PatentApplication ||--|| DraftingOrder : ""
+  PriorityClaim }o--|| PatentApplication : ""
+  DivisionalFiling }o--|| PatentApplication : ""
+  OfficeAction }o--|| PatentApplication : ""

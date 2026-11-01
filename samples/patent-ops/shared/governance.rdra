@@ -1,0 +1,57 @@
+module shared.governance
+
+import shared.actors
+import shared.biz
+import shared.entities
+
+quality Confidentiality "機密性"
+quality Auditability "監査可能性"
+quality Reliability "信頼性"
+
+// An unfiled invention must stay secret: 新規性の喪失 is a trouble that comes from misunderstanding
+// the system (keiyakuwatch-chizaibu-gyomu.md:181, 〔まとめ〕); the university asks for a password on
+// the e-mailed form (osaka-u-2022-hatsumeitodoke-toriatsukai.txt:13-14). The classification and the
+// retention are the model's assumption.
+constraint InventionConfidentiality "出願前の発明の秘密保持"
+  logging structured
+  retention "20y"
+  privacy restricted
+
+// Every deadline the docket keeps loses a right when it passes, so each change to a docketed
+// period is kept. The retention follows the 20-year term (egov-tokkyohou-334AC0000000121.txt:845)
+// plus a margin; the number is the model's assumption.
+constraint DocketAuditTrail "期限管理の監査証跡"
+  audit enabled
+  retention "25y"
+
+// The reminders must reach the staff in time. The metric and target are the model's assumption.
+nfr DeadlineReminderLead "期限の事前通知"
+  metric reminder_lead_days
+  target ">=30"
+  window "30d"
+  slo "100%"
+  resilience retryable
+
+applies_to(DeadlineReminderLead, IpManagementSystem)
+qualifies(DeadlineReminderLead, Reliability)
+qualifies(InventionConfidentiality, Confidentiality)
+qualifies(DocketAuditTrail, Auditability)
+constrains(InventionConfidentiality, InventionDisclosure)
+constrains(InventionConfidentiality, DraftingOrder)
+constrains(DocketAuditTrail, PatentApplication)
+constrains(DocketAuditTrail, OfficeAction)
+constrains(DocketAuditTrail, Patent)
+
+adr AdrAttorneyAsActor "特許事務所の弁理士をアクターとして扱う"
+  description "社外の特許事務所をモデルのどこに置くかの決定記録。"
+  adr_status accepted
+  context "出願書類は特許事務所が作り、知的財産部と発明者が確かめて承認する。弁理士は代理人として特許庁に出願し、通知を受けて応答する。"
+  decision "弁理士を actor とし、案件共有ポータルとインターネット出願ソフトを medium とする。特許庁は外部システムとしてイベントでつなぐ。"
+  consequence "業務フローに弁理士のレーンができ、知的財産部とのやり取り（依頼・納品・修正・承認）が画面と UC で追える。事務所の社内システムはモデルの外になる。"
+  accepted "弁理士をアクターにする"
+  rejected "特許事務所を外部システムにする"
+  reason "外部システムはイベントでしかつながらないので、出願書類のレビューと承認の往復が UC と画面に現れず、業務フローから弁理士の仕事が消える。"
+
+decides(AdrAttorneyAsActor, IpManagementSystem)
+decides(AdrAttorneyAsActor, DraftingOrder)
+decides(AdrAttorneyAsActor, OfficeAction)

@@ -1,0 +1,22 @@
+%% rdra-ish diagram=state scope=whole model=samples/patent-ops
+%% kinds: statemodel state
+%% omitted: OfficeAction.kind Patent.last_payment (Enum without transitions)
+stateDiagram-v2
+  state "DraftingOrder.status" as statemodel__DraftingOrder_status {
+    state "5 状態 / 5 遷移 (--entity DraftingOrder)" as index__DraftingOrder_status
+  }
+  state "InventionDisclosure.status" as statemodel__InventionDisclosure_status {
+    state "8 状態 / 8 遷移 (--entity InventionDisclosure)" as index__InventionDisclosure_status
+  }
+  state "InventorReward.status" as statemodel__InventorReward_status {
+    state "4 状態 / 4 遷移 (--entity InventorReward)" as index__InventorReward_status
+  }
+  state "OfficeAction.status" as statemodel__OfficeAction_status {
+    state "6 状態 / 9 遷移 (--entity OfficeAction)" as index__OfficeAction_status
+  }
+  state "Patent.status" as statemodel__Patent_status {
+    state "5 状態 / 7 遷移 (--entity Patent)" as index__Patent_status
+  }
+  state "PatentApplication.status" as statemodel__PatentApplication_status {
+    state "12 状態 / 16 遷移 (--entity PatentApplication)" as index__PatentApplication_status
+  }

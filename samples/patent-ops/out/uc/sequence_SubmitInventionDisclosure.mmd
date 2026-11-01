@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:SubmitInventionDisclosure model=samples/patent-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Inventor as 発明者
+  participant screen__DisclosureFormScreen as 発明届出書画面
+  participant api__SubmitDisclosureApi as 発明届出 API
+  participant entity__Employee as 従業者
+  participant entity__InventionDisclosure as 発明届出
+  participant api__DisclosureReviewApi as 届出受付 API
+  actor__Inventor ->> screen__DisclosureFormScreen: 発明届出書の提出
+  screen__DisclosureFormScreen ->> api__SubmitDisclosureApi: 発明届出 API
+  api__SubmitDisclosureApi ->> entity__Employee: read
+  api__SubmitDisclosureApi ->> entity__InventionDisclosure: create
+  api__SubmitDisclosureApi -) api__DisclosureReviewApi: 発明届出の提出
+  api__SubmitDisclosureApi -->> screen__DisclosureFormScreen: done

@@ -1,0 +1,1277 @@
+{
+  "asyncapi": "3.1.0",
+  "channels": {
+    "EvAcceleratedExamRequested": {
+      "address": "EvAcceleratedExamRequested",
+      "messages": {
+        "EvAcceleratedExamRequested": {
+          "$ref": "#/components/messages/EvAcceleratedExamRequested"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvAppealRequested": {
+      "address": "EvAppealRequested",
+      "messages": {
+        "EvAppealRequested": {
+          "$ref": "#/components/messages/EvAppealRequested"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvApplicationDismissed": {
+      "address": "EvApplicationDismissed",
+      "messages": {
+        "EvApplicationDismissed": {
+          "$ref": "#/components/messages/EvApplicationDismissed"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvApplicationFiled": {
+      "address": "EvApplicationFiled",
+      "messages": {
+        "EvApplicationFiled": {
+          "$ref": "#/components/messages/EvApplicationFiled"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvDecisionOfRejection": {
+      "address": "EvDecisionOfRejection",
+      "messages": {
+        "EvDecisionOfRejection": {
+          "$ref": "#/components/messages/EvDecisionOfRejection"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvDecisionToGrant": {
+      "address": "EvDecisionToGrant",
+      "messages": {
+        "EvDecisionToGrant": {
+          "$ref": "#/components/messages/EvDecisionToGrant"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvDisclosureSubmitted": {
+      "address": "EvDisclosureSubmitted",
+      "messages": {
+        "EvDisclosureSubmitted": {
+          "$ref": "#/components/messages/EvDisclosureSubmitted"
+        }
+      }
+    },
+    "EvDivisionalFiled": {
+      "address": "EvDivisionalFiled",
+      "messages": {
+        "EvDivisionalFiled": {
+          "$ref": "#/components/messages/EvDivisionalFiled"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvDraftApproved": {
+      "address": "EvDraftApproved",
+      "messages": {
+        "EvDraftApproved": {
+          "$ref": "#/components/messages/EvDraftApproved"
+        }
+      }
+    },
+    "EvExaminationRequested": {
+      "address": "EvExaminationRequested",
+      "messages": {
+        "EvExaminationRequested": {
+          "$ref": "#/components/messages/EvExaminationRequested"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvExtensionRequested": {
+      "address": "EvExtensionRequested",
+      "messages": {
+        "EvExtensionRequested": {
+          "$ref": "#/components/messages/EvExtensionRequested"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvFeesPaid": {
+      "address": "EvFeesPaid",
+      "messages": {
+        "EvFeesPaid": {
+          "$ref": "#/components/messages/EvFeesPaid"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvFilingDecided": {
+      "address": "EvFilingDecided",
+      "messages": {
+        "EvFilingDecided": {
+          "$ref": "#/components/messages/EvFilingDecided"
+        }
+      }
+    },
+    "EvFilingReceipt": {
+      "address": "EvFilingReceipt",
+      "messages": {
+        "EvFilingReceipt": {
+          "$ref": "#/components/messages/EvFilingReceipt"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvFinalOfficeAction": {
+      "address": "EvFinalOfficeAction",
+      "messages": {
+        "EvFinalOfficeAction": {
+          "$ref": "#/components/messages/EvFinalOfficeAction"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvFormalityAmendmentFiled": {
+      "address": "EvFormalityAmendmentFiled",
+      "messages": {
+        "EvFormalityAmendmentFiled": {
+          "$ref": "#/components/messages/EvFormalityAmendmentFiled"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvFormalityOrder": {
+      "address": "EvFormalityOrder",
+      "messages": {
+        "EvFormalityOrder": {
+          "$ref": "#/components/messages/EvFormalityOrder"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvOfficeAction": {
+      "address": "EvOfficeAction",
+      "messages": {
+        "EvOfficeAction": {
+          "$ref": "#/components/messages/EvOfficeAction"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvPriorityClaimed": {
+      "address": "EvPriorityClaimed",
+      "messages": {
+        "EvPriorityClaimed": {
+          "$ref": "#/components/messages/EvPriorityClaimed"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvPublished": {
+      "address": "EvPublished",
+      "messages": {
+        "EvPublished": {
+          "$ref": "#/components/messages/EvPublished"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvRegistered": {
+      "address": "EvRegistered",
+      "messages": {
+        "EvRegistered": {
+          "$ref": "#/components/messages/EvRegistered"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvRegistrationDismissed": {
+      "address": "EvRegistrationDismissed",
+      "messages": {
+        "EvRegistrationDismissed": {
+          "$ref": "#/components/messages/EvRegistrationDismissed"
+        }
+      },
+      "x-publisher": [
+        "Jpo"
+      ]
+    },
+    "EvResponseFiled": {
+      "address": "EvResponseFiled",
+      "messages": {
+        "EvResponseFiled": {
+          "$ref": "#/components/messages/EvResponseFiled"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvRestorationRequested": {
+      "address": "EvRestorationRequested",
+      "messages": {
+        "EvRestorationRequested": {
+          "$ref": "#/components/messages/EvRestorationRequested"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    },
+    "EvWithdrawalFiled": {
+      "address": "EvWithdrawalFiled",
+      "messages": {
+        "EvWithdrawalFiled": {
+          "$ref": "#/components/messages/EvWithdrawalFiled"
+        }
+      },
+      "x-subscriber": [
+        "Jpo"
+      ]
+    }
+  },
+  "components": {
+    "messages": {
+      "EvAcceleratedExamRequested": {
+        "name": "EvAcceleratedExamRequested",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAcceleratedExamRequested",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "早期審査に関する事情説明書の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "RequestAcceleratedExamination"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvAppealRequested": {
+        "name": "EvAppealRequested",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAppealRequested",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "拒絶査定不服審判の請求",
+        "x-rdra-ish-raised-by-usecases": [
+          "RequestAppeal"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvApplicationDismissed": {
+        "name": "EvApplicationDismissed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvApplicationDismissed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "却下処分",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "formality_order",
+            "to": "dismissed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordDismissal"
+        ]
+      },
+      "EvApplicationFiled": {
+        "name": "EvApplicationFiled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvApplicationFiled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "特許願の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "FileApplication"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucInventorReward"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "DecideReward"
+        ]
+      },
+      "EvDecisionOfRejection": {
+        "name": "EvDecisionOfRejection",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDecisionOfRejection",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "拒絶査定の謄本",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "answered",
+            "to": "closed"
+          },
+          {
+            "from": "examining",
+            "to": "rejected"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "CloseOfficeActionDocket",
+          "ReceiveDecisionOfRejection"
+        ]
+      },
+      "EvDecisionToGrant": {
+        "name": "EvDecisionToGrant",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDecisionToGrant",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "特許査定の謄本",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "answered",
+            "to": "closed"
+          },
+          {
+            "from": "examining",
+            "to": "granted"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [
+          "BucRegistration"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "CloseOfficeActionDocket",
+          "ReceiveDecisionToGrant"
+        ]
+      },
+      "EvDisclosureSubmitted": {
+        "name": "EvDisclosureSubmitted",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDisclosureSubmitted",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "発明届出の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "SubmitInventionDisclosure"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "submitted",
+            "to": "accepted"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "AcceptDisclosure"
+        ]
+      },
+      "EvDivisionalFiled": {
+        "name": "EvDivisionalFiled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDivisionalFiled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "分割出願",
+        "x-rdra-ish-raised-by-usecases": [
+          "FileDivisionalApplication"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvDraftApproved": {
+        "name": "EvDraftApproved",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDraftApproved",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "出願書類の承認",
+        "x-rdra-ish-raised-by-usecases": [
+          "ApproveDraft"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucFilingFormality"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "FileApplication"
+        ]
+      },
+      "EvExaminationRequested": {
+        "name": "EvExaminationRequested",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvExaminationRequested",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "出願審査請求書の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "RequestExamination"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvExtensionRequested": {
+        "name": "EvExtensionRequested",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvExtensionRequested",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "期間延長請求書の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "RequestFeePaymentExtension",
+          "RequestLateExtension",
+          "RequestTermExtension"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvFeesPaid": {
+        "name": "EvFeesPaid",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvFeesPaid",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "特許料の納付",
+        "x-rdra-ish-raised-by-usecases": [
+          "PayAnnuity",
+          "PayFirstAnnuities",
+          "PayLateAnnuity"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvFilingDecided": {
+        "name": "EvFilingDecided",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvFilingDecided",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "出願の決定",
+        "x-rdra-ish-raised-by-usecases": [
+          "DecideNotToFile",
+          "DecideToFile",
+          "DecideToKeepSecret"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucApplicationDrafting"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "NotifyInventorOfDecision",
+          "RequestDrafting"
+        ]
+      },
+      "EvFilingReceipt": {
+        "name": "EvFilingReceipt",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvFilingReceipt",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "受領書（出願番号）",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "approved",
+            "to": "filed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordFilingReceipt"
+        ]
+      },
+      "EvFinalOfficeAction": {
+        "name": "EvFinalOfficeAction",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvFinalOfficeAction",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "最後の拒絶理由通知書",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "answered",
+            "to": "open"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveFinalOfficeAction"
+        ]
+      },
+      "EvFormalityAmendmentFiled": {
+        "name": "EvFormalityAmendmentFiled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvFormalityAmendmentFiled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "手続補正書の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "SubmitFormalityAmendment"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvFormalityOrder": {
+        "name": "EvFormalityOrder",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvFormalityOrder",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "手続補正指令書（方式）",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "filed",
+            "to": "formality_order"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveFormalityOrder"
+        ]
+      },
+      "EvOfficeAction": {
+        "name": "EvOfficeAction",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvOfficeAction",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "拒絶理由通知書",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [
+          "BucOfficeAction"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "ReceiveOfficeAction"
+        ]
+      },
+      "EvPriorityClaimed": {
+        "name": "EvPriorityClaimed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPriorityClaimed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "国内優先権を主張した出願",
+        "x-rdra-ish-raised-by-usecases": [
+          "ClaimDomesticPriority"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvPublished": {
+        "name": "EvPublished",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPublished",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "出願公開",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordPublication"
+        ]
+      },
+      "EvRegistered": {
+        "name": "EvRegistered",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRegistered",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "設定登録",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "granted",
+            "to": "registered"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [
+          "BucAnnuity"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "DecideReward",
+          "RecordRegistration"
+        ]
+      },
+      "EvRegistrationDismissed": {
+        "name": "EvRegistrationDismissed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRegistrationDismissed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "特許料の不納による却下",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "granted",
+            "to": "dismissed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordRegistrationDismissal"
+        ]
+      },
+      "EvResponseFiled": {
+        "name": "EvResponseFiled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvResponseFiled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "意見書・手続補正書の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "FileResponse"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvRestorationRequested": {
+        "name": "EvRestorationRequested",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRestorationRequested",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "回復の手続",
+        "x-rdra-ish-raised-by-usecases": [
+          "RestoreExaminationRequest",
+          "RestorePatent"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvWithdrawalFiled": {
+        "name": "EvWithdrawalFiled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvWithdrawalFiled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "取下書・放棄書の提出",
+        "x-rdra-ish-raised-by-usecases": [
+          "AbandonPatent",
+          "WithdrawApplication"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish event catalog",
+    "version": "0.1.0"
+  },
+  "operations": {
+    "consumeEvApplicationDismissed": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvApplicationDismissed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvApplicationDismissed/messages/EvApplicationDismissed"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "formality_order",
+          "to": "dismissed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordDismissal"
+      ]
+    },
+    "consumeEvApplicationFiled": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvApplicationFiled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvApplicationFiled/messages/EvApplicationFiled"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucInventorReward"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "DecideReward"
+      ]
+    },
+    "consumeEvDecisionOfRejection": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDecisionOfRejection"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDecisionOfRejection/messages/EvDecisionOfRejection"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "answered",
+          "to": "closed"
+        },
+        {
+          "from": "examining",
+          "to": "rejected"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "CloseOfficeActionDocket",
+        "ReceiveDecisionOfRejection"
+      ]
+    },
+    "consumeEvDecisionToGrant": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDecisionToGrant"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDecisionToGrant/messages/EvDecisionToGrant"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "answered",
+          "to": "closed"
+        },
+        {
+          "from": "examining",
+          "to": "granted"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [
+        "BucRegistration"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "CloseOfficeActionDocket",
+        "ReceiveDecisionToGrant"
+      ]
+    },
+    "consumeEvDisclosureSubmitted": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDisclosureSubmitted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDisclosureSubmitted/messages/EvDisclosureSubmitted"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "submitted",
+          "to": "accepted"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "AcceptDisclosure"
+      ]
+    },
+    "consumeEvDraftApproved": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDraftApproved"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDraftApproved/messages/EvDraftApproved"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucFilingFormality"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "FileApplication"
+      ]
+    },
+    "consumeEvFilingDecided": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvFilingDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFilingDecided/messages/EvFilingDecided"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucApplicationDrafting"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "NotifyInventorOfDecision",
+        "RequestDrafting"
+      ]
+    },
+    "consumeEvFilingReceipt": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvFilingReceipt"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFilingReceipt/messages/EvFilingReceipt"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "approved",
+          "to": "filed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordFilingReceipt"
+      ]
+    },
+    "consumeEvFinalOfficeAction": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvFinalOfficeAction"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFinalOfficeAction/messages/EvFinalOfficeAction"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "answered",
+          "to": "open"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveFinalOfficeAction"
+      ]
+    },
+    "consumeEvFormalityOrder": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvFormalityOrder"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFormalityOrder/messages/EvFormalityOrder"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "filed",
+          "to": "formality_order"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveFormalityOrder"
+      ]
+    },
+    "consumeEvOfficeAction": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvOfficeAction"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvOfficeAction/messages/EvOfficeAction"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [
+        "BucOfficeAction"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "ReceiveOfficeAction"
+      ]
+    },
+    "consumeEvPublished": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvPublished"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPublished/messages/EvPublished"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordPublication"
+      ]
+    },
+    "consumeEvRegistered": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRegistered"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRegistered/messages/EvRegistered"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "granted",
+          "to": "registered"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [
+        "BucAnnuity"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "DecideReward",
+        "RecordRegistration"
+      ]
+    },
+    "consumeEvRegistrationDismissed": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRegistrationDismissed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRegistrationDismissed/messages/EvRegistrationDismissed"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "granted",
+          "to": "dismissed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordRegistrationDismissal"
+      ]
+    },
+    "publishEvAcceleratedExamRequested": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAcceleratedExamRequested"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAcceleratedExamRequested/messages/EvAcceleratedExamRequested"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RequestAcceleratedExamination"
+      ]
+    },
+    "publishEvAppealRequested": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAppealRequested"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAppealRequested/messages/EvAppealRequested"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RequestAppeal"
+      ]
+    },
+    "publishEvApplicationFiled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvApplicationFiled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvApplicationFiled/messages/EvApplicationFiled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "FileApplication"
+      ]
+    },
+    "publishEvDisclosureSubmitted": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvDisclosureSubmitted"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDisclosureSubmitted/messages/EvDisclosureSubmitted"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "SubmitInventionDisclosure"
+      ]
+    },
+    "publishEvDivisionalFiled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvDivisionalFiled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDivisionalFiled/messages/EvDivisionalFiled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "FileDivisionalApplication"
+      ]
+    },
+    "publishEvDraftApproved": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvDraftApproved"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDraftApproved/messages/EvDraftApproved"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ApproveDraft"
+      ]
+    },
+    "publishEvExaminationRequested": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvExaminationRequested"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvExaminationRequested/messages/EvExaminationRequested"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RequestExamination"
+      ]
+    },
+    "publishEvExtensionRequested": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvExtensionRequested"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvExtensionRequested/messages/EvExtensionRequested"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RequestFeePaymentExtension",
+        "RequestLateExtension",
+        "RequestTermExtension"
+      ]
+    },
+    "publishEvFeesPaid": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvFeesPaid"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFeesPaid/messages/EvFeesPaid"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "PayAnnuity",
+        "PayFirstAnnuities",
+        "PayLateAnnuity"
+      ]
+    },
+    "publishEvFilingDecided": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvFilingDecided"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFilingDecided/messages/EvFilingDecided"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DecideNotToFile",
+        "DecideToFile",
+        "DecideToKeepSecret"
+      ]
+    },
+    "publishEvFormalityAmendmentFiled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvFormalityAmendmentFiled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFormalityAmendmentFiled/messages/EvFormalityAmendmentFiled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "SubmitFormalityAmendment"
+      ]
+    },
+    "publishEvPriorityClaimed": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvPriorityClaimed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPriorityClaimed/messages/EvPriorityClaimed"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ClaimDomesticPriority"
+      ]
+    },
+    "publishEvResponseFiled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvResponseFiled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvResponseFiled/messages/EvResponseFiled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "FileResponse"
+      ]
+    },
+    "publishEvRestorationRequested": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvRestorationRequested"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRestorationRequested/messages/EvRestorationRequested"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RestoreExaminationRequest",
+        "RestorePatent"
+      ]
+    },
+    "publishEvWithdrawalFiled": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvWithdrawalFiled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvWithdrawalFiled/messages/EvWithdrawalFiled"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "AbandonPatent",
+        "WithdrawApplication"
+      ]
+    }
+  }
+}

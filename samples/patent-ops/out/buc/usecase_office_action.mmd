@@ -1,0 +1,188 @@
+%% rdra-ish diagram=usecase scope=buc:BucOfficeAction model=samples/patent-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+    %% desc actor__PatentAttorney: 社外の特許事務所の弁理士。出願書類を作り、代理人として電子出願し、特許庁からの通知に応答する。
+    extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__AppealDeadline(("拒絶査定不服審判の請求期限（謄本の送達から3月）")):::timer
+    timer__LateExtensionDeadline(("期間経過後の延長請求の期限（応答期間の経過から2か月）")):::timer
+    timer__ResponseDeadline(("拒絶理由通知の応答期限（発送日から60日、延長で2か月）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
+    %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
+    usecase__DraftLimitedResponse("限定した補正による応答案の作成"):::usecase
+    %% desc usecase__DraftLimitedResponse: 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。
+    usecase__DraftResponse("意見書・補正書案の作成"):::usecase
+    %% desc usecase__DraftResponse: 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。
+    usecase__ExpireResponseTerm("応答期間の経過"):::usecase
+    %% desc usecase__ExpireResponseTerm: 応答のないまま応答期間が過ぎたことを記録する。その後2か月は期間経過後の延長を請求できる。
+    usecase__FileDivisionalApplication("分割出願"):::usecase
+    %% desc usecase__FileDivisionalApplication: 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。
+    usecase__FileResponse("意見書・補正書の提出"):::usecase
+    %% desc usecase__FileResponse: 知的財産部が確かめた案を弁理士が特許庁に出す。
+    usecase__FinalizeRejection("拒絶査定の確定"):::usecase
+    %% desc usecase__FinalizeRejection: 審判請求がないまま3月が過ぎ、拒絶査定が確定したことを記録する。
+    usecase__InstructResponse("応答方針の指示"):::usecase
+    %% desc usecase__InstructResponse: 知的財産部が発明者と相談し、弁理士に応答の方針を伝える（参照のみ）。
+    usecase__LapseResponse("応答なしでの期間満了"):::usecase
+    %% desc usecase__LapseResponse: 期間経過後の延長も請求できなくなったことを記録する。
+    usecase__ReceiveDecisionOfRejection("拒絶査定の受領"):::usecase
+    %% desc usecase__ReceiveDecisionOfRejection: 拒絶査定の謄本を受け取る。審判請求の期限（3月）が始まる。
+    usecase__ReceiveDecisionToGrant("特許査定の受領"):::usecase
+    %% desc usecase__ReceiveDecisionToGrant: 特許査定の謄本を受け取る。特許料の納付期限（30日）が始まる。
+    usecase__ReceiveFinalOfficeAction("最後の拒絶理由通知の受領"):::usecase
+    %% desc usecase__ReceiveFinalOfficeAction: 応答の後に最後の拒絶理由通知書を受け取り、補正の範囲が限られた応答期間を始める。
+    usecase__ReceiveOfficeAction("拒絶理由通知の受領"):::usecase
+    %% desc usecase__ReceiveOfficeAction: 拒絶理由通知書を受け取り、応答期間の管理を始める。
+    usecase__RequestAppeal("拒絶査定不服審判の請求"):::usecase
+    %% desc usecase__RequestAppeal: 審判を請求する。審判の中身はこのモデルの対象外で、出願はここで審判に引き渡される。
+    usecase__RequestLateExtension("期間経過後の延長請求"):::usecase
+    %% desc usecase__RequestLateExtension: 応答期間の経過後2か月以内に延長を請求し、2か月の応答期間を得る。
+    usecase__RequestTermExtension("応答期間の延長請求"):::usecase
+    %% desc usecase__RequestTermExtension: 応答期間内に期間延長請求書を出し、2か月延長する。
+    screen__DecisionScreen["査定画面"]:::screen
+    screen__OfficeActionScreen["中間処理画面"]:::screen
+    screen__ResponseDraftScreen["応答案画面"]:::screen
+    event__EvAppealRequested>"拒絶査定不服審判の請求"]:::event
+    event__EvDecisionOfRejection>"拒絶査定の謄本"]:::event
+    event__EvDecisionToGrant>"特許査定の謄本"]:::event
+    event__EvDivisionalFiled>"分割出願"]:::event
+    event__EvExtensionRequested>"期間延長請求書の提出"]:::event
+    event__EvFinalOfficeAction>"最後の拒絶理由通知書"]:::event
+    event__EvOfficeAction>"拒絶理由通知書"]:::event
+    event__EvResponseFiled>"意見書・手続補正書の提出"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__DivisionalFiling[("分割出願")]:::entity
+    entity__OfficeAction[("拒絶理由通知")]:::entity
+    entity__PatentApplication[("特許出願")]:::entity
+    state__OfficeAction_answered((("応答済"))):::state
+    state__OfficeAction_closed((("案件終了"))):::state
+    state__OfficeAction_drafted((("応答案作成済"))):::state
+    state__OfficeAction_lapsed((("応答なしで期間満了"))):::state
+    state__OfficeAction_open((("応答期間中"))):::state
+    state__OfficeAction_overdue((("期間経過（延長請求可）"))):::state
+    state__PatentApplication_appealed((("拒絶査定不服審判を請求"))):::state
+    state__PatentApplication_examining((("審査請求済（審査中）"))):::state
+    state__PatentApplication_granted((("特許査定"))):::state
+    state__PatentApplication_rejected((("拒絶査定"))):::state
+    state__PatentApplication_rejection_final((("拒絶査定の確定"))):::state
+    condition__DivisionPossible{"分割できる時期である"}:::condition
+    condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
+    condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
+    condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
+  end
+  actor__IpStaff -.-> usecase__CloseOfficeActionDocket
+  actor__IpStaff -.-> usecase__InstructResponse
+  actor__IpStaff -.-> usecase__ReceiveDecisionOfRejection
+  actor__IpStaff -.-> usecase__ReceiveDecisionToGrant
+  actor__PatentAttorney -.-> usecase__DraftLimitedResponse
+  actor__PatentAttorney -.-> usecase__DraftResponse
+  actor__PatentAttorney -.-> usecase__FileDivisionalApplication
+  actor__PatentAttorney -.-> usecase__FileResponse
+  actor__PatentAttorney -.-> usecase__ReceiveFinalOfficeAction
+  actor__PatentAttorney -.-> usecase__ReceiveOfficeAction
+  actor__PatentAttorney -.-> usecase__RequestAppeal
+  actor__PatentAttorney -.-> usecase__RequestLateExtension
+  actor__PatentAttorney -.-> usecase__RequestTermExtension
+  condition__DivisionPossible -.-> usecase__FileDivisionalApplication
+  condition__FirstNoticeOnly -.-> usecase__DraftResponse
+  condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
+  condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
+  event__EvAppealRequested -.-> extsystem__Jpo
+  event__EvDecisionOfRejection -.-> usecase__CloseOfficeActionDocket
+  event__EvDecisionOfRejection -.-> usecase__ReceiveDecisionOfRejection
+  event__EvDecisionToGrant -.-> usecase__CloseOfficeActionDocket
+  event__EvDecisionToGrant -.-> usecase__ReceiveDecisionToGrant
+  event__EvDivisionalFiled -.-> extsystem__Jpo
+  event__EvExtensionRequested -.-> extsystem__Jpo
+  event__EvFinalOfficeAction -.-> usecase__ReceiveFinalOfficeAction
+  event__EvOfficeAction -.-> usecase__ReceiveOfficeAction
+  event__EvResponseFiled -.-> extsystem__Jpo
+  extsystem__Jpo -.-> event__EvDecisionOfRejection
+  extsystem__Jpo -.-> event__EvDecisionToGrant
+  extsystem__Jpo -.-> event__EvFinalOfficeAction
+  extsystem__Jpo -.-> event__EvOfficeAction
+  timer__AppealDeadline -.-> usecase__FinalizeRejection
+  timer__AppealDeadline -.-> usecase__RequestAppeal
+  timer__LateExtensionDeadline -.-> usecase__LapseResponse
+  timer__ResponseDeadline -.-> usecase__ExpireResponseTerm
+  timer__ResponseDeadline -.-> usecase__FileResponse
+  usecase__CloseOfficeActionDocket -.-> screen__OfficeActionScreen
+  usecase__CloseOfficeActionDocket -.->|transitions OfficeAction.status answered->closed| state__OfficeAction_closed
+  usecase__CloseOfficeActionDocket -.->|updates| entity__OfficeAction
+  usecase__DraftLimitedResponse -.-> screen__ResponseDraftScreen
+  usecase__DraftLimitedResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
+  usecase__DraftLimitedResponse -.->|updates| entity__OfficeAction
+  %% derived usecase__DraftLimitedResponse -> entity__OfficeAction via api__OfficeActionApi
+  usecase__DraftResponse -.-> screen__ResponseDraftScreen
+  usecase__DraftResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
+  usecase__DraftResponse -.->|updates| entity__OfficeAction
+  %% derived usecase__DraftResponse -> entity__OfficeAction via api__OfficeActionApi
+  usecase__ExpireResponseTerm -.->|transitions OfficeAction.status drafted->overdue| state__OfficeAction_overdue
+  usecase__ExpireResponseTerm -.->|transitions OfficeAction.status open->overdue| state__OfficeAction_overdue
+  usecase__ExpireResponseTerm -.->|updates| entity__OfficeAction
+  usecase__FileDivisionalApplication -.->|creates| entity__DivisionalFiling
+  %% derived usecase__FileDivisionalApplication -> entity__DivisionalFiling via api__DivisionalApi
+  usecase__FileDivisionalApplication -.-> screen__OfficeActionScreen
+  usecase__FileDivisionalApplication -.-> event__EvDivisionalFiled
+  usecase__FileResponse -.-> screen__ResponseDraftScreen
+  usecase__FileResponse -.-> event__EvResponseFiled
+  usecase__FileResponse -.->|transitions OfficeAction.status drafted->answered| state__OfficeAction_answered
+  usecase__FileResponse -.->|updates| entity__OfficeAction
+  %% derived usecase__FileResponse -> entity__OfficeAction via api__ResponseFilingApi
+  usecase__FinalizeRejection -.->|transitions PatentApplication.status rejected->rejection_final| state__PatentApplication_rejection_final
+  usecase__FinalizeRejection -.->|updates| entity__PatentApplication
+  usecase__InstructResponse -.-> screen__OfficeActionScreen
+  usecase__InstructResponse -.->|reads| entity__OfficeAction
+  usecase__InstructResponse -.->|reads| entity__PatentApplication
+  usecase__LapseResponse -.->|transitions OfficeAction.status overdue->lapsed| state__OfficeAction_lapsed
+  usecase__LapseResponse -.->|updates| entity__OfficeAction
+  usecase__ReceiveDecisionOfRejection -.-> screen__DecisionScreen
+  usecase__ReceiveDecisionOfRejection -.->|transitions PatentApplication.status examining->rejected| state__PatentApplication_rejected
+  usecase__ReceiveDecisionOfRejection -.->|updates| entity__PatentApplication
+  %% derived usecase__ReceiveDecisionOfRejection -> entity__PatentApplication via api__DecisionApi
+  usecase__ReceiveDecisionToGrant -.-> screen__DecisionScreen
+  usecase__ReceiveDecisionToGrant -.->|transitions PatentApplication.status examining->granted| state__PatentApplication_granted
+  usecase__ReceiveDecisionToGrant -.->|updates| entity__PatentApplication
+  %% derived usecase__ReceiveDecisionToGrant -> entity__PatentApplication via api__DecisionApi
+  usecase__ReceiveFinalOfficeAction -.-> screen__OfficeActionScreen
+  usecase__ReceiveFinalOfficeAction -.->|transitions OfficeAction.status answered->open| state__OfficeAction_open
+  usecase__ReceiveFinalOfficeAction -.->|updates| entity__OfficeAction
+  %% derived usecase__ReceiveFinalOfficeAction -> entity__OfficeAction via api__ResponseFilingApi
+  usecase__ReceiveOfficeAction -.->|creates| entity__OfficeAction
+  %% derived usecase__ReceiveOfficeAction -> entity__OfficeAction via api__OfficeActionIntakeApi
+  usecase__ReceiveOfficeAction -.-> screen__OfficeActionScreen
+  usecase__ReceiveOfficeAction -.->|reads| entity__PatentApplication
+  %% derived usecase__ReceiveOfficeAction -> entity__PatentApplication via api__OfficeActionIntakeApi
+  usecase__RequestAppeal -.-> screen__DecisionScreen
+  usecase__RequestAppeal -.-> event__EvAppealRequested
+  usecase__RequestAppeal -.->|transitions PatentApplication.status rejected->appealed| state__PatentApplication_appealed
+  usecase__RequestAppeal -.->|updates| entity__PatentApplication
+  %% derived usecase__RequestAppeal -> entity__PatentApplication via api__AppealApi
+  usecase__RequestLateExtension -.-> screen__OfficeActionScreen
+  usecase__RequestLateExtension -.-> event__EvExtensionRequested
+  usecase__RequestLateExtension -.->|transitions OfficeAction.status overdue->open| state__OfficeAction_open
+  usecase__RequestLateExtension -.->|updates| entity__OfficeAction
+  %% derived usecase__RequestLateExtension -> entity__OfficeAction via api__OfficeActionApi
+  usecase__RequestTermExtension -.-> screen__OfficeActionScreen
+  usecase__RequestTermExtension -.-> event__EvExtensionRequested
+  usecase__RequestTermExtension -.->|updates| entity__OfficeAction
+  %% derived usecase__RequestTermExtension -> entity__OfficeAction via api__OfficeActionApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

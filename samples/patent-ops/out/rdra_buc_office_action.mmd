@@ -1,0 +1,685 @@
+%% rdra-ish diagram=rdra scope=buc:BucOfficeAction model=samples/patent-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state variation condition
+%% omitted: (none)
+flowchart LR
+  subgraph layer_value["システム価値"]
+    extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    business__Prosecution[\"権利化"/]:::business
+    %% desc business__Prosecution: 特許事務所への依頼、出願、方式審査、審査請求、拒絶理由通知への応答（中間処理）。
+    business__RightsMaintenance[\"権利の維持"/]:::business
+    %% desc business__RightsMaintenance: 特許料の納付と設定登録、年金の管理、消滅と回復。
+    buc__BucAnnuity["年金管理と権利の維持"]:::buc
+    %% desc buc__BucAnnuity: 設定登録の後、第4年以後の特許料（年金）を前年以前に納付する。知的財産部は登録後3年目・6年目などに維持の要否を調べ、維持しない権利は納付をやめる。納付期限を過ぎても6月以内なら同額の割増特許料とともに追納でき、追納しなければ特許権は期限の経過の時に遡って消滅する。故意でなければ回復できる。特許権は放棄でき、出願から20年で満了する。
+    buc__BucOfficeAction["実体審査と中間処理"]:::buc
+    %% desc buc__BucOfficeAction: 審査官は拒絶理由を見つけなければ特許査定をし、見つければ拒絶理由通知で意見書を出す機会を与える。弁理士が知的財産部の方針で意見書・補正書を作って応答期間（国内居住者は発送日から60日）内に出し、期間内の請求で2か月、期間経過後2か月以内の請求でも2か月延長できる（両方はできない、`exclusive`）。最後の拒絶理由通知への補正は請求項の削除・減縮・誤記の訂正・釈明に限る（`FirstNoticeOnly`）。拒絶査定には謄本の送達から3月以内に審判を請求できる（審判の中身は対象外）。分割出願は補正できる時期・特許査定から30日・最初の拒絶査定から3月にできる。
+    buc__BucRegistration["特許料の納付と設定登録"]:::buc
+    %% desc buc__BucRegistration: 特許査定の謄本の送達から30日以内（請求で30日延長できる）に第1〜3年分の特許料を一時に納付すると、特許権の設定の登録がされ、特許権が発生する。納付しなければ設定登録されず、手続は却下される（`FirstFeesPaid`・`FirstFeesUnpaid`）。
+    flow__AnnuityFlow["年金管理の流れ"]:::flow
+    flow__OfficeActionFlow["実体審査と中間処理の流れ"]:::flow
+    flow__RegistrationFlow["設定登録の流れ"]:::flow
+    step__AbandonStep["放棄"]:::step
+    step__DivisionStep["分割出願"]:::step
+    step__DocketStep["年金管理の開始"]:::step
+    step__DraftingStep["意見書・補正書案の作成"]:::step
+    step__ExpiryStep["存続期間の満了（20年）"]:::step
+    step__ExtensionStep["応答期間の延長（2か月）"]:::step
+    step__FeeDismissalStep["不納による却下"]:::step
+    step__FeeExtensionStep["納付期間の延長（30日）"]:::step
+    step__FinalNoticeStep["最後の拒絶理由通知"]:::step
+    step__FirstFeeStep["第1〜3年分の納付（30日）"]:::step
+    step__GraceStep["追納（6月・割増）"]:::step
+    step__GrantStep["特許査定"]:::step
+    step__LapseStep["消滅"]:::step
+    step__LateExtensionStep["期間経過後の延長（2か月）"]:::step
+    step__NoticeStep["拒絶理由通知の受領（60日）"]:::step
+    step__PaymentStep["年金の納付（前年以前）"]:::step
+    step__PolicyStep["応答方針の指示"]:::step
+    step__RegistrationStep["設定登録"]:::step
+    step__RejectionStep["拒絶査定（審判請求は3月以内）"]:::step
+    step__ResponseStep["意見書・補正書の提出"]:::step
+    step__RestoreStep["回復"]:::step
+    step__ReviewStep["権利維持要否の調査（3年目・6年目）"]:::step
+    timer__AnnuityDueDate(("第4年以後の特許料の納付期限（前年以前）")):::timer
+    timer__AppealDeadline(("拒絶査定不服審判の請求期限（謄本の送達から3月）")):::timer
+    timer__FirstFeeDeadline(("第1〜3年分の特許料の納付期限（査定謄本の送達から30日）")):::timer
+    timer__LateExtensionDeadline(("期間経過後の延長請求の期限（応答期間の経過から2か月）")):::timer
+    timer__LatePaymentDeadline(("追納期限（納付期限の経過から6月）")):::timer
+    timer__MaintenanceReview(("権利維持要否の調査（登録後3年目・6年目）")):::timer
+    timer__PublicationCheck(("出願公開の確認（出願から1年6月）")):::timer
+    timer__ResponseDeadline(("拒絶理由通知の応答期限（発送日から60日、延長で2か月）")):::timer
+    timer__TermExpiry(("存続期間の満了（出願から20年）")):::timer
+    medium__AttorneyPortal["特許事務所との案件共有ポータル"]:::medium
+    medium__InternetFilingSoftware["インターネット出願ソフト"]:::medium
+    medium__IpWorkstation["知的財産部の端末"]:::medium
+    permission__DocketManage["期限管理"]:::permission
+    permission__DraftWrite["出願書類の作成"]:::permission
+    permission__FeePay["特許料の納付"]:::permission
+    permission__JpoProcedure["特許庁への手続（代理人）"]:::permission
+    permission__MaintenanceDecide["権利維持の判断"]:::permission
+    permission__RewardManage["相当の利益の管理"]:::permission
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AbandonPatent("特許権の放棄"):::usecase
+    %% desc usecase__AbandonPatent: 特許権を放棄する。専用実施権者・質権者があればその承諾を得る。
+    usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
+    %% desc usecase__CloseOfficeActionDocket: 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。
+    usecase__DecideReward("相当の利益の決定"):::usecase
+    %% desc usecase__DecideReward: 職務発明規程の基準で、職務発明の相当の利益を決める。
+    usecase__DecideToLetLapse("権利を維持しない決定"):::usecase
+    %% desc usecase__DecideToLetLapse: 維持しないと決め、以後の年金を納めない。
+    usecase__DraftLimitedResponse("限定した補正による応答案の作成"):::usecase
+    %% desc usecase__DraftLimitedResponse: 請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）の案を作る。最後の拒絶理由通知にはこの案だけが使える。
+    usecase__DraftResponse("意見書・補正書案の作成"):::usecase
+    %% desc usecase__DraftResponse: 最初の拒絶理由通知に対し、弁理士が意見書と、必要なら限定のない補正書の案を作る。
+    usecase__EnterGracePeriod("納付期限の経過"):::usecase
+    %% desc usecase__EnterGracePeriod: 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。
+    usecase__ExpirePatentTerm("存続期間の満了"):::usecase
+    %% desc usecase__ExpirePatentTerm: 出願から20年で特許権の存続期間が満了したことを記録する。
+    usecase__ExpireResponseTerm("応答期間の経過"):::usecase
+    %% desc usecase__ExpireResponseTerm: 応答のないまま応答期間が過ぎたことを記録する。その後2か月は期間経過後の延長を請求できる。
+    usecase__FileDivisionalApplication("分割出願"):::usecase
+    %% desc usecase__FileDivisionalApplication: 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。
+    usecase__FileResponse("意見書・補正書の提出"):::usecase
+    %% desc usecase__FileResponse: 知的財産部が確かめた案を弁理士が特許庁に出す。
+    usecase__FinalizeRejection("拒絶査定の確定"):::usecase
+    %% desc usecase__FinalizeRejection: 審判請求がないまま3月が過ぎ、拒絶査定が確定したことを記録する。
+    usecase__InstructResponse("応答方針の指示"):::usecase
+    %% desc usecase__InstructResponse: 知的財産部が発明者と相談し、弁理士に応答の方針を伝える（参照のみ）。
+    usecase__LapseResponse("応答なしでの期間満了"):::usecase
+    %% desc usecase__LapseResponse: 期間経過後の延長も請求できなくなったことを記録する。
+    usecase__LapseUnpaidPatent("追納期間の経過による消滅"):::usecase
+    %% desc usecase__LapseUnpaidPatent: 追納期間が過ぎ、特許権が納付期限の経過の時に遡って消滅したことを記録する。
+    usecase__PayAnnuity("年金の納付"):::usecase
+    %% desc usecase__PayAnnuity: 次の年の特許料を納付期限までに納付する。
+    usecase__PayFirstAnnuities("第1〜3年分の特許料の納付"):::usecase
+    %% desc usecase__PayFirstAnnuities: 特許査定の謄本の送達から30日以内に、第1〜3年分の特許料を一時に納付する。
+    usecase__PayLateAnnuity("追納"):::usecase
+    %% desc usecase__PayLateAnnuity: 追納期間内に、特許料と同額の割増特許料を納付する。
+    usecase__ReceiveDecisionOfRejection("拒絶査定の受領"):::usecase
+    %% desc usecase__ReceiveDecisionOfRejection: 拒絶査定の謄本を受け取る。審判請求の期限（3月）が始まる。
+    usecase__ReceiveDecisionToGrant("特許査定の受領"):::usecase
+    %% desc usecase__ReceiveDecisionToGrant: 特許査定の謄本を受け取る。特許料の納付期限（30日）が始まる。
+    usecase__ReceiveFinalOfficeAction("最後の拒絶理由通知の受領"):::usecase
+    %% desc usecase__ReceiveFinalOfficeAction: 応答の後に最後の拒絶理由通知書を受け取り、補正の範囲が限られた応答期間を始める。
+    usecase__ReceiveFormalityOrder("手続補正指令書の受領"):::usecase
+    %% desc usecase__ReceiveFormalityOrder: 方式の不備を指摘する手続補正指令書を受け取り、出願を補正待ちにする。
+    usecase__ReceiveOfficeAction("拒絶理由通知の受領"):::usecase
+    %% desc usecase__ReceiveOfficeAction: 拒絶理由通知書を受け取り、応答期間の管理を始める。
+    usecase__RecordDismissal("出願の却下の記録"):::usecase
+    %% desc usecase__RecordDismissal: 補正がなく出願が却下されたことを記録する。
+    usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
+    %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。
+    usecase__RecordPublication("出願公開の記録"):::usecase
+    %% desc usecase__RecordPublication: 出願から1年6月で出願が公開されたことを記録する。
+    usecase__RecordRegistration("設定登録の記録"):::usecase
+    %% desc usecase__RecordRegistration: 設定登録で特許権が発生したことを記録し、第4年分からの年金管理を始める。
+    usecase__RecordRegistrationDismissal("特許料の不納による却下の記録"):::usecase
+    %% desc usecase__RecordRegistrationDismissal: 納付期間内に特許料を納めず、手続が却下されたことを記録する。
+    usecase__RequestAppeal("拒絶査定不服審判の請求"):::usecase
+    %% desc usecase__RequestAppeal: 審判を請求する。審判の中身はこのモデルの対象外で、出願はここで審判に引き渡される。
+    usecase__RequestFeePaymentExtension("納付期間の延長請求"):::usecase
+    %% desc usecase__RequestFeePaymentExtension: 第1〜3年分の特許料の納付期間を、30日以内に限り延長するよう請求する。
+    usecase__RequestLateExtension("期間経過後の延長請求"):::usecase
+    %% desc usecase__RequestLateExtension: 応答期間の経過後2か月以内に延長を請求し、2か月の応答期間を得る。
+    usecase__RequestTermExtension("応答期間の延長請求"):::usecase
+    %% desc usecase__RequestTermExtension: 応答期間内に期間延長請求書を出し、2か月延長する。
+    usecase__RestorePatent("特許権の回復"):::usecase
+    %% desc usecase__RestorePatent: 納付しなかったことが故意でないとき、特許料と割増特許料を納めて特許権を回復する。
+    usecase__ReviewMaintenance("権利維持要否の調査"):::usecase
+    %% desc usecase__ReviewMaintenance: 発明者と事業部門に権利の活用状況を聞き、維持の要否を調べる（参照のみ）。
+    usecase__RollOverAnnuityYear("納付年度の更新"):::usecase
+    %% desc usecase__RollOverAnnuityYear: 納付済の年が始まり、次の年の特許料が未納になる。
+    screen__AnnuityScreen["年金管理画面"]:::screen
+    screen__ApplicationDocketScreen["出願案件・期限管理画面"]:::screen
+    screen__DecisionScreen["査定画面"]:::screen
+    screen__FeePaymentScreen["特許料納付画面"]:::screen
+    screen__MaintenanceReviewScreen["権利維持要否画面"]:::screen
+    screen__OfficeActionScreen["中間処理画面"]:::screen
+    screen__ResponseDraftScreen["応答案画面"]:::screen
+    screen__RewardScreen["相当の利益画面"]:::screen
+    field__AmendmentScopeField["補正の範囲"]:::field
+    field__ApplicationNoField["出願番号"]:::field
+    field__DecisionStatusField["査定"]:::field
+    field__FirstFeesPaidField["第1〜3年分の納付"]:::field
+    field__MaintainField["維持する"]:::field
+    field__NextYearPaidField["次の年の納付"]:::field
+    field__NoticeKindField["通知の種類（最初・最後）"]:::field
+    field__RewardAmountField["相当の利益の額"]:::field
+    event__EvAcceleratedExamRequested>"早期審査に関する事情説明書の提出"]:::event
+    event__EvAppealRequested>"拒絶査定不服審判の請求"]:::event
+    event__EvApplicationDismissed>"却下処分"]:::event
+    event__EvApplicationFiled>"特許願の提出"]:::event
+    event__EvDecisionOfRejection>"拒絶査定の謄本"]:::event
+    event__EvDecisionToGrant>"特許査定の謄本"]:::event
+    event__EvDivisionalFiled>"分割出願"]:::event
+    event__EvExaminationRequested>"出願審査請求書の提出"]:::event
+    event__EvExtensionRequested>"期間延長請求書の提出"]:::event
+    event__EvFeesPaid>"特許料の納付"]:::event
+    event__EvFilingReceipt>"受領書（出願番号）"]:::event
+    event__EvFinalOfficeAction>"最後の拒絶理由通知書"]:::event
+    event__EvFormalityAmendmentFiled>"手続補正書の提出"]:::event
+    event__EvFormalityOrder>"手続補正指令書（方式）"]:::event
+    event__EvOfficeAction>"拒絶理由通知書"]:::event
+    event__EvPriorityClaimed>"国内優先権を主張した出願"]:::event
+    event__EvPublished>"出願公開"]:::event
+    event__EvRegistered>"設定登録"]:::event
+    event__EvRegistrationDismissed>"特許料の不納による却下"]:::event
+    event__EvResponseFiled>"意見書・手続補正書の提出"]:::event
+    event__EvRestorationRequested>"回復の手続"]:::event
+    event__EvWithdrawalFiled>"取下書・放棄書の提出"]:::event
+  end
+  subgraph layer_system["システム"]
+    api__AnnuityApi{{"年金 API"}}:::api
+    api__AppealApi{{"審判請求 API"}}:::api
+    api__ApplicationDocketApi{{"出願案件 API"}}:::api
+    api__DecisionApi{{"査定 API"}}:::api
+    api__DivisionalApi{{"分割出願 API"}}:::api
+    api__FeePaymentApi{{"特許料納付 API"}}:::api
+    api__FormalityApi{{"方式補正 API"}}:::api
+    api__MaintenanceApi{{"権利維持 API"}}:::api
+    api__OfficeActionApi{{"中間処理 API"}}:::api
+    api__OfficeActionIntakeApi{{"拒絶理由通知の受付 API"}}:::api
+    api__RegistrationApi{{"設定登録 API"}}:::api
+    api__ResponseFilingApi{{"応答提出 API"}}:::api
+    api__RewardApi{{"相当の利益 API"}}:::api
+    entity__DivisionalFiling[("分割出願")]:::entity
+    entity__DraftingOrder[("出願依頼")]:::entity
+    entity__FeeSchedule[("料金表")]:::entity
+    entity__InventionDisclosure[("発明届出")]:::entity
+    entity__InventorReward[("相当の利益")]:::entity
+    entity__OfficeAction[("拒絶理由通知")]:::entity
+    entity__Patent[("特許権")]:::entity
+    entity__PatentApplication[("特許出願")]:::entity
+    state__DraftingOrder_approved((("出願承認済"))):::state
+    state__DraftingOrder_filed((("出願済"))):::state
+    state__OfficeAction_answered((("応答済"))):::state
+    state__OfficeAction_closed((("案件終了"))):::state
+    state__OfficeAction_drafted((("応答案作成済"))):::state
+    state__OfficeAction_lapsed((("応答なしで期間満了"))):::state
+    state__OfficeAction_open((("応答期間中"))):::state
+    state__OfficeAction_overdue((("期間経過（延長請求可）"))):::state
+    state__PatentApplication_appealed((("拒絶査定不服審判を請求"))):::state
+    state__PatentApplication_dismissed((("却下"))):::state
+    state__PatentApplication_examining((("審査請求済（審査中）"))):::state
+    state__PatentApplication_filed((("出願済（方式審査）"))):::state
+    state__PatentApplication_formality_order((("手続補正指令への対応中"))):::state
+    state__PatentApplication_granted((("特許査定"))):::state
+    state__PatentApplication_registered((("設定登録済"))):::state
+    state__PatentApplication_rejected((("拒絶査定"))):::state
+    state__PatentApplication_rejection_final((("拒絶査定の確定"))):::state
+    state__Patent_abandoned((("放棄"))):::state
+    state__Patent_expired((("存続期間満了"))):::state
+    state__Patent_grace((("追納期間中"))):::state
+    state__Patent_in_force((("存続中"))):::state
+    state__Patent_lapsed((("消滅（特許料の不納）"))):::state
+    variation__InventionCategory[\"発明の区分"\]:::variation
+    condition__AnnuityDue{"存続中で、維持すると決めた権利の次の年が未納"}:::condition
+    condition__DivisionPossible{"分割できる時期である"}:::condition
+    condition__EmployeeInventionReward{"職務発明である"}:::condition
+    condition__FirstFeesPaid{"第1〜3年分の特許料を納付している"}:::condition
+    condition__FirstFeesUnpaid{"第1〜3年分の特許料を納付していない"}:::condition
+    condition__FirstNoticeOnly{"最初の拒絶理由通知である"}:::condition
+    condition__Granted{"特許査定を受けた出願である"}:::condition
+    condition__InForce{"特許権が存続している"}:::condition
+    condition__KeptRight{"維持すると決めた権利である"}:::condition
+    condition__NotExtendedWithinTerm{"期間内に延長していない"}:::condition
+    condition__NotYetExtended{"納付期間をまだ延長していない"}:::condition
+    condition__StillPending{"出願が係属している"}:::condition
+    condition__WithinTermNotExtended{"応答期間内で、まだ延長していない"}:::condition
+    condition__YearPaid{"存続中で、次の年が納付済"}:::condition
+    condition__YearUnpaid{"次の年が未納"}:::condition
+  end
+  api__AnnuityApi -.->|reads| entity__FeeSchedule
+  api__AnnuityApi -.-> permission__FeePay
+  api__AnnuityApi -.->|updates| entity__Patent
+  api__AppealApi -.-> permission__JpoProcedure
+  api__AppealApi -.->|updates| entity__PatentApplication
+  api__ApplicationDocketApi -.-> permission__DocketManage
+  api__ApplicationDocketApi -.->|updates| entity__PatentApplication
+  api__DecisionApi -.-> permission__DocketManage
+  api__DecisionApi -.->|updates| entity__PatentApplication
+  api__DivisionalApi -.->|creates| entity__DivisionalFiling
+  api__DivisionalApi -.-> permission__JpoProcedure
+  api__FeePaymentApi -.->|reads| entity__FeeSchedule
+  api__FeePaymentApi -.-> permission__FeePay
+  api__FeePaymentApi -.->|updates| entity__PatentApplication
+  api__FormalityApi -.-> permission__JpoProcedure
+  api__FormalityApi -.->|updates| entity__PatentApplication
+  api__MaintenanceApi -.-> permission__MaintenanceDecide
+  api__MaintenanceApi -.->|updates| entity__Patent
+  api__OfficeActionApi -.-> permission__DraftWrite
+  api__OfficeActionApi -.->|updates| entity__OfficeAction
+  api__OfficeActionIntakeApi -.->|creates| entity__OfficeAction
+  api__OfficeActionIntakeApi -.->|reads| entity__PatentApplication
+  api__OfficeActionIntakeApi -.-> permission__JpoProcedure
+  api__RegistrationApi -.->|creates| entity__Patent
+  api__RegistrationApi -.-> permission__DocketManage
+  api__RegistrationApi -.->|updates| entity__PatentApplication
+  api__ResponseFilingApi -.-> permission__JpoProcedure
+  api__ResponseFilingApi -.->|updates| entity__OfficeAction
+  api__RewardApi -.->|creates| entity__InventorReward
+  api__RewardApi -.->|reads| entity__InventionDisclosure
+  api__RewardApi -.-> permission__RewardManage
+  buc__BucAnnuity --> business__RightsMaintenance
+  buc__BucAnnuity --> flow__AnnuityFlow
+  buc__BucAnnuity --> usecase__AbandonPatent
+  buc__BucAnnuity --> usecase__DecideToLetLapse
+  buc__BucAnnuity --> usecase__EnterGracePeriod
+  buc__BucAnnuity --> usecase__ExpirePatentTerm
+  buc__BucAnnuity --> usecase__LapseUnpaidPatent
+  buc__BucAnnuity --> usecase__PayAnnuity
+  buc__BucAnnuity --> usecase__PayLateAnnuity
+  buc__BucAnnuity --> usecase__RestorePatent
+  buc__BucAnnuity --> usecase__ReviewMaintenance
+  buc__BucAnnuity --> usecase__RollOverAnnuityYear
+  buc__BucOfficeAction --> business__Prosecution
+  buc__BucOfficeAction --> flow__OfficeActionFlow
+  buc__BucOfficeAction --> usecase__CloseOfficeActionDocket
+  buc__BucOfficeAction --> usecase__DraftLimitedResponse
+  buc__BucOfficeAction --> usecase__DraftResponse
+  buc__BucOfficeAction --> usecase__ExpireResponseTerm
+  buc__BucOfficeAction --> usecase__FileDivisionalApplication
+  buc__BucOfficeAction --> usecase__FileResponse
+  buc__BucOfficeAction --> usecase__FinalizeRejection
+  buc__BucOfficeAction --> usecase__InstructResponse
+  buc__BucOfficeAction --> usecase__LapseResponse
+  buc__BucOfficeAction --> usecase__ReceiveDecisionOfRejection
+  buc__BucOfficeAction --> usecase__ReceiveDecisionToGrant
+  buc__BucOfficeAction --> usecase__ReceiveFinalOfficeAction
+  buc__BucOfficeAction --> usecase__ReceiveOfficeAction
+  buc__BucOfficeAction --> usecase__RequestAppeal
+  buc__BucOfficeAction --> usecase__RequestLateExtension
+  buc__BucOfficeAction --> usecase__RequestTermExtension
+  buc__BucRegistration --> business__RightsMaintenance
+  buc__BucRegistration --> flow__RegistrationFlow
+  buc__BucRegistration --> usecase__PayFirstAnnuities
+  buc__BucRegistration --> usecase__RecordRegistration
+  buc__BucRegistration --> usecase__RecordRegistrationDismissal
+  buc__BucRegistration --> usecase__RequestFeePaymentExtension
+  condition__AnnuityDue -.-> usecase__PayAnnuity
+  condition__AnnuityDue -.-> entity__Patent
+  %% derived condition__AnnuityDue -> entity__Patent from holds
+  condition__DivisionPossible -.-> usecase__FileDivisionalApplication
+  condition__DivisionPossible -.-> entity__PatentApplication
+  %% derived condition__DivisionPossible -> entity__PatentApplication from holds
+  condition__EmployeeInventionReward -.-> usecase__DecideReward
+  condition__EmployeeInventionReward -.-> variation__InventionCategory
+  %% derived condition__EmployeeInventionReward -> variation__InventionCategory from holds
+  condition__FirstFeesPaid -.-> usecase__RecordRegistration
+  condition__FirstFeesPaid -.-> entity__PatentApplication
+  %% derived condition__FirstFeesPaid -> entity__PatentApplication from holds
+  condition__FirstFeesUnpaid -.-> usecase__RecordRegistrationDismissal
+  condition__FirstFeesUnpaid -.-> entity__PatentApplication
+  %% derived condition__FirstFeesUnpaid -> entity__PatentApplication from holds
+  condition__FirstNoticeOnly -.-> usecase__DraftResponse
+  condition__FirstNoticeOnly -.-> entity__OfficeAction
+  %% derived condition__FirstNoticeOnly -> entity__OfficeAction from holds
+  condition__Granted -.-> api__FeePaymentApi
+  condition__Granted -.-> entity__PatentApplication
+  %% derived condition__Granted -> entity__PatentApplication from holds
+  condition__InForce -.-> usecase__DecideToLetLapse
+  condition__InForce -.-> entity__Patent
+  %% derived condition__InForce -> entity__Patent from holds
+  condition__KeptRight -.-> usecase__PayLateAnnuity
+  condition__KeptRight -.-> entity__Patent
+  %% derived condition__KeptRight -> entity__Patent from holds
+  condition__NotExtendedWithinTerm -.-> usecase__RequestLateExtension
+  condition__NotExtendedWithinTerm -.-> entity__OfficeAction
+  %% derived condition__NotExtendedWithinTerm -> entity__OfficeAction from holds
+  condition__NotYetExtended -.-> usecase__RequestFeePaymentExtension
+  condition__NotYetExtended -.-> entity__PatentApplication
+  %% derived condition__NotYetExtended -> entity__PatentApplication from holds
+  condition__StillPending -.-> usecase__RecordPublication
+  condition__StillPending -.-> entity__PatentApplication
+  %% derived condition__StillPending -> entity__PatentApplication from holds
+  condition__WithinTermNotExtended -.-> usecase__RequestTermExtension
+  condition__WithinTermNotExtended -.-> entity__OfficeAction
+  %% derived condition__WithinTermNotExtended -> entity__OfficeAction from holds
+  condition__YearPaid -.-> usecase__RollOverAnnuityYear
+  condition__YearPaid -.-> entity__Patent
+  %% derived condition__YearPaid -> entity__Patent from holds
+  condition__YearUnpaid -.-> usecase__EnterGracePeriod
+  condition__YearUnpaid -.-> entity__Patent
+  %% derived condition__YearUnpaid -> entity__Patent from holds
+  entity__DivisionalFiling ---|N:1| entity__PatentApplication
+  entity__DraftingOrder ---|N:1| entity__InventionDisclosure
+  entity__InventorReward ---|N:1| entity__InventionDisclosure
+  entity__OfficeAction ---|N:1| entity__PatentApplication
+  entity__Patent ---|1:1| entity__PatentApplication
+  entity__PatentApplication ---|1:1| entity__DraftingOrder
+  event__EvAcceleratedExamRequested -.-> extsystem__Jpo
+  event__EvAppealRequested -.-> extsystem__Jpo
+  event__EvApplicationDismissed -.-> usecase__RecordDismissal
+  event__EvApplicationFiled -.-> extsystem__Jpo
+  event__EvApplicationFiled -.-> usecase__DecideReward
+  event__EvDecisionOfRejection -.-> usecase__CloseOfficeActionDocket
+  event__EvDecisionOfRejection -.-> usecase__ReceiveDecisionOfRejection
+  event__EvDecisionToGrant -.-> buc__BucRegistration
+  event__EvDecisionToGrant -.-> usecase__CloseOfficeActionDocket
+  event__EvDecisionToGrant -.-> usecase__ReceiveDecisionToGrant
+  event__EvDivisionalFiled -.-> extsystem__Jpo
+  event__EvExaminationRequested -.-> extsystem__Jpo
+  event__EvExtensionRequested -.-> extsystem__Jpo
+  event__EvFeesPaid -.-> extsystem__Jpo
+  event__EvFilingReceipt -.-> usecase__RecordFilingReceipt
+  event__EvFinalOfficeAction -.-> usecase__ReceiveFinalOfficeAction
+  event__EvFormalityAmendmentFiled -.-> extsystem__Jpo
+  event__EvFormalityOrder -.-> usecase__ReceiveFormalityOrder
+  event__EvOfficeAction -.-> buc__BucOfficeAction
+  event__EvOfficeAction -.-> usecase__ReceiveOfficeAction
+  event__EvPriorityClaimed -.-> extsystem__Jpo
+  event__EvPublished -.-> usecase__RecordPublication
+  event__EvRegistered -.-> buc__BucAnnuity
+  event__EvRegistered -.-> usecase__DecideReward
+  event__EvRegistered -.-> usecase__RecordRegistration
+  event__EvRegistrationDismissed -.-> usecase__RecordRegistrationDismissal
+  event__EvResponseFiled -.-> extsystem__Jpo
+  event__EvRestorationRequested -.-> extsystem__Jpo
+  event__EvWithdrawalFiled -.-> extsystem__Jpo
+  extsystem__Jpo -.-> event__EvApplicationDismissed
+  extsystem__Jpo -.-> event__EvDecisionOfRejection
+  extsystem__Jpo -.-> event__EvDecisionToGrant
+  extsystem__Jpo -.-> event__EvFilingReceipt
+  extsystem__Jpo -.-> event__EvFinalOfficeAction
+  extsystem__Jpo -.-> event__EvFormalityOrder
+  extsystem__Jpo -.-> event__EvOfficeAction
+  extsystem__Jpo -.-> event__EvPublished
+  extsystem__Jpo -.-> event__EvRegistered
+  extsystem__Jpo -.-> event__EvRegistrationDismissed
+  field__AmendmentScopeField -.-> entity__OfficeAction
+  field__ApplicationNoField -.-> entity__PatentApplication
+  field__DecisionStatusField -.-> entity__PatentApplication
+  field__FirstFeesPaidField -.-> entity__PatentApplication
+  field__MaintainField -.-> entity__Patent
+  field__NextYearPaidField -.-> entity__Patent
+  field__NoticeKindField -.-> entity__OfficeAction
+  field__RewardAmountField -.-> entity__InventorReward
+  flow__AnnuityFlow --> step__AbandonStep
+  flow__AnnuityFlow --> step__DocketStep
+  flow__AnnuityFlow --> step__ExpiryStep
+  flow__AnnuityFlow --> step__GraceStep
+  flow__AnnuityFlow --> step__LapseStep
+  flow__AnnuityFlow --> step__PaymentStep
+  flow__AnnuityFlow --> step__RestoreStep
+  flow__AnnuityFlow --> step__ReviewStep
+  flow__OfficeActionFlow --> step__DivisionStep
+  flow__OfficeActionFlow --> step__DraftingStep
+  flow__OfficeActionFlow --> step__ExtensionStep
+  flow__OfficeActionFlow --> step__FinalNoticeStep
+  flow__OfficeActionFlow --> step__GrantStep
+  flow__OfficeActionFlow --> step__LateExtensionStep
+  flow__OfficeActionFlow --> step__NoticeStep
+  flow__OfficeActionFlow --> step__PolicyStep
+  flow__OfficeActionFlow --> step__RejectionStep
+  flow__OfficeActionFlow --> step__ResponseStep
+  flow__RegistrationFlow --> step__FeeDismissalStep
+  flow__RegistrationFlow --> step__FeeExtensionStep
+  flow__RegistrationFlow --> step__FirstFeeStep
+  flow__RegistrationFlow --> step__RegistrationStep
+  screen__AnnuityScreen --> field__NextYearPaidField
+  screen__ApplicationDocketScreen --> field__ApplicationNoField
+  screen__DecisionScreen --> field__DecisionStatusField
+  screen__FeePaymentScreen --> field__FirstFeesPaidField
+  screen__MaintenanceReviewScreen --> field__MaintainField
+  screen__MaintenanceReviewScreen -.-> screen__AnnuityScreen
+  screen__OfficeActionScreen --> field__NoticeKindField
+  screen__OfficeActionScreen -.-> screen__DecisionScreen
+  screen__OfficeActionScreen -.-> screen__ResponseDraftScreen
+  screen__ResponseDraftScreen --> field__AmendmentScopeField
+  screen__ResponseDraftScreen -.-> screen__OfficeActionScreen
+  screen__RewardScreen --> field__RewardAmountField
+  step__AbandonStep -.-> usecase__AbandonPatent
+  step__DivisionStep -.-> usecase__FileDivisionalApplication
+  step__DocketStep -.-> event__EvRegistered
+  step__DocketStep -->|precedes| step__ReviewStep
+  step__DraftingStep -.-> usecase__DraftLimitedResponse
+  step__DraftingStep -.-> usecase__DraftResponse
+  step__DraftingStep -.->|excepts| step__LateExtensionStep
+  step__DraftingStep -->|precedes| step__ResponseStep
+  step__ExpiryStep -.-> timer__TermExpiry
+  step__ExpiryStep -.-> usecase__ExpirePatentTerm
+  step__ExtensionStep -.-> usecase__RequestTermExtension
+  step__ExtensionStep -->|repeats| step__DraftingStep
+  step__FeeDismissalStep -.-> usecase__RecordRegistrationDismissal
+  step__FeeExtensionStep -->|branches| step__FirstFeeStep
+  step__FeeExtensionStep -.-> usecase__RequestFeePaymentExtension
+  step__FinalNoticeStep -.-> usecase__ReceiveFinalOfficeAction
+  step__FinalNoticeStep -->|repeats| step__PolicyStep
+  step__FirstFeeStep -.-> timer__FirstFeeDeadline
+  step__FirstFeeStep -.-> usecase__PayFirstAnnuities
+  step__FirstFeeStep -.->|excepts| step__FeeDismissalStep
+  step__FirstFeeStep -->|precedes| step__RegistrationStep
+  step__GraceStep -.-> usecase__EnterGracePeriod
+  step__GraceStep -.-> usecase__PayLateAnnuity
+  step__GraceStep -.->|excepts| step__LapseStep
+  step__GraceStep -->|repeats| step__PaymentStep
+  step__GrantStep -.-> usecase__CloseOfficeActionDocket
+  step__GrantStep -.-> usecase__ReceiveDecisionToGrant
+  step__LapseStep -.-> timer__LatePaymentDeadline
+  step__LapseStep -.-> usecase__LapseUnpaidPatent
+  step__LapseStep -->|precedes| step__RestoreStep
+  step__LateExtensionStep -.-> timer__LateExtensionDeadline
+  step__LateExtensionStep -.-> usecase__ExpireResponseTerm
+  step__LateExtensionStep -.-> usecase__LapseResponse
+  step__LateExtensionStep -.-> usecase__RequestLateExtension
+  step__LateExtensionStep -->|repeats| step__DraftingStep
+  step__NoticeStep -.-> usecase__ReceiveOfficeAction
+  step__NoticeStep -->|precedes| step__PolicyStep
+  step__PaymentStep -.-> timer__AnnuityDueDate
+  step__PaymentStep -.-> usecase__PayAnnuity
+  step__PaymentStep -.-> usecase__RollOverAnnuityYear
+  step__PaymentStep -.->|excepts| step__GraceStep
+  step__PaymentStep -->|precedes| step__ExpiryStep
+  step__PaymentStep -->|repeats| step__ReviewStep
+  step__PolicyStep -->|branches| step__DivisionStep
+  step__PolicyStep -->|branches| step__ExtensionStep
+  step__PolicyStep -.-> usecase__InstructResponse
+  step__PolicyStep -->|precedes| step__DraftingStep
+  step__RegistrationStep -.-> usecase__RecordRegistration
+  step__RejectionStep -.-> timer__AppealDeadline
+  step__RejectionStep -.-> usecase__FinalizeRejection
+  step__RejectionStep -.-> usecase__ReceiveDecisionOfRejection
+  step__RejectionStep -.-> usecase__RequestAppeal
+  step__ResponseStep -->|branches| step__FinalNoticeStep
+  step__ResponseStep -.-> timer__ResponseDeadline
+  step__ResponseStep -.-> usecase__FileResponse
+  step__ResponseStep -.->|excepts| step__RejectionStep
+  step__ResponseStep -->|precedes| step__GrantStep
+  step__RestoreStep -.-> usecase__RestorePatent
+  step__ReviewStep -->|branches| step__AbandonStep
+  step__ReviewStep -.-> timer__MaintenanceReview
+  step__ReviewStep -.-> usecase__DecideToLetLapse
+  step__ReviewStep -.-> usecase__ReviewMaintenance
+  step__ReviewStep -->|precedes| step__PaymentStep
+  timer__AnnuityDueDate -.-> usecase__EnterGracePeriod
+  timer__AnnuityDueDate -.-> usecase__PayAnnuity
+  timer__AnnuityDueDate -.-> usecase__RollOverAnnuityYear
+  timer__AppealDeadline -.-> usecase__FinalizeRejection
+  timer__AppealDeadline -.-> usecase__RequestAppeal
+  timer__FirstFeeDeadline -.-> usecase__PayFirstAnnuities
+  timer__LateExtensionDeadline -.-> usecase__LapseResponse
+  timer__LatePaymentDeadline -.-> usecase__LapseUnpaidPatent
+  timer__LatePaymentDeadline -.-> usecase__PayLateAnnuity
+  timer__MaintenanceReview -.-> usecase__ReviewMaintenance
+  timer__PublicationCheck -.-> usecase__RecordPublication
+  timer__ResponseDeadline -.-> usecase__ExpireResponseTerm
+  timer__ResponseDeadline -.-> usecase__FileResponse
+  timer__TermExpiry -.-> usecase__ExpirePatentTerm
+  usecase__AbandonPatent -.-> screen__MaintenanceReviewScreen
+  usecase__AbandonPatent -.-> api__MaintenanceApi
+  usecase__AbandonPatent -.-> event__EvWithdrawalFiled
+  usecase__AbandonPatent -.-> medium__InternetFilingSoftware
+  usecase__AbandonPatent -.-> permission__MaintenanceDecide
+  usecase__AbandonPatent -.->|transitions Patent.status in_force->abandoned| state__Patent_abandoned
+  usecase__CloseOfficeActionDocket -.-> screen__OfficeActionScreen
+  usecase__CloseOfficeActionDocket -.-> medium__IpWorkstation
+  usecase__CloseOfficeActionDocket -.-> permission__DocketManage
+  usecase__CloseOfficeActionDocket -.->|transitions OfficeAction.status answered->closed| state__OfficeAction_closed
+  usecase__CloseOfficeActionDocket -.->|updates| entity__OfficeAction
+  usecase__DecideReward -.-> screen__RewardScreen
+  usecase__DecideReward -.-> api__RewardApi
+  usecase__DecideReward -.-> medium__IpWorkstation
+  usecase__DecideReward -.-> permission__RewardManage
+  usecase__DecideToLetLapse -.-> screen__MaintenanceReviewScreen
+  usecase__DecideToLetLapse -.-> api__MaintenanceApi
+  usecase__DecideToLetLapse -.-> medium__IpWorkstation
+  usecase__DecideToLetLapse -.-> permission__MaintenanceDecide
+  usecase__DraftLimitedResponse -.-> screen__ResponseDraftScreen
+  usecase__DraftLimitedResponse -.-> api__OfficeActionApi
+  usecase__DraftLimitedResponse -.-> medium__AttorneyPortal
+  usecase__DraftLimitedResponse -.-> permission__DraftWrite
+  usecase__DraftLimitedResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
+  usecase__DraftResponse -.-> screen__ResponseDraftScreen
+  usecase__DraftResponse -.-> api__OfficeActionApi
+  usecase__DraftResponse -.-> medium__AttorneyPortal
+  usecase__DraftResponse -.-> permission__DraftWrite
+  usecase__DraftResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
+  usecase__EnterGracePeriod -.->|transitions Patent.status in_force->grace| state__Patent_grace
+  usecase__EnterGracePeriod -.->|updates| entity__Patent
+  usecase__ExpirePatentTerm -.->|transitions Patent.status grace->expired| state__Patent_expired
+  usecase__ExpirePatentTerm -.->|transitions Patent.status in_force->expired| state__Patent_expired
+  usecase__ExpirePatentTerm -.->|updates| entity__Patent
+  usecase__ExpireResponseTerm -.->|transitions OfficeAction.status drafted->overdue| state__OfficeAction_overdue
+  usecase__ExpireResponseTerm -.->|transitions OfficeAction.status open->overdue| state__OfficeAction_overdue
+  usecase__ExpireResponseTerm -.->|updates| entity__OfficeAction
+  usecase__FileDivisionalApplication -.-> screen__OfficeActionScreen
+  usecase__FileDivisionalApplication -.-> api__DivisionalApi
+  usecase__FileDivisionalApplication -.-> event__EvDivisionalFiled
+  usecase__FileDivisionalApplication -.-> medium__InternetFilingSoftware
+  usecase__FileDivisionalApplication -.-> permission__JpoProcedure
+  usecase__FileResponse -.-> screen__ResponseDraftScreen
+  usecase__FileResponse -.-> api__ResponseFilingApi
+  usecase__FileResponse -.-> event__EvResponseFiled
+  usecase__FileResponse -.-> medium__InternetFilingSoftware
+  usecase__FileResponse -.-> permission__JpoProcedure
+  usecase__FileResponse -.->|transitions OfficeAction.status drafted->answered| state__OfficeAction_answered
+  usecase__FinalizeRejection -.->|transitions PatentApplication.status rejected->rejection_final| state__PatentApplication_rejection_final
+  usecase__FinalizeRejection -.->|updates| entity__PatentApplication
+  usecase__InstructResponse -.-> screen__OfficeActionScreen
+  usecase__InstructResponse -.->|reads| entity__OfficeAction
+  usecase__InstructResponse -.->|reads| entity__PatentApplication
+  usecase__InstructResponse -.-> medium__IpWorkstation
+  usecase__InstructResponse -.-> permission__DocketManage
+  usecase__LapseResponse -.->|transitions OfficeAction.status overdue->lapsed| state__OfficeAction_lapsed
+  usecase__LapseResponse -.->|updates| entity__OfficeAction
+  usecase__LapseUnpaidPatent -.->|transitions Patent.status grace->lapsed| state__Patent_lapsed
+  usecase__LapseUnpaidPatent -.->|updates| entity__Patent
+  usecase__PayAnnuity -.-> screen__AnnuityScreen
+  usecase__PayAnnuity -.-> api__AnnuityApi
+  usecase__PayAnnuity -.-> event__EvFeesPaid
+  usecase__PayAnnuity -.-> medium__InternetFilingSoftware
+  usecase__PayAnnuity -.-> permission__FeePay
+  usecase__PayFirstAnnuities -.-> screen__FeePaymentScreen
+  usecase__PayFirstAnnuities -.-> api__FeePaymentApi
+  usecase__PayFirstAnnuities -.-> event__EvFeesPaid
+  usecase__PayFirstAnnuities -.-> medium__InternetFilingSoftware
+  usecase__PayFirstAnnuities -.-> permission__FeePay
+  usecase__PayLateAnnuity -.-> screen__AnnuityScreen
+  usecase__PayLateAnnuity -.-> api__AnnuityApi
+  usecase__PayLateAnnuity -.-> event__EvFeesPaid
+  usecase__PayLateAnnuity -.-> medium__InternetFilingSoftware
+  usecase__PayLateAnnuity -.-> permission__FeePay
+  usecase__PayLateAnnuity -.->|transitions Patent.status grace->in_force| state__Patent_in_force
+  usecase__ReceiveDecisionOfRejection -.-> screen__DecisionScreen
+  usecase__ReceiveDecisionOfRejection -.-> api__DecisionApi
+  usecase__ReceiveDecisionOfRejection -.-> medium__IpWorkstation
+  usecase__ReceiveDecisionOfRejection -.-> permission__DocketManage
+  usecase__ReceiveDecisionOfRejection -.->|transitions PatentApplication.status examining->rejected| state__PatentApplication_rejected
+  usecase__ReceiveDecisionToGrant -.-> screen__DecisionScreen
+  usecase__ReceiveDecisionToGrant -.-> api__DecisionApi
+  usecase__ReceiveDecisionToGrant -.-> medium__IpWorkstation
+  usecase__ReceiveDecisionToGrant -.-> permission__DocketManage
+  usecase__ReceiveDecisionToGrant -.->|transitions PatentApplication.status examining->granted| state__PatentApplication_granted
+  usecase__ReceiveFinalOfficeAction -.-> screen__OfficeActionScreen
+  usecase__ReceiveFinalOfficeAction -.-> api__ResponseFilingApi
+  usecase__ReceiveFinalOfficeAction -.-> medium__InternetFilingSoftware
+  usecase__ReceiveFinalOfficeAction -.-> permission__JpoProcedure
+  usecase__ReceiveFinalOfficeAction -.->|transitions OfficeAction.status answered->open| state__OfficeAction_open
+  usecase__ReceiveFormalityOrder -.-> screen__ApplicationDocketScreen
+  usecase__ReceiveFormalityOrder -.-> api__FormalityApi
+  usecase__ReceiveFormalityOrder -.-> medium__InternetFilingSoftware
+  usecase__ReceiveFormalityOrder -.-> permission__JpoProcedure
+  usecase__ReceiveFormalityOrder -.->|transitions PatentApplication.status filed->formality_order| state__PatentApplication_formality_order
+  usecase__ReceiveOfficeAction -.-> screen__OfficeActionScreen
+  usecase__ReceiveOfficeAction -.-> api__OfficeActionIntakeApi
+  usecase__ReceiveOfficeAction -.-> medium__InternetFilingSoftware
+  usecase__ReceiveOfficeAction -.-> permission__JpoProcedure
+  usecase__RecordDismissal -.-> screen__ApplicationDocketScreen
+  usecase__RecordDismissal -.-> api__ApplicationDocketApi
+  usecase__RecordDismissal -.-> medium__IpWorkstation
+  usecase__RecordDismissal -.-> permission__DocketManage
+  usecase__RecordDismissal -.->|transitions PatentApplication.status formality_order->dismissed| state__PatentApplication_dismissed
+  usecase__RecordFilingReceipt -.-> screen__ApplicationDocketScreen
+  usecase__RecordFilingReceipt -.->|reads| entity__PatentApplication
+  usecase__RecordFilingReceipt -.-> medium__IpWorkstation
+  usecase__RecordFilingReceipt -.-> permission__DocketManage
+  usecase__RecordFilingReceipt -.->|transitions DraftingOrder.status approved->filed| state__DraftingOrder_filed
+  usecase__RecordFilingReceipt -.->|updates| entity__DraftingOrder
+  usecase__RecordPublication -.-> screen__ApplicationDocketScreen
+  usecase__RecordPublication -.-> api__ApplicationDocketApi
+  usecase__RecordPublication -.-> medium__IpWorkstation
+  usecase__RecordPublication -.-> permission__DocketManage
+  usecase__RecordRegistration -.-> screen__FeePaymentScreen
+  usecase__RecordRegistration -.-> api__RegistrationApi
+  usecase__RecordRegistration -.-> medium__IpWorkstation
+  usecase__RecordRegistration -.-> permission__DocketManage
+  usecase__RecordRegistration -.->|transitions PatentApplication.status granted->registered| state__PatentApplication_registered
+  usecase__RecordRegistrationDismissal -.-> screen__FeePaymentScreen
+  usecase__RecordRegistrationDismissal -.-> medium__IpWorkstation
+  usecase__RecordRegistrationDismissal -.-> permission__DocketManage
+  usecase__RecordRegistrationDismissal -.->|transitions PatentApplication.status granted->dismissed| state__PatentApplication_dismissed
+  usecase__RecordRegistrationDismissal -.->|updates| entity__PatentApplication
+  usecase__RequestAppeal -.-> screen__DecisionScreen
+  usecase__RequestAppeal -.-> api__AppealApi
+  usecase__RequestAppeal -.-> event__EvAppealRequested
+  usecase__RequestAppeal -.-> medium__InternetFilingSoftware
+  usecase__RequestAppeal -.-> permission__JpoProcedure
+  usecase__RequestAppeal -.->|transitions PatentApplication.status rejected->appealed| state__PatentApplication_appealed
+  usecase__RequestFeePaymentExtension -.-> screen__FeePaymentScreen
+  usecase__RequestFeePaymentExtension -.-> api__FeePaymentApi
+  usecase__RequestFeePaymentExtension -.-> event__EvExtensionRequested
+  usecase__RequestFeePaymentExtension -.-> medium__InternetFilingSoftware
+  usecase__RequestFeePaymentExtension -.-> permission__FeePay
+  usecase__RequestLateExtension -.-> screen__OfficeActionScreen
+  usecase__RequestLateExtension -.-> api__OfficeActionApi
+  usecase__RequestLateExtension -.-> event__EvExtensionRequested
+  usecase__RequestLateExtension -.-> medium__InternetFilingSoftware
+  usecase__RequestLateExtension -.-> permission__JpoProcedure
+  usecase__RequestLateExtension -.->|transitions OfficeAction.status overdue->open| state__OfficeAction_open
+  usecase__RequestTermExtension -.-> screen__OfficeActionScreen
+  usecase__RequestTermExtension -.-> api__OfficeActionApi
+  usecase__RequestTermExtension -.-> event__EvExtensionRequested
+  usecase__RequestTermExtension -.-> medium__InternetFilingSoftware
+  usecase__RequestTermExtension -.-> permission__JpoProcedure
+  usecase__RestorePatent -.-> screen__AnnuityScreen
+  usecase__RestorePatent -.-> api__AnnuityApi
+  usecase__RestorePatent -.-> event__EvRestorationRequested
+  usecase__RestorePatent -.-> medium__InternetFilingSoftware
+  usecase__RestorePatent -.-> permission__FeePay
+  usecase__RestorePatent -.->|transitions Patent.status lapsed->in_force| state__Patent_in_force
+  usecase__ReviewMaintenance -.-> screen__MaintenanceReviewScreen
+  usecase__ReviewMaintenance -.->|reads| entity__InventionDisclosure
+  usecase__ReviewMaintenance -.->|reads| entity__Patent
+  usecase__ReviewMaintenance -.-> medium__IpWorkstation
+  usecase__ReviewMaintenance -.-> permission__MaintenanceDecide
+  usecase__RollOverAnnuityYear -.->|updates| entity__Patent
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef medium fill:#f1f3f5,stroke:#333,color:#000;
+  classDef permission fill:#f1f3f5,stroke:#333,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef field fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

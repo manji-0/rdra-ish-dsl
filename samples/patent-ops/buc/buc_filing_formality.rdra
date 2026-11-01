@@ -1,0 +1,266 @@
+module buc.filing_formality
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+
+buc BucFilingFormality "出願と方式審査"
+  description "承認された出願書類を弁理士がインターネット出願ソフトで出願し、受領書の出願番号と出願日を記録する。方式の不備には手続補正指令書が届き、発送日から2月以内に手続補正書を出さなければ出願は却下される。出願から1年6月で出願公開される。先の出願から1年以内なら国内優先権を主張でき、先の出願は1年4月で取り下げたものとみなされる。"
+
+// 電子情報処理組織を使用して (egov-tokureihou-402AC0000000030.txt:39); it reaches the office when it is
+// recorded in the office's file (:41). 出願料 14,000円 (egov-tesuuryourei-335CO0000000020.txt:43-44).
+usecase FileApplication "電子出願"
+  description "承認された出願書類を、代理人の弁理士がインターネット出願ソフトで特許庁に出す。"
+
+// 【整理番号】 in the 願書 (jpo-tetuzuki-02-01-gansho.txt:196); 出願番号通知 (niigata-u-2023-hatsumei-flowchart.txt:130-135).
+usecase RecordFilingReceipt "出願番号・出願日の記録"
+  description "受領書の出願番号と出願日を記録し、出願依頼を出願済にする。"
+
+// 方式要件を満たしていない手続は…手続の補正が命じられます (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:6).
+usecase ReceiveFormalityOrder "手続補正指令書の受領"
+  description "方式の不備を指摘する手続補正指令書を受け取り、出願を補正待ちにする。"
+
+usecase SubmitFormalityAmendment "手続補正書の提出" description "指令書の発送日から2月以内に手続補正書を出す。"
+// この手続補正書の提出がないときは、この出願を却下 (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:338; egov-tokkyohou-334AC0000000121.txt:202).
+usecase RecordDismissal "出願の却下の記録" description "補正がなく出願が却下されたことを記録する。"
+// 出願公開 (egov-tokkyohou-334AC0000000121.txt:762).
+usecase RecordPublication "出願公開の記録" description "出願から1年6月で出願が公開されたことを記録する。"
+
+// 国内優先権 (egov-tokkyohou-334AC0000000121.txt:541).
+usecase ClaimDomesticPriority "国内優先権の主張"
+  description "改良発明をまとめた後の出願で、1年以内の先の出願に基づく優先権を主張する。"
+
+usecase DeemPriorityBaseWithdrawn "先の出願の取下げ擬制"
+  description "優先権の基礎とした先の出願が、その出願から1年4月で取り下げたものとみなされたことを記録する。"
+
+screen ApplicationDocketScreen "出願案件・期限管理画面"
+screen FilingScreen "出願画面"
+
+api FilingApi "出願 API"
+api ApplicationDocketApi "出願案件 API"
+api FormalityApi "方式補正 API"
+api PriorityClaimApi "国内優先権 API"
+api PriorityBaseApi "先の出願の取下げ擬制 API"
+
+performs(PatentAttorney, FileApplication)
+performs(IpStaff, RecordFilingReceipt)
+performs(PatentAttorney, ReceiveFormalityOrder)
+performs(PatentAttorney, SubmitFormalityAmendment)
+performs(IpStaff, RecordDismissal)
+performs(IpStaff, RecordPublication)
+performs(PatentAttorney, ClaimDomesticPriority)
+belongs(BucFilingFormality, Prosecution).by(InternetFilingSoftware).by(IpWorkstation)
+
+contains(BucFilingFormality, FileApplication)
+contains(BucFilingFormality, RecordFilingReceipt)
+contains(BucFilingFormality, ReceiveFormalityOrder)
+contains(BucFilingFormality, SubmitFormalityAmendment)
+contains(BucFilingFormality, RecordDismissal)
+contains(BucFilingFormality, RecordPublication)
+contains(BucFilingFormality, ClaimDomesticPriority)
+contains(BucFilingFormality, DeemPriorityBaseWithdrawn)
+contains(IpManagementSystem, FilingApi)
+contains(IpManagementSystem, ApplicationDocketApi)
+contains(IpManagementSystem, FormalityApi)
+contains(IpManagementSystem, PriorityClaimApi)
+contains(IpManagementSystem, PriorityBaseApi)
+
+displays(FileApplication, FilingScreen)
+invokes(FileApplication, FilingApi)
+creates(FilingApi, PatentApplication)
+reads(FilingApi, DraftingOrder)
+reads(FilingApi, FeeSchedule)
+raises(FileApplication, EvApplicationFiled)
+triggers(EvDraftApproved, BucFilingFormality)
+triggers(EvDraftApproved, FileApplication)
+triggers(EvApplicationFiled, Jpo)
+
+// The filing writes only the application and the receipt closes the order, so the order's review
+// states stay out of the application's state space (see README).
+displays(RecordFilingReceipt, ApplicationDocketScreen)
+updates(RecordFilingReceipt, DraftingOrder)
+reads(RecordFilingReceipt, PatentApplication)
+transitions(RecordFilingReceipt, DraftingOrder.status, approved -> filed)
+raises(Jpo, EvFilingReceipt)
+triggers(EvFilingReceipt, RecordFilingReceipt)
+
+// The formality order is modelled before the examination request only; an order on a later
+// document is the model's simplification.
+displays(ReceiveFormalityOrder, ApplicationDocketScreen)
+invokes(ReceiveFormalityOrder, FormalityApi)
+updates(FormalityApi, PatentApplication)
+transitions(ReceiveFormalityOrder, PatentApplication.status, filed -> formality_order)
+raises(Jpo, EvFormalityOrder)
+triggers(EvFormalityOrder, ReceiveFormalityOrder)
+
+// 指令書発送日の日から２月以内に (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:337). The period runs from
+// the 発送日 (pcinfo-guide-08-hassou-shorui.md:62); a notice not collected online is taken as sent
+// 開庁日で10日 after it became available (:21).
+displays(SubmitFormalityAmendment, ApplicationDocketScreen)
+invokes(SubmitFormalityAmendment, FormalityApi)
+transitions(SubmitFormalityAmendment, PatentApplication.status, formality_order -> filed)
+raises(SubmitFormalityAmendment, EvFormalityAmendmentFiled)
+triggers(EvFormalityAmendmentFiled, Jpo)
+triggers(FormalityAmendmentDeadline, SubmitFormalityAmendment)
+
+// After the period, a 却下理由通知 with 2か月 for a 弁明書 comes before the 却下
+// (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:12, :367); the model folds it into the 却下.
+displays(RecordDismissal, ApplicationDocketScreen)
+invokes(RecordDismissal, ApplicationDocketApi)
+updates(ApplicationDocketApi, PatentApplication)
+transitions(RecordDismissal, PatentApplication.status, formality_order -> dismissed)
+raises(Jpo, EvApplicationDismissed)
+triggers(EvApplicationDismissed, RecordDismissal)
+
+// 特許掲載公報の発行をしたものを除き (egov-tokkyohou-334AC0000000121.txt:762). An application that is no
+// longer pending is not published (the model's reading; the source names only the registered case).
+displays(RecordPublication, ApplicationDocketScreen)
+invokes(RecordPublication, ApplicationDocketApi)
+sets(RecordPublication, PatentApplication, published_at == present)
+raises(Jpo, EvPublished)
+triggers(EvPublished, RecordPublication)
+triggers(PublicationCheck, RecordPublication)
+
+condition StillPending "出願が係属している"
+holds(StillPending, PatentApplication.status != dismissed, PatentApplication.status != withdrawn, PatentApplication.status != deemed_withdrawn, PatentApplication.status != priority_withdrawn, PatentApplication.status != registered)
+applies_to(StillPending, RecordPublication)
+
+// The base must be the company's own application filed 一年以内 before (egov-tokkyohou-334AC0000000121.txt:541)
+// and still pending; a granted, refused, withdrawn, or dismissed application cannot be the base.
+// The DSL has no `in { ... }`, so the guard lists the states that block it.
+displays(ClaimDomesticPriority, FilingScreen)
+invokes(ClaimDomesticPriority, PriorityClaimApi)
+creates(PriorityClaimApi, PriorityClaim)
+updates(PriorityClaimApi, PatentApplication)
+sets(ClaimDomesticPriority, PatentApplication, priority_base == true)
+raises(ClaimDomesticPriority, EvPriorityClaimed)
+triggers(EvPriorityClaimed, Jpo)
+triggers(PriorityClaimDeadline, ClaimDomesticPriority)
+
+condition PriorityBasePending "先の出願が係属し、査定を受けていない"
+holds(PriorityBasePending, PatentApplication.status != dismissed, PatentApplication.status != withdrawn, PatentApplication.status != deemed_withdrawn, PatentApplication.status != priority_withdrawn, PatentApplication.status != granted, PatentApplication.status != rejected, PatentApplication.status != rejection_final, PatentApplication.status != appealed, PatentApplication.status != registered)
+applies_to(PriorityBasePending, ClaimDomesticPriority)
+
+// 取り下げたものとみなす (egov-tokkyohou-334AC0000000121.txt:558) after 一年四月
+// (egov-tokkyohou-shikoukisoku-335M50000400010.txt:696). Started by the timer, no performer. An
+// earlier application that is no longer pending at the deadline is left as it is (the proviso of
+// 42条 was not extracted; the model's reading).
+invokes(DeemPriorityBaseWithdrawn, PriorityBaseApi)
+updates(PriorityBaseApi, PatentApplication)
+transitions(DeemPriorityBaseWithdrawn, PatentApplication.status, filed -> priority_withdrawn)
+transitions(DeemPriorityBaseWithdrawn, PatentApplication.status, examining -> priority_withdrawn)
+triggers(PriorityBaseDeadline, DeemPriorityBaseWithdrawn)
+
+// `status != withdrawn` repeats what the arms already require; without an atom on a lifecycle or
+// variation column, `lint` reports the guard as condition-no-rdra-anchor.
+condition PriorityBase "国内優先権の基礎とされた出願である"
+holds(PriorityBase, PatentApplication.priority_base == true, PatentApplication.status != withdrawn)
+applies_to(PriorityBase, DeemPriorityBaseWithdrawn)
+
+// Access constraints
+requires_permission(FileApplication, JpoProcedure)
+requires_medium(FileApplication, InternetFilingSoftware)
+requires_permission(FilingApi, JpoProcedure)
+
+requires_permission(RecordFilingReceipt, DocketManage)
+requires_medium(RecordFilingReceipt, IpWorkstation)
+
+requires_permission(ReceiveFormalityOrder, JpoProcedure)
+requires_medium(ReceiveFormalityOrder, InternetFilingSoftware)
+requires_permission(FormalityApi, JpoProcedure)
+
+requires_permission(SubmitFormalityAmendment, JpoProcedure)
+requires_medium(SubmitFormalityAmendment, InternetFilingSoftware)
+
+requires_permission(RecordDismissal, DocketManage)
+requires_medium(RecordDismissal, IpWorkstation)
+requires_permission(ApplicationDocketApi, DocketManage)
+
+requires_permission(RecordPublication, DocketManage)
+requires_medium(RecordPublication, IpWorkstation)
+
+requires_permission(ClaimDomesticPriority, JpoProcedure)
+requires_medium(ClaimDomesticPriority, InternetFilingSoftware)
+
+// Screen transitions: the model's assumption.
+navigates(FilingScreen, ApplicationDocketScreen).via(FileApplication)
+
+// Screen fields
+field ApplicationNoField "出願番号"
+  access readonly
+  required true
+  source system
+
+field ClaimCountField "請求項の数"
+  access editable
+  required true
+  source actor
+
+contains(ApplicationDocketScreen, ApplicationNoField)
+contains(FilingScreen, ClaimCountField)
+maps_field(ApplicationNoField, PatentApplication.application_no)
+maps_field(ClaimCountField, PatentApplication.claim_count)
+
+// Business flow
+flow FilingFlow "出願と方式審査の流れ"
+step FilingStep "電子出願"
+step ReceiptStep "出願番号・出願日の記録"
+step FormalityStep "手続補正指令への対応（2月）"
+step DismissalStep "却下"
+step PublicationStep "出願公開（1年6月）"
+step PriorityStep "国内優先権の主張（1年）"
+step PriorityBaseStep "先の出願の取下げ擬制（1年4月）"
+
+contains(BucFilingFormality, FilingFlow)
+contains(FilingFlow, FilingStep)
+contains(FilingFlow, ReceiptStep)
+contains(FilingFlow, FormalityStep)
+contains(FilingFlow, DismissalStep)
+contains(FilingFlow, PublicationStep)
+contains(FilingFlow, PriorityStep)
+contains(FilingFlow, PriorityBaseStep)
+
+precedes(FilingStep, ReceiptStep)
+precedes(ReceiptStep, PublicationStep)
+excepts(ReceiptStep, FormalityStep)
+repeats(FormalityStep, ReceiptStep)
+excepts(FormalityStep, DismissalStep)
+branches(ReceiptStep, PriorityStep)
+precedes(PriorityStep, PriorityBaseStep)
+
+covers(FilingStep, FileApplication)
+covers(ReceiptStep, RecordFilingReceipt)
+covers(ReceiptStep, EvFilingReceipt)
+covers(FormalityStep, ReceiveFormalityOrder)
+covers(FormalityStep, SubmitFormalityAmendment)
+covers(FormalityStep, FormalityAmendmentDeadline)
+covers(DismissalStep, RecordDismissal)
+covers(PublicationStep, RecordPublication)
+covers(PublicationStep, PublicationCheck)
+covers(PriorityStep, ClaimDomesticPriority)
+covers(PriorityStep, PriorityClaimDeadline)
+covers(PriorityBaseStep, DeemPriorityBaseWithdrawn)
+covers(PriorityBaseStep, PriorityBaseDeadline)
+
+performs(PatentAttorney, FilingStep)
+performs(IpStaff, ReceiptStep)
+performs(PatentAttorney, FormalityStep)
+performs(IpStaff, DismissalStep)
+performs(IpStaff, PublicationStep)
+performs(PatentAttorney, PriorityStep)
+
+// Requirement traceability
+requirement ReqFormalityWithinTerm "手続補正指令には指定期間内に手続補正書を出す"
+  priority "must"
+  source "指令書発送日の日から２月以内に (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:337)"
+  source "この手続補正書の提出がないときは、この出願を却下 (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:338)"
+  stakeholder "弁理士"
+  stakeholder "知的財産部"
+  acceptance_criteria "手続補正指令書を受けた出願は、発送日から2月の期限が管理され、期限内に手続補正書が出される。"
+  status "accepted"
+
+motivates(ReqFormalityWithinTerm, BucFilingFormality)
+achieves(ReqFormalityWithinTerm, NoLostRights)

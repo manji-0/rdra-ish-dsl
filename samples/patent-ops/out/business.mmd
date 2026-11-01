@@ -1,0 +1,39 @@
+%% rdra-ish diagram=business scope=whole model=samples/patent-ops
+%% kinds: business buc
+%% omitted: actor requirement flow step timer medium permission usecase screen event api entity condition
+flowchart LR
+  subgraph business__InventionManagement["発明の管理"]
+    %% desc business__InventionManagement: 発明届出の受付、職務発明の判定、出願可否の判断、相当の利益の手続。
+    buc__BucFilingDecision["先行技術調査と出願可否の判断"]:::buc
+    %% desc buc__BucFilingDecision: 受け付けた発明について先行技術を調べ、発明審査委員会が出願する、ノウハウとして秘匿する、出願しないのいずれかに決める。会社が特許を受ける権利を取得していない発明は出願と決めない（`RightsAcquired`）。決定は発明者に知らせる。
+    buc__BucInventionDisclosure["発明届出と権利の取得"]:::buc
+    %% desc buc__BucInventionDisclosure: 発明者が発明届出書を出し、知的財産部が付番して記載を確かめ、不備があれば差し戻す。職務発明は職務発明規程により特許を受ける権利が発生した時から会社に帰属し、職務発明に当たらない発明は個別の譲渡で取得する（`EmployeeInvention`・`NonEmployeeInvention`）。
+    buc__BucInventorReward["相当の利益"]:::buc
+    %% desc buc__BucInventorReward: 職務発明について会社が特許を受ける権利を取得したとき、発明者は相当の利益を受ける。会社は職務発明規程の基準で額を決め、発明者に通知し、意見を聴いてから支払う。基準は協議・開示・意見の聴取の状況を考えて不合理であってはならない。支払の時期（出願時・登録時・実施時）はモデルの想定。
+  end
+  subgraph business__Prosecution["権利化"]
+    %% desc business__Prosecution: 特許事務所への依頼、出願、方式審査、審査請求、拒絶理由通知への応答（中間処理）。
+    buc__BucApplicationDrafting["特許事務所への依頼と出願書類の作成"]:::buc
+    %% desc buc__BucApplicationDrafting: 出願と決まった発明について特許事務所に明細書の作成を依頼し、納品された出願書類（願書・明細書・特許請求の範囲・要約書・図面）を発明者と知的財産部が確かめ、修正を依頼し、承認する。発明者の確認を経ない書類は承認しない（`InventorChecked`）。
+    buc__BucExaminationRequest["審査請求と早期審査"]:::buc
+    %% desc buc__BucExaminationRequest: 出願は審査請求がなければ審査されない。知的財産部は期限の前に審査請求の要否を決め、弁理士が出願から3年以内に請求する。請求がなければ出願は取り下げたものとみなされ、故意でなければ回復できる。審査請求をした出願は早期審査を申し出られる。出願は係属している間、取り下げ・放棄できる。
+    buc__BucFilingFormality["出願と方式審査"]:::buc
+    %% desc buc__BucFilingFormality: 承認された出願書類を弁理士がインターネット出願ソフトで出願し、受領書の出願番号と出願日を記録する。方式の不備には手続補正指令書が届き、発送日から2月以内に手続補正書を出さなければ出願は却下される。出願から1年6月で出願公開される。先の出願から1年以内なら国内優先権を主張でき、先の出願は1年4月で取り下げたものとみなされる。
+    buc__BucOfficeAction["実体審査と中間処理"]:::buc
+    %% desc buc__BucOfficeAction: 審査官は拒絶理由を見つけなければ特許査定をし、見つければ拒絶理由通知で意見書を出す機会を与える。弁理士が知的財産部の方針で意見書・補正書を作って応答期間（国内居住者は発送日から60日）内に出し、期間内の請求で2か月、期間経過後2か月以内の請求でも2か月延長できる（両方はできない、`exclusive`）。最後の拒絶理由通知への補正は請求項の削除・減縮・誤記の訂正・釈明に限る（`FirstNoticeOnly`）。拒絶査定には謄本の送達から3月以内に審判を請求できる（審判の中身は対象外）。分割出願は補正できる時期・特許査定から30日・最初の拒絶査定から3月にできる。
+  end
+  subgraph business__RightsMaintenance["権利の維持"]
+    %% desc business__RightsMaintenance: 特許料の納付と設定登録、年金の管理、消滅と回復。
+    buc__BucAnnuity["年金管理と権利の維持"]:::buc
+    %% desc buc__BucAnnuity: 設定登録の後、第4年以後の特許料（年金）を前年以前に納付する。知的財産部は登録後3年目・6年目などに維持の要否を調べ、維持しない権利は納付をやめる。納付期限を過ぎても6月以内なら同額の割増特許料とともに追納でき、追納しなければ特許権は期限の経過の時に遡って消滅する。故意でなければ回復できる。特許権は放棄でき、出願から20年で満了する。
+    buc__BucRegistration["特許料の納付と設定登録"]:::buc
+    %% desc buc__BucRegistration: 特許査定の謄本の送達から30日以内（請求で30日延長できる）に第1〜3年分の特許料を一時に納付すると、特許権の設定の登録がされ、特許権が発生する。納付しなければ設定登録されず、手続は却下される（`FirstFeesPaid`・`FirstFeesUnpaid`）。
+  end
+  buc__BucApplicationDrafting -->|出願書類の承認| buc__BucFilingFormality
+  %% derived buc__BucApplicationDrafting -> buc__BucFilingFormality via event__EvDraftApproved
+  buc__BucFilingDecision -->|出願の決定| buc__BucApplicationDrafting
+  %% derived buc__BucFilingDecision -> buc__BucApplicationDrafting via event__EvFilingDecided
+  buc__BucFilingFormality -->|特許願の提出| buc__BucInventorReward
+  %% derived buc__BucFilingFormality -> buc__BucInventorReward via event__EvApplicationFiled
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

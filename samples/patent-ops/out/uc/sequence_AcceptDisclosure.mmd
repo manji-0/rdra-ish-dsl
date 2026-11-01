@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:AcceptDisclosure model=samples/patent-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant usecase__SubmitInventionDisclosure as 発明届出書の提出
+  participant screen__DisclosureReviewScreen as 届出受付画面
+  participant api__DisclosureReviewApi as 届出受付 API
+  participant entity__InventionDisclosure as 発明届出
+  actor__IpStaff ->> screen__DisclosureReviewScreen: 届出の受付と付番
+  usecase__SubmitInventionDisclosure ->> api__DisclosureReviewApi: 発明届出の提出
+  screen__DisclosureReviewScreen ->> api__DisclosureReviewApi: 届出受付 API
+  alt InventionDisclosure.status == 受付待ち
+    api__DisclosureReviewApi ->> entity__InventionDisclosure: update status 受付待ち -> 受付済
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: done
+  else guard fails
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: rejected
+  end

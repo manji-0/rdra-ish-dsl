@@ -1,0 +1,147 @@
+module buc.inventor_reward
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
+
+buc BucInventorReward "相当の利益"
+  description "職務発明について会社が特許を受ける権利を取得したとき、発明者は相当の利益を受ける。会社は職務発明規程の基準で額を決め、発明者に通知し、意見を聴いてから支払う。基準は協議・開示・意見の聴取の状況を考えて不合理であってはならない。支払の時期（出願時・登録時・実施時）はモデルの想定。"
+
+// 相当の金銭その他の経済上の利益 (egov-tokkyohou-334AC0000000121.txt:382).
+usecase DecideReward "相当の利益の決定" description "職務発明規程の基準で、職務発明の相当の利益を決める。"
+// 開示: その基準を見ようと思えば見られる状態 (jlt-shokumu-hatsumei-shishin.md:41).
+usecase NotifyReward "発明者への通知" description "決めた相当の利益と基準を発明者に知らせる。"
+
+// 意見の聴取: 意見（質問や不服等を含む。）を聴く (jlt-shokumu-hatsumei-shishin.md:43).
+usecase RecordInventorOpinion "発明者の意見の申出"
+  description "発明者が相当の利益について意見（質問・不服を含む）を出す。"
+
+usecase AnswerInventorOpinion "意見への回答" description "発明者の意見に回答し、必要なら額を見直して通知し直す。"
+usecase PayReward "相当の利益の支払" description "通知した相当の利益を支払う。"
+
+screen RewardScreen "相当の利益画面"
+
+api RewardApi "相当の利益 API"
+api OpinionApi "意見の申出 API"
+
+performs(IpStaff, DecideReward)
+performs(IpStaff, NotifyReward)
+performs(Inventor, RecordInventorOpinion)
+performs(IpStaff, AnswerInventorOpinion)
+performs(IpStaff, PayReward)
+belongs(BucInventorReward, InventionManagement).by(IpWorkstation).by(InventorPortal)
+
+contains(BucInventorReward, DecideReward)
+contains(BucInventorReward, NotifyReward)
+contains(BucInventorReward, RecordInventorOpinion)
+contains(BucInventorReward, AnswerInventorOpinion)
+contains(BucInventorReward, PayReward)
+contains(IpManagementSystem, RewardApi)
+contains(IpManagementSystem, OpinionApi)
+
+displays(DecideReward, RewardScreen)
+invokes(DecideReward, RewardApi)
+creates(RewardApi, InventorReward)
+reads(RewardApi, InventionDisclosure)
+triggers(EvApplicationFiled, BucInventorReward)
+triggers(EvApplicationFiled, DecideReward)
+triggers(EvRegistered, DecideReward)
+
+// 相当の利益 is owed for a 職務発明 whose right the employer takes (egov-tokkyohou-334AC0000000121.txt:382).
+condition EmployeeInventionReward "職務発明である"
+holds(EmployeeInventionReward, InventionDisclosure.category == employee)
+applies_to(EmployeeInventionReward, DecideReward)
+
+displays(NotifyReward, RewardScreen)
+invokes(NotifyReward, OpinionApi)
+updates(OpinionApi, InventorReward)
+transitions(NotifyReward, InventorReward.status, decided -> notified)
+sets(NotifyReward, InventorReward, notified_at == present)
+
+displays(RecordInventorOpinion, RewardScreen)
+invokes(RecordInventorOpinion, OpinionApi)
+transitions(RecordInventorOpinion, InventorReward.status, notified -> objected)
+
+displays(AnswerInventorOpinion, RewardScreen)
+invokes(AnswerInventorOpinion, OpinionApi)
+transitions(AnswerInventorOpinion, InventorReward.status, objected -> notified)
+
+displays(PayReward, RewardScreen)
+invokes(PayReward, OpinionApi)
+transitions(PayReward, InventorReward.status, notified -> paid)
+
+// Access constraints
+requires_permission(DecideReward, RewardManage)
+requires_medium(DecideReward, IpWorkstation)
+requires_permission(RewardApi, RewardManage)
+
+requires_permission(NotifyReward, RewardManage)
+requires_medium(NotifyReward, IpWorkstation)
+
+requires_permission(RecordInventorOpinion, OpinionSubmit)
+requires_medium(RecordInventorOpinion, InventorPortal)
+
+requires_permission(AnswerInventorOpinion, RewardManage)
+requires_medium(AnswerInventorOpinion, IpWorkstation)
+
+requires_permission(PayReward, RewardManage)
+requires_medium(PayReward, IpWorkstation)
+
+// Screen fields
+field RewardAmountField "相当の利益の額"
+  access readonly
+  required true
+  source system
+
+contains(RewardScreen, RewardAmountField)
+maps_field(RewardAmountField, InventorReward.amount)
+
+// Business flow
+flow RewardFlow "相当の利益の流れ"
+step RewardDecisionStep "基準による決定"
+step RewardNoticeStep "発明者への通知"
+step OpinionStep "意見の申出"
+step OpinionAnswerStep "意見への回答"
+step RewardPaymentStep "支払"
+
+contains(BucInventorReward, RewardFlow)
+contains(RewardFlow, RewardDecisionStep)
+contains(RewardFlow, RewardNoticeStep)
+contains(RewardFlow, OpinionStep)
+contains(RewardFlow, OpinionAnswerStep)
+contains(RewardFlow, RewardPaymentStep)
+
+precedes(RewardDecisionStep, RewardNoticeStep)
+precedes(RewardNoticeStep, RewardPaymentStep)
+branches(RewardNoticeStep, OpinionStep)
+precedes(OpinionStep, OpinionAnswerStep)
+repeats(OpinionAnswerStep, RewardNoticeStep)
+
+covers(RewardDecisionStep, DecideReward)
+covers(RewardNoticeStep, NotifyReward)
+covers(OpinionStep, RecordInventorOpinion)
+covers(OpinionAnswerStep, AnswerInventorOpinion)
+covers(RewardPaymentStep, PayReward)
+
+performs(IpStaff, RewardDecisionStep)
+performs(IpStaff, RewardNoticeStep)
+performs(Inventor, OpinionStep)
+performs(IpStaff, OpinionAnswerStep)
+performs(IpStaff, RewardPaymentStep)
+
+// Requirement traceability
+requirement ReqFairReward "相当の利益を基準で決め、通知し、意見を聴いて支払う"
+  priority "must"
+  source "相当の利益 (egov-tokkyohou-334AC0000000121.txt:382)"
+  source "協議の状況…開示の状況…意見の聴取の状況 (egov-tokkyohou-334AC0000000121.txt:384)"
+  source "協議・開示・意見の聴取の定義 (jlt-shokumu-hatsumei-shishin.md:39, :41, :43)"
+  stakeholder "発明者"
+  stakeholder "知的財産部"
+  acceptance_criteria "職務発明ごとに相当の利益が決まり、発明者に通知され、意見の申出には回答してから支払われる。"
+  status "accepted"
+
+motivates(ReqFairReward, BucInventorReward)
+achieves(ReqFairReward, PromptFiling)

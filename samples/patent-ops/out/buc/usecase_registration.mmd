@@ -1,0 +1,83 @@
+%% rdra-ish diagram=usecase scope=buc:BucRegistration model=samples/patent-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__FirstFeeDeadline(("第1〜3年分の特許料の納付期限（査定謄本の送達から30日）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__PayFirstAnnuities("第1〜3年分の特許料の納付"):::usecase
+    %% desc usecase__PayFirstAnnuities: 特許査定の謄本の送達から30日以内に、第1〜3年分の特許料を一時に納付する。
+    usecase__RecordRegistration("設定登録の記録"):::usecase
+    %% desc usecase__RecordRegistration: 設定登録で特許権が発生したことを記録し、第4年分からの年金管理を始める。
+    usecase__RecordRegistrationDismissal("特許料の不納による却下の記録"):::usecase
+    %% desc usecase__RecordRegistrationDismissal: 納付期間内に特許料を納めず、手続が却下されたことを記録する。
+    usecase__RequestFeePaymentExtension("納付期間の延長請求"):::usecase
+    %% desc usecase__RequestFeePaymentExtension: 第1〜3年分の特許料の納付期間を、30日以内に限り延長するよう請求する。
+    screen__FeePaymentScreen["特許料納付画面"]:::screen
+    event__EvExtensionRequested>"期間延長請求書の提出"]:::event
+    event__EvFeesPaid>"特許料の納付"]:::event
+    event__EvRegistered>"設定登録"]:::event
+    event__EvRegistrationDismissed>"特許料の不納による却下"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__FeeSchedule[("料金表")]:::entity
+    entity__Patent[("特許権")]:::entity
+    entity__PatentApplication[("特許出願")]:::entity
+    state__PatentApplication_dismissed((("却下"))):::state
+    state__PatentApplication_granted((("特許査定"))):::state
+    state__PatentApplication_registered((("設定登録済"))):::state
+    condition__FirstFeesPaid{"第1〜3年分の特許料を納付している"}:::condition
+    condition__FirstFeesUnpaid{"第1〜3年分の特許料を納付していない"}:::condition
+    condition__NotYetExtended{"納付期間をまだ延長していない"}:::condition
+  end
+  actor__IpStaff -.-> usecase__PayFirstAnnuities
+  actor__IpStaff -.-> usecase__RecordRegistration
+  actor__IpStaff -.-> usecase__RecordRegistrationDismissal
+  actor__IpStaff -.-> usecase__RequestFeePaymentExtension
+  condition__FirstFeesPaid -.-> usecase__RecordRegistration
+  condition__FirstFeesUnpaid -.-> usecase__RecordRegistrationDismissal
+  condition__NotYetExtended -.-> usecase__RequestFeePaymentExtension
+  event__EvExtensionRequested -.-> extsystem__Jpo
+  event__EvFeesPaid -.-> extsystem__Jpo
+  event__EvRegistered -.-> usecase__RecordRegistration
+  event__EvRegistrationDismissed -.-> usecase__RecordRegistrationDismissal
+  extsystem__Jpo -.-> event__EvRegistered
+  extsystem__Jpo -.-> event__EvRegistrationDismissed
+  timer__FirstFeeDeadline -.-> usecase__PayFirstAnnuities
+  usecase__PayFirstAnnuities -.-> screen__FeePaymentScreen
+  usecase__PayFirstAnnuities -.-> event__EvFeesPaid
+  usecase__PayFirstAnnuities -.->|reads| entity__FeeSchedule
+  %% derived usecase__PayFirstAnnuities -> entity__FeeSchedule via api__FeePaymentApi
+  usecase__PayFirstAnnuities -.->|updates| entity__PatentApplication
+  %% derived usecase__PayFirstAnnuities -> entity__PatentApplication via api__FeePaymentApi
+  usecase__RecordRegistration -.->|creates| entity__Patent
+  %% derived usecase__RecordRegistration -> entity__Patent via api__RegistrationApi
+  usecase__RecordRegistration -.-> screen__FeePaymentScreen
+  usecase__RecordRegistration -.->|transitions PatentApplication.status granted->registered| state__PatentApplication_registered
+  usecase__RecordRegistration -.->|updates| entity__PatentApplication
+  %% derived usecase__RecordRegistration -> entity__PatentApplication via api__RegistrationApi
+  usecase__RecordRegistrationDismissal -.-> screen__FeePaymentScreen
+  usecase__RecordRegistrationDismissal -.->|transitions PatentApplication.status granted->dismissed| state__PatentApplication_dismissed
+  usecase__RecordRegistrationDismissal -.->|updates| entity__PatentApplication
+  usecase__RequestFeePaymentExtension -.-> screen__FeePaymentScreen
+  usecase__RequestFeePaymentExtension -.-> event__EvExtensionRequested
+  usecase__RequestFeePaymentExtension -.->|reads| entity__FeeSchedule
+  %% derived usecase__RequestFeePaymentExtension -> entity__FeeSchedule via api__FeePaymentApi
+  usecase__RequestFeePaymentExtension -.->|updates| entity__PatentApplication
+  %% derived usecase__RequestFeePaymentExtension -> entity__PatentApplication via api__FeePaymentApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -1,0 +1,80 @@
+%% rdra-ish diagram=robustness scope=buc:BucOfficeAction model=samples/patent-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+  extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  screen__DecisionScreen["査定画面"]:::screen
+  screen__OfficeActionScreen["中間処理画面"]:::screen
+  screen__ResponseDraftScreen["応答案画面"]:::screen
+  timer__AppealDeadline(("拒絶査定不服審判の請求期限（謄本の送達から3月）")):::timer
+  timer__LateExtensionDeadline(("期間経過後の延長請求の期限（応答期間の経過から2か月）")):::timer
+  timer__ResponseDeadline(("拒絶理由通知の応答期限（発送日から60日、延長で2か月）")):::timer
+  api__AppealApi{{"審判請求 API"}}:::api
+  api__DecisionApi{{"査定 API"}}:::api
+  api__DivisionalApi{{"分割出願 API"}}:::api
+  api__OfficeActionApi{{"中間処理 API"}}:::api
+  api__OfficeActionIntakeApi{{"拒絶理由通知の受付 API"}}:::api
+  api__ResponseFilingApi{{"応答提出 API"}}:::api
+  usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
+  usecase__ExpireResponseTerm("応答期間の経過"):::usecase
+  usecase__FinalizeRejection("拒絶査定の確定"):::usecase
+  usecase__InstructResponse("応答方針の指示"):::usecase
+  usecase__LapseResponse("応答なしでの期間満了"):::usecase
+  entity__DivisionalFiling[("分割出願")]:::entity
+  entity__OfficeAction[("拒絶理由通知")]:::entity
+  entity__PatentApplication[("特許出願")]:::entity
+  actor__IpStaff --> screen__DecisionScreen
+  actor__IpStaff --> screen__OfficeActionScreen
+  actor__PatentAttorney --> screen__DecisionScreen
+  actor__PatentAttorney --> screen__OfficeActionScreen
+  actor__PatentAttorney --> screen__ResponseDraftScreen
+  api__AppealApi -->|U| entity__PatentApplication
+  api__AppealApi -.->|拒絶査定不服審判の請求| extsystem__Jpo
+  api__DecisionApi -->|U| entity__PatentApplication
+  api__DivisionalApi -->|C| entity__DivisionalFiling
+  api__DivisionalApi -.->|分割出願| extsystem__Jpo
+  api__OfficeActionApi -->|U| entity__OfficeAction
+  api__OfficeActionApi -.->|期間延長請求書の提出| extsystem__Jpo
+  api__OfficeActionIntakeApi -->|C| entity__OfficeAction
+  api__OfficeActionIntakeApi -->|R| entity__PatentApplication
+  api__ResponseFilingApi -->|U| entity__OfficeAction
+  api__ResponseFilingApi -.->|意見書・手続補正書の提出| extsystem__Jpo
+  extsystem__Jpo -.->|拒絶査定の謄本| api__DecisionApi
+  extsystem__Jpo -.->|拒絶査定の謄本| usecase__CloseOfficeActionDocket
+  extsystem__Jpo -.->|拒絶理由通知書| api__OfficeActionIntakeApi
+  extsystem__Jpo -.->|最後の拒絶理由通知書| api__ResponseFilingApi
+  extsystem__Jpo -.->|特許査定の謄本| api__DecisionApi
+  extsystem__Jpo -.->|特許査定の謄本| usecase__CloseOfficeActionDocket
+  screen__DecisionScreen -->|拒絶査定の受領| api__DecisionApi
+  screen__DecisionScreen -->|拒絶査定不服審判の請求| api__AppealApi
+  screen__DecisionScreen -->|特許査定の受領| api__DecisionApi
+  screen__OfficeActionScreen -->|中間処理案件の終了| usecase__CloseOfficeActionDocket
+  screen__OfficeActionScreen -->|分割出願| api__DivisionalApi
+  screen__OfficeActionScreen -->|応答方針の指示| usecase__InstructResponse
+  screen__OfficeActionScreen -->|応答期間の延長請求| api__OfficeActionApi
+  screen__OfficeActionScreen -->|拒絶理由通知の受領| api__OfficeActionIntakeApi
+  screen__OfficeActionScreen -->|最後の拒絶理由通知の受領| api__ResponseFilingApi
+  screen__OfficeActionScreen -->|期間経過後の延長請求| api__OfficeActionApi
+  screen__ResponseDraftScreen -->|意見書・補正書の提出| api__ResponseFilingApi
+  screen__ResponseDraftScreen -->|意見書・補正書案の作成| api__OfficeActionApi
+  screen__ResponseDraftScreen -->|限定した補正による応答案の作成| api__OfficeActionApi
+  timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| api__AppealApi
+  timer__AppealDeadline -.->|拒絶査定不服審判の請求期限（謄本の送達から3月）| usecase__FinalizeRejection
+  timer__LateExtensionDeadline -.->|期間経過後の延長請求の期限（応答期間の経過から2か月）| usecase__LapseResponse
+  timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| api__ResponseFilingApi
+  timer__ResponseDeadline -.->|拒絶理由通知の応答期限（発送日から60日、延長で2か月）| usecase__ExpireResponseTerm
+  usecase__CloseOfficeActionDocket -->|U| entity__OfficeAction
+  usecase__ExpireResponseTerm -->|U| entity__OfficeAction
+  usecase__FinalizeRejection -->|U| entity__PatentApplication
+  usecase__InstructResponse -->|R| entity__OfficeAction
+  usecase__InstructResponse -->|R| entity__PatentApplication
+  usecase__LapseResponse -->|U| entity__OfficeAction
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

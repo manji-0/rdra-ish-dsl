@@ -1,0 +1,35 @@
+%% rdra-ish diagram=flow scope=buc:BucRegistration model=samples/patent-ops
+%% kinds: flow step lane timer usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__RegistrationFlow["設定登録の流れ"]
+    subgraph lane__RegistrationFlow__IpStaff["知的財産部 担当者"]
+      %% lane lane__RegistrationFlow__IpStaff: actor__IpStaff
+      step__FeeDismissalStep["不納による却下"]:::step
+      step__FeeExtensionStep["納付期間の延長（30日）"]:::step
+      step__FirstFeeStep["第1〜3年分の納付（30日）"]:::step
+      step__RegistrationStep["設定登録"]:::step
+    end
+  end
+  timer__FirstFeeDeadline(("第1〜3年分の特許料の納付期限（査定謄本の送達から30日）")):::timer
+  usecase__PayFirstAnnuities("第1〜3年分の特許料の納付"):::usecase
+  %% desc usecase__PayFirstAnnuities: 特許査定の謄本の送達から30日以内に、第1〜3年分の特許料を一時に納付する。
+  usecase__RecordRegistration("設定登録の記録"):::usecase
+  %% desc usecase__RecordRegistration: 設定登録で特許権が発生したことを記録し、第4年分からの年金管理を始める。
+  usecase__RecordRegistrationDismissal("特許料の不納による却下の記録"):::usecase
+  %% desc usecase__RecordRegistrationDismissal: 納付期間内に特許料を納めず、手続が却下されたことを記録する。
+  usecase__RequestFeePaymentExtension("納付期間の延長請求"):::usecase
+  %% desc usecase__RequestFeePaymentExtension: 第1〜3年分の特許料の納付期間を、30日以内に限り延長するよう請求する。
+  step__FeeDismissalStep -.-> usecase__RecordRegistrationDismissal
+  step__FeeExtensionStep -->|branches| step__FirstFeeStep
+  step__FeeExtensionStep -.-> usecase__RequestFeePaymentExtension
+  step__FirstFeeStep -.-> timer__FirstFeeDeadline
+  step__FirstFeeStep -.-> usecase__PayFirstAnnuities
+  step__FirstFeeStep -.->|excepts| step__FeeDismissalStep
+  step__FirstFeeStep -->|precedes| step__RegistrationStep
+  step__RegistrationStep -.-> usecase__RecordRegistration
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

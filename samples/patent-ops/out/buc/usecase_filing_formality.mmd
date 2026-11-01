@@ -1,0 +1,135 @@
+%% rdra-ish diagram=usecase scope=buc:BucFilingFormality model=samples/patent-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+    actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+    %% desc actor__PatentAttorney: 社外の特許事務所の弁理士。出願書類を作り、代理人として電子出願し、特許庁からの通知に応答する。
+    extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__FormalityAmendmentDeadline(("手続補正書の提出期限（指令書の発送日から2月）")):::timer
+    timer__PriorityBaseDeadline(("先の出願の取下げ擬制（先の出願から1年4月）")):::timer
+    timer__PriorityClaimDeadline(("国内優先権の主張期限（先の出願から1年）")):::timer
+    timer__PublicationCheck(("出願公開の確認（出願から1年6月）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__ClaimDomesticPriority("国内優先権の主張"):::usecase
+    %% desc usecase__ClaimDomesticPriority: 改良発明をまとめた後の出願で、1年以内の先の出願に基づく優先権を主張する。
+    usecase__DeemPriorityBaseWithdrawn("先の出願の取下げ擬制"):::usecase
+    %% desc usecase__DeemPriorityBaseWithdrawn: 優先権の基礎とした先の出願が、その出願から1年4月で取り下げたものとみなされたことを記録する。
+    usecase__FileApplication("電子出願"):::usecase
+    %% desc usecase__FileApplication: 承認された出願書類を、代理人の弁理士がインターネット出願ソフトで特許庁に出す。
+    usecase__ReceiveFormalityOrder("手続補正指令書の受領"):::usecase
+    %% desc usecase__ReceiveFormalityOrder: 方式の不備を指摘する手続補正指令書を受け取り、出願を補正待ちにする。
+    usecase__RecordDismissal("出願の却下の記録"):::usecase
+    %% desc usecase__RecordDismissal: 補正がなく出願が却下されたことを記録する。
+    usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
+    %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。
+    usecase__RecordPublication("出願公開の記録"):::usecase
+    %% desc usecase__RecordPublication: 出願から1年6月で出願が公開されたことを記録する。
+    usecase__SubmitFormalityAmendment("手続補正書の提出"):::usecase
+    %% desc usecase__SubmitFormalityAmendment: 指令書の発送日から2月以内に手続補正書を出す。
+    screen__ApplicationDocketScreen["出願案件・期限管理画面"]:::screen
+    screen__FilingScreen["出願画面"]:::screen
+    event__EvApplicationDismissed>"却下処分"]:::event
+    event__EvApplicationFiled>"特許願の提出"]:::event
+    event__EvDraftApproved>"出願書類の承認"]:::event
+    event__EvFilingReceipt>"受領書（出願番号）"]:::event
+    event__EvFormalityAmendmentFiled>"手続補正書の提出"]:::event
+    event__EvFormalityOrder>"手続補正指令書（方式）"]:::event
+    event__EvPriorityClaimed>"国内優先権を主張した出願"]:::event
+    event__EvPublished>"出願公開"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__DraftingOrder[("出願依頼")]:::entity
+    entity__FeeSchedule[("料金表")]:::entity
+    entity__PatentApplication[("特許出願")]:::entity
+    entity__PriorityClaim[("国内優先権の主張")]:::entity
+    state__DraftingOrder_approved((("出願承認済"))):::state
+    state__DraftingOrder_filed((("出願済"))):::state
+    state__PatentApplication_dismissed((("却下"))):::state
+    state__PatentApplication_examining((("審査請求済（審査中）"))):::state
+    state__PatentApplication_filed((("出願済（方式審査）"))):::state
+    state__PatentApplication_formality_order((("手続補正指令への対応中"))):::state
+    state__PatentApplication_priority_withdrawn((("取下げ擬制（国内優先権の基礎）"))):::state
+    condition__PriorityBase{"国内優先権の基礎とされた出願である"}:::condition
+    condition__PriorityBasePending{"先の出願が係属し、査定を受けていない"}:::condition
+    condition__StillPending{"出願が係属している"}:::condition
+  end
+  actor__IpStaff -.-> usecase__RecordDismissal
+  actor__IpStaff -.-> usecase__RecordFilingReceipt
+  actor__IpStaff -.-> usecase__RecordPublication
+  actor__PatentAttorney -.-> usecase__ClaimDomesticPriority
+  actor__PatentAttorney -.-> usecase__FileApplication
+  actor__PatentAttorney -.-> usecase__ReceiveFormalityOrder
+  actor__PatentAttorney -.-> usecase__SubmitFormalityAmendment
+  condition__PriorityBase -.-> usecase__DeemPriorityBaseWithdrawn
+  condition__PriorityBasePending -.-> usecase__ClaimDomesticPriority
+  condition__StillPending -.-> usecase__RecordPublication
+  event__EvApplicationDismissed -.-> usecase__RecordDismissal
+  event__EvApplicationFiled -.-> extsystem__Jpo
+  event__EvDraftApproved -.-> usecase__FileApplication
+  event__EvFilingReceipt -.-> usecase__RecordFilingReceipt
+  event__EvFormalityAmendmentFiled -.-> extsystem__Jpo
+  event__EvFormalityOrder -.-> usecase__ReceiveFormalityOrder
+  event__EvPriorityClaimed -.-> extsystem__Jpo
+  event__EvPublished -.-> usecase__RecordPublication
+  extsystem__Jpo -.-> event__EvApplicationDismissed
+  extsystem__Jpo -.-> event__EvFilingReceipt
+  extsystem__Jpo -.-> event__EvFormalityOrder
+  extsystem__Jpo -.-> event__EvPublished
+  timer__FormalityAmendmentDeadline -.-> usecase__SubmitFormalityAmendment
+  timer__PriorityBaseDeadline -.-> usecase__DeemPriorityBaseWithdrawn
+  timer__PriorityClaimDeadline -.-> usecase__ClaimDomesticPriority
+  timer__PublicationCheck -.-> usecase__RecordPublication
+  usecase__ClaimDomesticPriority -.->|creates| entity__PriorityClaim
+  %% derived usecase__ClaimDomesticPriority -> entity__PriorityClaim via api__PriorityClaimApi
+  usecase__ClaimDomesticPriority -.-> screen__FilingScreen
+  usecase__ClaimDomesticPriority -.-> event__EvPriorityClaimed
+  usecase__ClaimDomesticPriority -.->|updates| entity__PatentApplication
+  %% derived usecase__ClaimDomesticPriority -> entity__PatentApplication via api__PriorityClaimApi
+  usecase__DeemPriorityBaseWithdrawn -.->|transitions PatentApplication.status examining->priority_withdrawn| state__PatentApplication_priority_withdrawn
+  usecase__DeemPriorityBaseWithdrawn -.->|transitions PatentApplication.status filed->priority_withdrawn| state__PatentApplication_priority_withdrawn
+  usecase__DeemPriorityBaseWithdrawn -.->|updates| entity__PatentApplication
+  %% derived usecase__DeemPriorityBaseWithdrawn -> entity__PatentApplication via api__PriorityBaseApi
+  usecase__FileApplication -.->|creates| entity__PatentApplication
+  %% derived usecase__FileApplication -> entity__PatentApplication via api__FilingApi
+  usecase__FileApplication -.-> screen__FilingScreen
+  usecase__FileApplication -.-> event__EvApplicationFiled
+  usecase__FileApplication -.->|reads| entity__DraftingOrder
+  %% derived usecase__FileApplication -> entity__DraftingOrder via api__FilingApi
+  usecase__FileApplication -.->|reads| entity__FeeSchedule
+  %% derived usecase__FileApplication -> entity__FeeSchedule via api__FilingApi
+  usecase__ReceiveFormalityOrder -.-> screen__ApplicationDocketScreen
+  usecase__ReceiveFormalityOrder -.->|transitions PatentApplication.status filed->formality_order| state__PatentApplication_formality_order
+  usecase__ReceiveFormalityOrder -.->|updates| entity__PatentApplication
+  %% derived usecase__ReceiveFormalityOrder -> entity__PatentApplication via api__FormalityApi
+  usecase__RecordDismissal -.-> screen__ApplicationDocketScreen
+  usecase__RecordDismissal -.->|transitions PatentApplication.status formality_order->dismissed| state__PatentApplication_dismissed
+  usecase__RecordDismissal -.->|updates| entity__PatentApplication
+  %% derived usecase__RecordDismissal -> entity__PatentApplication via api__ApplicationDocketApi
+  usecase__RecordFilingReceipt -.-> screen__ApplicationDocketScreen
+  usecase__RecordFilingReceipt -.->|reads| entity__PatentApplication
+  usecase__RecordFilingReceipt -.->|transitions DraftingOrder.status approved->filed| state__DraftingOrder_filed
+  usecase__RecordFilingReceipt -.->|updates| entity__DraftingOrder
+  usecase__RecordPublication -.-> screen__ApplicationDocketScreen
+  usecase__RecordPublication -.->|updates| entity__PatentApplication
+  %% derived usecase__RecordPublication -> entity__PatentApplication via api__ApplicationDocketApi
+  usecase__SubmitFormalityAmendment -.-> screen__ApplicationDocketScreen
+  usecase__SubmitFormalityAmendment -.-> event__EvFormalityAmendmentFiled
+  usecase__SubmitFormalityAmendment -.->|transitions PatentApplication.status formality_order->filed| state__PatentApplication_filed
+  usecase__SubmitFormalityAmendment -.->|updates| entity__PatentApplication
+  %% derived usecase__SubmitFormalityAmendment -> entity__PatentApplication via api__FormalityApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

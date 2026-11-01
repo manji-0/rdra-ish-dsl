@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordPriorArtSearch model=samples/patent-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant screen__PriorArtSearchScreen as 先行技術調査画面
+  participant api__PriorArtSearchApi as 先行技術調査 API
+  participant entity__InventionDisclosure as 発明届出
+  actor__IpStaff ->> screen__PriorArtSearchScreen: 先行技術調査の結果の登録
+  screen__PriorArtSearchScreen ->> api__PriorArtSearchApi: 先行技術調査 API
+  alt InventionDisclosure.status == 先行技術調査中
+    api__PriorArtSearchApi ->> entity__InventionDisclosure: update status 先行技術調査中 -> 調査済
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: done
+  else guard fails
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: rejected
+  end

@@ -1,0 +1,61 @@
+%% rdra-ish diagram=robustness scope=buc:BucFilingFormality model=samples/patent-ops
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__IpStaff(["知的財産部 担当者"]):::actor
+  actor__PatentAttorney(["弁理士（特許事務所）"]):::actor
+  extsystem__Jpo[["特許庁（インターネット出願ソフト・オンライン発送）"]]:::extsystem
+  screen__ApplicationDocketScreen["出願案件・期限管理画面"]:::screen
+  screen__FilingScreen["出願画面"]:::screen
+  timer__FormalityAmendmentDeadline(("手続補正書の提出期限（指令書の発送日から2月）")):::timer
+  timer__PriorityBaseDeadline(("先の出願の取下げ擬制（先の出願から1年4月）")):::timer
+  timer__PriorityClaimDeadline(("国内優先権の主張期限（先の出願から1年）")):::timer
+  timer__PublicationCheck(("出願公開の確認（出願から1年6月）")):::timer
+  api__ApplicationDocketApi{{"出願案件 API"}}:::api
+  api__FilingApi{{"出願 API"}}:::api
+  api__FormalityApi{{"方式補正 API"}}:::api
+  api__PriorityBaseApi{{"先の出願の取下げ擬制 API"}}:::api
+  api__PriorityClaimApi{{"国内優先権 API"}}:::api
+  usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
+  entity__DraftingOrder[("出願依頼")]:::entity
+  entity__FeeSchedule[("料金表")]:::entity
+  entity__PatentApplication[("特許出願")]:::entity
+  entity__PriorityClaim[("国内優先権の主張")]:::entity
+  actor__IpStaff --> screen__ApplicationDocketScreen
+  actor__PatentAttorney --> screen__ApplicationDocketScreen
+  actor__PatentAttorney --> screen__FilingScreen
+  api__ApplicationDocketApi -->|U| entity__PatentApplication
+  api__FilingApi -->|C| entity__PatentApplication
+  api__FilingApi -->|R| entity__DraftingOrder
+  api__FilingApi -->|R| entity__FeeSchedule
+  api__FilingApi -.->|特許願の提出| extsystem__Jpo
+  api__FormalityApi -->|U| entity__PatentApplication
+  api__FormalityApi -.->|手続補正書の提出| extsystem__Jpo
+  api__PriorityBaseApi -->|U| entity__PatentApplication
+  api__PriorityClaimApi -->|C| entity__PriorityClaim
+  api__PriorityClaimApi -->|U| entity__PatentApplication
+  api__PriorityClaimApi -.->|国内優先権を主張した出願| extsystem__Jpo
+  extsystem__Jpo -.->|出願公開| api__ApplicationDocketApi
+  extsystem__Jpo -.->|却下処分| api__ApplicationDocketApi
+  extsystem__Jpo -.->|受領書（出願番号）| usecase__RecordFilingReceipt
+  extsystem__Jpo -.->|手続補正指令書（方式）| api__FormalityApi
+  screen__ApplicationDocketScreen -->|出願の却下の記録| api__ApplicationDocketApi
+  screen__ApplicationDocketScreen -->|出願公開の記録| api__ApplicationDocketApi
+  screen__ApplicationDocketScreen -->|出願番号・出願日の記録| usecase__RecordFilingReceipt
+  screen__ApplicationDocketScreen -->|手続補正指令書の受領| api__FormalityApi
+  screen__ApplicationDocketScreen -->|手続補正書の提出| api__FormalityApi
+  screen__FilingScreen -->|国内優先権の主張| api__PriorityClaimApi
+  screen__FilingScreen -->|電子出願| api__FilingApi
+  timer__FormalityAmendmentDeadline -.->|手続補正書の提出期限（指令書の発送日から2月）| api__FormalityApi
+  timer__PriorityBaseDeadline -.->|先の出願の取下げ擬制（先の出願から1年4月）| api__PriorityBaseApi
+  timer__PriorityClaimDeadline -.->|国内優先権の主張期限（先の出願から1年）| api__PriorityClaimApi
+  timer__PublicationCheck -.->|出願公開の確認（出願から1年6月）| api__ApplicationDocketApi
+  usecase__RecordFilingReceipt -->|R| entity__PatentApplication
+  usecase__RecordFilingReceipt -->|U| entity__DraftingOrder
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,79 @@
+%% rdra-ish diagram=usecase scope=buc:BucInventionDisclosure model=samples/patent-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Inventor(["発明者"]):::actor
+    %% desc actor__Inventor: 職務として発明をした従業者。発明届出書を出し、出願書類の内容を確かめ、相当の利益について意見を述べる。
+    actor__IpStaff(["知的財産部 担当者"]):::actor
+    %% desc actor__IpStaff: 発明届出の受付、職務発明の判定、先行技術調査、特許事務所への依頼と出願書類のレビュー、期限管理、特許料・年金の納付、相当の利益の手続を行う。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AcceptDisclosure("届出の受付と付番"):::usecase
+    %% desc usecase__AcceptDisclosure: 知的財産部が付番し、記載に不備がなければ受け付ける。
+    usecase__AcquireRightsByAssignment("特許を受ける権利の譲受け"):::usecase
+    %% desc usecase__AcquireRightsByAssignment: 職務発明に当たらない発明について、発明者から特許を受ける権利の譲渡を受ける。
+    usecase__JudgeEmployeeInvention("職務発明の判定"):::usecase
+    %% desc usecase__JudgeEmployeeInvention: 職務発明と判定し、規程により会社が発生時から特許を受ける権利を持つことを記録する。
+    usecase__ResubmitDisclosure("届出書の再提出"):::usecase
+    %% desc usecase__ResubmitDisclosure: 発明者が不備を直した届出書を出し直す。
+    usecase__ReturnDisclosure("届出書の差戻し"):::usecase
+    %% desc usecase__ReturnDisclosure: 記載に不備がある届出書を発明者に差し戻す。
+    usecase__SubmitInventionDisclosure("発明届出書の提出"):::usecase
+    %% desc usecase__SubmitInventionDisclosure: 発明者が発明届出書を出す。届出は受付待ちになる。
+    screen__DisclosureFormScreen["発明届出書画面"]:::screen
+    screen__DisclosureReviewScreen["届出受付画面"]:::screen
+    event__EvDisclosureSubmitted>"発明届出の提出"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Employee[("従業者")]:::entity
+    entity__InventionDisclosure[("発明届出")]:::entity
+    state__InventionDisclosure_accepted((("受付済"))):::state
+    state__InventionDisclosure_returned((("差戻し"))):::state
+    state__InventionDisclosure_submitted((("受付待ち"))):::state
+    condition__EmployeeInvention{"職務発明である"}:::condition
+    condition__NonEmployeeInvention{"職務発明に当たらない"}:::condition
+  end
+  actor__Inventor -.-> usecase__ResubmitDisclosure
+  actor__Inventor -.-> usecase__SubmitInventionDisclosure
+  actor__IpStaff -.-> usecase__AcceptDisclosure
+  actor__IpStaff -.-> usecase__AcquireRightsByAssignment
+  actor__IpStaff -.-> usecase__JudgeEmployeeInvention
+  actor__IpStaff -.-> usecase__ResubmitDisclosure
+  %% derived actor__IpStaff -> usecase__ResubmitDisclosure via step__ReturnStep
+  actor__IpStaff -.-> usecase__ReturnDisclosure
+  condition__EmployeeInvention -.-> usecase__JudgeEmployeeInvention
+  condition__NonEmployeeInvention -.-> usecase__AcquireRightsByAssignment
+  event__EvDisclosureSubmitted -.-> usecase__AcceptDisclosure
+  usecase__AcceptDisclosure -.-> screen__DisclosureReviewScreen
+  usecase__AcceptDisclosure -.->|transitions InventionDisclosure.status submitted->accepted| state__InventionDisclosure_accepted
+  usecase__AcceptDisclosure -.->|updates| entity__InventionDisclosure
+  %% derived usecase__AcceptDisclosure -> entity__InventionDisclosure via api__DisclosureReviewApi
+  usecase__AcquireRightsByAssignment -.-> screen__DisclosureReviewScreen
+  usecase__AcquireRightsByAssignment -.->|updates| entity__InventionDisclosure
+  %% derived usecase__AcquireRightsByAssignment -> entity__InventionDisclosure via api__DisclosureReviewApi
+  usecase__JudgeEmployeeInvention -.-> screen__DisclosureReviewScreen
+  usecase__JudgeEmployeeInvention -.->|updates| entity__InventionDisclosure
+  %% derived usecase__JudgeEmployeeInvention -> entity__InventionDisclosure via api__DisclosureReviewApi
+  usecase__ResubmitDisclosure -.-> screen__DisclosureFormScreen
+  usecase__ResubmitDisclosure -.->|transitions InventionDisclosure.status returned->submitted| state__InventionDisclosure_submitted
+  usecase__ResubmitDisclosure -.->|updates| entity__InventionDisclosure
+  %% derived usecase__ResubmitDisclosure -> entity__InventionDisclosure via api__ResubmitDisclosureApi
+  usecase__ReturnDisclosure -.-> screen__DisclosureReviewScreen
+  usecase__ReturnDisclosure -.->|transitions InventionDisclosure.status submitted->returned| state__InventionDisclosure_returned
+  usecase__ReturnDisclosure -.->|updates| entity__InventionDisclosure
+  %% derived usecase__ReturnDisclosure -> entity__InventionDisclosure via api__DisclosureReviewApi
+  usecase__SubmitInventionDisclosure -.->|creates| entity__InventionDisclosure
+  %% derived usecase__SubmitInventionDisclosure -> entity__InventionDisclosure via api__SubmitDisclosureApi
+  usecase__SubmitInventionDisclosure -.-> screen__DisclosureFormScreen
+  usecase__SubmitInventionDisclosure -.-> event__EvDisclosureSubmitted
+  usecase__SubmitInventionDisclosure -.->|reads| entity__Employee
+  %% derived usecase__SubmitInventionDisclosure -> entity__Employee via api__SubmitDisclosureApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

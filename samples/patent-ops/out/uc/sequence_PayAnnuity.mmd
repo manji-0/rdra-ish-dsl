@@ -1,0 +1,22 @@
+%% rdra-ish diagram=sequence scope=usecase:PayAnnuity model=samples/patent-ops
+%% kinds: actor timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__AnnuityDueDate as 第4年以後の特許料の納付期限（前年以前）
+  participant screen__AnnuityScreen as 年金管理画面
+  participant api__AnnuityApi as 年金 API
+  participant entity__FeeSchedule as 料金表
+  participant entity__Patent as 特許権
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor__IpStaff ->> screen__AnnuityScreen: 年金の納付
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt 存続中で、維持すると決めた権利の次の年が未納: Patent.status == 存続中, Patent.maintain == true, Patent.next_year_paid == false
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update next_year_paid=true, last_payment=regular, surcharge=null
+    api__AnnuityApi -) extsystem__Jpo: 特許料の納付
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end

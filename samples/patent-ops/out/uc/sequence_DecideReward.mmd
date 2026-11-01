@@ -1,0 +1,22 @@
+%% rdra-ish diagram=sequence scope=usecase:DecideReward model=samples/patent-ops
+%% kinds: actor extsystem usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant usecase__FileApplication as 電子出願
+  participant screen__RewardScreen as 相当の利益画面
+  participant api__RewardApi as 相当の利益 API
+  participant entity__InventionDisclosure as 発明届出
+  participant entity__InventorReward as 相当の利益
+  actor__IpStaff ->> screen__RewardScreen: 相当の利益の決定
+  extsystem__Jpo ->> api__RewardApi: 設定登録
+  usecase__FileApplication ->> api__RewardApi: 特許願の提出
+  screen__RewardScreen ->> api__RewardApi: 相当の利益 API
+  alt 職務発明である: InventionDisclosure.category == 職務発明
+    api__RewardApi ->> entity__InventionDisclosure: read
+    api__RewardApi ->> entity__InventorReward: create
+    api__RewardApi -->> screen__RewardScreen: done
+  else guard fails
+    api__RewardApi -->> screen__RewardScreen: rejected
+  end
