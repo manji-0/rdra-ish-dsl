@@ -657,6 +657,12 @@ relate(ClientCertificate, CertificateOrder, N:1)
 after(IssueCert).assert(CertificateOrder.status == executed)
 ```
 
+This is the 1.0 semantics, and it holds for a `timer` as for an event: neither orders the
+use cases it triggers (#30). Tracking the unhandled events as state would make the order
+exact, but it would change the reachable states and the `check` verdict of every model
+that uses `triggers`. [Known verification gaps](./formal-verification.md#known-verification-gaps)
+lists this gap with the others.
+
 When a rule depends on the event order, state what the order guarantees as a `condition`
 guard on the triggered use case. Here the event is raised only once the order is
 `executed`, so IssueCert needs an executed order:

@@ -331,6 +331,92 @@ The rules for each flag and for deferral are in
 - User-facing state diagnostics for multi-entity rules say **multi-entity**. The
   `Cross*` prefix in some constraint names is historical.
 
+## Known verification gaps
+
+<!-- derived-from #approximations-and-limitations -->
+<!-- derived-from ../samples/patent-ops/README.md#known-verification-gaps -->
+<!-- constrained-by ./language-reference.md#triggers-and-event-driven-buc-chaining -->
+A passing `check` or `verify` says nothing about what it does not explore. This section
+names each gap that 1.0 keeps, how to see it in a run, and what you can do about it. The
+[compatibility contract](./compatibility.md#bounds) promises results only within these
+gaps.
+
+- **Events and timers impose no order.** A use case that an event or a timer triggers can
+  run whenever its required states and guards hold, also before the use case that raises
+  the event. This over-approximation is the 1.0 semantics (#30): a check never misses a
+  violation the event order could produce, but it can report a run the event order
+  prevents. See it: a counterexample in which the triggered use case runs first, as in
+  [`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining).
+  What you can do: state what the event order guarantees as a `condition` guard on the
+  triggered use case.
+- **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that
+  BFS and TLC agree on the states, edges, findings, and verdicts of every cone. A cone whose
+  BFS passes the test's cap of 200,000 states at 2 instances is compared at 1 instance only.
+  `VERIFY_FALLBACK` in `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 10 cones
+  today:
+  - `samples/clinic-ops`: entities `Charge`, `ClinicalOrder`, `EligibilityCheck`,
+    `LabResult`, and `Prescription`, and invariants `Forbidden_ClinicalOrder_1`,
+    `Inv_ClinicalOrder_3`, and `Inv_Prescription_4`. Each reaches 223,901 to 969,167 states
+    at 2 instances (the table under
+    [Approximations and limitations](#approximations-and-limitations)).
+  - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
+    (with `Exclusive_OfficeAction_0`). The guards that read the application put its state
+    into the cone, which reaches 4,818,909 states at 2 instances.
+
+  `verify` still checks these cones at 2 instances: TLC runs on each, and BFS runs on each
+  clinic-ops cone. Only the agreement of the two engines is tested at 1 instance. This is
+  accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
+  it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
+  new model's cones under 200,000 states at 2 instances if you want the agreement tested.
+- **The `verify` BFS stops at 2,097,152 states per cone.** The BFS pass that finds missing
+  witnesses, deadlocks, use cases that never run, arms never taken, and values never chosen
+  stops at `Caps::VERIFY`, 2^21 states. A cone that stops there decides none of these
+  findings. TLC still checks its invariants. See it: each undecided finding under
+  `not checked:` on stdout, as patent-ops prints for the four stuck-state checks of
+  `OfficeAction`. What you can do: rely on `check` at 1 instance for those findings, or
+  shrink the cone, for example by removing a guard that pulls another entity's columns in.
+- **`check` stops at 65,536 states per cone.** A cone past the cap is the
+  `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone.
+  See it: the error, whose message names the variables the reached states vary in. What
+  you can do: raise the cap with `--max-states`, or narrow the cone by moving a guard that
+  reads another entity.
+- **Int columns range over `0..5`, and `now` is a bounded clock.** Every Int, Money,
+  Decimal, Date, and DateTime column takes values in `IntRange`. `now` starts in that range
+  and a `Tick` action raises it to the top, so a run never sees a later time. See it: the
+  `Int 0..5` in the `bounds:` line, and `IntLiteralOutOfBounds` for a literal outside it.
+  What you can do: `verify --int-range-max N` widens the range; `check` keeps `0..5`.
+- **Instances are bounded: 1 per entity in `check`, 2 in `verify`.** A rule that needs two
+  instances to break, such as `Unique_*`, holds vacuously in `check`. A rule that needs
+  three is not checked by default. Each entity is created at most `InstanceCount` times,
+  because a deleted slot is never reused. See it: the `bounds:` line. What you can do: run
+  `verify`, and raise `--instance-count` for a rule about more instances.
+- **Temporal properties are checked only by `verify`, on the whole model.** `check` and
+  `states` evaluate no `property` and print a `note:` that says so. A property needs
+  fairness on the whole system, so `verify` runs it on the whole model, not a cone, and a
+  run with `--buc` or `--entity` checks no property. See it: the `note:` from `check`, and
+  `temporal properties: none, no whole-model run` in a scoped `verify`. What you can do: run an unscoped
+  `verify` on a model small enough for a whole-model run.
+- **patent-ops states no temporal property.** A whole-model run of patent-ops at 2
+  instances explored 14 million states in 11 minutes without finishing, so a fair
+  `leads_to` such as `GrantEnds` in `temporal_fair.rdra` is undecided at patent-ops' size,
+  and the sample declares none. See it: `temporal properties: none, no whole-model run` in
+  its `verify` run. What you can do: check the property on a smaller model of the same
+  flow, as `temporal_fair.rdra` does.
+- **patent-ops does not check that a filing follows approved drafts.** `FileApplication`
+  should require `DraftingOrder.status == approved` through a mandatory link from the
+  application to its drafting order. With that link, the cones of `PatentApplication`,
+  `Patent`, and `OfficeAction` pass 10,000,000 states at 2 instances, so the guard and the
+  link are left out. See it:
+  [Known verification gaps](../samples/patent-ops/README.md#known-verification-gaps) in the
+  sample's README. What you can do: state such a rule only where its cone stays within the
+  `verify` cap, or check it in a smaller model.
+- **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
+  outside the selected BUCs, and those could reach, enable, or unblock a state. A missing
+  witness, a use case that never runs, a deadlock, an arm never taken, and a value never
+  chosen are therefore listed under `not checked:` and never reported as an error or a
+  warning. See it: the `not checked:` lines of a `--buc` run. What you can do: run without
+  `--buc`, or use `--entity`, whose cones are exact and whose findings are decided.
+
 ## Workflow
 
 1. Model lifecycle with `transitions` / `sets` and entity-local rules.

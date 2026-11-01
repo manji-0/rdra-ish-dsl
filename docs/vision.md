@@ -323,6 +323,18 @@ These questions were decided on 2026-10-29, during phase 6:
   in `cross_order_payment`, Cancel left the Payment of a cancelled Order pending forever,
   so Cancel now deletes it.
 
+The maintainer decided this question on 2026-11-01, for 1.0 (#51):
+
+- Events and timers impose no order on the use cases they trigger (#30). `states`,
+  `check`, and `verify` keep the over-approximation: a triggered use case runs whenever its
+  required states and guards hold. The alternative, a pending flag per raised event that the
+  triggered use case consumes, would change the reachable states and the `check` verdict of
+  every model with `triggers`, clinic-ops included, and grow every cone. A rule that depends
+  on the event order is written as a `condition` guard on the triggered use case, as
+  [the language reference](./language-reference.md#triggers-and-event-driven-buc-chaining)
+  shows. Changing this after 1.0 needs a major release
+  ([compatibility](./compatibility.md)).
+
 ## Sources
 
 - The author's element and connection rules:

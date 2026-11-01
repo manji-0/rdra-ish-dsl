@@ -1212,3 +1212,4 @@ carries a `witness`: a shortest path to the first state that holds it, as `start
 - [incremental-modeling.md](./incremental-modeling.md) — staged abstract-to-concrete modeling flow.
 - [state-derivation.md](./state-derivation.md) — how `states` computes its output.
 - [formal-verification.md](./formal-verification.md) — `export --kind tla` / `verify --backend tlc`.
+- [compatibility.md](./compatibility.md) — which subcommands, flags, exit codes, and output formats are stable.

@@ -103,6 +103,7 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
 - [State Derivation](./docs/state-derivation.md)
 - [Formal Verification (TLA+/TLC)](./docs/formal-verification.md)
+- [Compatibility](./docs/compatibility.md) — what a 1.0 release keeps stable
 - [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
 - [Changelog](./CHANGELOG.md)
 - Agent skills: [`skills/README.md`](./skills/README.md)
