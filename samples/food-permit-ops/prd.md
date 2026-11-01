@@ -735,15 +735,15 @@ flowchart TD
 | condition | 許可の取消である | Disposition | Disposition.kind == 許可の取消 | DecideRevocation | samples/food-permit-ops/buc/buc_disposition.rdra:176 |
 | condition | 営業の停止である | Disposition | Disposition.kind == 営業の停止 | DecideSuspension | samples/food-permit-ops/buc/buc_disposition.rdra:187 |
 | condition | 意見陳述を省く処分である | Disposition | Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号） | OrderImprovement | samples/food-permit-ops/buc/buc_disposition.rdra:213 |
-| condition | 処分が決定していて、まだ公表していない | Disposition | Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表 | PublishViolation | samples/food-permit-ops/buc/buc_disposition.rdra:238 |
-| condition | 公表中である | Disposition | Disposition.publication == 公表中 | EndPublication | samples/food-permit-ops/buc/buc_disposition.rdra:247 |
-| forbidden | 許可の取消の前に聴聞を行う | Disposition | Disposition.kind == 許可の取消 AND Disposition.procedure != hearing |  | samples/food-permit-ops/buc/buc_disposition.rdra:365 |
-| forbidden | 意見陳述を省けるのは技術的基準に従うよう命じる処分だけ | Disposition | Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号） AND Disposition.kind != improvement_order |  | samples/food-permit-ops/buc/buc_disposition.rdra:367 |
-| invariant | 不利益処分は理由を示して行う | Disposition | when Disposition.status in (decided, finalized) then Disposition.reason_shown == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:369 |
-| forbidden | 処分を決める前に公表しない | Disposition | Disposition.publication != unpublished AND Disposition.status not in (decided, finalized) |  | samples/food-permit-ops/buc/buc_disposition.rdra:371 |
-| forbidden | 営業停止中は営業しない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:375 |
-| forbidden | 許可なく営業しない（失効・取消・廃業の後の営業は無許可営業） | BusinessPermit | BusinessPermit.operating == true AND BusinessPermit.status in (expired, revoked, closed) |  | samples/food-permit-ops/buc/buc_disposition.rdra:379 |
-| after | 停止を命じた許可では営業していない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == false | SuspendBusiness | samples/food-permit-ops/buc/buc_disposition.rdra:381 |
+| condition | 処分が決定している | Disposition | Disposition.status in (処分決定, 確定（審査請求期間の経過）) | PublishViolation | samples/food-permit-ops/buc/buc_disposition.rdra:238 |
+| forbidden | 許可の取消の前に聴聞を行う | Disposition | Disposition.kind == 許可の取消 AND Disposition.procedure != hearing |  | samples/food-permit-ops/buc/buc_disposition.rdra:361 |
+| forbidden | 意見陳述を省けるのは技術的基準に従うよう命じる処分だけ | Disposition | Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号） AND Disposition.kind != improvement_order |  | samples/food-permit-ops/buc/buc_disposition.rdra:363 |
+| invariant | 不利益処分は理由を示して行う | Disposition | when Disposition.status in (decided, finalized) then Disposition.reason_shown == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:365 |
+| forbidden | 処分を決める前に公表しない | Disposition | Disposition.publication in (published, ended) AND Disposition.status not in (decided, finalized) |  | samples/food-permit-ops/buc/buc_disposition.rdra:367 |
+| forbidden | 公表対象外は処分しないと決めたものだけ | Disposition | Disposition.publication == 公表対象外 AND Disposition.status != dropped |  | samples/food-permit-ops/buc/buc_disposition.rdra:369 |
+| forbidden | 営業停止中は営業しない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:373 |
+| forbidden | 許可なく営業しない（失効・取消・廃業の後の営業は無許可営業） | BusinessPermit | BusinessPermit.operating == true AND BusinessPermit.status in (expired, revoked, closed) |  | samples/food-permit-ops/buc/buc_disposition.rdra:377 |
+| after | 停止を命じた許可では営業していない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == false | SuspendBusiness | samples/food-permit-ops/buc/buc_disposition.rdra:379 |
 | condition | 申請が検査待で、まだ検査の予定がない | PermitApplication\|Inspection | (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）)) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
 | condition | 施設検査で施設基準に適合した | Inspection | Inspection.status == 適合 | GrantPermit\|RenewPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:144 |
 | condition | 新規の申請である | PermitApplication | PermitApplication.kind == 新規 | GrantPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:148 |

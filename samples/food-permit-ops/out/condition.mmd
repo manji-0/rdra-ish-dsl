@@ -10,8 +10,8 @@ flowchart LR
   %% holds condition__CertifiedAndValid: BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true
   condition__CounterApplication{"窓口（紙）で出した申請である"}:::condition
   %% holds condition__CounterApplication: PermitApplication.channel == 保健所の窓口（紙）
-  condition__DecidedUnpublished{"処分が決定していて、まだ公表していない"}:::condition
-  %% holds condition__DecidedUnpublished: Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表
+  condition__DispositionDecided{"処分が決定している"}:::condition
+  %% holds condition__DispositionDecided: Disposition.status in (処分決定, 確定（審査請求期間の経過）)
   condition__ExemptType{"届出も要らない営業（施行令35条の2）である"}:::condition
   %% holds condition__ExemptType: Consultation.business_type == 常温で保存できる包装食品の販売（届出不要）
   condition__ExplanationProcedure{"弁明の機会を与える処分である"}:::condition
@@ -42,8 +42,6 @@ flowchart LR
   %% holds condition__PermitValid: BusinessPermit.status == 有効
   condition__PlanPublished{"監視指導計画が公表されている"}:::condition
   %% holds condition__PlanPublished: MonitoringPlan.status == 公表済
-  condition__Published{"公表中である"}:::condition
-  %% holds condition__Published: Disposition.publication == 公表中
   condition__RenewalApplication{"継続（更新）の申請である"}:::condition
   %% holds condition__RenewalApplication: PermitApplication.kind == 継続（更新）
   condition__RevocationKind{"許可の取消である"}:::condition
@@ -105,8 +103,6 @@ flowchart LR
   %% desc usecase__DecideRevocation: 聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。
   usecase__DecideSuspension("営業停止の決定"):::usecase
   %% desc usecase__DecideSuspension: 弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。
-  usecase__EndPublication("公表の終了"):::usecase
-  %% desc usecase__EndPublication: 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。
   usecase__FileChangeNotice("変更届の提出"):::usecase
   %% desc usecase__FileChangeNotice: 許可営業者が、申請書の記載事項（営業者の氏名・住所、施設の名称、食品衛生責任者など）や設備の変更を届け出る。
   usecase__FileSuccessionNotice("地位承継届の提出"):::usecase
@@ -158,9 +154,9 @@ flowchart LR
   %% derived condition__CounterApplication -> variation__SubmissionChannel from holds
   condition__CounterApplication -.->|when| usecase__WithdrawApplication
   %% derived condition__CounterApplication -> usecase__WithdrawApplication via transitions PermitApplication.status submitted->withdrawn, transitions PermitApplication.status awaiting_inspection->withdrawn
-  condition__DecidedUnpublished -.->|applies_to| usecase__PublishViolation
-  condition__DecidedUnpublished -.-> statemodel__Disposition_status
-  %% derived condition__DecidedUnpublished -> statemodel__Disposition_status from holds
+  condition__DispositionDecided -.->|applies_to| usecase__PublishViolation
+  condition__DispositionDecided -.-> statemodel__Disposition_status
+  %% derived condition__DispositionDecided -> statemodel__Disposition_status from holds
   condition__ExemptType -.-> statemodel__Consultation_status
   %% derived condition__ExemptType -> statemodel__Consultation_status from when
   condition__ExemptType -.-> variation__BusinessType
@@ -227,7 +223,6 @@ flowchart LR
   condition__PlanPublished -.->|applies_to| usecase__ScheduleSiteVisit
   condition__PlanPublished -.-> statemodel__MonitoringPlan_status
   %% derived condition__PlanPublished -> statemodel__MonitoringPlan_status from holds
-  condition__Published -.->|applies_to| usecase__EndPublication
   condition__RenewalApplication -.->|applies_to| usecase__RenewPermit
   condition__RenewalApplication -.-> variation__ApplicationKind
   %% derived condition__RenewalApplication -> variation__ApplicationKind from holds

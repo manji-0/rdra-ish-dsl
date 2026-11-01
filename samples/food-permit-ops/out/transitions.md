@@ -7,7 +7,7 @@
 | BusinessPermit | status | 有効 (valid) | 失効（有効期間満了） (expired) | 有効期間の満了による失効 (ExpirePermit) |  |  | samples/food-permit-ops/buc/buc_renewal.rdra:97 |
 | BusinessPermit | status | 有効 (valid) | 取消 (revoked) | 許可台帳への取消の記録 (RevokePermit) |  | 保健所 許可担当職員 | samples/food-permit-ops/buc/buc_disposition.rdra:193 |
 | BusinessPermit | status | 有効 (valid) | 廃業 (closed) | 廃業届の提出 (FileClosureNotice) |  | 営業者 | samples/food-permit-ops/buc/buc_permit_changes.rdra:107 |
-| BusinessPermit | status | 営業停止中 (suspended) | 有効 (valid) | 営業停止期間の満了 (LiftSuspension) |  |  | samples/food-permit-ops/buc/buc_disposition.rdra:221 |
+| BusinessPermit | status | 営業停止中 (suspended) | 有効 (valid) | 営業停止期間の満了 (LiftSuspension) |  |  | samples/food-permit-ops/buc/buc_disposition.rdra:222 |
 | BusinessPermit | status | 営業停止中 (suspended) | 失効（有効期間満了） (expired) | 有効期間の満了による失効 (ExpirePermit) |  |  | samples/food-permit-ops/buc/buc_renewal.rdra:98 |
 | BusinessPermit | status | 営業停止中 (suspended) | 取消 (revoked) | 許可台帳への取消の記録 (RevokePermit) |  | 保健所 許可担当職員 | samples/food-permit-ops/buc/buc_disposition.rdra:194 |
 | BusinessPermit | status | 営業停止中 (suspended) | 廃業 (closed) | 廃業届の提出 (FileClosureNotice) |  | 営業者 | samples/food-permit-ops/buc/buc_permit_changes.rdra:108 |
@@ -16,6 +16,9 @@
 | Consultation | status | 相談中 (open) | 許可が必要 (permit_required) | 営業の種類の判定 (ClassifyBusiness) | 許可業種（施行令35条）である | 食品衛生監視員 | samples/food-permit-ops/buc/buc_consultation.rdra:64 |
 | Consultation | status | 相談中 (open) | 届出が必要 (notification_required) | 営業の種類の判定 (ClassifyBusiness) | 届出業種である | 食品衛生監視員 | samples/food-permit-ops/buc/buc_consultation.rdra:65 |
 | Consultation | status | 相談中 (open) | 許可・届出とも不要 (exempt) | 営業の種類の判定 (ClassifyBusiness) | 届出も要らない営業（施行令35条の2）である | 食品衛生監視員 | samples/food-permit-ops/buc/buc_consultation.rdra:66 |
+| Disposition | publication | 未公表 (unpublished) | 公表中 (published) | 違反の公表 (PublishViolation) | 処分が決定している | 保健所 許可担当職員 | samples/food-permit-ops/buc/buc_disposition.rdra:233 |
+| Disposition | publication | 未公表 (unpublished) | 公表対象外 (excluded) | 処分を見送る (DropDisposition) |  | 都道府県知事等（保健所設置市長・特別区長） | samples/food-permit-ops/buc/buc_disposition.rdra:218 |
+| Disposition | publication | 公表中 (published) | 公表終了 (ended) | 公表の終了 (EndPublication) |  |  | samples/food-permit-ops/buc/buc_disposition.rdra:243 |
 | Disposition | status | 処分案 (proposed) | 意見陳述の通知済 (notified) | 聴聞・弁明の通知 (NotifyOpinionProcedure) | 意見陳述の手続を執る処分である | 保健所 許可担当職員 | samples/food-permit-ops/buc/buc_disposition.rdra:139 |
 | Disposition | status | 処分案 (proposed) | 処分決定 (decided) | 施設の整備改善命令 (OrderImprovement) | 施設の整備改善命令である\|意見陳述を省く処分である | 都道府県知事等（保健所設置市長・特別区長） | samples/food-permit-ops/buc/buc_disposition.rdra:208 |
 | Disposition | status | 意見陳述の通知済 (notified) | 意見陳述の手続終了 (heard) | 聴聞の実施 (HoldHearing) | 聴聞を執る処分である | 保健所 許可担当職員 | samples/food-permit-ops/buc/buc_disposition.rdra:147 |
@@ -24,7 +27,7 @@
 | Disposition | status | 意見陳述の手続終了 (heard) | 処分決定 (decided) | 営業停止の決定 (DecideSuspension) | 営業の停止である | 都道府県知事等（保健所設置市長・特別区長） | samples/food-permit-ops/buc/buc_disposition.rdra:181 |
 | Disposition | status | 意見陳述の手続終了 (heard) | 処分決定 (decided) | 施設の整備改善命令 (OrderImprovement) | 施設の整備改善命令である | 都道府県知事等（保健所設置市長・特別区長） | samples/food-permit-ops/buc/buc_disposition.rdra:207 |
 | Disposition | status | 意見陳述の手続終了 (heard) | 処分しない (dropped) | 処分を見送る (DropDisposition) |  | 都道府県知事等（保健所設置市長・特別区長） | samples/food-permit-ops/buc/buc_disposition.rdra:217 |
-| Disposition | status | 処分決定 (decided) | 確定（審査請求期間の経過） (finalized) | 審査請求期間の経過 (FinalizeDisposition) |  |  | samples/food-permit-ops/buc/buc_disposition.rdra:226 |
+| Disposition | status | 処分決定 (decided) | 確定（審査請求期間の経過） (finalized) | 審査請求期間の経過 (FinalizeDisposition) |  |  | samples/food-permit-ops/buc/buc_disposition.rdra:227 |
 | Inspection | status | 検査予定 (scheduled) | 適合 (passed) | 施設検査の実施 (ConductInspection) |  | 食品衛生監視員 | samples/food-permit-ops/buc/buc_inspection_decision.rdra:126 |
 | Inspection | status | 検査予定 (scheduled) | 不適合（改善の指示） (failed) | 施設検査の実施 (ConductInspection) |  | 食品衛生監視員 | samples/food-permit-ops/buc/buc_inspection_decision.rdra:127 |
 | Inspection | status | 不適合（改善の指示） (failed) | 検査予定 (scheduled) | 改善の報告と再検査の申込み (RequestReinspection) |  | 営業者 | samples/food-permit-ops/buc/buc_inspection_decision.rdra:132 |

@@ -921,6 +921,41 @@ fn bfs_and_tlc_report_every_check_that_fails_in_the_same_state() {
     check_fixture("simultaneous", SIMULTANEOUS);
 }
 
+/// Two lifecycle columns on one entity (#68): `status` and `publication` move independently,
+/// share the value `open`, and the rules read both. Publishing needs a decided status (a guard
+/// on one column's arm that reads the other), a forbidden state and an after-assert pair the
+/// two, and an arm whose guard never holds leaves `ended` without a witness.
+const TWO_LIFECYCLES: &str = r#"
+entity D "処分" {
+  id: Int @pk
+  status: Enum(open, decided, closed) @default(open)
+  publication: Enum(hidden, open, ended) @default(hidden)
+}
+usecase Make "作成"
+usecase Decide "決定"
+usecase Close "完結"
+usecase Publish "公表"
+usecase Withdraw "取下げ"
+usecase End "公表終了"
+creates(Make, D)
+transitions(Decide, D.status, open -> decided)
+transitions(Close, D.status, decided -> closed)
+condition Decided "決定済み"
+holds(Decided, D.status in (decided, closed))
+condition Never "起きない"
+holds(Never, D.status == open, D.publication == open)
+transitions(Publish, D.publication, hidden -> open).when(Decided)
+transitions(Withdraw, D.publication, open -> hidden)
+transitions(End, D.publication, open -> ended).when(Never)
+forbidden(D, publication == open, status == open)
+after(Close).assert(D.publication != hidden)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_two_lifecycle_columns() {
+    check_fixture("two_lifecycles", TWO_LIFECYCLES);
+}
+
 /// One inline model at both bounds.
 fn check_fixture(name: &str, src: &str) {
     let Some(tlc) = find_tlc() else {

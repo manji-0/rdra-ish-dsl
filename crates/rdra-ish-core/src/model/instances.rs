@@ -179,11 +179,15 @@ pub struct Entity {
     pub indexes: Vec<Vec<std::string::String>>,
 }
 
+/// One value of one lifecycle column: a node `transitions` derives, never declared.
 #[derive(Debug, Clone)]
 pub struct State {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
+    pub entity: super::EntityKey,
+    pub column: std::string::String,
+    pub value: std::string::String,
 }
 
 #[derive(Debug, Clone)]

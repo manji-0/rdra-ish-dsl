@@ -568,8 +568,10 @@ fn parse_state(text: &str) -> Result<StateChart, String> {
                     .ok_or_else(|| format!("unparsed state: {line}"))?;
                 if id.starts_with("index__") {
                     chart.index_notes.push((model, label.to_string()));
-                } else {
-                    chart.states.insert(id.to_string(), model);
+                } else if let Some(other) = chart.states.insert(id.to_string(), model.clone()) {
+                    if other != model {
+                        return Err(format!("state {id} in both {other} and {model}"));
+                    }
                 }
             } else {
                 let (arm, _label) = trimmed

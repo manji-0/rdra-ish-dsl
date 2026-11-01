@@ -1090,7 +1090,7 @@ What a variation column does differently from an inline `Enum`:
 |---|---|---|
 | `states` | One axis; unreached variants are reported unreachable | No axis, no reachability check |
 | `transitions` | Allowed | Error (`TransitionsColumnNotEnum`): an attribute has no lifecycle |
-| TLA+ export | Status column of the lifecycle | An axis only when a `sets`, a constraint, an `after` assertion, or a `property` names the column; `Init` is a free choice over every value, so TLC checks them all |
+| TLA+ export | A lifecycle column, one per column `transitions` names | An axis only when a `sets`, a constraint, an `after` assertion, or a `property` names the column; `Init` is a free choice over every value, so TLC checks them all |
 | update | A `transitions` arm or a `sets` moves it | Keeps its value, unless the use case `chooses` it |
 | `export --kind dbml` | One `Enum <Entity>_<column>` per column | One `Enum <VariationId>` shared by every column typed by it |
 | `export --kind json-schema`, `openapi` | `enum` of the variants | `enum` of the variation's values |
@@ -1446,6 +1446,34 @@ transitions(DecideFiling, Disclosure.status, searched -> decided_abandon)
 
 A `sets` is not a choice. Two `sets` of one use case with different values for one column
 are a `ConflictingEffects` error; keep one value or split the use case.
+
+#### Several lifecycle columns on one entity
+
+An entity may have several lifecycle columns. Each Enum column that `transitions` names is
+its own state model, with its own states, witnesses, deadlocks, and state diagram block. A
+disposition whose procedure and publication move independently keeps both on one row:
+
+```rdra
+entity Disposition "不利益処分" {
+  id: Int @pk
+  status: Enum(noticed, decided, finalized) @default(noticed)
+  publication: Enum(unpublished, published, ended) @default(unpublished)
+}
+transitions(Decide, Disposition.status, noticed -> decided)
+transitions(Publish, Disposition.publication, unpublished -> published).when(Decided)
+transitions(EndPublication, Disposition.publication, published -> ended)
+```
+
+- **The columns move independently.** `states` lists every combination the use cases
+  reach; `check` and the TLA+ export explore them together, so a guard, a `forbidden`, an
+  `invariant`, or an `after(UC).assert` may read any of the columns.
+- **A state names its column when the entity has several.** The state of `published` is
+  `Disposition_publication_published` (diagram id `state__Disposition_publication_published`),
+  so a value two columns share is two states. An entity with one lifecycle column keeps
+  `{Entity}_{value}`.
+- **A single-tag export picks one column.** `export --kind typescript` tags each state union
+  by `status`, else a `*_status` column, else the first lifecycle column by name; the other
+  columns are fields of each variant.
 
 #### Guard one arm: `.when`
 
@@ -2068,7 +2096,7 @@ to load with a message naming the replacement:
 | `timing` | `timer`. `belongs(...).when(...)` was removed; connect the timer with `triggers(Timer, UseCase)`. |
 | `uses` | Connect an external system through events: `raises(ExtSystem, Event)` inbound, `triggers(Event, ExtSystem)` outbound. |
 | `location` | Deleted with the `.where(...)` clause of `belongs`; use `medium` / `.by(...)` for Business-BUC context. |
-| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(UseCase, Entity.col, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for `lint` and the diagrams, which name it `state__{Entity}_{variant}`. |
+| `state` | Delete the declaration. States are the variants of the lifecycle Enum column named in `transitions(UseCase, Entity.col, from -> to)`; the analyzer derives one `{Entity}_{variant}` state per variant for `lint` and the diagrams, which name it `state__{Entity}_{variant}` (`{Entity}_{column}_{variant}` on an entity with [several lifecycle columns](#several-lifecycle-columns-on-one-entity)). |
 | `concept`, `domain_object`, `aggregate`, `value_object` / `valueobject`, and `maps_to` | `entity` for persistent structure, `dto` for payload shapes. |
 
 A top-level `when(...)` rule was removed too: a rule over related rows is an `invariant`,

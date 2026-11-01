@@ -94,22 +94,25 @@ flowchart LR
     state__BusinessPermit_revoked((("取消"))):::state
     state__BusinessPermit_suspended((("営業停止中"))):::state
     state__BusinessPermit_valid((("有効"))):::state
-    state__Disposition_decided((("処分決定"))):::state
-    state__Disposition_dropped((("処分しない"))):::state
-    state__Disposition_finalized((("確定（審査請求期間の経過）"))):::state
-    state__Disposition_heard((("意見陳述の手続終了"))):::state
-    state__Disposition_notified((("意見陳述の通知済"))):::state
-    state__Disposition_proposed((("処分案"))):::state
+    state__Disposition_publication_ended((("公表終了"))):::state
+    state__Disposition_publication_excluded((("公表対象外"))):::state
+    state__Disposition_publication_published((("公表中"))):::state
+    state__Disposition_publication_unpublished((("未公表"))):::state
+    state__Disposition_status_decided((("処分決定"))):::state
+    state__Disposition_status_dropped((("処分しない"))):::state
+    state__Disposition_status_finalized((("確定（審査請求期間の経過）"))):::state
+    state__Disposition_status_heard((("意見陳述の手続終了"))):::state
+    state__Disposition_status_notified((("意見陳述の通知済"))):::state
+    state__Disposition_status_proposed((("処分案"))):::state
     variation__DispositionKind[\"処分の種類"\]:::variation
     variation__OpinionProcedure[\"意見陳述の手続"\]:::variation
-    condition__DecidedUnpublished{"処分が決定していて、まだ公表していない"}:::condition
+    condition__DispositionDecided{"処分が決定している"}:::condition
     condition__ExplanationProcedure{"弁明の機会を与える処分である"}:::condition
     condition__HearingProcedure{"聴聞を執る処分である"}:::condition
     condition__ImprovementOrderKind{"施設の整備改善命令である"}:::condition
     condition__NotRevocation{"取消ではない処分である"}:::condition
     condition__OpinionOmitted{"意見陳述を省く処分である"}:::condition
     condition__OpinionRequired{"意見陳述の手続を執る処分である"}:::condition
-    condition__Published{"公表中である"}:::condition
     condition__RevocationKind{"許可の取消である"}:::condition
     condition__SuspensionKind{"営業の停止である"}:::condition
   end
@@ -137,9 +140,9 @@ flowchart LR
   buc__BucDisposition --> usecase__ReceiveExplanation
   buc__BucDisposition --> usecase__RevokePermit
   buc__BucDisposition --> usecase__SuspendBusiness
-  condition__DecidedUnpublished -.->|applies_to| usecase__PublishViolation
-  condition__DecidedUnpublished -.-> entity__Disposition
-  %% derived condition__DecidedUnpublished -> entity__Disposition from holds
+  condition__DispositionDecided -.->|applies_to| usecase__PublishViolation
+  condition__DispositionDecided -.-> entity__Disposition
+  %% derived condition__DispositionDecided -> entity__Disposition from holds
   condition__ExplanationProcedure -.->|applies_to| usecase__ReceiveExplanation
   condition__ExplanationProcedure -.-> variation__OpinionProcedure
   %% derived condition__ExplanationProcedure -> variation__OpinionProcedure from holds
@@ -169,7 +172,6 @@ flowchart LR
   condition__OpinionRequired -.->|applies_to| usecase__NotifyOpinionProcedure
   condition__OpinionRequired -.-> variation__OpinionProcedure
   %% derived condition__OpinionRequired -> variation__OpinionProcedure from holds
-  condition__Published -.->|applies_to| usecase__EndPublication
   condition__RevocationKind -.->|applies_to| usecase__DecideRevocation
   condition__RevocationKind -.-> variation__DispositionKind
   %% derived condition__RevocationKind -> variation__DispositionKind from holds
@@ -259,41 +261,43 @@ flowchart LR
   usecase__DecideRevocation -.-> event__EvRevocationDecided
   usecase__DecideRevocation -.-> medium__HealthCenterTerminal
   usecase__DecideRevocation -.-> permission__DispositionDecide
-  usecase__DecideRevocation -.->|transitions Disposition.status heard->decided| state__Disposition_decided
+  usecase__DecideRevocation -.->|transitions Disposition.status heard->decided| state__Disposition_status_decided
   usecase__DecideSuspension -.-> screen__DispositionScreen
   usecase__DecideSuspension -.-> api__DispositionApi
   usecase__DecideSuspension -.-> event__EvDispositionDecided
   usecase__DecideSuspension -.-> event__EvSuspensionDecided
   usecase__DecideSuspension -.-> medium__HealthCenterTerminal
   usecase__DecideSuspension -.-> permission__DispositionDecide
-  usecase__DecideSuspension -.->|transitions Disposition.status heard->decided| state__Disposition_decided
+  usecase__DecideSuspension -.->|transitions Disposition.status heard->decided| state__Disposition_status_decided
   usecase__DropDisposition -.-> screen__DispositionScreen
   usecase__DropDisposition -.-> api__DispositionApi
   usecase__DropDisposition -.-> medium__HealthCenterTerminal
   usecase__DropDisposition -.-> permission__DispositionDecide
-  usecase__DropDisposition -.->|transitions Disposition.status heard->dropped| state__Disposition_dropped
+  usecase__DropDisposition -.->|transitions Disposition.publication unpublished->excluded| state__Disposition_publication_excluded
+  usecase__DropDisposition -.->|transitions Disposition.status heard->dropped| state__Disposition_status_dropped
   usecase__EndPublication -.-> api__PublicationApi
+  usecase__EndPublication -.->|transitions Disposition.publication published->ended| state__Disposition_publication_ended
   usecase__FinalizeDisposition -.-> api__DispositionApi
-  usecase__FinalizeDisposition -.->|transitions Disposition.status decided->finalized| state__Disposition_finalized
+  usecase__FinalizeDisposition -.->|transitions Disposition.status decided->finalized| state__Disposition_status_finalized
   usecase__HoldHearing -.-> screen__OpinionProcedureScreen
   usecase__HoldHearing -.-> api__OpinionProcedureApi
   usecase__HoldHearing -.-> medium__HealthCenterTerminal
   usecase__HoldHearing -.-> permission__OpinionProcedureManage
-  usecase__HoldHearing -.->|transitions Disposition.status notified->heard| state__Disposition_heard
+  usecase__HoldHearing -.->|transitions Disposition.status notified->heard| state__Disposition_status_heard
   usecase__LiftSuspension -.-> api__PermitApi
   usecase__LiftSuspension -.->|transitions BusinessPermit.status suspended->valid| state__BusinessPermit_valid
   usecase__NotifyOpinionProcedure -.-> screen__OpinionProcedureScreen
   usecase__NotifyOpinionProcedure -.-> api__OpinionProcedureApi
   usecase__NotifyOpinionProcedure -.-> medium__HealthCenterTerminal
   usecase__NotifyOpinionProcedure -.-> permission__OpinionProcedureManage
-  usecase__NotifyOpinionProcedure -.->|transitions Disposition.status proposed->notified| state__Disposition_notified
+  usecase__NotifyOpinionProcedure -.->|transitions Disposition.status proposed->notified| state__Disposition_status_notified
   usecase__OrderImprovement -.-> screen__DispositionScreen
   usecase__OrderImprovement -.-> api__DispositionApi
   usecase__OrderImprovement -.-> event__EvDispositionDecided
   usecase__OrderImprovement -.-> medium__HealthCenterTerminal
   usecase__OrderImprovement -.-> permission__DispositionDecide
-  usecase__OrderImprovement -.->|transitions Disposition.status heard->decided| state__Disposition_decided
-  usecase__OrderImprovement -.->|transitions Disposition.status proposed->decided| state__Disposition_decided
+  usecase__OrderImprovement -.->|transitions Disposition.status heard->decided| state__Disposition_status_decided
+  usecase__OrderImprovement -.->|transitions Disposition.status proposed->decided| state__Disposition_status_decided
   usecase__ProposeDisposition -.-> screen__DispositionScreen
   usecase__ProposeDisposition -.-> api__DispositionDraftApi
   usecase__ProposeDisposition -.-> medium__HealthCenterTerminal
@@ -302,11 +306,12 @@ flowchart LR
   usecase__PublishViolation -.-> api__PublicationApi
   usecase__PublishViolation -.-> medium__HealthCenterTerminal
   usecase__PublishViolation -.-> permission__ViolationPublish
+  usecase__PublishViolation -.->|transitions Disposition.publication unpublished->published| state__Disposition_publication_published
   usecase__ReceiveExplanation -.-> screen__OpinionProcedureScreen
   usecase__ReceiveExplanation -.-> api__OpinionProcedureApi
   usecase__ReceiveExplanation -.-> medium__HealthCenterTerminal
   usecase__ReceiveExplanation -.-> permission__OpinionProcedureManage
-  usecase__ReceiveExplanation -.->|transitions Disposition.status notified->heard| state__Disposition_heard
+  usecase__ReceiveExplanation -.->|transitions Disposition.status notified->heard| state__Disposition_status_heard
   usecase__RevokePermit -.-> screen__PermitLedgerScreen
   usecase__RevokePermit -.-> api__PermitApi
   usecase__RevokePermit -.-> medium__HealthCenterTerminal

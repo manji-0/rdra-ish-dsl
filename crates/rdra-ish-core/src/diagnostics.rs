@@ -344,13 +344,6 @@ pub enum RdraError {
     #[error("drives(..., {col} == {value}, false) is invalid: a value equality driven false names no value to leave\n  hint: write `sets(..., {col} == other)` with the value the use case leaves; `drives` with `false` is for a comparison such as `stock < selling`")]
     DrivesFalseOnEquals { col: String, value: String },
 
-    #[error("entity '{entity}' already has transitions on column '{existing}', ignoring additional column '{column}'\n  hint: one Enum lifecycle column per entity is supported; move the other lifecycle to a separate entity or drop the extra `transitions`")]
-    MultipleLifecycleColumns {
-        entity: String,
-        existing: String,
-        column: String,
-    },
-
     #[error("unknown effect value '{value}' for column '{col}': not an enum variant, bool, null/present, or integer\n  hint: see the allowed value vocabulary in the docs")]
     UnknownEffectValue { col: String, value: String },
 

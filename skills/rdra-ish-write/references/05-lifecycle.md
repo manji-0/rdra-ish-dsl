@@ -42,7 +42,10 @@ Also ask:
 2. Add `transitions(UseCase, Entity.col, from -> to)` for lifecycle movement, naming
    the use case that drives each edge. States are not declared: each variant a
    `transitions` names, and each value a creating use case sets, is a state of the
-   state model.
+   state model. An entity may have several lifecycle columns (a procedure `status` and
+   a `publication` that moves on its own): give each its own `transitions`, and do not
+   split the entity or fake one with guarded `sets`. Each column is its own state model,
+   and guards and rules may read any of them.
 3. Declare an `event` and `raises(UseCase, Event)` only for an interface between use
    cases: something must consume the event (`triggers`, or `outbox(Event)` for a
    publication outside the model), else `check` warns that it is never consumed.

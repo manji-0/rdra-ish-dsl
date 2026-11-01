@@ -303,7 +303,8 @@ An entity with no state column has one trivial pattern that is both initial and 
 ### State models and witnesses
 
 A lifecycle column (one that `transitions` names, and not a `variation`) has a **state
-model**. Its states are the `from` and `to` endpoints of its `transitions` and the values a
+model**. An entity may have several; each is its own model, and its findings name the
+column (`Witness_<entity>_<column>_<value>`). Its states are the `from` and `to` endpoints of its `transitions` and the values a
 fresh instance starts at (`column_start_values`: what each creating use case sets, or the
 start of a pre-existing entity). Each state is either witnessed or an error:
 

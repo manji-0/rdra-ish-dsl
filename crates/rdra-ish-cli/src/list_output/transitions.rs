@@ -39,8 +39,12 @@ pub(crate) fn format_transitions(
         // One row per (from, to, use case), as the diagram draws one arrow for it.
         transitions.dedup_by(|a, b| (&a.from, &a.to, a.usecase) == (&b.from, &b.to, b.usecase));
         for t in transitions {
-            let value =
-                |variant: &str| format!("{} ({variant})", state_label(model, sm.entity, variant));
+            let value = |variant: &str| {
+                format!(
+                    "{} ({variant})",
+                    state_label(model, sm.entity, sm.column, variant)
+                )
+            };
             let usecase = &model.use_cases[t.usecase];
             let actors: Vec<String> = actors_for_usecase(model, t.usecase)
                 .into_iter()

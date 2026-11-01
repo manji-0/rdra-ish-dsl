@@ -23,10 +23,6 @@ pub(crate) fn push_error_unless_reported(
     }
 }
 
-pub(crate) fn push_warning(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, err: RdraError) {
-    diags.push(Diagnostic::warning_at(err, ctx.locate(span)));
-}
-
 pub(crate) fn push_error_cmp(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,

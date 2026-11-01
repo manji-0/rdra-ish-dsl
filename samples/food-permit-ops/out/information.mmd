@@ -17,6 +17,7 @@ flowchart LR
   statemodel__BusinessPermit_status[["BusinessPermit.status"]]:::statemodel
   statemodel__ChangeNotice_status[["ChangeNotice.status"]]:::statemodel
   statemodel__Consultation_status[["Consultation.status"]]:::statemodel
+  statemodel__Disposition_publication[["Disposition.publication"]]:::statemodel
   statemodel__Disposition_status[["Disposition.status"]]:::statemodel
   statemodel__Inspection_status[["Inspection.status"]]:::statemodel
   statemodel__MonitoringPlan_status[["MonitoringPlan.status"]]:::statemodel
@@ -41,6 +42,7 @@ flowchart LR
   entity__Consultation -.-> statemodel__Consultation_status
   entity__Consultation -.->|variation business_type| variation__BusinessType
   entity__Disposition ---|N:1| entity__BusinessPermit
+  entity__Disposition -.-> statemodel__Disposition_publication
   entity__Disposition -.-> statemodel__Disposition_status
   entity__Disposition -.->|variation kind| variation__DispositionKind
   entity__Disposition -.->|variation procedure| variation__OpinionProcedure

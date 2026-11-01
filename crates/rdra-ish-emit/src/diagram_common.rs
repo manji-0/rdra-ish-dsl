@@ -14,7 +14,7 @@ use std::collections::HashSet;
 pub(crate) fn lifecycle_start_states(
     model: &SemanticModel,
     columns: impl IntoIterator<Item = (EntityKey, String)>,
-    resolve: impl Fn(EntityKey, &str) -> Option<StateKey>,
+    resolve: impl Fn(EntityKey, &str, &str) -> Option<StateKey>,
 ) -> Vec<StateKey> {
     let built = TransitionSystem::build(model, Bounds::STATES, &LifecycleScope::ALL);
     let columns: std::collections::BTreeSet<(EntityKey, String)> = columns.into_iter().collect();
@@ -25,7 +25,7 @@ pub(crate) fn lifecycle_start_states(
                 .ts
                 .column_start_values(*entity, column)
                 .into_iter()
-                .filter_map(|variant| resolve(*entity, variant))
+                .filter_map(|variant| resolve(*entity, column, variant))
                 .collect::<Vec<_>>()
         })
         .collect::<HashSet<_>>()

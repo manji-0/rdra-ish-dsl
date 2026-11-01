@@ -174,7 +174,8 @@ fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<
         ) else {
             continue;
         };
-        let Some(to) = state_key(model, transition.entity, &transition.to) else {
+        let Some(to) = state_key(model, transition.entity, &transition.column, &transition.to)
+        else {
             continue;
         };
         facts.push(Fact {
@@ -187,7 +188,15 @@ fn facts(model: &SemanticModel, usecases: &HashSet<NodeRef>) -> (Vec<Fact>, Vec<
             to: NodeRef::State(to),
             via: None,
         });
-        left.extend(state_key(model, transition.entity, &transition.from).map(NodeRef::State));
+        left.extend(
+            state_key(
+                model,
+                transition.entity,
+                &transition.column,
+                &transition.from,
+            )
+            .map(NodeRef::State),
+        );
     }
     (facts, left)
 }

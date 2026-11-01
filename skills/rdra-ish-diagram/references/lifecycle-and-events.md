@@ -44,7 +44,9 @@ rdra-ish verify src/ --backend tlc -o out/
 - Each state model (a lifecycle column) is one composite state,
   `state "Order.status" as statemodel__Order_status { ... }`.
 - States are the Enum variants of that column, named `state__{Entity}_{variant}` (the
-  same id as in `--kind rdra`), in the Enum's order.
+  same id as in `--kind rdra`), in the Enum's order. An entity with several lifecycle
+  columns draws one block per column and names its states
+  `state__{Entity}_{column}_{variant}`, so a value two columns share is two states.
 - Arrows are the `transitions` arms, labelled with the label of the use case that drives
   each one and `[...]` with the conditions that guard it: the use case's `applies_to`
   conditions, then the arm's own `.when(Cond)`. The line before each arrow names

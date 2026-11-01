@@ -1,89 +1,92 @@
-//! エンティティの status Enum 列と、その列の遷移が結ぶ state ノードの対応。
+//! The lifecycle columns of an entity, and the state node each value they move between derives.
+//!
+//! An entity may have several lifecycle columns: each Enum column `transitions` names is its own
+//! state model, and its values are its own states.
 
-use crate::model::{ColumnType, EntityKey, SemanticModel, StateKey, StateTransition};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use crate::model::{EntityKey, SemanticModel, State, StateKey, StateTransition};
+use std::collections::{BTreeMap, BTreeSet};
 
-/// Pick the lifecycle status column for an entity from its transitions.
-/// Prefers `status` / `*_status`, then lexicographically first column.
-fn preferred_lifecycle_column(model: &SemanticModel, ek: EntityKey) -> Option<String> {
-    let cols: BTreeSet<String> = model
-        .state_transitions
-        .iter()
-        .filter(|st| st.entity == ek)
-        .map(|st| st.column.clone())
-        .collect();
-    if cols.is_empty() {
-        return None;
-    }
-    cols.iter()
-        .find(|c| *c == "status" || c.ends_with("_status"))
-        .cloned()
-        .or_else(|| cols.iter().next().cloned())
-}
-
-/// Resolve a transition/state variant string to the declared Enum casing.
-fn declared_variant_casing(
-    model: &SemanticModel,
-    ek: EntityKey,
-    column: &str,
-    variant: &str,
-) -> String {
+/// The columns `transitions` names on `entity`, sorted.
+pub fn lifecycle_columns(model: &SemanticModel, entity: EntityKey) -> BTreeSet<&str> {
     model
-        .entities
-        .get(ek)
-        .and_then(|e| e.columns.iter().find(|c| c.name == column))
-        .and_then(|c| match &c.col_type {
-            ColumnType::Enum(variants) => variants
-                .iter()
-                .find(|v| *v == variant || v.eq_ignore_ascii_case(variant))
-                .cloned(),
-            _ => None,
-        })
-        .unwrap_or_else(|| variant.to_string())
-}
-
-/// entity の status 列と、その列の遷移が結ぶ entity-scoped state (`{Entity}_{variant}`) を返す。
-///
-/// state ノードは `transitions(Entity.col, ...)` から導出されるもののみ。遷移がなければ `None`。
-/// Map values use the **declared Enum casing** (not lowercased).
-pub fn link_entity_status_states(
-    model: &SemanticModel,
-    ek: EntityKey,
-) -> Option<(String, HashMap<StateKey, String>)> {
-    let entity_id = &model.entities[ek].id;
-    let column = preferred_lifecycle_column(model, ek)?;
-    let mut map: HashMap<StateKey, String> = HashMap::new();
-    for st in model
         .state_transitions
         .iter()
-        .filter(|st| st.entity == ek && st.column == column)
-    {
-        for variant_name in [&st.from, &st.to] {
-            let declared = declared_variant_casing(model, ek, &column, variant_name);
-            let state_id = format!("{entity_id}_{declared}");
-            if let Some((sk, _)) = model.states.iter().find(|(_, s)| s.id == state_id) {
-                map.insert(sk, declared);
+        .filter(|st| st.entity == entity)
+        .map(|st| st.column.as_str())
+        .collect()
+}
+
+/// The column a single-tag view of `entity` (a TypeScript union) discriminates on: `status`,
+/// then a `*_status` column, then the first lifecycle column by name.
+pub fn discriminator_column(model: &SemanticModel, entity: EntityKey) -> Option<&str> {
+    let columns = lifecycle_columns(model, entity);
+    columns
+        .iter()
+        .find(|c| **c == "status" || c.ends_with("_status"))
+        .or_else(|| columns.iter().next())
+        .copied()
+}
+
+/// The id of the state `value` of `entity.column`: `{Entity}_{value}`, or
+/// `{Entity}_{column}_{value}` when the entity has more than one lifecycle column.
+pub fn state_id(model: &SemanticModel, entity: EntityKey, column: &str, value: &str) -> String {
+    let entity_id = &model.entities[entity].id;
+    if lifecycle_columns(model, entity).len() > 1 {
+        format!("{entity_id}_{column}_{value}")
+    } else {
+        format!("{entity_id}_{value}")
+    }
+}
+
+/// Derive one state node per value a `transitions` arm moves from or to, labelled by the
+/// column's `Enum` label for the value.
+pub(crate) fn derive_lifecycle_states(model: &mut SemanticModel) {
+    let mut seen: BTreeSet<(EntityKey, &str, &str)> = BTreeSet::new();
+    let mut states: Vec<State> = Vec::new();
+    for st in &model.state_transitions {
+        for value in [&st.from, &st.to] {
+            if !seen.insert((st.entity, st.column.as_str(), value.as_str())) {
+                continue;
             }
+            let label = model.entities[st.entity]
+                .columns
+                .iter()
+                .find(|c| c.name == st.column)
+                .and_then(|c| c.value_label(value))
+                .unwrap_or(value);
+            states.push(State {
+                id: state_id(model, st.entity, &st.column, value),
+                label: label.to_string(),
+                description: None,
+                entity: st.entity,
+                column: st.column.clone(),
+                value: value.clone(),
+            });
         }
     }
-    (!map.is_empty()).then_some((column, map))
+    for state in states {
+        model.states.insert(state);
+    }
 }
 
-/// The state node of `variant` on `entity`'s lifecycle column (`{Entity}_{variant}`, exact case).
-pub fn state_key(model: &SemanticModel, entity: EntityKey, variant: &str) -> Option<StateKey> {
-    let id = format!("{}_{variant}", model.entities.get(entity)?.id);
+/// The state node of `value` on `entity.column`, when a `transitions` arm names the value.
+pub fn state_key(
+    model: &SemanticModel,
+    entity: EntityKey,
+    column: &str,
+    value: &str,
+) -> Option<StateKey> {
     model
         .states
         .iter()
-        .find(|(_, state)| state.id == id)
+        .find(|(_, s)| s.entity == entity && s.column == column && s.value == value)
         .map(|(key, _)| key)
 }
 
-/// A lifecycle state's label, or the raw variant when the entity declares no such state.
-pub fn state_label(model: &SemanticModel, entity: EntityKey, variant: &str) -> String {
-    state_key(model, entity, variant)
-        .and_then(|key| model.states.get(key))
-        .map_or_else(|| variant.to_string(), |state| state.label.clone())
+/// A lifecycle state's label, or the raw value when no `transitions` arm names it.
+pub fn state_label(model: &SemanticModel, entity: EntityKey, column: &str, value: &str) -> String {
+    state_key(model, entity, column, value)
+        .map_or_else(|| value.to_string(), |key| model.states[key].label.clone())
 }
 
 /// One state model: the transitions of one lifecycle column, its states in `Enum` order.

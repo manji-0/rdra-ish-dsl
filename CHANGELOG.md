@@ -4,6 +4,17 @@
 
 ### Added
 
+- An entity may have several lifecycle columns (#68). Each Enum column that `transitions`
+  names is its own state model in `check`, `states`, `lint`, the TLA+ export, `verify`, and
+  the state diagram (one block per column under `--entity`); guards, constraints, and
+  `after(UC).assert` read any of them. Before, `transitions` on a second column reported
+  `entity 'E' already has transitions on column ...` and the diagrams merged the states of
+  a value two columns share. The warning (`MultipleLifecycleColumns`) is removed. An entity
+  with several lifecycle columns names each state by its column,
+  `{Entity}_{column}_{value}` (`state__{Entity}_{column}_{value}` in diagrams); an entity
+  with one keeps `{Entity}_{value}`. `export --kind typescript` tags such an entity's
+  union by `status`, else a `*_status` column, else the first lifecycle column by name.
+
 - `drives(UseCase, Entity, comparison, true | false)` drives a comparison proposition true or
   false (#51, condition 4). It is what the four-argument `sets` did: `sets` assigned a value
   with three arguments and drove a comparison with four, two meanings told apart by arity.

@@ -1,6 +1,6 @@
 //! 導出済み状態パターンを discriminated union 形式に変換する API。
 
-use crate::entity_lifecycle::link_entity_status_states;
+use crate::entity_lifecycle::discriminator_column;
 use crate::lifecycle::{
     derive_states, AbstractValue, AxisKind, Caps, EntityStateResult, ReachablePattern, Scope,
     StateAxis,
@@ -85,8 +85,8 @@ fn entity_state_variants_for_result(
         .find(|(_, e)| e.id == result.entity_id)
         .map(|(k, _)| k)?;
 
-    let discriminator_column = link_entity_status_states(model, entity)
-        .map(|(col, _)| col)
+    let discriminator_column = discriminator_column(model, entity)
+        .map(str::to_string)
         .or_else(|| first_enum_axis_column(&result.axes))?;
 
     let variants = result
@@ -222,5 +222,29 @@ sets(usecase::DeliverOrder, Order, delivered_at == present)
             delivered.fields.get("delivered_at"),
             Some(&StateFieldValue::Present { pg_type: None })
         );
+    }
+
+    /// With several lifecycle columns `status` is the tag; the others are fields of each state.
+    #[test]
+    fn status_discriminates_among_several_lifecycle_columns() {
+        let model = model_from(
+            r#"
+entity Case "案件" {
+  id: Int @pk
+  publication: Enum(hidden, shown) @default(hidden)
+  status: Enum(open, closed) @default(open)
+}
+usecase Show "公表"
+usecase Close "完結"
+transitions(Show, Case.publication, hidden -> shown)
+transitions(Close, Case.status, open -> closed)
+"#,
+        );
+        let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
+        let case = &collections[0];
+        assert_eq!(case.discriminator_column, "status");
+        assert_eq!(case.variants.len(), 4);
+        assert!(case.variants.iter().any(|v| v.discriminator == "closed"
+            && v.fields.get("publication") == Some(&StateFieldValue::Enum("shown".into()))));
     }
 }

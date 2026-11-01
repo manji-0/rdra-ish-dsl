@@ -69,6 +69,7 @@ pub fn build_model_items_with_scopes(
         }
     }
 
+    crate::entity_lifecycle::derive_lifecycle_states(&mut model);
     column_expr::reject_derived_writes(&model, &mut diags);
     condition::derive_condition_links(&mut model, &mut diags);
     condition::check_write_guards(&mut model, &mut diags);

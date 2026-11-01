@@ -14,8 +14,8 @@ sequenceDiagram
   usecase__DecideSuspension ->> api__PublicationApi: 不利益処分の決定
   usecase__OrderImprovement ->> api__PublicationApi: 不利益処分の決定
   screen__DispositionScreen ->> api__PublicationApi: 公表 API
-  alt 処分が決定していて、まだ公表していない: Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表
-    api__PublicationApi ->> entity__Disposition: update publication=published
+  alt 処分が決定している: Disposition.status in (処分決定, 確定（審査請求期間の経過）) and Disposition.publication == 未公表
+    api__PublicationApi ->> entity__Disposition: update publication 未公表 -> 公表中
     api__PublicationApi -->> screen__DispositionScreen: done
   else guard fails
     api__PublicationApi -->> screen__DispositionScreen: rejected

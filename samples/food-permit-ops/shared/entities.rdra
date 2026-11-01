@@ -183,8 +183,9 @@ entity Disposition "不利益処分" {
   status: Enum(proposed "処分案", notified "意見陳述の通知済", heard "意見陳述の手続終了", decided "処分決定", finalized "確定（審査請求期間の経過）", dropped "処分しない") @default(proposed)
   // 不利益処分の理由を示さなければならない (egov-gyousei-tetsuzukihou-405AC0000000088.txt:231).
   reason_shown: Bool @default(false)
-  // 違反した者の名称等を公表し (egov-shokuhin-eiseihou-322AC0000000233.txt:473).
-  publication: Enum(unpublished "未公表", published "公表中", ended "公表終了") @default(unpublished)
+  // この法律に基づく処分に違反した者の名称等を公表し (egov-shokuhin-eiseihou-322AC0000000233.txt:473):
+  // a disposition not made has no violation to publish.
+  publication: Enum(unpublished "未公表", published "公表中", ended "公表終了", excluded "公表対象外") @default(unpublished)
 }
 
 // ER relationships

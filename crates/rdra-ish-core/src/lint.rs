@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::LocatedSpan;
-use crate::model::{node_ref_kind, ColumnType, NodeRef, RelKind, SemanticModel, StateKey, StepKey};
+use crate::model::{
+    node_ref_kind, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StepKey,
+};
 use crate::rdra_rules::{owned_by_registry, rdra_findings};
 use crate::refinement::{assess, Assessment, Depth, Next, StageId};
 use crate::rules::business_rules;
@@ -972,17 +974,21 @@ fn relation_degree(model: &SemanticModel) -> HashMap<NodeRef, usize> {
         touch(NodeRef::Field(mapping.field));
         touch(NodeRef::Entity(mapping.entity));
     }
-    let state_by_id: HashMap<&str, StateKey> = model
+    let state_by_value: HashMap<(EntityKey, &str, &str), StateKey> = model
         .states
         .iter()
-        .map(|(key, state)| (state.id.as_str(), key))
+        .map(|(key, s)| ((s.entity, s.column.as_str(), s.value.as_str()), key))
         .collect();
     for transition in &model.state_transitions {
         touch(NodeRef::UseCase(transition.usecase));
         touch(NodeRef::Entity(transition.entity));
-        let entity_id = &model.entities[transition.entity].id;
-        for variant in [&transition.from, &transition.to] {
-            if let Some(&state) = state_by_id.get(format!("{entity_id}_{variant}").as_str()) {
+        for value in [&transition.from, &transition.to] {
+            let at = (
+                transition.entity,
+                transition.column.as_str(),
+                value.as_str(),
+            );
+            if let Some(&state) = state_by_value.get(&at) {
                 touch(NodeRef::State(state));
             }
         }

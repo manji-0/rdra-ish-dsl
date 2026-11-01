@@ -442,26 +442,6 @@ fn process_transitions_predicate(
         .cloned()
         .unwrap_or(to);
 
-    ensure_entity_variant_state(model, &entity_id, &from, col.value_label(&from));
-    ensure_entity_variant_state(model, &entity_id, &to, col.value_label(&to));
-
-    if let Some(existing) = model
-        .state_transitions
-        .iter()
-        .find(|st| st.entity == entity_key && st.column != column)
-    {
-        push_warning(
-            ctx,
-            diags,
-            arg_span(&pred.args[1]),
-            RdraError::MultipleLifecycleColumns {
-                entity: entity_id.clone(),
-                existing: existing.column.clone(),
-                column: column.clone(),
-            },
-        );
-    }
-
     model.state_transitions.push(crate::model::StateTransition {
         site: Some(ctx.locate(pred.span.clone())),
         usecase: *usecase,
@@ -699,23 +679,6 @@ pub(super) fn when_condition(
         }
     }
     guard
-}
-
-fn ensure_entity_variant_state(
-    model: &mut SemanticModel,
-    entity_id: &str,
-    variant: &str,
-    label: Option<&str>,
-) -> crate::model::StateKey {
-    let id = format!("{entity_id}_{variant}");
-    if let Some((k, _)) = model.states.iter().find(|(_, s)| s.id == id) {
-        return k;
-    }
-    model.states.insert(crate::model::State {
-        id,
-        label: label.unwrap_or(variant).to_string(),
-        description: None,
-    })
 }
 
 fn process_exposes_predicate(

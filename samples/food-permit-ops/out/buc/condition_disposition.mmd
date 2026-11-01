@@ -2,8 +2,8 @@
 %% kinds: condition statemodel variation value usecase
 %% omitted: (none)
 flowchart LR
-  condition__DecidedUnpublished{"処分が決定していて、まだ公表していない"}:::condition
-  %% holds condition__DecidedUnpublished: Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表
+  condition__DispositionDecided{"処分が決定している"}:::condition
+  %% holds condition__DispositionDecided: Disposition.status in (処分決定, 確定（審査請求期間の経過）)
   condition__ExplanationProcedure{"弁明の機会を与える処分である"}:::condition
   %% holds condition__ExplanationProcedure: Disposition.procedure == 弁明の機会の付与
   condition__HearingProcedure{"聴聞を執る処分である"}:::condition
@@ -16,8 +16,6 @@ flowchart LR
   %% holds condition__OpinionOmitted: Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号）
   condition__OpinionRequired{"意見陳述の手続を執る処分である"}:::condition
   %% holds condition__OpinionRequired: Disposition.procedure in (聴聞, 弁明の機会の付与)
-  condition__Published{"公表中である"}:::condition
-  %% holds condition__Published: Disposition.publication == 公表中
   condition__RevocationKind{"許可の取消である"}:::condition
   %% holds condition__RevocationKind: Disposition.kind == 許可の取消
   condition__SuspensionKind{"営業の停止である"}:::condition
@@ -37,8 +35,6 @@ flowchart LR
   %% desc usecase__DecideRevocation: 聴聞を経て許可を取り消すと決める。理由を示し、審査請求ができることを書面で教える。営業者は取消から2年は新たな許可を受けられないことがある。
   usecase__DecideSuspension("営業停止の決定"):::usecase
   %% desc usecase__DecideSuspension: 弁明の機会を経て、期間を定めて営業を停止すると決める。理由を示し、審査請求ができることを書面で教える。
-  usecase__EndPublication("公表の終了"):::usecase
-  %% desc usecase__EndPublication: 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。
   usecase__HoldHearing("聴聞の実施"):::usecase
   %% desc usecase__HoldHearing: 聴聞の期日に名あて人の意見を聴き、記録する。取消の前には必ず行う。
   usecase__NotifyOpinionProcedure("聴聞・弁明の通知"):::usecase
@@ -51,9 +47,9 @@ flowchart LR
   %% desc usecase__PublishViolation: 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。
   usecase__ReceiveExplanation("弁明書の受理"):::usecase
   %% desc usecase__ReceiveExplanation: 停止や整備改善命令の前に、名あて人の弁明書を受け取る。期限までに出なければ、弁明の機会を与えたものとして手続を終える。
-  condition__DecidedUnpublished -.->|applies_to| usecase__PublishViolation
-  condition__DecidedUnpublished -.-> statemodel__Disposition_status
-  %% derived condition__DecidedUnpublished -> statemodel__Disposition_status from holds
+  condition__DispositionDecided -.->|applies_to| usecase__PublishViolation
+  condition__DispositionDecided -.-> statemodel__Disposition_status
+  %% derived condition__DispositionDecided -> statemodel__Disposition_status from holds
   condition__ExplanationProcedure -.->|applies_to| usecase__ReceiveExplanation
   condition__ExplanationProcedure -.-> variation__OpinionProcedure
   %% derived condition__ExplanationProcedure -> variation__OpinionProcedure from holds
@@ -83,7 +79,6 @@ flowchart LR
   condition__OpinionRequired -.->|applies_to| usecase__NotifyOpinionProcedure
   condition__OpinionRequired -.-> variation__OpinionProcedure
   %% derived condition__OpinionRequired -> variation__OpinionProcedure from holds
-  condition__Published -.->|applies_to| usecase__EndPublication
   condition__RevocationKind -.->|applies_to| usecase__DecideRevocation
   condition__RevocationKind -.-> variation__DispositionKind
   %% derived condition__RevocationKind -> variation__DispositionKind from holds

@@ -215,6 +215,7 @@ holds(OpinionOmitted, Disposition.procedure == omitted)
 displays(DropDisposition, DispositionScreen)
 invokes(DropDisposition, DispositionApi)
 transitions(DropDisposition, Disposition.status, heard -> dropped)
+transitions(DropDisposition, Disposition.publication, unpublished -> excluded)
 
 // Started by the timer, no performer.
 invokes(LiftSuspension, PermitApi)
@@ -229,23 +230,18 @@ triggers(AppealPeriodEnd, FinalizeDisposition)
 displays(PublishViolation, DispositionScreen)
 invokes(PublishViolation, PublicationApi)
 updates(PublicationApi, Disposition)
-sets(PublishViolation, Disposition, publication == published)
+transitions(PublishViolation, Disposition.publication, unpublished -> published)
 triggers(EvDispositionDecided, PublishViolation)
 
-// An entity has one lifecycle column (`status`), so the publication is a set-only column: each use
-// case sets it, guarded on its current value.
-condition DecidedUnpublished "処分が決定していて、まだ公表していない"
-holds(DecidedUnpublished, Disposition.status in (decided, finalized), Disposition.publication == unpublished)
-applies_to(DecidedUnpublished, PublishViolation)
+// The publication is the disposition's second lifecycle column, moved independently of `status`.
+condition DispositionDecided "処分が決定している"
+holds(DispositionDecided, Disposition.status in (decided, finalized))
+applies_to(DispositionDecided, PublishViolation)
 
 // Started by the timer, no performer.
 invokes(EndPublication, PublicationApi)
-sets(EndPublication, Disposition, publication == ended)
+transitions(EndPublication, Disposition.publication, published -> ended)
 triggers(PublicationPeriodEnd, EndPublication)
-
-condition Published "公表中である"
-holds(Published, Disposition.publication == published)
-applies_to(Published, EndPublication)
 
 // Access constraints
 requires_permission(ProposeDisposition, DispositionPropose)
@@ -368,7 +364,9 @@ forbidden(Disposition, procedure == omitted, kind != improvement_order).label("�
 
 invariant(Disposition).when(status in (decided, finalized)).then(reason_shown == true).label("不利益処分は理由を示して行う")
 
-forbidden(Disposition, publication != unpublished, status not in (decided, finalized)).label("処分を決める前に公表しない")
+forbidden(Disposition, publication in (published, ended), status not in (decided, finalized)).label("処分を決める前に公表しない")
+
+forbidden(Disposition, publication == excluded, status != dropped).label("公表対象外は処分しないと決めたものだけ")
 
 // 都道府県知事は…営業の全部若しくは一部を…期間を定めて停止 (egov-shokuhin-eiseihou-322AC0000000233.txt:432); a 60条
 // disposition broken by operating is punished under 81条 (map.md:33).

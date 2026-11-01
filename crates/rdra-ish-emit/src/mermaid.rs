@@ -33,7 +33,7 @@ use crate::{
 };
 use rdra_ish_core::analysis::transition_guard_labels;
 use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, Relation, SemanticModel};
-use rdra_ish_core::{buc_members, state_key, state_models, StateModel};
+use rdra_ish_core::{buc_members, state_id, state_key, state_models, StateModel};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 // ── RDRA グラフ図エミッタ (Mermaid) ─────────────────────────────────────────
@@ -366,7 +366,8 @@ fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKin
         let Some(entity) = model.entities.get(transition.entity) else {
             continue;
         };
-        let Some(state) = state_key(model, transition.entity, &transition.to) else {
+        let Some(state) = state_key(model, transition.entity, &transition.column, &transition.to)
+        else {
             continue;
         };
         let (usecase, state) = (NodeRef::UseCase(transition.usecase), NodeRef::State(state));
@@ -404,7 +405,9 @@ impl Emitter for RdraMermaidEmitter {
                     .state_transitions
                     .iter()
                     .filter(|t| set.contains(&NodeRef::UseCase(t.usecase)))
-                    .flat_map(|t| [&t.from, &t.to].map(|v| state_key(model, t.entity, v)))
+                    .flat_map(|t| {
+                        [&t.from, &t.to].map(|v| state_key(model, t.entity, &t.column, v))
+                    })
                     .flatten()
                     .map(NodeRef::State)
                     .collect();
@@ -497,7 +500,7 @@ impl Emitter for StateMermaidEmitter {
         let starts = lifecycle_start_states(
             model,
             models.iter().map(|sm| (sm.entity, sm.column.to_string())),
-            |entity, variant| state_key(model, entity, variant),
+            |entity, column, variant| state_key(model, entity, column, variant),
         );
 
         let mut body = String::new();
@@ -519,11 +522,12 @@ impl Emitter for StateMermaidEmitter {
             };
             // A value no transition names has no State node; an unreachable one is still drawn.
             let state_id = |variant: &str| {
-                state_key(model, sm.entity, variant)
+                state_key(model, sm.entity, sm.column, variant)
                     .and_then(|sk| contract_id(model, &NodeRef::State(sk)))
                     .or_else(|| {
-                        mark(&marks.unreachable, variant)
-                            .then(|| format!("state__{}_{variant}", sm.entity_id))
+                        mark(&marks.unreachable, variant).then(|| {
+                            format!("state__{}", state_id(model, sm.entity, sm.column, variant))
+                        })
                     })
             };
             let mut arms: Vec<(&str, &str, String, String)> = sm
@@ -551,7 +555,9 @@ impl Emitter for StateMermaidEmitter {
                 .variants
                 .iter()
                 .copied()
-                .filter(|v| state_key(model, sm.entity, v).is_some_and(|sk| starts.contains(&sk)))
+                .filter(|v| {
+                    state_key(model, sm.entity, sm.column, v).is_some_and(|sk| starts.contains(&sk))
+                })
                 .collect();
             let drawn: Vec<&str> = sm
                 .variants
@@ -589,7 +595,7 @@ impl Emitter for StateMermaidEmitter {
             for variant in &drawn {
                 if let Some(id) = state_id(variant) {
                     add_kind("state");
-                    let label = state_key(model, sm.entity, variant)
+                    let label = state_key(model, sm.entity, sm.column, variant)
                         .map_or(*variant, |key| model.states[key].label.as_str());
                     body.push_str(&format!("    state \"{}\" as {id}\n", quote(label)));
                 }
@@ -1270,6 +1276,53 @@ transitions(Finish, Ticket.phase, new -> done)
             "{result}"
         );
         assert!(!result.contains("state__Ticket_new --> [*]"), "{result}");
+    }
+
+    /// Two lifecycle columns of one entity are two state models, and a value both hold is a
+    /// state of each, with the label its own column gives it.
+    #[test]
+    fn test_state_mermaid_keeps_a_value_two_lifecycle_columns_share_apart() {
+        let src = r#"
+entity D "D" {
+  id: Int @pk
+  status: Enum(open, done) @default(open)
+  review: Enum(none "未審査", open "審査中") @default(none)
+}
+usecase Close "Close"
+usecase Review "Review"
+transitions(Close, D.status, open -> done)
+transitions(Review, D.review, none -> open)
+"#;
+        let model = model_from(src);
+        let result = StateMermaidEmitter
+            .emit(&model, &all_entities(&model))
+            .unwrap();
+        let block = |column: &str| {
+            result
+                .split(&format!("as statemodel__D_{column} {{\n"))
+                .nth(1)
+                .and_then(|rest| rest.split("  }\n").next())
+                .unwrap()
+                .to_string()
+        };
+        let (status, review) = (block("status"), block("review"));
+        assert!(
+            status.contains("    [*] --> state__D_status_open\n"),
+            "{result}"
+        );
+        assert!(
+            status.contains("state \"open\" as state__D_status_open\n"),
+            "{result}"
+        );
+        assert!(
+            review.contains("    [*] --> state__D_review_none\n"),
+            "{result}"
+        );
+        assert!(
+            review.contains("state \"審査中\" as state__D_review_open\n"),
+            "{result}"
+        );
+        assert!(!review.contains("state__D_status"), "{result}");
     }
 
     #[test]

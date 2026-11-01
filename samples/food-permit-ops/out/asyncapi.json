@@ -141,7 +141,12 @@
           "DecideSuspension",
           "OrderImprovement"
         ],
-        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "unpublished",
+            "to": "published"
+          }
+        ],
         "x-rdra-ish-triggers-bucs": [],
         "x-rdra-ish-triggers-usecases": [
           "PublishViolation"
@@ -343,7 +348,12 @@
           "$ref": "#/channels/EvDispositionDecided/messages/EvDispositionDecided"
         }
       ],
-      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "unpublished",
+          "to": "published"
+        }
+      ],
       "x-rdra-ish-triggers-bucs": [],
       "x-rdra-ish-triggers-usecases": [
         "PublishViolation"

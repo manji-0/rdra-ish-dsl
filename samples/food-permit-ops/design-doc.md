@@ -1494,8 +1494,8 @@ flowchart LR
 | 処分を見送る<br>`DropDisposition` | 意見陳述の結果、処分しないと決める。 | `DispositionScreen` | `DispositionApi` | （なし） |
 | 営業停止期間の満了<br>`LiftSuspension` | 停止の期間が過ぎ、営業停止を終える。営業者は許可証を掲示して営業を再開できる。 | （なし） | `PermitApi` | （なし） |
 | 審査請求期間の経過<br>`FinalizeDisposition` | 審査請求のないまま3月が過ぎたことを記録する。審査請求と訴訟の中身は対象外。 | （なし） | `DispositionApi` | （なし） |
-| 違反の公表<br>`PublishViolation` | 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。 | `DispositionScreen` | `PublicationApi` | 処分が決定していて、まだ公表していない |
-| 公表の終了<br>`EndPublication` | 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。 | （なし） | `PublicationApi` | 公表中である |
+| 違反の公表<br>`PublishViolation` | 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。 | `DispositionScreen` | `PublicationApi` | 処分が決定している |
+| 公表の終了<br>`EndPublication` | 公表期間（処分の翌日から7日以上）が過ぎたら公表をやめる。 | （なし） | `PublicationApi` | （なし） |
 
 <details><summary>処分の起案（ProposeDisposition）のシーケンス図</summary>
 
@@ -1731,8 +1731,8 @@ sequenceDiagram
   participant entity__Disposition as 不利益処分
   actor__PermitAuthority ->> screen__DispositionScreen: 処分を見送る
   screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
-  alt Disposition.status == 意見陳述の手続終了
-    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分しない
+  alt Disposition.status == 意見陳述の手続終了 and Disposition.publication == 未公表
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分しない, publication 未公表 -> 公表対象外
     api__DispositionApi -->> screen__DispositionScreen: done
   else guard fails
     api__DispositionApi -->> screen__DispositionScreen: rejected
@@ -1802,8 +1802,8 @@ sequenceDiagram
   usecase__DecideSuspension ->> api__PublicationApi: 不利益処分の決定
   usecase__OrderImprovement ->> api__PublicationApi: 不利益処分の決定
   screen__DispositionScreen ->> api__PublicationApi: 公表 API
-  alt 処分が決定していて、まだ公表していない: Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表
-    api__PublicationApi ->> entity__Disposition: update publication=published
+  alt 処分が決定している: Disposition.status in (処分決定, 確定（審査請求期間の経過）) and Disposition.publication == 未公表
+    api__PublicationApi ->> entity__Disposition: update publication 未公表 -> 公表中
     api__PublicationApi -->> screen__DispositionScreen: done
   else guard fails
     api__PublicationApi -->> screen__DispositionScreen: rejected
@@ -1817,14 +1817,14 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:EndPublication model=samples/food-permit-ops
 %% kinds: timer api entity
-%% omitted: buc step condition
+%% omitted: buc step
 sequenceDiagram
   participant timer__PublicationPeriodEnd as 公表期間の経過（7日間以上）
   participant api__PublicationApi as 公表 API
   participant entity__Disposition as 不利益処分
   timer__PublicationPeriodEnd ->> api__PublicationApi: 公表期間の経過（7日間以上）
-  alt 公表中である: Disposition.publication == 公表中
-    api__PublicationApi ->> entity__Disposition: update publication=ended
+  alt Disposition.publication == 公表中
+    api__PublicationApi ->> entity__Disposition: update publication 公表中 -> 公表終了
     api__PublicationApi -->> timer__PublicationPeriodEnd: done
   else guard fails
     api__PublicationApi -->> timer__PublicationPeriodEnd: rejected
@@ -1843,7 +1843,6 @@ sequenceDiagram
 %% rdra-ish diagram=state scope=entity:BusinessNotification model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "BusinessNotification.status" as statemodel__BusinessNotification_status {
@@ -1867,7 +1866,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:BusinessPermit model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "BusinessPermit.status" as statemodel__BusinessPermit_status {
@@ -1946,7 +1944,6 @@ Entity: BusinessPermit (営業許可)
 %% rdra-ish diagram=state scope=entity:ChangeNotice model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ChangeNotice.status" as statemodel__ChangeNotice_status {
@@ -1972,7 +1969,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:Consultation model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Consultation.status" as statemodel__Consultation_status {
@@ -2003,49 +1999,65 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:Disposition model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
-  state "Disposition.status" as statemodel__Disposition_status {
-    [*] --> state__Disposition_proposed
-    state "処分案" as state__Disposition_proposed
-    state "意見陳述の通知済" as state__Disposition_notified
-    state "意見陳述の手続終了" as state__Disposition_heard
-    state "処分決定" as state__Disposition_decided
-    state "確定（審査請求期間の経過）" as state__Disposition_finalized
-    state "処分しない" as state__Disposition_dropped
-    %% transition usecase__NotifyOpinionProcedure
-    state__Disposition_proposed --> state__Disposition_notified : 聴聞・弁明の通知 [意見陳述の手続を執る処分である]
-    %% transition usecase__OrderImprovement
-    state__Disposition_proposed --> state__Disposition_decided : 施設の整備改善命令 [施設の整備改善命令である, 意見陳述を省く処分である]
-    %% transition usecase__HoldHearing
-    state__Disposition_notified --> state__Disposition_heard : 聴聞の実施 [聴聞を執る処分である]
-    %% transition usecase__ReceiveExplanation
-    state__Disposition_notified --> state__Disposition_heard : 弁明書の受理 [弁明の機会を与える処分である]
-    %% transition usecase__DecideRevocation
-    state__Disposition_heard --> state__Disposition_decided : 許可の取消の決定 [聴聞を執る処分である, 許可の取消である]
-    %% transition usecase__DecideSuspension
-    state__Disposition_heard --> state__Disposition_decided : 営業停止の決定 [営業の停止である]
-    %% transition usecase__OrderImprovement
-    state__Disposition_heard --> state__Disposition_decided : 施設の整備改善命令 [施設の整備改善命令である]
+  state "Disposition.publication" as statemodel__Disposition_publication {
+    [*] --> state__Disposition_publication_unpublished
+    state "未公表" as state__Disposition_publication_unpublished
+    state "公表中" as state__Disposition_publication_published
+    state "公表終了" as state__Disposition_publication_ended
+    state "公表対象外" as state__Disposition_publication_excluded
+    %% transition usecase__PublishViolation
+    state__Disposition_publication_unpublished --> state__Disposition_publication_published : 違反の公表 [処分が決定している]
     %% transition usecase__DropDisposition
-    state__Disposition_heard --> state__Disposition_dropped : 処分を見送る
+    state__Disposition_publication_unpublished --> state__Disposition_publication_excluded : 処分を見送る
+    %% transition usecase__EndPublication
+    state__Disposition_publication_published --> state__Disposition_publication_ended : 公表の終了
+    state__Disposition_publication_ended --> [*]
+    state__Disposition_publication_excluded --> [*]
+  }
+  state "Disposition.status" as statemodel__Disposition_status {
+    [*] --> state__Disposition_status_proposed
+    state "処分案" as state__Disposition_status_proposed
+    state "意見陳述の通知済" as state__Disposition_status_notified
+    state "意見陳述の手続終了" as state__Disposition_status_heard
+    state "処分決定" as state__Disposition_status_decided
+    state "確定（審査請求期間の経過）" as state__Disposition_status_finalized
+    state "処分しない" as state__Disposition_status_dropped
+    %% transition usecase__NotifyOpinionProcedure
+    state__Disposition_status_proposed --> state__Disposition_status_notified : 聴聞・弁明の通知 [意見陳述の手続を執る処分である]
+    %% transition usecase__OrderImprovement
+    state__Disposition_status_proposed --> state__Disposition_status_decided : 施設の整備改善命令 [施設の整備改善命令である, 意見陳述を省く処分である]
+    %% transition usecase__HoldHearing
+    state__Disposition_status_notified --> state__Disposition_status_heard : 聴聞の実施 [聴聞を執る処分である]
+    %% transition usecase__ReceiveExplanation
+    state__Disposition_status_notified --> state__Disposition_status_heard : 弁明書の受理 [弁明の機会を与える処分である]
+    %% transition usecase__DecideRevocation
+    state__Disposition_status_heard --> state__Disposition_status_decided : 許可の取消の決定 [聴聞を執る処分である, 許可の取消である]
+    %% transition usecase__DecideSuspension
+    state__Disposition_status_heard --> state__Disposition_status_decided : 営業停止の決定 [営業の停止である]
+    %% transition usecase__OrderImprovement
+    state__Disposition_status_heard --> state__Disposition_status_decided : 施設の整備改善命令 [施設の整備改善命令である]
+    %% transition usecase__DropDisposition
+    state__Disposition_status_heard --> state__Disposition_status_dropped : 処分を見送る
     %% transition usecase__FinalizeDisposition
-    state__Disposition_decided --> state__Disposition_finalized : 審査請求期間の経過
-    state__Disposition_finalized --> [*]
-    state__Disposition_dropped --> [*]
+    state__Disposition_status_decided --> state__Disposition_status_finalized : 審査請求期間の経過
+    state__Disposition_status_finalized --> [*]
+    state__Disposition_status_dropped --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
-  class state__Disposition_finalized stateend
-  class state__Disposition_dropped stateend
+  class state__Disposition_publication_ended stateend
+  class state__Disposition_publication_excluded stateend
+  class state__Disposition_status_finalized stateend
+  class state__Disposition_status_dropped stateend
 ```
 
 <details><summary>到達可能な状態の表</summary>
 
 ```text
 Entity: Disposition (不利益処分)
-  axes: kind[improvement_order|suspension|revocation], procedure[hearing|explanation|omitted], status[proposed|notified|heard|decided|finalized|dropped], reason_shown[false|true], publication[unpublished|published|ended]
-  labels: status[proposed=処分案|notified=意見陳述の通知済|heard=意見陳述の手続終了|decided=処分決定|finalized=確定（審査請求期間の経過）|dropped=処分しない], publication[unpublished=未公表|published=公表中|ended=公表終了]
+  axes: kind[improvement_order|suspension|revocation], procedure[hearing|explanation|omitted], status[proposed|notified|heard|decided|finalized|dropped], reason_shown[false|true], publication[unpublished|published|ended|excluded]
+  labels: status[proposed=処分案|notified=意見陳述の通知済|heard=意見陳述の手続終了|decided=処分決定|finalized=確定（審査請求期間の経過）|dropped=処分しない], publication[unpublished=未公表|published=公表中|ended=公表終了|excluded=公表対象外]
 
   KIND               PROCEDURE    STATUS     REASON_SHOWN  PUBLICATION  INITIAL  TERMINAL  VIA
   ─────────────────  ───────────  ─────────  ────────────  ───────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -2069,15 +2081,15 @@ Entity: Disposition (不利益処分)
   improvement_order  omitted      finalized  true          unpublished  no       no        BucDisposition/FinalizeDisposition, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition
   improvement_order  omitted      decided    true          published    no       no        BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation
   improvement_order  hearing      decided    true          unpublished  no       no        BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition
-  improvement_order  hearing      dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
+  improvement_order  hearing      dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
   suspension         hearing      decided    true          unpublished  no       no        BucDisposition/DecideSuspension, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
-  suspension         hearing      dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
+  suspension         hearing      dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
   revocation         hearing      decided    true          unpublished  no       no        BucDisposition/DecideRevocation, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
-  revocation         hearing      dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
+  revocation         hearing      dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
   improvement_order  explanation  decided    true          unpublished  no       no        BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
-  improvement_order  explanation  dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
+  improvement_order  explanation  dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
   suspension         explanation  decided    true          unpublished  no       no        BucDisposition/DecideSuspension, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
-  suspension         explanation  dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
+  suspension         explanation  dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
   improvement_order  omitted      finalized  true          published    no       no        BucDisposition/FinalizeDisposition, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation
   improvement_order  omitted      decided    true          ended        no       no        BucDisposition/EndPublication, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation
   improvement_order  hearing      finalized  true          unpublished  no       no        BucDisposition/FinalizeDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition
@@ -2107,7 +2119,7 @@ Entity: Disposition (不利益処分)
   improvement_order  explanation  finalized  true          ended        no       yes       BucDisposition/EndPublication, BucDisposition/FinalizeDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation, BucDisposition/ReceiveExplanation
   suspension         explanation  finalized  true          ended        no       yes       BucDisposition/DecideSuspension, BucDisposition/EndPublication, BucDisposition/FinalizeDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation, BucDisposition/ReceiveExplanation
 
-  reachable: 57 / bound: 324
+  reachable: 57 / bound: 432
 ```
 
 </details>
@@ -2118,7 +2130,6 @@ Entity: Disposition (不利益処分)
 %% rdra-ish diagram=state scope=entity:Inspection model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Inspection.status" as statemodel__Inspection_status {
@@ -2144,7 +2155,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:MonitoringPlan model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "MonitoringPlan.status" as statemodel__MonitoringPlan_status {
@@ -2165,7 +2175,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:PermitApplication model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PermitApplication.status" as statemodel__PermitApplication_status {
@@ -2269,7 +2278,6 @@ Entity: PermitApplication (営業許可申請)
 %% rdra-ish diagram=state scope=entity:SiteVisit model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "SiteVisit.status" as statemodel__SiteVisit_status {
@@ -2295,7 +2303,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:SuccessionNotice model=samples/food-permit-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Disposition.publication (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "SuccessionNotice.status" as statemodel__SuccessionNotice_status {
@@ -2472,15 +2479,15 @@ erDiagram
 | condition | 許可の取消である | Disposition | Disposition.kind == 許可の取消 | DecideRevocation | samples/food-permit-ops/buc/buc_disposition.rdra:176 |
 | condition | 営業の停止である | Disposition | Disposition.kind == 営業の停止 | DecideSuspension | samples/food-permit-ops/buc/buc_disposition.rdra:187 |
 | condition | 意見陳述を省く処分である | Disposition | Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号） | OrderImprovement | samples/food-permit-ops/buc/buc_disposition.rdra:213 |
-| condition | 処分が決定していて、まだ公表していない | Disposition | Disposition.status in (処分決定, 確定（審査請求期間の経過）), Disposition.publication == 未公表 | PublishViolation | samples/food-permit-ops/buc/buc_disposition.rdra:238 |
-| condition | 公表中である | Disposition | Disposition.publication == 公表中 | EndPublication | samples/food-permit-ops/buc/buc_disposition.rdra:247 |
-| forbidden | 許可の取消の前に聴聞を行う | Disposition | Disposition.kind == 許可の取消 AND Disposition.procedure != hearing |  | samples/food-permit-ops/buc/buc_disposition.rdra:365 |
-| forbidden | 意見陳述を省けるのは技術的基準に従うよう命じる処分だけ | Disposition | Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号） AND Disposition.kind != improvement_order |  | samples/food-permit-ops/buc/buc_disposition.rdra:367 |
-| invariant | 不利益処分は理由を示して行う | Disposition | when Disposition.status in (decided, finalized) then Disposition.reason_shown == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:369 |
-| forbidden | 処分を決める前に公表しない | Disposition | Disposition.publication != unpublished AND Disposition.status not in (decided, finalized) |  | samples/food-permit-ops/buc/buc_disposition.rdra:371 |
-| forbidden | 営業停止中は営業しない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:375 |
-| forbidden | 許可なく営業しない（失効・取消・廃業の後の営業は無許可営業） | BusinessPermit | BusinessPermit.operating == true AND BusinessPermit.status in (expired, revoked, closed) |  | samples/food-permit-ops/buc/buc_disposition.rdra:379 |
-| after | 停止を命じた許可では営業していない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == false | SuspendBusiness | samples/food-permit-ops/buc/buc_disposition.rdra:381 |
+| condition | 処分が決定している | Disposition | Disposition.status in (処分決定, 確定（審査請求期間の経過）) | PublishViolation | samples/food-permit-ops/buc/buc_disposition.rdra:238 |
+| forbidden | 許可の取消の前に聴聞を行う | Disposition | Disposition.kind == 許可の取消 AND Disposition.procedure != hearing |  | samples/food-permit-ops/buc/buc_disposition.rdra:361 |
+| forbidden | 意見陳述を省けるのは技術的基準に従うよう命じる処分だけ | Disposition | Disposition.procedure == 意見陳述の省略（行政手続法13条2項3号） AND Disposition.kind != improvement_order |  | samples/food-permit-ops/buc/buc_disposition.rdra:363 |
+| invariant | 不利益処分は理由を示して行う | Disposition | when Disposition.status in (decided, finalized) then Disposition.reason_shown == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:365 |
+| forbidden | 処分を決める前に公表しない | Disposition | Disposition.publication in (published, ended) AND Disposition.status not in (decided, finalized) |  | samples/food-permit-ops/buc/buc_disposition.rdra:367 |
+| forbidden | 公表対象外は処分しないと決めたものだけ | Disposition | Disposition.publication == 公表対象外 AND Disposition.status != dropped |  | samples/food-permit-ops/buc/buc_disposition.rdra:369 |
+| forbidden | 営業停止中は営業しない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:373 |
+| forbidden | 許可なく営業しない（失効・取消・廃業の後の営業は無許可営業） | BusinessPermit | BusinessPermit.operating == true AND BusinessPermit.status in (expired, revoked, closed) |  | samples/food-permit-ops/buc/buc_disposition.rdra:377 |
+| after | 停止を命じた許可では営業していない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == false | SuspendBusiness | samples/food-permit-ops/buc/buc_disposition.rdra:379 |
 | condition | 申請が検査待で、まだ検査の予定がない | PermitApplication\|Inspection | (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）)) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
 | condition | 施設検査で施設基準に適合した | Inspection | Inspection.status == 適合 | GrantPermit\|RenewPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:144 |
 | condition | 新規の申請である | PermitApplication | PermitApplication.kind == 新規 | GrantPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:148 |

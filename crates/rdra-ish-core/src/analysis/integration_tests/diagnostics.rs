@@ -468,33 +468,56 @@ drives(Refund, Order, stock < selling, false)
     assert!(!model.proposition_effects[0].truth);
 }
 
+/// Each column `transitions` names is its own state model, and a value two of them share is
+/// two states: an entity with several lifecycle columns names its states by column.
 #[test]
-fn test_multiple_lifecycle_columns_warns() {
+fn several_lifecycle_columns_are_separate_state_models() {
     let src = r#"
 entity Ticket "チケット" {
   id: Int @pk
   status: Enum(open, closed) @default(open)
-  phase: Enum(intake, work) @default(intake)
+  review: Enum(none "未審査", open "審査中") @default(none)
 }
+entity Note "メモ" { id: Int @pk  status: Enum(open, closed) @default(open) }
 usecase Close "閉じる"
-usecase StartWork "作業開始"
+usecase Review "審査"
+usecase Archive "保管"
 transitions(Close, Ticket.status, open -> closed)
-transitions(StartWork, Ticket.phase, intake -> work)
+transitions(Review, Ticket.review, none -> open)
+transitions(Archive, Note.status, open -> closed)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
-    let (_, diags) = build_model(&ast);
-    let warnings: Vec<_> = diags.iter().filter(|d| d.is_warning).collect();
-    assert!(
-        warnings.iter().any(|d| d
-            .error
-            .to_string()
-            .contains("already has transitions on column")),
-        "expected MultipleLifecycleColumns warning, got: {:?}",
-        warnings
-            .iter()
-            .map(|d| d.error.to_string())
-            .collect::<Vec<_>>()
+    let (model, diags) = build_model(&ast);
+    assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
+    let models: Vec<(&str, &str)> = crate::state_models(&model)
+        .iter()
+        .map(|sm| (sm.entity_id, sm.column))
+        .collect();
+    assert_eq!(
+        models,
+        [
+            ("Note", "status"),
+            ("Ticket", "review"),
+            ("Ticket", "status")
+        ]
+    );
+    let mut states: Vec<(&str, &str)> = model
+        .states
+        .values()
+        .map(|s| (s.id.as_str(), s.label.as_str()))
+        .collect();
+    states.sort();
+    assert_eq!(
+        states,
+        [
+            ("Note_closed", "closed"),
+            ("Note_open", "open"),
+            ("Ticket_review_none", "未審査"),
+            ("Ticket_review_open", "審査中"),
+            ("Ticket_status_closed", "closed"),
+            ("Ticket_status_open", "open"),
+        ]
     );
 }
 

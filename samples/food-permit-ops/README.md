@@ -75,9 +75,11 @@ numbers), the comment says the modeling is the model's assumption.
   starts `ExtendPermitTerm`. Written as one use case that moves both, each pair put the other
   entity's columns into the cone and `verify` stopped at its state cap (see below). Events impose
   no order (#30), so `check` also lets the ledger move without the decision; no rule reads both.
-- **The publication is a set-only column.** An entity has one lifecycle column, so
-  `Disposition.publication` is moved by `sets` under guards on its current value, not by
-  `transitions`.
+- **The disposition has two lifecycle columns.** `Disposition.status` follows the procedure
+  (処分案 to 確定) and `Disposition.publication` the publication (未公表, 公表中, 公表終了, and
+  公表対象外 for a disposition not made). Each has its own `transitions` and its own state model;
+  `PublishViolation` runs only on a decided disposition, `DropDisposition` moves both columns, and
+  two `forbidden` rules read both.
 
 ## Known verification gaps
 
@@ -125,8 +127,9 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
   property that reads one 421-state entity was undecidable in practice, so the sample has none.
 - **(G) An entity has one lifecycle column.** A second `transitions` column
   (`Disposition.publication`) is dropped with an unnamed `warning:` ("one Enum lifecycle column per
-  entity is supported"), and the language reference does not say so. The publication is moved by
-  `sets` under guards instead.
+  entity is supported"), and the language reference does not say so. The publication was moved by
+  `sets` under guards instead. Fixed by #68: an entity may have several lifecycle columns, and the
+  publication is now a `transitions` lifecycle.
 - **(D) A creating use case guarded on an optional parent it only reads never runs.**
   `Runs_ApplyRenewal` said only "in no reachable state do its guards hold". The cause, an
   `.optional()` child created unlinked unless the use case writes the parent, is in
@@ -141,7 +144,8 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
   rule**, while a condition's `in` gets them (`kind != improvement_order`,
   `status in (expired, revoked, closed)`).
 - **(D) An entity-scoped state diagram names another entity's set-only column** in its header
-  (`--entity BusinessPermit` prints `%% set-only: Disposition.publication`).
+  (`--entity BusinessPermit` printed `%% set-only: Disposition.publication`). Since #68 the
+  publication is a lifecycle column, so this sample no longer shows it.
 - **(D) An API that creates and updates makes every use case that invokes it a creator**, which shows
   as a deadlock that "needs a free slot". Eight APIs were split into a create API and an update API.
 - **(M) A created row cannot copy a value from the row that caused it**, so `RegisterPermit` cannot

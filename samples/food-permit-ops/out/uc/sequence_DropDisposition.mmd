@@ -8,8 +8,8 @@ sequenceDiagram
   participant entity__Disposition as 不利益処分
   actor__PermitAuthority ->> screen__DispositionScreen: 処分を見送る
   screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
-  alt Disposition.status == 意見陳述の手続終了
-    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分しない
+  alt Disposition.status == 意見陳述の手続終了 and Disposition.publication == 未公表
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分しない, publication 未公表 -> 公表対象外
     api__DispositionApi -->> screen__DispositionScreen: done
   else guard fails
     api__DispositionApi -->> screen__DispositionScreen: rejected

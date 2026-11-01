@@ -1,6 +1,6 @@
 Entity: Disposition (不利益処分)
-  axes: kind[improvement_order|suspension|revocation], procedure[hearing|explanation|omitted], status[proposed|notified|heard|decided|finalized|dropped], reason_shown[false|true], publication[unpublished|published|ended]
-  labels: status[proposed=処分案|notified=意見陳述の通知済|heard=意見陳述の手続終了|decided=処分決定|finalized=確定（審査請求期間の経過）|dropped=処分しない], publication[unpublished=未公表|published=公表中|ended=公表終了]
+  axes: kind[improvement_order|suspension|revocation], procedure[hearing|explanation|omitted], status[proposed|notified|heard|decided|finalized|dropped], reason_shown[false|true], publication[unpublished|published|ended|excluded]
+  labels: status[proposed=処分案|notified=意見陳述の通知済|heard=意見陳述の手続終了|decided=処分決定|finalized=確定（審査請求期間の経過）|dropped=処分しない], publication[unpublished=未公表|published=公表中|ended=公表終了|excluded=公表対象外]
 
   KIND               PROCEDURE    STATUS     REASON_SHOWN  PUBLICATION  INITIAL  TERMINAL  VIA                                                                                                                                                                                                                                             
   ─────────────────  ───────────  ─────────  ────────────  ───────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -24,15 +24,15 @@ Entity: Disposition (不利益処分)
   improvement_order  omitted      finalized  true          unpublished  no       no        BucDisposition/FinalizeDisposition, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition
   improvement_order  omitted      decided    true          published    no       no        BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation
   improvement_order  hearing      decided    true          unpublished  no       no        BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition
-  improvement_order  hearing      dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
+  improvement_order  hearing      dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
   suspension         hearing      decided    true          unpublished  no       no        BucDisposition/DecideSuspension, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
-  suspension         hearing      dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
+  suspension         hearing      dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
   revocation         hearing      decided    true          unpublished  no       no        BucDisposition/DecideRevocation, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
-  revocation         hearing      dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
+  revocation         hearing      dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition
   improvement_order  explanation  decided    true          unpublished  no       no        BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
-  improvement_order  explanation  dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
+  improvement_order  explanation  dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
   suspension         explanation  decided    true          unpublished  no       no        BucDisposition/DecideSuspension, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
-  suspension         explanation  dropped    false         unpublished  no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
+  suspension         explanation  dropped    false         excluded     no       yes       BucDisposition/DropDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/ReceiveExplanation
   improvement_order  omitted      finalized  true          published    no       no        BucDisposition/FinalizeDisposition, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation
   improvement_order  omitted      decided    true          ended        no       no        BucDisposition/EndPublication, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation
   improvement_order  hearing      finalized  true          unpublished  no       no        BucDisposition/FinalizeDisposition, BucDisposition/HoldHearing, BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition
@@ -62,5 +62,5 @@ Entity: Disposition (不利益処分)
   improvement_order  explanation  finalized  true          ended        no       yes       BucDisposition/EndPublication, BucDisposition/FinalizeDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/OrderImprovement, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation, BucDisposition/ReceiveExplanation
   suspension         explanation  finalized  true          ended        no       yes       BucDisposition/DecideSuspension, BucDisposition/EndPublication, BucDisposition/FinalizeDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation, BucDisposition/ReceiveExplanation
 
-  reachable: 57 / bound: 324
+  reachable: 57 / bound: 432
 
