@@ -4,7 +4,7 @@
 use std::num::NonZeroU8;
 
 use crate::location::LocatedSpan;
-use crate::model::{BucKey, ConditionKey, EntityKey, FkId, UseCaseKey};
+use crate::model::{ApiKey, BucKey, ConditionKey, EntityKey, FkId, UseCaseKey};
 
 /// Bounds are an input to the semantics, not a printer option. Every report states them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -303,6 +303,9 @@ pub enum ActionOrigin {
 pub struct Param {
     pub entity: EntId,
     pub role: ParamRole,
+    /// The invoked API whose `creates` makes the use case create this instance; `None` for a
+    /// direct `creates` or any other role.
+    pub via_api: Option<ApiKey>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

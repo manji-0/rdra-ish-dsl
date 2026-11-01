@@ -225,6 +225,7 @@ impl TransitionSystem {
             map.ent[i] = Some(EntId::at(n));
         }
         let mut out = TransitionSystem::empty(self.bounds);
+        out.api_ids = self.api_ids.clone();
         for &v in vars {
             map.var[v.index()] = Some(VarId::at(out.vars.len()));
             let mut decl = self.vars[v.index()].clone();

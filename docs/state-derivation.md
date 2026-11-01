@@ -421,6 +421,16 @@ is a warning:
 warning[Deadlock_Order_status_awaiting_retry]: deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound
 ```
 
+A use case creates an entity also when an API it invokes `creates` it. Then the message
+names the API, since the use case declares no `creates` of its own:
+
+```
+warning[Deadlock_Order_status_awaiting_retry]: deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound; RetryPayment creates Payment via api 'PaymentApi'
+```
+
+A `NeverRuns` warning ends the same way (`...; it creates Payment via api 'PaymentApi'`), and
+each such `needs:` row ends in `(created via api 'PaymentApi')`.
+
 A cone that stops at a cap, or a `--buc` run, decides no deadlock. Each state with a way out
 is listed under `not checked:` as `whether some Order can get stuck at status = paid is not
 decided: ...`, and is neither an error nor a warning. TLC's own deadlock check stays off (`CHECK_DEADLOCK FALSE`):

@@ -135,6 +135,16 @@
   written (`transitions` endpoints, comparisons, `in` lists, `sets`, `Enum(...)`, `variation`
   values) already took no quoted value; `rule_audit` now covers the quoted forms. A quoted
   `@default` of an Int or String column is unchanged.
+- A deadlock at the bound and a `NeverRuns` warning name the API when a use case creates the
+  entity it needs a free slot for only through an API it invokes (#55): `deadlock at the
+  bound: ... ResubmitDisclosure needs a free InventionDisclosure slot within the instance
+  bound; ResubmitDisclosure creates InventionDisclosure via api 'DisclosureApi'`, and
+  `... no free slot for an instance it creates; it creates InventionDisclosure via api
+  'DisclosureApi'`; the `needs:` row ends in `(created via api 'DisclosureApi')`. A direct
+  `creates` prints as before. `Blocked::NoInstance`, `Apart`, and `Crowded` now hold a
+  `Need { entity, role, via_api }`, and a lifecycle `Param` carries the API it is created
+  through.
+
 - A use case a timer or an event starts, with no `performs(Actor, UseCase)`, is the system's
   work for the permission check too (#58): its own and its APIs' `requires_permission` no
   longer report `UseCasePermissionNoActor` or `ApiPermissionNoActor`, as for a use case

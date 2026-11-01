@@ -472,29 +472,53 @@ pub struct Exit {
     pub why: Blocked,
 }
 
+/// An instance an action needs: the entity id, the param's role, and for a creation through
+/// an invoked API's `creates`, that API's id, which is why the use case creates it at all.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Need {
+    pub entity: String,
+    pub role: ParamRole,
+    pub via_api: Option<String>,
+}
+
+/// `; <who> creates <Entity> via api '<Api>'` for each need created through an API, joined
+/// with `and`; empty when none is. It says why a use case with no `creates` of its own needs
+/// a free slot.
+pub fn created_via_apis(who: &str, needs: &[Need]) -> String {
+    let vias: Vec<String> = needs
+        .iter()
+        .filter(|n| n.role == ParamRole::New)
+        .filter_map(|n| Some(format!("{} via api '{}'", n.entity, n.via_api.as_ref()?)))
+        .collect();
+    match vias.is_empty() {
+        true => String::new(),
+        false => format!("; {who} creates {}", vias.join(" and ")),
+    }
+}
+
 /// Why an action never runs, read off the reachable states of a cone that keeps it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Blocked {
     /// No reachable state has an instance for these params: a free slot for a `New` one, a
-    /// present instance otherwise. Each is the entity id and the role.
-    NoInstance(Vec<(String, ParamRole)>),
+    /// present instance otherwise.
+    NoInstance(Vec<Need>),
     /// Each param finds an instance in some reachable state, but no state has all of these at
     /// once.
-    Apart(Vec<(String, ParamRole)>),
+    Apart(Vec<Need>),
     /// These guards hold in no reachable state, under any binding of the params.
     Guards(Vec<(GuardWhy, Site)>),
     /// Each guard holds in some reachable state, but never all of them in one.
     Together,
     /// In some reachable state its guards hold and every other instance is there, but these
-    /// entities it creates have no free slot within the instance bound.
-    Crowded(Vec<String>),
+    /// instances it creates have no free slot within the instance bound.
+    Crowded(Vec<Need>),
 }
 
 impl Blocked {
     /// Only free slots are missing: every param it lacks is a `New` one.
     pub fn only_free_slots(&self) -> bool {
         match self {
-            Blocked::NoInstance(params) => params.iter().all(|(_, role)| *role == ParamRole::New),
+            Blocked::NoInstance(params) => params.iter().all(|n| n.role == ParamRole::New),
             Blocked::Crowded(_) => true,
             Blocked::Apart(_) | Blocked::Guards(_) | Blocked::Together => false,
         }
@@ -608,9 +632,11 @@ impl fmt::Display for StateDiag {
             StateDiag::NeverRuns { action, why, .. } => {
                 write!(f, "{action} can never run: ")?;
                 match why {
-                    Blocked::NoInstance(_) => {
-                        write!(f, "no reachable state has an instance it needs")
-                    }
+                    Blocked::NoInstance(needs) => write!(
+                        f,
+                        "no reachable state has an instance it needs{}",
+                        created_via_apis("it", needs)
+                    ),
                     Blocked::Apart(_) => write!(
                         f,
                         "no reachable state has all the instances it needs at once"
@@ -620,9 +646,10 @@ impl fmt::Display for StateDiag {
                         f,
                         "each of its guards holds in some reachable state, but never all of them in one"
                     ),
-                    Blocked::Crowded(_) => write!(
+                    Blocked::Crowded(needs) => write!(
                         f,
-                        "whenever its guards hold, the instance bound leaves no free slot for an instance it creates"
+                        "whenever its guards hold, the instance bound leaves no free slot for an instance it creates{}",
+                        created_via_apis("it", needs)
                     ),
                 }
             }
@@ -657,21 +684,20 @@ impl fmt::Display for StateDiag {
                 ..
             } => {
                 let bound = exits.iter().find_map(|x| match &x.why {
-                    Blocked::NoInstance(params) if x.why.only_free_slots() => Some((
-                        &x.action,
-                        params.iter().map(|(e, _)| e.as_str()).collect::<Vec<_>>(),
-                    )),
-                    Blocked::Crowded(entities) => {
-                        Some((&x.action, entities.iter().map(String::as_str).collect()))
+                    Blocked::NoInstance(needs) if x.why.only_free_slots() => {
+                        Some((&x.action, needs))
                     }
+                    Blocked::Crowded(needs) => Some((&x.action, needs)),
                     _ => None,
                 });
                 match bound {
-                    Some((action, slots)) => {
+                    Some((action, needs)) => {
+                        let slots: Vec<&str> = needs.iter().map(|n| n.entity.as_str()).collect();
                         write!(
                             f,
-                            "deadlock at the bound: {at} stays at {column} = {value} forever; {action} needs a free {} slot within the instance bound",
-                            slots.join(" and ")
+                            "deadlock at the bound: {at} stays at {column} = {value} forever; {action} needs a free {} slot within the instance bound{}",
+                            slots.join(" and "),
+                            created_via_apis(action, needs)
                         )
                     }
                     None => write!(

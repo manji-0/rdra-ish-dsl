@@ -180,12 +180,19 @@ fn blocked_rows(
     indent: &str,
 ) -> Vec<(String, Option<String>)> {
     match why {
-        Blocked::NoInstance(params) | Blocked::Apart(params) => params
+        Blocked::NoInstance(needs) | Blocked::Apart(needs) | Blocked::Crowded(needs) => needs
             .iter()
-            .map(|(entity, role)| {
-                let text = match role {
+            .map(|need| {
+                let entity = &need.entity;
+                let text = match need.role {
                     ParamRole::New => {
-                        format!("{indent}needs: a free {entity} slot within the instance bound")
+                        let via = match &need.via_api {
+                            Some(api) => format!(" (created via api '{api}')"),
+                            None => String::new(),
+                        };
+                        format!(
+                            "{indent}needs: a free {entity} slot within the instance bound{via}"
+                        )
                     }
                     ParamRole::Existing | ParamRole::Parent => {
                         format!("{indent}needs: an existing {entity}")
@@ -200,15 +207,6 @@ fn blocked_rows(
                 (
                     format!("{indent}guard: {}", guard_text(model, *why, site)),
                     location(program, site),
-                )
-            })
-            .collect(),
-        Blocked::Crowded(entities) => entities
-            .iter()
-            .map(|entity| {
-                (
-                    format!("{indent}needs: a free {entity} slot within the instance bound"),
-                    None,
                 )
             })
             .collect(),

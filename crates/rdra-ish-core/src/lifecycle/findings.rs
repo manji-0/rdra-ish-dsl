@@ -596,7 +596,11 @@ impl TransitionSystem {
         let action = &self.actions[act.index()];
         let need = |p: usize| {
             let param = action.params[p];
-            (self.entity(param.entity).id.clone(), param.role)
+            super::Need {
+                entity: self.entity(param.entity).id.clone(),
+                role: param.role,
+                via_api: param.via_api.map(|api| self.api_id(api)),
+            }
         };
         match scan {
             Scan::Unbound(params) => Blocked::NoInstance(params.into_iter().map(need).collect()),
@@ -608,9 +612,7 @@ impl TransitionSystem {
                     .collect(),
             ),
             Scan::EachHeld => Blocked::Together,
-            Scan::Crowded(params) => {
-                Blocked::Crowded(params.into_iter().map(|p| need(p).0).collect())
-            }
+            Scan::Crowded(params) => Blocked::Crowded(params.into_iter().map(need).collect()),
         }
     }
 

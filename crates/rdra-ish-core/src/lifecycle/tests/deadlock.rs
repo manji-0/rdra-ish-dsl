@@ -4,7 +4,7 @@
 use super::cone::{load, SAMPLES};
 use super::witness::final_values;
 use super::*;
-use crate::lifecycle::{Blocked, GuardWhy, ModelRef, ParamRole, Severity, Target};
+use crate::lifecycle::{Blocked, GuardWhy, ModelRef, Need, ParamRole, Severity, Target};
 
 const DEADLOCK: &str = "samples/formal-verification/deadlock.rdra";
 
@@ -149,7 +149,11 @@ fn a_way_out_blocked_only_by_the_instance_bound_is_a_warning() {
     };
     assert_eq!(
         exits[0].why,
-        Blocked::NoInstance(vec![("Payment".to_string(), ParamRole::New)])
+        Blocked::NoInstance(vec![Need {
+            entity: "Payment".to_string(),
+            role: ParamRole::New,
+            via_api: None,
+        }])
     );
     assert!(!report.has_errors(), "{:?}", report.diags);
 
@@ -159,6 +163,29 @@ fn a_way_out_blocked_only_by_the_instance_bound_is_a_warning() {
     assert!(
         !found.is_empty() && found.iter().all(|d| d.severity() == Severity::Warning),
         "{found:?}"
+    );
+}
+
+/// RETRY with the Payment created through an API: the bound names the API that makes
+/// RetryPayment a creator of Payment.
+pub(super) fn retry_via_api() -> String {
+    RETRY
+        .replace("updates(RetryPayment, Order)\n", "")
+        .replace(
+            "creates(RetryPayment, Payment)",
+            "api PaymentApi \"決済API\"\ninvokes(RetryPayment, PaymentApi)\nupdates(PaymentApi, Order)\ncreates(PaymentApi, Payment)",
+        )
+}
+
+#[test]
+fn a_way_out_blocked_by_a_slot_an_api_creates_names_the_api() {
+    let model = model_from(&retry_via_api());
+    let report = super::super::derive_states(&model, &Scope::ALL, Caps::STATES);
+    let found = deadlocks(&report.diags);
+    assert_eq!(found.len(), 1, "{found:?}");
+    assert_eq!(
+        found[0].to_string(),
+        "deadlock at the bound: Order#1 stays at status = awaiting_retry forever; RetryPayment needs a free Payment slot within the instance bound; RetryPayment creates Payment via api 'PaymentApi'"
     );
 }
 

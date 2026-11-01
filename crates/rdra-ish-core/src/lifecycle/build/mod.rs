@@ -485,17 +485,24 @@ impl<'m> Builder<'m> {
     ) -> Action {
         let model = self.model;
         let mut a = ActionDraft::default();
-        let mut sorted: Vec<(EntId, WriteKind)> = writes
+        let mut sorted: Vec<(EntId, WriteKind, Option<crate::model::ApiKey>)> = writes
             .iter()
-            .map(|w| (self.ent_of[&w.entity], w.kind.clone()))
+            .map(|w| (self.ent_of[&w.entity], w.kind.clone(), w.via_api))
             .collect();
-        sorted.sort_by_key(|(e, _)| *e);
-        for (e, kind) in sorted {
+        sorted.sort_by_key(|(e, _, _)| *e);
+        for (e, kind, via_api) in sorted {
             let role = match kind {
                 WriteKind::Creates => ParamRole::New,
                 WriteKind::Updates | WriteKind::Deletes => ParamRole::Existing,
             };
             let p = a.param(e, role);
+            if let (ParamRole::New, Some(api)) = (role, via_api) {
+                a.params[usize::from(p)].via_api = Some(api);
+                self.ts
+                    .api_ids
+                    .entry(api)
+                    .or_insert_with(|| model.apis[api].id.clone());
+            }
             match kind {
                 WriteKind::Creates => a.effects.push(Effect::Create { param: p }),
                 WriteKind::Deletes => a.effects.push(Effect::Delete { param: p }),
@@ -999,7 +1006,7 @@ impl<'m> Builder<'m> {
     /// any value unless the creating use case sets it. `@default` does not pin the choice.
     fn creation_choices(&mut self, a: &mut ActionDraft) {
         for p in 0..a.params.len() {
-            let Param { entity, role } = a.params[p];
+            let Param { entity, role, .. } = a.params[p];
             if role != ParamRole::New {
                 continue;
             }
@@ -1104,7 +1111,11 @@ struct ActionDraft {
 
 impl ActionDraft {
     fn param(&mut self, entity: EntId, role: ParamRole) -> u8 {
-        self.params.push(Param { entity, role });
+        self.params.push(Param {
+            entity,
+            role,
+            via_api: None,
+        });
         (self.params.len() - 1) as u8
     }
 

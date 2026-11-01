@@ -3,7 +3,7 @@
 
 use super::cone::{load, SAMPLES};
 use super::*;
-use crate::lifecycle::{Blocked, GuardWhy, ModelRef, ParamRole, Severity, Target};
+use crate::lifecycle::{Blocked, GuardWhy, ModelRef, Need, ParamRole, Severity, Target};
 
 /// The `NeverRuns` of a run, by action name.
 fn never_runs(diags: &[Diag]) -> Vec<(&str, &Blocked)> {
@@ -41,8 +41,16 @@ fn only_the_explained_sample_actions_never_run() {
                 "samples/formal-verification/min_card_met.rdra",
                 "AddLine".to_string(),
                 Blocked::Apart(vec![
-                    ("OrderLine".to_string(), ParamRole::New),
-                    ("Order".to_string(), ParamRole::Parent),
+                    Need {
+                        entity: "OrderLine".to_string(),
+                        role: ParamRole::New,
+                        via_api: None,
+                    },
+                    Need {
+                        entity: "Order".to_string(),
+                        role: ParamRole::Parent,
+                        via_api: None,
+                    },
                 ])
             ),
             (
@@ -235,7 +243,11 @@ fn a_creation_the_bound_crowds_out_names_the_slot_not_a_guard() {
         runs,
         [(
             "RetryPayment",
-            &Blocked::Crowded(vec!["Payment".to_string()])
+            &Blocked::Crowded(vec![Need {
+                entity: "Payment".to_string(),
+                role: ParamRole::New,
+                via_api: None,
+            }])
         )]
     );
     let diag = d
@@ -247,6 +259,23 @@ fn a_creation_the_bound_crowds_out_names_the_slot_not_a_guard() {
     assert_eq!(
         diag.diag.to_string(),
         "RetryPayment can never run: whenever its guards hold, the instance bound leaves no free slot for an instance it creates"
+    );
+}
+
+/// The same, with RetryPayment a creator of Payment only through the API it invokes: the
+/// message names the API.
+#[test]
+fn a_creation_the_bound_crowds_out_through_an_api_names_the_api() {
+    let model = model_from(&super::deadlock::retry_via_api());
+    let d = derive(&model);
+    let diag = d
+        .diags
+        .iter()
+        .find(|x| matches!(x.diag, StateDiag::NeverRuns { .. }))
+        .unwrap();
+    assert_eq!(
+        diag.diag.to_string(),
+        "RetryPayment can never run: whenever its guards hold, the instance bound leaves no free slot for an instance it creates; it creates Payment via api 'PaymentApi'"
     );
 }
 

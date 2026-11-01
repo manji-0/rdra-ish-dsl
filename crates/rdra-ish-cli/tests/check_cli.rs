@@ -78,6 +78,54 @@ fn check_and_states_print_the_bounds_line() {
     );
 }
 
+/// A use case that creates an entity only through the API it invokes: the slot it needs is
+/// named with that API, in the message and in the `needs:` row.
+#[test]
+fn check_names_the_api_through_which_a_use_case_needs_a_free_slot() {
+    let dir = std::env::temp_dir().join(format!("rdra-slot-via-api-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("slot_via_api.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Order "注文" { id: Int @pk  status: Enum(pending, awaiting_retry, paid) @default(pending) }
+entity Payment "決済" { id: Int @pk  status: Enum(failed, captured) @default(failed) }
+relate(Payment, Order, N:1)
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Fail "決済失敗"
+usecase RetryPayment "再決済"
+api PaymentApi "決済API"
+creates(Place, Order)
+updates(Pay, Order)
+updates(Fail, Order)
+creates(Fail, Payment)
+invokes(RetryPayment, PaymentApi)
+updates(PaymentApi, Order)
+creates(PaymentApi, Payment)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Fail, Order.status, pending -> awaiting_retry)
+condition Unsettled "未決済"
+holds(Unsettled, Payment.status == failed)
+applies_to(Unsettled, RetryPayment)
+transitions(RetryPayment, Order.status, awaiting_retry -> paid)
+"#,
+    )
+    .unwrap();
+    let output = run(&["check", file.to_str().unwrap()]);
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("RetryPayment needs a free Payment slot within the instance bound; RetryPayment creates Payment via api 'PaymentApi'"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "needs: a free Payment slot within the instance bound (created via api 'PaymentApi')"
+        ),
+        "{stderr}"
+    );
+}
+
 /// A never-run action names its transaction group and lists only the guards that hold in no
 /// reachable state, each at its site: Pay_2's settlement condition reads a state only Refund
 /// enters, and Refund leaves `paid`, which only Pay_2 enters.

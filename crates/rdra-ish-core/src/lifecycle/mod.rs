@@ -27,7 +27,8 @@ mod tests;
 
 pub use cone::{Cone, Target, VarSet};
 pub use diag::{
-    has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Severity, StateDiag, VarSpread,
+    created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,
+    Severity, StateDiag, VarSpread,
 };
 pub use explore::{Caps, ComponentRun, Edge, Exploration, Graph, LabelledEdges};
 pub use expr::State;
@@ -77,6 +78,8 @@ pub struct TransitionSystem {
     now: Option<VarId>,
     offsets: Vec<usize>,
     width: usize,
+    /// The id of each API a `New` param is created through (`Param::via_api`).
+    api_ids: std::collections::HashMap<crate::model::ApiKey, String>,
 }
 
 impl TransitionSystem {
@@ -96,6 +99,7 @@ impl TransitionSystem {
             now: None,
             offsets: Vec::new(),
             width: 0,
+            api_ids: std::collections::HashMap::new(),
         }
     }
 
@@ -123,6 +127,11 @@ impl TransitionSystem {
 
     pub fn entity(&self, id: EntId) -> &EntityDecl {
         &self.entities[id.index()]
+    }
+
+    /// The id of an API a creation goes through.
+    pub fn api_id(&self, api: crate::model::ApiKey) -> String {
+        self.api_ids.get(&api).cloned().unwrap_or_default()
     }
 
     pub fn vars(&self) -> &[VarDecl] {
