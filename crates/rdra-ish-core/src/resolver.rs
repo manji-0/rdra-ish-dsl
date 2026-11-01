@@ -238,7 +238,12 @@ fn similar_modules(
                 .filter_map(|base| path.strip_prefix(base).ok())
                 .min_by_key(|rel| rel.components().count())
                 .unwrap_or(path);
-            found.push(format!("{declared} ({})", shown.display()));
+            // `/` on every platform, so a hint reads the same as the import paths it sits beside.
+            let shown: Vec<String> = shown
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect();
+            found.push(format!("{declared} ({})", shown.join("/")));
         }
     }
     found.sort();
