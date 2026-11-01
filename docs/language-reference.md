@@ -1099,9 +1099,16 @@ and as an entity column second; when both match it is `AmbiguousCombinesTarget`,
 
 The body is a comma list of comparisons, the same form `forbidden` takes, so it is an
 implicit conjunction. Each operand names its entity, and `check` validates the entity,
-the column, and the value (`InvalidVariationValue` or `InvalidEnumVariant`). Disjunction and
-negation are not available yet. A second `holds` on one condition is `ConditionSecondBody`, and
-`combines` together with `holds` is `ConditionCombinesWithBody`, in either order.
+the column, and the value (`InvalidVariationValue` or `InvalidEnumVariant`). A choice among
+the values of one column is `Entity.column in (a, b)`, and its negation `not in`
+(see [Set membership](#set-membership-in-and-not-in)); other disjunction and negation are not
+available yet. A second `holds` on one condition is `ConditionSecondBody`, and `combines`
+together with `holds` is `ConditionCombinesWithBody`, in either order.
+
+```rdra
+// The guard of a later application's priority claim: the earlier one is still pending.
+holds(PriorityBasePending, PatentApplication.status in (filed, formality_order, examining))
+```
 
 A body may end in `.has(Related.col == v)` or `.none(Related.col == v)` calls. The guard then
 also needs some row (`has`), or no row (`none`), of the related entity to match. The rows are
@@ -1383,7 +1390,9 @@ The third argument is the bare comparison expression (no quotes); the fourth arg
 the bare boolean literal `true` or `false`. Value equality (`col == variant`) must not use
 `, false` — that form is rejected (`SetsFalseOnEquals`); omit the fourth argument and set
 a different value instead. Any other third argument, such as `status != paid`, or a
-comparison without `true` or `false`, sets nothing and is `SetsNoEffect`. Once any `sets` drives a comparison, the comparison is a Bool
+comparison without `true` or `false`, sets nothing and is `SetsNoEffect`. A use case leaves
+one value, so a set membership (`status in (a, b)`) in either form of `sets` is
+`SetsMembership`. Once any `sets` drives a comparison, the comparison is a Bool
 variable that only those `sets` change, and the Int columns no longer define it. A use case
 that drives a comparison to one truth while its own Int `sets` make it the other is
 `ContradictoryDrivenComparison`, an error.
@@ -1641,9 +1650,9 @@ property NeverBoth "mutex"
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
 
-Atoms use `Entity.column == value` / `!=`, or numeric comparisons (`<`, `>`, `<=`, `>=`)
-over Int / Money / Decimal columns and literals. Prefer connectives `and` / `or` / `not`
-(`/\` `\/` `~` remain aliases). See [formal-verification.md](./formal-verification.md).
+Atoms use `Entity.column == value` / `!=`, `Entity.column in (a, b)` / `not in`, or numeric
+comparisons (`<`, `>`, `<=`, `>=`) over Int / Money / Decimal columns and literals. Prefer
+connectives `and` / `or` / `not` (`/\` `\/` `~` remain aliases). See [formal-verification.md](./formal-verification.md).
 
 The property label string is optional: `property StockOk always(Item.stock >= Item.selling)`.
 
@@ -1679,12 +1688,14 @@ respect such a rule, put the same `.none(...)` on a `holds` guard (see Condition
 
 `forbidden`, `required`, `exclusive`, multi-entity `forbidden`/`invariant`, and the `.when()` / `.then()`
 clauses of `invariant` accept bare **comparison expressions** as
-conditions (`col == val`, `col op rhs`).
+conditions (`col == val`, `col op rhs`, `col in (a, b)`).
 
 #### Syntax
 
 ```
 col op rhs
+col in (v, ...)
+col not in (v, ...)
 ```
 
 Where:
@@ -1703,12 +1714,44 @@ Where:
 The type of the left-hand column decides what a bare right-hand side is; see
 [Bare identifiers](#bare-identifiers).
 
+#### Set membership: `in` and `not in`
+
+`col in (a, b, c)` holds when `col` is one of the values; it is `col == a or col == b or
+col == c`. `col not in (a, b, c)` holds when `col` is none of them; it is `col != a and
+col != b and col != c`. Every construct that takes a comparison takes a set membership:
+`forbidden`, `required`, `exclusive`, `invariant` with its `.when()`, `.then()`, `.has()`,
+and `.none()` (one entity or several, with `Entity.col in (...)`), `holds`,
+`after(...).assert(...)`, `@check`, `@derived`, and `property`. `sets` does not: a use case
+leaves one value (`SetsMembership`).
+
+```rdra
+forbidden(Order, status in (paid, shipped), refund_id == present)
+invariant(Order).when(status not in (draft, cancelled)).then(submitted_at == present)
+holds(Open, Order.status in (draft, submitted))
+required(Ticket, priority in (1, 2, 3))
+```
+
+| Rule | Error |
+|---|---|
+| The left-hand column is Enum, variation-typed, Bool, or `@null`; Int, Money, and Decimal columns take integer literals. Any other column type is an error. | `SetColumnNotEnumerable` |
+| Each value is a value of the left-hand column's type, read as a bare right-hand side of `==` is. A column name is no value, and a set has no column spelling. The error lists the column's values. | `SetValueNotAValue` |
+| Each value appears once. | `DuplicateSetValue` |
+| The list names at least one value. | parse error |
+
+`in` is a keyword only between a comparison's left-hand column and `(`, so a column may
+still be named `in` (`in in (1, 2)` is valid). `states`, `check`, and TLC read the
+disjunction alike; the TLA+ export writes `Order_status[b0] \in {"paid", "shipped"}` and
+`\notin`. `list --kind rule`, `list --kind condition`, the sequence diagram's guards, and a
+violation print the set as written, `status in (paid, shipped)`, with value labels where
+they print labels for `==`.
+
 #### Type rules
 
 | Operator | Permitted column types |
 |---|---|
 | `<`, `>`, `<=`, `>=` | `Int`, `Money`, `Decimal`, `Date`, `DateTime` |
 | `==`, `!=` | All column types |
+| `in`, `not in` | `Enum`, variation, `Bool`, `@null`, and `Int`, `Money`, `Decimal` (integer literals) |
 
 When `rhs` is a column reference, the left-hand and right-hand columns must belong to
 the same type category (numeric with numeric, temporal with temporal). Two Enum,
@@ -1745,9 +1788,10 @@ expressions). They use the same value vocabulary as `sets`: Enum variant names,
 variation values, `true` / `false`, and `present` / `null`.
 
 The left-hand column's type decides what a bare right-hand side `x` of `col == x` or
-`col != x` is. Every construct that takes a comparison reads it the same way: `forbidden`,
-`required`, `exclusive`, `invariant` with its `.when()`, `.then()`, `.has()`, and
-`.none()`, `holds`, `after(...).assert(...)`, `sets`, `property`, `@check`, and `@derived`.
+`col != x` is, and what each value of `col in (x, y)` is. Every construct that takes a
+comparison reads it the same way: `forbidden`, `required`, `exclusive`, `invariant` with its
+`.when()`, `.then()`, `.has()`, and `.none()`, `holds`, `after(...).assert(...)`, `sets`,
+`property`, `@check`, and `@derived`.
 
 | Left-hand column | A bare `x` is |
 |---|---|

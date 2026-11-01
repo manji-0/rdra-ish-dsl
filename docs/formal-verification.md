@@ -60,6 +60,7 @@ action, and `Spec` allows stuttering.
 | Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
 | `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments. |
 | Comparison proposition driven by `sets(..., cmp, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |
+| `col in (a, b)` / `col not in (a, b)` | `E_col[b0] \in {"a", "b"}` / `E_col[b0] \notin {"a", "b"}`, the same disjunction of equalities that `states` evaluates. A nullable Int value `present` keeps the `\/` form. |
 | `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |
 | Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `CrossForbidden_Order_0`). Each ranges over the present instances. |
 | `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
@@ -83,6 +84,9 @@ property PaidLeadsToShipped "paid eventually reaches shipped"
 property StockOk
   always(Item.stock >= Item.selling)
 
+property SettlesOrEnds
+  eventually(Order.status in (delivered, cancelled))
+
 sets(Restock, Item, stock == 3)
 forbidden(Item, stock < selling)
 
@@ -102,6 +106,7 @@ Operators:
 - `eventually(expr)` → `<>expr`
 - `leads_to(p, q)` → `p ~> q`
 - Connectives inside expressions: prefer `and` / `or` / `not` (`/\` `\/` `~` aliases)
+- Set membership in an atom: `Order.status in (a, b)` → `\in {"a", "b"}`, `not in` → `\notin`
 - Property label string is optional (`property StockOk always(...)`)
 
 `rdra-ish states` does not evaluate path properties, and `check` prints a `note:` that it
