@@ -4,7 +4,7 @@ import shared.actors
 import shared.entities
 import shared.biz
 import shared.goals
-import buc.filing_formality.{ApplicationDocketScreen, RecordFilingReceipt}
+import buc.filing_formality.{ApplicationDocketApi, ApplicationDocketScreen, RecordFilingReceipt}
 
 // Sources cited as file:line are under ~/research/japan-patent-operations/sources/.
 
@@ -85,8 +85,8 @@ condition ExaminationRequested "審査請求をした出願である"
 holds(ExaminationRequested, PatentApplication.status == examining, PatentApplication.exam_requested_at == present)
 applies_to(ExaminationRequested, RequestAcceleratedExamination)
 
-// Started by the timer, no performer.
-updates(DeemWithdrawnNoRequest, PatentApplication)
+// Started by the timer, no performer: the system records it on the docket, as a 却下 is.
+invokes(DeemWithdrawnNoRequest, ApplicationDocketApi)
 transitions(DeemWithdrawnNoRequest, PatentApplication.status, filed -> deemed_withdrawn)
 triggers(ExamRequestDeadline, DeemWithdrawnNoRequest)
 

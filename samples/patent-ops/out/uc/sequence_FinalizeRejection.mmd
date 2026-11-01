@@ -1,14 +1,14 @@
 %% rdra-ish diagram=sequence scope=usecase:FinalizeRejection model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step
 sequenceDiagram
   participant timer__AppealDeadline as 拒絶査定不服審判の請求期限（謄本の送達から3月）
-  participant usecase__FinalizeRejection as 拒絶査定の確定
+  participant api__DecisionApi as 査定 API
   participant entity__PatentApplication as 特許出願
-  timer__AppealDeadline ->> usecase__FinalizeRejection: 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  timer__AppealDeadline ->> api__DecisionApi: 拒絶査定不服審判の請求期限（謄本の送達から3月）
   alt PatentApplication.status == 拒絶査定
-    usecase__FinalizeRejection ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定の確定
-    usecase__FinalizeRejection -->> timer__AppealDeadline: done
+    api__DecisionApi ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定の確定
+    api__DecisionApi -->> timer__AppealDeadline: done
   else guard fails
-    usecase__FinalizeRejection -->> timer__AppealDeadline: rejected
+    api__DecisionApi -->> timer__AppealDeadline: rejected
   end

@@ -135,6 +135,27 @@
   written (`transitions` endpoints, comparisons, `in` lists, `sets`, `Enum(...)`, `variation`
   values) already took no quoted value; `rule_audit` now covers the quoted forms. A quoted
   `@default` of an Int or String column is unchanged.
+- A use case a timer or an event starts, with no `performs(Actor, UseCase)`, is the system's
+  work for the permission check too (#58): its own and its APIs' `requires_permission` no
+  longer report `UseCasePermissionNoActor` or `ApiPermissionNoActor`, as for a use case
+  exposed with `.caller(system)`. `actors_for_usecase` already left such a use case out of its
+  BUC's actors. A started use case that an actor performs is checked as before, and the two
+  hints now say to start a system-run use case with `triggers` instead of removing the
+  requirement. patent-ops' timer-started use cases that wrote rows directly to avoid the
+  warning go through the API the actors' use cases use: `DeemWithdrawnNoRequest` through
+  `ApplicationDocketApi`, `FinalizeRejection` through `DecisionApi`, and
+  `RollOverAnnuityYear`, `EnterGracePeriod`, `LapseUnpaidPatent`, and `ExpirePatentTerm`
+  through `AnnuityApi`; their sequence, use case, and robustness diagrams show the API, and
+  their `states` and `verify` results are unchanged.
+- `performs(Actor, Buc)` keeps meaning the actor performs every use case of the BUC (#58).
+  Taking part in a BUC is already written `performs(Actor, UseCase)` or
+  `performs(Actor, Step)`, which `list --kind buc-roles` and the context diagram read, so no
+  `participates` predicate is added. When a permission is missing only because of a
+  `performs(Actor, Buc)`, `ActorPermissionMissing`'s hint now names the BUC and those forms:
+  "`performs(Clerk, BucFees)` makes Clerk perform every use case of BucFees: to say Clerk
+  only takes part in BucFees, write `performs(Clerk, UseCase)` for the use cases it runs or
+  `performs(Clerk, Step)` for its steps instead".
+
 - An `import` resolves by the `module` a loaded file declares, whatever the file is called
   (#56). `buc/buc_registration.rdra` with `module buc.registration` now answers
   `import buc.registration.{FeePaymentScreen}`; it was `IO error reading

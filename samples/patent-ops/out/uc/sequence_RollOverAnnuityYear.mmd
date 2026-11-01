@@ -1,14 +1,16 @@
 %% rdra-ish diagram=sequence scope=usecase:RollOverAnnuityYear model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step condition
 sequenceDiagram
   participant timer__AnnuityDueDate as 第4年以後の特許料の納付期限（前年以前）
-  participant usecase__RollOverAnnuityYear as 納付年度の更新
+  participant api__AnnuityApi as 年金 API
+  participant entity__FeeSchedule as 料金表
   participant entity__Patent as 特許権
-  timer__AnnuityDueDate ->> usecase__RollOverAnnuityYear: 第4年以後の特許料の納付期限（前年以前）
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
   alt 存続中で、次の年が納付済: Patent.status == 存続中, Patent.next_year_paid == true
-    usecase__RollOverAnnuityYear ->> entity__Patent: update next_year_paid=false
-    usecase__RollOverAnnuityYear -->> timer__AnnuityDueDate: done
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update next_year_paid=false
+    api__AnnuityApi -->> timer__AnnuityDueDate: done
   else guard fails
-    usecase__RollOverAnnuityYear -->> timer__AnnuityDueDate: rejected
+    api__AnnuityApi -->> timer__AnnuityDueDate: rejected
   end

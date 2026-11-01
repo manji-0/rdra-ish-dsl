@@ -429,15 +429,33 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     for entry in derive_actor_permission_audit(model) {
         match entry.status {
             ActorPermissionAuditStatus::Missing => {
+                let actor = model.actors[entry.actor].id.clone();
+                let through_buc = match bucs_lending_usecases(model, entry.actor, &entry.sources)
+                    .as_slice()
+                {
+                    [] => String::new(),
+                    bucs => {
+                        let performs = bucs
+                            .iter()
+                            .map(|buc| format!("`performs({actor}, {buc})`"))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        let names = bucs.join(", ");
+                        format!(
+                            "; {performs} makes {actor} perform every use case of {names}: to say {actor} only takes part in {names}, write `performs({actor}, UseCase)` for the use cases it runs or `performs({actor}, Step)` for its steps instead"
+                        )
+                    }
+                };
                 push_model_decl_diagnostic(
                     model,
                     &mut diags,
                     "actor",
-                    &model.actors[entry.actor].id,
+                    &actor,
                     RdraError::ActorPermissionMissing {
-                        actor: model.actors[entry.actor].id.clone(),
+                        actor: actor.clone(),
                         permission: model.permissions[entry.permission].id.clone(),
                         required_by: describe_requirement_sources(model, &entry.sources),
+                        through_buc,
                     },
                     true,
                 );
@@ -462,11 +480,15 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
     diags
 }
 
+/// The system may run the use case with no actor: another system calls it through the
+/// published surface, or a timer or an event starts it. A started use case with no
+/// `performs(Actor, UseCase)` is the system's work (see `actors_for_usecase`), so its own and
+/// its APIs' permissions are the system's, which the model does not check.
 fn system_may_call(model: &SemanticModel, usecase: UseCaseKey) -> bool {
     matches!(
         model.publication.caller_of(usecase),
         Some(CallerKind::System | CallerKind::Any)
-    )
+    ) || triggered_use_cases(model).contains(&usecase)
 }
 
 fn collect_actor_permissions(model: &SemanticModel) -> HashMap<ActorKey, HashSet<PermissionKey>> {
@@ -718,6 +740,34 @@ pub fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<Act
     }
     sort_dedup_actors(model, &mut actors);
     actors
+}
+
+/// The BUCs whose `performs(actor, Buc)` is the only reason `actor` performs some use case of
+/// `sources`: it performs none of them directly. Sorted ids.
+fn bucs_lending_usecases(
+    model: &SemanticModel,
+    actor: ActorKey,
+    sources: &[ActorPermissionRequirementSource],
+) -> Vec<String> {
+    let performs = |target: NodeRef| {
+        model.relations.iter().any(|rel| {
+            rel.kind == RelKind::Performs && rel.from == NodeRef::Actor(actor) && rel.to == target
+        })
+    };
+    let mut bucs: Vec<String> = Vec::new();
+    for source in sources {
+        if performs(NodeRef::UseCase(source.usecase)) {
+            continue;
+        }
+        for buc in bucs_containing_usecase(model, source.usecase) {
+            if performs(NodeRef::Buc(buc)) {
+                bucs.push(model.bucs[buc].id.clone());
+            }
+        }
+    }
+    bucs.sort();
+    bucs.dedup();
+    bucs
 }
 
 fn apis_invoked_by_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<ApiKey> {
@@ -1101,6 +1151,7 @@ requires_permission(BookAppointment, ScheduleWrite)
                 actor,
                 permission,
                 required_by,
+                ..
             } if actor == "Staff"
                 && permission == "ScheduleWrite"
                 && required_by.contains("usecase 'BookAppointment'")
@@ -1205,6 +1256,7 @@ requires_permission(BookAppointment, ScheduleWrite)
                 actor,
                 permission,
                 required_by,
+                ..
             } if actor == "Assistant"
                 && permission == "ScheduleWrite"
                 && required_by.contains("usecase 'BookAppointment'")
@@ -1238,6 +1290,7 @@ requires_permission(BookingApi, ScheduleWrite)
                 actor,
                 permission,
                 required_by,
+                ..
             } if actor == "Patient"
                 && permission == "ScheduleWrite"
                 && required_by.contains("api 'BookingApi' via usecase 'CancelAppointment'")
@@ -1267,5 +1320,91 @@ requires_permission(ClaimsApi, BillingClaimWrite)
                 && permission == "BillingClaimWrite"
                 && usecase == "GenerateClaim"
         )));
+    }
+
+    /// A timer or an event starts the use case and no actor performs it: the system runs it,
+    /// so neither its permissions nor its APIs' need an actor.
+    #[test]
+    fn a_use_case_a_timer_or_event_starts_with_no_performer_needs_no_actor_permission() {
+        let model = model_from(
+            r#"
+usecase ExpireTerm "Expire term"
+usecase ReceiveNotice "Receive notice"
+api DocketApi "Docket API"
+timer Deadline "Deadline"
+event NoticeArrived "Notice arrived"
+permission DocketManage "Docket Manage"
+invokes(ExpireTerm, DocketApi)
+invokes(ReceiveNotice, DocketApi)
+requires_permission(DocketApi, DocketManage)
+requires_permission(ReceiveNotice, DocketManage)
+triggers(Deadline, ExpireTerm)
+triggers(NoticeArrived, ReceiveNotice)
+"#,
+        );
+
+        let diags = permission_diagnostics(&model);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    /// A started use case that an actor performs is that actor's work: the actor's permissions
+    /// are checked as for any other use case.
+    #[test]
+    fn a_started_use_case_with_a_performer_checks_the_performer() {
+        let model = model_from(
+            r#"
+actor Clerk "Clerk"
+usecase ExpireTerm "Expire term"
+api DocketApi "Docket API"
+timer Deadline "Deadline"
+permission DocketManage "Docket Manage"
+performs(Clerk, ExpireTerm)
+invokes(ExpireTerm, DocketApi)
+requires_permission(DocketApi, DocketManage)
+triggers(Deadline, ExpireTerm)
+"#,
+        );
+
+        let diags = permission_diagnostics(&model);
+        assert!(
+            diags.iter().any(|diag| matches!(
+                &diag.error,
+                RdraError::ActorPermissionMissing { actor, .. } if actor == "Clerk"
+            )),
+            "{diags:?}"
+        );
+    }
+
+    /// `performs(Actor, Buc)` makes the actor perform every use case of the BUC; when that is
+    /// how a permission comes to be missing, the message names the BUC and the narrower forms.
+    #[test]
+    fn a_permission_missing_through_a_buc_names_the_buc() {
+        let model = model_from(
+            r#"
+actor Clerk "Clerk"
+buc BucFees "Fees"
+usecase PayFees "Pay fees"
+usecase RecordGrant "Record grant"
+permission FeePay "Fee Pay"
+permission DocketManage "Docket Manage"
+contains(BucFees, PayFees)
+contains(BucFees, RecordGrant)
+performs(Clerk, BucFees)
+performs(Clerk, PayFees)
+has_permission(Clerk, FeePay)
+requires_permission(PayFees, FeePay)
+requires_permission(RecordGrant, DocketManage)
+"#,
+        );
+
+        let messages: Vec<String> = permission_diagnostics(&model)
+            .into_iter()
+            .filter(|diag| matches!(diag.error, RdraError::ActorPermissionMissing { .. }))
+            .map(|diag| diag.error.to_string())
+            .collect();
+        assert_eq!(
+            messages,
+            ["actor 'Clerk' is missing permission 'DocketManage' required by usecase 'RecordGrant'\n  hint: add `has_permission(Clerk, DocketManage)`, narrow the actor's `performs` path, or relax the UC/API requirement if it is too strict; `performs(Clerk, BucFees)` makes Clerk perform every use case of BucFees: to say Clerk only takes part in BucFees, write `performs(Clerk, UseCase)` for the use cases it runs or `performs(Clerk, Step)` for its steps instead"]
+        );
     }
 }

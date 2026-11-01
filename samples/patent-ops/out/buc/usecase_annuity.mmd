@@ -85,13 +85,22 @@ flowchart LR
   usecase__DecideToLetLapse -.-> screen__MaintenanceReviewScreen
   usecase__DecideToLetLapse -.->|updates| entity__Patent
   %% derived usecase__DecideToLetLapse -> entity__Patent via api__MaintenanceApi
+  usecase__EnterGracePeriod -.->|reads| entity__FeeSchedule
+  %% derived usecase__EnterGracePeriod -> entity__FeeSchedule via api__AnnuityApi
   usecase__EnterGracePeriod -.->|transitions Patent.status in_force->grace| state__Patent_grace
   usecase__EnterGracePeriod -.->|updates| entity__Patent
+  %% derived usecase__EnterGracePeriod -> entity__Patent via api__AnnuityApi
+  usecase__ExpirePatentTerm -.->|reads| entity__FeeSchedule
+  %% derived usecase__ExpirePatentTerm -> entity__FeeSchedule via api__AnnuityApi
   usecase__ExpirePatentTerm -.->|transitions Patent.status grace->expired| state__Patent_expired
   usecase__ExpirePatentTerm -.->|transitions Patent.status in_force->expired| state__Patent_expired
   usecase__ExpirePatentTerm -.->|updates| entity__Patent
+  %% derived usecase__ExpirePatentTerm -> entity__Patent via api__AnnuityApi
+  usecase__LapseUnpaidPatent -.->|reads| entity__FeeSchedule
+  %% derived usecase__LapseUnpaidPatent -> entity__FeeSchedule via api__AnnuityApi
   usecase__LapseUnpaidPatent -.->|transitions Patent.status grace->lapsed| state__Patent_lapsed
   usecase__LapseUnpaidPatent -.->|updates| entity__Patent
+  %% derived usecase__LapseUnpaidPatent -> entity__Patent via api__AnnuityApi
   usecase__PayAnnuity -.-> screen__AnnuityScreen
   usecase__PayAnnuity -.-> event__EvFeesPaid
   usecase__PayAnnuity -.->|reads| entity__FeeSchedule
@@ -115,7 +124,10 @@ flowchart LR
   usecase__ReviewMaintenance -.-> screen__MaintenanceReviewScreen
   usecase__ReviewMaintenance -.->|reads| entity__InventionDisclosure
   usecase__ReviewMaintenance -.->|reads| entity__Patent
+  usecase__RollOverAnnuityYear -.->|reads| entity__FeeSchedule
+  %% derived usecase__RollOverAnnuityYear -> entity__FeeSchedule via api__AnnuityApi
   usecase__RollOverAnnuityYear -.->|updates| entity__Patent
+  %% derived usecase__RollOverAnnuityYear -> entity__Patent via api__AnnuityApi
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;

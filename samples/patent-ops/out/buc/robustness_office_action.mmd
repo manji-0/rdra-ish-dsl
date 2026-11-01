@@ -19,7 +19,6 @@ flowchart LR
   api__ResponseFilingApi{{"応答提出 API"}}:::api
   usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
   usecase__ExpireResponseTerm("応答期間の経過"):::usecase
-  usecase__FinalizeRejection("拒絶査定の確定"):::usecase
   usecase__InstructResponse("応答方針の指示"):::usecase
   usecase__LapseResponse("応答なしでの期間満了"):::usecase
   entity__DivisionalFiling[("分割出願")]:::entity
@@ -60,14 +59,13 @@ flowchart LR
   screen__ResponseDraftScreen -->|意見書・補正書の提出| api__ResponseFilingApi
   screen__ResponseDraftScreen -->|意見書・補正書案の作成| api__OfficeActionApi
   timer__AppealDeadline -.-> api__AppealApi
-  timer__AppealDeadline -.-> usecase__FinalizeRejection
+  timer__AppealDeadline -.-> api__DecisionApi
   timer__LateExtensionDeadline -.-> usecase__LapseResponse
   timer__ResponseDeadline -.-> api__ResponseFilingApi
   timer__ResponseDeadline -.-> usecase__ExpireResponseTerm
   usecase__CloseOfficeActionDocket -->|R| entity__PatentApplication
   usecase__CloseOfficeActionDocket -->|U| entity__OfficeAction
   usecase__ExpireResponseTerm -->|U| entity__OfficeAction
-  usecase__FinalizeRejection -->|U| entity__PatentApplication
   usecase__InstructResponse -->|R| entity__OfficeAction
   usecase__InstructResponse -->|R| entity__PatentApplication
   usecase__LapseResponse -->|U| entity__OfficeAction

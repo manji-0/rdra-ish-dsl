@@ -228,8 +228,8 @@ raises(RequestAppeal, EvAppealRequested)
 triggers(EvAppealRequested, Jpo)
 triggers(AppealDeadline, RequestAppeal)
 
-// Started by the timer, no performer.
-updates(FinalizeRejection, PatentApplication)
+// Started by the timer, no performer: the system records it through the decision API.
+invokes(FinalizeRejection, DecisionApi)
 transitions(FinalizeRejection, PatentApplication.status, rejected -> rejection_final)
 triggers(AppealDeadline, FinalizeRejection)
 

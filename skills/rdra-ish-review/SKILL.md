@@ -57,7 +57,10 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
      started by an event or timer
    - Every `performs(Actor, Buc)` is meant for every use case of the BUC: a use case's
      actors are its direct performers plus the performers of each BUC that contains it,
-     and each of them must hold the use case's permissions
+     and each of them must hold the use case's permissions. An actor that only takes part
+     performs its use cases or steps instead
+   - A use case a timer or an event starts, with no direct performer, invokes the same API
+     as the actors' use cases; the system holds its permissions
    - Every BUC has a `belongs` predicate
    - Every `extsystem` is connected through an event: `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)`
    - Every `timer` triggers a use case or BUC: `triggers(Timer, UseCase|Buc)`

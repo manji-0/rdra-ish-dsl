@@ -140,6 +140,7 @@ flowchart LR
   %% derived usecase__FileResponse -> entity__OfficeAction via api__ResponseFilingApi
   usecase__FinalizeRejection -.->|transitions PatentApplication.status rejected->rejection_final| state__PatentApplication_rejection_final
   usecase__FinalizeRejection -.->|updates| entity__PatentApplication
+  %% derived usecase__FinalizeRejection -> entity__PatentApplication via api__DecisionApi
   usecase__InstructResponse -.-> screen__OfficeActionScreen
   usecase__InstructResponse -.->|reads| entity__OfficeAction
   usecase__InstructResponse -.->|reads| entity__PatentApplication

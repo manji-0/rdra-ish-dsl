@@ -929,14 +929,15 @@ flowchart LR
   screen__ExaminationRequestScreen["審査請求画面"]:::screen
   timer__ExamRequestDeadline(("審査請求期限（出願から3年）")):::timer
   timer__ExamRequestReview(("審査請求要否の検討（審査請求期限の前）")):::timer
+  api__ApplicationDocketApi{{"出願案件 API"}}:::api
   api__ExaminationRequestApi{{"審査請求 API"}}:::api
   api__WithdrawalApi{{"取下げ・放棄 API"}}:::api
   usecase__DecideExaminationRequest("審査請求要否の判断"):::usecase
-  usecase__DeemWithdrawnNoRequest("審査請求期間の経過"):::usecase
   entity__FeeSchedule[("料金表")]:::entity
   entity__PatentApplication[("特許出願")]:::entity
   actor__IpStaff --> screen__ExaminationRequestScreen
   actor__PatentAttorney --> screen__ExaminationRequestScreen
+  api__ApplicationDocketApi -->|U| entity__PatentApplication
   api__ExaminationRequestApi -->|R| entity__FeeSchedule
   api__ExaminationRequestApi -->|U| entity__PatentApplication
   api__ExaminationRequestApi -.->|出願審査請求書の提出| extsystem__Jpo
@@ -949,11 +950,10 @@ flowchart LR
   screen__ExaminationRequestScreen -->|審査請求の回復| api__ExaminationRequestApi
   screen__ExaminationRequestScreen -->|審査請求要否の判断| usecase__DecideExaminationRequest
   screen__ExaminationRequestScreen -->|早期審査の申出| api__ExaminationRequestApi
+  timer__ExamRequestDeadline -.-> api__ApplicationDocketApi
   timer__ExamRequestDeadline -.-> api__ExaminationRequestApi
-  timer__ExamRequestDeadline -.-> usecase__DeemWithdrawnNoRequest
   timer__ExamRequestReview -.-> usecase__DecideExaminationRequest
   usecase__DecideExaminationRequest -->|R| entity__PatentApplication
-  usecase__DeemWithdrawnNoRequest -->|U| entity__PatentApplication
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
@@ -968,7 +968,7 @@ flowchart LR
 | 審査請求要否の判断<br>`DecideExaminationRequest` | 期限の前に、審査請求をするかを決める（参照のみ）。 | `ExaminationRequestScreen` | `DecideExaminationRequest` | （なし） |
 | 出願審査の請求<br>`RequestExamination` | 出願から3年以内に出願審査請求書を出す。 | `ExaminationRequestScreen` | `ExaminationRequestApi` | （なし） |
 | 早期審査の申出<br>`RequestAcceleratedExamination` | 審査請求をした出願について、早期審査に関する事情説明書を出す。 | `ExaminationRequestScreen` | `ExaminationRequestApi` | 審査請求をした出願である |
-| 審査請求期間の経過<br>`DeemWithdrawnNoRequest` | 出願から3年以内に審査請求がなかった出願を、取り下げたものとみなされたとして記録する。 | （なし） | `DeemWithdrawnNoRequest` | （なし） |
+| 審査請求期間の経過<br>`DeemWithdrawnNoRequest` | 出願から3年以内に審査請求がなかった出願を、取り下げたものとみなされたとして記録する。 | （なし） | `ApplicationDocketApi` | （なし） |
 | 審査請求の回復<br>`RestoreExaminationRequest` | 期間内に請求できなかったことが故意でないとき、回復理由書とともに審査請求をする。 | `ExaminationRequestScreen` | `ExaminationRequestApi` | （なし） |
 | 出願の取下げ・放棄<br>`WithdrawApplication` | 係属している出願を取り下げる、または放棄する。 | `ExaminationRequestScreen` | `WithdrawalApi` | （なし） |
 
@@ -1053,18 +1053,18 @@ sequenceDiagram
 
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:DeemWithdrawnNoRequest model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step
 sequenceDiagram
   participant timer__ExamRequestDeadline as 審査請求期限（出願から3年）
-  participant usecase__DeemWithdrawnNoRequest as 審査請求期間の経過
+  participant api__ApplicationDocketApi as 出願案件 API
   participant entity__PatentApplication as 特許出願
-  timer__ExamRequestDeadline ->> usecase__DeemWithdrawnNoRequest: 審査請求期限（出願から3年）
+  timer__ExamRequestDeadline ->> api__ApplicationDocketApi: 審査請求期限（出願から3年）
   alt PatentApplication.status == 出願済（方式審査）
-    usecase__DeemWithdrawnNoRequest ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（審査請求なし）
-    usecase__DeemWithdrawnNoRequest -->> timer__ExamRequestDeadline: done
+    api__ApplicationDocketApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（審査請求なし）
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: done
   else guard fails
-    usecase__DeemWithdrawnNoRequest -->> timer__ExamRequestDeadline: rejected
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: rejected
   end
 ```
 
@@ -1148,7 +1148,6 @@ flowchart LR
   api__ResponseFilingApi{{"応答提出 API"}}:::api
   usecase__CloseOfficeActionDocket("中間処理案件の終了"):::usecase
   usecase__ExpireResponseTerm("応答期間の経過"):::usecase
-  usecase__FinalizeRejection("拒絶査定の確定"):::usecase
   usecase__InstructResponse("応答方針の指示"):::usecase
   usecase__LapseResponse("応答なしでの期間満了"):::usecase
   entity__DivisionalFiling[("分割出願")]:::entity
@@ -1189,14 +1188,13 @@ flowchart LR
   screen__ResponseDraftScreen -->|意見書・補正書の提出| api__ResponseFilingApi
   screen__ResponseDraftScreen -->|意見書・補正書案の作成| api__OfficeActionApi
   timer__AppealDeadline -.-> api__AppealApi
-  timer__AppealDeadline -.-> usecase__FinalizeRejection
+  timer__AppealDeadline -.-> api__DecisionApi
   timer__LateExtensionDeadline -.-> usecase__LapseResponse
   timer__ResponseDeadline -.-> api__ResponseFilingApi
   timer__ResponseDeadline -.-> usecase__ExpireResponseTerm
   usecase__CloseOfficeActionDocket -->|R| entity__PatentApplication
   usecase__CloseOfficeActionDocket -->|U| entity__OfficeAction
   usecase__ExpireResponseTerm -->|U| entity__OfficeAction
-  usecase__FinalizeRejection -->|U| entity__PatentApplication
   usecase__InstructResponse -->|R| entity__OfficeAction
   usecase__InstructResponse -->|R| entity__PatentApplication
   usecase__LapseResponse -->|U| entity__OfficeAction
@@ -1242,7 +1240,7 @@ flowchart LR
 | 特許査定の受領<br>`ReceiveDecisionToGrant` | 特許査定の謄本を受け取る。特許料の納付期限（30日）が始まる。 | `DecisionScreen` | `DecisionApi` | （なし） |
 | 拒絶査定の受領<br>`ReceiveDecisionOfRejection` | 拒絶査定の謄本を受け取る。審判請求の期限（3月）が始まる。 | `DecisionScreen` | `DecisionApi` | （なし） |
 | 拒絶査定不服審判の請求<br>`RequestAppeal` | 審判を請求する。審判の中身はこのモデルの対象外で、出願はここで審判に引き渡される。 | `DecisionScreen` | `AppealApi` | （なし） |
-| 拒絶査定の確定<br>`FinalizeRejection` | 審判請求がないまま3月が過ぎ、拒絶査定が確定したことを記録する。 | （なし） | `FinalizeRejection` | （なし） |
+| 拒絶査定の確定<br>`FinalizeRejection` | 審判請求がないまま3月が過ぎ、拒絶査定が確定したことを記録する。 | （なし） | `DecisionApi` | （なし） |
 | 中間処理案件の終了<br>`CloseOfficeActionDocket` | 査定・取下げで出願の審査が終わった後、応答済の拒絶理由通知の案件を閉じる。 | `OfficeActionScreen` | `CloseOfficeActionDocket` | 出願の審査が終わっている |
 | 分割出願<br>`FileDivisionalApplication` | 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。 | `OfficeActionScreen` | `DivisionalApi` | 分割できる時期である |
 
@@ -1542,18 +1540,18 @@ sequenceDiagram
 
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:FinalizeRejection model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step
 sequenceDiagram
   participant timer__AppealDeadline as 拒絶査定不服審判の請求期限（謄本の送達から3月）
-  participant usecase__FinalizeRejection as 拒絶査定の確定
+  participant api__DecisionApi as 査定 API
   participant entity__PatentApplication as 特許出願
-  timer__AppealDeadline ->> usecase__FinalizeRejection: 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  timer__AppealDeadline ->> api__DecisionApi: 拒絶査定不服審判の請求期限（謄本の送達から3月）
   alt PatentApplication.status == 拒絶査定
-    usecase__FinalizeRejection ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定の確定
-    usecase__FinalizeRejection -->> timer__AppealDeadline: done
+    api__DecisionApi ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定の確定
+    api__DecisionApi -->> timer__AppealDeadline: done
   else guard fails
-    usecase__FinalizeRejection -->> timer__AppealDeadline: rejected
+    api__DecisionApi -->> timer__AppealDeadline: rejected
   end
 ```
 
@@ -1790,11 +1788,7 @@ flowchart LR
   timer__TermExpiry(("存続期間の満了（出願から20年）")):::timer
   api__AnnuityApi{{"年金 API"}}:::api
   api__MaintenanceApi{{"権利維持 API"}}:::api
-  usecase__EnterGracePeriod("納付期限の経過"):::usecase
-  usecase__ExpirePatentTerm("存続期間の満了"):::usecase
-  usecase__LapseUnpaidPatent("追納期間の経過による消滅"):::usecase
   usecase__ReviewMaintenance("権利維持要否の調査"):::usecase
-  usecase__RollOverAnnuityYear("納付年度の更新"):::usecase
   entity__FeeSchedule[("料金表")]:::entity
   entity__InventionDisclosure[("発明届出")]:::entity
   entity__Patent[("特許権")]:::entity
@@ -1813,18 +1807,11 @@ flowchart LR
   screen__MaintenanceReviewScreen -->|権利維持要否の調査| usecase__ReviewMaintenance
   screen__MaintenanceReviewScreen -->|特許権の放棄| api__MaintenanceApi
   timer__AnnuityDueDate -.-> api__AnnuityApi
-  timer__AnnuityDueDate -.-> usecase__EnterGracePeriod
-  timer__AnnuityDueDate -.-> usecase__RollOverAnnuityYear
   timer__LatePaymentDeadline -.-> api__AnnuityApi
-  timer__LatePaymentDeadline -.-> usecase__LapseUnpaidPatent
   timer__MaintenanceReview -.-> usecase__ReviewMaintenance
-  timer__TermExpiry -.-> usecase__ExpirePatentTerm
-  usecase__EnterGracePeriod -->|U| entity__Patent
-  usecase__ExpirePatentTerm -->|U| entity__Patent
-  usecase__LapseUnpaidPatent -->|U| entity__Patent
+  timer__TermExpiry -.-> api__AnnuityApi
   usecase__ReviewMaintenance -->|R| entity__InventionDisclosure
   usecase__ReviewMaintenance -->|R| entity__Patent
-  usecase__RollOverAnnuityYear -->|U| entity__Patent
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
@@ -1853,13 +1840,13 @@ flowchart LR
 | 権利維持要否の調査<br>`ReviewMaintenance` | 発明者と事業部門に権利の活用状況を聞き、維持の要否を調べる（参照のみ）。 | `MaintenanceReviewScreen` | `ReviewMaintenance` | （なし） |
 | 権利を維持しない決定<br>`DecideToLetLapse` | 維持しないと決め、以後の年金を納めない。 | `MaintenanceReviewScreen` | `MaintenanceApi` | 特許権が存続している |
 | 年金の納付<br>`PayAnnuity` | 次の年の特許料を納付期限までに納付する。 | `AnnuityScreen` | `AnnuityApi` | 存続中で、維持すると決めた権利の次の年が未納 |
-| 納付年度の更新<br>`RollOverAnnuityYear` | 納付済の年が始まり、次の年の特許料が未納になる。 | （なし） | `RollOverAnnuityYear` | 存続中で、次の年が納付済 |
-| 納付期限の経過<br>`EnterGracePeriod` | 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。 | （なし） | `EnterGracePeriod` | 次の年が未納 |
+| 納付年度の更新<br>`RollOverAnnuityYear` | 納付済の年が始まり、次の年の特許料が未納になる。 | （なし） | `AnnuityApi` | 存続中で、次の年が納付済 |
+| 納付期限の経過<br>`EnterGracePeriod` | 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。 | （なし） | `AnnuityApi` | 次の年が未納 |
 | 追納<br>`PayLateAnnuity` | 追納期間内に、特許料と同額の割増特許料を納付する。 | `AnnuityScreen` | `AnnuityApi` | 維持すると決めた権利である |
-| 追納期間の経過による消滅<br>`LapseUnpaidPatent` | 追納期間が過ぎ、特許権が納付期限の経過の時に遡って消滅したことを記録する。 | （なし） | `LapseUnpaidPatent` | （なし） |
+| 追納期間の経過による消滅<br>`LapseUnpaidPatent` | 追納期間が過ぎ、特許権が納付期限の経過の時に遡って消滅したことを記録する。 | （なし） | `AnnuityApi` | （なし） |
 | 特許権の回復<br>`RestorePatent` | 納付しなかったことが故意でないとき、特許料と割増特許料を納めて特許権を回復する。 | `AnnuityScreen` | `AnnuityApi` | （なし） |
 | 特許権の放棄<br>`AbandonPatent` | 特許権を放棄する。専用実施権者・質権者があればその承諾を得る。 | `MaintenanceReviewScreen` | `MaintenanceApi` | （なし） |
-| 存続期間の満了<br>`ExpirePatentTerm` | 出願から20年で特許権の存続期間が満了したことを記録する。 | （なし） | `ExpirePatentTerm` | （なし） |
+| 存続期間の満了<br>`ExpirePatentTerm` | 出願から20年で特許権の存続期間が満了したことを記録する。 | （なし） | `AnnuityApi` | （なし） |
 
 <details><summary>権利維持要否の調査（ReviewMaintenance）のシーケンス図</summary>
 
@@ -1940,18 +1927,20 @@ sequenceDiagram
 
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:RollOverAnnuityYear model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step condition
 sequenceDiagram
   participant timer__AnnuityDueDate as 第4年以後の特許料の納付期限（前年以前）
-  participant usecase__RollOverAnnuityYear as 納付年度の更新
+  participant api__AnnuityApi as 年金 API
+  participant entity__FeeSchedule as 料金表
   participant entity__Patent as 特許権
-  timer__AnnuityDueDate ->> usecase__RollOverAnnuityYear: 第4年以後の特許料の納付期限（前年以前）
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
   alt 存続中で、次の年が納付済: Patent.status == 存続中, Patent.next_year_paid == true
-    usecase__RollOverAnnuityYear ->> entity__Patent: update next_year_paid=false
-    usecase__RollOverAnnuityYear -->> timer__AnnuityDueDate: done
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update next_year_paid=false
+    api__AnnuityApi -->> timer__AnnuityDueDate: done
   else guard fails
-    usecase__RollOverAnnuityYear -->> timer__AnnuityDueDate: rejected
+    api__AnnuityApi -->> timer__AnnuityDueDate: rejected
   end
 ```
 
@@ -1961,18 +1950,20 @@ sequenceDiagram
 
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:EnterGracePeriod model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step condition
 sequenceDiagram
   participant timer__AnnuityDueDate as 第4年以後の特許料の納付期限（前年以前）
-  participant usecase__EnterGracePeriod as 納付期限の経過
+  participant api__AnnuityApi as 年金 API
+  participant entity__FeeSchedule as 料金表
   participant entity__Patent as 特許権
-  timer__AnnuityDueDate ->> usecase__EnterGracePeriod: 第4年以後の特許料の納付期限（前年以前）
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
   alt 次の年が未納: Patent.next_year_paid == false and Patent.status == 存続中
-    usecase__EnterGracePeriod ->> entity__Patent: update status 存続中 -> 追納期間中
-    usecase__EnterGracePeriod -->> timer__AnnuityDueDate: done
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 存続中 -> 追納期間中
+    api__AnnuityApi -->> timer__AnnuityDueDate: done
   else guard fails
-    usecase__EnterGracePeriod -->> timer__AnnuityDueDate: rejected
+    api__AnnuityApi -->> timer__AnnuityDueDate: rejected
   end
 ```
 
@@ -2011,18 +2002,20 @@ sequenceDiagram
 
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:LapseUnpaidPatent model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step
 sequenceDiagram
   participant timer__LatePaymentDeadline as 追納期限（納付期限の経過から6月）
-  participant usecase__LapseUnpaidPatent as 追納期間の経過による消滅
+  participant api__AnnuityApi as 年金 API
+  participant entity__FeeSchedule as 料金表
   participant entity__Patent as 特許権
-  timer__LatePaymentDeadline ->> usecase__LapseUnpaidPatent: 追納期限（納付期限の経過から6月）
+  timer__LatePaymentDeadline ->> api__AnnuityApi: 追納期限（納付期限の経過から6月）
   alt Patent.status == 追納期間中
-    usecase__LapseUnpaidPatent ->> entity__Patent: update status 追納期間中 -> 消滅（特許料の不納）
-    usecase__LapseUnpaidPatent -->> timer__LatePaymentDeadline: done
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 追納期間中 -> 消滅（特許料の不納）
+    api__AnnuityApi -->> timer__LatePaymentDeadline: done
   else guard fails
-    usecase__LapseUnpaidPatent -->> timer__LatePaymentDeadline: rejected
+    api__AnnuityApi -->> timer__LatePaymentDeadline: rejected
   end
 ```
 
@@ -2084,18 +2077,20 @@ sequenceDiagram
 
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:ExpirePatentTerm model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step
 sequenceDiagram
   participant timer__TermExpiry as 存続期間の満了（出願から20年）
-  participant usecase__ExpirePatentTerm as 存続期間の満了
+  participant api__AnnuityApi as 年金 API
+  participant entity__FeeSchedule as 料金表
   participant entity__Patent as 特許権
-  timer__TermExpiry ->> usecase__ExpirePatentTerm: 存続期間の満了（出願から20年）
+  timer__TermExpiry ->> api__AnnuityApi: 存続期間の満了（出願から20年）
   alt Patent.status in (存続中, 追納期間中)
-    usecase__ExpirePatentTerm ->> entity__Patent: update status 存続中 -> 存続期間満了, status 追納期間中 -> 存続期間満了
-    usecase__ExpirePatentTerm -->> timer__TermExpiry: done
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 存続中 -> 存続期間満了, status 追納期間中 -> 存続期間満了
+    api__AnnuityApi -->> timer__TermExpiry: done
   else guard fails
-    usecase__ExpirePatentTerm -->> timer__TermExpiry: rejected
+    api__AnnuityApi -->> timer__TermExpiry: rejected
   end
 ```
 

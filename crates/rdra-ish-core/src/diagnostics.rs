@@ -408,7 +408,7 @@ pub enum RdraError {
     CrossConstraintColumnNeedsEntity { column: String, example: String },
 
     // ── 権限整合性診断 ─────────────────────────────────────────────────────────
-    #[error("usecase '{usecase}' requires permission '{permission}', but no actor performs the use case or its containing BUC\n  hint: add `performs(SomeActor, {usecase})`, add `performs(SomeActor, SomeBuc)` where `contains(SomeBuc, {usecase})`, or remove the permission requirement if this is a system-triggered step")]
+    #[error("usecase '{usecase}' requires permission '{permission}', but no actor performs the use case or its containing BUC\n  hint: add `performs(SomeActor, {usecase})`, add `performs(SomeActor, SomeBuc)` where `contains(SomeBuc, {usecase})`, or, if the system runs it, start it with `triggers(Timer, {usecase})` or `triggers(Event, {usecase})`")]
     UseCasePermissionNoActor { usecase: String, permission: String },
 
     #[error("usecase '{usecase}' requires permission '{permission}', but none of its actors ({actors}) has that permission\n  hint: add `has_permission(SomeActor, {permission})` for an actor that performs this use case path")]
@@ -418,7 +418,7 @@ pub enum RdraError {
         actors: String,
     },
 
-    #[error("api '{api}' requires permission '{permission}', but invoking usecase '{usecase}' has no actor path\n  hint: add a performer for the use case or containing BUC, or remove the API permission requirement if the invocation is system-triggered")]
+    #[error("api '{api}' requires permission '{permission}', but invoking usecase '{usecase}' has no actor path\n  hint: add a performer for the use case or containing BUC, or, if the system runs it, start it with `triggers(Timer, {usecase})` or `triggers(Event, {usecase})`")]
     ApiPermissionNoActor {
         api: String,
         permission: String,
@@ -433,11 +433,14 @@ pub enum RdraError {
         actors: String,
     },
 
-    #[error("actor '{actor}' is missing permission '{permission}' required by {required_by}\n  hint: add `has_permission({actor}, {permission})`, narrow the actor's `performs` path, or relax the UC/API requirement if it is too strict")]
+    #[error("actor '{actor}' is missing permission '{permission}' required by {required_by}\n  hint: add `has_permission({actor}, {permission})`, narrow the actor's `performs` path, or relax the UC/API requirement if it is too strict{through_buc}")]
     ActorPermissionMissing {
         actor: String,
         permission: String,
         required_by: String,
+        /// Empty, or why `performs(Actor, Buc)` makes the actor perform the requiring use
+        /// cases and how to name only the use cases or steps it takes part in.
+        through_buc: String,
     },
 
     #[error("actor '{actor}' has permission '{permission}', but no performed usecase or invoked API path currently requires it\n  hint: remove `has_permission({actor}, {permission})`, add the missing `requires_permission` on the operation that needs it, or keep it as an intentional out-of-model grant")]

@@ -1,14 +1,14 @@
 %% rdra-ish diagram=sequence scope=usecase:DeemWithdrawnNoRequest model=samples/patent-ops
-%% kinds: timer usecase entity
+%% kinds: timer api entity
 %% omitted: buc step
 sequenceDiagram
   participant timer__ExamRequestDeadline as 審査請求期限（出願から3年）
-  participant usecase__DeemWithdrawnNoRequest as 審査請求期間の経過
+  participant api__ApplicationDocketApi as 出願案件 API
   participant entity__PatentApplication as 特許出願
-  timer__ExamRequestDeadline ->> usecase__DeemWithdrawnNoRequest: 審査請求期限（出願から3年）
+  timer__ExamRequestDeadline ->> api__ApplicationDocketApi: 審査請求期限（出願から3年）
   alt PatentApplication.status == 出願済（方式審査）
-    usecase__DeemWithdrawnNoRequest ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（審査請求なし）
-    usecase__DeemWithdrawnNoRequest -->> timer__ExamRequestDeadline: done
+    api__ApplicationDocketApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（審査請求なし）
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: done
   else guard fails
-    usecase__DeemWithdrawnNoRequest -->> timer__ExamRequestDeadline: rejected
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: rejected
   end

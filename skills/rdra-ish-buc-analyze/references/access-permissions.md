@@ -18,7 +18,10 @@ The actors of a use case are its direct `performs(Actor, UseCase)` actors togeth
 the actors of every BUC that contains it (`performs(Actor, Buc)`). `check`, the RDRA
 diagrams, and the audit all read that union, so `performs(Actor, Buc)` means the actor
 runs every use case of the BUC and must hold every permission they require. An actor
-who runs only some of them should perform those use cases directly.
+who runs only some of them should perform those use cases directly, or perform the BUC's
+steps (`performs(Actor, Step)`), which carry no permission. A use case a timer or an event
+starts, with no direct performer, is the system's work: neither its permissions nor those of
+the APIs it invokes need an actor, so it goes through the same API as the actors' use cases.
 
 The three access CSVs answer different questions. Use them together.
 

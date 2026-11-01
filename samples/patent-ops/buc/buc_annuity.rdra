@@ -99,8 +99,8 @@ condition AnnuityDue "存続中で、維持すると決めた権利の次の年�
 holds(AnnuityDue, Patent.status == in_force, Patent.maintain == true, Patent.next_year_paid == false)
 applies_to(AnnuityDue, PayAnnuity)
 
-// Started by the timer, no performer.
-updates(RollOverAnnuityYear, Patent)
+// Started by the timer, no performer: the system updates the annuity record.
+invokes(RollOverAnnuityYear, AnnuityApi)
 sets(RollOverAnnuityYear, Patent, next_year_paid == false)
 triggers(AnnuityDueDate, RollOverAnnuityYear)
 
@@ -108,8 +108,8 @@ condition YearPaid "存続中で、次の年が納付済"
 holds(YearPaid, Patent.status == in_force, Patent.next_year_paid == true)
 applies_to(YearPaid, RollOverAnnuityYear)
 
-// Started by the timer, no performer.
-updates(EnterGracePeriod, Patent)
+// Started by the timer, no performer: the system updates the annuity record.
+invokes(EnterGracePeriod, AnnuityApi)
 transitions(EnterGracePeriod, Patent.status, in_force -> grace)
 triggers(AnnuityDueDate, EnterGracePeriod)
 
@@ -129,8 +129,8 @@ condition KeptRight "維持すると決めた権利である"
 holds(KeptRight, Patent.maintain == true)
 applies_to(KeptRight, PayLateAnnuity)
 
-// Started by the timer, no performer.
-updates(LapseUnpaidPatent, Patent)
+// Started by the timer, no performer: the system updates the annuity record.
+invokes(LapseUnpaidPatent, AnnuityApi)
 transitions(LapseUnpaidPatent, Patent.status, grace -> lapsed)
 triggers(LatePaymentDeadline, LapseUnpaidPatent)
 
@@ -150,8 +150,8 @@ invokes(AbandonPatent, MaintenanceApi)
 transitions(AbandonPatent, Patent.status, in_force -> abandoned)
 raises(AbandonPatent, EvWithdrawalFiled)
 
-// Started by the timer, no performer.
-updates(ExpirePatentTerm, Patent)
+// Started by the timer, no performer: the system updates the annuity record.
+invokes(ExpirePatentTerm, AnnuityApi)
 transitions(ExpirePatentTerm, Patent.status, in_force -> expired)
 transitions(ExpirePatentTerm, Patent.status, grace -> expired)
 triggers(TermExpiry, ExpirePatentTerm)

@@ -59,6 +59,7 @@ flowchart LR
   usecase__DecideExaminationRequest -.->|reads| entity__PatentApplication
   usecase__DeemWithdrawnNoRequest -.->|transitions PatentApplication.status filed->deemed_withdrawn| state__PatentApplication_deemed_withdrawn
   usecase__DeemWithdrawnNoRequest -.->|updates| entity__PatentApplication
+  %% derived usecase__DeemWithdrawnNoRequest -> entity__PatentApplication via api__ApplicationDocketApi
   usecase__RequestAcceleratedExamination -.-> screen__ExaminationRequestScreen
   usecase__RequestAcceleratedExamination -.-> event__EvAcceleratedExamRequested
   usecase__RequestAcceleratedExamination -.->|reads| entity__FeeSchedule

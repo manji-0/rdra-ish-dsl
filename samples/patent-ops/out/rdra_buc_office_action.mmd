@@ -536,11 +536,11 @@ flowchart LR
   usecase__DraftResponse -.-> medium__AttorneyPortal
   usecase__DraftResponse -.-> permission__DraftWrite
   usecase__DraftResponse -.->|transitions OfficeAction.status open->drafted| state__OfficeAction_drafted
+  usecase__EnterGracePeriod -.-> api__AnnuityApi
   usecase__EnterGracePeriod -.->|transitions Patent.status in_force->grace| state__Patent_grace
-  usecase__EnterGracePeriod -.->|updates| entity__Patent
+  usecase__ExpirePatentTerm -.-> api__AnnuityApi
   usecase__ExpirePatentTerm -.->|transitions Patent.status grace->expired| state__Patent_expired
   usecase__ExpirePatentTerm -.->|transitions Patent.status in_force->expired| state__Patent_expired
-  usecase__ExpirePatentTerm -.->|updates| entity__Patent
   usecase__ExpireResponseTerm -.->|transitions OfficeAction.status drafted->overdue| state__OfficeAction_overdue
   usecase__ExpireResponseTerm -.->|transitions OfficeAction.status open->overdue| state__OfficeAction_overdue
   usecase__ExpireResponseTerm -.->|updates| entity__OfficeAction
@@ -555,8 +555,8 @@ flowchart LR
   usecase__FileResponse -.-> medium__InternetFilingSoftware
   usecase__FileResponse -.-> permission__JpoProcedure
   usecase__FileResponse -.->|transitions OfficeAction.status drafted->answered| state__OfficeAction_answered
+  usecase__FinalizeRejection -.-> api__DecisionApi
   usecase__FinalizeRejection -.->|transitions PatentApplication.status rejected->rejection_final| state__PatentApplication_rejection_final
-  usecase__FinalizeRejection -.->|updates| entity__PatentApplication
   usecase__InstructResponse -.-> screen__OfficeActionScreen
   usecase__InstructResponse -.->|reads| entity__OfficeAction
   usecase__InstructResponse -.->|reads| entity__PatentApplication
@@ -564,8 +564,8 @@ flowchart LR
   usecase__InstructResponse -.-> permission__DocketManage
   usecase__LapseResponse -.->|transitions OfficeAction.status overdue->lapsed| state__OfficeAction_lapsed
   usecase__LapseResponse -.->|updates| entity__OfficeAction
+  usecase__LapseUnpaidPatent -.-> api__AnnuityApi
   usecase__LapseUnpaidPatent -.->|transitions Patent.status grace->lapsed| state__Patent_lapsed
-  usecase__LapseUnpaidPatent -.->|updates| entity__Patent
   usecase__PayAnnuity -.-> screen__AnnuityScreen
   usecase__PayAnnuity -.-> api__AnnuityApi
   usecase__PayAnnuity -.-> event__EvFeesPaid
@@ -664,7 +664,7 @@ flowchart LR
   usecase__ReviewMaintenance -.->|reads| entity__Patent
   usecase__ReviewMaintenance -.-> medium__IpWorkstation
   usecase__ReviewMaintenance -.-> permission__MaintenanceDecide
-  usecase__RollOverAnnuityYear -.->|updates| entity__Patent
+  usecase__RollOverAnnuityYear -.-> api__AnnuityApi
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
   classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

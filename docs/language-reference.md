@@ -186,7 +186,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 
 | Predicate | Signature | Semantics |
 |---|---|---|
-| `performs` | `(Actor, UseCase \| Buc \| Step)` | The actor performs the given use case, BUC, or business step. |
+| `performs` | `(Actor, UseCase \| Buc \| Step)` | The actor performs the given use case, BUC, or business step. On a BUC it performs every use case of the BUC, with their permissions; an actor that only takes part in a BUC performs the use cases or steps it runs instead (see [`api` and the API layer](#api-and-the-api-layer)). |
 | `invokes` | `(UseCase, Api)` | The use case invokes the API layer. The API's writes form one transaction group of the use case. |
 | `request` | `(Api, Dto)` | The API accepts the DTO as a request payload. |
 | `response` | `(Api, Dto)` | The API returns the DTO as a successful response payload. |
@@ -529,9 +529,12 @@ contains(BucBillingClaims, GenerateClaim)
 triggers(event::EncounterSigned, GenerateClaim)
 ```
 
-If the triggered use case is a system-triggered step, `performs` may be omitted. If it
-declares `requires_permission` directly or through an invoked API, `check` reports a
-warning until an actor path with the required permission is modeled.
+If the triggered use case is a system-triggered step, `performs` may be omitted. A use case
+that a timer or an event starts and that no `performs(Actor, UseCase)` names is the system's
+work: the actors of its BUC do not perform it, and the permissions it requires, directly or
+through the APIs it invokes, are the system's, which `check` does not ask any actor to hold.
+So a timer-started use case goes through the same API as the actor's use cases that write the
+same rows. Once a `performs(Actor, UseCase)` names an actor, that actor must hold them.
 
 ---
 
@@ -790,7 +793,14 @@ actors of every BUC that contains it (`performs(Actor, Buc)`). The permission ch
 requires each of them to hold the
 use case's and its APIs' permissions. So `performs(Actor, Buc)` says the actor may run
 every use case of the BUC; an actor who runs only some of them performs those use cases
-directly instead.
+directly instead. To record that an actor takes part in a BUC without running all of it,
+write `performs(Actor, UseCase)` for the use cases it runs or `performs(Actor, Step)` for its
+steps: `list --kind buc-roles` and the context diagram count any of the three as taking part,
+and a step carries no permission. When a permission is missing only because of a
+`performs(Actor, Buc)`, the `ActorPermissionMissing` hint names that BUC and these forms. A
+use case with no actor at all needs one for its permissions (`UseCasePermissionNoActor`,
+`ApiPermissionNoActor`), unless a timer or an event starts it (see [`triggers`](#triggers-and-event-driven-buc-chaining))
+or another system calls it (`exposes(..).caller(system)`).
 
 The `api` element models the backend API layer that sits between a screen and the
 entities it operates. Declare an api once per API endpoint or boundary:
