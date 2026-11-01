@@ -375,7 +375,8 @@ pub enum Effect {
         rhs: Rhs,
         site: Site,
     },
-    /// var := the `to` of the arm whose `from` the pre-state holds.
+    /// var := the `to` of an arm whose `from` the pre-state holds. Arms that share a `from`
+    /// are a choice: one successor per arm, forked like `Choose` after the other effects.
     Transition {
         var: VarId,
         param: u8,

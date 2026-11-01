@@ -608,7 +608,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             column, variant
         ),
         StateDiag::ConflictingEffects { usecase, column, .. } => format!(
-            "usecase '{}' assigns conflicting effects to column '{}'; the last effect wins",
+            "usecase '{}' assigns conflicting effects to column '{}'; a `sets` is not a choice: keep one value, or split the use case per value (for an Enum lifecycle column, several `transitions` arms from one state are a choice)",
             usecase, column
         ),
         StateDiag::DoubleModeledEnum { column, .. } => format!(

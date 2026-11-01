@@ -653,14 +653,17 @@ be read back from the text. The `rdra` diagram shows each part:
      to the control.
   2. The screen calls the control with the use case or API label.
   3. When the use case has guards, `alt <guards>` opens: each condition with a `holds` body
-     that applies to it (the condition label, then its body), and `Entity.column == <from>`
-     for each `transitions` it makes, unless a condition already says it. `else guard fails`
-     ends with the control replying `rejected` to the screen.
+     that applies to it (the condition label, then its body), and for each column its
+     `transitions` move, `Entity.column == <from>`, or `Entity.column in (<from>, ...)` when
+     the arms leave from several states, unless a condition already says it. `else guard
+     fails` ends with the control replying `rejected` to the screen.
   4. Each control `->>` its entities: `read`, then one transaction at a time in the
      order of the transaction inference, each write labelled `create`, `update`, or `delete`
      with the lifecycle move (`status <from label> -> <to label>`) and the other columns
-     `sets` fixes (`paid_at=set`). A transaction with more than one write, or inferred from
-     foreign keys, opens with a `Note over <control>: transaction (...)`.
+     `sets` fixes (`paid_at=set`). Arms that leave one state for several are the actor's
+     choice: after the write, `alt status <from> -> <to>` holds one branch per arm, each a
+     message `status = <to>`, and `end` closes it. A transaction with more than one write, or
+     inferred from foreign keys, opens with a `Note over <control>: transaction (...)`.
   5. For each event the use case `raises`, the control sends `-)` to the control of each use
      case it `triggers` (one message, never expanded) and to each external system it
      `triggers`; an event that triggers nothing is a `Note`.

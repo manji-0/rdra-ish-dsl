@@ -531,6 +531,41 @@ fn bfs_and_tlc_agree_on_condition_guards() {
     check_fixture("condition_guards", CONDITION_GUARDS);
 }
 
+/// `transitions` arms of one use case from one state are a choice (#52): three arms from
+/// `searched` beside a deterministic arm from `file`, a second choice column, a `sets` and a
+/// creation every arm carries, and an after-assert one arm breaks.
+const TRANSITION_CHOICE: &str = r#"
+entity Doc "届出" {
+  id: Int @pk
+  status: Enum(searched, file, secret, drop) @default(searched)
+  route: Enum(none, fast, slow) @default(none)
+  flag: Bool @default(false)
+}
+entity Log "記録" { id: Int @pk }
+usecase Submit "届出"
+usecase Decide "判断"
+usecase Withdraw "取下げ"
+creates(Submit, Doc)
+transitions(Decide, Doc.status, searched -> file)
+transitions(Decide, Doc.status, searched -> secret)
+transitions(Decide, Doc.status, searched -> drop)
+transitions(Decide, Doc.status, file -> drop)
+transitions(Decide, Doc.route, none -> fast)
+transitions(Decide, Doc.route, none -> slow)
+sets(Decide, Doc, flag == true)
+creates(Decide, Log)
+transitions(Withdraw, Doc.status, secret -> searched)
+usecase Reroute "経路の取消"
+transitions(Reroute, Doc.route, fast -> none)
+transitions(Reroute, Doc.route, slow -> none)
+after(Decide).assert(Doc.status != drop)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_transition_choices() {
+    check_fixture("transition_choice", TRANSITION_CHOICE);
+}
+
 /// A use case split into two transaction groups (one API each): an after-assert checked after
 /// each step, with the other group's entity universally bound, and a condition guard on the
 /// group whose entity it reads.

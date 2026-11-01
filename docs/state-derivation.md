@@ -107,11 +107,21 @@ effects apply together to the pre-state:
 | `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. |
 | `sets(UC, E, col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
 | `sets(UC, E, cmp, bool)` | The comparison variable becomes `bool`. |
-| `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. |
+| `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |
 | a column the use case does not write | Unchanged. |
 
 A `creates(Api, E)` reached through `invokes(UC, Api)` counts as a creation by `UC`.
+
+**Choices.** An action has one successor per choice it makes. A `transitions` choice, and
+a variation column of a created instance, fork the post-state after every other effect has
+applied, so each successor carries the action's other effects. Two choices in one action
+multiply: each combination of one value per choice is a successor. The guards read the
+pre-state, so they hold or fail for every arm together, and `after(UC).assert` is checked
+on every successor. In the TLA+ export a choice of transitions is
+`\E v \in (CASE col = a -> {b, c} [] ... [] OTHER -> {col}) : col' = [col EXCEPT ![p] = v]`;
+a column whose arms leave each state for one target keeps the deterministic `CASE`. A `sets`
+is never a choice: two values for one column in one use case are `ConflictingEffects`.
 
 **Owners.** An action that writes two entities joined by a `relate` binds them. A
 created child gets its parent's slot as its owner. An action that updates a child

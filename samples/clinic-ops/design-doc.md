@@ -1019,7 +1019,7 @@ sequenceDiagram
   participant entity__EligibilityCheck as 資格確認
   actor__ReceptionClerk ->> screen__EligibilityScreen: 資格の再確認
   screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
-  alt EligibilityCheck.result == 無効 and EligibilityCheck.result == 該当資格なし
+  alt EligibilityCheck.result in (無効, 該当資格なし)
     api__EligibilityResultApi ->> entity__EligibilityCheck: update result 無効 -> 照会中, result 該当資格なし -> 照会中
     api__EligibilityResultApi -->> screen__EligibilityScreen: done
   else guard fails
@@ -2905,7 +2905,7 @@ sequenceDiagram
   actor__ClaimsClerk ->> screen__PaymentPostingScreen: 診療報酬の入金
   extsystem__ClaimsReviewOrganization ->> api__PaymentPostApi: 診療報酬の支払
   screen__PaymentPostingScreen ->> api__PaymentPostApi: 入金 API
-  alt ClaimStatement.status == 審査中 and ClaimStatement.status == 査定 and ClaimStatement.status == 再審査請求中
+  alt ClaimStatement.status in (審査中, 査定, 再審査請求中)
     api__PaymentPostApi ->> entity__ClaimStatement: update status 審査中 -> 支払済, status 査定 -> 支払済, status 再審査請求中 -> 支払済, paid_at=set
     api__PaymentPostApi -->> screen__PaymentPostingScreen: done
   else guard fails

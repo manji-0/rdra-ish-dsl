@@ -14,6 +14,33 @@
   `prd.md` are in `scripts/sample-artifacts.tsv`. `scripts/gen-clinic-ops-docs.py` takes the
   sample as a second argument (`clinic-ops` by default; its output is unchanged).
 
+### Changed
+
+- Several `transitions` of one use case from one state on one column are a choice: one run
+  of the use case takes exactly one arm, the actor's decision (#52). Every arm carries the
+  use case's other effects (`sets`, creations, deletions, other transitions); two choice
+  columns in one use case choose independently, one run per pair of arms; a condition
+  applied to the use case guards every arm; `after(UC).assert` must hold after every arm.
+  `states`, `check`, the TLA+ export (`\E v \in (CASE col = a -> {b, c} ...)`), and `verify`
+  share this semantics, and `engine_equivalence` compares a fixture with choices against TLC.
+  A model with such arms now reaches the states the later arms enter, and may report new
+  findings there; no sample had them, so every sample's `states` and `verify` counts are
+  unchanged. A `sets` stays deterministic: two values for one column in one use case are
+  still the `ConflictingEffects` error, whose message now says to keep one value or split
+  the use case.
+- The sequence diagram names each transitioned column's source states once
+  (`alt Patent.status in (存続中, 追納期間中)` where it printed `Patent.status == 存続中 and
+  Patent.status == 追納期間中`) and draws a choice as an `alt` with one branch per arm after
+  the write.
+
+### Fixed
+
+- A use case with several `transitions` from one state explored only the first arm and
+  dropped the others with no diagnostic; their targets were reported as
+  `UnreachableEnumVariant`, and a trace step cited the first arm whatever arm it took (#52).
+  An audit test checks that every declared arm is an edge of the derived system, or that a
+  `NeverRuns`, `UnreachableEnumVariant` of its source, or a `Deadlock` naming it says why.
+
 ## v0.4.0 - 2026-11-01
 
 Upgrading from v0.3.0: run `python3 scripts/migrate-syntax-v2.py <model dir>` to rewrite

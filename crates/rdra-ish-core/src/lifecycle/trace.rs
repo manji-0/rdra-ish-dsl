@@ -250,9 +250,10 @@ impl TransitionSystem {
                     arms,
                     sites,
                 } if *v == var && slot(param) == at => {
-                    let from = pre.get(self, var, at);
+                    // Of a choice, the arm the step took.
+                    let arm = (pre.get(self, var, at), post.get(self, var, at));
                     arms.iter()
-                        .position(|(f, _)| *f == from)
+                        .position(|a| *a == arm)
                         .map(|i| sites[i].clone())
                 }
                 _ => None,

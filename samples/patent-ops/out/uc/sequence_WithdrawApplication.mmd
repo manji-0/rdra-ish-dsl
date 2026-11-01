@@ -9,7 +9,7 @@ sequenceDiagram
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   actor__PatentAttorney ->> screen__ExaminationRequestScreen: 出願の取下げ・放棄
   screen__ExaminationRequestScreen ->> api__WithdrawalApi: 取下げ・放棄 API
-  alt PatentApplication.status == 出願済（方式審査） and PatentApplication.status == 審査請求済（審査中）
+  alt PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
     api__WithdrawalApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ・放棄, status 審査請求済（審査中） -> 取下げ・放棄
     api__WithdrawalApi -) extsystem__Jpo: 取下書・放棄書の提出
     api__WithdrawalApi -->> screen__ExaminationRequestScreen: done

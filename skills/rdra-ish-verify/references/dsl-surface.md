@@ -112,6 +112,11 @@ sets(Restock, Item, stock == 3)
 sets(ReserveStock, Inventory, stock < selling, true)  // drives the comparison as a Bool
 ```
 
+Several `transitions` of one use case from one state are the actor's choice: one run takes
+one arm, every arm carries the use case's other effects, and its guards and
+`after(UC).assert` apply to each arm. Two values `sets` writes to one column in one use case
+are `ConflictingEffects`, not a choice.
+
 Use Int / Money / Decimal columns and `sets(UC, E, col == N)` when the quantity itself
 must be checked; `check` and TLC both evaluate a comparison on the values over
 `0..--int-range-max`. Drive the comparison with the four-argument `sets` only when the

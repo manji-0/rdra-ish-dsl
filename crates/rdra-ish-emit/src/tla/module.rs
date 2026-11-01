@@ -195,6 +195,8 @@ enum Post {
     Expr(String),
     /// One successor per value (applied after every other effect).
     Choose(Vec<Value>),
+    /// One successor per member of a set expression: the targets of a `transitions` choice.
+    ChooseIn(String),
 }
 
 /// One `v' = [v EXCEPT ..]` per written var, with the explorer's order of application:
@@ -233,18 +235,37 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
                     Some(Post::Expr(e)) => e.clone(),
                     _ => cur.clone(),
                 };
-                let mut cases: Vec<String> = arms
+                // The targets of each source state, in arm order.
+                let mut by_from: Vec<(Value, Vec<Value>)> = Vec::new();
+                for (f, t) in arms {
+                    match by_from.iter_mut().find(|(g, _)| g == f) {
+                        Some((_, tos)) => tos.push(*t),
+                        None => by_from.push((*f, vec![*t])),
+                    }
+                }
+                let choice = by_from.iter().any(|(_, tos)| tos.len() > 1);
+                let render = |tos: &[Value]| {
+                    let tos: Vec<String> = tos.iter().map(|t| render_value(d, *t)).collect();
+                    match choice {
+                        true => format!("{{{}}}", tos.join(", ")),
+                        false => tos.join(""),
+                    }
+                };
+                let mut cases: Vec<String> = by_from
                     .iter()
-                    .map(|(f, t)| {
-                        format!("{cur} = {} -> {}", render_value(d, *f), render_value(d, *t))
-                    })
+                    .map(|(f, tos)| format!("{cur} = {} -> {}", render_value(d, *f), render(tos)))
                     .collect();
-                cases.push(format!("OTHER -> {prev}"));
-                (
-                    *var,
-                    *param,
-                    Post::Expr(format!("CASE {}", cases.join(" [] "))),
-                )
+                let other = match choice {
+                    true => format!("{{{prev}}}"),
+                    false => prev,
+                };
+                cases.push(format!("OTHER -> {other}"));
+                let case = format!("CASE {}", cases.join(" [] "));
+                let post = match choice {
+                    true => Post::ChooseIn(format!("({case})")),
+                    false => Post::Expr(case),
+                };
+                (*var, *param, post)
             }
             Effect::Choose { var, param, values } => (*var, *param, Post::Choose(values.clone())),
             Effect::Tick => {
@@ -254,7 +275,7 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
         };
         let slot = post.entry(var).or_default();
         match (slot.get(&param), &value) {
-            (Some(Post::Choose(_)), Post::Expr(_)) => {}
+            (Some(Post::Choose(_) | Post::ChooseIn(_)), Post::Expr(_)) => {}
             _ => {
                 slot.insert(param, value);
             }
@@ -294,6 +315,12 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
                     let d = &ts.var(*var).domain;
                     let set: Vec<String> = values.iter().map(|v| render_value(d, *v)).collect();
                     binders.push(format!("{x} \\in {{{}}}", set.join(", ")));
+                    x
+                }
+                Post::ChooseIn(set) => {
+                    let x = format!("v{fresh}");
+                    fresh += 1;
+                    binders.push(format!("{x} \\in {set}"));
                     x
                 }
             };

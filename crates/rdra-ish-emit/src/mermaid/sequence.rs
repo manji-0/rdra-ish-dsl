@@ -51,8 +51,14 @@ fn write_label(
         .iter()
         .filter(|t| t.usecase == usecase && t.entity == entity)
         .collect();
+    let chosen = choices(model, usecase, entity);
     let mut parts: Vec<String> = transitions
         .iter()
+        .filter(|t| {
+            !chosen
+                .iter()
+                .any(|(column, from, _)| *column == t.column && *from == t.from)
+        })
         .map(|t| {
             format!(
                 "{} {} -> {}",
@@ -77,8 +83,37 @@ fn write_label(
     }
 }
 
+/// The use case's choices on `entity`: each `(column, from)` with more than one arm, and the
+/// `to` of each arm in declaration order. One run takes one arm.
+fn choices(
+    model: &SemanticModel,
+    usecase: UseCaseKey,
+    entity: EntityKey,
+) -> Vec<(String, String, Vec<String>)> {
+    let mut groups: Vec<(String, String, Vec<String>)> = Vec::new();
+    for t in model
+        .state_transitions
+        .iter()
+        .filter(|t| t.usecase == usecase && t.entity == entity)
+    {
+        match groups
+            .iter_mut()
+            .find(|(column, from, _)| *column == t.column && *from == t.from)
+        {
+            Some((_, _, tos)) => {
+                if !tos.contains(&t.to) {
+                    tos.push(t.to.clone());
+                }
+            }
+            None => groups.push((t.column.clone(), t.from.clone(), vec![t.to.clone()])),
+        }
+    }
+    groups.retain(|(_, _, tos)| tos.len() > 1);
+    groups
+}
+
 /// The guards of the use case: each applied condition with a `holds` body, then the `from`
-/// state of each transition.
+/// states of each transitioned column, each named once.
 fn guards(model: &SemanticModel, usecase: UseCaseKey) -> Vec<String> {
     let conditions: Vec<String> = applied_bodies(model)
         .into_iter()
@@ -92,17 +127,35 @@ fn guards(model: &SemanticModel, usecase: UseCaseKey) -> Vec<String> {
         })
         .collect();
     // A condition that already says `Entity.column == from` makes the same state guard redundant.
-    let states = model
+    let mut froms: Vec<(EntityKey, &str, Vec<String>)> = Vec::new();
+    for t in model
         .state_transitions
         .iter()
         .filter(|t| t.usecase == usecase)
-        .map(|t| {
-            format!(
-                "{}.{} == {}",
-                model.entities[t.entity].id,
-                t.column,
-                model.value_display(t.entity, &t.column, &t.from)
-            )
+    {
+        let from = model
+            .value_display(t.entity, &t.column, &t.from)
+            .to_string();
+        match froms
+            .iter_mut()
+            .find(|(e, column, _)| *e == t.entity && *column == t.column)
+        {
+            Some((_, _, values)) => {
+                if !values.contains(&from) {
+                    values.push(from);
+                }
+            }
+            None => froms.push((t.entity, &t.column, vec![from])),
+        }
+    }
+    let states = froms
+        .into_iter()
+        .map(|(entity, column, values)| {
+            let column = format!("{}.{column}", model.entities[entity].id);
+            match &values[..] {
+                [one] => format!("{column} == {one}"),
+                many => format!("{column} in ({})", many.join(", ")),
+            }
         })
         .filter(|said| !conditions.iter().any(|condition| condition.contains(said)));
     conditions
@@ -320,6 +373,29 @@ impl Emitter for SequenceMermaidEmitter {
                     participants.add(3, &entity);
                     let message = write_label(model, usecase_key, write.entity, write.kind.label());
                     script.send(control, "->>", &entity, &message);
+                    for (column, from, tos) in choices(model, usecase_key, write.entity) {
+                        let shown =
+                            |v: &str| model.value_display(write.entity, &column, v).to_string();
+                        for (i, to) in tos.iter().enumerate() {
+                            let keyword = if i == 0 { "alt" } else { "else" };
+                            if i > 0 {
+                                script.depth -= 1;
+                            }
+                            script.push(format!(
+                                "{keyword} {}",
+                                text(&format!("{column} {} -> {}", shown(&from), shown(to)))
+                            ));
+                            script.depth += 1;
+                            script.send(
+                                control,
+                                "->>",
+                                &entity,
+                                &text(&format!("{column} = {}", shown(to))),
+                            );
+                        }
+                        script.depth -= 1;
+                        script.push("end".to_string());
+                    }
                 }
             }
         }
@@ -564,6 +640,48 @@ updates(LedgerApi, Receipt)
         assert!(
             result.contains("  screen__PayScreen ->> api__PayApi: Pay API\n"),
             "{result}"
+        );
+    }
+
+    const CHOICE: &str = r#"
+actor Board "Board"
+usecase Decide "Decide"
+performs(Board, Decide)
+entity Doc "Doc" {
+  id: Int @pk
+  status: Enum(searched, file, secret, drop, held) @default(searched)
+  flag: Bool @default(false)
+}
+updates(Decide, Doc)
+transitions(Decide, Doc.status, searched -> file)
+transitions(Decide, Doc.status, searched -> secret)
+transitions(Decide, Doc.status, held -> drop)
+sets(Decide, Doc, flag == true)
+"#;
+
+    /// Arms from one state are the actor's choice: the guard names each source state once,
+    /// the write carries the rest, and an `alt` holds one branch per arm.
+    #[test]
+    fn arms_from_one_state_are_an_alt_per_arm() {
+        let result = SequenceMermaidEmitter
+            .emit(
+                &model_from(CHOICE),
+                &View::usecases(vec!["Decide".to_string()]),
+            )
+            .unwrap();
+        has_in_order(
+            &result,
+            &[
+                "  alt Doc.status in (searched, held)\n",
+                "    usecase__Decide ->> entity__Doc: update status held -> drop, flag=true\n",
+                "    alt status searched -> file\n",
+                "      usecase__Decide ->> entity__Doc: status = file\n",
+                "    else status searched -> secret\n",
+                "      usecase__Decide ->> entity__Doc: status = secret\n",
+                "    end\n",
+                "    usecase__Decide -->> actor__Board: done\n",
+                "  else guard fails\n",
+            ],
         );
     }
 

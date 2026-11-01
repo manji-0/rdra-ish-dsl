@@ -2,6 +2,7 @@
 //! the fly; per-entity view statistics are gathered from the edges as they are found. The run
 //! keeps every edge and, per state, the edge that first reached it.
 
+use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
 use super::cone::VarSet;
@@ -416,7 +417,7 @@ impl TransitionSystem {
         let slot = |p: u8| usize::from(params[usize::from(p)]);
         let mut next = s.clone();
         let mut deleted: Vec<u8> = Vec::new();
-        let mut choices: Vec<(VarId, u8, &[Value])> = Vec::new();
+        let mut choices: Vec<(VarId, u8, Cow<'_, [Value]>)> = Vec::new();
         for eff in &action.effects {
             match eff {
                 Effect::Create { param } => {
@@ -437,11 +438,21 @@ impl TransitionSystem {
                     var, param, arms, ..
                 } => {
                     let from = s.get(self, *var, slot(*param));
-                    if let Some((_, to)) = arms.iter().find(|(f, _)| *f == from) {
-                        next.set(self, *var, slot(*param), *to);
+                    let tos: Vec<Value> = arms
+                        .iter()
+                        .filter(|(f, _)| *f == from)
+                        .map(|(_, t)| *t)
+                        .collect();
+                    match tos[..] {
+                        [] => {}
+                        [to] => next.set(self, *var, slot(*param), to),
+                        // A choice forks after every other effect, so each arm carries them.
+                        _ => choices.push((*var, *param, Cow::Owned(tos))),
                     }
                 }
-                Effect::Choose { var, param, values } => choices.push((*var, *param, values)),
+                Effect::Choose { var, param, values } => {
+                    choices.push((*var, *param, Cow::Borrowed(values)))
+                }
                 Effect::Tick => {
                     let now = self.now.expect("tick without a clock");
                     let v = s.get(self, now, 0);

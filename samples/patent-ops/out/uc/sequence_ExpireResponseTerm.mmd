@@ -6,7 +6,7 @@ sequenceDiagram
   participant usecase__ExpireResponseTerm as 応答期間の経過
   participant entity__OfficeAction as 拒絶理由通知
   timer__ResponseDeadline ->> usecase__ExpireResponseTerm: 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
-  alt OfficeAction.status == 応答期間中 and OfficeAction.status == 応答案作成済
+  alt OfficeAction.status in (応答期間中, 応答案作成済)
     usecase__ExpireResponseTerm ->> entity__OfficeAction: update status 応答期間中 -> 期間経過（延長請求可）, status 応答案作成済 -> 期間経過（延長請求可）
     usecase__ExpireResponseTerm -->> timer__ResponseDeadline: done
   else guard fails

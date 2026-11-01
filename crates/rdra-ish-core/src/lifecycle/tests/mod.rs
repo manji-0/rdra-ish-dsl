@@ -1,6 +1,7 @@
 //! Lifecycle behaviour tests: a model in, views and diagnostics out.
 
 mod bare_values;
+mod choice;
 mod conditions;
 mod cone;
 mod constraints;
@@ -14,6 +15,7 @@ mod owners;
 mod select;
 mod system;
 mod trace;
+mod transition_audit;
 mod tx_groups;
 mod witness;
 

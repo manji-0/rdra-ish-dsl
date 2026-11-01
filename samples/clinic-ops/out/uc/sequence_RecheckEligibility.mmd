@@ -8,7 +8,7 @@ sequenceDiagram
   participant entity__EligibilityCheck as 資格確認
   actor__ReceptionClerk ->> screen__EligibilityScreen: 資格の再確認
   screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
-  alt EligibilityCheck.result == 無効 and EligibilityCheck.result == 該当資格なし
+  alt EligibilityCheck.result in (無効, 該当資格なし)
     api__EligibilityResultApi ->> entity__EligibilityCheck: update result 無効 -> 照会中, result 該当資格なし -> 照会中
     api__EligibilityResultApi -->> screen__EligibilityScreen: done
   else guard fails

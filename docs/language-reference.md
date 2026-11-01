@@ -1292,6 +1292,33 @@ transitions(CancelOrder, Order.status, pending -> cancelled)
 transitions(ExpireOrder, Order.status, pending -> cancelled)
 ```
 
+Several arms of one use case from one state on one column are a choice. One run of the
+use case takes exactly one of them, and the actor decides which:
+
+```
+transitions(DecideFiling, Disclosure.status, searched -> decided_file)
+transitions(DecideFiling, Disclosure.status, searched -> decided_secret)
+transitions(DecideFiling, Disclosure.status, searched -> decided_abandon)
+```
+
+- **Every arm carries the rest of the use case.** Its `sets` on other columns, its
+  `creates` and `deletes`, and its transitions of other columns or entities apply on each
+  arm alike.
+- **Two choice columns choose independently.** A use case with arms `searched -> file` and
+  `searched -> drop` on `status`, and `none -> fast` and `none -> slow` on `route`, has four
+  runs, one per pair. To tie a value of one column to a value of the other, split the use
+  case, one per pair.
+- **Guards apply to every arm.** A condition applied to the use case guards each arm alike,
+  and the use case runs only from a state one of its arms leaves. When one outcome needs a
+  precondition the others do not, give that outcome its own use case.
+- **`after(UC).assert` holds after every arm.** An assert one arm breaks is violated, with a
+  trace through that arm.
+- A repeated arm is one arm. Arms from different states stay one move per state: the
+  state the instance is in picks the arm.
+
+A `sets` is not a choice. Two `sets` of one use case with different values for one column
+are a `ConflictingEffects` error; keep one value or split the use case.
+
 The second argument must be a use case. Passing an event, the earlier form, is a
 `TypeMismatch` whose hint names the use case to write and `scripts/migrate-phase3.py`,
 which rewrites a model to one line per use case that raises the event. See

@@ -1256,6 +1256,33 @@ fn list_transition_markdown_has_a_row_per_transition_with_guards_and_actors() {
     );
 }
 
+/// The arms of a choice (one use case, one `from`) are a row each, so the list shows every
+/// outcome the actor can pick.
+#[test]
+fn list_transition_has_a_row_per_arm_of_a_choice() {
+    let src = TRANSITION_MODEL.replace(
+        "transitions(Expire, Appointment.status, booked -> cancelled)",
+        "transitions(CheckIn, Appointment.status, booked -> cancelled)",
+    );
+    let (ast, parse_errors) = rdra_ish_syntax::parse(&src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, _) = rdra_ish_core::build_model(&ast);
+    let csv = list_elements(&model, &ListKind::Transition, &ListFormat::Csv).unwrap();
+    let check_in: Vec<&str> = csv
+        .lines()
+        .filter(|row| row.contains("(CheckIn)"))
+        .collect();
+    assert_eq!(check_in.len(), 2, "{csv}");
+    assert!(
+        check_in[0].contains(",予約済 (booked),受付済 (checkedin),"),
+        "{csv}"
+    );
+    assert!(
+        check_in[1].contains(",予約済 (booked),cancelled (cancelled),"),
+        "{csv}"
+    );
+}
+
 #[test]
 fn list_transition_writes_every_format() {
     let model = transition_model();

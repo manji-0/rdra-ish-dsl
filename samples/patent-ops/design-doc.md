@@ -588,7 +588,7 @@ sequenceDiagram
   participant entity__DraftingOrder as 出願依頼
   actor__PatentAttorney ->> screen__DraftReviewScreen: 出願書類案の納品
   screen__DraftReviewScreen ->> api__DraftReviewApi: 出願書類レビュー API
-  alt DraftingOrder.status == 依頼済 and DraftingOrder.status == 修正依頼中
+  alt DraftingOrder.status in (依頼済, 修正依頼中)
     api__DraftReviewApi ->> entity__DraftingOrder: update status 依頼済 -> 原稿受領, status 修正依頼中 -> 原稿受領
     api__DraftReviewApi -->> screen__DraftReviewScreen: done
   else guard fails
@@ -963,7 +963,7 @@ sequenceDiagram
   participant api__PriorityBaseApi as 先の出願の取下げ擬制 API
   participant entity__PatentApplication as 特許出願
   timer__PriorityBaseDeadline ->> api__PriorityBaseApi: 先の出願の取下げ擬制（先の出願から1年4月）
-  alt 国内優先権の基礎とされた出願である: PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 and PatentApplication.status == 出願済（方式審査） and PatentApplication.status == 審査請求済（審査中）
+  alt 国内優先権の基礎とされた出願である: PatentApplication.priority_base == true, PatentApplication.status != 取下げ・放棄 and PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
     api__PriorityBaseApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（国内優先権の基礎）, status 審査請求済（審査中） -> 取下げ擬制（国内優先権の基礎）
     api__PriorityBaseApi -->> timer__PriorityBaseDeadline: done
   else guard fails
@@ -1170,7 +1170,7 @@ sequenceDiagram
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   actor__PatentAttorney ->> screen__ExaminationRequestScreen: 出願の取下げ・放棄
   screen__ExaminationRequestScreen ->> api__WithdrawalApi: 取下げ・放棄 API
-  alt PatentApplication.status == 出願済（方式審査） and PatentApplication.status == 審査請求済（審査中）
+  alt PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
     api__WithdrawalApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ・放棄, status 審査請求済（審査中） -> 取下げ・放棄
     api__WithdrawalApi -) extsystem__Jpo: 取下書・放棄書の提出
     api__WithdrawalApi -->> screen__ExaminationRequestScreen: done
@@ -1432,7 +1432,7 @@ sequenceDiagram
   participant usecase__ExpireResponseTerm as 応答期間の経過
   participant entity__OfficeAction as 拒絶理由通知
   timer__ResponseDeadline ->> usecase__ExpireResponseTerm: 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
-  alt OfficeAction.status == 応答期間中 and OfficeAction.status == 応答案作成済
+  alt OfficeAction.status in (応答期間中, 応答案作成済)
     usecase__ExpireResponseTerm ->> entity__OfficeAction: update status 応答期間中 -> 期間経過（延長請求可）, status 応答案作成済 -> 期間経過（延長請求可）
     usecase__ExpireResponseTerm -->> timer__ResponseDeadline: done
   else guard fails
@@ -2168,7 +2168,7 @@ sequenceDiagram
   participant usecase__ExpirePatentTerm as 存続期間の満了
   participant entity__Patent as 特許権
   timer__TermExpiry ->> usecase__ExpirePatentTerm: 存続期間の満了（出願から20年）
-  alt Patent.status == 存続中 and Patent.status == 追納期間中
+  alt Patent.status in (存続中, 追納期間中)
     usecase__ExpirePatentTerm ->> entity__Patent: update status 存続中 -> 存続期間満了, status 追納期間中 -> 存続期間満了
     usecase__ExpirePatentTerm -->> timer__TermExpiry: done
   else guard fails

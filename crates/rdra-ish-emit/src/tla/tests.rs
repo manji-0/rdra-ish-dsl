@@ -451,3 +451,38 @@ fn tla_one_entity_quantified_invariant_matches_the_two_entity_form() {
     assert!(one.contains("Quantifier_Cert_0"), "{one}");
     assert_eq!(one, two);
 }
+
+const CHOICE: &str = r#"
+entity Doc "Doc" {
+  id: Int @pk
+  status: Enum(searched, file, secret, drop) @default(searched)
+}
+usecase Submit "Submit"
+usecase Decide "Decide"
+creates(Submit, Doc)
+transitions(Decide, Doc.status, searched -> file)
+transitions(Decide, Doc.status, searched -> secret)
+transitions(Decide, Doc.status, file -> drop)
+"#;
+
+/// Arms of one use case from one state are a choice: the post-value ranges over the set of
+/// their targets, and the guard names each source state once. Without a choice the action
+/// keeps the deterministic `CASE`.
+#[test]
+fn arms_from_one_state_are_a_choice_over_their_targets() {
+    let tla = print(&system(CHOICE), PrintMode::Check, "M").tla;
+    let decide = tla
+        .split("Decide(p0) ==\n")
+        .nth(1)
+        .and_then(|rest| rest.split("\n\n").next())
+        .expect("the Decide operator");
+    assert_eq!(decide.matches("= \"searched\"").count(), 2, "{decide}");
+    assert!(
+        decide.contains(
+            "  /\\ \\E v0 \\in (CASE Doc_status[p0] = \"searched\" -> {\"file\", \"secret\"} [] Doc_status[p0] = \"file\" -> {\"drop\"} [] OTHER -> {Doc_status[p0]}) : Doc_status' = [Doc_status EXCEPT ![p0] = v0]"
+        ),
+        "{decide}"
+    );
+    let single = print(&system(&sample("order.rdra")), PrintMode::Check, "M").tla;
+    assert!(!single.contains("\\E v"), "{single}");
+}

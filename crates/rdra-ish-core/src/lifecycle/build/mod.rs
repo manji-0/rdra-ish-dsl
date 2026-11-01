@@ -737,7 +737,8 @@ impl<'m> Builder<'m> {
     }
 
     /// One `Transition` effect per column: its arms are the use case's `from -> to` pairs,
-    /// and its guard is that the column holds one of the `from` values.
+    /// and its guard is that the column holds one of the `from` values. Arms that share a
+    /// `from` are a choice: one run takes one of them.
     fn transition_effects(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
         let model = self.model;
         let first = a.effects.len();
@@ -772,7 +773,7 @@ impl<'m> Builder<'m> {
             });
             match existing {
                 Some((arms, sites)) => {
-                    if !arms.iter().any(|(f, _)| *f == arm.0) {
+                    if !arms.contains(&arm) {
                         arms.push(arm);
                         sites.push(site);
                     }
@@ -796,11 +797,16 @@ impl<'m> Builder<'m> {
                 continue;
             };
             let at = At::Param(*param);
+            let mut froms: Vec<Value> = Vec::new();
+            for (from, _) in arms {
+                if !froms.contains(from) {
+                    froms.push(*from);
+                }
+            }
             let pred = Pred::Or(
-                arms.iter()
-                    .map(|(from, _)| {
-                        Pred::Cmp(Term::Slot { var: *var, at }, CmpOp::Eq, Term::Lit(*from))
-                    })
+                froms
+                    .into_iter()
+                    .map(|from| Pred::Cmp(Term::Slot { var: *var, at }, CmpOp::Eq, Term::Lit(from)))
                     .collect(),
             );
             a.guards.push(Guard {
