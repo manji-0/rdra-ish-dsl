@@ -21,6 +21,9 @@
 //! Without `tlc` on PATH the TLC test is skipped with a printed reason; `RDRA_REQUIRE_TLC=1`
 //! turns the skip into a failure.
 
+#[path = "../src/property_cone.rs"]
+#[allow(dead_code)]
+mod property_cone;
 #[path = "../src/tlc_env.rs"]
 #[allow(dead_code)]
 mod tlc_env;
@@ -38,6 +41,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
+use property_cone::{ConeRun, PropertyCone, Verdict, Why};
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, Runs, Scope, State,
     StateDiag, StateModelFindings, Taken, Target, TransitionSystem, Witness,
@@ -45,8 +49,8 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 use tlc_env::{tlc_env, Heap};
-use tlc_output::{parse_dot, TlcRun};
-use tlc_replay::explain_violation;
+use tlc_output::{parse_dot, Outcome, TlcRun};
+use tlc_replay::{explain_property, explain_violation};
 
 /// The largest cone the test compares. At `Bounds::STATES` every cone of every sample is far
 /// below it.
@@ -1084,4 +1088,246 @@ fn a_corrupted_tlc_trace_does_not_replay() {
         explain_violation(sub, &check.names, &text),
         Err("TLC state 4 is no state of the cone".to_string())
     );
+}
+
+/// A property's cone decides what the whole model decides: an `ok` on the cone is an `ok` on
+/// the whole model, a counterexample is a counterexample, and the properties the cone leaves
+/// undecided are the ones expected, with the reason. Each fixture names what it exercises.
+type TemporalCase = (&'static str, &'static str, &'static [(&'static str, Why)]);
+
+const TEMPORAL_CASES: &[TemporalCase] = &[
+    (
+        "samples/formal-verification/order.rdra",
+        "",
+        &[
+            ("PaidLeadsToShipped", Why::WfNext),
+            ("EventuallyTerminal", Why::WfNext),
+        ],
+    ),
+    ("samples/formal-verification/int_stock.rdra", "", &[]),
+    ("samples/formal-verification/temporal_fair.rdra", "", &[]),
+    ("samples/formal-verification/temporal_unmet.rdra", "", &[]),
+    (
+        "independent_loop",
+        INDEPENDENT_LOOP,
+        &[("PaidShipsUnfair", Why::WfNext)],
+    ),
+    (
+        "guard_reads_other",
+        GUARD_READS_OTHER,
+        &[("PaidShipsHalfFair", Why::WfNext)],
+    ),
+    ("guard_toggles", GUARD_TOGGLES, &[]),
+    (
+        "frees_slots",
+        FREES_SLOTS,
+        &[("PaidShips", Why::FreesSlots)],
+    ),
+    ("whole_cone", WHOLE_CONE, &[]),
+];
+
+/// The cone holds every var an action writes, so its `WF_vars(Next)` is the whole model's:
+/// the stutter at `paid` the plain run finds is ruled out by the `_WF` run, which decides
+/// `ok` without a whole-model run.
+const WHOLE_CONE: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped)
+"#;
+
+/// Another entity loops forever outside the property's cone. Without `.fair`, the cone's
+/// counterexample (a stutter at `paid`) is ruled out by the cone's own `WF_vars(Next)`, so the
+/// cone cannot decide; the whole model's `WF_vars(Next)` is met by the ticket's loop, and the
+/// property fails there. With `.fair(Ship)` the cone decides `ok`, and the whole model agrees.
+const INDEPENDENT_LOOP: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Ticket "問い合わせ" { id: Int @pk  status: Enum(open, closed) @default(open) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Open "起票"
+usecase Close "完了"
+usecase Reopen "再開"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+transitions(Reopen, Ticket.status, closed -> open)
+property PaidShipsUnfair leads_to(Order.status == paid, Order.status == shipped)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship)
+"#;
+
+/// The fair use case's guard reads another entity, which is built once and only opens. The
+/// cone keeps the warehouse's state, its building, and its opening, and leaves the order's
+/// note out. With the three use cases fair the cone decides `ok`; with `Ship` alone the
+/// cone's stutter before the warehouse opens needs `WF_vars(Next)` to rule out, which the
+/// cone cannot assume while `Annotate` writes outside it, and the whole model, where nothing
+/// loops, decides `ok`.
+const GUARD_READS_OTHER: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  note: Bool @default(false)
+}
+entity Warehouse "倉庫" { id: Int @pk  state: Enum(closed, open) @default(closed) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Annotate "備考"
+usecase Build "開設"
+usecase OpenWh "開場"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Annotate, Order, note == true)
+creates(Build, Warehouse)
+transitions(OpenWh, Warehouse.state, closed -> open)
+condition Open "倉庫が開いている"
+holds(Open, Order.status == paid, Warehouse.state == open)
+applies_to(Open, Ship)
+property PaidShipsFair leads_to(Order.status == paid, Order.status == shipped).fair(Ship, Build, OpenWh)
+property PaidShipsHalfFair leads_to(Order.status == paid, Order.status == shipped).fair(Ship)
+"#;
+
+/// The same guard on a warehouse that opens and closes forever: `Ship` is enabled again and
+/// again but never stays enabled, so weak fairness does not force it, and the property fails
+/// on the cone (a loop) and on the whole model.
+const GUARD_TOGGLES: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Warehouse "倉庫" { id: Int @pk  state: Enum(closed, open) @default(closed) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Build "開設"
+usecase OpenWh "開場"
+usecase CloseWh "閉場"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Build, Warehouse)
+transitions(OpenWh, Warehouse.state, closed -> open)
+transitions(CloseWh, Warehouse.state, open -> closed)
+condition Open "倉庫が開いている"
+holds(Open, Order.status == paid, Warehouse.state == open)
+applies_to(Open, Ship)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship, OpenWh)
+"#;
+
+/// `Pay` moves the order and, in the same transaction (the receipt's key joins the writes),
+/// creates a receipt the cone does not read, so the cone does not count receipt slots: its
+/// loop of paying and reopening forever creates a receipt per round, which the bounded whole
+/// model cannot do. The cone's counterexample is not taken, and the whole model decides.
+const FREES_SLOTS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Receipt "領収書" { id: Int @pk }
+relate(Receipt, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Reopen "差し戻し"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+creates(Pay, Receipt)
+transitions(Reopen, Order.status, paid -> pending)
+transitions(Ship, Order.status, paid -> shipped)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship)
+"#;
+
+/// One property run of `bundle` in `dir`; the module is printed as `Cone`.
+fn run_property(tlc: &Path, dir: &Path, bundle: &tla::TlaBundle) -> (Outcome, TlcRun, String) {
+    let (ok, log) = run_tlc(tlc, dir, &[], &bundle.tla, &bundle.cfg);
+    let run = TlcRun::parse(&log);
+    (run.outcome(ok), run, log)
+}
+
+#[test]
+fn a_property_cone_decides_what_the_whole_model_decides() {
+    let Some(tlc) = find_tlc() else {
+        let reason = "tlc not on PATH (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_TLC").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_TLC=1 but {reason}"
+        );
+        println!("skipped temporal cone equivalence: {reason}");
+        return;
+    };
+    let scratch = std::env::temp_dir().join(format!("rdra-temporal-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    for (name, src, expected) in TEMPORAL_CASES {
+        let model = if src.is_empty() {
+            load(name)
+        } else {
+            let file = scratch.join(format!("{name}.rdra"));
+            std::fs::write(&file, src).expect("write model");
+            load(file.to_str().expect("utf-8 path"))
+        };
+        let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        let mut undecided = Vec::new();
+        for i in 0..ts.properties().len() {
+            let property = &ts.properties()[i].name;
+            let label = format!("{name}: {property}");
+            let cone = PropertyCone::new(&ts, i);
+            let dir = scratch.join(format!("{}-{i}", name.replace('/', "_")));
+            let plain = cone.bundle(ConeRun::Plain, "Cone");
+            assert!(
+                !plain.tla.contains("WF_vars(Next)"),
+                "{label}: the plain cone run assumes WF_vars(Next)"
+            );
+            let (first, mut run, mut log) = run_property(&tlc, &dir.join("plain"), &plain);
+            let mut verdict = cone.verdict(first, None);
+            if verdict == Verdict::NeedsWfNext {
+                let wf = cone.bundle(ConeRun::WfNext, "Cone");
+                assert!(
+                    wf.tla.contains("WF_vars(Next)"),
+                    "{label}: the WF cone run lacks WF_vars(Next)"
+                );
+                let (second, r, l) = run_property(&tlc, &dir.join("wf"), &wf);
+                verdict = cone.verdict(first, Some(second));
+                (run, log) = (r, l);
+            }
+            let whole = tla::print(&ts, PrintMode::Property(i), "Cone");
+            let (whole_outcome, _, whole_log) = run_property(&tlc, &dir.join("whole"), &whole);
+            assert_ne!(
+                whole_outcome,
+                Outcome::ToolError,
+                "{label}: whole model\n{whole_log}"
+            );
+            match verdict {
+                Verdict::Ok => assert_eq!(
+                    whole_outcome,
+                    Outcome::Ok,
+                    "{label}: the cone says ok, the whole model does not\n{whole_log}"
+                ),
+                Verdict::Counterexample => {
+                    assert_eq!(
+                        whole_outcome,
+                        Outcome::Counterexample,
+                        "{label}: the cone finds a counterexample, the whole model does not\n{log}"
+                    );
+                    for v in &run.violations {
+                        explain_property(&cone.system, &plain.names, cone.index, v).unwrap_or_else(
+                            |why| panic!("{label}: the cone's lasso does not replay: {why}\n{log}"),
+                        );
+                    }
+                }
+                Verdict::Undecided(why) => undecided.push((property.as_str(), why)),
+                Verdict::NeedsWfNext | Verdict::ToolError => panic!("{label}: {verdict:?}\n{log}"),
+            }
+            println!(
+                "{label}: cone {verdict:?} ({} states), whole {}",
+                run.distinct_states.unwrap_or(0),
+                whole_outcome.as_str()
+            );
+        }
+        let expected: Vec<(&str, Why)> = expected.to_vec();
+        assert_eq!(undecided, expected, "{name}: the undecided properties");
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
 }

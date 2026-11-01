@@ -179,6 +179,12 @@ invokes(AppointHygieneManager, OperatorPermitApi)
 updates(OperatorPermitApi, BusinessPermit)
 sets(AppointHygieneManager, BusinessPermit, hygiene_manager_appointed == true)
 
+// 営業の許可後速やかに食品衛生責任者を選定 (mhlw-2019-seishokuhatsu1227-2-sekou.txt:435): a valid permit
+// without one ends with one appointed, or with the permit's end, once the operator's
+// notification is not starved. `verify` checks it on the permit's cone (README).
+property HygieneManagerEventuallyAppointed "有効な許可には食品衛生責任者が選定される"
+  leads_to((BusinessPermit.status == valid) and (BusinessPermit.hygiene_manager_appointed == false), (BusinessPermit.hygiene_manager_appointed == true) or (BusinessPermit.status != valid)).fair(AppointHygieneManager)
+
 displays(StartBusiness, PermitLedgerScreen)
 invokes(StartBusiness, OperatorPermitApi)
 sets(StartBusiness, BusinessPermit, operating == true)

@@ -318,6 +318,10 @@ pub(crate) enum Commands {
         /// TLA+ `IntRange == 0..N` upper bound
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
+        /// Seconds a temporal property's whole-model run gets when its cone does not decide
+        /// it; past them the property is reported as not decided
+        #[arg(long, default_value_t = 300)]
+        temporal_budget: u64,
         #[command(flatten)]
         scope: ScopeArgs,
     },

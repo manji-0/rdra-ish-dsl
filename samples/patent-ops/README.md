@@ -44,6 +44,12 @@ reward occasions, the goals' numbers), the comment says the modeling is the mode
   application under examination (`UnderExamination`), and the IP department closes an office
   action's docket only after the examination is over (`ExaminationOver`). The filing does not move
   the drafting order: the filing receipt does.
+- `GrantEnds` states that a granted application ends registered or dismissed, under
+  `.fair(RecordRegistration, RecordRegistrationDismissal)` (特許法66条, 18条). `verify` checks it
+  on the cone of what it reads and of the two use cases (the application's status and fee
+  columns and the patent record `RecordRegistration` opens; 4,105 states at 2 instances), not
+  on the whole model, which explored 14 million states in 11 minutes without finishing (#59,
+  #67).
 
 ## Known verification gaps
 

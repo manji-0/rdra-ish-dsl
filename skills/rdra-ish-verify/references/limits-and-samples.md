@@ -46,15 +46,17 @@
   `AfterAssert_<UC>_<n>` (not injected into the effects).
 - **`WF_vars(Next)`**: fairness on whole `Next`, not per action; another instance's loop
   satisfies it. `.fair(UC, ...)` on a property adds weak fairness per instance on the listed
-  use cases (no strong fairness). A property runs on the whole model, so a large model such as
-  patent-ops or food-permit-ops is too big for a temporal run at two instances, even for a
-  property that reads one small entity.
+  use cases (no strong fairness). A property is checked on the cone of what it reads and of
+  its `.fair` use cases, where `WF_vars(Next)` does not restrict; a property without `.fair`
+  reaches the whole model unless its cone holds every written var, and a whole-model run of
+  patent-ops or food-permit-ops at two instances stops at `--temporal-budget` as not decided.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at the same bounds as TLC (capped at 2,097,152 states per cone).
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
   action, and TLC cannot see one instance stuck while others keep moving.
-- **Cones**: `verify` checks each invariant and `after` assertion on its cone of
-  influence and the temporal properties on the whole model.
+- **Cones**: `verify` checks each invariant, `after` assertion, and temporal property on
+  its cone of influence, and a temporal property on the whole model only when its cone does
+  not decide it (`docs/formal-verification.md`, "Temporal properties on a cone").
 - Int, Money, Decimal, Date, and DateTime columns that something names are variables over
   `IntRange`; a `@null` one adds `null`, and a comparison over a null operand passes.
 - `states` and `check` read the same system at one instance per entity, so Int and `now`

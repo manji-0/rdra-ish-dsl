@@ -30,6 +30,10 @@ pub enum PrintMode {
     /// `TypeOK` and `properties()[i]` alone: TLC does not say which property a temporal
     /// counterexample breaks, so `verify` checks each in its own run.
     Property(usize),
+    /// `TypeOK` and `properties()[i]` alone on a cone, with no `WF_vars(Next)` in `Spec`: the
+    /// whole model's `WF_vars(Next)` is met by steps outside the cone, so the cone assumes
+    /// only the property's own `.fair`. An `ok` here is the whole model's verdict.
+    ConeProperty(usize),
     /// No INVARIANT or PROPERTY lines, so `tlc -dump` sees the whole reachable set.
     Explore,
 }
@@ -46,7 +50,8 @@ pub struct TlaBundle {
 pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBundle {
     let module_name = sanitize_module_name(module_name);
     let names = TlaNames::new(ts);
-    let tla = module::render(ts, &names, &module_name);
+    let wf_next = !matches!(mode, PrintMode::ConeProperty(_)) && needs_fairness(ts);
+    let tla = module::render(ts, &names, &module_name, wf_next);
     let cfg = cfg_without(ts, &names, mode, &BTreeSet::new());
     TlaBundle {
         module_name,
@@ -133,7 +138,7 @@ pub fn cfg_without(
         PrintMode::Check => (true, all),
         PrintMode::Safety => (true, 0..0),
         PrintMode::Temporal => (false, all),
-        PrintMode::Property(i) => (false, i..i + 1),
+        PrintMode::Property(i) | PrintMode::ConeProperty(i) => (false, i..i + 1),
         PrintMode::Explore => (false, 0..0),
     };
     let mut out = String::from("SPECIFICATION Spec\n");
@@ -167,7 +172,7 @@ pub fn cfg_without(
     out
 }
 
-/// Fairness is needed only when a property asks for progress.
+/// `WF_vars(Next)` is needed only when a property asks for progress.
 fn needs_fairness(ts: &TransitionSystem) -> bool {
     ts.properties()
         .iter()

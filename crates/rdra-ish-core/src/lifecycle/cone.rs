@@ -6,7 +6,9 @@
 use std::collections::BTreeSet;
 
 use super::expr::State;
-use super::types::{ActId, Action, Effect, EntId, ParamRole, Pred, Term, VarId, VarKind};
+use super::types::{
+    ActId, Action, ActionOrigin, Effect, EntId, Ltl, ParamRole, Pred, Term, VarId, VarKind,
+};
 use super::TransitionSystem;
 
 pub type VarSet = BTreeSet<VarId>;
@@ -189,6 +191,52 @@ impl TransitionSystem {
             vars: self.cone(&seed, &keep),
             keep,
         }
+    }
+
+    /// The cone a temporal property is checked on: what its formula reads, and each action of
+    /// its `.fair` use cases whole. A fair action's guards, param existences, transition
+    /// sources, and the slots it creates decide `ENABLED` of the action, and its writes decide
+    /// whether a step of it changes the cone; with all of them inside, weak fairness on the
+    /// action restricted to the cone is weak fairness on the action in the whole model. Every
+    /// other action outside the cone stutters for it (docs/formal-verification.md, "Temporal
+    /// properties on a cone").
+    pub fn property_cone(&self, i: usize) -> Cone {
+        let p = &self.properties[i];
+        let mut seed = VarSet::new();
+        let mut keep = BTreeSet::new();
+        for e in &p.binders {
+            seed.insert(self.entity(*e).exists);
+        }
+        match &p.formula {
+            Ltl::Always(x) | Ltl::Eventually(x) => self.pred_reads(x, &mut seed),
+            Ltl::LeadsTo(x, y) => {
+                self.pred_reads(x, &mut seed);
+                self.pred_reads(y, &mut seed);
+            }
+        }
+        for (k, a) in self.actions.iter().enumerate() {
+            if !matches!(&a.origin, ActionOrigin::UseCase { uc, .. } if p.fair.contains(uc)) {
+                continue;
+            }
+            keep.insert(ActId::at(k));
+            seed.extend(self.action_writes(a));
+            for param in a.params.iter().filter(|q| q.role == ParamRole::New) {
+                seed.insert(self.entity(param.entity).exists);
+            }
+        }
+        Cone {
+            vars: self.cone(&seed, &keep),
+            keep,
+        }
+    }
+
+    /// Every var an action writes is in `vars`: each step of the whole system that changes
+    /// anything changes the cone, so `WF_vars(Next)` on the cone is `WF_vars(Next)` on the
+    /// whole system.
+    pub fn cone_keeps_every_write(&self, vars: &VarSet) -> bool {
+        self.actions
+            .iter()
+            .all(|a| self.action_writes(a).is_subset(vars))
     }
 
     /// Some action of the cone takes a new slot of an entity outside it. That entity is

@@ -47,8 +47,8 @@ property ShippedOnceCaptured
   `.fair` is `FairRequiresUseCases`; a use case that changes nothing is `FairOnInertUseCase`.
 - A property holds per present instance: `always x` is `[](present => x)`,
   `eventually x` is `[](present => <>x)`, and `leads_to x y` is `(present /\ x) ~> y`.
-- Only `verify` evaluates properties, each in its own TLC run on the whole model;
-  `check` prints a `note:` that it did not.
+- Only `verify` evaluates properties, each in its own TLC run on its cone (the whole model
+  only when the cone does not decide it); `check` prints a `note:` that it did not.
 
 | Form | TLA+ |
 |---|---|

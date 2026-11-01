@@ -102,6 +102,11 @@ condition FirstFeesUnpaid "第1〜3年分の特許料を納付していない"
 holds(FirstFeesUnpaid, PatentApplication.first_fees_paid == false)
 applies_to(FirstFeesUnpaid, RecordRegistrationDismissal)
 
+// A granted application ends registered or dismissed once the two use cases that end it are
+// not starved (特許法66条, 18条). `verify` checks it on the application's cone (README).
+property GrantEnds "特許査定を受けた出願は設定登録されるか却下される"
+  leads_to(PatentApplication.status == granted, PatentApplication.status in (registered, dismissed)).fair(RecordRegistration, RecordRegistrationDismissal)
+
 // Access constraints
 requires_permission(PayFirstAnnuities, FeePay)
 requires_medium(PayFirstAnnuities, InternetFilingSoftware)

@@ -8,6 +8,7 @@ mod fmt_cmd;
 mod list_output;
 mod load;
 mod next;
+mod property_cone;
 mod states;
 mod tlc_env;
 mod tlc_output;
@@ -305,6 +306,7 @@ fn main() -> Result<()> {
             out,
             instance_count,
             int_range_max,
+            temporal_budget,
             scope,
         } => {
             let Project {
@@ -322,6 +324,7 @@ fn main() -> Result<()> {
                 out,
                 (instance_count, int_range_max),
                 &scope,
+                std::time::Duration::from_secs(temporal_budget),
             )?;
         }
     }

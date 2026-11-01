@@ -15,6 +15,32 @@
   with one keeps `{Entity}_{value}`. `export --kind typescript` tags such an entity's
   union by `status`, else a `*_status` column, else the first lifecycle column by name.
 
+- `verify` checks each temporal property on a cone of its own, and on the whole model only
+  when the cone does not decide it (#67). The cone holds what the property reads and every
+  action of the use cases its `.fair` lists, whole (their guards, bound instances, transition
+  sources, created slots, and writes), closed under the reads of the actions that write into
+  it, so weak fairness on those actions restricted to the cone is weak fairness on them in
+  the whole model and every other action stutters for the cone. The whole model's
+  `WF_vars(Next)` does not restrict to a cone, so an `eventually` or `leads_to` gets up to
+  two cone runs: `Cone_<P>` without `WF_vars(Next)`, whose `ok` is the verdict, and
+  `Cone_<P>_WF` with it, whose counterexample is the verdict and whose `ok` decides only
+  when the cone holds every written var. Otherwise, or when the cone frees an entity's slots
+  and finds a counterexample, the property runs on the whole model as `RdraSpec_<P>`, which
+  now prints TLC's progress and stops at `--temporal-budget` seconds (default 300) or
+  2,097,152 distinct states, reporting the property as `not decided` under `not checked:`
+  instead of running on. The `temporal properties:` line says `each checked on its cone, and
+  on the whole model only when the cone does not decide it (budget N s)`, and a scoped run
+  says `not checked: a scoped run checks none`. `docs/formal-verification.md` states the
+  condition under "Temporal properties on a cone", and
+  `a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares
+  the cone verdict with the whole-model verdict on the temporal samples and on fixtures for
+  an entity looping outside the cone, a fair use case whose guard reads another entity, a
+  guard that toggles forever, a cone that frees slots, and a cone that holds every written
+  var. food-permit-ops gets back `HygieneManagerEventuallyAppointed`, checked on a 111-state
+  cone (its whole model found 6.9 million states in 300 s without finishing), and patent-ops
+  gains `GrantEnds`, checked on a 4,105-state cone (its whole model explored 14 million
+  states in 11 minutes without finishing). `lifecycle_measure` lists property cones too.
+
 - `drives(UseCase, Entity, comparison, true | false)` drives a comparison proposition true or
   false (#51, condition 4). It is what the four-argument `sets` did: `sets` assigned a value
   with three arguments and drove a comparison with four, two meanings told apart by arity.

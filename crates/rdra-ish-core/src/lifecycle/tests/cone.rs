@@ -256,3 +256,98 @@ fn every_state_replays_from_its_parent_path_through_moves() {
     }
     assert!(replayed > 1000, "replayed {replayed} states");
 }
+
+/// A property's cone holds what the formula reads and each fair action whole: its guard's
+/// reads on another entity, the slots it creates, and the columns it writes that the
+/// formula does not read. Without `.fair` the cone is the formula's reads, closed.
+#[test]
+fn a_property_cone_keeps_its_fair_actions_whole() {
+    let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  note: Bool @default(false)
+}
+entity Warehouse "倉庫" { id: Int @pk  state: Enum(closed, open) @default(closed) }
+entity Receipt "領収書" { id: Int @pk }
+entity Ticket "問い合わせ" { id: Int @pk }
+relate(Receipt, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Build "開設"
+usecase OpenWh "開場"
+usecase Ask "起票"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Ship, Order, note == true)
+creates(Ship, Receipt)
+creates(Build, Warehouse)
+transitions(OpenWh, Warehouse.state, closed -> open)
+creates(Ask, Ticket)
+condition Open "倉庫が開いている"
+holds(Open, Order.status == paid, Warehouse.state == open)
+applies_to(Open, Ship)
+property Fair leads_to(Order.status == paid, Order.status == shipped).fair(Ship)
+property Unfair leads_to(Order.status == paid, Order.status == shipped)
+"#;
+    let model = model_from(src);
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
+    let names = |vars: &BTreeSet<crate::lifecycle::VarId>| -> BTreeSet<String> {
+        vars.iter()
+            .map(|v| match &ts.var(*v).kind {
+                crate::lifecycle::VarKind::Exists(e) => ts.entity(*e).id.clone(),
+                crate::lifecycle::VarKind::Column { entity, column, .. } => {
+                    format!("{}.{column}", ts.entity(*entity).id)
+                }
+                crate::lifecycle::VarKind::Owner { child, parent, .. } => {
+                    format!("{}->{}", ts.entity(*child).id, ts.entity(*parent).id)
+                }
+                other => format!("{other:?}"),
+            })
+            .collect()
+    };
+    let set =
+        |items: &[&str]| -> BTreeSet<String> { items.iter().map(|s| s.to_string()).collect() };
+
+    let fair = ts.property_cone(0);
+    assert_eq!(
+        names(&fair.vars),
+        set(&[
+            "Order",
+            "Order.status",
+            "Order.note",
+            "Warehouse",
+            "Warehouse.state",
+            "Receipt",
+            "Receipt->Order",
+        ]),
+        "the fair action's guard reads, created slots, and writes are in the cone"
+    );
+    let ship = ts
+        .actions()
+        .iter()
+        .position(|a| a.name == "Ship")
+        .expect("Ship");
+    assert_eq!(fair.keep.len(), 1);
+    assert!(fair.keep.contains(&crate::lifecycle::ActId::at(ship)));
+    assert!(!ts.cone_frees_slots(&fair));
+    assert!(
+        !ts.cone_keeps_every_write(&fair.vars),
+        "Ask writes the ticket outside it"
+    );
+
+    // Ship writes the status, so the closure keeps its guard's reads; its created receipt
+    // and its note are not read by anything in the cone.
+    let unfair = ts.property_cone(1);
+    assert_eq!(
+        names(&unfair.vars),
+        set(&["Order", "Order.status", "Warehouse", "Warehouse.state"])
+    );
+    assert!(unfair.keep.is_empty());
+    assert!(
+        ts.cone_frees_slots(&unfair),
+        "Ship creates a receipt the cone does not count"
+    );
+}

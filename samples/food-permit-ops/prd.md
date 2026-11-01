@@ -748,11 +748,11 @@ flowchart TD
 | condition | 施設検査で施設基準に適合した | Inspection | Inspection.status == 適合 | GrantPermit\|RenewPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:144 |
 | condition | 新規の申請である | PermitApplication | PermitApplication.kind == 新規 | GrantPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:148 |
 | condition | 許可が有効である | BusinessPermit | BusinessPermit.status == 有効 | AppointHygieneManager\|IssueCertificate | samples/food-permit-ops/buc/buc_inspection_decision.rdra:173 |
-| condition | 許可が有効で、許可証の交付を受けている | BusinessPermit | BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true | StartBusiness | samples/food-permit-ops/buc/buc_inspection_decision.rdra:187 |
-| forbidden | 施設基準に適合しない施設には許可しない | PermitApplication\|Inspection | PermitApplication.status == 許可 AND Inspection.status != 適合 |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:293 |
-| invariant | 不許可には理由を同時に示す | PermitApplication | when PermitApplication.status == 不許可 then PermitApplication.reason_shown == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:295 |
-| invariant | 手数料を納めた申請だけが検査と許可に進む | PermitApplication | when PermitApplication.status in (awaiting_inspection, approved) then PermitApplication.fee_paid == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:298 |
-| invariant | 許可証の交付を受けてから営業する | BusinessPermit | when BusinessPermit.operating == true then BusinessPermit.certificate_issued == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:301 |
+| condition | 許可が有効で、許可証の交付を受けている | BusinessPermit | BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true | StartBusiness | samples/food-permit-ops/buc/buc_inspection_decision.rdra:193 |
+| forbidden | 施設基準に適合しない施設には許可しない | PermitApplication\|Inspection | PermitApplication.status == 許可 AND Inspection.status != 適合 |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:299 |
+| invariant | 不許可には理由を同時に示す | PermitApplication | when PermitApplication.status == 不許可 then PermitApplication.reason_shown == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:301 |
+| invariant | 手数料を納めた申請だけが検査と許可に進む | PermitApplication | when PermitApplication.status in (awaiting_inspection, approved) then PermitApplication.fee_paid == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:304 |
+| invariant | 許可証の交付を受けてから営業する | BusinessPermit | when BusinessPermit.operating == true then BusinessPermit.certificate_issued == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:307 |
 | condition | 監視指導計画が公表されている | MonitoringPlan | MonitoringPlan.status == 公表済 | ScheduleSiteVisit | samples/food-permit-ops/buc/buc_monitoring.rdra:84 |
 | condition | 申請が確認待か差戻し中である | PermitApplication | PermitApplication.status in (申請内容確認待, 差戻し・補正中) | PayPermitFee | samples/food-permit-ops/buc/buc_permit_application.rdra:108 |
 | condition | 手数料が納められている | PermitApplication | PermitApplication.fee_paid == true | ReviewApplication | samples/food-permit-ops/buc/buc_permit_application.rdra:117 |

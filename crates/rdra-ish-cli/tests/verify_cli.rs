@@ -209,24 +209,44 @@ fn a_temporal_counterexample_prints_its_lasso_in_model_terms() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
-    for (module, property) in [
-        ("M_NeverShipped", "NeverShipped"),
-        ("M_PendingLeadsToDelivered", "PendingLeadsToDelivered"),
+    // The always needs one cone run; the leads_to's counterexample is confirmed by the `_WF`
+    // run, the same cone with `WF_vars(Next)`.
+    assert!(
+        stdout.contains("\nCone_NeverShipped [NeverShipped]: counterexample (31 states)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nCone_PendingLeadsToDelivered [PendingLeadsToDelivered]: counterexample (31 states, Cone_PendingLeadsToDelivered_WF: counterexample)\n"),
+        "{stdout}"
+    );
+    for (module, property, wf_next) in [
+        ("Cone_NeverShipped", "NeverShipped", false),
+        (
+            "Cone_PendingLeadsToDelivered",
+            "PendingLeadsToDelivered",
+            false,
+        ),
+        (
+            "Cone_PendingLeadsToDelivered_WF",
+            "PendingLeadsToDelivered",
+            true,
+        ),
     ] {
-        assert!(
-            stdout.contains(&format!("\n{module} [{property}]: counterexample")),
-            "{stdout}"
-        );
         let cfg = std::fs::read_to_string(tmp.join(format!("{module}.cfg"))).unwrap();
         assert_eq!(cfg.matches("PROPERTY ").count(), 1, "{cfg}");
         assert!(cfg.contains(&format!("PROPERTY {property}\n")), "{cfg}");
+        let tla = std::fs::read_to_string(tmp.join(format!("{module}.tla"))).unwrap();
+        assert_eq!(tla.contains("WF_vars(Next)"), wf_next, "{module}");
     }
+    assert!(!tmp.join("Cone_NeverShipped_WF.tla").exists());
     let whole = std::fs::read_to_string(tmp.join("M.cfg")).expect("the whole-model cfg");
     assert_eq!(whole.matches("PROPERTY ").count(), 2, "{whole}");
     let index = std::fs::read_to_string(tmp.join("cones.txt")).unwrap();
     assert_eq!(
         index,
-        "M_NeverShipped.tla: NeverShipped\nM_PendingLeadsToDelivered.tla: PendingLeadsToDelivered\n"
+        "Cone_NeverShipped.tla: NeverShipped\n\
+         Cone_PendingLeadsToDelivered.tla: PendingLeadsToDelivered\n\
+         Cone_PendingLeadsToDelivered_WF.tla: PendingLeadsToDelivered\n"
     );
 
     let block = |name: &str| -> &str {
@@ -287,6 +307,60 @@ fn a_fair_property_holds_where_the_unfair_one_loops() {
     );
     assert!(!stderr.contains("error[GrantEnds]:"), "{stderr}");
     assert!(stderr.contains("error[GrantEndsUnfair]:"), "{stderr}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A property without `.fair` rests on the whole model's `WF_vars(Next)`, which the cone
+/// does not keep: the cone's two runs leave it undecided, and the whole-model run decides it
+/// under the budget. With a budget of 0 s the whole-model run is stopped, the property is
+/// listed as not decided, and the run still ends in `OK:` as a BFS cone at its cap does.
+#[test]
+fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_whole_model");
+    let sample = repo().join("samples/formal-verification/order.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("\ntemporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nCone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)\n"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("not checked:"), "{stdout}");
+
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "--temporal-budget", "0"],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (stopped at the time budget of 0 s)\n")
+            || stdout.contains("\nRdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, stopped at the time budget of 0 s)\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("\nnot checked: 2 temporal properties not decided\n  PaidLeadsToShipped: the whole-model run stopped at the time budget of 0 s"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("\ntlc_result: ok\n"), "{stdout}");
+    assert!(
+        stdout.ends_with("OK: no errors within 2 instances per entity, Int 0..5\n"),
+        "{stdout}"
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
@@ -441,7 +515,7 @@ fn a_buc_scope_skips_temporal_properties_and_leaves_progress_undecided() {
         "{stdout}"
     );
     assert!(
-        lines.contains(&"temporal properties: 2, not checked: a scoped run has no whole-model run"),
+        lines.contains(&"temporal properties: 2, not checked: a scoped run checks none"),
         "{stdout}"
     );
     assert!(

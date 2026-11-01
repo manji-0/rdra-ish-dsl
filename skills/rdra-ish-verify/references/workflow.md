@@ -27,9 +27,12 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 - `export -o X.tla` names the module `X` and writes `X.cfg` beside it; `-o DIR` writes
   `DIR/RdraSpec.tla` and `DIR/RdraSpec.cfg`.
 - `verify -o DIR` writes one `Cone_<first check>.tla` / `.cfg` pair per cone, one
-  `RdraSpec_<Property>` pair per temporal property (TLC runs each alone, because it does
-  not name the property a temporal counterexample violates), `cones.txt`, and, when the
-  model has temporal properties, the whole-model `RdraSpec` pair for a run by hand.
+  `Cone_<Property>` pair per temporal property with a `Cone_<Property>_WF` pair beside it
+  for an `eventually` or `leads_to` (TLC runs each property alone, because it does not name
+  the property a temporal counterexample violates), `cones.txt`, and, when the model has
+  temporal properties, the whole-model `RdraSpec` pair for a run by hand and a
+  `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs
+  under `--temporal-budget`.
 - Without `-o`, `verify` uses a temp dir. A passing run deletes it; a failed run ends
   with `specs: <dir> (kept because a check failed)`.
 - `verify --entity <E>` (repeatable) checks only `E`'s view and the invariants and
@@ -58,7 +61,7 @@ line and raw trace follow. Here `Pay` writes through two APIs, so it is two acti
 $ rdra-ish verify samples/cross_order_payment_split.rdra
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
-temporal properties: none, no whole-model run
+temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_CrossForbidden_Order_0 [CrossForbidden_Order_0]: counterexample (43 states)
 tlc_result: counterexample
@@ -114,7 +117,7 @@ clear (`deadlock at the bound`) are warnings:
 $ rdra-ish verify samples/deadlock.rdra
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 0 for 0 invariant(s) and 0 after-assert(s)
-temporal properties: none, no whole-model run
+temporal properties: none
 error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state
   leaves paid: Ship (paid -> shipped)   samples/deadlock.rdra:29:1
     guard: condition Packed             samples/deadlock.rdra:33:1

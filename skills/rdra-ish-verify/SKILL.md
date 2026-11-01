@@ -51,9 +51,11 @@ A passing run names its bounds first and last:
 $ rdra-ish verify samples/order.rdra
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
-temporal properties: 2, each checked in its own run on the whole model (fairness does not restrict to a cone)
+temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
+Cone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))
+Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))
 RdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)
 RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)
 tlc_result: ok

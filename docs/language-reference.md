@@ -1919,6 +1919,10 @@ transaction groups is fair on each of its actions. `Spec`, the `.cfg`, and prope
 - No model-wide switch: fairness on every use case would change the verdict of every
   existing property and assume every actor always acts, which hides real liveness gaps. Name
   the use cases each property relies on.
+- `.fair` also keeps the property on its cone: `verify` checks a property on the cone of
+  what it reads and of the listed use cases, and a property whose verdict rests on
+  `WF_vars(Next)` alone needs the whole model (see
+  [formal-verification.md](./formal-verification.md#temporal-properties-on-a-cone)).
 - `check` and `states` run BFS, which evaluates no temporal property, so `.fair` changes
   nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
   to its temporal runs.

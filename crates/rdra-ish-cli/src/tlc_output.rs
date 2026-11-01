@@ -159,6 +159,30 @@ fn distinct_states(line: &str) -> Option<u64> {
         .ok()
 }
 
+/// One of TLC's `Progress(..)` lines, printed about once a minute while it runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TlcProgress {
+    pub distinct: u64,
+    pub queued: u64,
+}
+
+pub fn progress(line: &str) -> Option<TlcProgress> {
+    let line = line.trim();
+    if !line.starts_with("Progress(") {
+        return None;
+    }
+    let distinct = distinct_states(line)?;
+    let (head, _) = line.split_once(" states left on queue")?;
+    let queued = head
+        .rsplit(", ")
+        .next()?
+        .trim()
+        .replace(',', "")
+        .parse()
+        .ok()?;
+    Some(TlcProgress { distinct, queued })
+}
+
 /// The `State n:` blocks after a violation line, up to the next `Error:` or summary line, and
 /// the lasso line that ends a temporal counterexample.
 fn parse_trace(lines: &[&str], mut i: usize) -> (Vec<TraceStep>, Option<Lasso>, usize) {
@@ -516,6 +540,20 @@ Model checking completed. No error has been found.
         assert_eq!(run.distinct_states, Some(39));
         // `-continue` prints both; a violation wins.
         assert_eq!(run.outcome(true), Outcome::Counterexample);
+    }
+
+    #[test]
+    fn a_progress_line_gives_the_distinct_and_queued_counts() {
+        let line = "Progress(14) at 2026-11-02 10:05:00: 9,210,811 states generated (1,842,162 s/min), 6,877,496 distinct states found (1,375,499 ds/min), 5,949,713 states left on queue.";
+        assert_eq!(
+            progress(line),
+            Some(TlcProgress {
+                distinct: 6_877_496,
+                queued: 5_949_713
+            })
+        );
+        assert_eq!(progress("39 distinct states found"), None);
+        assert_eq!(TlcRun::parse(line).distinct_states, Some(6_877_496));
     }
 
     #[test]

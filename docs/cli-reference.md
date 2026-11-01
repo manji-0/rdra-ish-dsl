@@ -169,7 +169,7 @@ The `scope:` line follows the `bounds:` line and names each flag; for `--buc` it
 use cases outside the BUCs. The `not checked:` block lists the targets the scope leaves
 out, the deferred build errors, and each finding a scope or a cap left undecided. A whole
 run prints it only when a cap left something undecided. `verify` under a scope also lists
-the temporal properties: a scoped run has no whole model to check them on.
+the temporal properties: a scoped run checks none.
 
 <!-- derived-from ./state-derivation.md#diagnostics -->
 `check` includes the same broad review signals exposed elsewhere:
@@ -988,16 +988,17 @@ Export a TLA+ specification and run TLC formal verification. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]...
+rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--buc <ID>]... [--entity <ID>]...
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`. |
-| `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `RdraSpec_<Property>.tla` / `.cfg` pair per temporal property, `cones.txt` listing each module TLC runs and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` for a run by hand (TLC does not run it). A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each property module `<stem>_<Property>`. |
+| `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per temporal property with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to`, `cones.txt` listing each module TLC may run and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` for a run by hand and a `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
+| `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and the property is `not decided`, which does not fail the run. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Check only the entity's view and the invariants and after-asserts that read it, with one TLC job per selected cone. See [Partial runs](#partial-runs). |
 
@@ -1007,13 +1008,18 @@ prints no notice for conditions.
 Warnings and errors of the lifecycle transition system are printed on stderr, and an
 error stops `verify` before TLC runs. Each invariant and `after(..).assert` is checked on
 its own cone of influence, a restriction of the system whose reachable states are exactly
-the whole model's projected onto it, with the cones run in parallel. Temporal properties
-need fairness on the whole system, so they are checked on the whole model, and only when
-the model declares any, each in its own run after the cone runs, at most two at a time:
-TLC does not say which property a temporal counterexample violates. Stdout names the
-bounds, the cone count, and each run's result. Stdout or
-stderr carries one `tlc_result: ok|counterexample|tool_error` line. Exits non-zero when
-TLC is missing or reports a violation.
+the whole model's projected onto it, with the cones run in parallel. Each temporal
+property is checked on a cone of its own, of what it reads and of the use cases its
+`.fair` lists, in one run (`Cone_<P>`) or two (`Cone_<P>_WF` adds `WF_vars(Next)`), and
+only when neither decides it on the whole model (`RdraSpec_<P>`), after the cone runs, at
+most two at a time, under `--temporal-budget`; see
+[formal-verification.md](./formal-verification.md#temporal-properties-on-a-cone) for what
+decides. TLC does not say which property a temporal counterexample violates, so each
+property runs alone. Stdout names the bounds, the cone count, and each run's result; a
+whole-model run prints TLC's progress (`  RdraSpec_<P>: N distinct states, M queued, S s`)
+about once a minute, and a run the budget stops prints `not decided` and is listed under
+`not checked:`. Stdout or stderr carries one `tlc_result: ok|counterexample|tool_error`
+line. Exits non-zero when TLC is missing or reports a violation.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped
 at 2,097,152 states per cone; the `bounds:` line names the cap as `2097152 states per BFS

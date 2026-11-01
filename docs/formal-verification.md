@@ -33,10 +33,14 @@ transition system they print, for example `IntLiteralOutOfBounds` or `DoubleMode
 If `-o` ends with `.tla`, the sibling `.cfg` is written next to it and the file stem is the
 module name. If `-o` is a directory (or has no extension), `export` writes
 `<dir>/RdraSpec.tla` and `<dir>/RdraSpec.cfg`. `verify -o <dir>` writes one
-`Cone_<first check>.tla` and `.cfg` pair per cone, one `RdraSpec_<Property>` pair per
-temporal property, and `cones.txt`, which lists each module TLC runs and the checks it
+`Cone_<first check>.tla` and `.cfg` pair per cone of an invariant or after-assert, one
+`Cone_<Property>` pair per temporal property (its cone without `WF_vars(Next)`) with a
+`Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` (the same cone with
+`WF_vars(Next)`), and `cones.txt`, which lists each module TLC may run and the checks it
 answers. When the model has temporal properties it also writes the whole-model `RdraSpec`
-pair, whose `.cfg` names every property, for a run by hand; TLC does not run it.
+pair, whose `.cfg` names every property, for a run by hand, and a `RdraSpec_<Property>`
+pair for each property its cone leaves undecided, which TLC runs (see
+[Temporal properties on a cone](#temporal-properties-on-a-cone)).
 Without `-o`, `verify` writes them to a temp dir. It deletes the dir when every check
 passes, and keeps it and prints `specs: <dir>` when one fails. The TLC heap settings
 (`RDRA_TLC_HEAP`, `JAVA_TOOL_OPTIONS`) are in [cli-reference.md](./cli-reference.md#verify).
@@ -122,21 +126,79 @@ verdicts is the whole-model verdict. Cones over the same variables share one run
 This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 s and
 11 GB on ec-site and did not finish in 300 s on clinic-ops.
 
-Temporal properties need fairness on the whole system, which does not restrict to a
-cone. `verify` checks them on the whole model, and only when the model declares any. TLC
-reports a temporal violation as `Temporal properties were violated.` without naming the
-property, so `verify` runs each property alone: module `RdraSpec_<Property>`, the same
-module text and fairness as the whole-model `RdraSpec`, and a `.cfg` with that one
-`PROPERTY`. The property runs start after the cone runs, at most two at a time, and share
-the cores.
+A temporal property is checked on a cone of its own, and on the whole model only when that
+cone does not decide it (see [Temporal properties on a cone](#temporal-properties-on-a-cone)).
+TLC reports a temporal violation as `Temporal properties were violated.` without naming the
+property, so each property runs alone: module `Cone_<Property>` with a `.cfg` that names
+that one `PROPERTY`. The property cones run with the other cones, in parallel.
 
 A property with `.fair(UC, ...)` (see
-[language-reference.md](./language-reference.md#fairness-fairusecase-)) runs the same way: its
-assumption is part of its own formula, `Fair_P => (...)`, so it needs no `Spec` of its own,
-and no cone has to keep the listed use cases. `verify` prints `<P> assumes weak fairness per
-instance on ...` under the `temporal properties:` line, since an `ok` for `P` holds only on the
-runs that do not starve them. `check` and `states` run BFS, which evaluates no temporal
-property, with or without `.fair`.
+[language-reference.md](./language-reference.md#fairness-fairusecase-)) carries its
+assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases
+whole. `verify` prints `<P> assumes weak fairness per instance on ...` under the `temporal
+properties:` line, since an `ok` for `P` holds only on the runs that do not starve them.
+`check` and `states` run BFS, which evaluates no temporal property, with or without `.fair`.
+
+### Temporal properties on a cone
+
+<!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
+<!-- constrained-by ./language-reference.md#fairness-fairusecase- -->
+A property's cone (`TransitionSystem::property_cone`) is the smallest closed var set that
+holds what the formula reads and, for each action of each use case its `.fair` lists,
+everything the action reads and writes: its guards with the `applies_to` conditions and the
+quantifier reads inside them, the existence of each instance it binds, the source of each
+transition, the clock when it ticks, the columns it assigns, transitions, or chooses, and the
+existence of each entity it creates or deletes. Closed means what it means for an invariant's
+cone: every action that writes a var of the cone reads only vars of the cone. The cone
+decides the property's verdict under the property's own fairness because, for a fair action
+`A`, whether `A(p)` is enabled in the whole model is a function of the cone's vars, every
+step of `A(p)` that changes any var changes a var of the cone, and so `WF_vars(A(p))` on the
+cone's `vars` is `WF_vars(A(p))` on the whole model's; every other action either writes into
+the cone, and then reads only the cone, or leaves the cone unchanged, which is a stuttering
+step of the cone's `[Next]_vars`. Every behavior of the whole model that satisfies `Fair_P`
+therefore projects onto a behavior of the cone that satisfies `Fair_P`, and a behavior of the
+cone lifts to one of the whole model as long as the cone counts the slots of every entity its
+actions create.
+
+What does not restrict to a cone is the `WF_vars(Next)` that `Spec` adds for any `eventually`
+or `leads_to`: a step outside the cone satisfies it, so the cone with `WF_vars(Next)` of its
+own would rule out runs the whole model allows (another entity looping forever while the
+property's instance stands still), and the cone without it admits a stutter the whole model's
+`WF_vars(Next)` rules out. `verify` therefore gives such a property up to two runs on the
+cone, and the whole model only when neither decides:
+
+1. `Cone_<P>`, the cone with `Spec == Init /\ [][Next]_vars` and the property
+   `Fair_P => (...)`. An `ok` is the whole model's verdict.
+2. `Cone_<P>_WF`, the same cone with `WF_vars(Next)`, when the first run finds a
+   counterexample. A counterexample here is a counterexample of the whole model: its loop
+   keeps stepping, and its stutter leaves every action of the cone disabled, which the
+   whole model's actions outside the cone cannot change. An `ok` here decides only when the
+   cone holds every var an action writes, so that every step of the whole model changes the
+   cone; otherwise the first run's counterexample needs the whole model's `WF_vars(Next)`
+   to rule out, and the property is undecided on the cone.
+3. `RdraSpec_<P>`, the whole model, for a property its cone leaves undecided. This is the
+   run that did not finish on food-permit-ops. It prints TLC's progress (distinct states,
+   queue, seconds, about once a minute) and stops at `--temporal-budget` seconds (default
+   300) or at the first progress line past 2,097,152 distinct states, after which the
+   property is `not decided`, listed under `not checked:`, and the run still ends in `OK:`
+   with exit status 0, as a BFS cone at its cap does.
+
+An `always` needs the first run only. A cone that frees an entity's slots (an action of the
+cone creates an entity the cone does not read, so the cone does not count its slots) can show
+a lasso that creates more instances than the bound allows, so only its `ok` is taken, and a
+counterexample sends the property to the whole model. Each property's line names what
+happened: `Cone_P [P]: ok (111 states)`, `Cone_P [P]: counterexample (43 states, Cone_P_WF:
+counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs the whole model's
+WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A property without `.fair` rests on
+`WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
+var; name the use cases it relies on to keep it on the cone. On food-permit-ops
+`HygieneManagerEventuallyAppointed` runs on a 111-state cone and the whole `verify` takes
+3 s; on patent-ops `GrantEnds` runs on a 4,105-state cone. The test
+`a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares the
+cone verdict with the whole-model verdict on the temporal samples and on fixtures for each
+case: another entity looping outside the cone, a fair use case whose guard reads another
+entity, a guard that toggles forever, a cone that frees slots, and a cone that holds every
+written var.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
 2,097,152 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
@@ -161,14 +223,20 @@ its four stuck-state checks are listed under `not checked:` (see the sample's RE
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
-temporal properties: 2, each checked in its own run on the whole model (fairness does not restrict to a cone)
+temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
+Cone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))
+Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))
 RdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)
 RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)
 tlc_result: ok
 OK: no errors within 2 instances per entity, Int 0..5
 ```
+
+Both properties of `order.rdra` have no `.fair`, and `DeliverOrder` writes `delivered_at`,
+which neither reads, so their cones do not decide them and the whole model (31 states) does.
+With `.fair(ShipOrder)` on `PaidLeadsToShipped`, its first cone run would decide it.
 
 A violated invariant or `after` assertion prints in model terms first, the same way
 `check` prints it: the rule's `path:line:col`, one line per step with the use case, its
@@ -282,10 +350,13 @@ The rules for each flag and for deferral are in
   only moves the others (`temporal_fair.rdra`). `.fair(UC, ...)` adds weak fairness per
   instance on the use cases a property names. There is no strong fairness: a step enabled and
   disabled forever is not forced.
-- **Whole-model temporal runs.** A property runs on the whole model, not a cone, so its run
-  explores every reachable state at once. On `samples/patent-ops` at `InstanceCount=2` that
-  is more than tens of millions of states (the largest cone alone has 4.8 million), so
-  patent-ops declares no temporal property.
+- **A property without `.fair` tends to need the whole model.** Its verdict rests on
+  `WF_vars(Next)`, which a cone keeps only when it holds every var an action writes (see
+  [Temporal properties on a cone](#temporal-properties-on-a-cone)); otherwise the property
+  runs on the whole model, which explores every reachable state at once and on
+  `samples/patent-ops` or `samples/food-permit-ops` at `InstanceCount=2` stops at the budget
+  as `not decided`. A `.fair` that names the use cases the property relies on keeps it on
+  its cone.
 - **`.along`.** An `.along` path needs a `relate` that binds each adjacent pair. Without
   one, the rule is `UnbindableScope`, an error in every command, not a dropped filter.
 - **Quantifiers.** `has` and `none` range over the `InstanceCount` ids. Where a `relate`
@@ -391,18 +462,22 @@ gaps.
   three is not checked by default. Each entity is created at most `InstanceCount` times,
   because a deleted slot is never reused. See it: the `bounds:` line. What you can do: run
   `verify`, and raise `--instance-count` for a rule about more instances.
-- **Temporal properties are checked only by `verify`, on the whole model.** `check` and
-  `states` evaluate no `property` and print a `note:` that says so. A property needs
-  fairness on the whole system, so `verify` runs it on the whole model, not a cone, and a
-  run with `--buc` or `--entity` checks no property. See it: the `note:` from `check`, and
-  `temporal properties: none, no whole-model run` in a scoped `verify`. What you can do: run an unscoped
-  `verify` on a model small enough for a whole-model run.
-- **patent-ops states no temporal property.** A whole-model run of patent-ops at 2
-  instances explored 14 million states in 11 minutes without finishing, so a fair
-  `leads_to` such as `GrantEnds` in `temporal_fair.rdra` is undecided at patent-ops' size,
-  and the sample declares none. See it: `temporal properties: none, no whole-model run` in
-  its `verify` run. What you can do: check the property on a smaller model of the same
-  flow, as `temporal_fair.rdra` does.
+- **Temporal properties are checked only by `verify`, and a scoped run checks none.**
+  `check` and `states` evaluate no `property` and print a `note:` that says so. A run with
+  `--buc` or `--entity` checks no property: `--buc` drops use cases a property's fairness
+  reads, and `--entity` may defer an error inside a property's cone. See it: the `note:`
+  from `check`, and `temporal properties: 2, not checked: a scoped run checks none` in a
+  scoped `verify`. What you can do: run an unscoped `verify`.
+- **A property its cone cannot decide runs on the whole model under a budget.** A property
+  whose first cone run finds a counterexample and whose `_WF` run finds none needs the whole
+  model's `WF_vars(Next)` (see [Temporal properties on a cone](#temporal-properties-on-a-cone));
+  so does a property whose cone frees an entity's slots and finds a counterexample. The
+  whole-model run stops at `--temporal-budget` seconds (300 by default) or at 2,097,152
+  distinct states, and the property is then `not decided`, which does not fail the run. On
+  patent-ops and food-permit-ops at 2 instances a whole-model run does not finish (14
+  million states in 11 minutes, and 6.9 million in 300 s). See it: `not decided` on the
+  property's line and under `not checked:`. What you can do: add `.fair(...)` naming the
+  use cases the property relies on, which keeps it on its cone, or raise the budget.
 - **patent-ops does not check that a filing follows approved drafts.** `FileApplication`
   should require `DraftingOrder.status == approved` through a mandatory link from the
   application to its drafting order. With that link, the cones of `PatentApplication`,
@@ -411,12 +486,11 @@ gaps.
   [Known verification gaps](../samples/patent-ops/README.md#known-verification-gaps) in the
   sample's README. What you can do: state such a rule only where its cone stays within the
   `verify` cap, or check it in a smaller model.
-- **food-permit-ops states no temporal property either.** Its property that a valid permit
-  without a 食品衛生責任者 ends with one appointed reads only `BusinessPermit`, a 421-state cone at
-  2 instances, but runs on the whole model: TLC found 6,877,496 distinct states in 300 s with
-  5,949,713 still queued. The sample also leaves out the guard that ties a renewal to a valid
-  permit (the application's cone grows from 14,197 to 429,485 states) and joins a disposition's
-  decision to the permit's ledger by an event. See it:
+- **food-permit-ops leaves a renewal guard out.** The sample leaves out the guard that ties
+  a renewal to a valid permit (the application's cone grows from 14,197 to 429,485 states)
+  and joins a disposition's decision to the permit's ledger by an event. Its temporal
+  property, that a valid permit without a 食品衛生責任者 ends with one appointed, is checked on
+  a 111-state cone. See it:
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
   you can do: as for patent-ops.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
@@ -525,5 +599,6 @@ Name         = [A-Za-z0-9_]+
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
-Locally (Apple silicon) the 47 runs of the 23 roots take about 50 s, and clinic-ops `verify`
-takes 34 s of that at about 800 MB, its TLC JVMs included. The CI step has 5 minutes.
+Locally (Apple silicon) the 55 runs of the 27 roots take about 130 s: clinic-ops `verify`
+takes 41 s at about 820 MB and patent-ops `verify` 65 s at about 1.1 GB, their TLC JVMs
+included; food-permit-ops `verify` takes 1.4 s. The CI step has 5 minutes.

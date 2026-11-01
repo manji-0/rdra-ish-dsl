@@ -1,7 +1,8 @@
 //! Measurement gate for the lifecycle layer. For every root in `samples.txt` it builds at
-//! `Bounds::STATES` (or `Bounds::VERIFY`, the bounds of `verify`'s BFS pass) and explores the cone of each target (each entity view, invariant, and
-//! after-assert) under a state cap. It prints the cone size and reached-state count per
-//! target and the largest per sample.
+//! `Bounds::STATES` (or `Bounds::VERIFY`, the bounds of `verify`'s BFS pass) and explores the
+//! cone of each target (each entity view, invariant, and after-assert) and of each temporal
+//! property under a state cap. It prints the cone size and reached-state count per target and
+//! the largest per sample.
 //!
 //! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure [-- STATE_CAP [verify [SAMPLE]]]`
 
@@ -52,8 +53,17 @@ fn main() {
         );
         let mut seen: HashMap<Cone, (usize, String)> = HashMap::new();
         let mut worst: (usize, String) = (0, String::new());
-        for t in ts.targets() {
-            let cone = ts.target_cone(t);
+        let targets = ts
+            .targets()
+            .into_iter()
+            .map(|t| (ts.target_cone(t), target_name(ts, t)));
+        let properties = (0..ts.properties().len()).map(|i| {
+            (
+                ts.property_cone(i),
+                format!("property {}", ts.properties()[i].name),
+            )
+        });
+        for (cone, name) in targets.chain(properties) {
             let entities: BTreeSet<_> = cone
                 .vars
                 .iter()
@@ -82,7 +92,6 @@ fn main() {
             } else {
                 states.to_string()
             };
-            let name = target_name(ts, t);
             println!(
                 "  {:<44} {:>5} {:>8} {:>10} {:>7}",
                 name,

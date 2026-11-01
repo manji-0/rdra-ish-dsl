@@ -87,13 +87,13 @@ The state space limits what this model says and how far `verify` checks it (#51,
 Each figure is a cone size at the 2 instances of `verify`, from
 `crates/rdra-ish-core/examples/lifecycle_measure.rs`, or a TLC run.
 
-- **No temporal property.** The model should say that a valid permit without a 食品衛生責任者 ends
-  with one appointed or with the permit's end (`leads_to(BusinessPermit.status == valid and
-  BusinessPermit.hygiene_manager_appointed == false, ...).fair(AppointHygieneManager)`). The
-  property reads one entity, whose cone has 421 states, but `verify` checks a property on the
-  whole model. TLC on the whole model found 6,877,496 distinct states in 300 s with 5,949,713
-  still queued, and `verify` printed nothing for the 20 minutes it ran. CI runs every sample
-  unscoped, so the property is left out. `ReqHygieneManagerAfterPermit` states it in words.
+- **The one temporal property is checked on its cone.** `HygieneManagerEventuallyAppointed`
+  says that a valid permit without a 食品衛生責任者 ends with one appointed or with the permit's
+  end, under `.fair(AppointHygieneManager)`. `verify` checks it on the cone of what it reads
+  and of `AppointHygieneManager` (three columns, 111 states at 2 instances), not on the whole
+  model, where TLC found 6,877,496 distinct states in 300 s with 5,949,713 still queued (#67).
+  A property without `.fair` would still go to the whole model, which `verify` now stops at
+  its budget as not decided.
 - **A renewal is not tied to the permit it continues.** `ApplyRenewal` and `RenewPermit` should run
   only while the permit is valid. The guard puts every column of `BusinessPermit` into the cone of
   `PermitApplication` and `Inspection`, which grows from 14,197 to 429,485 states. That is under the
@@ -123,8 +123,9 @@ The model was written against the language as it stood at d8f9094, with no chang
 the parser, the core, or the emitters. Each finding is rated (G) needs a grammar change, (B) a bug
 in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modeling choice.
 
-- **(G/B) A temporal property is checked only on the whole model.** See the first gap above: a
-  property that reads one 421-state entity was undecidable in practice, so the sample has none.
+- **(G/B) A temporal property was checked only on the whole model.** A property that reads one
+  entity was undecidable in practice, so the first soak left it out. #67 checks a property on
+  its cone, and `HygieneManagerEventuallyAppointed` is in the model.
 - **(G) An entity has one lifecycle column.** A second `transitions` column
   (`Disposition.publication`) is dropped with an unnamed `warning:` ("one Enum lifecycle column per
   entity is supported"), and the language reference does not say so. The publication was moved by
