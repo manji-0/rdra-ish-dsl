@@ -1,12 +1,13 @@
 //! Linked editing ranges for synchronized symbol renames while typing.
 
 use rdra_ish_core::SemanticModel;
-use rdra_ish_syntax::ast::{Ast, Expr, Item, Operand, PredicateArg, PredicateCall};
+use rdra_ish_syntax::ast::{Ast, Item};
 use tower_lsp::lsp_types::{LinkedEditingRanges, Range};
 
 use crate::convert::span_to_range;
 use crate::refs::{
-    id_span_in_qref, instance_id_span, reference_at_offset, symbol_target, SymbolTarget,
+    ast_references, id_span_in_qref, instance_id_span, reference_at_offset, symbol_target,
+    SymbolTarget,
 };
 
 pub fn linked_editing_ranges(
@@ -22,17 +23,16 @@ pub fn linked_editing_ranges(
     let mut ranges = vec![active];
 
     for item in &ast.items {
-        match item {
-            Item::Instance(inst) => {
-                if inst.kind.name() == target.kind && inst.id == target.id {
-                    let range = span_to_range(text, instance_id_span(inst, text));
-                    push_unique_range(&mut ranges, range);
-                }
+        if let Item::Instance(inst) = item {
+            if inst.kind.name() == target.kind && inst.id == target.id {
+                let range = span_to_range(text, instance_id_span(inst, text));
+                push_unique_range(&mut ranges, range);
             }
-            Item::Predicate(pred) => {
-                collect_linked_ranges(pred, text, &target, &mut ranges);
-            }
-            Item::Import(_) | Item::Module(_, _) | Item::Property(_) => {}
+        }
+    }
+    for qref in ast_references(ast) {
+        if let Some(span) = id_span_in_qref(qref, text, &target) {
+            push_unique_range(&mut ranges, span_to_range(text, span));
         }
     }
 
@@ -61,66 +61,6 @@ fn active_id_range(ast: &Ast, text: &str, target: &SymbolTarget, offset: usize) 
         }
         crate::refs::ReferenceAt::Symbol(qref) => {
             id_span_in_qref(qref, text, target).map(|span| span_to_range(text, span))
-        }
-    }
-}
-
-fn collect_linked_ranges(
-    pred: &PredicateCall,
-    text: &str,
-    target: &SymbolTarget,
-    ranges: &mut Vec<Range>,
-) {
-    for arg in &pred.args {
-        collect_linked_ranges_in_arg(arg, text, target, ranges);
-    }
-    for chain in &pred.chain {
-        for arg in &chain.args {
-            collect_linked_ranges_in_arg(arg, text, target, ranges);
-        }
-    }
-}
-
-fn collect_linked_ranges_in_arg(
-    arg: &PredicateArg,
-    text: &str,
-    target: &SymbolTarget,
-    ranges: &mut Vec<Range>,
-) {
-    match arg {
-        PredicateArg::Ref(qref) => {
-            if let Some(span) = id_span_in_qref(qref, text, target) {
-                push_unique_range(ranges, span_to_range(text, span));
-            }
-        }
-        PredicateArg::Expr(expr) => collect_expr_linked_spans(expr, text, target, ranges),
-        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
-    }
-}
-
-fn collect_expr_linked_spans(
-    expr: &Expr,
-    text: &str,
-    target: &SymbolTarget,
-    ranges: &mut Vec<Range>,
-) {
-    match expr {
-        Expr::Cmp(cmp) => {
-            if let Operand::QualifiedColumn(col) = &cmp.lhs {
-                if let Some(span) = id_span_in_qref(&col.entity, text, target) {
-                    push_unique_range(ranges, span_to_range(text, span));
-                }
-            }
-            if let Operand::QualifiedColumn(col) = &cmp.rhs {
-                if let Some(span) = id_span_in_qref(&col.entity, text, target) {
-                    push_unique_range(ranges, span_to_range(text, span));
-                }
-            }
-        }
-        Expr::Not(inner) => collect_expr_linked_spans(inner, text, target, ranges),
-        Expr::And(a, b) | Expr::Or(a, b) => {
-            collect_expr_linked_spans(a, text, target, ranges);
-            collect_expr_linked_spans(b, text, target, ranges);
         }
     }
 }

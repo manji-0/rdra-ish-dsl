@@ -1,13 +1,12 @@
 //! Inlay hints for predicate parameters and symbol kinds.
 
 use rdra_ish_core::{node_ref_kind, LookupResult, SemanticModel};
-use rdra_ish_syntax::ast::{
-    Ast, ChainCall, Expr, Item, Operand, PredicateArg, PredicateCall, QRef,
-};
+use rdra_ish_syntax::ast::{Ast, Item, PredicateCall, QRef};
 use tower_lsp::lsp_types::{InlayHint, InlayHintKind, InlayHintLabel, Range};
 
 use crate::convert::byte_offset_to_position;
 use crate::predicates::predicate_signature_parameters;
+use crate::refs::ast_references;
 
 pub fn inlay_hints(
     model: &SemanticModel,
@@ -18,14 +17,15 @@ pub fn inlay_hints(
     let mut hints = Vec::new();
 
     for item in &ast.items {
-        match item {
-            Item::Predicate(pred) => {
-                hints.extend(predicate_parameter_hints(text, pred));
-                collect_reference_hints(model, text, pred, &mut hints);
-            }
-            Item::Instance(_) | Item::Import(_) | Item::Module(_, _) | Item::Property(_) => {}
+        if let Item::Predicate(pred) = item {
+            hints.extend(predicate_parameter_hints(text, pred));
         }
     }
+    hints.extend(
+        ast_references(ast)
+            .into_iter()
+            .filter_map(|qref| reference_kind_hint(model, text, qref)),
+    );
 
     if let Some(range) = range {
         hints.retain(|hint| hint_in_range(hint, &range));
@@ -77,77 +77,6 @@ fn arg_delimiter_positions(source: &str, pred: &PredicateCall) -> Vec<usize> {
         }
     }
     positions
-}
-
-fn collect_reference_hints(
-    model: &SemanticModel,
-    text: &str,
-    pred: &PredicateCall,
-    hints: &mut Vec<InlayHint>,
-) {
-    for arg in &pred.args {
-        collect_reference_hints_in_arg(model, text, arg, hints);
-    }
-    for chain in &pred.chain {
-        collect_reference_hints_in_chain(model, text, chain, hints);
-    }
-}
-
-fn collect_reference_hints_in_chain(
-    model: &SemanticModel,
-    text: &str,
-    chain: &ChainCall,
-    hints: &mut Vec<InlayHint>,
-) {
-    for arg in &chain.args {
-        collect_reference_hints_in_arg(model, text, arg, hints);
-    }
-}
-
-fn collect_reference_hints_in_arg(
-    model: &SemanticModel,
-    text: &str,
-    arg: &PredicateArg,
-    hints: &mut Vec<InlayHint>,
-) {
-    match arg {
-        PredicateArg::Ref(qref) => {
-            if let Some(hint) = reference_kind_hint(model, text, qref) {
-                hints.push(hint);
-            }
-        }
-        PredicateArg::Expr(expr) => {
-            collect_reference_hints_in_expr(model, text, expr, hints);
-        }
-        PredicateArg::Transition { .. } | PredicateArg::Card(_) | PredicateArg::Lit(_) => {}
-    }
-}
-
-fn collect_reference_hints_in_expr(
-    model: &SemanticModel,
-    text: &str,
-    expr: &Expr,
-    hints: &mut Vec<InlayHint>,
-) {
-    match expr {
-        Expr::Cmp(cmp) => {
-            if let Operand::QualifiedColumn(col) = &cmp.lhs {
-                if let Some(hint) = reference_kind_hint(model, text, &col.entity) {
-                    hints.push(hint);
-                }
-            }
-            if let Operand::QualifiedColumn(col) = &cmp.rhs {
-                if let Some(hint) = reference_kind_hint(model, text, &col.entity) {
-                    hints.push(hint);
-                }
-            }
-        }
-        Expr::Not(inner) => collect_reference_hints_in_expr(model, text, inner, hints),
-        Expr::And(a, b) | Expr::Or(a, b) => {
-            collect_reference_hints_in_expr(model, text, a, hints);
-            collect_reference_hints_in_expr(model, text, b, hints);
-        }
-    }
 }
 
 fn reference_kind_hint(model: &SemanticModel, text: &str, qref: &QRef) -> Option<InlayHint> {

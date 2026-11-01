@@ -272,6 +272,16 @@
   its own header line, `%% set-only: <Entity>.<column> ...`, and `omitted:` keeps the Enum
   columns nothing moves. It is still no state model: without `transitions` it has no states
   to draw, as `information` and `condition` already treat it.
+- The LSP treats a reference in a chain-method argument like one in a predicate argument
+  (#66). With the cursor on `Cond` in `.when(Cond)` (#62, #65), on a use case in
+  `.via(UseCase)` or `.fair(UseCase, ...)` (#59), on an entity in `.via(Junction)` or
+  `.along(E, ...)`, on a medium in `.by(medium)`, or on the entity of an `Entity.column` in
+  `.when`, `.then`, `.has`, `.none`, or `.assert`, rename, references, go-to-definition,
+  hover, and linked editing found no symbol. A property was not read at all, so renaming a
+  use case or an entity left its name unchanged in `.fair(...)` and in the property's
+  formula. The features now read one list of the references in a file, and a test renames
+  a symbol inside every chain method that `predicate_chain_methods` lists, so a new method
+  must be added to the test before it passes.
 
 ## v0.4.0 - 2026-11-01
 
