@@ -597,7 +597,10 @@ Supported field clauses are:
 
 `shows(Screen, Entity)` remains a coarse screen-to-entity information link.
 `maps_field(Field, Entity.column)` is the fine-grained mapping when a concrete
-screen item corresponds to a logical data column.
+screen item corresponds to a logical data column. `lint` `field-column-unwritten` warns on a
+field mapped to a `@null` column that no `sets` and no `chooses` gives a value: `states` keeps
+that column at `null`, so the screen shows a value the model never produces. Add
+`sets(UseCase, Entity, column == present)` to the use case that records it.
 
 ### Screen transitions
 

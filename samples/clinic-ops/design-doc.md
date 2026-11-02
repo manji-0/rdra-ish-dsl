@@ -1892,7 +1892,7 @@ sequenceDiagram
   actor__Clinician ->> screen__PrescriptionScreen: リフィル処方箋の処方オーダ
   screen__PrescriptionScreen ->> api__DraftPrescriptionApi: 処方オーダ API
   api__DraftPrescriptionApi ->> entity__Encounter: read
-  api__DraftPrescriptionApi ->> entity__Prescription: create
+  api__DraftPrescriptionApi ->> entity__Prescription: create refill_limit=set
   api__DraftPrescriptionApi -->> screen__PrescriptionScreen: done
 ```
 
@@ -3806,19 +3806,29 @@ Entity: Prescription (処方箋)
   labels: status[drafted=処方入力中|issued=院外処方箋発行済|voucher_issued=引換券交付済|in_inquiry=疑義照会中|audited=調剤・監査済|counseled=服薬指導済|dispensed=交付済|expired=使用期間切れ|cancelled=取消]
 
   STATUS          REFILL_LIMIT  SENT_AT  DISPENSED_AT  INITIAL  TERMINAL  VIA
-  ──────────────  ────────────  ───────  ────────────  ───────  ────────  ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  drafted         null          null     null          yes      no        BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  issued          null          present  null          no       no        BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  voucher_issued  null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  cancelled       null          null     null          no       yes       BucPrescriptionFulfillment/CancelPrescription, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  dispensed       null          present  present       no       yes       BucPrescriptionFulfillment/ConfirmDispense, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  expired         null          present  null          no       yes       BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/ExpirePrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
-  audited         null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  in_inquiry      null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  counseled       null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
-  dispensed       null          null     present       no       yes       BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/HandOverMedication, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  ──────────────  ────────────  ───────  ────────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  drafted         null          null     null          yes      no        BucPrescriptionFulfillment/DraftPrescription
+  drafted         present       null     null          yes      no        BucPrescriptionFulfillment/IssueRefillPrescription
+  issued          null          present  null          no       no        BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription
+  voucher_issued  null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  cancelled       null          null     null          no       yes       BucPrescriptionFulfillment/CancelPrescription, BucPrescriptionFulfillment/DraftPrescription
+  issued          present       present  null          no       no        BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  voucher_issued  present       null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  cancelled       present       null     null          no       yes       BucPrescriptionFulfillment/CancelPrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  dispensed       null          present  present       no       yes       BucPrescriptionFulfillment/ConfirmDispense, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueOutsidePrescription
+  expired         null          present  null          no       yes       BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/ExpirePrescription, BucPrescriptionFulfillment/IssueOutsidePrescription
+  audited         null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  in_inquiry      null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  dispensed       present       present  present       no       yes       BucPrescriptionFulfillment/ConfirmDispense, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  expired         present       present  null          no       yes       BucPrescriptionFulfillment/ExpirePrescription, BucPrescriptionFulfillment/IssueOutsidePrescription, BucPrescriptionFulfillment/IssueRefillPrescription
+  audited         present       null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  in_inquiry      present       null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  counseled       null          null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  counseled       present       null     null          no       no        BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  dispensed       null          null     present       no       yes       BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/DraftPrescription, BucPrescriptionFulfillment/HandOverMedication, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/RaisePrescriptionInquiry
+  dispensed       present       null     present       no       yes       BucPrescriptionFulfillment/AnswerPrescriptionInquiry, BucPrescriptionFulfillment/CounselMedication, BucPrescriptionFulfillment/DispenseAndAudit, BucPrescriptionFulfillment/HandOverMedication, BucPrescriptionFulfillment/IssueInhouseVoucher, BucPrescriptionFulfillment/IssueRefillPrescription, BucPrescriptionFulfillment/RaisePrescriptionInquiry
 
-  reachable: 10 / bound: 72
+  reachable: 20 / bound: 72
 ```
 
 </details>

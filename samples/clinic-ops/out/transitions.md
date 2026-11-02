@@ -49,14 +49,14 @@
 | PatientAccount | status | 有効 (active) | アーカイブ済 (inactive) | 患者のアーカイブ (ArchivePatient) |  | 医事課 受付担当 | samples/clinic-ops/buc/buc_patient_onboarding.rdra:131 |
 | PatientAccount | status | 有効 (active) | 統合済 (merged) | 重複患者の統合 (MergeDuplicatePatient) |  | 医事課 受付担当 | samples/clinic-ops/buc/buc_patient_onboarding.rdra:127 |
 | PaymentTransaction | status | 収納済 (posted) | 還付済 (refunded) | 還付・追加徴収 (RefundPayment) |  | 医事課 会計担当 | samples/clinic-ops/buc/buc_visit_payment.rdra:129 |
-| Prescription | status | 処方入力中 (drafted) | 院外処方箋発行済 (issued) | 院外処方箋の発行 (IssueOutsidePrescription) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:104 |
-| Prescription | status | 処方入力中 (drafted) | 引換券交付済 (voucher_issued) | 院内処方用引換券の交付 (IssueInhouseVoucher) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:110 |
-| Prescription | status | 処方入力中 (drafted) | 取消 (cancelled) | 処方の取消 (CancelPrescription) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:163 |
-| Prescription | status | 院外処方箋発行済 (issued) | 院外処方箋発行済 (issued) | 保険薬局からの疑義照会への回答 (AnswerPharmacyInquiry) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:142 |
-| Prescription | status | 院外処方箋発行済 (issued) | 交付済 (dispensed) | 保険薬局での調剤結果の受信 (ConfirmDispense) |  |  | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:151 |
-| Prescription | status | 院外処方箋発行済 (issued) | 使用期間切れ (expired) | 処方箋の使用期間切れ (ExpirePrescription) |  |  | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:158 |
-| Prescription | status | 引換券交付済 (voucher_issued) | 疑義照会中 (in_inquiry) | 疑義照会 (RaisePrescriptionInquiry) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:131 |
-| Prescription | status | 引換券交付済 (voucher_issued) | 調剤・監査済 (audited) | 調剤・監査 (DispenseAndAudit) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:115 |
-| Prescription | status | 疑義照会中 (in_inquiry) | 引換券交付済 (voucher_issued) | 疑義照会への回答 (AnswerPrescriptionInquiry) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:136 |
-| Prescription | status | 調剤・監査済 (audited) | 服薬指導済 (counseled) | 服薬指導 (CounselMedication) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:119 |
-| Prescription | status | 服薬指導済 (counseled) | 交付済 (dispensed) | 薬剤交付 (HandOverMedication) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:123 |
+| Prescription | status | 処方入力中 (drafted) | 院外処方箋発行済 (issued) | 院外処方箋の発行 (IssueOutsidePrescription) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:105 |
+| Prescription | status | 処方入力中 (drafted) | 引換券交付済 (voucher_issued) | 院内処方用引換券の交付 (IssueInhouseVoucher) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:111 |
+| Prescription | status | 処方入力中 (drafted) | 取消 (cancelled) | 処方の取消 (CancelPrescription) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:164 |
+| Prescription | status | 院外処方箋発行済 (issued) | 院外処方箋発行済 (issued) | 保険薬局からの疑義照会への回答 (AnswerPharmacyInquiry) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:143 |
+| Prescription | status | 院外処方箋発行済 (issued) | 交付済 (dispensed) | 保険薬局での調剤結果の受信 (ConfirmDispense) |  |  | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:152 |
+| Prescription | status | 院外処方箋発行済 (issued) | 使用期間切れ (expired) | 処方箋の使用期間切れ (ExpirePrescription) |  |  | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:159 |
+| Prescription | status | 引換券交付済 (voucher_issued) | 疑義照会中 (in_inquiry) | 疑義照会 (RaisePrescriptionInquiry) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:132 |
+| Prescription | status | 引換券交付済 (voucher_issued) | 調剤・監査済 (audited) | 調剤・監査 (DispenseAndAudit) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:116 |
+| Prescription | status | 疑義照会中 (in_inquiry) | 引換券交付済 (voucher_issued) | 疑義照会への回答 (AnswerPrescriptionInquiry) |  | 医師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:137 |
+| Prescription | status | 調剤・監査済 (audited) | 服薬指導済 (counseled) | 服薬指導 (CounselMedication) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:120 |
+| Prescription | status | 服薬指導済 (counseled) | 交付済 (dispensed) | 薬剤交付 (HandOverMedication) |  | 薬剤師 | samples/clinic-ops/buc/buc_prescription_fulfillment.rdra:124 |

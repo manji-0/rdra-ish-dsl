@@ -249,6 +249,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_flow_cycles(model, &mut findings);
     lint_column_names(model, &mut findings);
     lint_enum_attributes(model, &mut findings);
+    lint_unwritten_field_columns(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
     lint_rule_labels(model, &mut findings);
     lint_goals(model, &mut findings);
@@ -671,6 +672,47 @@ fn lint_enum_attributes(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
                 "type it by a variation if an actor chooses the value",
             );
         }
+    }
+}
+
+/// A nullable column a screen field shows starts `null`, and `states` keeps it there unless a
+/// `sets` or a `chooses` gives it a value, so the field shows nothing the model can produce.
+fn lint_unwritten_field_columns(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for mapping in &model.field_mappings {
+        let Some(entity) = model.entities.get(mapping.entity) else {
+            continue;
+        };
+        let Some(field) = model.fields.get(mapping.field) else {
+            continue;
+        };
+        let nullable = entity
+            .columns
+            .iter()
+            .any(|c| c.name == mapping.column && c.is_nullable);
+        let written = model
+            .column_effects
+            .iter()
+            .any(|e| e.entity == mapping.entity && e.column == mapping.column)
+            || model
+                .column_choices
+                .iter()
+                .any(|c| c.entity == mapping.entity && c.column == mapping.column);
+        if !nullable || written {
+            continue;
+        }
+        push_element_lint(
+            model,
+            issues,
+            "field",
+            "field",
+            &field.id,
+            "field-column-unwritten",
+            format!(
+                "{} shows {}.{}, a nullable column that no use case sets, so it stays null",
+                field.id, entity.id, mapping.column
+            ),
+            "add sets(UseCase, Entity, column == present) where the value is given, or drop the column's @null",
+        );
     }
 }
 
@@ -1415,6 +1457,38 @@ transitions(Place, Order.status, pending -> paid)
             .filter(|issue| issue.subject_kind == "state")
             .collect();
         assert!(on_states.is_empty(), "{on_states:?}");
+    }
+
+    #[test]
+    fn lint_flags_a_screen_field_column_no_use_case_sets() {
+        let src = |sets: &str| {
+            format!(
+                r#"
+usecase Close "Close"
+screen S "S"
+field DoneOn "Done on"
+contains(S, DoneOn)
+entity Claim "Claim" {{
+  id: Int @pk
+  done_on: Date @null
+}}
+updates(Close, Claim)
+maps_field(DoneOn, Claim.done_on)
+{sets}
+"#
+            )
+        };
+        let unwritten = |model: &SemanticModel| {
+            collect_findings(model)
+                .into_iter()
+                .filter(|issue| issue.rule == "field-column-unwritten")
+                .count()
+        };
+        assert_eq!(unwritten(&model_from(&src(""))), 1);
+        assert_eq!(
+            unwritten(&model_from(&src("sets(Close, Claim, done_on == present)"))),
+            0
+        );
     }
 
     #[test]

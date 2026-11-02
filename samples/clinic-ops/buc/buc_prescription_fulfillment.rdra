@@ -92,6 +92,7 @@ creates(DraftPrescriptionApi, Prescription)
 // リフィル処方箋 states that it is one and its upper limit of uses (egov-ryotan-kisoku-332M50000100015.txt:481).
 displays(IssueRefillPrescription, PrescriptionScreen)
 invokes(IssueRefillPrescription, DraftPrescriptionApi)
+sets(IssueRefillPrescription, Prescription, refill_limit == present)
 
 // The signed 処方箋 is sent to the 電子処方箋管理サービス, also when a paper one is printed
 // (mhlw-denshi-shohousen-unyou.txt:28-30); the paper one carries an 引換番号 (:131). The patient takes it

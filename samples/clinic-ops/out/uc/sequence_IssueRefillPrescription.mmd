@@ -10,5 +10,5 @@ sequenceDiagram
   actor__Clinician ->> screen__PrescriptionScreen: リフィル処方箋の処方オーダ
   screen__PrescriptionScreen ->> api__DraftPrescriptionApi: 処方オーダ API
   api__DraftPrescriptionApi ->> entity__Encounter: read
-  api__DraftPrescriptionApi ->> entity__Prescription: create
+  api__DraftPrescriptionApi ->> entity__Prescription: create refill_limit=set
   api__DraftPrescriptionApi -->> screen__PrescriptionScreen: done

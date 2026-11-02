@@ -4,6 +4,11 @@
 
 ### Added
 
+- `lint` `field-column-unwritten` warns on a screen field mapped (`maps_field`) to a `@null`
+  column that no `sets` and no `chooses` gives a value (#79). In `samples/insurance-claim-ops`,
+  `Claim.completed_on` (the field 請求完了日) stayed an axis at `null` in `states` until
+  `CompleteClaim` set it, and neither `check` nor `lint` said so. `samples/clinic-ops` had the
+  same gap on `Prescription.refill_limit`; `IssueRefillPrescription` now sets it.
 - `.by(role)` names the key a join follows wherever two keys join the same two entities
   (#73): after `.has(...)` or `.none(...)` (on an `invariant` or a `holds`), after a `holds`
   body (the link from an entity it compares to the entities the guarded use case binds),
