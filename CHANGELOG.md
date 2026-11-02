@@ -342,6 +342,10 @@
 
 ### Fixed
 
+- `diagram --kind state --entity <Entity>` names only that entity's columns in the
+  `omitted:` and `set-only:` header lines (#70). It also listed the Enum columns of every
+  other entity in scope, such as `%% set-only: Disposition.publication` under
+  `--entity BusinessPermit`.
 - `list --kind rule` prints the values of `!=`, `in (...)`, and `not in (...)` in a
   `forbidden`, `invariant`, `required`, or `exclusive` by their labels, as it did for `==`
   and as `list --kind condition` does (#70). `Doc.status in (paid, shipped)` reads

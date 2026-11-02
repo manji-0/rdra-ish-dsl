@@ -641,10 +641,12 @@ impl Emitter for StateMermaidEmitter {
         // An Enum column no `transitions` drive is no state model. One a `sets` writes is still
         // a state axis of `states` and `check`, so it is named apart from one that never moves.
         let (mut unmodeled, mut set_only): (Vec<String>, Vec<String>) = (Vec::new(), Vec::new());
-        let mut entities: Vec<_> = model.entities.iter().collect();
-        entities.sort_by_key(|(_, e)| &e.id);
-        for (key, entity) in entities {
-            if !in_scope.contains(&NodeRef::Entity(key)) {
+        let mut all_entities: Vec<_> = model.entities.iter().collect();
+        all_entities.sort_by_key(|(_, e)| &e.id);
+        for (key, entity) in all_entities {
+            if !in_scope.contains(&NodeRef::Entity(key))
+                || (!entities.is_empty() && !entities.contains(&entity.id))
+            {
                 continue;
             }
             for column in &entity.columns {
@@ -1090,6 +1092,33 @@ sets(Publish, Doc, kind == report)
             ),
             "{result}"
         );
+    }
+
+    #[test]
+    fn an_entity_scoped_state_diagram_names_only_that_entitys_unmodeled_columns() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published) @default(draft)
+  tone: Enum(plain, formal)
+}
+entity Memo "メモ" {
+  id: Int @pk
+  kind: Enum(note, todo) @default(note)
+  mood: Enum(calm, tense)
+}
+usecase Publish "公開する"
+usecase Jot "書く"
+transitions(Publish, Doc.status, draft -> published)
+sets(Jot, Memo, kind == todo)
+"#;
+        let model = model_from(src);
+        let mut view = View::whole();
+        view.state.entities = vec!["Doc".to_string()];
+        let result = StateMermaidEmitter.emit(&model, &view).unwrap();
+        assert!(result.contains("%% omitted: Doc.tone "), "{result}");
+        assert!(!result.contains("Memo."), "{result}");
+        assert!(!result.contains("set-only"), "{result}");
     }
 
     #[test]
