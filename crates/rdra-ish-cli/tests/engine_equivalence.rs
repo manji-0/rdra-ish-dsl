@@ -1216,7 +1216,104 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ),
     ("whole_cone", WHOLE_CONE, &[]),
     ("guard_on_unassigned", GUARD_ON_UNASSIGNED, &[]),
+    (
+        "copy_parent",
+        COPY_PARENT,
+        &[("IssueEventuallyPlain", Why::WfNext)],
+    ),
+    ("copy_outside", COPY_OUTSIDE, &[]),
+    (
+        "quantifier_chain",
+        QUANTIFIER_CHAIN,
+        &[
+            ("OrderShips", Why::WfNext),
+            ("OrderShipsPlain", Why::WfNext),
+        ],
+    ),
 ];
+
+/// A fair use case copies its parent's kind: the copy target is in the cone, so the parent's
+/// column, its owner and its creation come in with it.
+const COPY_PARENT: &str = r#"
+entity Application "申請" { id: Int @pk  kind: Enum(food, retail) @default(food) }
+entity Permit "許可" {
+  id: Int @pk
+  status: Enum(draft, issued) @default(draft)
+  kind: Enum(food, retail) @default(food)
+}
+relate(Permit, Application, N:1)
+usecase File "申請"
+usecase Draft "許可作成"
+usecase Issue "発行"
+creates(File, Application)
+creates(Draft, Permit)
+updates(Issue, Permit)
+transitions(Issue, Permit.status, draft -> issued)
+sets(Issue, Permit, kind == Application.kind)
+property IssueEventually leads_to(Permit.status == draft, Permit.status == issued).fair(Issue)
+property IssueEventuallyPlain leads_to(Permit.status == draft, Permit.status == issued)
+"#;
+
+/// `Pay` writes the cone and copies the tier from an optional parent: `PaidShips` leaves the
+/// tiers out and drops the copy guard, which some source value meets in the whole model. Pay
+/// needs a linked customer, and once `Join` takes every customer slot `Link` cannot create
+/// one, so both `PendingPays` fail on the cone and on the whole model.
+const COPY_OUTSIDE: &str = r#"
+entity Customer "顧客" { id: Int @pk  tier: Enum(basic, gold) @default(basic) }
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  tier: Enum(basic, gold) @default(basic)
+}
+relate(Order, Customer, N:1).optional()
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Join "入会"
+usecase Upgrade "昇格"
+usecase Link "紐付け"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order, tier == Customer.tier)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Join, Customer)
+sets(Upgrade, Customer, tier == gold)
+creates(Link, Customer)
+updates(Link, Order)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship)
+property PendingPays leads_to(Order.status == pending, Order.status == paid).fair(Pay)
+property PendingPaysLinked leads_to(Order.status == pending, Order.status == paid).fair(Pay, Link)
+"#;
+
+/// A fair use case guarded by `.none` over holds that another use case releases; the clerk
+/// loops outside every cone. With `Ship` alone fair, a hold that is never released blocks the
+/// order, and the cone needs the whole model's `WF_vars(Next)`, which the clerk's loop meets
+/// without releasing; with `Release` fair too, every hold is released and the order ships.
+const QUANTIFIER_CHAIN: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, shipped) @default(open) }
+entity Hold "保留" { id: Int @pk  state: Enum(active, released) @default(active) }
+entity Clerk "担当" { id: Int @pk  state: Enum(away, here) @default(away) }
+relate(Hold, Order, N:1)
+usecase Place "注文"
+usecase PlaceHold "保留登録"
+usecase Release "保留解除"
+usecase Ship "出荷"
+usecase Arrive "出勤"
+usecase Leave "退勤"
+creates(Place, Order)
+creates(PlaceHold, Hold)
+transitions(Release, Hold.state, active -> released)
+updates(Ship, Order)
+transitions(Ship, Order.status, open -> shipped)
+transitions(Arrive, Clerk.state, away -> here)
+transitions(Leave, Clerk.state, here -> away)
+condition Clear "保留がない"
+holds(Clear, Order.status == open).none(Hold.state == active)
+applies_to(Clear, Ship)
+property OrderShips leads_to(Order.status == open, Order.status == shipped).fair(Ship)
+property OrderShipsReleased leads_to(Order.status == open, Order.status == shipped).fair(Ship, Release)
+property OrderShipsPlain leads_to(Order.status == open, Order.status == shipped)
+"#;
 
 /// The cone holds every var an action writes, so its `WF_vars(Next)` is the whole model's:
 /// the stutter at `paid` the plain run finds is ruled out by the `_WF` run, which decides
