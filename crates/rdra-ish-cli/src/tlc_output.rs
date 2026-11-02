@@ -137,9 +137,12 @@ impl TlcRun {
     }
 }
 
+/// `TypeOK` is the emitter's own typing, not a model rule: its violation is a tool error.
 fn violation_kind(line: &str) -> Option<ViolationKind> {
     let rest = line.strip_prefix("Error:")?.trim();
-    if rest.starts_with("Invariant ") && rest.ends_with("is violated.") {
+    if rest.starts_with("Invariant TypeOK ") {
+        None
+    } else if rest.starts_with("Invariant ") && rest.ends_with("is violated.") {
         Some(ViolationKind::Invariant)
     } else if rest.starts_with("Action property ") && rest.ends_with("is violated.") {
         Some(ViolationKind::ActionProperty)
@@ -590,6 +593,14 @@ Model checking completed. No error has been found.
         let cut = &BACK[..BACK.find("Back to state").unwrap()];
         assert_eq!(TlcRun::parse(cut).verdict(), None);
         assert_eq!(TlcRun::parse("").verdict(), None);
+    }
+
+    #[test]
+    fn a_type_ok_violation_is_a_tool_error() {
+        let run = TlcRun::parse("Error: Invariant TypeOK is violated.\n");
+        assert!(run.violations.is_empty());
+        assert_eq!(run.outcome(false), Outcome::ToolError);
+        assert_eq!(run.verdict(), None);
     }
 
     #[test]
