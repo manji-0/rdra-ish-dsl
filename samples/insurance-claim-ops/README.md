@@ -111,8 +111,9 @@ permission, and no timer starts it.
   (`.none(Subrogation)`).
 - **A use case that writes a parent and creates a child uses one API.** `RequestInvestigation`
   and `OpenSettlement` each invoke one API that creates the child and updates the case, so the
-  step is one transaction group. With two APIs the creation ran as a second action with no
-  guard and no order to the first (see Soak findings).
+  step is one transaction group. With two APIs each step carries the guard (#78), but the
+  two steps have no order, and the creation can run again without the case's move (see Soak
+  findings).
 - **An OR is two guarded arms.** A case is assessed when the survey is reported and either the
   coverage is first-party or the liability is decided. `AssessDamage` declares the arm
   `investigating -> assessed` twice, once under `FirstPartyCoverage` and once under
@@ -247,7 +248,12 @@ What the model could say but `verify` could not check, and what it could not say
   a vehicle case still in 事故受付, with no guard and no first transaction. state-derivation.md says
   the first group that writes an entity the body reads carries the guard, but not that the other
   groups run with none and in any order. One API that creates the child and updates the case
-  makes it one step.
+  makes it one step. Since #78 every group's step carries the use case's guard, and the
+  two-API form passes `check`. It still fails `verify` at 2 instances, so the sample keeps one
+  API: the settlement's step does not need the case's move, so it runs again on a case that
+  already has a settlement (`Unique_Settlement_ClaimCase`), and `verify` also reports
+  `Deadlock_ClaimCase_status_negotiating`. Its cone grows from 60,193 to 674,981 states, and
+  `verify` takes 336 s and 41 GB instead of 3 s.
 - **(D) A use case that moves two lifecycle columns runs only where both have an arm.** A use
   case with `transitions(Go, E.status, a -> b)` and `transitions(Go, E.period, y -> z)` does not
   run at `(a, x)`. The language reference's section on several lifecycle columns does not say

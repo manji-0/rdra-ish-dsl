@@ -196,7 +196,7 @@ fn after_assert_is_checked_after_each_group_step() {
 }
 
 #[test]
-fn a_condition_guards_the_group_whose_entity_it_reads() {
+fn a_condition_guards_every_group_of_the_use_case() {
     let conditions = |body: &str| {
         split_pay(&format!(
             "condition Ready \"可\"\nholds(Ready, {body})\napplies_to(Ready, Pay)\n\
@@ -214,13 +214,59 @@ fn a_condition_guards_the_group_whose_entity_it_reads() {
             .map(|a| a.name.clone())
             .collect()
     };
-    assert_eq!(
-        guarded(&built(&conditions("Order.rush == true"))),
-        vec!["Pay_2"]
-    );
-    // A body on an entity no group writes is a precondition of the first step.
-    assert_eq!(
-        guarded(&built(&conditions("Desk.open == true"))),
-        vec!["Pay_1"]
-    );
+    // A body is a precondition of the use case, so each group's step carries it, whether a
+    // group writes the entity the body reads or no group does (#78).
+    for body in ["Order.rush == true", "Desk.open == true"] {
+        assert_eq!(
+            guarded(&built(&conditions(body))),
+            vec!["Pay_1", "Pay_2"],
+            "{body}"
+        );
+    }
+}
+
+/// OpenSettlement moves the claim through one API and creates the settlement under it through
+/// another, guarded by the claim's kind (#78). Each group's step carries the guard, and the
+/// settlement's step reads it on the claim the settlement is created under, so no settlement
+/// is ever created under a vehicle claim.
+const GUARDED_SPLIT: &str = r#"
+variation Kind "種目" {
+  liability "賠償"
+  vehicle "車両"
+}
+entity Claim "案件" { id: Int @pk  kind: Kind  status: Enum(open, negotiating, closed) @default(open) }
+entity Settlement "示談" { id: Int @pk  status: Enum(pending, agreed) @default(pending) }
+relate(Settlement, Claim, N:1)
+usecase Report "受付"
+usecase Close "終了"
+usecase OpenSettlement "示談開始"
+api ClaimApi "案件 API"
+api SettlementApi "示談 API"
+creates(Report, Claim)
+transitions(Close, Claim.status, open -> closed)
+invokes(OpenSettlement, ClaimApi)
+updates(ClaimApi, Claim)
+transitions(OpenSettlement, Claim.status, open -> negotiating)
+invokes(OpenSettlement, SettlementApi)
+creates(SettlementApi, Settlement)
+condition Eligible "賠償責任の事故"
+holds(Eligible, Claim.kind == liability)
+forbidden(Claim, Settlement, Claim.kind == vehicle, Settlement.status == pending).along(Claim, Settlement)
+"#;
+
+#[test]
+fn a_guard_holds_for_every_group_of_a_split_use_case() {
+    let violated = |src: &str| {
+        derive_src(src)
+            .diags
+            .iter()
+            .any(|x| matches!(x.diag, StateDiag::ConstraintViolated { .. }))
+    };
+    assert!(violated(GUARDED_SPLIT), "the rule needs the guard");
+    let guarded = format!("{GUARDED_SPLIT}applies_to(Eligible, OpenSettlement)\n");
+    assert!(!violated(&guarded));
+    let ts = built(&guarded);
+    // The settlement's step binds the claim it creates the settlement under, and the guard
+    // reads that row.
+    assert_eq!(bound(&ts, "OpenSettlement_2"), vec!["Settlement", "Claim"]);
 }

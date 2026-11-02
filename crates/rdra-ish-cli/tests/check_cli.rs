@@ -142,8 +142,8 @@ transitions(RetryPayment, Order.status, awaiting_retry -> paid)
 }
 
 /// A never-run action names its transaction group and lists only the guards that hold in no
-/// reachable state, each at its site: Pay_2's settlement condition reads a state only Refund
-/// enters, and Refund leaves `paid`, which only Pay_2 enters.
+/// reachable state, each at its site: Pay's settlement condition, which both of its groups
+/// carry, reads a state only Refund enters, and Refund leaves `paid`, which only Pay_2 enters.
 #[test]
 fn check_lists_only_the_guards_that_never_hold() {
     let dir = std::env::temp_dir().join(format!("rdra-never-runs-{}", std::process::id()));
@@ -191,7 +191,7 @@ applies_to(Settled, Pay)
                 .unwrap()
         })
         .collect();
-    assert_eq!(blocks.len(), 2, "{stderr}");
+    assert_eq!(blocks.len(), 3, "{stderr}");
     let squash = |b: &str| {
         let squashed = b
             .lines()
@@ -200,15 +200,19 @@ applies_to(Settled, Pay)
             .join("\n");
         common::relative_to(&squashed, &dir)
     };
-    assert_eq!(
-        squash(blocks[0]),
-        "\
-transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
-declared: transaction 2 of Pay (Pay_2) never_runs.rdra:5:1
+    for (block, group) in blocks.iter().zip(1..=2) {
+        assert_eq!(
+            squash(block),
+            format!(
+                "\
+transaction {group} of Pay (Pay_{group}) can never run: in no reachable state do its guards hold
+declared: transaction {group} of Pay (Pay_{group}) never_runs.rdra:5:1
 guard: condition Settled never_runs.rdra:20:1"
-    );
+            )
+        );
+    }
     assert_eq!(
-        squash(blocks[1]),
+        squash(blocks[2]),
         "\
 use case Refund can never run: in no reachable state do its guards hold
 declared: use case Refund never_runs.rdra:6:1
@@ -218,7 +222,7 @@ guard: Order.status is paid (transitions of Refund) never_runs.rdra:18:1"
         .lines()
         .filter(|l| l.starts_with("warning[Runs_"))
         .count();
-    assert_eq!(warnings, 2, "each action warns once: {stderr}");
+    assert_eq!(warnings, 3, "each action warns once: {stderr}");
 }
 
 /// A use case that creates a child under an `.optional()` key and guards on the parent it

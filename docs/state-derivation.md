@@ -86,7 +86,9 @@ actions interleave: in each step the tool picks any enabled action and applies i
   `<UC>_1` to `<UC>_k` in transaction order, and the actions interleave freely with
   every other action.
   [`cross_order_payment_split`](../samples/formal-verification/cross_order_payment_split.rdra)
-  routes `Pay` through two APIs, so `Cancel` runs between `Pay_1` and `Pay_2`.
+  routes `Pay` through two APIs, so `Cancel` runs between `Pay_1` and `Pay_2`. Every
+  one of the k actions carries the use case's condition guards (see
+  [Conditions as guards](#actions)).
 - **A published entity is not in the lifecycle, and its write joins the internal
   change.** An entity published with `exposes(System, E).append()` or `.upsert()` gets no
   variables and no view. A use case's direct write to it joins the use case's one
@@ -202,8 +204,14 @@ case's action:
 - An atom on any other entity reads an existing instance. The atoms on one such
   entity share one instance, which a direct `relate` owner links to the parameters it
   relates to. Without a `relate`, the instance is independent.
-- In a use case with k groups, the first group that writes an entity the body reads
-  carries the guard, else the first group.
+- In a use case with k groups, every group's action carries the guard: the use case runs
+  only when the condition holds, so no group runs without it. Each action reads the body on
+  its own pre-state, with the bindings above. An atom on an entity the group writes, or on
+  the parent it creates a child under, reads that row. An atom on an entity a sibling group
+  writes reads an existing instance. The groups stay unordered, so a group whose sibling has
+  already made the guard false waits, and runs before that sibling in another
+  interleaving. A `.when` on a `transitions` arm or a `chooses` value guards only the group
+  that writes its column.
 - A `.has(...)` or `.none(...)` on the body quantifies over the related instances
   present in the pre-state, linked by a `relate` owner to the parameters and the other
   instances, through the key [Joins](#joins) picks. `.has(Related)` and `.none(Related)`

@@ -14,8 +14,8 @@ use crate::lifecycle::types::{
 use crate::lifecycle::EntId;
 use crate::model::{
     CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossConstraintScope,
-    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Join, Min,
-    QuantifierKind, RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
+    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, Join, Min, QuantifierKind,
+    RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
@@ -1021,25 +1021,20 @@ impl<'m> Builder<'m> {
 
     // ── R-guard: condition bodies ────────────────────────────────────────────
 
-    /// One guard per `holds` body applied to the use case and placed on this transaction group
-    /// (see [`condition_group`]). An entity the action binds reads its param: on the pre-state,
-    /// or in the successor (`At::Next`) when the action creates it, so the body constrains what
-    /// is created. Any other entity, an entity of a sibling group included, is `Exists` over
-    /// present instances of the pre-state, one witness per entity shared by the body's atoms,
-    /// linked by a direct owner var (one hop) to each param or other witness it relates to; with
-    /// no such relate it is independent.
-    pub(super) fn condition_guards(
-        &mut self,
-        uc: UseCaseKey,
-        params: &[Param],
-        groups: &[Vec<EntityKey>],
-        group: usize,
-    ) -> Vec<Guard> {
+    /// One guard per `holds` body applied to the use case. A body is a precondition of the use
+    /// case, so every transaction group's action carries it, each on its own pre-state. An
+    /// entity the action binds reads its param: on the pre-state, or in the successor
+    /// (`At::Next`) when the action creates it, so the body constrains what is created. Any
+    /// other entity, an entity of a sibling group included, is `Exists` over present instances
+    /// of the pre-state, one witness per entity shared by the body's atoms, linked by a direct
+    /// owner var (one hop) to each param or other witness it relates to; with no such relate it
+    /// is independent.
+    pub(super) fn condition_guards(&mut self, uc: UseCaseKey, params: &[Param]) -> Vec<Guard> {
         let model = self.model;
         let mut guards = Vec::new();
         for (ck, _, body) in applied_bodies(model)
             .into_iter()
-            .filter(|(_, u, body)| *u == uc && condition_group(body, groups) == group)
+            .filter(|(_, u, _)| *u == uc)
         {
             let site = Site::new(ModelRef::Condition(ck), &body.site);
             let pred = self.body_pred(ck, params, &site);
@@ -1361,18 +1356,6 @@ impl<'m> Builder<'m> {
             );
         }
     }
-}
-
-/// The transaction group whose action carries a condition body: the first, in transaction
-/// order, that writes an entity the body reads, else the first. A body is a precondition of the
-/// use case, so it guards one step only, and an atom on a sibling group's entity reads that
-/// entity's pre-state.
-pub(super) fn condition_group(body: &HoldsBody, groups: &[Vec<EntityKey>]) -> usize {
-    let read: Vec<EntityKey> = body.conds.iter().flat_map(cond_entities).collect();
-    groups
-        .iter()
-        .position(|g| g.iter().any(|ek| read.contains(ek)))
-        .unwrap_or(0)
 }
 
 /// The entities a body atom reads, left operand first.

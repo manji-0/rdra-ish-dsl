@@ -86,7 +86,8 @@ fn refund_never_runs_once_with_its_name() {
     assert!(d.has("Order", |x| matches!(x, StateDiag::NeverRuns { .. })));
 }
 
-/// Pay spans two transaction groups. Only the Order group is blocked, so only `Pay_2` warns.
+/// Pay spans two transaction groups. Only the Order group's arm is guarded, and its guard never
+/// holds, so only `Pay_2` warns.
 #[test]
 fn each_transaction_group_runs_or_not_on_its_own() {
     let src = r#"
@@ -103,15 +104,19 @@ invokes(Pay, CapturePaymentApi)
 updates(CapturePaymentApi, Payment)
 invokes(Pay, PayOrderApi)
 updates(PayOrderApi, Order)
-transitions(Pay, Order.status, pending -> paid)
+transitions(Pay, Order.status, pending -> paid).when(Settled)
 transitions(Pay, Payment.status, pending -> captured)
 condition Settled "精算済み"
 holds(Settled, Order.status == paid)
-applies_to(Settled, Pay)
 "#;
     let d = derive_src(src);
     let names: Vec<&str> = never_runs(&d.diags).into_iter().map(|(a, _)| a).collect();
     assert_eq!(names, ["Pay_2"]);
+    // A use case's guard holds for every group, so it blocks both.
+    let guarded = src.replace(").when(Settled)", ")") + "applies_to(Settled, Pay)\n";
+    let d = derive_src(&guarded);
+    let names: Vec<&str> = never_runs(&d.diags).into_iter().map(|(a, _)| a).collect();
+    assert_eq!(names, ["Pay_1", "Pay_2"]);
 }
 
 /// Close writes Order and Payment in one transaction, so both entity cones keep it and both

@@ -458,7 +458,7 @@ impl<'m> Builder<'m> {
                     _ => format!("{id}_{}", g + 1),
                 };
                 self.acting = entities[g].clone();
-                let action = self.usecase_action(uc, name, writes, &entities, g);
+                let action = self.usecase_action(uc, name, writes, &entities);
                 self.acting.clear();
                 self.uc_actions
                     .entry(uc)
@@ -475,14 +475,13 @@ impl<'m> Builder<'m> {
 
     /// One atomic action for one transaction group of the use case: every effect on every
     /// entity of the group in one step. `groups` lists every group's entities, in transaction
-    /// order; `group` is this one.
+    /// order.
     fn usecase_action(
         &mut self,
         uc: UseCaseKey,
         name: String,
         writes: &[UcWrite],
         groups: &[Vec<EntityKey>],
-        group: usize,
     ) -> Action {
         let model = self.model;
         let mut a = ActionDraft::default();
@@ -514,9 +513,9 @@ impl<'m> Builder<'m> {
         self.chosen_columns(uc, &mut a);
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
-        self.owner_bindings(uc, &mut a, groups, group);
+        self.owner_bindings(uc, &mut a);
         self.copy_effects(uc, &mut a, groups);
-        let guards = self.condition_guards(uc, &a.params, groups, group);
+        let guards = self.condition_guards(uc, &a.params);
         a.guards.extend(guards);
         self.arm_guards(&mut a);
         Action {
@@ -844,21 +843,13 @@ impl<'m> Builder<'m> {
         }
     }
 
-    /// Whether a `holds` body applied to `uc` and placed on this group reads `parent` through
-    /// key `fk` from a `child` the action creates, so the creation links to the row the guard
-    /// reads.
-    fn guard_reads_parent(
-        &self,
-        uc: UseCaseKey,
-        fk: FkId,
-        groups: &[Vec<EntityKey>],
-        group: usize,
-    ) -> bool {
+    /// Whether a `holds` body applied to `uc` reads `parent` through key `fk` from a `child`
+    /// the action creates, so the creation links to the row the guard reads.
+    fn guard_reads_parent(&self, uc: UseCaseKey, fk: FkId) -> bool {
         let model = self.model;
         let key = model.foreign_key(fk);
         applied_bodies(model).into_iter().any(|(_, u, body)| {
             u == uc
-                && preds::condition_group(body, groups) == group
                 && body
                     .conds
                     .iter()
@@ -1309,13 +1300,7 @@ impl<'m> Builder<'m> {
     /// the action reads, not writes, so it is never relinked. Each key has its own parent
     /// param, so a child created under two keys to one parent the action does not write may
     /// point at two rows.
-    fn owner_bindings(
-        &mut self,
-        uc: UseCaseKey,
-        a: &mut ActionDraft,
-        groups: &[Vec<EntityKey>],
-        group: usize,
-    ) {
+    fn owner_bindings(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
         for &(var, child, parent) in &self.owners.clone() {
             let Some(c) = a.param_of(child) else { continue };
             let VarKind::Owner { fk, .. } = self.ts.vars[var.index()].kind else {
@@ -1345,7 +1330,7 @@ impl<'m> Builder<'m> {
                         site: site.clone(),
                     });
                 }
-                let guarded = || self.guard_reads_parent(uc, fk, groups, group);
+                let guarded = || self.guard_reads_parent(uc, fk);
                 let rhs = match a.param_of(parent) {
                     Some(p) => Rhs::Param(p),
                     None if optional && !(child_is_new && guarded()) => Rhs::Lit(Value::NULL),

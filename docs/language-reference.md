@@ -904,7 +904,8 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 - FK-grouped direct writes use the full `relate` graph for connectivity. Two written
   sibling entities that share an unwritten parent entity are still grouped as one
   inferred transaction.
-- `states` and `verify` run these transactions (`UsecaseTx::groups()`). An entity a use
+- `states` and `verify` run these transactions (`UsecaseTx::groups()`), each as its own
+  step, and every step carries the use case's `applies_to` guards. An entity a use
   case only `sets` or transitions counts as an update. An
   entity written in its own transaction after an FK group raises `SeparateTxInferred`.
 
@@ -1338,7 +1339,9 @@ exempt the body.
 A body with `applies_to(Condition, UseCase)` is a guard on that use case: the use case runs
 only in a state where every comparison holds. `applies_to(Condition, Api)` guards each use
 case that invokes the API, and `applies_to(Condition, System)` adds no guard. `states`,
-`check`, and the TLA+ export read the same guard.
+`check`, and the TLA+ export read the same guard. A use case whose writes span several
+transaction groups (two APIs, for example) is one step per group, and every step carries
+the guard, each read on the state before that step.
 
 - A comparison on an entity that the use case writes reads that instance. When the use case
   creates the entity, the comparison tests the new instance after the use case runs, so

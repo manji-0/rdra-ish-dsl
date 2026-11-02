@@ -755,8 +755,8 @@ fn bfs_and_tlc_agree_on_choice_guards() {
 }
 
 /// A use case split into two transaction groups (one API each): an after-assert checked after
-/// each step, with the other group's entity universally bound, and a condition guard on the
-/// group whose entity it reads.
+/// each step, with the other group's entity universally bound, and a condition guard on every
+/// group's step.
 const SPLIT_USE_CASE: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending)  rush: Bool }
 entity Payment "決済" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
@@ -784,6 +784,42 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 #[test]
 fn bfs_and_tlc_agree_on_split_use_cases() {
     check_fixture("split_use_case", SPLIT_USE_CASE);
+}
+
+/// A use case that moves the claim through one API and creates the settlement under it through
+/// another, guarded by the claim's kind (#78). The settlement's step carries the guard too, so
+/// neither engine creates a settlement under a vehicle claim.
+const GUARDED_SPLIT: &str = r#"
+variation Kind "種目" {
+  liability "賠償"
+  vehicle "車両"
+}
+entity Claim "案件" { id: Int @pk  kind: Kind  status: Enum(open, negotiating, closed) @default(open) }
+entity Settlement "示談" { id: Int @pk  status: Enum(pending, agreed) @default(pending) }
+relate(Settlement, Claim, N:1)
+usecase Report "受付"
+usecase Close "終了"
+usecase OpenSettlement "示談開始"
+api ClaimApi "案件 API"
+api SettlementApi "示談 API"
+creates(Report, Claim)
+transitions(Close, Claim.status, open -> closed)
+invokes(OpenSettlement, ClaimApi)
+updates(ClaimApi, Claim)
+transitions(OpenSettlement, Claim.status, open -> negotiating)
+invokes(OpenSettlement, SettlementApi)
+creates(SettlementApi, Settlement)
+condition Eligible "賠償責任の事故"
+holds(Eligible, Claim.kind == liability)
+applies_to(Eligible, OpenSettlement)
+forbidden(Claim, Settlement, Claim.kind == vehicle, Settlement.status == pending).along(Claim, Settlement)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_guard_over_every_group() {
+    if let Some(violated) = check_fixture("guarded_split", GUARDED_SPLIT) {
+        assert!(violated.is_empty(), "{violated:?}");
+    }
 }
 
 const PUBLISHED_OUTBOX: &str = r#"

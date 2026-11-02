@@ -295,6 +295,18 @@
   of one entity runs only where both columns have an arm (Several lifecycle columns on one
   entity). A deadline that depends on a reason is one timer per period, each triggering its
   own use case guarded by a `condition` on the reason (Timers); the snippet is checked.
+- A use case's guard holds for every transaction group of the use case (#78). A use case
+  whose writes span k groups (two APIs, for example) is k actions, `<UC>_1` to `<UC>_k`, and
+  each now carries every `applies_to` body of the use case, read on the state before that
+  step. Before, only the first group that wrote an entity the body read carried it, and the
+  other groups ran unguarded: an `OpenSettlement` that moves the case through the case API and
+  creates the settlement through a settlement API created a settlement under a vehicle case.
+  A group's step reads the guard on the rows it binds, a parent it creates a child under
+  included, and on an existing instance otherwise. A `.when` on a `transitions` arm or a
+  `chooses` value still guards only the group that writes its column. `check`, `states`, the
+  TLA+ export and `verify` read the same guards. The groups still run in any order, so a
+  guard does not make one group wait for another.
+
 - A `.by(role)` belongs to the `.along(...)`, `.has(...)` or `.none(...)` before it (#73). On
   a `forbidden` or `invariant`, a `.by` written before `.along(...)`, which `.along` used to
   take, is now `ByWithoutAlong`; move it after the `.along`.
