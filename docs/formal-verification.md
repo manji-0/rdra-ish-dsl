@@ -219,8 +219,8 @@ counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs t
 WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A property without `.fair` rests on
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
-`HygieneManagerEventuallyAppointed` runs on a 257-state cone and the whole `verify` takes
-3 s; on patent-ops `GrantEnds` runs on a 4,105-state cone. The test
+`HygieneManagerEventuallyAppointed` runs on a 243-state cone and the whole `verify` takes
+18 s; on patent-ops `GrantEnds` runs on a 4,105-state cone. The test
 `a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares the
 cone verdict with the whole-model verdict on the temporal samples and on fixtures for each
 case: another entity looping outside the cone, a fair use case whose guard reads another
@@ -408,8 +408,9 @@ The rules for each flag and for deferral are in
 
   At 2 instances, a cone whose BFS passes the test's cap of 200,000 states is compared at
   1 instance only. The test lists these cones in `VERIFY_FALLBACK` and fails when the list
-  changes. Today they are in `samples/clinic-ops` and `samples/patent-ops` (states at 2
-  instances, measured with `lifecycle_measure`):
+  changes. Today they are in `samples/clinic-ops`, `samples/patent-ops`, and
+  `samples/food-permit-ops` (states at 2 instances, measured with `lifecycle_measure`; the
+  food-permit-ops cones are listed under the next item):
 
   | Cone (first target that reads it; clinic-ops unless named) | States |
   |---|---:|
@@ -454,7 +455,7 @@ gaps.
 - **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that
   BFS and TLC agree on the states, edges, findings, and verdicts of every cone. A cone whose
   BFS passes the test's cap of 200,000 states at 2 instances is compared at 1 instance only.
-  `VERIFY_FALLBACK` in `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 10 cones
+  `VERIFY_FALLBACK` in `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 17 cones
   today:
   - `samples/clinic-ops`: entities `Charge`, `ClinicalOrder`, `EligibilityCheck`,
     `LabResult`, and `Prescription`, and invariants `Forbidden_ClinicalOrder_1`,
@@ -464,6 +465,11 @@ gaps.
   - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
     (with `Exclusive_OfficeAction_0`). The guards that read the application put its state
     into the cone, which reaches 4,818,909 states at 2 instances.
+  - `samples/food-permit-ops`: entities `Disposition`, `Inspection`, and `PermitApplication`,
+    and invariants `Forbidden_Disposition_2`, `Inv_Disposition_0`, `Inv_PermitApplication_1`,
+    and `Inv_PermitApplication_2`. The renewal guard `失効後の更新はできない` puts the renewed
+    permit's existence and status into them (#73): 231,493 to 232,885 states at 2 instances,
+    and 2,094,157 for the view of `PermitApplication`.
 
   `verify` still checks these cones at 2 instances: TLC runs on each, and BFS runs on each
   clinic-ops cone. Only the agreement of the two engines is tested at 1 instance. This is
@@ -518,16 +524,21 @@ gaps.
   [Known verification gaps](../samples/patent-ops/README.md#known-verification-gaps) in the
   sample's README. What you can do: state such a rule only where its cone stays within the
   `verify` cap, or check it in a smaller model.
-- **food-permit-ops leaves a renewal guard out.** The sample leaves out the guard that ties
-  a renewal to a valid permit. The guard adds two variables to the application's cone,
-  `BusinessPermit._exists` and `BusinessPermit.status`, and the cone grows from 14,197 to
-  429,485 states (#71): the 31 reachable states of those two variables at 2 instances
-  interleave with every state of the application, and an exact cone cannot be smaller than
-  that projection. The sample also joins a disposition's decision to the permit's ledger by
-  an event. Its temporal property, that a valid permit without a 食品衛生責任者 ends with one
-  appointed, is checked on a 257-state cone. See it:
+- **food-permit-ops checks its renewal guard just under the cap.** A renewal application
+  names the permit it renews (`renews`, a second key between the two entities since #73), and
+  `失効後の更新はできない` guards `ApplyRenewal` and `RenewPermit` on that permit's status. The
+  guard adds the permit's existence, its status and the `renews` link to the application's
+  cone: at 2 instances the view of `PermitApplication` grows from 127,165 to 2,094,157
+  states, 2,995 under the cap of 2,097,152, and the views of `Inspection` and `Disposition`
+  from 14,197 and 23,156 to about 232,000 each. `verify` decides every check (18 s locally).
+  The interleaving of the permit's 31 reachable states with the application's is inherent to
+  an exact cone; reducing it is #74. At 1 instance a renewal needs a second application slot,
+  so `check` warns that `ApplyRenewal` and `RenewPermit` never run. The sample also joins a
+  disposition's decision to the permit's ledger by an event. Its temporal property, that a
+  valid permit without a 食品衛生責任者 ends with one appointed, is checked on its cone. See it:
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
-  you can do: as for patent-ops.
+  you can do: a change that grows the application's cone further takes the view past the cap;
+  measure it with `lifecycle_measure` first.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
   outside the selected BUCs, and those could reach, enable, or unblock a state. A missing
   witness, a use case that never runs, a deadlock, an arm never taken, and a value never
@@ -567,7 +578,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `temporal_fair.rdra` | pass, fail | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
 | `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
-| `none_any_child.rdra` | pass, pass | `.none(Invoice.status in (<every value>))` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states) |
+| `none_any_child.rdra` | pass, pass | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
 | `none_any_child_bypassed.rdra` | pass, fail | The same model with Reissue, which creates an Invoice under a closed Order without the guard; `Unique_Invoice_Order` fails at two instances on the cone without `Invoice.status` |
 | `min_card_unmet.rdra` | fail, fail | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
 | `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |

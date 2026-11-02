@@ -79,12 +79,18 @@ numbers), the comment says the modeling is the model's assumption.
 - **The permit is registered under its application, one per application.**
   `relate(BusinessPermit, PermitApplication, 1:1)`, and `RegisterPermit` runs only on a new
   application that has no permit yet (`holds(NoPermitYet, PermitApplication.kind ==
-  new).none(BusinessPermit.status in (valid, suspended, expired, revoked, closed))`): a set of
-  every status says "no permit" and reads only the link (#71). The 1:1 checks the result as
-  `Unique_BusinessPermit_PermitApplication`. `RegisterPermit` also copies the application's
-  営業の種類 into the permit (`sets(RegisterPermit, BusinessPermit, business_type ==
-  PermitApplication.business_type)`, #69), and the rule `許可の営業の種類は申請の営業の種類と同じ` reads
-  both.
+  new).none(BusinessPermit).by(PermitApplication)`): `.none(BusinessPermit)` says "no permit"
+  and reads only the link (#71, #73). The 1:1 checks the result as
+  `Unique_BusinessPermit_PermitApplication`.
+- **A renewal names the permit it renews.** `relate(PermitApplication, BusinessPermit,
+  N:1).optional().role(renews)`: a new application names none. With the registration key, two
+  keys join the two entities, so each guard and rule between them names its key with `.by`
+  (#73). `RenewsValidPermit` (`失効後の更新はできない`) reads `BusinessPermit.status == valid`
+  through `renews` on `ApplyRenewal` and `RenewPermit`. On `ApplyRenewal`, which creates the
+  application, the guard also links the new application to the valid permit it reads.
+- **The permit copies the application's 営業の種類.** `sets(RegisterPermit, BusinessPermit,
+  business_type == PermitApplication.business_type)` (#69), and the rule
+  `許可の営業の種類は申請の営業の種類と同じ` reads both through the registration key.
 - **The disposition has two lifecycle columns.** `Disposition.status` follows the procedure
   (処分案 to 確定) and `Disposition.publication` the publication (未公表, 公表中, 公表終了, and
   公表対象外 for a disposition not made). Each has its own `transitions` and its own state model;
@@ -100,29 +106,36 @@ Each figure is a cone size at the 2 instances of `verify`, from
 - **The one temporal property is checked on its cone.** `HygieneManagerEventuallyAppointed`
   says that a valid permit without a 食品衛生責任者 ends with one appointed or with the permit's
   end, under `.fair(AppointHygieneManager)`. `verify` checks it on the cone of what it reads
-  and of `AppointHygieneManager` (257 states at 2 instances), not on the whole
+  and of `AppointHygieneManager` (243 states at 2 instances), not on the whole
   model, where TLC found 6,877,496 distinct states in 300 s with 5,949,713 still queued (#67).
   A property without `.fair` would still go to the whole model, which `verify` now stops at
   its budget as not decided.
 - **The copied 営業の種類 is state.** Since #69, `PermitApplication.business_type` and
-  `BusinessPermit.business_type` are variables, so the view of `PermitApplication` grows from
-  14,197 to 127,165 states. The view of `BusinessPermit` is 8,023 states and that of
-  `Disposition` 23,156 with one permit per application (#71); before the guard that enforces it
-  read the permit's status as well as its link, which took `Disposition` to 248,032.
-- **A renewal is not tied to the permit it continues.** `ApplyRenewal` and `RenewPermit` should run
-  only while the permit is valid. The cone is exact and column-level (#71): the guard adds two
-  variables to the cones of `PermitApplication` and `Inspection`, `BusinessPermit._exists` and
-  `BusinessPermit.status`, and the 31 states those two reach on their own at 2 instances
-  interleave with every state of the application, so 14,197 states became 429,485 before #69,
-  and on the current model, with `business_type` as state, the same guard takes 127,165 past
-  3,000,000, over the `verify` cap of 2,097,152. A cone cannot be smaller than that projection.
-  On the current model the guard as a `holds` on `BusinessPermit.status` also never runs: the
-  only link between the two entities is the one from the permit to the application it was
-  registered under, which no renewal has, and a second link from the application to the permit
-  it renews makes the key that joins the two ambiguous (`.along(...)` reports it, and a
-  condition has no `.by(role)` to pick one). The model leaves the guard out. Only `ExtendPermitTerm`, a step from
-  `valid` to `valid`, keeps an expired permit from being extended, so `after(ExtendPermitTerm)`
-  holds by construction.
+  `BusinessPermit.business_type` are variables, so the view of `PermitApplication` grew from
+  14,197 to 127,165 states. Before the renewal guard, the view of `BusinessPermit` was 8,023
+  states and that of `Disposition` 23,156 with one permit per application (#71); before the
+  guard that enforces it read the permit's status as well as its link, which took
+  `Disposition` to 248,032.
+- **The renewal guard leaves the application's view just under the cap.** The guard
+  `失効後の更新はできない` (#73) adds the permit's existence and status and the `renews` link to
+  the cones that hold the application. The cone is exact and column-level (#71), so the 31
+  states the permit's two variables reach at 2 instances interleave with every state of the
+  application; a cone cannot be smaller than that projection, and reducing it is #74. Measured
+  with `lifecycle_measure -- 3000000 verify` at 2 instances, before and after the guard:
+
+  | View | Before | After |
+  |---|---:|---:|
+  | `PermitApplication` | 127,165 | 2,094,157 |
+  | `Inspection` | 14,197 | 232,885 |
+  | `Disposition` | 23,156 | 231,493 |
+  | `BusinessPermit` | 8,023 | 7,813 |
+
+  The view of `PermitApplication` is 2,995 states under the `verify` cap of 2,097,152, so
+  `verify` decides every check: `tlc_result: ok`, no deadlock, every use case runs, in 18 s and
+  700 MB locally. A change that grows the application's cone further takes the view past the
+  cap; measure it first. Before #73 the guard could not be written: the only link between the
+  two entities was the registration key, which no renewal has, and a second key made the join
+  ambiguous with no way to name one (the first key won silently in a condition).
 - **The decision and the ledger are joined by events.** In the first draft the decision of a 取消
   or 停止 moved the disposition and the permit in one use case, and the renewal wrote the permit too.
   The cones of `PermitApplication`, `Inspection`, and `BusinessPermit` each passed 3,000,000 states,
@@ -135,9 +148,11 @@ Each figure is a cone size at the 2 instances of `verify`, from
 
 ## Diagnostics left in place
 
-`check` and `lint` report nothing, and `lint` scores 100. Every API carries a method and a path, so
-`api-contract-missing` does not fire, and every screen is reached by a `navigates`, some from another
-BUC's file through `import buc.<name>.{Screen}`.
+`lint` reports nothing and scores 100. `check` warns that `ApplyRenewal` and `RenewPermit` never
+run: at its 1 instance per entity the one application slot holds the new application the permit
+is registered under, and a renewal needs a second one. `verify` at 2 instances runs both. Every
+API carries a method and a path, so `api-contract-missing` does not fire, and every screen is
+reached by a `navigates`, some from another BUC's file through `import buc.<name>.{Screen}`.
 
 ## Soak findings
 
@@ -156,7 +171,9 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
 - **(D) A creating use case guarded on an optional parent it only reads never runs.**
   `Runs_ApplyRenewal` said only "in no reachable state do its guards hold". The cause, an
   `.optional()` child created unlinked unless the use case writes the parent, is in
-  `state-derivation.md` but not in the warning.
+  `state-derivation.md` but not in the warning. The warning now says so; since #73 a `holds`
+  guard that compares a column of the parent links the created child to it, which is how
+  `ApplyRenewal` links a renewal to its permit.
 - **(M) A guard on another entity multiplies the cone by the other entity's states** (14,197 to
   429,485 states for the renewal), and a decision that writes two entities merges their cones.
   Both were traded for events and a looser model (the gaps above). The first report said the
@@ -170,6 +187,13 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
   one permit per application took `Disposition` from 13,231 to 248,032 states and was left out.
   Fixed by #71: a set of every value is true when the system is built, the cone is 23,156
   states, and the permit is 1:1 with its application.
+- **(G) "No child row" had to list every value.** Fixed by #73: `.none(BusinessPermit)` and
+  `.none(Inspection)` say it directly and build the same cones as the list.
+- **(G/B) A guard could not say which key joins two entities.** With `renews` beside the
+  registration key, `.along(...)` reported the join as ambiguous, and a condition or quantifier
+  silently took the first key. Fixed by #73: one rule resolves every join, ambiguity is the
+  error `AmbiguousOwnerLink` naming the candidates, and `.by(role)` picks one on a `holds`, a
+  `.has/.none`, a copy, and `.along`. The renewal guard is in the model.
 - **(D) `list --kind rule` prints value labels for `==` but not for `!=`, `in`, or `not in` in a
   rule**, while a condition's `in` gets them (`kind != improvement_order`,
   `status in (expired, revoked, closed)`).

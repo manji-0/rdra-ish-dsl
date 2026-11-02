@@ -387,22 +387,8 @@ impl<'m> Builder<'m> {
             Join::Unrelated => None,
             Join::Key(fk) => self.key_link(fk, a, b),
             Join::Ambiguous(candidates) => {
-                let model = self.model;
-                let roles: Vec<&str> = candidates
-                    .iter()
-                    .map(|id| model.key_role(model.foreign_key(*id)))
-                    .collect();
-                self.diag(
-                    vec![a.0],
-                    StateDiag::AmbiguousOwnerLink {
-                        statement: statement.to_string(),
-                        a: model.entities[a.0].id.clone(),
-                        b: model.entities[b.0].id.clone(),
-                        roles: roles.join(", "),
-                        rewrite: format!("{statement}.by({})", roles[0]),
-                        site: site.clone(),
-                    },
-                );
+                let diag = ambiguous_owner_link(self.model, statement, a.0, b.0, &candidates, site);
+                self.diag(vec![a.0], diag);
                 None
             }
         }
@@ -1505,6 +1491,30 @@ fn cross_display(model: &crate::model::SemanticModel, conds: &[CrossEntityCondit
         })
         .collect::<Vec<_>>()
         .join(" AND ")
+}
+
+/// `AmbiguousOwnerLink` for a join of `a` and `b` that `statement` makes, which `candidates`
+/// could follow: the rewrite names the first.
+pub(super) fn ambiguous_owner_link(
+    model: &crate::model::SemanticModel,
+    statement: &str,
+    a: EntityKey,
+    b: EntityKey,
+    candidates: &[FkId],
+    site: &Site,
+) -> StateDiag {
+    let roles: Vec<&str> = candidates
+        .iter()
+        .map(|id| model.key_role(model.foreign_key(*id)))
+        .collect();
+    StateDiag::AmbiguousOwnerLink {
+        statement: statement.to_string(),
+        a: model.entities[a].id.clone(),
+        b: model.entities[b].id.clone(),
+        roles: roles.join(", "),
+        rewrite: format!("{statement}.by({})", roles[0]),
+        site: site.clone(),
+    }
 }
 
 /// `.none(Related.col == v).by(role)` as written, for a diagnostic that names the call.

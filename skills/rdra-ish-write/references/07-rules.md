@@ -64,6 +64,10 @@ Also ask:
 8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
 9. Add `invariant(Entity).when(...).none/has(Related.col == v)` for to-many quantifiers; a top-level `when(...)` no longer loads.
+   For "no related row at all" (or "some row"), name the entity alone: `.none(Related)`, not a
+   list of every value of a column. When two keys join the two entities, name the one the rule
+   follows after the call: `.none(Permit).by(Application)` (the role, or the parent id of a key
+   without `.role`).
 10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after each
     step of the use case) and `property` for a temporal rule (only `verify` evaluates
     it; see skill `rdra-ish-verify`).
@@ -187,8 +191,9 @@ error[Inv_Order_0]: invariant Inv_Order_0 is violated: invariant violated: when 
 - `check` reports no `error[...]` for a rule, or each one is listed as an open design
   item.
 - Cross-entity rules use `Entity.column`; an `UnbindableScope` error means a `.along(...)`
-  path that no `relate` binds, and `AmbiguousOwnerLink` means two keys join the pair,
-  so name one with `.by(role)`.
+  path that no `relate` binds, and `AmbiguousOwnerLink` means two keys join the pair, on a
+  `.along`, a `.has/.none`, a `holds` body, or a copy. Name one with `.by(role)` after that
+  call; the error prints the statement with the `.by` to add.
 - Temporal `property` rules, and rules that need two instances, are checked with
   `verify` (skill `rdra-ish-verify`); `check` runs one instance per entity and does not
   evaluate properties.

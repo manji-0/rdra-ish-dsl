@@ -64,10 +64,10 @@ reads(SendExpiryNotice, BusinessPermit)
 updates(PermitTermApi, BusinessPermit)
 triggers(ExpiryNoticeDue, SendExpiryNotice)
 
-// A renewal is an application like a new one, of the other kind. It should name the permit it
-// continues and run only while that permit is valid; the model does not link the two (README, known
-// verification gaps): the guard puts the permit's existence and status into the application's cone,
-// whose 31 states at the 2 instances of `verify` multiply the cone from 14,197 to 429,485 states.
+// A renewal is an application like a new one, of the other kind. It names the permit it continues
+// through `renews`, and runs only while that permit is valid: the guard `RenewsValidPermit` reads the
+// permit through that key, so ApplyRenewal links the application it creates to the valid permit it
+// reads, and RenewPermit decides only while that permit is still valid.
 displays(ApplyRenewal, RenewalScreen)
 invokes(ApplyRenewal, RenewalApi)
 creates(RenewalApi, PermitApplication)
@@ -85,6 +85,13 @@ condition RenewalApplication "継続（更新）の申請である"
 holds(RenewalApplication, PermitApplication.kind == renewal)
 applies_to(RenewalApplication, RenewPermit)
 applies_to(InspectionPassed, RenewPermit)
+
+// 失効した許可は更新できず、新規の申請からやり直す (toshima-ku-kyoka-go-tetsuzuki.md:39; README): the
+// permit the renewal names is still valid when the 営業者 applies and when the 保健所 decides.
+condition RenewsValidPermit "失効後の更新はできない"
+holds(RenewsValidPermit, BusinessPermit.status == valid).by(renews)
+applies_to(RenewsValidPermit, ApplyRenewal)
+applies_to(RenewsValidPermit, RenewPermit)
 
 // The new term is a step from `valid` to `valid`: only a permit still in force is extended, so an
 // expired one stays expired and its 営業者 applies anew.

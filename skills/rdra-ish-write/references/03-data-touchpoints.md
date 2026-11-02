@@ -31,7 +31,10 @@ Also ask:
    `deletes`.
 3. Prefer direct use-case CRUD here. Delay `api` until the boundary is meaningful.
 4. Keep column details, FK relations, `system`, and `coordinates` out unless already
-   stable and necessary for review.
+   stable and necessary for review. When two business objects are linked twice (a renewal
+   application and the permit it renews, beside the permit and the application it was
+   granted on), note both links now: each later `relate` gets a `.role(...)`, and rules
+   name the link they follow with `.by(...)`.
 5. Add `shows(Screen, Entity)` for the entities each screen of Step 2 presents, and
    `maps_field(Field, Entity.column)` for a field whose target column already exists.
 6. Use the CRUD matrix to spot overloaded or empty use cases.

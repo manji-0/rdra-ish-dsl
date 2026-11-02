@@ -260,7 +260,8 @@ only the methods below, and any other name is an `unknown chain method` error
 | `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
 | `required`, `exclusive` | `.label("...")` |
-| `holds` | `.has(...)`, `.none(...)` |
+| `holds` | `.has(...)`, `.none(...)`, `.by(...)` |
+| `sets` | `.by(...)`, on a copy (`column == Source.column`) |
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | every other predicate (including `combines`) | none |
@@ -1222,16 +1223,21 @@ holds(PriorityBasePending, PatentApplication.status in (filed, formality_order, 
 ```
 
 A body may end in `.has(Related.col == v)` or `.none(Related.col == v)` calls. The guard then
-also needs some row (`has`), or no row (`none`), of the related entity to match. The rows are
+also needs some row (`has`), or no row (`none`), of the related entity to match. A bare entity,
+`.has(Related)` or `.none(Related)`, asks for some linked row, or none, whatever its columns
+hold: it reads only the link. The rows are
 the ones the relate links to the instance the use case runs on, and every row when no relate
 joins the two entities. Like the `.none(...)` of an `invariant`, it ranges over the present rows.
 It reads them before the use case runs: on a use case that creates the related entity, the
 row being created is not one of them, and on a use case that updates a related row, that row
 is one of them, read as it was before the update. The quantified row is its own instance even
 when the body also reads its entity. A set that names every value of the column holds for
-every row, so `.none(Related.status in (<every value>))` asks for no related row at all, and
-the lifecycle reads only the link for it (see
-[Set membership](#set-membership-in-and-not-in)).
+every row, so `.none(Related.status in (<every value>))` is the same guard as `.none(Related)`,
+and the lifecycle reads only the link for it (see
+[Set membership](#set-membership-in-and-not-in)). Write `.none(Related)`: it says "no related
+row" without listing values, and it does not change meaning when the column gains a value.
+When two keys join the body's entities, `.by(role)` names the one to follow (see
+[Which key a join follows](#which-key-a-join-follows)).
 
 ```rdra
 // Revoke only while no assignment of the certificate is active.
@@ -1369,12 +1375,63 @@ Two chain methods shape the key:
 | `KeyOptionOnManyToMany` | `.role` or `.key` on `relate(A, B, N:M)`. An N:M holds no key of its own, so write the junction's keys as two `N:1` relates instead. |
 | `UnknownRefAction` | `.on_delete(...)` or `.on_update(...)` names an unknown action. |
 
-A constraint's `.along(A, B)` follows the key between `A` and `B`. When two keys join
-them, `.along(A, B).by(ship_to)` names the one to follow (the role, or the parent id for
-a key without `.role`); without `.by` the constraint is `AmbiguousOwnerLink`. `.by` that
-names no key on the path is `UnknownOwnerRole`, and `.by` without `.along` is
-`ByWithoutAlong`. A quantifier (`.has/.none(...)` on an `invariant`) and a condition take no `.by`
-and follow the first key between the pair.
+#### Which key a join follows
+
+<!-- constrained-by #relate-and-fk-generation -->
+
+A statement that reads two related entities joins them through a key: an `.along(A, B)`
+hop, a `.has(...)` or `.none(...)` (on an `invariant` or a `holds`), the link between an
+entity a `holds` body compares and an entity the guarded use case writes, and the source of
+a copy (`sets(UC, E, col == F.col)`). Every one of them resolves the key by one rule
+(`SemanticModel::join_key`), so `check`, `states`, the TLA+ export and `verify` read the
+same rows:
+
+- One key between the two entities (in either direction) is the join. A model with one key
+  per pair writes no selector, and a selector does not change such a join.
+- Several keys (two relates, or two self-relates of one entity) need `.by(role)`, which
+  names the key by its role, or by its parent id when it has no `.role` (`.by(Order)` names
+  the key of `relate(Line, Order, N:1)`; case does not matter). The join follows the one key
+  the selector names.
+- Several keys and no selector naming exactly one is `AmbiguousOwnerLink`, an error that
+  names the candidate roles and the statement with `.by(<first role>)` added. The join is
+  left unlinked.
+
+`.by(role)` belongs to the call before it:
+
+| Written after | Picks the key of |
+|---|---|
+| `.along(A, B, ...)` | each hop that several keys join |
+| `.has(...)` or `.none(...)` | the link from the quantified row to the rows the statement binds |
+| `holds(Cond, ...)` itself, before any `.has/.none` | the link between an entity the body compares and the other entities of the guard |
+| `sets(UC, E, col == F.col)` | the key from the target row to the source row |
+
+```rdra
+relate(BusinessPermit, PermitApplication, 1:1)                  // registered under
+relate(PermitApplication, BusinessPermit, N:1).optional().role(renews)
+
+// A new application gets one permit: no permit registered under it yet.
+holds(NoPermitYet, PermitApplication.kind == new).none(BusinessPermit).by(PermitApplication)
+// A renewal reads, and links to, the permit it renews.
+holds(RenewsValidPermit, BusinessPermit.status == valid).by(renews)
+forbidden(BusinessPermit, PermitApplication, BusinessPermit.business_type != PermitApplication.business_type)
+  .along(BusinessPermit, PermitApplication).by(PermitApplication)
+```
+
+The selector is a chain call rather than a qualified reference such as
+`PermitApplication.renews.status`. It keeps every comparison in the `Entity.column` form the
+rest of the language reads, it is the call `.along(...)` already took, and a model with one key
+per pair, the common case, never writes it.
+
+| Diagnostic | When |
+|---|---|
+| `AmbiguousOwnerLink` | Several keys join two entities a statement joins, and no `.by(role)` names one. The lifecycle reports it for a guard, a quantifier, and a copy (it depends on the use case a guard is on); the analysis for `.along`. |
+| `UnknownOwnerRole` | `.by(role)` names no key on the `.along` path, no key of the quantified entity, no key of an entity the `holds` body compares, or no key between a copy's target and source. |
+| `ByWithoutAlong` | `.by(...)` on a `forbidden` or `invariant` follows no `.along`, `.has` or `.none`, or `.by(...)` on a `sets` that copies nothing. |
+
+In LSP, a role is a symbol: go to definition on `.by(renews)` opens the `relate` that
+declares `.role(renews)`, and find references and rename cover the `.role(...)` and every
+`.by(...)` that names it. A `.by(Order)` that names a key by its parent id is a reference
+to the entity `Order`.
 
 ### Cardinality ranges
 
@@ -1585,7 +1642,9 @@ way a `holds` atom on that entity reads it (see
 - **The target's parent.** A `relate` makes the source entity the parent of the target.
   A child created under a mandatory relate reads the parent it is created under. An updated
   child reads the parent that its foreign key names, and the use case waits while an
-  `.optional()` key is unlinked.
+  `.optional()` key is unlinked. When two keys join the target and the source, the copy
+  names the one to follow: `sets(Fix, Permit, kind == Site.kind).by(home)` (see
+  [Which key a join follows](#which-key-a-join-follows)).
 
 Any other source is `UnboundCopySource`, an error, and the copy is not applied:
 
@@ -1930,8 +1989,10 @@ also when the related entity is the anchor's own: `invariant(Task).when(status =
 .none(Task.status == open)` fails while one task is done and another open. A one-entity `invariant` takes the related entity
 from the qualified columns of `.has/.none(...)`, so it is the same rule as
 `invariant(Entity, Related)`, and `invariant()` takes its entity from the qualified
-columns of `.when(...)`. A `.has(...)` or `.none(...)` that
-names no condition on a related entity, as `.none()` or `.none(Related)`, is
+columns of `.when(...)`. `.has(Related)` and `.none(Related)` name the entity alone and
+range over every linked row: `invariant(Order).when(status == closed).has(Invoice)` says a
+closed order has an invoice, and reads only the link. A `.has(...)` or `.none(...)` that
+names nothing, as `.none()`, is
 `QuantifierWithoutCondition`, and `invariant()` with no entity in its scope or its
 `.when(...)` is `QuantifierScopeUnknown`. `states` runs one instance per entity, so use
 `verify --instance-count 2` for rules that need two related instances. To make a use case
@@ -2027,7 +2088,8 @@ and `.none()` (one entity or several, with `Entity.col in (...)`), `holds`,
 `after(...).assert(...)`, `@check`, `@derived`, and `property`. `sets` and `drives` do not: a
 use case leaves one value (`EffectMembership`). A set that lists every value of the column
 is true, and its `not in` false, when the lifecycle builds its system: `.none(Child.status
-in (<every value>))` says "no child row" and pulls no column into a cone.
+in (<every value>))` says "no child row" and pulls no column into a cone. It stays valid and
+draws no warning, but `.none(Child)` says the same without listing the values.
 
 ```rdra
 forbidden(Order, status in (paid, shipped), refund_id == present)

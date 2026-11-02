@@ -195,6 +195,10 @@ relate(Inspection, PermitApplication, 1:1)
 // none (`NoPermitYet` in buc_inspection_decision.rdra), which the 1:1 checks as
 // Unique_BusinessPermit_PermitApplication.
 relate(BusinessPermit, PermitApplication, 1:1)
+// A renewal application names the permit it continues (継続, egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:886);
+// a new one names none. With the registration key above, two keys join the two entities, so
+// every guard and rule between them says which with `.by(renews)` or `.by(PermitApplication)`.
+relate(PermitApplication, BusinessPermit, N:1).optional().role(renews)
 relate(ChangeNotice, BusinessPermit, N:1)
 relate(SuccessionNotice, BusinessPermit, N:1)
 relate(SiteVisit, MonitoringPlan, N:1)

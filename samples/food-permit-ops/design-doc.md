@@ -507,7 +507,7 @@ sequenceDiagram
   participant entity__Inspection as 施設検査
   actor__PermitClerk ->> screen__InspectionScreen: 施設検査の日程調整
   screen__InspectionScreen ->> api__InspectionScheduleApi: 施設検査予定 API
-  alt 申請が検査待で、まだ検査の予定がない: (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）))
+  alt 申請が検査待で、まだ検査の予定がない: (PermitApplication.status == 検査待).none(Inspection)
     api__InspectionScheduleApi ->> entity__PermitApplication: read
     api__InspectionScheduleApi ->> entity__Inspection: create
     api__InspectionScheduleApi -->> screen__InspectionScreen: done
@@ -640,7 +640,7 @@ sequenceDiagram
   actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への登録
   usecase__GrantPermit ->> api__PermitRegistrationApi: 営業許可の決定
   screen__PermitLedgerScreen ->> api__PermitRegistrationApi: 営業許可登録 API
-  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit.status in (有効, 営業停止中, 失効（有効期間満了）, 取消, 廃業))
+  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit).by(PermitApplication)
     api__PermitRegistrationApi ->> entity__PermitApplication: read
     api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
     api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
@@ -804,8 +804,8 @@ flowchart LR
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 満了通知の発送<br>`SendExpiryNotice` | 有効期間が満了する前に、許可営業者に満了の時期と更新の手続を知らせる。 | `PermitLedgerScreen` | `PermitTermApi` | （なし） |
-| 継続（更新）の申請<br>`ApplyRenewal` | 有効な許可の営業者が、満了の前に継続の許可を申請する（窓口・電子）。手数料と施設検査は新規と同じ手順で進む。 | `RenewalScreen` | `RenewalApi` | （なし） |
-| 更新の許可の決定<br>`RenewPermit` | 施設検査で施設基準に合うと認めた継続の申請に、許可がまだ有効なうちに許可を与える。 | `InspectionScreen` | `DecisionApi` | 施設検査で施設基準に適合した、継続（更新）の申請である |
+| 継続（更新）の申請<br>`ApplyRenewal` | 有効な許可の営業者が、満了の前に継続の許可を申請する（窓口・電子）。手数料と施設検査は新規と同じ手順で進む。 | `RenewalScreen` | `RenewalApi` | 失効後の更新はできない |
+| 更新の許可の決定<br>`RenewPermit` | 施設検査で施設基準に合うと認めた継続の申請に、許可がまだ有効なうちに許可を与える。 | `InspectionScreen` | `DecisionApi` | 施設検査で施設基準に適合した、継続（更新）の申請である、失効後の更新はできない |
 | 有効期間の更新<br>`ExtendPermitTerm` | 更新の許可を受けて、台帳の有効期間を新しい期間に書き換え、満了通知の記録を消す。 | `PermitLedgerScreen` | `PermitTermApi` | （なし） |
 | 有効期間の満了による失効<br>`ExpirePermit` | 更新されないまま有効期間が満了した許可を失効させる。営業者は営業をやめ、続けるなら新規の許可を受ける。 | （なし） | `PermitTermApi` | （なし） |
 
@@ -838,7 +838,7 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:ApplyRenewal model=samples/food-permit-ops
 %% kinds: actor screen api entity
-%% omitted: buc step medium permission
+%% omitted: buc step medium permission condition
 sequenceDiagram
   actor actor__BusinessOperator as 営業者
   participant screen__RenewalScreen as 更新申請画面
@@ -847,9 +847,13 @@ sequenceDiagram
   participant entity__PermitApplication as 営業許可申請
   actor__BusinessOperator ->> screen__RenewalScreen: 継続（更新）の申請
   screen__RenewalScreen ->> api__RenewalApi: 更新申請 API
-  api__RenewalApi ->> entity__BusinessPermit: read
-  api__RenewalApi ->> entity__PermitApplication: create kind=renewal
-  api__RenewalApi -->> screen__RenewalScreen: done
+  alt 失効後の更新はできない: (BusinessPermit.status == 有効).by(renews)
+    api__RenewalApi ->> entity__BusinessPermit: read
+    api__RenewalApi ->> entity__PermitApplication: create kind=renewal
+    api__RenewalApi -->> screen__RenewalScreen: done
+  else guard fails
+    api__RenewalApi -->> screen__RenewalScreen: rejected
+  end
 ```
 
 </details>
@@ -870,7 +874,7 @@ sequenceDiagram
   participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
   actor__PermitAuthority ->> screen__InspectionScreen: 更新の許可の決定
   screen__InspectionScreen ->> api__DecisionApi: 許可決定 API
-  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and PermitApplication.status == 検査待
+  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and 失効後の更新はできない: (BusinessPermit.status == 有効).by(renews) and PermitApplication.status == 検査待
     api__DecisionApi ->> entity__Inspection: read
     api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 許可
     api__DecisionApi -) api__PermitTermApi: 更新の許可
@@ -2249,7 +2253,7 @@ stateDiagram-v2
     %% transition usecase__GrantPermit
     state__PermitApplication_awaiting_inspection --> state__PermitApplication_approved : 許可の決定 [施設検査で施設基準に適合した, 新規の申請である]
     %% transition usecase__RenewPermit
-    state__PermitApplication_awaiting_inspection --> state__PermitApplication_approved : 更新の許可の決定 [継続（更新）の申請である, 施設検査で施設基準に適合した]
+    state__PermitApplication_awaiting_inspection --> state__PermitApplication_approved : 更新の許可の決定 [継続（更新）の申請である, 施設検査で施設基準に適合した, 失効後の更新はできない]
     %% transition usecase__DenyPermit
     state__PermitApplication_awaiting_inspection --> state__PermitApplication_denied : 不許可の決定
     %% transition usecase__WithdrawApplication
@@ -2271,130 +2275,73 @@ Entity: PermitApplication (営業許可申請)
   axes: kind[new|renewal], channel[counter|online], business_type[restaurant|meat_retail|confectionery], status[submitted|returned|awaiting_inspection|approved|denied|withdrawn], fee_paid[false|true], reason_shown[false|true]
   labels: status[submitted=申請内容確認待|returned=差戻し・補正中|awaiting_inspection=検査待|approved=許可|denied=不許可|withdrawn=取下げ]
 
-  KIND     CHANNEL  BUSINESS_TYPE  STATUS               FEE_PAID  REASON_SHOWN  INITIAL  TERMINAL  VIA
-  ───────  ───────  ─────────────  ───────────────────  ────────  ────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  renewal  counter  restaurant     submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  new      online   restaurant     submitted            false     false         yes      no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   meat_retail    submitted            false     false         yes      no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   confectionery  submitted            false     false         yes      no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      counter  restaurant     submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  renewal  counter  restaurant     returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  restaurant     withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  counter  restaurant     submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  new      online   restaurant     returned             false     false         no       no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   restaurant     submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   meat_retail    returned             false     false         no       no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   meat_retail    submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   confectionery  returned             false     false         no       no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   confectionery  submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      counter  restaurant     returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  restaurant     withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
-  new      counter  restaurant     submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
-  new      counter  meat_retail    submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
-  new      counter  confectionery  submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  renewal  counter  restaurant     denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  restaurant     returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  restaurant     awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  restaurant     withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  new      online   restaurant     denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   restaurant     withdrawn            false     false         no       yes       BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication
-  new      online   restaurant     returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   restaurant     awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   meat_retail    denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   meat_retail    withdrawn            false     false         no       yes       BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication
-  new      online   meat_retail    returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   meat_retail    awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   confectionery  denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
-  new      online   confectionery  withdrawn            false     false         no       yes       BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication
-  new      online   confectionery  returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   confectionery  awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      counter  restaurant     denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  restaurant     returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  restaurant     awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  restaurant     withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
-  new      counter  meat_retail    denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
-  new      counter  confectionery  denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
-  renewal  counter  restaurant     denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  meat_retail    denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  counter  confectionery  denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   restaurant     withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   meat_retail    withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal
-  renewal  online   confectionery  withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication, BucRenewal/ApplyRenewal
-  new      online   restaurant     denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   restaurant     withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication
-  new      online   meat_retail    denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   meat_retail    withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication
-  new      online   confectionery  denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   confectionery  withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication
-  new      counter  restaurant     denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  renewal  counter  restaurant     approved             true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal, BucRenewal/RenewPermit
-  renewal  counter  meat_retail    approved             true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal, BucRenewal/RenewPermit
-  renewal  counter  confectionery  approved             true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal, BucRenewal/RenewPermit
-  renewal  online   restaurant     approved             true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal, BucRenewal/RenewPermit
-  renewal  online   meat_retail    approved             true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal, BucRenewal/RenewPermit
-  renewal  online   confectionery  approved             true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucRenewal/ApplyRenewal, BucRenewal/RenewPermit
-  new      online   restaurant     approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   meat_retail    approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      online   confectionery  approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
-  new      counter  restaurant     approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  meat_retail    approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
-  new      counter  confectionery  approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  KIND  CHANNEL  BUSINESS_TYPE  STATUS               FEE_PAID  REASON_SHOWN  INITIAL  TERMINAL  VIA
+  ────  ───────  ─────────────  ───────────────────  ────────  ────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  new   online   restaurant     submitted            false     false         yes      no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   meat_retail    submitted            false     false         yes      no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   confectionery  submitted            false     false         yes      no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   counter  restaurant     submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  submitted            false     false         yes      no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   online   restaurant     returned             false     false         no       no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   restaurant     submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   meat_retail    returned             false     false         no       no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   meat_retail    submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   confectionery  returned             false     false         no       no        BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   confectionery  submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   counter  restaurant     returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  restaurant     withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
+  new   counter  restaurant     submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
+  new   counter  meat_retail    submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  returned             false     false         no       no        BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  withdrawn            false     false         no       yes       BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
+  new   counter  confectionery  submitted            true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   online   restaurant     denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   restaurant     withdrawn            false     false         no       yes       BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication
+  new   online   restaurant     returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   restaurant     awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   meat_retail    denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   meat_retail    withdrawn            false     false         no       yes       BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication
+  new   online   meat_retail    returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   meat_retail    awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   confectionery  denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication
+  new   online   confectionery  withdrawn            false     false         no       yes       BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/WithdrawApplication
+  new   online   confectionery  returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   confectionery  awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   counter  restaurant     denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  restaurant     returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  restaurant     awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  restaurant     withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
+  new   counter  meat_retail    denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
+  new   counter  confectionery  denied               false     true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  returned             true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  awaiting_inspection  true      false         no       no        BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication, BucPermitApplication/WithdrawApplication
+  new   online   restaurant     denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   restaurant     withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication
+  new   online   meat_retail    denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   meat_retail    withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication
+  new   online   confectionery  denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   confectionery  withdrawn            true      false         no       yes       BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/WithdrawApplication
+  new   counter  restaurant     denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  denied               true      true          no       yes       BucInspectionDecision/DenyPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   online   restaurant     approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   meat_retail    approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   online   confectionery  approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ReceiveOnlineApplication, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication
+  new   counter  restaurant     approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  meat_retail    approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
+  new   counter  confectionery  approved             true      false         no       yes       BucInspectionDecision/GrantPermit, BucPermitApplication/PayPermitFee, BucPermitApplication/ResubmitApplication, BucPermitApplication/ReturnApplication, BucPermitApplication/ReviewApplication, BucPermitApplication/SubmitCounterApplication
 
-  reachable: 120 / bound: 288
+  reachable: 60 / bound: 288
+  diagnostics:
+    [warn][Runs_RenewPermit] RenewPermit can never run: in no reachable state do its guards hold
+    [warn][Runs_ApplyRenewal] ApplyRenewal can never run: no reachable state has all the instances it needs at once
 ```
 
 </details>
@@ -2514,6 +2461,7 @@ erDiagram
     Enum status
     Bool fee_paid
     Bool reason_shown
+    Int renews_id FK
   }
   SiteVisit {
     Int id PK
@@ -2528,6 +2476,7 @@ erDiagram
   }
   SiteVisit }o--|| MonitoringPlan : ""
   Disposition }o--|| BusinessPermit : ""
+  PermitApplication }o--|| BusinessPermit : ""
   Inspection ||--|| PermitApplication : ""
   BusinessPermit ||--|| PermitApplication : ""
   ChangeNotice }o--|| BusinessPermit : ""
@@ -2582,6 +2531,7 @@ erDiagram
 | PermitApplication | 営業許可申請 | status | Enum | false | false | false | false |  | false |  |  | false | submitted |  | false | false | false |  |
 | PermitApplication | 営業許可申請 | fee_paid | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
 | PermitApplication | 営業許可申請 | reason_shown | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
+| PermitApplication | 営業許可申請 | renews_id | Int | false | false | false | true | BusinessPermit | true |  |  | true |  |  | false | false | false |  |
 | SiteVisit | 立入検査 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | SiteVisit | 立入検査 | status | Enum | false | false | false | false |  | false |  |  | false | planned |  | false | false | false |  |
 | SiteVisit | 立入検査 | monitoringplan_id | Int | false | false | false | true | MonitoringPlan | false |  |  | false |  |  | false | false | false |  |
@@ -2618,10 +2568,10 @@ erDiagram
 | forbidden | 営業停止中は営業しない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:373 |
 | forbidden | 許可なく営業しない（失効・取消・廃業の後の営業は無許可営業） | BusinessPermit | BusinessPermit.operating == true AND BusinessPermit.status in (失効（有効期間満了）, 取消, 廃業) |  | samples/food-permit-ops/buc/buc_disposition.rdra:377 |
 | after | 停止を命じた許可では営業していない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == false | SuspendBusiness | samples/food-permit-ops/buc/buc_disposition.rdra:379 |
-| condition | 申請が検査待で、まだ検査の予定がない | PermitApplication\|Inspection | (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）)) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
+| condition | 申請が検査待で、まだ検査の予定がない | PermitApplication | (PermitApplication.status == 検査待).none(Inspection) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
 | condition | 施設検査で施設基準に適合した | Inspection | Inspection.status == 適合 | GrantPermit\|RenewPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:144 |
 | condition | 新規の申請である | PermitApplication | PermitApplication.kind == 新規 | GrantPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:148 |
-| condition | 新規の申請で、まだ許可が登録されていない | PermitApplication\|BusinessPermit | (PermitApplication.kind == 新規).none(BusinessPermit.status in (有効, 営業停止中, 失効（有効期間満了）, 取消, 廃業)) | RegisterPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:175 |
+| condition | 新規の申請で、まだ許可が登録されていない | PermitApplication | (PermitApplication.kind == 新規).none(BusinessPermit).by(PermitApplication) | RegisterPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:175 |
 | condition | 許可が有効である | BusinessPermit | BusinessPermit.status == 有効 | AppointHygieneManager\|IssueCertificate | samples/food-permit-ops/buc/buc_inspection_decision.rdra:185 |
 | condition | 許可が有効で、許可証の交付を受けている | BusinessPermit | BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true | StartBusiness | samples/food-permit-ops/buc/buc_inspection_decision.rdra:205 |
 | forbidden | 施設基準に適合しない施設には許可しない | PermitApplication\|Inspection | PermitApplication.status == 許可 AND Inspection.status != 適合 |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:311 |
@@ -2635,7 +2585,8 @@ erDiagram
 | condition | 窓口（紙）で出した申請である | PermitApplication | PermitApplication.channel == 保健所の窓口（紙） | WithdrawApplication | samples/food-permit-ops/buc/buc_permit_application.rdra:140 |
 | condition | 許可が終わっていない（有効か停止中） | BusinessPermit | BusinessPermit.status in (有効, 営業停止中) | FileChangeNotice\|FileSuccessionNotice | samples/food-permit-ops/buc/buc_permit_changes.rdra:82 |
 | condition | 継続（更新）の申請である | PermitApplication | PermitApplication.kind == 継続（更新） | RenewPermit | samples/food-permit-ops/buc/buc_renewal.rdra:85 |
-| after | 失効した許可は更新できない | BusinessPermit | BusinessPermit.status == 有効 | ExtendPermitTerm | samples/food-permit-ops/buc/buc_renewal.rdra:170 |
+| condition | 失効後の更新はできない | BusinessPermit | (BusinessPermit.status == 有効).by(renews) | ApplyRenewal\|RenewPermit | samples/food-permit-ops/buc/buc_renewal.rdra:92 |
+| after | 失効した許可は更新できない | BusinessPermit | BusinessPermit.status == 有効 | ExtendPermitTerm | samples/food-permit-ops/buc/buc_renewal.rdra:177 |
 
 ## 6. CRUD と権限
 

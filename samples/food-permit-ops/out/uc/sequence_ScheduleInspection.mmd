@@ -9,7 +9,7 @@ sequenceDiagram
   participant entity__Inspection as 施設検査
   actor__PermitClerk ->> screen__InspectionScreen: 施設検査の日程調整
   screen__InspectionScreen ->> api__InspectionScheduleApi: 施設検査予定 API
-  alt 申請が検査待で、まだ検査の予定がない: (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）))
+  alt 申請が検査待で、まだ検査の予定がない: (PermitApplication.status == 検査待).none(Inspection)
     api__InspectionScheduleApi ->> entity__PermitApplication: read
     api__InspectionScheduleApi ->> entity__Inspection: create
     api__InspectionScheduleApi -->> screen__InspectionScreen: done

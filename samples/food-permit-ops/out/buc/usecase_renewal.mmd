@@ -53,6 +53,7 @@ flowchart LR
     condition__AwaitingInspection{"申請が検査待で、まだ検査の予定がない"}:::condition
     condition__InspectionPassed{"施設検査で施設基準に適合した"}:::condition
     condition__RenewalApplication{"継続（更新）の申請である"}:::condition
+    condition__RenewsValidPermit{"失効後の更新はできない"}:::condition
   end
   actor__BusinessOperator -.-> usecase__ApplyRenewal
   actor__FoodSanitationInspector -.-> usecase__ConductInspection
@@ -65,6 +66,8 @@ flowchart LR
   condition__AwaitingInspection -.->|applies_to| usecase__ScheduleInspection
   condition__InspectionPassed -.->|applies_to| usecase__RenewPermit
   condition__RenewalApplication -.->|applies_to| usecase__RenewPermit
+  condition__RenewsValidPermit -.->|applies_to| usecase__ApplyRenewal
+  condition__RenewsValidPermit -.->|applies_to| usecase__RenewPermit
   event__EvRenewalGranted -.-> extsystem__FoodSanitationSystem
   event__EvRenewalGranted -.-> usecase__ExtendPermitTerm
   timer__ExpiryNoticeDue -.-> usecase__SendExpiryNotice

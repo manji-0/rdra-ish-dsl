@@ -51,6 +51,7 @@ flowchart LR
   entity__Inspection ---|1:1| entity__PermitApplication
   entity__Inspection -.-> statemodel__Inspection_status
   entity__MonitoringPlan -.-> statemodel__MonitoringPlan_status
+  entity__PermitApplication ---|N:1| entity__BusinessPermit
   entity__PermitApplication -.-> statemodel__PermitApplication_status
   entity__PermitApplication -.->|variation business_type| variation__PermitBusinessType
   entity__PermitApplication -.->|variation channel| variation__SubmissionChannel

@@ -744,10 +744,10 @@ flowchart TD
 | forbidden | 営業停止中は営業しない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == true |  | samples/food-permit-ops/buc/buc_disposition.rdra:373 |
 | forbidden | 許可なく営業しない（失効・取消・廃業の後の営業は無許可営業） | BusinessPermit | BusinessPermit.operating == true AND BusinessPermit.status in (失効（有効期間満了）, 取消, 廃業) |  | samples/food-permit-ops/buc/buc_disposition.rdra:377 |
 | after | 停止を命じた許可では営業していない | BusinessPermit | BusinessPermit.status == 営業停止中 AND BusinessPermit.operating == false | SuspendBusiness | samples/food-permit-ops/buc/buc_disposition.rdra:379 |
-| condition | 申請が検査待で、まだ検査の予定がない | PermitApplication\|Inspection | (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）)) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
+| condition | 申請が検査待で、まだ検査の予定がない | PermitApplication | (PermitApplication.status == 検査待).none(Inspection) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
 | condition | 施設検査で施設基準に適合した | Inspection | Inspection.status == 適合 | GrantPermit\|RenewPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:144 |
 | condition | 新規の申請である | PermitApplication | PermitApplication.kind == 新規 | GrantPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:148 |
-| condition | 新規の申請で、まだ許可が登録されていない | PermitApplication\|BusinessPermit | (PermitApplication.kind == 新規).none(BusinessPermit.status in (有効, 営業停止中, 失効（有効期間満了）, 取消, 廃業)) | RegisterPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:175 |
+| condition | 新規の申請で、まだ許可が登録されていない | PermitApplication | (PermitApplication.kind == 新規).none(BusinessPermit).by(PermitApplication) | RegisterPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:175 |
 | condition | 許可が有効である | BusinessPermit | BusinessPermit.status == 有効 | AppointHygieneManager\|IssueCertificate | samples/food-permit-ops/buc/buc_inspection_decision.rdra:185 |
 | condition | 許可が有効で、許可証の交付を受けている | BusinessPermit | BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true | StartBusiness | samples/food-permit-ops/buc/buc_inspection_decision.rdra:205 |
 | forbidden | 施設基準に適合しない施設には許可しない | PermitApplication\|Inspection | PermitApplication.status == 許可 AND Inspection.status != 適合 |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:311 |
@@ -761,7 +761,8 @@ flowchart TD
 | condition | 窓口（紙）で出した申請である | PermitApplication | PermitApplication.channel == 保健所の窓口（紙） | WithdrawApplication | samples/food-permit-ops/buc/buc_permit_application.rdra:140 |
 | condition | 許可が終わっていない（有効か停止中） | BusinessPermit | BusinessPermit.status in (有効, 営業停止中) | FileChangeNotice\|FileSuccessionNotice | samples/food-permit-ops/buc/buc_permit_changes.rdra:82 |
 | condition | 継続（更新）の申請である | PermitApplication | PermitApplication.kind == 継続（更新） | RenewPermit | samples/food-permit-ops/buc/buc_renewal.rdra:85 |
-| after | 失効した許可は更新できない | BusinessPermit | BusinessPermit.status == 有効 | ExtendPermitTerm | samples/food-permit-ops/buc/buc_renewal.rdra:170 |
+| condition | 失効後の更新はできない | BusinessPermit | (BusinessPermit.status == 有効).by(renews) | ApplyRenewal\|RenewPermit | samples/food-permit-ops/buc/buc_renewal.rdra:92 |
+| after | 失効した許可は更新できない | BusinessPermit | BusinessPermit.status == 有効 | ExtendPermitTerm | samples/food-permit-ops/buc/buc_renewal.rdra:177 |
 
 ## 7. 非機能要件
 

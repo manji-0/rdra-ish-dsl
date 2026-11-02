@@ -653,10 +653,6 @@ impl<'m> Builder<'m> {
             let source_at = match self.copy_source(a, p, source.entity, &ce.by, groups) {
                 Ok(at) => at,
                 Err(CopyMiss::Ambiguous(candidates)) => {
-                    let roles: Vec<&str> = candidates
-                        .iter()
-                        .map(|id| model.key_role(model.foreign_key(*id)))
-                        .collect();
                     let statement = format!(
                         "sets({}, {}, {} == {}.{})",
                         model.use_cases[uc].id,
@@ -665,17 +661,10 @@ impl<'m> Builder<'m> {
                         model.entities[source.entity].id,
                         source.column
                     );
-                    self.diag(
-                        vec![ce.entity],
-                        StateDiag::AmbiguousOwnerLink {
-                            rewrite: format!("{statement}.by({})", roles[0]),
-                            statement,
-                            a: model.entities[ce.entity].id.clone(),
-                            b: model.entities[source.entity].id.clone(),
-                            roles: roles.join(", "),
-                            site,
-                        },
-                    );
+                    let (a, b) = (ce.entity, source.entity);
+                    let diag =
+                        preds::ambiguous_owner_link(model, &statement, a, b, &candidates, &site);
+                    self.diag(vec![ce.entity], diag);
                     continue;
                 }
                 Err(CopyMiss::Unbound(reason)) => {

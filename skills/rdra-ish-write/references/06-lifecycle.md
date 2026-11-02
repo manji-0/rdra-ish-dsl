@@ -65,7 +65,12 @@ Also ask:
    `transitions(UseCase, Entity.col, from -> to).when(Cond)`. The other arms stay free.
    When it holds back one value the actor picks, guard that value:
    `chooses(UseCase, Entity.col, value).when(Cond)` beside the unguarded values. Keep
-   one use case; do not split it per value.
+   one use case; do not split it per value. A body that reads a related entity
+   (`holds(Renewable, Permit.status == valid)`) follows the `relate` between it and the
+   entity the use case writes; when two relates join them, name the one with
+   `.by(role)` after the body (`holds(Renewable, Permit.status == valid).by(renews)`). On a
+   use case that creates the child of an `.optional()` key, such a guard also links the
+   new row to the parent it reads. "No related row" is `.none(Related)`.
 8. Add `sets(UseCase, Entity, col == val)` for enum, nullable, boolean, and Int
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). A `sets` on a column that `transitions`
@@ -73,7 +78,8 @@ Also ask:
    When the value comes from another row, copy it: `sets(Register, Permit, kind ==
    Application.kind)`. The source must be a row the step binds: an entity the use case
    writes in the same transaction group, or the parent of the target through a `relate`
-   (a created child reads the parent it is created under). Any other source is
+   (a created child reads the parent it is created under; with two relates to the source,
+   name one: `sets(Fix, Permit, kind == Site.kind).by(home)`). Any other source is
    `UnboundCopySource`; give the target a `relate` to the source instead of leaving the
    value a free choice. The two columns hold one set of values (`SetsCopyMismatch`).
 9. Add `drives(UC, E, cmp, true|false)` when rules depend on a derived comparison and

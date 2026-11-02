@@ -63,6 +63,7 @@ erDiagram
     Enum status
     Bool fee_paid
     Bool reason_shown
+    Int renews_id FK
   }
   SiteVisit {
     Int id PK
@@ -77,6 +78,7 @@ erDiagram
   }
   SiteVisit }o--|| MonitoringPlan : ""
   Disposition }o--|| BusinessPermit : ""
+  PermitApplication }o--|| BusinessPermit : ""
   Inspection ||--|| PermitApplication : ""
   BusinessPermit ||--|| PermitApplication : ""
   ChangeNotice }o--|| BusinessPermit : ""

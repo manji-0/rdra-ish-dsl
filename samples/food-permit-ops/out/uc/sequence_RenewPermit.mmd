@@ -11,7 +11,7 @@ sequenceDiagram
   participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
   actor__PermitAuthority ->> screen__InspectionScreen: 更新の許可の決定
   screen__InspectionScreen ->> api__DecisionApi: 許可決定 API
-  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and PermitApplication.status == 検査待
+  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and 失効後の更新はできない: (BusinessPermit.status == 有効).by(renews) and PermitApplication.status == 検査待
     api__DecisionApi ->> entity__Inspection: read
     api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 許可
     api__DecisionApi -) api__PermitTermApi: 更新の許可

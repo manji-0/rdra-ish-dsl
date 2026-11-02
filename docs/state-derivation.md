@@ -151,11 +151,20 @@ created child gets its parent's slot as its owner. An action that updates a chil
 requires that the child belongs to the parent the action also writes. A mandatory
 `relate` adds the parent as a parameter when a created child needs one. An
 `.optional()` `relate` does not: the child is created unlinked, and a parent
-that the action writes links it. An unlinked owner is not linked for `.along`,
-quantifiers, or owner guards. A guard that reads the parent of a child the action creates
-unlinked therefore never holds, and the `Runs_<UseCase>` warning adds a `note:` row: the
-use case creates the child without writing the parent. Write the parent in the use case
+that the action writes links it. One more case links it: a `holds` guard on the use case
+that compares a column of the parent and joins the child to it through that key (see
+[Joins](#joins)) adds the parent as a parameter, as a mandatory key does, so the child is
+created linked to a present parent the guard holds for. An unlinked owner is not linked for
+`.along`, quantifiers, or owner guards. A guard that reads the parent of a child the action
+creates unlinked only through a `.has/.none(...)` therefore never holds, and the
+`Runs_<UseCase>` warning adds a `note:` row: the use case creates the child without writing
+the parent. Compare a parent column in a `holds` guard, write the parent in the use case
 (`updates(UseCase, Parent)`), or drop `.optional()` so the parent is a parameter.
+
+A parent parameter is a row the action reads. It is never relinked: when it is also the
+child of another key whose parent the action creates, that key keeps its owner. Two keys
+from one child to one parent that the action does not write share one parent parameter, so a
+child created under both starts with the same parent on each.
 
 **Relinking.** An action that creates the parent and updates an existing child links the
 child to the new parent. The rule depends on the key:
@@ -166,10 +175,13 @@ child to the new parent. The rule depends on the key:
 - A mandatory key always has a parent, so the same action moves the child to the new
   parent.
 
-A `.along(A, B)` hop reads the owner of the key that joins `A` and `B`. With two keys
-between them, `.by(role)` picks one (see
-[language-reference.md](./language-reference.md#relate-and-fk-generation)). A
-quantifier or condition body takes the first owner between the pair.
+<a id="joins"></a>**Joins.** A `.along(A, B)` hop, a `.has/.none(...)`, the link between a `holds`
+body's existing instance and the other instances of the guard, and a copy source each read
+the owner of one key. `SemanticModel::join_key` picks it: the one key between the two
+entities, or among several the one a `.by(role)` names. Several keys with no selector naming
+one is `AmbiguousOwnerLink` (an error), and the two are left unlinked (see
+[language-reference.md](./language-reference.md#which-key-a-join-follows)). The builder never
+picks a key itself, so the explorer and the TLA+ printer read the same owner.
 
 **Conditions as guards.** `applies_to(Condition, UseCase)` with a `holds` body, or
 `applies_to(Condition, Api)` for each use case that invokes the API, guards the use
@@ -185,7 +197,8 @@ case's action:
   carries the guard, else the first group.
 - A `.has(...)` or `.none(...)` on the body quantifies over the related instances
   present in the pre-state, linked by a `relate` owner to the parameters and the other
-  instances. The instance a created parameter takes is absent there, so the quantifier
+  instances, through the key [Joins](#joins) picks. `.has(Related)` and `.none(Related)`
+  name no condition, so they read the owner and the instance's existence only. The instance a created parameter takes is absent there, so the quantifier
   never reads it; an updated parameter's instance is present and is quantified with its
   pre-state values. The quantified instance is its own binder even when the action or
   another atom binds the same entity.
@@ -204,8 +217,9 @@ witness.
 
 - When the action has a parameter for `F`, the copy reads that parameter: an updated or
   parent parameter before the effects, a created one as the action leaves it.
-- When `F` is the parent of the target through a `relate`, and the action updates the
-  target, `F` joins the action as a parent parameter, with the owner guard
+- When `F` is the parent of the target through the key `join_key` picks (with the copy's
+  `.by(role)`), and the action updates the target, `F` joins the action as a parent
+  parameter, with the owner guard
   `owner[target] == F`. An unlinked `.optional()` owner fails that guard, so the action
   waits. A created target under a mandatory `relate` already has its parent as a parameter
   (see Owners).
@@ -276,7 +290,8 @@ cone of influence:
   that column the guard holds for some value of the column, so the action drops it with
   the column's choice. A set that lists every value of its column (`Child.status in
   (<every value>)`) is true when the system is built, so `.none(Child.status in (<every
-  value>))` says "no child row" and reads the link alone, not the column (#71).
+  value>))` says "no child row" and reads the link alone, not the column (#71). `.none(Child)`
+  is the same predicate, written without the values (#73).
 - **Exact.** The reachable states of the cone are the reachable states of the whole
   system projected onto the cone, except where an action of the cone also creates an
   entity the cone does not read: the cone drops that creation and never runs out of that
@@ -591,6 +606,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing. |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E, col == F.src)` names an `F` that the step binds to no one row: not written in the same transaction group and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
+| `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.by(role)` names one. The message names the candidate roles and the statement with the `.by` to add; the join is left unlinked. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
 | `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |

@@ -182,6 +182,7 @@ flowchart LR
   entity__ChangeNotice ---|N:1| entity__BusinessPermit
   entity__Disposition ---|N:1| entity__BusinessPermit
   entity__Inspection ---|1:1| entity__PermitApplication
+  entity__PermitApplication ---|N:1| entity__BusinessPermit
   entity__SuccessionNotice ---|N:1| entity__BusinessPermit
   event__EvDispositionDecided -.-> usecase__PublishViolation
   event__EvRevocationDecided -.-> usecase__RevokePermit

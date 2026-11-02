@@ -4,6 +4,28 @@
 
 ### Added
 
+- `.by(role)` names the key a join follows wherever two keys join the same two entities
+  (#73): after `.has(...)` or `.none(...)` (on an `invariant` or a `holds`), after a `holds`
+  body (the link from an entity it compares to the entities the guarded use case binds),
+  after a copy `sets(UC, E, col == F.col)`, and after `.along(...)` as before. One resolver,
+  `SemanticModel::join_key`, decides every join for `check`, `states`, the TLA+ export and
+  `verify`: one key is the join and needs no selector; among several, the one `.by` names (its
+  role, or its parent id when it has no `.role`); otherwise `AmbiguousOwnerLink`, an error
+  naming the candidate roles and the statement with `.by(<first role>)` added. A `.by` naming
+  no key of the join is `UnknownOwnerRole`. In LSP a role is a symbol: definition, references
+  and rename cover `relate(..).role(x)` and each `.by(x)`.
+- `.has(Related)` and `.none(Related)` ask for some, or no, linked row of `Related` and read
+  only the link (#73). `.none(Child)` builds the same cones as `.none(Child.status in (<every
+  value>))`, which stays valid; the samples use the direct form.
+- A `holds` guard on a use case that creates the child of an `.optional()` key, and compares
+  a column of the parent through that key, links the new child to a present parent the guard
+  holds for, as a mandatory key does (#73). Before, the child was created unlinked and the
+  guard never held. `samples/food-permit-ops` uses it to tie a renewal to the permit it renews
+  (`relate(PermitApplication, BusinessPermit, N:1).optional().role(renews)`) and restores the
+  guard `失効後の更新はできない` on `ApplyRenewal` and `RenewPermit`; at 2 instances the view of
+  `PermitApplication` grows from 127,165 to 2,094,157 states, under the `verify` cap, and
+  `verify` decides every check.
+
 - `list --kind screen`, `event`, and `timer` list the declared screens, events, and timers
   as `id,label`, sorted by id, in every `--format` (#70), as `flow`, `step`, and `system`
   do. Before, `--kind` rejected them.
@@ -242,6 +264,10 @@
 
 ### Changed
 
+- A `.by(role)` belongs to the `.along(...)`, `.has(...)` or `.none(...)` before it (#73). On
+  a `forbidden` or `invariant`, a `.by` written before `.along(...)`, which `.along` used to
+  take, is now `ByWithoutAlong`; move it after the `.along`.
+
 - The incremental modeling stages put screens before data (#72). The interaction boundary
   stage is split in two: Screens (`screen`, `displays`, `navigates`, `field`) comes right
   after the BUC skeleton, and API and access boundary (`api`, `invokes`, `dto`, `system`,
@@ -384,6 +410,13 @@
   the docs, skills, and tests is rewritten; no sample used it.
 
 ### Fixed
+
+- A condition or quantifier between two entities that two keys join no longer follows the
+  first key silently (#73); it is `AmbiguousOwnerLink` until `.by(role)` names one. A copy's
+  source follows the same rule.
+- An action never relinks a parent parameter, a row it only reads (#73). With a second key
+  from the parent's entity back to the created child's, `RegisterPermit` in a model with
+  `renews` linked the application it read as renewing the permit it created.
 
 - `verify` decides a model whose condition on a creating use case reads a column the
   creation does not assign (#67 review). The TLA+ printed the guard on the successor

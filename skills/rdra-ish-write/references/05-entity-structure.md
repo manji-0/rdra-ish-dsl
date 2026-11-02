@@ -55,7 +55,10 @@ Also ask:
    second child linked to one parent). Write `1..*:1` when every parent must have a
    child; the lifecycle checks it as `MinCard_<Child>_<role>`, so the use case that
    creates the parent must create its first child in the same transaction.
-   Chain `.role(name)` when two relates join one child to one parent. Chain
+   Chain `.role(name)` when two relates join one child to one parent, or when a second
+   relate joins the same two entities the other way. Every rule, guard, quantifier and copy
+   that joins such a pair then names its key with `.by(name)` (`AmbiguousOwnerLink`
+   otherwise). Chain
    `.key(col)` to adopt a column the child already declares. Do not hand-write
    a column that `relate` generates: it is `FkConflict` unless you adopt it with `.key`.
 5. Re-check API CRUD after entity refinement; APIs should still operate the right
