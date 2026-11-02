@@ -78,7 +78,7 @@
   the cone verdict with the whole-model verdict on the temporal samples and on fixtures for
   an entity looping outside the cone, a fair use case whose guard reads another entity, a
   guard that toggles forever, a cone that frees slots, and a cone that holds every written
-  var. food-permit-ops gets back `HygieneManagerEventuallyAppointed`, checked on a 223-state
+  var. food-permit-ops gets back `HygieneManagerEventuallyAppointed`, checked on a 257-state
   cone (its whole model found 6.9 million states in 300 s without finishing), and patent-ops
   gains `GrantEnds`, checked on a 4,105-state cone (its whole model explored 14 million
   states in 11 minutes without finishing). `lifecycle_measure` lists property cones too.
@@ -385,6 +385,15 @@
 
 ### Fixed
 
+- `verify` decides a model whose condition on a creating use case reads a column the
+  creation does not assign (#67 review). The TLA+ printed the guard on the successor
+  (`E_status'[p0] = "a"`) before `UNCHANGED E_status`, so TLC could not evaluate it and
+  every run holding the column, the whole model and its cones, ended `tool_error`. Every
+  assignment and the `UNCHANGED` now come before a guard that reads the successor.
+- A whole-model property run that the time budget or the state cap stops after TLC printed
+  its verdict reports that verdict, not `not decided`.
+- TLC reporting `Invariant TypeOK is violated` is a tool error, not a counterexample:
+  `TypeOK` checks the generated TLA+, not a rule of the model.
 - The `Runs_<UseCase>` warning of a use case that creates a child under an `.optional()`
   `relate` and guards on the parent it does not write says why (#70): `note: it creates App
   without writing Permit, so the App is unlinked and no Permit is its parent for a guard to

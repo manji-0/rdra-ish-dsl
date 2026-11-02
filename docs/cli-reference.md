@@ -1009,8 +1009,10 @@ prints no notice for conditions.
 
 Warnings and errors of the lifecycle transition system are printed on stderr, and an
 error stops `verify` before TLC runs. Each invariant and `after(..).assert` is checked on
-its own cone of influence, a restriction of the system whose reachable states are exactly
-the whole model's projected onto it, with the cones run in parallel. Each temporal
+its own cone of influence, a restriction of the system whose reachable states are the
+whole model's projected onto it (a superset where an action of the cone creates an entity
+the cone does not read, since the cone does not bound that entity), with the cones run in
+parallel. Each temporal
 property is checked on a cone of its own, of what it reads and of the use cases its
 `.fair` lists, in one run (`Cone_<P>`) or two (`Cone_<P>_WF` adds `WF_vars(Next)`), and
 only when neither decides it on the whole model (`RdraSpec_<P>`), after the cone runs, at

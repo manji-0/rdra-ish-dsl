@@ -278,10 +278,13 @@ cone of influence:
   (<every value>)`) is true when the system is built, so `.none(Child.status in (<every
   value>))` says "no child row" and reads the link alone, not the column (#71).
 - **Exact.** The reachable states of the cone are the reachable states of the whole
-  system projected onto the cone. The cone is not an approximation. The test
-  `cone_exploration_equals_the_projection_of_the_whole_component` in
-  `crates/rdra-ish-core/src/lifecycle/tests/cone.rs` checks that on `ec-site`,
-  `personal-info`, and the formal-verification samples.
+  system projected onto the cone, except where an action of the cone also creates an
+  entity the cone does not read: the cone drops that creation and never runs out of that
+  entity's slots (see [Bounds](#bounds)), so it reaches a superset. The cone is not an
+  approximation. The test `cone_exploration_equals_the_projection_of_the_whole_component` in
+  `crates/rdra-ish-core/src/lifecycle/tests/cone.rs` checks equality on `ec-site`,
+  `personal-info`, and the formal-verification samples, and the superset where a cone
+  frees slots.
 - **Shared.** Targets with the same cone are explored once.
 
 BFS starts from every initial state, applies every enabled action, and stops when

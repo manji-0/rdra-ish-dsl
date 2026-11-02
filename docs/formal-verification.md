@@ -121,8 +121,13 @@ did not model-check them. Use `export` or `verify`.
 
 `verify` restricts the system to the cone of influence of each invariant and
 `after` assertion, prints that cone, and runs TLC on each cone in parallel. A cone
-reaches exactly the whole model's states projected onto it, so the union of the cone
-verdicts is the whole-model verdict. Cones over the same variables share one run.
+reaches the whole model's states projected onto it. When an action of the cone also
+creates an entity the cone does not read, the cone drops that creation and never runs out
+of that entity's slots, so it reaches a superset: the `bounds:` line says so (`entities a
+check does not read are unbounded`). An `ok` on every cone is the whole-model `ok`, and a
+violation on a cone is a violation of the model, possibly with more instances of the
+unread entity than the bound. For a temporal property this is the `FreesSlots` case
+below. Cones over the same variables share one run.
 This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 s and
 11 GB on ec-site and did not finish in 300 s on clinic-ops.
 
@@ -149,16 +154,35 @@ everything the action reads and writes: its guards with the `applies_to` conditi
 quantifier reads inside them, the existence of each instance it binds, the source of each
 transition, the clock when it ticks, the columns it assigns, transitions, or chooses, and the
 existence of each entity it creates or deletes. Closed means what it means for an invariant's
-cone: every action that writes a var of the cone reads only vars of the cone. The cone
-decides the property's verdict under the property's own fairness because, for a fair action
-`A`, whether `A(p)` is enabled in the whole model is a function of the cone's vars, every
-step of `A(p)` that changes any var changes a var of the cone, and so `WF_vars(A(p))` on the
-cone's `vars` is `WF_vars(A(p))` on the whole model's; every other action either writes into
-the cone, and then reads only the cone, or leaves the cone unchanged, which is a stuttering
-step of the cone's `[Next]_vars`. Every behavior of the whole model that satisfies `Fair_P`
-therefore projects onto a behavior of the cone that satisfies `Fair_P`, and a behavior of the
-cone lifts to one of the whole model as long as the cone counts the slots of every entity its
-actions create.
+cone: every action that writes a var of the cone reads only vars of the cone, with two
+exceptions. A copy guard (`sets(UC, Child, col == Parent.col)`) whose target column is
+outside the cone is dropped with the column, and a creation of an entity outside the cone
+is dropped with its slot (the `FreesSlots` case below). The cone decides the property's
+verdict under the property's own fairness because, for a fair action `A`, whether `A(p)` is
+enabled in the whole model is a function of the cone's vars, every step of `A(p)` that
+changes any var changes a var of the cone, and so `WF_vars(A(p))` on the cone's `vars` is
+`WF_vars(A(p))` on the whole model's; every other action either writes into the cone, and
+then reads only the cone apart from those two exceptions, or leaves the cone unchanged,
+which is a stuttering step of the cone's `[Next]_vars`. Every behavior of the whole model
+that satisfies `Fair_P` therefore projects onto a behavior of the cone that satisfies
+`Fair_P`. A behavior of the cone lifts to one of the whole model on three facts:
+
+- A dropped copy guard can hold in the whole model whatever its source holds: `copyable`
+  accepts a copy only between columns that hold the same values, with a nullable source
+  only into a nullable target, and rejects any other copy with `SetsCopyMismatch`, so the
+  target can take every source value. The step lifts with the target set to the source's
+  value. A copy from an optional parent keeps its `Owner` guard and its `Parent` param in
+  the cone, so the cone still needs a linked parent where the whole model does.
+- A cone step that both a fair `A(p)` and a non-fair `B` explain lifts as `A(p)`, so the
+  lifted behavior takes the fair step wherever `WF_vars(A(p))` needs one.
+- An `always` counterexample the first run finds without `WF_vars(Next)` extends to a
+  behavior that satisfies the whole model's `WF_vars(Next)`: `WF_vars(Next)` and `Fair_P`
+  are weak fairness on actions of `Next`, which is machine closed, so every finite prefix
+  extends to a behavior that satisfies both, and an `always` is violated by the prefix
+  alone.
+
+The lift needs the cone to count the slots of every entity its actions create; the
+`FreesSlots` case below is the one where it does not.
 
 What does not restrict to a cone is the `WF_vars(Next)` that `Spec` adds for any `eventually`
 or `leads_to`: a step outside the cone satisfies it, so the cone with `WF_vars(Next)` of its
@@ -173,9 +197,9 @@ cone, and the whole model only when neither decides:
    counterexample. A counterexample here is a counterexample of the whole model: its loop
    keeps stepping, and its stutter leaves every action of the cone disabled, which the
    whole model's actions outside the cone cannot change. An `ok` here decides only when the
-   cone holds every var an action writes, so that every step of the whole model changes the
-   cone; otherwise the first run's counterexample needs the whole model's `WF_vars(Next)`
-   to rule out, and the property is undecided on the cone.
+   cone holds every var an action writes, so that every step that changes the whole model
+   changes the cone; otherwise the first run's counterexample needs the whole model's
+   `WF_vars(Next)` to rule out, and the property is undecided on the cone.
 3. `RdraSpec_<P>`, the whole model, for a property its cone leaves undecided. This is the
    run that did not finish on food-permit-ops. It prints TLC's progress (distinct states,
    queue, seconds, about once a minute) and stops at `--temporal-budget` seconds (default
@@ -194,13 +218,16 @@ counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs t
 WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A property without `.fair` rests on
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
-`HygieneManagerEventuallyAppointed` runs on a 223-state cone and the whole `verify` takes
+`HygieneManagerEventuallyAppointed` runs on a 257-state cone and the whole `verify` takes
 3 s; on patent-ops `GrantEnds` runs on a 4,105-state cone. The test
 `a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares the
 cone verdict with the whole-model verdict on the temporal samples and on fixtures for each
 case: another entity looping outside the cone, a fair use case whose guard reads another
-entity, a guard that toggles forever, a cone that frees slots, and a cone that holds every
-written var.
+entity, a guard that toggles forever, a cone that frees slots, a cone that holds every
+written var, a fair use case copying from its parent, a copy from an optional parent the
+cone leaves out, a `.none` guard on a fair use case whose quantified column another use
+case writes, and a condition on a creating use case that reads a column the creation does
+not assign.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
 2,097,152 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a

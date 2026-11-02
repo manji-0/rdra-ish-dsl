@@ -1,8 +1,11 @@
 //! Exact cone-of-influence reduction. A var set S is closed when every action that writes a
 //! var in S has all the vars it reads in S, where a copy's guard counts as read only when the
-//! var it pins is in S. Then the reachable states of `restrict_to(S)` are exactly the
-//! reachable states of the whole system projected onto S, so a view or verdict that reads only
-//! S can be computed on the smaller system.
+//! var it pins is in S. Then the reachable states of `restrict_to(S)` are the reachable states
+//! of the whole system projected onto S, so a view or verdict that reads only S can be
+//! computed on the smaller system. The one exception is an action that also creates an entity
+//! outside S: `restrict_to` drops that creation, the entity never runs out of slots, and the
+//! cone reaches a superset (`cone_frees_slots`; the `bounds:` line says such entities are
+//! unbounded).
 
 use std::collections::BTreeSet;
 
@@ -259,9 +262,9 @@ impl TransitionSystem {
         }
     }
 
-    /// Every var an action writes is in `vars`: each step of the whole system that changes
-    /// anything changes the cone, so `WF_vars(Next)` on the cone is `WF_vars(Next)` on the
-    /// whole system.
+    /// Every var an action writes is in `vars`: every step that changes the whole system
+    /// changes the cone, so `WF_vars(Next)` on the cone is `WF_vars(Next)` on the whole
+    /// system.
     pub fn cone_keeps_every_write(&self, vars: &VarSet) -> bool {
         self.actions
             .iter()
