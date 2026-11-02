@@ -29,7 +29,7 @@ pub struct DiagramRequest {
     pub entity: Vec<String>,
     pub node_kind: Vec<String>,
     pub edge_kind: Vec<String>,
-    pub out: PathBuf,
+    pub out: Option<PathBuf>,
 }
 
 pub fn run_diagram(request: DiagramRequest) -> Result<()> {
@@ -176,10 +176,15 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     }
 
     let diagram_text = emit_diagram(&model, &kind, &view)?;
-    let out_path = out.with_extension("mmd");
-    fs::write(&out_path, &diagram_text)
-        .with_context(|| format!("failed to write {}", out_path.display()))?;
-    println!("wrote {}", out_path.display());
+    match out {
+        Some(out) => {
+            let out_path = out.with_extension("mmd");
+            fs::write(&out_path, &diagram_text)
+                .with_context(|| format!("failed to write {}", out_path.display()))?;
+            println!("wrote {}", out_path.display());
+        }
+        None => print!("{diagram_text}"),
+    }
 
     Ok(())
 }

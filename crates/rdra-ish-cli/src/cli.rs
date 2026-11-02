@@ -182,7 +182,7 @@ pub(crate) enum Commands {
         /// condition, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
-        /// Output format: mermaid, the only one (writes <out>.mmd)
+        /// Output format: mermaid, the only one (prints Mermaid text)
         #[arg(long, default_value = "mermaid", value_parser = WithRemoved::<OutputFormat>::new(REMOVED_FORMATS))]
         format: OutputFormat,
         /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
@@ -206,8 +206,10 @@ pub(crate) enum Commands {
         /// Applies to --kind rdra.
         #[arg(long = "edge-kind", alias = "edge-filter")]
         edge_kind: Vec<String>,
-        #[arg(short, long, default_value = "out")]
-        out: PathBuf,
+        /// Write the Mermaid text to this file (`.mmd` is always the extension). Without it,
+        /// the text goes to stdout.
+        #[arg(short, long)]
+        out: Option<PathBuf>,
     },
     /// Generate CSV
     Csv {
@@ -501,7 +503,7 @@ mod tests {
                 assert_eq!(buc, vec!["BucScheduling"]);
                 assert_eq!(node_kind, vec!["usecase"]);
                 assert_eq!(edge_kind, vec!["invokes"]);
-                assert_eq!(out, PathBuf::from("out.mmd"));
+                assert_eq!(out, Some(PathBuf::from("out.mmd")));
             }
             _ => panic!("expected diagram command"),
         }

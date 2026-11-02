@@ -46,7 +46,7 @@ bash scripts/check-sample-artifacts.sh
 
 ## Notes
 
-- `diagram` appends `.mmd` to `--out`.
+- `diagram` prints to stdout without `--out`; with it, `.mmd` is appended to the path.
 - Prefer scoped diagrams (`--buc`) before rendering images.
 - Every flowchart kind writes each description as a `%% desc <id>: <text>` comment
   line; there is no flag for it.

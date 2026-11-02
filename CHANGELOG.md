@@ -227,6 +227,9 @@
 
 ### Changed
 
+- `diagram` without `-o` prints the Mermaid text to stdout instead of writing `./out.mmd`
+  (#70). `-o <path>` still writes `<path>.mmd` and prints `wrote <path>.mmd`. A script that
+  relied on the default `out.mmd` passes `-o out`.
 - A quoted value of an Enum or a variation is `QuotedValue`, after #48's rule that a token
   is bare and a quoted string is free text: `chooses(Pay, Order.kind, "a")` recorded `a`, and
   `@default("open")` on an Enum or variation column loaded as `@default(open)`. The hint names

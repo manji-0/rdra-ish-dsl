@@ -959,7 +959,7 @@ fn usecase_scope_errors_say_what_to_pass() {
         entity: Vec::new(),
         node_kind: Vec::new(),
         edge_kind: Vec::new(),
-        out: out.clone(),
+        out: Some(out.clone()),
     };
     for (request, message) in [
         (
@@ -1001,7 +1001,7 @@ fn entity_scope_errors_say_what_to_pass() {
         entity: entity.iter().map(|id| id.to_string()).collect(),
         node_kind: Vec::new(),
         edge_kind: Vec::new(),
-        out: out.clone(),
+        out: Some(out.clone()),
     };
     for (request, message) in [
         (
@@ -1039,7 +1039,7 @@ fn a_deadlocked_model_still_draws_its_state_diagram_with_the_deadlock_coloured()
         entity: vec!["Order".to_string()],
         node_kind: Vec::new(),
         edge_kind: Vec::new(),
-        out: out.clone(),
+        out: Some(out.clone()),
     })
     .unwrap();
     let text = std::fs::read_to_string(out.with_extension("mmd")).unwrap();
