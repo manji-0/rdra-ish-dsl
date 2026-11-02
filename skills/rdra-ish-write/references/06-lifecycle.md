@@ -45,7 +45,9 @@ Also ask:
    state model. An entity may have several lifecycle columns (a procedure `status` and
    a `publication` that moves on its own): give each its own `transitions`, and do not
    split the entity or fake one with guarded `sets`. Each column is its own state model,
-   and guards and rules may read any of them.
+   and guards and rules may read any of them. A use case that moves two of them takes one
+   arm of each in one step, so it runs only where both columns have an arm: list an arm for
+   every state of the other column it should run from.
 3. Declare an `event` and `raises(UseCase, Event)` only for an interface between use
    cases: something must consume the event (`triggers`, or `outbox(Event)` for a
    publication outside the model), else `check` warns that it is never consumed.
@@ -56,7 +58,9 @@ Also ask:
 5. Connect an external system through events: `raises(ExtSystem, Event)` inbound,
    `triggers(Event, ExtSystem)` outbound.
 6. Declare a `timer` and `triggers(Timer, UseCase)` for a schedule that starts a use
-   case. Keep that use case in a BUC.
+   case. Keep that use case in a BUC. A timer has no parameter. When the deadline depends on
+   a reason, declare one timer per period, let each trigger its own use case, and guard
+   that use case with a `condition` on the reason (see the third pattern below).
 7. Declare a `condition` for a business rule that selects when a use case applies.
    Without a body it is a trace link (`combines` its variation and lifecycle column);
    with `holds(Cond, Entity.col == value, ...)` it guards each use case it
@@ -125,6 +129,59 @@ triggers(NightlyExpiry, ExpireDrafts)
 condition CardPayment "The order is paid by card"
 holds(CardPayment, Payment.method == card)
 applies_to(CardPayment, CapturePayment)
+```
+
+A deadline that depends on a reason: one timer per period, each use case guarded by the
+reason it serves.
+
+```rdra
+variation ExtensionReason "Extension reason" {
+  none "No extension"
+  disaster_area "Disaster area"
+  foreign_survey "Overseas survey"
+}
+
+entity Claim "Claim" {
+  id: Int @pk
+  status: Enum(waiting, overdue) @default(waiting)
+  extension: ExtensionReason @default(none)
+}
+
+buc BucClaim "Claim"
+usecase FileClaim "File a claim"
+usecase RecordExtension "Record the extension reason"
+usecase FlagOverdue30 "Flag overdue after 30 days"
+usecase FlagOverdue60 "Flag overdue after 60 days"
+usecase FlagOverdue120 "Flag overdue after 120 days"
+contains(BucClaim, FileClaim)
+contains(BucClaim, RecordExtension)
+contains(BucClaim, FlagOverdue30)
+contains(BucClaim, FlagOverdue60)
+contains(BucClaim, FlagOverdue120)
+
+creates(FileClaim, Claim)
+updates(RecordExtension, Claim)
+chooses(RecordExtension, Claim.extension)
+transitions(FlagOverdue30, Claim.status, waiting -> overdue)
+transitions(FlagOverdue60, Claim.status, waiting -> overdue)
+transitions(FlagOverdue120, Claim.status, waiting -> overdue)
+
+timer After30Days "30 days after filing"
+timer After60Days "60 days after filing"
+timer After120Days "120 days after filing"
+triggers(After30Days, FlagOverdue30)
+triggers(After60Days, FlagOverdue60)
+triggers(After120Days, FlagOverdue120)
+
+condition NoExtension "No extension was recorded"
+holds(NoExtension, Claim.extension == none)
+condition DisasterArea "A disaster-area extension was recorded"
+holds(DisasterArea, Claim.extension == disaster_area)
+condition ForeignSurvey "An overseas-survey extension was recorded"
+holds(ForeignSurvey, Claim.extension == foreign_survey)
+applies_to(NoExtension, FlagOverdue30)
+applies_to(DisasterArea, FlagOverdue60)
+applies_to(ForeignSurvey, FlagOverdue120)
 ```
 
 A created row that copies a value from the row it is created under:

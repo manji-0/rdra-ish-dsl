@@ -281,6 +281,11 @@
 
 ### Changed
 
+- The language reference and the lifecycle skill document two things the
+  `samples/insurance-claim-ops` soak found (#79). A use case that moves two lifecycle columns
+  of one entity runs only where both columns have an arm (Several lifecycle columns on one
+  entity). A deadline that depends on a reason is one timer per period, each triggering its
+  own use case guarded by a `condition` on the reason (Timers); the snippet is checked.
 - A `.by(role)` belongs to the `.along(...)`, `.has(...)` or `.none(...)` before it (#73). On
   a `forbidden` or `invariant`, a `.by` written before `.along(...)`, which `.along` used to
   take, is now `ByWithoutAlong`; move it after the `.along`.

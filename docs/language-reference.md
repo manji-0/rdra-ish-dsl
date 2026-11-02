@@ -474,6 +474,72 @@ timer triggers and that belongs to no BUC is reported like an event-triggered on
 external-environment layer of the RDRA diagram, and the event diagram draws it
 with its `triggers` edges.
 
+#### A deadline that depends on a reason
+
+A timer has no parameter, so it cannot wait 30 days for one claim and 60 for another. Declare
+one timer per period, let each trigger its own use case, and guard that use case with a
+`condition` on the reason. The timer whose period does not fit the row finds its use case
+not applicable and does nothing:
+
+```rdra
+variation ExtensionReason "Extension reason" {
+  none "No extension"
+  disaster_area "Disaster area"
+  foreign_survey "Overseas survey"
+}
+
+entity Claim "Claim" {
+  id: Int @pk
+  status: Enum(waiting, overdue) @default(waiting)
+  extension: ExtensionReason @default(none)
+}
+
+buc BucClaim "Claim"
+usecase FileClaim "File a claim"
+usecase RecordExtension "Record the extension reason"
+usecase FlagOverdue30 "Flag overdue after 30 days"
+usecase FlagOverdue60 "Flag overdue after 60 days"
+usecase FlagOverdue120 "Flag overdue after 120 days"
+contains(BucClaim, FileClaim)
+contains(BucClaim, RecordExtension)
+contains(BucClaim, FlagOverdue30)
+contains(BucClaim, FlagOverdue60)
+contains(BucClaim, FlagOverdue120)
+
+creates(FileClaim, Claim)
+updates(RecordExtension, Claim)
+chooses(RecordExtension, Claim.extension)
+transitions(FlagOverdue30, Claim.status, waiting -> overdue)
+transitions(FlagOverdue60, Claim.status, waiting -> overdue)
+transitions(FlagOverdue120, Claim.status, waiting -> overdue)
+
+timer After30Days "30 days after filing"
+timer After60Days "60 days after filing"
+timer After120Days "120 days after filing"
+triggers(After30Days, FlagOverdue30)
+triggers(After60Days, FlagOverdue60)
+triggers(After120Days, FlagOverdue120)
+
+condition NoExtension "No extension was recorded"
+holds(NoExtension, Claim.extension == none)
+condition DisasterArea "A disaster-area extension was recorded"
+holds(DisasterArea, Claim.extension == disaster_area)
+condition ForeignSurvey "An overseas-survey extension was recorded"
+holds(ForeignSurvey, Claim.extension == foreign_survey)
+applies_to(NoExtension, FlagOverdue30)
+applies_to(DisasterArea, FlagOverdue60)
+applies_to(ForeignSurvey, FlagOverdue120)
+```
+
+- **The guard picks the period.** `applies_to(DisasterArea, FlagOverdue60)` lets the 60-day
+  use case run only on a claim whose `extension` is `disaster_area`. Without it, an
+  `after(FlagOverdue60).assert(Claim.extension == disaster_area)` fails with a counterexample
+  at `extension=none`.
+- **The reason is chosen before the deadline.** `chooses(RecordExtension, Claim.extension)`
+  gives the column a value; a column nothing reads or chooses adds no variable.
+- **The model does not count days.** Each timer only says that its use case may fire; the
+  names `After30Days`, `After60Days` and `After120Days` carry the period.
+
 ### Business flows
 
 Business flows are optional, first-class narrative structure for cases where BUC
@@ -1544,6 +1610,14 @@ transitions(EndPublication, Disposition.publication, published -> ended)
   `Disposition_publication_published` (diagram id `state__Disposition_publication_published`),
   so a value two columns share is two states. An entity with one lifecycle column keeps
   `{Entity}_{value}`.
+- **A use case that moves two columns runs only where both have an arm.** `Go` with
+  `transitions(Go, E.status, a -> b)` and `transitions(Go, E.period, y -> z)` takes one arm
+  of each column in one step. It does not run on a row at `(a, x)`: the period has no arm
+  from `x`, so the status arm is not taken either. To let it run there, list an arm for
+  each state of the other column that it should move from, such as
+  `transitions(Go, E.period, x -> z)`. A self-loop `x -> x` lets it run
+  but leaves the period at `x`; with the arms above, a row at `(b, y)` then has no use case
+  that moves the period, and `check` reports `Deadlock_E_period_y`.
 - **A single-tag export picks one column.** `export --kind typescript` tags each state union
   by `status`, else a `*_status` column, else the first lifecycle column by name; the other
   columns are fields of each variant.
