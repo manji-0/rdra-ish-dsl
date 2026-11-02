@@ -415,14 +415,52 @@ fn a_written_parent_takes_only_the_key_its_by_names() {
     assert!(!order_violated(&at_verify(&written_parent(".by(ship_to)"))));
 }
 
-/// Two keys and no `.by`: the written row is the order's on neither key, so the guard reads an
-/// address unrelated to the order and the violation stays reachable.
+/// Two keys and no `.by` of the use case naming one is `AmbiguousOwnerLink`, as for any other
+/// join (#73): the error names the guard that compares the address with `.by(ship_to)` added,
+/// the first key declared. The link is left unbound, so the guard reads an address unrelated
+/// to the order. A use case with no guard or copy that reads the parent is told where a `.by`
+/// can go.
 #[test]
-fn a_written_parent_without_by_takes_neither_of_two_keys() {
+fn a_written_parent_without_by_is_ambiguous() {
     let src = written_parent("");
-    let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
-    assert!(owner_guards(&ts).is_empty());
-    assert!(order_violated(&at_verify(&src)));
+    let built = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
+    assert!(owner_guards(&built.ts).is_empty());
+    let ambiguous: Vec<(String, String)> = built
+        .diags
+        .iter()
+        .filter_map(|d| match &d.diag {
+            StateDiag::AmbiguousOwnerLink {
+                statement, rewrite, ..
+            } => Some((statement.clone(), rewrite.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        ambiguous,
+        vec![(
+            "holds(BillsEast, ...)".to_string(),
+            "holds(BillsEast, ...).by(ship_to)".to_string()
+        )]
+    );
+    let unread = src
+        .replace("holds(BillsEast, Address.region == east)\n", "")
+        .replace("applies_to(BillsEast, ShipBilled)\n", "")
+        .replace("condition BillsEast \"請求先が東\"\n", "");
+    let built = TransitionSystem::build(&model_from(&unread), Bounds::VERIFY, &Scope::ALL);
+    let rewrites: Vec<String> = built
+        .diags
+        .iter()
+        .filter_map(|d| match &d.diag {
+            StateDiag::AmbiguousOwnerLink {
+                statement, rewrite, ..
+            } if statement == "usecase ShipBilled" => Some(rewrite.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        rewrites,
+        vec![".by(ship_to) on a holds guard applied to ShipBilled that compares Address, or on a copy from Address in it".to_string()]
+    );
 }
 
 /// An order created with an address it creates takes the new address on the key the `.by`

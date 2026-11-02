@@ -1510,7 +1510,11 @@ in it. Every other key is bound as if the use case did not write the parent: a c
 takes a parent row of its own on it, and an updated child keeps whatever row it has. So a use
 case that updates the billing address and ships the order
 (`holds(BillsEast, Address.region == east).by(bill_to)`) reads the order's `bill_to` address,
-and the order may ship to another one. With no `.by`, the written row is on neither key.
+and the order may ship to another one. With several keys and no `.by` of the use case
+naming any of them, the join is `AmbiguousOwnerLink`, as it is for any other statement: the
+error names the use case's `holds` body that compares the parent, or its copy from the
+parent, with `.by(<first role>)` added, or, when the use case has neither, says that a
+`holds` guard applied to it or a copy in it must name the key.
 
 `.by(role)` belongs to the call before it:
 
@@ -1540,7 +1544,7 @@ per pair, the common case, never writes it.
 
 | Diagnostic | When |
 |---|---|
-| `AmbiguousOwnerLink` | Several keys join two entities a statement joins, and no `.by(role)` names one. The lifecycle reports it for a guard, a quantifier, and a copy (it depends on the use case a guard is on); the analysis for `.along`. |
+| `AmbiguousOwnerLink` | Several keys join two entities a statement joins, and no `.by(role)` names one. The lifecycle reports it for a guard, a quantifier, a copy, and a parent and child one use case writes (it depends on the use case a guard is on); the analysis for `.along`. |
 | `UnknownOwnerRole` | `.by(role)` names no key on the `.along` path, no key of the quantified entity, no key of an entity the `holds` body compares, or no key between a copy's target and source. |
 | `UnjoinedGuardRead` | A `holds` body compares an entity that no key joins to a row the guarded use case binds, so any row of it satisfies the guard (a warning). |
 | `ByWithoutAlong` | `.by(...)` on a `forbidden` or `invariant` follows no `.along`, `.has` or `.none`, or `.by(...)` on a `sets` that copies nothing. |

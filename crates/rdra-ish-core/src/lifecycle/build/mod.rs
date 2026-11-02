@@ -1427,8 +1427,9 @@ impl<'m> Builder<'m> {
     /// the action reads, not writes, so it is never relinked. Each key has its own parent
     /// param, so a child created under two keys to one parent the action does not write may
     /// point at two rows. A parent the action writes binds only the keys
-    /// [`Self::takes_written_parent`] gives it; every other key is bound as if the action did
-    /// not write the parent.
+    /// [`Self::written_parent_key`] gives it; every other key is bound as if the action did
+    /// not write the parent, and several keys none of which a `.by` names are
+    /// `AmbiguousOwnerLink`.
     fn owner_bindings(&mut self, uc: UseCaseKey, bodies: &[AppliedBody<'m>], a: &mut ActionDraft) {
         for &(var, child, parent) in &self.owners.clone() {
             let Some(c) = a.row_of(child) else { continue };
@@ -1436,9 +1437,17 @@ impl<'m> Builder<'m> {
                 continue;
             };
             let site = self.ts.vars[var.index()].site.clone();
-            let written = a
-                .row_of(parent)
-                .filter(|_| self.takes_written_parent(uc, fk));
+            let written = match a.row_of(parent) {
+                Some(p) => match self.written_parent_key(uc, fk) {
+                    Join::Key(k) if k == fk => Some(p),
+                    Join::Ambiguous(candidates) => {
+                        self.ambiguous_written_parent(uc, fk, &candidates);
+                        None
+                    }
+                    _ => None,
+                },
+                None => None,
+            };
             let parent_is_new =
                 written.is_some_and(|p| a.params[usize::from(p)].role == ParamRole::New);
             let child_is_new = a.params[usize::from(c)].role == ParamRole::New;
@@ -1492,20 +1501,22 @@ impl<'m> Builder<'m> {
 }
 
 impl Builder<'_> {
-    /// Whether a row of `fk`'s parent that the use case writes is the row `fk` joins a child
-    /// it writes to (#76): the one key from that child to that parent, or, among several, a key
-    /// that a `.by` of the use case's `holds` guards (the body's or an `.along` hop's) or of its
-    /// copies names. So `.by` names the same row as elsewhere: the written row is the row of the
-    /// key the use case reads it through.
-    fn takes_written_parent(&self, uc: UseCaseKey, fk: FkId) -> bool {
+    /// Which key joins a row of `fk`'s parent that the use case writes to a child it writes
+    /// (#76): `Join::Key(fk)` for the one key from that child to that parent, or, among
+    /// several, when a `.by` of the use case's `holds` guards (the body's or an `.along` hop's)
+    /// or of its copies names `fk`, so `.by` names the same row as elsewhere; `Join::Key` of
+    /// another key when a `.by` names only others; `Join::Ambiguous` when no `.by` names any of
+    /// them, which is `AmbiguousOwnerLink` as for any other join.
+    fn written_parent_key(&self, uc: UseCaseKey, fk: FkId) -> Join {
         let model = self.model;
         let key = model.foreign_key(fk);
-        let parallel = model
+        let parallel: Vec<FkId> = model
             .foreign_keys()
             .filter(|(_, k)| (k.child, k.parent) == (key.child, key.parent))
-            .count();
-        if parallel == 1 {
-            return true;
+            .map(|(id, _)| id)
+            .collect();
+        if parallel.len() == 1 {
+            return Join::Key(fk);
         }
         let guards = applied_bodies(model)
             .into_iter()
@@ -1522,7 +1533,95 @@ impl Builder<'_> {
             .iter()
             .filter(|ce| ce.origin == uc && matches!(ce.value, SetValue::Copy(_)))
             .flat_map(|ce| ce.by.iter());
-        guards.chain(copies).any(|role| model.key_named(key, role))
+        let named: Vec<FkId> = guards
+            .chain(copies)
+            .filter_map(|role| {
+                parallel
+                    .iter()
+                    .copied()
+                    .find(|id| model.key_named(model.foreign_key(*id), role))
+            })
+            .collect();
+        match named.iter().find(|id| **id == fk).or(named.first()) {
+            Some(id) => Join::Key(*id),
+            None => Join::Ambiguous(parallel),
+        }
+    }
+
+    /// `AmbiguousOwnerLink` for a parent the use case writes that several keys join to a
+    /// child it writes, none of which a `.by` of the use case names. The statement is the
+    /// first `holds` body applied to the use case that compares the parent, else its first
+    /// copy from the parent, with `.by(<first role>)` as the rewrite; a use case with neither
+    /// is told where a `.by` can go.
+    fn ambiguous_written_parent(&mut self, uc: UseCaseKey, fk: FkId, candidates: &[FkId]) {
+        let model = self.model;
+        let key = model.foreign_key(fk);
+        let (child, parent) = (key.child, key.parent);
+        let holds = applied_bodies(model)
+            .into_iter()
+            .filter(|b| b.usecase == uc)
+            .find(|b| {
+                b.body
+                    .conds
+                    .iter()
+                    .flat_map(preds::cond_entities)
+                    .any(|ek| ek == parent)
+            })
+            .map(|b| {
+                (
+                    format!("holds({}, ...)", model.conditions[b.cond].id),
+                    Site::new(ModelRef::Condition(b.cond), &b.body.site),
+                )
+            });
+        let copy = model
+            .column_effects
+            .iter()
+            .enumerate()
+            .find_map(|(idx, ce)| {
+                let SetValue::Copy(source) = &ce.value else {
+                    return None;
+                };
+                (ce.origin == uc && ce.entity == child && source.entity == parent).then(|| {
+                    (
+                        format!(
+                            "sets({}, {}, {} == {}.{})",
+                            model.use_cases[uc].id,
+                            model.entities[child].id,
+                            ce.column,
+                            model.entities[parent].id,
+                            source.column
+                        ),
+                        Site::new(ModelRef::ColumnEffect(idx), &ce.site),
+                    )
+                })
+            });
+        let diag = match holds.or(copy) {
+            Some((statement, site)) => {
+                preds::ambiguous_owner_link(model, &statement, child, parent, candidates, &site)
+            }
+            None => {
+                let uc_id = &model.use_cases[uc].id;
+                let roles: Vec<&str> = candidates
+                    .iter()
+                    .map(|id| model.key_role(model.foreign_key(*id)))
+                    .collect();
+                StateDiag::AmbiguousOwnerLink {
+                    statement: format!("usecase {uc_id}"),
+                    a: model.entities[child].id.clone(),
+                    b: model.entities[parent].id.clone(),
+                    roles: roles.join(", "),
+                    rewrite: format!(
+                        ".by({}) on a holds guard applied to {uc_id} that compares {}, or on a copy from {} in it",
+                        roles[0], model.entities[parent].id, model.entities[parent].id
+                    ),
+                    site: Site::new(
+                        ModelRef::UseCase(uc),
+                        &model.decl_sites.located("usecase", uc_id),
+                    ),
+                }
+            }
+        };
+        self.diag(vec![child], diag);
     }
 }
 

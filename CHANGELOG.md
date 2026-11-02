@@ -518,9 +518,13 @@
   several, the keys a `.by` of the use case names (of a `holds` guard on it, after the body or
   an `.along` hop, or of a copy in it), so `.by` names the written row as it names any other.
   Every other key is bound as if the use case did not write the parent: a created child takes
-  a parent row of its own on it, and an updated child keeps its row. `MinCardNeedsCreate`
-  counts a child only when the step links it to the new parent. No sample has two keys from one
-  child to one parent; no sample's output changes.
+  a parent row of its own on it, and an updated child keeps its row. Several keys and no `.by`
+  of the use case naming any of them is `AmbiguousOwnerLink`, as for any other join (#73): the
+  error names the use case's `holds` body that compares the parent, or its copy from the
+  parent, with `.by(<first role>)` added, or, with neither, says a `holds` guard applied to the
+  use case or a copy in it must name the key. `MinCardNeedsCreate` counts a child only when the
+  step links it to the new parent. No sample has two keys from one child to one parent; no
+  sample's output changes.
 
 - `samples/clinic-ops`: `BookedPatient` on `BatchVerifyEligibility` (一括照会 of the patients
   booked ahead) read any scheduled appointment, so one booked patient let the batch check
