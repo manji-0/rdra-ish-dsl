@@ -999,7 +999,7 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per temporal property with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to`, `cones.txt` listing each module TLC may run and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` for a run by hand and a `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
-| `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and the property is `not decided`, which warns and does not fail the run. |
+| `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and, unless TLC already printed its verdict, the property is `not decided`, which warns and does not fail the run. |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a state, deadlock, or use case a BFS cone left at its state cap. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Check only the entity's view and the invariants and after-asserts that read it, with one TLC job per selected cone. See [Partial runs](#partial-runs). |
@@ -1021,8 +1021,8 @@ most two at a time, under `--temporal-budget`; see
 decides. TLC does not say which property a temporal counterexample violates, so each
 property runs alone. Stdout names the bounds, the cone count, and each run's result; a
 whole-model run prints TLC's progress (`  RdraSpec_<P>: N distinct states, M queued, S s`)
-about once a minute, and a run the budget stops prints `not decided` and is listed under
-`not checked:`. Stdout or stderr carries one `tlc_result: ok|counterexample|tool_error`
+about once a minute, and a run the budget stops before TLC prints its verdict prints `not
+decided` and is listed under `not checked:`. Stdout or stderr carries one `tlc_result: ok|counterexample|tool_error`
 line. Exits non-zero when TLC is missing or reports a violation.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped

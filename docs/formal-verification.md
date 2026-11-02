@@ -203,8 +203,9 @@ cone, and the whole model only when neither decides:
 3. `RdraSpec_<P>`, the whole model, for a property its cone leaves undecided. This is the
    run that did not finish on food-permit-ops. It prints TLC's progress (distinct states,
    queue, seconds, about once a minute) and stops at `--temporal-budget` seconds (default
-   300) or at the first progress line past 2,097,152 distinct states, after which the
-   property is `not decided`, listed under `not checked:`, and the run still ends in `OK:`
+   300) or at the first progress line past 2,097,152 distinct states. A run stopped
+   after TLC printed its verdict keeps that verdict; otherwise the property is `not
+   decided`, listed under `not checked:`, and the run still ends in `OK:`
    with exit status 0, as a BFS cone at its cap does, after a `warning:` on stderr that
    counts what was left undecided. `--deny-undecided` makes that an error with exit
    status 1.
