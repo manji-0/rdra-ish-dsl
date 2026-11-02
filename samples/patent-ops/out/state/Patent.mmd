@@ -1,7 +1,7 @@
 %% rdra-ish diagram=state scope=entity:Patent model=samples/patent-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% set-only: Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Patent.status" as statemodel__Patent_status {

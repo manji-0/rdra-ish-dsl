@@ -3370,7 +3370,6 @@ sequenceDiagram
 %% rdra-ish diagram=state scope=entity:Appointment model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Appointment.status" as statemodel__Appointment_status {
@@ -3483,7 +3482,6 @@ Entity: Appointment (予約・受診)
 %% rdra-ish diagram=state scope=entity:CarePlan model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "CarePlan.status" as statemodel__CarePlan_status {
@@ -3507,7 +3505,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:ClaimStatement model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ClaimStatement.status" as statemodel__ClaimStatement_status {
@@ -3589,7 +3586,6 @@ Entity: ClaimStatement (レセプト)
 %% rdra-ish diagram=state scope=entity:ClinicalOrder model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "ClinicalOrder.status" as statemodel__ClinicalOrder_status {
@@ -3623,7 +3619,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:EligibilityCheck model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "EligibilityCheck.result" as statemodel__EligibilityCheck_result {
@@ -3662,7 +3657,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:Encounter model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Encounter.status" as statemodel__Encounter_status {
@@ -3689,7 +3683,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:IntakePacket model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "IntakePacket.status" as statemodel__IntakePacket_status {
@@ -3715,7 +3708,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:PatientAccount model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PatientAccount.status" as statemodel__PatientAccount_status {
@@ -3741,7 +3733,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:PaymentTransaction model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PaymentTransaction.status" as statemodel__PaymentTransaction_status {
@@ -3762,7 +3753,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:Prescription model=samples/clinic-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: Charge.status InsurancePolicy.verification_status PatientMessage.status Room.occupancy_status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Prescription.status" as statemodel__Prescription_status {

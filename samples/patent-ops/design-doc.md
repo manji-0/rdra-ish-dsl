@@ -2270,7 +2270,6 @@ sequenceDiagram
 %% rdra-ish diagram=state scope=entity:DraftingOrder model=samples/patent-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "DraftingOrder.status" as statemodel__DraftingOrder_status {
@@ -2302,7 +2301,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:InventionDisclosure model=samples/patent-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "InventionDisclosure.status" as statemodel__InventionDisclosure_status {
@@ -2347,7 +2345,6 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:InventorReward model=samples/patent-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "InventorReward.status" as statemodel__InventorReward_status {
@@ -2376,7 +2373,7 @@ stateDiagram-v2
 %% rdra-ish diagram=state scope=entity:OfficeAction model=samples/patent-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% set-only: OfficeAction.kind (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "OfficeAction.status" as statemodel__OfficeAction_status {
@@ -2486,7 +2483,7 @@ Entity: OfficeAction (拒絶理由通知)
 %% rdra-ish diagram=state scope=entity:Patent model=samples/patent-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% set-only: Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Patent.status" as statemodel__Patent_status {
@@ -2581,7 +2578,6 @@ Entity: Patent (特許権)
 %% rdra-ish diagram=state scope=entity:PatentApplication model=samples/patent-ops
 %% kinds: statemodel state usecase
 %% omitted: (none)
-%% set-only: OfficeAction.kind Patent.last_payment (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
 %% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "PatentApplication.status" as statemodel__PatentApplication_status {
@@ -3001,7 +2997,7 @@ erDiagram
 | condition | 発明者が内容を確認している | DraftingOrder | DraftingOrder.inventor_checked == true | ApproveDraft | samples/patent-ops/buc/buc_application_drafting.rdra:92 |
 | forbidden | 発明者が内容を確認していない出願書類は承認しない | DraftingOrder | DraftingOrder.status == 出願承認済 AND DraftingOrder.inventor_checked == false |  | samples/patent-ops/buc/buc_application_drafting.rdra:96 |
 | condition | 審査請求をした出願である | PatentApplication | PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present | RequestAcceleratedExamination | samples/patent-ops/buc/buc_examination_request.rdra:85 |
-| invariant | 審査請求のない出願は審査されない | PatentApplication | when PatentApplication.exam_requested_at == null then PatentApplication.status not in (granted, rejected, rejection_final, appealed, registered) |  | samples/patent-ops/buc/buc_examination_request.rdra:110 |
+| invariant | 審査請求のない出願は審査されない | PatentApplication | when PatentApplication.exam_requested_at == null then PatentApplication.status not in (特許査定, 拒絶査定, 拒絶査定の確定, 拒絶査定不服審判を請求, 設定登録済) |  | samples/patent-ops/buc/buc_examination_request.rdra:110 |
 | forbidden | 審査請求をしていない出願は早期審査の対象にならない | PatentApplication | PatentApplication.accelerated == true AND PatentApplication.exam_requested_at == null |  | samples/patent-ops/buc/buc_examination_request.rdra:113 |
 | condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.right_acquired == true | DecideFiling | samples/patent-ops/buc/buc_filing_decision.rdra:68 |
 | forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:70 |
