@@ -42,8 +42,8 @@ same way, and every kind in the language names the check or output that reviews 
 
 Refine the model in small stages instead of filling every layer at once. After each
 stage, run `rdra-ish check` on the current `src/` tree and use diagrams or CSV output
-to review only the concern you just added (scope, data touchpoints, boundaries,
-structure, lifecycle, rules). `rdra-ish next src/` tells you which stage each BUC has
+to review only the concern you just added (scope, screens, data touchpoints, API and
+access boundaries, structure, lifecycle, rules). `rdra-ish next src/` tells you which stage each BUC has
 reached, which elements block the next stage, and which questions to ask next.
 
 See [Incremental Modeling Flow](./docs/incremental-modeling.md) for stage goals,

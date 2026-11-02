@@ -96,5 +96,5 @@ rdra-ish list src/ --kind step --format table
 
 ## Next Step
 
-Load `references/02-data-touchpoints.md` when reviewers can name the
+Load `references/02-screens.md` when reviewers can name the
 business objects each use case creates, reads, updates, or deletes.

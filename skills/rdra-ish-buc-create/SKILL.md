@@ -14,7 +14,7 @@ complete model: invented columns, state machines, or endpoints read as decisions
 reviewers. Treat creation as business-to-technical refinement: model value and actors
 before data touchpoints, UI/API boundaries, entity structure, lifecycle, or rules. The
 stage files of skill `rdra-ish-write` (`../rdra-ish-write/references/00-scope.md` to
-`../rdra-ish-write/references/06-rules.md`) hold the syntax and validation for each stage; in the
+`../rdra-ish-write/references/07-rules.md`) hold the syntax and validation for each stage; in the
 `rdra-ish-dsl` repository, `docs/incremental-modeling.md` describes the same flow.
 
 ### Stage gate
@@ -29,13 +29,14 @@ the Add column of that stage, and ask for the next stage's before adding it:
 |---|---|---|---|
 | 0 Scope sketch | Biz intent | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` |
 | 1 BUC skeleton | Biz value | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters |
-| 2 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) |
-| 3 Interaction boundary | Tech interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `navigates`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
-| 4 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
-| 5 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
-| 6A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |
-| 6B Local obligations | Tech-enforced rules | Which reachable states imply or require other facts? | `invariant`, narrow `required` |
-| 6C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
+| 2 Screens | Biz actor boundary | What does the actor see and do in each use case? | `screen`, `displays`, `navigates`, optional `field` |
+| 3 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch, and which does each screen show? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`), `shows`, optional `maps_field` |
+| 4 API and access boundary | Tech system boundary | Which use cases work through an API, which system owns it, and which permission and medium does the work need? | optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
+| 5 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
+| 6 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
+| 7A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |
+| 7B Local obligations | Tech-enforced rules | Which reachable states imply or require other facts? | `invariant`, narrow `required` |
+| 7C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
 <!-- /stage-spec -->
 
 Ask only the questions needed to advance one row.
@@ -51,7 +52,7 @@ Read the requirement and list:
 - **Use cases** — verbs the actor performs (one `usecase` per user-visible action), and
   which actor performs each
 - **Business flow** — ordered steps, branches, exceptions, loops, and which UCs/events each step covers
-- **Screens** — UI pages shown during the flow, if the user is already at the interaction stage
+- **Screens** — UI pages the actor works on during the flow, if the user is already at the screens stage
 - **Fields** — screen input/output fields, actor-entered vs system-derived, readonly/editable/required
 - **Entities** — logical data objects created or modified, and values an actor chooses
   (variations)
@@ -215,8 +216,9 @@ For staged work, also run the command that matches the current abstraction:
 
 - Any stage: `rdra-ish lint src/ --format table`
 - BUC skeleton: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>`
+- Screens: `rdra-ish diagram src/ --kind screen --format mermaid --buc <BucId>`
 - Data touchpoints: `rdra-ish csv src/ --kind matrix`
-- Interaction boundary: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>` and `rdra-ish check src/` (transaction and API warnings)
+- API and access boundary: `rdra-ish diagram src/ --kind rdra --format mermaid --buc <BucId>` and `rdra-ish check src/` (transaction and API warnings)
 - Access: `rdra-ish csv src/ --kind screen-constraints`,
   `rdra-ish csv src/ --kind permission-callables`, and
   `rdra-ish csv src/ --kind actor-permission-audit`; review `missing` and `excess`

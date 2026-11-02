@@ -5,6 +5,7 @@ buc BucStoreOrganizationMaintenance "Maintain Store Organization"
 actor OpsStaff "Operations Staff"
 permission StoreMaintenanceWrite "Store Maintenance Write"
 usecase ChangeStoreParentOrganization "Change Store Parent Organization"
+screen StoreMaintenanceScreen "Store Maintenance"
 
 api StoreOrganizationApi "Store Organization API"
   method PATCH
@@ -38,6 +39,8 @@ entity Store "Store" {
 
 belongs(BucStoreOrganizationMaintenance, StoreOperations)
 contains(BucStoreOrganizationMaintenance, ChangeStoreParentOrganization)
+displays(ChangeStoreParentOrganization, StoreMaintenanceScreen)
+shows(StoreMaintenanceScreen, Store)
 performs(OpsStaff, BucStoreOrganizationMaintenance)
 has_permission(OpsStaff, StoreMaintenanceWrite)
 contains(StoreAdminSystem, StoreOrganizationApi)

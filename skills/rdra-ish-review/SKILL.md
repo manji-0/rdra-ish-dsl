@@ -43,14 +43,16 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
 
 4. **Classify refinement stage**
    - Scope: BUC/business declarations only
-   - BUC skeleton: actors/use cases/business flow predicates, little or no CRUD
-   - Data touchpoints: CRUD exists, entity structure is still coarse
-   - Interaction boundary: screens/API are being modeled
+   - BUC skeleton: actors/use cases/business flow predicates, no screens yet
+   - Screens: use cases `displays` screens, `navigates` links them, little or no CRUD
+   - Data touchpoints: CRUD and `shows` exist, entity structure is still coarse
+   - API and access boundary: APIs, systems, permissions, or media are being modeled
    - Entity structure: columns/variations/relationships/cardinality are modeled
    - Lifecycle: transitions/sets/events/timers/conditions are modeled
    - Business rules: entity and cross-entity constraints are modeled
-   - Concern shift: Scope and BUC skeleton are business-facing; interaction boundary
-     and deeper stages are technical commitments derived from that business model
+   - Concern shift: Scope through data touchpoints are business-facing; the API and
+     access boundary and deeper stages are technical commitments derived from that
+     business model
 
 5. **Check actor and BUC coverage**
    - Every use case has a performer, directly or through `performs(Actor, Buc)`, or is

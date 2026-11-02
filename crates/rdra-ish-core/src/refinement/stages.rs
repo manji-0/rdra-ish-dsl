@@ -146,14 +146,92 @@ pub(super) const SKELETON: StageSpec = StageSpec {
     },
 };
 
+/// Shared by every stage that reads use cases: a BUC started only by an event or timer
+/// passes the skeleton, and is asked for the use case the trigger starts.
+const HOLDS_USE_CASE: Check = Check {
+    passes_when: "the BUC holds a use case",
+    weight: Weight::Blocking,
+    eval: |f| {
+        if !f.use_cases.is_empty() {
+            return Ok(());
+        }
+        let id = f.buc_id();
+        let message = if f.buc_triggers.is_empty() {
+            format!("add a `usecase` and `contains({id}, UseCase)` for each user-visible action")
+        } else {
+            format!(
+                "name the use case that {} starts: add a `usecase` and `contains({id}, UseCase)`",
+                f.buc_triggers.join(" / ")
+            )
+        };
+        Err(vec![gap(SubjectKind::Buc, id, message)])
+    },
+};
+
+pub(super) const SCREENS: StageSpec = StageSpec {
+    id: StageId::Screens,
+    name: "Screens",
+    concern: "Biz actor boundary",
+    question: "What does the actor see and do in each use case?",
+    adds: "`screen`, `displays`, `navigates`, optional `field`",
+    asks: &[
+        "Which screen does the actor work on in each use case?",
+        "Which screen leads to which, and through which use case?",
+        "Which items on a screen does the actor enter or check, and which does the system fill in?",
+        "Is any use case started by an event or timer, with no actor at a screen?",
+    ],
+    review: &[
+        "rdra-ish check {src}",
+        "rdra-ish diagram {src} --kind rdra --format mermaid --buc {buc}",
+        "rdra-ish diagram {src} --kind screen --format mermaid --buc {buc}",
+        "rdra-ish list {src} --kind screen --format table",
+    ],
+    requirement: Requirement::Required,
+    checks: &[
+        HOLDS_USE_CASE,
+        Check {
+            passes_when: "every use case `displays` a screen, or an event or timer `triggers` it",
+            weight: Weight::Blocking,
+            eval: |f| {
+                failing(
+                    f.use_cases
+                        .iter()
+                        .filter(|&&uc| !f.has_screen_or_trigger(uc))
+                        .map(|&uc| {
+                            let id = f.use_case_id(uc);
+                            gap(
+                                SubjectKind::UseCase,
+                                id,
+                                format!(
+                                    "add `displays({id}, Screen)` for the screen the actor works on, or `triggers(Event, {id})` when no actor starts it"
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            },
+        },
+    ],
+    evidence: |f| {
+        let total = f.use_cases.len();
+        let bounded = f
+            .use_cases
+            .iter()
+            .filter(|&&uc| f.has_screen_or_trigger(uc))
+            .count();
+        format!("{bounded}/{total} use cases display a screen or run on a trigger")
+    },
+};
+
 pub(super) const DATA_TOUCHPOINTS: StageSpec = StageSpec {
     id: StageId::DataTouchpoints,
     name: "Data touchpoints",
     concern: "Biz object touchpoints",
-    question: "Which data objects does each use case touch?",
-    adds: "coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`)",
+    question: "Which data objects does each use case touch, and which does each screen show?",
+    adds: "coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`), `shows`, optional `maps_field`",
     asks: &[
         "Which business objects are created, read, updated, or deleted by each use case?",
+        "Which entities does each screen show?",
         "Which nouns are logical data structures, and which are only business vocabulary?",
         "Which entities should be shared across multiple BUCs?",
     ],
@@ -164,25 +242,7 @@ pub(super) const DATA_TOUCHPOINTS: StageSpec = StageSpec {
     ],
     requirement: Requirement::Required,
     checks: &[
-        Check {
-            passes_when: "the BUC holds a use case",
-            weight: Weight::Blocking,
-            eval: |f| {
-                if !f.use_cases.is_empty() {
-                    return Ok(());
-                }
-                let id = f.buc_id();
-                let message = if f.buc_triggers.is_empty() {
-                    format!("add a `usecase` and `contains({id}, UseCase)` for each user-visible action")
-                } else {
-                    format!(
-                        "name the use case that {} starts: add a `usecase` and `contains({id}, UseCase)`",
-                        f.buc_triggers.join(" / ")
-                    )
-                };
-                Err(vec![gap(SubjectKind::Buc, id, message)])
-            },
-        },
+        HOLDS_USE_CASE,
         Check {
             passes_when: "a use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes`",
             weight: Weight::Blocking,
@@ -223,6 +283,31 @@ pub(super) const DATA_TOUCHPOINTS: StageSpec = StageSpec {
                 )
             },
         },
+        Check {
+            passes_when: "review: once a use case touches data, each screen its use cases display with no `shows` is data-free on purpose",
+            weight: Weight::Advisory,
+            eval: |f| {
+                if !f.use_cases.iter().any(|&uc| f.touches(uc)) {
+                    return Ok(());
+                }
+                failing(
+                    f.screens()
+                        .into_iter()
+                        .filter(|&screen| !f.shows_entity(screen))
+                        .map(|screen| {
+                            let id = f.screen_id(screen);
+                            gap(
+                                SubjectKind::Screen,
+                                id,
+                                format!(
+                                    "does {id} show no data on purpose? otherwise add `shows({id}, Entity)`"
+                                ),
+                            )
+                        })
+                        .collect(),
+                )
+            },
+        },
     ],
     evidence: |f| {
         let total = f.use_cases.len();
@@ -231,16 +316,15 @@ pub(super) const DATA_TOUCHPOINTS: StageSpec = StageSpec {
     },
 };
 
-pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
-    id: StageId::InteractionBoundary,
-    name: "Interaction boundary",
-    concern: "Tech interaction boundary",
-    question: "What UI/API boundary mediates the work, and with which authority/media constraints?",
-    adds: "`screen`, `displays`, `shows`, `navigates`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*`",
+pub(super) const API_ACCESS_BOUNDARY: StageSpec = StageSpec {
+    id: StageId::ApiAccessBoundary,
+    name: "API and access boundary",
+    concern: "Tech system boundary",
+    question: "Which use cases work through an API, which system owns it, and which permission and medium does the work need?",
+    adds: "optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*`",
     asks: &[
-        "Which screen or external interface does each use case expose?",
         "Does the use case write data directly, or through an API boundary?",
-        "Is the API a reusable boundary or local to this BUC?",
+        "Is the API a reusable boundary or local to this BUC, and which system owns it?",
         "Which actor permission and physical/device medium are required for the use case or API?",
     ],
     review: &[
@@ -254,25 +338,23 @@ pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
     requirement: Requirement::Required,
     checks: &[
         Check {
-            passes_when: "every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it",
+            passes_when: "every API a use case `invokes` belongs to a `system`",
             weight: Weight::Blocking,
             eval: |f| {
-                let gaps = f
-                    .use_cases
-                    .iter()
-                    .filter(|&&uc| !f.has_boundary(uc))
-                    .map(|&uc| {
-                        let id = f.use_case_id(uc);
-                        gap(
-                            SubjectKind::UseCase,
-                            id,
-                            format!(
-                                "add `displays({id}, Screen)` or `invokes({id}, Api)` for the boundary it works through"
-                            ),
-                        )
-                    })
-                    .collect();
-                all_of_nonempty(f.use_cases.len(), gaps)
+                failing(
+                    f.apis()
+                        .into_iter()
+                        .filter(|&api| !f.in_system(api))
+                        .map(|api| {
+                            let id = f.api_id(api);
+                            gap(
+                                SubjectKind::Api,
+                                id,
+                                format!("add `contains(System, {id})` for the system that owns {id}"),
+                            )
+                        })
+                        .collect(),
+                )
             },
         },
         Check {
@@ -302,9 +384,12 @@ pub(super) const INTERACTION_BOUNDARY: StageSpec = StageSpec {
         },
     ],
     evidence: |f| {
-        let total = f.use_cases.len();
-        let bounded = f.use_cases.iter().filter(|&&uc| f.has_boundary(uc)).count();
-        format!("{bounded}/{total} use cases display a screen, invoke an API, or run on a trigger")
+        let apis = f.apis();
+        if apis.is_empty() {
+            return "no use case invokes an API".to_string();
+        }
+        let owned = apis.iter().filter(|&&api| f.in_system(api)).count();
+        format!("{owned}/{} invoked APIs belong to a system", apis.len())
     },
 };
 

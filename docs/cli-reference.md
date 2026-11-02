@@ -218,7 +218,7 @@ It also emits these `info` rows:
   element (`scope`, `business-flow`, `data`, `interaction`, `system-boundary`, `rules`)
   subtracts 8 (floor 0).
 - `stage-readiness` gives the stage of each BUC and the stage after it, as
-  [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 5 (required
+  [`next`](#next) decides them: `BucOrder stage 2 (next 3); BucPayment stage 6 (required
   stages complete)`.
 - `requirement-no-goal` marks a `requirement` that achieves no `goal`, unless its status is
   `out-of-scope`. The hint is to add `achieves(Requirement, Goal)`, or to mark a non-goal
@@ -285,7 +285,7 @@ back. A stage whose clauses pass but which owns an error of [`check`](#check) (a
 `Witness_`, `Deadlock_`, or violated rule on an entity the BUC touches) is **blocked**: the
 elements exist, but the model has to be fixed before the next stage's detail is added.
 Otherwise the stage is **met**. A BUC is at the last stage of the met prefix of the
-required stages, 0 to 5; the rule stages 6A to 6C are optional, so a BUC with a
+required stages, 0 to 6; the rule stages 7A to 7C are optional, so a BUC with a
 lifecycle and no rule is complete, and `next` offers the rule stages instead of
 demanding them:
 
@@ -294,13 +294,14 @@ demanding them:
 |---|---|---|
 | 0 Scope sketch | the BUC `belongs` to a business |  |
 | 1 BUC skeleton | an actor `performs` it or one of its use cases, or an event or timer `triggers` one; and it holds a use case (by `contains`, or through a flow's steps and `covers`), or an event or timer `triggers` the BUC itself |  |
-| 2 Data touchpoints | the BUC holds a use case; and a use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes` | once a use case touches data, each use case with no touchpoint is data-free on purpose |
-| 3 Interaction boundary | every use case `displays` a screen or `invokes` an API, or an event or timer `triggers` it | when the model declares a `permission` or `medium`, each use case with no `requires_permission` / `requires_medium` on it or its APIs is open to every actor and device on purpose |
-| 4 Entity structure | every touched entity has a column that is neither a primary key nor a foreign key | when the BUC touches two or more entities, each touched entity with no `relate` to another touched entity stands alone on purpose |
-| 5 Lifecycle | a use case moves an Enum or Bool column, with `transitions` or with `sets` on it | a `sets` that only marks presence, an Int, or a comparison follows a lifecycle Enum or Bool |
-| 6A Local guardrails (optional) | a `forbidden` or `exclusive` with no comparison reads a column this BUC moves |  |
-| 6B Local obligations (optional) | an `invariant` or `required` with no comparison reads a column this BUC moves |  |
-| 6C Advanced rules (optional) | a rule that holds a comparison or names more than one entity reads a column this BUC moves |  |
+| 2 Screens | the BUC holds a use case; and every use case `displays` a screen, or an event or timer `triggers` it |  |
+| 3 Data touchpoints | the BUC holds a use case; and a use case creates, reads, updates, or deletes an entity, directly or through an API it `invokes` | once a use case touches data, each use case with no touchpoint is data-free on purpose; and once a use case touches data, each screen its use cases display with no `shows` is data-free on purpose |
+| 4 API and access boundary | every API a use case `invokes` belongs to a `system` | when the model declares a `permission` or `medium`, each use case with no `requires_permission` / `requires_medium` on it or its APIs is open to every actor and device on purpose |
+| 5 Entity structure | every touched entity has a column that is neither a primary key nor a foreign key | when the BUC touches two or more entities, each touched entity with no `relate` to another touched entity stands alone on purpose |
+| 6 Lifecycle | a use case moves an Enum or Bool column, with `transitions` or with `sets` on it | a `sets` that only marks presence, an Int, or a comparison follows a lifecycle Enum or Bool |
+| 7A Local guardrails (optional) | a `forbidden` or `exclusive` with no comparison reads a column this BUC moves |  |
+| 7B Local obligations (optional) | an `invariant` or `required` with no comparison reads a column this BUC moves |  |
+| 7C Advanced rules (optional) | a rule that holds a comparison or names more than one entity reads a column this BUC moves |  |
 <!-- /stage-spec -->
 
 A gate passing is evidence, not a verdict. The stage sections of
@@ -317,42 +318,42 @@ lists every one), the review notes (`Notes:`), the `check` findings the stage ow
 review the stage once it is added, and its section in the modeling guide:
 
 ```text
-BucStoreRestock "Maintain Store Restock": stage 2 Data touchpoints
-  [x] 0  Scope sketch          belongs to StoreOperations
-  [x] 1  BUC skeleton          2 use cases, 1 `performs` / `triggers` starting them
-  [x] 2  Data touchpoints      2/2 use cases touch an entity
-  [ ] 3  Interaction boundary  0/2 use cases display a screen, invoke an API, or run on a trigger
+BucStoreRestock "Maintain Store Restock": stage 1 BUC skeleton
+  [x] 0  Scope sketch             belongs to StoreOperations
+  [x] 1  BUC skeleton             2 use cases, 1 `performs` / `triggers` starting them
+  [ ] 2  Screens                  0/2 use cases display a screen or run on a trigger
+  [ ] 3  Data touchpoints         0/2 use cases touch an entity
   ...
 
-Next: stage 3 Interaction boundary
-  What UI/API boundary mediates the work, and with which authority/media constraints?
+Next: stage 2 Screens
+  What does the actor see and do in each use case?
   Gaps:
-    - usecase ChangeNextRestockDate: add `displays(ChangeNextRestockDate, Screen)` or `invokes(ChangeNextRestockDate, Api)` for the boundary it works through
+    - usecase ChangeNextRestockDate: add `displays(ChangeNextRestockDate, Screen)` for the screen the actor works on, or `triggers(Event, ChangeNextRestockDate)` when no actor starts it
     ...
   Ask:
-    - Which screen or external interface does each use case expose?
+    - Which screen does the actor work on in each use case?
     ...
   Then review with:
     rdra-ish check src
     rdra-ish diagram src --kind rdra --format mermaid --buc BucStoreRestock
     ...
-  See docs/incremental-modeling.md#stage-3-interaction-boundary
+  See docs/incremental-modeling.md#stage-2-screens
 ```
 
-Once every required stage is met the block reads `stage 5 Lifecycle, required stages
+Once every required stage is met the block reads `stage 6 Lifecycle, required stages
 complete`, and `Every required stage is met.` is followed by the met rule stages and an
-`Optional: stage 6C Advanced rules` block for each open one. A blocked stage reads
-`Next: stage 5 Lifecycle is blocked: the elements exist, but check rejects them`. Findings
+`Optional: stage 7C Advanced rules` block for each open one. A blocked stage reads
+`Next: stage 6 Lifecycle is blocked: the elements exist, but check rejects them`. Findings
 of `check` that no BUC owns are printed before the BUC blocks.
 
 `--format json` writes `{"bucs": [...], "unowned_findings": [...]}`. Each BUC has `id`,
-`label`, `stage` (`"2"`, `"6A"`, or `null` before stage 0), `stage_name`, `slug` (a
+`label`, `stage` (`"2"`, `"7A"`, or `null` before stage 0), `stage_name`, `slug` (a
 stable id such as `data-touchpoints`, which a reorder of the stages does not change),
 `required_complete`, `gates` (`stage`, `stage_name`, `slug`, `passed`, `verdict` as
 `met`, `open`, or `blocked`, `evidence`, the counts `gaps` and `notes`, and `findings`),
 and `next`. `next.kind` is `required` while a required stage is not met, with that stage's
 `stage`, `stage_name`, `slug`, `verdict`, `question`, `doc`, `asks`, `validate`, `gaps`
-and `notes` (`kind`, `id`, `message`), and `findings` (`name`, `severity`); once every
+and `notes` (`kind` as `buc`, `usecase`, `screen`, `api`, or `entity`, `id`, `message`), and `findings` (`name`, `severity`); once every
 required stage is met it is `optional`, with the same fields for each rule stage under
 `stages`. Skills key on `slug`, and read `next.asks` and `next.gaps` for what to ask.
 

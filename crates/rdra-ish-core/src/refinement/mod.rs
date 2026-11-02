@@ -29,8 +29,9 @@ pub enum Depth {
 pub enum StageId {
     Scope,
     Skeleton,
+    Screens,
     DataTouchpoints,
-    InteractionBoundary,
+    ApiAccessBoundary,
     EntityStructure,
     Lifecycle,
     LocalGuardrails,
@@ -45,8 +46,9 @@ impl StageId {
         match self {
             StageId::Scope => "scope",
             StageId::Skeleton => "skeleton",
+            StageId::Screens => "screens",
             StageId::DataTouchpoints => "data-touchpoints",
-            StageId::InteractionBoundary => "interaction-boundary",
+            StageId::ApiAccessBoundary => "api-access-boundary",
             StageId::EntityStructure => "entity-structure",
             StageId::Lifecycle => "lifecycle",
             StageId::LocalGuardrails => "local-guardrails",
@@ -67,7 +69,7 @@ pub struct StageSpec {
     /// `Stage {number}: {name}`.
     pub name: &'static str,
     /// The Stage Map's Concern column. Consecutive stages with one concern share a number
-    /// and are told apart by a letter (`6A`, `6B`, `6C`).
+    /// and are told apart by a letter (`7A`, `7B`, `7C`).
     pub concern: &'static str,
     /// The main question of the stage, as the Stage Map words it.
     pub question: &'static str,
@@ -142,8 +144,9 @@ pub fn spec(id: StageId) -> &'static StageSpec {
     match id {
         StageId::Scope => &stages::SCOPE,
         StageId::Skeleton => &stages::SKELETON,
+        StageId::Screens => &stages::SCREENS,
         StageId::DataTouchpoints => &stages::DATA_TOUCHPOINTS,
-        StageId::InteractionBoundary => &stages::INTERACTION_BOUNDARY,
+        StageId::ApiAccessBoundary => &stages::API_ACCESS_BOUNDARY,
         StageId::EntityStructure => &stages::ENTITY_STRUCTURE,
         StageId::Lifecycle => &stages::LIFECYCLE,
         StageId::LocalGuardrails => &stages::LOCAL_GUARDRAILS,
@@ -170,6 +173,8 @@ pub struct Gap {
 pub enum SubjectKind {
     Buc,
     UseCase,
+    Screen,
+    Api,
     Entity,
 }
 
@@ -178,6 +183,8 @@ impl SubjectKind {
         match self {
             SubjectKind::Buc => "buc",
             SubjectKind::UseCase => "usecase",
+            SubjectKind::Screen => "screen",
+            SubjectKind::Api => "api",
             SubjectKind::Entity => "entity",
         }
     }
@@ -422,11 +429,14 @@ contains(BucOrder, PlaceOrder)
     #[test]
     fn numbers_and_anchors_derive_from_the_order() {
         let numbers: Vec<String> = stages().map(|id| id.number()).collect();
-        assert_eq!(numbers, ["0", "1", "2", "3", "4", "5", "6A", "6B", "6C"]);
+        assert_eq!(
+            numbers,
+            ["0", "1", "2", "3", "4", "5", "6", "7A", "7B", "7C"]
+        );
         assert_eq!(StageId::Scope.doc_anchor(), "stage-0-scope-sketch");
         assert_eq!(
             StageId::AdvancedRules.doc_anchor(),
-            "stage-6c-advanced-rules"
+            "stage-7c-advanced-rules"
         );
     }
 
@@ -435,8 +445,9 @@ contains(BucOrder, PlaceOrder)
         let all = [
             StageId::Scope,
             StageId::Skeleton,
+            StageId::Screens,
             StageId::DataTouchpoints,
-            StageId::InteractionBoundary,
+            StageId::ApiAccessBoundary,
             StageId::EntityStructure,
             StageId::Lifecycle,
             StageId::LocalGuardrails,
@@ -473,7 +484,8 @@ forbidden(Order, status == paid, paid_at == null)
             StageId::EntityStructure,
             StageId::Lifecycle,
             StageId::Skeleton,
-            StageId::InteractionBoundary,
+            StageId::ApiAccessBoundary,
+            StageId::Screens,
             StageId::LocalGuardrails,
             StageId::LocalObligations,
             StageId::AdvancedRules,
@@ -505,7 +517,7 @@ forbidden(Order, status == paid, paid_at == null)
     }
 
     #[test]
-    fn the_stage_is_the_last_gate_of_the_passing_prefix() {
+    fn entities_without_screens_stop_at_the_skeleton_and_ask_for_screens() {
         let src = format!(
             "{SKELETON}
 entity Order \"Order\" {{
@@ -516,12 +528,68 @@ creates(PlaceOrder, Order)
 "
         );
         let p = &standing(&src)[0];
+        assert_eq!(p.view(StageId::DataTouchpoints).verdict(), Verdict::Met);
         assert_eq!(p.view(StageId::EntityStructure).verdict(), Verdict::Met);
-        assert_eq!(p.reached(), Some(StageId::DataTouchpoints));
+        assert_eq!(p.reached(), Some(StageId::Skeleton));
         let next = next_required(p);
-        assert_eq!(next.id, StageId::InteractionBoundary);
+        assert_eq!(next.id, StageId::Screens);
         assert_eq!(next.gaps.len(), 1);
         assert_eq!(next.gaps[0].subject_id, "PlaceOrder");
+        assert!(next.gaps[0]
+            .message
+            .contains("displays(PlaceOrder, Screen)"));
+    }
+
+    #[test]
+    fn screens_without_entities_reach_the_screens_stage_and_ask_for_data() {
+        let src = format!(
+            "{SKELETON}
+screen Checkout \"Checkout\"
+displays(PlaceOrder, Checkout)
+"
+        );
+        let p = &standing(&src)[0];
+        assert_eq!(p.reached(), Some(StageId::Screens));
+        let next = next_required(p);
+        assert_eq!(next.id, StageId::DataTouchpoints);
+        assert_eq!(next.gaps[0].subject_id, "BucOrder");
+        assert!(next.notes.is_empty());
+    }
+
+    #[test]
+    fn data_touchpoints_note_a_screen_that_shows_no_entity() {
+        let src = format!(
+            "{SKELETON}
+usecase ReviewCart \"Review Cart\"
+contains(BucOrder, ReviewCart)
+screen Checkout \"Checkout\"
+screen Cart \"Cart\"
+entity Order \"Order\" {{
+  id: Int @pk
+  total: Money
+}}
+displays(PlaceOrder, Checkout)
+displays(ReviewCart, Cart)
+shows(Checkout, Order)
+creates(PlaceOrder, Order)
+"
+        );
+        let p = &standing(&src)[0];
+        let data = p.view(StageId::DataTouchpoints);
+        assert_eq!(data.verdict(), Verdict::Met);
+        let notes: Vec<(SubjectKind, &str)> = data
+            .notes
+            .iter()
+            .map(|note| (note.subject_kind, note.subject_id.as_str()))
+            .collect();
+        assert_eq!(
+            notes,
+            [
+                (SubjectKind::UseCase, "ReviewCart"),
+                (SubjectKind::Screen, "Cart")
+            ]
+        );
+        assert_eq!(p.reached(), Some(StageId::EntityStructure));
     }
 
     #[test]
@@ -570,9 +638,23 @@ updates(OrderApi, Order)
 "#;
         let p = &standing(src)[0];
         assert_eq!(p.view(StageId::Skeleton).verdict(), Verdict::Met);
+        assert_eq!(p.view(StageId::Screens).verdict(), Verdict::Met);
         assert_eq!(p.view(StageId::DataTouchpoints).verdict(), Verdict::Met);
-        assert_eq!(p.view(StageId::InteractionBoundary).verdict(), Verdict::Met);
-        assert_eq!(p.reached(), Some(StageId::InteractionBoundary));
+        assert_eq!(p.reached(), Some(StageId::DataTouchpoints));
+        let next = next_required(p);
+        assert_eq!(next.id, StageId::ApiAccessBoundary);
+        assert_eq!(next.gaps[0].subject_kind, SubjectKind::Api);
+        assert_eq!(next.gaps[0].subject_id, "OrderApi");
+
+        let owned =
+            format!("{src}system OrderSystem \"Order System\"\ncontains(OrderSystem, OrderApi)\n");
+        let p = &standing(&owned)[0];
+        assert_eq!(p.view(StageId::ApiAccessBoundary).verdict(), Verdict::Met);
+        assert_eq!(
+            p.view(StageId::ApiAccessBoundary).evidence,
+            "1/1 invoked APIs belong to a system"
+        );
+        assert_eq!(p.reached(), Some(StageId::ApiAccessBoundary));
     }
 
     #[test]

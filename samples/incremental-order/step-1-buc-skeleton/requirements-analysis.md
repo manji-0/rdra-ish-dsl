@@ -41,7 +41,7 @@
 
 ## 6. 次 step への確認
 
-次 step では、ここで合意した語彙を保持したまま `粗い entity と direct CRUD を追加する`。
+次 step では、ここで合意した語彙を保持したまま `usecase ごとの画面を追加する`。
 
 ## Summary
 

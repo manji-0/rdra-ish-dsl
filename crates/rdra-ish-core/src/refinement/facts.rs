@@ -2,7 +2,9 @@
 
 use std::collections::BTreeSet;
 
-use crate::model::{BucKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use crate::model::{
+    ApiKey, BucKey, ColumnType, EntityKey, NodeRef, RelKind, ScreenKey, SemanticModel, UseCaseKey,
+};
 
 pub(crate) struct BucFacts<'m> {
     pub model: &'m SemanticModel,
@@ -155,12 +157,91 @@ impl<'m> BucFacts<'m> {
         !use_case_entities(self.model, uc).is_empty()
     }
 
-    pub fn has_boundary(&self, uc: UseCaseKey) -> bool {
+    fn screens_of(&self, uc: UseCaseKey) -> Vec<ScreenKey> {
+        let node = NodeRef::UseCase(uc);
+        self.model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Displays && rel.from == node)
+            .filter_map(|rel| match rel.to {
+                NodeRef::Screen(screen) => Some(screen),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The use case `displays` a screen, or an event or timer `triggers` it and no actor
+    /// starts it at a screen.
+    pub fn has_screen_or_trigger(&self, uc: UseCaseKey) -> bool {
         let node = NodeRef::UseCase(uc);
         self.model.relations.iter().any(|rel| match rel.kind {
-            RelKind::Displays | RelKind::Invokes => rel.from == node,
+            RelKind::Displays => rel.from == node,
             RelKind::Triggers => rel.to == node,
             _ => false,
+        })
+    }
+
+    fn apis_of(&self, uc: UseCaseKey) -> Vec<ApiKey> {
+        let node = NodeRef::UseCase(uc);
+        self.model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Invokes && rel.from == node)
+            .filter_map(|rel| match rel.to {
+                NodeRef::Api(api) => Some(api),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The screens the BUC's use cases display, each once, in first-use order.
+    pub fn screens(&self) -> Vec<ScreenKey> {
+        let mut screens = Vec::new();
+        for &uc in &self.use_cases {
+            for screen in self.screens_of(uc) {
+                if !screens.contains(&screen) {
+                    screens.push(screen);
+                }
+            }
+        }
+        screens
+    }
+
+    /// The APIs the BUC's use cases invoke, each once, in first-use order.
+    pub fn apis(&self) -> Vec<ApiKey> {
+        let mut apis = Vec::new();
+        for &uc in &self.use_cases {
+            for api in self.apis_of(uc) {
+                if !apis.contains(&api) {
+                    apis.push(api);
+                }
+            }
+        }
+        apis
+    }
+
+    pub fn shows_entity(&self, screen: ScreenKey) -> bool {
+        let node = NodeRef::Screen(screen);
+        self.model
+            .relations
+            .iter()
+            .any(|rel| rel.kind == RelKind::Shows && rel.from == node)
+    }
+
+    pub fn screen_id(&self, screen: ScreenKey) -> &'m str {
+        &self.model.screens[screen].id
+    }
+
+    pub fn api_id(&self, api: ApiKey) -> &'m str {
+        &self.model.apis[api].id
+    }
+
+    pub fn in_system(&self, api: ApiKey) -> bool {
+        let node = NodeRef::Api(api);
+        self.model.relations.iter().any(|rel| {
+            rel.kind == RelKind::Contains
+                && rel.to == node
+                && matches!(rel.from, NodeRef::System(_))
         })
     }
 

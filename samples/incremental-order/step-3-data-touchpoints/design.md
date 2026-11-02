@@ -1,0 +1,154 @@
+# 店舗補充管理 設計 Step 3: Data Touchpoints
+
+<!-- constrained-by ../../../docs/incremental-modeling.md#stage-3-data-touchpoints -->
+<!-- derived-from ./requirements-analysis.md -->
+
+この文書は Step 3 時点の RDRA DSL 設計サンプルです。clinic-ops の設計書と同じく、レビューに必要な生成物は本文へ埋め込みます。
+
+## 1. 設計目的
+
+粗い entity と direct CRUD を追加し、Step 2 の画面が示す entity を `shows` で結ぶ。
+
+## 2. モデル構成
+
+| 分類 | 対象 | 役割 |
+|---|---|---|
+| Entity | `Store` | 補充予定を持つ店舗 |
+| Entity | `Organization` | 店舗の担当組織候補 |
+| CRUD | `ChangeNextRestockDate -> Store` | 店舗単体の更新 |
+| CRUD | `ChangeStoreParentOrganization -> Organization/Store` | 組織参照と店舗更新 |
+| Shows | `StoreMaintenanceScreen -> Store/Organization` | 画面が店舗と担当組織候補を示す |
+
+## 3. 設計判断
+
+| 判断 | 理由 |
+|---|---|
+| entity は id のみで開始する | 項目定義よりも業務操作とデータ接点の妥当性を先に確認するため |
+| direct CRUD を採用する | API 境界やトランザクション責務がまだ未確定のため |
+| Organization は Read のみ | 担当組織そのものを変更する業務ではないため |
+| shows は entity と同じ step で置く | 画面と entity がそろって初めて、画面が示すデータを結べるため |
+
+## 4. 生成成果物
+
+生成コマンド例:
+
+```sh
+rdra-ish check samples/incremental-order/step-3-data-touchpoints/src
+rdra-ish diagram samples/incremental-order/step-3-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-data-touchpoints/out/object_graph_buc_store_restock
+rdra-ish csv samples/incremental-order/step-3-data-touchpoints/src --kind matrix --out samples/incremental-order/step-3-data-touchpoints/out/usecase_matrix.csv
+```
+
+### 4.1 RDRA Layered Graph 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-3-data-touchpoints/src --kind rdra --format mermaid --buc BucStoreRestock --out samples/incremental-order/step-3-data-touchpoints/out/object_graph_buc_store_restock
+```
+
+<!-- embed: out/object_graph_buc_store_restock.mmd -->
+```mermaid
+%% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-3-data-touchpoints/src
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor business buc usecase screen entity
+%% omitted: (none)
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__OpsStaff(["Operations Staff"]):::actor
+  end
+  subgraph layer_environment["システム外部環境"]
+    business__StoreOperations[\"Store Operations"/]:::business
+    %% desc business__StoreOperations: Store operations owns restock planning and store master maintenance.
+    buc__BucStoreRestock["Maintain Store Restock"]:::buc
+    %% desc buc__BucStoreRestock: Keep restock dates and store organization assignments operationally correct.
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__ChangeNextRestockDate("Change Next Restock Date"):::usecase
+    usecase__ChangeStoreParentOrganization("Change Store Parent Organization"):::usecase
+    screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__Organization[("Organization")]:::entity
+    entity__Store[("Store")]:::entity
+  end
+  actor__OpsStaff -.-> buc__BucStoreRestock
+  buc__BucStoreRestock --> business__StoreOperations
+  buc__BucStoreRestock --> usecase__ChangeNextRestockDate
+  buc__BucStoreRestock --> usecase__ChangeStoreParentOrganization
+  screen__StoreMaintenanceScreen -.-> entity__Organization
+  screen__StoreMaintenanceScreen -.-> entity__Store
+  usecase__ChangeNextRestockDate -.-> screen__StoreMaintenanceScreen
+  usecase__ChangeNextRestockDate -.->|updates| entity__Store
+  usecase__ChangeStoreParentOrganization -.-> screen__StoreMaintenanceScreen
+  usecase__ChangeStoreParentOrganization -.->|reads| entity__Organization
+  usecase__ChangeStoreParentOrganization -.->|updates| entity__Store
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+### 4.3 ER 図
+
+生成コマンド:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-3-data-touchpoints/src --kind er --format mermaid --out samples/incremental-order/step-3-data-touchpoints/out/er
+```
+
+<!-- embed: out/er.mmd -->
+```mermaid
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-3-data-touchpoints/src
+%% kinds: entity
+%% omitted: (none)
+erDiagram
+  Organization {
+    Int id PK
+  }
+  Store {
+    Int id PK
+  }
+```
+
+### 4.5 Usecase CRUD matrix
+
+<!-- embed: out/usecase_matrix.csv -->
+```csv
+UseCase,Organization,Store
+ChangeNextRestockDate,,U
+ChangeStoreParentOrganization,R,U
+```
+
+### 4.7 Store 状態到達表
+
+<!-- embed: out/states_store.txt -->
+```text
+Entity: Store (Store)
+  (no state axes)
+  reachable: 1 / bound: 1
+```
+
+## 5. レビュー観点
+
+- Store と Organization 以外に、この段階で必要な業務データがあるか。
+- 担当組織変更で Organization を更新しない判断が正しいか。
+- direct CRUD のまま次 step に進んでも論点が失われないか。
+
+## 6. 承認条件
+
+| 観点 | 承認条件 |
+|---|---|
+| 要求 | requirements-analysis.md の Must 要求を説明できる |
+| 設計 | この step で追加した DSL 要素の責務を説明できる |
+| 生成物 | 埋め込み成果物が現在の DSL から生成されている |
+| 次 step | 次に具体化する情報と、まだ具体化しない情報を区別できる |
+
+## Summary
+
+<!-- derived-from #2-モデル構成 -->
+<!-- derived-from #3-設計判断 -->
+<!-- derived-from #4-生成成果物 -->
+
+Step 3 の設計は、粗い entity と direct CRUD を追加し、画面が示す entity を結ぶための最小 DSL と生成成果物を提示する。

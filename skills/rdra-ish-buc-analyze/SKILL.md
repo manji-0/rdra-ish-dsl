@@ -27,8 +27,8 @@ reference file for the concrete analysis task.
 1. Run `rdra-ish check <src-dir>/` first unless the user only wants a narrow command
    explanation.
 2. Identify whether the model is still business-facing or has entered technical
-   commitment: data touchpoints, interaction boundary, entity structure, lifecycle, or
-   rules.
+   commitment: API and access boundary, entity structure, lifecycle, or rules. Screens
+   and data touchpoints are still business-facing.
 3. Load one reference file from the routing guide and run only the commands needed for
    that analysis.
 4. Report evidence with command output signals, not just intuition: the diagnostic

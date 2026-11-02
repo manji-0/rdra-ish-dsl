@@ -18,7 +18,7 @@ A good RDRA-ish analysis report does three things:
 ## Analysis: <BUC or whole model>
 
 ### Current refinement stage
-- Stage: <scope | BUC skeleton | business flow | data touchpoints | interaction boundary | entity structure | lifecycle | business rules>
+- Stage: <scope | BUC skeleton | business flow | screens | data touchpoints | API and access boundary | entity structure | lifecycle | business rules>
 - Evidence: <commands, rows, warnings, or model signals>
 - Appropriate omissions: <not required yet at this stage>
 - Next information needed: <focused questions>
@@ -72,8 +72,9 @@ A good RDRA-ish analysis report does three things:
 - Missing business ownership: add `belongs(<Buc>, <Business>)`.
 - Empty CRUD row: ask which entity the use case touches, then add the correct CRUD
   predicate.
-- Missing screen/API boundary: add `screen`, `api`, `displays`, `invokes`, and API CRUD
-  only if the interaction boundary is now known.
+- Missing screen: add `screen` and `displays` once the actor's screen is known.
+- Missing API boundary: add `api`, `invokes`, and API CRUD only if the API boundary is
+  now known.
 - Missing actor grant: add `has_permission(<Actor>, <Permission>)` or revise who
   performs the use case.
 - Cross-system relation: add `coordinates(<UseCase>, <EntityA>, <EntityB>)` plus API

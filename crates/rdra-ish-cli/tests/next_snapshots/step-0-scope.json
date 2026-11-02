@@ -25,26 +25,37 @@
           "verdict": "open"
         },
         {
+          "evidence": "0/0 use cases display a screen or run on a trigger",
+          "findings": [],
+          "gaps": 1,
+          "notes": 0,
+          "passed": false,
+          "slug": "screens",
+          "stage": "2",
+          "stage_name": "Screens",
+          "verdict": "open"
+        },
+        {
           "evidence": "0/0 use cases touch an entity",
           "findings": [],
           "gaps": 1,
           "notes": 0,
           "passed": false,
           "slug": "data-touchpoints",
-          "stage": "2",
+          "stage": "3",
           "stage_name": "Data touchpoints",
           "verdict": "open"
         },
         {
-          "evidence": "0/0 use cases display a screen, invoke an API, or run on a trigger",
+          "evidence": "no use case invokes an API",
           "findings": [],
           "gaps": 0,
           "notes": 0,
-          "passed": false,
-          "slug": "interaction-boundary",
-          "stage": "3",
-          "stage_name": "Interaction boundary",
-          "verdict": "open"
+          "passed": true,
+          "slug": "api-access-boundary",
+          "stage": "4",
+          "stage_name": "API and access boundary",
+          "verdict": "met"
         },
         {
           "evidence": "0/0 entities have a column beyond their keys",
@@ -53,7 +64,7 @@
           "notes": 0,
           "passed": false,
           "slug": "entity-structure",
-          "stage": "4",
+          "stage": "5",
           "stage_name": "Entity structure",
           "verdict": "open"
         },
@@ -64,7 +75,7 @@
           "notes": 0,
           "passed": false,
           "slug": "lifecycle",
-          "stage": "5",
+          "stage": "6",
           "stage_name": "Lifecycle",
           "verdict": "open"
         },
@@ -75,7 +86,7 @@
           "notes": 0,
           "passed": false,
           "slug": "local-guardrails",
-          "stage": "6A",
+          "stage": "7A",
           "stage_name": "Local guardrails",
           "verdict": "open"
         },
@@ -86,7 +97,7 @@
           "notes": 0,
           "passed": false,
           "slug": "local-obligations",
-          "stage": "6B",
+          "stage": "7B",
           "stage_name": "Local obligations",
           "verdict": "open"
         },
@@ -97,7 +108,7 @@
           "notes": 0,
           "passed": false,
           "slug": "advanced-rules",
-          "stage": "6C",
+          "stage": "7C",
           "stage_name": "Advanced rules",
           "verdict": "open"
         }

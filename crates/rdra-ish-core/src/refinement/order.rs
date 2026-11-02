@@ -5,8 +5,9 @@ use super::{spec, StageId};
 pub(crate) const ORDER: &[StageId] = &[
     StageId::Scope,
     StageId::Skeleton,
+    StageId::Screens,
     StageId::DataTouchpoints,
-    StageId::InteractionBoundary,
+    StageId::ApiAccessBoundary,
     StageId::EntityStructure,
     StageId::Lifecycle,
     StageId::LocalGuardrails,
@@ -15,7 +16,7 @@ pub(crate) const ORDER: &[StageId] = &[
 ];
 
 impl StageId {
-    /// `"0"`, `"5"`, `"6A"`. Consecutive stages that share a concern form one numbered
+    /// `"0"`, `"6"`, `"7A"`. Consecutive stages that share a concern form one numbered
     /// group; a group of more than one stage adds a letter per member.
     pub fn number(self) -> String {
         let mut group = 0;

@@ -27,9 +27,11 @@ fn each_incremental_order_step_is_at_its_own_stage() {
     let steps = [
         ("step-0-scope", "0", "1"),
         ("step-1-buc-skeleton", "1", "2"),
-        ("step-2-data-touchpoints", "2", "3"),
-        ("step-3-interaction-boundary", "3", "4"),
-        ("step-4-entity-structure", "4", "5"),
+        ("step-2-screens", "2", "3"),
+        // No use case invokes an API, so the API and access boundary has nothing to hold.
+        ("step-3-data-touchpoints", "4", "5"),
+        ("step-4-api-access-boundary", "4", "5"),
+        ("step-5-entity-structure", "5", "6"),
     ];
     for (step, stage, next_stage) in steps {
         let src = format!("samples/incremental-order/{step}/src");
@@ -45,9 +47,9 @@ fn each_incremental_order_step_is_at_its_own_stage() {
 
 #[test]
 fn a_buc_with_a_lifecycle_is_complete_and_the_rule_stages_are_optional() {
-    let out = json(&["samples/incremental-order/step-5-lifecycle/src"]);
+    let out = json(&["samples/incremental-order/step-6-lifecycle/src"]);
     let buc = &out["bucs"][0];
-    assert_eq!(buc["stage"], "5");
+    assert_eq!(buc["stage"], "6");
     assert_eq!(buc["slug"], "lifecycle");
     assert_eq!(buc["required_complete"], true);
     assert_eq!(buc["next"]["kind"], "optional");
@@ -62,14 +64,14 @@ fn a_buc_with_a_lifecycle_is_complete_and_the_rule_stages_are_optional() {
         ["local-guardrails", "local-obligations", "advanced-rules"]
     );
 
-    let out = json(&["samples/incremental-order/step-6-business-rules/src"]);
+    let out = json(&["samples/incremental-order/step-7-business-rules/src"]);
     let buc = &out["bucs"][0];
-    assert_eq!(buc["stage"], "5");
+    assert_eq!(buc["stage"], "6");
     let verdicts: Vec<(&str, &str)> = buc["gates"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|gate| gate["stage"].as_str().unwrap().starts_with('6'))
+        .filter(|gate| gate["stage"].as_str().unwrap().starts_with('7'))
         .map(|gate| {
             (
                 gate["stage"].as_str().unwrap(),
@@ -77,18 +79,18 @@ fn a_buc_with_a_lifecycle_is_complete_and_the_rule_stages_are_optional() {
             )
         })
         .collect();
-    assert_eq!(verdicts, [("6A", "met"), ("6B", "met"), ("6C", "open")]);
+    assert_eq!(verdicts, [("7A", "met"), ("7B", "met"), ("7C", "open")]);
 
-    let output = next(&["samples/incremental-order/step-6-business-rules/src"]);
+    let output = next(&["samples/incremental-order/step-7-business-rules/src"]);
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
         text.starts_with(
-            "BucStoreRestock \"Maintain Store Restock\": stage 5 Lifecycle, required stages complete\n"
+            "BucStoreRestock \"Maintain Store Restock\": stage 6 Lifecycle, required stages complete\n"
         ),
         "{text}"
     );
     assert!(
-        text.contains("\nOptional: stage 6C Advanced rules\n"),
+        text.contains("\nOptional: stage 7C Advanced rules\n"),
         "{text}"
     );
     assert!(!text.contains("\nNext: stage"), "{text}");
@@ -96,31 +98,28 @@ fn a_buc_with_a_lifecycle_is_complete_and_the_rule_stages_are_optional() {
 
 #[test]
 fn text_output_names_the_next_stage_its_gaps_and_review_commands() {
-    let output = next(&["samples/incremental-order/step-2-data-touchpoints/src"]);
+    let output = next(&["samples/incremental-order/step-1-buc-skeleton/src"]);
     assert!(output.status.success(), "{output:?}");
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
-        text.starts_with("BucStoreRestock \"Maintain Store Restock\": stage 2 Data touchpoints\n"),
+        text.starts_with("BucStoreRestock \"Maintain Store Restock\": stage 1 BUC skeleton\n"),
         "{text}"
     );
-    assert!(
-        text.contains("Next: stage 3 Interaction boundary\n"),
-        "{text}"
-    );
+    assert!(text.contains("Next: stage 2 Screens\n"), "{text}");
     assert!(
         text.contains(
-            "    - usecase ChangeNextRestockDate: add `displays(ChangeNextRestockDate, Screen)` or `invokes(ChangeNextRestockDate, Api)`"
+            "    - usecase ChangeNextRestockDate: add `displays(ChangeNextRestockDate, Screen)` for the screen the actor works on, or `triggers(Event, ChangeNextRestockDate)` when no actor starts it\n"
         ),
         "{text}"
     );
     assert!(
         text.contains(
-            "    rdra-ish csv samples/incremental-order/step-2-data-touchpoints/src --kind screen-constraints\n"
+            "    rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind screen --format mermaid --buc BucStoreRestock\n"
         ),
         "{text}"
     );
     assert!(
-        text.contains("  See docs/incremental-modeling.md#stage-3-interaction-boundary\n"),
+        text.contains("  See docs/incremental-modeling.md#stage-2-screens\n"),
         "{text}"
     );
 }
@@ -251,25 +250,26 @@ entity Order \"Order\" {{
   total: Money
 }}
 creates(PlaceOrder, Order)
+shows(Checkout, Order)
 "
         ),
     );
     let buc = &json(&[&src])["bucs"][0];
-    let data = gate(buc, "2");
+    let data = gate(buc, "3");
     assert_eq!(data["verdict"], "met");
     assert_eq!(data["notes"], 1);
-    assert_eq!(buc["stage"], "4");
+    assert_eq!(buc["stage"], "5");
 
     let output = next(&[&src]);
     let text = String::from_utf8_lossy(&output.stdout);
     assert!(
-        text.contains("  [x] 2  Data touchpoints      1/2 use cases touch an entity (1 note)\n"),
+        text.contains("  [x] 3  Data touchpoints         1/2 use cases touch an entity (1 note)\n"),
         "{text}"
     );
 }
 
 #[test]
-fn a_buc_whose_use_cases_touch_no_data_is_open_at_stage_two() {
+fn a_buc_whose_use_cases_touch_no_data_is_open_at_stage_three() {
     let src = model(
         "no_data",
         &format!(
@@ -281,8 +281,8 @@ entity Order \"Order\" {{
         ),
     );
     let buc = &json(&[&src])["bucs"][0];
-    assert_eq!(buc["stage"], "1");
-    assert_eq!(buc["next"]["stage"], "2");
+    assert_eq!(buc["stage"], "2");
+    assert_eq!(buc["next"]["stage"], "3");
     assert_eq!(buc["next"]["gaps"][0]["kind"], "buc");
 }
 
@@ -299,20 +299,20 @@ creates(PlaceOrder, Order)
     );
     let plain = model("access_plain", &base);
     let buc = &json(&[&plain])["bucs"][0];
-    assert_eq!(gate(buc, "3")["notes"], 0);
+    assert_eq!(gate(buc, "4")["notes"], 0);
 
     let declared = model(
         "access_declared",
         &format!("{base}permission OrderWrite \"Order Write\"\n"),
     );
     let buc = &json(&[&declared])["bucs"][0];
-    assert_eq!(gate(buc, "3")["verdict"], "met");
-    assert_eq!(gate(buc, "3")["notes"], 1);
+    assert_eq!(gate(buc, "4")["verdict"], "met");
+    assert_eq!(gate(buc, "4")["notes"], 1);
     let next = &buc["next"];
-    assert_eq!(next["stage"], "5");
+    assert_eq!(next["stage"], "6");
     let output = next_text(&declared);
     assert!(
-        output.contains("  [x] 3  Interaction boundary  1/1 use cases display a screen, invoke an API, or run on a trigger (1 note)\n"),
+        output.contains("  [x] 4  API and access boundary  no use case invokes an API (1 note)\n"),
         "{output}"
     );
 }
@@ -343,7 +343,7 @@ creates(PlaceOrder, OrderLine)
     );
     let buc = &json(&[&src])["bucs"][0];
     let next = &buc["next"];
-    assert_eq!(next["stage"], "4");
+    assert_eq!(next["stage"], "5");
     assert_eq!(
         next["gaps"][0]["message"],
         "add the columns that identify and describe Order"
@@ -375,8 +375,8 @@ relate(OrderLine, Order, N:1)
         ),
     );
     let buc = &json(&[&related])["bucs"][0];
-    assert_eq!(gate(buc, "4")["verdict"], "met");
-    assert_eq!(gate(buc, "4")["notes"], 0);
+    assert_eq!(gate(buc, "5")["verdict"], "met");
+    assert_eq!(gate(buc, "5")["notes"], 0);
 }
 
 #[test]
@@ -395,16 +395,16 @@ sets(PlaceOrder, Order, note == present)
         ),
     );
     let buc = &json(&[&src])["bucs"][0];
-    assert_eq!(buc["stage"], "4");
+    assert_eq!(buc["stage"], "5");
     let next = &buc["next"];
-    assert_eq!(next["stage"], "5");
+    assert_eq!(next["stage"], "6");
     assert_eq!(
         next["notes"][0]["message"],
         "`sets` moves Order.note, which is not an Enum or Bool: which lifecycle state does it follow?"
     );
     let text = next_text(&src);
     assert!(
-        text.contains("  [ ] 5  Lifecycle             no use case moves an Enum or Bool column; `sets` moves Order.note (1 note)\n"),
+        text.contains("  [ ] 6  Lifecycle                no use case moves an Enum or Bool column; `sets` moves Order.note (1 note)\n"),
         "{text}"
     );
 }
@@ -426,9 +426,9 @@ forbidden(Order, flagged == true)
     );
     let buc = &json(&[&src])["bucs"][0];
     assert_eq!(buc["required_complete"], true);
-    assert_eq!(gate(buc, "6A")["verdict"], "open");
+    assert_eq!(gate(buc, "7A")["verdict"], "open");
     assert_eq!(
-        gate(buc, "6A")["evidence"],
+        gate(buc, "7A")["evidence"],
         "no `forbidden` / `exclusive` reads a column this BUC moves"
     );
 }
@@ -452,11 +452,11 @@ forbidden(Order, qty > stock)
     );
     let buc = &json(&[&src])["bucs"][0];
     assert_eq!(buc["required_complete"], true);
-    assert_eq!(gate(buc, "6A")["verdict"], "open");
-    assert_eq!(gate(buc, "6B")["verdict"], "open");
-    assert_eq!(gate(buc, "6C")["verdict"], "met");
+    assert_eq!(gate(buc, "7A")["verdict"], "open");
+    assert_eq!(gate(buc, "7B")["verdict"], "open");
+    assert_eq!(gate(buc, "7C")["verdict"], "met");
     assert_eq!(
-        gate(buc, "6C")["evidence"],
+        gate(buc, "7C")["evidence"],
         "comparison or cross-entity rule reads Order.qty, Order.stock"
     );
 }
@@ -484,11 +484,11 @@ transitions(PlaceOrder, Order.status, pending -> paid)
 "#,
     );
     let buc = &json(&[&src])["bucs"][0];
-    assert_eq!(buc["stage"], "4");
+    assert_eq!(buc["stage"], "5");
     assert_eq!(buc["required_complete"], false);
-    assert_eq!(gate(buc, "5")["verdict"], "blocked");
+    assert_eq!(gate(buc, "6")["verdict"], "blocked");
     let next = &buc["next"];
-    assert_eq!(next["stage"], "5");
+    assert_eq!(next["stage"], "6");
     assert_eq!(next["verdict"], "blocked");
     assert_eq!(next["gaps"].as_array().unwrap().len(), 0);
     let findings: Vec<(&str, &str)> = next["findings"]
@@ -504,12 +504,12 @@ transitions(PlaceOrder, Order.status, pending -> paid)
 
     let text = next_text(&src);
     assert!(
-        text.contains("  [!] 5  Lifecycle             use cases move Order.status (1 error from check, 1 warning from check)\n"),
+        text.contains("  [!] 6  Lifecycle                use cases move Order.status (1 error from check, 1 warning from check)\n"),
         "{text}"
     );
     assert!(
         text.contains(
-            "\nNext: stage 5 Lifecycle is blocked: the elements exist, but check rejects them\n"
+            "\nNext: stage 6 Lifecycle is blocked: the elements exist, but check rejects them\n"
         ),
         "{text}"
     );

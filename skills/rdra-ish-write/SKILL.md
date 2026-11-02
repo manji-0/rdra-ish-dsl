@@ -19,19 +19,20 @@ files, classify the model, then continue with the single most relevant step.
 |---|---|---|---|
 | 0 Scope sketch | Biz intent | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` |
 | 1 BUC skeleton | Biz value | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters |
-| 2 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) |
-| 3 Interaction boundary | Tech interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `navigates`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
-| 4 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
-| 5 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
-| 6A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |
-| 6B Local obligations | Tech-enforced rules | Which reachable states imply or require other facts? | `invariant`, narrow `required` |
-| 6C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
+| 2 Screens | Biz actor boundary | What does the actor see and do in each use case? | `screen`, `displays`, `navigates`, optional `field` |
+| 3 Data touchpoints | Biz object touchpoints | Which data objects does each use case touch, and which does each screen show? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`), `shows`, optional `maps_field` |
+| 4 API and access boundary | Tech system boundary | Which use cases work through an API, which system owns it, and which permission and medium does the work need? | optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` |
+| 5 Entity structure | Tech data design | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` |
+| 6 Lifecycle | Tech lifecycle design | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` |
+| 7A Local guardrails | Tech-enforced rules | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes |
+| 7B Local obligations | Tech-enforced rules | Which reachable states imply or require other facts? | `invariant`, narrow `required` |
+| 7C Advanced rules | Tech-enforced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` |
 <!-- /stage-spec -->
 
 The step files are `references/00-scope.md` for stage 0, `references/01-buc-skeleton.md`
-for 1, `references/02-data-touchpoints.md` for 2, `references/03-interaction-boundary.md`
-for 3, `references/04-entity-structure.md` for 4, `references/05-lifecycle.md` for 5, and
-`references/06-rules.md` for 6A to 6C.
+for 1, `references/02-screens.md` for 2, `references/03-data-touchpoints.md` for 3,
+`references/04-api-access-boundary.md` for 4, `references/05-entity-structure.md` for 5,
+`references/06-lifecycle.md` for 6, and `references/07-rules.md` for 7A to 7C.
 
 Do not skip ahead because a downstream detail is tempting: a guessed column or state
 machine reads as a commitment to reviewers. Model the smallest useful increment, run
@@ -244,7 +245,7 @@ import shared.actors.{Staff as S}
 - Type a column by a `variation` (`method: PaymentMethod`) when an actor chooses its
   value; keep an inline `Enum(...)` for lifecycle columns and values that use cases set.
 - A `condition` is an RDRA 条件. Without a body it is a trace link; with a `holds` body
-  it guards each use case it `applies_to` (Step 5).
+  it guards each use case it `applies_to` (Step 6).
 - `check` evaluates every rule, quantifier, and `after(UC).assert` at one instance per
   entity. A temporal `property`, and a rule that needs two instances, need `verify`
   (skill `rdra-ish-verify`).

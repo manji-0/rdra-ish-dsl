@@ -88,7 +88,7 @@ The important invariant is path/module correspondence and clear ownership.
 - Medium: missing `belongs`, missing actor assignment, empty CRUD row after the model has
   reached data touchpoints.
 - Medium: unexpected or missing `business-inputs`/`maps_field` rows after the model
-  has reached interaction/entity structure and the team is reviewing actor-entered information.
+  has reached data touchpoints or entity structure and the team is reviewing actor-entered information.
 - Medium: unscoped requirement/NFR/ADR or API method/path without DTOs after the
   model claims traceability or contract readiness.
 - Low: intentionally deferred screens, APIs, lifecycle, or rules in an early-stage BUC.

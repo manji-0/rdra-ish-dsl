@@ -1,0 +1,173 @@
+{
+  "bucs": [
+    {
+      "gates": [
+        {
+          "evidence": "belongs to StoreOperations",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": true,
+          "slug": "scope",
+          "stage": "0",
+          "stage_name": "Scope sketch",
+          "verdict": "met"
+        },
+        {
+          "evidence": "2 use cases, 1 `performs` / `triggers` starting them",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": true,
+          "slug": "skeleton",
+          "stage": "1",
+          "stage_name": "BUC skeleton",
+          "verdict": "met"
+        },
+        {
+          "evidence": "2/2 use cases display a screen or run on a trigger",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": true,
+          "slug": "screens",
+          "stage": "2",
+          "stage_name": "Screens",
+          "verdict": "met"
+        },
+        {
+          "evidence": "2/2 use cases touch an entity",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": true,
+          "slug": "data-touchpoints",
+          "stage": "3",
+          "stage_name": "Data touchpoints",
+          "verdict": "met"
+        },
+        {
+          "evidence": "2/2 invoked APIs belong to a system",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": true,
+          "slug": "api-access-boundary",
+          "stage": "4",
+          "stage_name": "API and access boundary",
+          "verdict": "met"
+        },
+        {
+          "evidence": "2/2 entities have a column beyond their keys",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": true,
+          "slug": "entity-structure",
+          "stage": "5",
+          "stage_name": "Entity structure",
+          "verdict": "met"
+        },
+        {
+          "evidence": "no use case moves an entity column",
+          "findings": [
+            {
+              "name": "NoCreationPath_Organization",
+              "severity": "info"
+            },
+            {
+              "name": "NoCreationPath_Store",
+              "severity": "info"
+            }
+          ],
+          "gaps": 1,
+          "notes": 0,
+          "passed": false,
+          "slug": "lifecycle",
+          "stage": "6",
+          "stage_name": "Lifecycle",
+          "verdict": "open"
+        },
+        {
+          "evidence": "no `forbidden` / `exclusive` reads a column this BUC moves",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": false,
+          "slug": "local-guardrails",
+          "stage": "7A",
+          "stage_name": "Local guardrails",
+          "verdict": "open"
+        },
+        {
+          "evidence": "no `invariant` / `required` reads a column this BUC moves",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": false,
+          "slug": "local-obligations",
+          "stage": "7B",
+          "stage_name": "Local obligations",
+          "verdict": "open"
+        },
+        {
+          "evidence": "no comparison or cross-entity rule reads a column this BUC moves",
+          "findings": [],
+          "gaps": 0,
+          "notes": 0,
+          "passed": false,
+          "slug": "advanced-rules",
+          "stage": "7C",
+          "stage_name": "Advanced rules",
+          "verdict": "open"
+        }
+      ],
+      "id": "BucStoreRestock",
+      "label": "Maintain Store Restock",
+      "next": {
+        "asks": [
+          "Which Enum column and variants represent lifecycle state?",
+          "Which use case causes each state change?",
+          "Does any event start another BUC, and is the concrete entry use case known yet?",
+          "Which nullable or boolean fields change together with the lifecycle?",
+          "Are the Enum variants the states you want to see? Diagrams derive one state per variant."
+        ],
+        "doc": "docs/incremental-modeling.md#stage-6-lifecycle",
+        "findings": [
+          {
+            "name": "NoCreationPath_Organization",
+            "severity": "info"
+          },
+          {
+            "name": "NoCreationPath_Store",
+            "severity": "info"
+          }
+        ],
+        "gaps": [
+          {
+            "id": "BucStoreRestock",
+            "kind": "buc",
+            "message": "add a lifecycle `Enum` column to the entity whose state BucStoreRestock changes, and `transitions` for the use case that moves it"
+          }
+        ],
+        "kind": "required",
+        "notes": [],
+        "question": "Which states and event-triggered BUC entries are reachable through the BUCs?",
+        "slug": "lifecycle",
+        "stage": "6",
+        "stage_name": "Lifecycle",
+        "validate": [
+          "rdra-ish check samples/incremental-order/step-5-entity-structure/src",
+          "rdra-ish diagram samples/incremental-order/step-5-entity-structure/src --kind state --format mermaid --buc BucStoreRestock",
+          "rdra-ish diagram samples/incremental-order/step-5-entity-structure/src --kind event --format mermaid"
+        ],
+        "verdict": "open"
+      },
+      "required_complete": false,
+      "slug": "entity-structure",
+      "stage": "5",
+      "stage_name": "Entity structure"
+    }
+  ],
+  "unowned_findings": []
+}

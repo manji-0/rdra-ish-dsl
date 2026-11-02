@@ -40,6 +40,8 @@ release fixes bugs only.
   `states`, and the `--format csv` columns of `lint`, `list`, `states`, and `csv`, as the
   CLI reference and [Output formats](./state-derivation.md#output-formats) document them. A release may add a key or append a column. It does not
   rename, remove, or reorder one.
+  In `next`, a stage's `slug` is its stable id. Its `stage` value (`"2"`, `"7A"`) is a
+  display label that a change to the stage order renumbers.
 - **The `bounds:` line and `tlc_result:` line.** Their form stays parseable as the CLI
   reference shows it.
 

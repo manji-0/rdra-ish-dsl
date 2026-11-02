@@ -1,0 +1,4 @@
+module shared.biz
+
+business StoreOperations "Store Operations"
+  description "Store operations owns restock planning and store master maintenance."

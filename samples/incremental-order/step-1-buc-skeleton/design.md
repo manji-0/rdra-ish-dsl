@@ -23,7 +23,7 @@ actor と user-visible usecase を追加する。
 |---|---|
 | performs(OpsStaff, BucStoreRestock) | 担当者が BUC 全体を担うことを示す |
 | contains(...) | BUC 内の業務操作を usecase として束ねる |
-| entity をまだ置かない | データ接点の議論を次 step に分離する |
+| 画面と entity をまだ置かない | 画面とデータ接点の議論を後続 step に分離する |
 
 ## 4. 生成成果物
 

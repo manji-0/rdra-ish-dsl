@@ -1,0 +1,16 @@
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-5-entity-structure/src
+%% kinds: entity
+%% omitted: (none)
+erDiagram
+  Organization {
+    Int id PK
+    String code
+    String name
+  }
+  Store {
+    Int id PK
+    String code
+    String name
+    Int organization_id FK
+  }
+  Store }o--|| Organization : ""

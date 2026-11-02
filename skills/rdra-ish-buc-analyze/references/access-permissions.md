@@ -41,7 +41,7 @@ rdra-ish list src/ --kind actor-permission-audit --format table
 
 `screen-constraints` answers: "which permission/media constraints reach each screen
 through the UC/API path?" Each row is a derived Screen x UseCase x Api? path. If a
-screen appears with no constraints after the model is at interaction-boundary stage,
+screen appears with no constraints after the model is at the API and access boundary stage,
 verify whether the action is truly unconstrained.
 
 `permission-callables` answers: "what does this permission enable?" The

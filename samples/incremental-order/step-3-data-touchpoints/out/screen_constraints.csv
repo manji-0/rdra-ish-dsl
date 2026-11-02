@@ -1,0 +1,3 @@
+screen_id,usecase_id,api_id,required_permissions,required_media
+StoreMaintenanceScreen,ChangeNextRestockDate,,,
+StoreMaintenanceScreen,ChangeStoreParentOrganization,,,

@@ -2,14 +2,14 @@
 
 <!-- constrained-by ./cli-reference.md#diagram -->
 <!-- constrained-by ./incremental-modeling.md -->
-<!-- derived-from ../samples/incremental-order/step-6-business-rules/design.md -->
+<!-- derived-from ../samples/incremental-order/step-7-business-rules/design.md -->
 
 This guide embeds one generated diagram of each `diagram --kind` and explains how to read
 it during review. The kinds follow the RDRA 3.0 diagrams, in the order a review usually
 walks them: system context and requirements, business, use cases and flows, information
 and conditions, lifecycle and events, then the data model and the whole graph.
 
-Most examples use `samples/incremental-order/step-6-business-rules`, a small model with
+Most examples use `samples/incremental-order/step-7-business-rules`, a small model with
 business scope, permissions, UI, APIs, entities, lifecycle, and two systems. It declares
 no requirement, flow, condition, or event, so those sections use `samples/clinic-ops`
 and `samples/ec-site`.
@@ -54,15 +54,15 @@ Every kind follows the [encoding contract](./cli-reference.md#encoding-contract)
 Generated from:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
   --kind context \
   --format mermaid \
-  --out samples/incremental-order/step-6-business-rules/out/context
+  --out samples/incremental-order/step-7-business-rules/out/context
 ```
 
-<!-- embed: ../samples/incremental-order/step-6-business-rules/out/context.mmd -->
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/context.mmd -->
 ```mermaid
-%% rdra-ish diagram=context scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% rdra-ish diagram=context scope=whole model=samples/incremental-order/step-7-business-rules/src
 %% kinds: actor system
 %% omitted: buc permission
 flowchart LR
@@ -219,15 +219,15 @@ Review points:
 Generated from:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
   --kind business \
   --format mermaid \
-  --out samples/incremental-order/step-6-business-rules/out/business
+  --out samples/incremental-order/step-7-business-rules/out/business
 ```
 
-<!-- embed: ../samples/incremental-order/step-6-business-rules/out/business.mmd -->
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/business.mmd -->
 ```mermaid
-%% rdra-ish diagram=business scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% rdra-ish diagram=business scope=whole model=samples/incremental-order/step-7-business-rules/src
 %% kinds: business buc
 %% omitted: actor medium permission usecase screen api entity
 flowchart LR
@@ -259,16 +259,16 @@ Review points:
 Generated from:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
   --kind usecase \
   --format mermaid \
   --buc BucStoreRestock \
-  --out samples/incremental-order/step-6-business-rules/out/usecase_buc_store_restock
+  --out samples/incremental-order/step-7-business-rules/out/usecase_buc_store_restock
 ```
 
-<!-- embed: ../samples/incremental-order/step-6-business-rules/out/usecase_buc_store_restock.mmd -->
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/usecase_buc_store_restock.mmd -->
 ```mermaid
-%% rdra-ish diagram=usecase scope=buc:BucStoreRestock model=samples/incremental-order/step-6-business-rules/src
+%% rdra-ish diagram=usecase scope=buc:BucStoreRestock model=samples/incremental-order/step-7-business-rules/src
 %% layers: value=システム価値 boundary=システム境界 system=システム
 %% kinds: actor usecase screen entity state
 %% omitted: buc medium permission api
@@ -430,15 +430,15 @@ Review points:
 Generated from:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
   --kind information \
   --format mermaid \
-  --out samples/incremental-order/step-6-business-rules/out/information
+  --out samples/incremental-order/step-7-business-rules/out/information
 ```
 
-<!-- embed: ../samples/incremental-order/step-6-business-rules/out/information.mmd -->
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/information.mmd -->
 ```mermaid
-%% rdra-ish diagram=information scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% rdra-ish diagram=information scope=whole model=samples/incremental-order/step-7-business-rules/src
 %% kinds: entity statemodel
 %% omitted: columns usecase screen api
 flowchart LR
@@ -549,15 +549,15 @@ Review points:
 Generated from:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
   --kind state \
   --format mermaid \
-  --out samples/incremental-order/step-6-business-rules/out/state
+  --out samples/incremental-order/step-7-business-rules/out/state
 ```
 
-<!-- embed: ../samples/incremental-order/step-6-business-rules/out/state.mmd -->
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/state.mmd -->
 ```mermaid
-%% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% rdra-ish diagram=state scope=whole model=samples/incremental-order/step-7-business-rules/src
 %% kinds: statemodel state
 %% omitted: (none)
 stateDiagram-v2
@@ -640,15 +640,15 @@ Review points:
 Generated from:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
   --kind er \
   --format mermaid \
-  --out samples/incremental-order/step-6-business-rules/out/er
+  --out samples/incremental-order/step-7-business-rules/out/er
 ```
 
-<!-- embed: ../samples/incremental-order/step-6-business-rules/out/er.mmd -->
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/er.mmd -->
 ```mermaid
-%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-6-business-rules/src
+%% rdra-ish diagram=er scope=whole model=samples/incremental-order/step-7-business-rules/src
 %% kinds: entity
 %% omitted: (none)
 erDiagram
@@ -689,16 +689,16 @@ Review points:
 Generated from:
 
 ```sh
-rdra-ish diagram samples/incremental-order/step-6-business-rules/src \
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
   --kind rdra \
   --format mermaid \
   --buc BucStoreRestock \
-  --out samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock
+  --out samples/incremental-order/step-7-business-rules/out/object_graph_buc_store_restock
 ```
 
-<!-- embed: ../samples/incremental-order/step-6-business-rules/out/object_graph_buc_store_restock.mmd -->
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/object_graph_buc_store_restock.mmd -->
 ```mermaid
-%% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-6-business-rules/src
+%% rdra-ish diagram=rdra scope=buc:BucStoreRestock model=samples/incremental-order/step-7-business-rules/src
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
 %% kinds: actor business buc medium permission usecase screen api entity state
 %% omitted: (none)

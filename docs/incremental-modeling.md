@@ -15,9 +15,12 @@ a validation command, and a focused set of questions that unlocks the next stage
 
 The stages can also be read as a shift of concern from **business intent** to
 **technical design**. Early stages keep the model close to business language: value
-streams, actors, and user-visible work. Later stages add technical commitments:
-data touchpoints, UI/API boundaries, ownership, access/media constraints, persistence
-structure, lifecycle, and rules that the implementation must preserve.
+streams, actors, the screens they work on, and the data that work touches. Later stages
+add technical commitments: API boundaries, ownership, access/media constraints,
+persistence structure, lifecycle, and rules that the implementation must preserve. The
+order follows RDRA's layers from the outside in: the screen sits with the use case on
+the system boundary, nearest the actor, and the information the system keeps sits inside
+it.
 
 Start with the smallest model that can answer the current question. Move to the next
 stage only when the current abstraction is stable enough to make the added detail
@@ -137,13 +140,14 @@ import shared.lifecycle.order
 |---|---|---|---|---|---|
 | 0 | Biz intent | Scope sketch | What business area are we modeling? | `business`, rough `buc`, `belongs`, candidate `actor`, optional `requirement` and `motivates` | `check`, `list --kind buc --format table`, `diagram --kind rdra` |
 | 1 | Biz value | BUC skeleton | Who gets value from each BUC? | `performs`, `contains`, rough `usecase`, `flow` / `step` when order matters | `check`, `diagram --kind rdra` |
-| 2 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`) | `check`, `csv --kind matrix`, `diagram --kind er` |
-| 3 | Tech interaction boundary | Interaction boundary | What UI/API boundary mediates the work, and with which authority/media constraints? | `screen`, `displays`, `shows`, `navigates`, `field`, optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` | `check`, `diagram --kind rdra`, `list --kind api --format table`, `csv --kind api-matrix`, `csv --kind screen-constraints`, `csv --kind actor-permission-audit` |
-| 4 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` | `check`, `diagram --kind er` |
-| 5 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` | `check`, `states`, `diagram --kind state`, `diagram --kind event` |
-| 6A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `check`, `states` |
-| 6B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `check`, `states` |
-| 6C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` | `check`, `states` |
+| 2 | Biz actor boundary | Screens | What does the actor see and do in each use case? | `screen`, `displays`, `navigates`, optional `field` | `check`, `diagram --kind rdra`, `diagram --kind screen`, `list --kind screen --format table` |
+| 3 | Biz object touchpoints | Data touchpoints | Which data objects does each use case touch, and which does each screen show? | coarse `entity`, CRUD predicates (`creates`, `reads`, `updates`, `deletes`), `shows`, optional `maps_field` | `check`, `csv --kind matrix`, `diagram --kind er` |
+| 4 | Tech system boundary | API and access boundary | Which use cases work through an API, which system owns it, and which permission and medium does the work need? | optional `api` / `invokes`, `dto`, `system`, `permission`, `medium`, `has_permission`, `requires_*` | `check`, `diagram --kind rdra`, `list --kind api --format table`, `csv --kind api-matrix`, `csv --kind screen-constraints`, `csv --kind actor-permission-audit` |
+| 5 | Tech data design | Entity structure | What structure and ownership does the data need? | columns, `@pk`, `variation`, `relate`, cardinality, optional `owns` / `coordinates` | `check`, `diagram --kind er` |
+| 6 | Tech lifecycle design | Lifecycle | Which states and event-triggered BUC entries are reachable through the BUCs? | `Enum`, `Bool`, `@null`, `event`, `transitions`, `raises`, `triggers`, `timer`, `sets`, `condition` | `check`, `states`, `diagram --kind state`, `diagram --kind event` |
+| 7A | Tech-enforced rules | Local guardrails | Which simple states or facts must never co-occur? | `forbidden`, `exclusive` over Enum / Bool / nullable axes | `check`, `states` |
+| 7B | Tech-enforced rules | Local obligations | Which reachable states imply or require other facts? | `invariant`, narrow `required` | `check`, `states` |
+| 7C | Tech-enforced rules | Advanced rules | Which comparison or cross-entity facts are reviewable from the abstract state space? | comparison propositions, multi-entity `forbidden` / `invariant` | `check`, `states` |
 <!-- /stage-spec -->
 
 ## Finding the Current Stage
@@ -161,7 +165,7 @@ leaves the stage open; an advisory clause that fails is a review note, which nev
 BUC back, so a use case that is data-free on purpose or an entity that stands alone is a
 question, not a blocker. A stage whose clauses pass but which owns an error of `check` is
 blocked until the model is fixed. A BUC is at the last met stage of the required prefix,
-0 to 5. Stages 6A to 6C are optional: a BUC with a lifecycle and no rule is complete, and
+0 to 6. Stages 7A to 7C are optional: a BUC with a lifecycle and no rule is complete, and
 `next` offers the rule stages with their questions. For the next stage, `next` prints its
 main question, the gaps, notes and findings, the questions to ask the user, and the
 validation commands of the stage section below. The gates are listed in the
@@ -215,7 +219,7 @@ Move on when BUC names and business ownership look stable enough for review.
 ## Stage 1: BUC skeleton
 <!-- /stage-spec -->
 
-Add actors and use cases, but do not require entities or screens yet.
+Add actors and use cases, but do not require screens or entities yet.
 
 ```rdra
 actor Customer "Customer"
@@ -246,12 +250,54 @@ rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
 Move on when every important action is represented as a use case and each use case
 belongs to the intended BUC.
 
-<!-- stage-spec: heading data-touchpoints -->
-## Stage 2: Data touchpoints
+<!-- stage-spec: heading screens -->
+## Stage 2: Screens
 <!-- /stage-spec -->
 
-Add coarse entities and CRUD predicates. At this stage, entities may have only `id`
-columns; detailed attributes can wait.
+Add the screens the actor works on, before deciding which data each use case touches.
+In RDRA the screen sits with the use case on the system boundary, outside the information
+the system keeps: it is what the actor sees and does, so it is settled first. A use case
+that an event or timer starts, with no actor at a screen, needs no screen.
+
+```rdra
+screen CartScreen "Cart"
+screen CheckoutScreen "Checkout"
+
+displays(PlaceOrder, CheckoutScreen)
+displays(CancelOrder, CartScreen)
+navigates(CartScreen, CheckoutScreen).via(PlaceOrder)
+```
+
+Add a `field` when a screen item needs review as a model element, such as an input the
+actor must enter. Leave its entity column mapping (`maps_field`) for the next stage.
+
+<!-- stage-spec: ask screens -->
+Ask the user:
+
+- Which screen does the actor work on in each use case?
+- Which screen leads to which, and through which use case?
+- Which items on a screen does the actor enter or check, and which does the system fill in?
+- Is any use case started by an event or timer, with no actor at a screen?
+
+Validation:
+
+```sh
+rdra-ish check src/
+rdra-ish diagram src/ --kind rdra --format mermaid --buc BucOrder
+rdra-ish diagram src/ --kind screen --format mermaid --buc BucOrder
+rdra-ish list src/ --kind screen --format table
+```
+<!-- /stage-spec -->
+
+Move on when each actor-facing use case names the screen it works on and the screen
+transitions read as the actor's path through the BUC.
+
+<!-- stage-spec: heading data-touchpoints -->
+## Stage 3: Data touchpoints
+<!-- /stage-spec -->
+
+Add coarse entities and CRUD predicates, and join the screens to the entities they show.
+At this stage, entities may have only `id` columns; detailed attributes can wait.
 
 ```rdra
 entity Order "Order" {
@@ -265,12 +311,15 @@ entity Cart "Cart" {
 creates(PlaceOrder, Order)
 updates(PlaceOrder, Cart)
 updates(CancelOrder, Order)
+shows(CheckoutScreen, Order)
+shows(CartScreen, Cart)
 ```
 
 <!-- stage-spec: ask data-touchpoints -->
 Ask the user:
 
 - Which business objects are created, read, updated, or deleted by each use case?
+- Which entities does each screen show?
 - Which nouns are logical data structures, and which are only business vocabulary?
 - Which entities should be shared across multiple BUCs?
 
@@ -286,33 +335,33 @@ rdra-ish diagram src/ --kind er --format mermaid --buc BucOrder
 Move on when the CRUD matrix tells a plausible story, even if entity columns are still
 coarse.
 
-<!-- stage-spec: heading interaction-boundary -->
-## Stage 3: Interaction boundary
+<!-- stage-spec: heading api-access-boundary -->
+## Stage 4: API and access boundary
 <!-- /stage-spec -->
 
-Add screens, optional APIs, and access/media constraints once the use-case/data
-relationship is clear.
+Add APIs, the systems that own them, and access/media constraints once the
+use-case/screen/data path is clear. Each of them is optional: a use case can keep its
+direct CRUD, and a model with no `permission` or `medium` has no access constraints to
+review. The gate asks only that every API a use case invokes belongs to a system.
 
 ```rdra
-screen CheckoutScreen "Checkout"
 api OrderApi "Order API"
+system OrderSystem "Order System"
 permission OrderWrite "Order Write"
 medium CustomerDevice "Customer Device"
 
-displays(PlaceOrder, CheckoutScreen)
-shows(CheckoutScreen, Order)
+contains(OrderSystem, OrderApi)
 invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
 requires_permission(PlaceOrder, OrderWrite)
 requires_medium(PlaceOrder, CustomerDevice)
 ```
 
-<!-- stage-spec: ask interaction-boundary -->
+<!-- stage-spec: ask api-access-boundary -->
 Ask the user:
 
-- Which screen or external interface does each use case expose?
 - Does the use case write data directly, or through an API boundary?
-- Is the API a reusable boundary or local to this BUC?
+- Is the API a reusable boundary or local to this BUC, and which system owns it?
 - Which actor permission and physical/device medium are required for the use case or API?
 
 Validation:
@@ -395,7 +444,7 @@ case. If another store operation updates only ordinary store attributes, keep it
 or give it a separate API only when it has its own transaction or reference contract.
 
 <!-- stage-spec: heading entity-structure -->
-## Stage 4: Entity structure
+## Stage 5: Entity structure
 <!-- /stage-spec -->
 
 Refine entities with columns, primary keys, relationships, and cardinality.
@@ -430,7 +479,7 @@ Move on when FK relationships and the transaction warnings of `check` match the 
 boundary.
 
 <!-- stage-spec: heading lifecycle -->
-## Stage 5: Lifecycle
+## Stage 6: Lifecycle
 <!-- /stage-spec -->
 
 Add lifecycle axes and events after the structural model is stable.
@@ -483,7 +532,7 @@ or unreachable states have been reviewed. Model an event-triggered BUC first wit
 `contains(TargetBuc, EntryUseCase)` and optionally `triggers(Event, EntryUseCase)`.
 
 <!-- stage-spec: heading local-guardrails -->
-## Stage 6A: Local guardrails
+## Stage 7A: Local guardrails
 <!-- /stage-spec -->
 
 Add low-risk constraints only after there is enough lifecycle behavior to evaluate them.
@@ -516,7 +565,7 @@ the first guardrail pass small; it should catch obviously impossible states with
 requiring a complete business rule catalogue.
 
 <!-- stage-spec: heading local-obligations -->
-## Stage 6B: Local obligations
+## Stage 7B: Local obligations
 <!-- /stage-spec -->
 
 Add implication-style rules after local guardrails are stable. Use `invariant` for
@@ -550,7 +599,7 @@ Move on when obligation diagnostics match the intended lifecycle. If `required` 
 too many violations, prefer narrowing it into an `invariant` before adding more rules.
 
 <!-- stage-spec: heading advanced-rules -->
-## Stage 6C: Advanced rules
+## Stage 7C: Advanced rules
 <!-- /stage-spec -->
 
 Add comparison propositions and cross-entity constraints last. These rules are powerful
@@ -596,8 +645,8 @@ level to decide what to ask next:
 | If the model has... | Ask next for... |
 |---|---|
 | BUCs but no actors | initiating actors and external systems |
-| Actors/use cases but no CRUD | data objects touched by each use case |
-| CRUD but no screens | visible UI surfaces or external interfaces |
+| Actors/use cases but no screens | the screen the actor works on in each use case |
+| screens but no CRUD | data objects touched by each use case and shown on each screen |
 | direct CRUD but cross-usecase transaction or reference consistency is required | API endpoints and `invokes` relationships |
 | entities with only `id` | columns, keys, and relationships |
 | Enum/Bool/nullable columns but no `sets` or `transitions` | use-case effects and events |
@@ -615,5 +664,6 @@ level to decide what to ask next:
 
 Incremental modeling works best when each stage answers one question and leaves later
 detail out until it becomes useful. The model should move from BUC intent, to use-case
-coverage, to data touchpoints, to interaction boundaries and consistency-oriented API
-boundaries, to entity structure, to lifecycle, and finally to business-rule constraints.
+coverage, to the screens the actor works on, to data touchpoints, to consistency-oriented
+API boundaries and access constraints, to entity structure, to lifecycle, and finally to
+business-rule constraints.

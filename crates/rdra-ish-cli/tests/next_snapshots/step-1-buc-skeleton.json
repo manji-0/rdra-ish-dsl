@@ -25,26 +25,37 @@
           "verdict": "met"
         },
         {
+          "evidence": "0/2 use cases display a screen or run on a trigger",
+          "findings": [],
+          "gaps": 2,
+          "notes": 0,
+          "passed": false,
+          "slug": "screens",
+          "stage": "2",
+          "stage_name": "Screens",
+          "verdict": "open"
+        },
+        {
           "evidence": "0/2 use cases touch an entity",
           "findings": [],
           "gaps": 1,
           "notes": 0,
           "passed": false,
           "slug": "data-touchpoints",
-          "stage": "2",
+          "stage": "3",
           "stage_name": "Data touchpoints",
           "verdict": "open"
         },
         {
-          "evidence": "0/2 use cases display a screen, invoke an API, or run on a trigger",
+          "evidence": "no use case invokes an API",
           "findings": [],
-          "gaps": 2,
+          "gaps": 0,
           "notes": 0,
-          "passed": false,
-          "slug": "interaction-boundary",
-          "stage": "3",
-          "stage_name": "Interaction boundary",
-          "verdict": "open"
+          "passed": true,
+          "slug": "api-access-boundary",
+          "stage": "4",
+          "stage_name": "API and access boundary",
+          "verdict": "met"
         },
         {
           "evidence": "0/0 entities have a column beyond their keys",
@@ -53,7 +64,7 @@
           "notes": 0,
           "passed": false,
           "slug": "entity-structure",
-          "stage": "4",
+          "stage": "5",
           "stage_name": "Entity structure",
           "verdict": "open"
         },
@@ -64,7 +75,7 @@
           "notes": 0,
           "passed": false,
           "slug": "lifecycle",
-          "stage": "5",
+          "stage": "6",
           "stage_name": "Lifecycle",
           "verdict": "open"
         },
@@ -75,7 +86,7 @@
           "notes": 0,
           "passed": false,
           "slug": "local-guardrails",
-          "stage": "6A",
+          "stage": "7A",
           "stage_name": "Local guardrails",
           "verdict": "open"
         },
@@ -86,7 +97,7 @@
           "notes": 0,
           "passed": false,
           "slug": "local-obligations",
-          "stage": "6B",
+          "stage": "7B",
           "stage_name": "Local obligations",
           "verdict": "open"
         },
@@ -97,7 +108,7 @@
           "notes": 0,
           "passed": false,
           "slug": "advanced-rules",
-          "stage": "6C",
+          "stage": "7C",
           "stage_name": "Advanced rules",
           "verdict": "open"
         }
@@ -106,29 +117,36 @@
       "label": "Maintain Store Restock",
       "next": {
         "asks": [
-          "Which business objects are created, read, updated, or deleted by each use case?",
-          "Which nouns are logical data structures, and which are only business vocabulary?",
-          "Which entities should be shared across multiple BUCs?"
+          "Which screen does the actor work on in each use case?",
+          "Which screen leads to which, and through which use case?",
+          "Which items on a screen does the actor enter or check, and which does the system fill in?",
+          "Is any use case started by an event or timer, with no actor at a screen?"
         ],
-        "doc": "docs/incremental-modeling.md#stage-2-data-touchpoints",
+        "doc": "docs/incremental-modeling.md#stage-2-screens",
         "findings": [],
         "gaps": [
           {
-            "id": "BucStoreRestock",
-            "kind": "buc",
-            "message": "add `creates` / `reads` / `updates` / `deletes(UseCase, Entity)` for the data its use cases touch"
+            "id": "ChangeNextRestockDate",
+            "kind": "usecase",
+            "message": "add `displays(ChangeNextRestockDate, Screen)` for the screen the actor works on, or `triggers(Event, ChangeNextRestockDate)` when no actor starts it"
+          },
+          {
+            "id": "ChangeStoreParentOrganization",
+            "kind": "usecase",
+            "message": "add `displays(ChangeStoreParentOrganization, Screen)` for the screen the actor works on, or `triggers(Event, ChangeStoreParentOrganization)` when no actor starts it"
           }
         ],
         "kind": "required",
         "notes": [],
-        "question": "Which data objects does each use case touch?",
-        "slug": "data-touchpoints",
+        "question": "What does the actor see and do in each use case?",
+        "slug": "screens",
         "stage": "2",
-        "stage_name": "Data touchpoints",
+        "stage_name": "Screens",
         "validate": [
           "rdra-ish check samples/incremental-order/step-1-buc-skeleton/src",
-          "rdra-ish csv samples/incremental-order/step-1-buc-skeleton/src --kind matrix",
-          "rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind er --format mermaid --buc BucStoreRestock"
+          "rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind rdra --format mermaid --buc BucStoreRestock",
+          "rdra-ish diagram samples/incremental-order/step-1-buc-skeleton/src --kind screen --format mermaid --buc BucStoreRestock",
+          "rdra-ish list samples/incremental-order/step-1-buc-skeleton/src --kind screen --format table"
         ],
         "verdict": "open"
       },

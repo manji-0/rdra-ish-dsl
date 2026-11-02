@@ -7,9 +7,9 @@ current stage before analyzing details.
 ## Concept
 
 RDRA-ish refinement intentionally moves from business concern to technical concern.
-Early omissions are not always defects. A BUC with no API may be perfectly fine at the
-data-touchpoint stage, while the same omission is a real gap once the interaction
-boundary is being reviewed. Stage readiness analysis separates "wrong" from "not yet
+Early omissions are not always defects. A BUC with no entity may be perfectly fine at the
+screens stage, while the same omission is a real gap once data touchpoints are being
+reviewed. Stage readiness analysis separates "wrong" from "not yet
 modeled".
 
 The stage question is: what information is already stable enough to commit to source?
@@ -49,10 +49,11 @@ stage.
 | Business names exist but BUCs are tentative | Scope sketch | Which business area and candidate BUCs matter first? |
 | BUCs exist but actors/use cases are sparse | BUC skeleton | Which actors perform which user-visible actions? |
 | BUC has multiple ordered actions but no `flow`/`step` | BUC skeleton / business flow | Does the business sequence, branch, exception, or loop need review? |
-| Use cases exist but CRUD matrix is empty | BUC skeleton | Which business objects does each use case create/read/update/delete? |
+| Use cases exist but none `displays` a screen | BUC skeleton | Which screen does the actor work on in each use case? |
+| Screens exist but the CRUD matrix is empty | Screens | Which business objects does each use case create/read/update/delete, and which does each screen show? |
 | CRUD exists but entities are coarse | Data touchpoints | Which objects are logical data structures versus business vocabulary? |
-| CRUD exists but no use case `invokes` an API | Data touchpoints | What screens and APIs mediate the work? |
-| APIs/screens/permissions/fields appear | Interaction boundary | Which system owns each API, which fields map to data, and which constraints apply to UC/API paths? |
+| CRUD exists but no use case `invokes` an API | Data touchpoints | Which operations need an API boundary, and which permission and medium do they need? |
+| APIs/systems/permissions/media appear | API and access boundary | Which system owns each API, which fields map to data, and which constraints apply to UC/API paths? |
 | APIs have method/path metadata | Contract boundary | Which request/response/error DTOs are part of the contract? |
 | Entities have columns, keys, and `relate` | Entity structure | Which fields represent lifecycle state or cross-system coordination? |
 | `business-inputs` has surprising or missing field rows | Entity structure | Which fields are actor-entered versus derived by defaults, FK relations, APIs, events, or `sets`? |

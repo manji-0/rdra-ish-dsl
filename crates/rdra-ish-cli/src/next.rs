@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use rdra_ish_core::lifecycle::Severity;
 use rdra_ish_core::refinement::{
-    assess, BucStanding, Depth, FindingRef, Gap, Next, StageId, StageView, Verdict,
+    assess, stages, BucStanding, Depth, FindingRef, Gap, Next, StageId, StageView, Verdict,
 };
 use serde_json::{json, Value};
 
@@ -90,13 +90,18 @@ fn render_text(standings: &[BucStanding], unowned: &[FindingRef], src: &str) -> 
         return out;
     }
 
+    let name_width = stages().map(|id| id.spec().name.len()).max().unwrap_or(0);
     if standings.len() > 1 {
         let width = standings.iter().map(|p| p.id.len()).max().unwrap_or(0);
-        let _ = writeln!(out, "{:width$}  {:24}  Next", "BUC", "Stage");
+        let stage_width = stages()
+            .map(|id| stage_label(Some(id)).len())
+            .max()
+            .unwrap_or(0);
+        let _ = writeln!(out, "{:width$}  {:stage_width$}  Next", "BUC", "Stage");
         for p in standings {
             let _ = writeln!(
                 out,
-                "{:width$}  {:24}  {}",
+                "{:width$}  {:stage_width$}  {}",
                 p.id,
                 stage_label(p.reached()),
                 next_label(p)
@@ -129,7 +134,7 @@ fn render_text(standings: &[BucStanding], unowned: &[FindingRef], src: &str) -> 
             };
             let _ = writeln!(
                 out,
-                "  [{mark}] {:2} {:21} {}{}",
+                "  [{mark}] {:2} {:name_width$}  {}{}",
                 view.id.number(),
                 view.spec().name,
                 view.evidence,

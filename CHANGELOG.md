@@ -242,6 +242,34 @@
 
 ### Changed
 
+- The incremental modeling stages put screens before data (#72). The interaction boundary
+  stage is split in two: Screens (`screen`, `displays`, `navigates`, `field`) comes right
+  after the BUC skeleton, and API and access boundary (`api`, `invokes`, `dto`, `system`,
+  `permission`, `medium`, `has_permission`, `requires_*`) comes after data touchpoints,
+  which now also adds `shows` and `maps_field`. The RDRA screen sits with the use case on
+  the system boundary, nearest the actor, so what the actor sees is settled before the data
+  it touches. `displays` stays with the screens, not with the data: it is what ties a use
+  case to its screen. Stage numbers, slugs, and anchors move:
+
+  | Before | After |
+  |---|---|
+  | 2 Data touchpoints (`data-touchpoints`) | 3 Data touchpoints (`data-touchpoints`) |
+  | 3 Interaction boundary (`interaction-boundary`) | 2 Screens (`screens`) and 4 API and access boundary (`api-access-boundary`) |
+  | 4 Entity structure | 5 Entity structure |
+  | 5 Lifecycle | 6 Lifecycle |
+  | 6A / 6B / 6C rules | 7A / 7B / 7C rules |
+
+  The Screens gate asks that every use case `displays` a screen or be started by an event
+  or timer; an `invokes` no longer stands in for a screen, so a BUC whose actor-performed
+  use case has only an API now stops at stage 1 and is asked for the screen. The API and
+  access boundary gate asks that every API a use case invokes belong to a `system`, and
+  keeps the permission and medium review note; a BUC with no API passes it as it stands.
+  Data touchpoints adds a review note for a displayed screen with no `shows`. In
+  `rdra-ish next --format json`, the `slug` values stay the stable ids; `interaction-boundary`
+  is gone, `screens` and `api-access-boundary` are new, every `stage` number from 2 on
+  shifts, and a gap or note `kind` can now be `screen` or `api`. The `rdra-ish-write` step
+  files are renumbered to match (`02-screens.md` to `07-rules.md`), and the
+  `incremental-order` sample gains `step-2-screens` and renumbers the later steps.
 - `diagram` without `-o` prints the Mermaid text to stdout instead of writing `./out.mmd`
   (#70). `-o <path>` still writes `<path>.mmd` and prints `wrote <path>.mmd`. A script that
   relied on the default `out.mmd` passes `-o out`.
