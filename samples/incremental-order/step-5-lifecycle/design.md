@@ -194,10 +194,10 @@ Entity: Store (Store)
   axes: restock_status[normal|scheduled|blocked], next_restock_date[null|present]
 
   RESTOCK_STATUS  NEXT_RESTOCK_DATE  INITIAL  TERMINAL  VIA
-  ──────────────  ─────────────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-  normal          null               yes      no        BucStoreRestock/ChangeStoreParentOrganization
-  scheduled       present            no       no        BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
-  blocked         null               no       yes       BucStoreRestock/BlockScheduledRestock, BucStoreRestock/ChangeNextRestockDate, BucStoreRestock/ChangeStoreParentOrganization
+  ──────────────  ─────────────────  ───────  ────────  ────────────────────────────────────────────────────────────────────────────
+  normal          null               yes      no        -
+  scheduled       present            no       no        BucStoreRestock/ChangeNextRestockDate
+  blocked         null               no       yes       BucStoreRestock/BlockScheduledRestock, BucStoreRestock/ChangeNextRestockDate
 
   reachable: 3 / bound: 6
   diagnostics:

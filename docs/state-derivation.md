@@ -600,8 +600,11 @@ these names, and the `// expect` headers of the samples list the names of the er
 `rdra-ish states` renders the views in one of four formats (`--format`).
 
 - `table` (default). One table per entity with an axis legend, one column per axis, and
-  the `INITIAL`, `TERMINAL`, and `VIA` columns. An Int axis prints its values
-  (`stock[0..5]`). An entity with no state column prints `(no state axes)`.
+  the `INITIAL`, `TERMINAL`, and `VIA` columns. `VIA` is the least set of use cases on some
+  path into the row: the use cases that create the instance in it or move it into it, those
+  that lead into a row that reaches it, and those that delete an instance in it. A use case
+  that touches the entity without changing a column is not listed. An Int axis prints its
+  values (`stock[0..5]`). An entity with no state column prints `(no state axes)`.
 - `csv`. One row per pattern and column, with `entity_id`, `pattern_idx`, `column`,
   `value`, `is_initial`, `is_terminal`, and `via`.
 - `json`. One object per entity with `axes` (each with its `domain`), `patterns`,

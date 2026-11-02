@@ -230,7 +230,7 @@ pub(crate) struct EntityView {
     pub changes: Vec<bool>,
     /// Some enabled action deletes a slot in this pattern.
     pub deletable: Vec<bool>,
-    /// Actions that create, delete, or touch a slot in this pattern without moving it.
+    /// Actions that create or delete a slot in this pattern.
     touch: Vec<BTreeSet<ActId>>,
     /// (from pattern, action, to pattern) for every move between patterns.
     moves: BTreeSet<(usize, ActId, usize)>,
@@ -794,8 +794,6 @@ struct Bfs<'t> {
     complete: bool,
     diags: Vec<Diag>,
     views: Vec<EntityView>,
-    /// Per action, per param: the action writes that param's existence or view columns.
-    writes: Vec<Vec<bool>>,
     /// Invariants and asserts with a reported violation: each reports its first one only.
     violated: HashSet<String>,
     /// Per reported violation: its index in `diags` and where it was seen.
@@ -807,28 +805,6 @@ struct Bfs<'t> {
 
 impl<'t> Bfs<'t> {
     fn new(ts: &'t TransitionSystem, caps: Caps) -> Self {
-        let writes = ts
-            .actions
-            .iter()
-            .map(|a| {
-                (0..a.params.len())
-                    .map(|p| {
-                        let columns = &ts.entity(a.params[p].entity).columns;
-                        a.effects.iter().any(|eff| match eff {
-                            Effect::Create { param } | Effect::Delete { param } => {
-                                usize::from(*param) == p
-                            }
-                            Effect::Assign { var, param, .. }
-                            | Effect::Transition { var, param, .. }
-                            | Effect::Choose { var, param, .. } => {
-                                usize::from(*param) == p && columns.contains(var)
-                            }
-                            Effect::Tick => false,
-                        })
-                    })
-                    .collect()
-            })
-            .collect();
         Bfs {
             ts,
             caps,
@@ -837,7 +813,6 @@ impl<'t> Bfs<'t> {
             complete: true,
             diags: Vec::new(),
             views: ts.entities.iter().map(|_| EntityView::default()).collect(),
-            writes,
             violated: HashSet::new(),
             violations: Vec::new(),
             parents: Vec::new(),
@@ -1038,8 +1013,6 @@ impl<'t> Bfs<'t> {
                     if id2 != id {
                         view.changes[id] = true;
                         view.moves.insert((id, act, id2));
-                    } else if !self.writes[act.index()][p] {
-                        view.touch[id].insert(act);
                     }
                 }
                 (None, false) => {}

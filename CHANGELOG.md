@@ -342,6 +342,14 @@
 
 ### Fixed
 
+- `states` `VIA` no longer lists a use case that only touches the entity without changing it
+  on every row (#70). A use case that reaches the entity through an API that `updates` it,
+  with no `transitions`, `sets`, or `chooses` on its columns, led into no row, yet each row
+  after the entity's first carried it. `VIA` lists the use cases that create or move
+  an instance into a row, those that lead into a row that reaches it, and those that delete
+  an instance in it. `samples/personal-info` `CreditCard` loses `SetPrimaryCard`, for
+  example, and the JSON `via` and the CSV `via` column follow.
+
 - A multi-entity `==` or `!=` between two Int-typed or two Date-typed columns
   (`Permit.fee != Application.fee`) left both columns without an Int variable, so the rule
   was `UnsupportedComparison`. They are Int variables now, as in an order comparison.

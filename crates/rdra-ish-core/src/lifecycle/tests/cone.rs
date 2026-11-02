@@ -188,15 +188,10 @@ fn an_entity_the_view_does_not_read_never_runs_out_of_slots() {
             .flat_map(|p| p.provenance.via.iter().map(|(_, uc)| uc.clone()))
             .collect()
     };
-    for uc in ["RegisterCard", "SetPrimaryCard", "DeleteCard"] {
+    for uc in ["RegisterCard", "DeleteCard"] {
         assert!(via("CreditCard").contains(uc), "CreditCard via {uc}");
     }
-    for uc in [
-        "RegisterAddress",
-        "UpdateAddress",
-        "SetPrimaryAddress",
-        "DeleteAddress",
-    ] {
+    for uc in ["RegisterAddress", "DeleteAddress"] {
         assert!(via("PostalAddress").contains(uc), "PostalAddress via {uc}");
     }
 }

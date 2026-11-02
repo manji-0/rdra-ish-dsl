@@ -243,3 +243,31 @@ transitions(Close, Order.status, open -> closed)
         "Order is still created, by a use case outside the scope"
     );
 }
+
+/// `VIA` names the use cases on a path into a pattern. A use case that only reads the entity
+/// leads into none of them, so it names no row, whatever pattern the slot holds when it runs.
+#[test]
+fn via_leaves_out_a_use_case_that_only_reads_the_entity() {
+    let d = derive_src(
+        r#"
+usecase Open "Open"
+usecase Close "Close"
+usecase Show "Show"
+usecase Notify "Notify"
+api DocApi "Doc API"
+entity Doc "届出" { id: Int @pk  status: Enum(open, closed) @default(open) }
+creates(Open, Doc)
+transitions(Close, Doc.status, open -> closed)
+reads(Show, Doc)
+invokes(Notify, DocApi)
+updates(DocApi, Doc)
+"#,
+    );
+    let via: Vec<Vec<String>> = d
+        .entity("Doc")
+        .patterns
+        .iter()
+        .map(|p| p.provenance.via.iter().map(|(_, uc)| uc.clone()).collect())
+        .collect();
+    assert_eq!(via, vec![vec!["Open"], vec!["Close", "Open"]]);
+}
