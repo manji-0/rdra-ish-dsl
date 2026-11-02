@@ -147,6 +147,7 @@ impl TransitionSystem {
                     role.as_deref().unwrap_or(&self.entity(*parent).id)
                 )
             }
+            VarKind::Run { usecase, .. } => format!("run of {usecase}"),
             VarKind::Exists(_) | VarKind::Now => self.var_name(var),
         }
     }

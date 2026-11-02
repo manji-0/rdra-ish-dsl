@@ -6,6 +6,7 @@ flowchart LR
   actor__PolicyHolder(["契約者・被保険者"]):::actor
   actor__Victim(["被害者（損害賠償請求権者）"]):::actor
   screen__SettlementScreen["示談画面"]:::screen
+  api__CaseApi{{"事故案件 API"}}:::api
   api__SettlementApi{{"示談 API"}}:::api
   api__SettlementCreateApi{{"示談代行開始 API"}}:::api
   entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
@@ -13,12 +14,13 @@ flowchart LR
   actor__ClaimHandler --> screen__SettlementScreen
   actor__PolicyHolder --> screen__SettlementScreen
   actor__Victim --> screen__SettlementScreen
+  api__CaseApi -->|U| entity__ClaimCase
   api__SettlementApi -->|U| entity__Settlement
   api__SettlementCreateApi -->|C| entity__Settlement
-  api__SettlementCreateApi -->|U| entity__ClaimCase
   screen__SettlementScreen -->|示談の成立| api__SettlementApi
   screen__SettlementScreen -->|示談交渉の終了（不調）| api__SettlementApi
   screen__SettlementScreen -->|示談交渉の開始| api__SettlementApi
+  screen__SettlementScreen -->|示談代行の開始| api__CaseApi
   screen__SettlementScreen -->|示談代行の開始| api__SettlementCreateApi
   screen__SettlementScreen -->|示談代行を行わない| api__SettlementApi
   screen__SettlementScreen -->|被保険者の同意| api__SettlementApi

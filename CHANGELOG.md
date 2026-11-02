@@ -295,6 +295,38 @@
 
 ### Changed
 
+- The transaction groups of one use case run in order, as one run on one run's rows (#80).
+  A use case whose writes span k groups (two APIs, for example) is k actions, `<UC>_1` to
+  `<UC>_k`, and one run of the use case is `<UC>_1`, then `<UC>_2`, up to `<UC>_k`, each on
+  the rows the earlier steps bound: the settlement is created under the case the first step
+  moved, once. Before, the k actions had no order, so `OpenSettlement_2` created a settlement
+  without `OpenSettlement_1` and again on a case that already had one
+  (`Unique_Settlement_ClaimCase` and `Deadlock_ClaimCase_status_negotiating` at 2 instances).
+  Every entity a step before the last writes gets a run mark, `<E>._run_<UC>` (TLA+
+  `<E>_run_<UC>`), valued `none` or the last step of the pending run; a later step binds each
+  such row as an `Earlier` parameter matched by its mark, links it to the rows it writes
+  through their keys, and reads it in its `holds` atoms, copies and `after` asserts. Any other
+  use case runs between two steps of a run, another run of the same use case on other rows
+  included; a step whose guard fails when its turn comes waits, since the earlier transactions
+  are committed, and the stuck row shows as a `Deadlock` or a use case that never runs with the
+  run guard among what blocks it. The mark is not a `states` axis and survives a delete.
+  The groups follow the use case's `invokes` lines, then the FK groups, then the isolated
+  writes; before, API groups were sorted by API id. A `holds` body applied to the use case is
+  the precondition of the run and guards the first step only, and a body applied to an API
+  guards that API's step (#78 put every body on every group because the groups had no order);
+  a body on an entity a later step creates reads an existing row at the first step, so apply
+  it to that step's API to constrain the creation. A copy from an entity an earlier step wrote
+  reads the run's row (`UnboundCopySource` now names a later group). The marks are ordinary
+  variables, so cones stay exact. `cross_order_payment_split` invokes the capture first, so
+  `Cancel` still runs between `Pay_1` and `Pay_2`; `split_run_order` is the repro, and passes.
+  `samples/insurance-claim-ops` moves `OpenSettlement` to the case API and the settlement
+  API, as the business reads it, and `verify --deny-undecided` passes at 2 instances. In
+  `samples/clinic-ops`, `CheckInPatient` checks the appointment in through one API and
+  creates the eligibility check through another, so every cone that reads
+  `Appointment.status` carries its two run marks and has 2.3 to 2.6 times the states at 2
+  instances; `CarePlan` and `PatientMessage` join the cones `engine_equivalence` compares
+  with TLC at 1 instance only. An `after` assert on a split use case read a dropped
+  parameter's index in a cone (TLC: `Unknown operator: p1`); the cone renumbers it.
 - The state diagram labels an edge of a use case that moves two lifecycle columns of one
   entity with the other column, `請求の取下げ (Claim.status と同時)` (#79). Each column has its
   own block, so `out/state/Claim.mmd` drew `WithdrawClaim` as two unrelated edges. The

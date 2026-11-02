@@ -13,10 +13,10 @@ use super::types::{
     VarKind,
 };
 use super::{Built, Scope, TransitionSystem};
-use crate::analysis::applied_bodies;
+use crate::analysis::{applied_bodies, AppliedBody};
 use crate::model::{
-    CmpOpModel, CmpRhs, ColumnType, ConditionKey, CrossConstraintScope, EffectValue, EntityKey,
-    FkId, Join, Min, ModelColumn, NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
+    ApiKey, CmpOpModel, CmpRhs, ColumnType, ConditionKey, CrossConstraintScope, EffectValue,
+    EntityKey, FkId, Join, Min, ModelColumn, NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use crate::tx::{infer_usecase_transactions, UcWrite, WriteKind};
@@ -44,6 +44,8 @@ struct Builder<'m> {
     prop_var: HashMap<(EntId, String), VarId>,
     /// (owner var, child, parent)
     owners: Vec<(VarId, EntId, EntId)>,
+    /// The run mark of each entity a step before the last of a split use case writes.
+    run_marks: HashMap<(UseCaseKey, EntId), VarId>,
     /// Use cases whose actions exist, each with its actions in transaction order.
     uc_actions: HashMap<UseCaseKey, Vec<super::types::ActId>>,
     /// Use cases with any write in the full model (before the scope filter).
@@ -66,6 +68,7 @@ impl<'m> Builder<'m> {
             col_var: HashMap::new(),
             prop_var: HashMap::new(),
             owners: Vec::new(),
+            run_marks: HashMap::new(),
             uc_actions: HashMap::new(),
             active_ucs: HashSet::new(),
             diags: Vec::new(),
@@ -452,13 +455,16 @@ impl<'m> Builder<'m> {
                 .map(|writes| writes.iter().map(|w| w.entity).collect())
                 .collect();
             let id = &model.use_cases[uc].id;
+            let written_apis: HashSet<ApiKey> = utx.writes().filter_map(|w| w.via_api).collect();
+            self.run_mark_vars(uc, &entities);
             for (g, writes) in groups.iter().enumerate() {
                 let name = match entities.len() {
                     1 => id.clone(),
                     _ => format!("{id}_{}", g + 1),
                 };
+                let bodies = self.step_bodies(uc, writes, g, &written_apis);
                 self.acting = entities[g].clone();
-                let action = self.usecase_action(uc, name, writes, &entities);
+                let action = self.usecase_action(uc, name, writes, &entities, g, &bodies);
                 self.acting.clear();
                 self.uc_actions
                     .entry(uc)
@@ -473,19 +479,76 @@ impl<'m> Builder<'m> {
         self.inert_conditions();
     }
 
+    /// One run mark per slot of each entity a step before the last of a split use case
+    /// writes (docs/state-derivation.md, "Runs of a split use case"). `groups` lists every
+    /// group's entities, in transaction order.
+    fn run_mark_vars(&mut self, uc: UseCaseKey, groups: &[Vec<EntityKey>]) {
+        let Some((_, earlier)) = groups.split_last() else {
+            return;
+        };
+        let model = self.model;
+        let names: Vec<String> = std::iter::once("none".to_string())
+            .chain((1..groups.len()).map(|i| i.to_string()))
+            .collect();
+        let id = &model.use_cases[uc].id;
+        let site = Site::new(
+            ModelRef::UseCase(uc),
+            &model.decl_sites.located("usecase", id),
+        );
+        for &ek in earlier.iter().flatten() {
+            let e = self.ent_of[&ek];
+            let var = self.push_var(
+                VarKind::Run {
+                    entity: e,
+                    usecase: id.clone(),
+                },
+                Domain::Enum(names.clone()),
+                Value(0),
+                site.clone(),
+            );
+            self.run_marks.insert((uc, e), var);
+        }
+    }
+
+    /// The `holds` bodies step `step` (0-based) of the use case carries: the bodies applied
+    /// to the use case on step 1, the precondition of the run, and a body applied to an API
+    /// on the step of that API's group, or on step 1 when the API is in `written_apis`, the
+    /// APIs the use case writes through, for no group.
+    fn step_bodies(
+        &self,
+        uc: UseCaseKey,
+        writes: &[UcWrite],
+        step: usize,
+        written_apis: &HashSet<ApiKey>,
+    ) -> Vec<AppliedBody<'m>> {
+        applied_bodies(self.model)
+            .into_iter()
+            .filter(|b| b.usecase == uc)
+            .filter(|b| match b.api {
+                Some(api) if written_apis.contains(&api) => {
+                    writes.iter().any(|w| w.via_api == Some(api))
+                }
+                _ => step == 0,
+            })
+            .collect()
+    }
+
     /// One atomic action for one transaction group of the use case: every effect on every
     /// entity of the group in one step. `groups` lists every group's entities, in transaction
-    /// order.
+    /// order, `step` is this group's index in it, and `bodies` the `holds` bodies this step
+    /// carries.
     fn usecase_action(
         &mut self,
         uc: UseCaseKey,
         name: String,
         writes: &[UcWrite],
         groups: &[Vec<EntityKey>],
+        step: usize,
+        bodies: &[AppliedBody<'m>],
     ) -> Action {
         let model = self.model;
         let mut a = ActionDraft::default();
-        let mut sorted: Vec<(EntId, WriteKind, Option<crate::model::ApiKey>)> = writes
+        let mut sorted: Vec<(EntId, WriteKind, Option<ApiKey>)> = writes
             .iter()
             .map(|w| (self.ent_of[&w.entity], w.kind.clone(), w.via_api))
             .collect();
@@ -509,13 +572,24 @@ impl<'m> Builder<'m> {
                 WriteKind::Updates => {}
             }
         }
+        let ent_of = &self.ent_of;
+        let mut earlier: Vec<(EntId, u8)> = groups[..step]
+            .iter()
+            .enumerate()
+            .flat_map(|(j, ents)| ents.iter().map(move |ek| (ent_of[ek], j as u8 + 1)))
+            .collect();
+        earlier.sort();
+        for (e, wrote) in earlier {
+            a.param(e, ParamRole::Earlier { step: wrote });
+        }
         self.sets_effects(uc, &mut a);
         self.chosen_columns(uc, &mut a);
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
-        self.owner_bindings(uc, &mut a);
+        self.owner_bindings(uc, bodies, &mut a);
         self.copy_effects(uc, &mut a, groups);
-        let guards = self.condition_guards(uc, &a.params);
+        self.run_marks(uc, &mut a, step, groups.len());
+        let guards = self.condition_guards(bodies, &a.params);
         a.guards.extend(guards);
         self.arm_guards(uc, &mut a);
         Action {
@@ -531,6 +605,52 @@ impl<'m> Builder<'m> {
             params: a.params,
             guards: a.guards,
             effects: a.effects,
+        }
+    }
+
+    /// The run guards and mark effects of step `step` (0-based) of `k`: a written row of a
+    /// step before the last is in no run (`none`) and takes this step's number; an `Earlier`
+    /// row carries the previous step's number and takes this step's, or `none` at the last
+    /// step. A created row's mark is at base already.
+    fn run_marks(&mut self, uc: UseCaseKey, a: &mut ActionDraft, step: usize, k: usize) {
+        let this = step as u8 + 1;
+        let next = if usize::from(this) < k {
+            Value(this)
+        } else {
+            Value(0)
+        };
+        for p in 0..a.params.len() {
+            let Param { entity, role, .. } = a.params[p];
+            let Some(&var) = self.run_marks.get(&(uc, entity)) else {
+                continue;
+            };
+            let expected = match role {
+                ParamRole::New => None,
+                ParamRole::Existing => Some(0),
+                ParamRole::Earlier { .. } => Some(this - 1),
+                ParamRole::Parent { .. } => continue,
+            };
+            let site = self.ts.vars[var.index()].site.clone();
+            if let Some(mark) = expected {
+                a.guards.push(Guard {
+                    pred: Pred::Cmp(
+                        Term::Slot {
+                            var,
+                            at: At::Param(p as u8),
+                        },
+                        CmpOp::Eq,
+                        Term::Lit(Value(mark)),
+                    ),
+                    why: GuardWhy::Run { step: mark },
+                    site: site.clone(),
+                });
+            }
+            a.effects.push(Effect::Assign {
+                var,
+                param: p as u8,
+                rhs: Rhs::Lit(next),
+                site,
+            });
         }
     }
 
@@ -752,7 +872,9 @@ impl<'m> Builder<'m> {
         if let Some(q) = self.read_param(&a.params, s, by) {
             return Ok(match a.params[usize::from(q)].role {
                 ParamRole::New => At::Next(q),
-                ParamRole::Existing | ParamRole::Parent { .. } => At::Param(q),
+                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Earlier { .. } => {
+                    At::Param(q)
+                }
             });
         }
         let target = a.params[usize::from(p)].entity;
@@ -790,9 +912,9 @@ impl<'m> Builder<'m> {
             return Ok(At::Param(q));
         }
         let child = key.is_some();
-        let elsewhere = groups.iter().flatten().any(|ek| *ek == source);
-        Err(CopyMiss::Unbound(if elsewhere {
-            format!("the use case writes {source_id} in another transaction group, a step of its own; relate {target_id} to {source_id} so one step writes both")
+        let later = groups.iter().flatten().any(|ek| *ek == source);
+        Err(CopyMiss::Unbound(if later {
+            format!("the use case writes {source_id} in a later transaction group, a step of its own; order the use case's invokes so {source_id} is written first, or relate {target_id} to {source_id} so one step writes both")
         } else if child {
             format!("several {source_id} rows may belong to one {target_id}; copy from the row the {target_id} belongs to, or from one the use case writes")
         } else {
@@ -808,16 +930,13 @@ impl<'m> Builder<'m> {
     }
 
     /// The param a statement with selector `by` reads for a row of entity `e`: the row of `e`
-    /// the action writes, else the `Parent` param of the key the statement's join follows
-    /// ([`SemanticModel::join_key`] from that key's child). One `Parent` param of `e` whose
-    /// join no `.by` names is the row the action reads. Otherwise, for a key with no `Parent`
-    /// param or for several such params and no `.by` naming one, `None`: the statement joins
-    /// its own row of `e`.
+    /// the action writes or an earlier step of its run wrote, else the `Parent` param of the
+    /// key the statement's join follows ([`SemanticModel::join_key`] from that key's child).
+    /// One `Parent` param of `e` whose join no `.by` names is the row the action reads.
+    /// Otherwise, for a key with no `Parent` param or for several such params and no `.by`
+    /// naming one, `None`: the statement joins its own row of `e`.
     fn read_param(&self, params: &[Param], e: EntId, by: &[String]) -> Option<u8> {
-        if let Some(p) = params
-            .iter()
-            .position(|p| p.entity == e && p.role.is_written())
-        {
+        if let Some(p) = params.iter().position(|p| p.entity == e && p.role.is_row()) {
             return Some(p as u8);
         }
         let model = self.model;
@@ -843,24 +962,26 @@ impl<'m> Builder<'m> {
         }
     }
 
-    /// Whether a `holds` body applied to `uc` reads `parent` through key `fk` from a `child`
-    /// the action creates, so the creation links to the row the guard reads: the body compares
-    /// the parent and its join follows `fk`, or its `.along(..)` takes a hop through `fk`.
-    fn guard_reads_parent(&self, uc: UseCaseKey, fk: FkId) -> bool {
+    /// Whether a `holds` body the action carries reads `parent` through key `fk` from a
+    /// `child` the action creates, so the creation links to the row the guard reads: the body
+    /// compares the parent and its join follows `fk`, or its `.along(..)` takes a hop through
+    /// `fk`.
+    fn guard_reads_parent(&self, bodies: &[AppliedBody<'m>], fk: FkId) -> bool {
         let model = self.model;
         let key = model.foreign_key(fk);
-        applied_bodies(model).into_iter().any(|(_, u, body)| {
-            let along = match &body.along {
+        bodies.iter().any(|b| {
+            let along = match &b.body.along {
                 CrossConstraintScope::RelationPath { links, .. } => links.contains(&Some(fk)),
                 CrossConstraintScope::GlobalProduct => false,
             };
-            let compared = body
+            let compared = b
+                .body
                 .conds
                 .iter()
                 .flat_map(preds::cond_entities)
                 .any(|ek| ek == key.parent)
-                && model.join_key(key.child, key.parent, &body.by) == Join::Key(fk);
-            u == uc && (along || compared)
+                && model.join_key(key.child, key.parent, &b.body.by) == Join::Key(fk);
+            along || compared
         })
     }
 
@@ -1297,7 +1418,8 @@ impl<'m> Builder<'m> {
     /// R-bind: a created child belongs to its parent, a present one unless the relate is
     /// optional; a child the action updates must already belong to a parent the action only
     /// updates. An optional key also links a created child to a present parent when a guard
-    /// of the action reads the parent through that key.
+    /// of the action reads the parent through that key. A row an earlier step of the run
+    /// wrote (`Earlier`) is the action's row of its entity here, as a written one is.
     ///
     /// Relink: an action that creates the parent and updates an existing child links the child.
     /// For an optional key the child must be unlinked, so a linked child is not relinked; a
@@ -1307,15 +1429,15 @@ impl<'m> Builder<'m> {
     /// point at two rows. A parent the action writes binds only the keys
     /// [`Self::takes_written_parent`] gives it; every other key is bound as if the action did
     /// not write the parent.
-    fn owner_bindings(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
+    fn owner_bindings(&mut self, uc: UseCaseKey, bodies: &[AppliedBody<'m>], a: &mut ActionDraft) {
         for &(var, child, parent) in &self.owners.clone() {
-            let Some(c) = a.param_of(child) else { continue };
+            let Some(c) = a.row_of(child) else { continue };
             let VarKind::Owner { fk, .. } = self.ts.vars[var.index()].kind else {
                 continue;
             };
             let site = self.ts.vars[var.index()].site.clone();
             let written = a
-                .param_of(parent)
+                .row_of(parent)
                 .filter(|_| self.takes_written_parent(uc, fk));
             let parent_is_new =
                 written.is_some_and(|p| a.params[usize::from(p)].role == ParamRole::New);
@@ -1339,7 +1461,7 @@ impl<'m> Builder<'m> {
                         site: site.clone(),
                     });
                 }
-                let guarded = || self.guard_reads_parent(uc, fk);
+                let guarded = || self.guard_reads_parent(bodies, fk);
                 let rhs = match written {
                     Some(p) => Rhs::Param(p),
                     None if optional && !(child_is_new && guarded()) => Rhs::Lit(Value::NULL),
@@ -1387,13 +1509,13 @@ impl Builder<'_> {
         }
         let guards = applied_bodies(model)
             .into_iter()
-            .filter(|(_, u, _)| *u == uc)
-            .flat_map(|(_, _, body)| {
-                let hops = match &body.along {
+            .filter(|b| b.usecase == uc)
+            .flat_map(|b| {
+                let hops = match &b.body.along {
                     CrossConstraintScope::RelationPath { by, .. } => by.as_slice(),
                     CrossConstraintScope::GlobalProduct => &[],
                 };
-                body.by.iter().chain(hops)
+                b.body.by.iter().chain(hops)
             });
         let copies = model
             .column_effects
@@ -1440,6 +1562,15 @@ impl ActionDraft {
         self.params
             .iter()
             .position(|p| p.entity == entity && p.role.is_written())
+            .map(|i| i as u8)
+    }
+
+    /// The param of the action's row of `entity`: one it writes, or one an earlier step of
+    /// its run wrote.
+    fn row_of(&self, entity: EntId) -> Option<u8> {
+        self.params
+            .iter()
+            .position(|p| p.entity == entity && p.role.is_row())
             .map(|i| i as u8)
     }
 

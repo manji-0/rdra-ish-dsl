@@ -59,10 +59,12 @@ const STATE_CAP: usize = 200_000;
 /// `(sample, cone)`: the cones whose BFS at `Bounds::VERIFY` passes `STATE_CAP`, each named by
 /// the first target that reads it. Each is compared at `Bounds::STATES`.
 const VERIFY_FALLBACK: &[(&str, &str)] = &[
+    ("samples/clinic-ops", "entity CarePlan"),
     ("samples/clinic-ops", "entity Charge"),
     ("samples/clinic-ops", "entity ClinicalOrder"),
     ("samples/clinic-ops", "entity EligibilityCheck"),
     ("samples/clinic-ops", "entity LabResult"),
+    ("samples/clinic-ops", "entity PatientMessage"),
     ("samples/clinic-ops", "entity Prescription"),
     ("samples/clinic-ops", "invariant Forbidden_ClinicalOrder_1"),
     ("samples/clinic-ops", "invariant Inv_ClinicalOrder_3"),
@@ -787,8 +789,9 @@ fn bfs_and_tlc_agree_on_split_use_cases() {
 }
 
 /// A use case that moves the claim through one API and creates the settlement under it through
-/// another, guarded by the claim's kind (#78). The settlement's step carries the guard too, so
-/// neither engine creates a settlement under a vehicle claim.
+/// another, guarded by the claim's kind (#78, #80). The first step carries the guard and the
+/// second creates the settlement under the claim the first moved, so neither engine creates a
+/// settlement under a vehicle claim.
 const GUARDED_SPLIT: &str = r#"
 variation Kind "種目" {
   liability "賠償"
@@ -819,6 +822,54 @@ forbidden(Claim, Settlement, Claim.kind == vehicle, Settlement.status == pending
 fn bfs_and_tlc_agree_on_a_guard_over_every_group() {
     if let Some(violated) = check_fixture("guarded_split", GUARDED_SPLIT) {
         assert!(violated.is_empty(), "{violated:?}");
+    }
+}
+
+/// The repro of #80: the two steps of OpenSettlement run in order on one run's rows, so the
+/// settlement is created once under the claim step 1 moved (`Unique_Settlement_Claim` holds)
+/// and no claim is stuck at negotiating. Both engines agree, at 1 and 2 instances.
+#[test]
+fn bfs_and_tlc_agree_on_an_ordered_run() {
+    let src =
+        std::fs::read_to_string(repo().join("samples/formal-verification/split_run_order.rdra"))
+            .expect("sample readable");
+    if let Some(violated) = check_fixture("split_run_order", &src) {
+        assert!(violated.is_empty(), "{violated:?}");
+    }
+}
+
+/// Between two steps of a run any other use case runs: Flag marks a negotiating claim with no
+/// settlement yet, then the settlement step creates a pending settlement under it, and both
+/// engines reach the forbidden pair.
+const INTERLEAVED_SPLIT: &str = r#"
+entity Claim "案件" { id: Int @pk  status: Enum(open, negotiating, closed) @default(open)  flagged: Bool @default(false) }
+entity Settlement "示談" { id: Int @pk  status: Enum(pending, agreed) @default(pending) }
+relate(Settlement, Claim, 1:1)
+usecase Report "受付"
+usecase OpenSettlement "示談開始"
+usecase Flag "注意"
+api ClaimApi "案件 API"
+api SettlementApi "示談 API"
+creates(Report, Claim)
+invokes(OpenSettlement, ClaimApi)
+updates(ClaimApi, Claim)
+transitions(OpenSettlement, Claim.status, open -> negotiating)
+invokes(OpenSettlement, SettlementApi)
+creates(SettlementApi, Settlement)
+sets(Flag, Claim, flagged == true)
+condition NoSettlementYet "示談未作成"
+holds(NoSettlementYet, Claim.status == negotiating).none(Settlement)
+applies_to(NoSettlementYet, Flag)
+forbidden(Claim, Settlement, Claim.flagged == true, Settlement.status == pending).along(Claim, Settlement)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_an_interleaving_between_two_steps() {
+    if let Some(violated) = check_fixture("interleaved_split", INTERLEAVED_SPLIT) {
+        assert_eq!(
+            violated,
+            BTreeSet::from(["CrossForbidden_Claim_0".to_string()])
+        );
     }
 }
 
@@ -1480,6 +1531,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ("samples/formal-verification/int_stock.rdra", "", &[]),
     ("samples/formal-verification/temporal_fair.rdra", "", &[]),
     ("samples/formal-verification/temporal_unmet.rdra", "", &[]),
+    ("samples/formal-verification/split_run_order.rdra", "", &[]),
     (
         "independent_loop",
         INDEPENDENT_LOOP,

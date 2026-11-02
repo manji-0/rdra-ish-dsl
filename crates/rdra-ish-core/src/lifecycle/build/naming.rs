@@ -134,7 +134,7 @@ impl Named {
             .chain(
                 applied_bodies(model)
                     .into_iter()
-                    .flat_map(|(_, _, body)| body.read_conditions()),
+                    .flat_map(|b| b.body.read_conditions()),
             )
             .chain(
                 when_guards(model)

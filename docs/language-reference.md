@@ -905,9 +905,13 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
   sibling entities that share an unwritten parent entity are still grouped as one
   inferred transaction.
 - `states` and `verify` run these transactions (`UsecaseTx::groups()`), each as its own
-  step, and every step carries the use case's `applies_to` guards. An entity a use
-  case only `sets` or transitions counts as an update. An
-  entity written in its own transaction after an FK group raises `SeparateTxInferred`.
+  step, in order: the APIs in the order of the use case's `invokes` lines, then the FK
+  groups, then the isolated writes. One run of the use case is its steps in that order on
+  the rows the earlier steps bound, and any other use case runs between two of them (see
+  [Runs of a split use case](./state-derivation.md#runs)). The first step carries the use
+  case's `applies_to` guards; a guard applied to an API is on that API's step. An entity a
+  use case only `sets` or transitions counts as an update. An entity written in its own
+  transaction after an FK group raises `SeparateTxInferred`.
 
 **System boundary behaviour**:
 - `contains(System, Api)` assigns an API to an internal system boundary.
@@ -1340,8 +1344,13 @@ A body with `applies_to(Condition, UseCase)` is a guard on that use case: the us
 only in a state where every comparison holds. `applies_to(Condition, Api)` guards each use
 case that invokes the API, and `applies_to(Condition, System)` adds no guard. `states`,
 `check`, and the TLA+ export read the same guard. A use case whose writes span several
-transaction groups (two APIs, for example) is one step per group, and every step carries
-the guard, each read on the state before that step.
+transaction groups (two APIs, for example) is one step per group, run in order as one run
+(see [Runs of a split use case](./state-derivation.md#runs)). A body applied to the use
+case is the precondition of the run: its first step carries it, read on the state before
+that step, and the later steps run because the first did. A body applied to an API is the
+precondition of that API's transaction: the step of that API carries it. No step re-reads a
+guard an earlier step carried, so a use case that falsifies the condition between two steps
+is explored, not blocked.
 
 - A comparison on an entity that the use case writes reads that instance. When the use case
   creates the entity, the comparison tests the new instance after the use case runs, so
@@ -1755,6 +1764,9 @@ way a `holds` atom on that entity reads it (see
 - **A row the step writes.** The use case writes the entity in the same transaction group.
   The step reads an updated row before it changes it, and a created row as the step leaves
   it. A copy within one row (`sets(UC, E, shadow == E.flag)`) reads that row.
+- **A row an earlier step of the run wrote.** The use case writes the entity in an earlier
+  transaction group (an API invoked before the target's). The step reads that run's row
+  before it changes anything (see [Runs of a split use case](./state-derivation.md#runs)).
 - **The target's parent.** A `relate` makes the source entity the parent of the target.
   A child created under a mandatory relate reads the parent it is created under. An updated
   child reads the parent that its foreign key names, and the use case waits while an
@@ -1766,8 +1778,8 @@ Any other source is `UnboundCopySource`, an error, and the copy is not applied:
 
 - an entity that the use case does not write and that is not the target's parent;
 - a child of the target, because several rows may belong to one target row;
-- an entity that the use case writes in another transaction group, which is a step of its
-  own;
+- an entity that the use case writes in a later transaction group, a step of its own that
+  has not run yet (order the `invokes` lines so the source is written first);
 - the parent of a created child under an `.optional()` relate, because the child is
   created unlinked.
 
@@ -2048,7 +2060,8 @@ owner (an `.optional()` relate not yet linked) is not linked for `.along`.
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific
 use-case boundary instead of against every reachable state. The tool checks the predicate
 on the state that each step of the use case leaves. A use case whose writes span k
-transaction groups is k steps, and the assertion holds after each one. Comparison forms
+transaction groups is k steps, and the assertion holds after each one, on the rows of
+that run: the state between two steps is checked too. Comparison forms
 are also valid, for example
 `after(ExecuteCertIssue).assert(CertificateOrder.status == executed)`. An `after` on a
 use case that changes nothing is `AssertOnInertUseCase`.
@@ -2139,7 +2152,9 @@ GrantEnds == Fair_GrantEnds => (\A b0 \in Application_Ids : ...)
 The `\A` ranges over the instances the use case reads or creates under; an instance it
 creates is bound inside, `WF_vars(\E p1 \in Patent_Ids : Register(p0, p1))`, so the next
 free slot moving on does not reset an application's claim. A use case split into
-transaction groups is fair on each of its actions. `Spec`, the `.cfg`, and properties without
+transaction groups is fair on each of its actions, the later ones per run (the `\A` ranges
+over the rows the earlier steps bound), so a started run is fair to finish while its next
+step stays enabled. `Spec`, the `.cfg`, and properties without
 `.fair` are unchanged; `Spec /\ Fair_P` satisfies `P` exactly when `Spec` satisfies
 `Fair_P => P`.
 

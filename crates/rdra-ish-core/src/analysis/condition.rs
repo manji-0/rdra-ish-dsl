@@ -223,10 +223,20 @@ pub fn condition_body_display(
     Some(text)
 }
 
+/// A `holds` body that guards a use case, and the API it is applied to when it guards the
+/// use case through `applies_to(Cond, Api)`: that API's transaction carries it.
+#[derive(Clone, Copy)]
+pub struct AppliedBody<'m> {
+    pub cond: ConditionKey,
+    pub usecase: UseCaseKey,
+    pub api: Option<ApiKey>,
+    pub body: &'m HoldsBody,
+}
+
 /// Every `holds` body that guards a use case: `applies_to(Cond, UC)`, or `applies_to(Cond, Api)`
 /// for each use case that invokes the API. In relation order, without duplicates.
-pub fn applied_bodies(model: &SemanticModel) -> Vec<(ConditionKey, UseCaseKey, &HoldsBody)> {
-    let mut out: Vec<(ConditionKey, UseCaseKey, &HoldsBody)> = Vec::new();
+pub fn applied_bodies(model: &SemanticModel) -> Vec<AppliedBody<'_>> {
+    let mut out: Vec<AppliedBody<'_>> = Vec::new();
     for rel in model
         .relations
         .iter()
@@ -238,23 +248,31 @@ pub fn applied_bodies(model: &SemanticModel) -> Vec<(ConditionKey, UseCaseKey, &
         let Some(body) = model.conditions[ck].body.as_ref() else {
             continue;
         };
-        let ucs: Vec<UseCaseKey> = match rel.to {
-            NodeRef::UseCase(uc) => vec![uc],
+        let targets: Vec<(UseCaseKey, Option<ApiKey>)> = match rel.to {
+            NodeRef::UseCase(uc) => vec![(uc, None)],
             NodeRef::Api(api) => model
                 .relations
                 .iter()
                 .filter_map(|r| match (&r.kind, &r.from, &r.to) {
                     (RelKind::Invokes, NodeRef::UseCase(uc), NodeRef::Api(a)) if *a == api => {
-                        Some(*uc)
+                        Some((*uc, Some(api)))
                     }
                     _ => None,
                 })
                 .collect(),
             _ => continue,
         };
-        for uc in ucs {
-            if !out.iter().any(|(c, u, _)| (*c, *u) == (ck, uc)) {
-                out.push((ck, uc, body));
+        for (uc, api) in targets {
+            if !out
+                .iter()
+                .any(|b| (b.cond, b.usecase, b.api) == (ck, uc, api))
+            {
+                out.push(AppliedBody {
+                    cond: ck,
+                    usecase: uc,
+                    api,
+                    body,
+                });
             }
         }
     }
@@ -265,8 +283,8 @@ pub fn applied_bodies(model: &SemanticModel) -> Vec<(ConditionKey, UseCaseKey, &
 pub fn guard_labels(model: &SemanticModel, uc: UseCaseKey) -> Vec<&str> {
     applied_bodies(model)
         .into_iter()
-        .filter(|(_, u, _)| *u == uc)
-        .map(|(ck, ..)| model.conditions[ck].label.as_str())
+        .filter(|b| b.usecase == uc)
+        .map(|b| model.conditions[b.cond].label.as_str())
         .collect()
 }
 

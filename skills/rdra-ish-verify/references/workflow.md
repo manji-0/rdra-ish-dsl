@@ -66,7 +66,7 @@ bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
-Cone_CrossForbidden_Order_0 [CrossForbidden_Order_0]: counterexample (43 states)
+Cone_CrossForbidden_Order_0 [CrossForbidden_Order_0]: counterexample (31 states)
 tlc_result: counterexample
 Error: TLC verification failed
 ...

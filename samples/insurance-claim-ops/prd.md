@@ -876,13 +876,13 @@ flowchart TD
 | condition | 修理着工を承認した | RepairEstimate | RepairEstimate.approved == true | StartRepair | samples/insurance-claim-ops/buc/buc_repair.rdra:83 |
 | forbidden | 修理着工は事前承認の後 | RepairEstimate | RepairEstimate.approved == false AND RepairEstimate.status in (修理中, 修理完了) |  | samples/insurance-claim-ops/buc/buc_repair.rdra:151 |
 | forbidden | 修理見積は車両・対物賠償の事故だけ | RepairEstimate\|ClaimCase | ClaimCase.coverage in (対人賠償, 人身傷害) |  | samples/insurance-claim-ops/buc/buc_repair.rdra:153 |
-| condition | 対人・対物賠償の事故で、被保険者に賠償責任がある | ClaimCase | ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり | OpenSettlement | samples/insurance-claim-ops/buc/buc_settlement.rdra:84 |
-| condition | 示談代行の同意を確かめている | Settlement | Settlement.status == 同意の確認中 | RecordInsuredConsent\|RecordVictimConsent | samples/insurance-claim-ops/buc/buc_settlement.rdra:97 |
-| condition | 被保険者と被害者がともに同意している | Settlement | Settlement.insured_consent == true, Settlement.victim_consent == true | BeginNegotiation | samples/insurance-claim-ops/buc/buc_settlement.rdra:106 |
-| forbidden | 被害者の同意なく示談代行しない | Settlement | Settlement.victim_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:209 |
-| forbidden | 被保険者の同意なく示談代行しない | Settlement | Settlement.insured_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:211 |
-| forbidden | 過失ゼロなら示談代行しない | Settlement\|ClaimCase | Settlement.status in (示談交渉中, 示談成立) AND ClaimCase.liability == 過失ゼロ（賠償責任なし） |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:214 |
-| forbidden | 示談代行は対人・対物賠償の事故だけ | Settlement\|ClaimCase | ClaimCase.coverage in (車両, 人身傷害) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:217 |
+| condition | 対人・対物賠償の事故で、被保険者に賠償責任がある | ClaimCase | ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり | OpenSettlement | samples/insurance-claim-ops/buc/buc_settlement.rdra:85 |
+| condition | 示談代行の同意を確かめている | Settlement | Settlement.status == 同意の確認中 | RecordInsuredConsent\|RecordVictimConsent | samples/insurance-claim-ops/buc/buc_settlement.rdra:98 |
+| condition | 被保険者と被害者がともに同意している | Settlement | Settlement.insured_consent == true, Settlement.victim_consent == true | BeginNegotiation | samples/insurance-claim-ops/buc/buc_settlement.rdra:107 |
+| forbidden | 被害者の同意なく示談代行しない | Settlement | Settlement.victim_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:210 |
+| forbidden | 被保険者の同意なく示談代行しない | Settlement | Settlement.insured_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:212 |
+| forbidden | 過失ゼロなら示談代行しない | Settlement\|ClaimCase | Settlement.status in (示談交渉中, 示談成立) AND ClaimCase.liability == 過失ゼロ（賠償責任なし） |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:215 |
+| forbidden | 示談代行は対人・対物賠償の事故だけ | Settlement\|ClaimCase | ClaimCase.coverage in (車両, 人身傷害) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:218 |
 | condition | 保険金を支払った請求で、まだ求償していない | Claim | (Claim.status == 支払済).none(Subrogation) | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:59 |
 | forbidden | 支払後に求償権が移る | Subrogation\|Claim | Claim.status != 支払済 |  | samples/insurance-claim-ops/buc/buc_subrogation.rdra:125 |
 | after | 求償は保険金を支払った請求についてだけ始める | Claim | Claim.status == 支払済 | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:127 |

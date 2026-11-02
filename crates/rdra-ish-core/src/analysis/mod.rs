@@ -19,7 +19,7 @@ mod qref_util;
 
 pub use condition::{
     applied_bodies, chosen_variation, condition_body_display, condition_edges, guard_labels,
-    transition_guard_labels, ConditionEdge,
+    transition_guard_labels, AppliedBody, ConditionEdge,
 };
 pub(crate) use condition::{body_condition_display, effect_value_display};
 use fk::{check_join_selectors, resolve_along_links, resolve_foreign_keys};

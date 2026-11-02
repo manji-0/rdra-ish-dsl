@@ -1,7 +1,7 @@
-// cross_order_payment.rdra with Pay split across two APIs (two actions, Pay_1 and Pay_2;
-// docs/vision.md, rule 6), and a Cancel that does not delete the Payment.
-// TLC intent: expected FAIL. Pay_2 captures the payment while the linked Order is still
-// pending, Cancel then cancels that Order, and the forbidden pair is reached.
+// cross_order_payment.rdra with Pay split across two APIs in invokes order (two actions, Pay_1
+// captures the payment, then Pay_2 pays its order; docs/vision.md, rule 6), and a Cancel that
+// does not delete the Payment. TLC intent: expected FAIL. Pay_1 captures the payment while the
+// linked Order is still pending, Cancel then cancels that Order, and the forbidden pair is reached.
 // expect check: fail CrossForbidden_Order_0
 // expect verify: tlc=counterexample fail CrossForbidden_Order_0
 entity Order "注文" {
@@ -28,10 +28,10 @@ contains(BucOrderPayment, Cancel)
 
 creates(Place, Order)
 creates(Place, Payment)
-invokes(Pay, PayOrderApi)
-updates(PayOrderApi, Order)
 invokes(Pay, CapturePaymentApi)
 updates(CapturePaymentApi, Payment)
+invokes(Pay, PayOrderApi)
+updates(PayOrderApi, Order)
 updates(Cancel, Order)
 
 transitions(Pay, Order.status, pending -> paid)

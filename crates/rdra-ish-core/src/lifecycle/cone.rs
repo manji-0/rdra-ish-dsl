@@ -67,11 +67,16 @@ impl TransitionSystem {
 
     /// Guards, slot selection, transition sources, and the clock. Selecting a present slot
     /// reads its entity's existence; taking a new slot does not count as a read, so an entity
-    /// a target never reads is never out of slots (`restrict_to` drops that param). A copy's
-    /// guard is read only with the var it pins (`copy_reads`).
+    /// a target never reads is never out of slots (`restrict_to` drops that param), and an
+    /// `Earlier` slot is selected by its run mark, a guard. A copy's guard is read only with
+    /// the var it pins (`copy_reads`).
     pub(crate) fn action_reads(&self, action: &Action) -> VarSet {
         let mut out = VarSet::new();
-        for p in action.params.iter().filter(|p| p.role != ParamRole::New) {
+        for p in action
+            .params
+            .iter()
+            .filter(|p| matches!(p.role, ParamRole::Existing | ParamRole::Parent { .. }))
+        {
             out.insert(self.entity(p.entity).exists);
         }
         for g in action.guards.iter().filter(|g| g.copy_target().is_none()) {
@@ -164,7 +169,9 @@ impl TransitionSystem {
                     VarKind::Owner { child, parent, .. } => {
                         vec![self.entity(child).exists, self.entity(parent).exists]
                     }
-                    VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
+                    VarKind::Column { entity, .. }
+                    | VarKind::Prop { entity, .. }
+                    | VarKind::Run { entity, .. } => {
                         vec![self.entity(entity).exists]
                     }
                     VarKind::Exists(_) | VarKind::Now => Vec::new(),

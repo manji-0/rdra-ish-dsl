@@ -83,7 +83,7 @@ flowchart LR
   usecase__OpenSettlement -.-> screen__SettlementScreen
   usecase__OpenSettlement -.->|transitions ClaimCase.status investigating->negotiating| state__ClaimCase_status_negotiating
   usecase__OpenSettlement -.->|updates| entity__ClaimCase
-  %% derived usecase__OpenSettlement -> entity__ClaimCase via api__SettlementCreateApi
+  %% derived usecase__OpenSettlement -> entity__ClaimCase via api__CaseApi
   usecase__RecordInsuredConsent -.-> screen__SettlementScreen
   usecase__RecordInsuredConsent -.->|updates| entity__Settlement
   %% derived usecase__RecordInsuredConsent -> entity__Settlement via api__SettlementApi

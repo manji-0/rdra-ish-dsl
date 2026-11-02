@@ -74,7 +74,8 @@ fn owner_entity(kind: &VarKind) -> Option<EntId> {
     match kind {
         VarKind::Exists(e)
         | VarKind::Column { entity: e, .. }
-        | VarKind::Prop { entity: e, .. } => Some(*e),
+        | VarKind::Prop { entity: e, .. }
+        | VarKind::Run { entity: e, .. } => Some(*e),
         VarKind::Owner { child, .. } => Some(*child),
         VarKind::Now => None,
     }
@@ -165,6 +166,8 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
             ParamRole::Existing | ParamRole::Parent { .. } => {
                 format!("{exists}[p{p}] = \"present\"")
             }
+            // Its run guard selects the slot.
+            ParamRole::Earlier { .. } => continue,
         });
     }
     let guard = |g: &rdra_ish_core::lifecycle::Guard| {

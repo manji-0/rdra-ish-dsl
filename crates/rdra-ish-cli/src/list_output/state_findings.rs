@@ -206,6 +206,9 @@ fn blocked_rows(
                     ParamRole::Existing | ParamRole::Parent { .. } => {
                         format!("{indent}needs: an existing {entity}")
                     }
+                    ParamRole::Earlier { step } => format!(
+                        "{indent}needs: the {entity} step {step} of this use case's run wrote"
+                    ),
                 };
                 (text, None)
             })
@@ -340,6 +343,16 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
         (GuardWhy::TransitionFrom, _) => {
             "the column is in a from state of its transitions".to_string()
         }
+        (GuardWhy::Run { step: 0 }, ModelRef::UseCase(uc)) => format!(
+            "the bound rows are in no run of {} (a run is its steps in order)",
+            model.use_cases[*uc].id
+        ),
+        (GuardWhy::Run { step }, ModelRef::UseCase(uc)) => format!(
+            "step {step} of {} ran on the bound rows and step {} has not",
+            model.use_cases[*uc].id,
+            step + 1
+        ),
+        (GuardWhy::Run { .. }, _) => "the bound rows are at this step of the run".to_string(),
     }
 }
 

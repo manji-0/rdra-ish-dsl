@@ -85,7 +85,7 @@ Also ask:
    drives is an error unless the use case creates the entity.
    When the value comes from another row, copy it: `sets(Register, Permit, kind ==
    Application.kind)`. The source must be a row the step binds: an entity the use case
-   writes in the same transaction group, or the parent of the target through a `relate`
+   writes in the same or an earlier transaction group, or the parent of the target through a `relate`
    (a created child reads the parent it is created under; with two relates to the source,
    name one: `sets(Fix, Permit, kind == Site.kind).by(home)`). Any other source is
    `UnboundCopySource`; give the target a `relate` to the source instead of leaving the

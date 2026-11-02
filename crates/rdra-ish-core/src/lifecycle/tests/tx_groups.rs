@@ -2,7 +2,7 @@
 //! checker explores the states in between.
 
 use super::*;
-use crate::lifecycle::{ActionOrigin, GuardWhy};
+use crate::lifecycle::{ActionOrigin, Domain, Effect, GuardWhy, ParamRole, Rhs, Value, VarKind};
 
 /// Pay updates Order and Payment through one API each, so it spans two groups. `{extra}`
 /// completes the model.
@@ -54,8 +54,16 @@ fn a_use_case_spanning_two_groups_is_one_action_per_group_in_tx_order() {
     let model = model_from(&split_pay(""));
     let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
     assert_eq!(action_names(&ts), vec!["Pay_1", "Pay_2", "Place", "Staff"]);
+    // The APIs in invokes order: the capture first. The second step binds the payment the
+    // first step captured, and the order it belongs to.
     assert_eq!(bound(&ts, "Pay_1"), vec!["Payment"]);
-    assert_eq!(bound(&ts, "Pay_2"), vec!["Order"]);
+    assert_eq!(bound(&ts, "Pay_2"), vec!["Order", "Payment"]);
+    let pay_2 = ts.actions().iter().find(|a| a.name == "Pay_2").unwrap();
+    assert_eq!(pay_2.params[1].role, ParamRole::Earlier { step: 1 });
+    assert!(pay_2
+        .guards
+        .iter()
+        .any(|g| matches!(g.why, GuardWhy::Owner)));
     // Place creates both through one FK-connected group: one atomic action.
     assert_eq!(bound(&ts, "Place"), vec!["Order", "Payment"]);
     let (pay, _) = model.use_cases.iter().find(|(_, u)| u.id == "Pay").unwrap();
@@ -176,13 +184,14 @@ fn after_assert_is_checked_after_each_group_step() {
         .map(|s| ts.actions()[s.act.index()].name.clone())
         .collect();
     assert_eq!(steps, vec!["Pay_1", "Pay_2"]);
-    // Each step binds its own group's entity; the other group's is universally bound.
+    // The first step binds its own group's entity and the later group's is universally
+    // bound; the second step binds the run's payment too.
     let binders: Vec<Vec<String>> = a
         .steps
         .iter()
         .map(|s| s.binders.iter().map(|e| ts.entity(*e).id.clone()).collect())
         .collect();
-    assert_eq!(binders, vec![vec!["Order"], vec!["Payment"]]);
+    assert_eq!(binders, vec![vec!["Order"], vec![]]);
     // After Pay_1 alone the Order is still pending: the assert sees the in-between state.
     let d = derive_src(&src);
     assert!(
@@ -196,10 +205,10 @@ fn after_assert_is_checked_after_each_group_step() {
 }
 
 #[test]
-fn a_condition_guards_every_group_of_the_use_case() {
-    let conditions = |body: &str| {
+fn a_condition_guards_the_first_step_of_the_use_case_and_an_api_body_its_own_step() {
+    let conditions = |target: &str, body: &str| {
         split_pay(&format!(
-            "condition Ready \"可\"\nholds(Ready, {body})\napplies_to(Ready, Pay)\n\
+            "condition Ready \"可\"\nholds(Ready, {body})\napplies_to(Ready, {target})\n\
              usecase Rush \"急ぎ\"\nsets(Rush, Order, rush == true)\nsets(Staff, Desk, open == true)"
         ))
     };
@@ -214,21 +223,34 @@ fn a_condition_guards_every_group_of_the_use_case() {
             .map(|a| a.name.clone())
             .collect()
     };
-    // A body is a precondition of the use case, so each group's step carries it, whether a
-    // group writes the entity the body reads or no group does (#78).
+    // A body applied to the use case is the precondition of its run: the first step carries
+    // it, whether a later step writes the entity the body reads or no step does, and the
+    // later steps run because the first did (#80).
     for body in ["Order.rush == true", "Desk.open == true"] {
         assert_eq!(
-            guarded(&built(&conditions(body))),
-            vec!["Pay_1", "Pay_2"],
+            guarded(&built(&conditions("Pay", body))),
+            vec!["Pay_1"],
             "{body}"
         );
     }
+    // A body applied to an API is the precondition of that API's transaction.
+    assert_eq!(
+        guarded(&built(&conditions("PayOrderApi", "Desk.open == true"))),
+        vec!["Pay_2"]
+    );
+    assert_eq!(
+        guarded(&built(&conditions(
+            "CapturePaymentApi",
+            "Desk.open == true"
+        ))),
+        vec!["Pay_1"]
+    );
 }
 
 /// OpenSettlement moves the claim through one API and creates the settlement under it through
-/// another, guarded by the claim's kind (#78). Each group's step carries the guard, and the
-/// settlement's step reads it on the claim the settlement is created under, so no settlement
-/// is ever created under a vehicle claim.
+/// another, guarded by the claim's kind (#78, #80). The first step carries the guard, and the
+/// settlement's step creates the settlement under the claim the first step moved, so no
+/// settlement is ever created under a vehicle claim.
 const GUARDED_SPLIT: &str = r#"
 variation Kind "種目" {
   liability "賠償"
@@ -255,7 +277,7 @@ forbidden(Claim, Settlement, Claim.kind == vehicle, Settlement.status == pending
 "#;
 
 #[test]
-fn a_guard_holds_for_every_group_of_a_split_use_case() {
+fn a_guard_on_the_first_step_protects_the_run() {
     let violated = |src: &str| {
         derive_src(src)
             .diags
@@ -266,7 +288,196 @@ fn a_guard_holds_for_every_group_of_a_split_use_case() {
     let guarded = format!("{GUARDED_SPLIT}applies_to(Eligible, OpenSettlement)\n");
     assert!(!violated(&guarded));
     let ts = built(&guarded);
-    // The settlement's step binds the claim it creates the settlement under, and the guard
-    // reads that row.
+    // The settlement's step binds the claim the first step moved, and creates the settlement
+    // under it; the guard was read on that row by the first step.
     assert_eq!(bound(&ts, "OpenSettlement_2"), vec!["Settlement", "Claim"]);
+}
+
+/// The run marks of a split use case: one per slot of each entity a step before the last
+/// writes, on no entity only the last step writes, on no use case with one group, and never
+/// an axis of `states`.
+#[test]
+fn a_split_use_case_marks_the_rows_its_earlier_steps_write() {
+    let model = sample_model("samples/formal-verification/split_run_order.rdra");
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let marks: Vec<(String, String)> = ts
+        .vars()
+        .iter()
+        .filter_map(|d| match &d.kind {
+            VarKind::Run { entity, usecase } => {
+                Some((ts.entity(*entity).id.clone(), usecase.clone()))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        marks,
+        vec![("Claim".to_string(), "OpenSettlement".to_string())]
+    );
+    let mark = ts
+        .var_ids()
+        .find(|v| matches!(ts.var(*v).kind, VarKind::Run { .. }))
+        .unwrap();
+    assert_eq!(
+        ts.var(mark).domain,
+        Domain::Enum(vec!["none".to_string(), "1".to_string()])
+    );
+    assert!(ts
+        .entities()
+        .iter()
+        .all(|e| !e.columns.contains(&mark) && !e.owners.contains(&mark)));
+    let step = |name: &str| ts.actions().iter().find(|a| a.name == name).unwrap();
+    // Step 1 takes a claim in no run and marks it; step 2 binds the marked claim as the row
+    // it creates the settlement under, and ends the run.
+    let step_1 = step("OpenSettlement_1");
+    assert!(step_1
+        .guards
+        .iter()
+        .any(|g| g.why == GuardWhy::Run { step: 0 }));
+    let step_2 = step("OpenSettlement_2");
+    assert_eq!(bound(&ts, "OpenSettlement_2"), vec!["Settlement", "Claim"]);
+    assert_eq!(step_2.params[1].role, ParamRole::Earlier { step: 1 });
+    assert!(step_2
+        .guards
+        .iter()
+        .any(|g| g.why == GuardWhy::Run { step: 1 }));
+    let marks_set: Vec<Value> = step_2
+        .effects
+        .iter()
+        .filter_map(|eff| match eff {
+            Effect::Assign {
+                var,
+                rhs: Rhs::Lit(v),
+                ..
+            } if *var == mark => Some(*v),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(marks_set, vec![Value(0)]);
+    assert!(step_2.effects.iter().any(|eff| matches!(
+        eff,
+        Effect::Assign {
+            rhs: Rhs::Param(1),
+            ..
+        }
+    )));
+}
+
+/// The repro of #80 at 2 instances: the settlement is created once, under the claim step 1
+/// moved, so the 1:1 key holds. Unordered steps created a second settlement under a claim
+/// that already had one.
+#[test]
+fn a_run_finishes_on_the_rows_it_started() {
+    let model = sample_model("samples/formal-verification/split_run_order.rdra");
+    let d = derive_scoped(&model, Bounds::VERIFY, &Scope::ALL);
+    let violated: Vec<&StateDiag> = d
+        .diags
+        .iter()
+        .map(|x| &x.diag)
+        .filter(|x| matches!(x, StateDiag::ConstraintViolated { .. }))
+        .collect();
+    assert!(violated.is_empty(), "{violated:?}");
+    assert_eq!(
+        d.rows("Claim"),
+        vec![
+            "kind=liability, status=open",
+            "kind=vehicle, status=open",
+            "kind=liability, status=negotiating",
+            "kind=liability, status=closed",
+            "kind=vehicle, status=closed",
+        ]
+    );
+}
+
+/// Between two steps of a run any other use case runs: a flag set on a negotiating claim
+/// with no settlement yet, then the settlement step, reaches the forbidden pair. Without the
+/// flagging use case the pair is unreachable.
+const INTERLEAVED_SPLIT: &str = r#"
+entity Claim "案件" { id: Int @pk  status: Enum(open, negotiating, closed) @default(open)  flagged: Bool @default(false) }
+entity Settlement "示談" { id: Int @pk  status: Enum(pending, agreed) @default(pending) }
+relate(Settlement, Claim, 1:1)
+usecase Report "受付"
+usecase OpenSettlement "示談開始"
+usecase Flag "注意"
+api ClaimApi "案件 API"
+api SettlementApi "示談 API"
+creates(Report, Claim)
+invokes(OpenSettlement, ClaimApi)
+updates(ClaimApi, Claim)
+transitions(OpenSettlement, Claim.status, open -> negotiating)
+invokes(OpenSettlement, SettlementApi)
+creates(SettlementApi, Settlement)
+sets(Flag, Claim, flagged == true)
+condition NoSettlementYet "示談未作成"
+holds(NoSettlementYet, Claim.status == negotiating).none(Settlement)
+applies_to(NoSettlementYet, Flag)
+forbidden(Claim, Settlement, Claim.flagged == true, Settlement.status == pending).along(Claim, Settlement)
+"#;
+
+#[test]
+fn another_use_case_interleaves_between_two_steps_of_a_run() {
+    let d = derive_src(INTERLEAVED_SPLIT);
+    let trace = d.diags.iter().find_map(|x| match &x.diag {
+        StateDiag::ConstraintViolated { trace, .. } => Some(trace),
+        _ => None,
+    });
+    let steps: Vec<&str> = trace
+        .unwrap_or_else(|| panic!("the pair is reached: {:?}", d.diags))
+        .steps
+        .iter()
+        .map(|s| s.action.as_str())
+        .collect();
+    assert_eq!(
+        steps,
+        vec!["Report", "OpenSettlement_1", "Flag", "OpenSettlement_2"]
+    );
+    let without_flag = INTERLEAVED_SPLIT
+        .replace("applies_to(NoSettlementYet, Flag)", "")
+        .replace("sets(Flag, Claim, flagged == true)", "");
+    let d = derive_src(&without_flag);
+    assert!(
+        !d.diags
+            .iter()
+            .any(|x| matches!(x.diag, StateDiag::ConstraintViolated { .. })),
+        "{:?}",
+        d.diags
+    );
+}
+
+/// A later step whose guard fails when its turn comes waits, and the row stays in the run:
+/// the run is never abandoned, so the claim is stuck at negotiating, and the deadlock names
+/// what blocks each way out.
+#[test]
+fn a_blocked_run_is_never_abandoned() {
+    let src = r#"
+entity Claim "案件" { id: Int @pk  status: Enum(open, negotiating, closed) @default(open)  ok: Bool @default(true) }
+entity Settlement "示談" { id: Int @pk  status: Enum(pending, agreed) @default(pending) }
+relate(Settlement, Claim, 1:1)
+usecase Report "受付"
+usecase OpenSettlement "示談開始"
+usecase Veto "却下"
+usecase Close "終了"
+api ClaimApi "案件 API"
+api SettlementApi "示談 API"
+creates(Report, Claim)
+invokes(OpenSettlement, ClaimApi)
+updates(ClaimApi, Claim)
+transitions(OpenSettlement, Claim.status, open -> negotiating)
+invokes(OpenSettlement, SettlementApi)
+creates(SettlementApi, Settlement)
+sets(Veto, Claim, ok == false)
+transitions(Close, Claim.status, negotiating -> closed)
+condition Ok "可"
+holds(Ok, Claim.ok == true)
+applies_to(Ok, SettlementApi)
+condition Settled "示談あり"
+holds(Settled, Settlement.status == pending)
+applies_to(Settled, Close)
+"#;
+    let d = derive_src(src);
+    let found = d
+        .diags
+        .iter()
+        .any(|x| matches!(&x.diag, StateDiag::Deadlock { value, .. } if value == "negotiating"));
+    assert!(found, "the vetoed run deadlocks: {:?}", d.diags);
 }

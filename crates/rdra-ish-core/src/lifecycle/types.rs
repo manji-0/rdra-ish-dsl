@@ -126,6 +126,15 @@ pub enum VarKind {
         /// The key's `.role(..)`, which names the var in place of the parent.
         role: Option<String>,
     },
+    /// The run mark of a use case split into k transaction groups, on each slot of an
+    /// entity a step before the last writes: the last step of a pending run that wrote the
+    /// row (`Domain::Enum` of `none`, `1`, .., `k-1`). Not a view axis, and a delete does
+    /// not reset it.
+    Run {
+        entity: EntId,
+        /// The use case id.
+        usecase: String,
+    },
     Now,
 }
 
@@ -318,11 +327,21 @@ pub enum ParamRole {
     /// A present slot that a child of `key` belongs to; the action does not write it. Each
     /// key has its own, so two keys to one parent range over the parent's rows independently.
     Parent { key: FkId },
+    /// A row that step `step` of the same run of this use case wrote, matched by its run mark
+    /// (`VarKind::Run`) rather than by its existence. The action does not write it, reads it
+    /// as the row of its entity, links it to the rows it writes, and advances its mark.
+    Earlier { step: u8 },
 }
 
 impl ParamRole {
     /// `New` or `Existing`: a row the action writes, not a parent it only reads.
     pub fn is_written(self) -> bool {
+        matches!(self, ParamRole::New | ParamRole::Existing)
+    }
+
+    /// A written row or an `Earlier` one: the action's one row of its entity, which keys,
+    /// condition atoms, copies, and after-asserts read.
+    pub fn is_row(self) -> bool {
         !matches!(self, ParamRole::Parent { .. })
     }
 }
@@ -400,6 +419,9 @@ pub enum GuardWhy {
     ArmCondition { cond: ConditionKey },
     /// `sets(UC, E, column == F.source)`: the successor's column holds the source row's value.
     Copy,
+    /// The run mark of the bound row is `step`: `0` on a row step 1 takes (in no run), `i`
+    /// on an `Earlier` row step `i + 1` continues.
+    Run { step: u8 },
 }
 
 #[derive(Clone, Debug)]

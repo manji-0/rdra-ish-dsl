@@ -16,6 +16,6 @@ PaymentCreateApi,U,,,,,C,,,
 RepairEstimateApi,,,,,,,U,,
 RepairEstimateCreateApi,,,,,,,C,,
 SettlementApi,,,,,,,,U,
-SettlementCreateApi,,U,,,,,,C,
+SettlementCreateApi,,,,,,,,C,
 SubrogationApi,,,,,,,,,U
 SubrogationCreateApi,,,,,,,,,C

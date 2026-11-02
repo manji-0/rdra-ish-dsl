@@ -4,7 +4,7 @@ use std::collections::{BTreeSet, HashSet};
 
 use super::naming::{is_driven, property_entity};
 use super::Builder;
-use crate::analysis::applied_bodies;
+use crate::analysis::{applied_bodies, AppliedBody};
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, CmpOp, Domain, Effect, Guard,
@@ -1039,26 +1039,25 @@ impl<'m> Builder<'m> {
 
     // ── R-guard: condition bodies ────────────────────────────────────────────
 
-    /// One guard per `holds` body applied to the use case. A body is a precondition of the use
-    /// case, so every transaction group's action carries it, each on its own pre-state. An
-    /// entity the action binds reads its param: on the pre-state, or in the successor
-    /// (`At::Next`) when the action creates it, so the body constrains what is created. Any
-    /// other entity, an entity of a sibling group included, is `Exists` over present instances
-    /// of the pre-state, one witness per entity shared by the body's atoms, linked by a direct
-    /// owner var (one hop) to each param or other witness it relates to; with no such relate it
-    /// is independent.
-    pub(super) fn condition_guards(&mut self, uc: UseCaseKey, params: &[Param]) -> Vec<Guard> {
-        let model = self.model;
+    /// One guard per `holds` body the action carries (`Builder::step_bodies`), each read on
+    /// the action's pre-state. An entity the action binds reads its param: on the pre-state,
+    /// or in the successor (`At::Next`) when the action creates it, so the body constrains
+    /// what is created. Any other entity, an entity a later step of the use case writes
+    /// included, is `Exists` over present instances of the pre-state, one witness per entity
+    /// shared by the body's atoms, linked by a direct owner var (one hop) to each param or
+    /// other witness it relates to; with no such relate it is independent.
+    pub(super) fn condition_guards(
+        &mut self,
+        bodies: &[AppliedBody<'m>],
+        params: &[Param],
+    ) -> Vec<Guard> {
         let mut guards = Vec::new();
-        for (ck, _, body) in applied_bodies(model)
-            .into_iter()
-            .filter(|(_, u, _)| *u == uc)
-        {
-            let site = Site::new(ModelRef::Condition(ck), &body.site);
-            let pred = self.body_pred(uc, ck, params, &site);
+        for b in bodies {
+            let site = Site::new(ModelRef::Condition(b.cond), &b.body.site);
+            let pred = self.body_pred(b.usecase, b.cond, params, &site);
             guards.push(Guard {
                 pred,
-                why: GuardWhy::Condition { cond: ck },
+                why: GuardWhy::Condition { cond: b.cond },
                 site,
             });
         }
@@ -1093,7 +1092,9 @@ impl<'m> Builder<'m> {
             };
             let at = match params[usize::from(i)].role {
                 ParamRole::New => At::Next(i),
-                ParamRole::Existing | ParamRole::Parent { .. } => At::Param(i),
+                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Earlier { .. } => {
+                    At::Param(i)
+                }
             };
             binding.push((ek, at));
         }
@@ -1229,18 +1230,18 @@ impl<'m> Builder<'m> {
     /// A body applied to a use case that writes nothing has no action to guard.
     pub(super) fn inert_conditions(&mut self) {
         let model = self.model;
-        for (ck, uc, body) in applied_bodies(model) {
-            if self.active_ucs.contains(&uc) {
+        for b in applied_bodies(model) {
+            if self.active_ucs.contains(&b.usecase) {
                 continue;
             }
             self.diag(
-                body.conds.iter().flat_map(cond_entities).collect(),
+                b.body.conds.iter().flat_map(cond_entities).collect(),
                 StateDiag::UnbindableCondition {
-                    condition: model.conditions[ck].id.clone(),
-                    usecase: model.use_cases[uc].id.clone(),
+                    condition: model.conditions[b.cond].id.clone(),
+                    usecase: model.use_cases[b.usecase].id.clone(),
                     reason: "the use case writes nothing, so no action carries the guard"
                         .to_string(),
-                    site: Site::new(ModelRef::Condition(ck), &body.site),
+                    site: Site::new(ModelRef::Condition(b.cond), &b.body.site),
                 },
             );
         }

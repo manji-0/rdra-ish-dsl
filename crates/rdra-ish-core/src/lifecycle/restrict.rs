@@ -39,7 +39,9 @@ impl TransitionSystem {
     pub(crate) fn var_entity(&self, var: VarId) -> Option<EntId> {
         match self.var(var).kind {
             VarKind::Exists(e) => Some(e),
-            VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => Some(entity),
+            VarKind::Column { entity, .. }
+            | VarKind::Prop { entity, .. }
+            | VarKind::Run { entity, .. } => Some(entity),
             VarKind::Owner { child, .. } => Some(child),
             VarKind::Now => None,
         }
@@ -191,7 +193,8 @@ impl TransitionSystem {
             .filter(|(_, d)| match d.kind {
                 VarKind::Exists(e)
                 | VarKind::Column { entity: e, .. }
-                | VarKind::Prop { entity: e, .. } => inside(e),
+                | VarKind::Prop { entity: e, .. }
+                | VarKind::Run { entity: e, .. } => inside(e),
                 VarKind::Owner { child, parent, .. } => inside(child) && inside(parent),
                 VarKind::Now => comp.now,
             })
@@ -218,6 +221,7 @@ impl TransitionSystem {
             ent: vec![None; self.entities.len()],
             var: vec![None; self.vars.len()],
             act: vec![None; self.actions.len()],
+            params: vec![None; self.actions.len()],
         };
         let kept_entities: Vec<usize> = (0..self.entities.len())
             .filter(|&i| vars.contains(&self.entities[i].exists))
@@ -276,8 +280,10 @@ impl TransitionSystem {
             action
                 .guards
                 .retain(|g| g.copy_target().is_none_or(|t| vars.contains(&t)));
-            let action = drop_unread_new_params(action, |e| vars.contains(&self.entity(e).exists));
+            let (action, params) =
+                drop_unread_new_params(action, |e| vars.contains(&self.entity(e).exists));
             map.act[i] = Some(ActId::at(out.actions.len()));
+            map.params[i] = params;
             out.actions.push(map.action(&action));
         }
         let reads_inside = |preds: &[&Pred], binders: &[EntId]| {
@@ -303,10 +309,15 @@ impl TransitionSystem {
                 .iter()
                 .filter(|step| reads_inside(&[&step.post], &step.binders))
                 .filter_map(|step| {
+                    let i = step.act.index();
+                    let mut post = step.post.clone();
+                    if let Some(index) = &map.params[i] {
+                        renumber_pred(&mut post, &renumber_by(index));
+                    }
                     Some(AfterStep {
-                        act: map.act[step.act.index()]?,
+                        act: map.act[i]?,
                         binders: step.binders.iter().map(|e| map.e(*e)).collect(),
-                        post: map.pred(&step.post),
+                        post: map.pred(&post),
                     })
                 })
                 .collect();
@@ -338,8 +349,13 @@ impl TransitionSystem {
 }
 
 /// Drops each `New` param whose entity is outside the system, with nothing left to point at
-/// it, and renumbers the rest. Outside a target's cone an entity never runs out of slots.
-fn drop_unread_new_params(mut action: Action, kept: impl Fn(EntId) -> bool) -> Action {
+/// it, and renumbers the rest; the returned map takes an old param index to its new one, and
+/// is `None` when nothing was dropped. Outside a target's cone an entity never runs out of
+/// slots.
+fn drop_unread_new_params(
+    mut action: Action,
+    kept: impl Fn(EntId) -> bool,
+) -> (Action, Option<Vec<Option<u8>>>) {
     let mut index: Vec<Option<u8>> = Vec::with_capacity(action.params.len());
     let mut params = Vec::new();
     for p in &action.params {
@@ -351,27 +367,33 @@ fn drop_unread_new_params(mut action: Action, kept: impl Fn(EntId) -> bool) -> A
         }
     }
     if params.len() == action.params.len() {
-        return action;
+        return (action, None);
     }
-    let at = |p: &mut u8| *p = index[usize::from(*p)].expect("a dropped param is unreferenced");
     action.params = params;
-    for g in &mut action.guards {
-        renumber_pred(&mut g.pred, &at);
-    }
-    for eff in &mut action.effects {
-        match eff {
-            Effect::Create { param } | Effect::Delete { param } => at(param),
-            Effect::Assign { param, rhs, .. } => {
-                at(param);
-                if let Rhs::Param(p) = rhs {
-                    at(p);
+    {
+        let at = renumber_by(&index);
+        for g in &mut action.guards {
+            renumber_pred(&mut g.pred, &at);
+        }
+        for eff in &mut action.effects {
+            match eff {
+                Effect::Create { param } | Effect::Delete { param } => at(param),
+                Effect::Assign { param, rhs, .. } => {
+                    at(param);
+                    if let Rhs::Param(p) = rhs {
+                        at(p);
+                    }
                 }
+                Effect::Transition { param, .. } | Effect::Choose { param, .. } => at(param),
+                Effect::Tick => {}
             }
-            Effect::Transition { param, .. } | Effect::Choose { param, .. } => at(param),
-            Effect::Tick => {}
         }
     }
-    action
+    (action, Some(index))
+}
+
+fn renumber_by(index: &[Option<u8>]) -> impl Fn(&mut u8) + '_ {
+    |p: &mut u8| *p = index[usize::from(*p)].expect("a dropped param is unreferenced")
 }
 
 fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
@@ -405,6 +427,8 @@ struct Remap {
     ent: Vec<Option<EntId>>,
     var: Vec<Option<VarId>>,
     act: Vec<Option<ActId>>,
+    /// Per source action, old param index to new, when `drop_unread_new_params` dropped one.
+    params: Vec<Option<Vec<Option<u8>>>>,
 }
 
 impl Remap {
@@ -435,6 +459,10 @@ impl Remap {
             VarKind::Prop { entity, key } => VarKind::Prop {
                 entity: self.e(*entity),
                 key: key.clone(),
+            },
+            VarKind::Run { entity, usecase } => VarKind::Run {
+                entity: self.e(*entity),
+                usecase: usecase.clone(),
             },
             VarKind::Owner {
                 child,

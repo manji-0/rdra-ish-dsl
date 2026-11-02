@@ -189,6 +189,9 @@ impl TransitionSystem {
                 let name = role.as_deref().unwrap_or(&self.entity(*parent).id);
                 format!("{}._owner_{name}", self.entity(*child).id)
             }
+            VarKind::Run { entity, usecase } => {
+                format!("{}._run_{usecase}", self.entity(*entity).id)
+            }
             VarKind::Now => "now".to_string(),
         }
     }

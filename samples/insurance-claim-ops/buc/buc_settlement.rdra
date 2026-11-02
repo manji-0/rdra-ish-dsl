@@ -4,7 +4,7 @@ import shared.actors
 import shared.entities
 import shared.biz
 import shared.goals
-import buc.intake.{CaseScreen}
+import buc.intake.{CaseScreen, CaseApi}
 
 // Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
 
@@ -72,13 +72,14 @@ contains(BucSettlement, EndNegotiationUnresolved)
 contains(ClaimSystem, SettlementCreateApi)
 contains(ClaimSystem, SettlementApi)
 
-// The case moves to 示談交渉中 and the settlement is created under it in one step: one API writes
-// both, so they are one transaction group.
+// The case API moves the case to 示談交渉中, then the settlement API creates the settlement under
+// that case: two transactions, one run of the use case in invokes order (#80).
 displays(OpenSettlement, SettlementScreen)
+invokes(OpenSettlement, CaseApi)
+updates(CaseApi, ClaimCase)
+transitions(OpenSettlement, ClaimCase.status, investigating -> negotiating)
 invokes(OpenSettlement, SettlementCreateApi)
 creates(SettlementCreateApi, Settlement)
-updates(SettlementCreateApi, ClaimCase)
-transitions(OpenSettlement, ClaimCase.status, investigating -> negotiating)
 
 condition SettlementEligible "対人・対物賠償の事故で、被保険者に賠償責任がある"
 holds(SettlementEligible, ClaimCase.coverage in (bodily_liability, property_liability), ClaimCase.liability == at_fault)

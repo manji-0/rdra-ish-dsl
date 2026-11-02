@@ -18,8 +18,9 @@
   through its owner; otherwise the related side is independent.
 - **Atomic use case**: one use case is one atomic action per transaction group it
   writes, so `cross_order_payment` passes; a use case spanning k groups is k
-  actions `<UC>_1..k`, so `cross_order_payment_split` fails; `quantifier_none`
-  still fails.
+  actions `<UC>_1..k`, one run in `invokes` order on one run's rows with other use
+  cases between its steps, so `cross_order_payment_split` fails and `split_run_order`
+  passes; `quantifier_none` still fails.
 - **Int arithmetic**: `IntRange` default `0..5`. A literal outside it is
   `IntLiteralOutOfBounds`, an error in `check` too.
 - **`now`**: a global Int clock with a `Tick` action. Nothing pins a column compared to
@@ -96,7 +97,8 @@ expectations"). The table repeats each header; "ok" means the command passes.
 | `samples/int_stock.rdra` | ok | `tlc=ok` | Int arithmetic invariant / property |
 | `samples/now_coupon.rdra` | fail `Forbidden_Coupon_0` | `tlc=counterexample` | `now` and `Tick`; no action pins `expired_at` |
 | `samples/cross_order_payment.rdra` | ok | `tlc=ok` | Multi-instance + `.along` (Pay is one atomic action; Cancel deletes the pending Payment) |
-| `samples/cross_order_payment_split.rdra` | fail `CrossForbidden_Order_0` | `tlc=counterexample` | Pay through two APIs is two actions, so Cancel runs between them |
+| `samples/cross_order_payment_split.rdra` | fail `CrossForbidden_Order_0` | `tlc=counterexample` | Pay through two APIs is two actions in `invokes` order, the capture first, so Cancel runs between them |
+| `samples/split_run_order.rdra` | ok | `tlc=ok` | OpenSettlement through two APIs is one run: the settlement is created once, under the claim the first step moved, and `.fair(OpenSettlement, ..)` finishes a started run |
 | `samples/quantifier_none.rdra` | fail `Quantifier_Cert_0` | `tlc=counterexample` | `invariant(...).when(...).none(...)` (Revoke while an Assign stays active) |
 | `samples/quantifier_guard.rdra` | ok | `tlc=ok` | `holds(..).none(..)` guard on Revoke; the `.none(...)` rule holds |
 | `samples/untriggered_sets.rdra` | fail `Forbidden_Order_0` | `tlc=counterexample` | `sets` from a use case that drives no transition, next to `transitions` |

@@ -32,7 +32,7 @@
 | ClaimCase | liability | 未確定 (undetermined) | 過失ゼロ（賠償責任なし） (no_fault) | 過失割合と賠償責任の判断 (DetermineFault) | 事故案件を調査しているか、損害を確定した | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_investigation.rdra:82 |
 | ClaimCase | status | 事故受付 (received) | 初期対応済 (responded) | 初期対応（担当者の案内と手続の説明） (RespondInitially) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_intake.rdra:71 |
 | ClaimCase | status | 初期対応済 (responded) | 調査中 (investigating) | 損害調査の依頼 (RequestInvestigation) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_investigation.rdra:68 |
-| ClaimCase | status | 調査中 (investigating) | 示談交渉中 (negotiating) | 示談代行の開始 (OpenSettlement) | 対人・対物賠償の事故で、被保険者に賠償責任がある | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:81 |
+| ClaimCase | status | 調査中 (investigating) | 示談交渉中 (negotiating) | 示談代行の開始 (OpenSettlement) | 対人・対物賠償の事故で、被保険者に賠償責任がある | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:80 |
 | ClaimCase | status | 調査中 (investigating) | 損害確定 (assessed) | 損害の確定 (AssessDamage) | 損害調査の報告がある\|車両・人身傷害の事故である | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_investigation.rdra:96 |
 | ClaimCase | status | 示談交渉中 (negotiating) | 損害確定 (assessed) | 損害の確定 (AssessDamage) | 損害調査の報告がある\|示談が成立したか、示談代行を終えた | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_investigation.rdra:98 |
 | ClaimCase | status | 損害確定 (assessed) | 完了 (closed) | 事故案件の完了 (CloseCase) | 賠償責任の有無を判断している |  | samples/insurance-claim-ops/buc/buc_payment.rdra:197 |
@@ -55,10 +55,10 @@
 | RepairEstimate | status | 見積提出 (submitted) | 修理費の協定 (agreed) | 修理費の協定 (AgreeRepairCost) |  | アジャスター | samples/insurance-claim-ops/buc/buc_repair.rdra:68 |
 | RepairEstimate | status | 修理費の協定 (agreed) | 修理中 (repairing) | 修理の着工 (StartRepair) | 修理着工を承認した | 修理工場 | samples/insurance-claim-ops/buc/buc_repair.rdra:80 |
 | RepairEstimate | status | 修理中 (repairing) | 修理完了 (completed) | 修理の完了 (CompleteRepair) |  | 修理工場 | samples/insurance-claim-ops/buc/buc_repair.rdra:88 |
-| Settlement | status | 同意の確認中 (consent_pending) | 示談交渉中 (negotiating) | 示談交渉の開始 (BeginNegotiation) | 被保険者と被害者がともに同意している | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:103 |
-| Settlement | status | 同意の確認中 (consent_pending) | 示談代行を行わない (declined) | 示談代行を行わない (DeclineSettlementService) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:111 |
-| Settlement | status | 示談交渉中 (negotiating) | 示談成立 (agreed) | 示談の成立 (AgreeSettlement) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:116 |
-| Settlement | status | 示談交渉中 (negotiating) | 不調（調停・訴訟へ） (failed) | 示談交渉の終了（不調） (EndNegotiationUnresolved) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:121 |
+| Settlement | status | 同意の確認中 (consent_pending) | 示談交渉中 (negotiating) | 示談交渉の開始 (BeginNegotiation) | 被保険者と被害者がともに同意している | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:104 |
+| Settlement | status | 同意の確認中 (consent_pending) | 示談代行を行わない (declined) | 示談代行を行わない (DeclineSettlementService) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:112 |
+| Settlement | status | 示談交渉中 (negotiating) | 示談成立 (agreed) | 示談の成立 (AgreeSettlement) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:117 |
+| Settlement | status | 示談交渉中 (negotiating) | 不調（調停・訴訟へ） (failed) | 示談交渉の終了（不調） (EndNegotiationUnresolved) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_settlement.rdra:122 |
 | Subrogation | status | 求償中 (open) | 回収 (recovered) | 求償の回収 (RecoverSubrogation) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_subrogation.rdra:65 |
 | Subrogation | status | 求償中 (open) | 回収の断念 (abandoned) | 求償の断念 (AbandonSubrogation) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_subrogation.rdra:69 |
 | Subrogation | status | 求償中 (open) | 時効消滅 (time_barred) | 求償する債権の時効 (LapseSubrogation) |  |  | samples/insurance-claim-ops/buc/buc_subrogation.rdra:73 |

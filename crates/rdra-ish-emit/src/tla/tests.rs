@@ -549,15 +549,29 @@ fn a_fair_property_assumes_weak_fairness_per_instance() {
     assert!(bundle.cfg.contains("PROPERTY Ends\nPROPERTY Plain\n"));
 }
 
-/// A use case split into transaction groups is fair on each of its actions.
+/// A use case split into transaction groups is fair on each of its actions, the later ones
+/// per run: the second step binds the application the first step moved (an `Earlier` param,
+/// selected by its run mark), so a started run is fair to finish.
 #[test]
 fn a_fair_split_use_case_is_fair_on_each_action() {
     let split = FAIR.replace("relate(Patent, App, 1:1)\n", "");
     let tla = print(&system(&split), PrintMode::Check, "M").tla;
     assert!(
         tla.contains(
-            "Fair_Ends ==\n  /\\ \\A p0 \\in App_Ids : WF_vars(Register_1(p0))\n  /\\ WF_vars(\\E p0 \\in Patent_Ids : Register_2(p0))\n"
+            "Fair_Ends ==\n  /\\ \\A p0 \\in App_Ids : WF_vars(Register_1(p0))\n  /\\ \\A p1 \\in App_Ids : WF_vars(\\E p0 \\in Patent_Ids : Register_2(p0, p1))\n"
         ),
+        "{tla}"
+    );
+    assert!(
+        tla.contains("App_run_Register \\in [App_Ids -> {\"none\", \"1\"}]"),
+        "{tla}"
+    );
+    assert!(
+        tla.contains("Register_1(p0) ==\n  /\\ App_exists[p0] = \"present\"\n  /\\ App_status[p0] = \"granted\"\n  /\\ App_run_Register[p0] = \"none\"\n"),
+        "{tla}"
+    );
+    assert!(
+        tla.contains("Register_2(p0, p1) ==\n  /\\ FirstAbsent(Patent_exists, p0)\n  /\\ App_run_Register[p1] = \"1\"\n"),
         "{tla}"
     );
 }

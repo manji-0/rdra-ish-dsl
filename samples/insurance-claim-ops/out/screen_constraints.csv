@@ -23,6 +23,7 @@ DecisionScreen,FlagSuspectedFraud,DecisionApi,CaseHandle,HandlerTerminal
 ComplaintScreen,GuideToAdr,ComplaintApi,ComplaintHandle,HandlerTerminal
 DecisionScreen,NotifyDenial,DecisionApi,CaseHandle,ClaimDocuments
 PaymentScreen,NotifyPaymentCompleted,PaymentApi,CaseHandle,HandlerTerminal
+SettlementScreen,OpenSettlement,CaseApi,CaseHandle,HandlerTerminal
 SettlementScreen,OpenSettlement,SettlementCreateApi,CaseHandle,HandlerTerminal
 PaymentScreen,PayClaim,PaymentCreateApi,CaseHandle,HandlerTerminal
 CaseScreen,QueryAccidentExchange,,CaseHandle,HandlerTerminal

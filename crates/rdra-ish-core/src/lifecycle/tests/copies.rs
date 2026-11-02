@@ -146,27 +146,47 @@ forbidden(Invoice, Order, Invoice.kind != Order.kind)
     assert_eq!(d.rows("Invoice").len(), 2, "{:?}", d.rows("Invoice"));
 }
 
-/// Two writes no relate joins are two steps, so the second cannot read the first.
+/// Two writes no relate joins are two steps. A run takes them in order, so a step reads a
+/// row an earlier step of the run wrote, and cannot read one a later step writes.
 #[test]
-fn a_source_in_another_transaction_group_is_unbound() {
-    let diags = build_diags(
-        r#"
-variation Kind "種類" {
+fn a_source_in_a_later_transaction_group_is_unbound() {
+    let model = |first_api: &str, second_api: &str| {
+        format!(
+            r#"
+variation Kind "種類" {{
   food "食品"
   drink "飲料"
-}
-entity Order "注文" { id: Int @pk  kind: Kind }
-entity Invoice "請求" { id: Int @pk  kind: Kind }
+}}
+entity Order "注文" {{ id: Int @pk  kind: Kind }}
+entity Invoice "請求" {{ id: Int @pk  kind: Kind }}
 usecase Open "開始"
-creates(Open, Order)
-creates(Open, Invoice)
+api OrderApi "注文 API"
+api InvoiceApi "請求 API"
+invokes(Open, {first_api})
+invokes(Open, {second_api})
+creates(OrderApi, Order)
+creates(InvoiceApi, Invoice)
 sets(Open, Invoice, kind == Order.kind)
-"#,
-    );
+forbidden(Invoice, Order, Invoice.kind != Order.kind)
+"#
+        )
+    };
+    let diags = build_diags(&model("InvoiceApi", "OrderApi"));
     assert!(
-        diags.iter().any(|d| matches!(d, StateDiag::UnboundCopySource { reason, .. } if reason.contains("another transaction group"))),
+        diags.iter().any(|d| matches!(d, StateDiag::UnboundCopySource { reason, .. } if reason.contains("later transaction group"))),
         "{diags:?}"
     );
+    // The order is written first, so the invoice's step copies from the run's order: with
+    // two orders of different kinds, the rule still holds.
+    let d = derive_src(&model("OrderApi", "InvoiceApi"));
+    assert!(
+        !d.diags
+            .iter()
+            .any(|x| matches!(x.diag, StateDiag::UnboundCopySource { .. })),
+        "{:?}",
+        d.diags
+    );
+    assert!(violated(&d).is_empty(), "{:?}", d.diags);
 }
 
 /// A copy within one row reads the row's pre-state on an update.

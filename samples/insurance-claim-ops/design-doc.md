@@ -608,6 +608,7 @@ flowchart LR
   actor__PolicyHolder(["契約者・被保険者"]):::actor
   actor__Victim(["被害者（損害賠償請求権者）"]):::actor
   screen__SettlementScreen["示談画面"]:::screen
+  api__CaseApi{{"事故案件 API"}}:::api
   api__SettlementApi{{"示談 API"}}:::api
   api__SettlementCreateApi{{"示談代行開始 API"}}:::api
   entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
@@ -615,12 +616,13 @@ flowchart LR
   actor__ClaimHandler --> screen__SettlementScreen
   actor__PolicyHolder --> screen__SettlementScreen
   actor__Victim --> screen__SettlementScreen
+  api__CaseApi -->|U| entity__ClaimCase
   api__SettlementApi -->|U| entity__Settlement
   api__SettlementCreateApi -->|C| entity__Settlement
-  api__SettlementCreateApi -->|U| entity__ClaimCase
   screen__SettlementScreen -->|示談の成立| api__SettlementApi
   screen__SettlementScreen -->|示談交渉の終了（不調）| api__SettlementApi
   screen__SettlementScreen -->|示談交渉の開始| api__SettlementApi
+  screen__SettlementScreen -->|示談代行の開始| api__CaseApi
   screen__SettlementScreen -->|示談代行の開始| api__SettlementCreateApi
   screen__SettlementScreen -->|示談代行を行わない| api__SettlementApi
   screen__SettlementScreen -->|被保険者の同意| api__SettlementApi
@@ -633,7 +635,7 @@ flowchart LR
 
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
-| 示談代行の開始<br>`OpenSettlement` | 対人・対物賠償の事故で、被保険者に賠償責任があると判断した案件について、示談代行の手続を開き、契約者と被害者の同意を確かめにいく。 | `SettlementScreen` | `SettlementCreateApi` | 対人・対物賠償の事故で、被保険者に賠償責任がある |
+| 示談代行の開始<br>`OpenSettlement` | 対人・対物賠償の事故で、被保険者に賠償責任があると判断した案件について、示談代行の手続を開き、契約者と被害者の同意を確かめにいく。 | `SettlementScreen` | `CaseApi`, `SettlementCreateApi` | 対人・対物賠償の事故で、被保険者に賠償責任がある |
 | 被保険者の同意<br>`RecordInsuredConsent` | 被保険者が保険会社の解決条件に同意し、保険会社が被保険者のために示談交渉をすることに同意する。 | `SettlementScreen` | `SettlementApi` | 示談代行の同意を確かめている |
 | 被害者の同意<br>`RecordVictimConsent` | 被害者が加害者側の保険会社と直接折衝することに同意する。 | `SettlementScreen` | `SettlementApi` | 示談代行の同意を確かめている |
 | 示談交渉の開始<br>`BeginNegotiation` | 双方の同意を得て、保険会社が加害者の窓口として被害者と交渉を始める。 | `SettlementScreen` | `SettlementApi` | 被保険者と被害者がともに同意している |
@@ -650,18 +652,19 @@ flowchart LR
 sequenceDiagram
   actor actor__ClaimHandler as 損害サービス担当者
   participant screen__SettlementScreen as 示談画面
+  participant api__CaseApi as 事故案件 API
   participant api__SettlementCreateApi as 示談代行開始 API
   participant entity__ClaimCase as 事故案件（担保種目ごと）
   participant entity__Settlement as 示談（示談代行）
   actor__ClaimHandler ->> screen__SettlementScreen: 示談代行の開始
-  screen__SettlementScreen ->> api__SettlementCreateApi: 示談代行開始 API
+  screen__SettlementScreen ->> api__CaseApi: 事故案件 API
   alt 対人・対物賠償の事故で、被保険者に賠償責任がある: ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり and ClaimCase.status == 調査中
-    Note over api__SettlementCreateApi: transaction (API atomic boundary)
-    api__SettlementCreateApi ->> entity__ClaimCase: update status 調査中 -> 示談交渉中
+    screen__SettlementScreen ->> api__SettlementCreateApi: 示談代行開始 API
+    api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 示談交渉中
     api__SettlementCreateApi ->> entity__Settlement: create
-    api__SettlementCreateApi -->> screen__SettlementScreen: done
+    api__CaseApi -->> screen__SettlementScreen: done
   else guard fails
-    api__SettlementCreateApi -->> screen__SettlementScreen: rejected
+    api__CaseApi -->> screen__SettlementScreen: rejected
   end
 ```
 
@@ -2542,13 +2545,13 @@ erDiagram
 | condition | 修理着工を承認した | RepairEstimate | RepairEstimate.approved == true | StartRepair | samples/insurance-claim-ops/buc/buc_repair.rdra:83 |
 | forbidden | 修理着工は事前承認の後 | RepairEstimate | RepairEstimate.approved == false AND RepairEstimate.status in (修理中, 修理完了) |  | samples/insurance-claim-ops/buc/buc_repair.rdra:151 |
 | forbidden | 修理見積は車両・対物賠償の事故だけ | RepairEstimate\|ClaimCase | ClaimCase.coverage in (対人賠償, 人身傷害) |  | samples/insurance-claim-ops/buc/buc_repair.rdra:153 |
-| condition | 対人・対物賠償の事故で、被保険者に賠償責任がある | ClaimCase | ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり | OpenSettlement | samples/insurance-claim-ops/buc/buc_settlement.rdra:84 |
-| condition | 示談代行の同意を確かめている | Settlement | Settlement.status == 同意の確認中 | RecordInsuredConsent\|RecordVictimConsent | samples/insurance-claim-ops/buc/buc_settlement.rdra:97 |
-| condition | 被保険者と被害者がともに同意している | Settlement | Settlement.insured_consent == true, Settlement.victim_consent == true | BeginNegotiation | samples/insurance-claim-ops/buc/buc_settlement.rdra:106 |
-| forbidden | 被害者の同意なく示談代行しない | Settlement | Settlement.victim_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:209 |
-| forbidden | 被保険者の同意なく示談代行しない | Settlement | Settlement.insured_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:211 |
-| forbidden | 過失ゼロなら示談代行しない | Settlement\|ClaimCase | Settlement.status in (示談交渉中, 示談成立) AND ClaimCase.liability == 過失ゼロ（賠償責任なし） |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:214 |
-| forbidden | 示談代行は対人・対物賠償の事故だけ | Settlement\|ClaimCase | ClaimCase.coverage in (車両, 人身傷害) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:217 |
+| condition | 対人・対物賠償の事故で、被保険者に賠償責任がある | ClaimCase | ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり | OpenSettlement | samples/insurance-claim-ops/buc/buc_settlement.rdra:85 |
+| condition | 示談代行の同意を確かめている | Settlement | Settlement.status == 同意の確認中 | RecordInsuredConsent\|RecordVictimConsent | samples/insurance-claim-ops/buc/buc_settlement.rdra:98 |
+| condition | 被保険者と被害者がともに同意している | Settlement | Settlement.insured_consent == true, Settlement.victim_consent == true | BeginNegotiation | samples/insurance-claim-ops/buc/buc_settlement.rdra:107 |
+| forbidden | 被害者の同意なく示談代行しない | Settlement | Settlement.victim_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:210 |
+| forbidden | 被保険者の同意なく示談代行しない | Settlement | Settlement.insured_consent == false AND Settlement.status in (示談交渉中, 示談成立) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:212 |
+| forbidden | 過失ゼロなら示談代行しない | Settlement\|ClaimCase | Settlement.status in (示談交渉中, 示談成立) AND ClaimCase.liability == 過失ゼロ（賠償責任なし） |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:215 |
+| forbidden | 示談代行は対人・対物賠償の事故だけ | Settlement\|ClaimCase | ClaimCase.coverage in (車両, 人身傷害) |  | samples/insurance-claim-ops/buc/buc_settlement.rdra:218 |
 | condition | 保険金を支払った請求で、まだ求償していない | Claim | (Claim.status == 支払済).none(Subrogation) | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:59 |
 | forbidden | 支払後に求償権が移る | Subrogation\|Claim | Claim.status != 支払済 |  | samples/insurance-claim-ops/buc/buc_subrogation.rdra:125 |
 | after | 求償は保険金を支払った請求についてだけ始める | Claim | Claim.status == 支払済 | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:127 |
@@ -2578,7 +2581,7 @@ erDiagram
 | RepairEstimateApi |  |  |  |  |  |  | U |  |  |
 | RepairEstimateCreateApi |  |  |  |  |  |  | C |  |  |
 | SettlementApi |  |  |  |  |  |  |  | U |  |
-| SettlementCreateApi |  | U |  |  |  |  |  | C |  |
+| SettlementCreateApi |  |  |  |  |  |  |  | C |  |
 | SubrogationApi |  |  |  |  |  |  |  |  | U |
 | SubrogationCreateApi |  |  |  |  |  |  |  |  | C |
 
@@ -2590,7 +2593,7 @@ erDiagram
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Adjuster | アジャスター | DamageSurvey | 損害調査 | true | true | ok | AgreeRepairCost\|ConductSurvey\|ReportSurvey | ConductSurvey->InvestigationApi\|ReportSurvey->InvestigationApi |
 | Agent | 代理店 | AccidentReport | 事故の通知 | true | true | ok | RelayAccidentReport | RelayAccidentReport->CaseCreateApi |
-| ClaimHandler | 損害サービス担当者 | CaseHandle | 事故案件の担当 | true | true | ok | AbandonSubrogation\|AgreeSettlement\|ApproveRepairStart\|AssessDamage\|BeginNegotiation\|CompleteClaim\|ConfirmClaimIntent\|DeclineSettlementService\|DetermineFault\|EndNegotiationUnresolved\|ExplainDenialReason\|ExtendPaymentPeriod\|FlagSuspectedFraud\|NotifyDenial\|NotifyPaymentCompleted\|OpenSettlement\|PayClaim\|QueryAccidentExchange\|RecoverSubrogation\|RequestInvestigation\|RespondInitially\|SendClaimForms\|SendJibaisekiSurvey\|StartSubrogation | AssessDamage->CaseApi\|DetermineFault->CaseApi\|NotifyPaymentCompleted->PaymentApi\|OpenSettlement->SettlementCreateApi\|PayClaim->PaymentCreateApi\|RequestInvestigation->InvestigationCreateApi\|RespondInitially->CaseApi\|SendClaimForms->ClaimCreateApi\|SendJibaisekiSurvey->JibaisekiSurveyCreateApi\|StartSubrogation->SubrogationCreateApi |
+| ClaimHandler | 損害サービス担当者 | CaseHandle | 事故案件の担当 | true | true | ok | AbandonSubrogation\|AgreeSettlement\|ApproveRepairStart\|AssessDamage\|BeginNegotiation\|CompleteClaim\|ConfirmClaimIntent\|DeclineSettlementService\|DetermineFault\|EndNegotiationUnresolved\|ExplainDenialReason\|ExtendPaymentPeriod\|FlagSuspectedFraud\|NotifyDenial\|NotifyPaymentCompleted\|OpenSettlement\|PayClaim\|QueryAccidentExchange\|RecoverSubrogation\|RequestInvestigation\|RespondInitially\|SendClaimForms\|SendJibaisekiSurvey\|StartSubrogation | AssessDamage->CaseApi\|DetermineFault->CaseApi\|NotifyPaymentCompleted->PaymentApi\|OpenSettlement->CaseApi\|OpenSettlement->SettlementCreateApi\|PayClaim->PaymentCreateApi\|RequestInvestigation->InvestigationCreateApi\|RespondInitially->CaseApi\|SendClaimForms->ClaimCreateApi\|SendJibaisekiSurvey->JibaisekiSurveyCreateApi\|StartSubrogation->SubrogationCreateApi |
 | ClaimHandler | 損害サービス担当者 | ComplaintHandle | 苦情・ADR の対応 | true | true | ok | AnswerAdrComplaint\|GuideToAdr\|ResolveComplaint |  |
 | ClaimReceptionist | 事故受付担当 | AccidentReport | 事故の通知 | true | true | ok | RelayAccidentReport\|ReportAccident | RelayAccidentReport->CaseCreateApi\|ReportAccident->CaseCreateApi |
 | PaymentApprover | 支払決裁者 | PaymentDecide | 支払・不払の決裁 | true | true | ok | DecideClaim |  |

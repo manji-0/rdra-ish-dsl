@@ -400,6 +400,8 @@ impl TransitionSystem {
                     .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
                     .map(|s| s as u8)
                     .collect(),
+                // Matched by its run mark, a guard, whether or not the slot is present.
+                ParamRole::Earlier { .. } => (0..self.bounds.slots() as u8).collect(),
             };
             out = out
                 .into_iter()
@@ -572,6 +574,11 @@ impl TransitionSystem {
                 let want = match param.role {
                     ParamRole::New => Value::ABSENT,
                     ParamRole::Existing | ParamRole::Parent { .. } => Value::PRESENT,
+                    // Any slot binds it; its run guard says whether a run reached it.
+                    ParamRole::Earlier { .. } => {
+                        bound[p] = true;
+                        continue;
+                    }
                 };
                 let mut slots = match pin {
                     Some((q, k)) if q == p => usize::from(k)..usize::from(k) + 1,
@@ -930,7 +937,9 @@ impl<'t> Bfs<'t> {
                         let name = format!("{}.{}", ts.entity(*entity).id, ts.var_name(v));
                         (name, range)
                     }
-                    VarKind::Exists(_) | VarKind::Owner { .. } => (ts.var_name(v), None),
+                    VarKind::Exists(_) | VarKind::Owner { .. } | VarKind::Run { .. } => {
+                        (ts.var_name(v), None)
+                    }
                 };
                 VarSpread {
                     name,

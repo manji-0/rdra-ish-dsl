@@ -36,6 +36,7 @@ holds one value per slot.
 | A column typed by a [`variation`](./language-reference.md#variations) | the variation's values | Something names it, as for Int |
 | A comparison proposition (`stock < selling`) | `false`, `true` | `drives(UC, E, cmp, bool)` drives the comparison |
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
+| A run mark `<E>._run_<UC>` | `none`, `1`, .., `k-1` | A use case split into k transaction groups writes the entity in a group before its last (see [Runs of a split use case](#runs)) |
 | `now` | `0..5` | Something compares a column to `now` |
 
 A `@derived` column is never a variable. A construct that reads a Bool `@derived` column
@@ -78,17 +79,20 @@ actions interleave: in each step the tool picks any enabled action and applies i
 - **One action when the writes form one group.** `Pay` that moves an Order and its
   Payment in one FK-connected group is one action. Nothing can run between the two
   writes.
-- **k actions when the writes form k groups.** The groups that `tx.rs` infers bound
-  atomicity: FK-connected or API-bounded groups, then each isolated write.
-  `UsecaseTx::groups()` yields them in that order, each as a `TxGroup` of kind `Fk`,
-  `Api`, or `Isolated`. The lifecycle and the `SeparateTxInferred` warning of `check`
-  read this one list. The use case becomes
-  `<UC>_1` to `<UC>_k` in transaction order, and the actions interleave freely with
-  every other action.
+- **k actions when the writes form k groups, and one run takes them in order.** The
+  groups that `tx.rs` infers bound atomicity: the writes of each invoked API, in the
+  order of the use case's `invokes` lines, then the FK-connected groups of the direct
+  writes, then each isolated write. `UsecaseTx::groups()` yields them in that order,
+  each as a `TxGroup` of kind `Api`, `Fk`, or `Isolated`. The lifecycle, the sequence
+  diagram, and the `SeparateTxInferred` warning of `check` read this one list. The use
+  case becomes `<UC>_1` to `<UC>_k` in that order. One run of the use case is `<UC>_1`,
+  then `<UC>_2`, up to `<UC>_k`, each on the rows the earlier steps bound (see
+  [Runs of a split use case](#runs)). Between two steps of a run any other action runs,
+  another run of the same use case on other rows included: the steps are separate
+  transactions.
   [`cross_order_payment_split`](../samples/formal-verification/cross_order_payment_split.rdra)
-  routes `Pay` through two APIs, so `Cancel` runs between `Pay_1` and `Pay_2`. Every
-  one of the k actions carries the use case's condition guards (see
-  [Conditions as guards](#actions)).
+  routes `Pay` through two APIs, the capture first, so `Cancel` runs between `Pay_1`
+  and `Pay_2`.
 - **A published entity is not in the lifecycle, and its write joins the internal
   change.** An entity published with `exposes(System, E).append()` or `.upsert()` gets no
   variables and no view. A use case's direct write to it joins the use case's one
@@ -98,6 +102,33 @@ actions interleave: in each step the tool picks any enabled action and applies i
   With no or several internal groups, or a published write through an API of its own,
   the owner's `check` reports `PublishedNotInSourceTx` instead.
 - **A use case with no write has no action.**
+
+<a id="runs"></a>**Runs of a split use case.** A run is the rows its steps bound. Every
+entity a step before the last writes gets a run mark per slot for the use case,
+`<E>._run_<UC>`, whose value is the last step of a pending run that wrote the row, or
+`none` outside a run. Step 1 binds its rows as any action does, takes only rows marked
+`none`, and marks them `1`. Step i > 1 binds one row of every entity steps 1 to i-1
+wrote, as an `Earlier` parameter matched by its mark `i-1`, and marks them `i`, or `none`
+at the last step, which ends the run. An `Earlier` parameter is the step's row of that
+entity: a key between it and a row the step writes links the two as a written parent and
+child are linked (a child is created under it, an updated child must belong to it), a
+condition atom on the entity reads it, a copy reads it, and an `after` assert reads it.
+It is matched by its mark, not by its existence, so a row step 1 deleted still finishes
+its run. A row carries one mark per use case, so one run per row is in flight at a time:
+step 1 waits for a row in a run. A step whose guard fails when its turn comes waits too;
+the run is never abandoned, since its earlier transactions are committed, and a row that
+no step can move then shows as a `Deadlock` or a use case that never runs, with the mark
+guard among what blocks it. The mark is not an axis of `states`, and a delete does not
+reset it.
+
+The cost is k values per slot of each marked entity: the reachable states multiply by the
+rows of the runs in flight, at most k^slots per marked entity, and only in a cone that
+holds the use case's steps. One counter per use case would be k states, but it would
+serialize the runs of one use case on different rows, so an interleaving of two runs on
+two cases would never be explored; a mark on one anchor entity only would leave the other
+rows of the run unbound, so a later step could act on a row no earlier step touched.
+Marking every row a step bound costs no more states than the rows in flight and keeps
+the business reading: the settlement is created under the case step 1 moved.
 
 An action takes one parameter per entity it writes. A `creates` takes the lowest
 `absent` slot. An `updates` or `deletes` takes any `present` slot. The
@@ -215,14 +246,18 @@ case's action:
   the path joins to the action's parameters, as `.along` binds a multi-entity rule.
 - An instance of a compared entity that no chain of links reaches from a parameter of the action is
   `UnjoinedGuardRead`, a warning: any present row of the entity satisfies the guard.
-- In a use case with k groups, every group's action carries the guard: the use case runs
-  only when the condition holds, so no group runs without it. Each action reads the body on
-  its own pre-state, with the bindings above. An atom on an entity the group writes, or on
-  the parent it creates a child under, reads that row. An atom on an entity a sibling group
-  writes reads an existing instance. The groups stay unordered, so a group whose sibling has
-  already made the guard false waits, and runs before that sibling in another
-  interleaving. A `.when` on a `transitions` arm or a `chooses` value guards only the group
-  that writes its column.
+- In a use case with k groups, the body is the precondition of the run: step 1 carries
+  it, read on its pre-state with the bindings above, and the later steps run because step
+  1 ran (see [Runs of a split use case](#runs)). An atom on an entity a later step writes
+  reads an existing instance there, so a body that must constrain what a later step
+  creates is applied to that step's API instead. A body applied to an API,
+  `applies_to(Condition, Api)`, is the precondition of that API's transaction: the step of
+  that API's group carries it, in every use case that invokes the API. Its atom on an
+  entity an earlier step wrote reads the `Earlier` parameter, the row of the run. A
+  `.when` on a `transitions` arm or a `chooses` value guards only the step that writes its
+  column. No step re-reads a guard an earlier step carried, so a use case that falsifies
+  the condition between two steps is explored, not blocked: a rule that the in-between
+  state breaks reports it.
 - A `.has(...)` or `.none(...)` on the body quantifies over the related instances
   present in the pre-state, linked by a `relate` owner to the parameters and the other
   instances, through the key [Joins](#joins) picks. `.has(Related)` and `.none(Related)`
@@ -243,10 +278,11 @@ use case ([`triggers` and event-driven BUC chaining](./language-reference.md#tri
 would read, with one restriction: the row must be bound to the step, never an independent
 witness.
 
-- When the action has a parameter for `F`, the copy reads that parameter: an updated or
-  parent parameter before the effects, a created one as the action leaves it. Among the
-  parent parameters of several keys to `F`, it reads the one of the key `.by` names, as a
-  condition atom does.
+- When the action has a parameter for `F`, the copy reads that parameter: an updated,
+  parent, or `Earlier` parameter before the effects, a created one as the action leaves
+  it. Among the parent parameters of several keys to `F`, it reads the one of the key
+  `.by` names, as a condition atom does. An `F` an earlier step of the use case wrote is
+  the `Earlier` parameter, the row of the run.
 - When `F` is the parent of the target through the key `join_key` picks (with the copy's
   `.by(role)`), and the action updates the target, `F` joins the action as a parent
   parameter, with the owner guard
@@ -254,8 +290,8 @@ witness.
   waits. A created target under a mandatory `relate` already has its parent as a parameter
   (see Owners).
 - Any other `F` is `UnboundCopySource`, an error, and the action has no copy. That
-  includes a child of the target, an entity of another transaction group, and the parent of
-  a created child under an `.optional()` key.
+  includes a child of the target, an entity a later step of the use case writes, and the
+  parent of a created child under an `.optional()` key.
 
 The copy is a choice of the target's value, one successor per value of its domain, which
 the guard `col'[p] = src[q]` (`GuardWhy::Copy`) filters, as an arm guard filters a choice.
@@ -570,7 +606,10 @@ conditions.
 ### Temporal anchor assertions
 
 `after(UseCase).assert(...)` checks a predicate on the state that each step of the use
-case leaves. A use case split into k groups is checked after each group.
+case leaves. A use case split into k groups is checked after each step, so the assert
+sees the state between two steps of a run; an entity an earlier step wrote is read on the
+run's row (the `Earlier` parameter), and an entity the step does not bind is universally
+bound.
 
 ```rdra
 after(ExecuteCertIssue)
@@ -639,7 +678,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
-| `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E, col == F.src)` names an `F` that the step binds to no one row: not written in the same transaction group and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
+| `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E, col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.by(role)` names one. The message names the candidate roles and the statement with the `.by` to add; the join is left unlinked. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |

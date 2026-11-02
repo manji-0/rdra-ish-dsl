@@ -150,9 +150,10 @@ The transition system follows these rules:
    explores every value, so a variant needs no dedicated use case to be reachable.
    `@default` on such a column sets the DBML default only. It never pins the choice.
 6. The transaction groups that `tx.rs` infers bound atomicity. A use case whose
-   effects span k groups is k actions, named `<UseCase>_1` to `<UseCase>_k`. The checker
-   interleaves them freely with every other action, so it explores the states in
-   between. `after(UseCase).assert` holds after each of the k steps.
+   effects span k groups is k actions, named `<UseCase>_1` to `<UseCase>_k`, and one
+   run of the use case takes them in order on the rows its earlier steps bound. The
+   checker interleaves every other action between two steps of a run, so it explores the
+   states in between. `after(UseCase).assert` holds after each of the k steps.
 
 ## Verification is bounded, fails closed, and points at the model
 

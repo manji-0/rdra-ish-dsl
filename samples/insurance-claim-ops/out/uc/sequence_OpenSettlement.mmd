@@ -4,16 +4,17 @@
 sequenceDiagram
   actor actor__ClaimHandler as 損害サービス担当者
   participant screen__SettlementScreen as 示談画面
+  participant api__CaseApi as 事故案件 API
   participant api__SettlementCreateApi as 示談代行開始 API
   participant entity__ClaimCase as 事故案件（担保種目ごと）
   participant entity__Settlement as 示談（示談代行）
   actor__ClaimHandler ->> screen__SettlementScreen: 示談代行の開始
-  screen__SettlementScreen ->> api__SettlementCreateApi: 示談代行開始 API
+  screen__SettlementScreen ->> api__CaseApi: 事故案件 API
   alt 対人・対物賠償の事故で、被保険者に賠償責任がある: ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり and ClaimCase.status == 調査中
-    Note over api__SettlementCreateApi: transaction (API atomic boundary)
-    api__SettlementCreateApi ->> entity__ClaimCase: update status 調査中 -> 示談交渉中
+    screen__SettlementScreen ->> api__SettlementCreateApi: 示談代行開始 API
+    api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 示談交渉中
     api__SettlementCreateApi ->> entity__Settlement: create
-    api__SettlementCreateApi -->> screen__SettlementScreen: done
+    api__CaseApi -->> screen__SettlementScreen: done
   else guard fails
-    api__SettlementCreateApi -->> screen__SettlementScreen: rejected
+    api__CaseApi -->> screen__SettlementScreen: rejected
   end

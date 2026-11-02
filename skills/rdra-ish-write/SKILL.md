@@ -210,7 +210,8 @@ import shared.actors.{Staff as S}
   `api` plus `invokes` once an implementation boundary matters.
 - Treat API CRUD as an atomic entity-operation boundary. Split APIs by consistency
   contract, not by screen button count. The lifecycle runs a use case as one atomic
-  action per transaction group, so the split decides what can interleave.
+  action per transaction group, in the order of its `invokes` lines, so the split and the
+  order decide what can interleave between the steps of one run.
 - Treat system ownership as derived from `contains(System, Api)` plus API CRUD by
   default. Add `owns(System, Entity)` only to record intentional ownership before
   CRUD APIs are complete, and review any difference from derived ownership.

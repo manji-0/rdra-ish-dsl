@@ -74,6 +74,9 @@ impl TlaNames {
                 VarKind::Prop { entity: e, key } => {
                     taken.claim(&format!("{}_prop_{key}", entity(*e)))
                 }
+                VarKind::Run { entity: e, usecase } => {
+                    taken.claim(&format!("{}_run_{usecase}", entity(*e)))
+                }
                 VarKind::Owner {
                     child,
                     parent,

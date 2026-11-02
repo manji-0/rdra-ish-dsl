@@ -58,6 +58,7 @@ action, and `Spec` allows stuttering.
 | Enum, Bool, `@null`, Int, Money, Decimal, Date, or DateTime column the system reads or writes; a variation-typed column that something names | `<E>_<col>`, a function over `<E>_Ids`. Int-like columns range over `IntRange` (nullable ones add `"null"`). |
 | `relate` N:1, 1:N, 1:1 | `<Child>_owner_<Parent>`, a function from child ids to parent ids. An `.optional()` relate adds `0` for an unlinked child. |
 | Use case | One operator `<UC>(p0, ...)` per transaction group of `UsecaseTx::groups()` (`<UC>_1`, `<UC>_2`, ... when the writes form several groups). `Next` is the disjunction of `\E` over the parameters. |
+| A use case split into k groups | A run mark `<E>_run_<UC>`, a function from the ids of each entity a step before the last writes to `{"none", "1", .., "k-1"}`. `<UC>_1` takes a row at `"none"` and sets `"1"`; `<UC>_i` binds a parameter per earlier row with `<E>_run_<UC>[p] = "i-1"` in place of a presence test, and sets `"i"`, or `"none"` at the last step (see [Runs of a split use case](./state-derivation.md#runs)). |
 | `creates` | `FirstAbsent(<E>_exists, p)` and `<E>_exists' = ... "present"`. A deleted slot is never reused. |
 | `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. |
 | `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
@@ -366,8 +367,11 @@ The rules for each flag and for deferral are in
 - **One use case across entities.** A use case is one atomic action per transaction
   group it writes (`Pay(p0, p1)` moves the Order and its owned Payment in one
   step), so `cross_order_payment` passes. A use case whose writes span k groups is k
-  actions `<UC>_1..k` that interleave freely, so `cross_order_payment_split` (`Pay`
-  through two APIs) fails. `quantifier_none` still fails.
+  actions `<UC>_1..k`, one run in order on one run's rows, with any other action between
+  two of them, so `cross_order_payment_split` (`Pay` through two APIs, the capture first)
+  fails: `Cancel` runs between `Pay_1` and `Pay_2`. `split_run_order` passes: the
+  settlement step runs once, after the case step, under that case. `quantifier_none`
+  still fails.
 - **Int arithmetic.** Comparisons and `sets(..., col == N)` on Int, Money, Decimal,
   Date, and DateTime columns use TLC integers on `IntRange` (default `0..5`, override
   with `--int-range-max`). A literal outside that window is
@@ -415,21 +419,26 @@ The rules for each flag and for deferral are in
 
   | Cone (first target that reads it; clinic-ops unless named) | States |
   |---|---:|
-  | entity `Charge` | 969,167 |
-  | entity `EligibilityCheck` (the guard `BookedPatient` reads the booked patient's appointment along its policy, #77) | 895,604 |
-  | entity `Prescription` | 427,607 |
-  | invariant `Inv_Prescription_4` | 427,607 |
-  | entity `ClinicalOrder` | 235,607 |
-  | entity `LabResult` | 235,607 |
-  | invariant `Forbidden_ClinicalOrder_1` (also `Unique_LabResult_ClinicalOrder`) | 235,607 |
-  | invariant `Inv_ClinicalOrder_3` | 235,607 |
+  | entity `Charge` | over 3,000,000 |
+  | entity `Prescription` | over 3,000,000 |
+  | entity `EligibilityCheck` (the guard `BookedPatient` reads the booked patient's appointment along its policy, #77) | 1,784,808 |
+  | invariant `Inv_Prescription_4` | 1,126,335 |
+  | entity `ClinicalOrder` | 619,835 |
+  | entity `LabResult` | 619,835 |
+  | invariant `Forbidden_ClinicalOrder_1` (also `Unique_LabResult_ClinicalOrder`) | 619,835 |
+  | invariant `Inv_ClinicalOrder_3` | 619,835 |
+  | entity `PatientMessage` | 441,287 |
+  | entity `CarePlan` | 299,467 |
   | patent-ops entity `OfficeAction` | 4,818,909 |
   | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 4,818,909 |
 
-  The other 31 clinic-ops cones at 2 instances (595,325 states in total, the largest
-  `PatientMessage` at 169,203) are compared. CI runs the test with `cargo test --release`
+  Every clinic-ops cone that reads `Appointment.status` carries the two run marks of
+  `CheckInPatient`, which checks the appointment in through one API and creates the
+  eligibility check through another (#80): 2.3 to 2.6 times the states it had when the
+  two steps ran in any order. The other 29 clinic-ops cones at 2 instances (811,945 states
+  in total, the largest `Appointment` at 188,699) are compared. CI runs the test with `cargo test --release`
   and sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job. The debug build took
-  315 s on the CI runner, over its 300 s budget; the release build takes 68 s locally
+  315 s on the CI runner, over its 300 s budget; the release build takes 121 s locally
   (Apple silicon, measured).
 - User-facing state diagnostics for multi-entity rules say **multi-entity**. The
   `Cross*` prefix in some constraint names is historical.
@@ -457,12 +466,12 @@ gaps.
 - **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that
   BFS and TLC agree on the states, edges, findings, and verdicts of every cone. A cone whose
   BFS passes the test's cap of 200,000 states at 2 instances is compared at 1 instance only.
-  `VERIFY_FALLBACK` in `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 17 cones
+  `VERIFY_FALLBACK` in `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 19 cones
   today:
-  - `samples/clinic-ops`: entities `Charge`, `ClinicalOrder`, `EligibilityCheck`,
-    `LabResult`, and `Prescription`, and invariants `Forbidden_ClinicalOrder_1`,
-    `Inv_ClinicalOrder_3`, and `Inv_Prescription_4`. Each reaches 235,607 to 969,167 states
-    at 2 instances (the table under
+  - `samples/clinic-ops`: entities `CarePlan`, `Charge`, `ClinicalOrder`, `EligibilityCheck`,
+    `LabResult`, `PatientMessage`, and `Prescription`, and invariants
+    `Forbidden_ClinicalOrder_1`, `Inv_ClinicalOrder_3`, and `Inv_Prescription_4`. Each reaches
+    299,467 to over 3,000,000 states at 2 instances (the table under
     [Approximations and limitations](#approximations-and-limitations)).
   - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
     (with `Exclusive_OfficeAction_0`). The guards that read the application put its state
@@ -587,7 +596,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `int_stock.rdra` | pass, pass | Int columns, arithmetic `forbidden`, Int temporal property |
 | `now_coupon.rdra` | fail, fail | `now` and `Tick`; the invariant finds `expired_at < now` |
 | `cross_order_payment.rdra` | pass, pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave; Cancel deletes the pending Payment) |
-| `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2`; Cancel does not delete the Payment here |
+| `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs, the capture first: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2`; Cancel does not delete the Payment here |
+| `split_run_order.rdra` | pass, pass | OpenSettlement through a claim API and a settlement API: one run in `invokes` order, so the settlement is created once under the claim the first step moved (`Unique_Settlement_Claim`), and a started run finishes under `.fair(OpenSettlement, ..)` |
 | `quantifier_none.rdra` | fail, fail | `invariant(...).when(...).none(...)` (Revoke while Assign stays active) |
 | `quantifier_guard.rdra` | pass, pass | `holds(..).none(..)` on Revoke makes the `.none(...)` rule of `quantifier_none` hold |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
@@ -664,7 +674,8 @@ Name         = [A-Za-z0-9_]+
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
-Locally (Apple silicon) the 55 runs of the 27 roots take about 130 s: clinic-ops `verify`
-takes 41 s at about 820 MB and patent-ops `verify` 65 s at about 1.1 GB, their TLC JVMs
-included; food-permit-ops `verify` takes 1.4 s, and insurance-claim-ops `verify` about 5 s at
-about 460 MB. The CI step has 5 minutes.
+Locally (Apple silicon) the 63 runs of the 31 roots take about 220 s: clinic-ops `verify`
+takes 105 s at about 2.0 GB (50 s at 1.4 GB before the run marks of `CheckInPatient`, #80)
+and patent-ops `verify` 68 s at about 1.2 GB, their TLC JVMs included; food-permit-ops
+`verify` takes 16 s, and insurance-claim-ops `verify` about 3 s at about 470 MB. The CI
+step has 5 minutes.

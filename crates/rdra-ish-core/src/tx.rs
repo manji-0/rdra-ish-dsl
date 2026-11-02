@@ -149,14 +149,11 @@ pub fn infer_usecase_transactions(model: &SemanticModel) -> Vec<UsecaseTx> {
                 }
             }
         }
-        invoked_apis.sort_by_key(|ak| {
-            model
-                .apis
-                .get(*ak)
-                .map(|a| a.id.clone())
-                .unwrap_or_default()
-        });
-        invoked_apis.dedup();
+        // In the order of the use case's `invokes` lines: a run of the use case takes the
+        // API transactions in this order (docs/state-derivation.md, "Runs of a split use
+        // case").
+        let mut seen = HashSet::new();
+        invoked_apis.retain(|ak| seen.insert(*ak));
 
         for ak in &invoked_apis {
             let mut api_writes: Vec<UcWrite> = Vec::new();
@@ -761,6 +758,30 @@ updates(BookAppointment, ProviderSchedule)
                 "API-origin writes should be rendered from the API lane"
             );
         }
+    }
+
+    /// The API groups follow the use case's `invokes` lines, not the API ids: a run of the use
+    /// case takes the API transactions in that order (#80).
+    #[test]
+    fn test_api_groups_follow_the_invokes_order() {
+        let src = r#"
+entity Order "注文" { id: Int @pk }
+entity Payment "決済" { id: Int @pk }
+usecase Pay "決済確定"
+api PayOrderApi "Pay order"
+api CapturePaymentApi "Capture"
+invokes(Pay, PayOrderApi)
+invokes(Pay, CapturePaymentApi)
+updates(PayOrderApi, Order)
+updates(CapturePaymentApi, Payment)
+"#;
+        assert_eq!(
+            groups(src),
+            vec![
+                (TxKind::Isolated, ids(&["Order"])),
+                (TxKind::Isolated, ids(&["Payment"]))
+            ]
+        );
     }
 
     /// APIはFK非連結の複数エンティティ書き込みでも、1つの原子境界として扱う。

@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 
 use super::*;
-use crate::lifecycle::{EntityStateResult, Exploration, State, Target};
+use crate::lifecycle::{At, EntityStateResult, Exploration, Pred, State, Target, Term};
 use crate::load_project;
 
 pub(super) fn load(rel: &str) -> SemanticModel {
@@ -58,6 +58,7 @@ pub(super) const SAMPLES: &[&str] = &[
     "samples/formal-verification/order.rdra",
     "samples/formal-verification/partial_scope.rdra",
     "samples/formal-verification/quantifier_none.rdra",
+    "samples/formal-verification/split_run_order.rdra",
     "samples/formal-verification/untriggered_sets.rdra",
     "samples/formal-verification/unwitnessed_state.rdra",
     "samples/formal-verification-fail/order.rdra",
@@ -360,4 +361,75 @@ property Unfair leads_to(Order.status == paid, Order.status == shipped)
         ts.cone_frees_slots(&unfair),
         "Ship creates a receipt the cone does not count"
     );
+}
+
+/// Decide updates Doc and creates Log in two isolated groups, so `Decide_2` binds the log it
+/// creates and the doc step 1 moved. Doc's cone drops the unread Log param; the after-assert
+/// step on `Decide_2` must then read the doc by its new index, in the BFS and in TLA+.
+#[test]
+fn an_after_assert_step_follows_its_params_into_a_cone() {
+    let src = r#"
+entity Doc "届出" { id: Int @pk  status: Enum(searched, file, drop) @default(searched) }
+entity Log "記録" { id: Int @pk }
+usecase Submit "届出"
+usecase Decide "判断"
+creates(Submit, Doc)
+transitions(Decide, Doc.status, searched -> file)
+transitions(Decide, Doc.status, searched -> drop)
+creates(Decide, Log)
+after(Decide).assert(Doc.status != drop)
+"#;
+    let model = model_from(src);
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
+    let ts = &built.ts;
+    let doc = ts
+        .targets()
+        .into_iter()
+        .find(|t| matches!(t, Target::Entity(e) if ts.entity(*e).id == "Doc"))
+        .unwrap();
+    let cone = ts.target_cone(doc);
+    let sub = ts.restrict_to(&cone.vars, &cone.keep);
+    let [a] = sub.after_asserts() else {
+        panic!("one assert")
+    };
+    let step = a
+        .steps
+        .iter()
+        .find(|s| sub.actions()[s.act.index()].name == "Decide_2")
+        .unwrap();
+    assert_eq!(sub.actions()[step.act.index()].params.len(), 1);
+    fn params_read(pred: &Pred, out: &mut BTreeSet<u8>) {
+        let term = |t: &Term, out: &mut BTreeSet<u8>| {
+            if let Term::Slot {
+                at: At::Param(p), ..
+            }
+            | Term::Index(At::Param(p)) = t
+            {
+                out.insert(*p);
+            }
+        };
+        match pred {
+            Pred::True | Pred::False => {}
+            Pred::Cmp(a, _, b) => {
+                term(a, out);
+                term(b, out);
+            }
+            Pred::In(a, vs) => {
+                term(a, out);
+                vs.iter().for_each(|v| term(v, out));
+            }
+            Pred::Not(p) => params_read(p, out),
+            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| params_read(p, out)),
+            Pred::Forall { body, .. } | Pred::Exists { body, .. } => params_read(body, out),
+        }
+    }
+    let mut read = BTreeSet::new();
+    params_read(&step.post, &mut read);
+    assert_eq!(
+        read,
+        BTreeSet::from([0]),
+        "the doc is the step's only param"
+    );
+    let (exact, _) = assert_cones_exact("inline", &model, Bounds::STATES);
+    assert!(exact > 0);
 }

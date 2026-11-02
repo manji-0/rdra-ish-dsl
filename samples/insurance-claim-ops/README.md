@@ -109,10 +109,12 @@ permission, and no timer starts it.
 - **The subrogation starts from a paid claim.** `relate(Subrogation, Claim, 1:1)`; the guard
   `ClaimPaid` reads the claim the subrogation is created under and asks for no subrogation yet
   (`.none(Subrogation)`).
-- **A use case that writes a parent and creates a child uses one API.** `RequestInvestigation`
-  and `OpenSettlement` each invoke one API that creates the child and updates the case, so the
-  step is one transaction group. With two APIs each step carries the guard (#78), but the
-  two steps have no order, and the creation can run again without the case's move (see Soak
+- **A use case that writes a parent and creates a child is one run of its APIs.**
+  `RequestInvestigation` invokes one API that creates the investigation and updates the case,
+  one transaction group. `OpenSettlement` invokes the case API, which moves the case to
+  示談交渉中, and then `SettlementCreateApi`, which creates the settlement under that case: two
+  transactions, run in `invokes` order as one run (#80), so the settlement is created once and
+  under the case the first step moved, and another use case may run between the two (see Soak
   findings).
 - **An OR is two guarded arms.** A case is assessed when the survey is reported and either the
   coverage is first-party or the liability is decided. `AssessDamage` declares the arm
@@ -248,20 +250,19 @@ What the model could say but `verify` could not check, and what it could not say
   run above prints `the whole-model run stopped at the state cap of 2097152 states after 2272892
   states; raise --temporal-budget or shrink the model`, 143 s into a 300 s budget. Raising the
   budget does not lift the cap, and no flag does.
-- **(D/M) A use case that invokes two APIs is two actions, and the second runs without the
-  guard and without the first.** `OpenSettlement` first invoked the case API (moving the case
-  to 示談交渉中) and a settlement API (creating the settlement), guarded by
-  `SettlementEligible` on the case. `check` reported `示談代行は対人・対物賠償の事故だけ` with the trace
+- **(D/M) A use case that invokes two APIs is two actions, and the second ran without the
+  guard and without the first.** `OpenSettlement` invokes the case API (moving the case to
+  示談交渉中) and a settlement API (creating the settlement), guarded by `SettlementEligible`
+  on the case. `check` reported `示談代行は対人・対物賠償の事故だけ` with the trace
   `RelayAccidentReport`, `OpenSettlement_2, transaction 2 of OpenSettlement`: the creation ran on
-  a vehicle case still in 事故受付, with no guard and no first transaction. state-derivation.md says
-  the first group that writes an entity the body reads carries the guard, but not that the other
-  groups run with none and in any order. One API that creates the child and updates the case
-  makes it one step. Since #78 every group's step carries the use case's guard, and the
-  two-API form passes `check`. It still fails `verify` at 2 instances, so the sample keeps one
-  API: the settlement's step does not need the case's move, so it runs again on a case that
-  already has a settlement (`Unique_Settlement_ClaimCase`), and `verify` also reports
-  `Deadlock_ClaimCase_status_negotiating`. Its cone grows from 60,193 to 674,981 states, and
-  `verify` takes 336 s and 41 GB instead of 3 s.
+  a vehicle case still in 事故受付, with no guard and no first transaction. #78 put the guard on
+  every group's step, and the two-API form passed `check`, but at 2 instances the settlement's
+  step still ran again on a case that already had a settlement (`Unique_Settlement_ClaimCase`)
+  and `verify` also reported `Deadlock_ClaimCase_status_negotiating`; the cone grew from
+  60,193 to 674,981 states, and `verify` took 336 s and 41 GB instead of 3 s. Since #80 the two
+  steps are one run in `invokes` order, the settlement step binds the case the first step
+  moved, and the sample uses the two APIs: `verify --deny-undecided` passes at 2 instances
+  (the cone numbers above are its).
 - **(D) A use case that moves two lifecycle columns runs only where both have an arm.** A use
   case with `transitions(Go, E.status, a -> b)` and `transitions(Go, E.period, y -> z)` does not
   run at `(a, x)`. The language reference's section on several lifecycle columns does not say

@@ -200,17 +200,22 @@ applies_to(Settled, Pay)
             .join("\n");
         common::relative_to(&squashed, &dir)
     };
-    for (block, group) in blocks.iter().zip(1..=2) {
-        assert_eq!(
-            squash(block),
-            format!(
-                "\
-transaction {group} of Pay (Pay_{group}) can never run: in no reachable state do its guards hold
-declared: transaction {group} of Pay (Pay_{group}) never_runs.rdra:5:1
+    // The condition is the precondition of the run, on its first step; the second step
+    // waits for a run the first step started.
+    assert_eq!(
+        squash(blocks[0]),
+        "\
+transaction 1 of Pay (Pay_1) can never run: in no reachable state do its guards hold
+declared: transaction 1 of Pay (Pay_1) never_runs.rdra:5:1
 guard: condition Settled never_runs.rdra:20:1"
-            )
-        );
-    }
+    );
+    assert_eq!(
+        squash(blocks[1]),
+        "\
+transaction 2 of Pay (Pay_2) can never run: in no reachable state do its guards hold
+declared: transaction 2 of Pay (Pay_2) never_runs.rdra:5:1
+guard: step 1 of Pay ran on the bound rows and step 2 has not never_runs.rdra:5:1"
+    );
     assert_eq!(
         squash(blocks[2]),
         "\

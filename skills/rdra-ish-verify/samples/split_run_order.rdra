@@ -1,0 +1,57 @@
+// A use case split across two APIs is one run in invokes order (#80): OpenSettlement_1 moves
+// the claim to negotiating through the claim API, then OpenSettlement_2 creates the settlement
+// under that same claim through the settlement API, once. With no order between the two
+// steps, a second settlement was created under a claim that already had one, and a claim
+// stayed at negotiating with no settlement.
+// TLC intent: expected PASS. Unique_Settlement_Claim holds at 2 instances, no claim is stuck
+// at negotiating, and a started run finishes under .fair(OpenSettlement).
+// expect check: ok
+// expect verify: tlc=ok
+variation Kind "種目" {
+  liability "賠償"
+  vehicle "車両"
+}
+
+entity Claim "案件" {
+  id: Int @pk
+  kind: Kind
+  status: Enum(open, negotiating, closed) @default(open)
+}
+
+entity Settlement "示談" {
+  id: Int @pk
+  status: Enum(pending, agreed) @default(pending)
+}
+
+relate(Settlement, Claim, 1:1)
+
+usecase Report "受付"
+usecase OpenSettlement "示談開始"
+usecase Agree "示談成立"
+usecase Close "終了"
+
+api ClaimApi "案件 API"
+api SettlementApi "示談 API"
+
+creates(Report, Claim)
+invokes(OpenSettlement, ClaimApi)
+updates(ClaimApi, Claim)
+transitions(OpenSettlement, Claim.status, open -> negotiating)
+invokes(OpenSettlement, SettlementApi)
+creates(SettlementApi, Settlement)
+transitions(Agree, Settlement.status, pending -> agreed)
+transitions(Close, Claim.status, open -> closed)
+transitions(Close, Claim.status, negotiating -> closed).when(Agreed)
+
+// Only a liability claim opens a settlement; the settlement step reads the claim step 1 moved.
+condition Eligible "賠償責任の事故"
+holds(Eligible, Claim.kind == liability)
+applies_to(Eligible, OpenSettlement)
+
+condition Agreed "示談成立済み"
+holds(Agreed, Settlement.status == agreed)
+
+forbidden(Claim, Settlement, Claim.kind == vehicle, Settlement.status == pending).along(Claim, Settlement)
+
+property Ends
+  leads_to(Claim.status == negotiating, Claim.status == closed).fair(OpenSettlement, Agree, Close)

@@ -184,8 +184,9 @@ fn choices(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -> Vec
 fn guards(model: &SemanticModel, usecase: UseCaseKey) -> Vec<String> {
     let conditions: Vec<String> = applied_bodies(model)
         .into_iter()
-        .filter(|(_, uc, _)| *uc == usecase)
-        .map(|(condition, _, _)| {
+        .filter(|b| b.usecase == usecase)
+        .map(|b| {
+            let condition = b.cond;
             let name = &model.conditions[condition].label;
             match condition_body_display(model, condition) {
                 Some(body) => format!("{name}: {body}"),
