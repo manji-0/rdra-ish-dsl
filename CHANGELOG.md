@@ -4,6 +4,9 @@
 
 ### Added
 
+- `list --kind screen`, `event`, and `timer` list the declared screens, events, and timers
+  as `id,label`, sorted by id, in every `--format` (#70), as `flow`, `step`, and `system`
+  do. Before, `--kind` rejected them.
 - `verify` warns on stderr when it leaves a finding undecided, a temporal property past
   `--temporal-budget` or a finding a BFS cone left at its state cap: `warning: 2 temporal
   properties the budget left undecided; the OK line holds only for what was decided
