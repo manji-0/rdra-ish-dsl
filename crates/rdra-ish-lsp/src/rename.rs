@@ -319,6 +319,10 @@ performs(Staff, Book)
                 ENTITY_TGT,
                 "invariant(A).along(A, Tgt).when(A.status == x).then(A.status == y)",
             ),
+            ("holds", "along") => (
+                ENTITY_TGT,
+                "relate(A, Tgt, N:1)\ncondition C \"c\"\nholds(C, Tgt.status == x).along(A, Tgt)",
+            ),
             ("holds", "has") => (
                 ENTITY_TGT,
                 "condition C \"c\"\nholds(C, A.status == x).has(Tgt.status == y)",

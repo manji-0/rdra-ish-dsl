@@ -103,7 +103,7 @@ displays(BatchVerifyEligibility, EligibilityScreen)
 invokes(BatchVerifyEligibility, OnlineEligibilityApi)
 triggers(EligibilityBatchInquiry, BatchVerifyEligibility)
 condition BookedPatient "予約済みの患者"
-holds(BookedPatient, Appointment.status == scheduled)
+holds(BookedPatient, Appointment.status == scheduled).along(InsurancePolicy, PatientAccount, Appointment)
 applies_to(BookedPatient, BatchVerifyEligibility)
 
 // The result is one of 有効, 無効, 該当資格なし (mhlw-2023-online-shikaku-tebiki-001085572.txt:383-401).

@@ -204,6 +204,12 @@ case's action:
 - An atom on any other entity reads an existing instance. The atoms on one such
   entity share one instance, which a direct `relate` owner links to the parameters it
   relates to. Without a `relate`, the instance is independent.
+- With `.along(A, B, ..)`, each path entity the action does not bind is such an instance,
+  and the owner of each hop's key (the key [Joins](#joins) picks, with the `.by` after
+  the `.along`) links neighbours; no other link is added. The guard reads the instances
+  the path joins to the action's parameters, as `.along` binds a multi-entity rule.
+- An instance of a compared entity that no chain of links reaches from a parameter of the action is
+  `UnjoinedGuardRead`, a warning: any present row of the entity satisfies the guard.
 - In a use case with k groups, every group's action carries the guard: the use case runs
   only when the condition holds, so no group runs without it. Each action reads the body on
   its own pre-state, with the bindings above. An atom on an entity the group writes, or on
@@ -626,7 +632,8 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal lies outside `0..max`. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
-| `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing. |
+| `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds. |
+| `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E, col == F.src)` names an `F` that the step binds to no one row: not written in the same transaction group and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.by(role)` names one. The message names the candidate roles and the statement with the `.by` to add; the join is left unlinked. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |

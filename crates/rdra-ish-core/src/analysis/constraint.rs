@@ -739,6 +739,17 @@ pub(crate) fn cross_scope_semantics_from_chain(
     diags: &mut Vec<Diagnostic>,
 ) -> CrossConstraintScope {
     report_leading_by(&pred.chain, ctx, diags);
+    along_scope(model, pred, ctx, diags)
+}
+
+/// The `.along(..)` path of a statement and the selectors of its hops, or `GlobalProduct`
+/// without one.
+pub(crate) fn along_scope(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> CrossConstraintScope {
     match collect_cross_along_path(model, pred, ctx, diags) {
         Some((at, path)) => CrossConstraintScope::RelationPath {
             path,

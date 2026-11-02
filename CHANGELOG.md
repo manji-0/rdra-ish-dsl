@@ -9,6 +9,20 @@
   `Claim.completed_on` (the field 請求完了日) stayed an axis at `null` in `states` until
   `CompleteClaim` set it, and neither `check` nor `lint` said so. `samples/clinic-ops` had the
   same gap on `Prescription.refill_limit`; `IssueRefillPrescription` now sets it.
+- `holds` takes `.along(A, B, C)` (#77): the guard reads the instances of the path entities
+  that the keys between neighbours join to the rows the guarded use case binds, as the
+  `.along` of a `forbidden` or `invariant` binds a rule, and only the hops link. A `.by(role)`
+  after the `.along` picks the key of a hop that two keys join. One meaning in `check`,
+  `states`, the TLA+ export and `verify`: the path's keys are resolved by
+  `SemanticModel::join_key` with the rules' paths, and the lifecycle builds its links with the
+  same code as a rule's. `holds(SettlementSigned, Settlement.status == agreed).along(Claim,
+  ClaimCase, Settlement)` reads the settlement of the claim's own case.
+- The `UnjoinedGuardRead` warning (#77): a `holds` body applied to a use case compares an
+  entity that no key joins, directly or along its path, to a row the use case binds, so any
+  row of it anywhere satisfies the guard. It names the condition, the use case, the entity,
+  and the fix: the `.along(...)` of the shortest key path, or writing the entity in the use
+  case. Of the samples, only clinic-ops drew it, on a real modeling error (below).
+
 - `.by(role)` names the key a join follows wherever two keys join the same two entities
   (#73): after `.has(...)` or `.none(...)` (on an `invariant` or a `holds`), after a `holds`
   body (the link from an entity it compares to the entities the guarded use case binds),
@@ -463,6 +477,18 @@
   body listing at least one value`` at the `variation` line, and `Enum(a, field)` with
   ``unexpected `field`; expected `)` ``; neither named the reserved word. They take the same
   words a path segment does, as a column may already be named `goal`.
+- `samples/clinic-ops`: `BookedPatient` on `BatchVerifyEligibility` (一括照会 of the patients
+  booked ahead) read any scheduled appointment, so one booked patient let the batch check
+  every patient's eligibility. It now reads the appointment of the policy's patient,
+  `.along(InsurancePolicy, PatientAccount, Appointment)` (#77). The `EligibilityCheck` cone
+  grows from 223,901 to 895,604 states at 2 instances; it was already compared at 1 instance
+  only, and no other cone changes.
+- `samples/insurance-claim-ops` still leaves out the guard and the rule that a liability claim
+  is completed only when its case's settlement is agreed (#77). With `.along` they say it, but
+  they join the claim's cone to the case's: at 2 instances the views of `Claim`, `Payment` and
+  `Subrogation` pass 3,000,000 states and the TLC runs on them had not finished after 20
+  minutes (#74). The README's soak findings and known gaps give the numbers.
+
 - A condition or quantifier between two entities that two keys join no longer follows the
   first key silently (#73); it is `AmbiguousOwnerLink` until `.by(role)` names one. A copy's
   source follows the same rule.

@@ -60,7 +60,11 @@ Also ask:
    row agrees with its parent (`forbidden(Permit, Application, Permit.kind !=
    Application.kind).along(Permit, Application)`) holds only when the use case that
    creates the row copies the value (`sets(Register, Permit, kind == Application.kind)`);
-   without the copy the value is a free choice and `check` reports the rule.
+   without the copy the value is a free choice and `check` reports the rule. The guard
+   that makes such a rule hold takes the same path:
+   `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
+   Settlement)` reads the settlement of the claim's own case, as
+   `forbidden(Claim, Settlement, ...).along(Claim, ClaimCase, Settlement)` does.
 8. If a per-entity rule fails unexpectedly, inspect lifecycle inputs before weakening it:
    missing `sets`, missing transitions, or missing create/default paths are common.
 9. Add `invariant(Entity).when(...).none/has(Related.col == v)` for to-many quantifiers; a top-level `when(...)` no longer loads.

@@ -169,10 +169,11 @@ Every cone is under the 200,000 states `engine_equivalence` compares at 2 instan
 ## Known verification gaps
 
 - **The settlement does not gate the liability claim.** A liability claim can be completed
-  only with the 示談書 (tokiomarine-2025-tap-yakkan.txt:4576-4577, :4596), but the claim and the
-  settlement are both children of the case, and a guard follows one key: a guard on
-  `CompleteClaim` that reads `Settlement` reads any settlement, not the one of the claim's case.
-  The rule is not in the model (see Soak findings).
+  only with the 示談書 (tokiomarine-2025-tap-yakkan.txt:4576-4577, :4596). Since #77 the guard
+  can read the settlement of the claim's own case,
+  `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase, Settlement)`,
+  but it joins the claim's cone to the case's, and `verify` does not finish at 2 instances.
+  The guard and the rule are not in the model (see Soak findings).
 - **The payment period is not tied to its reason.** `PaymentDeadline` cannot read
   `Claim.extension`, so nothing checks that a 90-day extension ends at 90 days; the model checks
   only that a claim paid after its deadline carries the late interest.
@@ -206,18 +207,25 @@ needed `drives` or a guarded `chooses`.
 
 What the model could say but `verify` could not check, and what it could not say:
 
-- **(G, V) A guard cannot follow two keys.** A liability claim is completed with the 示談書
-  (tokiomarine-2025-tap-yakkan.txt:4576-4577, :4596): `Claim` and `Settlement` are both children
-  of `ClaimCase`. The rule can be written,
-  `forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, ClaimCase, Settlement)`,
-  but its guard cannot: `holds(SettlementSigned, Settlement.status == agreed)` on `CompleteClaim`
-  loads with no warning and reads an independent settlement, any settlement of any case. `check`
-  passes it at 1 instance. At 2 instances the guard also merges the claim's cone (2,975 states)
-  with the case's (60,193): `lifecycle_measure` stopped the claim's view past 20,000,000 states
-  after 247 s, and `verify` stops the `Claim`, `Payment`, and `Subrogation` cones at the
-  BFS cap of 2,097,152 states, leaves 11 state-model findings `not decided`, and had printed no
-  TLC verdict when it was killed at 300 s. The rule and the guard are left out (Known
-  verification gaps). Repro: this sample plus the condition and the `.along` rule above.
+- **(V) A guard on the case's settlement does not fit the `verify` cap.** A liability claim is
+  completed with the 示談書 (tokiomarine-2025-tap-yakkan.txt:4576-4577, :4596): `Claim` and
+  `Settlement` are both children of `ClaimCase`. The rule is
+  `forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, ClaimCase, Settlement)`.
+  Its guard was first rated (G): `holds(SettlementSigned, Settlement.status == agreed)` on
+  `CompleteClaim` read any settlement of any case, with no warning. Since #77 `holds` takes
+  `.along(Claim, ClaimCase, Settlement)` and reads the settlement of the claim's own case, and
+  the path-less form is the `UnjoinedGuardRead` warning. The guard needs one arm per kind of
+  claim, since a first-party claim has no settlement:
+  `transitions(CompleteClaim, Claim.status, submitted -> completed)` declared once
+  `.when(FirstPartyCoverage)` and once `.when(SettlementSigned)`. With that model `check`
+  passes, but at 2 instances the guard and the rule still join the claim's cone (2,975 states)
+  to the case's (60,193): `lifecycle_measure -- 3000000 verify` stops the views of `Claim`,
+  `Payment`, and `Subrogation`, the rule, and 13 more targets past 3,000,000 states (10 to 17 s
+  each); `verify --deny-undecided` stops the `Claim`, `Payment`, and `Subrogation` BFS cones at
+  2,097,152 states with 11 findings `not decided`, and its 6 TLC runs on those cones had not
+  finished after 20 minutes, each with 0.8 to 1.6 GB of states on disk. Reading the right
+  settlement does not shrink the cone: the case's states interleave with the claim's either way
+  (#74). The rule and the guard are left out (Known verification gaps).
 - **(M, D) One timer stands for every payment period.** The payment period is 30 days, or 60,
   90, 120, or 180 by the extension reason (tokiomarine-2025-tap-yakkan.txt:4633, :4650-4658). One
   timer stands for all of them, and `chooses(ExtendPaymentPeriod, Claim.extension)` records a

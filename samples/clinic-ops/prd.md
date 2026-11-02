@@ -970,7 +970,7 @@ flowchart TD
 | --- | --- | --- | --- | --- | --- |
 | condition | 振替・分割の対象外（負担割合の相違・公費） |  |  | RecordClaimReturn | samples/clinic-ops/buc/buc_billing_claims.rdra:178 |
 | condition | 医師が確定したオーダ | ClinicalOrder | ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済 | CollectSpecimen | samples/clinic-ops/buc/buc_orders_results.rdra:111 |
-| condition | 予約済みの患者 | Appointment | Appointment.status == 予約済 | BatchVerifyEligibility | samples/clinic-ops/buc/buc_visit_checkin.rdra:106 |
+| condition | 予約済みの患者 | Appointment | (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment) | BatchVerifyEligibility | samples/clinic-ops/buc/buc_visit_checkin.rdra:106 |
 | condition | 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする |  |  | CalculateVisitBill | samples/clinic-ops/buc/buc_visit_payment.rdra:73 |
 | condition | 紹介状なしの初診で、除外に当たらない | Charge\|Appointment | Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診 | ApplySelectedTreatmentFee | samples/clinic-ops/buc/buc_visit_payment.rdra:92 |
 | invariant | 受付済の予約には受付時刻が記録されている | Appointment | when Appointment.status == 受付済 then Appointment.checked_in_at == present |  | samples/clinic-ops/shared/entities.rdra:430 |

@@ -118,6 +118,9 @@ invariant(Order, Payment)
   `sets(...).by(ship_to)`. Without it the join is `AmbiguousOwnerLink`, which names the
   candidates and the rewrite. `.by(Address)` names a key without `.role` by its parent id.
 - `.none(Related)` / `.has(Related)` ask for no linked row, or some, and read only the link.
+- A `holds` guard reads an entity two hops from the use case's row through
+  `.along(A, B, C)`, with `.by(role)` after it per hop. A compared entity that no key joins
+  to the use case's rows is `UnjoinedGuardRead` (warning): any row of it satisfies the guard.
 - Diagnostic ids may still say `Cross*` even though surface syntax is
   multi-entity `forbidden` / `invariant`.
 

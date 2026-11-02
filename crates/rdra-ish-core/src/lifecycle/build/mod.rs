@@ -15,8 +15,8 @@ use super::types::{
 use super::{Built, Scope, TransitionSystem};
 use crate::analysis::applied_bodies;
 use crate::model::{
-    CmpOpModel, CmpRhs, ColumnType, ConditionKey, EffectValue, EntityKey, FkId, Join, Min,
-    ModelColumn, NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
+    CmpOpModel, CmpRhs, ColumnType, ConditionKey, CrossConstraintScope, EffectValue, EntityKey,
+    FkId, Join, Min, ModelColumn, NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use crate::tx::{infer_usecase_transactions, UcWrite, WriteKind};
@@ -517,7 +517,7 @@ impl<'m> Builder<'m> {
         self.copy_effects(uc, &mut a, groups);
         let guards = self.condition_guards(uc, &a.params);
         a.guards.extend(guards);
-        self.arm_guards(&mut a);
+        self.arm_guards(uc, &mut a);
         Action {
             name,
             origin: ActionOrigin::UseCase {
@@ -844,18 +844,23 @@ impl<'m> Builder<'m> {
     }
 
     /// Whether a `holds` body applied to `uc` reads `parent` through key `fk` from a `child`
-    /// the action creates, so the creation links to the row the guard reads.
+    /// the action creates, so the creation links to the row the guard reads: the body compares
+    /// the parent and its join follows `fk`, or its `.along(..)` takes a hop through `fk`.
     fn guard_reads_parent(&self, uc: UseCaseKey, fk: FkId) -> bool {
         let model = self.model;
         let key = model.foreign_key(fk);
         applied_bodies(model).into_iter().any(|(_, u, body)| {
-            u == uc
-                && body
-                    .conds
-                    .iter()
-                    .flat_map(preds::cond_entities)
-                    .any(|ek| ek == key.parent)
-                && model.join_key(key.child, key.parent, &body.by) == Join::Key(fk)
+            let along = match &body.along {
+                CrossConstraintScope::RelationPath { links, .. } => links.contains(&Some(fk)),
+                CrossConstraintScope::GlobalProduct => false,
+            };
+            let compared = body
+                .conds
+                .iter()
+                .flat_map(preds::cond_entities)
+                .any(|ek| ek == key.parent)
+                && model.join_key(key.child, key.parent, &body.by) == Join::Key(fk);
+            u == uc && (along || compared)
         })
     }
 
@@ -1112,7 +1117,7 @@ impl<'m> Builder<'m> {
     /// arm's or value's guard is true). It filters the choice the `Transition` or `Choose`
     /// effect forks, so the use case runs when some arm or value is enabled, and a body on a
     /// created param reads it after the step, as a use case's condition does.
-    fn arm_guards(&mut self, a: &mut ActionDraft) {
+    fn arm_guards(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
         let model = self.model;
         let mut guards = Vec::new();
         for eff in &a.effects {
@@ -1170,7 +1175,7 @@ impl<'m> Builder<'m> {
                     let bodies = conds
                         .iter()
                         .filter(|(ck, _)| model.conditions[*ck].body.is_some())
-                        .map(|(ck, _)| self.body_pred(*ck, &a.params, site))
+                        .map(|(ck, _)| self.body_pred(uc, *ck, &a.params, site))
                         .collect();
                     parts.push(Pred::Or(bodies));
                 }

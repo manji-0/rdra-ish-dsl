@@ -216,7 +216,8 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::PropertyViolated { .. }
-        | StateDiag::UnresolvedPropertyAtom { .. } => d.to_string(),
+        | StateDiag::UnresolvedPropertyAtom { .. }
+        | StateDiag::UnjoinedGuardRead { .. } => d.to_string(),
     };
     format!("[{label}][{}] {body}", d.name(&[entity]))
 }

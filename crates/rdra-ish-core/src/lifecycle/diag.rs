@@ -298,6 +298,16 @@ pub enum StateDiag {
     },
     /// A lifecycle construct reads an arithmetic `@derived` column, which has no state var.
     DerivedColumnRead { column: String, site: Site },
+    /// A `holds` body applied to a use case compares an entity that no key joins to a row the
+    /// use case binds, so the guard holds when any row of it anywhere satisfies the body.
+    UnjoinedGuardRead {
+        condition: String,
+        usecase: String,
+        entity: String,
+        /// How to join it: the `.along(..)` a key path gives, or writing the entity.
+        fix: String,
+        site: Site,
+    },
     /// A property atom names a column no single entity owns.
     UnresolvedPropertyAtom {
         property: String,
@@ -407,6 +417,9 @@ impl StateDiag {
             StateDiag::UnresolvedPropertyAtom {
                 property, column, ..
             } => with("UnresolvedPropertyAtom", &[property, column]),
+            StateDiag::UnjoinedGuardRead {
+                condition, usecase, ..
+            } => with("UnjoinedGuardRead", &[condition, usecase]),
         };
         raw.chars()
             .map(|c| {
@@ -455,7 +468,8 @@ impl StateDiag {
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::NeverRuns { .. }
             | StateDiag::ArmNeverTaken { .. }
-            | StateDiag::ValueNeverChosen { .. } => Severity::Warning,
+            | StateDiag::ValueNeverChosen { .. }
+            | StateDiag::UnjoinedGuardRead { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -806,6 +820,16 @@ impl fmt::Display for StateDiag {
             } => write!(
                 f,
                 "property {property}: no single entity owns column {column}"
+            ),
+            StateDiag::UnjoinedGuardRead {
+                condition,
+                usecase,
+                entity,
+                fix,
+                ..
+            } => write!(
+                f,
+                "holds({condition}, ...) on {usecase} reads {entity}, which no key joins to a row {usecase} binds, so any {entity} row satisfies it; {fix}"
             ),
         }
     }

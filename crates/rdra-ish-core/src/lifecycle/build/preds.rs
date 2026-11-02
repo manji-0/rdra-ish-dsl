@@ -836,9 +836,6 @@ impl<'m> Builder<'m> {
             );
             None
         };
-        if path.len() < 2 {
-            return fail(self, "along(..) needs at least two entities".to_string());
-        }
         if let Some(out) = scope.iter().find(|ek| !path.contains(ek)) {
             let id = self.model.entities[*out].id.clone();
             return fail(self, format!("along(..) does not cover {id}"));
@@ -850,26 +847,41 @@ impl<'m> Builder<'m> {
                 binding.push((ek, At::Bound(binding.len() as u8)));
             }
         }
+        match self.hop_links(path, keys, &binding) {
+            Ok(links) => Some((binding, Pred::And(links))),
+            Err(reason) => fail(self, reason),
+        }
+    }
+
+    /// The owner links of the hops of an `.along(..)` path, each through the key resolved
+    /// for it, over a `binding` that binds every path entity. `Err` says why the path binds
+    /// nothing: it is too short, or no key joins a hop.
+    fn hop_links(
+        &self,
+        path: &[EntityKey],
+        keys: &[Option<FkId>],
+        binding: &Binding,
+    ) -> Result<Vec<Pred>, String> {
+        if path.len() < 2 {
+            return Err("along(..) needs at least two entities".to_string());
+        }
         let mut links = Vec::new();
         for (i, pair) in path.windows(2).enumerate() {
             let key = keys.get(i).copied().flatten();
-            let bound = |ek| at_of(&binding, ek).expect("every path entity is bound");
+            let bound = |ek| at_of(binding, ek).expect("every path entity is bound");
             let (a, b) = (bound(pair[0]), bound(pair[1]));
             match key.and_then(|fk| self.key_link(fk, (pair[0], a), (pair[1], b))) {
                 Some(link) => links.push(link),
                 None => {
                     let (x, y) = (
-                        self.model.entities[pair[0]].id.clone(),
-                        self.model.entities[pair[1]].id.clone(),
+                        &self.model.entities[pair[0]].id,
+                        &self.model.entities[pair[1]].id,
                     );
-                    return fail(
-                        self,
-                        format!("no N:1, 1:N, or 1:1 relate binds {x} and {y}"),
-                    );
+                    return Err(format!("no N:1, 1:N, or 1:1 relate binds {x} and {y}"));
                 }
             }
         }
-        Some((binding, Pred::And(links)))
+        Ok(links)
     }
 
     fn cross_invariants(&mut self) {
@@ -1037,7 +1049,7 @@ impl<'m> Builder<'m> {
             .filter(|(_, u, _)| *u == uc)
         {
             let site = Site::new(ModelRef::Condition(ck), &body.site);
-            let pred = self.body_pred(ck, params, &site);
+            let pred = self.body_pred(uc, ck, params, &site);
             guards.push(Guard {
                 pred,
                 why: GuardWhy::Condition { cond: ck },
@@ -1048,7 +1060,16 @@ impl<'m> Builder<'m> {
     }
 
     /// The `holds` body of `ck` over an action's params, as [`Self::condition_guards`] reads it.
-    pub(super) fn body_pred(&mut self, ck: ConditionKey, params: &[Param], site: &Site) -> Pred {
+    /// With `.along(..)`, the path's keys join its rows: each path entity the action does not
+    /// bind is a witness, and only the hops link. Without it, each witness links to each
+    /// bound entity or other witness that one key joins it to.
+    pub(super) fn body_pred(
+        &mut self,
+        uc: UseCaseKey,
+        ck: ConditionKey,
+        params: &[Param],
+        site: &Site,
+    ) -> Pred {
         let model = self.model;
         let Some(body) = model.conditions[ck].body.as_ref() else {
             return Pred::True;
@@ -1070,8 +1091,13 @@ impl<'m> Builder<'m> {
             };
             binding.push((ek, at));
         }
+        let read: Vec<EntityKey> = body.conds.iter().flat_map(cond_entities).collect();
+        let path: &[EntityKey] = match &body.along {
+            CrossConstraintScope::RelationPath { path, .. } => path,
+            CrossConstraintScope::GlobalProduct => &[],
+        };
         let mut witnesses = Vec::new();
-        for ek in body.conds.iter().flat_map(cond_entities) {
+        for &ek in path.iter().chain(&read) {
             if at_of(&binding, ek).is_none() {
                 binding.push((ek, At::Bound(witnesses.len() as u8)));
                 witnesses.push(self.ent_of[&ek]);
@@ -1079,13 +1105,39 @@ impl<'m> Builder<'m> {
         }
         let witness = |(_, at): (EntityKey, At)| matches!(at, At::Bound(_));
         let mut parts = Vec::new();
-        for (i, &x) in binding.iter().enumerate() {
-            for &y in &binding[i + 1..] {
-                if witness(x) || witness(y) {
-                    parts.extend(self.owner_link(x, y, &body.by, &statement, &body_site));
+        // The pairs of entities a key joins, linked or reported as ambiguous.
+        let mut joined: Vec<(EntityKey, EntityKey)> = Vec::new();
+        match &body.along {
+            CrossConstraintScope::RelationPath { links, .. } => {
+                match self.hop_links(path, links, &binding) {
+                    Ok(links) => parts.extend(links),
+                    Err(reason) => self.diag(
+                        read.clone(),
+                        StateDiag::UnbindableCondition {
+                            condition: model.conditions[ck].id.clone(),
+                            usecase: model.use_cases[uc].id.clone(),
+                            reason,
+                            site: body_site.clone(),
+                        },
+                    ),
+                }
+                joined.extend(path.windows(2).map(|hop| (hop[0], hop[1])));
+            }
+            CrossConstraintScope::GlobalProduct => {
+                for (i, &x) in binding.iter().enumerate() {
+                    for &y in &binding[i + 1..] {
+                        if !(witness(x) || witness(y)) {
+                            continue;
+                        }
+                        if model.join_key(x.0, y.0, &body.by) != Join::Unrelated {
+                            joined.push((x.0, y.0));
+                        }
+                        parts.extend(self.owner_link(x, y, &body.by, &statement, &body_site));
+                    }
                 }
             }
         }
+        self.unjoined_reads(uc, ck, &binding, &joined, &read, &body_site);
         parts.extend(
             body.conds
                 .iter()
@@ -1101,6 +1153,71 @@ impl<'m> Builder<'m> {
                 entity,
                 body: Box::new(inner),
             })
+    }
+
+    /// `UnjoinedGuardRead` for each entity the body compares that is a witness no chain of
+    /// `joined` pairs reaches from a row the action binds: the guard holds when any row of it
+    /// satisfies the body, wherever it is.
+    fn unjoined_reads(
+        &mut self,
+        uc: UseCaseKey,
+        ck: ConditionKey,
+        binding: &Binding,
+        joined: &[(EntityKey, EntityKey)],
+        read: &[EntityKey],
+        site: &Site,
+    ) {
+        let model = self.model;
+        let bound: Vec<EntityKey> = binding
+            .iter()
+            .filter(|(_, at)| !matches!(at, At::Bound(_)))
+            .map(|(ek, _)| *ek)
+            .collect();
+        let mut reached = bound.clone();
+        let mut grew = true;
+        while grew {
+            grew = false;
+            for &(a, b) in joined {
+                for (from, to) in [(a, b), (b, a)] {
+                    if reached.contains(&from) && !reached.contains(&to) {
+                        reached.push(to);
+                        grew = true;
+                    }
+                }
+            }
+        }
+        let mut reported: Vec<EntityKey> = Vec::new();
+        for &ek in read {
+            if reached.contains(&ek) || reported.contains(&ek) {
+                continue;
+            }
+            reported.push(ek);
+            let usecase = &model.use_cases[uc].id;
+            let entity = &model.entities[ek].id;
+            let fix = match key_path(model, &bound, ek) {
+                Some(path) => {
+                    let ids: Vec<&str> =
+                        path.iter().map(|e| model.entities[*e].id.as_str()).collect();
+                    format!(
+                        "add `.along({})` to read the row joined to the use case's, or write {entity} in {usecase}",
+                        ids.join(", ")
+                    )
+                }
+                None => format!(
+                    "relate {entity} to an entity {usecase} writes and add `.along(...)`, or write {entity} in {usecase}"
+                ),
+            };
+            self.diag(
+                vec![ek],
+                StateDiag::UnjoinedGuardRead {
+                    condition: model.conditions[ck].id.clone(),
+                    usecase: usecase.clone(),
+                    entity: entity.clone(),
+                    fix,
+                    site: site.clone(),
+                },
+            );
+        }
     }
 
     /// A body applied to a use case that writes nothing has no action to guard.
@@ -1356,6 +1473,41 @@ impl<'m> Builder<'m> {
             );
         }
     }
+}
+
+/// The shortest chain of keys from one of `from` to `to`, both ends included.
+fn key_path(
+    model: &crate::model::SemanticModel,
+    from: &[EntityKey],
+    to: EntityKey,
+) -> Option<Vec<EntityKey>> {
+    let mut prev: Vec<(EntityKey, Option<EntityKey>)> = from.iter().map(|&e| (e, None)).collect();
+    let mut frontier: Vec<EntityKey> = from.to_vec();
+    while !frontier.is_empty() && !prev.iter().any(|(e, _)| *e == to) {
+        let mut next = Vec::new();
+        for &at in &frontier {
+            for (_, fk) in model.foreign_keys() {
+                let other = match (fk.child == at, fk.parent == at) {
+                    (true, _) => fk.parent,
+                    (_, true) => fk.child,
+                    _ => continue,
+                };
+                if !prev.iter().any(|(e, _)| *e == other) {
+                    prev.push((other, Some(at)));
+                    next.push(other);
+                }
+            }
+        }
+        frontier = next;
+    }
+    let mut path = vec![to];
+    let mut at = to;
+    while let (_, Some(p)) = prev.iter().find(|(e, _)| *e == at)? {
+        path.push(*p);
+        at = *p;
+    }
+    path.reverse();
+    Some(path)
 }
 
 /// The entities a body atom reads, left operand first.

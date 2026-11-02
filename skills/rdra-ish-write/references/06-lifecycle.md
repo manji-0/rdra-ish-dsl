@@ -74,7 +74,11 @@ Also ask:
    entity the use case writes; when two relates join them, name the one with
    `.by(role)` after the body (`holds(Renewable, Permit.status == valid).by(renews)`). On a
    use case that creates the child of an `.optional()` key, such a guard also links the
-   new row to the parent it reads. "No related row" is `.none(Related)`.
+   new row to the parent it reads. "No related row" is `.none(Related)`. An entity two
+   hops away, such as the settlement of the case a claim belongs to, needs the path:
+   `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
+   Settlement)`. Without it the guard reads any settlement, and `check` warns
+   `UnjoinedGuardRead` with the `.along(...)` to add.
 8. Add `sets(UseCase, Entity, col == val)` for enum, nullable, boolean, and Int
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). A `sets` on a column that `transitions`

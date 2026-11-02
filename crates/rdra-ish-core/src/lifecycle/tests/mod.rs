@@ -1,5 +1,6 @@
 //! Lifecycle behaviour tests: a model in, views and diagnostics out.
 
+mod along_guards;
 mod arm_guards;
 mod bare_values;
 mod choice;

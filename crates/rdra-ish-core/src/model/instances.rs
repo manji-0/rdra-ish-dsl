@@ -227,9 +227,12 @@ pub struct Condition {
 pub struct HoldsBody {
     pub conds: Vec<crate::model::CrossEntityCondition>,
     pub quantifiers: Vec<crate::model::RelatedQuantifier>,
-    /// `.by(role)` before any `.has`/`.none`: the key that links an entity the body reads to
-    /// another, where several could.
+    /// `.by(role)` before any `.along`/`.has`/`.none`: the key that links an entity the body
+    /// reads to another, where several could.
     pub by: Vec<String>,
+    /// `.along(A, B, ..)`: the path whose keys join the body's rows to the rows the guarded
+    /// use case binds, in place of the one-hop links. `GlobalProduct` when the body has none.
+    pub along: crate::model::CrossConstraintScope,
     pub site: Option<crate::location::LocatedSpan>,
 }
 

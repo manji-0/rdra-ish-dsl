@@ -416,13 +416,13 @@ The rules for each flag and for deferral are in
   | Cone (first target that reads it; clinic-ops unless named) | States |
   |---|---:|
   | entity `Charge` | 969,167 |
+  | entity `EligibilityCheck` (the guard `BookedPatient` reads the booked patient's appointment along its policy, #77) | 895,604 |
   | entity `Prescription` | 427,607 |
   | invariant `Inv_Prescription_4` | 427,607 |
   | entity `ClinicalOrder` | 235,607 |
   | entity `LabResult` | 235,607 |
   | invariant `Forbidden_ClinicalOrder_1` (also `Unique_LabResult_ClinicalOrder`) | 235,607 |
   | invariant `Inv_ClinicalOrder_3` | 235,607 |
-  | entity `EligibilityCheck` | 223,901 |
   | patent-ops entity `OfficeAction` | 4,818,909 |
   | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 4,818,909 |
 
@@ -461,7 +461,7 @@ gaps.
   today:
   - `samples/clinic-ops`: entities `Charge`, `ClinicalOrder`, `EligibilityCheck`,
     `LabResult`, and `Prescription`, and invariants `Forbidden_ClinicalOrder_1`,
-    `Inv_ClinicalOrder_3`, and `Inv_Prescription_4`. Each reaches 223,901 to 969,167 states
+    `Inv_ClinicalOrder_3`, and `Inv_Prescription_4`. Each reaches 235,607 to 969,167 states
     at 2 instances (the table under
     [Approximations and limitations](#approximations-and-limitations)).
   - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
@@ -548,11 +548,12 @@ gaps.
   measure it with `lifecycle_measure` first.
 - **insurance-claim-ops does not gate a liability claim on its settlement.** A liability claim
   is completed with the 示談書, but the claim and the settlement are both children of the
-  accident case, and a `holds` guard follows one key: a guard on `CompleteClaim` that reads
-  `Settlement` reads any settlement at 2 instances, not the one of the claim's case. The rule
-  `.along(Claim, ClaimCase, Settlement)` can be written, but no guard makes it hold, so it is
-  left out. The sample's largest cone is 60,193 states at 2 instances and `verify` takes about
-  5 s. See it:
+  accident case. Since #77 the guard reads the settlement of the claim's own case
+  (`holds(..).along(Claim, ClaimCase, Settlement)`), but with it and the rule
+  `.along(Claim, ClaimCase, Settlement)` the claim's cone joins the case's: at 2 instances the
+  views of `Claim`, `Payment`, and `Subrogation` pass 3,000,000 states, and the TLC runs on
+  them had not finished after 20 minutes. Both are left out (#74). The sample's largest cone
+  is 60,193 states at 2 instances and `verify` takes about 5 s. See it:
   [Known verification gaps](../samples/insurance-claim-ops/README.md#known-verification-gaps).
   What you can do: give the two children a key of their own, or carry the fact on the claim.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases

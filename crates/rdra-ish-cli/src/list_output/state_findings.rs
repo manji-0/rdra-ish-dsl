@@ -732,6 +732,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::PropertyViolated { .. }
-        | StateDiag::UnresolvedPropertyAtom { .. } => diag.to_string(),
+        | StateDiag::UnresolvedPropertyAtom { .. }
+        | StateDiag::UnjoinedGuardRead { .. } => diag.to_string(),
     }
 }

@@ -3,7 +3,7 @@
 %% omitted: (none)
 flowchart LR
   condition__BookedPatient{"予約済みの患者"}:::condition
-  %% holds condition__BookedPatient: Appointment.status == 予約済
+  %% holds condition__BookedPatient: (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment)
   condition__CopayCappedAtLimit{"窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}:::condition
   condition__OrderConfirmedByPhysician{"医師が確定したオーダ"}:::condition
   %% holds condition__OrderConfirmedByPhysician: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済

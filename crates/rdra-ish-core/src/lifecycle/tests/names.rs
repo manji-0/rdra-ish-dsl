@@ -180,6 +180,13 @@ fn one_of_each() -> Vec<StateDiag> {
             conditions: vec!["NotFinal".into()],
             site: site(),
         },
+        StateDiag::UnjoinedGuardRead {
+            condition: "SettlementSigned".into(),
+            usecase: "CompleteClaim".into(),
+            entity: "Settlement".into(),
+            fix: "add `.along(Claim, ClaimCase, Settlement)`".into(),
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -212,7 +219,8 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::UnsupportedComparison { .. }
             | StateDiag::DerivedColumnRead { .. }
-            | StateDiag::UnresolvedPropertyAtom { .. } => {}
+            | StateDiag::UnresolvedPropertyAtom { .. }
+            | StateDiag::UnjoinedGuardRead { .. } => {}
         }
     }
     all

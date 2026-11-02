@@ -260,7 +260,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
 | `required`, `exclusive` | `.label("...")` |
-| `holds` | `.has(...)`, `.none(...)`, `.by(...)` |
+| `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)` |
 | `sets` | `.by(...)`, on a copy (`column == Source.column`) |
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
@@ -1350,6 +1350,21 @@ the guard, each read on the state before that step.
 - A comparison on any other entity needs some existing instance that satisfies it.
   Comparisons on one such entity share one instance. A direct `relate` links that instance
   to the entities it relates to; without a `relate`, it is independent.
+- `.along(A, B, C)` names the path instead: the guard reads the instance of each path
+  entity the keys between neighbours join, starting from the instance the use case binds.
+  Only the hops link; the one-hop links of the item above are not added. A `.by(role)` after
+  the `.along` picks the key of a hop that two keys join, as on a `forbidden`.
+- A compared entity that no key, direct or along the path, joins to an instance the use case
+  binds is the `UnjoinedGuardRead` warning: the guard holds when any row of it anywhere
+  satisfies the body. The warning names the entity, the use case, and the fix: the `.along`
+  that the shortest key path gives, or writing the entity in the use case.
+
+```rdra
+// A claim and a settlement are both children of the accident case. The claim is completed
+// only when the settlement of its own case is agreed, not any settlement.
+holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase, Settlement)
+applies_to(SettlementSigned, CompleteClaim)
+```
 - A body applied to a use case that writes nothing has no action to guard. That is
   `UnbindableCondition`, an error.
 - A body names its columns, so a column the body reads that no use case writes draws the
@@ -1454,7 +1469,8 @@ Two chain methods shape the key:
 <!-- constrained-by #relate-and-fk-generation -->
 
 A statement that reads two related entities joins them through a key: an `.along(A, B)`
-hop, a `.has(...)` or `.none(...)` (on an `invariant` or a `holds`), the link between an
+hop (on a `forbidden`, an `invariant`, or a `holds`), a `.has(...)` or `.none(...)` (on an
+`invariant` or a `holds`), the link between an
 entity a `holds` body compares and an entity the guarded use case writes, and the source of
 a copy (`sets(UC, E, col == F.col)`). Every one of them resolves the key by one rule
 (`SemanticModel::join_key`), so `check`, `states`, the TLA+ export and `verify` read the
@@ -1508,6 +1524,7 @@ per pair, the common case, never writes it.
 |---|---|
 | `AmbiguousOwnerLink` | Several keys join two entities a statement joins, and no `.by(role)` names one. The lifecycle reports it for a guard, a quantifier, and a copy (it depends on the use case a guard is on); the analysis for `.along`. |
 | `UnknownOwnerRole` | `.by(role)` names no key on the `.along` path, no key of the quantified entity, no key of an entity the `holds` body compares, or no key between a copy's target and source. |
+| `UnjoinedGuardRead` | A `holds` body compares an entity that no key joins to a row the guarded use case binds, so any row of it satisfies the guard (a warning). |
 | `ByWithoutAlong` | `.by(...)` on a `forbidden` or `invariant` follows no `.along`, `.has` or `.none`, or `.by(...)` on a `sets` that copies nothing. |
 
 In LSP, a role is a symbol: go to definition on `.by(renews)` opens the `relate` that

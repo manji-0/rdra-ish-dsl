@@ -1237,6 +1237,46 @@ fn bfs_and_tlc_agree_on_two_keys_to_one_parent() {
     }
 }
 
+/// A claim and a settlement are both children of a case (#77). `Complete` runs while the
+/// settlement GUARD_PATH reads is agreed. Along the case it is the settlement of the claim's
+/// own case, and both engines find the rule holds; with no path it is any settlement, and
+/// both reach a completed claim of a case whose settlement is still negotiating.
+const ALONG_GUARD: &str = r#"
+entity Case "案件" { id: Int @pk  status: Enum(open, negotiating) @default(open) }
+entity Claim "請求" { id: Int @pk  status: Enum(submitted, completed) @default(submitted) }
+entity Settlement "示談" { id: Int @pk  status: Enum(negotiating, agreed) @default(negotiating) }
+relate(Claim, Case, N:1)
+relate(Settlement, Case, N:1)
+usecase Open "受付"
+usecase Submit "請求"
+usecase Negotiate "示談開始"
+usecase Agree "示談成立"
+usecase Complete "請求完了"
+creates(Open, Case)
+creates(Submit, Claim)
+creates(Negotiate, Settlement)
+transitions(Negotiate, Case.status, open -> negotiating)
+transitions(Agree, Settlement.status, negotiating -> agreed)
+transitions(Complete, Claim.status, submitted -> completed)
+condition Signed "示談書がある"
+holds(Signed, Settlement.status == agreed)GUARD_PATH
+applies_to(Signed, Complete)
+forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, Case, Settlement)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_guard_along_a_path() {
+    let along = check_fixture(
+        "along_guard",
+        &ALONG_GUARD.replace("GUARD_PATH", ".along(Claim, Case, Settlement)"),
+    );
+    let anywhere = check_fixture("unjoined_guard", &ALONG_GUARD.replace("GUARD_PATH", ""));
+    if let (Some(along), Some(anywhere)) = (along, anywhere) {
+        assert!(!along.contains("CrossForbidden_Claim_0"), "{along:?}");
+        assert!(anywhere.contains("CrossForbidden_Claim_0"), "{anywhere:?}");
+    }
+}
+
 /// `.none(Invoice)` and `.none(Invoice.status in (<every value>))` are one guard (#73): both
 /// engines agree on each, and every cone has the same states under either form.
 #[test]

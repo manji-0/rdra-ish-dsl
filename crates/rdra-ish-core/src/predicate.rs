@@ -102,7 +102,7 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
         "forbidden" => &["along", "by", "label"],
         "invariant" => &["when", "then", "has", "none", "along", "by", "label"],
         "required" | "exclusive" => &["label"],
-        "holds" => &["has", "none", "by"],
+        "holds" => &["has", "none", "along", "by"],
         "sets" => &["by"],
         "after" => &["assert", "label"],
         "exposes" => &["append", "upsert", "caller"],

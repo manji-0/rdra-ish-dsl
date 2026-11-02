@@ -12,7 +12,8 @@ use rdra_ish_syntax::ast::*;
 
 use super::arg_resolve::{resolve_arg, resolve_entity_name, resolve_namespaced_variation};
 use super::constraint::{
-    add_condition_entities_to_scope, resolve_cross_condition, resolve_related_quantifier, selectors,
+    add_condition_entities_to_scope, along_scope, resolve_cross_condition,
+    resolve_related_quantifier, selectors,
 };
 use super::nodes::node_kind_tag_str;
 use super::predicate_process::predicate_arg_display;
@@ -193,10 +194,19 @@ pub fn condition_body_display(
             .join(", ")
     };
     let mut text = comparisons(&body.conds);
-    if !body.quantifiers.is_empty() || !body.by.is_empty() {
+    let chained = !matches!(body.along, CrossConstraintScope::GlobalProduct);
+    if chained || !body.quantifiers.is_empty() || !body.by.is_empty() {
         text = format!("({text})");
     }
     text.push_str(&crate::rules::by_display(&body.by));
+    if let CrossConstraintScope::RelationPath { path, by, .. } = &body.along {
+        let ids: Vec<&str> = path
+            .iter()
+            .map(|e| model.entities[*e].id.as_str())
+            .collect();
+        text.push_str(&format!(".along({})", ids.join(", ")));
+        text.push_str(&crate::rules::by_display(by));
+    }
     for q in &body.quantifiers {
         let method = match q.kind {
             QuantifierKind::Has => "has",
@@ -496,10 +506,12 @@ pub(crate) fn process_holds_predicate(
         }
     }
     let by = selectors(&pred.chain, None);
+    let along = along_scope(model, pred, ctx, diags);
     model.conditions[condition].body = Some(HoldsBody {
         conds: body,
         quantifiers,
         by,
+        along,
         site: Some(ctx.locate(pred.span.clone())),
     });
     model
