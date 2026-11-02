@@ -1,0 +1,45 @@
+// `.none(Invoice.status in (draft, issued, paid))` lists every value of the column, so it says
+// "no Invoice belongs to this Order yet" and reads the link only: the cones that keep Issue
+// hold Invoice._owner_Order and not Invoice.status. Issue creates one Invoice per open Order,
+// so Unique_Invoice_Order (relate 1:1) holds at InstanceCount == 2.
+// expect check: ok
+// expect verify: tlc=ok
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+entity Invoice "請求書" {
+  id: Int @pk
+  status: Enum(draft, issued, paid) @default(draft)
+}
+
+usecase Place "注文確定"
+usecase Issue "請求書発行"
+usecase Send "請求書送付"
+usecase Pay "支払"
+usecase Close "注文終了"
+
+buc BucBilling "Billing"
+contains(BucBilling, Place)
+contains(BucBilling, Issue)
+contains(BucBilling, Send)
+contains(BucBilling, Pay)
+contains(BucBilling, Close)
+
+creates(Place, Order)
+creates(Issue, Invoice)
+updates(Send, Invoice)
+updates(Pay, Invoice)
+updates(Close, Order)
+
+transitions(Send, Invoice.status, draft -> issued)
+transitions(Pay, Invoice.status, issued -> paid)
+transitions(Close, Order.status, open -> closed)
+
+relate(Invoice, Order, 1:1)
+
+// One invoice per order: Issue runs only while the order is open and has no invoice.
+condition NoInvoiceYet "請求書のない注文"
+holds(NoInvoiceYet, Order.status == open).none(Invoice.status in (draft, issued, paid))
+applies_to(NoInvoiceYet, Issue)

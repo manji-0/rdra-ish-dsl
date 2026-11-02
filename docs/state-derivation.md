@@ -274,7 +274,9 @@ cone of influence:
   Actions that write nothing in the set drop out, and an action keeps only its effects
   on the set. A copy's guard is read only when the cone holds the column it pins. Without
   that column the guard holds for some value of the column, so the action drops it with
-  the column's choice.
+  the column's choice. A set that lists every value of its column (`Child.status in
+  (<every value>)`) is true when the system is built, so `.none(Child.status in (<every
+  value>))` says "no child row" and reads the link alone, not the column (#71).
 - **Exact.** The reachable states of the cone are the reachable states of the whole
   system projected onto the cone. The cone is not an approximation. The test
   `cone_exploration_equals_the_projection_of_the_whole_component` in

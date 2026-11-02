@@ -5,6 +5,8 @@
 //! the largest per sample.
 //!
 //! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure [-- STATE_CAP [verify [SAMPLE]]]`
+//! `SAMPLE` is a line of `samples.txt` or a path to any project. `RDRA_CONE_VARS=1` prints the
+//! vars of each cone under its line.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
@@ -31,16 +33,22 @@ fn main() {
         _ => (Bounds::STATES, Bounds::STATES.instances),
     };
     let only = std::env::args().nth(3);
+    let show_vars = std::env::var_os("RDRA_CONE_VARS").is_some();
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let list = std::fs::read_to_string(repo.join("samples.txt")).expect("samples.txt");
     let caps = Caps::new(usize::MAX, cap);
     println!("bounds: instances={instances} int_max=5  state cap per cone: {cap}");
-    for sample in list
+    let listed: Vec<&str> = list
         .lines()
         .map(str::trim)
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .filter(|l| only.as_deref().is_none_or(|o| o == *l))
-    {
+        .collect();
+    let samples: Vec<&str> = match (&only, listed.is_empty()) {
+        (Some(path), true) => vec![path.as_str()],
+        _ => listed,
+    };
+    for sample in samples {
         let model = load_project(&[repo.join(sample)], None)
             .expect("sample loads")
             .model;
@@ -100,6 +108,19 @@ fn main() {
                 shown,
                 ms
             );
+            if show_vars {
+                let names: Vec<String> = cone
+                    .vars
+                    .iter()
+                    .map(|v| match &ts.var(*v).kind {
+                        VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
+                            format!("{}.{}", ts.entity(*entity).id, ts.var_name(*v))
+                        }
+                        _ => ts.var_name(*v),
+                    })
+                    .collect();
+                println!("    vars: {}", names.join(" "));
+            }
             if states >= worst.0 {
                 let ids: Vec<&str> = entities.iter().map(|e| ts.entity(*e).id.as_str()).collect();
                 worst = (states, format!("{name} [{}]", ids.join(",")));

@@ -1,6 +1,6 @@
 %% rdra-ish diagram=sequence scope=usecase:RegisterPermit model=samples/food-permit-ops
 %% kinds: actor usecase screen api entity extsystem
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__PermitClerk as 保健所 許可担当職員
   participant usecase__GrantPermit as 許可の決定
@@ -12,7 +12,11 @@ sequenceDiagram
   actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への登録
   usecase__GrantPermit ->> api__PermitRegistrationApi: 営業許可の決定
   screen__PermitLedgerScreen ->> api__PermitRegistrationApi: 営業許可登録 API
-  api__PermitRegistrationApi ->> entity__PermitApplication: read
-  api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
-  api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
-  api__PermitRegistrationApi -->> screen__PermitLedgerScreen: done
+  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit.status in (有効, 営業停止中, 失効（有効期間満了）, 取消, 廃業))
+    api__PermitRegistrationApi ->> entity__PermitApplication: read
+    api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
+    api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
+    api__PermitRegistrationApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitRegistrationApi -->> screen__PermitLedgerScreen: rejected
+  end

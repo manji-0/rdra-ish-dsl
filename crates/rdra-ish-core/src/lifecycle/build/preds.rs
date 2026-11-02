@@ -1,6 +1,6 @@
 //! Constraints, after-asserts, and properties as predicates over the system's vars.
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use super::naming::{is_driven, property_entity};
 use super::Builder;
@@ -246,11 +246,35 @@ impl<'m> Builder<'m> {
             .iter()
             .map(|v| self.eq_atom(ek, at, column, v, site))
             .collect();
-        let any = one_slot_set(&eqs).unwrap_or(Pred::Or(eqs));
-        match op {
-            CmpOpModel::NotIn => Pred::Not(Box::new(any)),
-            _ => any,
+        let any = match one_slot_set(&eqs) {
+            Some(set) if self.lists_whole_domain(&set) => Pred::True,
+            Some(set) => set,
+            None => Pred::Or(eqs),
+        };
+        match (op, any) {
+            (CmpOpModel::NotIn, Pred::True) => Pred::False,
+            (CmpOpModel::NotIn, any) => Pred::Not(Box::new(any)),
+            (_, any) => any,
         }
+    }
+
+    /// `t in (v, ..)` names every value of the slot's domain. A slot always holds one of them,
+    /// present, created, or deleted at base, so the set holds wherever it is read and no
+    /// cone needs the column for it (`.none(Child.status in (<every value>))` says "no child").
+    fn lists_whole_domain(&self, set: &Pred) -> bool {
+        let Pred::In(Term::Slot { var, .. }, values) = set else {
+            return false;
+        };
+        let domain = &self.ts.vars[var.index()].domain;
+        let listed: BTreeSet<Value> = values
+            .iter()
+            .filter_map(|v| match v {
+                Term::Lit(v) => Some(*v),
+                Term::Int(n) => domain.of_number(*n, self.bounds),
+                _ => None,
+            })
+            .collect();
+        listed.len() == domain.size(self.bounds)
     }
 
     fn cross_atom(&mut self, cond: &CrossEntityCondition, binding: &Binding, site: &Site) -> Pred {

@@ -191,8 +191,10 @@ entity Disposition "不利益処分" {
 // ER relationships
 relate(Inspection, PermitApplication, 1:1)
 // The permit is registered from the application it grants; a renewal extends the permit and
-// creates none. One permit per application would be 1:1 with a guard on RegisterPermit (README).
-relate(BusinessPermit, PermitApplication, N:1)
+// creates none. One permit per application: RegisterPermit runs only while the application has
+// none (`NoPermitYet` in buc_inspection_decision.rdra), which the 1:1 checks as
+// Unique_BusinessPermit_PermitApplication.
+relate(BusinessPermit, PermitApplication, 1:1)
 relate(ChangeNotice, BusinessPermit, N:1)
 relate(SuccessionNotice, BusinessPermit, N:1)
 relate(SiteVisit, MonitoringPlan, N:1)

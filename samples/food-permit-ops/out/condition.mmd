@@ -26,6 +26,8 @@ flowchart LR
   %% holds condition__InspectionPassed: Inspection.status == 適合
   condition__NewApplication{"新規の申請である"}:::condition
   %% holds condition__NewApplication: PermitApplication.kind == 新規
+  condition__NoPermitYet{"新規の申請で、まだ許可が登録されていない"}:::condition
+  %% holds condition__NoPermitYet: (PermitApplication.kind == 新規).none(BusinessPermit.status in (有効, 営業停止中, 失効（有効期間満了）, 取消, 廃業))
   condition__NotRevocation{"取消ではない処分である"}:::condition
   %% holds condition__NotRevocation: Disposition.kind in (施設の整備改善命令, 営業の停止)
   condition__NotificationRequiredType{"届出業種である"}:::condition
@@ -125,6 +127,8 @@ flowchart LR
   %% desc usecase__PublishViolation: 処分を受けた営業者の名称、施設、処分の理由と内容をホームページと掲示場で公表する。
   usecase__ReceiveExplanation("弁明書の受理"):::usecase
   %% desc usecase__ReceiveExplanation: 停止や整備改善命令の前に、名あて人の弁明書を受け取る。期限までに出なければ、弁明の機会を与えたものとして手続を終える。
+  usecase__RegisterPermit("許可台帳への登録"):::usecase
+  %% desc usecase__RegisterPermit: 許可の決定を受けて許可番号を付け、許可台帳に登録する。電子申請ではシステムの表示を発行済にする。
   usecase__RenewPermit("更新の許可の決定"):::usecase
   %% desc usecase__RenewPermit: 施設検査で施設基準に合うと認めた継続の申請に、許可がまだ有効なうちに許可を与える。
   usecase__ReviewApplication("申請内容の確認と受理"):::usecase
@@ -185,6 +189,11 @@ flowchart LR
   condition__NewApplication -.->|applies_to| usecase__GrantPermit
   condition__NewApplication -.-> variation__ApplicationKind
   %% derived condition__NewApplication -> variation__ApplicationKind from holds
+  condition__NoPermitYet -.->|applies_to| usecase__RegisterPermit
+  condition__NoPermitYet -.-> statemodel__BusinessPermit_status
+  %% derived condition__NoPermitYet -> statemodel__BusinessPermit_status from holds
+  condition__NoPermitYet -.-> variation__ApplicationKind
+  %% derived condition__NoPermitYet -> variation__ApplicationKind from holds
   condition__NotRevocation -.-> variation__DispositionKind
   %% derived condition__NotRevocation -> variation__DispositionKind from holds
   condition__NotRevocation -.-> variation__OpinionProcedure

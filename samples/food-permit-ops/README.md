@@ -76,10 +76,15 @@ numbers), the comment says the modeling is the model's assumption.
   entity's columns into the cone and `verify` stopped at its state cap (see below). Events impose
   no order (#30), so `check` also lets the ledger move without the decision; no rule reads the
   status of both.
-- **The permit is registered under its application.** `relate(BusinessPermit,
-  PermitApplication, N:1)`, and `RegisterPermit` copies the application's 営業の種類 into the
-  permit (`sets(RegisterPermit, BusinessPermit, business_type == PermitApplication.business_type)`,
-  #69). The rule `許可の営業の種類は申請の営業の種類と同じ` reads both.
+- **The permit is registered under its application, one per application.**
+  `relate(BusinessPermit, PermitApplication, 1:1)`, and `RegisterPermit` runs only on a new
+  application that has no permit yet (`holds(NoPermitYet, PermitApplication.kind ==
+  new).none(BusinessPermit.status in (valid, suspended, expired, revoked, closed))`): a set of
+  every status says "no permit" and reads only the link (#71). The 1:1 checks the result as
+  `Unique_BusinessPermit_PermitApplication`. `RegisterPermit` also copies the application's
+  営業の種類 into the permit (`sets(RegisterPermit, BusinessPermit, business_type ==
+  PermitApplication.business_type)`, #69), and the rule `許可の営業の種類は申請の営業の種類と同じ` reads
+  both.
 - **The disposition has two lifecycle columns.** `Disposition.status` follows the procedure
   (処分案 to 確定) and `Disposition.publication` the publication (未公表, 公表中, 公表終了, and
   公表対象外 for a disposition not made). Each has its own `transitions` and its own state model;
@@ -95,27 +100,29 @@ Each figure is a cone size at the 2 instances of `verify`, from
 - **The one temporal property is checked on its cone.** `HygieneManagerEventuallyAppointed`
   says that a valid permit without a 食品衛生責任者 ends with one appointed or with the permit's
   end, under `.fair(AppointHygieneManager)`. `verify` checks it on the cone of what it reads
-  and of `AppointHygieneManager` (223 states at 2 instances), not on the whole
+  and of `AppointHygieneManager` (257 states at 2 instances), not on the whole
   model, where TLC found 6,877,496 distinct states in 300 s with 5,949,713 still queued (#67).
   A property without `.fair` would still go to the whole model, which `verify` now stops at
   its budget as not decided.
-- **One permit per application is not modeled.** The permit belongs to its application through an
-  N:1 `relate`. A 1:1 `relate` needs a guard on `RegisterPermit` that no permit is registered for
-  the application yet (`.none(BusinessPermit.status in (...))`); without it `verify` at 2 instances
-  registers a second one, as with the inspections below. The guard
-  (`holds(..., PermitApplication.kind == new).none(...)`) takes the cone of `Disposition` from
-  13,231 to 248,032 states, over the 200,000 above which `engine_equivalence` compares a cone at 1
-  instance only.
 - **The copied 営業の種類 is state.** Since #69, `PermitApplication.business_type` and
   `BusinessPermit.business_type` are variables, so the view of `PermitApplication` grows from
-  14,197 to 127,165 states and that of `BusinessPermit` from 421 to 12,373.
+  14,197 to 127,165 states. The view of `BusinessPermit` is 8,023 states and that of
+  `Disposition` 23,156 with one permit per application (#71); before the guard that enforces it
+  read the permit's status as well as its link, which took `Disposition` to 248,032.
 - **A renewal is not tied to the permit it continues.** `ApplyRenewal` and `RenewPermit` should run
-  only while the permit is valid. The guard puts every column of `BusinessPermit` into the cone of
-  `PermitApplication` and `Inspection`, which grew from 14,197 to 429,485 states before #69. That
-  is under the `verify` cap of 2,097,152, but over the 200,000 above which `engine_equivalence`
-  compares a cone at 1 instance only. The model leaves the guard out. Only `ExtendPermitTerm`, a
-  step from `valid` to `valid`, keeps an expired permit from being extended, so
-  `after(ExtendPermitTerm)` holds by construction.
+  only while the permit is valid. The cone is exact and column-level (#71): the guard adds two
+  variables to the cones of `PermitApplication` and `Inspection`, `BusinessPermit._exists` and
+  `BusinessPermit.status`, and the 31 states those two reach on their own at 2 instances
+  interleave with every state of the application, so 14,197 states became 429,485 before #69,
+  and on the current model, with `business_type` as state, the same guard takes 127,165 past
+  3,000,000, over the `verify` cap of 2,097,152. A cone cannot be smaller than that projection.
+  On the current model the guard as a `holds` on `BusinessPermit.status` also never runs: the
+  only link between the two entities is the one from the permit to the application it was
+  registered under, which no renewal has, and a second link from the application to the permit
+  it renews makes the key that joins the two ambiguous (`.along(...)` reports it, and a
+  condition has no `.by(role)` to pick one). The model leaves the guard out. Only `ExtendPermitTerm`, a step from
+  `valid` to `valid`, keeps an expired permit from being extended, so `after(ExtendPermitTerm)`
+  holds by construction.
 - **The decision and the ledger are joined by events.** In the first draft the decision of a 取消
   or 停止 moved the disposition and the permit in one use case, and the renewal wrote the permit too.
   The cones of `PermitApplication`, `Inspection`, and `BusinessPermit` each passed 3,000,000 states,
@@ -150,12 +157,19 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
   `Runs_ApplyRenewal` said only "in no reachable state do its guards hold". The cause, an
   `.optional()` child created unlinked unless the use case writes the parent, is in
   `state-derivation.md` but not in the warning.
-- **(M) A guard on another entity pulls all of its columns into the cone** (14,197 to 429,485
-  states for the renewal), and a decision that writes two entities merges their cones. Both were
-  traded for events and a looser model (the gaps above).
+- **(M) A guard on another entity multiplies the cone by the other entity's states** (14,197 to
+  429,485 states for the renewal), and a decision that writes two entities merges their cones.
+  Both were traded for events and a looser model (the gaps above). The first report said the
+  guard pulled every column of the permit in; #71 measured that it pulls two (`_exists` and
+  `status`) and that the growth is their 31 reachable states interleaved with the application's.
 - **(M/D) A 1:1 `relate` does not stop a second child.** `ScheduleInspection` could create two
   inspections for one application; `check` at 1 instance cannot see it, and `verify` reported
   `Unique_Inspection_PermitApplication` with a 5-step trace. A `.none(...)` on the guard fixed it.
+- **(B) A `.none(Child.status in (<every value>))` guard read the child's status.** The only way to
+  say "no child row yet" lists every status, and the cone read the column as well as the link, so
+  one permit per application took `Disposition` from 13,231 to 248,032 states and was left out.
+  Fixed by #71: a set of every value is true when the system is built, the cone is 23,156
+  states, and the permit is 1:1 with its application.
 - **(D) `list --kind rule` prints value labels for `==` but not for `!=`, `in`, or `not in` in a
   rule**, while a condition's `in` gets them (`kind != improvement_order`,
   `status in (expired, revoked, closed)`).

@@ -491,10 +491,13 @@ gaps.
   sample's README. What you can do: state such a rule only where its cone stays within the
   `verify` cap, or check it in a smaller model.
 - **food-permit-ops leaves a renewal guard out.** The sample leaves out the guard that ties
-  a renewal to a valid permit (the application's cone grows from 14,197 to 429,485 states)
-  and joins a disposition's decision to the permit's ledger by an event. Its temporal
-  property, that a valid permit without a 食品衛生責任者 ends with one appointed, is checked on
-  a 223-state cone. See it:
+  a renewal to a valid permit. The guard adds two variables to the application's cone,
+  `BusinessPermit._exists` and `BusinessPermit.status`, and the cone grows from 14,197 to
+  429,485 states (#71): the 31 reachable states of those two variables at 2 instances
+  interleave with every state of the application, and an exact cone cannot be smaller than
+  that projection. The sample also joins a disposition's decision to the permit's ledger by
+  an event. Its temporal property, that a valid permit without a 食品衛生責任者 ends with one
+  appointed, is checked on a 257-state cone. See it:
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
   you can do: as for patent-ops.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
@@ -536,6 +539,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `temporal_fair.rdra` | pass, fail | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
 | `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
+| `none_any_child.rdra` | pass, pass | `.none(Invoice.status in (<every value>))` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states) |
+| `none_any_child_bypassed.rdra` | pass, fail | The same model with Reissue, which creates an Invoice under a closed Order without the guard; `Unique_Invoice_Order` fails at two instances on the cone without `Invoice.status` |
 | `min_card_unmet.rdra` | fail, fail | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
 | `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
 | `check_unmet.rdra` | fail, fail | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |

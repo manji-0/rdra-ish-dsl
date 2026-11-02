@@ -7,6 +7,18 @@
 - `list --kind screen`, `event`, and `timer` list the declared screens, events, and timers
   as `id,label`, sorted by id, in every `--format` (#70), as `flow`, `step`, and `system`
   do. Before, `--kind` rejected them.
+
+- A set that lists every value of its column (`Child.status in (<every value>)`) is true,
+  and its `not in` false, when the lifecycle builds its system (#71). `.none(Child.status in
+  (<every value>))` therefore says "no child row" and reads only the link, so a creator
+  guarded that way pulls no column of the child into the cones that keep it. The cone of
+  `samples/food-permit-ops`'s `Disposition` with such a guard on `RegisterPermit` falls from
+  248,032 states to 23,156 at 2 instances, and the sample now registers one permit per
+  application (`relate(BusinessPermit, PermitApplication, 1:1)` with the guard
+  `NoPermitYet`). The fixtures `none_any_child` and `none_any_child_bypassed` cover it.
+  `lifecycle_measure` takes a project path in place of a `samples.txt` line and prints each
+  cone's variables under `RDRA_CONE_VARS=1`.
+
 - `verify` warns on stderr when it leaves a finding undecided, a temporal property past
   `--temporal-budget` or a finding a BFS cone left at its state cap: `warning: 2 temporal
   properties the budget left undecided; the OK line holds only for what was decided

@@ -106,6 +106,8 @@ expectations"). The table repeats each header; "ok" means the command passes.
 | `samples/deadlock.rdra` | fail `Deadlock_Order_status_paid` | `tlc=ok`, fails on the same name | A way out that never opens: Ship's condition holds only while `pending`; Ship warns `Runs_Ship` |
 | `samples/partial_scope.rdra` | fail `DerivedColumnRead_Audit_score` | fails before TLC; `--entity Order` gives `tlc=ok` | Audit's `forbidden` reads an arithmetic `@derived` column; `--entity Order` defers it under `not checked:` |
 | `samples/one_to_one_shared.rdra` | ok | `tlc=counterexample`, `Unique_Shipment_Order` | Two use cases link two Shipments to one Order; one instance cannot show it |
+| `samples/none_any_child.rdra` | ok | `tlc=ok` | `.none(Invoice.status in (<every value>))` on Issue says "no invoice yet" and reads the link only; `Unique_Invoice_Order` holds |
+| `samples/none_any_child_bypassed.rdra` | ok | `tlc=counterexample`, `Unique_Invoice_Order` | Reissue creates a second Invoice under a closed Order without the guard; one instance cannot show it |
 | `samples/min_card_unmet.rdra` | fail `MinCard_OrderLine_Order` | `tlc=counterexample` | `1..*:1`; Place creates an Order without a line |
 | `samples/min_card_met.rdra` | ok | `tlc=ok` | Place creates the Order and its first line in one transaction; `check` warns that AddLine never runs at one instance (no free OrderLine slot), `verify` runs it |
 | `samples/check_unmet.rdra` | fail `Check_CartLine_qty_0` | `tlc=counterexample` | `@check(qty >= 1)`; ClearQty sets `qty` to 0 |

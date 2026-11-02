@@ -185,7 +185,8 @@ impl TransitionSystem {
                 let d = self.entity(e);
                 seed.insert(d.exists);
                 seed.extend(d.columns.iter().copied());
-                // Actions that touch the entity without changing it still name it in VIA.
+                // Actions that touch the entity without changing it stay, with every guard,
+                // so this cone decides whether they run (`NeverRuns`, findings.rs).
                 for (i, a) in self.actions.iter().enumerate() {
                     if a.params
                         .iter()

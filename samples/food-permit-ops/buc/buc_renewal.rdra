@@ -66,8 +66,8 @@ triggers(ExpiryNoticeDue, SendExpiryNotice)
 
 // A renewal is an application like a new one, of the other kind. It should name the permit it
 // continues and run only while that permit is valid; the model does not link the two (README, known
-// verification gaps): the guard puts every column of the permit into the application's cone, which
-// grows from 14,197 to 429,485 states at the 2 instances of `verify`.
+// verification gaps): the guard puts the permit's existence and status into the application's cone,
+// whose 31 states at the 2 instances of `verify` multiply the cone from 14,197 to 429,485 states.
 displays(ApplyRenewal, RenewalScreen)
 invokes(ApplyRenewal, RenewalApi)
 creates(RenewalApi, PermitApplication)

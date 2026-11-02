@@ -488,7 +488,7 @@ flowchart LR
 | 改善の報告と再検査の申込み<br>`RequestReinspection` | 営業者が指示された箇所を直し、再検査を申し込む。 | `InspectionScreen` | `ReinspectionApi` | （なし） |
 | 許可の決定<br>`GrantPermit` | 施設検査で施設基準に合うと認めた新規の申請に許可を与え、有効期間（5年以上）を付ける。 | `DecisionScreen` | `DecisionApi` | 施設検査で施設基準に適合した、新規の申請である |
 | 不許可の決定<br>`DenyPermit` | 施設基準に合わないか、補正に応じないか、欠格事由に当たる申請を、理由を示し、審査請求ができることを書面で教えて拒否する。 | `DecisionScreen` | `DecisionApi` | （なし） |
-| 許可台帳への登録<br>`RegisterPermit` | 許可の決定を受けて許可番号を付け、許可台帳に登録する。電子申請ではシステムの表示を発行済にする。 | `PermitLedgerScreen` | `PermitRegistrationApi` | （なし） |
+| 許可台帳への登録<br>`RegisterPermit` | 許可の決定を受けて許可番号を付け、許可台帳に登録する。電子申請ではシステムの表示を発行済にする。 | `PermitLedgerScreen` | `PermitRegistrationApi` | 新規の申請で、まだ許可が登録されていない |
 | 許可証の交付<br>`IssueCertificate` | 許可証を営業者に交付する。 | `PermitLedgerScreen` | `PermitApi` | 許可が有効である |
 | 食品衛生責任者の選定の届出<br>`AppointHygieneManager` | 申請時に食品衛生責任者を定めていなかった営業者が、許可後に定めて（講習会を受けて）届け出る。 | `PermitLedgerScreen` | `OperatorPermitApi` | 許可が有効である |
 | 営業の開始・再開<br>`StartBusiness` | 営業者が許可証を掲示して営業を始める。営業停止の期間が終わった後の再開も同じ。 | `PermitLedgerScreen` | `OperatorPermitApi` | 許可が有効で、許可証の交付を受けている |
@@ -628,7 +628,7 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:RegisterPermit model=samples/food-permit-ops
 %% kinds: actor usecase screen api entity extsystem
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__PermitClerk as 保健所 許可担当職員
   participant usecase__GrantPermit as 許可の決定
@@ -640,10 +640,14 @@ sequenceDiagram
   actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への登録
   usecase__GrantPermit ->> api__PermitRegistrationApi: 営業許可の決定
   screen__PermitLedgerScreen ->> api__PermitRegistrationApi: 営業許可登録 API
-  api__PermitRegistrationApi ->> entity__PermitApplication: read
-  api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
-  api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
-  api__PermitRegistrationApi -->> screen__PermitLedgerScreen: done
+  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit.status in (有効, 営業停止中, 失効（有効期間満了）, 取消, 廃業))
+    api__PermitRegistrationApi ->> entity__PermitApplication: read
+    api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
+    api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
+    api__PermitRegistrationApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitRegistrationApi -->> screen__PermitLedgerScreen: rejected
+  end
 ```
 
 </details>
@@ -2525,7 +2529,7 @@ erDiagram
   SiteVisit }o--|| MonitoringPlan : ""
   Disposition }o--|| BusinessPermit : ""
   Inspection ||--|| PermitApplication : ""
-  BusinessPermit }o--|| PermitApplication : ""
+  BusinessPermit ||--|| PermitApplication : ""
   ChangeNotice }o--|| BusinessPermit : ""
   SuccessionNotice }o--|| BusinessPermit : ""
 ```
@@ -2546,7 +2550,7 @@ erDiagram
 | BusinessPermit | 営業許可 | operating | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
 | BusinessPermit | 営業許可 | certificate_issued | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
 | BusinessPermit | 営業許可 | hygiene_manager_appointed | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
-| BusinessPermit | 営業許可 | permitapplication_id | Int | false | false | false | true | PermitApplication | false |  |  | false |  |  | false | false | false |  |
+| BusinessPermit | 営業許可 | permitapplication_id | Int | false | true | false | true | PermitApplication | false |  |  | false |  |  | false | false | false |  |
 | ChangeNotice | 変更届 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | ChangeNotice | 変更届 | status | Enum | false | false | false | false |  | false |  |  | false | received |  | false | false | false |  |
 | ChangeNotice | 変更届 | businesspermit_id | Int | false | false | false | true | BusinessPermit | false |  |  | false |  |  | false | false | false |  |
@@ -2617,13 +2621,14 @@ erDiagram
 | condition | 申請が検査待で、まだ検査の予定がない | PermitApplication\|Inspection | (PermitApplication.status == 検査待).none(Inspection.status in (検査予定, 適合, 不適合（改善の指示）)) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
 | condition | 施設検査で施設基準に適合した | Inspection | Inspection.status == 適合 | GrantPermit\|RenewPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:144 |
 | condition | 新規の申請である | PermitApplication | PermitApplication.kind == 新規 | GrantPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:148 |
-| condition | 許可が有効である | BusinessPermit | BusinessPermit.status == 有効 | AppointHygieneManager\|IssueCertificate | samples/food-permit-ops/buc/buc_inspection_decision.rdra:177 |
-| condition | 許可が有効で、許可証の交付を受けている | BusinessPermit | BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true | StartBusiness | samples/food-permit-ops/buc/buc_inspection_decision.rdra:197 |
-| forbidden | 施設基準に適合しない施設には許可しない | PermitApplication\|Inspection | PermitApplication.status == 許可 AND Inspection.status != 適合 |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:303 |
-| invariant | 不許可には理由を同時に示す | PermitApplication | when PermitApplication.status == 不許可 then PermitApplication.reason_shown == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:305 |
-| invariant | 手数料を納めた申請だけが検査と許可に進む | PermitApplication | when PermitApplication.status in (検査待, 許可) then PermitApplication.fee_paid == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:308 |
-| invariant | 許可証の交付を受けてから営業する | BusinessPermit | when BusinessPermit.operating == true then BusinessPermit.certificate_issued == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:311 |
-| forbidden | 許可の営業の種類は申請の営業の種類と同じ | BusinessPermit\|PermitApplication | BusinessPermit.business_type != PermitApplication.business_type |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:315 |
+| condition | 新規の申請で、まだ許可が登録されていない | PermitApplication\|BusinessPermit | (PermitApplication.kind == 新規).none(BusinessPermit.status in (有効, 営業停止中, 失効（有効期間満了）, 取消, 廃業)) | RegisterPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:175 |
+| condition | 許可が有効である | BusinessPermit | BusinessPermit.status == 有効 | AppointHygieneManager\|IssueCertificate | samples/food-permit-ops/buc/buc_inspection_decision.rdra:185 |
+| condition | 許可が有効で、許可証の交付を受けている | BusinessPermit | BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true | StartBusiness | samples/food-permit-ops/buc/buc_inspection_decision.rdra:205 |
+| forbidden | 施設基準に適合しない施設には許可しない | PermitApplication\|Inspection | PermitApplication.status == 許可 AND Inspection.status != 適合 |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:311 |
+| invariant | 不許可には理由を同時に示す | PermitApplication | when PermitApplication.status == 不許可 then PermitApplication.reason_shown == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:313 |
+| invariant | 手数料を納めた申請だけが検査と許可に進む | PermitApplication | when PermitApplication.status in (検査待, 許可) then PermitApplication.fee_paid == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:316 |
+| invariant | 許可証の交付を受けてから営業する | BusinessPermit | when BusinessPermit.operating == true then BusinessPermit.certificate_issued == true |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:319 |
+| forbidden | 許可の営業の種類は申請の営業の種類と同じ | BusinessPermit\|PermitApplication | BusinessPermit.business_type != PermitApplication.business_type |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:323 |
 | condition | 監視指導計画が公表されている | MonitoringPlan | MonitoringPlan.status == 公表済 | ScheduleSiteVisit | samples/food-permit-ops/buc/buc_monitoring.rdra:84 |
 | condition | 申請が確認待か差戻し中である | PermitApplication | PermitApplication.status in (申請内容確認待, 差戻し・補正中) | PayPermitFee | samples/food-permit-ops/buc/buc_permit_application.rdra:108 |
 | condition | 手数料が納められている | PermitApplication | PermitApplication.fee_paid == true | ReviewApplication | samples/food-permit-ops/buc/buc_permit_application.rdra:117 |

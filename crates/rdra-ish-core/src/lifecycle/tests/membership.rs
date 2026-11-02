@@ -1,7 +1,7 @@
 //! `col in (..)` is a disjunction of `col == v`, `col not in (..)` a conjunction of `col != v`.
 
 use super::*;
-use crate::lifecycle::InvKind;
+use crate::lifecycle::{InvKind, Target};
 
 const ORDER: &str = r#"
 entity Order "注文" {
@@ -87,4 +87,41 @@ fn a_not_in_guard_keeps_a_use_case_out_of_the_listed_states() {
     let guard =
         "condition Open \"未確定\"\nholds(Open, Order.status in (pending))\napplies_to(Open, Cancel)";
     assert!(!violated(&format!("{guard}\n{rule}"), InvKind::Forbidden));
+}
+
+/// A set of every value of the column is true: `.none(Invoice.status in (<every value>))` says
+/// "no Invoice", so the cone that decides the key's uniqueness holds the link and not the
+/// status, and a guard of `not in (<every value>)` never holds.
+#[test]
+fn a_set_of_every_value_reads_no_column() {
+    let model = sample_model("samples/formal-verification/none_any_child.rdra");
+    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
+    let ts = &built.ts;
+    let invoice = ts.entities().iter().find(|e| e.id == "Invoice").unwrap();
+    let unique = ts
+        .invariants()
+        .iter()
+        .position(|i| i.name == "Unique_Invoice_Order")
+        .unwrap();
+    let cone = ts.target_cone(Target::Invariant(unique));
+    let names: Vec<String> = cone.vars.iter().map(|v| ts.var_name(*v)).collect();
+    assert!(
+        names.iter().any(|n| n == "Invoice._owner_Order"),
+        "{names:?}"
+    );
+    assert!(
+        !cone.vars.contains(&invoice.columns[0]),
+        "Invoice.status stays out of {names:?}"
+    );
+
+    let d = derive_src(&format!(
+        "{ORDER}\ncondition Never \"どの状態でもない\"\nholds(Never, Order.status not in (pending, paid, cancelled))\napplies_to(Never, Bump)"
+    ));
+    assert!(
+        d.diags
+            .iter()
+            .any(|x| matches!(&x.diag, StateDiag::NeverRuns { action, .. } if action == "Bump")),
+        "{:?}",
+        d.diags
+    );
 }

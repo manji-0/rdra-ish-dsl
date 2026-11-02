@@ -166,6 +166,14 @@ creates(PermitRegistrationApi, BusinessPermit)
 reads(PermitRegistrationApi, PermitApplication)
 sets(RegisterPermit, BusinessPermit, business_type == PermitApplication.business_type)
 raises(RegisterPermit, EvPermitIssued)
+
+// One permit per application (一施設一許可, mhlw-eigyou-kisei-qa.txt:131): the permit is registered
+// under a new application that has none yet. The `.none(...)` lists every status, so it says "no
+// permit" and reads only the link; the 1:1 relate checks the result as
+// Unique_BusinessPermit_PermitApplication.
+condition NoPermitYet "新規の申請で、まだ許可が登録されていない"
+holds(NoPermitYet, PermitApplication.kind == new).none(BusinessPermit.status in (valid, suspended, expired, revoked, closed))
+applies_to(NoPermitYet, RegisterPermit)
 triggers(EvPermitIssued, FoodSanitationSystem)
 
 displays(IssueCertificate, PermitLedgerScreen)

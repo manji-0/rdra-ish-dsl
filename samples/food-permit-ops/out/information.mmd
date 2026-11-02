@@ -35,7 +35,7 @@ flowchart LR
   entity__BusinessNotification -.-> statemodel__BusinessNotification_status
   entity__BusinessNotification -.->|variation business_type| variation__NotifiedBusinessType
   entity__BusinessNotification -.->|variation channel| variation__SubmissionChannel
-  entity__BusinessPermit ---|N:1| entity__PermitApplication
+  entity__BusinessPermit ---|1:1| entity__PermitApplication
   entity__BusinessPermit -.-> statemodel__BusinessPermit_status
   entity__BusinessPermit -.->|variation business_type| variation__PermitBusinessType
   entity__ChangeNotice ---|N:1| entity__BusinessPermit

@@ -1228,7 +1228,10 @@ joins the two entities. Like the `.none(...)` of an `invariant`, it ranges over 
 It reads them before the use case runs: on a use case that creates the related entity, the
 row being created is not one of them, and on a use case that updates a related row, that row
 is one of them, read as it was before the update. The quantified row is its own instance even
-when the body also reads its entity.
+when the body also reads its entity. A set that names every value of the column holds for
+every row, so `.none(Related.status in (<every value>))` asks for no related row at all, and
+the lifecycle reads only the link for it (see
+[Set membership](#set-membership-in-and-not-in)).
 
 ```rdra
 // Revoke only while no assignment of the certificate is active.
@@ -2022,7 +2025,9 @@ col != b and col != c`. Every construct that takes a comparison takes a set memb
 `forbidden`, `required`, `exclusive`, `invariant` with its `.when()`, `.then()`, `.has()`,
 and `.none()` (one entity or several, with `Entity.col in (...)`), `holds`,
 `after(...).assert(...)`, `@check`, `@derived`, and `property`. `sets` and `drives` do not: a
-use case leaves one value (`EffectMembership`).
+use case leaves one value (`EffectMembership`). A set that lists every value of the column
+is true, and its `not in` false, when the lifecycle builds its system: `.none(Child.status
+in (<every value>))` says "no child row" and pulls no column into a cone.
 
 ```rdra
 forbidden(Order, status in (paid, shipped), refund_id == present)

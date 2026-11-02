@@ -78,6 +78,6 @@ erDiagram
   SiteVisit }o--|| MonitoringPlan : ""
   Disposition }o--|| BusinessPermit : ""
   Inspection ||--|| PermitApplication : ""
-  BusinessPermit }o--|| PermitApplication : ""
+  BusinessPermit ||--|| PermitApplication : ""
   ChangeNotice }o--|| BusinessPermit : ""
   SuccessionNotice }o--|| BusinessPermit : ""
