@@ -73,6 +73,11 @@ fn cross_parts(model: &SemanticModel, conds: &[CrossEntityCondition]) -> Vec<Str
         .collect()
 }
 
+/// `.by(a).by(b)` for the selectors of a join, empty without one.
+pub fn by_display(by: &[String]) -> String {
+    by.iter().map(|role| format!(".by({role})")).collect()
+}
+
 fn all_of(parts: &[String]) -> String {
     parts.join(" AND ")
 }
@@ -160,12 +165,15 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
             QuantifierKind::Has => "has",
             QuantifierKind::None => "none",
         };
-        let text = format!(
-            "when {} then {method} {}({})",
+        let mut text = format!(
+            "when {} then {method} {}",
             all_of(&cross_parts(model, &c.guards)),
             model.entities[q.related].id,
-            all_of(&cross_parts(model, &q.conditions)),
         );
+        if !q.conditions.is_empty() {
+            text.push_str(&format!("({})", all_of(&cross_parts(model, &q.conditions))));
+        }
+        text.push_str(&by_display(&q.by));
         let entities = entity_ids(model, &[c.anchor, q.related]);
         push("quantifier", &c.label, entities, text, vec![], &q.site);
     }

@@ -3,7 +3,7 @@
 use super::support::entity_key;
 use crate::analysis::build_model;
 use crate::diagnostics::RdraError;
-use crate::model::{ColumnType, CrossConstraintScope, Max, Min, SemanticModel, UniqueSource};
+use crate::model::{ColumnType, CrossConstraintScope, Join, Max, Min, SemanticModel, UniqueSource};
 use rdra_ish_syntax::parse;
 
 fn build(src: &str) -> (SemanticModel, Vec<RdraError>) {
@@ -487,4 +487,146 @@ fn a_range_out_of_bounds_on_the_parent_side_or_on_an_nm_is_an_error() {
         matches!(errors.as_slice(), [RdraError::MinCardOnManyToMany { .. }]),
         "{errors:?}"
     );
+}
+
+// ── The one join rule (#73) ─────────────────────────────────────────────────
+
+/// Permit is registered under its application (1:1, role `Application` by default), and an
+/// application `renews` a permit: two keys between one pair, in opposite directions.
+const RENEWS: &str = r#"
+entity Permit "P" { id: Int @pk  status: Enum(valid, expired) @default(valid) }
+entity Application "A" { id: Int @pk  status: Enum(open, done) @default(open) }
+relate(Permit, Application, 1:1)
+relate(Application, Permit, N:1).optional().role(renews)
+"#;
+
+fn role_of(model: &SemanticModel, join: Join) -> Option<String> {
+    match join {
+        Join::Key(id) => Some(model.key_role(model.foreign_key(id)).to_string()),
+        Join::Unrelated => None,
+        Join::Ambiguous(ids) => Some(format!(
+            "ambiguous: {}",
+            ids.iter()
+                .map(|id| model.key_role(model.foreign_key(*id)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+#[test]
+fn join_key_is_the_one_key_or_the_one_a_selector_names() {
+    let model = built(RENEWS);
+    let (p, a) = (
+        entity_key(&model, "Permit"),
+        entity_key(&model, "Application"),
+    );
+    let join = |by: &[&str]| {
+        let by: Vec<String> = by.iter().map(ToString::to_string).collect();
+        role_of(&model, model.join_key(a, p, &by))
+    };
+    assert_eq!(join(&[]).as_deref(), Some("ambiguous: Application, renews"));
+    assert_eq!(join(&["renews"]).as_deref(), Some("renews"));
+    // The parent id names a key without `.role`, in any case.
+    assert_eq!(join(&["application"]).as_deref(), Some("Application"));
+    // A selector that names neither key leaves the join ambiguous; one that names both too.
+    assert_eq!(
+        join(&["nosuch"]).as_deref(),
+        Some("ambiguous: Application, renews")
+    );
+    assert_eq!(
+        join(&["renews", "Application"]).as_deref(),
+        Some("ambiguous: Application, renews")
+    );
+    // Either direction is the same join.
+    assert_eq!(
+        role_of(&model, model.join_key(p, a, &["renews".to_string()])).as_deref(),
+        Some("renews")
+    );
+
+    let one = built(&format!("{ADDRESSES}\nrelate(Order, Address, N:1)\n"));
+    let (o, ad) = (entity_key(&one, "Order"), entity_key(&one, "Address"));
+    assert_eq!(
+        role_of(&one, one.join_key(o, ad, &[])).as_deref(),
+        Some("Address")
+    );
+    // A selector on a unique join changes nothing.
+    let by = ["nosuch".to_string()];
+    assert_eq!(
+        role_of(&one, one.join_key(o, ad, &by)).as_deref(),
+        Some("Address")
+    );
+    assert_eq!(role_of(&one, one.join_key(o, o, &[])), None);
+}
+
+#[test]
+fn join_key_tells_two_self_keys_apart_by_role() {
+    let model = built(
+        r#"
+entity Staff "S" { id: Int @pk }
+relate(Staff, Staff, N:1).optional().role(manager)
+relate(Staff, Staff, N:1).optional().role(mentor)
+"#,
+    );
+    let s = entity_key(&model, "Staff");
+    assert_eq!(
+        role_of(&model, model.join_key(s, s, &[])).as_deref(),
+        Some("ambiguous: manager, mentor")
+    );
+    let by = ["mentor".to_string()];
+    assert_eq!(
+        role_of(&model, model.join_key(s, s, &by)).as_deref(),
+        Some("mentor")
+    );
+}
+
+#[test]
+fn a_selector_naming_no_key_of_the_join_is_unknown_owner_role() {
+    for statement in [
+        "condition C \"c\"\nholds(C, Permit.status == valid).by(renew)",
+        "condition C \"c\"\nholds(C, Application.status == open).none(Permit).by(renew)",
+        "invariant(Application).when(status == done).none(Permit).by(renew)",
+    ] {
+        let (_, errors) = build(&format!("{RENEWS}\n{statement}\n"));
+        assert!(
+            errors.iter().any(
+                |e| matches!(e, RdraError::UnknownOwnerRole { role, roles, .. }
+                    if role == "renew" && roles.contains("renews"))
+            ),
+            "{statement}: {errors:?}"
+        );
+    }
+    let (_, errors) = build(&format!(
+        "{RENEWS}\nusecase U \"u\"\nupdates(U, Permit)\nsets(U, Permit, status == valid).by(renews)\n"
+    ));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::ByWithoutAlong]),
+        "a literal sets joins nothing: {errors:?}"
+    );
+}
+
+#[test]
+fn a_selector_before_the_quantifier_of_an_invariant_selects_nothing() {
+    let (_, errors) = build(&format!(
+        "{RENEWS}\ninvariant(Application).by(renews).when(status == done).none(Permit)\n"
+    ));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::ByWithoutAlong]),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn each_selector_belongs_to_the_call_before_it() {
+    let model = built(&format!(
+        "{RENEWS}\ncondition C \"c\"\nholds(C, Application.status == open).by(renews).none(Permit).by(Application)\n"
+    ));
+    let body = model
+        .conditions
+        .values()
+        .find_map(|c| c.body.as_ref())
+        .unwrap();
+    assert_eq!(body.by, ["renews"]);
+    assert_eq!(body.quantifiers[0].by, ["Application"]);
+    assert!(body.quantifiers[0].conditions.is_empty());
 }

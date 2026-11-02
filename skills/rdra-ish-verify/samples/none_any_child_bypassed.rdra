@@ -45,7 +45,7 @@ transitions(Close, Order.status, open -> closed)
 relate(Invoice, Order, 1:1)
 
 condition NoInvoiceYet "請求書のない注文"
-holds(NoInvoiceYet, Order.status == open).none(Invoice.status in (draft, issued, paid))
+holds(NoInvoiceYet, Order.status == open).none(Invoice)
 applies_to(NoInvoiceYet, Issue)
 
 // Reissue checks the order, not whether it already has an invoice.

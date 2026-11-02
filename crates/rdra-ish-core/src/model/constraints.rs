@@ -128,7 +128,7 @@ pub enum CrossConstraintScope {
     RelationPath {
         path: Vec<EntityKey>,
         /// `.by(role)`: on a hop that two keys join, the one with this role.
-        by: Option<String>,
+        by: Vec<String>,
         /// The key joining `path[i]` and `path[i + 1]`. `None` when no key joins them, or
         /// when the hop is ambiguous (reported as `AmbiguousOwnerLink`).
         links: Vec<Option<FkId>>,
@@ -186,12 +186,15 @@ pub enum QuantifierKind {
 }
 
 /// One `.has(...)` / `.none(...)` chain call: whether some, or no, row of `related` matches
-/// `conditions`. The rows are the ones linked to the entity the chain hangs off.
+/// `conditions`. The rows are the ones linked to the entity the chain hangs off. No
+/// conditions (`.none(Related)`) asks whether any linked row exists.
 #[derive(Debug, Clone)]
 pub struct RelatedQuantifier {
     pub kind: QuantifierKind,
     pub related: EntityKey,
     pub conditions: Vec<CrossEntityCondition>,
+    /// `.by(role)` after the call: the key a link to `related` follows where several could.
+    pub by: Vec<String>,
 
     /// Source site of the chain call.
     pub site: Option<crate::location::LocatedSpan>,

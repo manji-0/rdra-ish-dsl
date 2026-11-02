@@ -129,7 +129,57 @@ pub enum UniqueSource {
     OneToOne(FkId),
 }
 
+/// The key a join between two entities follows: [`SemanticModel::join_key`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Join {
+    /// No key joins the two entities.
+    Unrelated,
+    Key(FkId),
+    /// Several keys join them, and no `.by(role)` names exactly one. Holds the candidates.
+    Ambiguous(Vec<FkId>),
+}
+
 impl SemanticModel {
+    /// The name `.by(..)` picks a key by: its role, or the parent id when it has none.
+    pub fn key_role<'a>(&'a self, fk: &'a ForeignKey) -> &'a str {
+        fk.role_or(&self.entities[fk.parent].id)
+    }
+
+    /// Whether `.by(selector)` names `fk`. Case-insensitive, so `.by(Order)` names the key
+    /// whose default role is `order`.
+    pub fn key_named(&self, fk: &ForeignKey, selector: &str) -> bool {
+        self.key_role(fk).eq_ignore_ascii_case(selector)
+    }
+
+    /// Every key between `a` and `b`, in either direction.
+    pub fn keys_between(
+        &self,
+        a: EntityKey,
+        b: EntityKey,
+    ) -> impl Iterator<Item = (FkId, &ForeignKey)> {
+        self.foreign_keys().filter(move |(_, fk)| {
+            (fk.child, fk.parent) == (a, b) || (fk.child, fk.parent) == (b, a)
+        })
+    }
+
+    /// The one rule every join follows (`.along`, `.has`/`.none`, a `holds` body, a copy
+    /// source): one key between `a` and `b` is the join; among several, the one a selector
+    /// in `by` names; otherwise the join is ambiguous.
+    pub fn join_key(&self, a: EntityKey, b: EntityKey, by: &[String]) -> Join {
+        let between: Vec<(FkId, &ForeignKey)> = self.keys_between(a, b).collect();
+        let named: Vec<FkId> = between
+            .iter()
+            .filter(|(_, fk)| by.iter().any(|s| self.key_named(fk, s)))
+            .map(|&(id, _)| id)
+            .collect();
+        match (between.as_slice(), named.as_slice()) {
+            ([], _) => Join::Unrelated,
+            ([(id, _)], _) | (_, [id]) => Join::Key(*id),
+            (_, []) => Join::Ambiguous(between.iter().map(|&(id, _)| id).collect()),
+            (_, named) => Join::Ambiguous(named.to_vec()),
+        }
+    }
+
     pub fn foreign_keys(&self) -> impl Iterator<Item = (FkId, &ForeignKey)> {
         self.foreign_keys
             .iter()

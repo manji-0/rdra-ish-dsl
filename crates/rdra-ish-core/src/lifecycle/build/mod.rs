@@ -13,9 +13,10 @@ use super::types::{
     VarKind,
 };
 use super::{Built, Scope, TransitionSystem};
+use crate::analysis::applied_bodies;
 use crate::model::{
-    CmpOpModel, CmpRhs, ColumnType, ConditionKey, EffectValue, EntityKey, Min, ModelColumn,
-    NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
+    CmpOpModel, CmpRhs, ColumnType, ConditionKey, EffectValue, EntityKey, FkId, Join, Min,
+    ModelColumn, NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use crate::tx::{infer_usecase_transactions, UcWrite, WriteKind};
@@ -513,7 +514,7 @@ impl<'m> Builder<'m> {
         self.chosen_columns(uc, &mut a);
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
-        self.owner_bindings(&mut a);
+        self.owner_bindings(uc, &mut a, groups, group);
         self.copy_effects(uc, &mut a, groups);
         let guards = self.condition_guards(uc, &a.params, groups, group);
         a.guards.extend(guards);
@@ -649,9 +650,35 @@ impl<'m> Builder<'m> {
                 );
                 continue;
             }
-            let source_at = match self.copy_source(a, p, source.entity, groups) {
+            let source_at = match self.copy_source(a, p, source.entity, &ce.by, groups) {
                 Ok(at) => at,
-                Err(reason) => {
+                Err(CopyMiss::Ambiguous(candidates)) => {
+                    let roles: Vec<&str> = candidates
+                        .iter()
+                        .map(|id| model.key_role(model.foreign_key(*id)))
+                        .collect();
+                    let statement = format!(
+                        "sets({}, {}, {} == {}.{})",
+                        model.use_cases[uc].id,
+                        model.entities[ce.entity].id,
+                        ce.column,
+                        model.entities[source.entity].id,
+                        source.column
+                    );
+                    self.diag(
+                        vec![ce.entity],
+                        StateDiag::AmbiguousOwnerLink {
+                            rewrite: format!("{statement}.by({})", roles[0]),
+                            statement,
+                            a: model.entities[ce.entity].id.clone(),
+                            b: model.entities[source.entity].id.clone(),
+                            roles: roles.join(", "),
+                            site,
+                        },
+                    );
+                    continue;
+                }
+                Err(CopyMiss::Unbound(reason)) => {
                     let source_id = &model.entities[source.entity].id;
                     self.diag(
                         vec![ce.entity],
@@ -717,18 +744,22 @@ impl<'m> Builder<'m> {
 
     /// The row of `source` a copy into param `p` reads, by the rule a condition atom follows:
     /// a param of the action (on the pre-state, or in the successor when the action creates
-    /// it), else the parent `p` belongs to through a `relate`, which joins the action as a
-    /// `Parent` param that `p`'s owner names. Any other row is not bound to the step.
+    /// it), else the parent `p` belongs to through the key [`SemanticModel::join_key`] picks
+    /// (with the copy's `.by`), which joins the action as a `Parent` param that `p`'s owner
+    /// names. Any other row is not bound to the step.
     fn copy_source(
         &mut self,
         a: &mut ActionDraft,
         p: u8,
         source: EntityKey,
+        by: &[String],
         groups: &[Vec<EntityKey>],
-    ) -> Result<At, String> {
+    ) -> Result<At, CopyMiss> {
         let model = self.model;
         let Some(&s) = self.ent_of.get(&source) else {
-            return Err("it is published and has no state".to_string());
+            return Err(CopyMiss::Unbound(
+                "it is published and has no state".to_string(),
+            ));
         };
         if let Some(q) = a.param_of(s) {
             return Ok(match a.params[usize::from(q)].role {
@@ -739,16 +770,20 @@ impl<'m> Builder<'m> {
         let target = a.params[usize::from(p)].entity;
         let target_id = &self.ts.entities[target.index()].id;
         let source_id = &model.entities[source].id;
-        let owner = self
-            .owners
-            .iter()
-            .find(|(_, child, parent)| (*child, *parent) == (target, s))
-            .map(|(var, ..)| *var);
+        let target_ek = self.ts.entities[target.index()].key;
+        let key = match model.join_key(target_ek, source, by) {
+            Join::Ambiguous(candidates) => return Err(CopyMiss::Ambiguous(candidates)),
+            Join::Key(fk) => Some(fk),
+            Join::Unrelated => None,
+        };
+        let owner = key
+            .filter(|fk| model.foreign_key(*fk).child == target_ek)
+            .and_then(|fk| self.owner_var(fk));
         if let Some(var) = owner {
             if a.params[usize::from(p)].role == ParamRole::New {
-                return Err(format!(
+                return Err(CopyMiss::Unbound(format!(
                     "the {target_id} it creates is not linked to a {source_id}: the relate is optional and the use case does not write {source_id}"
-                ));
+                )));
             }
             let q = a.param(s, ParamRole::Parent);
             let site = self.ts.vars[var.index()].site.clone();
@@ -766,17 +801,45 @@ impl<'m> Builder<'m> {
             });
             return Ok(At::Param(q));
         }
-        let child = self
-            .owners
-            .iter()
-            .any(|(_, child, parent)| (*child, *parent) == (s, target));
+        let child = key.is_some();
         let elsewhere = groups.iter().flatten().any(|ek| *ek == source);
-        Err(if elsewhere {
+        Err(CopyMiss::Unbound(if elsewhere {
             format!("the use case writes {source_id} in another transaction group, a step of its own; relate {target_id} to {source_id} so one step writes both")
         } else if child {
             format!("several {source_id} rows may belong to one {target_id}; copy from the row the {target_id} belongs to, or from one the use case writes")
         } else {
             format!("the use case does not write {source_id}, and no relate makes it the parent of {target_id}")
+        }))
+    }
+
+    /// The owner var of key `fk`, if both its entities have state.
+    fn owner_var(&self, fk: FkId) -> Option<VarId> {
+        self.owners.iter().map(|(var, ..)| *var).find(|var| {
+            matches!(self.ts.vars[var.index()].kind, VarKind::Owner { fk: id, .. } if id == fk)
+        })
+    }
+
+    /// Whether a `holds` body applied to `uc` and placed on this group reads `parent` through
+    /// key `fk` from a `child` the action creates, so the creation links to the row the guard
+    /// reads.
+    fn guard_reads_parent(
+        &self,
+        uc: UseCaseKey,
+        fk: FkId,
+        groups: &[Vec<EntityKey>],
+        group: usize,
+    ) -> bool {
+        let model = self.model;
+        let key = model.foreign_key(fk);
+        applied_bodies(model).into_iter().any(|(_, u, body)| {
+            u == uc
+                && preds::condition_group(body, groups) == group
+                && body
+                    .conds
+                    .iter()
+                    .flat_map(preds::cond_entities)
+                    .any(|ek| ek == key.parent)
+                && model.join_key(key.child, key.parent, &body.by) == Join::Key(fk)
         })
     }
 
@@ -1090,8 +1153,8 @@ impl<'m> Builder<'m> {
                 if !conds.is_empty() {
                     let bodies = conds
                         .iter()
-                        .filter_map(|(ck, _)| model.conditions[*ck].body.as_ref())
-                        .map(|body| self.body_pred(body, &a.params, site))
+                        .filter(|(ck, _)| model.conditions[*ck].body.is_some())
+                        .map(|(ck, _)| self.body_pred(*ck, &a.params, site))
                         .collect();
                     parts.push(Pred::Or(bodies));
                 }
@@ -1212,14 +1275,25 @@ impl<'m> Builder<'m> {
 
     /// R-bind: a created child belongs to its parent, a present one unless the relate is
     /// optional; a child the action updates must already belong to a parent the action only
-    /// updates.
+    /// updates. An optional key also links a created child to a present parent when a guard
+    /// of the action reads the parent through that key.
     ///
     /// Relink: an action that creates the parent and updates an existing child links the child.
     /// For an optional key the child must be unlinked, so a linked child is not relinked; a
-    /// mandatory child always has a parent, so the link is a move.
-    fn owner_bindings(&mut self, a: &mut ActionDraft) {
+    /// mandatory child always has a parent, so the link is a move. A parent param is a row
+    /// the action reads, not writes, so it is never relinked.
+    fn owner_bindings(
+        &mut self,
+        uc: UseCaseKey,
+        a: &mut ActionDraft,
+        groups: &[Vec<EntityKey>],
+        group: usize,
+    ) {
         for &(var, child, parent) in &self.owners.clone() {
             let Some(c) = a.param_of(child) else { continue };
+            if a.params[usize::from(c)].role == ParamRole::Parent {
+                continue;
+            }
             let site = self.ts.vars[var.index()].site.clone();
             let parent_is_new = a
                 .param_of(parent)
@@ -1244,9 +1318,15 @@ impl<'m> Builder<'m> {
                         site: site.clone(),
                     });
                 }
+                let guarded = || {
+                    let VarKind::Owner { fk, .. } = self.ts.vars[var.index()].kind else {
+                        return false;
+                    };
+                    self.guard_reads_parent(uc, fk, groups, group)
+                };
                 let rhs = match a.param_of(parent) {
                     Some(p) => Rhs::Param(p),
-                    None if optional => Rhs::Lit(Value::NULL),
+                    None if optional && !(child_is_new && guarded()) => Rhs::Lit(Value::NULL),
                     None => Rhs::Param(a.param(parent, ParamRole::Parent)),
                 };
                 a.effects.push(Effect::Assign {
@@ -1271,6 +1351,13 @@ impl<'m> Builder<'m> {
             }
         }
     }
+}
+
+/// Why a copy has no source row: the reason for `UnboundCopySource`, or the keys that could
+/// lead to it.
+enum CopyMiss {
+    Unbound(String),
+    Ambiguous(Vec<FkId>),
 }
 
 enum EffectRhs {

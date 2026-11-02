@@ -133,6 +133,14 @@ fn one_of_each() -> Vec<StateDiag> {
             reason: "several Line rows".into(),
             site: site(),
         },
+        StateDiag::AmbiguousOwnerLink {
+            statement: ".none(Permit)".into(),
+            a: "Application".into(),
+            b: "Permit".into(),
+            roles: "application, renews".into(),
+            rewrite: ".none(Permit).by(application)".into(),
+            site: site(),
+        },
         StateDiag::ContradictoryDrivenComparison {
             usecase: "Pay".into(),
             proposition: "Order.amount > 3".into(),
@@ -199,6 +207,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnboundCopySource { .. }
+            | StateDiag::AmbiguousOwnerLink { .. }
             | StateDiag::ContradictoryDrivenComparison { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::UnsupportedComparison { .. }

@@ -227,6 +227,9 @@ pub struct Condition {
 pub struct HoldsBody {
     pub conds: Vec<crate::model::CrossEntityCondition>,
     pub quantifiers: Vec<crate::model::RelatedQuantifier>,
+    /// `.by(role)` before any `.has`/`.none`: the key that links an entity the body reads to
+    /// another, where several could.
+    pub by: Vec<String>,
     pub site: Option<crate::location::LocatedSpan>,
 }
 

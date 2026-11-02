@@ -848,12 +848,14 @@ fn push_column_effect(
     value: SetValue,
     ctx: DiagCtxt,
 ) {
+    let by = super::constraint::selectors(&pred.chain, None);
     model.column_effects.push(ColumnEffect {
         site: Some(ctx.locate(pred.span.clone())),
         origin,
         entity,
         column: column.clone(),
         value,
+        by,
     });
     model.typed_predicates.push(TypedPredicate::SetsColumn {
         origin,
@@ -897,6 +899,9 @@ fn record_sets_effect(
     let Some((column, value)) = value else {
         return false;
     };
+    if let SetValue::Value(_) = &value {
+        super::constraint::report_leading_by(&pred.chain, ctx, diags);
+    }
     push_column_effect(model, pred, origin, entity_key, column, value, ctx);
     true
 }

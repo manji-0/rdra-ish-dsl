@@ -13,8 +13,8 @@ use crate::lifecycle::types::{
 };
 use crate::lifecycle::EntId;
 use crate::model::{
-    CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, CrossCmpRhs, CrossConstraintScope,
-    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Min,
+    CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossConstraintScope,
+    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Join, Min,
     QuantifierKind, RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
 };
 
@@ -370,11 +370,42 @@ impl<'m> Builder<'m> {
         )
     }
 
-    /// `owner[child] == parent` for the first relate between the two bound entities.
-    fn owner_link(&self, a: (EntityKey, At), b: (EntityKey, At)) -> Option<Pred> {
-        self.owners.iter().find_map(|&owner| {
-            Self::link_pred(self.ent_of[&a.0], self.ent_of[&b.0], owner, a.1, b.1)
-        })
+    /// `owner[child] == parent` for the key [`SemanticModel::join_key`] picks between the two
+    /// bound entities, `None` when no key joins them. Several keys and no `.by` naming one is
+    /// `AmbiguousOwnerLink` on `statement`, and the two are left unlinked.
+    ///
+    /// [`SemanticModel::join_key`]: crate::model::SemanticModel::join_key
+    fn owner_link(
+        &mut self,
+        a: (EntityKey, At),
+        b: (EntityKey, At),
+        by: &[String],
+        statement: &str,
+        site: &Site,
+    ) -> Option<Pred> {
+        match self.model.join_key(a.0, b.0, by) {
+            Join::Unrelated => None,
+            Join::Key(fk) => self.key_link(fk, a, b),
+            Join::Ambiguous(candidates) => {
+                let model = self.model;
+                let roles: Vec<&str> = candidates
+                    .iter()
+                    .map(|id| model.key_role(model.foreign_key(*id)))
+                    .collect();
+                self.diag(
+                    vec![a.0],
+                    StateDiag::AmbiguousOwnerLink {
+                        statement: statement.to_string(),
+                        a: model.entities[a.0].id.clone(),
+                        b: model.entities[b.0].id.clone(),
+                        roles: roles.join(", "),
+                        rewrite: format!("{statement}.by({})", roles[0]),
+                        site: site.clone(),
+                    },
+                );
+                None
+            }
+        }
     }
 
     /// `owner[child] == parent` for key `fk`, which joins the two bound entities.
@@ -936,9 +967,13 @@ impl<'m> Builder<'m> {
             .collect();
         inner.push((q.related, At::Bound(depth)));
         let conds = self.cross_all(&q.conditions, &inner, site);
+        let statement = quantifier_display(self.model, q);
         let links: Vec<Pred> = binding
             .iter()
-            .filter_map(|&owner| self.owner_link(owner, (q.related, At::Bound(depth))))
+            .filter_map(|&owner| {
+                let related = (q.related, At::Bound(depth));
+                self.owner_link(owner, related, &q.by, &statement, site)
+            })
             .collect();
         let link = if links.is_empty() {
             Pred::True
@@ -970,14 +1005,16 @@ impl<'m> Builder<'m> {
                 QuantifierKind::Has => "has",
                 QuantifierKind::None => "none",
             };
-            let constraint = format!(
-                "{} when ({}) {} {} where ({})",
+            let mut constraint = format!(
+                "{} when ({}) {} {}",
                 model.entities[c.anchor].id,
                 cross_display(model, &c.guards),
                 kind,
                 model.entities[q.related].id,
-                cross_display(model, &q.conditions)
             );
+            if !q.conditions.is_empty() {
+                constraint.push_str(&format!(" where ({})", cross_display(model, &q.conditions)));
+            }
             let text = InvText::Quantifier {
                 anchor: model.entities[c.anchor].id.clone(),
                 related: model.entities[q.related].id.clone(),
@@ -1019,7 +1056,7 @@ impl<'m> Builder<'m> {
             .filter(|(_, u, body)| *u == uc && condition_group(body, groups) == group)
         {
             let site = Site::new(ModelRef::Condition(ck), &body.site);
-            let pred = self.body_pred(body, params, &site);
+            let pred = self.body_pred(ck, params, &site);
             guards.push(Guard {
                 pred,
                 why: GuardWhy::Condition { cond: ck },
@@ -1029,8 +1066,14 @@ impl<'m> Builder<'m> {
         guards
     }
 
-    /// A `holds` body over an action's params, as [`Self::condition_guards`] reads it.
-    pub(super) fn body_pred(&mut self, body: &HoldsBody, params: &[Param], site: &Site) -> Pred {
+    /// The `holds` body of `ck` over an action's params, as [`Self::condition_guards`] reads it.
+    pub(super) fn body_pred(&mut self, ck: ConditionKey, params: &[Param], site: &Site) -> Pred {
+        let model = self.model;
+        let Some(body) = model.conditions[ck].body.as_ref() else {
+            return Pred::True;
+        };
+        let statement = format!("holds({}, ...)", model.conditions[ck].id);
+        let body_site = Site::new(ModelRef::Condition(ck), &body.site);
         let mut binding: Binding = params
             .iter()
             .enumerate()
@@ -1054,7 +1097,7 @@ impl<'m> Builder<'m> {
         for (i, &x) in binding.iter().enumerate() {
             for &y in &binding[i + 1..] {
                 if witness(x) || witness(y) {
-                    parts.extend(self.owner_link(x, y));
+                    parts.extend(self.owner_link(x, y, &body.by, &statement, &body_site));
                 }
             }
         }
@@ -1334,7 +1377,7 @@ impl<'m> Builder<'m> {
 /// order, that writes an entity the body reads, else the first. A body is a precondition of the
 /// use case, so it guards one step only, and an atom on a sibling group's entity reads that
 /// entity's pre-state.
-fn condition_group(body: &HoldsBody, groups: &[Vec<EntityKey>]) -> usize {
+pub(super) fn condition_group(body: &HoldsBody, groups: &[Vec<EntityKey>]) -> usize {
     let read: Vec<EntityKey> = body.conds.iter().flat_map(cond_entities).collect();
     groups
         .iter()
@@ -1343,7 +1386,7 @@ fn condition_group(body: &HoldsBody, groups: &[Vec<EntityKey>]) -> usize {
 }
 
 /// The entities a body atom reads, left operand first.
-fn cond_entities(cond: &CrossEntityCondition) -> Vec<EntityKey> {
+pub(super) fn cond_entities(cond: &CrossEntityCondition) -> Vec<EntityKey> {
     match cond {
         CrossEntityCondition::Equals { column, .. } => vec![column.entity],
         CrossEntityCondition::Comparison(p) => match &p.rhs {
@@ -1462,6 +1505,20 @@ fn cross_display(model: &crate::model::SemanticModel, conds: &[CrossEntityCondit
         })
         .collect::<Vec<_>>()
         .join(" AND ")
+}
+
+/// `.none(Related.col == v).by(role)` as written, for a diagnostic that names the call.
+fn quantifier_display(model: &crate::model::SemanticModel, q: &RelatedQuantifier) -> String {
+    let method = match q.kind {
+        QuantifierKind::Has => "has",
+        QuantifierKind::None => "none",
+    };
+    let arg = if q.conditions.is_empty() {
+        model.entities[q.related].id.clone()
+    } else {
+        "...".to_string()
+    };
+    format!(".{method}({arg})")
 }
 
 fn entity_list(model: &crate::model::SemanticModel, scope: &[EntityKey]) -> String {

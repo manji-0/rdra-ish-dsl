@@ -422,10 +422,12 @@ fn bfs_and_tlc_reach_the_same_states_and_verdicts() {
     for sample in samples() {
         let model = load(&sample);
         assert!(
-            check_model(&tlc, &scratch, &sample, &model, Bounds::STATES).is_empty(),
+            check_model(&tlc, &scratch, &sample, &model, Bounds::STATES)
+                .capped
+                .is_empty(),
             "{sample}: a cone passes the state cap at STATES"
         );
-        for cone in check_model(&tlc, &scratch, &sample, &model, Bounds::VERIFY) {
+        for cone in check_model(&tlc, &scratch, &sample, &model, Bounds::VERIFY).capped {
             fallback.push((sample.clone(), cone));
         }
     }
@@ -449,6 +451,13 @@ fn target_label(ts: &TransitionSystem, t: Target) -> String {
     }
 }
 
+/// What [`check_model`] found: the cones past the state cap, and the checks TLC and the BFS
+/// both found violated in the others.
+struct ModelReport {
+    capped: Vec<String>,
+    violated: BTreeSet<String>,
+}
+
 /// Every cone of the model at these bounds, explored and checked in parallel; returns the
 /// cones whose BFS passes `STATE_CAP`, which are not compared.
 fn check_model(
@@ -457,7 +466,7 @@ fn check_model(
     sample: &str,
     model: &SemanticModel,
     bounds: Bounds,
-) -> Vec<String> {
+) -> ModelReport {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     let mut cones: Vec<(Cone, String)> = Vec::new();
@@ -496,7 +505,10 @@ fn check_model(
     reports.sort_by_key(|(i, _)| *i);
     let checked: Vec<&ConeReport> = reports.iter().filter_map(|(_, r)| r.as_ref()).collect();
     let states: usize = checked.iter().map(|r| r.states).sum();
-    let violated: BTreeSet<&String> = checked.iter().flat_map(|r| &r.violated).collect();
+    let violated: BTreeSet<String> = checked
+        .iter()
+        .flat_map(|r| r.violated.iter().cloned())
+        .collect();
     let capped: Vec<String> = reports
         .iter()
         .filter(|(_, r)| r.is_none())
@@ -507,7 +519,7 @@ fn check_model(
         bounds.instances,
         checked.len()
     );
-    capped
+    ModelReport { capped, violated }
 }
 
 /// Condition guards in both engines: a bound atom, an `Exists` along an owner, an independent
@@ -1052,7 +1064,9 @@ fn bfs_and_tlc_agree_on_a_guard_over_an_unassigned_column() {
 }
 
 /// One inline model at both bounds.
-fn check_fixture(name: &str, src: &str) {
+/// Checks `src` as [`check_model`] does at both bounds; returns the checks found violated at
+/// `Bounds::VERIFY`, or `None` without `tlc`.
+fn check_fixture(name: &str, src: &str) -> Option<BTreeSet<String>> {
     let Some(tlc) = find_tlc() else {
         let reason = "tlc not on PATH (run inside `nix develop`)";
         assert!(
@@ -1060,7 +1074,7 @@ fn check_fixture(name: &str, src: &str) {
             "RDRA_REQUIRE_TLC=1 but {reason}"
         );
         println!("skipped {name} equivalence: {reason}");
-        return;
+        return None;
     };
     let scratch =
         std::env::temp_dir().join(format!("rdra-equivalence-{name}-{}", std::process::id()));
@@ -1069,11 +1083,104 @@ fn check_fixture(name: &str, src: &str) {
     let file = scratch.join(format!("{name}.rdra"));
     std::fs::write(&file, src).expect("write model");
     let model = load(file.to_str().expect("utf-8 path"));
+    let mut violated = BTreeSet::new();
     for bounds in [Bounds::STATES, Bounds::VERIFY] {
-        let capped = check_model(&tlc, &scratch, name, &model, bounds);
+        let report = check_model(&tlc, &scratch, name, &model, bounds);
+        let capped = report.capped;
         assert!(capped.is_empty(), "{name}: {capped:?} pass the state cap");
+        violated = report.violated;
     }
     let _ = std::fs::remove_dir_all(&scratch);
+    Some(violated)
+}
+
+/// Two keys join App and Permit: the permit is registered under its application (1:1), and
+/// a renewal application `renews` a permit. Every join names its key with `.by` (#73): the
+/// registration guard's `.none(Permit).by(App)`, the renewal's `holds(..).by(renews)`, which
+/// also links the renewal to the valid permit it reads, and the expiry's
+/// `.none(App.status == done).by(EXPIRY_KEY)`. Through `renews` the expiry waits for no
+/// renewal of the permit to be done, so the forbidden state is unreachable; through the
+/// registration key it reads the new application, which is never renewed, so a permit
+/// expires under a done renewal and both engines report the violation.
+const JOIN_KEYS: &str = r#"
+entity Permit "許可" { id: Int @pk  status: Enum(valid, expired) @default(valid) }
+entity App "申請" { id: Int @pk  kind: Enum(new, renewal)  status: Enum(open, done) @default(open) }
+relate(Permit, App, 1:1)
+relate(App, Permit, N:1).optional().role(renews)
+usecase Issue "新規申請"
+usecase Register "登録"
+usecase Apply "更新申請"
+usecase Renew "更新"
+usecase Expire "失効"
+creates(Issue, App)
+sets(Issue, App, kind == new)
+creates(Register, Permit)
+condition NoPermitYet "許可がまだない新規申請"
+holds(NoPermitYet, App.kind == new).none(Permit).by(App)
+applies_to(NoPermitYet, Register)
+creates(Apply, App)
+sets(Apply, App, kind == renewal)
+reads(Apply, Permit)
+condition Renewable "更新する許可が有効"
+holds(Renewable, Permit.status == valid).by(renews)
+applies_to(Renewable, Apply)
+applies_to(Renewable, Renew)
+transitions(Renew, App.status, open -> done)
+transitions(Expire, Permit.status, valid -> expired)
+condition NotRenewed "更新済みの申請がない"
+holds(NotRenewed, Permit.status == valid).none(App.status == done).by(EXPIRY_KEY)
+applies_to(NotRenewed, Expire)
+forbidden(App, Permit, App.status == done, Permit.status == expired).along(App, Permit).by(renews)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_the_key_a_join_names() {
+    let renews = check_fixture("join_renews", &JOIN_KEYS.replace("EXPIRY_KEY", "renews"));
+    let registered = check_fixture("join_registered", &JOIN_KEYS.replace("EXPIRY_KEY", "App"));
+    if let (Some(renews), Some(registered)) = (renews, registered) {
+        assert!(!renews.contains("CrossForbidden_App_0"), "{renews:?}");
+        assert!(
+            registered.contains("CrossForbidden_App_0"),
+            "{registered:?}"
+        );
+    }
+}
+
+/// `.none(Invoice)` and `.none(Invoice.status in (<every value>))` are one guard (#73): both
+/// engines agree on each, and every cone has the same states under either form.
+#[test]
+fn none_of_an_entity_is_none_of_every_value() {
+    let every =
+        std::fs::read_to_string(repo().join("samples/formal-verification/none_any_child.rdra"))
+            .expect("sample");
+    let listed_src = every.replace(
+        ".none(Invoice)",
+        ".none(Invoice.status in (draft, issued, paid))",
+    );
+    assert_ne!(every, listed_src, "the sample guards with .none(Invoice)");
+    let cones = |src: &str| -> Vec<usize> {
+        let dir = std::env::temp_dir().join(format!("rdra-none-any-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("scratch dir");
+        let file = dir.join("m.rdra");
+        std::fs::write(&file, src).expect("write model");
+        let model = load(file.to_str().expect("utf-8 path"));
+        let _ = std::fs::remove_dir_all(&dir);
+        let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        ts.targets()
+            .into_iter()
+            .map(|t| {
+                let cone = ts.target_cone(t);
+                let run = ts
+                    .restrict_to(&cone.vars, &cone.keep)
+                    .run(Caps::new(usize::MAX, STATE_CAP));
+                run.states.len()
+            })
+            .collect()
+    };
+    assert_eq!(cones(&every), cones(&listed_src));
+    let direct = check_fixture("none_entity", &every);
+    let listed = check_fixture("none_every_value", &listed_src);
+    assert_eq!(direct, listed);
 }
 
 /// Every slot of every var has a distinct key, and a reached state's canon form has exactly

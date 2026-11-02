@@ -22,7 +22,7 @@ pub use condition::{
     transition_guard_labels, ConditionEdge,
 };
 pub(crate) use condition::{body_condition_display, effect_value_display};
-use fk::{resolve_along_links, resolve_foreign_keys};
+use fk::{check_join_selectors, resolve_along_links, resolve_foreign_keys};
 use instance::register_instance;
 use predicate_process::process_predicate;
 use property::register_property;
@@ -77,6 +77,7 @@ pub fn build_model_items_with_scopes(
     resolve_foreign_keys(&mut model, &mut diags);
     effect::reject_key_copies(&model, &mut diags);
     resolve_along_links(&mut model, &mut diags);
+    check_join_selectors(&model, &mut diags);
     diags.extend(crate::event_flow::api_route_diagnostics(&model));
     diags.extend(crate::publication::publication_diagnostics(&model));
 

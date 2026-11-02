@@ -12,7 +12,7 @@ use rdra_ish_syntax::ast::*;
 
 use super::arg_resolve::{resolve_arg, resolve_entity_name, resolve_namespaced_variation};
 use super::constraint::{
-    add_condition_entities_to_scope, resolve_cross_condition, resolve_related_quantifier,
+    add_condition_entities_to_scope, resolve_cross_condition, resolve_related_quantifier, selectors,
 };
 use super::nodes::node_kind_tag_str;
 use super::predicate_process::predicate_arg_display;
@@ -193,15 +193,22 @@ pub fn condition_body_display(
             .join(", ")
     };
     let mut text = comparisons(&body.conds);
-    if !body.quantifiers.is_empty() {
+    if !body.quantifiers.is_empty() || !body.by.is_empty() {
         text = format!("({text})");
     }
+    text.push_str(&crate::rules::by_display(&body.by));
     for q in &body.quantifiers {
         let method = match q.kind {
             QuantifierKind::Has => "has",
             QuantifierKind::None => "none",
         };
-        text.push_str(&format!(".{method}({})", comparisons(&q.conditions)));
+        let arg = if q.conditions.is_empty() {
+            model.entities[q.related].id.clone()
+        } else {
+            comparisons(&q.conditions)
+        };
+        text.push_str(&format!(".{method}({arg})"));
+        text.push_str(&crate::rules::by_display(&q.by));
     }
     Some(text)
 }
@@ -477,17 +484,22 @@ pub(crate) fn process_holds_predicate(
     let mut anchors = Vec::new();
     add_condition_entities_to_scope(&mut anchors, &body);
     let mut quantifiers = Vec::new();
-    for cc in &pred.chain {
+    for (at, cc) in pred.chain.iter().enumerate() {
         if matches!(cc.name.as_str(), "has" | "none") {
             let Some(anchor) = anchors.first().copied() else {
                 break;
             };
-            quantifiers.extend(resolve_related_quantifier(model, anchor, cc, ctx, diags));
+            let by = selectors(&pred.chain, Some(at));
+            quantifiers.extend(resolve_related_quantifier(
+                model, anchor, cc, by, ctx, diags,
+            ));
         }
     }
+    let by = selectors(&pred.chain, None);
     model.conditions[condition].body = Some(HoldsBody {
         conds: body,
         quantifiers,
+        by,
         site: Some(ctx.locate(pred.span.clone())),
     });
     model

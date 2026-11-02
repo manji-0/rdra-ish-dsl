@@ -121,6 +121,8 @@ pub struct ColumnEffect {
     pub column: std::string::String,
     /// The value the use case leaves: a literal, or a copy of another row's column.
     pub value: SetValue,
+    /// `.by(role)` on a copy: the key that leads to the source row, where several could.
+    pub by: Vec<String>,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,

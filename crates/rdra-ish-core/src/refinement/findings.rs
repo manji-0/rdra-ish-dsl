@@ -40,6 +40,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::IntLiteralOutOfBounds { .. }
         | StateDiag::UnbindableCondition { .. }
         | StateDiag::UnboundCopySource { .. }
+        | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::UnresolvedPropertyAtom { .. } => StageId::Lifecycle,
     }

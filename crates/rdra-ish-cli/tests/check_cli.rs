@@ -222,8 +222,9 @@ guard: Order.status is paid (transitions of Refund) never_runs.rdra:18:1"
 }
 
 /// A use case that creates a child under an `.optional()` key and guards on the parent it
-/// only reads creates the child unlinked, so the guard never holds. The warning says so and
-/// what to write instead; the same model with the parent written, or the key mandatory,
+/// only reads through a quantifier creates the child unlinked, so the guard never holds. The
+/// warning says so and what to write instead; the same model with the parent written, the
+/// key mandatory, or the parent read by a `holds` comparison (which links the child to it)
 /// runs.
 #[test]
 fn check_says_why_a_child_created_unlinked_cannot_read_its_parent() {
@@ -237,36 +238,42 @@ fn check_says_why_a_child_created_unlinked_cannot_read_its_parent() {
                 r#"usecase Issue "Issue"
 usecase Renew "Renew"
 entity Permit "許可" {{ id: Int @pk  status: Enum(valid, expired) @default(valid) }}
-entity App "申請" {{ id: Int @pk }}
+entity App "申請" {{ id: Int @pk  kind: Enum(renewal) @default(renewal) }}
 {relate}
 creates(Issue, Permit)
 creates(Renew, App)
 reads(Renew, Permit)
 condition PermitValid "有効な許可"
-holds(PermitValid, Permit.status == valid)
-applies_to(PermitValid, Renew)
 {extra}
+applies_to(PermitValid, Renew)
+
 "#
             ),
         )
         .unwrap();
         String::from_utf8_lossy(&run(&["check", file.to_str().unwrap()]).stderr).into_owned()
     };
-    let stderr = model("relate(App, Permit, N:1).optional()", "");
+    let quantified = "holds(PermitValid, App.kind == renewal).has(Permit.status == valid)";
+    let stderr = model("relate(App, Permit, N:1).optional()", quantified);
     assert!(stderr.contains("warning[Runs_Renew]"), "{stderr}");
     assert!(
         stderr.contains(
-            "note: it creates App without writing Permit, so the App is unlinked and no Permit is its parent for a guard to read; write Permit in the use case (`updates`), or drop `.optional()` from the `relate`"
+            "note: it creates App without writing Permit, so the App is unlinked and no Permit is its parent for a guard to read; compare a Permit column in a `holds` guard on the use case so the App links to the Permit it reads, write Permit in the use case (`updates`), or drop `.optional()` from the `relate`"
         ),
         "{stderr}"
     );
     let written = model(
         "relate(App, Permit, N:1).optional()",
-        "updates(Renew, Permit)",
+        &format!("{quantified}\nupdates(Renew, Permit)"),
     );
     assert!(!written.contains("Runs_"), "{written}");
-    let mandatory = model("relate(App, Permit, N:1)", "");
+    let mandatory = model("relate(App, Permit, N:1)", quantified);
     assert!(!mandatory.contains("Runs_"), "{mandatory}");
+    let compared = model(
+        "relate(App, Permit, N:1).optional()",
+        "holds(PermitValid, Permit.status == valid)",
+    );
+    assert!(!compared.contains("Runs_"), "{compared}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

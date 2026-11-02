@@ -32,6 +32,35 @@ pub(crate) fn arg_as_str(arg: &PredicateArg) -> Option<String> {
     }
 }
 
+/// The chain call a `.by(role)` at `at` selects the key of: the nearest `.along`, `.has` or
+/// `.none` before it, or `None` when it follows none, where it selects the key of the
+/// statement itself (a `holds` body, a copy).
+fn by_owner(chain: &[ChainCall], at: usize) -> Option<usize> {
+    chain[..at]
+        .iter()
+        .rposition(|cc| matches!(cc.name.as_str(), "along" | "has" | "none"))
+}
+
+/// The roles the `.by(..)` calls that select the key of `owner` name (see [`by_owner`]).
+pub(crate) fn selectors(chain: &[ChainCall], owner: Option<usize>) -> Vec<String> {
+    chain
+        .iter()
+        .enumerate()
+        .filter(|(at, cc)| cc.name == "by" && by_owner(chain, *at) == owner)
+        .flat_map(|(_, cc)| cc.args.iter().filter_map(arg_as_str))
+        .collect()
+}
+
+/// The `.by(..)` calls that follow no `.along`, `.has` or `.none`, on a statement that has
+/// no key of its own to select.
+pub(crate) fn report_leading_by(chain: &[ChainCall], ctx: DiagCtxt, diags: &mut Vec<Diagnostic>) {
+    for (at, cc) in chain.iter().enumerate() {
+        if cc.name == "by" && by_owner(chain, at).is_none() {
+            push_error(ctx, diags, cc.span.clone(), RdraError::ByWithoutAlong);
+        }
+    }
+}
+
 /// The text of the rule's one `.label("...")` chain call. A second call, or an argument that is
 /// not a single string literal, is reported and the label is left unset.
 pub(crate) fn rule_label(
@@ -690,36 +719,33 @@ fn collect_cross_along_path(
     pred: &PredicateCall,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
-) -> Option<Vec<EntityKey>> {
-    let along = pred.chain.iter().find(|cc| cc.name == "along")?;
+) -> Option<(usize, Vec<EntityKey>)> {
+    let at = pred.chain.iter().position(|cc| cc.name == "along")?;
     let mut path = Vec::new();
-    for arg in &along.args {
+    for arg in &pred.chain[at].args {
         if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
             path.push(entity);
         }
     }
-    Some(path)
+    Some((at, path))
 }
 
+/// The scope of a cross-entity `forbidden` or `invariant`. A `.by(..)` that follows no
+/// `.along`, `.has` or `.none` is reported here.
 pub(crate) fn cross_scope_semantics_from_chain(
     model: &SemanticModel,
     pred: &PredicateCall,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> CrossConstraintScope {
-    let by = pred.chain.iter().find(|cc| cc.name == "by");
+    report_leading_by(&pred.chain, ctx, diags);
     match collect_cross_along_path(model, pred, ctx, diags) {
-        Some(path) => CrossConstraintScope::RelationPath {
+        Some((at, path)) => CrossConstraintScope::RelationPath {
             path,
-            by: by.and_then(|cc| cc.args.first()).and_then(arg_as_str),
+            by: selectors(&pred.chain, Some(at)),
             links: Vec::new(),
         },
-        None => {
-            if let Some(by) = by {
-                push_error(ctx, diags, by.span.clone(), RdraError::ByWithoutAlong);
-            }
-            CrossConstraintScope::GlobalProduct
-        }
+        None => CrossConstraintScope::GlobalProduct,
     }
 }
 
@@ -781,7 +807,7 @@ pub(crate) fn process_invariant(
     let mut requireds = Vec::new();
     let mut quantified = false;
     let label = rule_label(pred, ctx, diags);
-    for cc in &pred.chain {
+    for (at, cc) in pred.chain.iter().enumerate() {
         match cc.name.as_str() {
             "when" => guards.extend(collect_cross_chain_conditions(
                 model, &scope, &pred.name, &cc.args, ctx, diags,
@@ -801,14 +827,29 @@ pub(crate) fn process_invariant(
                     push_error(ctx, diags, cc.span.clone(), err);
                     continue;
                 };
-                process_quantifier_chain(model, anchor, &guards, cc, label.clone(), ctx, diags)
+                let by = selectors(&pred.chain, Some(at));
+                let Some(quantifier) =
+                    resolve_related_quantifier(model, anchor, cc, by, ctx, diags)
+                else {
+                    continue;
+                };
+                model
+                    .quantifier_constraints
+                    .push(crate::model::QuantifierConstraint {
+                        label: label.clone(),
+                        anchor,
+                        guards: guards.clone(),
+                        quantifier,
+                    });
             }
             _ => {}
         }
     }
 
     if requireds.is_empty() {
-        if !quantified {
+        if quantified {
+            report_leading_by(&pred.chain, ctx, diags);
+        } else {
             let err = RdraError::InvariantWithoutConsequence;
             push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
         }
@@ -836,40 +877,21 @@ pub(crate) fn process_invariant(
         .push(TypedPredicate::CrossInvariant { scope });
 }
 
-fn process_quantifier_chain(
-    model: &mut SemanticModel,
-    anchor: EntityKey,
-    guards: &[CrossEntityCondition],
-    cc: &ChainCall,
-    label: Option<String>,
-    ctx: DiagCtxt,
-    diags: &mut Vec<Diagnostic>,
-) {
-    let Some(quantifier) = resolve_related_quantifier(model, anchor, cc, ctx, diags) else {
-        return;
-    };
-    model
-        .quantifier_constraints
-        .push(crate::model::QuantifierConstraint {
-            label,
-            anchor,
-            guards: guards.to_vec(),
-            quantifier,
-        });
-}
-
 /// The related entity, conditions and kind of one `.has(...)` / `.none(...)` chain call. The
-/// related entity is the first one the conditions name other than `anchor`. `None` only with
-/// an error reported, so a quantifier is never dropped silently.
+/// related entity is the one a bare first argument names (`.none(Permit)`, any row at all), or
+/// else the first one the conditions name other than `anchor`. `by` holds the `.by(role)`
+/// selectors that follow the call. `None` only with an error reported, so a quantifier is
+/// never dropped silently.
 pub(crate) fn resolve_related_quantifier(
     model: &SemanticModel,
     anchor: EntityKey,
     cc: &ChainCall,
+    by: Vec<String>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<crate::model::RelatedQuantifier> {
     let before = diags.len();
-    let quantifier = related_quantifier(model, anchor, cc, ctx, diags);
+    let quantifier = related_quantifier(model, anchor, cc, by, ctx, diags);
     if quantifier.is_none() {
         let err = RdraError::QuantifierWithoutCondition {
             method: cc.name.clone(),
@@ -883,11 +905,17 @@ fn related_quantifier(
     model: &SemanticModel,
     anchor: EntityKey,
     cc: &ChainCall,
+    by: Vec<String>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<crate::model::RelatedQuantifier> {
-    // New form: `.none(Assign.status == active)` — infer related entity from conditions.
-    // Legacy-compatible: `.none(Assign.status == active)` if first arg is an entity Ref.
+    let kind = match cc.name.as_str() {
+        "has" => crate::model::QuantifierKind::Has,
+        "none" => crate::model::QuantifierKind::None,
+        _ => return None,
+    };
+    // `.none(Permit)` and `.none(Permit, Permit.status == x)` name the related entity first;
+    // `.none(Permit.status == x)` names it in the conditions.
     let (related, related_args) = match cc.args.first() {
         Some(PredicateArg::Ref(_)) => {
             let related = resolve_entity_scope_arg(model, &cc.name, &cc.args[0], ctx, diags)?;
@@ -916,19 +944,14 @@ fn related_quantifier(
     let related_scope = vec![related];
     let related_conditions =
         collect_cross_chain_conditions(model, &related_scope, &cc.name, related_args, ctx, diags);
-    if related_conditions.is_empty() {
+    if related_conditions.is_empty() && !related_args.is_empty() {
         return None;
     }
-
-    let kind = match cc.name.as_str() {
-        "has" => crate::model::QuantifierKind::Has,
-        "none" => crate::model::QuantifierKind::None,
-        _ => return None,
-    };
     Some(crate::model::RelatedQuantifier {
         kind,
         related,
         conditions: related_conditions,
+        by,
         site: Some(ctx.locate(cc.span.clone())),
     })
 }

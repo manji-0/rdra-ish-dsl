@@ -1,6 +1,10 @@
 //! Reference lookup at a cursor position.
 
 use rdra_ish_core::{node_ref_kind, DeclSite, LookupResult, SemanticModel};
+
+/// The symbol kind of a `relate` key's role: declared by `relate(..).role(x)`, referred to
+/// by the `.by(x)` that picks the key of a join.
+pub const ROLE_KIND: &str = "role";
 use rdra_ish_syntax::ast::{
     Ast, AstTemporalFormula, ChainCall, Expr, InstanceDecl, Item, Operand, PredicateArg, QRef, Span,
 };
@@ -55,13 +59,38 @@ pub fn resolve_decl_site(model: &SemanticModel, reference: ReferenceAt<'_>) -> O
             } else {
                 let node = match model.symbols.lookup(id) {
                     LookupResult::Found(node) => node,
-                    _ => return None,
+                    _ => return role_site(model, qref),
                 };
                 node_ref_kind(node)
             };
             model.decl_sites.get(kind, id).cloned()
         }
     }
+}
+
+/// The `relate` that declares the role `qref` names, when it names one and no symbol.
+fn role_site(model: &SemanticModel, qref: &QRef) -> Option<DeclSite> {
+    let id = role_name(model, qref)?;
+    let (_, fk) = model
+        .foreign_keys()
+        .find(|(_, fk)| fk.role.as_deref() == Some(id))?;
+    let site = fk.site.as_ref()?;
+    Some(DeclSite {
+        source_id: site.source_id,
+        span: site.span.clone(),
+    })
+}
+
+/// The role an unqualified one-part `qref` names: the `.role(x)` of some `relate`.
+fn role_name<'a>(model: &SemanticModel, qref: &'a QRef) -> Option<&'a str> {
+    let [id] = qref.parts.as_slice() else {
+        return None;
+    };
+    (qref.kind_qualifier.is_none()
+        && model
+            .foreign_keys()
+            .any(|(_, fk)| fk.role.as_deref() == Some(id.as_str())))
+    .then_some(id.as_str())
 }
 
 pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Option<SymbolTarget> {
@@ -77,7 +106,12 @@ pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Optio
             } else {
                 let node = match model.symbols.lookup(&id) {
                     LookupResult::Found(node) => node,
-                    _ => return None,
+                    _ => {
+                        return role_name(model, qref).map(|id| SymbolTarget {
+                            kind: ROLE_KIND.to_string(),
+                            id: id.to_string(),
+                        })
+                    }
                 };
                 node_ref_kind(node).to_string()
             };
@@ -87,11 +121,43 @@ pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Optio
 }
 
 pub fn find_symbol_references(ast: &Ast, target: &SymbolTarget) -> Vec<Span> {
-    ast_references(ast)
+    references_to(ast, target)
         .into_iter()
-        .filter(|qref| qref_matches_target(qref, target))
         .map(|qref| qref.span.clone())
         .collect()
+}
+
+/// The references in `ast` to `target`. A role is referred to only where a role is written,
+/// in `relate(..).role(x)` and in a `.by(x)` that picks a key, so a value or a medium
+/// spelled the same is not one of them.
+pub fn references_to<'a>(ast: &'a Ast, target: &SymbolTarget) -> Vec<&'a QRef> {
+    if target.kind != ROLE_KIND {
+        return ast_references(ast)
+            .into_iter()
+            .filter(|qref| qref_matches_target(qref, target))
+            .collect();
+    }
+    let mut refs = Vec::new();
+    for item in &ast.items {
+        let Item::Predicate(pred) = item else {
+            continue;
+        };
+        let method = match pred.name.as_str() {
+            "relate" => "role",
+            "belongs" => continue,
+            _ => "by",
+        };
+        for call in pred.chain.iter().filter(|call| call.name == method) {
+            for arg in &call.args {
+                if let PredicateArg::Ref(qref) = arg {
+                    if qref.kind_qualifier.is_none() && qref.parts == [target.id.as_str()] {
+                        refs.push(qref);
+                    }
+                }
+            }
+        }
+    }
+    refs
 }
 
 /// Every symbol reference written in `ast`: the arguments of each predicate and of each

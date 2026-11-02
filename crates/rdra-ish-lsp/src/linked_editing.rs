@@ -6,7 +6,7 @@ use tower_lsp::lsp_types::{LinkedEditingRanges, Range};
 
 use crate::convert::span_to_range;
 use crate::refs::{
-    ast_references, id_span_in_qref, instance_id_span, reference_at_offset, symbol_target,
+    id_span_in_qref, instance_id_span, reference_at_offset, references_to, symbol_target,
     SymbolTarget,
 };
 
@@ -30,7 +30,7 @@ pub fn linked_editing_ranges(
             }
         }
     }
-    for qref in ast_references(ast) {
+    for qref in references_to(ast, &target) {
         if let Some(span) = id_span_in_qref(qref, text, &target) {
             push_unique_range(&mut ranges, span_to_range(text, span));
         }

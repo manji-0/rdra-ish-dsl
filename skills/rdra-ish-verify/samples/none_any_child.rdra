@@ -1,7 +1,6 @@
-// `.none(Invoice.status in (draft, issued, paid))` lists every value of the column, so it says
-// "no Invoice belongs to this Order yet" and reads the link only: the cones that keep Issue
-// hold Invoice._owner_Order and not Invoice.status. Issue creates one Invoice per open Order,
-// so Unique_Invoice_Order (relate 1:1) holds at InstanceCount == 2.
+// `.none(Invoice)` says "no Invoice belongs to this Order yet" and reads the link only: the
+// cones that keep Issue hold Invoice._owner_Order and not Invoice.status. Issue creates one
+// Invoice per open Order, so Unique_Invoice_Order (relate 1:1) holds at InstanceCount == 2.
 // expect check: ok
 // expect verify: tlc=ok
 entity Order "注文" {
@@ -41,5 +40,5 @@ relate(Invoice, Order, 1:1)
 
 // One invoice per order: Issue runs only while the order is open and has no invoice.
 condition NoInvoiceYet "請求書のない注文"
-holds(NoInvoiceYet, Order.status == open).none(Invoice.status in (draft, issued, paid))
+holds(NoInvoiceYet, Order.status == open).none(Invoice)
 applies_to(NoInvoiceYet, Issue)

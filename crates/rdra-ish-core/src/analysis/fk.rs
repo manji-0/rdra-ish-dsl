@@ -381,7 +381,7 @@ pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Dia
     let resolved: Vec<Vec<Option<FkId>>> = scopes
         .map(|(scope, site)| match scope {
             CrossConstraintScope::RelationPath { path, by, .. } => {
-                along_links(model, path, by.as_deref(), site.as_ref(), diags)
+                along_links(model, path, by, site.as_ref(), diags)
             }
             CrossConstraintScope::GlobalProduct => Vec::new(),
         })
@@ -406,7 +406,7 @@ pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Dia
 fn along_links(
     model: &SemanticModel,
     path: &[EntityKey],
-    by: Option<&str>,
+    by: &[String],
     site: Option<&LocatedSpan>,
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<Option<FkId>> {
@@ -416,56 +416,142 @@ fn along_links(
             None => Diagnostic::error(err),
         });
     };
-    let role = |fk: &ForeignKey| fk.role_or(&model.entities[fk.parent].id).to_string();
-    let mut by_used = false;
-    let mut path_roles: Vec<String> = Vec::new();
     let mut links = Vec::new();
     for pair in path.windows(2) {
-        let between: Vec<(FkId, &ForeignKey)> = model
-            .foreign_keys()
-            .filter(|(_, fk)| {
-                (fk.child, fk.parent) == (pair[0], pair[1])
-                    || (fk.child, fk.parent) == (pair[1], pair[0])
-            })
-            .collect();
-        path_roles.extend(between.iter().map(|(_, fk)| role(fk)));
-        let named: Vec<FkId> = between
-            .iter()
-            .filter(|(_, fk)| by.is_some_and(|by| role(fk).eq_ignore_ascii_case(by)))
-            .map(|&(id, _)| id)
-            .collect();
-        by_used |= !named.is_empty();
-        links.push(match (between.as_slice(), named.as_slice()) {
-            ([], _) => None,
-            ([(id, _)], _) | (_, [id]) => Some(*id),
-            _ => {
-                let roles: Vec<String> = between.iter().map(|(_, fk)| role(fk)).collect();
+        links.push(match model.join_key(pair[0], pair[1], by) {
+            Join::Unrelated => None,
+            Join::Key(id) => Some(id),
+            Join::Ambiguous(candidates) => {
                 push(
                     diags,
-                    RdraError::AmbiguousOwnerLink {
-                        a: model.entities[pair[0]].id.clone(),
-                        b: model.entities[pair[1]].id.clone(),
-                        first: roles[0].clone(),
-                        roles: roles.join(", "),
-                    },
+                    ambiguous_owner_link(model, ".along(...)", pair[0], pair[1], &candidates),
                 );
                 None
             }
         });
     }
-    if let Some(by) = by.filter(|_| !by_used) {
+    let path_keys: Vec<&ForeignKey> = path
+        .windows(2)
+        .flat_map(|pair| model.keys_between(pair[0], pair[1]).map(|(_, fk)| fk))
+        .collect();
+    for role in by {
+        if path_keys.iter().any(|fk| model.key_named(fk, role)) {
+            continue;
+        }
         let along: Vec<&str> = path
             .iter()
             .map(|e| model.entities[*e].id.as_str())
             .collect();
+        let roles: Vec<&str> = path_keys.iter().map(|fk| model.key_role(fk)).collect();
         push(
             diags,
             RdraError::UnknownOwnerRole {
-                role: by.to_string(),
-                along: along.join(", "),
-                roles: path_roles.join(", "),
+                role: role.clone(),
+                on: format!("on .along({})", along.join(", ")),
+                roles: roles.join(", "),
             },
         );
     }
     links
+}
+
+/// Each `.by(role)` of a `.has`/`.none`, a `holds` body, or a copy must name a key that
+/// touches an entity whose join it picks the key for: the related entity of a quantifier,
+/// an entity a body compares, the target or the source of a copy. Otherwise it is
+/// `UnknownOwnerRole`. Which join a selector serves depends on the use case a body guards,
+/// so the lifecycle reports a join it leaves ambiguous.
+pub(crate) fn check_join_selectors(model: &SemanticModel, diags: &mut Vec<Diagnostic>) {
+    let mut sites: Vec<SelectorSite> = Vec::new();
+    let quantifier = |q| quantifier_selectors(model, q);
+    for c in &model.quantifier_constraints {
+        sites.push(quantifier(&c.quantifier));
+    }
+    for (_, condition) in &model.conditions {
+        let Some(body) = &condition.body else {
+            continue;
+        };
+        let mut entities = Vec::new();
+        super::constraint::add_condition_entities_to_scope(&mut entities, &body.conds);
+        let on = format!("that joins an entity of holds({}, ...)", condition.id);
+        sites.push((body.by.as_slice(), entities, on, body.site.as_ref()));
+        sites.extend(body.quantifiers.iter().map(quantifier));
+    }
+    for ce in &model.column_effects {
+        if let SetValue::Copy(source) = &ce.value {
+            let on = format!(
+                "that joins {} to {}",
+                model.entities[ce.entity].id, model.entities[source.entity].id
+            );
+            let ends = vec![ce.entity, source.entity];
+            sites.push((ce.by.as_slice(), ends, on, ce.site.as_ref()));
+        }
+    }
+    for (by, entities, on, site) in sites {
+        let touching: Vec<&ForeignKey> = model
+            .foreign_keys()
+            .map(|(_, fk)| fk)
+            .filter(|fk| entities.contains(&fk.child) || entities.contains(&fk.parent))
+            .collect();
+        for role in by {
+            if touching.iter().any(|fk| model.key_named(fk, role)) {
+                continue;
+            }
+            let roles: Vec<&str> = touching.iter().map(|fk| model.key_role(fk)).collect();
+            let err = RdraError::UnknownOwnerRole {
+                role: role.clone(),
+                on: on.clone(),
+                roles: if roles.is_empty() {
+                    "(none)".to_string()
+                } else {
+                    roles.join(", ")
+                },
+            };
+            diags.push(match site {
+                Some(site) => Diagnostic::error_at(err, site.clone()),
+                None => Diagnostic::error(err),
+            });
+        }
+    }
+}
+
+/// The selectors of one statement, the entities whose joins they pick keys for, where the
+/// key would be (for the message), and the statement's site.
+type SelectorSite<'a> = (
+    &'a [String],
+    Vec<EntityKey>,
+    String,
+    Option<&'a LocatedSpan>,
+);
+
+fn quantifier_selectors<'a>(model: &SemanticModel, q: &'a RelatedQuantifier) -> SelectorSite<'a> {
+    let method = match q.kind {
+        QuantifierKind::Has => "has",
+        QuantifierKind::None => "none",
+    };
+    let on = format!(
+        "that joins {} (.{method}(...))",
+        model.entities[q.related].id
+    );
+    (q.by.as_slice(), vec![q.related], on, q.site.as_ref())
+}
+
+/// `AmbiguousOwnerLink` for a join of `a` and `b` that `site` makes, which `candidates` could
+/// follow. The hint rewrites `site` with a `.by(..)` naming the first candidate.
+pub fn ambiguous_owner_link(
+    model: &SemanticModel,
+    site: &str,
+    a: EntityKey,
+    b: EntityKey,
+    candidates: &[FkId],
+) -> RdraError {
+    let roles: Vec<&str> = candidates
+        .iter()
+        .map(|id| model.key_role(model.foreign_key(*id)))
+        .collect();
+    RdraError::AmbiguousOwnerLink {
+        statement: site.to_string(),
+        pair: format!("'{}' and '{}'", model.entities[a].id, model.entities[b].id),
+        roles: roles.join(", "),
+        first: roles[0].to_string(),
+    }
 }

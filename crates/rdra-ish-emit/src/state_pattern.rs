@@ -208,6 +208,7 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::UnbindableScope { .. }
         | StateDiag::UnbindableCondition { .. }
         | StateDiag::UnboundCopySource { .. }
+        | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }

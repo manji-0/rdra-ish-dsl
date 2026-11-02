@@ -254,6 +254,18 @@ pub enum StateDiag {
         reason: String,
         site: Site,
     },
+    /// A `.has`/`.none`, a `holds` body, or a copy joins two entities that several keys
+    /// join, and no `.by(role)` names one. The analysis reports the same for `.along`.
+    AmbiguousOwnerLink {
+        /// The statement, such as `.none(...)` or `holds(Cond, ...)`.
+        statement: String,
+        a: String,
+        b: String,
+        roles: String,
+        /// The statement with the `.by(role)` that picks the first candidate.
+        rewrite: String,
+        site: Site,
+    },
     /// `sets(UC, E, column == F.source)` where the step binds no one row of `F` to read.
     UnboundCopySource {
         usecase: String,
@@ -380,6 +392,7 @@ impl StateDiag {
             StateDiag::UnboundCopySource {
                 usecase, column, ..
             } => with("UnboundCopySource", &[usecase, column]),
+            StateDiag::AmbiguousOwnerLink { a, b, .. } => with("AmbiguousOwnerLink", &[a, b]),
             StateDiag::ContradictoryDrivenComparison {
                 usecase,
                 proposition,
@@ -459,6 +472,7 @@ impl StateDiag {
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnboundCopySource { .. }
+            | StateDiag::AmbiguousOwnerLink { .. }
             | StateDiag::UnsupportedComparison { .. }
             | StateDiag::DerivedColumnRead { .. }
             | StateDiag::UnresolvedPropertyAtom { .. } => Severity::Error,
@@ -746,6 +760,17 @@ impl fmt::Display for StateDiag {
                 reason,
                 ..
             } => write!(f, "condition {condition} on {usecase}: {reason}"),
+            StateDiag::AmbiguousOwnerLink {
+                statement,
+                a,
+                b,
+                roles,
+                rewrite,
+                ..
+            } => write!(
+                f,
+                "{statement} cannot tell which key joins {a} and {b}: roles {roles}; name one with `{rewrite}`"
+            ),
             StateDiag::UnboundCopySource {
                 usecase,
                 column,
