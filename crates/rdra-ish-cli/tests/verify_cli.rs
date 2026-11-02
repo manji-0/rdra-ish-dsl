@@ -356,6 +356,10 @@ fn a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget() 
         stdout.contains("\nnot checked: 2 temporal properties not decided\n  PaidLeadsToShipped: the whole-model run stopped at the time budget of 0 s"),
         "{stdout}"
     );
+    assert!(
+        stdout.contains("; raise --temporal-budget, or name the use cases the property relies on with .fair(UseCase, ...)"),
+        "{stdout}"
+    );
     assert!(stdout.contains("\ntlc_result: ok\n"), "{stdout}");
     assert!(
         stdout.ends_with("OK: no errors within 2 instances per entity, Int 0..5\n"),

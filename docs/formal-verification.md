@@ -513,7 +513,10 @@ gaps.
   so does a property whose cone frees an entity's slots and finds a counterexample. The
   whole-model run stops at `--temporal-budget` seconds (300 by default) or at 2,097,152
   distinct states, and the property is then `not decided`, which warns and does not fail
-  the run unless `--deny-undecided` is given. On
+  the run unless `--deny-undecided` is given. The `not checked:` line names the cause. At
+  the state cap it says that `--temporal-budget` does not lift the cap; at the time budget it
+  offers the budget. Both suggest `.fair(UseCase, ...)` naming the use cases the property
+  relies on, which decides it on its cone. On
   patent-ops, food-permit-ops, and insurance-claim-ops at 2 instances a whole-model run does
   not finish (14 million states in 11 minutes, 6.9 million in 300 s, and 2.3 million with 1.7
   million queued at the state cap in 143 s; insurance-claim-ops's two properties are on their

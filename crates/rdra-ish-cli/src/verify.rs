@@ -119,6 +119,8 @@ struct Ran {
     notes: Vec<String>,
     /// The property is not decided, and why.
     undecided: Option<String>,
+    /// The whole-model run stopped at the state cap, not at the time budget.
+    capped: bool,
 }
 
 impl Ran {
@@ -384,7 +386,19 @@ fn run_cfg(
         log,
         notes: Vec::new(),
         undecided: None,
+        capped: false,
     })
+}
+
+/// What to change when a property's whole-model run stopped. A property without `.fair` rests
+/// on the whole model's `WF_vars(Next)`; naming the use cases it relies on lets its cone decide
+/// it. The state cap is fixed, so only a smaller model or a cone lifts it.
+fn undecided_hint(capped: bool) -> &'static str {
+    if capped {
+        "the model has more states than the cap; --temporal-budget does not lift it, so name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone, or shrink the model"
+    } else {
+        "raise --temporal-budget, or name the use cases the property relies on with .fair(UseCase, ...) to decide it on its cone"
+    }
 }
 
 /// A whole-model property run under a budget: TLC's progress lines (about one a minute) print
@@ -427,6 +441,7 @@ fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration)
     let cap = Caps::VERIFY.states as u64;
     let mut log = String::new();
     let mut stopped: Option<String> = None;
+    let mut capped = false;
     let mut status = None;
     while status.is_none() {
         while let Ok(line) = rx.try_recv() {
@@ -442,6 +457,7 @@ fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration)
                 );
                 if p.distinct > cap && stopped.is_none() {
                     stopped = Some(format!("stopped at the state cap of {cap} states"));
+                    capped = true;
                     let _ = child.kill();
                 }
             }
@@ -481,6 +497,7 @@ fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration)
         run,
         log,
         notes: stopped.iter().cloned().collect(),
+        capped: capped && stopped.is_some(),
         undecided: stopped,
     })
 }
@@ -730,8 +747,9 @@ fn run_tlc(
                 .distinct_states
                 .map_or(String::new(), |n| format!(" after {n} states"));
             Some(format!(
-                "  {}: the whole-model run {why}{states}; raise --temporal-budget or shrink the model",
-                job.checks.join(", ")
+                "  {}: the whole-model run {why}{states}; {}",
+                job.checks.join(", "),
+                undecided_hint(r.capped)
             ))
         })
         .collect();
@@ -930,4 +948,25 @@ fn which(cmd: &str) -> Result<PathBuf> {
         bail!("`{cmd}` not found");
     }
     Ok(PathBuf::from(path))
+}
+
+#[cfg(test)]
+mod hint_tests {
+    use super::undecided_hint;
+
+    /// Raising the budget cannot lift the state cap, so that hint must not offer it.
+    #[test]
+    fn a_state_cap_hint_does_not_offer_the_budget() {
+        let hint = undecided_hint(true);
+        assert!(hint.contains("does not lift"), "{hint}");
+        assert!(hint.contains(".fair(UseCase, ...)"), "{hint}");
+        assert!(!hint.starts_with("raise --temporal-budget"), "{hint}");
+    }
+
+    #[test]
+    fn a_time_budget_hint_offers_the_budget_and_fair() {
+        let hint = undecided_hint(false);
+        assert!(hint.starts_with("raise --temporal-budget"), "{hint}");
+        assert!(hint.contains(".fair(UseCase, ...)"), "{hint}");
+    }
 }

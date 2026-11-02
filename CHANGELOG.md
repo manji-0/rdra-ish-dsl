@@ -281,6 +281,11 @@
 
 ### Changed
 
+- The hint for a temporal property whose whole-model run stopped names the cause (#79). At the
+  state cap it says `--temporal-budget` does not lift the cap; at the time budget it offers the
+  budget. Both suggest `.fair(UseCase, ...)` naming the use cases the property relies on, so
+  the cone decides it. Before, a run that stopped at the cap 143 s into a 300 s budget said
+  `raise --temporal-budget or shrink the model`.
 - The language reference and the lifecycle skill document two things the
   `samples/insurance-claim-ops` soak found (#79). A use case that moves two lifecycle columns
   of one entity runs only where both columns have an arm (Several lifecycle columns on one
