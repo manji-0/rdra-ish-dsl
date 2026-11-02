@@ -6,8 +6,8 @@ use crate::analysis::{body_condition_display, condition_body_display, effect_val
 use crate::lint::node_id;
 use crate::location::LocatedSpan;
 use crate::model::{
-    ComparisonProp, CrossEntityCondition, EffectValue, EntityKey, NodeRef, QuantifierKind, RelKind,
-    SemanticModel,
+    values_display, CmpRhs, ComparisonProp, CrossEntityCondition, EffectValue, EntityKey, NodeRef,
+    QuantifierKind, RelKind, SemanticModel,
 };
 
 /// One row of the business-rule table.
@@ -50,9 +50,20 @@ fn local_parts(
         .chain(
             comparisons
                 .iter()
-                .map(|prop| format!("{id}.{}", prop.display())),
+                .map(|prop| format!("{id}.{}", comparison_display(model, entity, prop))),
         )
         .collect()
+}
+
+/// `prop` as written, with the values of an `Enum` or variation column by their labels.
+fn comparison_display(model: &SemanticModel, entity: EntityKey, prop: &ComparisonProp) -> String {
+    let show = |v: &EffectValue| effect_value_display(model, entity, &prop.lhs_column, v);
+    let rhs = match &prop.rhs {
+        CmpRhs::Value(v) => show(v),
+        CmpRhs::Values(vs) => values_display(vs, show),
+        other => other.display(),
+    };
+    format!("{} {} {rhs}", prop.lhs_column, prop.op.as_str())
 }
 
 fn cross_parts(model: &SemanticModel, conds: &[CrossEntityCondition]) -> Vec<String> {

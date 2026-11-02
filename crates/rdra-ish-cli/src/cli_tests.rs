@@ -1115,6 +1115,38 @@ fn list_rule_json_carries_the_columns() {
 }
 
 #[test]
+fn list_rule_prints_value_labels_for_every_operator() {
+    use rdra_ish_core::build_model;
+    let src = r#"
+entity Doc "届出" {
+  id: Int @pk
+  status: Enum(open "受付中", paid "支払済", shipped "発送済", closed "終了")
+  note: String @null
+}
+usecase Pay "支払"
+transitions(Pay, Doc.status, open -> paid)
+forbidden(Doc, status != open, note == present)
+forbidden(Doc, status in (paid, shipped))
+forbidden(Doc, status not in (open, closed))
+invariant(Doc).when(status in (paid, shipped)).then(status != closed)
+"#;
+    let (ast, parse_errors) = rdra_ish_syntax::parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    let csv = list_elements(&model, &ListKind::Rule, &ListFormat::Csv).unwrap();
+    for rule in [
+        "Doc.status != 受付中",
+        "Doc.status in (支払済, 発送済)",
+        "Doc.status not in (受付中, 終了)",
+        "when Doc.status in (支払済, 発送済) then Doc.status != 終了",
+    ] {
+        assert!(csv.contains(rule), "missing `{rule}` in\n{csv}");
+    }
+    assert!(!csv.contains("paid"), "{csv}");
+}
+
+#[test]
 fn list_rule_site_is_file_and_line_from_a_loaded_project() {
     let inputs = vec![errors_fixture("samples/clinic-ops")];
     let Project { program, model, .. } = load_project(&inputs, None).expect("load clinic-ops");
