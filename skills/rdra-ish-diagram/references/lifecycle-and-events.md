@@ -50,7 +50,10 @@ rdra-ish verify src/ --backend tlc -o out/
 - Arrows are the `transitions` arms, labelled with the label of the use case that drives
   each one and `[...]` with the conditions that guard it: the use case's `applies_to`
   conditions, then the arm's own `.when(Cond)`. The line before each arrow names
-  the use case by id (`%% transition usecase__Capture`).
+  the use case by id (`%% transition usecase__Capture`). A use case that moves two lifecycle
+  columns of one entity is one step that runs only where both have an arm, but each block
+  draws its own edge. Each such edge adds `(Entity.other_column と同時)` after the label, so
+  the two edges read as one step: `請求の取下げ (Claim.status と同時)`.
 - `[*] -->` start edges come from the states a creating use case sets, or the start of a
   pre-existing entity. `--> [*]` marks an end state: one with no transition to another
   state.

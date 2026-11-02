@@ -281,6 +281,10 @@
 
 ### Changed
 
+- The state diagram labels an edge of a use case that moves two lifecycle columns of one
+  entity with the other column, `請求の取下げ (Claim.status と同時)` (#79). Each column has its
+  own block, so `out/state/Claim.mmd` drew `WithdrawClaim` as two unrelated edges. The
+  `%% transition` line, the node ids, and the header are unchanged.
 - The hint for a temporal property whose whole-model run stopped names the cause (#79). At the
   state cap it says `--temporal-budget` does not lift the cap; at the time budget it offers the
   budget. Both suggest `.fair(UseCase, ...)` naming the use cases the property relies on, so

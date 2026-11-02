@@ -11,35 +11,35 @@ stateDiagram-v2
     state "期限経過" as state__Claim_period_overdue
     state "期限の管理を終了" as state__Claim_period_ended
     %% transition usecase__CompleteClaim
-    state__Claim_period_not_started --> state__Claim_period_running : 請求完了の確認
+    state__Claim_period_not_started --> state__Claim_period_running : 請求完了の確認 (Claim.status と同時)
     %% transition usecase__TimeBarClaim
-    state__Claim_period_not_started --> state__Claim_period_ended : 請求権の時効による消滅
+    state__Claim_period_not_started --> state__Claim_period_ended : 請求権の時効による消滅 (Claim.status と同時)
     %% transition usecase__WithdrawClaim
-    state__Claim_period_not_started --> state__Claim_period_ended : 請求の取下げ
+    state__Claim_period_not_started --> state__Claim_period_ended : 請求の取下げ (Claim.status と同時)
     %% transition usecase__ExtendPaymentPeriod
     state__Claim_period_running --> state__Claim_period_extended : 支払期限の延長と通知 [請求完了の後、支払・不払を決める前である]
     %% transition usecase__MarkPaymentOverdue
     state__Claim_period_running --> state__Claim_period_overdue : 支払期限の経過
     %% transition usecase__NotifyDenial
-    state__Claim_period_running --> state__Claim_period_ended : 不払いの通知 [不払いの理由を説明した]
+    state__Claim_period_running --> state__Claim_period_ended : 不払いの通知 (Claim.status と同時) [不払いの理由を説明した]
     %% transition usecase__PayClaim
-    state__Claim_period_running --> state__Claim_period_ended : 保険金の支払 [支払済みの案件は再度支払わない]
+    state__Claim_period_running --> state__Claim_period_ended : 保険金の支払 (Claim.status と同時) [支払済みの案件は再度支払わない]
     %% transition usecase__WithdrawClaim
-    state__Claim_period_running --> state__Claim_period_ended : 請求の取下げ
+    state__Claim_period_running --> state__Claim_period_ended : 請求の取下げ (Claim.status と同時)
     %% transition usecase__MarkPaymentOverdue
     state__Claim_period_extended --> state__Claim_period_overdue : 支払期限の経過
     %% transition usecase__NotifyDenial
-    state__Claim_period_extended --> state__Claim_period_ended : 不払いの通知 [不払いの理由を説明した]
+    state__Claim_period_extended --> state__Claim_period_ended : 不払いの通知 (Claim.status と同時) [不払いの理由を説明した]
     %% transition usecase__PayClaim
-    state__Claim_period_extended --> state__Claim_period_ended : 保険金の支払 [支払済みの案件は再度支払わない]
+    state__Claim_period_extended --> state__Claim_period_ended : 保険金の支払 (Claim.status と同時) [支払済みの案件は再度支払わない]
     %% transition usecase__WithdrawClaim
-    state__Claim_period_extended --> state__Claim_period_ended : 請求の取下げ
+    state__Claim_period_extended --> state__Claim_period_ended : 請求の取下げ (Claim.status と同時)
     %% transition usecase__NotifyDenial
-    state__Claim_period_overdue --> state__Claim_period_ended : 不払いの通知 [不払いの理由を説明した]
+    state__Claim_period_overdue --> state__Claim_period_ended : 不払いの通知 (Claim.status と同時) [不払いの理由を説明した]
     %% transition usecase__PayClaim
-    state__Claim_period_overdue --> state__Claim_period_ended : 保険金の支払 [支払済みの案件は再度支払わない]
+    state__Claim_period_overdue --> state__Claim_period_ended : 保険金の支払 (Claim.status と同時) [支払済みの案件は再度支払わない]
     %% transition usecase__WithdrawClaim
-    state__Claim_period_overdue --> state__Claim_period_ended : 請求の取下げ
+    state__Claim_period_overdue --> state__Claim_period_ended : 請求の取下げ (Claim.status と同時)
     state__Claim_period_ended --> [*]
   }
   state "Claim.status" as statemodel__Claim_status {
@@ -56,15 +56,15 @@ stateDiagram-v2
     %% transition usecase__SubmitClaim
     state__Claim_status_guided --> state__Claim_status_submitted : 請求書類の提出 [等級の変動を説明して請求の意思を確かめた]
     %% transition usecase__WithdrawClaim
-    state__Claim_status_guided --> state__Claim_status_withdrawn : 請求の取下げ
+    state__Claim_status_guided --> state__Claim_status_withdrawn : 請求の取下げ (Claim.period と同時)
     %% transition usecase__TimeBarClaim
-    state__Claim_status_guided --> state__Claim_status_time_barred : 請求権の時効による消滅
+    state__Claim_status_guided --> state__Claim_status_time_barred : 請求権の時効による消滅 (Claim.period と同時)
     %% transition usecase__CompleteClaim
-    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認
+    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認 (Claim.period と同時)
     %% transition usecase__WithdrawClaim
-    state__Claim_status_submitted --> state__Claim_status_withdrawn : 請求の取下げ
+    state__Claim_status_submitted --> state__Claim_status_withdrawn : 請求の取下げ (Claim.period と同時)
     %% transition usecase__TimeBarClaim
-    state__Claim_status_submitted --> state__Claim_status_time_barred : 請求権の時効による消滅
+    state__Claim_status_submitted --> state__Claim_status_time_barred : 請求権の時効による消滅 (Claim.period と同時)
     %% transition usecase__DecideClaim
     state__Claim_status_completed --> state__Claim_status_decided_payment : 支払・不払の決裁 [不正請求の疑いがない]
     %% transition usecase__DecideSuspectedClaim
@@ -74,11 +74,11 @@ stateDiagram-v2
     %% transition usecase__DecideSuspectedClaim
     state__Claim_status_completed --> state__Claim_status_decided_denial : 疑義事案の支払・不払の決裁 [不正請求の疑いがある]
     %% transition usecase__WithdrawClaim
-    state__Claim_status_completed --> state__Claim_status_withdrawn : 請求の取下げ
+    state__Claim_status_completed --> state__Claim_status_withdrawn : 請求の取下げ (Claim.period と同時)
     %% transition usecase__PayClaim
-    state__Claim_status_decided_payment --> state__Claim_status_paid : 保険金の支払 [支払済みの案件は再度支払わない]
+    state__Claim_status_decided_payment --> state__Claim_status_paid : 保険金の支払 (Claim.period と同時) [支払済みの案件は再度支払わない]
     %% transition usecase__NotifyDenial
-    state__Claim_status_decided_denial --> state__Claim_status_denial_notified : 不払いの通知 [不払いの理由を説明した]
+    state__Claim_status_decided_denial --> state__Claim_status_denial_notified : 不払いの通知 (Claim.period と同時) [不払いの理由を説明した]
     state__Claim_status_paid --> [*]
     state__Claim_status_denial_notified --> [*]
     state__Claim_status_withdrawn --> [*]

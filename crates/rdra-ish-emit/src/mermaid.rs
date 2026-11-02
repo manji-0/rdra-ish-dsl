@@ -717,7 +717,19 @@ impl Emitter for StateMermaidEmitter {
 /// that guards it, the use case's and the arm's own `.when` (UML guard notation).
 fn transition_label(model: &SemanticModel, t: &rdra_ish_core::StateTransition) -> String {
     let guards = transition_guard_labels(model, t);
-    let label = quote(&model.use_cases[t.usecase].label);
+    let mut label = quote(&model.use_cases[t.usecase].label);
+    let mut together: Vec<String> = model
+        .state_transitions
+        .iter()
+        .filter(|o| o.usecase == t.usecase && o.entity == t.entity && o.column != t.column)
+        .map(|o| format!("{}.{}", model.entities[o.entity].id, o.column))
+        .collect();
+    together.sort();
+    together.dedup();
+    if !together.is_empty() {
+        // One step of the use case moves every column it names, and runs only where each has an arm.
+        label.push_str(&format!(" ({} と同時)", together.join(", ")));
+    }
     if guards.is_empty() {
         label
     } else {
@@ -1231,6 +1243,42 @@ applies_to(Traced, Publish)
                 "    %% transition usecase__Publish\n    state__Doc_draft --> state__Doc_published : 公開する [レビュー済み]\n"
             ),
             "a condition without a body guards nothing: {result}"
+        );
+    }
+
+    /// A use case that moves two columns is one step; each column's edge says so.
+    #[test]
+    fn test_state_mermaid_names_the_other_column_a_use_case_moves() {
+        let src = r#"
+entity Doc "文書" {
+  id: Int @pk
+  status: Enum(draft, published) @default(draft)
+  period: Enum(open, closed) @default(open)
+}
+usecase Publish "公開する"
+usecase Reopen "開き直す"
+transitions(Publish, Doc.status, draft -> published)
+transitions(Publish, Doc.period, open -> closed)
+transitions(Reopen, Doc.period, closed -> open)
+"#;
+        let model = model_from(src);
+        let result = StateMermaidEmitter
+            .emit(&model, &all_entities(&model))
+            .unwrap();
+        assert!(
+            result.contains(
+                "state__Doc_status_draft --> state__Doc_status_published : 公開する (Doc.period と同時)\n"
+            ),
+            "{result}"
+        );
+        assert!(
+            result
+                .contains("state__Doc_period_open --> state__Doc_period_closed : 公開する (Doc.status と同時)\n"),
+            "{result}"
+        );
+        assert!(
+            result.contains("state__Doc_period_closed --> state__Doc_period_open : 開き直す\n"),
+            "{result}"
         );
     }
 
