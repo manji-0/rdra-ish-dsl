@@ -423,6 +423,10 @@
 
 ### Fixed
 
+- `states --entity`, `check --entity` and `verify --entity` print the use cases no selected
+  cone keeps as one `not checked:` line that counts them and names three, not one line each
+  (#79). `states --entity Claim` on `samples/insurance-claim-ops` printed 39 lines before its
+  table.
 - A `variation` value, an `Enum` variant, and a column in an expression may be any kind
   keyword (#79). `variation V "V" { a "A"  field "B" }` failed with ``a `variation` needs a
   body listing at least one value`` at the `variation` line, and `Enum(a, field)` with

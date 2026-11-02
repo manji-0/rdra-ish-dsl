@@ -146,7 +146,10 @@ model, and an unknown one is an error.
 - `--entity <id>` selects targets: the entity's view, each invariant that binds the entity,
   and each after-assert whose anchor or predicate binds it. Each target is explored on its
   own cone, as in a whole run, so every finding on a selected target is exact. A use case
-  that no selected entity's cone keeps is not decided.
+  that no selected entity's cone keeps is not decided. One such use case gets its own line;
+  two or more get one line that counts them and names the first three (`whether 39 use cases
+  (A, B, C, ...) can run is not decided: ...`), and the `findings not decided` count still
+  includes each.
 
 A build error whose entities no selected cone reads is **deferred**. It is listed under
 `not checked:` and does not fail the run. A build error that alters a use case (a guard

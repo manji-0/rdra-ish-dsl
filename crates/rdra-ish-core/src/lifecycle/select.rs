@@ -6,7 +6,7 @@ use std::fmt;
 
 use super::cone::Target;
 use super::diag::{Diag, Severity};
-use super::targets::Undecided;
+use super::targets::{Subject, Undecided, UndecidedWhy};
 use super::TransitionSystem;
 use crate::model::{EntityKey, SemanticModel, UseCaseKey};
 
@@ -328,8 +328,30 @@ impl fmt::Display for NotChecked<'_> {
                 d.diag
             )?;
         }
+        let unselected: Vec<String> = self
+            .undecided
+            .iter()
+            .filter(|u| u.why == UndecidedWhy::Unselected)
+            .filter_map(|u| match &u.subject {
+                Subject::Runs { action } => Some(action.clone()),
+                _ => None,
+            })
+            .collect();
+        let group = unselected.len() > 1;
         for u in self.undecided {
-            write!(f, "\n  {u}")?;
+            let grouped = group
+                && u.why == UndecidedWhy::Unselected
+                && matches!(u.subject, Subject::Runs { .. });
+            if !grouped {
+                write!(f, "\n  {u}")?;
+            }
+        }
+        if group {
+            write!(
+                f,
+                "\n  whether {} can run is not decided: no cone of a selected entity keeps them",
+                counted(&unselected, "use case", "use cases")
+            )?;
         }
         Ok(())
     }

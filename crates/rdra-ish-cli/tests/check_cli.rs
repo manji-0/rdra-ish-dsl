@@ -670,3 +670,43 @@ fn max_states_sets_the_cap_and_the_cap_names_what_grows() {
         .status
         .success());
 }
+
+/// Use cases no selected entity's cone keeps are one `not checked:` line, not one line each.
+#[test]
+fn an_entity_scope_groups_the_use_cases_it_leaves_undecided() {
+    let dir = std::env::temp_dir().join(format!("rdra-grouped-undecided-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Audit "監査" { id: Int @pk  status: Enum(open, closed) @default(open) }
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Open "監査開始"
+usecase Close "監査終了"
+usecase Review "監査確認"
+creates(Place, Order)
+updates(Pay, Order)
+transitions(Pay, Order.status, pending -> paid)
+creates(Open, Audit)
+updates(Close, Audit)
+transitions(Close, Audit.status, open -> closed)
+updates(Review, Audit)
+transitions(Review, Audit.status, open -> closed)
+"#,
+    )
+    .expect("write model");
+    let output = run(&["states", file.to_str().unwrap(), "--entity", "Order"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stderr}");
+    assert!(
+        stderr.contains(
+            "\n  whether 3 use cases (Close, Review, Open) can run is not decided: no cone of a selected entity keeps them\n"
+        ),
+        "{stderr}"
+    );
+    assert_eq!(stderr.matches("not decided").count(), 2, "{stderr}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
