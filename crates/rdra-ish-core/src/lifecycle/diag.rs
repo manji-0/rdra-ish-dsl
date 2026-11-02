@@ -194,6 +194,10 @@ pub enum StateDiag {
         /// The use case declaration.
         site: Site,
         why: Blocked,
+        /// `(child, parent)` entity ids: instances the action creates under an `.optional()`
+        /// key to a parent it does not write, so they are created unlinked. Set only when `why`
+        /// is `Blocked::Guards`.
+        unlinked: Vec<(String, String)>,
     },
     /// A `transitions(..).when(Cond)` arm whose use case runs and whose `from` state is
     /// reached, but which no edge of any cone that keeps it takes: its guard never holds where

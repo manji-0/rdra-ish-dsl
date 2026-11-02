@@ -152,7 +152,10 @@ requires that the child belongs to the parent the action also writes. A mandator
 `relate` adds the parent as a parameter when a created child needs one. An
 `.optional()` `relate` does not: the child is created unlinked, and a parent
 that the action writes links it. An unlinked owner is not linked for `.along`,
-quantifiers, or owner guards.
+quantifiers, or owner guards. A guard that reads the parent of a child the action creates
+unlinked therefore never holds, and the `Runs_<UseCase>` warning adds a `note:` row: the
+use case creates the child without writing the parent. Write the parent in the use case
+(`updates(UseCase, Parent)`), or drop `.optional()` so the parent is a parameter.
 
 **Relinking.** An action that creates the parent and updates an existing child links the
 child to the new parent. The rule depends on the key:

@@ -221,6 +221,55 @@ guard: Order.status is paid (transitions of Refund) never_runs.rdra:18:1"
     assert_eq!(warnings, 2, "each action warns once: {stderr}");
 }
 
+/// A use case that creates a child under an `.optional()` key and guards on the parent it
+/// only reads creates the child unlinked, so the guard never holds. The warning says so and
+/// what to write instead; the same model with the parent written, or the key mandatory,
+/// runs.
+#[test]
+fn check_says_why_a_child_created_unlinked_cannot_read_its_parent() {
+    let dir = std::env::temp_dir().join(format!("rdra-unlinked-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let model = |relate: &str, extra: &str| {
+        let file = dir.join("unlinked.rdra");
+        std::fs::write(
+            &file,
+            format!(
+                r#"usecase Issue "Issue"
+usecase Renew "Renew"
+entity Permit "許可" {{ id: Int @pk  status: Enum(valid, expired) @default(valid) }}
+entity App "申請" {{ id: Int @pk }}
+{relate}
+creates(Issue, Permit)
+creates(Renew, App)
+reads(Renew, Permit)
+condition PermitValid "有効な許可"
+holds(PermitValid, Permit.status == valid)
+applies_to(PermitValid, Renew)
+{extra}
+"#
+            ),
+        )
+        .unwrap();
+        String::from_utf8_lossy(&run(&["check", file.to_str().unwrap()]).stderr).into_owned()
+    };
+    let stderr = model("relate(App, Permit, N:1).optional()", "");
+    assert!(stderr.contains("warning[Runs_Renew]"), "{stderr}");
+    assert!(
+        stderr.contains(
+            "note: it creates App without writing Permit, so the App is unlinked and no Permit is its parent for a guard to read; write Permit in the use case (`updates`), or drop `.optional()` from the `relate`"
+        ),
+        "{stderr}"
+    );
+    let written = model(
+        "relate(App, Permit, N:1).optional()",
+        "updates(Renew, Permit)",
+    );
+    assert!(!written.contains("Runs_"), "{written}");
+    let mandatory = model("relate(App, Permit, N:1)", "");
+    assert!(!mandatory.contains("Runs_"), "{mandatory}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// A state of a state model that no use case reaches is one error, with the arm that would
 /// enter it; the Order that would leave shipped through it never does, a deadlock; the use
 /// case that would enter it never runs, a warning with its declaration; `states` reports all

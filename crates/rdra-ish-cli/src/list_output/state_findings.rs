@@ -153,6 +153,7 @@ fn render_never_runs(
         origin,
         site,
         why,
+        unlinked,
     } = diag
     else {
         return None;
@@ -164,6 +165,14 @@ fn render_never_runs(
         location(program, site),
     )];
     rows.extend(blocked_rows(program, model, why, "  "));
+    for (child, parent) in unlinked {
+        rows.push((
+            format!(
+                "  note: it creates {child} without writing {parent}, so the {child} is unlinked and no {parent} is its parent for a guard to read; write {parent} in the use case (`updates`), or drop `.optional()` from the `relate`"
+            ),
+            None,
+        ));
+    }
     Some(format!(
         "{}{reason}{}",
         action_label(model, action, origin),

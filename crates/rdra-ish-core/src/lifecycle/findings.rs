@@ -583,12 +583,47 @@ impl TransitionSystem {
     /// The `NeverRuns` of `act`: only the checks of `moves` that hold in no state of `g`.
     fn never_runs(&self, act: ActId, g: &Graph) -> StateDiag {
         let action = &self.actions[act.index()];
+        let why = self.blocked(act, self.scan_guards(act, g.states, None));
+        let unlinked = match why {
+            Blocked::Guards(_) => self.unlinked_parents(act),
+            _ => Vec::new(),
+        };
         StateDiag::NeverRuns {
             action: action.name.clone(),
             origin: action.origin.clone(),
             site: action.site.clone(),
-            why: self.blocked(act, self.scan_guards(act, g.states, None)),
+            why,
+            unlinked,
         }
+    }
+
+    /// `(child, parent)` entity ids for each instance `act` creates under an `.optional()` key
+    /// whose parent the action does not bind. The child is created unlinked, so a guard that
+    /// reads the parent through that key finds none.
+    fn unlinked_parents(&self, act: ActId) -> Vec<(String, String)> {
+        let action = &self.actions[act.index()];
+        let mut out: Vec<(String, String)> = Vec::new();
+        for param in action.params.iter().filter(|p| p.role == ParamRole::New) {
+            for &owner in &self.entity(param.entity).owners {
+                let var = &self.vars[owner.index()];
+                let (VarKind::Owner { parent, .. }, Domain::Instance { optional: true, .. }) =
+                    (&var.kind, &var.domain)
+                else {
+                    continue;
+                };
+                if action.params.iter().any(|p| p.entity == *parent) {
+                    continue;
+                }
+                let pair = (
+                    self.entity(param.entity).id.clone(),
+                    self.entity(*parent).id.clone(),
+                );
+                if !out.contains(&pair) {
+                    out.push(pair);
+                }
+            }
+        }
+        out
     }
 
     /// A scan of `act`'s checks in model terms: entities and roles, guards with their sites.

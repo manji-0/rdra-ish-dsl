@@ -82,6 +82,7 @@ fn one_of_each() -> Vec<StateDiag> {
             origin: ActionOrigin::Clock,
             site: site(),
             why: Blocked::Together,
+            unlinked: vec![],
         },
         StateDiag::Deadlock {
             entity: "Order".into(),

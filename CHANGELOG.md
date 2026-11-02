@@ -345,6 +345,12 @@
 
 ### Fixed
 
+- The `Runs_<UseCase>` warning of a use case that creates a child under an `.optional()`
+  `relate` and guards on the parent it does not write says why (#70): `note: it creates App
+  without writing Permit, so the App is unlinked and no Permit is its parent for a guard to
+  read; write Permit in the use case (`updates`), or drop `.optional()` from the `relate``.
+  Before, it said only that its guards hold in no reachable state. `StateDiag::NeverRuns`
+  gains an `unlinked` field.
 - `diagram --kind state --entity <Entity>` names only that entity's columns in the
   `omitted:` and `set-only:` header lines (#70). It also listed the Enum columns of every
   other entity in scope, such as `%% set-only: Disposition.publication` under
