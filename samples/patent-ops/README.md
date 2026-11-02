@@ -76,11 +76,12 @@ Each figure is a cone size from `crates/rdra-ish-core/examples/lifecycle_measure
 ## Diagnostics left in place
 
 `check` reports nothing. `lint` reports `api-contract-missing` for every API (no API carries an
-HTTP contract, as in clinic-ops) and `screen-no-transition` for three screens that are the only
-screen of their BUC (`ExaminationRequestScreen`, `FeePaymentScreen`, `RewardScreen`). A screen
-transition into them would come from another BUC's screen, and a BUC file cannot import another
-BUC's module: `import buc.registration` looks for `buc/registration.rdra`, while the file that
-declares `module buc.registration` is `buc/buc_registration.rdra`, the layout clinic-ops uses.
+HTTP contract, as in clinic-ops). A screen that is the only one of its BUC (`ExaminationRequestScreen`,
+`FeePaymentScreen`, `RewardScreen`) is reached by a `navigates` from another BUC's screen, so
+`lint` does not report `screen-no-transition` for it. A BUC file imports another BUC's module by
+its `module` name, as `buc_inventor_reward.rdra` does with `import buc.registration.{FeePaymentScreen,
+RecordRegistration}`. The file name does not matter: the module is `buc.registration` and the file
+is `buc/buc_registration.rdra`.
 
 `scripts/gen-clinic-ops-docs.py target/debug/rdra-ish patent-ops` generates `design-doc.md` and
 `prd.md` from the model, in the same layout as clinic-ops.
