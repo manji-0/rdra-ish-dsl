@@ -396,7 +396,7 @@ impl TransitionSystem {
                     None if crowd => (0..self.bounds.slots() as u8).collect(),
                     None => Vec::new(),
                 },
-                ParamRole::Existing | ParamRole::Parent => (0..self.bounds.slots())
+                ParamRole::Existing | ParamRole::Parent { .. } => (0..self.bounds.slots())
                     .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
                     .map(|s| s as u8)
                     .collect(),
@@ -571,7 +571,7 @@ impl TransitionSystem {
                 let exists = self.entity(param.entity).exists;
                 let want = match param.role {
                     ParamRole::New => Value::ABSENT,
-                    ParamRole::Existing | ParamRole::Parent => Value::PRESENT,
+                    ParamRole::Existing | ParamRole::Parent { .. } => Value::PRESENT,
                 };
                 let mut slots = match pin {
                     Some((q, k)) if q == p => usize::from(k)..usize::from(k) + 1,
@@ -731,7 +731,7 @@ impl TransitionSystem {
                 let mut parts: Vec<String> = Vec::new();
                 let mut entities = Vec::new();
                 for (p, param) in action.params.iter().enumerate() {
-                    if param.role == ParamRole::Parent && !read.contains(&param.entity) {
+                    if !param.role.is_written() && !read.contains(&param.entity) {
                         continue;
                     }
                     parts.push(describe_slot(
@@ -980,7 +980,7 @@ impl<'t> Bfs<'t> {
         let ts = self.ts;
         let action = &ts.actions[act.index()];
         for (p, param) in action.params.iter().enumerate() {
-            if param.role == ParamRole::Parent {
+            if !param.role.is_written() {
                 continue;
             }
             let (e, slot) = (param.entity, usize::from(params[p]));

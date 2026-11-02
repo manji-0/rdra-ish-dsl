@@ -430,7 +430,7 @@ impl TransitionSystem {
                     && action
                         .params
                         .iter()
-                        .any(|p| p.entity == e && p.role != ParamRole::Parent)
+                        .any(|p| p.entity == e && p.role.is_written())
             })
             .map(|act| ActionRuns {
                 act,

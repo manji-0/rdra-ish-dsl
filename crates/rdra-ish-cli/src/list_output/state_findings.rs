@@ -203,7 +203,7 @@ fn blocked_rows(
                             "{indent}needs: a free {entity} slot within the instance bound{via}"
                         )
                     }
-                    ParamRole::Existing | ParamRole::Parent => {
+                    ParamRole::Existing | ParamRole::Parent { .. } => {
                         format!("{indent}needs: an existing {entity}")
                     }
                 };

@@ -1162,6 +1162,45 @@ fn bfs_and_tlc_agree_on_the_key_a_join_names() {
     }
 }
 
+/// Two mandatory keys from Order to Address, and `Place` creates the order without writing an
+/// address (#75). Each key has its own parent param, so an order may ship to one address and
+/// bill another. `Ship` runs while the `SHIP_KEY` address is in the east, and the rule forbids
+/// a shipped order billed to the west. Through `ship_to` both engines reach the violation,
+/// which needs the two keys on different rows; with one shared param they missed it. Through
+/// `bill_to` the guard rules it out.
+const TWO_KEYS: &str = r#"
+entity Address "住所" { id: Int @pk  region: Enum(east, west) }
+entity Order "注文" { id: Int @pk  status: Enum(open, shipped, cancelled) @default(open) }
+relate(Order, Address, N:1).role(ship_to)
+relate(Order, Address, N:1).role(bill_to)
+usecase AddEast "東の住所"
+usecase AddWest "西の住所"
+usecase Place "注文"
+usecase Ship "出荷"
+usecase Cancel "取消"
+creates(AddEast, Address)
+sets(AddEast, Address, region == east)
+creates(AddWest, Address)
+sets(AddWest, Address, region == west)
+creates(Place, Order)
+transitions(Ship, Order.status, open -> shipped)
+transitions(Cancel, Order.status, open -> cancelled)
+condition ShipsEast "東へ出荷する"
+holds(ShipsEast, Address.region == east).by(SHIP_KEY)
+applies_to(ShipsEast, Ship)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(bill_to)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_two_keys_to_one_parent() {
+    let ship = check_fixture("two_keys_ship", &TWO_KEYS.replace("SHIP_KEY", "ship_to"));
+    let bill = check_fixture("two_keys_bill", &TWO_KEYS.replace("SHIP_KEY", "bill_to"));
+    if let (Some(ship), Some(bill)) = (ship, bill) {
+        assert!(ship.contains("CrossForbidden_Order_0"), "{ship:?}");
+        assert!(!bill.contains("CrossForbidden_Order_0"), "{bill:?}");
+    }
+}
+
 /// `.none(Invoice)` and `.none(Invoice.status in (<every value>))` are one guard (#73): both
 /// engines agree on each, and every cone has the same states under either form.
 #[test]

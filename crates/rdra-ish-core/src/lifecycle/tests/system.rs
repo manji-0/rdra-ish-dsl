@@ -1,7 +1,7 @@
 //! Whole-system behaviour: order.rdra, components, restrict, bounds.
 
 use super::*;
-use crate::lifecycle::{Birth, ParamRole};
+use crate::lifecycle::Birth;
 
 #[test]
 fn order_sample_reaches_its_five_patterns() {
@@ -109,7 +109,7 @@ creates(AddLine, Line)
     assert!(add
         .params
         .iter()
-        .any(|p| p.role == ParamRole::Parent && built.ts.entity(p.entity).id == "Order"));
+        .any(|p| !p.role.is_written() && built.ts.entity(p.entity).id == "Order"));
     let comps = built.ts.components();
     assert_eq!(comps.len(), 1, "the implied parent joins the two entities");
     let run = built.ts.explore(Caps::new(256, 1000));

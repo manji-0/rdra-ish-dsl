@@ -713,7 +713,7 @@ impl<'m> Builder<'m> {
             let gives_child = |a: &Action| {
                 a.params
                     .iter()
-                    .any(|q| q.entity == c && q.role != ParamRole::Parent)
+                    .any(|q| q.entity == c && q.role.is_written())
             };
             let lone: Vec<UseCaseKey> = self
                 .ts
@@ -1060,17 +1060,21 @@ impl<'m> Builder<'m> {
         };
         let statement = format!("holds({}, ...)", model.conditions[ck].id);
         let body_site = Site::new(ModelRef::Condition(ck), &body.site);
-        let mut binding: Binding = params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                let at = match p.role {
-                    ParamRole::New => At::Next(i as u8),
-                    ParamRole::Existing | ParamRole::Parent => At::Param(i as u8),
-                };
-                (self.ts.entities[p.entity.index()].key, at)
-            })
-            .collect();
+        let mut binding: Binding = Vec::new();
+        for e in params.iter().map(|p| p.entity) {
+            let ek = self.ts.entities[e.index()].key;
+            if at_of(&binding, ek).is_some() {
+                continue;
+            }
+            let Some(i) = self.read_param(params, e, &body.by) else {
+                continue;
+            };
+            let at = match params[usize::from(i)].role {
+                ParamRole::New => At::Next(i),
+                ParamRole::Existing | ParamRole::Parent { .. } => At::Param(i),
+            };
+            binding.push((ek, at));
+        }
         let mut witnesses = Vec::new();
         for ek in body.conds.iter().flat_map(cond_entities) {
             if at_of(&binding, ek).is_none() {
@@ -1159,8 +1163,8 @@ impl<'m> Builder<'m> {
                 let mut binders = Vec::new();
                 for &ek in &entities {
                     let e = self.ent_of[&ek];
-                    match params.iter().position(|p| p.entity == e) {
-                        Some(p) => binding.push((ek, At::Param(p as u8))),
+                    match self.read_param(&params, e, &[]) {
+                        Some(p) => binding.push((ek, At::Param(p))),
                         None => {
                             binding.push((ek, At::Bound(binders.len() as u8)));
                             binders.push(e);

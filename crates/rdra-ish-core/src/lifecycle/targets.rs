@@ -8,7 +8,7 @@ use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag};
 use super::explore::{Caps, ComponentRun};
 use super::findings::{Progress, Runs, Taken, Witness};
-use super::types::{ActionOrigin, EntId, ParamRole, Site};
+use super::types::{ActionOrigin, EntId, Site};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
 use crate::model::{EntityKey, SemanticModel};
@@ -220,7 +220,7 @@ impl TransitionSystem {
                         let entities = action
                             .params
                             .iter()
-                            .filter(|p| p.role != ParamRole::Parent)
+                            .filter(|p| p.role.is_written())
                             .map(|p| self.entity(p.entity).key)
                             .collect();
                         out.verdicts.push(Diag { entities, diag });
@@ -239,7 +239,7 @@ impl TransitionSystem {
                 let entities = action
                     .params
                     .iter()
-                    .filter(|p| p.role != ParamRole::Parent)
+                    .filter(|p| p.role.is_written())
                     .map(|p| self.entity(p.entity).key)
                     .collect();
                 out.verdicts.push(Diag { entities, diag });
@@ -271,7 +271,7 @@ impl TransitionSystem {
     fn judged_by_entity_cones(&self, i: usize) -> bool {
         let action = &self.actions[i];
         matches!(action.origin, ActionOrigin::UseCase { .. })
-            && action.params.iter().any(|p| p.role != ParamRole::Parent)
+            && action.params.iter().any(|p| p.role.is_written())
     }
 
     /// The id of the entity `key` in this (restricted) system.

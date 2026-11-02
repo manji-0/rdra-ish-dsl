@@ -417,6 +417,19 @@
 - An action never relinks a parent parameter, a row it only reads (#73). With a second key
   from the parent's entity back to the created child's, `RegisterPermit` in a model with
   `renews` linked the application it read as renewing the permit it created.
+- Two keys from one child to one parent no longer point at the same row when a use case
+  creates the child without writing the parent (#75). The keys (`ship_to` and `bill_to` from
+  `Order` to `Address`) shared one parent parameter, so the child always started with both on
+  one row, and `check` and `verify` missed every violation that needs two rows. Each key now
+  has its own parent parameter, an `.optional()` key included when a guard links it, in the
+  lifecycle builder that the explorer, the TLA+ export and `verify` read. No sample has two
+  such keys, and no sample's cone changes size.
+- A `holds` comparison or a copy source on a parent the use case binds follows `.by` (#75).
+  Before, it read the bound parameter whatever `.by` named. It now reads the parent parameter
+  of the key `.by` names, or an existing row through that key when the use case binds none
+  for it; with two parent parameters of the entity and no `.by` naming one it is
+  `AmbiguousOwnerLink`. An `after(UC).assert` reads an entity the step binds through two
+  parent parameters on every row.
 
 - `verify` decides a model whose condition on a creating use case reads a column the
   creation does not assign (#67 review). The TLA+ printed the guard on the successor

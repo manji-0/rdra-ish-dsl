@@ -162,9 +162,11 @@ the parent. Compare a parent column in a `holds` guard, write the parent in the 
 (`updates(UseCase, Parent)`), or drop `.optional()` so the parent is a parameter.
 
 A parent parameter is a row the action reads. It is never relinked: when it is also the
-child of another key whose parent the action creates, that key keeps its owner. Two keys
-from one child to one parent that the action does not write share one parent parameter, so a
-child created under both starts with the same parent on each.
+child of another key whose parent the action creates, that key keeps its owner. Each key has
+its own parent parameter. Two keys from one child to one parent that the action does not
+write (`ship_to` and `bill_to` from `Order` to `Address`) therefore range over the parent's
+rows independently, so a child created under both may point at one row or at two. A parent
+the action writes is one row, and every key of a child the action writes links to it.
 
 **Relinking.** An action that creates the parent and updates an existing child links the
 child to the new parent. The rule depends on the key:
@@ -190,6 +192,13 @@ case's action:
 - An atom on an entity the action writes reads that parameter. The action reads the
   parameter before the effects, except for a created entity, where it reads the
   instance as the action leaves it, so the condition constrains the creation.
+- An atom on a parent the action only reads follows the key [Joins](#joins) picks for the
+  body, with the body's `.by`: it reads that key's parent parameter. One parent parameter
+  of the entity, with several keys and no `.by` naming one, is the row the atom reads.
+  Several parent parameters of the entity and no `.by` naming one is `AmbiguousOwnerLink`.
+  A `.by` naming a key with no parent parameter reads an existing instance through that
+  key, as the next item says. So `.by` names the same row whether or not the action binds
+  the entity: the row the key joins to the child.
 - An atom on any other entity reads an existing instance. The atoms on one such
   entity share one instance, which a direct `relate` owner links to the parameters it
   relates to. Without a `relate`, the instance is independent.
@@ -216,7 +225,9 @@ would read, with one restriction: the row must be bound to the step, never an in
 witness.
 
 - When the action has a parameter for `F`, the copy reads that parameter: an updated or
-  parent parameter before the effects, a created one as the action leaves it.
+  parent parameter before the effects, a created one as the action leaves it. Among the
+  parent parameters of several keys to `F`, it reads the one of the key `.by` names, as a
+  condition atom does.
 - When `F` is the parent of the target through the key `join_key` picks (with the copy's
   `.by(role)`), and the action updates the target, `F` joins the action as a parent
   parameter, with the owner guard
@@ -547,8 +558,11 @@ after(ExecuteCertIssue)
   .assert(CertificateOrder.status == executed, ClientCertificate.status == active)
 ```
 
-A step that ends in a state that fails the predicate is `AfterAssertViolated`, naming
-the state the step reached. Equality and comparison forms both work. An `after` on a
+An entity the step binds reads that row: the row the step writes, else its one parent
+parameter. An entity the step binds through several parent parameters (two keys to it, see
+**Owners** under [Actions](#actions)) or does not bind at all is read on every present row, since an `after`
+has no `.by` to pick one. A step that ends in a state that fails the predicate is
+`AfterAssertViolated`, naming the state the step reached. Equality and comparison forms both work. An `after` on a
 use case with no action is `AssertOnInertUseCase`.
 
 ### Multi-entity and quantifier constraints

@@ -750,10 +750,10 @@ impl<'m> Builder<'m> {
                 "it is published and has no state".to_string(),
             ));
         };
-        if let Some(q) = a.param_of(s) {
+        if let Some(q) = self.read_param(&a.params, s, by) {
             return Ok(match a.params[usize::from(q)].role {
                 ParamRole::New => At::Next(q),
-                ParamRole::Existing | ParamRole::Parent => At::Param(q),
+                ParamRole::Existing | ParamRole::Parent { .. } => At::Param(q),
             });
         }
         let target = a.params[usize::from(p)].entity;
@@ -767,14 +767,14 @@ impl<'m> Builder<'m> {
         };
         let owner = key
             .filter(|fk| model.foreign_key(*fk).child == target_ek)
-            .and_then(|fk| self.owner_var(fk));
-        if let Some(var) = owner {
+            .and_then(|fk| Some((fk, self.owner_var(fk)?)));
+        if let Some((fk, var)) = owner {
             if a.params[usize::from(p)].role == ParamRole::New {
                 return Err(CopyMiss::Unbound(format!(
                     "the {target_id} it creates is not linked to a {source_id}: the relate is optional and the use case does not write {source_id}"
                 )));
             }
-            let q = a.param(s, ParamRole::Parent);
+            let q = a.param(s, ParamRole::Parent { key: fk });
             let site = self.ts.vars[var.index()].site.clone();
             a.guards.push(Guard {
                 pred: Pred::Cmp(
@@ -806,6 +806,42 @@ impl<'m> Builder<'m> {
         self.owners.iter().map(|(var, ..)| *var).find(|var| {
             matches!(self.ts.vars[var.index()].kind, VarKind::Owner { fk: id, .. } if id == fk)
         })
+    }
+
+    /// The param a statement with selector `by` reads for a row of entity `e`: the row of `e`
+    /// the action writes, else the `Parent` param of the key the statement's join follows
+    /// ([`SemanticModel::join_key`] from that key's child). One `Parent` param of `e` whose
+    /// join no `.by` names is the row the action reads. Otherwise, for a key with no `Parent`
+    /// param or for several such params and no `.by` naming one, `None`: the statement joins
+    /// its own row of `e`.
+    fn read_param(&self, params: &[Param], e: EntId, by: &[String]) -> Option<u8> {
+        if let Some(p) = params
+            .iter()
+            .position(|p| p.entity == e && p.role.is_written())
+        {
+            return Some(p as u8);
+        }
+        let model = self.model;
+        let ek = self.ts.entities[e.index()].key;
+        let parents: Vec<(u8, FkId)> = params
+            .iter()
+            .enumerate()
+            .filter_map(|(i, p)| match p.role {
+                ParamRole::Parent { key } if p.entity == e => Some((i as u8, key)),
+                _ => None,
+            })
+            .collect();
+        let join = |fk: FkId| model.join_key(model.foreign_key(fk).child, ek, by);
+        let named: Vec<u8> = parents
+            .iter()
+            .filter(|&&(_, fk)| join(fk) == Join::Key(fk))
+            .map(|&(p, _)| p)
+            .collect();
+        match (parents.as_slice(), named.as_slice()) {
+            (_, [p]) => Some(*p),
+            ([(p, fk)], []) if matches!(join(*fk), Join::Ambiguous(_)) => Some(*p),
+            _ => None,
+        }
     }
 
     /// Whether a `holds` body applied to `uc` and placed on this group reads `parent` through
@@ -1270,7 +1306,9 @@ impl<'m> Builder<'m> {
     /// Relink: an action that creates the parent and updates an existing child links the child.
     /// For an optional key the child must be unlinked, so a linked child is not relinked; a
     /// mandatory child always has a parent, so the link is a move. A parent param is a row
-    /// the action reads, not writes, so it is never relinked.
+    /// the action reads, not writes, so it is never relinked. Each key has its own parent
+    /// param, so a child created under two keys to one parent the action does not write may
+    /// point at two rows.
     fn owner_bindings(
         &mut self,
         uc: UseCaseKey,
@@ -1280,9 +1318,9 @@ impl<'m> Builder<'m> {
     ) {
         for &(var, child, parent) in &self.owners.clone() {
             let Some(c) = a.param_of(child) else { continue };
-            if a.params[usize::from(c)].role == ParamRole::Parent {
+            let VarKind::Owner { fk, .. } = self.ts.vars[var.index()].kind else {
                 continue;
-            }
+            };
             let site = self.ts.vars[var.index()].site.clone();
             let parent_is_new = a
                 .param_of(parent)
@@ -1307,16 +1345,11 @@ impl<'m> Builder<'m> {
                         site: site.clone(),
                     });
                 }
-                let guarded = || {
-                    let VarKind::Owner { fk, .. } = self.ts.vars[var.index()].kind else {
-                        return false;
-                    };
-                    self.guard_reads_parent(uc, fk, groups, group)
-                };
+                let guarded = || self.guard_reads_parent(uc, fk, groups, group);
                 let rhs = match a.param_of(parent) {
                     Some(p) => Rhs::Param(p),
                     None if optional && !(child_is_new && guarded()) => Rhs::Lit(Value::NULL),
-                    None => Rhs::Param(a.param(parent, ParamRole::Parent)),
+                    None => Rhs::Param(a.param(parent, ParamRole::Parent { key: fk })),
                 };
                 a.effects.push(Effect::Assign {
                     var,
@@ -1373,10 +1406,11 @@ impl ActionDraft {
         (self.params.len() - 1) as u8
     }
 
+    /// The param of a row of `entity` the action writes.
     fn param_of(&self, entity: EntId) -> Option<u8> {
         self.params
             .iter()
-            .position(|p| p.entity == entity)
+            .position(|p| p.entity == entity && p.role.is_written())
             .map(|i| i as u8)
     }
 

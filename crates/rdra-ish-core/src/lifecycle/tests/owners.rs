@@ -1,7 +1,7 @@
 //! Relate bindings: mandatory owners need a present parent, optional owners may stay unlinked.
 
 use super::*;
-use crate::lifecycle::{InvKind, ParamRole, Value};
+use crate::lifecycle::{InvKind, Value};
 
 /// clinic-ops' Charge/Claim shape: the claim's creator updates the charge it bills.
 fn billing(relate: &str) -> String {
@@ -32,7 +32,7 @@ fn mandatory_owner_needs_a_present_parent_so_the_cycle_creates_nothing() {
         .iter()
         .find(|a| a.name == "CreateCharge")
         .unwrap();
-    assert!(create.params.iter().any(|p| p.role == ParamRole::Parent));
+    assert!(create.params.iter().any(|p| !p.role.is_written()));
     let d = derive(&model);
     assert!(d.entity("Charge").patterns.is_empty());
     assert!(d.entity("Claim").patterns.is_empty());

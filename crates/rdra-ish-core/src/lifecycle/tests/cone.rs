@@ -68,7 +68,7 @@ fn cone_exploration_equals_the_projection_of_the_whole_component() {
     let mut checked = 0;
     let mut freed = 0;
     for sample in SAMPLES {
-        let (exact, free) = assert_cones_exact(sample, &load(sample));
+        let (exact, free) = assert_cones_exact(sample, &load(sample), Bounds::STATES);
         assert!(exact > 0, "{sample}: no target checked exactly");
         checked += exact;
         freed += free;
@@ -83,11 +83,15 @@ fn cone_exploration_equals_the_projection_of_the_whole_component() {
 /// Each target's cone reaches the projection of its whole component's states, with the same
 /// view and verdict; a cone that frees an unread entity's slots reaches a superset. Returns the
 /// targets checked exactly and the freed ones.
-pub(super) fn assert_cones_exact(sample: &str, model: &SemanticModel) -> (usize, usize) {
+pub(super) fn assert_cones_exact(
+    sample: &str,
+    model: &SemanticModel,
+    bounds: Bounds,
+) -> (usize, usize) {
     let caps = Caps::new(usize::MAX, 200_000);
     let mut checked = 0;
     let mut freed = 0;
-    let built = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL);
+    let built = TransitionSystem::build(model, bounds, &Scope::ALL);
     for comp in built.ts.components() {
         let sub = built.ts.restrict(&comp);
         let full = sub.clone().run(caps);

@@ -48,7 +48,9 @@ fn only_the_explained_sample_actions_never_run() {
                     },
                     Need {
                         entity: "Order".to_string(),
-                        role: ParamRole::Parent,
+                        role: ParamRole::Parent {
+                            key: crate::model::FkId::at(0),
+                        },
                         via_api: None,
                     },
                 ])

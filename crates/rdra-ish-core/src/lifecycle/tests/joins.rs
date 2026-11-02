@@ -1,9 +1,10 @@
 //! Joins over two keys (#73): every join a guard, a quantifier, or a copy makes follows the
 //! key [`crate::model::SemanticModel::join_key`] picks, so a second key between the same two
-//! entities never changes which rows a rule reads.
+//! entities never changes which rows a rule reads. Two keys from one child to one parent
+//! (#75) bind a parent row each.
 
 use super::*;
-use crate::lifecycle::types::{Effect, Rhs, VarKind};
+use crate::lifecycle::types::{Effect, ParamRole, Rhs, VarKind};
 
 /// A permit is registered under its application (1:1); a renewal application `renews` a
 /// permit. `{EXPIRY}` is the key the expiry's quantifier follows.
@@ -194,5 +195,154 @@ sets(Fix, Permit, kind == Site.kind)
             StateDiag::AmbiguousOwnerLink { .. } | StateDiag::UnboundCopySource { .. }
         )),
         "{named:?}"
+    );
+}
+
+/// An order has two mandatory keys to Address, `ship_to` and `bill_to`, and `Place` creates
+/// it without writing an address. `Ship` runs while the `{SHIP}` address is in the east; the
+/// rule forbids a shipped order billed to the west. The rule is violated only when the two
+/// keys point at different rows.
+const TWO_KEYS: &str = r#"
+entity Address "住所" { id: Int @pk  region: Enum(east, west) }
+entity Order "注文" { id: Int @pk  status: Enum(open, shipped, cancelled) @default(open) }
+relate(Order, Address, N:1).role(ship_to)
+relate(Order, Address, N:1).role(bill_to)
+usecase AddEast "東の住所"
+usecase AddWest "西の住所"
+usecase Place "注文"
+usecase Ship "出荷"
+usecase Cancel "取消"
+creates(AddEast, Address)
+sets(AddEast, Address, region == east)
+creates(AddWest, Address)
+sets(AddWest, Address, region == west)
+creates(Place, Order)
+transitions(Ship, Order.status, open -> shipped)
+transitions(Cancel, Order.status, open -> cancelled)
+condition ShipsEast "東へ出荷する"
+holds(ShipsEast, Address.region == east).by({SHIP})
+applies_to(ShipsEast, Ship)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(bill_to)
+"#;
+
+fn order_violated(d: &Derived) -> bool {
+    d.diags.iter().any(|x| {
+        matches!(&x.diag, StateDiag::ConstraintViolated { name, .. } if name == "CrossForbidden_Order_0")
+    })
+}
+
+/// The `Parent` param of the key with this role, and the owner var `Place` assigns it to.
+fn place_parent(ts: &TransitionSystem, role: &str) -> Option<u8> {
+    let place = ts
+        .actions()
+        .iter()
+        .find(|a| a.name == "Place")
+        .expect("Place");
+    let owner = owner_of(ts, Some(role));
+    place.effects.iter().find_map(|e| match e {
+        Effect::Assign {
+            var,
+            rhs: Rhs::Param(p),
+            ..
+        } if *var == owner
+            && matches!(place.params[usize::from(*p)].role, ParamRole::Parent { .. }) =>
+        {
+            Some(*p)
+        }
+        _ => None,
+    })
+}
+
+/// Each key of a created child has its own parent param, so an order may ship to one address
+/// and bill another (#75). With one shared param the two keys were equal, and the violation
+/// through two rows was unreachable.
+#[test]
+fn two_keys_to_one_parent_point_at_rows_of_their_own() {
+    let model = model_from(&TWO_KEYS.replace("{SHIP}", "ship_to"));
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let ship = place_parent(&ts, "ship_to").expect("ship_to parent");
+    let bill = place_parent(&ts, "bill_to").expect("bill_to parent");
+    assert_ne!(ship, bill);
+    assert!(order_violated(&at_verify(
+        &TWO_KEYS.replace("{SHIP}", "ship_to")
+    )));
+    assert!(!order_violated(&at_verify(
+        &TWO_KEYS.replace("{SHIP}", "bill_to")
+    )));
+}
+
+#[test]
+fn two_keys_to_one_parent_keep_the_cone_exact() {
+    let model = model_from(&TWO_KEYS.replace("{SHIP}", "ship_to"));
+    let (exact, _) = super::cone::assert_cones_exact("two_keys", &model, Bounds::VERIFY);
+    assert!(exact > 0);
+}
+
+/// `Place` guarded by a `holds` on the address `by` names, and the rule on the open order it
+/// leaves.
+fn placed_under(by: &str) -> String {
+    TWO_KEYS
+        .replace("{SHIP}", "ship_to")
+        .replace("Order.status == shipped", "Order.status == open")
+        .replace(
+            "applies_to(ShipsEast, Ship)",
+            &format!(
+                "applies_to(ShipsEast, Ship)\ncondition PlacesEast \"東の住所で注文する\"\nholds(PlacesEast, Address.region == east){by}\napplies_to(PlacesEast, Place)"
+            ),
+        )
+}
+
+/// An atom on a parent the action binds reads the row its `.by` key joins (#75): the
+/// `bill_to` guard keeps every placed order billed to the east, the `ship_to` guard does not.
+#[test]
+fn a_guard_on_a_parent_param_reads_the_key_its_by_names() {
+    assert!(!order_violated(&at_verify(&placed_under(".by(bill_to)"))));
+    assert!(order_violated(&at_verify(&placed_under(".by(ship_to)"))));
+}
+
+/// With two parent params of one entity and no `.by`, the atom's row is ambiguous.
+#[test]
+fn a_guard_on_two_parent_params_without_by_is_ambiguous() {
+    let model = model_from(&placed_under(""));
+    let diags = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).diags;
+    assert!(
+        diags.iter().any(|d| matches!(&d.diag,
+            StateDiag::AmbiguousOwnerLink { statement, rewrite, .. }
+            if statement == "holds(PlacesEast, ...)" && rewrite == "holds(PlacesEast, ...).by(ship_to)")),
+        "{diags:?}"
+    );
+}
+
+/// An `.optional()` key whose parent a guard compares links the created child to that parent
+/// (#73) through a param of its own, beside the mandatory `ship_to`'s.
+#[test]
+fn a_guard_links_an_optional_key_beside_a_mandatory_one() {
+    let src = placed_under(".by(bill_to)").replace(
+        "relate(Order, Address, N:1).role(bill_to)",
+        "relate(Order, Address, N:1).optional().role(bill_to)",
+    );
+    let model = model_from(&src);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let ship = place_parent(&ts, "ship_to").expect("ship_to parent");
+    let bill = place_parent(&ts, "bill_to").expect("bill_to parent");
+    assert_ne!(ship, bill);
+    assert!(!order_violated(&at_verify(&src)));
+}
+
+/// An after-assert has no `.by`: an entity the step binds through two parent params is bound
+/// over every row, so an address in the west fails it even when both keys point east.
+#[test]
+fn an_after_assert_over_two_parent_params_reads_every_row() {
+    let src = format!(
+        "{}condition BillsEast \"東へ請求する\"\nholds(BillsEast, Address.region == east).by(bill_to)\napplies_to(BillsEast, Place)\nafter(Place).assert(Address.region == east)\n",
+        placed_under(".by(ship_to)")
+    );
+    let d = at_verify(&src);
+    assert!(
+        d.diags
+            .iter()
+            .any(|x| matches!(x.diag, StateDiag::AfterAssertViolated { .. })),
+        "{:?}",
+        d.diags
     );
 }

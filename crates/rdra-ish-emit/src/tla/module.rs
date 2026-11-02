@@ -162,7 +162,9 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
         let exists = names.var(ts.entity(param.entity).exists);
         conj.push(match param.role {
             ParamRole::New => format!("FirstAbsent({exists}, p{p})"),
-            ParamRole::Existing | ParamRole::Parent => format!("{exists}[p{p}] = \"present\""),
+            ParamRole::Existing | ParamRole::Parent { .. } => {
+                format!("{exists}[p{p}] = \"present\"")
+            }
         });
     }
     let guard = |g: &rdra_ish_core::lifecycle::Guard| {

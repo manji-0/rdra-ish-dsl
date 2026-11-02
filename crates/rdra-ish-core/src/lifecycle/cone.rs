@@ -193,7 +193,7 @@ impl TransitionSystem {
                 for (i, a) in self.actions.iter().enumerate() {
                     if a.params
                         .iter()
-                        .any(|p| p.entity == e && p.role != ParamRole::Parent)
+                        .any(|p| p.entity == e && p.role.is_written())
                     {
                         keep.insert(ActId::at(i));
                     }

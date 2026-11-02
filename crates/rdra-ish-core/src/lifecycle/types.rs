@@ -279,7 +279,8 @@ pub struct Action {
     pub origin: ActionOrigin,
     /// The use case declaration, or `Synthesized` for `Tick`.
     pub site: Site,
-    /// At most one param per entity.
+    /// At most one written (`New` or `Existing`) param per entity, and at most one `Parent`
+    /// param per key, so two keys to one parent read two rows.
     pub params: Vec<Param>,
     /// Conjunction, read on the pre-state.
     pub guards: Vec<Guard>,
@@ -314,8 +315,16 @@ pub enum ParamRole {
     New,
     /// Any present slot.
     Existing,
-    /// A present slot that a `New` child is created under; the action does not write it.
-    Parent,
+    /// A present slot that a child of `key` belongs to; the action does not write it. Each
+    /// key has its own, so two keys to one parent range over the parent's rows independently.
+    Parent { key: FkId },
+}
+
+impl ParamRole {
+    /// `New` or `Existing`: a row the action writes, not a parent it only reads.
+    pub fn is_written(self) -> bool {
+        !matches!(self, ParamRole::Parent { .. })
+    }
 }
 
 /// A guard holds on the pre-state, or, when it reads `At::Next`, on the pre-state and the

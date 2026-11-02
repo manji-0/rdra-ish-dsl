@@ -1396,6 +1396,14 @@ same rows:
   names the candidate roles and the statement with `.by(<first role>)` added. The join is
   left unlinked.
 
+`.by` names the same row whether or not the guarded use case binds the entity. A use case
+that creates a child under two keys to one parent it does not write (`ship_to` and `bill_to`
+from `Order` to `Address`) binds one parent row per key, and the two rows may differ. A
+`holds` comparison or a copy source on that parent reads the row of the key its `.by` names,
+and with no `.by` the comparison is `AmbiguousOwnerLink`. A use case that binds one parent
+row reads it without a selector. A parent the use case writes is one row that every key of
+the child links to.
+
 `.by(role)` belongs to the call before it:
 
 | Written after | Picks the key of |

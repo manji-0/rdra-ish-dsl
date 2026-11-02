@@ -286,6 +286,6 @@ sets(Spawn, Child, status == Parent.status)
 #[test]
 fn a_copy_keeps_the_cone_exact() {
     let model = model_from(&format!("{PERMIT}{COPIES}"));
-    let (exact, _) = super::cone::assert_cones_exact("copies", &model);
+    let (exact, _) = super::cone::assert_cones_exact("copies", &model, Bounds::STATES);
     assert!(exact > 0);
 }
