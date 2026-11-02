@@ -62,7 +62,7 @@ action, and `Spec` allows stuttering.
 | `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. |
 | `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
 | Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
-| `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments. |
+| `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments and the `UNCHANGED` that bind every primed variable it reads. |
 | Comparison proposition driven by `drives(..., cmp, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |
 | `col in (a, b)` / `col not in (a, b)` | `E_col[b0] \in {"a", "b"}` / `E_col[b0] \notin {"a", "b"}`, the same disjunction of equalities that `states` evaluates. A nullable Int value `present` keeps the `\/` form. |
 | `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |

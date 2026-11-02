@@ -552,3 +552,43 @@ fn a_buc_scope_skips_temporal_properties_and_leaves_progress_undecided() {
     );
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// A condition on the use case that creates a row reads a column the creation leaves at its
+/// default, so the guard reads a successor only `UNCHANGED` binds: the invariant's cone, the
+/// property's cone, and the whole model all decide.
+#[test]
+fn a_creation_guard_on_an_unassigned_column_is_decided() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_guard_on_unassigned");
+    let model = tmp.join("m.rdra");
+    std::fs::write(
+        &model,
+        r#"entity E "E" { id: Int @pk  status: Enum(a, b) @default(a)  seen: Bool @default(false) }
+usecase Make "作成"
+usecase Flip "切替"
+creates(Make, E)
+transitions(Flip, E.status, a -> b)
+sets(Flip, E, seen == true)
+condition Fresh "新規"
+holds(Fresh, E.status == a)
+applies_to(Fresh, Make)
+forbidden(E, status == b, seen == false)
+property P eventually(E.status == b)
+"#,
+    )
+    .unwrap();
+    let output = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines.contains(&"Cone_Forbidden_E_0 [Forbidden_E_0]: ok (7 states)"),
+        "{stdout}"
+    );
+    assert!(lines.contains(&"RdraSpec_P [P]: ok (7 states)"), "{stdout}");
+    assert!(lines.contains(&"tlc_result: ok"), "{stdout}");
+    let _ = std::fs::remove_dir_all(&tmp);
+}

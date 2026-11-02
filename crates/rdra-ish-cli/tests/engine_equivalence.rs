@@ -1030,6 +1030,27 @@ creates(Reissue, Invoice)
 forbidden(Invoice, Order, Invoice.kind != Order.kind).along(Invoice, Order)
 "#;
 
+/// A condition on a use case that creates the row reads a column the creation leaves at its
+/// default: the guard reads the successor of a var only `UNCHANGED` binds, so TLC needs the
+/// `UNCHANGED` before the guard.
+const GUARD_ON_UNASSIGNED: &str = r#"
+entity E "E" { id: Int @pk  status: Enum(a, b) @default(a) }
+usecase Make "作成"
+usecase Flip "切替"
+creates(Make, E)
+transitions(Flip, E.status, a -> b)
+condition Fresh "新規"
+holds(Fresh, E.status == a)
+applies_to(Fresh, Make)
+forbidden(E, status == b)
+property P eventually(E.status == b)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_guard_over_an_unassigned_column() {
+    check_fixture("guard_on_unassigned", GUARD_ON_UNASSIGNED);
+}
+
 /// One inline model at both bounds.
 fn check_fixture(name: &str, src: &str) {
     let Some(tlc) = find_tlc() else {
@@ -1194,6 +1215,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
         &[("PaidShips", Why::FreesSlots)],
     ),
     ("whole_cone", WHOLE_CONE, &[]),
+    ("guard_on_unassigned", GUARD_ON_UNASSIGNED, &[]),
 ];
 
 /// The cone holds every var an action writes, so its `WF_vars(Next)` is the whole model's:

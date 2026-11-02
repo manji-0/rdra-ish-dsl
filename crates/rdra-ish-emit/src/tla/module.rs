@@ -174,12 +174,13 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
         };
         ctx.pred(&g.pred)
     };
-    // TLC reads a primed var only after the conjunct that assigns it.
+    // TLC reads a primed var only after the conjunct that binds it, and a guard on the
+    // successor may read a var the action leaves unchanged: every assign and the UNCHANGED
+    // come before the first successor-reading guard.
     let (post, pre): (Vec<_>, Vec<_>) = a.guards.iter().partition(|g| g.reads_successor());
     conj.extend(pre.into_iter().map(guard));
     let (assigns, written) = effects(ts, names, a);
     conj.extend(assigns);
-    conj.extend(post.into_iter().map(guard));
     let unchanged: Vec<&str> = ts
         .var_ids()
         .filter(|v| !written.contains(v))
@@ -190,6 +191,7 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
         [one] => conj.push(format!("UNCHANGED {one}")),
         many => conj.push(format!("UNCHANGED <<{}>>", many.join(", "))),
     }
+    conj.extend(post.into_iter().map(guard));
     out.push_str(&format!("{} ==\n", signature(names, id, a)));
     for c in conj {
         out.push_str(&format!("  /\\ {c}\n"));
