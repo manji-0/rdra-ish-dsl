@@ -1,10 +1,11 @@
 //! Joins over two keys (#73): every join a guard, a quantifier, or a copy makes follows the
 //! key [`crate::model::SemanticModel::join_key`] picks, so a second key between the same two
 //! entities never changes which rows a rule reads. Two keys from one child to one parent
-//! (#75) bind a parent row each.
+//! (#75) bind a parent row each, and a parent the use case writes takes only the key its `.by`
+//! names (#76).
 
 use super::*;
-use crate::lifecycle::types::{Effect, ParamRole, Rhs, VarKind};
+use crate::lifecycle::types::{Effect, GuardWhy, ParamRole, Pred, Rhs, Term, VarKind};
 
 /// A permit is registered under its application (1:1); a renewal application `renews` a
 /// permit. `{EXPIRY}` is the key the expiry's quantifier follows.
@@ -345,4 +346,121 @@ fn an_after_assert_over_two_parent_params_reads_every_row() {
         "{:?}",
         d.diags
     );
+}
+
+/// `ShipBilled` checks the billing address and ships: it writes an address and an order. The
+/// guard reads the address it writes, joined to the order through `{KEY}`. The rule forbids a
+/// shipped order whose `ship_to` address is in the west.
+const WRITTEN_PARENT: &str = r#"
+entity Address "住所" { id: Int @pk  region: Enum(east, west)  checked: Bool @default(false) }
+entity Order "注文" { id: Int @pk  status: Enum(open, shipped, cancelled) @default(open) }
+relate(Order, Address, N:1).role(ship_to)
+relate(Order, Address, N:1).role(bill_to)
+usecase AddEast "東の住所"
+usecase AddWest "西の住所"
+usecase Place "注文"
+usecase ShipBilled "請求先を確認して出荷"
+usecase Cancel "取消"
+creates(AddEast, Address)
+sets(AddEast, Address, region == east)
+creates(AddWest, Address)
+sets(AddWest, Address, region == west)
+creates(Place, Order)
+sets(ShipBilled, Address, checked == true)
+transitions(ShipBilled, Order.status, open -> shipped)
+transitions(Cancel, Order.status, open -> cancelled)
+condition BillsEast "請求先が東"
+holds(BillsEast, Address.region == east){KEY}
+applies_to(BillsEast, ShipBilled)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(ship_to)
+"#;
+
+fn written_parent(key: &str) -> String {
+    WRITTEN_PARENT.replace("{KEY}", key)
+}
+
+/// The roles of the owner guards `ShipBilled` puts on the order it updates.
+fn owner_guards(ts: &TransitionSystem) -> Vec<String> {
+    let ship = ts
+        .actions()
+        .iter()
+        .find(|a| a.name == "ShipBilled")
+        .expect("ShipBilled");
+    let mut roles: Vec<String> = ship
+        .guards
+        .iter()
+        .filter(|g| matches!(g.why, GuardWhy::Owner))
+        .filter_map(|g| match &g.pred {
+            Pred::Cmp(Term::Slot { var, .. }, ..) => match &ts.vars()[var.index()].kind {
+                VarKind::Owner { role, .. } => role.clone(),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    roles.sort();
+    roles
+}
+
+/// A use case that writes the parent binds the written row to the key a `.by` of it names,
+/// not to every key of the child (#76). Billed to the checked address, the order may ship to
+/// another, in the west: the violation is reachable. Before, both keys were on the written
+/// row, and `verify` said ok.
+#[test]
+fn a_written_parent_takes_only_the_key_its_by_names() {
+    let billed = model_from(&written_parent(".by(bill_to)"));
+    let ts = TransitionSystem::build(&billed, Bounds::VERIFY, &Scope::ALL).ts;
+    assert_eq!(owner_guards(&ts), ["bill_to"]);
+    assert!(order_violated(&at_verify(&written_parent(".by(bill_to)"))));
+    assert!(!order_violated(&at_verify(&written_parent(".by(ship_to)"))));
+}
+
+/// Two keys and no `.by`: the written row is the order's on neither key, so the guard reads an
+/// address unrelated to the order and the violation stays reachable.
+#[test]
+fn a_written_parent_without_by_takes_neither_of_two_keys() {
+    let src = written_parent("");
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
+    assert!(owner_guards(&ts).is_empty());
+    assert!(order_violated(&at_verify(&src)));
+}
+
+/// An order created with an address it creates takes the new address on the key the `.by`
+/// names, and a row of its own on the other.
+#[test]
+fn a_created_parent_takes_the_named_key_of_a_created_child() {
+    let src = TWO_KEYS.replace("{SHIP}", "ship_to").replace(
+        "creates(Place, Order)",
+        "creates(Place, Order)\ncreates(Place, Address)\nsets(Place, Address, region == east)\ncondition NewShipTo \"新しい配送先\"\nholds(NewShipTo, Address.region == east).by(ship_to)\napplies_to(NewShipTo, Place)",
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
+    let place = ts
+        .actions()
+        .iter()
+        .find(|a| a.name == "Place")
+        .expect("Place");
+    let role_of = |role: &str| {
+        let owner = owner_of(&ts, Some(role));
+        place.effects.iter().find_map(|e| match e {
+            Effect::Assign {
+                var,
+                rhs: Rhs::Param(p),
+                ..
+            } if *var == owner => Some(place.params[usize::from(*p)].role),
+            _ => None,
+        })
+    };
+    assert_eq!(role_of("ship_to"), Some(ParamRole::New));
+    assert!(
+        matches!(role_of("bill_to"), Some(ParamRole::Parent { .. })),
+        "{:?}",
+        role_of("bill_to")
+    );
+}
+
+#[test]
+fn a_written_parent_on_one_key_keeps_the_cone_exact() {
+    let model = model_from(&written_parent(".by(bill_to)"));
+    let (exact, _) = super::cone::assert_cones_exact("written_parent", &model, Bounds::VERIFY);
+    assert!(exact > 0);
 }

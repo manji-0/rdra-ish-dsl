@@ -1304,7 +1304,9 @@ impl<'m> Builder<'m> {
     /// mandatory child always has a parent, so the link is a move. A parent param is a row
     /// the action reads, not writes, so it is never relinked. Each key has its own parent
     /// param, so a child created under two keys to one parent the action does not write may
-    /// point at two rows.
+    /// point at two rows. A parent the action writes binds only the keys
+    /// [`Self::takes_written_parent`] gives it; every other key is bound as if the action did
+    /// not write the parent.
     fn owner_bindings(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
         for &(var, child, parent) in &self.owners.clone() {
             let Some(c) = a.param_of(child) else { continue };
@@ -1312,9 +1314,11 @@ impl<'m> Builder<'m> {
                 continue;
             };
             let site = self.ts.vars[var.index()].site.clone();
-            let parent_is_new = a
+            let written = a
                 .param_of(parent)
-                .is_some_and(|p| a.params[usize::from(p)].role == ParamRole::New);
+                .filter(|_| self.takes_written_parent(uc, fk));
+            let parent_is_new =
+                written.is_some_and(|p| a.params[usize::from(p)].role == ParamRole::New);
             let child_is_new = a.params[usize::from(c)].role == ParamRole::New;
             if child_is_new || parent_is_new {
                 let optional = matches!(
@@ -1336,7 +1340,7 @@ impl<'m> Builder<'m> {
                     });
                 }
                 let guarded = || self.guard_reads_parent(uc, fk);
-                let rhs = match a.param_of(parent) {
+                let rhs = match written {
                     Some(p) => Rhs::Param(p),
                     None if optional && !(child_is_new && guarded()) => Rhs::Lit(Value::NULL),
                     None => Rhs::Param(a.param(parent, ParamRole::Parent { key: fk })),
@@ -1347,7 +1351,7 @@ impl<'m> Builder<'m> {
                     rhs,
                     site,
                 });
-            } else if let Some(p) = a.param_of(parent) {
+            } else if let Some(p) = written {
                 a.guards.push(Guard {
                     pred: Pred::Cmp(
                         Term::Slot {
@@ -1362,6 +1366,41 @@ impl<'m> Builder<'m> {
                 });
             }
         }
+    }
+}
+
+impl Builder<'_> {
+    /// Whether a row of `fk`'s parent that the use case writes is the row `fk` joins a child
+    /// it writes to (#76): the one key from that child to that parent, or, among several, a key
+    /// that a `.by` of the use case's `holds` guards (the body's or an `.along` hop's) or of its
+    /// copies names. So `.by` names the same row as elsewhere: the written row is the row of the
+    /// key the use case reads it through.
+    fn takes_written_parent(&self, uc: UseCaseKey, fk: FkId) -> bool {
+        let model = self.model;
+        let key = model.foreign_key(fk);
+        let parallel = model
+            .foreign_keys()
+            .filter(|(_, k)| (k.child, k.parent) == (key.child, key.parent))
+            .count();
+        if parallel == 1 {
+            return true;
+        }
+        let guards = applied_bodies(model)
+            .into_iter()
+            .filter(|(_, u, _)| *u == uc)
+            .flat_map(|(_, _, body)| {
+                let hops = match &body.along {
+                    CrossConstraintScope::RelationPath { by, .. } => by.as_slice(),
+                    CrossConstraintScope::GlobalProduct => &[],
+                };
+                body.by.iter().chain(hops)
+            });
+        let copies = model
+            .column_effects
+            .iter()
+            .filter(|ce| ce.origin == uc && matches!(ce.value, SetValue::Copy(_)))
+            .flat_map(|ce| ce.by.iter());
+        guards.chain(copies).any(|role| model.key_named(key, role))
     }
 }
 

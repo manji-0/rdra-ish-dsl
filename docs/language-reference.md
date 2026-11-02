@@ -1491,8 +1491,17 @@ that creates a child under two keys to one parent it does not write (`ship_to` a
 from `Order` to `Address`) binds one parent row per key, and the two rows may differ. A
 `holds` comparison or a copy source on that parent reads the row of the key its `.by` names,
 and with no `.by` the comparison is `AmbiguousOwnerLink`. A use case that binds one parent
-row reads it without a selector. A parent the use case writes is one row that every key of
-the child links to.
+row reads it without a selector.
+
+A parent the use case writes joins a child it writes through one key the same way. With one
+key from the child to the parent, the written row is the child's parent on that key. With
+several, it is the child's parent only on the keys that a `.by` of the use case names: the
+`.by` of a `holds` guard applied to it (after the body or after an `.along` hop) or of a copy
+in it. Every other key is bound as if the use case did not write the parent: a created child
+takes a parent row of its own on it, and an updated child keeps whatever row it has. So a use
+case that updates the billing address and ships the order
+(`holds(BillsEast, Address.region == east).by(bill_to)`) reads the order's `bill_to` address,
+and the order may ship to another one. With no `.by`, the written row is on neither key.
 
 `.by(role)` belongs to the call before it:
 

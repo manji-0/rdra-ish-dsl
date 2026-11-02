@@ -562,15 +562,6 @@ gaps.
   chosen are therefore listed under `not checked:` and never reported as an error or a
   warning. See it: the `not checked:` lines of a `--buc` run. What you can do: run without
   `--buc`, or use `--entity`, whose cones are exact and whose findings are decided.
-- **A parent the use case writes takes every key of a child it writes.** A use case that
-  writes the parent and creates or updates a child with two keys to it (`ship_to` and
-  `bill_to` from `Order` to `Address`) links both keys to that one row: a created child starts
-  with both on it, and an updated child must already have both on it. That use case never
-  reaches a state where the two keys differ. A parent the use case only reads has a row per
-  key (#75), so this gap closes when the parent is not written. See it: the step that creates
-  the child names one parent row for both owners. What you can do: nothing inside that use
-  case. Where the keys may differ, a use case that only reads the parent reaches those
-  states.
 
 ## Workflow
 

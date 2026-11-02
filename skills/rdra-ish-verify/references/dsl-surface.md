@@ -117,6 +117,8 @@ invariant(Order, Payment)
   `.none(Address).by(bill_to)`, `holds(C, Address.status == open).by(ship_to)`, and a copy's
   `sets(...).by(ship_to)`. Without it the join is `AmbiguousOwnerLink`, which names the
   candidates and the rewrite. `.by(Address)` names a key without `.role` by its parent id.
+  A use case that writes the `Address` and the `Order` puts the written address on the keys
+  its guards' or copies' `.by` name, and on neither of two keys without one.
 - `.none(Related)` / `.has(Related)` ask for no linked row, or some, and read only the link.
 - A `holds` guard reads an entity two hops from the use case's row through
   `.along(A, B, C)`, with `.by(role)` after it per hop. A compared entity that no key joins

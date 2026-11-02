@@ -168,7 +168,12 @@ child of another key whose parent the action creates, that key keeps its owner. 
 its own parent parameter. Two keys from one child to one parent that the action does not
 write (`ship_to` and `bill_to` from `Order` to `Address`) therefore range over the parent's
 rows independently, so a child created under both may point at one row or at two. A parent
-the action writes is one row, and every key of a child the action writes links to it.
+the action writes is the child's parent only on the keys it takes: the one key from the child
+to the parent, or, among several, each key that a `.by` of the use case's `holds` guards (after
+the body or an `.along` hop) or copies names. On every other key the action binds the child as
+if it did not write the parent: a created child gets a parent parameter of that key, and an
+updated child gets no owner guard. So `.by` names the written row as it names any other: the
+row of the key the use case reads it through.
 
 **Relinking.** An action that creates the parent and updates an existing child links the
 child to the new parent. The rule depends on the key:

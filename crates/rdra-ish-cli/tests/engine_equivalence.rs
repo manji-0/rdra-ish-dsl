@@ -1237,6 +1237,50 @@ fn bfs_and_tlc_agree_on_two_keys_to_one_parent() {
     }
 }
 
+/// `ShipBilled` checks the address it writes and ships the order (#76). The written address is
+/// the order's on the key the guard's `.by(BILLED_KEY)` names only; the other key keeps its own
+/// row. Billed to it, the order may ship to an address in the west, and both engines reach the
+/// violation; shipped to it, the guard rules it out.
+const WRITTEN_PARENT: &str = r#"
+entity Address "住所" { id: Int @pk  region: Enum(east, west)  checked: Bool @default(false) }
+entity Order "注文" { id: Int @pk  status: Enum(open, shipped, cancelled) @default(open) }
+relate(Order, Address, N:1).role(ship_to)
+relate(Order, Address, N:1).role(bill_to)
+usecase AddEast "東の住所"
+usecase AddWest "西の住所"
+usecase Place "注文"
+usecase ShipBilled "請求先を確認して出荷"
+usecase Cancel "取消"
+creates(AddEast, Address)
+sets(AddEast, Address, region == east)
+creates(AddWest, Address)
+sets(AddWest, Address, region == west)
+creates(Place, Order)
+sets(ShipBilled, Address, checked == true)
+transitions(ShipBilled, Order.status, open -> shipped)
+transitions(Cancel, Order.status, open -> cancelled)
+condition BillsEast "請求先が東"
+holds(BillsEast, Address.region == east).by(BILLED_KEY)
+applies_to(BillsEast, ShipBilled)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(ship_to)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_written_parent_on_one_key() {
+    let billed = check_fixture(
+        "written_bill",
+        &WRITTEN_PARENT.replace("BILLED_KEY", "bill_to"),
+    );
+    let shipped = check_fixture(
+        "written_ship",
+        &WRITTEN_PARENT.replace("BILLED_KEY", "ship_to"),
+    );
+    if let (Some(billed), Some(shipped)) = (billed, shipped) {
+        assert!(billed.contains("CrossForbidden_Order_0"), "{billed:?}");
+        assert!(!shipped.contains("CrossForbidden_Order_0"), "{shipped:?}");
+    }
+}
+
 /// A claim and a settlement are both children of a case (#77). `Complete` runs while the
 /// settlement GUARD_PATH reads is agreed. Along the case it is the settlement of the claim's
 /// own case, and both engines find the rule holds; with no path it is any settlement, and

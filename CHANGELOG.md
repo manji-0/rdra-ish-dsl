@@ -477,6 +477,19 @@
   body listing at least one value`` at the `variation` line, and `Enum(a, field)` with
   ``unexpected `field`; expected `)` ``; neither named the reserved word. They take the same
   words a path segment does, as a column may already be named `goal`.
+- A use case that writes a parent no longer puts it on every key of a child it writes (#76).
+  With two keys from the child to the parent (`ship_to` and `bill_to` from `Order` to
+  `Address`), a created child started with both keys on the written row and an updated child
+  had to have both on it, so a use case that checks the billing address could only ship an
+  order billed and shipped to one address, and `verify` missed every violation that needs the
+  two apart. The written row now takes the one key from the child to the parent, or, among
+  several, the keys a `.by` of the use case names (of a `holds` guard on it, after the body or
+  an `.along` hop, or of a copy in it), so `.by` names the written row as it names any other.
+  Every other key is bound as if the use case did not write the parent: a created child takes
+  a parent row of its own on it, and an updated child keeps its row. `MinCardNeedsCreate`
+  counts a child only when the step links it to the new parent. No sample has two keys from one
+  child to one parent; no sample's output changes.
+
 - `samples/clinic-ops`: `BookedPatient` on `BatchVerifyEligibility` (一括照会 of the patients
   booked ahead) read any scheduled appointment, so one booked patient let the batch check
   every patient's eligibility. It now reads the appointment of the policy's patient,

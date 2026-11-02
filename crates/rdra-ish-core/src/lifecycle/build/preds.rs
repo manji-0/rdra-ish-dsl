@@ -8,8 +8,8 @@ use crate::analysis::applied_bodies;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, CmpOp, Domain, Effect, Guard,
-    GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param, ParamRole, Pred, Property, Site,
-    Start, Term, Value, VarId, VarKind,
+    GuardWhy, InvKind, InvText, Invariant, Ltl, ModelRef, Param, ParamRole, Pred, Property, Rhs,
+    Site, Start, Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::EntId;
 use crate::model::{
@@ -708,12 +708,18 @@ impl<'m> Builder<'m> {
                     .iter()
                     .any(|q| q.entity == e && q.role == ParamRole::New)
             };
-            // An action that creates the parent links every child it creates or updates
-            // (`owner_bindings`), so either kind of child param gives the parent its first child.
+            // An action that creates the parent and links a child it creates or updates to it
+            // through this key (`owner_bindings`) gives the parent its first child.
+            let owner = self.owner_var(id);
             let gives_child = |a: &Action| {
-                a.params
-                    .iter()
-                    .any(|q| q.entity == c && q.role.is_written())
+                a.effects.iter().any(|eff| match eff {
+                    Effect::Assign {
+                        var,
+                        rhs: Rhs::Param(q),
+                        ..
+                    } => Some(*var) == owner && a.params[usize::from(*q)].role == ParamRole::New,
+                    _ => false,
+                })
             };
             let lone: Vec<UseCaseKey> = self
                 .ts
