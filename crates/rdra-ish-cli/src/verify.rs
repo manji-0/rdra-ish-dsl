@@ -388,8 +388,8 @@ fn run_cfg(
 }
 
 /// A whole-model property run under a budget: TLC's progress lines (about one a minute) print
-/// as they come, and the run is killed and left undecided past `budget` or past
-/// `Caps::VERIFY` distinct states.
+/// as they come, and the run is killed past `budget` or past `Caps::VERIFY` distinct states,
+/// and left undecided unless TLC had already printed its verdict.
 fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration) -> Result<Ran> {
     let tla = format!("{}.tla", job.module);
     let cfg = format!("{}.cfg", job.module);
@@ -470,9 +470,11 @@ fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration)
     clean_up(dir, &job.module);
     let run = TlcRun::parse(&log);
     let exit_ok = status.is_some_and(|s| s.success());
-    let outcome = match &stopped {
-        Some(_) => Outcome::Ok,
-        None => run.outcome(exit_ok),
+    // A kill that lands after TLC printed its verdict stops nothing that decides.
+    let (outcome, stopped) = match (stopped, run.verdict()) {
+        (Some(_), Some(outcome)) => (outcome, None),
+        (Some(why), None) => (Outcome::Ok, Some(why)),
+        (None, _) => (run.outcome(exit_ok), None),
     };
     Ok(Ran {
         outcome,

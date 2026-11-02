@@ -117,6 +117,18 @@ impl TlcRun {
         }
     }
 
+    /// The verdict TLC printed, whatever its exit: a violation whose trace is complete (a
+    /// temporal one ends in its lasso), or the success line. `None` when the log stops before
+    /// either, as a killed run's may.
+    pub fn verdict(&self) -> Option<Outcome> {
+        let complete = |v: &Violation| v.kind != ViolationKind::Temporal || v.lasso.is_some();
+        match self.violations.is_empty() {
+            false if self.violations.iter().all(complete) => Some(Outcome::Counterexample),
+            false => None,
+            true => self.completed.then_some(Outcome::Ok),
+        }
+    }
+
     pub fn violated_names(&self) -> BTreeSet<String> {
         self.violations
             .iter()
@@ -564,6 +576,20 @@ Model checking completed. No error has been found.
         let crash = TlcRun::parse("Error: TLC threw an unexpected exception.\n");
         assert_eq!(crash.outcome(false), Outcome::ToolError);
         assert_eq!(TlcRun::parse("").outcome(true), Outcome::ToolError);
+    }
+
+    #[test]
+    fn a_killed_run_keeps_the_verdict_it_printed() {
+        let ok = TlcRun::parse("Model checking completed. No error has been found.\n");
+        assert_eq!(ok.verdict(), Some(Outcome::Ok));
+        assert_eq!(
+            TlcRun::parse(STUTTER).verdict(),
+            Some(Outcome::Counterexample)
+        );
+        assert_eq!(TlcRun::parse(BACK).verdict(), Some(Outcome::Counterexample));
+        let cut = &BACK[..BACK.find("Back to state").unwrap()];
+        assert_eq!(TlcRun::parse(cut).verdict(), None);
+        assert_eq!(TlcRun::parse("").verdict(), None);
     }
 
     #[test]
