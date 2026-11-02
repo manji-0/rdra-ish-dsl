@@ -423,6 +423,11 @@
 
 ### Fixed
 
+- A `variation` value, an `Enum` variant, and a column in an expression may be any kind
+  keyword (#79). `variation V "V" { a "A"  field "B" }` failed with ``a `variation` needs a
+  body listing at least one value`` at the `variation` line, and `Enum(a, field)` with
+  ``unexpected `field`; expected `)` ``; neither named the reserved word. They take the same
+  words a path segment does, as a column may already be named `goal`.
 - A condition or quantifier between two entities that two keys join no longer follows the
   first key silently (#73); it is `AmbiguousOwnerLink` until `.by(role)` names one. A copy's
   source follows the same rule.

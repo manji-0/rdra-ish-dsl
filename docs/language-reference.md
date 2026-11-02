@@ -1078,7 +1078,9 @@ entity PaymentTransaction "Payment Transaction" {
 ```
 
 The body lists at least one value; a value is an identifier with an optional label,
-and values are unique within the variation. Any entity or DTO column can name the
+and values are unique within the variation. A value, an `Enum` variant, and a column may
+be named with any kind keyword (`field`, `screen`, `goal`, and so on): `site_visit` and
+`field` can sit side by side. Any entity or DTO column can name the
 variation as its type, and `@default(v)` must be one of its values (otherwise
 `InvalidVariationValue`). A `sets` value on such a column is checked against the same
 list. The type name resolves like a reference: through the file's imports, so a

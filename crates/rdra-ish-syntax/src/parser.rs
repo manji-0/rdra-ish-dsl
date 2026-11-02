@@ -308,7 +308,7 @@ fn col_type() -> impl Parser<Token, ColType, Error = Simple<Token>> + Clone {
     };
 
     // Enum(active "販売中", discontinued) — at least one variant required, labels optional
-    let enum_value = ident()
+    let enum_value = path_ident()
         .then(string_lit().or_not())
         .map(|(value, label)| EnumValue { value, label });
     let enum_ty = just(Token::TEnum)
@@ -330,19 +330,17 @@ fn col_type() -> impl Parser<Token, ColType, Error = Simple<Token>> + Clone {
 
 // ── Column definition ─────────────────────────────────────────────────────────
 
-/// A column name: an identifier, or a kind keyword that columns may still use.
+/// A column name or value: an identifier, or any kind keyword.
+///
+/// Columns and values never share a position with a declaration, so a word such as
+/// `goal` or `field` is unambiguous where a column or a value is expected.
 fn column_name() -> impl Parser<Token, String, Error = Simple<Token>> + Clone {
-    select! {
-        Token::Ident(s) => s,
-        Token::Variation => "variation".to_string(),
-        Token::Condition => "condition".to_string(),
-        Token::Goal => "goal".to_string(),
-    }
+    path_ident()
 }
 
 /// `cash "Cash"` or `adjustment` (label optional)
 fn variation_value() -> impl Parser<Token, VariationValue, Error = Simple<Token>> + Clone {
-    ident()
+    path_ident()
         .then(string_lit().or_not())
         .map_with_span(|(value, label), span| VariationValue { value, label, span })
 }
@@ -1242,6 +1240,19 @@ goal Bare "Bare"
             panic!("expected entity");
         };
         assert_eq!(entity.columns[1].name, "goal");
+    }
+
+    #[test]
+    fn a_kind_keyword_is_a_variation_or_enum_value() {
+        let ast = parse_ok(
+            "variation Method \"m\" {\n  site_visit \"s\"\n  field \"f\"\n}\n\
+             entity E \"e\" {\n  id: Int @pk\n  s: Enum(a, field, screen)\n}\n\
+             forbidden(E, E.s == field)\n",
+        );
+        let Item::Instance(method) = &ast.items[0] else {
+            panic!("expected variation");
+        };
+        assert_eq!(method.variation_values[1].value, "field");
     }
 
     #[test]
