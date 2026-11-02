@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordDisputeTerminated model=samples/insurance-claim-ops
+%% kinds: extsystem api entity
+%% omitted: buc step event
+sequenceDiagram
+  participant extsystem__SonpoAdrCenter as そんぽADRセンター（日本損害保険協会）
+  participant api__ComplaintApi as 苦情・ADR API
+  participant entity__Complaint as 苦情・紛争
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: 紛争解決手続の終了
+  alt Complaint.status in (ADR 紛争解決手続中, 和解案の提示)
+    api__ComplaintApi ->> entity__Complaint: update status ADR 紛争解決手続中 -> 手続終了（不調）, status 和解案の提示 -> 手続終了（不調）
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end

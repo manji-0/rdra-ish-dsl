@@ -1,0 +1,30 @@
+module shared.access
+
+import shared.actors
+import shared.biz
+
+has_permission(PolicyHolder, AccidentReport)
+has_permission(PolicyHolder, ConsentGive)
+has_permission(PolicyHolder, ClaimSubmit)
+has_permission(PolicyHolder, ComplaintFile)
+
+has_permission(Victim, ConsentGive)
+has_permission(Victim, ClaimSubmit)
+has_permission(Victim, ComplaintFile)
+
+has_permission(Agent, AccidentReport)
+
+has_permission(RepairShop, RepairEstimateSubmit)
+
+has_permission(ClaimReceptionist, AccidentReport)
+
+has_permission(ClaimHandler, CaseHandle)
+has_permission(ClaimHandler, ComplaintHandle)
+
+has_permission(Adjuster, DamageSurvey)
+
+has_permission(PaymentApprover, PaymentDecide)
+
+// The senior approver decides the suspected claims and answers the ADR's proposals.
+has_permission(SeniorApprover, SuspectedClaimDecide)
+has_permission(SeniorApprover, ComplaintHandle)

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:GuideToAdr model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__ComplaintScreen as 苦情・ADR 画面
+  participant api__ComplaintApi as 苦情・ADR API
+  participant entity__Complaint as 苦情・紛争
+  actor__ClaimHandler ->> screen__ComplaintScreen: 相談機関の案内
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt 苦情を受け付けて解決していない: Complaint.status == 苦情受付
+    api__ComplaintApi ->> entity__Complaint: update adr_guided=true
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end

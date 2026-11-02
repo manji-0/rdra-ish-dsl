@@ -1,0 +1,45 @@
+%% rdra-ish diagram=state scope=entity:ClaimCase model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "ClaimCase.liability" as statemodel__ClaimCase_liability {
+    [*] --> state__ClaimCase_liability_undetermined
+    state "未確定" as state__ClaimCase_liability_undetermined
+    state "賠償責任あり" as state__ClaimCase_liability_at_fault
+    state "過失ゼロ（賠償責任なし）" as state__ClaimCase_liability_no_fault
+    %% transition usecase__DetermineFault
+    state__ClaimCase_liability_undetermined --> state__ClaimCase_liability_at_fault : 過失割合と賠償責任の判断 [事故案件を調査しているか、損害を確定した]
+    %% transition usecase__DetermineFault
+    state__ClaimCase_liability_undetermined --> state__ClaimCase_liability_no_fault : 過失割合と賠償責任の判断 [事故案件を調査しているか、損害を確定した]
+    state__ClaimCase_liability_at_fault --> [*]
+    state__ClaimCase_liability_no_fault --> [*]
+  }
+  state "ClaimCase.status" as statemodel__ClaimCase_status {
+    [*] --> state__ClaimCase_status_received
+    state "事故受付" as state__ClaimCase_status_received
+    state "初期対応済" as state__ClaimCase_status_responded
+    state "調査中" as state__ClaimCase_status_investigating
+    state "示談交渉中" as state__ClaimCase_status_negotiating
+    state "損害確定" as state__ClaimCase_status_assessed
+    state "完了" as state__ClaimCase_status_closed
+    %% transition usecase__RespondInitially
+    state__ClaimCase_status_received --> state__ClaimCase_status_responded : 初期対応（担当者の案内と手続の説明）
+    %% transition usecase__RequestInvestigation
+    state__ClaimCase_status_responded --> state__ClaimCase_status_investigating : 損害調査の依頼
+    %% transition usecase__OpenSettlement
+    state__ClaimCase_status_investigating --> state__ClaimCase_status_negotiating : 示談代行の開始 [対人・対物賠償の事故で、被保険者に賠償責任がある]
+    %% transition usecase__AssessDamage
+    state__ClaimCase_status_investigating --> state__ClaimCase_status_assessed : 損害の確定 [損害調査の報告がある, 車両・人身傷害の事故である]
+    %% transition usecase__AssessDamage
+    state__ClaimCase_status_investigating --> state__ClaimCase_status_assessed : 損害の確定 [損害調査の報告がある, 賠償責任の有無を判断している]
+    %% transition usecase__AssessDamage
+    state__ClaimCase_status_negotiating --> state__ClaimCase_status_assessed : 損害の確定 [損害調査の報告がある, 示談が成立したか、示談代行を終えた]
+    %% transition usecase__CloseCase
+    state__ClaimCase_status_assessed --> state__ClaimCase_status_closed : 事故案件の完了 [賠償責任の有無を判断している]
+    state__ClaimCase_status_closed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__ClaimCase_liability_at_fault stateend
+  class state__ClaimCase_liability_no_fault stateend
+  class state__ClaimCase_status_closed stateend

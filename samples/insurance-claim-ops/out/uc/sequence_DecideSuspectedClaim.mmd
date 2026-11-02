@@ -1,0 +1,21 @@
+%% rdra-ish diagram=sequence scope=usecase:DecideSuspectedClaim model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__SeniorApprover as 上位決裁者（不正請求対応）
+  participant screen__DecisionScreen as 支払査定画面
+  participant api__DecisionApi as 支払査定 API
+  participant entity__Claim as 保険金請求
+  actor__SeniorApprover ->> screen__DecisionScreen: 疑義事案の支払・不払の決裁
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不正請求の疑いがある: Claim.fraud_suspected == true and Claim.status == 請求完了
+    api__DecisionApi ->> entity__Claim: update senior_approved=true
+    alt status 請求完了 -> 支払決定
+      api__DecisionApi ->> entity__Claim: status = 支払決定
+    else status 請求完了 -> 不払決定
+      api__DecisionApi ->> entity__Claim: status = 不払決定
+    end
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end

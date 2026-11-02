@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:LapseSubrogation model=samples/insurance-claim-ops
+%% kinds: timer api entity
+%% omitted: buc step
+sequenceDiagram
+  participant timer__SubrogationLimitation as 求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）
+  participant api__SubrogationApi as 求償 API
+  participant entity__Subrogation as 求償（請求権代位）
+  timer__SubrogationLimitation ->> api__SubrogationApi: 求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 時効消滅
+    api__SubrogationApi -->> timer__SubrogationLimitation: done
+  else guard fails
+    api__SubrogationApi -->> timer__SubrogationLimitation: rejected
+  end

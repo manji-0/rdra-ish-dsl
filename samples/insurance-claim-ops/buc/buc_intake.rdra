@@ -1,0 +1,158 @@
+module buc.intake
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucIntake "事故受付と初期対応"
+  description "契約者・被保険者は事故を知ったら遅滞なく保険会社か代理店に通知する。保険会社は契約内容・重複契約・事故状況・傷害を確かめ、警察への届出を案内し、担保種目ごとに担当者を決めて所属・氏名・連絡先を知らせ、請求の手続と必要な書類を説明する。車両事故・対物事故は、他社での事故受付の有無を共同利用制度で照会する。"
+
+// 遅滞なく、保険者に対し、その旨の通知を発しなければならない (egov-hokenhou-420AC0000000056.txt:153); 事故の発生の日時、場所
+// および事故の概要を直ちに当会社に通知 (tokiomarine-2025-tap-yakkan.txt:4479), 事故の状況…を遅滞なく、当会社に書面等により
+// 通知 (:4480). A breach without 正当な理由 lets the insurer deduct the loss it could have prevented
+// (edesign-2024-jidousha-yakkan.txt:3295).
+usecase ReportAccident "事故の通知（保険会社へ）"
+  description "契約者・被保険者が事故の日時・場所・概要を事故受付センターに直ちに通知し、事故の状況・被害者・証人・損害賠償の請求の内容を遅滞なく知らせる。"
+
+// 必ず弊社もしくは代理店までご連絡をお願いします (tokiomarine-nagare-auto.md:44).
+usecase RelayAccidentReport "事故の通知（代理店経由）"
+  description "代理店が契約者から事故の連絡を受け、保険会社の事故受付に取り次ぐ。"
+
+// 契約内容、重複契約の有無、保険の目的物とその所在地、事故状況 (sonpo-2026-shiharai-guideline.txt:320-321); 警察署・消防署等の
+// 公的機関に事故の届出を行うよう案内 (:324-325); 担当者の所属部署名、氏名、連絡先を案内 (:338); 保険金請求手続の方法を説明し、
+// 必要な書類を送付 (:343). The 交通事故証明書 needs a police report (tokiomarine-2025-tap-yakkan.txt:1501-1503).
+usecase RespondInitially "初期対応（担当者の案内と手続の説明）"
+  description "担保種目ごとに担当者を決め、所属部署・氏名・連絡先を案内する。警察への届出と交通事故証明書、損害の防止、無断で責任を認めないことを説明し、支払の対象になりうる保険金と請求の手続を説明する。"
+
+// 自動車保険の車両事故または対物事故において…事故受付の有無を確認する制度 (sonpo-kyodoriyou-0004-jidousha-jiko.md:97);
+// 「不正請求等防止制度」等の適切な共同利用 (fsa-2026-kantoku-shishin-ins.txt:8395).
+usecase QueryAccidentExchange "事故受付の有無の照会"
+  description "車両事故・対物事故について、同じ事故が他社で受け付けられていないかを自動車事故情報交換システムで照会する。"
+
+screen AccidentReportScreen "事故受付画面"
+screen CaseScreen "事故案件画面"
+
+api CaseCreateApi "事故受付 API"
+  method POST
+  path "/cases"
+
+api CaseApi "事故案件 API"
+  method PATCH
+  path "/cases/{id}"
+
+performs(PolicyHolder, ReportAccident)
+performs(ClaimReceptionist, ReportAccident)
+performs(Agent, RelayAccidentReport)
+performs(ClaimReceptionist, RelayAccidentReport)
+performs(ClaimHandler, RespondInitially)
+performs(ClaimHandler, QueryAccidentExchange)
+belongs(BucIntake, ClaimHandling).by(AccidentHotline).by(AgentCounter).by(HandlerTerminal)
+
+contains(BucIntake, ReportAccident)
+contains(BucIntake, RelayAccidentReport)
+contains(BucIntake, RespondInitially)
+contains(BucIntake, QueryAccidentExchange)
+contains(ClaimSystem, CaseCreateApi)
+contains(ClaimSystem, CaseApi)
+
+displays(ReportAccident, AccidentReportScreen)
+invokes(ReportAccident, CaseCreateApi)
+creates(CaseCreateApi, ClaimCase)
+
+displays(RelayAccidentReport, AccidentReportScreen)
+invokes(RelayAccidentReport, CaseCreateApi)
+
+displays(RespondInitially, CaseScreen)
+invokes(RespondInitially, CaseApi)
+updates(CaseApi, ClaimCase)
+transitions(RespondInitially, ClaimCase.status, received -> responded)
+
+// The query is for 車両事故または対物事故 only (sonpo-kyodoriyou-0004-jidousha-jiko.md:97).
+displays(QueryAccidentExchange, CaseScreen)
+reads(QueryAccidentExchange, ClaimCase)
+raises(QueryAccidentExchange, EvAccidentQueried)
+triggers(EvAccidentQueried, AccidentInfoExchange)
+
+// Access constraints
+requires_permission(ReportAccident, AccidentReport)
+requires_medium(ReportAccident, AccidentHotline)
+requires_permission(RelayAccidentReport, AccidentReport)
+requires_medium(RelayAccidentReport, AgentCounter)
+requires_permission(CaseCreateApi, AccidentReport)
+requires_permission(RespondInitially, CaseHandle)
+requires_medium(RespondInitially, HandlerTerminal)
+requires_permission(CaseApi, CaseHandle)
+requires_permission(QueryAccidentExchange, CaseHandle)
+requires_medium(QueryAccidentExchange, HandlerTerminal)
+
+// Screen transitions: the model's assumption.
+navigates(AccidentReportScreen, CaseScreen).via(ReportAccident)
+navigates(AccidentReportScreen, CaseScreen).via(RelayAccidentReport)
+
+field CoverageField "担保種目"
+  access editable
+  required true
+  source actor
+
+field AccidentAtField "事故の日時"
+  access editable
+  required true
+  source actor
+
+field CaseStatusField "案件の状態"
+  access readonly
+  required true
+  source system
+
+contains(AccidentReportScreen, CoverageField)
+contains(AccidentReportScreen, AccidentAtField)
+contains(CaseScreen, CaseStatusField)
+maps_field(CoverageField, ClaimCase.coverage)
+maps_field(AccidentAtField, ClaimCase.accident_at)
+maps_field(CaseStatusField, ClaimCase.status)
+
+// Business flow
+flow IntakeFlow "事故受付の流れ"
+step ReportStep "事故の通知（直ちに・遅滞なく）"
+step RelayStep "代理店からの取次ぎ"
+step InitialResponseStep "初期対応（担当者・手続の案内）"
+step ExchangeQueryStep "事故受付の有無の照会"
+
+contains(BucIntake, IntakeFlow)
+contains(IntakeFlow, ReportStep)
+contains(IntakeFlow, RelayStep)
+contains(IntakeFlow, InitialResponseStep)
+contains(IntakeFlow, ExchangeQueryStep)
+
+precedes(ReportStep, InitialResponseStep)
+branches(ReportStep, RelayStep)
+precedes(RelayStep, InitialResponseStep)
+precedes(InitialResponseStep, ExchangeQueryStep)
+
+covers(ReportStep, ReportAccident)
+covers(RelayStep, RelayAccidentReport)
+covers(InitialResponseStep, RespondInitially)
+covers(ExchangeQueryStep, QueryAccidentExchange)
+covers(ExchangeQueryStep, EvAccidentQueried)
+
+performs(PolicyHolder, ReportStep)
+performs(Agent, RelayStep)
+performs(ClaimHandler, InitialResponseStep)
+performs(ClaimHandler, ExchangeQueryStep)
+
+// Requirement traceability
+requirement ReqPromptIntake "事故の通知を受けたら、担保種目ごとの担当者と請求の手続を速やかに案内する"
+  priority "must"
+  source "事故発生の通知 (egov-hokenhou-420AC0000000056.txt:153; tokiomarine-2025-tap-yakkan.txt:4479)"
+  source "担当者の案内 (sonpo-2026-shiharai-guideline.txt:338, :340)"
+  source "請求手続の説明と書類の送付 (sonpo-2026-shiharai-guideline.txt:343)"
+  stakeholder "契約者・被保険者"
+  stakeholder "事故受付担当"
+  acceptance_criteria "受け付けた事故案件はすべて担当者が決まり、請求の手続を案内している。"
+  status "accepted"
+
+motivates(ReqPromptIntake, BucIntake)
+achieves(ReqPromptIntake, TimelyPayment)

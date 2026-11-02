@@ -1,0 +1,22 @@
+%% rdra-ish diagram=robustness scope=buc:BucJibaiseki model=samples/insurance-claim-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  extsystem__Giroj[["損害保険料率算出機構（自賠責損害調査事務所）"]]:::extsystem
+  screen__JibaisekiScreen["自賠責損害調査画面"]:::screen
+  api__JibaisekiSurveyApi{{"自賠責損害調査 API"}}:::api
+  api__JibaisekiSurveyCreateApi{{"自賠責損害調査依頼 API"}}:::api
+  entity__JibaisekiSurvey[("自賠責損害調査")]:::entity
+  actor__ClaimHandler --> screen__JibaisekiScreen
+  api__JibaisekiSurveyApi -->|U| entity__JibaisekiSurvey
+  api__JibaisekiSurveyCreateApi -->|C| entity__JibaisekiSurvey
+  api__JibaisekiSurveyCreateApi -.->|自賠責損害調査の依頼| extsystem__Giroj
+  extsystem__Giroj -.->|上部機関・審査会での審査| api__JibaisekiSurveyApi
+  extsystem__Giroj -.->|自賠責損害調査の結果の報告| api__JibaisekiSurveyApi
+  screen__JibaisekiScreen -->|自賠責損害調査の依頼| api__JibaisekiSurveyCreateApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

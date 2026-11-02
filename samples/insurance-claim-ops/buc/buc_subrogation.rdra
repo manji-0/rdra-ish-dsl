@@ -1,0 +1,156 @@
+module buc.subrogation
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.payment.{PaymentScreen}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucSubrogation "求償（請求権代位）"
+  description "保険会社は保険金を払うと、払った額と被保険者の債権の額のいずれか少ない額を限度に、被保険者が相手方に持つ損害賠償請求権を当然に取得する（請求権代位）。被保険者の残りの債権が優先する。保険会社は相手方（とその保険会社）に求償し、回収するか断念する。相手方への請求権は、損害と加害者を知った時から3年（人身損害は5年）で時効にかかる。"
+
+// 保険者は、保険給付を行ったときは…被保険者債権…について当然に被保険者に代位する (egov-hokenhou-420AC0000000056.txt:214);
+// 当会社がその損害に対して保険金を支払ったときは、その債権は当会社に移転します (tokiomarine-2025-tap-yakkan.txt:5188);
+// the insured's remaining claim comes first (edesign-2024-jidousha-yakkan.txt:3476).
+usecase StartSubrogation "求償の開始"
+  description "保険金を払った請求について、被保険者から移った損害賠償請求権の額（払った額と被保険者の債権のいずれか少ない額）を確かめ、相手方への求償を始める。"
+
+usecase RecoverSubrogation "求償の回収" description "相手方またはその保険会社から求償した額を回収する。"
+
+usecase AbandonSubrogation "求償の断念" description "相手方に資力がないなど、回収の見込みがないときに求償をやめる。"
+
+// 損害及び加害者を知った時から三年間行使しないとき (egov-minpou-129AC0000000089.txt:4676); 人の生命又は身体を害する不法行為は
+// 五年間 (:4681).
+usecase LapseSubrogation "求償する債権の時効"
+  description "相手方への損害賠償請求権が時効（3年、人身損害は5年）にかかり、求償を終える。"
+
+screen SubrogationScreen "求償画面"
+
+api SubrogationCreateApi "求償開始 API"
+  method POST
+  path "/claims/{id}/subrogation"
+
+api SubrogationApi "求償 API"
+  method PATCH
+  path "/subrogations/{id}"
+
+performs(ClaimHandler, StartSubrogation)
+performs(ClaimHandler, RecoverSubrogation)
+performs(ClaimHandler, AbandonSubrogation)
+belongs(BucSubrogation, ClaimPayment).by(HandlerTerminal)
+
+contains(BucSubrogation, StartSubrogation)
+contains(BucSubrogation, RecoverSubrogation)
+contains(BucSubrogation, AbandonSubrogation)
+contains(BucSubrogation, LapseSubrogation)
+contains(ClaimSystem, SubrogationCreateApi)
+contains(ClaimSystem, SubrogationApi)
+
+// The payment raises the event that may start the recovery; the guard is what the order guarantees.
+displays(StartSubrogation, SubrogationScreen)
+invokes(StartSubrogation, SubrogationCreateApi)
+creates(SubrogationCreateApi, Subrogation)
+triggers(EvClaimPaid, BucSubrogation)
+triggers(EvClaimPaid, StartSubrogation)
+
+condition ClaimPaid "保険金を支払った請求で、まだ求償していない"
+holds(ClaimPaid, Claim.status == paid).none(Subrogation)
+applies_to(ClaimPaid, StartSubrogation)
+
+displays(RecoverSubrogation, SubrogationScreen)
+invokes(RecoverSubrogation, SubrogationApi)
+updates(SubrogationApi, Subrogation)
+transitions(RecoverSubrogation, Subrogation.status, open -> recovered)
+
+displays(AbandonSubrogation, SubrogationScreen)
+invokes(AbandonSubrogation, SubrogationApi)
+transitions(AbandonSubrogation, Subrogation.status, open -> abandoned)
+
+// Started by the timer, no performer.
+invokes(LapseSubrogation, SubrogationApi)
+transitions(LapseSubrogation, Subrogation.status, open -> time_barred)
+triggers(SubrogationLimitation, LapseSubrogation)
+
+// Access constraints
+requires_permission(StartSubrogation, CaseHandle)
+requires_medium(StartSubrogation, HandlerTerminal)
+requires_permission(SubrogationCreateApi, CaseHandle)
+requires_permission(RecoverSubrogation, CaseHandle)
+requires_medium(RecoverSubrogation, HandlerTerminal)
+requires_permission(AbandonSubrogation, CaseHandle)
+requires_medium(AbandonSubrogation, HandlerTerminal)
+
+// Screen transitions: the model's assumption.
+navigates(PaymentScreen, SubrogationScreen).via(StartSubrogation)
+
+field SubrogationStatusField "求償の状態"
+  access readonly
+  required true
+  source system
+
+contains(SubrogationScreen, SubrogationStatusField)
+maps_field(SubrogationStatusField, Subrogation.status)
+
+// Business flow
+flow SubrogationFlow "求償の流れ"
+step SubrogationStartStep "代位による債権の取得と求償の開始"
+step RecoveryStep "回収"
+step AbandonStep "断念"
+step LapseStep "時効（3年・人身5年）"
+
+contains(BucSubrogation, SubrogationFlow)
+contains(SubrogationFlow, SubrogationStartStep)
+contains(SubrogationFlow, RecoveryStep)
+contains(SubrogationFlow, AbandonStep)
+contains(SubrogationFlow, LapseStep)
+
+precedes(SubrogationStartStep, RecoveryStep)
+branches(SubrogationStartStep, AbandonStep)
+excepts(SubrogationStartStep, LapseStep)
+
+covers(SubrogationStartStep, StartSubrogation)
+covers(SubrogationStartStep, EvClaimPaid)
+covers(RecoveryStep, RecoverSubrogation)
+covers(AbandonStep, AbandonSubrogation)
+covers(LapseStep, LapseSubrogation)
+covers(LapseStep, SubrogationLimitation)
+
+performs(ClaimHandler, SubrogationStartStep)
+performs(ClaimHandler, RecoveryStep)
+performs(ClaimHandler, AbandonStep)
+
+// Rules
+forbidden(Subrogation, Claim, Claim.status != paid).along(Subrogation, Claim).label("支払後に求償権が移る")
+
+after(StartSubrogation).assert(Claim.status == paid).label("求償は保険金を支払った請求についてだけ始める")
+
+// The open recovery ends by recovery, abandonment, or the other party's 時効, whichever comes; the
+// timer is what guarantees it.
+property SubrogationEnds "求償はいずれ回収・断念・時効のどれかで終わる"
+  leads_to(Subrogation.status == open, Subrogation.status in (recovered, abandoned, time_barred)).fair(LapseSubrogation)
+
+// Requirement traceability
+requirement ReqSubrogateAfterPayment "保険金を払った後に、移った請求権で相手方に求償し、時効の前に回収か断念を決める"
+  priority "should"
+  source "請求権代位 (egov-hokenhou-420AC0000000056.txt:214)"
+  source "債権の移転 (tokiomarine-2025-tap-yakkan.txt:5188-5194)"
+  source "被保険者の債権の優先 (edesign-2024-jidousha-yakkan.txt:3476)"
+  source "不法行為の時効 (egov-minpou-129AC0000000089.txt:4676, :4681)"
+  stakeholder "損害サービス担当者"
+  acceptance_criteria "求償は支払済みの請求にだけあり、すべて回収・断念・時効のどれかで終わる。"
+  status "accepted"
+
+motivates(ReqSubrogateAfterPayment, BucSubrogation)
+achieves(ReqSubrogateAfterPayment, NoMissedPayment)
+
+// Non-goals
+requirement ReqNoSalvage "残存物代位と全損時の契約の扱いは対象外とする"
+  source "残存物代位 (egov-hokenhou-420AC0000000056.txt:211; tokiomarine-2025-tap-yakkan.txt:5269)"
+  source "全損で契約が終わる約款の条は見つけていない (map.md:110)"
+  stakeholder "損害サービス担当者"
+  status "out-of-scope"
+  rationale "車両の全損で保険会社が車の所有権を取得すること（残存物代位）と、全損で契約が終わるかどうかは扱わない。後者は一次資料で条を見つけていない。"
+
+motivates(ReqNoSalvage, BucSubrogation)

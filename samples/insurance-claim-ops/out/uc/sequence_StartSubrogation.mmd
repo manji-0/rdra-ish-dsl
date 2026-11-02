@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:StartSubrogation model=samples/insurance-claim-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant usecase__PayClaim as 保険金の支払
+  participant screen__SubrogationScreen as 求償画面
+  participant api__SubrogationCreateApi as 求償開始 API
+  participant entity__Subrogation as 求償（請求権代位）
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の開始
+  usecase__PayClaim ->> api__SubrogationCreateApi: 保険金の支払
+  screen__SubrogationScreen ->> api__SubrogationCreateApi: 求償開始 API
+  alt 保険金を支払った請求で、まだ求償していない: (Claim.status == 支払済).none(Subrogation)
+    api__SubrogationCreateApi ->> entity__Subrogation: create
+    api__SubrogationCreateApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationCreateApi -->> screen__SubrogationScreen: rejected
+  end

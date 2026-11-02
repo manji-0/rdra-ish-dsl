@@ -1,0 +1,20 @@
+Entity: Settlement (示談（示談代行）)
+  axes: status[consent_pending|negotiating|agreed|failed|declined], insured_consent[false|true], victim_consent[false|true]
+  labels: status[consent_pending=同意の確認中|negotiating=示談交渉中|agreed=示談成立|failed=不調（調停・訴訟へ）|declined=示談代行を行わない]
+
+  STATUS           INSURED_CONSENT  VICTIM_CONSENT  INITIAL  TERMINAL  VIA                                                                                                                                                                        
+  ───────────────  ───────────────  ──────────────  ───────  ────────  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  consent_pending  false            false           yes      no        BucSettlement/OpenSettlement
+  declined         false            false           no       yes       BucSettlement/DeclineSettlementService, BucSettlement/OpenSettlement
+  consent_pending  true             false           no       no        BucSettlement/OpenSettlement, BucSettlement/RecordInsuredConsent
+  consent_pending  false            true            no       no        BucSettlement/OpenSettlement, BucSettlement/RecordVictimConsent
+  declined         true             false           no       yes       BucSettlement/DeclineSettlementService, BucSettlement/OpenSettlement, BucSettlement/RecordInsuredConsent
+  consent_pending  true             true            no       no        BucSettlement/OpenSettlement, BucSettlement/RecordInsuredConsent, BucSettlement/RecordVictimConsent
+  declined         false            true            no       yes       BucSettlement/DeclineSettlementService, BucSettlement/OpenSettlement, BucSettlement/RecordVictimConsent
+  negotiating      true             true            no       no        BucSettlement/BeginNegotiation, BucSettlement/OpenSettlement, BucSettlement/RecordInsuredConsent, BucSettlement/RecordVictimConsent
+  declined         true             true            no       yes       BucSettlement/DeclineSettlementService, BucSettlement/OpenSettlement, BucSettlement/RecordInsuredConsent, BucSettlement/RecordVictimConsent
+  agreed           true             true            no       yes       BucSettlement/AgreeSettlement, BucSettlement/BeginNegotiation, BucSettlement/OpenSettlement, BucSettlement/RecordInsuredConsent, BucSettlement/RecordVictimConsent
+  failed           true             true            no       yes       BucSettlement/BeginNegotiation, BucSettlement/EndNegotiationUnresolved, BucSettlement/OpenSettlement, BucSettlement/RecordInsuredConsent, BucSettlement/RecordVictimConsent
+
+  reachable: 11 / bound: 20
+

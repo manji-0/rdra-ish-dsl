@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:QueryAccidentExchange model=samples/insurance-claim-ops
+%% kinds: actor screen usecase entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__CaseScreen as 事故案件画面
+  participant usecase__QueryAccidentExchange as 事故受付の有無の照会
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant extsystem__AccidentInfoExchange as 自動車事故情報交換システム（損保協会の共同利用制度）
+  actor__ClaimHandler ->> screen__CaseScreen: 事故受付の有無の照会
+  screen__CaseScreen ->> usecase__QueryAccidentExchange: 事故受付の有無の照会
+  usecase__QueryAccidentExchange ->> entity__ClaimCase: read
+  usecase__QueryAccidentExchange -) extsystem__AccidentInfoExchange: 事故受付の有無の照会
+  usecase__QueryAccidentExchange -->> screen__CaseScreen: done

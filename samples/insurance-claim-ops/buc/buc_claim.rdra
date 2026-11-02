@@ -1,0 +1,239 @@
+module buc.claim
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.intake.{CaseScreen, RespondInitially}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucClaim "保険金の請求"
+  description "保険会社は請求の手続と必要な書類を案内する。自動車保険では、請求の前に次の契約の等級がどう変わるかを説明して、請求の意思を確かめる。請求者（被保険者・保険金請求権者、直接請求の被害者）が書類を出し終えた日が請求完了日で、支払期限はこの日から数える。賠償の保険金は示談書などで賠償額が決まってから請求できる。請求権は発生の翌日から3年で時効にかかる。請求を取り下げるときは理由を記録する。"
+
+// 迅速かつ適切に保険金請求手続の方法を説明し、必要な書類を送付 (sonpo-2026-shiharai-guideline.txt:343); 交通事故証明書、
+// り災証明書、診断書等 (:344-345). The claim is created when the forms go out; that it follows the initial response
+// is carried by an event, which gives no order (README).
+usecase SendClaimForms "請求書類の案内と送付"
+  description "担当者が請求者に請求の手続を説明し、請求書と、交通事故証明書・診断書・見積書・示談書など必要な書類を案内して送る。"
+
+// 保険金の支払いに伴う次契約の適用等級の変動について説明した上で、保険金請求意思の確認を行う
+// (sonpo-2026-shiharai-guideline.txt:496-497). 3等級ダウン事故 1件につき「3」を引き (tokiomarine-2025-tap-yakkan.txt:936).
+usecase ConfirmClaimIntent "等級の変動の説明と請求意思の確認"
+  description "保険金を請求すると次の契約の等級が下がる（3等級ダウン事故は1件につき3等級）ことを説明し、それでも請求するかを確かめる。"
+
+// 請求書 (tokiomarine-2025-tap-yakkan.txt:4587), 損害額を証明する書類 (:4588), 交通事故証明書 (:4594), 示談書 (:4596).
+// The 被害者 claims by the 直接請求権 (:2493).
+usecase SubmitClaim "請求書類の提出"
+  description "請求者が保険会社の求める請求書類を出す。賠償の保険金では、示談書と、賠償金を払ったか被害者が承諾したことを示す書類を添える。"
+
+// 被保険者または保険金請求権者が第１条（保険金の請求）（2）の手続を完了した日 (tokiomarine-2025-tap-yakkan.txt:4666) is
+// the 請求完了日, and the payment period runs from it (:4633). 請求書類の受領連絡や必要事項の確認
+// (sonpo-2026-shiharai-guideline.txt:486-487).
+usecase CompleteClaim "請求完了の確認"
+  description "担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。"
+
+// 請求を取り下げる意向である場合は…取り下げ理由、確認を行った日付、方法、担当者名および確認先等の事実を確実に記録
+// (sonpo-2026-shiharai-guideline.txt:464-466).
+usecase WithdrawClaim "請求の取下げ"
+  description "請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。"
+
+// 翌日から起算して３年を経過した場合は、時効によっ (tokiomarine-2025-tap-yakkan.txt:5258).
+usecase TimeBarClaim "請求権の時効による消滅"
+  description "請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。"
+
+screen ClaimScreen "保険金請求画面"
+screen ClaimFormScreen "請求書類の提出画面"
+
+api ClaimCreateApi "請求案内 API"
+  method POST
+  path "/cases/{id}/claims"
+
+api ClaimApi "保険金請求 API"
+  method PATCH
+  path "/claims/{id}"
+
+api ClaimSubmitApi "請求書類提出 API"
+  method POST
+  path "/claims/{id}/documents"
+
+performs(ClaimHandler, SendClaimForms)
+performs(ClaimHandler, ConfirmClaimIntent)
+performs(PolicyHolder, SubmitClaim)
+performs(Victim, SubmitClaim)
+performs(ClaimHandler, CompleteClaim)
+performs(PolicyHolder, WithdrawClaim)
+belongs(BucClaim, ClaimPayment).by(ClaimDocuments).by(HandlerTerminal)
+
+contains(BucClaim, SendClaimForms)
+contains(BucClaim, ConfirmClaimIntent)
+contains(BucClaim, SubmitClaim)
+contains(BucClaim, CompleteClaim)
+contains(BucClaim, WithdrawClaim)
+contains(BucClaim, TimeBarClaim)
+contains(ClaimSystem, ClaimCreateApi)
+contains(ClaimSystem, ClaimApi)
+contains(ClaimSystem, ClaimSubmitApi)
+
+event EvInitialResponded "初期対応の完了"
+raises(RespondInitially, EvInitialResponded)
+triggers(EvInitialResponded, SendClaimForms)
+
+displays(SendClaimForms, ClaimScreen)
+invokes(SendClaimForms, ClaimCreateApi)
+creates(ClaimCreateApi, Claim)
+
+displays(ConfirmClaimIntent, ClaimScreen)
+invokes(ConfirmClaimIntent, ClaimApi)
+updates(ClaimApi, Claim)
+sets(ConfirmClaimIntent, Claim, grade_explained == true)
+
+condition ClaimGuided "請求の案内をした段階である"
+holds(ClaimGuided, Claim.status == guided)
+applies_to(ClaimGuided, ConfirmClaimIntent)
+
+displays(SubmitClaim, ClaimFormScreen)
+invokes(SubmitClaim, ClaimSubmitApi)
+updates(ClaimSubmitApi, Claim)
+transitions(SubmitClaim, Claim.status, guided -> submitted)
+
+condition GradeExplained "等級の変動を説明して請求の意思を確かめた"
+holds(GradeExplained, Claim.grade_explained == true)
+applies_to(GradeExplained, SubmitClaim)
+
+// The claim and its period move together: the 請求完了日 starts the 30 days.
+displays(CompleteClaim, ClaimScreen)
+invokes(CompleteClaim, ClaimApi)
+transitions(CompleteClaim, Claim.status, submitted -> completed)
+transitions(CompleteClaim, Claim.period, not_started -> running)
+sets(CompleteClaim, Claim, completed_on == present)
+
+// A use case that moves both columns runs only where each column has an arm from its state, so a
+// claim withdrawn before its period starts needs an arm from `not_started` too (README, Soak findings).
+displays(WithdrawClaim, ClaimScreen)
+invokes(WithdrawClaim, ClaimApi)
+transitions(WithdrawClaim, Claim.status, guided -> withdrawn)
+transitions(WithdrawClaim, Claim.status, submitted -> withdrawn)
+transitions(WithdrawClaim, Claim.status, completed -> withdrawn)
+transitions(WithdrawClaim, Claim.period, not_started -> ended)
+transitions(WithdrawClaim, Claim.period, running -> ended)
+transitions(WithdrawClaim, Claim.period, extended -> ended)
+transitions(WithdrawClaim, Claim.period, overdue -> ended)
+raises(WithdrawClaim, EvClaimWithdrawn)
+
+// Started by the timer, no performer.
+invokes(TimeBarClaim, ClaimApi)
+transitions(TimeBarClaim, Claim.status, guided -> time_barred)
+transitions(TimeBarClaim, Claim.status, submitted -> time_barred)
+transitions(TimeBarClaim, Claim.period, not_started -> ended)
+triggers(ClaimLimitation, TimeBarClaim)
+
+// Access constraints
+requires_permission(SendClaimForms, CaseHandle)
+requires_medium(SendClaimForms, HandlerTerminal)
+requires_permission(ClaimCreateApi, CaseHandle)
+requires_permission(ConfirmClaimIntent, CaseHandle)
+requires_medium(ConfirmClaimIntent, HandlerTerminal)
+requires_permission(SubmitClaim, ClaimSubmit)
+requires_medium(SubmitClaim, ClaimDocuments)
+requires_permission(ClaimSubmitApi, ClaimSubmit)
+requires_permission(CompleteClaim, CaseHandle)
+requires_medium(CompleteClaim, HandlerTerminal)
+requires_permission(WithdrawClaim, ClaimSubmit)
+requires_medium(WithdrawClaim, ClaimDocuments)
+
+// Screen transitions: the model's assumption.
+navigates(CaseScreen, ClaimScreen).via(SendClaimForms)
+navigates(ClaimFormScreen, ClaimScreen).via(SubmitClaim)
+
+field GradeExplainedField "等級の変動の説明"
+  access readonly
+  required true
+  source system
+
+field CompletedOnField "請求完了日"
+  access readonly
+  required true
+  source system
+
+field ClaimStatusField "請求の状態"
+  access readonly
+  required true
+  source system
+
+contains(ClaimScreen, GradeExplainedField)
+contains(ClaimScreen, CompletedOnField)
+contains(ClaimScreen, ClaimStatusField)
+contains(ClaimFormScreen, ClaimStatusField)
+maps_field(GradeExplainedField, Claim.grade_explained)
+maps_field(CompletedOnField, Claim.completed_on)
+maps_field(ClaimStatusField, Claim.status)
+
+// Business flow
+flow ClaimFlow "保険金請求の流れ"
+step GuideStep "請求の手続と書類の案内"
+step IntentStep "等級の変動の説明と請求意思の確認"
+step SubmitStep "請求書類の提出"
+step CompleteStep "請求完了（支払期限の起算）"
+step WithdrawStep "請求の取下げ"
+step TimeBarStep "時効（3年）"
+
+contains(BucClaim, ClaimFlow)
+contains(ClaimFlow, GuideStep)
+contains(ClaimFlow, IntentStep)
+contains(ClaimFlow, SubmitStep)
+contains(ClaimFlow, CompleteStep)
+contains(ClaimFlow, WithdrawStep)
+contains(ClaimFlow, TimeBarStep)
+
+precedes(GuideStep, IntentStep)
+precedes(IntentStep, SubmitStep)
+precedes(SubmitStep, CompleteStep)
+excepts(SubmitStep, WithdrawStep)
+excepts(GuideStep, TimeBarStep)
+
+covers(GuideStep, SendClaimForms)
+covers(GuideStep, EvInitialResponded)
+covers(IntentStep, ConfirmClaimIntent)
+covers(SubmitStep, SubmitClaim)
+covers(CompleteStep, CompleteClaim)
+covers(WithdrawStep, WithdrawClaim)
+covers(TimeBarStep, TimeBarClaim)
+covers(TimeBarStep, ClaimLimitation)
+
+performs(ClaimHandler, GuideStep)
+performs(ClaimHandler, IntentStep)
+performs(PolicyHolder, SubmitStep)
+performs(Victim, SubmitStep)
+performs(ClaimHandler, CompleteStep)
+performs(PolicyHolder, WithdrawStep)
+
+// Rules
+forbidden(Claim, status not in (guided, withdrawn, time_barred), grade_explained == false).label("等級の変動を説明してから請求の意思を確かめる")
+
+forbidden(Claim, status in (completed, decided_payment, decided_denial), period in (not_started, ended)).label("請求完了から支払・通知までは支払期限を管理する")
+
+// Requirement traceability
+requirement ReqClaimGuidance "請求の手続と書類を案内し、等級の変動を説明してから請求の意思を確かめる"
+  priority "must"
+  source "請求手続の説明と書類の送付 (sonpo-2026-shiharai-guideline.txt:343)"
+  source "等級の変動の説明と請求意思の確認 (sonpo-2026-shiharai-guideline.txt:496-497)"
+  source "請求書類 (tokiomarine-2025-tap-yakkan.txt:4585-4596)"
+  source "請求完了日 (tokiomarine-2025-tap-yakkan.txt:4666)"
+  stakeholder "契約者・被保険者"
+  stakeholder "損害サービス担当者"
+  acceptance_criteria "提出された請求はすべて等級の変動の説明を経ており、請求完了から支払・通知までは支払期限が動いている。"
+  status "accepted"
+
+motivates(ReqClaimGuidance, BucClaim)
+achieves(ReqClaimGuidance, NoMissedPayment)
+
+// Non-goals
+requirement ReqNoUnderwriting "保険料・引受・等級の算定は対象外とする"
+  source "範囲の外: 保険料・引受 (map.md:16)"
+  source "等級の決め方 (tokiomarine-2025-tap-yakkan.txt:936-937)"
+  stakeholder "契約者・被保険者"
+  status "out-of-scope"
+  rationale "等級は請求の前に変動を説明することだけを扱う。次の契約の等級と保険料の計算、告知義務違反による解除、全損で契約が終わるかどうか（約款の条を見つけていない）はモデルにしない。"
+
+motivates(ReqNoUnderwriting, BucClaim)

@@ -1,0 +1,33 @@
+%% rdra-ish diagram=robustness scope=buc:BucIntake model=samples/insurance-claim-ops
+%% kinds: actor extsystem screen api usecase entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__Agent(["代理店"]):::actor
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  actor__ClaimReceptionist(["事故受付担当"]):::actor
+  actor__PolicyHolder(["契約者・被保険者"]):::actor
+  extsystem__AccidentInfoExchange[["自動車事故情報交換システム（損保協会の共同利用制度）"]]:::extsystem
+  screen__AccidentReportScreen["事故受付画面"]:::screen
+  screen__CaseScreen["事故案件画面"]:::screen
+  api__CaseApi{{"事故案件 API"}}:::api
+  api__CaseCreateApi{{"事故受付 API"}}:::api
+  usecase__QueryAccidentExchange("事故受付の有無の照会"):::usecase
+  entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+  actor__Agent --> screen__AccidentReportScreen
+  actor__ClaimHandler --> screen__CaseScreen
+  actor__ClaimReceptionist --> screen__AccidentReportScreen
+  actor__PolicyHolder --> screen__AccidentReportScreen
+  api__CaseApi -->|U| entity__ClaimCase
+  api__CaseCreateApi -->|C| entity__ClaimCase
+  screen__AccidentReportScreen -->|事故の通知（代理店経由）| api__CaseCreateApi
+  screen__AccidentReportScreen -->|事故の通知（保険会社へ）| api__CaseCreateApi
+  screen__CaseScreen -->|事故受付の有無の照会| usecase__QueryAccidentExchange
+  screen__CaseScreen -->|初期対応（担当者の案内と手続の説明）| api__CaseApi
+  usecase__QueryAccidentExchange -->|R| entity__ClaimCase
+  usecase__QueryAccidentExchange -.->|事故受付の有無の照会| extsystem__AccidentInfoExchange
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

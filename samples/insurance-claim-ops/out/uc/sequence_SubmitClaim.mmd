@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:SubmitClaim model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant screen__ClaimFormScreen as 請求書類の提出画面
+  participant api__ClaimSubmitApi as 請求書類提出 API
+  participant entity__Claim as 保険金請求
+  actor__PolicyHolder ->> screen__ClaimFormScreen: 請求書類の提出
+  actor__Victim ->> screen__ClaimFormScreen: 請求書類の提出
+  screen__ClaimFormScreen ->> api__ClaimSubmitApi: 請求書類提出 API
+  alt 等級の変動を説明して請求の意思を確かめた: Claim.grade_explained == true and Claim.status == 請求の案内済
+    api__ClaimSubmitApi ->> entity__Claim: update status 請求の案内済 -> 請求書類の提出
+    api__ClaimSubmitApi -->> screen__ClaimFormScreen: done
+  else guard fails
+    api__ClaimSubmitApi -->> screen__ClaimFormScreen: rejected
+  end

@@ -49,7 +49,8 @@
   use cases (no strong fairness). A property is checked on the cone of what it reads and of
   its `.fair` use cases, where `WF_vars(Next)` does not restrict; a property without `.fair`
   reaches the whole model unless its cone holds every written var, and a whole-model run of
-  patent-ops or food-permit-ops at two instances stops at `--temporal-budget` as not decided.
+  patent-ops, food-permit-ops, or insurance-claim-ops at two instances stops at
+  `--temporal-budget` or at the state cap as not decided.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at the same bounds as TLC (capped at 2,097,152 states per cone).
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled

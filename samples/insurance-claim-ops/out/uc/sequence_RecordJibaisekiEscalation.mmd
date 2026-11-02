@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordJibaisekiEscalation model=samples/insurance-claim-ops
+%% kinds: extsystem api entity
+%% omitted: buc step event
+sequenceDiagram
+  participant extsystem__Giroj as 損害保険料率算出機構（自賠責損害調査事務所）
+  participant api__JibaisekiSurveyApi as 自賠責損害調査 API
+  participant entity__JibaisekiSurvey as 自賠責損害調査
+  extsystem__Giroj ->> api__JibaisekiSurveyApi: 上部機関・審査会での審査
+  alt JibaisekiSurvey.status == 調査事務所へ送付
+    api__JibaisekiSurveyApi ->> entity__JibaisekiSurvey: update status 調査事務所へ送付 -> 地区本部・本部・審査会で審査中
+    api__JibaisekiSurveyApi -->> extsystem__Giroj: done
+  else guard fails
+    api__JibaisekiSurveyApi -->> extsystem__Giroj: rejected
+  end

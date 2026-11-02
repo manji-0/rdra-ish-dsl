@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:SubmitRepairEstimate model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__RepairShop as 修理工場
+  participant screen__RepairScreen as 修理見積画面
+  participant api__RepairEstimateCreateApi as 修理見積提出 API
+  participant entity__RepairEstimate as 修理見積
+  actor__RepairShop ->> screen__RepairScreen: 修理見積の提出
+  screen__RepairScreen ->> api__RepairEstimateCreateApi: 修理見積提出 API
+  alt 車両・対物賠償の事故である: ClaimCase.coverage in (車両, 対物賠償)
+    api__RepairEstimateCreateApi ->> entity__RepairEstimate: create
+    api__RepairEstimateCreateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateCreateApi -->> screen__RepairScreen: rejected
+  end

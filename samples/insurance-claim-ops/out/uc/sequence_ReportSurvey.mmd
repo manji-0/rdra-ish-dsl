@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ReportSurvey model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Adjuster as アジャスター
+  participant screen__InvestigationScreen as 損害調査画面
+  participant api__InvestigationApi as 損害調査 API
+  participant entity__Investigation as 損害調査
+  actor__Adjuster ->> screen__InvestigationScreen: 損害調査の報告
+  screen__InvestigationScreen ->> api__InvestigationApi: 損害調査 API
+  alt Investigation.status == 調査中
+    api__InvestigationApi ->> entity__Investigation: update status 調査中 -> 調査報告済
+    api__InvestigationApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationApi -->> screen__InvestigationScreen: rejected
+  end

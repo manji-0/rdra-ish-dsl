@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RecoverSubrogation model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__SubrogationScreen as 求償画面
+  participant api__SubrogationApi as 求償 API
+  participant entity__Subrogation as 求償（請求権代位）
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の回収
+  screen__SubrogationScreen ->> api__SubrogationApi: 求償 API
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 回収
+    api__SubrogationApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationApi -->> screen__SubrogationScreen: rejected
+  end

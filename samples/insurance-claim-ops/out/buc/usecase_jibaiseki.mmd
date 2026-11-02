@@ -1,0 +1,55 @@
+%% rdra-ish diagram=usecase scope=buc:BucJibaiseki model=samples/insurance-claim-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+    extsystem__Giroj[["損害保険料率算出機構（自賠責損害調査事務所）"]]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__RecordJibaisekiEscalation("上部機関・審査会での審査の記録"):::usecase
+    %% desc usecase__RecordJibaisekiEscalation: 損保料率機構から、事案が地区本部・本部または審査会の審査に回ったと知らせを受けて記録する。
+    usecase__RecordJibaisekiResult("自賠責損害調査の結果の受領"):::usecase
+    %% desc usecase__RecordJibaisekiResult: 損保料率機構の調査結果（有無責、後遺障害の等級、重過失減額の有無）を受け取り、支払額の決定に使う。
+    usecase__SendJibaisekiSurvey("自賠責損害調査の依頼"):::usecase
+    %% desc usecase__SendJibaisekiSurvey: 一括払いに同意を得た人身の事故について、自賠責の請求書類を確かめて損保料率機構の自賠責損害調査事務所に送る。
+    screen__JibaisekiScreen["自賠責損害調査画面"]:::screen
+    event__EvJibaisekiSurveyEscalated>"上部機関・審査会での審査"]:::event
+    event__EvJibaisekiSurveyReported>"自賠責損害調査の結果の報告"]:::event
+    event__EvJibaisekiSurveyRequested>"自賠責損害調査の依頼"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__JibaisekiSurvey[("自賠責損害調査")]:::entity
+    state__JibaisekiSurvey_reported((("調査結果の報告受領"))):::state
+    state__JibaisekiSurvey_sent((("調査事務所へ送付"))):::state
+    state__JibaisekiSurvey_under_review((("地区本部・本部・審査会で審査中"))):::state
+    condition__InjuryCoverage{"対人賠償・人身傷害の事故である"}:::condition
+  end
+  actor__ClaimHandler -.-> usecase__SendJibaisekiSurvey
+  condition__InjuryCoverage -.->|applies_to| usecase__SendJibaisekiSurvey
+  event__EvJibaisekiSurveyEscalated -.-> usecase__RecordJibaisekiEscalation
+  event__EvJibaisekiSurveyReported -.-> usecase__RecordJibaisekiResult
+  event__EvJibaisekiSurveyRequested -.-> extsystem__Giroj
+  extsystem__Giroj -.-> event__EvJibaisekiSurveyEscalated
+  extsystem__Giroj -.-> event__EvJibaisekiSurveyReported
+  usecase__RecordJibaisekiEscalation -.->|transitions JibaisekiSurvey.status sent->under_review| state__JibaisekiSurvey_under_review
+  usecase__RecordJibaisekiEscalation -.->|updates| entity__JibaisekiSurvey
+  %% derived usecase__RecordJibaisekiEscalation -> entity__JibaisekiSurvey via api__JibaisekiSurveyApi
+  usecase__RecordJibaisekiResult -.->|transitions JibaisekiSurvey.status sent->reported| state__JibaisekiSurvey_reported
+  usecase__RecordJibaisekiResult -.->|transitions JibaisekiSurvey.status under_review->reported| state__JibaisekiSurvey_reported
+  usecase__RecordJibaisekiResult -.->|updates| entity__JibaisekiSurvey
+  %% derived usecase__RecordJibaisekiResult -> entity__JibaisekiSurvey via api__JibaisekiSurveyApi
+  usecase__SendJibaisekiSurvey -.->|creates| entity__JibaisekiSurvey
+  %% derived usecase__SendJibaisekiSurvey -> entity__JibaisekiSurvey via api__JibaisekiSurveyCreateApi
+  usecase__SendJibaisekiSurvey -.-> screen__JibaisekiScreen
+  usecase__SendJibaisekiSurvey -.-> event__EvJibaisekiSurveyRequested
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -1,0 +1,49 @@
+%% rdra-ish diagram=screen scope=whole model=samples/insurance-claim-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__AccidentReportScreen["事故受付画面"]:::screen
+  screen__CaseScreen["事故案件画面"]:::screen
+  screen__ClaimFormScreen["請求書類の提出画面"]:::screen
+  screen__ClaimScreen["保険金請求画面"]:::screen
+  screen__ComplaintScreen["苦情・ADR 画面"]:::screen
+  screen__DecisionScreen["支払査定画面"]:::screen
+  screen__InvestigationScreen["損害調査画面"]:::screen
+  screen__JibaisekiScreen["自賠責損害調査画面"]:::screen
+  screen__PaymentScreen["支払画面"]:::screen
+  screen__RepairScreen["修理見積画面"]:::screen
+  screen__SettlementScreen["示談画面"]:::screen
+  screen__SubrogationScreen["求償画面"]:::screen
+  screen__AccidentReportScreen -->|事故の通知（代理店経由）| screen__CaseScreen
+  screen__AccidentReportScreen -->|事故の通知（保険会社へ）| screen__CaseScreen
+  screen__CaseScreen -->|修理見積の提出| screen__RepairScreen
+  screen__CaseScreen -->|損害調査の依頼| screen__InvestigationScreen
+  screen__CaseScreen -->|示談代行の開始| screen__SettlementScreen
+  screen__CaseScreen -->|自賠責損害調査の依頼| screen__JibaisekiScreen
+  screen__CaseScreen -->|請求書類の案内と送付| screen__ClaimScreen
+  screen__ClaimFormScreen -->|請求書類の提出| screen__ClaimScreen
+  screen__ClaimScreen -->|不正請求の疑いの登録| screen__DecisionScreen
+  screen__DecisionScreen -->|支払・不払の決裁| screen__PaymentScreen
+  screen__DecisionScreen -->|疑義事案の支払・不払の決裁| screen__PaymentScreen
+  screen__DecisionScreen -->|苦情の申出| screen__ComplaintScreen
+  screen__InvestigationScreen -->|損害調査の報告| screen__CaseScreen
+  screen__PaymentScreen -->|保険金の支払| screen__CaseScreen
+  screen__PaymentScreen -->|求償の開始| screen__SubrogationScreen
+  screen__SettlementScreen -->|示談の成立| screen__CaseScreen
+  %% via screen__AccidentReportScreen -> screen__CaseScreen usecase__RelayAccidentReport
+  %% via screen__AccidentReportScreen -> screen__CaseScreen usecase__ReportAccident
+  %% via screen__CaseScreen -> screen__ClaimScreen usecase__SendClaimForms
+  %% via screen__CaseScreen -> screen__InvestigationScreen usecase__RequestInvestigation
+  %% via screen__CaseScreen -> screen__JibaisekiScreen usecase__SendJibaisekiSurvey
+  %% via screen__CaseScreen -> screen__RepairScreen usecase__SubmitRepairEstimate
+  %% via screen__CaseScreen -> screen__SettlementScreen usecase__OpenSettlement
+  %% via screen__ClaimFormScreen -> screen__ClaimScreen usecase__SubmitClaim
+  %% via screen__ClaimScreen -> screen__DecisionScreen usecase__FlagSuspectedFraud
+  %% via screen__DecisionScreen -> screen__ComplaintScreen usecase__FileComplaint
+  %% via screen__DecisionScreen -> screen__PaymentScreen usecase__DecideClaim
+  %% via screen__DecisionScreen -> screen__PaymentScreen usecase__DecideSuspectedClaim
+  %% via screen__InvestigationScreen -> screen__CaseScreen usecase__ReportSurvey
+  %% via screen__PaymentScreen -> screen__CaseScreen usecase__PayClaim
+  %% via screen__PaymentScreen -> screen__SubrogationScreen usecase__StartSubrogation
+  %% via screen__SettlementScreen -> screen__CaseScreen usecase__AgreeSettlement
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

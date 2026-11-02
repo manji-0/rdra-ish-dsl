@@ -1,0 +1,22 @@
+%% rdra-ish diagram=sequence scope=usecase:AssessDamage model=samples/insurance-claim-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant usecase__AgreeSettlement as 示談の成立
+  participant usecase__DeclineSettlementService as 示談代行を行わない
+  participant usecase__EndNegotiationUnresolved as 示談交渉の終了（不調）
+  participant screen__CaseScreen as 事故案件画面
+  participant api__CaseApi as 事故案件 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  actor__ClaimHandler ->> screen__CaseScreen: 損害の確定
+  usecase__AgreeSettlement ->> api__CaseApi: 示談の成立
+  usecase__DeclineSettlementService ->> api__CaseApi: 示談代行の終了（不調・不実施）
+  usecase__EndNegotiationUnresolved ->> api__CaseApi: 示談代行の終了（不調・不実施）
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt 損害調査の報告がある: Investigation.status == 調査報告済 and ClaimCase.status in (調査中, 示談交渉中)
+    api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 損害確定 [車両・人身傷害の事故である], status 調査中 -> 損害確定 [賠償責任の有無を判断している], status 示談交渉中 -> 損害確定 [示談が成立したか、示談代行を終えた]
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end

@@ -1,0 +1,35 @@
+%% rdra-ish diagram=flow scope=buc:BucJibaiseki model=samples/insurance-claim-ops
+%% kinds: flow step lane usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__JibaisekiFlow["自賠責損害調査の流れ"]
+    step__EscalationStep["地区本部・本部・審査会の審査"]:::step
+    step__SurveyResultStep["調査結果の報告"]:::step
+    subgraph lane__JibaisekiFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__JibaisekiFlow__ClaimHandler: actor__ClaimHandler
+      step__SendSurveyStep["一括払いの同意と調査事務所への送付"]:::step
+    end
+  end
+  usecase__RecordJibaisekiEscalation("上部機関・審査会での審査の記録"):::usecase
+  %% desc usecase__RecordJibaisekiEscalation: 損保料率機構から、事案が地区本部・本部または審査会の審査に回ったと知らせを受けて記録する。
+  usecase__RecordJibaisekiResult("自賠責損害調査の結果の受領"):::usecase
+  %% desc usecase__RecordJibaisekiResult: 損保料率機構の調査結果（有無責、後遺障害の等級、重過失減額の有無）を受け取り、支払額の決定に使う。
+  usecase__SendJibaisekiSurvey("自賠責損害調査の依頼"):::usecase
+  %% desc usecase__SendJibaisekiSurvey: 一括払いに同意を得た人身の事故について、自賠責の請求書類を確かめて損保料率機構の自賠責損害調査事務所に送る。
+  event__EvJibaisekiSurveyEscalated>"上部機関・審査会での審査"]:::event
+  event__EvJibaisekiSurveyReported>"自賠責損害調査の結果の報告"]:::event
+  event__EvJibaisekiSurveyRequested>"自賠責損害調査の依頼"]:::event
+  step__EscalationStep -.-> event__EvJibaisekiSurveyEscalated
+  step__EscalationStep -.-> usecase__RecordJibaisekiEscalation
+  step__EscalationStep -->|precedes| step__SurveyResultStep
+  step__SendSurveyStep -->|branches| step__EscalationStep
+  step__SendSurveyStep -.-> event__EvJibaisekiSurveyRequested
+  step__SendSurveyStep -.-> usecase__SendJibaisekiSurvey
+  step__SendSurveyStep -->|precedes| step__SurveyResultStep
+  step__SurveyResultStep -.-> event__EvJibaisekiSurveyReported
+  step__SurveyResultStep -.-> usecase__RecordJibaisekiResult
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

@@ -1,0 +1,31 @@
+module shared.goals
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+// The goals state why the requirements exist. Every metric, baseline, and target is assumed by the
+// model; no primary source gives the numbers.
+
+// モデルの想定（一次資料なし）. The period is the 約款's (tokiomarine-2025-tap-yakkan.txt:4633), and the supervisory
+// guideline asks for 支払い…に至るまでの所要日数の短縮 (fsa-2026-kantoku-shishin-ins.txt:8476-8478).
+goal TimelyPayment "支払期限のうちに支払・不払を決めて知らせる"
+  description "請求完了日から30日（延長したときは延長の日数）のうちに確認を終え、支払うか、支払わない理由を知らせる。期限を過ぎると遅延利息が付く。"
+  metric "支払期限のうちに支払または不払通知を済ませた請求の割合"
+  baseline "96%"
+  target "99%"
+  window "四半期"
+
+// モデルの想定（一次資料なし）. The 付随的な保険金の支払漏れ of 2005: 26 社 50 万件 380 億円
+// (fsa-2009-hokenkin-shiharai-wg.txt:30), 契約者から請求が無かったため…支払っていなかった (fsa-2006-fuzuiteki-shiharai-more.md:87).
+goal NoMissedPayment "払うべき保険金を漏れなく払う"
+  description "支払うべき保険金を、請求がないからといって払わずにおかない。不正な請求には払わず、同じ請求に二度払わない。"
+  metric "支払済み事案の点検で見つかった支払漏れ・二重払いの件数"
+  baseline "年30件"
+  target "年0件"
+  window "年次"
+
+// モデルの想定（一次資料なし）. 不払いの理由の説明 (sonpo-2026-shiharai-guideline.txt:530-531) and the 相談機関の案内 (:540).
+goal FairDenial "不払いを理由とともに説明し、納得を得る"
+  description "支払えないときは、根拠となる約款の条項と調査の結果を説明してから通知し、了解が得られなければ ADR を案内する。"
+  metric "不払通知のうち、そんぽADRセンターの紛争解決手続に進んだ割合"
+  baseline "1.5%"
+  target "0.5%"
+  window "年次"

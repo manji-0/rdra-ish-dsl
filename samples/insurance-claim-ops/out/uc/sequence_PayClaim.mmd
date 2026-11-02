@@ -1,0 +1,23 @@
+%% rdra-ish diagram=sequence scope=usecase:PayClaim model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__PaymentScreen as 支払画面
+  participant api__PaymentCreateApi as 保険金支払 API
+  participant entity__Claim as 保険金請求
+  participant entity__Payment as 保険金の支払
+  participant api__CaseApi as 事故案件 API
+  participant api__SubrogationCreateApi as 求償開始 API
+  actor__ClaimHandler ->> screen__PaymentScreen: 保険金の支払
+  screen__PaymentScreen ->> api__PaymentCreateApi: 保険金支払 API
+  alt 支払済みの案件は再度支払わない: (Claim.status == 支払決定).none(Payment) and Claim.period in (30日の期間中, 延長期間中, 期限経過)
+    Note over api__PaymentCreateApi: transaction (API atomic boundary)
+    api__PaymentCreateApi ->> entity__Claim: update status 支払決定 -> 支払済, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__PaymentCreateApi ->> entity__Payment: create late_interest=Claim.late_interest_due
+    api__PaymentCreateApi -) api__CaseApi: 保険金の支払
+    api__PaymentCreateApi -) api__SubrogationCreateApi: 保険金の支払
+    api__PaymentCreateApi -->> screen__PaymentScreen: done
+  else guard fails
+    api__PaymentCreateApi -->> screen__PaymentScreen: rejected
+  end

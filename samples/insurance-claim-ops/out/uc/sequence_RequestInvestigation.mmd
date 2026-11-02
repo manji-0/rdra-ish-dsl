@@ -1,0 +1,19 @@
+%% rdra-ish diagram=sequence scope=usecase:RequestInvestigation model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__InvestigationScreen as 損害調査画面
+  participant api__InvestigationCreateApi as 損害調査依頼 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant entity__Investigation as 損害調査
+  actor__ClaimHandler ->> screen__InvestigationScreen: 損害調査の依頼
+  screen__InvestigationScreen ->> api__InvestigationCreateApi: 損害調査依頼 API
+  alt ClaimCase.status == 初期対応済
+    Note over api__InvestigationCreateApi: transaction (API atomic boundary)
+    api__InvestigationCreateApi ->> entity__ClaimCase: update status 初期対応済 -> 調査中
+    api__InvestigationCreateApi ->> entity__Investigation: create
+    api__InvestigationCreateApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationCreateApi -->> screen__InvestigationScreen: rejected
+  end

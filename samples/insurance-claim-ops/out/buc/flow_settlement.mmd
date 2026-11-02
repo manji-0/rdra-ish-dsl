@@ -1,0 +1,57 @@
+%% rdra-ish diagram=flow scope=buc:BucSettlement model=samples/insurance-claim-ops
+%% kinds: flow step lane actor usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__SettlementFlow["示談代行の流れ"]
+    step__ConsentStep["被保険者・被害者の同意"]:::step
+    subgraph lane__SettlementFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__SettlementFlow__ClaimHandler: actor__ClaimHandler
+      step__AgreementStep["示談の成立（示談書）"]:::step
+      step__DeclineStep["示談代行を行わない"]:::step
+      step__NegotiationStep["示談交渉"]:::step
+      step__OpenSettlementStep["示談代行の開始（賠償責任あり）"]:::step
+      step__UnresolvedStep["不調（調停・訴訟へ）"]:::step
+    end
+  end
+  actor__PolicyHolder(["契約者・被保険者"]):::actor
+  %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+  actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+  %% desc actor__Victim: 加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。
+  usecase__AgreeSettlement("示談の成立"):::usecase
+  %% desc usecase__AgreeSettlement: 示談案を提示し、被害者と合意して示談書を取り交わす。賠償の保険金の請求権がこのとき発生する。
+  usecase__BeginNegotiation("示談交渉の開始"):::usecase
+  %% desc usecase__BeginNegotiation: 双方の同意を得て、保険会社が加害者の窓口として被害者と交渉を始める。
+  usecase__DeclineSettlementService("示談代行を行わない"):::usecase
+  %% desc usecase__DeclineSettlementService: 被害者が同意しない、被保険者が協力しない、賠償額が保険金額を明らかに超えるなど、約款の定める場合に示談代行を行わないと決め、契約者に伝える。
+  usecase__EndNegotiationUnresolved("示談交渉の終了（不調）"):::usecase
+  %% desc usecase__EndNegotiationUnresolved: 示談がまとまらず、調停または訴訟に移る。調停・訴訟の中身は対象外。
+  usecase__OpenSettlement("示談代行の開始"):::usecase
+  %% desc usecase__OpenSettlement: 対人・対物賠償の事故で、被保険者に賠償責任があると判断した案件について、示談代行の手続を開き、契約者と被害者の同意を確かめにいく。
+  usecase__RecordInsuredConsent("被保険者の同意"):::usecase
+  %% desc usecase__RecordInsuredConsent: 被保険者が保険会社の解決条件に同意し、保険会社が被保険者のために示談交渉をすることに同意する。
+  usecase__RecordVictimConsent("被害者の同意"):::usecase
+  %% desc usecase__RecordVictimConsent: 被害者が加害者側の保険会社と直接折衝することに同意する。
+  event__EvSettlementAgreed>"示談の成立"]:::event
+  event__EvSettlementEnded>"示談代行の終了（不調・不実施）"]:::event
+  actor__PolicyHolder -.-> step__ConsentStep
+  actor__Victim -.-> step__ConsentStep
+  step__AgreementStep -.-> event__EvSettlementAgreed
+  step__AgreementStep -.-> usecase__AgreeSettlement
+  step__ConsentStep -.-> usecase__RecordInsuredConsent
+  step__ConsentStep -.-> usecase__RecordVictimConsent
+  step__ConsentStep -.->|excepts| step__DeclineStep
+  step__ConsentStep -->|precedes| step__NegotiationStep
+  step__DeclineStep -.-> usecase__DeclineSettlementService
+  step__NegotiationStep -.-> usecase__BeginNegotiation
+  step__NegotiationStep -.->|excepts| step__UnresolvedStep
+  step__NegotiationStep -->|precedes| step__AgreementStep
+  step__OpenSettlementStep -.-> usecase__OpenSettlement
+  step__OpenSettlementStep -->|precedes| step__ConsentStep
+  step__UnresolvedStep -.-> event__EvSettlementEnded
+  step__UnresolvedStep -.-> usecase__EndNegotiationUnresolved
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

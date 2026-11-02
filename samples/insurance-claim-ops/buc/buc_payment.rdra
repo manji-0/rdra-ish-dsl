@@ -1,0 +1,407 @@
+module buc.payment
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import shared.governance
+import buc.intake.{CaseScreen, CaseApi}
+import buc.investigation.{LiabilityDetermined}
+import buc.claim.{ClaimScreen, ClaimApi, CompleteClaim}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucPayment "支払・不払の決定と支払"
+  description "請求完了日を含めて30日以内に、支払事由・免責事由・損害額・契約の効力の確認を終えて払う。特別な照会や調査が要るときは、確認する事項と終える時期を通知して、事由に応じて60〜180日まで延ばせる。決裁権限は支払と不払いで差があり、不正請求の疑いがある事案は上位の決裁者が決める。払えないときは、根拠となる約款の条項と調査の結果を説明して通知する。期限を過ぎて払うときは遅延利息を付ける。同じ請求に二度は払わない。"
+
+// 確認が必要な事項およびその確認を終えるべき時期を被保険者または保険金請求権者に対して通知する
+// (tokiomarine-2025-tap-yakkan.txt:4648); the days by kind (:4650-4658), the longest when several apply (:4668).
+// 確認事項および必要となる日数について契約者等および被害者に通知 (sonpo-2026-shiharai-guideline.txt:422-423).
+usecase ExtendPaymentPeriod "支払期限の延長と通知"
+  description "特別な照会または調査が欠かせないとき、延長事由（被災地の調査60日、鑑定等の照会90日、後遺障害の照会120日、警察等の照会180日、国外の調査180日）を選び、確認する事項と終える時期を請求者に通知する。"
+
+// 疑義事案については、関係者の協力を得つつ、深度ある調査・検証 (fsa-2026-kantoku-shishin-ins.txt:8440-8441); 不正な保険金
+// 請求が疑われる事案は、事故状況、事故と損害の因果関係、修理・治療内容等を特に精査 (sonpo-2026-shiharai-guideline.txt:285-286).
+usecase FlagSuspectedFraud "不正請求の疑いの登録"
+  description "事故状況・因果関係・修理や治療の内容に不自然な点があるか、他社での事故受付が分かったとき、請求を疑義事案として登録し、深く調べる。"
+
+// 決裁権限規定においては、保険金等の決裁金額や支払いと不払いの間などで合理的な差異 (fsa-2026-kantoku-shishin-ins.txt:8376-8377);
+// 保険金を支払わない事由（免責、解除等）に該当するか否かを、調査の結果確認できた事実等に基づいて判断
+// (sonpo-2026-shiharai-guideline.txt:517-519).
+usecase DecideClaim "支払・不払の決裁"
+  description "支払決裁者が調査の結果と請求書類から、保険金を支払うか、免責・解除などで支払わないかを決める。"
+
+// その決裁を上位の決裁権限を有する職員又は不正請求への対応を専門の担当とする職員に限定 (fsa-2026-kantoku-shishin-ins.txt:8379).
+usecase DecideSuspectedClaim "疑義事案の支払・不払の決裁"
+  description "不正請求の疑いがある請求を、上位の決裁者（不正請求への対応を専門とする担当）が決める。"
+
+// 根拠となる具体的な保険約款の条項や損害調査結果等を丁寧に説明 (sonpo-2026-shiharai-guideline.txt:531); 約款等の根拠条文の
+// 記載を含め不払いの理由となる説明 (fsa-2026-kantoku-shishin-ins.txt:8501-8502).
+usecase ExplainDenialReason "不払いの理由の説明"
+  description "支払わない根拠となる約款の条項と、調査で確かめた事実を、契約者等と被害者に説明する。"
+
+// 保険金の支払ができないと判断される場合は、契約者等および被害者に対してその旨を通知する (sonpo-2026-shiharai-guideline.txt:529-530).
+usecase NotifyDenial "不払いの通知"
+  description "理由を説明したうえで、支払わないことを書面で通知する。了解が得られなければ、そんぽADRセンターなどの相談機関を案内する。"
+
+// 支払金額、内訳…その金額算定に至った理由を…説明 (sonpo-2026-shiharai-guideline.txt:473-474); 修理業者や医療機関等に直接
+// 支払う (:492). The insurer acquires the insured's claims when it pays (egov-hokenhou-420AC0000000056.txt:214).
+usecase PayClaim "保険金の支払"
+  description "支払金額と内訳（主たる保険金と特約・費用保険金）、算定の理由を説明して、被保険者・被害者・修理工場に払う。期限を過ぎていれば遅延利息を加える。"
+
+// 内払または最終の保険金をお支払いした段階で、保険金支払手続が完了した旨を連絡 (sonpo-2026-shiharai-guideline.txt:511-512).
+usecase NotifyPaymentCompleted "支払完了の連絡"
+  description "保険金を払ったことと支払手続が終わったことを請求者に連絡する。"
+
+// 約款に定める保険金支払の期限の管理…遅延利息の起算日の管理も適切に行う (sonpo-2026-shiharai-guideline.txt:490-491).
+usecase MarkPaymentOverdue "支払期限の経過"
+  description "支払期限（30日、延長したときは延長の日数）を過ぎても支払・不払の通知をしていない請求に、遅延利息の起算を記録する。"
+
+usecase CloseCase "事故案件の完了"
+  description "請求の支払・不払の通知・取下げを受けて、事故案件を完了にする。過失の判断が残っていれば先に済ませる。"
+
+screen DecisionScreen "支払査定画面"
+screen PaymentScreen "支払画面"
+
+api DecisionApi "支払査定 API"
+  method PATCH
+  path "/claims/{id}/decision"
+
+api PaymentCreateApi "保険金支払 API"
+  method POST
+  path "/claims/{id}/payment"
+
+api PaymentApi "支払完了連絡 API"
+  method PATCH
+  path "/payments/{id}"
+
+performs(ClaimHandler, ExtendPaymentPeriod)
+performs(ClaimHandler, FlagSuspectedFraud)
+performs(PaymentApprover, DecideClaim)
+performs(SeniorApprover, DecideSuspectedClaim)
+performs(ClaimHandler, ExplainDenialReason)
+performs(ClaimHandler, NotifyDenial)
+performs(ClaimHandler, PayClaim)
+performs(ClaimHandler, NotifyPaymentCompleted)
+belongs(BucPayment, ClaimPayment).by(HandlerTerminal).by(ClaimDocuments)
+
+contains(BucPayment, ExtendPaymentPeriod)
+contains(BucPayment, FlagSuspectedFraud)
+contains(BucPayment, DecideClaim)
+contains(BucPayment, DecideSuspectedClaim)
+contains(BucPayment, ExplainDenialReason)
+contains(BucPayment, NotifyDenial)
+contains(BucPayment, PayClaim)
+contains(BucPayment, NotifyPaymentCompleted)
+contains(BucPayment, MarkPaymentOverdue)
+contains(BucPayment, CloseCase)
+contains(ClaimSystem, DecisionApi)
+contains(ClaimSystem, PaymentCreateApi)
+contains(ClaimSystem, PaymentApi)
+
+// The reason picks the length of the extension; the timer that ends it cannot read it (README).
+displays(ExtendPaymentPeriod, ClaimScreen)
+invokes(ExtendPaymentPeriod, ClaimApi)
+transitions(ExtendPaymentPeriod, Claim.period, running -> extended)
+chooses(ExtendPaymentPeriod, Claim.extension)
+
+condition ClaimUnderConfirmation "請求完了の後、支払・不払を決める前である"
+holds(ClaimUnderConfirmation, Claim.status == completed)
+applies_to(ClaimUnderConfirmation, ExtendPaymentPeriod)
+
+// A case other insurers also received (sonpo-kyodoriyou-0004-jidousha-jiko.md:97) is one way the suspicion arises.
+displays(FlagSuspectedFraud, DecisionScreen)
+invokes(FlagSuspectedFraud, DecisionApi)
+updates(DecisionApi, Claim)
+sets(FlagSuspectedFraud, Claim, fraud_suspected == true)
+raises(AccidentInfoExchange, EvDuplicateAccidentFound)
+triggers(EvDuplicateAccidentFound, FlagSuspectedFraud)
+
+condition ClaimBeforeDecision "請求書類の提出から決裁の前である"
+holds(ClaimBeforeDecision, Claim.status in (submitted, completed))
+applies_to(ClaimBeforeDecision, FlagSuspectedFraud)
+
+// The two decisions differ by who decides: a suspected claim goes to the senior approver.
+displays(DecideClaim, DecisionScreen)
+invokes(DecideClaim, DecisionApi)
+transitions(DecideClaim, Claim.status, completed -> decided_payment)
+transitions(DecideClaim, Claim.status, completed -> decided_denial)
+
+condition NoFraudSuspicion "不正請求の疑いがない"
+holds(NoFraudSuspicion, Claim.fraud_suspected == false)
+applies_to(NoFraudSuspicion, DecideClaim)
+
+displays(DecideSuspectedClaim, DecisionScreen)
+invokes(DecideSuspectedClaim, DecisionApi)
+transitions(DecideSuspectedClaim, Claim.status, completed -> decided_payment)
+transitions(DecideSuspectedClaim, Claim.status, completed -> decided_denial)
+sets(DecideSuspectedClaim, Claim, senior_approved == true)
+
+condition FraudSuspected "不正請求の疑いがある"
+holds(FraudSuspected, Claim.fraud_suspected == true)
+applies_to(FraudSuspected, DecideSuspectedClaim)
+
+displays(ExplainDenialReason, DecisionScreen)
+invokes(ExplainDenialReason, DecisionApi)
+sets(ExplainDenialReason, Claim, reason_explained == true)
+
+condition DenialDecided "不払いを決めた"
+holds(DenialDecided, Claim.status == decided_denial)
+applies_to(DenialDecided, ExplainDenialReason)
+
+displays(NotifyDenial, DecisionScreen)
+invokes(NotifyDenial, DecisionApi)
+transitions(NotifyDenial, Claim.status, decided_denial -> denial_notified)
+transitions(NotifyDenial, Claim.period, running -> ended)
+transitions(NotifyDenial, Claim.period, extended -> ended)
+transitions(NotifyDenial, Claim.period, overdue -> ended)
+raises(NotifyDenial, EvDenialNotified)
+
+condition ReasonExplained "不払いの理由を説明した"
+holds(ReasonExplained, Claim.reason_explained == true)
+applies_to(ReasonExplained, NotifyDenial)
+
+// One API creates the payment and moves the claim, so they are one step. The payment copies whether
+// the period had passed, and `.none(Payment)` lets the claim be paid once.
+displays(PayClaim, PaymentScreen)
+invokes(PayClaim, PaymentCreateApi)
+creates(PaymentCreateApi, Payment)
+updates(PaymentCreateApi, Claim)
+transitions(PayClaim, Claim.status, decided_payment -> paid)
+transitions(PayClaim, Claim.period, running -> ended)
+transitions(PayClaim, Claim.period, extended -> ended)
+transitions(PayClaim, Claim.period, overdue -> ended)
+sets(PayClaim, Payment, late_interest == Claim.late_interest_due)
+raises(PayClaim, EvClaimPaid)
+
+condition NotPaidYet "支払済みの案件は再度支払わない"
+holds(NotPaidYet, Claim.status == decided_payment).none(Payment)
+applies_to(NotPaidYet, PayClaim)
+
+displays(NotifyPaymentCompleted, PaymentScreen)
+invokes(NotifyPaymentCompleted, PaymentApi)
+updates(PaymentApi, Payment)
+transitions(NotifyPaymentCompleted, Payment.status, instructed -> completed)
+
+// Started by the timer, no performer. The period passes while the claim is open, so a claim that is
+// paid or denied after it carries the late interest.
+invokes(MarkPaymentOverdue, ClaimApi)
+transitions(MarkPaymentOverdue, Claim.period, running -> overdue)
+transitions(MarkPaymentOverdue, Claim.period, extended -> overdue)
+sets(MarkPaymentOverdue, Claim, late_interest_due == true)
+triggers(PaymentDeadline, MarkPaymentOverdue)
+
+// Started by the events from the claim, no performer. Events give no order (#30), so the guard
+// states only what the case itself needs.
+invokes(CloseCase, CaseApi)
+transitions(CloseCase, ClaimCase.status, assessed -> closed)
+applies_to(LiabilityDetermined, CloseCase)
+triggers(EvClaimPaid, CloseCase)
+triggers(EvDenialNotified, CloseCase)
+triggers(EvClaimWithdrawn, CloseCase)
+
+// Access constraints
+requires_permission(ExtendPaymentPeriod, CaseHandle)
+requires_medium(ExtendPaymentPeriod, HandlerTerminal)
+requires_permission(FlagSuspectedFraud, CaseHandle)
+requires_medium(FlagSuspectedFraud, HandlerTerminal)
+requires_permission(DecideClaim, PaymentDecide)
+requires_medium(DecideClaim, HandlerTerminal)
+requires_permission(DecideSuspectedClaim, SuspectedClaimDecide)
+requires_medium(DecideSuspectedClaim, HandlerTerminal)
+requires_permission(ExplainDenialReason, CaseHandle)
+requires_medium(ExplainDenialReason, ClaimDocuments)
+requires_permission(NotifyDenial, CaseHandle)
+requires_medium(NotifyDenial, ClaimDocuments)
+requires_permission(PayClaim, CaseHandle)
+requires_medium(PayClaim, HandlerTerminal)
+requires_permission(PaymentCreateApi, CaseHandle)
+requires_permission(NotifyPaymentCompleted, CaseHandle)
+requires_medium(NotifyPaymentCompleted, HandlerTerminal)
+requires_permission(PaymentApi, CaseHandle)
+
+// Screen transitions: the model's assumption.
+navigates(ClaimScreen, DecisionScreen).via(FlagSuspectedFraud)
+navigates(DecisionScreen, PaymentScreen).via(DecideClaim)
+navigates(DecisionScreen, PaymentScreen).via(DecideSuspectedClaim)
+navigates(PaymentScreen, CaseScreen).via(PayClaim)
+
+field ExtensionField "延長事由"
+  access editable
+  required false
+  source actor
+
+field FraudField "不正請求の疑い"
+  access editable
+  required true
+  source actor
+
+field PeriodField "支払期限"
+  access readonly
+  required true
+  source system
+
+field PayeeField "支払先"
+  access editable
+  required true
+  source actor
+
+field LateInterestField "遅延利息"
+  access readonly
+  required true
+  source system
+
+contains(DecisionScreen, ExtensionField)
+contains(DecisionScreen, FraudField)
+contains(DecisionScreen, PeriodField)
+contains(PaymentScreen, PayeeField)
+contains(PaymentScreen, LateInterestField)
+maps_field(ExtensionField, Claim.extension)
+maps_field(FraudField, Claim.fraud_suspected)
+maps_field(PeriodField, Claim.period)
+maps_field(PayeeField, Payment.payee)
+maps_field(LateInterestField, Payment.late_interest)
+
+// Business flow
+flow PaymentFlow "支払・不払の流れ"
+step ConfirmStep "確認（請求完了日を含めて30日）"
+step ExtendStep "延長と通知（60〜180日）"
+step SuspicionStep "疑義事案の登録"
+step DecisionStep "支払・不払の決裁"
+step SeniorDecisionStep "上位の決裁"
+step PayStep "支払と完了の連絡"
+step DenialStep "不払いの理由の説明と通知"
+step OverdueStep "期限の経過（遅延利息）"
+step CloseStep "事故案件の完了"
+
+contains(BucPayment, PaymentFlow)
+contains(PaymentFlow, ConfirmStep)
+contains(PaymentFlow, ExtendStep)
+contains(PaymentFlow, SuspicionStep)
+contains(PaymentFlow, DecisionStep)
+contains(PaymentFlow, SeniorDecisionStep)
+contains(PaymentFlow, PayStep)
+contains(PaymentFlow, DenialStep)
+contains(PaymentFlow, OverdueStep)
+contains(PaymentFlow, CloseStep)
+
+precedes(ConfirmStep, DecisionStep)
+branches(ConfirmStep, ExtendStep)
+precedes(ExtendStep, DecisionStep)
+branches(ConfirmStep, SuspicionStep)
+precedes(SuspicionStep, SeniorDecisionStep)
+precedes(DecisionStep, PayStep)
+branches(DecisionStep, DenialStep)
+precedes(SeniorDecisionStep, PayStep)
+branches(SeniorDecisionStep, DenialStep)
+excepts(ConfirmStep, OverdueStep)
+precedes(PayStep, CloseStep)
+precedes(DenialStep, CloseStep)
+
+covers(ConfirmStep, CompleteClaim)
+covers(ExtendStep, ExtendPaymentPeriod)
+covers(SuspicionStep, FlagSuspectedFraud)
+covers(SuspicionStep, EvDuplicateAccidentFound)
+covers(DecisionStep, DecideClaim)
+covers(SeniorDecisionStep, DecideSuspectedClaim)
+covers(PayStep, PayClaim)
+covers(PayStep, NotifyPaymentCompleted)
+covers(DenialStep, ExplainDenialReason)
+covers(DenialStep, NotifyDenial)
+covers(OverdueStep, MarkPaymentOverdue)
+covers(OverdueStep, PaymentDeadline)
+covers(CloseStep, CloseCase)
+
+performs(ClaimHandler, ConfirmStep)
+performs(ClaimHandler, ExtendStep)
+performs(ClaimHandler, SuspicionStep)
+performs(PaymentApprover, DecisionStep)
+performs(SeniorApprover, SeniorDecisionStep)
+performs(ClaimHandler, PayStep)
+performs(ClaimHandler, DenialStep)
+
+// Rules
+forbidden(Claim, fraud_suspected == true, status in (decided_payment, decided_denial, paid, denial_notified), senior_approved == false).label("不正請求の疑いがある請求は上位の決裁者が決める")
+
+invariant(Claim).when(status == denial_notified).then(reason_explained == true).label("不払いは理由を説明してから通知する")
+
+invariant(Claim).when(status == paid).has(Payment).label("支払済みの請求には支払の記録がある")
+
+forbidden(Payment, Claim, Claim.late_interest_due == true, Payment.late_interest == false).along(Payment, Claim).label("支払期限を過ぎた支払には遅延利息を付ける")
+
+after(PayClaim).assert(Claim.status == paid, Claim.period == ended).label("支払ったら支払期限の管理を終える")
+
+// 請求完了日からその日を含めて30日以内に…確認を終え、保険金を支払います (tokiomarine-2025-tap-yakkan.txt:4633). Checked by
+// `verify` on its cone, assuming the two decisions are not starved.
+property ClaimEventuallyDecided "請求完了した請求は、いずれ支払決定か不払決定に至る"
+  leads_to(Claim.status == completed, Claim.status in (decided_payment, decided_denial, withdrawn)).fair(DecideClaim, DecideSuspectedClaim)
+
+// Requirement traceability
+requirement ReqPayWithinPeriod "請求完了日から30日（延長時は事由ごとの日数）のうちに支払・不払を決めて知らせ、過ぎたら遅延利息を付ける"
+  priority "must"
+  source "支払時期 30日 (tokiomarine-2025-tap-yakkan.txt:4633)"
+  source "延長の日数と通知 (tokiomarine-2025-tap-yakkan.txt:4648-4668)"
+  source "相当の期間 (egov-hokenhou-420AC0000000056.txt:182)"
+  source "遅延利息の起算日の管理 (sonpo-2026-shiharai-guideline.txt:490-491)"
+  stakeholder "契約者・被保険者"
+  stakeholder "被害者"
+  acceptance_criteria "請求完了した請求はいずれ支払・不払に至り、支払期限を過ぎた支払には遅延利息が付いている。"
+  status "accepted"
+
+motivates(ReqPayWithinPeriod, BucPayment)
+achieves(ReqPayWithinPeriod, TimelyPayment)
+
+requirement ReqSeniorApprovalForSuspicion "不正請求の疑いがある請求は、上位の決裁者か不正請求対応の担当者が決裁する"
+  priority "must"
+  source "上位の決裁権限 (fsa-2026-kantoku-shishin-ins.txt:8378-8382)"
+  source "疑義事案の深度ある調査 (fsa-2026-kantoku-shishin-ins.txt:8440-8441)"
+  source "不正請求が疑われる事案の精査 (sonpo-2026-shiharai-guideline.txt:285-286)"
+  stakeholder "支払決裁者"
+  stakeholder "上位決裁者（不正請求対応）"
+  acceptance_criteria "疑義事案として登録された請求の支払・不払は、すべて上位の決裁を経ている。"
+  status "accepted"
+
+motivates(ReqSeniorApprovalForSuspicion, BucPayment)
+achieves(ReqSeniorApprovalForSuspicion, NoMissedPayment)
+
+requirement ReqExplainDenial "不払いは、根拠となる約款の条項と調査の結果を説明してから通知する"
+  priority "must"
+  source "不払いの理由の説明 (sonpo-2026-shiharai-guideline.txt:529-532)"
+  source "約款等の根拠条文の記載 (fsa-2026-kantoku-shishin-ins.txt:8501-8502)"
+  source "自賠責の不払いの書面 (egov-jibaihou-330AC0000000097.txt:190)"
+  stakeholder "契約者・被保険者"
+  stakeholder "被害者"
+  acceptance_criteria "不払いを通知した請求は、すべて理由を説明している。"
+  status "accepted"
+
+motivates(ReqExplainDenial, BucPayment)
+achieves(ReqExplainDenial, FairDenial)
+
+requirement ReqNoDoublePayment "同じ請求に二度払わない"
+  priority "must"
+  source "支払済み事案の点検 (sonpo-2026-shiharai-guideline.txt:170)"
+  stakeholder "支払決裁者"
+  acceptance_criteria "支払済みの請求には支払の記録が一つだけある。"
+  status "accepted"
+
+motivates(ReqNoDoublePayment, BucPayment)
+achieves(ReqNoDoublePayment, NoMissedPayment)
+
+// Non-goals
+requirement ReqNoInterimPayment "内払と付随的な保険金の算定は対象外とする"
+  source "内払 (tokiomarine-2025-tap-yakkan.txt:4662; fsa-2026-kantoku-shishin-ins.txt:8427-8431)"
+  source "付随的な保険金の支払漏れ (fsa-2006-fuzuiteki-shiharai-more.md:87)"
+  stakeholder "支払決裁者"
+  status "out-of-scope"
+  rationale "支払は請求ごとに一度とし、総損害額の確定前の内払と、臨時費用・代車費用などの付随的な保険金の内訳は扱わない。支払漏れを防ぐ点検は目標（NoMissedPayment）にだけ残す。"
+
+motivates(ReqNoInterimPayment, BucPayment)
+
+requirement ReqNoRescission "重大事由による解除と告知義務違反は対象外とする"
+  source "重大事由解除 (egov-hokenhou-420AC0000000056.txt:258-262)"
+  source "解除の通知 (sonpo-2026-shiharai-guideline.txt:545-548)"
+  stakeholder "上位決裁者（不正請求対応）"
+  status "out-of-scope"
+  rationale "不正請求の疑いは上位の決裁までを扱い、詐欺を理由とする契約の解除とその通知、告知義務違反の判断はモデルにしない。"
+
+motivates(ReqNoRescission, BucPayment)

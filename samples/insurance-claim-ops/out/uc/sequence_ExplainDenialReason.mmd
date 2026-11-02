@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ExplainDenialReason model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__DecisionScreen as 支払査定画面
+  participant api__DecisionApi as 支払査定 API
+  participant entity__Claim as 保険金請求
+  actor__ClaimHandler ->> screen__DecisionScreen: 不払いの理由の説明
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不払いを決めた: Claim.status == 不払決定
+    api__DecisionApi ->> entity__Claim: update reason_explained=true
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end

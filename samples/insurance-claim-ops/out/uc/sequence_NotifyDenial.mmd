@@ -1,0 +1,20 @@
+%% rdra-ish diagram=sequence scope=usecase:NotifyDenial model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__DecisionScreen as 支払査定画面
+  participant api__DecisionApi as 支払査定 API
+  participant entity__Claim as 保険金請求
+  participant api__ComplaintCreateApi as 苦情受付 API
+  participant api__CaseApi as 事故案件 API
+  actor__ClaimHandler ->> screen__DecisionScreen: 不払いの通知
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不払いの理由を説明した: Claim.reason_explained == true and Claim.status == 不払決定 and Claim.period in (30日の期間中, 延長期間中, 期限経過)
+    api__DecisionApi ->> entity__Claim: update status 不払決定 -> 不払通知済, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__DecisionApi -) api__ComplaintCreateApi: 不払いの通知
+    api__DecisionApi -) api__CaseApi: 不払いの通知
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end

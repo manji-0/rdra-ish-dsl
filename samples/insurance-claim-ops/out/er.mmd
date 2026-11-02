@@ -1,0 +1,76 @@
+%% rdra-ish diagram=er scope=whole model=samples/insurance-claim-ops
+%% kinds: entity
+%% omitted: (none)
+erDiagram
+  Claim {
+    Int id PK
+    Date completed_on
+    Enum status
+    Enum period
+    ExtensionReason extension
+    Bool grade_explained
+    Bool fraud_suspected
+    Bool senior_approved
+    Bool reason_explained
+    Bool late_interest_due
+    Int claimcase_id FK
+  }
+  ClaimCase {
+    Int id PK
+    DateTime accident_at
+    Coverage coverage
+    Enum status
+    Enum liability
+  }
+  Complaint {
+    Int id PK
+    AdrProposal proposal
+    Enum status
+    Bool adr_guided
+    Int claimcase_id FK
+  }
+  Investigation {
+    Int id PK
+    SurveyMethod method
+    Enum status
+    Int claimcase_id FK
+  }
+  JibaisekiSurvey {
+    Int id PK
+    Enum status
+    Int claimcase_id FK
+  }
+  Payment {
+    Int id PK
+    Payee payee
+    Enum status
+    Bool late_interest
+    Int claim_id FK
+  }
+  RepairEstimate {
+    Int id PK
+    Money amount
+    Enum status
+    Bool approved
+    Int claimcase_id FK
+  }
+  Settlement {
+    Int id PK
+    Enum status
+    Bool insured_consent
+    Bool victim_consent
+    Int claimcase_id FK
+  }
+  Subrogation {
+    Int id PK
+    Enum status
+    Int claim_id FK
+  }
+  Investigation ||--|| ClaimCase : ""
+  RepairEstimate }o--|| ClaimCase : ""
+  Settlement ||--|| ClaimCase : ""
+  JibaisekiSurvey }o--|| ClaimCase : ""
+  Claim }o--|| ClaimCase : ""
+  Payment ||--|| Claim : ""
+  Subrogation ||--|| Claim : ""
+  Complaint }o--|| ClaimCase : ""

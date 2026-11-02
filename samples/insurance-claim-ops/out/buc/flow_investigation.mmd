@@ -1,0 +1,38 @@
+%% rdra-ish diagram=flow scope=buc:BucInvestigation model=samples/insurance-claim-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__InvestigationFlow["損害確認の流れ"]
+    subgraph lane__InvestigationFlow__Adjuster["アジャスター"]
+      %% lane lane__InvestigationFlow__Adjuster: actor__Adjuster
+      step__SurveyStep["損害調査（アジャスター）"]:::step
+    end
+    subgraph lane__InvestigationFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__InvestigationFlow__ClaimHandler: actor__ClaimHandler
+      step__AssessStep["損害の確定"]:::step
+      step__FaultStep["過失割合と賠償責任の判断"]:::step
+      step__RequestSurveyStep["調査の依頼（手法の選択）"]:::step
+    end
+  end
+  usecase__AssessDamage("損害の確定"):::usecase
+  %% desc usecase__AssessDamage: 調査の報告を受けて損害を確定する。賠償の事故では過失を判断した後に、示談代行をしたときは示談の成立か終了の後に確定する。
+  usecase__ConductSurvey("損害調査の実施"):::usecase
+  %% desc usecase__ConductSurvey: アジャスターが事故の原因と状況、損傷部位と事故の関係、損害額を調べる。契約者と被害者の認識が違えば事故現場を調べる。
+  usecase__DetermineFault("過失割合と賠償責任の判断"):::usecase
+  %% desc usecase__DetermineFault: 過去の裁判例を基準に過失割合を検討し、被保険者に法律上の損害賠償責任があるか、過失ゼロかを判断する。
+  usecase__ReportSurvey("損害調査の報告"):::usecase
+  %% desc usecase__ReportSurvey: アジャスターが調査の結果を報告する。法的・医学的・工学的な判断を要する事案は専門家の見解を添える。
+  usecase__RequestInvestigation("損害調査の依頼"):::usecase
+  %% desc usecase__RequestInvestigation: 担当者が事案の特性に応じた調査の手法（書類・写真、現場の実地調査、専門家の見解）を選び、アジャスターに損害調査を依頼する。
+  step__AssessStep -.-> usecase__AssessDamage
+  step__FaultStep -.-> usecase__DetermineFault
+  step__FaultStep -->|precedes| step__AssessStep
+  step__RequestSurveyStep -.-> usecase__RequestInvestigation
+  step__RequestSurveyStep -->|precedes| step__SurveyStep
+  step__SurveyStep -.-> usecase__ConductSurvey
+  step__SurveyStep -.-> usecase__ReportSurvey
+  step__SurveyStep -->|precedes| step__FaultStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

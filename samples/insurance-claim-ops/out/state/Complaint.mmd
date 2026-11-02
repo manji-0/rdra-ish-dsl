@@ -1,0 +1,45 @@
+%% rdra-ish diagram=state scope=entity:Complaint model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Complaint.status" as statemodel__Complaint_status {
+    [*] --> state__Complaint_received
+    state "苦情受付" as state__Complaint_received
+    state "解決" as state__Complaint_resolved
+    state "ADR 苦情解決手続中" as state__Complaint_adr_complaint
+    state "ADR 紛争解決手続中" as state__Complaint_adr_dispute
+    state "和解案の提示" as state__Complaint_proposal_received
+    state "和解成立" as state__Complaint_settled
+    state "和解案を受諾しない" as state__Complaint_rejected
+    state "手続終了（不調）" as state__Complaint_terminated
+    %% transition usecase__ResolveComplaint
+    state__Complaint_received --> state__Complaint_resolved : 苦情の解決
+    %% transition usecase__RecordAdrComplaint
+    state__Complaint_received --> state__Complaint_adr_complaint : ADR 苦情の受付
+    %% transition usecase__RecordDisputeFiled
+    state__Complaint_received --> state__Complaint_adr_dispute : 紛争解決手続の申立ての受付
+    %% transition usecase__AnswerAdrComplaint
+    state__Complaint_adr_complaint --> state__Complaint_resolved : ADR 苦情への対応
+    %% transition usecase__RecordDisputeFiled
+    state__Complaint_adr_complaint --> state__Complaint_adr_dispute : 紛争解決手続の申立ての受付
+    %% transition usecase__RecordProposal
+    state__Complaint_adr_dispute --> state__Complaint_proposal_received : 和解案の受領
+    %% transition usecase__RecordDisputeTerminated
+    state__Complaint_adr_dispute --> state__Complaint_terminated : 紛争解決手続の終了
+    %% transition usecase__AcceptProposal
+    state__Complaint_proposal_received --> state__Complaint_settled : 和解案の受諾
+    %% transition usecase__RejectProposal
+    state__Complaint_proposal_received --> state__Complaint_rejected : 和解案を受諾しない [特別調停案ではない和解案である]
+    %% transition usecase__RecordDisputeTerminated
+    state__Complaint_proposal_received --> state__Complaint_terminated : 紛争解決手続の終了
+    state__Complaint_resolved --> [*]
+    state__Complaint_settled --> [*]
+    state__Complaint_rejected --> [*]
+    state__Complaint_terminated --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Complaint_resolved stateend
+  class state__Complaint_settled stateend
+  class state__Complaint_rejected stateend
+  class state__Complaint_terminated stateend

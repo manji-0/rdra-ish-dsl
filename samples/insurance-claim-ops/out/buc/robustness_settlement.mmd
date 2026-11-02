@@ -1,0 +1,29 @@
+%% rdra-ish diagram=robustness scope=buc:BucSettlement model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  actor__PolicyHolder(["契約者・被保険者"]):::actor
+  actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+  screen__SettlementScreen["示談画面"]:::screen
+  api__SettlementApi{{"示談 API"}}:::api
+  api__SettlementCreateApi{{"示談代行開始 API"}}:::api
+  entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+  entity__Settlement[("示談（示談代行）")]:::entity
+  actor__ClaimHandler --> screen__SettlementScreen
+  actor__PolicyHolder --> screen__SettlementScreen
+  actor__Victim --> screen__SettlementScreen
+  api__SettlementApi -->|U| entity__Settlement
+  api__SettlementCreateApi -->|C| entity__Settlement
+  api__SettlementCreateApi -->|U| entity__ClaimCase
+  screen__SettlementScreen -->|示談の成立| api__SettlementApi
+  screen__SettlementScreen -->|示談交渉の終了（不調）| api__SettlementApi
+  screen__SettlementScreen -->|示談交渉の開始| api__SettlementApi
+  screen__SettlementScreen -->|示談代行の開始| api__SettlementCreateApi
+  screen__SettlementScreen -->|示談代行を行わない| api__SettlementApi
+  screen__SettlementScreen -->|被保険者の同意| api__SettlementApi
+  screen__SettlementScreen -->|被害者の同意| api__SettlementApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,25 @@
+%% rdra-ish diagram=robustness scope=buc:BucRepair model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+flowchart LR
+  actor__Adjuster(["アジャスター"]):::actor
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  actor__RepairShop(["修理工場"]):::actor
+  screen__RepairScreen["修理見積画面"]:::screen
+  api__RepairEstimateApi{{"修理見積 API"}}:::api
+  api__RepairEstimateCreateApi{{"修理見積提出 API"}}:::api
+  entity__RepairEstimate[("修理見積")]:::entity
+  actor__Adjuster --> screen__RepairScreen
+  actor__ClaimHandler --> screen__RepairScreen
+  actor__RepairShop --> screen__RepairScreen
+  api__RepairEstimateApi -->|U| entity__RepairEstimate
+  api__RepairEstimateCreateApi -->|C| entity__RepairEstimate
+  screen__RepairScreen -->|修理の完了| api__RepairEstimateApi
+  screen__RepairScreen -->|修理の着工| api__RepairEstimateApi
+  screen__RepairScreen -->|修理着工の承認| api__RepairEstimateApi
+  screen__RepairScreen -->|修理見積の提出| api__RepairEstimateCreateApi
+  screen__RepairScreen -->|修理費の協定| api__RepairEstimateApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,29 @@
+%% rdra-ish diagram=robustness scope=buc:BucInvestigation model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__Adjuster(["アジャスター"]):::actor
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  screen__CaseScreen["事故案件画面"]:::screen
+  screen__InvestigationScreen["損害調査画面"]:::screen
+  api__CaseApi{{"事故案件 API"}}:::api
+  api__InvestigationApi{{"損害調査 API"}}:::api
+  api__InvestigationCreateApi{{"損害調査依頼 API"}}:::api
+  entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+  entity__Investigation[("損害調査")]:::entity
+  actor__Adjuster --> screen__InvestigationScreen
+  actor__ClaimHandler --> screen__CaseScreen
+  actor__ClaimHandler --> screen__InvestigationScreen
+  api__CaseApi -->|U| entity__ClaimCase
+  api__InvestigationApi -->|U| entity__Investigation
+  api__InvestigationCreateApi -->|C| entity__Investigation
+  api__InvestigationCreateApi -->|U| entity__ClaimCase
+  screen__CaseScreen -->|損害の確定| api__CaseApi
+  screen__CaseScreen -->|過失割合と賠償責任の判断| api__CaseApi
+  screen__InvestigationScreen -->|損害調査の依頼| api__InvestigationCreateApi
+  screen__InvestigationScreen -->|損害調査の報告| api__InvestigationApi
+  screen__InvestigationScreen -->|損害調査の実施| api__InvestigationApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

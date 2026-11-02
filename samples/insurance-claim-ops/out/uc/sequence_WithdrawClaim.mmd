@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:WithdrawClaim model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PolicyHolder as 契約者・被保険者
+  participant screen__ClaimScreen as 保険金請求画面
+  participant api__ClaimApi as 保険金請求 API
+  participant entity__Claim as 保険金請求
+  participant api__CaseApi as 事故案件 API
+  actor__PolicyHolder ->> screen__ClaimScreen: 請求の取下げ
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status in (請求の案内済, 請求書類の提出, 請求完了) and Claim.period in (未起算, 30日の期間中, 延長期間中, 期限経過)
+    api__ClaimApi ->> entity__Claim: update status 請求の案内済 -> 取下げ, status 請求書類の提出 -> 取下げ, status 請求完了 -> 取下げ, period 未起算 -> 期限の管理を終了, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__ClaimApi -) api__CaseApi: 請求の取下げ
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end

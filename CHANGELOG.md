@@ -254,6 +254,18 @@
   artifacts, `design-doc.md`, and `prd.md` are in `scripts/sample-artifacts.tsv`, and its README
   lists the soak findings. It states no temporal property: the one it was written with reads a
   421-state entity but runs on the whole model, which TLC did not finish.
+- `samples/insurance-claim-ops`, the third soak of #51 condition 3, written without changing
+  the grammar, the parser, the core, or the emitters: the motor claim work of a Japanese
+  non-life insurer's 損害サービス部門, from the accident report and the initial response through
+  the damage survey and the liability decision, the repair approval, the settlement the insurer
+  negotiates for the insured, and the 自賠責 survey by the 損保料率機構, to the claim and its payment
+  period, the decision with the senior approval of a suspected claim and the explained denial,
+  the payment with late interest, the subrogation, and the complaint and the そんぽADRセンター
+  procedures. 9 BUCs, 54 use cases, 9 entities, 11 state models, 3 timers, 17 labelled rules,
+  2 after-asserts, 2 temporal properties with `.fair` checked on their cones, and about 270 `//`
+  citations of primary sources. It is in `samples.txt` (`check: ok`, `verify: tlc=ok`; the
+  largest cone is 60,193 states at 2 instances), its artifacts, `design-doc.md`, and `prd.md`
+  are in `scripts/sample-artifacts.tsv`, and its README lists the soak findings.
 - `check --max-states <n>` and `states --max-states <n>` set the joint-state cap of each
   target cone, which the `bounds:` line prints (#60). `check` also takes `--max-patterns`,
   as `states` does. A cone past the cap is still the `StateCapReached` error, and its

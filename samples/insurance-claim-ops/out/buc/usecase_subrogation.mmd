@@ -1,0 +1,60 @@
+%% rdra-ish diagram=usecase scope=buc:BucSubrogation model=samples/insurance-claim-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__SubrogationLimitation(("求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AbandonSubrogation("求償の断念"):::usecase
+    %% desc usecase__AbandonSubrogation: 相手方に資力がないなど、回収の見込みがないときに求償をやめる。
+    usecase__LapseSubrogation("求償する債権の時効"):::usecase
+    %% desc usecase__LapseSubrogation: 相手方への損害賠償請求権が時効（3年、人身損害は5年）にかかり、求償を終える。
+    usecase__RecoverSubrogation("求償の回収"):::usecase
+    %% desc usecase__RecoverSubrogation: 相手方またはその保険会社から求償した額を回収する。
+    usecase__StartSubrogation("求償の開始"):::usecase
+    %% desc usecase__StartSubrogation: 保険金を払った請求について、被保険者から移った損害賠償請求権の額（払った額と被保険者の債権のいずれか少ない額）を確かめ、相手方への求償を始める。
+    screen__SubrogationScreen["求償画面"]:::screen
+    event__EvClaimPaid>"保険金の支払"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Subrogation[("求償（請求権代位）")]:::entity
+    state__Subrogation_abandoned((("回収の断念"))):::state
+    state__Subrogation_open((("求償中"))):::state
+    state__Subrogation_recovered((("回収"))):::state
+    state__Subrogation_time_barred((("時効消滅"))):::state
+    condition__ClaimPaid{"保険金を支払った請求で、まだ求償していない"}:::condition
+  end
+  actor__ClaimHandler -.-> usecase__AbandonSubrogation
+  actor__ClaimHandler -.-> usecase__RecoverSubrogation
+  actor__ClaimHandler -.-> usecase__StartSubrogation
+  condition__ClaimPaid -.->|applies_to| usecase__StartSubrogation
+  event__EvClaimPaid -.-> usecase__StartSubrogation
+  timer__SubrogationLimitation -.-> usecase__LapseSubrogation
+  usecase__AbandonSubrogation -.-> screen__SubrogationScreen
+  usecase__AbandonSubrogation -.->|transitions Subrogation.status open->abandoned| state__Subrogation_abandoned
+  usecase__AbandonSubrogation -.->|updates| entity__Subrogation
+  %% derived usecase__AbandonSubrogation -> entity__Subrogation via api__SubrogationApi
+  usecase__LapseSubrogation -.->|transitions Subrogation.status open->time_barred| state__Subrogation_time_barred
+  usecase__LapseSubrogation -.->|updates| entity__Subrogation
+  %% derived usecase__LapseSubrogation -> entity__Subrogation via api__SubrogationApi
+  usecase__RecoverSubrogation -.-> screen__SubrogationScreen
+  usecase__RecoverSubrogation -.->|transitions Subrogation.status open->recovered| state__Subrogation_recovered
+  usecase__RecoverSubrogation -.->|updates| entity__Subrogation
+  %% derived usecase__RecoverSubrogation -> entity__Subrogation via api__SubrogationApi
+  usecase__StartSubrogation -.->|creates| entity__Subrogation
+  %% derived usecase__StartSubrogation -> entity__Subrogation via api__SubrogationCreateApi
+  usecase__StartSubrogation -.-> screen__SubrogationScreen
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

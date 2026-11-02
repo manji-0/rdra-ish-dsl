@@ -1,0 +1,58 @@
+module shared.biz
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+// 損害サービスを「事故受付」「初期対応」「損害確認」「保険金のお支払い」の4つのプロセスに分けて
+// (tokiomarine-songai-auto-taisei.md:44). The three businesses group them with what follows the payment.
+business ClaimHandling "事故対応と損害確認"
+  description "事故受付、初期対応、損害調査と過失の判断、修理見積と着工の承認、示談代行、自賠責の損害調査。"
+
+business ClaimPayment "保険金の請求と支払"
+  description "保険金請求の案内と請求完了、支払期限とその延長、支払・不払の決裁と通知、支払、請求権代位による求償。"
+
+business CustomerRedress "苦情と紛争解決"
+  description "保険会社への苦情と、そんぽADRセンターの苦情解決手続・紛争解決手続への対応。"
+
+// The insurer's own claim system. No source describes it; the model's assumption.
+system ClaimSystem "保険金支払システム（損害サービス）"
+
+// Periods are timers. Each starts the use case that records what happens when the period passes.
+// The DSL has no calendar and a timer has no parameter, so each timer's label carries the period
+// and the comment its source.
+
+// 請求完了日（*1）からその日を含めて30日以内に…確認を終え (tokiomarine-2025-tap-yakkan.txt:4633); with a 特別な照会
+// または調査, 60日 (:4650), 90日 (:4652), 120日 (:4654), 180日 (:4656), 180日 (:4658), and 複数に該当する場合は、
+// そのうち最長の日数 (:4668). The same in イーデザイン損保 (edesign-2024-jidousha-yakkan.txt:3368) and in the
+// 自賠責保険普通保険約款 15条 for the 加害者請求 (mlit-jibaiseki-yakkan.txt:180-181, :196-212). 自賠法16条の9 for the
+// 被害者請求 sets no day count, only 必要な期間 (egov-jibaihou-330AC0000000097.txt:233). The law caps any period
+// at 相当の期間 (egov-hokenhou-420AC0000000056.txt:182), and a clause worse for the insured is void (:223).
+// One timer stands for every length: which length applies is the claim's `extension`, which the
+// timer cannot read (README).
+timer PaymentDeadline "支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）"
+
+// 保険金請求権は、第４節第１条（保険金の請求）（1）に規定する時の翌日から起算して３年を経過した場合は、時効によっ
+// (tokiomarine-2025-tap-yakkan.txt:5258); 行使することができる時から三年間 (egov-hokenhou-420AC0000000056.txt:761).
+timer ClaimLimitation "保険金請求権の時効（請求権が発生した時の翌日から3年）"
+
+// 損害及び加害者を知った時から三年間 (egov-minpou-129AC0000000089.txt:4676); 人の生命又は身体を害する不法行為は
+// 五年間 (:4681). The insurer acquires the insured's claim against the other party (egov-hokenhou-420AC0000000056.txt:214),
+// so the other party's period runs against the insurer.
+timer SubrogationLimitation "求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）"
+
+// ただちにご契約の代理店または弊社（上記フリーダイヤル）にご連絡ください (tokiomarine-2025-tap-yakkan.txt:1546-1547).
+medium AccidentHotline "事故受付センター（電話）"
+medium AgentCounter "代理店"
+medium HandlerTerminal "損害サービスの端末"
+// 書類または証拠のうち、当会社が求めるものを当会社に提出 (tokiomarine-2025-tap-yakkan.txt:4585).
+medium ClaimDocuments "書面（請求書・示談書・見積書）"
+
+permission AccidentReport "事故の通知"
+permission ConsentGive "示談代行への同意"
+permission ClaimSubmit "保険金の請求"
+permission ComplaintFile "苦情の申出"
+permission RepairEstimateSubmit "修理見積の提出と着工"
+permission CaseHandle "事故案件の担当"
+permission DamageSurvey "損害調査"
+permission PaymentDecide "支払・不払の決裁"
+permission SuspectedClaimDecide "疑義事案の決裁"
+permission ComplaintHandle "苦情・ADR の対応"

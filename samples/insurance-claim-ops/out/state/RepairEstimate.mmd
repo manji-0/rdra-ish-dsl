@@ -1,0 +1,21 @@
+%% rdra-ish diagram=state scope=entity:RepairEstimate model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "RepairEstimate.status" as statemodel__RepairEstimate_status {
+    [*] --> state__RepairEstimate_submitted
+    state "見積提出" as state__RepairEstimate_submitted
+    state "修理費の協定" as state__RepairEstimate_agreed
+    state "修理中" as state__RepairEstimate_repairing
+    state "修理完了" as state__RepairEstimate_completed
+    %% transition usecase__AgreeRepairCost
+    state__RepairEstimate_submitted --> state__RepairEstimate_agreed : 修理費の協定
+    %% transition usecase__StartRepair
+    state__RepairEstimate_agreed --> state__RepairEstimate_repairing : 修理の着工 [修理着工を承認した]
+    %% transition usecase__CompleteRepair
+    state__RepairEstimate_repairing --> state__RepairEstimate_completed : 修理の完了
+    state__RepairEstimate_completed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__RepairEstimate_completed stateend

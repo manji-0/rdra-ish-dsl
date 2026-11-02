@@ -1,0 +1,98 @@
+%% rdra-ish diagram=usecase scope=buc:BucClaim model=samples/insurance-claim-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+    actor__PolicyHolder(["契約者・被保険者"]):::actor
+    %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+    actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+    %% desc actor__Victim: 加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__ClaimLimitation(("保険金請求権の時効（請求権が発生した時の翌日から3年）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__CompleteClaim("請求完了の確認"):::usecase
+    %% desc usecase__CompleteClaim: 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。
+    usecase__ConfirmClaimIntent("等級の変動の説明と請求意思の確認"):::usecase
+    %% desc usecase__ConfirmClaimIntent: 保険金を請求すると次の契約の等級が下がる（3等級ダウン事故は1件につき3等級）ことを説明し、それでも請求するかを確かめる。
+    usecase__SendClaimForms("請求書類の案内と送付"):::usecase
+    %% desc usecase__SendClaimForms: 担当者が請求者に請求の手続を説明し、請求書と、交通事故証明書・診断書・見積書・示談書など必要な書類を案内して送る。
+    usecase__SubmitClaim("請求書類の提出"):::usecase
+    %% desc usecase__SubmitClaim: 請求者が保険会社の求める請求書類を出す。賠償の保険金では、示談書と、賠償金を払ったか被害者が承諾したことを示す書類を添える。
+    usecase__TimeBarClaim("請求権の時効による消滅"):::usecase
+    %% desc usecase__TimeBarClaim: 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。
+    usecase__WithdrawClaim("請求の取下げ"):::usecase
+    %% desc usecase__WithdrawClaim: 請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。
+    screen__ClaimFormScreen["請求書類の提出画面"]:::screen
+    screen__ClaimScreen["保険金請求画面"]:::screen
+    event__EvClaimWithdrawn>"請求の取下げ"]:::event
+    event__EvInitialResponded>"初期対応の完了"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Claim[("保険金請求")]:::entity
+    state__Claim_period_ended((("期限の管理を終了"))):::state
+    state__Claim_period_extended((("延長期間中"))):::state
+    state__Claim_period_not_started((("未起算"))):::state
+    state__Claim_period_overdue((("期限経過"))):::state
+    state__Claim_period_running((("30日の期間中"))):::state
+    state__Claim_status_completed((("請求完了"))):::state
+    state__Claim_status_guided((("請求の案内済"))):::state
+    state__Claim_status_submitted((("請求書類の提出"))):::state
+    state__Claim_status_time_barred((("時効消滅"))):::state
+    state__Claim_status_withdrawn((("取下げ"))):::state
+    condition__ClaimGuided{"請求の案内をした段階である"}:::condition
+    condition__GradeExplained{"等級の変動を説明して請求の意思を確かめた"}:::condition
+  end
+  actor__ClaimHandler -.-> usecase__CompleteClaim
+  actor__ClaimHandler -.-> usecase__ConfirmClaimIntent
+  actor__ClaimHandler -.-> usecase__SendClaimForms
+  actor__PolicyHolder -.-> usecase__SubmitClaim
+  actor__PolicyHolder -.-> usecase__WithdrawClaim
+  actor__Victim -.-> usecase__SubmitClaim
+  condition__ClaimGuided -.->|applies_to| usecase__ConfirmClaimIntent
+  condition__GradeExplained -.->|applies_to| usecase__SubmitClaim
+  event__EvInitialResponded -.-> usecase__SendClaimForms
+  timer__ClaimLimitation -.-> usecase__TimeBarClaim
+  usecase__CompleteClaim -.-> screen__ClaimScreen
+  usecase__CompleteClaim -.->|transitions Claim.period not_started->running| state__Claim_period_running
+  usecase__CompleteClaim -.->|transitions Claim.status submitted->completed| state__Claim_status_completed
+  usecase__CompleteClaim -.->|updates| entity__Claim
+  %% derived usecase__CompleteClaim -> entity__Claim via api__ClaimApi
+  usecase__ConfirmClaimIntent -.-> screen__ClaimScreen
+  usecase__ConfirmClaimIntent -.->|updates| entity__Claim
+  %% derived usecase__ConfirmClaimIntent -> entity__Claim via api__ClaimApi
+  usecase__SendClaimForms -.->|creates| entity__Claim
+  %% derived usecase__SendClaimForms -> entity__Claim via api__ClaimCreateApi
+  usecase__SendClaimForms -.-> screen__ClaimScreen
+  usecase__SubmitClaim -.-> screen__ClaimFormScreen
+  usecase__SubmitClaim -.->|transitions Claim.status guided->submitted| state__Claim_status_submitted
+  usecase__SubmitClaim -.->|updates| entity__Claim
+  %% derived usecase__SubmitClaim -> entity__Claim via api__ClaimSubmitApi
+  usecase__TimeBarClaim -.->|transitions Claim.period not_started->ended| state__Claim_period_ended
+  usecase__TimeBarClaim -.->|transitions Claim.status guided->time_barred| state__Claim_status_time_barred
+  usecase__TimeBarClaim -.->|transitions Claim.status submitted->time_barred| state__Claim_status_time_barred
+  usecase__TimeBarClaim -.->|updates| entity__Claim
+  %% derived usecase__TimeBarClaim -> entity__Claim via api__ClaimApi
+  usecase__WithdrawClaim -.-> screen__ClaimScreen
+  usecase__WithdrawClaim -.-> event__EvClaimWithdrawn
+  usecase__WithdrawClaim -.->|transitions Claim.period extended->ended| state__Claim_period_ended
+  usecase__WithdrawClaim -.->|transitions Claim.period not_started->ended| state__Claim_period_ended
+  usecase__WithdrawClaim -.->|transitions Claim.period overdue->ended| state__Claim_period_ended
+  usecase__WithdrawClaim -.->|transitions Claim.period running->ended| state__Claim_period_ended
+  usecase__WithdrawClaim -.->|transitions Claim.status completed->withdrawn| state__Claim_status_withdrawn
+  usecase__WithdrawClaim -.->|transitions Claim.status guided->withdrawn| state__Claim_status_withdrawn
+  usecase__WithdrawClaim -.->|transitions Claim.status submitted->withdrawn| state__Claim_status_withdrawn
+  usecase__WithdrawClaim -.->|updates| entity__Claim
+  %% derived usecase__WithdrawClaim -> entity__Claim via api__ClaimApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

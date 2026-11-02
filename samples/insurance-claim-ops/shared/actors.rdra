@@ -1,0 +1,74 @@
+module shared.actors
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+// The model is the insurer's 損害サービス部門. The sources name its four processes, 事故受付, 初期対応,
+// 損害確認, and 保険金のお支払い (tokiomarine-songai-auto-taisei.md:44), not its staff roles: the split of
+// the insurer's staff into a receptionist, a handler, a payment approver, and a senior approver is
+// the model's assumption, motivated by the supervisory guideline's 支払部門 and 支払管理部門
+// (fsa-2026-kantoku-shishin-ins.txt:8227-8229) and its 決裁権限 (:8376, :8379).
+//
+// Actor or external system: a party is an actor when it takes part in a use case of the insurer
+// (it reports, consents, submits, or surveys, and the insurer's staff record it); it is an
+// external system when it is an organization that does its own work outside the insurer and
+// exchanges documents or notices with it. An external system talks to the model only through
+// events, holds no permission, and no timer can start it.
+
+// 保険契約者又は被保険者は…遅滞なく、保険者に対し、その旨の通知を発しなければならない (egov-hokenhou-420AC0000000056.txt:153).
+actor PolicyHolder "契約者・被保険者"
+  description "事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。"
+
+// 損害賠償請求権者 (tokiomarine-2025-tap-yakkan.txt:2493); 被害者 in the guideline (sonpo-2026-shiharai-guideline.txt:388).
+// An actor: the 被害者 consents to deal with the insurer (:2504) and may claim it directly (:2493).
+actor Victim "被害者（損害賠償請求権者）"
+  description "加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。"
+
+// 事故が発生した場合には、必ず弊社もしくは代理店までご連絡をお願いします (tokiomarine-nagare-auto.md:44);
+// ただちにご契約の代理店または (tokiomarine-2025-tap-yakkan.txt:1546). An actor because it takes the report
+// into the insurer's intake. The research found no rule on what else an 代理店 does in a claim
+// (map.md:111), and the supervisory guideline asks the insurer to keep the 代理店 from
+// interfering with the payment (fsa-2026-kantoku-shishin-ins.txt:8235), so the model gives it the
+// intake only.
+actor Agent "代理店" description "契約者から事故の連絡を受け、保険会社の事故受付に取り次ぐ。支払の判断には関わらない。"
+
+// 修理に着工される前に必ず弊社へご連絡ください (tokiomarine-2025-tap-yakkan.txt:1555). An actor rather than an
+// external system: the shop submits the estimate and asks for the approval in the insurer's
+// process, and the research found no system between them. The research found no form of the
+// 見積協定 between the adjuster and the shop (map.md:114); the agreement is the model's assumption.
+actor RepairShop "修理工場"
+  description "損害車両の修理見積を出し、アジャスターと修理費を協定し、保険会社の承認を受けてから修理に着工する。"
+
+// アジャスターとは…保険会社の「保険事故」の損害調査業務を行 (sonpo-2024-adjuster-seido-gaiyou.txt:4); 技術アジャスター
+// …損害車両の損害額、事故の原因および損傷部位と事故 (:11); 損害調査業務は…TAS のアジャスターが担当します
+// (tokiomarine-expert.md:51).
+actor Adjuster "アジャスター"
+  description "日本損害保険協会に登録された損害調査の担い手。事故の原因と状況、損傷と事故の関係、損害額を調べ、修理工場と修理費を協定する。"
+
+// The model's assumption: the 事故受付 process (tokiomarine-songai-auto-taisei.md:44) has its own staff.
+actor ClaimReceptionist "事故受付担当"
+  description "事故の連絡を受け、契約内容・重複契約・事故状況・傷害を確かめ、警察への届出を案内する。"
+
+// 担当者の所属部署名、氏名、連絡先を案内する (sonpo-2026-shiharai-guideline.txt:338). The 支払部門 of the
+// supervisory guideline (fsa-2026-kantoku-shishin-ins.txt:8233).
+actor ClaimHandler "損害サービス担当者"
+  description "担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。"
+
+// 決裁権限規定においては、保険金等の決裁金額や支払いと不払いの間などで合理的な差異 (fsa-2026-kantoku-shishin-ins.txt:8376).
+actor PaymentApprover "支払決裁者" description "調査結果と請求書類から、保険金を支払うか支払わないかを決裁する。"
+
+// その決裁を上位の決裁権限を有する職員又は不正請求への対応を専門の担当とする職員に限定 (fsa-2026-kantoku-shishin-ins.txt:8379).
+actor SeniorApprover "上位決裁者（不正請求対応）"
+  description "不正請求の疑いがある請求の支払・不払を決裁する。そんぽADRセンターの和解案に応じるかを決める。"
+
+// 損害保険料率算出機構…の調査事務所に送付します (mlit-jibaiseki-procedure.md:58); 報告を受けた保険会社は、当機構の
+// 調査結果に基づいて支払額を決定し (giroj-survey-system.md:103). An external system: the insurer sends the
+// documents, the 機構 surveys on its own (:113-115), and its report comes back.
+extsystem Giroj "損害保険料率算出機構（自賠責損害調査事務所）"
+
+// そんぽADRセンターから通知して、お客様への対応を求めます (sonpo-adr-kujou.md:111); 指定紛争解決機関は…当該加入保険業
+// 関係業者に対し、当該保険業務等関連苦情の内容を通知 (egov-hoken-gyouhou-407AC0000000105.txt:8835). An external
+// system: its 苦情解決手続 and 紛争解決手続 run outside the insurer, which receives its notices and
+// answers them.
+extsystem SonpoAdrCenter "そんぽADRセンター（日本損害保険協会）"
+
+// 受け付けた事故について損害保険会社等の間で事故受付の有無を確認する制度 (sonpo-kyodoriyou-0004-jidousha-jiko.md:97).
+extsystem AccidentInfoExchange "自動車事故情報交換システム（損保協会の共同利用制度）"

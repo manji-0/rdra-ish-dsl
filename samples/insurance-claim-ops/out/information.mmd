@@ -1,0 +1,56 @@
+%% rdra-ish diagram=information scope=whole model=samples/insurance-claim-ops
+%% kinds: entity statemodel variation
+%% omitted: columns adr constraint usecase field api condition
+flowchart LR
+  entity__Claim[("保険金請求")]:::entity
+  entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+  entity__Complaint[("苦情・紛争")]:::entity
+  entity__Investigation[("損害調査")]:::entity
+  entity__JibaisekiSurvey[("自賠責損害調査")]:::entity
+  entity__Payment[("保険金の支払")]:::entity
+  entity__RepairEstimate[("修理見積")]:::entity
+  entity__Settlement[("示談（示談代行）")]:::entity
+  entity__Subrogation[("求償（請求権代位）")]:::entity
+  statemodel__ClaimCase_liability[["ClaimCase.liability"]]:::statemodel
+  statemodel__ClaimCase_status[["ClaimCase.status"]]:::statemodel
+  statemodel__Claim_period[["Claim.period"]]:::statemodel
+  statemodel__Claim_status[["Claim.status"]]:::statemodel
+  statemodel__Complaint_status[["Complaint.status"]]:::statemodel
+  statemodel__Investigation_status[["Investigation.status"]]:::statemodel
+  statemodel__JibaisekiSurvey_status[["JibaisekiSurvey.status"]]:::statemodel
+  statemodel__Payment_status[["Payment.status"]]:::statemodel
+  statemodel__RepairEstimate_status[["RepairEstimate.status"]]:::statemodel
+  statemodel__Settlement_status[["Settlement.status"]]:::statemodel
+  statemodel__Subrogation_status[["Subrogation.status"]]:::statemodel
+  variation__AdrProposal[\"和解案の種類"\]:::variation
+  variation__Coverage[\"担保種目"\]:::variation
+  variation__ExtensionReason[\"支払期限の延長事由"\]:::variation
+  variation__Payee[\"支払先"\]:::variation
+  variation__SurveyMethod[\"損害調査の手法"\]:::variation
+  entity__Claim ---|N:1| entity__ClaimCase
+  entity__Claim -.-> statemodel__Claim_period
+  entity__Claim -.-> statemodel__Claim_status
+  entity__Claim -.->|variation extension| variation__ExtensionReason
+  entity__ClaimCase -.-> statemodel__ClaimCase_liability
+  entity__ClaimCase -.-> statemodel__ClaimCase_status
+  entity__ClaimCase -.->|variation coverage| variation__Coverage
+  entity__Complaint ---|N:1| entity__ClaimCase
+  entity__Complaint -.-> statemodel__Complaint_status
+  entity__Complaint -.->|variation proposal| variation__AdrProposal
+  entity__Investigation ---|1:1| entity__ClaimCase
+  entity__Investigation -.-> statemodel__Investigation_status
+  entity__Investigation -.->|variation method| variation__SurveyMethod
+  entity__JibaisekiSurvey ---|N:1| entity__ClaimCase
+  entity__JibaisekiSurvey -.-> statemodel__JibaisekiSurvey_status
+  entity__Payment ---|1:1| entity__Claim
+  entity__Payment -.-> statemodel__Payment_status
+  entity__Payment -.->|variation payee| variation__Payee
+  entity__RepairEstimate ---|N:1| entity__ClaimCase
+  entity__RepairEstimate -.-> statemodel__RepairEstimate_status
+  entity__Settlement ---|1:1| entity__ClaimCase
+  entity__Settlement -.-> statemodel__Settlement_status
+  entity__Subrogation ---|1:1| entity__Claim
+  entity__Subrogation -.-> statemodel__Subrogation_status
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;

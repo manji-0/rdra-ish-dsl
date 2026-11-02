@@ -1,0 +1,21 @@
+%% rdra-ish diagram=sequence scope=usecase:DetermineFault model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__CaseScreen as 事故案件画面
+  participant api__CaseApi as 事故案件 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  actor__ClaimHandler ->> screen__CaseScreen: 過失割合と賠償責任の判断
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt 事故案件を調査しているか、損害を確定した: ClaimCase.status in (調査中, 示談交渉中, 損害確定) and ClaimCase.liability == 未確定
+    api__CaseApi ->> entity__ClaimCase: update
+    alt liability 未確定 -> 賠償責任あり
+      api__CaseApi ->> entity__ClaimCase: liability = 賠償責任あり
+    else liability 未確定 -> 過失ゼロ（賠償責任なし）
+      api__CaseApi ->> entity__ClaimCase: liability = 過失ゼロ（賠償責任なし）
+    end
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end

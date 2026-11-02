@@ -405,6 +405,124 @@ samples/food-permit-ops/out/states_disposition.txt	states samples/food-permit-op
 samples/food-permit-ops/out/asyncapi.json	export samples/food-permit-ops --kind asyncapi
 samples/food-permit-ops/out/er.mmd	diagram samples/food-permit-ops --kind er --format mermaid
 samples/food-permit-ops/out/transitions.md	list samples/food-permit-ops --kind transition --format markdown
+samples/insurance-claim-ops/out/actor_permission_audit.csv	csv samples/insurance-claim-ops --kind actor-permission-audit
+samples/insurance-claim-ops/out/api_matrix.csv	csv samples/insurance-claim-ops --kind api-matrix
+samples/insurance-claim-ops/out/buc/condition_payment.mmd	diagram samples/insurance-claim-ops --kind condition --format mermaid --buc BucPayment
+samples/insurance-claim-ops/out/buc/flow_claim.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucClaim
+samples/insurance-claim-ops/out/buc/flow_complaint.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucComplaint
+samples/insurance-claim-ops/out/buc/flow_intake.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucIntake
+samples/insurance-claim-ops/out/buc/flow_investigation.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucInvestigation
+samples/insurance-claim-ops/out/buc/flow_jibaiseki.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucJibaiseki
+samples/insurance-claim-ops/out/buc/flow_payment.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucPayment
+samples/insurance-claim-ops/out/buc/flow_repair.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucRepair
+samples/insurance-claim-ops/out/buc/flow_settlement.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucSettlement
+samples/insurance-claim-ops/out/buc/flow_subrogation.mmd	diagram samples/insurance-claim-ops --kind flow --format mermaid --buc BucSubrogation
+samples/insurance-claim-ops/out/buc/usecase_claim.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucClaim
+samples/insurance-claim-ops/out/buc/usecase_complaint.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucComplaint
+samples/insurance-claim-ops/out/buc/usecase_intake.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucIntake
+samples/insurance-claim-ops/out/buc/usecase_investigation.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucInvestigation
+samples/insurance-claim-ops/out/buc/usecase_jibaiseki.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucJibaiseki
+samples/insurance-claim-ops/out/buc/usecase_payment.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucPayment
+samples/insurance-claim-ops/out/buc/usecase_repair.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucRepair
+samples/insurance-claim-ops/out/buc/usecase_settlement.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucSettlement
+samples/insurance-claim-ops/out/buc/usecase_subrogation.mmd	diagram samples/insurance-claim-ops --kind usecase --format mermaid --buc BucSubrogation
+samples/insurance-claim-ops/out/buc/robustness_claim.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucClaim
+samples/insurance-claim-ops/out/buc/robustness_complaint.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucComplaint
+samples/insurance-claim-ops/out/buc/robustness_intake.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucIntake
+samples/insurance-claim-ops/out/buc/robustness_investigation.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucInvestigation
+samples/insurance-claim-ops/out/buc/robustness_jibaiseki.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucJibaiseki
+samples/insurance-claim-ops/out/buc/robustness_payment.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucPayment
+samples/insurance-claim-ops/out/buc/robustness_repair.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucRepair
+samples/insurance-claim-ops/out/buc/robustness_settlement.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucSettlement
+samples/insurance-claim-ops/out/buc/robustness_subrogation.mmd	diagram samples/insurance-claim-ops --kind robustness --format mermaid --buc BucSubrogation
+samples/insurance-claim-ops/out/buc/screen_claim.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucClaim
+samples/insurance-claim-ops/out/buc/screen_complaint.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucComplaint
+samples/insurance-claim-ops/out/buc/screen_intake.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucIntake
+samples/insurance-claim-ops/out/buc/screen_investigation.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucInvestigation
+samples/insurance-claim-ops/out/buc/screen_jibaiseki.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucJibaiseki
+samples/insurance-claim-ops/out/buc/screen_payment.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucPayment
+samples/insurance-claim-ops/out/buc/screen_repair.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucRepair
+samples/insurance-claim-ops/out/buc/screen_settlement.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucSettlement
+samples/insurance-claim-ops/out/buc/screen_subrogation.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid --buc BucSubrogation
+samples/insurance-claim-ops/out/uc/sequence_AbandonSubrogation.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase AbandonSubrogation
+samples/insurance-claim-ops/out/uc/sequence_AcceptProposal.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase AcceptProposal
+samples/insurance-claim-ops/out/uc/sequence_AgreeRepairCost.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase AgreeRepairCost
+samples/insurance-claim-ops/out/uc/sequence_AgreeSettlement.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase AgreeSettlement
+samples/insurance-claim-ops/out/uc/sequence_AnswerAdrComplaint.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase AnswerAdrComplaint
+samples/insurance-claim-ops/out/uc/sequence_ApproveRepairStart.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ApproveRepairStart
+samples/insurance-claim-ops/out/uc/sequence_AssessDamage.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase AssessDamage
+samples/insurance-claim-ops/out/uc/sequence_BeginNegotiation.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase BeginNegotiation
+samples/insurance-claim-ops/out/uc/sequence_CloseCase.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase CloseCase
+samples/insurance-claim-ops/out/uc/sequence_CompleteClaim.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase CompleteClaim
+samples/insurance-claim-ops/out/uc/sequence_CompleteRepair.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase CompleteRepair
+samples/insurance-claim-ops/out/uc/sequence_ConductSurvey.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ConductSurvey
+samples/insurance-claim-ops/out/uc/sequence_ConfirmClaimIntent.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ConfirmClaimIntent
+samples/insurance-claim-ops/out/uc/sequence_DecideClaim.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase DecideClaim
+samples/insurance-claim-ops/out/uc/sequence_DecideSuspectedClaim.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase DecideSuspectedClaim
+samples/insurance-claim-ops/out/uc/sequence_DeclineSettlementService.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase DeclineSettlementService
+samples/insurance-claim-ops/out/uc/sequence_DetermineFault.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase DetermineFault
+samples/insurance-claim-ops/out/uc/sequence_EndNegotiationUnresolved.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase EndNegotiationUnresolved
+samples/insurance-claim-ops/out/uc/sequence_ExplainDenialReason.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ExplainDenialReason
+samples/insurance-claim-ops/out/uc/sequence_ExtendPaymentPeriod.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ExtendPaymentPeriod
+samples/insurance-claim-ops/out/uc/sequence_FileComplaint.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase FileComplaint
+samples/insurance-claim-ops/out/uc/sequence_FlagSuspectedFraud.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase FlagSuspectedFraud
+samples/insurance-claim-ops/out/uc/sequence_GuideToAdr.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase GuideToAdr
+samples/insurance-claim-ops/out/uc/sequence_LapseSubrogation.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase LapseSubrogation
+samples/insurance-claim-ops/out/uc/sequence_MarkPaymentOverdue.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase MarkPaymentOverdue
+samples/insurance-claim-ops/out/uc/sequence_NotifyDenial.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase NotifyDenial
+samples/insurance-claim-ops/out/uc/sequence_NotifyPaymentCompleted.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase NotifyPaymentCompleted
+samples/insurance-claim-ops/out/uc/sequence_OpenSettlement.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase OpenSettlement
+samples/insurance-claim-ops/out/uc/sequence_PayClaim.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase PayClaim
+samples/insurance-claim-ops/out/uc/sequence_QueryAccidentExchange.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase QueryAccidentExchange
+samples/insurance-claim-ops/out/uc/sequence_RecordAdrComplaint.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordAdrComplaint
+samples/insurance-claim-ops/out/uc/sequence_RecordDisputeFiled.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordDisputeFiled
+samples/insurance-claim-ops/out/uc/sequence_RecordDisputeTerminated.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordDisputeTerminated
+samples/insurance-claim-ops/out/uc/sequence_RecordInsuredConsent.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordInsuredConsent
+samples/insurance-claim-ops/out/uc/sequence_RecordJibaisekiEscalation.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordJibaisekiEscalation
+samples/insurance-claim-ops/out/uc/sequence_RecordJibaisekiResult.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordJibaisekiResult
+samples/insurance-claim-ops/out/uc/sequence_RecordProposal.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordProposal
+samples/insurance-claim-ops/out/uc/sequence_RecordVictimConsent.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecordVictimConsent
+samples/insurance-claim-ops/out/uc/sequence_RecoverSubrogation.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RecoverSubrogation
+samples/insurance-claim-ops/out/uc/sequence_RejectProposal.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RejectProposal
+samples/insurance-claim-ops/out/uc/sequence_RelayAccidentReport.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RelayAccidentReport
+samples/insurance-claim-ops/out/uc/sequence_ReportAccident.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ReportAccident
+samples/insurance-claim-ops/out/uc/sequence_ReportSurvey.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ReportSurvey
+samples/insurance-claim-ops/out/uc/sequence_RequestInvestigation.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RequestInvestigation
+samples/insurance-claim-ops/out/uc/sequence_ResolveComplaint.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase ResolveComplaint
+samples/insurance-claim-ops/out/uc/sequence_RespondInitially.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase RespondInitially
+samples/insurance-claim-ops/out/uc/sequence_SendClaimForms.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase SendClaimForms
+samples/insurance-claim-ops/out/uc/sequence_SendJibaisekiSurvey.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase SendJibaisekiSurvey
+samples/insurance-claim-ops/out/uc/sequence_StartRepair.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase StartRepair
+samples/insurance-claim-ops/out/uc/sequence_StartSubrogation.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase StartSubrogation
+samples/insurance-claim-ops/out/uc/sequence_SubmitClaim.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase SubmitClaim
+samples/insurance-claim-ops/out/uc/sequence_SubmitRepairEstimate.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase SubmitRepairEstimate
+samples/insurance-claim-ops/out/uc/sequence_TimeBarClaim.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase TimeBarClaim
+samples/insurance-claim-ops/out/uc/sequence_WithdrawClaim.mmd	diagram samples/insurance-claim-ops --kind sequence --format mermaid --usecase WithdrawClaim
+samples/insurance-claim-ops/out/business.mmd	diagram samples/insurance-claim-ops --kind business --format mermaid
+samples/insurance-claim-ops/out/condition.mmd	diagram samples/insurance-claim-ops --kind condition --format mermaid
+samples/insurance-claim-ops/out/context.mmd	diagram samples/insurance-claim-ops --kind context --format mermaid
+samples/insurance-claim-ops/out/event_flow.mmd	diagram samples/insurance-claim-ops --kind event --format mermaid
+samples/insurance-claim-ops/out/information.mmd	diagram samples/insurance-claim-ops --kind information --format mermaid
+samples/insurance-claim-ops/out/rdra_buc_payment.mmd	diagram samples/insurance-claim-ops --kind rdra --format mermaid --buc BucPayment
+samples/insurance-claim-ops/out/requirement.mmd	diagram samples/insurance-claim-ops --kind requirement --format mermaid
+samples/insurance-claim-ops/out/screen.mmd	diagram samples/insurance-claim-ops --kind screen --format mermaid
+samples/insurance-claim-ops/out/screen_constraints.csv	csv samples/insurance-claim-ops --kind screen-constraints
+samples/insurance-claim-ops/out/state_whole.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid
+samples/insurance-claim-ops/out/state/ClaimCase.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity ClaimCase
+samples/insurance-claim-ops/out/state/Investigation.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity Investigation
+samples/insurance-claim-ops/out/state/RepairEstimate.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity RepairEstimate
+samples/insurance-claim-ops/out/state/Settlement.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity Settlement
+samples/insurance-claim-ops/out/state/JibaisekiSurvey.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity JibaisekiSurvey
+samples/insurance-claim-ops/out/state/Claim.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity Claim
+samples/insurance-claim-ops/out/state/Payment.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity Payment
+samples/insurance-claim-ops/out/state/Subrogation.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity Subrogation
+samples/insurance-claim-ops/out/state/Complaint.mmd	diagram samples/insurance-claim-ops --kind state --format mermaid --entity Complaint
+samples/insurance-claim-ops/out/states_claim_case.txt	states samples/insurance-claim-ops --format table --entity ClaimCase
+samples/insurance-claim-ops/out/states_claim.txt	states samples/insurance-claim-ops --format table --entity Claim
+samples/insurance-claim-ops/out/states_settlement.txt	states samples/insurance-claim-ops --format table --entity Settlement
+samples/insurance-claim-ops/out/asyncapi.json	export samples/insurance-claim-ops --kind asyncapi
+samples/insurance-claim-ops/out/er.mmd	diagram samples/insurance-claim-ops --kind er --format mermaid
+samples/insurance-claim-ops/out/transitions.md	list samples/insurance-claim-ops --kind transition --format markdown
 samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid

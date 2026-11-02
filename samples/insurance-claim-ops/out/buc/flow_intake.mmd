@@ -1,0 +1,42 @@
+%% rdra-ish diagram=flow scope=buc:BucIntake model=samples/insurance-claim-ops
+%% kinds: flow step lane usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__IntakeFlow["事故受付の流れ"]
+    subgraph lane__IntakeFlow__Agent["代理店"]
+      %% lane lane__IntakeFlow__Agent: actor__Agent
+      step__RelayStep["代理店からの取次ぎ"]:::step
+    end
+    subgraph lane__IntakeFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__IntakeFlow__ClaimHandler: actor__ClaimHandler
+      step__ExchangeQueryStep["事故受付の有無の照会"]:::step
+      step__InitialResponseStep["初期対応（担当者・手続の案内）"]:::step
+    end
+    subgraph lane__IntakeFlow__PolicyHolder["契約者・被保険者"]
+      %% lane lane__IntakeFlow__PolicyHolder: actor__PolicyHolder
+      step__ReportStep["事故の通知（直ちに・遅滞なく）"]:::step
+    end
+  end
+  usecase__QueryAccidentExchange("事故受付の有無の照会"):::usecase
+  %% desc usecase__QueryAccidentExchange: 車両事故・対物事故について、同じ事故が他社で受け付けられていないかを自動車事故情報交換システムで照会する。
+  usecase__RelayAccidentReport("事故の通知（代理店経由）"):::usecase
+  %% desc usecase__RelayAccidentReport: 代理店が契約者から事故の連絡を受け、保険会社の事故受付に取り次ぐ。
+  usecase__ReportAccident("事故の通知（保険会社へ）"):::usecase
+  %% desc usecase__ReportAccident: 契約者・被保険者が事故の日時・場所・概要を事故受付センターに直ちに通知し、事故の状況・被害者・証人・損害賠償の請求の内容を遅滞なく知らせる。
+  usecase__RespondInitially("初期対応（担当者の案内と手続の説明）"):::usecase
+  %% desc usecase__RespondInitially: 担保種目ごとに担当者を決め、所属部署・氏名・連絡先を案内する。警察への届出と交通事故証明書、損害の防止、無断で責任を認めないことを説明し、支払の対象になりうる保険金と請求の手続を説明する。
+  event__EvAccidentQueried>"事故受付の有無の照会"]:::event
+  step__ExchangeQueryStep -.-> event__EvAccidentQueried
+  step__ExchangeQueryStep -.-> usecase__QueryAccidentExchange
+  step__InitialResponseStep -.-> usecase__RespondInitially
+  step__InitialResponseStep -->|precedes| step__ExchangeQueryStep
+  step__RelayStep -.-> usecase__RelayAccidentReport
+  step__RelayStep -->|precedes| step__InitialResponseStep
+  step__ReportStep -->|branches| step__RelayStep
+  step__ReportStep -.-> usecase__ReportAccident
+  step__ReportStep -->|precedes| step__InitialResponseStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

@@ -1,0 +1,130 @@
+%% rdra-ish diagram=event scope=whole model=samples/insurance-claim-ops
+%% kinds: event usecase extsystem buc timer
+%% omitted: state transitions
+flowchart LR
+  event__EvAccidentQueried>"事故受付の有無の照会"]:::event
+  usecase__QueryAccidentExchange("事故受付の有無の照会"):::usecase
+  %% desc usecase__QueryAccidentExchange: 車両事故・対物事故について、同じ事故が他社で受け付けられていないかを自動車事故情報交換システムで照会する。
+  usecase__QueryAccidentExchange -.-> event__EvAccidentQueried
+  extsystem__AccidentInfoExchange[["自動車事故情報交換システム（損保協会の共同利用制度）"]]:::extsystem
+  event__EvAccidentQueried -.-> extsystem__AccidentInfoExchange
+  event__EvAdrComplaintAnswered>"ADR 苦情への回答"]:::event
+  usecase__AnswerAdrComplaint("ADR 苦情への対応"):::usecase
+  %% desc usecase__AnswerAdrComplaint: 申出人と話し合って苦情を解決し、センターに結果を回答する。
+  usecase__AnswerAdrComplaint -.-> event__EvAdrComplaintAnswered
+  extsystem__SonpoAdrCenter[["そんぽADRセンター（日本損害保険協会）"]]:::extsystem
+  event__EvAdrComplaintAnswered -.-> extsystem__SonpoAdrCenter
+  event__EvAdrComplaintNotified>"ADR 苦情の通知"]:::event
+  extsystem__SonpoAdrCenter -.-> event__EvAdrComplaintNotified
+  usecase__RecordAdrComplaint("ADR 苦情の受付"):::usecase
+  %% desc usecase__RecordAdrComplaint: そんぽADRセンターから苦情の通知を受け、対応を始める。
+  event__EvAdrComplaintNotified -.-> usecase__RecordAdrComplaint
+  event__EvAdrDisputeFiled>"紛争解決手続の申立て"]:::event
+  extsystem__SonpoAdrCenter -.-> event__EvAdrDisputeFiled
+  usecase__RecordDisputeFiled("紛争解決手続の申立ての受付"):::usecase
+  %% desc usecase__RecordDisputeFiled: 申出人が紛争解決手続を申し立てたと、センターから知らせを受ける。
+  event__EvAdrDisputeFiled -.-> usecase__RecordDisputeFiled
+  event__EvAdrDisputeTerminated>"紛争解決手続の終了"]:::event
+  extsystem__SonpoAdrCenter -.-> event__EvAdrDisputeTerminated
+  usecase__RecordDisputeTerminated("紛争解決手続の終了"):::usecase
+  %% desc usecase__RecordDisputeTerminated: 和解の見込みがないとして手続が終わったと知らせを受ける。申出人は通知から1月以内に提訴すれば時効の完成が猶予される。
+  event__EvAdrDisputeTerminated -.-> usecase__RecordDisputeTerminated
+  event__EvAdrProposalAnswered>"和解案への回答"]:::event
+  usecase__AcceptProposal("和解案の受諾"):::usecase
+  %% desc usecase__AcceptProposal: 和解案を受け入れ、和解を成立させる。
+  usecase__AcceptProposal -.-> event__EvAdrProposalAnswered
+  usecase__RejectProposal("和解案を受諾しない"):::usecase
+  %% desc usecase__RejectProposal: 特別調停案でない和解案を受け入れないと回答する。特別調停案は受諾しなければならない。
+  usecase__RejectProposal -.-> event__EvAdrProposalAnswered
+  event__EvAdrProposalAnswered -.-> extsystem__SonpoAdrCenter
+  event__EvAdrProposalPresented>"和解案の提示"]:::event
+  extsystem__SonpoAdrCenter -.-> event__EvAdrProposalPresented
+  usecase__RecordProposal("和解案の受領"):::usecase
+  %% desc usecase__RecordProposal: 手続実施委員から和解案を受け取る。和解案が特別調停案かを記録する。
+  event__EvAdrProposalPresented -.-> usecase__RecordProposal
+  event__EvClaimPaid>"保険金の支払"]:::event
+  usecase__PayClaim("保険金の支払"):::usecase
+  %% desc usecase__PayClaim: 支払金額と内訳（主たる保険金と特約・費用保険金）、算定の理由を説明して、被保険者・被害者・修理工場に払う。期限を過ぎていれば遅延利息を加える。
+  usecase__PayClaim -.-> event__EvClaimPaid
+  usecase__CloseCase("事故案件の完了"):::usecase
+  %% desc usecase__CloseCase: 請求の支払・不払の通知・取下げを受けて、事故案件を完了にする。過失の判断が残っていれば先に済ませる。
+  event__EvClaimPaid -.-> usecase__CloseCase
+  usecase__StartSubrogation("求償の開始"):::usecase
+  %% desc usecase__StartSubrogation: 保険金を払った請求について、被保険者から移った損害賠償請求権の額（払った額と被保険者の債権のいずれか少ない額）を確かめ、相手方への求償を始める。
+  event__EvClaimPaid -.-> usecase__StartSubrogation
+  buc__BucSubrogation["求償（請求権代位）"]:::buc
+  %% desc buc__BucSubrogation: 保険会社は保険金を払うと、払った額と被保険者の債権の額のいずれか少ない額を限度に、被保険者が相手方に持つ損害賠償請求権を当然に取得する（請求権代位）。被保険者の残りの債権が優先する。保険会社は相手方（とその保険会社）に求償し、回収するか断念する。相手方への請求権は、損害と加害者を知った時から3年（人身損害は5年）で時効にかかる。
+  event__EvClaimPaid -.-> buc__BucSubrogation
+  event__EvClaimWithdrawn>"請求の取下げ"]:::event
+  usecase__WithdrawClaim("請求の取下げ"):::usecase
+  %% desc usecase__WithdrawClaim: 請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。
+  usecase__WithdrawClaim -.-> event__EvClaimWithdrawn
+  event__EvClaimWithdrawn -.-> usecase__CloseCase
+  event__EvDenialNotified>"不払いの通知"]:::event
+  usecase__NotifyDenial("不払いの通知"):::usecase
+  %% desc usecase__NotifyDenial: 理由を説明したうえで、支払わないことを書面で通知する。了解が得られなければ、そんぽADRセンターなどの相談機関を案内する。
+  usecase__NotifyDenial -.-> event__EvDenialNotified
+  event__EvDenialNotified -.-> usecase__CloseCase
+  usecase__FileComplaint("苦情の申出"):::usecase
+  %% desc usecase__FileComplaint: 契約者・被保険者または被害者が、支払・不払や対応について保険会社に苦情を申し出る。
+  event__EvDenialNotified -.-> usecase__FileComplaint
+  event__EvDuplicateAccidentFound>"他社での事故受付の判明"]:::event
+  extsystem__AccidentInfoExchange -.-> event__EvDuplicateAccidentFound
+  usecase__FlagSuspectedFraud("不正請求の疑いの登録"):::usecase
+  %% desc usecase__FlagSuspectedFraud: 事故状況・因果関係・修理や治療の内容に不自然な点があるか、他社での事故受付が分かったとき、請求を疑義事案として登録し、深く調べる。
+  event__EvDuplicateAccidentFound -.-> usecase__FlagSuspectedFraud
+  event__EvInitialResponded>"初期対応の完了"]:::event
+  usecase__RespondInitially("初期対応（担当者の案内と手続の説明）"):::usecase
+  %% desc usecase__RespondInitially: 担保種目ごとに担当者を決め、所属部署・氏名・連絡先を案内する。警察への届出と交通事故証明書、損害の防止、無断で責任を認めないことを説明し、支払の対象になりうる保険金と請求の手続を説明する。
+  usecase__RespondInitially -.-> event__EvInitialResponded
+  usecase__SendClaimForms("請求書類の案内と送付"):::usecase
+  %% desc usecase__SendClaimForms: 担当者が請求者に請求の手続を説明し、請求書と、交通事故証明書・診断書・見積書・示談書など必要な書類を案内して送る。
+  event__EvInitialResponded -.-> usecase__SendClaimForms
+  event__EvJibaisekiSurveyEscalated>"上部機関・審査会での審査"]:::event
+  extsystem__Giroj[["損害保険料率算出機構（自賠責損害調査事務所）"]]:::extsystem
+  extsystem__Giroj -.-> event__EvJibaisekiSurveyEscalated
+  usecase__RecordJibaisekiEscalation("上部機関・審査会での審査の記録"):::usecase
+  %% desc usecase__RecordJibaisekiEscalation: 損保料率機構から、事案が地区本部・本部または審査会の審査に回ったと知らせを受けて記録する。
+  event__EvJibaisekiSurveyEscalated -.-> usecase__RecordJibaisekiEscalation
+  event__EvJibaisekiSurveyReported>"自賠責損害調査の結果の報告"]:::event
+  extsystem__Giroj -.-> event__EvJibaisekiSurveyReported
+  usecase__RecordJibaisekiResult("自賠責損害調査の結果の受領"):::usecase
+  %% desc usecase__RecordJibaisekiResult: 損保料率機構の調査結果（有無責、後遺障害の等級、重過失減額の有無）を受け取り、支払額の決定に使う。
+  event__EvJibaisekiSurveyReported -.-> usecase__RecordJibaisekiResult
+  event__EvJibaisekiSurveyRequested>"自賠責損害調査の依頼"]:::event
+  usecase__SendJibaisekiSurvey("自賠責損害調査の依頼"):::usecase
+  %% desc usecase__SendJibaisekiSurvey: 一括払いに同意を得た人身の事故について、自賠責の請求書類を確かめて損保料率機構の自賠責損害調査事務所に送る。
+  usecase__SendJibaisekiSurvey -.-> event__EvJibaisekiSurveyRequested
+  event__EvJibaisekiSurveyRequested -.-> extsystem__Giroj
+  event__EvSettlementAgreed>"示談の成立"]:::event
+  usecase__AgreeSettlement("示談の成立"):::usecase
+  %% desc usecase__AgreeSettlement: 示談案を提示し、被害者と合意して示談書を取り交わす。賠償の保険金の請求権がこのとき発生する。
+  usecase__AgreeSettlement -.-> event__EvSettlementAgreed
+  usecase__AssessDamage("損害の確定"):::usecase
+  %% desc usecase__AssessDamage: 調査の報告を受けて損害を確定する。賠償の事故では過失を判断した後に、示談代行をしたときは示談の成立か終了の後に確定する。
+  event__EvSettlementAgreed -.-> usecase__AssessDamage
+  event__EvSettlementEnded>"示談代行の終了（不調・不実施）"]:::event
+  usecase__DeclineSettlementService("示談代行を行わない"):::usecase
+  %% desc usecase__DeclineSettlementService: 被害者が同意しない、被保険者が協力しない、賠償額が保険金額を明らかに超えるなど、約款の定める場合に示談代行を行わないと決め、契約者に伝える。
+  usecase__DeclineSettlementService -.-> event__EvSettlementEnded
+  usecase__EndNegotiationUnresolved("示談交渉の終了（不調）"):::usecase
+  %% desc usecase__EndNegotiationUnresolved: 示談がまとまらず、調停または訴訟に移る。調停・訴訟の中身は対象外。
+  usecase__EndNegotiationUnresolved -.-> event__EvSettlementEnded
+  event__EvSettlementEnded -.-> usecase__AssessDamage
+  timer__ClaimLimitation(("保険金請求権の時効（請求権が発生した時の翌日から3年）")):::timer
+  usecase__TimeBarClaim("請求権の時効による消滅"):::usecase
+  %% desc usecase__TimeBarClaim: 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。
+  timer__ClaimLimitation -.-> usecase__TimeBarClaim
+  timer__PaymentDeadline(("支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）")):::timer
+  usecase__MarkPaymentOverdue("支払期限の経過"):::usecase
+  %% desc usecase__MarkPaymentOverdue: 支払期限（30日、延長したときは延長の日数）を過ぎても支払・不払の通知をしていない請求に、遅延利息の起算を記録する。
+  timer__PaymentDeadline -.-> usecase__MarkPaymentOverdue
+  timer__SubrogationLimitation(("求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）")):::timer
+  usecase__LapseSubrogation("求償する債権の時効"):::usecase
+  %% desc usecase__LapseSubrogation: 相手方への損害賠償請求権が時効（3年、人身損害は5年）にかかり、求償を終える。
+  timer__SubrogationLimitation -.-> usecase__LapseSubrogation
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;

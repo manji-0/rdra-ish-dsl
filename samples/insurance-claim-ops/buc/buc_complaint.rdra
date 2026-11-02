@@ -1,0 +1,248 @@
+module buc.complaint
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import shared.governance
+import buc.payment.{DecisionScreen}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucComplaint "苦情と ADR"
+  description "支払えないことや支払の内容に了解が得られないとき、保険会社はそんぽADRセンターなどの相談機関を案内する。損害保険会社は指定紛争解決機関と手続実施基本契約を結んでいる。センターは苦情を会社に通知して対応を求め、60日たっても解決しなければ紛争解決手続を案内する。紛争解決手続では原則4か月以内に和解案を作り、特別調停案は会社が受諾しなければならない。自賠責の支払の紛争は対象外。"
+
+// 契約者等または被害者から、保険金をお支払いできないことについてご了解いただけない場合 (sonpo-2026-shiharai-guideline.txt:539-540).
+usecase FileComplaint "苦情の申出"
+  description "契約者・被保険者または被害者が、支払・不払や対応について保険会社に苦情を申し出る。"
+
+// 顧客から支払査定の結果に関し苦情申し出があった場合等については…再度の事実確認 (fsa-2026-kantoku-shishin-ins.txt:8492-8494).
+usecase ResolveComplaint "苦情の解決" description "事実を確かめ直し、説明して苦情を解決する。"
+
+// 日本損害保険協会そんぽＡＤＲセンター…交通事故紛争処理センター…日弁連交通事故相談センター等の各種相談機関を案内する
+// (sonpo-2026-shiharai-guideline.txt:540-543).
+usecase GuideToAdr "相談機関の案内" description "了解が得られない申出人に、そんぽADRセンターなどの相談機関を案内する。"
+
+// 当該加入保険業関係業者に対し、当該保険業務等関連苦情の内容を通知してその迅速な処理を求めなければならない
+// (egov-hoken-gyouhou-407AC0000000105.txt:8835); 苦情の内容を通知して対応を求める (sonpo-adr-kujou.md:109).
+usecase RecordAdrComplaint "ADR 苦情の受付" description "そんぽADRセンターから苦情の通知を受け、対応を始める。"
+
+usecase AnswerAdrComplaint "ADR 苦情への対応" description "申出人と話し合って苦情を解決し、センターに結果を回答する。"
+
+// 苦情のお申出から60日を経過しても当該苦情が解決しない場合には…紛争解決手続のご案内 (sonpo-adr-kujou.md:111); 紛争解決手続の
+// 申立て (sonpo-adr-hunsou.md:109).
+usecase RecordDisputeFiled "紛争解決手続の申立ての受付"
+  description "申出人が紛争解決手続を申し立てたと、センターから知らせを受ける。"
+
+// 原則として4か月以内に、和解案を作成するよう努めます (sonpo-adr-hunsou.md:111).
+usecase RecordProposal "和解案の受領" description "手続実施委員から和解案を受け取る。和解案が特別調停案かを記録する。"
+
+usecase AcceptProposal "和解案の受諾" description "和解案を受け入れ、和解を成立させる。"
+
+// 「特別調停案」とは、和解案であって…加入保険業関係業者が受諾しなければならないもの (egov-hoken-gyouhou-407AC0000000105.txt:8806).
+usecase RejectProposal "和解案を受諾しない"
+  description "特別調停案でない和解案を受け入れないと回答する。特別調停案は受諾しなければならない。"
+
+// 当事者がその旨の通知を受けた日から一月以内に…訴えを提起したときは、時効の完成猶予 (egov-hoken-gyouhou-407AC0000000105.txt:8888).
+usecase RecordDisputeTerminated "紛争解決手続の終了"
+  description "和解の見込みがないとして手続が終わったと知らせを受ける。申出人は通知から1月以内に提訴すれば時効の完成が猶予される。"
+
+screen ComplaintScreen "苦情・ADR 画面"
+
+api ComplaintCreateApi "苦情受付 API"
+  method POST
+  path "/cases/{id}/complaints"
+
+api ComplaintApi "苦情・ADR API"
+  method PATCH
+  path "/complaints/{id}"
+
+performs(PolicyHolder, FileComplaint)
+performs(Victim, FileComplaint)
+performs(ClaimHandler, ResolveComplaint)
+performs(ClaimHandler, GuideToAdr)
+performs(ClaimHandler, AnswerAdrComplaint)
+performs(SeniorApprover, AcceptProposal)
+performs(SeniorApprover, RejectProposal)
+belongs(BucComplaint, CustomerRedress).by(AccidentHotline).by(HandlerTerminal)
+
+contains(BucComplaint, FileComplaint)
+contains(BucComplaint, ResolveComplaint)
+contains(BucComplaint, GuideToAdr)
+contains(BucComplaint, RecordAdrComplaint)
+contains(BucComplaint, AnswerAdrComplaint)
+contains(BucComplaint, RecordDisputeFiled)
+contains(BucComplaint, RecordProposal)
+contains(BucComplaint, AcceptProposal)
+contains(BucComplaint, RejectProposal)
+contains(BucComplaint, RecordDisputeTerminated)
+contains(ClaimSystem, ComplaintCreateApi)
+contains(ClaimSystem, ComplaintApi)
+
+displays(FileComplaint, ComplaintScreen)
+invokes(FileComplaint, ComplaintCreateApi)
+creates(ComplaintCreateApi, Complaint)
+triggers(EvDenialNotified, FileComplaint)
+
+displays(ResolveComplaint, ComplaintScreen)
+invokes(ResolveComplaint, ComplaintApi)
+updates(ComplaintApi, Complaint)
+transitions(ResolveComplaint, Complaint.status, received -> resolved)
+
+displays(GuideToAdr, ComplaintScreen)
+invokes(GuideToAdr, ComplaintApi)
+sets(GuideToAdr, Complaint, adr_guided == true)
+
+condition ComplaintOpen "苦情を受け付けて解決していない"
+holds(ComplaintOpen, Complaint.status == received)
+applies_to(ComplaintOpen, GuideToAdr)
+
+// Started by the center's notices, no performer. The center's own periods (60 days to the dispute
+// guidance, 4 months to a proposal) run outside the insurer: a timer cannot start an external
+// system, so they are in the event labels, the flow, and the NFR AdrProposalTarget.
+invokes(RecordAdrComplaint, ComplaintApi)
+transitions(RecordAdrComplaint, Complaint.status, received -> adr_complaint)
+raises(SonpoAdrCenter, EvAdrComplaintNotified)
+triggers(EvAdrComplaintNotified, RecordAdrComplaint)
+
+displays(AnswerAdrComplaint, ComplaintScreen)
+invokes(AnswerAdrComplaint, ComplaintApi)
+transitions(AnswerAdrComplaint, Complaint.status, adr_complaint -> resolved)
+raises(AnswerAdrComplaint, EvAdrComplaintAnswered)
+triggers(EvAdrComplaintAnswered, SonpoAdrCenter)
+
+invokes(RecordDisputeFiled, ComplaintApi)
+transitions(RecordDisputeFiled, Complaint.status, received -> adr_dispute)
+transitions(RecordDisputeFiled, Complaint.status, adr_complaint -> adr_dispute)
+raises(SonpoAdrCenter, EvAdrDisputeFiled)
+triggers(EvAdrDisputeFiled, RecordDisputeFiled)
+
+invokes(RecordProposal, ComplaintApi)
+transitions(RecordProposal, Complaint.status, adr_dispute -> proposal_received)
+chooses(RecordProposal, Complaint.proposal)
+raises(SonpoAdrCenter, EvAdrProposalPresented)
+triggers(EvAdrProposalPresented, RecordProposal)
+applies_to(AdrProposalTarget, RecordProposal)
+
+displays(AcceptProposal, ComplaintScreen)
+invokes(AcceptProposal, ComplaintApi)
+transitions(AcceptProposal, Complaint.status, proposal_received -> settled)
+raises(AcceptProposal, EvAdrProposalAnswered)
+triggers(EvAdrProposalAnswered, SonpoAdrCenter)
+
+displays(RejectProposal, ComplaintScreen)
+invokes(RejectProposal, ComplaintApi)
+transitions(RejectProposal, Complaint.status, proposal_received -> rejected)
+raises(RejectProposal, EvAdrProposalAnswered)
+
+condition OrdinaryProposal "特別調停案ではない和解案である"
+holds(OrdinaryProposal, Complaint.proposal == ordinary)
+applies_to(OrdinaryProposal, RejectProposal)
+
+invokes(RecordDisputeTerminated, ComplaintApi)
+transitions(RecordDisputeTerminated, Complaint.status, adr_dispute -> terminated)
+transitions(RecordDisputeTerminated, Complaint.status, proposal_received -> terminated)
+raises(SonpoAdrCenter, EvAdrDisputeTerminated)
+triggers(EvAdrDisputeTerminated, RecordDisputeTerminated)
+
+// Access constraints
+requires_permission(FileComplaint, ComplaintFile)
+requires_medium(FileComplaint, AccidentHotline)
+requires_permission(ComplaintCreateApi, ComplaintFile)
+requires_permission(ResolveComplaint, ComplaintHandle)
+requires_medium(ResolveComplaint, HandlerTerminal)
+requires_permission(GuideToAdr, ComplaintHandle)
+requires_medium(GuideToAdr, HandlerTerminal)
+requires_permission(AnswerAdrComplaint, ComplaintHandle)
+requires_medium(AnswerAdrComplaint, HandlerTerminal)
+requires_permission(AcceptProposal, ComplaintHandle)
+requires_medium(AcceptProposal, HandlerTerminal)
+requires_permission(RejectProposal, ComplaintHandle)
+requires_medium(RejectProposal, HandlerTerminal)
+
+// Screen transitions: the model's assumption.
+navigates(DecisionScreen, ComplaintScreen).via(FileComplaint)
+
+field ComplaintStatusField "苦情・紛争の状態"
+  access readonly
+  required true
+  source system
+
+field ProposalField "和解案の種類"
+  access readonly
+  required true
+  source system
+
+contains(ComplaintScreen, ComplaintStatusField)
+contains(ComplaintScreen, ProposalField)
+maps_field(ComplaintStatusField, Complaint.status)
+maps_field(ProposalField, Complaint.proposal)
+
+// Business flow
+flow ComplaintFlow "苦情と紛争解決の流れ"
+step ComplaintStep "苦情の申出"
+step GuideAdrStep "相談機関の案内"
+step AdrComplaintStep "ADR 苦情解決手続（60日）"
+step DisputeStep "紛争解決手続の申立て"
+step ProposalStep "和解案（原則4か月以内）"
+step AnswerStep "和解案への回答"
+step TerminateStep "手続の終了（1月以内の提訴で時効の完成猶予）"
+
+contains(BucComplaint, ComplaintFlow)
+contains(ComplaintFlow, ComplaintStep)
+contains(ComplaintFlow, GuideAdrStep)
+contains(ComplaintFlow, AdrComplaintStep)
+contains(ComplaintFlow, DisputeStep)
+contains(ComplaintFlow, ProposalStep)
+contains(ComplaintFlow, AnswerStep)
+contains(ComplaintFlow, TerminateStep)
+
+precedes(ComplaintStep, GuideAdrStep)
+precedes(GuideAdrStep, AdrComplaintStep)
+precedes(AdrComplaintStep, DisputeStep)
+precedes(DisputeStep, ProposalStep)
+precedes(ProposalStep, AnswerStep)
+excepts(ProposalStep, TerminateStep)
+
+covers(ComplaintStep, FileComplaint)
+covers(ComplaintStep, ResolveComplaint)
+covers(ComplaintStep, EvDenialNotified)
+covers(GuideAdrStep, GuideToAdr)
+covers(AdrComplaintStep, RecordAdrComplaint)
+covers(AdrComplaintStep, AnswerAdrComplaint)
+covers(AdrComplaintStep, EvAdrComplaintNotified)
+covers(DisputeStep, RecordDisputeFiled)
+covers(DisputeStep, EvAdrDisputeFiled)
+covers(ProposalStep, RecordProposal)
+covers(ProposalStep, EvAdrProposalPresented)
+covers(AnswerStep, AcceptProposal)
+covers(AnswerStep, RejectProposal)
+covers(TerminateStep, RecordDisputeTerminated)
+covers(TerminateStep, EvAdrDisputeTerminated)
+
+performs(PolicyHolder, ComplaintStep)
+performs(Victim, ComplaintStep)
+performs(ClaimHandler, GuideAdrStep)
+performs(ClaimHandler, AdrComplaintStep)
+performs(SeniorApprover, AnswerStep)
+
+// Rules
+forbidden(Complaint, proposal == special, status == rejected).label("特別調停案は会社が受諾する")
+
+// Requirement traceability
+requirement ReqAdrParticipation "了解を得られない申出人に相談機関を案内し、そんぽADRセンターの手続に応じ、特別調停案は受諾する"
+  priority "must"
+  source "相談機関の案内 (sonpo-2026-shiharai-guideline.txt:538-544)"
+  source "手続実施基本契約 (egov-hoken-gyouhou-407AC0000000105.txt:3492)"
+  source "苦情の通知 (egov-hoken-gyouhou-407AC0000000105.txt:8835)"
+  source "特別調停案 (egov-hoken-gyouhou-407AC0000000105.txt:8806)"
+  source "苦情解決手続 60日 (sonpo-adr-kujou.md:111)"
+  source "紛争解決手続 4か月 (sonpo-adr-hunsou.md:111)"
+  stakeholder "契約者・被保険者"
+  stakeholder "被害者"
+  stakeholder "上位決裁者（不正請求対応）"
+  acceptance_criteria "特別調停案を受諾しなかった紛争はない。"
+  status "accepted"
+
+motivates(ReqAdrParticipation, BucComplaint)
+achieves(ReqAdrParticipation, FairDenial)

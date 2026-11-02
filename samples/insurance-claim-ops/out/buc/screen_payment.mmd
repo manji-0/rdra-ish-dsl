@@ -1,0 +1,14 @@
+%% rdra-ish diagram=screen scope=buc:BucPayment model=samples/insurance-claim-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__ClaimScreen["保険金請求画面"]:::screen
+  screen__DecisionScreen["支払査定画面"]:::screen
+  screen__PaymentScreen["支払画面"]:::screen
+  screen__ClaimScreen -->|不正請求の疑いの登録| screen__DecisionScreen
+  screen__DecisionScreen -->|支払・不払の決裁| screen__PaymentScreen
+  screen__DecisionScreen -->|疑義事案の支払・不払の決裁| screen__PaymentScreen
+  %% via screen__ClaimScreen -> screen__DecisionScreen usecase__FlagSuspectedFraud
+  %% via screen__DecisionScreen -> screen__PaymentScreen usecase__DecideClaim
+  %% via screen__DecisionScreen -> screen__PaymentScreen usecase__DecideSuspectedClaim
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

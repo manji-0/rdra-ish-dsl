@@ -1,0 +1,59 @@
+%% rdra-ish diagram=context scope=whole model=samples/insurance-claim-ops
+%% kinds: actor extsystem system
+%% omitted: step permission usecase event
+flowchart LR
+  actor__Adjuster(["アジャスター"]):::actor
+  %% desc actor__Adjuster: 日本損害保険協会に登録された損害調査の担い手。事故の原因と状況、損傷と事故の関係、損害額を調べ、修理工場と修理費を協定する。
+  actor__Agent(["代理店"]):::actor
+  %% desc actor__Agent: 契約者から事故の連絡を受け、保険会社の事故受付に取り次ぐ。支払の判断には関わらない。
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+  actor__ClaimReceptionist(["事故受付担当"]):::actor
+  %% desc actor__ClaimReceptionist: 事故の連絡を受け、契約内容・重複契約・事故状況・傷害を確かめ、警察への届出を案内する。
+  actor__PaymentApprover(["支払決裁者"]):::actor
+  %% desc actor__PaymentApprover: 調査結果と請求書類から、保険金を支払うか支払わないかを決裁する。
+  actor__PolicyHolder(["契約者・被保険者"]):::actor
+  %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+  actor__RepairShop(["修理工場"]):::actor
+  %% desc actor__RepairShop: 損害車両の修理見積を出し、アジャスターと修理費を協定し、保険会社の承認を受けてから修理に着工する。
+  actor__SeniorApprover(["上位決裁者（不正請求対応）"]):::actor
+  %% desc actor__SeniorApprover: 不正請求の疑いがある請求の支払・不払を決裁する。そんぽADRセンターの和解案に応じるかを決める。
+  actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+  %% desc actor__Victim: 加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。
+  extsystem__AccidentInfoExchange[["自動車事故情報交換システム（損保協会の共同利用制度）"]]:::extsystem
+  extsystem__Giroj[["損害保険料率算出機構（自賠責損害調査事務所）"]]:::extsystem
+  extsystem__SonpoAdrCenter[["そんぽADRセンター（日本損害保険協会）"]]:::extsystem
+  system__ClaimSystem["保険金支払システム（損害サービス）"]:::system
+  actor__Adjuster -.->|損害調査と損害確認、修理見積と着工の承認| system__ClaimSystem
+  %% derived actor__Adjuster -> system__ClaimSystem via buc__BucInvestigation,buc__BucRepair
+  actor__Agent -.->|事故受付と初期対応| system__ClaimSystem
+  %% derived actor__Agent -> system__ClaimSystem via buc__BucIntake
+  actor__ClaimHandler -.->|保険金の請求、支払・不払の決定と支払、苦情と ADR、事故受付と初期対応、損害調査と損害確認、自賠責の損害調査（一括払い）、修理見積と着工の承認、示談代行、求償（請求権代位）| system__ClaimSystem
+  %% derived actor__ClaimHandler -> system__ClaimSystem via buc__BucClaim,buc__BucComplaint,buc__BucIntake,buc__BucInvestigation,buc__BucJibaiseki,buc__BucPayment,buc__BucRepair,buc__BucSettlement,buc__BucSubrogation
+  actor__ClaimReceptionist -.->|事故受付と初期対応| system__ClaimSystem
+  %% derived actor__ClaimReceptionist -> system__ClaimSystem via buc__BucIntake
+  actor__PaymentApprover -.->|支払・不払の決定と支払| system__ClaimSystem
+  %% derived actor__PaymentApprover -> system__ClaimSystem via buc__BucPayment
+  actor__PolicyHolder -.->|保険金の請求、苦情と ADR、事故受付と初期対応、示談代行| system__ClaimSystem
+  %% derived actor__PolicyHolder -> system__ClaimSystem via buc__BucClaim,buc__BucComplaint,buc__BucIntake,buc__BucSettlement
+  actor__RepairShop -.->|修理見積と着工の承認| system__ClaimSystem
+  %% derived actor__RepairShop -> system__ClaimSystem via buc__BucRepair
+  actor__SeniorApprover -.->|苦情と ADR、支払・不払の決定と支払| system__ClaimSystem
+  %% derived actor__SeniorApprover -> system__ClaimSystem via buc__BucComplaint,buc__BucPayment
+  actor__Victim -.->|保険金の請求、苦情と ADR、示談代行| system__ClaimSystem
+  %% derived actor__Victim -> system__ClaimSystem via buc__BucClaim,buc__BucComplaint,buc__BucSettlement
+  extsystem__AccidentInfoExchange -.->|他社での事故受付の判明| system__ClaimSystem
+  %% derived extsystem__AccidentInfoExchange -> system__ClaimSystem via event__EvDuplicateAccidentFound
+  extsystem__Giroj -.->|上部機関・審査会での審査、自賠責損害調査の結果の報告| system__ClaimSystem
+  %% derived extsystem__Giroj -> system__ClaimSystem via event__EvJibaisekiSurveyEscalated,event__EvJibaisekiSurveyReported
+  extsystem__SonpoAdrCenter -.->|ADR 苦情の通知、紛争解決手続の申立て、和解案の提示、紛争解決手続の終了| system__ClaimSystem
+  %% derived extsystem__SonpoAdrCenter -> system__ClaimSystem via event__EvAdrComplaintNotified,event__EvAdrDisputeFiled,event__EvAdrDisputeTerminated,event__EvAdrProposalPresented
+  system__ClaimSystem -.->|ADR 苦情への回答、和解案への回答| extsystem__SonpoAdrCenter
+  %% derived system__ClaimSystem -> extsystem__SonpoAdrCenter via event__EvAdrComplaintAnswered,event__EvAdrProposalAnswered
+  system__ClaimSystem -.->|事故受付の有無の照会| extsystem__AccidentInfoExchange
+  %% derived system__ClaimSystem -> extsystem__AccidentInfoExchange via event__EvAccidentQueried
+  system__ClaimSystem -.->|自賠責損害調査の依頼| extsystem__Giroj
+  %% derived system__ClaimSystem -> extsystem__Giroj via event__EvJibaisekiSurveyRequested
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;

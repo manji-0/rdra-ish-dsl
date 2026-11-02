@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:AgreeRepairCost model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Adjuster as アジャスター
+  participant screen__RepairScreen as 修理見積画面
+  participant api__RepairEstimateApi as 修理見積 API
+  participant entity__RepairEstimate as 修理見積
+  actor__Adjuster ->> screen__RepairScreen: 修理費の協定
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt RepairEstimate.status == 見積提出
+    api__RepairEstimateApi ->> entity__RepairEstimate: update status 見積提出 -> 修理費の協定
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:FileComplaint model=samples/insurance-claim-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant usecase__NotifyDenial as 不払いの通知
+  participant screen__ComplaintScreen as 苦情・ADR 画面
+  participant api__ComplaintCreateApi as 苦情受付 API
+  participant entity__Complaint as 苦情・紛争
+  actor__PolicyHolder ->> screen__ComplaintScreen: 苦情の申出
+  actor__Victim ->> screen__ComplaintScreen: 苦情の申出
+  usecase__NotifyDenial ->> api__ComplaintCreateApi: 不払いの通知
+  screen__ComplaintScreen ->> api__ComplaintCreateApi: 苦情受付 API
+  api__ComplaintCreateApi ->> entity__Complaint: create
+  api__ComplaintCreateApi -->> screen__ComplaintScreen: done

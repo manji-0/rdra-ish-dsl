@@ -1,0 +1,79 @@
+%% rdra-ish diagram=flow scope=buc:BucPayment model=samples/insurance-claim-ops
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__PaymentFlow["支払・不払の流れ"]
+    step__CloseStep["事故案件の完了"]:::step
+    step__OverdueStep["期限の経過（遅延利息）"]:::step
+    subgraph lane__PaymentFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__PaymentFlow__ClaimHandler: actor__ClaimHandler
+      step__ConfirmStep["確認（請求完了日を含めて30日）"]:::step
+      step__DenialStep["不払いの理由の説明と通知"]:::step
+      step__ExtendStep["延長と通知（60〜180日）"]:::step
+      step__PayStep["支払と完了の連絡"]:::step
+      step__SuspicionStep["疑義事案の登録"]:::step
+    end
+    subgraph lane__PaymentFlow__PaymentApprover["支払決裁者"]
+      %% lane lane__PaymentFlow__PaymentApprover: actor__PaymentApprover
+      step__DecisionStep["支払・不払の決裁"]:::step
+    end
+    subgraph lane__PaymentFlow__SeniorApprover["上位決裁者（不正請求対応）"]
+      %% lane lane__PaymentFlow__SeniorApprover: actor__SeniorApprover
+      step__SeniorDecisionStep["上位の決裁"]:::step
+    end
+  end
+  timer__PaymentDeadline(("支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）")):::timer
+  usecase__CloseCase("事故案件の完了"):::usecase
+  %% desc usecase__CloseCase: 請求の支払・不払の通知・取下げを受けて、事故案件を完了にする。過失の判断が残っていれば先に済ませる。
+  usecase__CompleteClaim("請求完了の確認"):::usecase
+  %% desc usecase__CompleteClaim: 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。
+  usecase__DecideClaim("支払・不払の決裁"):::usecase
+  %% desc usecase__DecideClaim: 支払決裁者が調査の結果と請求書類から、保険金を支払うか、免責・解除などで支払わないかを決める。
+  usecase__DecideSuspectedClaim("疑義事案の支払・不払の決裁"):::usecase
+  %% desc usecase__DecideSuspectedClaim: 不正請求の疑いがある請求を、上位の決裁者（不正請求への対応を専門とする担当）が決める。
+  usecase__ExplainDenialReason("不払いの理由の説明"):::usecase
+  %% desc usecase__ExplainDenialReason: 支払わない根拠となる約款の条項と、調査で確かめた事実を、契約者等と被害者に説明する。
+  usecase__ExtendPaymentPeriod("支払期限の延長と通知"):::usecase
+  %% desc usecase__ExtendPaymentPeriod: 特別な照会または調査が欠かせないとき、延長事由（被災地の調査60日、鑑定等の照会90日、後遺障害の照会120日、警察等の照会180日、国外の調査180日）を選び、確認する事項と終える時期を請求者に通知する。
+  usecase__FlagSuspectedFraud("不正請求の疑いの登録"):::usecase
+  %% desc usecase__FlagSuspectedFraud: 事故状況・因果関係・修理や治療の内容に不自然な点があるか、他社での事故受付が分かったとき、請求を疑義事案として登録し、深く調べる。
+  usecase__MarkPaymentOverdue("支払期限の経過"):::usecase
+  %% desc usecase__MarkPaymentOverdue: 支払期限（30日、延長したときは延長の日数）を過ぎても支払・不払の通知をしていない請求に、遅延利息の起算を記録する。
+  usecase__NotifyDenial("不払いの通知"):::usecase
+  %% desc usecase__NotifyDenial: 理由を説明したうえで、支払わないことを書面で通知する。了解が得られなければ、そんぽADRセンターなどの相談機関を案内する。
+  usecase__NotifyPaymentCompleted("支払完了の連絡"):::usecase
+  %% desc usecase__NotifyPaymentCompleted: 保険金を払ったことと支払手続が終わったことを請求者に連絡する。
+  usecase__PayClaim("保険金の支払"):::usecase
+  %% desc usecase__PayClaim: 支払金額と内訳（主たる保険金と特約・費用保険金）、算定の理由を説明して、被保険者・被害者・修理工場に払う。期限を過ぎていれば遅延利息を加える。
+  event__EvDuplicateAccidentFound>"他社での事故受付の判明"]:::event
+  step__CloseStep -.-> usecase__CloseCase
+  step__ConfirmStep -->|branches| step__ExtendStep
+  step__ConfirmStep -->|branches| step__SuspicionStep
+  step__ConfirmStep -.-> usecase__CompleteClaim
+  step__ConfirmStep -.->|excepts| step__OverdueStep
+  step__ConfirmStep -->|precedes| step__DecisionStep
+  step__DecisionStep -->|branches| step__DenialStep
+  step__DecisionStep -.-> usecase__DecideClaim
+  step__DecisionStep -->|precedes| step__PayStep
+  step__DenialStep -.-> usecase__ExplainDenialReason
+  step__DenialStep -.-> usecase__NotifyDenial
+  step__DenialStep -->|precedes| step__CloseStep
+  step__ExtendStep -.-> usecase__ExtendPaymentPeriod
+  step__ExtendStep -->|precedes| step__DecisionStep
+  step__OverdueStep -.-> timer__PaymentDeadline
+  step__OverdueStep -.-> usecase__MarkPaymentOverdue
+  step__PayStep -.-> usecase__NotifyPaymentCompleted
+  step__PayStep -.-> usecase__PayClaim
+  step__PayStep -->|precedes| step__CloseStep
+  step__SeniorDecisionStep -->|branches| step__DenialStep
+  step__SeniorDecisionStep -.-> usecase__DecideSuspectedClaim
+  step__SeniorDecisionStep -->|precedes| step__PayStep
+  step__SuspicionStep -.-> event__EvDuplicateAccidentFound
+  step__SuspicionStep -.-> usecase__FlagSuspectedFraud
+  step__SuspicionStep -->|precedes| step__SeniorDecisionStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

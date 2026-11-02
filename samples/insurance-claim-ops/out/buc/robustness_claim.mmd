@@ -1,0 +1,32 @@
+%% rdra-ish diagram=robustness scope=buc:BucClaim model=samples/insurance-claim-ops
+%% kinds: actor screen timer api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  actor__PolicyHolder(["契約者・被保険者"]):::actor
+  actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+  screen__ClaimFormScreen["請求書類の提出画面"]:::screen
+  screen__ClaimScreen["保険金請求画面"]:::screen
+  timer__ClaimLimitation(("保険金請求権の時効（請求権が発生した時の翌日から3年）")):::timer
+  api__ClaimApi{{"保険金請求 API"}}:::api
+  api__ClaimCreateApi{{"請求案内 API"}}:::api
+  api__ClaimSubmitApi{{"請求書類提出 API"}}:::api
+  entity__Claim[("保険金請求")]:::entity
+  actor__ClaimHandler --> screen__ClaimScreen
+  actor__PolicyHolder --> screen__ClaimFormScreen
+  actor__PolicyHolder --> screen__ClaimScreen
+  actor__Victim --> screen__ClaimFormScreen
+  api__ClaimApi -->|U| entity__Claim
+  api__ClaimCreateApi -->|C| entity__Claim
+  api__ClaimSubmitApi -->|U| entity__Claim
+  screen__ClaimFormScreen -->|請求書類の提出| api__ClaimSubmitApi
+  screen__ClaimScreen -->|等級の変動の説明と請求意思の確認| api__ClaimApi
+  screen__ClaimScreen -->|請求の取下げ| api__ClaimApi
+  screen__ClaimScreen -->|請求完了の確認| api__ClaimApi
+  screen__ClaimScreen -->|請求書類の案内と送付| api__ClaimCreateApi
+  timer__ClaimLimitation -.-> api__ClaimApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

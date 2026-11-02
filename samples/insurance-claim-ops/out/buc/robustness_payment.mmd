@@ -1,0 +1,50 @@
+%% rdra-ish diagram=robustness scope=buc:BucPayment model=samples/insurance-claim-ops
+%% kinds: actor extsystem screen timer api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__ClaimHandler(["損害サービス担当者"]):::actor
+  actor__PaymentApprover(["支払決裁者"]):::actor
+  actor__SeniorApprover(["上位決裁者（不正請求対応）"]):::actor
+  extsystem__AccidentInfoExchange[["自動車事故情報交換システム（損保協会の共同利用制度）"]]:::extsystem
+  screen__ClaimScreen["保険金請求画面"]:::screen
+  screen__DecisionScreen["支払査定画面"]:::screen
+  screen__PaymentScreen["支払画面"]:::screen
+  timer__PaymentDeadline(("支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）")):::timer
+  api__CaseApi{{"事故案件 API"}}:::api
+  api__ClaimApi{{"保険金請求 API"}}:::api
+  api__DecisionApi{{"支払査定 API"}}:::api
+  api__PaymentApi{{"支払完了連絡 API"}}:::api
+  api__PaymentCreateApi{{"保険金支払 API"}}:::api
+  entity__Claim[("保険金請求")]:::entity
+  entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+  entity__Payment[("保険金の支払")]:::entity
+  actor__ClaimHandler --> screen__ClaimScreen
+  actor__ClaimHandler --> screen__DecisionScreen
+  actor__ClaimHandler --> screen__PaymentScreen
+  actor__PaymentApprover --> screen__DecisionScreen
+  actor__SeniorApprover --> screen__DecisionScreen
+  api__CaseApi -->|U| entity__ClaimCase
+  api__ClaimApi -->|U| entity__Claim
+  api__DecisionApi -->|U| entity__Claim
+  api__DecisionApi -.->|不払いの通知| api__CaseApi
+  api__PaymentApi -->|U| entity__Payment
+  api__PaymentCreateApi -->|C| entity__Payment
+  api__PaymentCreateApi -->|U| entity__Claim
+  api__PaymentCreateApi -.->|保険金の支払| api__CaseApi
+  extsystem__AccidentInfoExchange -.->|他社での事故受付の判明| api__DecisionApi
+  screen__ClaimScreen -->|支払期限の延長と通知| api__ClaimApi
+  screen__ClaimScreen -->|請求完了の確認| api__ClaimApi
+  screen__DecisionScreen -->|不払いの理由の説明| api__DecisionApi
+  screen__DecisionScreen -->|不払いの通知| api__DecisionApi
+  screen__DecisionScreen -->|不正請求の疑いの登録| api__DecisionApi
+  screen__DecisionScreen -->|支払・不払の決裁| api__DecisionApi
+  screen__DecisionScreen -->|疑義事案の支払・不払の決裁| api__DecisionApi
+  screen__PaymentScreen -->|保険金の支払| api__PaymentCreateApi
+  screen__PaymentScreen -->|支払完了の連絡| api__PaymentApi
+  timer__PaymentDeadline -.-> api__ClaimApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

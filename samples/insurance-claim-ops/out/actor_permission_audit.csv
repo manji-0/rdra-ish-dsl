@@ -1,0 +1,17 @@
+actor_id,actor_label,permission_id,permission_label,assigned,required,status,required_usecase_ids,required_api_paths
+Adjuster,アジャスター,DamageSurvey,損害調査,true,true,ok,AgreeRepairCost|ConductSurvey|ReportSurvey,ConductSurvey->InvestigationApi|ReportSurvey->InvestigationApi
+Agent,代理店,AccidentReport,事故の通知,true,true,ok,RelayAccidentReport,RelayAccidentReport->CaseCreateApi
+ClaimHandler,損害サービス担当者,CaseHandle,事故案件の担当,true,true,ok,AbandonSubrogation|AgreeSettlement|ApproveRepairStart|AssessDamage|BeginNegotiation|CompleteClaim|ConfirmClaimIntent|DeclineSettlementService|DetermineFault|EndNegotiationUnresolved|ExplainDenialReason|ExtendPaymentPeriod|FlagSuspectedFraud|NotifyDenial|NotifyPaymentCompleted|OpenSettlement|PayClaim|QueryAccidentExchange|RecoverSubrogation|RequestInvestigation|RespondInitially|SendClaimForms|SendJibaisekiSurvey|StartSubrogation,AssessDamage->CaseApi|DetermineFault->CaseApi|NotifyPaymentCompleted->PaymentApi|OpenSettlement->SettlementCreateApi|PayClaim->PaymentCreateApi|RequestInvestigation->InvestigationCreateApi|RespondInitially->CaseApi|SendClaimForms->ClaimCreateApi|SendJibaisekiSurvey->JibaisekiSurveyCreateApi|StartSubrogation->SubrogationCreateApi
+ClaimHandler,損害サービス担当者,ComplaintHandle,苦情・ADR の対応,true,true,ok,AnswerAdrComplaint|GuideToAdr|ResolveComplaint,
+ClaimReceptionist,事故受付担当,AccidentReport,事故の通知,true,true,ok,RelayAccidentReport|ReportAccident,RelayAccidentReport->CaseCreateApi|ReportAccident->CaseCreateApi
+PaymentApprover,支払決裁者,PaymentDecide,支払・不払の決裁,true,true,ok,DecideClaim,
+PolicyHolder,契約者・被保険者,AccidentReport,事故の通知,true,true,ok,ReportAccident,ReportAccident->CaseCreateApi
+PolicyHolder,契約者・被保険者,ClaimSubmit,保険金の請求,true,true,ok,SubmitClaim|WithdrawClaim,SubmitClaim->ClaimSubmitApi
+PolicyHolder,契約者・被保険者,ComplaintFile,苦情の申出,true,true,ok,FileComplaint,FileComplaint->ComplaintCreateApi
+PolicyHolder,契約者・被保険者,ConsentGive,示談代行への同意,true,true,ok,RecordInsuredConsent,
+RepairShop,修理工場,RepairEstimateSubmit,修理見積の提出と着工,true,true,ok,CompleteRepair|StartRepair|SubmitRepairEstimate,SubmitRepairEstimate->RepairEstimateCreateApi
+SeniorApprover,上位決裁者（不正請求対応）,ComplaintHandle,苦情・ADR の対応,true,true,ok,AcceptProposal|RejectProposal,
+SeniorApprover,上位決裁者（不正請求対応）,SuspectedClaimDecide,疑義事案の決裁,true,true,ok,DecideSuspectedClaim,
+Victim,被害者（損害賠償請求権者）,ClaimSubmit,保険金の請求,true,true,ok,SubmitClaim,SubmitClaim->ClaimSubmitApi
+Victim,被害者（損害賠償請求権者）,ComplaintFile,苦情の申出,true,true,ok,FileComplaint,FileComplaint->ComplaintCreateApi
+Victim,被害者（損害賠償請求権者）,ConsentGive,示談代行への同意,true,true,ok,RecordVictimConsent,

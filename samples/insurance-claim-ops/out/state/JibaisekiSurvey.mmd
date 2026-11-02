@@ -1,0 +1,20 @@
+%% rdra-ish diagram=state scope=entity:JibaisekiSurvey model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "JibaisekiSurvey.status" as statemodel__JibaisekiSurvey_status {
+    [*] --> state__JibaisekiSurvey_sent
+    state "調査事務所へ送付" as state__JibaisekiSurvey_sent
+    state "地区本部・本部・審査会で審査中" as state__JibaisekiSurvey_under_review
+    state "調査結果の報告受領" as state__JibaisekiSurvey_reported
+    %% transition usecase__RecordJibaisekiEscalation
+    state__JibaisekiSurvey_sent --> state__JibaisekiSurvey_under_review : 上部機関・審査会での審査の記録
+    %% transition usecase__RecordJibaisekiResult
+    state__JibaisekiSurvey_sent --> state__JibaisekiSurvey_reported : 自賠責損害調査の結果の受領
+    %% transition usecase__RecordJibaisekiResult
+    state__JibaisekiSurvey_under_review --> state__JibaisekiSurvey_reported : 自賠責損害調査の結果の受領
+    state__JibaisekiSurvey_reported --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__JibaisekiSurvey_reported stateend

@@ -1,0 +1,212 @@
+module buc.investigation
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.intake.{CaseScreen, CaseApi}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucInvestigation "損害調査と損害確認"
+  description "立証責任がどちらにあっても、保険会社は必要な損害調査をする。アジャスターが事故の原因と状況、損傷と事故の関係、損害額を調べ、契約者と被害者の認識が違えば現場で実地調査をする。過失割合は過去の裁判例を基準に検討し、賠償責任があるかを判断する。調査の報告と、賠償の事故では過失の判断を経て、損害を確定する。"
+
+// 支払事由の立証責任が請求者または会員会社のいずれにあるかにかかわらず…必要な損害調査や事実確認等を行う
+// (sonpo-2026-shiharai-guideline.txt:277-278). The cost of the survey is the insurer's
+// (てん補損害額の算定に必要な費用, egov-hokenhou-420AC0000000056.txt:203).
+usecase RequestInvestigation "損害調査の依頼"
+  description "担当者が事案の特性に応じた調査の手法（書類・写真、現場の実地調査、専門家の見解）を選び、アジャスターに損害調査を依頼する。"
+
+// 技術アジャスター …… 損害車両の損害額、事故の原因および損傷部位と事故 (sonpo-2024-adjuster-seido-gaiyou.txt:11);
+// 双方の認識に相違がある場合は、事故現場の実地調査 (sonpo-2026-shiharai-guideline.txt:390).
+usecase ConductSurvey "損害調査の実施"
+  description "アジャスターが事故の原因と状況、損傷部位と事故の関係、損害額を調べる。契約者と被害者の認識が違えば事故現場を調べる。"
+
+// 高度な法的判断または医学的判断、工学的な判断…専門家の見解を確認 (sonpo-2026-shiharai-guideline.txt:427-428).
+usecase ReportSurvey "損害調査の報告"
+  description "アジャスターが調査の結果を報告する。法的・医学的・工学的な判断を要する事案は専門家の見解を添える。"
+
+// その検討基準となるのは過去の裁判例です (tokiomarine-kashitsu.md:44). With no 賠償責任, the insurer has nothing to
+// negotiate (tokiomarine-faq-2119.md:111).
+usecase DetermineFault "過失割合と賠償責任の判断"
+  description "過去の裁判例を基準に過失割合を検討し、被保険者に法律上の損害賠償責任があるか、過失ゼロかを判断する。"
+
+usecase AssessDamage "損害の確定"
+  description "調査の報告を受けて損害を確定する。賠償の事故では過失を判断した後に、示談代行をしたときは示談の成立か終了の後に確定する。"
+
+screen InvestigationScreen "損害調査画面"
+
+api InvestigationCreateApi "損害調査依頼 API"
+  method POST
+  path "/cases/{id}/investigation"
+
+api InvestigationApi "損害調査 API"
+  method PATCH
+  path "/investigations/{id}"
+
+performs(ClaimHandler, RequestInvestigation)
+performs(Adjuster, ConductSurvey)
+performs(Adjuster, ReportSurvey)
+performs(ClaimHandler, DetermineFault)
+performs(ClaimHandler, AssessDamage)
+belongs(BucInvestigation, ClaimHandling).by(HandlerTerminal)
+
+contains(BucInvestigation, RequestInvestigation)
+contains(BucInvestigation, ConductSurvey)
+contains(BucInvestigation, ReportSurvey)
+contains(BucInvestigation, DetermineFault)
+contains(BucInvestigation, AssessDamage)
+contains(ClaimSystem, InvestigationCreateApi)
+contains(ClaimSystem, InvestigationApi)
+
+// The case moves to 調査中 and the survey is created under it in one step: one API writes both, so
+// they are one transaction group (README).
+displays(RequestInvestigation, InvestigationScreen)
+invokes(RequestInvestigation, InvestigationCreateApi)
+creates(InvestigationCreateApi, Investigation)
+updates(InvestigationCreateApi, ClaimCase)
+transitions(RequestInvestigation, ClaimCase.status, responded -> investigating)
+
+displays(ConductSurvey, InvestigationScreen)
+invokes(ConductSurvey, InvestigationApi)
+updates(InvestigationApi, Investigation)
+transitions(ConductSurvey, Investigation.status, requested -> surveying)
+
+displays(ReportSurvey, InvestigationScreen)
+invokes(ReportSurvey, InvestigationApi)
+transitions(ReportSurvey, Investigation.status, surveying -> reported)
+
+displays(DetermineFault, CaseScreen)
+invokes(DetermineFault, CaseApi)
+transitions(DetermineFault, ClaimCase.liability, undetermined -> at_fault)
+transitions(DetermineFault, ClaimCase.liability, undetermined -> no_fault)
+
+// A vehicle or 人身傷害 case may be assessed before its fault is decided; the fault still decides the
+// 求償 against the other party, so it is decided before the case closes (CloseCase).
+condition CaseInvestigating "事故案件を調査しているか、損害を確定した"
+holds(CaseInvestigating, ClaimCase.status in (investigating, negotiating, assessed))
+applies_to(CaseInvestigating, DetermineFault)
+
+// A case is assessed once the survey is reported. A liability case also needs the fault decided,
+// which the other coverages do not: the arm `investigating -> assessed` is declared twice, once
+// under each guard, and is enabled when either holds. A negotiated case is assessed after the
+// settlement ends, as the event from the settlement says.
+displays(AssessDamage, CaseScreen)
+invokes(AssessDamage, CaseApi)
+transitions(AssessDamage, ClaimCase.status, investigating -> assessed).when(FirstPartyCoverage)
+transitions(AssessDamage, ClaimCase.status, investigating -> assessed).when(LiabilityDetermined)
+transitions(AssessDamage, ClaimCase.status, negotiating -> assessed).when(SettlementConcluded)
+triggers(EvSettlementAgreed, AssessDamage)
+triggers(EvSettlementEnded, AssessDamage)
+
+condition InvestigationReported "損害調査の報告がある"
+holds(InvestigationReported, Investigation.status == reported)
+applies_to(InvestigationReported, AssessDamage)
+
+condition FirstPartyCoverage "車両・人身傷害の事故である"
+holds(FirstPartyCoverage, ClaimCase.coverage in (vehicle, personal_injury))
+
+condition LiabilityDetermined "賠償責任の有無を判断している"
+holds(LiabilityDetermined, ClaimCase.liability in (at_fault, no_fault))
+
+// 示談書 (tokiomarine-2025-tap-yakkan.txt:4596) or the end of the insurer's negotiation.
+condition SettlementConcluded "示談が成立したか、示談代行を終えた"
+holds(SettlementConcluded, Settlement.status in (agreed, failed, declined))
+
+// Access constraints
+requires_permission(RequestInvestigation, CaseHandle)
+requires_medium(RequestInvestigation, HandlerTerminal)
+requires_permission(InvestigationCreateApi, CaseHandle)
+requires_permission(ConductSurvey, DamageSurvey)
+requires_medium(ConductSurvey, HandlerTerminal)
+requires_permission(InvestigationApi, DamageSurvey)
+requires_permission(ReportSurvey, DamageSurvey)
+requires_medium(ReportSurvey, HandlerTerminal)
+requires_permission(DetermineFault, CaseHandle)
+requires_medium(DetermineFault, HandlerTerminal)
+requires_permission(AssessDamage, CaseHandle)
+requires_medium(AssessDamage, HandlerTerminal)
+
+// Screen transitions: the model's assumption.
+navigates(CaseScreen, InvestigationScreen).via(RequestInvestigation)
+navigates(InvestigationScreen, CaseScreen).via(ReportSurvey)
+
+field SurveyMethodField "調査の手法"
+  access editable
+  required true
+  source actor
+
+field SurveyStatusField "調査の状態"
+  access readonly
+  required true
+  source system
+
+field LiabilityField "賠償責任"
+  access editable
+  required true
+  source actor
+
+contains(InvestigationScreen, SurveyMethodField)
+contains(InvestigationScreen, SurveyStatusField)
+contains(CaseScreen, LiabilityField)
+maps_field(SurveyMethodField, Investigation.method)
+maps_field(SurveyStatusField, Investigation.status)
+maps_field(LiabilityField, ClaimCase.liability)
+
+// Business flow
+flow InvestigationFlow "損害確認の流れ"
+step RequestSurveyStep "調査の依頼（手法の選択）"
+step SurveyStep "損害調査（アジャスター）"
+step FaultStep "過失割合と賠償責任の判断"
+step AssessStep "損害の確定"
+
+contains(BucInvestigation, InvestigationFlow)
+contains(InvestigationFlow, RequestSurveyStep)
+contains(InvestigationFlow, SurveyStep)
+contains(InvestigationFlow, FaultStep)
+contains(InvestigationFlow, AssessStep)
+
+precedes(RequestSurveyStep, SurveyStep)
+precedes(SurveyStep, FaultStep)
+precedes(FaultStep, AssessStep)
+
+covers(RequestSurveyStep, RequestInvestigation)
+covers(SurveyStep, ConductSurvey)
+covers(SurveyStep, ReportSurvey)
+covers(FaultStep, DetermineFault)
+covers(AssessStep, AssessDamage)
+
+performs(ClaimHandler, RequestSurveyStep)
+performs(Adjuster, SurveyStep)
+performs(ClaimHandler, FaultStep)
+performs(ClaimHandler, AssessStep)
+
+// Rules
+forbidden(ClaimCase, Investigation, ClaimCase.status in (assessed, closed), Investigation.status != reported).along(ClaimCase, Investigation).label("損害調査の報告の前に損害を確定しない")
+
+forbidden(ClaimCase, status in (assessed, closed), coverage in (bodily_liability, property_liability), liability == undetermined).label("賠償の事故は賠償責任を判断してから損害を確定する")
+
+// Requirement traceability
+requirement ReqInvestigateBeforeDecision "立証責任にかかわらず損害調査をし、その報告に基づいて損害を確定する"
+  priority "must"
+  source "立証責任にかかわらない調査 (sonpo-2026-shiharai-guideline.txt:277-278)"
+  source "認識の相違は現場で実地調査 (sonpo-2026-shiharai-guideline.txt:388-390)"
+  source "専門家の見解 (sonpo-2026-shiharai-guideline.txt:427-428)"
+  source "アジャスターの業務 (sonpo-2024-adjuster-seido-gaiyou.txt:4, :11)"
+  stakeholder "損害サービス担当者"
+  stakeholder "アジャスター"
+  acceptance_criteria "損害が確定した事故案件には報告済みの損害調査があり、賠償の事故は賠償責任が判断されている。"
+  status "accepted"
+
+motivates(ReqInvestigateBeforeDecision, BucInvestigation)
+achieves(ReqInvestigateBeforeDecision, NoMissedPayment)
+
+// Non-goals
+requirement ReqNoLossCalculation "人身損害・物損の損害額の算定の中身は対象外とする"
+  source "範囲の外: 人身傷害・対人の損害額算定の中身 (map.md:16)"
+  source "自賠責の支払基準 (egov-jibaihou-330AC0000000097.txt:180)"
+  stakeholder "アジャスター"
+  status "out-of-scope"
+  rationale "損害額の算定（自賠責の支払基準、任意保険の支払基準、過失相殺の計算）は調査の結果として扱い、算定の手順はモデルにしない。調査もしていない。"
+
+motivates(ReqNoLossCalculation, BucInvestigation)

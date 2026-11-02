@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:SendClaimForms model=samples/insurance-claim-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant usecase__RespondInitially as 初期対応（担当者の案内と手続の説明）
+  participant screen__ClaimScreen as 保険金請求画面
+  participant api__ClaimCreateApi as 請求案内 API
+  participant entity__Claim as 保険金請求
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求書類の案内と送付
+  usecase__RespondInitially ->> api__ClaimCreateApi: 初期対応の完了
+  screen__ClaimScreen ->> api__ClaimCreateApi: 請求案内 API
+  api__ClaimCreateApi ->> entity__Claim: create
+  api__ClaimCreateApi -->> screen__ClaimScreen: done

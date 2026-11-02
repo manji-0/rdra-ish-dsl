@@ -1,0 +1,138 @@
+module buc.jibaiseki
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.intake.{CaseScreen}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucJibaiseki "自賠責の損害調査（一括払い）"
+  description "人身の事故では、任意保険の会社が自賠責保険の部分を含めて保険金を払う（一括払い）。契約者・被害者に説明して同意を確かめ、自賠責の請求書類を損保料率機構の自賠責損害調査事務所に送る。判断が難しい事案は地区本部・本部、特定事案は審査会で審査され、結果が保険会社に報告される。保険会社はその結果に基づいて支払額を決める。同意がなければ、加害者請求・被害者請求・仮渡金の手続を案内する。"
+
+// 人身傷害保険や対人賠償保険では自賠責保険部分を含めて保険金を支払う「一括払い」を行うことについて親切・丁寧に説明し、
+// 同意の有無を確認 (sonpo-2026-shiharai-guideline.txt:404-405); without it, 自賠法15条・16条 and the 仮渡金 (:406-409).
+// 請求書類を確認して、損害保険料率算出機構…の調査事務所に送付 (mlit-jibaiseki-procedure.md:58).
+usecase SendJibaisekiSurvey "自賠責損害調査の依頼"
+  description "一括払いに同意を得た人身の事故について、自賠責の請求書類を確かめて損保料率機構の自賠責損害調査事務所に送る。"
+
+// 判断が困難な事案については、自賠責損害調査事務所の上部機関である地区本部や本部で審査 (giroj-survey-system.md:114);
+// 特定事案については、自賠責保険（共済）審査会において審査 (:115).
+usecase RecordJibaisekiEscalation "上部機関・審査会での審査の記録"
+  description "損保料率機構から、事案が地区本部・本部または審査会の審査に回ったと知らせを受けて記録する。"
+
+// その結果を保険会社に報告します。報告を受けた保険会社は、当機構の調査結果に基づいて支払額を決定 (giroj-survey-system.md:102-103).
+usecase RecordJibaisekiResult "自賠責損害調査の結果の受領"
+  description "損保料率機構の調査結果（有無責、後遺障害の等級、重過失減額の有無）を受け取り、支払額の決定に使う。"
+
+screen JibaisekiScreen "自賠責損害調査画面"
+
+api JibaisekiSurveyCreateApi "自賠責損害調査依頼 API"
+  method POST
+  path "/cases/{id}/jibaiseki-surveys"
+
+api JibaisekiSurveyApi "自賠責損害調査 API"
+  method PATCH
+  path "/jibaiseki-surveys/{id}"
+
+performs(ClaimHandler, SendJibaisekiSurvey)
+belongs(BucJibaiseki, ClaimHandling).by(HandlerTerminal)
+
+contains(BucJibaiseki, SendJibaisekiSurvey)
+contains(BucJibaiseki, RecordJibaisekiEscalation)
+contains(BucJibaiseki, RecordJibaisekiResult)
+contains(ClaimSystem, JibaisekiSurveyCreateApi)
+contains(ClaimSystem, JibaisekiSurveyApi)
+
+displays(SendJibaisekiSurvey, JibaisekiScreen)
+invokes(SendJibaisekiSurvey, JibaisekiSurveyCreateApi)
+creates(JibaisekiSurveyCreateApi, JibaisekiSurvey)
+raises(SendJibaisekiSurvey, EvJibaisekiSurveyRequested)
+triggers(EvJibaisekiSurveyRequested, Giroj)
+
+condition InjuryCoverage "対人賠償・人身傷害の事故である"
+holds(InjuryCoverage, ClaimCase.coverage in (bodily_liability, personal_injury))
+applies_to(InjuryCoverage, SendJibaisekiSurvey)
+
+// Started by the 機構's notice, no performer.
+invokes(RecordJibaisekiEscalation, JibaisekiSurveyApi)
+updates(JibaisekiSurveyApi, JibaisekiSurvey)
+transitions(RecordJibaisekiEscalation, JibaisekiSurvey.status, sent -> under_review)
+raises(Giroj, EvJibaisekiSurveyEscalated)
+triggers(EvJibaisekiSurveyEscalated, RecordJibaisekiEscalation)
+
+invokes(RecordJibaisekiResult, JibaisekiSurveyApi)
+transitions(RecordJibaisekiResult, JibaisekiSurvey.status, sent -> reported)
+transitions(RecordJibaisekiResult, JibaisekiSurvey.status, under_review -> reported)
+raises(Giroj, EvJibaisekiSurveyReported)
+triggers(EvJibaisekiSurveyReported, RecordJibaisekiResult)
+
+// Access constraints
+requires_permission(SendJibaisekiSurvey, CaseHandle)
+requires_medium(SendJibaisekiSurvey, HandlerTerminal)
+requires_permission(JibaisekiSurveyCreateApi, CaseHandle)
+
+// Screen transitions: the model's assumption.
+navigates(CaseScreen, JibaisekiScreen).via(SendJibaisekiSurvey)
+
+field JibaisekiStatusField "自賠責損害調査の状態"
+  access readonly
+  required true
+  source system
+
+contains(JibaisekiScreen, JibaisekiStatusField)
+maps_field(JibaisekiStatusField, JibaisekiSurvey.status)
+
+// Business flow
+flow JibaisekiFlow "自賠責損害調査の流れ"
+step SendSurveyStep "一括払いの同意と調査事務所への送付"
+step EscalationStep "地区本部・本部・審査会の審査"
+step SurveyResultStep "調査結果の報告"
+
+contains(BucJibaiseki, JibaisekiFlow)
+contains(JibaisekiFlow, SendSurveyStep)
+contains(JibaisekiFlow, EscalationStep)
+contains(JibaisekiFlow, SurveyResultStep)
+
+precedes(SendSurveyStep, SurveyResultStep)
+branches(SendSurveyStep, EscalationStep)
+precedes(EscalationStep, SurveyResultStep)
+
+covers(SendSurveyStep, SendJibaisekiSurvey)
+covers(SendSurveyStep, EvJibaisekiSurveyRequested)
+covers(EscalationStep, RecordJibaisekiEscalation)
+covers(EscalationStep, EvJibaisekiSurveyEscalated)
+covers(SurveyResultStep, RecordJibaisekiResult)
+covers(SurveyResultStep, EvJibaisekiSurveyReported)
+
+performs(ClaimHandler, SendSurveyStep)
+
+// Rules
+forbidden(JibaisekiSurvey, ClaimCase, ClaimCase.coverage in (property_liability, vehicle)).along(JibaisekiSurvey, ClaimCase).label("自賠責の損害調査は人身の事故だけ")
+
+// Requirement traceability
+requirement ReqJibaisekiSurvey "人身の事故の自賠責部分は、損保料率機構の調査結果に基づいて支払額を決める"
+  priority "must"
+  source "一括払いの説明と同意 (sonpo-2026-shiharai-guideline.txt:403-405)"
+  source "調査事務所への送付 (mlit-jibaiseki-procedure.md:58)"
+  source "調査結果に基づく支払額の決定 (giroj-survey-system.md:103)"
+  source "支払基準 (egov-jibaihou-330AC0000000097.txt:180)"
+  stakeholder "被害者"
+  stakeholder "損害サービス担当者"
+  acceptance_criteria "自賠責の損害調査は対人賠償・人身傷害の事故にだけあり、結果を受け取るまで調査中として扱う。"
+  status "accepted"
+
+motivates(ReqJibaisekiSurvey, BucJibaiseki)
+achieves(ReqJibaisekiSurvey, NoMissedPayment)
+
+// Non-goals
+requirement ReqNoJibaisekiDispute "自賠責の異議申立と紛争処理は対象外とする"
+  source "異議申立は審査会 (mlit-jibaiseki-proper.md:56)"
+  source "指定紛争処理機関 (egov-jibaihou-330AC0000000097.txt:309)"
+  source "自賠責はそんぽADRセンターの紛争解決手続の対象外 (sonpo-adr-hunsou.md:115)"
+  stakeholder "被害者"
+  status "out-of-scope"
+  rationale "自賠責の支払に関する異議申立（審査会）と自賠責保険・共済紛争処理機構の手続は、保険会社の外で進むので扱わない。加害者請求・被害者請求・仮渡金の手続そのものも、案内することだけを記述に残す。"
+
+motivates(ReqNoJibaisekiDispute, BucJibaiseki)

@@ -1,0 +1,63 @@
+%% rdra-ish diagram=usecase scope=buc:BucIntake model=samples/insurance-claim-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Agent(["代理店"]):::actor
+    %% desc actor__Agent: 契約者から事故の連絡を受け、保険会社の事故受付に取り次ぐ。支払の判断には関わらない。
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+    actor__ClaimReceptionist(["事故受付担当"]):::actor
+    %% desc actor__ClaimReceptionist: 事故の連絡を受け、契約内容・重複契約・事故状況・傷害を確かめ、警察への届出を案内する。
+    actor__PolicyHolder(["契約者・被保険者"]):::actor
+    %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+    extsystem__AccidentInfoExchange[["自動車事故情報交換システム（損保協会の共同利用制度）"]]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__QueryAccidentExchange("事故受付の有無の照会"):::usecase
+    %% desc usecase__QueryAccidentExchange: 車両事故・対物事故について、同じ事故が他社で受け付けられていないかを自動車事故情報交換システムで照会する。
+    usecase__RelayAccidentReport("事故の通知（代理店経由）"):::usecase
+    %% desc usecase__RelayAccidentReport: 代理店が契約者から事故の連絡を受け、保険会社の事故受付に取り次ぐ。
+    usecase__ReportAccident("事故の通知（保険会社へ）"):::usecase
+    %% desc usecase__ReportAccident: 契約者・被保険者が事故の日時・場所・概要を事故受付センターに直ちに通知し、事故の状況・被害者・証人・損害賠償の請求の内容を遅滞なく知らせる。
+    usecase__RespondInitially("初期対応（担当者の案内と手続の説明）"):::usecase
+    %% desc usecase__RespondInitially: 担保種目ごとに担当者を決め、所属部署・氏名・連絡先を案内する。警察への届出と交通事故証明書、損害の防止、無断で責任を認めないことを説明し、支払の対象になりうる保険金と請求の手続を説明する。
+    screen__AccidentReportScreen["事故受付画面"]:::screen
+    screen__CaseScreen["事故案件画面"]:::screen
+    event__EvAccidentQueried>"事故受付の有無の照会"]:::event
+    event__EvInitialResponded>"初期対応の完了"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+    state__ClaimCase_status_received((("事故受付"))):::state
+    state__ClaimCase_status_responded((("初期対応済"))):::state
+  end
+  actor__Agent -.-> usecase__RelayAccidentReport
+  actor__ClaimHandler -.-> usecase__QueryAccidentExchange
+  actor__ClaimHandler -.-> usecase__RespondInitially
+  actor__ClaimReceptionist -.-> usecase__RelayAccidentReport
+  actor__ClaimReceptionist -.-> usecase__ReportAccident
+  actor__PolicyHolder -.-> usecase__ReportAccident
+  event__EvAccidentQueried -.-> extsystem__AccidentInfoExchange
+  usecase__QueryAccidentExchange -.-> screen__CaseScreen
+  usecase__QueryAccidentExchange -.-> event__EvAccidentQueried
+  usecase__QueryAccidentExchange -.->|reads| entity__ClaimCase
+  usecase__RelayAccidentReport -.->|creates| entity__ClaimCase
+  %% derived usecase__RelayAccidentReport -> entity__ClaimCase via api__CaseCreateApi
+  usecase__RelayAccidentReport -.-> screen__AccidentReportScreen
+  usecase__ReportAccident -.->|creates| entity__ClaimCase
+  %% derived usecase__ReportAccident -> entity__ClaimCase via api__CaseCreateApi
+  usecase__ReportAccident -.-> screen__AccidentReportScreen
+  usecase__RespondInitially -.-> screen__CaseScreen
+  usecase__RespondInitially -.-> event__EvInitialResponded
+  usecase__RespondInitially -.->|transitions ClaimCase.status received->responded| state__ClaimCase_status_responded
+  usecase__RespondInitially -.->|updates| entity__ClaimCase
+  %% derived usecase__RespondInitially -> entity__ClaimCase via api__CaseApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;

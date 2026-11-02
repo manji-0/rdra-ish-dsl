@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:RecordVictimConsent model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant screen__SettlementScreen as 示談画面
+  participant api__SettlementApi as 示談 API
+  participant entity__Settlement as 示談（示談代行）
+  actor__Victim ->> screen__SettlementScreen: 被害者の同意
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt 示談代行の同意を確かめている: Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update victim_consent=true
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end

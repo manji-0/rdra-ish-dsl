@@ -1,0 +1,99 @@
+%% rdra-ish diagram=usecase scope=buc:BucSettlement model=samples/insurance-claim-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+    actor__PolicyHolder(["契約者・被保険者"]):::actor
+    %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+    actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+    %% desc actor__Victim: 加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AgreeSettlement("示談の成立"):::usecase
+    %% desc usecase__AgreeSettlement: 示談案を提示し、被害者と合意して示談書を取り交わす。賠償の保険金の請求権がこのとき発生する。
+    usecase__BeginNegotiation("示談交渉の開始"):::usecase
+    %% desc usecase__BeginNegotiation: 双方の同意を得て、保険会社が加害者の窓口として被害者と交渉を始める。
+    usecase__DeclineSettlementService("示談代行を行わない"):::usecase
+    %% desc usecase__DeclineSettlementService: 被害者が同意しない、被保険者が協力しない、賠償額が保険金額を明らかに超えるなど、約款の定める場合に示談代行を行わないと決め、契約者に伝える。
+    usecase__EndNegotiationUnresolved("示談交渉の終了（不調）"):::usecase
+    %% desc usecase__EndNegotiationUnresolved: 示談がまとまらず、調停または訴訟に移る。調停・訴訟の中身は対象外。
+    usecase__OpenSettlement("示談代行の開始"):::usecase
+    %% desc usecase__OpenSettlement: 対人・対物賠償の事故で、被保険者に賠償責任があると判断した案件について、示談代行の手続を開き、契約者と被害者の同意を確かめにいく。
+    usecase__RecordInsuredConsent("被保険者の同意"):::usecase
+    %% desc usecase__RecordInsuredConsent: 被保険者が保険会社の解決条件に同意し、保険会社が被保険者のために示談交渉をすることに同意する。
+    usecase__RecordVictimConsent("被害者の同意"):::usecase
+    %% desc usecase__RecordVictimConsent: 被害者が加害者側の保険会社と直接折衝することに同意する。
+    screen__SettlementScreen["示談画面"]:::screen
+    event__EvSettlementAgreed>"示談の成立"]:::event
+    event__EvSettlementEnded>"示談代行の終了（不調・不実施）"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+    entity__Settlement[("示談（示談代行）")]:::entity
+    state__ClaimCase_status_investigating((("調査中"))):::state
+    state__ClaimCase_status_negotiating((("示談交渉中"))):::state
+    state__Settlement_agreed((("示談成立"))):::state
+    state__Settlement_consent_pending((("同意の確認中"))):::state
+    state__Settlement_declined((("示談代行を行わない"))):::state
+    state__Settlement_failed((("不調（調停・訴訟へ）"))):::state
+    state__Settlement_negotiating((("示談交渉中"))):::state
+    condition__BothConsented{"被保険者と被害者がともに同意している"}:::condition
+    condition__ConsentPending{"示談代行の同意を確かめている"}:::condition
+    condition__SettlementEligible{"対人・対物賠償の事故で、被保険者に賠償責任がある"}:::condition
+  end
+  actor__ClaimHandler -.-> usecase__AgreeSettlement
+  actor__ClaimHandler -.-> usecase__BeginNegotiation
+  actor__ClaimHandler -.-> usecase__DeclineSettlementService
+  actor__ClaimHandler -.-> usecase__EndNegotiationUnresolved
+  actor__ClaimHandler -.-> usecase__OpenSettlement
+  actor__PolicyHolder -.-> usecase__RecordInsuredConsent
+  actor__PolicyHolder -.-> usecase__RecordVictimConsent
+  %% derived actor__PolicyHolder -> usecase__RecordVictimConsent via step__ConsentStep
+  actor__Victim -.-> usecase__RecordInsuredConsent
+  %% derived actor__Victim -> usecase__RecordInsuredConsent via step__ConsentStep
+  actor__Victim -.-> usecase__RecordVictimConsent
+  condition__BothConsented -.->|applies_to| usecase__BeginNegotiation
+  condition__ConsentPending -.->|applies_to| usecase__RecordInsuredConsent
+  condition__ConsentPending -.->|applies_to| usecase__RecordVictimConsent
+  condition__SettlementEligible -.->|applies_to| usecase__OpenSettlement
+  usecase__AgreeSettlement -.-> screen__SettlementScreen
+  usecase__AgreeSettlement -.-> event__EvSettlementAgreed
+  usecase__AgreeSettlement -.->|transitions Settlement.status negotiating->agreed| state__Settlement_agreed
+  usecase__AgreeSettlement -.->|updates| entity__Settlement
+  %% derived usecase__AgreeSettlement -> entity__Settlement via api__SettlementApi
+  usecase__BeginNegotiation -.-> screen__SettlementScreen
+  usecase__BeginNegotiation -.->|transitions Settlement.status consent_pending->negotiating| state__Settlement_negotiating
+  usecase__BeginNegotiation -.->|updates| entity__Settlement
+  %% derived usecase__BeginNegotiation -> entity__Settlement via api__SettlementApi
+  usecase__DeclineSettlementService -.-> screen__SettlementScreen
+  usecase__DeclineSettlementService -.-> event__EvSettlementEnded
+  usecase__DeclineSettlementService -.->|transitions Settlement.status consent_pending->declined| state__Settlement_declined
+  usecase__DeclineSettlementService -.->|updates| entity__Settlement
+  %% derived usecase__DeclineSettlementService -> entity__Settlement via api__SettlementApi
+  usecase__EndNegotiationUnresolved -.-> screen__SettlementScreen
+  usecase__EndNegotiationUnresolved -.-> event__EvSettlementEnded
+  usecase__EndNegotiationUnresolved -.->|transitions Settlement.status negotiating->failed| state__Settlement_failed
+  usecase__EndNegotiationUnresolved -.->|updates| entity__Settlement
+  %% derived usecase__EndNegotiationUnresolved -> entity__Settlement via api__SettlementApi
+  usecase__OpenSettlement -.->|creates| entity__Settlement
+  %% derived usecase__OpenSettlement -> entity__Settlement via api__SettlementCreateApi
+  usecase__OpenSettlement -.-> screen__SettlementScreen
+  usecase__OpenSettlement -.->|transitions ClaimCase.status investigating->negotiating| state__ClaimCase_status_negotiating
+  usecase__OpenSettlement -.->|updates| entity__ClaimCase
+  %% derived usecase__OpenSettlement -> entity__ClaimCase via api__SettlementCreateApi
+  usecase__RecordInsuredConsent -.-> screen__SettlementScreen
+  usecase__RecordInsuredConsent -.->|updates| entity__Settlement
+  %% derived usecase__RecordInsuredConsent -> entity__Settlement via api__SettlementApi
+  usecase__RecordVictimConsent -.-> screen__SettlementScreen
+  usecase__RecordVictimConsent -.->|updates| entity__Settlement
+  %% derived usecase__RecordVictimConsent -> entity__Settlement via api__SettlementApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:SendJibaisekiSurvey model=samples/insurance-claim-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__JibaisekiScreen as 自賠責損害調査画面
+  participant api__JibaisekiSurveyCreateApi as 自賠責損害調査依頼 API
+  participant entity__JibaisekiSurvey as 自賠責損害調査
+  participant extsystem__Giroj as 損害保険料率算出機構（自賠責損害調査事務所）
+  actor__ClaimHandler ->> screen__JibaisekiScreen: 自賠責損害調査の依頼
+  screen__JibaisekiScreen ->> api__JibaisekiSurveyCreateApi: 自賠責損害調査依頼 API
+  alt 対人賠償・人身傷害の事故である: ClaimCase.coverage in (対人賠償, 人身傷害)
+    api__JibaisekiSurveyCreateApi ->> entity__JibaisekiSurvey: create
+    api__JibaisekiSurveyCreateApi -) extsystem__Giroj: 自賠責損害調査の依頼
+    api__JibaisekiSurveyCreateApi -->> screen__JibaisekiScreen: done
+  else guard fails
+    api__JibaisekiSurveyCreateApi -->> screen__JibaisekiScreen: rejected
+  end

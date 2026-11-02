@@ -1,0 +1,28 @@
+%% rdra-ish diagram=state scope=entity:Settlement model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Settlement.status" as statemodel__Settlement_status {
+    [*] --> state__Settlement_consent_pending
+    state "同意の確認中" as state__Settlement_consent_pending
+    state "示談交渉中" as state__Settlement_negotiating
+    state "示談成立" as state__Settlement_agreed
+    state "不調（調停・訴訟へ）" as state__Settlement_failed
+    state "示談代行を行わない" as state__Settlement_declined
+    %% transition usecase__BeginNegotiation
+    state__Settlement_consent_pending --> state__Settlement_negotiating : 示談交渉の開始 [被保険者と被害者がともに同意している]
+    %% transition usecase__DeclineSettlementService
+    state__Settlement_consent_pending --> state__Settlement_declined : 示談代行を行わない
+    %% transition usecase__AgreeSettlement
+    state__Settlement_negotiating --> state__Settlement_agreed : 示談の成立
+    %% transition usecase__EndNegotiationUnresolved
+    state__Settlement_negotiating --> state__Settlement_failed : 示談交渉の終了（不調）
+    state__Settlement_agreed --> [*]
+    state__Settlement_failed --> [*]
+    state__Settlement_declined --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Settlement_agreed stateend
+  class state__Settlement_failed stateend
+  class state__Settlement_declined stateend

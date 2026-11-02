@@ -1,0 +1,92 @@
+%% rdra-ish diagram=usecase scope=buc:BucInvestigation model=samples/insurance-claim-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Adjuster(["アジャスター"]):::actor
+    %% desc actor__Adjuster: 日本損害保険協会に登録された損害調査の担い手。事故の原因と状況、損傷と事故の関係、損害額を調べ、修理工場と修理費を協定する。
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AssessDamage("損害の確定"):::usecase
+    %% desc usecase__AssessDamage: 調査の報告を受けて損害を確定する。賠償の事故では過失を判断した後に、示談代行をしたときは示談の成立か終了の後に確定する。
+    usecase__ConductSurvey("損害調査の実施"):::usecase
+    %% desc usecase__ConductSurvey: アジャスターが事故の原因と状況、損傷部位と事故の関係、損害額を調べる。契約者と被害者の認識が違えば事故現場を調べる。
+    usecase__DetermineFault("過失割合と賠償責任の判断"):::usecase
+    %% desc usecase__DetermineFault: 過去の裁判例を基準に過失割合を検討し、被保険者に法律上の損害賠償責任があるか、過失ゼロかを判断する。
+    usecase__ReportSurvey("損害調査の報告"):::usecase
+    %% desc usecase__ReportSurvey: アジャスターが調査の結果を報告する。法的・医学的・工学的な判断を要する事案は専門家の見解を添える。
+    usecase__RequestInvestigation("損害調査の依頼"):::usecase
+    %% desc usecase__RequestInvestigation: 担当者が事案の特性に応じた調査の手法（書類・写真、現場の実地調査、専門家の見解）を選び、アジャスターに損害調査を依頼する。
+    screen__CaseScreen["事故案件画面"]:::screen
+    screen__InvestigationScreen["損害調査画面"]:::screen
+    event__EvSettlementAgreed>"示談の成立"]:::event
+    event__EvSettlementEnded>"示談代行の終了（不調・不実施）"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+    entity__Investigation[("損害調査")]:::entity
+    state__ClaimCase_liability_at_fault((("賠償責任あり"))):::state
+    state__ClaimCase_liability_no_fault((("過失ゼロ（賠償責任なし）"))):::state
+    state__ClaimCase_liability_undetermined((("未確定"))):::state
+    state__ClaimCase_status_assessed((("損害確定"))):::state
+    state__ClaimCase_status_investigating((("調査中"))):::state
+    state__ClaimCase_status_negotiating((("示談交渉中"))):::state
+    state__ClaimCase_status_responded((("初期対応済"))):::state
+    state__Investigation_reported((("調査報告済"))):::state
+    state__Investigation_requested((("調査依頼"))):::state
+    state__Investigation_surveying((("調査中"))):::state
+    condition__CaseInvestigating{"事故案件を調査しているか、損害を確定した"}:::condition
+    condition__FirstPartyCoverage{"車両・人身傷害の事故である"}:::condition
+    condition__InvestigationReported{"損害調査の報告がある"}:::condition
+    condition__LiabilityDetermined{"賠償責任の有無を判断している"}:::condition
+    condition__SettlementConcluded{"示談が成立したか、示談代行を終えた"}:::condition
+  end
+  actor__Adjuster -.-> usecase__ConductSurvey
+  actor__Adjuster -.-> usecase__ReportSurvey
+  actor__ClaimHandler -.-> usecase__AssessDamage
+  actor__ClaimHandler -.-> usecase__DetermineFault
+  actor__ClaimHandler -.-> usecase__RequestInvestigation
+  condition__CaseInvestigating -.->|applies_to| usecase__DetermineFault
+  condition__FirstPartyCoverage -.->|when| usecase__AssessDamage
+  %% derived condition__FirstPartyCoverage -> usecase__AssessDamage via transitions ClaimCase.status investigating->assessed
+  condition__InvestigationReported -.->|applies_to| usecase__AssessDamage
+  condition__LiabilityDetermined -.->|when| usecase__AssessDamage
+  %% derived condition__LiabilityDetermined -> usecase__AssessDamage via transitions ClaimCase.status investigating->assessed
+  condition__SettlementConcluded -.->|when| usecase__AssessDamage
+  %% derived condition__SettlementConcluded -> usecase__AssessDamage via transitions ClaimCase.status negotiating->assessed
+  event__EvSettlementAgreed -.-> usecase__AssessDamage
+  event__EvSettlementEnded -.-> usecase__AssessDamage
+  usecase__AssessDamage -.-> screen__CaseScreen
+  usecase__AssessDamage -.->|transitions ClaimCase.status investigating->assessed| state__ClaimCase_status_assessed
+  usecase__AssessDamage -.->|transitions ClaimCase.status negotiating->assessed| state__ClaimCase_status_assessed
+  usecase__AssessDamage -.->|updates| entity__ClaimCase
+  %% derived usecase__AssessDamage -> entity__ClaimCase via api__CaseApi
+  usecase__ConductSurvey -.-> screen__InvestigationScreen
+  usecase__ConductSurvey -.->|transitions Investigation.status requested->surveying| state__Investigation_surveying
+  usecase__ConductSurvey -.->|updates| entity__Investigation
+  %% derived usecase__ConductSurvey -> entity__Investigation via api__InvestigationApi
+  usecase__DetermineFault -.-> screen__CaseScreen
+  usecase__DetermineFault -.->|transitions ClaimCase.liability undetermined->at_fault| state__ClaimCase_liability_at_fault
+  usecase__DetermineFault -.->|transitions ClaimCase.liability undetermined->no_fault| state__ClaimCase_liability_no_fault
+  usecase__DetermineFault -.->|updates| entity__ClaimCase
+  %% derived usecase__DetermineFault -> entity__ClaimCase via api__CaseApi
+  usecase__ReportSurvey -.-> screen__InvestigationScreen
+  usecase__ReportSurvey -.->|transitions Investigation.status surveying->reported| state__Investigation_reported
+  usecase__ReportSurvey -.->|updates| entity__Investigation
+  %% derived usecase__ReportSurvey -> entity__Investigation via api__InvestigationApi
+  usecase__RequestInvestigation -.->|creates| entity__Investigation
+  %% derived usecase__RequestInvestigation -> entity__Investigation via api__InvestigationCreateApi
+  usecase__RequestInvestigation -.-> screen__InvestigationScreen
+  usecase__RequestInvestigation -.->|transitions ClaimCase.status responded->investigating| state__ClaimCase_status_investigating
+  usecase__RequestInvestigation -.->|updates| entity__ClaimCase
+  %% derived usecase__RequestInvestigation -> entity__ClaimCase via api__InvestigationCreateApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

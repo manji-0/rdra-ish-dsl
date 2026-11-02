@@ -1,0 +1,15 @@
+%% rdra-ish diagram=state scope=entity:Payment model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Payment.status" as statemodel__Payment_status {
+    [*] --> state__Payment_instructed
+    state "支払手続" as state__Payment_instructed
+    state "支払完了の連絡済" as state__Payment_completed
+    %% transition usecase__NotifyPaymentCompleted
+    state__Payment_instructed --> state__Payment_completed : 支払完了の連絡
+    state__Payment_completed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Payment_completed stateend

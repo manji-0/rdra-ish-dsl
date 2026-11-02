@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ExtendPaymentPeriod model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__ClaimScreen as 保険金請求画面
+  participant api__ClaimApi as 保険金請求 API
+  participant entity__Claim as 保険金請求
+  actor__ClaimHandler ->> screen__ClaimScreen: 支払期限の延長と通知
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt 請求完了の後、支払・不払を決める前である: Claim.status == 請求完了 and Claim.period == 30日の期間中
+    api__ClaimApi ->> entity__Claim: update period 30日の期間中 -> 延長期間中, extension in (災害救助法の被災地域での調査（60日）, 医療機関・専門機関の診断・鑑定の照会（90日）, 後遺障害の診断・認定審査の照会（120日）, 警察・検察・消防等の捜査・調査結果の照会（180日）, 日本国外での調査（180日）)
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end

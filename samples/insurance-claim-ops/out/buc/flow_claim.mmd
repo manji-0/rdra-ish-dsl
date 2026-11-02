@@ -1,0 +1,58 @@
+%% rdra-ish diagram=flow scope=buc:BucClaim model=samples/insurance-claim-ops
+%% kinds: flow step lane actor timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__ClaimFlow["保険金請求の流れ"]
+    step__SubmitStep["請求書類の提出"]:::step
+    step__TimeBarStep["時効（3年）"]:::step
+    subgraph lane__ClaimFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__ClaimFlow__ClaimHandler: actor__ClaimHandler
+      step__CompleteStep["請求完了（支払期限の起算）"]:::step
+      step__GuideStep["請求の手続と書類の案内"]:::step
+      step__IntentStep["等級の変動の説明と請求意思の確認"]:::step
+    end
+    subgraph lane__ClaimFlow__PolicyHolder["契約者・被保険者"]
+      %% lane lane__ClaimFlow__PolicyHolder: actor__PolicyHolder
+      step__WithdrawStep["請求の取下げ"]:::step
+    end
+  end
+  actor__PolicyHolder(["契約者・被保険者"]):::actor
+  %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+  actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+  %% desc actor__Victim: 加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。
+  timer__ClaimLimitation(("保険金請求権の時効（請求権が発生した時の翌日から3年）")):::timer
+  usecase__CompleteClaim("請求完了の確認"):::usecase
+  %% desc usecase__CompleteClaim: 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。
+  usecase__ConfirmClaimIntent("等級の変動の説明と請求意思の確認"):::usecase
+  %% desc usecase__ConfirmClaimIntent: 保険金を請求すると次の契約の等級が下がる（3等級ダウン事故は1件につき3等級）ことを説明し、それでも請求するかを確かめる。
+  usecase__SendClaimForms("請求書類の案内と送付"):::usecase
+  %% desc usecase__SendClaimForms: 担当者が請求者に請求の手続を説明し、請求書と、交通事故証明書・診断書・見積書・示談書など必要な書類を案内して送る。
+  usecase__SubmitClaim("請求書類の提出"):::usecase
+  %% desc usecase__SubmitClaim: 請求者が保険会社の求める請求書類を出す。賠償の保険金では、示談書と、賠償金を払ったか被害者が承諾したことを示す書類を添える。
+  usecase__TimeBarClaim("請求権の時効による消滅"):::usecase
+  %% desc usecase__TimeBarClaim: 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。
+  usecase__WithdrawClaim("請求の取下げ"):::usecase
+  %% desc usecase__WithdrawClaim: 請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。
+  event__EvInitialResponded>"初期対応の完了"]:::event
+  actor__PolicyHolder -.-> step__SubmitStep
+  actor__Victim -.-> step__SubmitStep
+  step__CompleteStep -.-> usecase__CompleteClaim
+  step__GuideStep -.-> event__EvInitialResponded
+  step__GuideStep -.-> usecase__SendClaimForms
+  step__GuideStep -.->|excepts| step__TimeBarStep
+  step__GuideStep -->|precedes| step__IntentStep
+  step__IntentStep -.-> usecase__ConfirmClaimIntent
+  step__IntentStep -->|precedes| step__SubmitStep
+  step__SubmitStep -.-> usecase__SubmitClaim
+  step__SubmitStep -.->|excepts| step__WithdrawStep
+  step__SubmitStep -->|precedes| step__CompleteStep
+  step__TimeBarStep -.-> timer__ClaimLimitation
+  step__TimeBarStep -.-> usecase__TimeBarClaim
+  step__WithdrawStep -.-> usecase__WithdrawClaim
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

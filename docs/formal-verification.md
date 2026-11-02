@@ -220,7 +220,8 @@ WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A property without `.fai
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
 `HygieneManagerEventuallyAppointed` runs on a 243-state cone and the whole `verify` takes
-18 s; on patent-ops `GrantEnds` runs on a 4,105-state cone. The test
+18 s; on patent-ops `GrantEnds` runs on a 4,105-state cone; on insurance-claim-ops
+`ClaimEventuallyDecided` runs on a 2,975-state cone and `SubrogationEnds` on a 4,783-state one. The test
 `a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares the
 cone verdict with the whole-model verdict on the temporal samples and on fixtures for each
 case: another entity looping outside the cone, a fair use case whose guard reads another
@@ -384,9 +385,9 @@ The rules for each flag and for deferral are in
   `WF_vars(Next)`, which a cone keeps only when it holds every var an action writes (see
   [Temporal properties on a cone](#temporal-properties-on-a-cone)); otherwise the property
   runs on the whole model, which explores every reachable state at once and on
-  `samples/patent-ops` or `samples/food-permit-ops` at `InstanceCount=2` stops at the budget
-  as `not decided`. A `.fair` that names the use cases the property relies on keeps it on
-  its cone.
+  `samples/patent-ops`, `samples/food-permit-ops`, or `samples/insurance-claim-ops` at
+  `InstanceCount=2` stops at the budget or the state cap as `not decided`. A `.fair` that names
+  the use cases the property relies on keeps it on its cone.
 - **`.along`.** An `.along` path needs a `relate` that binds each adjacent pair. Without
   one, the rule is `UnbindableScope`, an error in every command, not a dropped filter.
 - **Quantifiers.** `has` and `none` range over the `InstanceCount` ids. Where a `relate`
@@ -438,6 +439,7 @@ The rules for each flag and for deferral are in
 <!-- derived-from #approximations-and-limitations -->
 <!-- derived-from ../samples/patent-ops/README.md#known-verification-gaps -->
 <!-- derived-from ../samples/food-permit-ops/README.md#known-verification-gaps -->
+<!-- derived-from ../samples/insurance-claim-ops/README.md#known-verification-gaps -->
 <!-- constrained-by ./language-reference.md#triggers-and-event-driven-buc-chaining -->
 A passing `check` or `verify` says nothing about what it does not explore. This section
 names each gap that 1.0 keeps, how to see it in a run, and what you can do about it. The
@@ -512,8 +514,10 @@ gaps.
   whole-model run stops at `--temporal-budget` seconds (300 by default) or at 2,097,152
   distinct states, and the property is then `not decided`, which warns and does not fail
   the run unless `--deny-undecided` is given. On
-  patent-ops and food-permit-ops at 2 instances a whole-model run does not finish (14
-  million states in 11 minutes, and 6.9 million in 300 s). See it: `not decided` on the
+  patent-ops, food-permit-ops, and insurance-claim-ops at 2 instances a whole-model run does
+  not finish (14 million states in 11 minutes, 6.9 million in 300 s, and 2.3 million with 1.7
+  million queued at the state cap in 143 s; insurance-claim-ops's two properties are on their
+  cones only with `.fair`). See it: `not decided` on the
   property's line and under `not checked:`. What you can do: add `.fair(...)` naming the
   use cases the property relies on, which keeps it on its cone, or raise the budget.
 - **patent-ops does not check that a filing follows approved drafts.** `FileApplication`
@@ -539,6 +543,15 @@ gaps.
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
   you can do: a change that grows the application's cone further takes the view past the cap;
   measure it with `lifecycle_measure` first.
+- **insurance-claim-ops does not gate a liability claim on its settlement.** A liability claim
+  is completed with the 示談書, but the claim and the settlement are both children of the
+  accident case, and a `holds` guard follows one key: a guard on `CompleteClaim` that reads
+  `Settlement` reads any settlement at 2 instances, not the one of the claim's case. The rule
+  `.along(Claim, ClaimCase, Settlement)` can be written, but no guard makes it hold, so it is
+  left out. The sample's largest cone is 60,193 states at 2 instances and `verify` takes about
+  5 s. See it:
+  [Known verification gaps](../samples/insurance-claim-ops/README.md#known-verification-gaps).
+  What you can do: give the two children a key of their own, or carry the fact on the claim.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
   outside the selected BUCs, and those could reach, enable, or unblock a state. A missing
   witness, a use case that never runs, a deadlock, an arm never taken, and a value never
@@ -658,4 +671,5 @@ The script prints one line per run with the verdict, the wall time, and the maxi
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
 Locally (Apple silicon) the 55 runs of the 27 roots take about 130 s: clinic-ops `verify`
 takes 41 s at about 820 MB and patent-ops `verify` 65 s at about 1.1 GB, their TLC JVMs
-included; food-permit-ops `verify` takes 1.4 s. The CI step has 5 minutes.
+included; food-permit-ops `verify` takes 1.4 s, and insurance-claim-ops `verify` about 5 s at
+about 460 MB. The CI step has 5 minutes.

@@ -2,6 +2,7 @@ samples/ec-site
 samples/clinic-ops
 samples/patent-ops
 samples/food-permit-ops
+samples/insurance-claim-ops
 samples/personal-info
 samples/api-contract
 samples/incremental-order/step-7-business-rules/src

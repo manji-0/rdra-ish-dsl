@@ -1,0 +1,9 @@
+%% rdra-ish diagram=screen scope=buc:BucClaim model=samples/insurance-claim-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__ClaimFormScreen["請求書類の提出画面"]:::screen
+  screen__ClaimScreen["保険金請求画面"]:::screen
+  screen__ClaimFormScreen -->|請求書類の提出| screen__ClaimScreen
+  %% via screen__ClaimFormScreen -> screen__ClaimScreen usecase__SubmitClaim
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

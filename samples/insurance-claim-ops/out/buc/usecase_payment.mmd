@@ -1,0 +1,162 @@
+%% rdra-ish diagram=usecase scope=buc:BucPayment model=samples/insurance-claim-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+    actor__PaymentApprover(["支払決裁者"]):::actor
+    %% desc actor__PaymentApprover: 調査結果と請求書類から、保険金を支払うか支払わないかを決裁する。
+    actor__SeniorApprover(["上位決裁者（不正請求対応）"]):::actor
+    %% desc actor__SeniorApprover: 不正請求の疑いがある請求の支払・不払を決裁する。そんぽADRセンターの和解案に応じるかを決める。
+    extsystem__AccidentInfoExchange[["自動車事故情報交換システム（損保協会の共同利用制度）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__PaymentDeadline(("支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__CloseCase("事故案件の完了"):::usecase
+    %% desc usecase__CloseCase: 請求の支払・不払の通知・取下げを受けて、事故案件を完了にする。過失の判断が残っていれば先に済ませる。
+    usecase__CompleteClaim("請求完了の確認"):::usecase
+    %% desc usecase__CompleteClaim: 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。
+    usecase__DecideClaim("支払・不払の決裁"):::usecase
+    %% desc usecase__DecideClaim: 支払決裁者が調査の結果と請求書類から、保険金を支払うか、免責・解除などで支払わないかを決める。
+    usecase__DecideSuspectedClaim("疑義事案の支払・不払の決裁"):::usecase
+    %% desc usecase__DecideSuspectedClaim: 不正請求の疑いがある請求を、上位の決裁者（不正請求への対応を専門とする担当）が決める。
+    usecase__ExplainDenialReason("不払いの理由の説明"):::usecase
+    %% desc usecase__ExplainDenialReason: 支払わない根拠となる約款の条項と、調査で確かめた事実を、契約者等と被害者に説明する。
+    usecase__ExtendPaymentPeriod("支払期限の延長と通知"):::usecase
+    %% desc usecase__ExtendPaymentPeriod: 特別な照会または調査が欠かせないとき、延長事由（被災地の調査60日、鑑定等の照会90日、後遺障害の照会120日、警察等の照会180日、国外の調査180日）を選び、確認する事項と終える時期を請求者に通知する。
+    usecase__FlagSuspectedFraud("不正請求の疑いの登録"):::usecase
+    %% desc usecase__FlagSuspectedFraud: 事故状況・因果関係・修理や治療の内容に不自然な点があるか、他社での事故受付が分かったとき、請求を疑義事案として登録し、深く調べる。
+    usecase__MarkPaymentOverdue("支払期限の経過"):::usecase
+    %% desc usecase__MarkPaymentOverdue: 支払期限（30日、延長したときは延長の日数）を過ぎても支払・不払の通知をしていない請求に、遅延利息の起算を記録する。
+    usecase__NotifyDenial("不払いの通知"):::usecase
+    %% desc usecase__NotifyDenial: 理由を説明したうえで、支払わないことを書面で通知する。了解が得られなければ、そんぽADRセンターなどの相談機関を案内する。
+    usecase__NotifyPaymentCompleted("支払完了の連絡"):::usecase
+    %% desc usecase__NotifyPaymentCompleted: 保険金を払ったことと支払手続が終わったことを請求者に連絡する。
+    usecase__PayClaim("保険金の支払"):::usecase
+    %% desc usecase__PayClaim: 支払金額と内訳（主たる保険金と特約・費用保険金）、算定の理由を説明して、被保険者・被害者・修理工場に払う。期限を過ぎていれば遅延利息を加える。
+    screen__ClaimScreen["保険金請求画面"]:::screen
+    screen__DecisionScreen["支払査定画面"]:::screen
+    screen__PaymentScreen["支払画面"]:::screen
+    event__EvClaimPaid>"保険金の支払"]:::event
+    event__EvClaimWithdrawn>"請求の取下げ"]:::event
+    event__EvDenialNotified>"不払いの通知"]:::event
+    event__EvDuplicateAccidentFound>"他社での事故受付の判明"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Claim[("保険金請求")]:::entity
+    entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+    entity__Payment[("保険金の支払")]:::entity
+    state__ClaimCase_status_assessed((("損害確定"))):::state
+    state__ClaimCase_status_closed((("完了"))):::state
+    state__Claim_period_ended((("期限の管理を終了"))):::state
+    state__Claim_period_extended((("延長期間中"))):::state
+    state__Claim_period_not_started((("未起算"))):::state
+    state__Claim_period_overdue((("期限経過"))):::state
+    state__Claim_period_running((("30日の期間中"))):::state
+    state__Claim_status_completed((("請求完了"))):::state
+    state__Claim_status_decided_denial((("不払決定"))):::state
+    state__Claim_status_decided_payment((("支払決定"))):::state
+    state__Claim_status_denial_notified((("不払通知済"))):::state
+    state__Claim_status_paid((("支払済"))):::state
+    state__Claim_status_submitted((("請求書類の提出"))):::state
+    state__Payment_completed((("支払完了の連絡済"))):::state
+    state__Payment_instructed((("支払手続"))):::state
+    condition__ClaimBeforeDecision{"請求書類の提出から決裁の前である"}:::condition
+    condition__ClaimUnderConfirmation{"請求完了の後、支払・不払を決める前である"}:::condition
+    condition__DenialDecided{"不払いを決めた"}:::condition
+    condition__FraudSuspected{"不正請求の疑いがある"}:::condition
+    condition__LiabilityDetermined{"賠償責任の有無を判断している"}:::condition
+    condition__NoFraudSuspicion{"不正請求の疑いがない"}:::condition
+    condition__NotPaidYet{"支払済みの案件は再度支払わない"}:::condition
+    condition__ReasonExplained{"不払いの理由を説明した"}:::condition
+  end
+  actor__ClaimHandler -.-> usecase__CompleteClaim
+  actor__ClaimHandler -.-> usecase__ExplainDenialReason
+  actor__ClaimHandler -.-> usecase__ExtendPaymentPeriod
+  actor__ClaimHandler -.-> usecase__FlagSuspectedFraud
+  actor__ClaimHandler -.-> usecase__NotifyDenial
+  actor__ClaimHandler -.-> usecase__NotifyPaymentCompleted
+  actor__ClaimHandler -.-> usecase__PayClaim
+  actor__PaymentApprover -.-> usecase__DecideClaim
+  actor__SeniorApprover -.-> usecase__DecideSuspectedClaim
+  condition__ClaimBeforeDecision -.->|applies_to| usecase__FlagSuspectedFraud
+  condition__ClaimUnderConfirmation -.->|applies_to| usecase__ExtendPaymentPeriod
+  condition__DenialDecided -.->|applies_to| usecase__ExplainDenialReason
+  condition__FraudSuspected -.->|applies_to| usecase__DecideSuspectedClaim
+  condition__LiabilityDetermined -.->|applies_to| usecase__CloseCase
+  condition__NoFraudSuspicion -.->|applies_to| usecase__DecideClaim
+  condition__NotPaidYet -.->|applies_to| usecase__PayClaim
+  condition__ReasonExplained -.->|applies_to| usecase__NotifyDenial
+  event__EvClaimPaid -.-> usecase__CloseCase
+  event__EvClaimWithdrawn -.-> usecase__CloseCase
+  event__EvDenialNotified -.-> usecase__CloseCase
+  event__EvDuplicateAccidentFound -.-> usecase__FlagSuspectedFraud
+  extsystem__AccidentInfoExchange -.-> event__EvDuplicateAccidentFound
+  timer__PaymentDeadline -.-> usecase__MarkPaymentOverdue
+  usecase__CloseCase -.->|transitions ClaimCase.status assessed->closed| state__ClaimCase_status_closed
+  usecase__CloseCase -.->|updates| entity__ClaimCase
+  %% derived usecase__CloseCase -> entity__ClaimCase via api__CaseApi
+  usecase__CompleteClaim -.-> screen__ClaimScreen
+  usecase__CompleteClaim -.->|transitions Claim.period not_started->running| state__Claim_period_running
+  usecase__CompleteClaim -.->|transitions Claim.status submitted->completed| state__Claim_status_completed
+  usecase__CompleteClaim -.->|updates| entity__Claim
+  %% derived usecase__CompleteClaim -> entity__Claim via api__ClaimApi
+  usecase__DecideClaim -.-> screen__DecisionScreen
+  usecase__DecideClaim -.->|transitions Claim.status completed->decided_denial| state__Claim_status_decided_denial
+  usecase__DecideClaim -.->|transitions Claim.status completed->decided_payment| state__Claim_status_decided_payment
+  usecase__DecideClaim -.->|updates| entity__Claim
+  %% derived usecase__DecideClaim -> entity__Claim via api__DecisionApi
+  usecase__DecideSuspectedClaim -.-> screen__DecisionScreen
+  usecase__DecideSuspectedClaim -.->|transitions Claim.status completed->decided_denial| state__Claim_status_decided_denial
+  usecase__DecideSuspectedClaim -.->|transitions Claim.status completed->decided_payment| state__Claim_status_decided_payment
+  usecase__DecideSuspectedClaim -.->|updates| entity__Claim
+  %% derived usecase__DecideSuspectedClaim -> entity__Claim via api__DecisionApi
+  usecase__ExplainDenialReason -.-> screen__DecisionScreen
+  usecase__ExplainDenialReason -.->|updates| entity__Claim
+  %% derived usecase__ExplainDenialReason -> entity__Claim via api__DecisionApi
+  usecase__ExtendPaymentPeriod -.-> screen__ClaimScreen
+  usecase__ExtendPaymentPeriod -.->|transitions Claim.period running->extended| state__Claim_period_extended
+  usecase__ExtendPaymentPeriod -.->|updates| entity__Claim
+  %% derived usecase__ExtendPaymentPeriod -> entity__Claim via api__ClaimApi
+  usecase__FlagSuspectedFraud -.-> screen__DecisionScreen
+  usecase__FlagSuspectedFraud -.->|updates| entity__Claim
+  %% derived usecase__FlagSuspectedFraud -> entity__Claim via api__DecisionApi
+  usecase__MarkPaymentOverdue -.->|transitions Claim.period extended->overdue| state__Claim_period_overdue
+  usecase__MarkPaymentOverdue -.->|transitions Claim.period running->overdue| state__Claim_period_overdue
+  usecase__MarkPaymentOverdue -.->|updates| entity__Claim
+  %% derived usecase__MarkPaymentOverdue -> entity__Claim via api__ClaimApi
+  usecase__NotifyDenial -.-> screen__DecisionScreen
+  usecase__NotifyDenial -.-> event__EvDenialNotified
+  usecase__NotifyDenial -.->|transitions Claim.period extended->ended| state__Claim_period_ended
+  usecase__NotifyDenial -.->|transitions Claim.period overdue->ended| state__Claim_period_ended
+  usecase__NotifyDenial -.->|transitions Claim.period running->ended| state__Claim_period_ended
+  usecase__NotifyDenial -.->|transitions Claim.status decided_denial->denial_notified| state__Claim_status_denial_notified
+  usecase__NotifyDenial -.->|updates| entity__Claim
+  %% derived usecase__NotifyDenial -> entity__Claim via api__DecisionApi
+  usecase__NotifyPaymentCompleted -.-> screen__PaymentScreen
+  usecase__NotifyPaymentCompleted -.->|transitions Payment.status instructed->completed| state__Payment_completed
+  usecase__NotifyPaymentCompleted -.->|updates| entity__Payment
+  %% derived usecase__NotifyPaymentCompleted -> entity__Payment via api__PaymentApi
+  usecase__PayClaim -.->|creates| entity__Payment
+  %% derived usecase__PayClaim -> entity__Payment via api__PaymentCreateApi
+  usecase__PayClaim -.-> screen__PaymentScreen
+  usecase__PayClaim -.-> event__EvClaimPaid
+  usecase__PayClaim -.->|transitions Claim.period extended->ended| state__Claim_period_ended
+  usecase__PayClaim -.->|transitions Claim.period overdue->ended| state__Claim_period_ended
+  usecase__PayClaim -.->|transitions Claim.period running->ended| state__Claim_period_ended
+  usecase__PayClaim -.->|transitions Claim.status decided_payment->paid| state__Claim_status_paid
+  usecase__PayClaim -.->|updates| entity__Claim
+  %% derived usecase__PayClaim -> entity__Claim via api__PaymentCreateApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:RespondInitially model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__CaseScreen as 事故案件画面
+  participant api__CaseApi as 事故案件 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant api__ClaimCreateApi as 請求案内 API
+  actor__ClaimHandler ->> screen__CaseScreen: 初期対応（担当者の案内と手続の説明）
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt ClaimCase.status == 事故受付
+    api__CaseApi ->> entity__ClaimCase: update status 事故受付 -> 初期対応済
+    api__CaseApi -) api__ClaimCreateApi: 初期対応の完了
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end

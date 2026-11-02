@@ -1,0 +1,41 @@
+%% rdra-ish diagram=flow scope=buc:BucRepair model=samples/insurance-claim-ops
+%% kinds: flow step lane usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__RepairFlow["修理の流れ"]
+    subgraph lane__RepairFlow__Adjuster["アジャスター"]
+      %% lane lane__RepairFlow__Adjuster: actor__Adjuster
+      step__AgreeStep["修理費の協定（アジャスター）"]:::step
+    end
+    subgraph lane__RepairFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__RepairFlow__ClaimHandler: actor__ClaimHandler
+      step__ApproveStep["着工の承認"]:::step
+    end
+    subgraph lane__RepairFlow__RepairShop["修理工場"]
+      %% lane lane__RepairFlow__RepairShop: actor__RepairShop
+      step__EstimateStep["見積書と写真の提出"]:::step
+      step__RepairStep["着工と修理"]:::step
+    end
+  end
+  usecase__AgreeRepairCost("修理費の協定"):::usecase
+  %% desc usecase__AgreeRepairCost: アジャスターが損傷と事故の関係、修理の方法と部品交換の要否を確かめ、修理工場と修理費を協定する。
+  usecase__ApproveRepairStart("修理着工の承認"):::usecase
+  %% desc usecase__ApproveRepairStart: 協定した修理費で修理に着工することを、保険会社が承認する。
+  usecase__CompleteRepair("修理の完了"):::usecase
+  %% desc usecase__CompleteRepair: 修理工場が修理を終える。
+  usecase__StartRepair("修理の着工"):::usecase
+  %% desc usecase__StartRepair: 修理工場が保険会社の承認を受けて修理に着工する。
+  usecase__SubmitRepairEstimate("修理見積の提出"):::usecase
+  %% desc usecase__SubmitRepairEstimate: 修理工場が損害車両の修理見積書と写真を保険会社に出す。
+  step__AgreeStep -.-> usecase__AgreeRepairCost
+  step__AgreeStep -->|precedes| step__ApproveStep
+  step__ApproveStep -.-> usecase__ApproveRepairStart
+  step__ApproveStep -->|precedes| step__RepairStep
+  step__EstimateStep -.-> usecase__SubmitRepairEstimate
+  step__EstimateStep -->|precedes| step__AgreeStep
+  step__RepairStep -.-> usecase__CompleteRepair
+  step__RepairStep -.-> usecase__StartRepair
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

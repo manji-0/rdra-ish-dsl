@@ -1,0 +1,95 @@
+%% rdra-ish diagram=requirement scope=whole model=samples/insurance-claim-ops
+%% kinds: requirement goal buc
+%% omitted: nfr quality constraint business flow usecase event system entity
+flowchart LR
+  requirement__ReqAdrParticipation[/"了解を得られない申出人に相談機関を案内し、そんぽADRセンターの手続に応じ、特別調停案は受諾する"\]:::requirement
+  requirement__ReqClaimGuidance[/"請求の手続と書類を案内し、等級の変動を説明してから請求の意思を確かめる"\]:::requirement
+  requirement__ReqExplainDenial[/"不払いは、根拠となる約款の条項と調査の結果を説明してから通知する"\]:::requirement
+  requirement__ReqInvestigateBeforeDecision[/"立証責任にかかわらず損害調査をし、その報告に基づいて損害を確定する"\]:::requirement
+  requirement__ReqJibaisekiSurvey[/"人身の事故の自賠責部分は、損保料率機構の調査結果に基づいて支払額を決める"\]:::requirement
+  requirement__ReqNoDoublePayment[/"同じ請求に二度払わない"\]:::requirement
+  requirement__ReqPayWithinPeriod[/"請求完了日から30日（延長時は事由ごとの日数）のうちに支払・不払を決めて知らせ、過ぎたら遅延利息を付ける"\]:::requirement
+  requirement__ReqPromptIntake[/"事故の通知を受けたら、担保種目ごとの担当者と請求の手続を速やかに案内する"\]:::requirement
+  requirement__ReqRepairApproval[/"修理は、アジャスターが修理費を協定し、保険会社が着工を承認してから行う"\]:::requirement
+  requirement__ReqSeniorApprovalForSuspicion[/"不正請求の疑いがある請求は、上位の決裁者か不正請求対応の担当者が決裁する"\]:::requirement
+  requirement__ReqSettlementWithConsent[/"示談代行は、賠償責任のある対人・対物賠償の事故で、被保険者と被害者の同意を得て行う"\]:::requirement
+  requirement__ReqSubrogateAfterPayment[/"保険金を払った後に、移った請求権で相手方に求償し、時効の前に回収か断念を決める"\]:::requirement
+  goal__FairDenial[/"不払いを理由とともに説明し、納得を得る<br/>不払通知のうち、そんぽADRセンターの紛争解決手続に進んだ割合: 1.5% → 0.5%"/]:::goal
+  %% desc goal__FairDenial: 支払えないときは、根拠となる約款の条項と調査の結果を説明してから通知し、了解が得られなければ ADR を案内する。
+  goal__NoMissedPayment[/"払うべき保険金を漏れなく払う<br/>支払済み事案の点検で見つかった支払漏れ・二重払いの件数: 年30件 → 年0件"/]:::goal
+  %% desc goal__NoMissedPayment: 支払うべき保険金を、請求がないからといって払わずにおかない。不正な請求には払わず、同じ請求に二度払わない。
+  goal__TimelyPayment[/"支払期限のうちに支払・不払を決めて知らせる<br/>支払期限のうちに支払または不払通知を済ませた請求の割合: 96% → 99%"/]:::goal
+  %% desc goal__TimelyPayment: 請求完了日から30日（延長したときは延長の日数）のうちに確認を終え、支払うか、支払わない理由を知らせる。期限を過ぎると遅延利息が付く。
+  buc__BucClaim["保険金の請求"]:::buc
+  %% desc buc__BucClaim: 保険会社は請求の手続と必要な書類を案内する。自動車保険では、請求の前に次の契約の等級がどう変わるかを説明して、請求の意思を確かめる。請求者（被保険者・保険金請求権者、直接請求の被害者）が書類を出し終えた日が請求完了日で、支払期限はこの日から数える。賠償の保険金は示談書などで賠償額が決まってから請求できる。請求権は発生の翌日から3年で時効にかかる。請求を取り下げるときは理由を記録する。
+  buc__BucComplaint["苦情と ADR"]:::buc
+  %% desc buc__BucComplaint: 支払えないことや支払の内容に了解が得られないとき、保険会社はそんぽADRセンターなどの相談機関を案内する。損害保険会社は指定紛争解決機関と手続実施基本契約を結んでいる。センターは苦情を会社に通知して対応を求め、60日たっても解決しなければ紛争解決手続を案内する。紛争解決手続では原則4か月以内に和解案を作り、特別調停案は会社が受諾しなければならない。自賠責の支払の紛争は対象外。
+  buc__BucIntake["事故受付と初期対応"]:::buc
+  %% desc buc__BucIntake: 契約者・被保険者は事故を知ったら遅滞なく保険会社か代理店に通知する。保険会社は契約内容・重複契約・事故状況・傷害を確かめ、警察への届出を案内し、担保種目ごとに担当者を決めて所属・氏名・連絡先を知らせ、請求の手続と必要な書類を説明する。車両事故・対物事故は、他社での事故受付の有無を共同利用制度で照会する。
+  buc__BucInvestigation["損害調査と損害確認"]:::buc
+  %% desc buc__BucInvestigation: 立証責任がどちらにあっても、保険会社は必要な損害調査をする。アジャスターが事故の原因と状況、損傷と事故の関係、損害額を調べ、契約者と被害者の認識が違えば現場で実地調査をする。過失割合は過去の裁判例を基準に検討し、賠償責任があるかを判断する。調査の報告と、賠償の事故では過失の判断を経て、損害を確定する。
+  buc__BucJibaiseki["自賠責の損害調査（一括払い）"]:::buc
+  %% desc buc__BucJibaiseki: 人身の事故では、任意保険の会社が自賠責保険の部分を含めて保険金を払う（一括払い）。契約者・被害者に説明して同意を確かめ、自賠責の請求書類を損保料率機構の自賠責損害調査事務所に送る。判断が難しい事案は地区本部・本部、特定事案は審査会で審査され、結果が保険会社に報告される。保険会社はその結果に基づいて支払額を決める。同意がなければ、加害者請求・被害者請求・仮渡金の手続を案内する。
+  buc__BucPayment["支払・不払の決定と支払"]:::buc
+  %% desc buc__BucPayment: 請求完了日を含めて30日以内に、支払事由・免責事由・損害額・契約の効力の確認を終えて払う。特別な照会や調査が要るときは、確認する事項と終える時期を通知して、事由に応じて60〜180日まで延ばせる。決裁権限は支払と不払いで差があり、不正請求の疑いがある事案は上位の決裁者が決める。払えないときは、根拠となる約款の条項と調査の結果を説明して通知する。期限を過ぎて払うときは遅延利息を付ける。同じ請求に二度は払わない。
+  buc__BucRepair["修理見積と着工の承認"]:::buc
+  %% desc buc__BucRepair: 損害車両は修理工場に入る。修理工場は見積書と写真を出し、アジャスターが損害額と損傷・事故の関係を確かめて修理費を協定する。保険の対象を修理するには、応急の仮手当を除き、あらかじめ保険会社の承認を得る。承認の前に着工すると、保険金の一部または全部が払われないことがある。
+  buc__BucSettlement["示談代行"]:::buc
+  %% desc buc__BucSettlement: 対人・対物賠償の事故で被保険者に賠償責任があるとき、保険会社は被保険者の同意を得て、被保険者のために被害者と折衝し示談する（当会社による解決）。被害者が保険会社と直接折衝することに同意しないとき、被保険者に賠償責任がない（過失ゼロ）とき、賠償額が保険金額を明らかに超えるときなどは行わない。示談が成立すれば示談書が賠償の保険金の請求書類になる。
+  buc__BucSubrogation["求償（請求権代位）"]:::buc
+  %% desc buc__BucSubrogation: 保険会社は保険金を払うと、払った額と被保険者の債権の額のいずれか少ない額を限度に、被保険者が相手方に持つ損害賠償請求権を当然に取得する（請求権代位）。被保険者の残りの債権が優先する。保険会社は相手方（とその保険会社）に求償し、回収するか断念する。相手方への請求権は、損害と加害者を知った時から3年（人身損害は5年）で時効にかかる。
+  subgraph group_out_of_scope["やらないこと"]
+    requirement__ReqNoInterimPayment[/"内払と付随的な保険金の算定は対象外とする"\]:::requirement
+    requirement__ReqNoJibaisekiDispute[/"自賠責の異議申立と紛争処理は対象外とする"\]:::requirement
+    requirement__ReqNoLitigation[/"調停・訴訟の中身は対象外とする"\]:::requirement
+    requirement__ReqNoLossCalculation[/"人身損害・物損の損害額の算定の中身は対象外とする"\]:::requirement
+    requirement__ReqNoRescission[/"重大事由による解除と告知義務違反は対象外とする"\]:::requirement
+    requirement__ReqNoSalvage[/"残存物代位と全損時の契約の扱いは対象外とする"\]:::requirement
+    requirement__ReqNoUnderwriting[/"保険料・引受・等級の算定は対象外とする"\]:::requirement
+  end
+  goal__FairDenial --> requirement__ReqAdrParticipation
+  %% derived goal__FairDenial -> requirement__ReqAdrParticipation via requirement__ReqAdrParticipation
+  goal__FairDenial --> requirement__ReqExplainDenial
+  %% derived goal__FairDenial -> requirement__ReqExplainDenial via requirement__ReqExplainDenial
+  goal__FairDenial --> requirement__ReqSettlementWithConsent
+  %% derived goal__FairDenial -> requirement__ReqSettlementWithConsent via requirement__ReqSettlementWithConsent
+  goal__NoMissedPayment --> requirement__ReqClaimGuidance
+  %% derived goal__NoMissedPayment -> requirement__ReqClaimGuidance via requirement__ReqClaimGuidance
+  goal__NoMissedPayment --> requirement__ReqInvestigateBeforeDecision
+  %% derived goal__NoMissedPayment -> requirement__ReqInvestigateBeforeDecision via requirement__ReqInvestigateBeforeDecision
+  goal__NoMissedPayment --> requirement__ReqJibaisekiSurvey
+  %% derived goal__NoMissedPayment -> requirement__ReqJibaisekiSurvey via requirement__ReqJibaisekiSurvey
+  goal__NoMissedPayment --> requirement__ReqNoDoublePayment
+  %% derived goal__NoMissedPayment -> requirement__ReqNoDoublePayment via requirement__ReqNoDoublePayment
+  goal__NoMissedPayment --> requirement__ReqRepairApproval
+  %% derived goal__NoMissedPayment -> requirement__ReqRepairApproval via requirement__ReqRepairApproval
+  goal__NoMissedPayment --> requirement__ReqSeniorApprovalForSuspicion
+  %% derived goal__NoMissedPayment -> requirement__ReqSeniorApprovalForSuspicion via requirement__ReqSeniorApprovalForSuspicion
+  goal__NoMissedPayment --> requirement__ReqSubrogateAfterPayment
+  %% derived goal__NoMissedPayment -> requirement__ReqSubrogateAfterPayment via requirement__ReqSubrogateAfterPayment
+  goal__TimelyPayment --> requirement__ReqPayWithinPeriod
+  %% derived goal__TimelyPayment -> requirement__ReqPayWithinPeriod via requirement__ReqPayWithinPeriod
+  goal__TimelyPayment --> requirement__ReqPromptIntake
+  %% derived goal__TimelyPayment -> requirement__ReqPromptIntake via requirement__ReqPromptIntake
+  requirement__ReqAdrParticipation --> buc__BucComplaint
+  requirement__ReqClaimGuidance --> buc__BucClaim
+  requirement__ReqExplainDenial --> buc__BucPayment
+  requirement__ReqInvestigateBeforeDecision --> buc__BucInvestigation
+  requirement__ReqJibaisekiSurvey --> buc__BucJibaiseki
+  requirement__ReqNoDoublePayment --> buc__BucPayment
+  requirement__ReqNoInterimPayment -.-> buc__BucPayment
+  requirement__ReqNoJibaisekiDispute -.-> buc__BucJibaiseki
+  requirement__ReqNoLitigation -.-> buc__BucSettlement
+  requirement__ReqNoLossCalculation -.-> buc__BucInvestigation
+  requirement__ReqNoRescission -.-> buc__BucPayment
+  requirement__ReqNoSalvage -.-> buc__BucSubrogation
+  requirement__ReqNoUnderwriting -.-> buc__BucClaim
+  requirement__ReqPayWithinPeriod --> buc__BucPayment
+  requirement__ReqPromptIntake --> buc__BucIntake
+  requirement__ReqRepairApproval --> buc__BucRepair
+  requirement__ReqSeniorApprovalForSuspicion --> buc__BucPayment
+  requirement__ReqSettlementWithConsent --> buc__BucSettlement
+  requirement__ReqSubrogateAfterPayment --> buc__BucSubrogation
+  classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

@@ -1,0 +1,18 @@
+%% rdra-ish diagram=state scope=entity:Investigation model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Investigation.status" as statemodel__Investigation_status {
+    [*] --> state__Investigation_requested
+    state "調査依頼" as state__Investigation_requested
+    state "調査中" as state__Investigation_surveying
+    state "調査報告済" as state__Investigation_reported
+    %% transition usecase__ConductSurvey
+    state__Investigation_requested --> state__Investigation_surveying : 損害調査の実施
+    %% transition usecase__ReportSurvey
+    state__Investigation_surveying --> state__Investigation_reported : 損害調査の報告
+    state__Investigation_reported --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Investigation_reported stateend

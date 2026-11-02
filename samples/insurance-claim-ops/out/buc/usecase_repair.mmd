@@ -1,0 +1,68 @@
+%% rdra-ish diagram=usecase scope=buc:BucRepair model=samples/insurance-claim-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor usecase screen entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__Adjuster(["アジャスター"]):::actor
+    %% desc actor__Adjuster: 日本損害保険協会に登録された損害調査の担い手。事故の原因と状況、損傷と事故の関係、損害額を調べ、修理工場と修理費を協定する。
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+    actor__RepairShop(["修理工場"]):::actor
+    %% desc actor__RepairShop: 損害車両の修理見積を出し、アジャスターと修理費を協定し、保険会社の承認を受けてから修理に着工する。
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AgreeRepairCost("修理費の協定"):::usecase
+    %% desc usecase__AgreeRepairCost: アジャスターが損傷と事故の関係、修理の方法と部品交換の要否を確かめ、修理工場と修理費を協定する。
+    usecase__ApproveRepairStart("修理着工の承認"):::usecase
+    %% desc usecase__ApproveRepairStart: 協定した修理費で修理に着工することを、保険会社が承認する。
+    usecase__CompleteRepair("修理の完了"):::usecase
+    %% desc usecase__CompleteRepair: 修理工場が修理を終える。
+    usecase__StartRepair("修理の着工"):::usecase
+    %% desc usecase__StartRepair: 修理工場が保険会社の承認を受けて修理に着工する。
+    usecase__SubmitRepairEstimate("修理見積の提出"):::usecase
+    %% desc usecase__SubmitRepairEstimate: 修理工場が損害車両の修理見積書と写真を保険会社に出す。
+    screen__RepairScreen["修理見積画面"]:::screen
+  end
+  subgraph layer_system["システム"]
+    entity__RepairEstimate[("修理見積")]:::entity
+    state__RepairEstimate_agreed((("修理費の協定"))):::state
+    state__RepairEstimate_completed((("修理完了"))):::state
+    state__RepairEstimate_repairing((("修理中"))):::state
+    state__RepairEstimate_submitted((("見積提出"))):::state
+    condition__RepairApproved{"修理着工を承認した"}:::condition
+    condition__RepairCostAgreed{"修理費を協定した"}:::condition
+    condition__RepairCoverage{"車両・対物賠償の事故である"}:::condition
+  end
+  actor__Adjuster -.-> usecase__AgreeRepairCost
+  actor__ClaimHandler -.-> usecase__ApproveRepairStart
+  actor__RepairShop -.-> usecase__CompleteRepair
+  actor__RepairShop -.-> usecase__StartRepair
+  actor__RepairShop -.-> usecase__SubmitRepairEstimate
+  condition__RepairApproved -.->|applies_to| usecase__StartRepair
+  condition__RepairCostAgreed -.->|applies_to| usecase__ApproveRepairStart
+  condition__RepairCoverage -.->|applies_to| usecase__SubmitRepairEstimate
+  usecase__AgreeRepairCost -.-> screen__RepairScreen
+  usecase__AgreeRepairCost -.->|transitions RepairEstimate.status submitted->agreed| state__RepairEstimate_agreed
+  usecase__AgreeRepairCost -.->|updates| entity__RepairEstimate
+  %% derived usecase__AgreeRepairCost -> entity__RepairEstimate via api__RepairEstimateApi
+  usecase__ApproveRepairStart -.-> screen__RepairScreen
+  usecase__ApproveRepairStart -.->|updates| entity__RepairEstimate
+  %% derived usecase__ApproveRepairStart -> entity__RepairEstimate via api__RepairEstimateApi
+  usecase__CompleteRepair -.-> screen__RepairScreen
+  usecase__CompleteRepair -.->|transitions RepairEstimate.status repairing->completed| state__RepairEstimate_completed
+  usecase__CompleteRepair -.->|updates| entity__RepairEstimate
+  %% derived usecase__CompleteRepair -> entity__RepairEstimate via api__RepairEstimateApi
+  usecase__StartRepair -.-> screen__RepairScreen
+  usecase__StartRepair -.->|transitions RepairEstimate.status agreed->repairing| state__RepairEstimate_repairing
+  usecase__StartRepair -.->|updates| entity__RepairEstimate
+  %% derived usecase__StartRepair -> entity__RepairEstimate via api__RepairEstimateApi
+  usecase__SubmitRepairEstimate -.->|creates| entity__RepairEstimate
+  %% derived usecase__SubmitRepairEstimate -> entity__RepairEstimate via api__RepairEstimateCreateApi
+  usecase__SubmitRepairEstimate -.-> screen__RepairScreen
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

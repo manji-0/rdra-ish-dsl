@@ -1,0 +1,37 @@
+%% rdra-ish diagram=state scope=whole model=samples/insurance-claim-ops
+%% kinds: statemodel state
+%% omitted: (none)
+stateDiagram-v2
+  state "Claim.period" as statemodel__Claim_period {
+    state "5 状態 / 15 遷移 (--entity Claim)" as index__Claim_period
+  }
+  state "Claim.status" as statemodel__Claim_status {
+    state "9 状態 / 13 遷移 (--entity Claim)" as index__Claim_status
+  }
+  state "ClaimCase.liability" as statemodel__ClaimCase_liability {
+    state "3 状態 / 2 遷移 (--entity ClaimCase)" as index__ClaimCase_liability
+  }
+  state "ClaimCase.status" as statemodel__ClaimCase_status {
+    state "6 状態 / 7 遷移 (--entity ClaimCase)" as index__ClaimCase_status
+  }
+  state "Complaint.status" as statemodel__Complaint_status {
+    state "8 状態 / 10 遷移 (--entity Complaint)" as index__Complaint_status
+  }
+  state "Investigation.status" as statemodel__Investigation_status {
+    state "3 状態 / 2 遷移 (--entity Investigation)" as index__Investigation_status
+  }
+  state "JibaisekiSurvey.status" as statemodel__JibaisekiSurvey_status {
+    state "3 状態 / 3 遷移 (--entity JibaisekiSurvey)" as index__JibaisekiSurvey_status
+  }
+  state "Payment.status" as statemodel__Payment_status {
+    state "2 状態 / 1 遷移 (--entity Payment)" as index__Payment_status
+  }
+  state "RepairEstimate.status" as statemodel__RepairEstimate_status {
+    state "4 状態 / 3 遷移 (--entity RepairEstimate)" as index__RepairEstimate_status
+  }
+  state "Settlement.status" as statemodel__Settlement_status {
+    state "5 状態 / 4 遷移 (--entity Settlement)" as index__Settlement_status
+  }
+  state "Subrogation.status" as statemodel__Subrogation_status {
+    state "4 状態 / 3 遷移 (--entity Subrogation)" as index__Subrogation_status
+  }

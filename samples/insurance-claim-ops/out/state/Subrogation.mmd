@@ -1,0 +1,25 @@
+%% rdra-ish diagram=state scope=entity:Subrogation model=samples/insurance-claim-ops
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Subrogation.status" as statemodel__Subrogation_status {
+    [*] --> state__Subrogation_open
+    state "求償中" as state__Subrogation_open
+    state "回収" as state__Subrogation_recovered
+    state "回収の断念" as state__Subrogation_abandoned
+    state "時効消滅" as state__Subrogation_time_barred
+    %% transition usecase__RecoverSubrogation
+    state__Subrogation_open --> state__Subrogation_recovered : 求償の回収
+    %% transition usecase__AbandonSubrogation
+    state__Subrogation_open --> state__Subrogation_abandoned : 求償の断念
+    %% transition usecase__LapseSubrogation
+    state__Subrogation_open --> state__Subrogation_time_barred : 求償する債権の時効
+    state__Subrogation_recovered --> [*]
+    state__Subrogation_abandoned --> [*]
+    state__Subrogation_time_barred --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Subrogation_recovered stateend
+  class state__Subrogation_abandoned stateend
+  class state__Subrogation_time_barred stateend

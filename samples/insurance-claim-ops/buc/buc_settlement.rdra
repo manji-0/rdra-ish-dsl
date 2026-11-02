@@ -1,0 +1,242 @@
+module buc.settlement
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.intake.{CaseScreen}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucSettlement "示談代行"
+  description "対人・対物賠償の事故で被保険者に賠償責任があるとき、保険会社は被保険者の同意を得て、被保険者のために被害者と折衝し示談する（当会社による解決）。被害者が保険会社と直接折衝することに同意しないとき、被保険者に賠償責任がない（過失ゼロ）とき、賠償額が保険金額を明らかに超えるときなどは行わない。示談が成立すれば示談書が賠償の保険金の請求書類になる。"
+
+// 被保険者の同意を得て、被保険者のために、折衝、示談または調停もしくは訴訟の手続 (tokiomarine-2025-tap-yakkan.txt:2490),
+// 対人事故または対物事故 (:2486). 賠償責任が発生しない本ケースでは保険会社として示談代行(回収交渉)ができない
+// (tokiomarine-faq-2119.md:111). The insurer may do it as a party to the insurance; 弁護士法72条 bars it for others
+// (egov-bengoshihou-324AC1000000205.txt:1229).
+usecase OpenSettlement "示談代行の開始"
+  description "対人・対物賠償の事故で、被保険者に賠償責任があると判断した案件について、示談代行の手続を開き、契約者と被害者の同意を確かめにいく。"
+
+// あらかじめ契約者等の意向・要望を確認し、同意を得たうえで示談交渉を行う (sonpo-2026-shiharai-guideline.txt:358-359).
+usecase RecordInsuredConsent "被保険者の同意"
+  description "被保険者が保険会社の解決条件に同意し、保険会社が被保険者のために示談交渉をすることに同意する。"
+
+// 損害賠償請求権者が、当会社と直接、折衝することに同意しない場合 (tokiomarine-2025-tap-yakkan.txt:2504) the insurer does
+// not negotiate.
+usecase RecordVictimConsent "被害者の同意" description "被害者が加害者側の保険会社と直接折衝することに同意する。"
+
+// 被害者の主張に謙虚に耳を傾ける (sonpo-2026-shiharai-guideline.txt:264); 加害者の窓口 (:270).
+usecase BeginNegotiation "示談交渉の開始"
+  description "双方の同意を得て、保険会社が加害者の窓口として被害者と交渉を始める。"
+
+// The 不実施 cases: 保険金額を明らかに超える (tokiomarine-2025-tap-yakkan.txt:2500-2503), 被害者の不同意 (:2504),
+// 被保険者の協力の拒否 (:2505), 自賠責未加入 (:2506), 免責金額を下回る (:2507-2508).
+usecase DeclineSettlementService "示談代行を行わない"
+  description "被害者が同意しない、被保険者が協力しない、賠償額が保険金額を明らかに超えるなど、約款の定める場合に示談代行を行わないと決め、契約者に伝える。"
+
+// 加害者側・被害者側双方の見解をふまえて適切な示談案を提示 (sonpo-2026-shiharai-guideline.txt:480-481); 示談書
+// (tokiomarine-2025-tap-yakkan.txt:4596); the claim right arises when 書面による合意が成立した時 (:4576-4577).
+usecase AgreeSettlement "示談の成立"
+  description "示談案を提示し、被害者と合意して示談書を取り交わす。賠償の保険金の請求権がこのとき発生する。"
+
+usecase EndNegotiationUnresolved "示談交渉の終了（不調）"
+  description "示談がまとまらず、調停または訴訟に移る。調停・訴訟の中身は対象外。"
+
+screen SettlementScreen "示談画面"
+
+api SettlementCreateApi "示談代行開始 API"
+  method POST
+  path "/cases/{id}/settlement"
+
+api SettlementApi "示談 API"
+  method PATCH
+  path "/settlements/{id}"
+
+performs(ClaimHandler, OpenSettlement)
+performs(PolicyHolder, RecordInsuredConsent)
+performs(Victim, RecordVictimConsent)
+performs(ClaimHandler, BeginNegotiation)
+performs(ClaimHandler, DeclineSettlementService)
+performs(ClaimHandler, AgreeSettlement)
+performs(ClaimHandler, EndNegotiationUnresolved)
+belongs(BucSettlement, ClaimHandling).by(HandlerTerminal).by(ClaimDocuments)
+
+contains(BucSettlement, OpenSettlement)
+contains(BucSettlement, RecordInsuredConsent)
+contains(BucSettlement, RecordVictimConsent)
+contains(BucSettlement, BeginNegotiation)
+contains(BucSettlement, DeclineSettlementService)
+contains(BucSettlement, AgreeSettlement)
+contains(BucSettlement, EndNegotiationUnresolved)
+contains(ClaimSystem, SettlementCreateApi)
+contains(ClaimSystem, SettlementApi)
+
+// The case moves to 示談交渉中 and the settlement is created under it in one step: one API writes
+// both, so they are one transaction group.
+displays(OpenSettlement, SettlementScreen)
+invokes(OpenSettlement, SettlementCreateApi)
+creates(SettlementCreateApi, Settlement)
+updates(SettlementCreateApi, ClaimCase)
+transitions(OpenSettlement, ClaimCase.status, investigating -> negotiating)
+
+condition SettlementEligible "対人・対物賠償の事故で、被保険者に賠償責任がある"
+holds(SettlementEligible, ClaimCase.coverage in (bodily_liability, property_liability), ClaimCase.liability == at_fault)
+applies_to(SettlementEligible, OpenSettlement)
+
+displays(RecordInsuredConsent, SettlementScreen)
+invokes(RecordInsuredConsent, SettlementApi)
+updates(SettlementApi, Settlement)
+sets(RecordInsuredConsent, Settlement, insured_consent == true)
+
+displays(RecordVictimConsent, SettlementScreen)
+invokes(RecordVictimConsent, SettlementApi)
+sets(RecordVictimConsent, Settlement, victim_consent == true)
+
+condition ConsentPending "示談代行の同意を確かめている"
+holds(ConsentPending, Settlement.status == consent_pending)
+applies_to(ConsentPending, RecordInsuredConsent)
+applies_to(ConsentPending, RecordVictimConsent)
+
+displays(BeginNegotiation, SettlementScreen)
+invokes(BeginNegotiation, SettlementApi)
+transitions(BeginNegotiation, Settlement.status, consent_pending -> negotiating)
+
+condition BothConsented "被保険者と被害者がともに同意している"
+holds(BothConsented, Settlement.insured_consent == true, Settlement.victim_consent == true)
+applies_to(BothConsented, BeginNegotiation)
+
+displays(DeclineSettlementService, SettlementScreen)
+invokes(DeclineSettlementService, SettlementApi)
+transitions(DeclineSettlementService, Settlement.status, consent_pending -> declined)
+raises(DeclineSettlementService, EvSettlementEnded)
+
+displays(AgreeSettlement, SettlementScreen)
+invokes(AgreeSettlement, SettlementApi)
+transitions(AgreeSettlement, Settlement.status, negotiating -> agreed)
+raises(AgreeSettlement, EvSettlementAgreed)
+
+displays(EndNegotiationUnresolved, SettlementScreen)
+invokes(EndNegotiationUnresolved, SettlementApi)
+transitions(EndNegotiationUnresolved, Settlement.status, negotiating -> failed)
+raises(EndNegotiationUnresolved, EvSettlementEnded)
+
+// Access constraints
+requires_permission(OpenSettlement, CaseHandle)
+requires_medium(OpenSettlement, HandlerTerminal)
+requires_permission(SettlementCreateApi, CaseHandle)
+requires_permission(RecordInsuredConsent, ConsentGive)
+requires_medium(RecordInsuredConsent, ClaimDocuments)
+requires_permission(RecordVictimConsent, ConsentGive)
+requires_medium(RecordVictimConsent, ClaimDocuments)
+requires_permission(BeginNegotiation, CaseHandle)
+requires_medium(BeginNegotiation, HandlerTerminal)
+requires_permission(DeclineSettlementService, CaseHandle)
+requires_medium(DeclineSettlementService, HandlerTerminal)
+requires_permission(AgreeSettlement, CaseHandle)
+requires_medium(AgreeSettlement, ClaimDocuments)
+requires_permission(EndNegotiationUnresolved, CaseHandle)
+requires_medium(EndNegotiationUnresolved, HandlerTerminal)
+
+// Screen transitions: the model's assumption.
+navigates(CaseScreen, SettlementScreen).via(OpenSettlement)
+navigates(SettlementScreen, CaseScreen).via(AgreeSettlement)
+
+field InsuredConsentField "被保険者の同意"
+  access readonly
+  required true
+  source system
+
+field VictimConsentField "被害者の同意"
+  access readonly
+  required true
+  source system
+
+field SettlementStatusField "示談の状態"
+  access readonly
+  required true
+  source system
+
+contains(SettlementScreen, InsuredConsentField)
+contains(SettlementScreen, VictimConsentField)
+contains(SettlementScreen, SettlementStatusField)
+maps_field(InsuredConsentField, Settlement.insured_consent)
+maps_field(VictimConsentField, Settlement.victim_consent)
+maps_field(SettlementStatusField, Settlement.status)
+
+// Business flow
+flow SettlementFlow "示談代行の流れ"
+step OpenSettlementStep "示談代行の開始（賠償責任あり）"
+step ConsentStep "被保険者・被害者の同意"
+step NegotiationStep "示談交渉"
+step AgreementStep "示談の成立（示談書）"
+step DeclineStep "示談代行を行わない"
+step UnresolvedStep "不調（調停・訴訟へ）"
+
+contains(BucSettlement, SettlementFlow)
+contains(SettlementFlow, OpenSettlementStep)
+contains(SettlementFlow, ConsentStep)
+contains(SettlementFlow, NegotiationStep)
+contains(SettlementFlow, AgreementStep)
+contains(SettlementFlow, DeclineStep)
+contains(SettlementFlow, UnresolvedStep)
+
+precedes(OpenSettlementStep, ConsentStep)
+precedes(ConsentStep, NegotiationStep)
+precedes(NegotiationStep, AgreementStep)
+excepts(ConsentStep, DeclineStep)
+excepts(NegotiationStep, UnresolvedStep)
+
+covers(OpenSettlementStep, OpenSettlement)
+covers(ConsentStep, RecordInsuredConsent)
+covers(ConsentStep, RecordVictimConsent)
+covers(NegotiationStep, BeginNegotiation)
+covers(AgreementStep, AgreeSettlement)
+covers(AgreementStep, EvSettlementAgreed)
+covers(DeclineStep, DeclineSettlementService)
+covers(UnresolvedStep, EndNegotiationUnresolved)
+covers(UnresolvedStep, EvSettlementEnded)
+
+performs(ClaimHandler, OpenSettlementStep)
+performs(PolicyHolder, ConsentStep)
+performs(Victim, ConsentStep)
+performs(ClaimHandler, NegotiationStep)
+performs(ClaimHandler, AgreementStep)
+performs(ClaimHandler, DeclineStep)
+performs(ClaimHandler, UnresolvedStep)
+
+// Rules
+forbidden(Settlement, status in (negotiating, agreed), victim_consent == false).label("被害者の同意なく示談代行しない")
+
+forbidden(Settlement, status in (negotiating, agreed), insured_consent == false).label("被保険者の同意なく示談代行しない")
+
+// 賠償責任が発生しない本ケースでは保険会社として示談代行(回収交渉)ができない (tokiomarine-faq-2119.md:111).
+forbidden(Settlement, ClaimCase, Settlement.status in (negotiating, agreed), ClaimCase.liability == no_fault).along(Settlement, ClaimCase).label("過失ゼロなら示談代行しない")
+
+// 被保険者が対人事故または対物事故にかかわる損害賠償の請求を受けた場合 (tokiomarine-2025-tap-yakkan.txt:2486).
+forbidden(Settlement, ClaimCase, ClaimCase.coverage in (vehicle, personal_injury)).along(Settlement, ClaimCase).label("示談代行は対人・対物賠償の事故だけ")
+
+// Requirement traceability
+requirement ReqSettlementWithConsent "示談代行は、賠償責任のある対人・対物賠償の事故で、被保険者と被害者の同意を得て行う"
+  priority "must"
+  source "当会社による解決 (tokiomarine-2025-tap-yakkan.txt:2490)"
+  source "被害者の不同意では行わない (tokiomarine-2025-tap-yakkan.txt:2504)"
+  source "過失ゼロでは示談代行できない (tokiomarine-faq-2119.md:111)"
+  source "契約者の同意を得たうえで示談交渉 (sonpo-2026-shiharai-guideline.txt:358-359)"
+  stakeholder "契約者・被保険者"
+  stakeholder "被害者"
+  acceptance_criteria "交渉中・成立した示談はすべて被保険者と被害者が同意しており、過失ゼロの事故と車両・人身傷害の事故には示談代行がない。"
+  status "accepted"
+
+motivates(ReqSettlementWithConsent, BucSettlement)
+achieves(ReqSettlementWithConsent, FairDenial)
+
+// Non-goals
+requirement ReqNoLitigation "調停・訴訟の中身は対象外とする"
+  source "訴訟の通知 (tokiomarine-2025-tap-yakkan.txt:4494)"
+  source "範囲の外: 裁判 (map.md:16)"
+  stakeholder "損害サービス担当者"
+  status "out-of-scope"
+  rationale "示談がまとまらないときは調停・訴訟に移ることだけを記録する。弁護士の選任、調停・訴訟の手続、判決と和解の中身はモデルにせず、調査もしていない。"
+
+motivates(ReqNoLitigation, BucSettlement)

@@ -35,9 +35,11 @@ python3 -I scripts/embed-sample-artifacts.py
 python3 -I scripts/gen-clinic-ops-docs.py "$bin" clinic-ops
 python3 -I scripts/gen-clinic-ops-docs.py "$bin" patent-ops
 python3 -I scripts/gen-clinic-ops-docs.py "$bin" food-permit-ops
+python3 -I scripts/gen-clinic-ops-docs.py "$bin" insurance-claim-ops
 outputs+=(samples/incremental-order/step-*/design.md samples/clinic-ops/design-doc.md samples/clinic-ops/prd.md
   samples/patent-ops/design-doc.md samples/patent-ops/prd.md
   samples/food-permit-ops/design-doc.md samples/food-permit-ops/prd.md
+  samples/insurance-claim-ops/design-doc.md samples/insurance-claim-ops/prd.md
   docs/diagram-sample-review.md)
 
 if ! git diff --quiet -- "${outputs[@]}"; then

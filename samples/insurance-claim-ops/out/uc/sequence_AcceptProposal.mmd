@@ -1,0 +1,18 @@
+%% rdra-ish diagram=sequence scope=usecase:AcceptProposal model=samples/insurance-claim-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__SeniorApprover as 上位決裁者（不正請求対応）
+  participant screen__ComplaintScreen as 苦情・ADR 画面
+  participant api__ComplaintApi as 苦情・ADR API
+  participant entity__Complaint as 苦情・紛争
+  participant extsystem__SonpoAdrCenter as そんぽADRセンター（日本損害保険協会）
+  actor__SeniorApprover ->> screen__ComplaintScreen: 和解案の受諾
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt Complaint.status == 和解案の提示
+    api__ComplaintApi ->> entity__Complaint: update status 和解案の提示 -> 和解成立
+    api__ComplaintApi -) extsystem__SonpoAdrCenter: 和解案への回答
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end

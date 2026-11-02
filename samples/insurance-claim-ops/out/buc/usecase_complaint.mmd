@@ -1,0 +1,130 @@
+%% rdra-ish diagram=usecase scope=buc:BucComplaint model=samples/insurance-claim-ops
+%% layers: value=システム価値 boundary=システム境界 system=システム
+%% kinds: actor extsystem usecase screen event entity state condition
+%% omitted: nfr buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__ClaimHandler(["損害サービス担当者"]):::actor
+    %% desc actor__ClaimHandler: 担保種目ごとの担当者。初期対応、調査の手配、示談交渉、請求書類の確認、延長の通知、不払いの説明、支払、求償、苦情の対応を行う。
+    actor__PolicyHolder(["契約者・被保険者"]):::actor
+    %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+    actor__SeniorApprover(["上位決裁者（不正請求対応）"]):::actor
+    %% desc actor__SeniorApprover: 不正請求の疑いがある請求の支払・不払を決裁する。そんぽADRセンターの和解案に応じるかを決める。
+    actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+    %% desc actor__Victim: 加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。
+    extsystem__SonpoAdrCenter[["そんぽADRセンター（日本損害保険協会）"]]:::extsystem
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AcceptProposal("和解案の受諾"):::usecase
+    %% desc usecase__AcceptProposal: 和解案を受け入れ、和解を成立させる。
+    usecase__AnswerAdrComplaint("ADR 苦情への対応"):::usecase
+    %% desc usecase__AnswerAdrComplaint: 申出人と話し合って苦情を解決し、センターに結果を回答する。
+    usecase__FileComplaint("苦情の申出"):::usecase
+    %% desc usecase__FileComplaint: 契約者・被保険者または被害者が、支払・不払や対応について保険会社に苦情を申し出る。
+    usecase__GuideToAdr("相談機関の案内"):::usecase
+    %% desc usecase__GuideToAdr: 了解が得られない申出人に、そんぽADRセンターなどの相談機関を案内する。
+    usecase__RecordAdrComplaint("ADR 苦情の受付"):::usecase
+    %% desc usecase__RecordAdrComplaint: そんぽADRセンターから苦情の通知を受け、対応を始める。
+    usecase__RecordDisputeFiled("紛争解決手続の申立ての受付"):::usecase
+    %% desc usecase__RecordDisputeFiled: 申出人が紛争解決手続を申し立てたと、センターから知らせを受ける。
+    usecase__RecordDisputeTerminated("紛争解決手続の終了"):::usecase
+    %% desc usecase__RecordDisputeTerminated: 和解の見込みがないとして手続が終わったと知らせを受ける。申出人は通知から1月以内に提訴すれば時効の完成が猶予される。
+    usecase__RecordProposal("和解案の受領"):::usecase
+    %% desc usecase__RecordProposal: 手続実施委員から和解案を受け取る。和解案が特別調停案かを記録する。
+    usecase__RejectProposal("和解案を受諾しない"):::usecase
+    %% desc usecase__RejectProposal: 特別調停案でない和解案を受け入れないと回答する。特別調停案は受諾しなければならない。
+    usecase__ResolveComplaint("苦情の解決"):::usecase
+    %% desc usecase__ResolveComplaint: 事実を確かめ直し、説明して苦情を解決する。
+    screen__ComplaintScreen["苦情・ADR 画面"]:::screen
+    event__EvAdrComplaintAnswered>"ADR 苦情への回答"]:::event
+    event__EvAdrComplaintNotified>"ADR 苦情の通知"]:::event
+    event__EvAdrDisputeFiled>"紛争解決手続の申立て"]:::event
+    event__EvAdrDisputeTerminated>"紛争解決手続の終了"]:::event
+    event__EvAdrProposalAnswered>"和解案への回答"]:::event
+    event__EvAdrProposalPresented>"和解案の提示"]:::event
+    event__EvDenialNotified>"不払いの通知"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Complaint[("苦情・紛争")]:::entity
+    state__Complaint_adr_complaint((("ADR 苦情解決手続中"))):::state
+    state__Complaint_adr_dispute((("ADR 紛争解決手続中"))):::state
+    state__Complaint_proposal_received((("和解案の提示"))):::state
+    state__Complaint_received((("苦情受付"))):::state
+    state__Complaint_rejected((("和解案を受諾しない"))):::state
+    state__Complaint_resolved((("解決"))):::state
+    state__Complaint_settled((("和解成立"))):::state
+    state__Complaint_terminated((("手続終了（不調）"))):::state
+    condition__ComplaintOpen{"苦情を受け付けて解決していない"}:::condition
+    condition__OrdinaryProposal{"特別調停案ではない和解案である"}:::condition
+  end
+  actor__ClaimHandler -.-> usecase__AnswerAdrComplaint
+  actor__ClaimHandler -.-> usecase__GuideToAdr
+  actor__ClaimHandler -.-> usecase__ResolveComplaint
+  actor__PolicyHolder -.-> usecase__FileComplaint
+  actor__PolicyHolder -.-> usecase__ResolveComplaint
+  %% derived actor__PolicyHolder -> usecase__ResolveComplaint via step__ComplaintStep
+  actor__SeniorApprover -.-> usecase__AcceptProposal
+  actor__SeniorApprover -.-> usecase__RejectProposal
+  actor__Victim -.-> usecase__FileComplaint
+  actor__Victim -.-> usecase__ResolveComplaint
+  %% derived actor__Victim -> usecase__ResolveComplaint via step__ComplaintStep
+  condition__ComplaintOpen -.->|applies_to| usecase__GuideToAdr
+  condition__OrdinaryProposal -.->|applies_to| usecase__RejectProposal
+  event__EvAdrComplaintAnswered -.-> extsystem__SonpoAdrCenter
+  event__EvAdrComplaintNotified -.-> usecase__RecordAdrComplaint
+  event__EvAdrDisputeFiled -.-> usecase__RecordDisputeFiled
+  event__EvAdrDisputeTerminated -.-> usecase__RecordDisputeTerminated
+  event__EvAdrProposalAnswered -.-> extsystem__SonpoAdrCenter
+  event__EvAdrProposalPresented -.-> usecase__RecordProposal
+  event__EvDenialNotified -.-> usecase__FileComplaint
+  extsystem__SonpoAdrCenter -.-> event__EvAdrComplaintNotified
+  extsystem__SonpoAdrCenter -.-> event__EvAdrDisputeFiled
+  extsystem__SonpoAdrCenter -.-> event__EvAdrDisputeTerminated
+  extsystem__SonpoAdrCenter -.-> event__EvAdrProposalPresented
+  usecase__AcceptProposal -.-> screen__ComplaintScreen
+  usecase__AcceptProposal -.-> event__EvAdrProposalAnswered
+  usecase__AcceptProposal -.->|transitions Complaint.status proposal_received->settled| state__Complaint_settled
+  usecase__AcceptProposal -.->|updates| entity__Complaint
+  %% derived usecase__AcceptProposal -> entity__Complaint via api__ComplaintApi
+  usecase__AnswerAdrComplaint -.-> screen__ComplaintScreen
+  usecase__AnswerAdrComplaint -.-> event__EvAdrComplaintAnswered
+  usecase__AnswerAdrComplaint -.->|transitions Complaint.status adr_complaint->resolved| state__Complaint_resolved
+  usecase__AnswerAdrComplaint -.->|updates| entity__Complaint
+  %% derived usecase__AnswerAdrComplaint -> entity__Complaint via api__ComplaintApi
+  usecase__FileComplaint -.->|creates| entity__Complaint
+  %% derived usecase__FileComplaint -> entity__Complaint via api__ComplaintCreateApi
+  usecase__FileComplaint -.-> screen__ComplaintScreen
+  usecase__GuideToAdr -.-> screen__ComplaintScreen
+  usecase__GuideToAdr -.->|updates| entity__Complaint
+  %% derived usecase__GuideToAdr -> entity__Complaint via api__ComplaintApi
+  usecase__RecordAdrComplaint -.->|transitions Complaint.status received->adr_complaint| state__Complaint_adr_complaint
+  usecase__RecordAdrComplaint -.->|updates| entity__Complaint
+  %% derived usecase__RecordAdrComplaint -> entity__Complaint via api__ComplaintApi
+  usecase__RecordDisputeFiled -.->|transitions Complaint.status adr_complaint->adr_dispute| state__Complaint_adr_dispute
+  usecase__RecordDisputeFiled -.->|transitions Complaint.status received->adr_dispute| state__Complaint_adr_dispute
+  usecase__RecordDisputeFiled -.->|updates| entity__Complaint
+  %% derived usecase__RecordDisputeFiled -> entity__Complaint via api__ComplaintApi
+  usecase__RecordDisputeTerminated -.->|transitions Complaint.status adr_dispute->terminated| state__Complaint_terminated
+  usecase__RecordDisputeTerminated -.->|transitions Complaint.status proposal_received->terminated| state__Complaint_terminated
+  usecase__RecordDisputeTerminated -.->|updates| entity__Complaint
+  %% derived usecase__RecordDisputeTerminated -> entity__Complaint via api__ComplaintApi
+  usecase__RecordProposal -.->|transitions Complaint.status adr_dispute->proposal_received| state__Complaint_proposal_received
+  usecase__RecordProposal -.->|updates| entity__Complaint
+  %% derived usecase__RecordProposal -> entity__Complaint via api__ComplaintApi
+  usecase__RejectProposal -.-> screen__ComplaintScreen
+  usecase__RejectProposal -.-> event__EvAdrProposalAnswered
+  usecase__RejectProposal -.->|transitions Complaint.status proposal_received->rejected| state__Complaint_rejected
+  usecase__RejectProposal -.->|updates| entity__Complaint
+  %% derived usecase__RejectProposal -> entity__Complaint via api__ComplaintApi
+  usecase__ResolveComplaint -.-> screen__ComplaintScreen
+  usecase__ResolveComplaint -.->|transitions Complaint.status received->resolved| state__Complaint_resolved
+  usecase__ResolveComplaint -.->|updates| entity__Complaint
+  %% derived usecase__ResolveComplaint -> entity__Complaint via api__ComplaintApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

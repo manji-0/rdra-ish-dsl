@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:NotifyPaymentCompleted model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__PaymentScreen as 支払画面
+  participant api__PaymentApi as 支払完了連絡 API
+  participant entity__Payment as 保険金の支払
+  actor__ClaimHandler ->> screen__PaymentScreen: 支払完了の連絡
+  screen__PaymentScreen ->> api__PaymentApi: 支払完了連絡 API
+  alt Payment.status == 支払手続
+    api__PaymentApi ->> entity__Payment: update status 支払手続 -> 支払完了の連絡済
+    api__PaymentApi -->> screen__PaymentScreen: done
+  else guard fails
+    api__PaymentApi -->> screen__PaymentScreen: rejected
+  end

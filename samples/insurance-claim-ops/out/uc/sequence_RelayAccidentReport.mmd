@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:RelayAccidentReport model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__Agent as 代理店
+  actor actor__ClaimReceptionist as 事故受付担当
+  participant screen__AccidentReportScreen as 事故受付画面
+  participant api__CaseCreateApi as 事故受付 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  actor__Agent ->> screen__AccidentReportScreen: 事故の通知（代理店経由）
+  actor__ClaimReceptionist ->> screen__AccidentReportScreen: 事故の通知（代理店経由）
+  screen__AccidentReportScreen ->> api__CaseCreateApi: 事故受付 API
+  api__CaseCreateApi ->> entity__ClaimCase: create
+  api__CaseCreateApi -->> screen__AccidentReportScreen: done

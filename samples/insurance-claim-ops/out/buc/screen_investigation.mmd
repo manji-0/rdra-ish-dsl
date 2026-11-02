@@ -1,0 +1,11 @@
+%% rdra-ish diagram=screen scope=buc:BucInvestigation model=samples/insurance-claim-ops
+%% kinds: screen
+%% omitted: usecase field
+flowchart LR
+  screen__CaseScreen["事故案件画面"]:::screen
+  screen__InvestigationScreen["損害調査画面"]:::screen
+  screen__CaseScreen -->|損害調査の依頼| screen__InvestigationScreen
+  screen__InvestigationScreen -->|損害調査の報告| screen__CaseScreen
+  %% via screen__CaseScreen -> screen__InvestigationScreen usecase__RequestInvestigation
+  %% via screen__InvestigationScreen -> screen__CaseScreen usecase__ReportSurvey
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

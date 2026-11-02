@@ -1,0 +1,174 @@
+module shared.entities
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+// The sources name the insurer's processes (事故受付・初期対応・損害確認・保険金のお支払い,
+// tokiomarine-songai-auto-taisei.md:44) but no internal state of a case or a claim (map.md:113). Every
+// status name below is the model's assumption, named after the step the sources describe.
+
+// Values an actor chooses from. They type attribute columns and move no lifecycle.
+
+// 担保種目（例えば、対人賠償事故と対物賠償事故）ごとに、担当者が異なる (sonpo-2026-shiharai-guideline.txt:340). The four
+// 条項 of the TAP 約款 whose claim rights arise at different times (tokiomarine-2025-tap-yakkan.txt:4575-4584).
+variation Coverage "担保種目" {
+  bodily_liability "対人賠償"
+  property_liability "対物賠償"
+  vehicle "車両"
+  personal_injury "人身傷害"
+}
+
+// 事案の特性に応じた手法を採用する (sonpo-2026-shiharai-guideline.txt:280-281); 事故現場の実地調査 (:390); 弁護士・
+// 医師・鑑定人等の専門家の見解 (:427-428).
+variation SurveyMethod "損害調査の手法" {
+  documents "書類・写真による確認"
+  site_visit "事故現場の実地調査"
+  expert "専門家の見解の確認"
+}
+
+// 特別な照会または調査が不可欠な場合 (tokiomarine-2025-tap-yakkan.txt:4646): the five kinds and their days
+// (:4650-4658). The number of days is in each label; no rule reads them (README).
+variation ExtensionReason "支払期限の延長事由" {
+  disaster_area "災害救助法の被災地域での調査（60日）"
+  expert_inquiry "医療機関・専門機関の診断・鑑定の照会（90日）"
+  disability_inquiry "後遺障害の診断・認定審査の照会（120日）"
+  public_inquiry "警察・検察・消防等の捜査・調査結果の照会（180日）"
+  overseas "日本国外での調査（180日）"
+}
+
+// 被保険者 or 保険金請求権者 (tokiomarine-2025-tap-yakkan.txt:4666); the 損害賠償請求権者 by the 直接請求権 (:2493);
+// 物損に対して修理を行った事業者…に直接支払う (fsa-2026-kantoku-shishin-ins.txt:8488-8489).
+variation Payee "支払先" {
+  insured "被保険者・保険金請求権者"
+  victim "被害者（直接請求・一括払い）"
+  repair_shop "修理工場（直接支払）"
+}
+
+// 和解案 (sonpo-adr-hunsou.md:111); 「特別調停案」とは、和解案であって…加入保険業関係業者が受諾しなければならないもの
+// (egov-hoken-gyouhou-407AC0000000105.txt:8806).
+variation AdrProposal "和解案の種類" {
+  ordinary "和解案"
+  special "特別調停案"
+}
+
+// One accident under one 担保種目: the guideline names a handler per 担保種目 (sonpo-2026-shiharai-guideline.txt:340),
+// and the claim right of each 条項 arises at its own time (tokiomarine-2025-tap-yakkan.txt:4575-4584). What the
+// intake confirms: 契約内容、重複契約の有無、保険の目的物とその所在地、事故状況 (sonpo-2026-shiharai-guideline.txt:320-321).
+// `liability` is the insured's 法律上の損害賠償責任, decided by the 過失割合, whose 検討基準となるのは過去の裁判例
+// (tokiomarine-kashitsu.md:44).
+entity ClaimCase "事故案件（担保種目ごと）" {
+  id: Int @pk
+  accident_at: DateTime
+  coverage: Coverage
+  status: Enum(received "事故受付", responded "初期対応済", investigating "調査中", negotiating "示談交渉中", assessed "損害確定", closed "完了") @default(received)
+  liability: Enum(undetermined "未確定", at_fault "賠償責任あり", no_fault "過失ゼロ（賠償責任なし）") @default(undetermined)
+}
+
+// 損害調査 (sonpo-2026-shiharai-guideline.txt:277-278), by an adjuster (tokiomarine-expert.md:51). One survey per case.
+entity Investigation "損害調査" {
+  id: Int @pk
+  method: SurveyMethod
+  status: Enum(requested "調査依頼", surveying "調査中", reported "調査報告済") @default(requested)
+}
+
+// 修理等に必要とする費用の見積書 (edesign-2024-jidousha-yakkan.txt:3338). The adjuster agrees the repair cost with the shop
+// (損害車両の損害額, sonpo-2024-adjuster-seido-gaiyou.txt:11); the name 協定 and the step are the model's
+// assumption (map.md:114). `approved` is the insurer's 修理着工の事前承認 (tokiomarine-2025-tap-yakkan.txt:4499-4501).
+entity RepairEstimate "修理見積" {
+  id: Int @pk
+  amount: Money
+  status: Enum(submitted "見積提出", agreed "修理費の協定", repairing "修理中", completed "修理完了") @default(submitted)
+  approved: Bool @default(false)
+}
+
+// 当会社による解決: 被保険者の同意を得て、被保険者のために、折衝、示談または調停もしくは訴訟の手続
+// (tokiomarine-2025-tap-yakkan.txt:2490). It is not done when 損害賠償請求権者が、当会社と直接、折衝することに同意しない
+// (:2504), and the 示談書 is a document of the claim (:4596).
+entity Settlement "示談（示談代行）" {
+  id: Int @pk
+  status: Enum(consent_pending "同意の確認中", negotiating "示談交渉中", agreed "示談成立", failed "不調（調停・訴訟へ）", declined "示談代行を行わない") @default(consent_pending)
+  insured_consent: Bool @default(false)
+  victim_consent: Bool @default(false)
+}
+
+// 請求書類を確認して、損害保険料率算出機構…の調査事務所に送付 (mlit-jibaiseki-procedure.md:58); 判断が困難な事案…は…地区本部
+// や本部で審査 (giroj-survey-system.md:114), 特定事案は審査会 (:115); 調査結果に基づいて支払額を決定 (:103).
+entity JibaisekiSurvey "自賠責損害調査" {
+  id: Int @pk
+  status: Enum(sent "調査事務所へ送付", under_review "地区本部・本部・審査会で審査中", reported "調査結果の報告受領") @default(sent)
+}
+
+// 保険金の請求: 請求書 (tokiomarine-2025-tap-yakkan.txt:4587) and the other documents the insurer asks for (:4585). The
+// 請求完了日 is the day the claimant completes them (:4666), and the payment period runs from it (:4633).
+// `status` follows the claim to its decision; `period` follows the payment period on its own.
+entity Claim "保険金請求" {
+  id: Int @pk
+  // 請求完了日 (tokiomarine-2025-tap-yakkan.txt:4666).
+  completed_on: Date @null
+  status: Enum(guided "請求の案内済", submitted "請求書類の提出", completed "請求完了", decided_payment "支払決定", decided_denial "不払決定", paid "支払済", denial_notified "不払通知済", withdrawn "取下げ", time_barred "時効消滅") @default(guided)
+  period: Enum(not_started "未起算", running "30日の期間中", extended "延長期間中", overdue "期限経過", ended "期限の管理を終了") @default(not_started)
+  extension: ExtensionReason
+  // 次契約の適用等級の変動について説明した上で、保険金請求意思の確認を行う (sonpo-2026-shiharai-guideline.txt:496-497).
+  grade_explained: Bool @default(false)
+  // 疑義事案については…深度ある調査・検証 (fsa-2026-kantoku-shishin-ins.txt:8440-8441).
+  fraud_suspected: Bool @default(false)
+  // その決裁を上位の決裁権限を有する職員…に限定 (fsa-2026-kantoku-shishin-ins.txt:8379).
+  senior_approved: Bool @default(false)
+  // 根拠となる具体的な保険約款の条項や損害調査結果等を丁寧に説明 (sonpo-2026-shiharai-guideline.txt:531).
+  reason_explained: Bool @default(false)
+  // 遅延利息の起算日の管理 (sonpo-2026-shiharai-guideline.txt:491).
+  late_interest_due: Bool @default(false)
+}
+
+// One payment per claim. 内払 (tokiomarine-2025-tap-yakkan.txt:4662, fsa-2026-kantoku-shishin-ins.txt:8427) is
+// left out: the model pays once, when the claim is decided (README).
+entity Payment "保険金の支払" {
+  id: Int @pk
+  payee: Payee
+  status: Enum(instructed "支払手続", completed "支払完了の連絡済") @default(instructed)
+  late_interest: Bool @default(false)
+}
+
+// 保険者は、保険給付を行ったときは…被保険者債権…について当然に被保険者に代位する (egov-hokenhou-420AC0000000056.txt:214);
+// その債権は当会社に移転します (tokiomarine-2025-tap-yakkan.txt:5188).
+entity Subrogation "求償（請求権代位）" {
+  id: Int @pk
+  status: Enum(open "求償中", recovered "回収", abandoned "回収の断念", time_barred "時効消滅") @default(open)
+}
+
+// A complaint about a claim, made to the insurer or through そんぽADRセンター. 苦情解決手続 (sonpo-adr-kujou.md:109);
+// 紛争解決手続 (sonpo-adr-hunsou.md:109).
+entity Complaint "苦情・紛争" {
+  id: Int @pk
+  proposal: AdrProposal
+  status: Enum(received "苦情受付", resolved "解決", adr_complaint "ADR 苦情解決手続中", adr_dispute "ADR 紛争解決手続中", proposal_received "和解案の提示", settled "和解成立", rejected "和解案を受諾しない", terminated "手続終了（不調）") @default(received)
+  // 日本損害保険協会そんぽＡＤＲセンター…等の各種相談機関を案内する (sonpo-2026-shiharai-guideline.txt:540-543).
+  adr_guided: Bool @default(false)
+}
+
+// ER relationships
+relate(Investigation, ClaimCase, 1:1)
+relate(RepairEstimate, ClaimCase, N:1)
+relate(Settlement, ClaimCase, 1:1)
+relate(JibaisekiSurvey, ClaimCase, N:1)
+// A case can have several claimants (each 被害者 of an 対人賠償 case), so several claims.
+relate(Claim, ClaimCase, N:1)
+relate(Payment, Claim, 1:1)
+relate(Subrogation, Claim, 1:1)
+relate(Complaint, ClaimCase, N:1)
+
+// Events: the interface between use cases, and between use cases and the external systems.
+event EvAccidentQueried "事故受付の有無の照会"
+event EvDuplicateAccidentFound "他社での事故受付の判明"
+event EvJibaisekiSurveyRequested "自賠責損害調査の依頼"
+event EvJibaisekiSurveyEscalated "上部機関・審査会での審査"
+event EvJibaisekiSurveyReported "自賠責損害調査の結果の報告"
+event EvSettlementAgreed "示談の成立"
+event EvSettlementEnded "示談代行の終了（不調・不実施）"
+event EvClaimPaid "保険金の支払"
+event EvDenialNotified "不払いの通知"
+event EvClaimWithdrawn "請求の取下げ"
+event EvAdrComplaintNotified "ADR 苦情の通知"
+event EvAdrComplaintAnswered "ADR 苦情への回答"
+event EvAdrDisputeFiled "紛争解決手続の申立て"
+event EvAdrProposalPresented "和解案の提示"
+event EvAdrProposalAnswered "和解案への回答"
+event EvAdrDisputeTerminated "紛争解決手続の終了"

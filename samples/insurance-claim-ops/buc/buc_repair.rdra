@@ -1,0 +1,168 @@
+module buc.repair
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.intake.{CaseScreen}
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+buc BucRepair "修理見積と着工の承認"
+  description "損害車両は修理工場に入る。修理工場は見積書と写真を出し、アジャスターが損害額と損傷・事故の関係を確かめて修理費を協定する。保険の対象を修理するには、応急の仮手当を除き、あらかじめ保険会社の承認を得る。承認の前に着工すると、保険金の一部または全部が払われないことがある。"
+
+// 被害が生じた物の価額を確認できる書類、修理等に必要とする費用の見積書…および被害が生じた物の写真
+// (edesign-2024-jidousha-yakkan.txt:3338).
+usecase SubmitRepairEstimate "修理見積の提出" description "修理工場が損害車両の修理見積書と写真を保険会社に出す。"
+
+// 技術アジャスター …… 損害車両の損害額、事故の原因および損傷部位と事故 (sonpo-2024-adjuster-seido-gaiyou.txt:11). The
+// agreement with the shop is the model's assumption: the research found no 見積協定 form (map.md:114).
+usecase AgreeRepairCost "修理費の協定"
+  description "アジャスターが損傷と事故の関係、修理の方法と部品交換の要否を確かめ、修理工場と修理費を協定する。"
+
+// 保険の対象（*6）を修理する場合には、あらかじめ当会社の承認を得ること (tokiomarine-2025-tap-yakkan.txt:4501).
+usecase ApproveRepairStart "修理着工の承認" description "協定した修理費で修理に着工することを、保険会社が承認する。"
+
+// 修理に着工される前に必ず弊社へご連絡ください。弊社が承認する前に修理に着工され (tokiomarine-2025-tap-yakkan.txt:1555).
+usecase StartRepair "修理の着工" description "修理工場が保険会社の承認を受けて修理に着工する。"
+
+usecase CompleteRepair "修理の完了" description "修理工場が修理を終える。"
+
+screen RepairScreen "修理見積画面"
+
+api RepairEstimateCreateApi "修理見積提出 API"
+  method POST
+  path "/cases/{id}/repair-estimates"
+
+api RepairEstimateApi "修理見積 API"
+  method PATCH
+  path "/repair-estimates/{id}"
+
+performs(RepairShop, SubmitRepairEstimate)
+performs(Adjuster, AgreeRepairCost)
+performs(ClaimHandler, ApproveRepairStart)
+performs(RepairShop, StartRepair)
+performs(RepairShop, CompleteRepair)
+belongs(BucRepair, ClaimHandling).by(ClaimDocuments).by(HandlerTerminal)
+
+contains(BucRepair, SubmitRepairEstimate)
+contains(BucRepair, AgreeRepairCost)
+contains(BucRepair, ApproveRepairStart)
+contains(BucRepair, StartRepair)
+contains(BucRepair, CompleteRepair)
+contains(ClaimSystem, RepairEstimateCreateApi)
+contains(ClaimSystem, RepairEstimateApi)
+
+// The insurer pays a repair under 車両 (the insured's own car) or 対物賠償 (the other party's).
+displays(SubmitRepairEstimate, RepairScreen)
+invokes(SubmitRepairEstimate, RepairEstimateCreateApi)
+creates(RepairEstimateCreateApi, RepairEstimate)
+
+condition RepairCoverage "車両・対物賠償の事故である"
+holds(RepairCoverage, ClaimCase.coverage in (vehicle, property_liability))
+applies_to(RepairCoverage, SubmitRepairEstimate)
+
+displays(AgreeRepairCost, RepairScreen)
+invokes(AgreeRepairCost, RepairEstimateApi)
+updates(RepairEstimateApi, RepairEstimate)
+transitions(AgreeRepairCost, RepairEstimate.status, submitted -> agreed)
+
+displays(ApproveRepairStart, RepairScreen)
+invokes(ApproveRepairStart, RepairEstimateApi)
+sets(ApproveRepairStart, RepairEstimate, approved == true)
+
+condition RepairCostAgreed "修理費を協定した"
+holds(RepairCostAgreed, RepairEstimate.status == agreed)
+applies_to(RepairCostAgreed, ApproveRepairStart)
+
+displays(StartRepair, RepairScreen)
+invokes(StartRepair, RepairEstimateApi)
+transitions(StartRepair, RepairEstimate.status, agreed -> repairing)
+
+condition RepairApproved "修理着工を承認した"
+holds(RepairApproved, RepairEstimate.approved == true)
+applies_to(RepairApproved, StartRepair)
+
+displays(CompleteRepair, RepairScreen)
+invokes(CompleteRepair, RepairEstimateApi)
+transitions(CompleteRepair, RepairEstimate.status, repairing -> completed)
+
+// Access constraints
+requires_permission(SubmitRepairEstimate, RepairEstimateSubmit)
+requires_medium(SubmitRepairEstimate, ClaimDocuments)
+requires_permission(RepairEstimateCreateApi, RepairEstimateSubmit)
+requires_permission(AgreeRepairCost, DamageSurvey)
+requires_medium(AgreeRepairCost, HandlerTerminal)
+requires_permission(ApproveRepairStart, CaseHandle)
+requires_medium(ApproveRepairStart, HandlerTerminal)
+requires_permission(StartRepair, RepairEstimateSubmit)
+requires_medium(StartRepair, ClaimDocuments)
+requires_permission(CompleteRepair, RepairEstimateSubmit)
+requires_medium(CompleteRepair, ClaimDocuments)
+
+// Screen transitions: the model's assumption.
+navigates(CaseScreen, RepairScreen).via(SubmitRepairEstimate)
+
+field RepairAmountField "修理費"
+  access editable
+  required true
+  source actor
+
+field RepairApprovedField "着工の承認"
+  access readonly
+  required true
+  source system
+
+contains(RepairScreen, RepairAmountField)
+contains(RepairScreen, RepairApprovedField)
+maps_field(RepairAmountField, RepairEstimate.amount)
+maps_field(RepairApprovedField, RepairEstimate.approved)
+
+// Business flow
+flow RepairFlow "修理の流れ"
+step EstimateStep "見積書と写真の提出"
+step AgreeStep "修理費の協定（アジャスター）"
+step ApproveStep "着工の承認"
+step RepairStep "着工と修理"
+
+contains(BucRepair, RepairFlow)
+contains(RepairFlow, EstimateStep)
+contains(RepairFlow, AgreeStep)
+contains(RepairFlow, ApproveStep)
+contains(RepairFlow, RepairStep)
+
+precedes(EstimateStep, AgreeStep)
+precedes(AgreeStep, ApproveStep)
+precedes(ApproveStep, RepairStep)
+
+covers(EstimateStep, SubmitRepairEstimate)
+covers(AgreeStep, AgreeRepairCost)
+covers(ApproveStep, ApproveRepairStart)
+covers(RepairStep, StartRepair)
+covers(RepairStep, CompleteRepair)
+
+performs(RepairShop, EstimateStep)
+performs(Adjuster, AgreeStep)
+performs(ClaimHandler, ApproveStep)
+performs(RepairShop, RepairStep)
+
+// Rules
+// 必要な応急の仮手当を行う場合を除きます (tokiomarine-2025-tap-yakkan.txt:4501-4502): the emergency repair is not modeled.
+forbidden(RepairEstimate, status in (repairing, completed), approved == false).label("修理着工は事前承認の後")
+
+forbidden(RepairEstimate, ClaimCase, ClaimCase.coverage in (bodily_liability, personal_injury)).along(RepairEstimate, ClaimCase).label("修理見積は車両・対物賠償の事故だけ")
+
+// Requirement traceability
+requirement ReqRepairApproval "修理は、アジャスターが修理費を協定し、保険会社が着工を承認してから行う"
+  priority "must"
+  source "修理着工の事前承認 (tokiomarine-2025-tap-yakkan.txt:4499-4501)"
+  source "承認前の着工は払わないことがある (tokiomarine-2025-tap-yakkan.txt:1555-1557)"
+  source "技術アジャスター (sonpo-2024-adjuster-seido-gaiyou.txt:11)"
+  source "兼業代理店の不正な修理費見積り (fsa-2026-kantoku-shishin-ins.txt:8202)"
+  stakeholder "修理工場"
+  stakeholder "アジャスター"
+  acceptance_criteria "修理中・修理完了の見積はすべて着工の承認を受けている。"
+  status "accepted"
+
+motivates(ReqRepairApproval, BucRepair)
+achieves(ReqRepairApproval, NoMissedPayment)

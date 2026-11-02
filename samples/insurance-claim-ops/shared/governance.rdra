@@ -1,0 +1,55 @@
+module shared.governance
+
+import shared.actors
+import shared.biz
+import shared.entities
+
+// Sources cited as file:line are under ~/research/japan-insurance-claim-operations/sources/.
+
+quality Timeliness "迅速性"
+quality Fairness "公平・公正"
+quality Auditability "監査可能性"
+
+// 手続実施委員は、お申立てを受け付けた日から原則として4か月以内に、和解案を作成するよう努めます (sonpo-adr-hunsou.md:111).
+// An NFR, not a timer: the period is the ADR center's target, it runs outside the insurer, and nothing
+// changes in the insurer's records when it passes.
+nfr AdrProposalTarget "ADR の和解案の作成（申立ての受付から原則4か月以内）"
+  metric proposal_months
+  target "<=4"
+  window "1 dispute"
+  slo "原則"
+
+// 支払管理部門 (fsa-2026-kantoku-shishin-ins.txt:8227-8229); 保険金支払済み事案については、特約・費用保険金等に関して、
+// 支払漏れがないか点検 (sonpo-2026-shiharai-guideline.txt:170); 取下げの記録 (:464-466). The retention is the model's
+// assumption.
+constraint PaymentAudit "支払・不払と取下げの記録"
+  audit enabled
+  logging structured
+  retention "10y"
+
+// 不払い通知の事後検証 is part of the 支払管理態勢 (fsa-2026-kantoku-shishin-ins.txt:8370-8371).
+constraint DenialReview "不払いの事後検証"
+  audit enabled
+  retention "10y"
+
+applies_to(AdrProposalTarget, ClaimSystem)
+qualifies(AdrProposalTarget, Timeliness)
+qualifies(PaymentAudit, Auditability)
+qualifies(DenialReview, Fairness)
+constrains(PaymentAudit, Claim)
+constrains(PaymentAudit, Payment)
+constrains(DenialReview, Claim)
+
+// 支払管理部門及び支払部門においては、営業部門からの不適切な介入が牽制及び排除 (fsa-2026-kantoku-shishin-ins.txt:8232-8234);
+// 保険代理店等を含む…第三者…からの不適切な介入に影響されることなく (:8235-8236).
+adr AdrAgentOutOfDecision "代理店を支払の判断から外す"
+  description "代理店をモデルのどこに置くかの決定記録。"
+  adr_status accepted
+  context "契約者は事故を保険会社か代理店に連絡する。監督指針は、支払部門と支払管理部門が営業部門や代理店の不適切な介入に影響されない態勢を求め、兼業代理店の修理工場が不正な修理費見積りで過大な支払を受けた事案を挙げる。代理店が損害調査で何をするかの規程は調査で見つけていない。"
+  decision "代理店はアクターとし、事故の通知の取次ぎだけを行う。調査・査定・決裁・支払の権限を持たせない。"
+  consequence "代理店の権限は事故の通知だけになる。兼業代理店の修理工場は修理工場として扱う。"
+  accepted "代理店を事故受付の窓口に限る"
+  rejected "代理店に示談や修理費の協定を行わせる"
+  reason "介入の排除は支払管理態勢の要求で、代理店の請求上の役割は一次資料にない。"
+
+decides(AdrAgentOutOfDecision, ClaimCase)

@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:CompleteClaim model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__ClaimScreen as 保険金請求画面
+  participant api__ClaimApi as 保険金請求 API
+  participant entity__Claim as 保険金請求
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求完了の確認
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status == 請求書類の提出 and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求書類の提出 -> 請求完了, period 未起算 -> 30日の期間中, completed_on=set
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end

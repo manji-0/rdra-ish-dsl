@@ -1,0 +1,14 @@
+%% rdra-ish diagram=sequence scope=usecase:TimeBarClaim model=samples/insurance-claim-ops
+%% kinds: timer api entity
+%% omitted: buc step
+sequenceDiagram
+  participant timer__ClaimLimitation as 保険金請求権の時効（請求権が発生した時の翌日から3年）
+  participant api__ClaimApi as 保険金請求 API
+  participant entity__Claim as 保険金請求
+  timer__ClaimLimitation ->> api__ClaimApi: 保険金請求権の時効（請求権が発生した時の翌日から3年）
+  alt Claim.status in (請求の案内済, 請求書類の提出) and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求の案内済 -> 時効消滅, status 請求書類の提出 -> 時効消滅, period 未起算 -> 期限の管理を終了
+    api__ClaimApi -->> timer__ClaimLimitation: done
+  else guard fails
+    api__ClaimApi -->> timer__ClaimLimitation: rejected
+  end

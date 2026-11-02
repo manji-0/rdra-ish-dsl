@@ -1,0 +1,77 @@
+%% rdra-ish diagram=flow scope=buc:BucComplaint model=samples/insurance-claim-ops
+%% kinds: flow step lane actor usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__ComplaintFlow["苦情と紛争解決の流れ"]
+    step__ComplaintStep["苦情の申出"]:::step
+    step__DisputeStep["紛争解決手続の申立て"]:::step
+    step__ProposalStep["和解案（原則4か月以内）"]:::step
+    step__TerminateStep["手続の終了（1月以内の提訴で時効の完成猶予）"]:::step
+    subgraph lane__ComplaintFlow__ClaimHandler["損害サービス担当者"]
+      %% lane lane__ComplaintFlow__ClaimHandler: actor__ClaimHandler
+      step__AdrComplaintStep["ADR 苦情解決手続（60日）"]:::step
+      step__GuideAdrStep["相談機関の案内"]:::step
+    end
+    subgraph lane__ComplaintFlow__SeniorApprover["上位決裁者（不正請求対応）"]
+      %% lane lane__ComplaintFlow__SeniorApprover: actor__SeniorApprover
+      step__AnswerStep["和解案への回答"]:::step
+    end
+  end
+  actor__PolicyHolder(["契約者・被保険者"]):::actor
+  %% desc actor__PolicyHolder: 事故を通知し、示談代行に同意し、保険金を請求する。請求の前に、等級の変動の説明を受けて請求の意思を決める。苦情を申し出る。
+  actor__Victim(["被害者（損害賠償請求権者）"]):::actor
+  %% desc actor__Victim: 加害者側の保険会社と折衝することに同意するかを決め、示談に応じ、直接請求権に基づいて保険金を請求する。苦情を申し出る。
+  usecase__AcceptProposal("和解案の受諾"):::usecase
+  %% desc usecase__AcceptProposal: 和解案を受け入れ、和解を成立させる。
+  usecase__AnswerAdrComplaint("ADR 苦情への対応"):::usecase
+  %% desc usecase__AnswerAdrComplaint: 申出人と話し合って苦情を解決し、センターに結果を回答する。
+  usecase__FileComplaint("苦情の申出"):::usecase
+  %% desc usecase__FileComplaint: 契約者・被保険者または被害者が、支払・不払や対応について保険会社に苦情を申し出る。
+  usecase__GuideToAdr("相談機関の案内"):::usecase
+  %% desc usecase__GuideToAdr: 了解が得られない申出人に、そんぽADRセンターなどの相談機関を案内する。
+  usecase__RecordAdrComplaint("ADR 苦情の受付"):::usecase
+  %% desc usecase__RecordAdrComplaint: そんぽADRセンターから苦情の通知を受け、対応を始める。
+  usecase__RecordDisputeFiled("紛争解決手続の申立ての受付"):::usecase
+  %% desc usecase__RecordDisputeFiled: 申出人が紛争解決手続を申し立てたと、センターから知らせを受ける。
+  usecase__RecordDisputeTerminated("紛争解決手続の終了"):::usecase
+  %% desc usecase__RecordDisputeTerminated: 和解の見込みがないとして手続が終わったと知らせを受ける。申出人は通知から1月以内に提訴すれば時効の完成が猶予される。
+  usecase__RecordProposal("和解案の受領"):::usecase
+  %% desc usecase__RecordProposal: 手続実施委員から和解案を受け取る。和解案が特別調停案かを記録する。
+  usecase__RejectProposal("和解案を受諾しない"):::usecase
+  %% desc usecase__RejectProposal: 特別調停案でない和解案を受け入れないと回答する。特別調停案は受諾しなければならない。
+  usecase__ResolveComplaint("苦情の解決"):::usecase
+  %% desc usecase__ResolveComplaint: 事実を確かめ直し、説明して苦情を解決する。
+  event__EvAdrComplaintNotified>"ADR 苦情の通知"]:::event
+  event__EvAdrDisputeFiled>"紛争解決手続の申立て"]:::event
+  event__EvAdrDisputeTerminated>"紛争解決手続の終了"]:::event
+  event__EvAdrProposalPresented>"和解案の提示"]:::event
+  event__EvDenialNotified>"不払いの通知"]:::event
+  actor__PolicyHolder -.-> step__ComplaintStep
+  actor__Victim -.-> step__ComplaintStep
+  step__AdrComplaintStep -.-> event__EvAdrComplaintNotified
+  step__AdrComplaintStep -.-> usecase__AnswerAdrComplaint
+  step__AdrComplaintStep -.-> usecase__RecordAdrComplaint
+  step__AdrComplaintStep -->|precedes| step__DisputeStep
+  step__AnswerStep -.-> usecase__AcceptProposal
+  step__AnswerStep -.-> usecase__RejectProposal
+  step__ComplaintStep -.-> event__EvDenialNotified
+  step__ComplaintStep -.-> usecase__FileComplaint
+  step__ComplaintStep -.-> usecase__ResolveComplaint
+  step__ComplaintStep -->|precedes| step__GuideAdrStep
+  step__DisputeStep -.-> event__EvAdrDisputeFiled
+  step__DisputeStep -.-> usecase__RecordDisputeFiled
+  step__DisputeStep -->|precedes| step__ProposalStep
+  step__GuideAdrStep -.-> usecase__GuideToAdr
+  step__GuideAdrStep -->|precedes| step__AdrComplaintStep
+  step__ProposalStep -.-> event__EvAdrProposalPresented
+  step__ProposalStep -.-> usecase__RecordProposal
+  step__ProposalStep -.->|excepts| step__TerminateStep
+  step__ProposalStep -->|precedes| step__AnswerStep
+  step__TerminateStep -.-> event__EvAdrDisputeTerminated
+  step__TerminateStep -.-> usecase__RecordDisputeTerminated
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

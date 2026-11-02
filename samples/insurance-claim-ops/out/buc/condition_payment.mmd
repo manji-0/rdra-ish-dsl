@@ -1,0 +1,62 @@
+%% rdra-ish diagram=condition scope=buc:BucPayment model=samples/insurance-claim-ops
+%% kinds: condition statemodel usecase
+%% omitted: (none)
+flowchart LR
+  condition__ClaimBeforeDecision{"請求書類の提出から決裁の前である"}:::condition
+  %% holds condition__ClaimBeforeDecision: Claim.status in (請求書類の提出, 請求完了)
+  condition__ClaimUnderConfirmation{"請求完了の後、支払・不払を決める前である"}:::condition
+  %% holds condition__ClaimUnderConfirmation: Claim.status == 請求完了
+  condition__DenialDecided{"不払いを決めた"}:::condition
+  %% holds condition__DenialDecided: Claim.status == 不払決定
+  condition__FraudSuspected{"不正請求の疑いがある"}:::condition
+  %% holds condition__FraudSuspected: Claim.fraud_suspected == true
+  condition__LiabilityDetermined{"賠償責任の有無を判断している"}:::condition
+  %% holds condition__LiabilityDetermined: ClaimCase.liability in (賠償責任あり, 過失ゼロ（賠償責任なし）)
+  condition__NoFraudSuspicion{"不正請求の疑いがない"}:::condition
+  %% holds condition__NoFraudSuspicion: Claim.fraud_suspected == false
+  condition__NotPaidYet{"支払済みの案件は再度支払わない"}:::condition
+  %% holds condition__NotPaidYet: (Claim.status == 支払決定).none(Payment)
+  condition__ReasonExplained{"不払いの理由を説明した"}:::condition
+  %% holds condition__ReasonExplained: Claim.reason_explained == true
+  statemodel__ClaimCase_liability[["ClaimCase.liability"]]:::statemodel
+  statemodel__ClaimCase_status[["ClaimCase.status"]]:::statemodel
+  statemodel__Claim_status[["Claim.status"]]:::statemodel
+  usecase__CloseCase("事故案件の完了"):::usecase
+  %% desc usecase__CloseCase: 請求の支払・不払の通知・取下げを受けて、事故案件を完了にする。過失の判断が残っていれば先に済ませる。
+  usecase__DecideClaim("支払・不払の決裁"):::usecase
+  %% desc usecase__DecideClaim: 支払決裁者が調査の結果と請求書類から、保険金を支払うか、免責・解除などで支払わないかを決める。
+  usecase__DecideSuspectedClaim("疑義事案の支払・不払の決裁"):::usecase
+  %% desc usecase__DecideSuspectedClaim: 不正請求の疑いがある請求を、上位の決裁者（不正請求への対応を専門とする担当）が決める。
+  usecase__ExplainDenialReason("不払いの理由の説明"):::usecase
+  %% desc usecase__ExplainDenialReason: 支払わない根拠となる約款の条項と、調査で確かめた事実を、契約者等と被害者に説明する。
+  usecase__ExtendPaymentPeriod("支払期限の延長と通知"):::usecase
+  %% desc usecase__ExtendPaymentPeriod: 特別な照会または調査が欠かせないとき、延長事由（被災地の調査60日、鑑定等の照会90日、後遺障害の照会120日、警察等の照会180日、国外の調査180日）を選び、確認する事項と終える時期を請求者に通知する。
+  usecase__FlagSuspectedFraud("不正請求の疑いの登録"):::usecase
+  %% desc usecase__FlagSuspectedFraud: 事故状況・因果関係・修理や治療の内容に不自然な点があるか、他社での事故受付が分かったとき、請求を疑義事案として登録し、深く調べる。
+  usecase__NotifyDenial("不払いの通知"):::usecase
+  %% desc usecase__NotifyDenial: 理由を説明したうえで、支払わないことを書面で通知する。了解が得られなければ、そんぽADRセンターなどの相談機関を案内する。
+  usecase__PayClaim("保険金の支払"):::usecase
+  %% desc usecase__PayClaim: 支払金額と内訳（主たる保険金と特約・費用保険金）、算定の理由を説明して、被保険者・被害者・修理工場に払う。期限を過ぎていれば遅延利息を加える。
+  condition__ClaimBeforeDecision -.->|applies_to| usecase__FlagSuspectedFraud
+  condition__ClaimBeforeDecision -.-> statemodel__Claim_status
+  %% derived condition__ClaimBeforeDecision -> statemodel__Claim_status from holds
+  condition__ClaimUnderConfirmation -.->|applies_to| usecase__ExtendPaymentPeriod
+  condition__ClaimUnderConfirmation -.-> statemodel__Claim_status
+  %% derived condition__ClaimUnderConfirmation -> statemodel__Claim_status from holds
+  condition__DenialDecided -.->|applies_to| usecase__ExplainDenialReason
+  condition__DenialDecided -.-> statemodel__Claim_status
+  %% derived condition__DenialDecided -> statemodel__Claim_status from holds
+  condition__FraudSuspected -.->|applies_to| usecase__DecideSuspectedClaim
+  condition__LiabilityDetermined -.->|applies_to| usecase__CloseCase
+  condition__LiabilityDetermined -.-> statemodel__ClaimCase_liability
+  %% derived condition__LiabilityDetermined -> statemodel__ClaimCase_liability from holds
+  condition__LiabilityDetermined -.-> statemodel__ClaimCase_status
+  %% derived condition__LiabilityDetermined -> statemodel__ClaimCase_status from when
+  condition__NoFraudSuspicion -.->|applies_to| usecase__DecideClaim
+  condition__NotPaidYet -.->|applies_to| usecase__PayClaim
+  condition__NotPaidYet -.-> statemodel__Claim_status
+  %% derived condition__NotPaidYet -> statemodel__Claim_status from holds
+  condition__ReasonExplained -.->|applies_to| usecase__NotifyDenial
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

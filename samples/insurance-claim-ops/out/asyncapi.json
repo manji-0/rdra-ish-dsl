@@ -1,0 +1,994 @@
+{
+  "asyncapi": "3.1.0",
+  "channels": {
+    "EvAccidentQueried": {
+      "address": "EvAccidentQueried",
+      "messages": {
+        "EvAccidentQueried": {
+          "$ref": "#/components/messages/EvAccidentQueried"
+        }
+      },
+      "x-subscriber": [
+        "AccidentInfoExchange"
+      ]
+    },
+    "EvAdrComplaintAnswered": {
+      "address": "EvAdrComplaintAnswered",
+      "messages": {
+        "EvAdrComplaintAnswered": {
+          "$ref": "#/components/messages/EvAdrComplaintAnswered"
+        }
+      },
+      "x-subscriber": [
+        "SonpoAdrCenter"
+      ]
+    },
+    "EvAdrComplaintNotified": {
+      "address": "EvAdrComplaintNotified",
+      "messages": {
+        "EvAdrComplaintNotified": {
+          "$ref": "#/components/messages/EvAdrComplaintNotified"
+        }
+      },
+      "x-publisher": [
+        "SonpoAdrCenter"
+      ]
+    },
+    "EvAdrDisputeFiled": {
+      "address": "EvAdrDisputeFiled",
+      "messages": {
+        "EvAdrDisputeFiled": {
+          "$ref": "#/components/messages/EvAdrDisputeFiled"
+        }
+      },
+      "x-publisher": [
+        "SonpoAdrCenter"
+      ]
+    },
+    "EvAdrDisputeTerminated": {
+      "address": "EvAdrDisputeTerminated",
+      "messages": {
+        "EvAdrDisputeTerminated": {
+          "$ref": "#/components/messages/EvAdrDisputeTerminated"
+        }
+      },
+      "x-publisher": [
+        "SonpoAdrCenter"
+      ]
+    },
+    "EvAdrProposalAnswered": {
+      "address": "EvAdrProposalAnswered",
+      "messages": {
+        "EvAdrProposalAnswered": {
+          "$ref": "#/components/messages/EvAdrProposalAnswered"
+        }
+      },
+      "x-subscriber": [
+        "SonpoAdrCenter"
+      ]
+    },
+    "EvAdrProposalPresented": {
+      "address": "EvAdrProposalPresented",
+      "messages": {
+        "EvAdrProposalPresented": {
+          "$ref": "#/components/messages/EvAdrProposalPresented"
+        }
+      },
+      "x-publisher": [
+        "SonpoAdrCenter"
+      ]
+    },
+    "EvClaimPaid": {
+      "address": "EvClaimPaid",
+      "messages": {
+        "EvClaimPaid": {
+          "$ref": "#/components/messages/EvClaimPaid"
+        }
+      }
+    },
+    "EvClaimWithdrawn": {
+      "address": "EvClaimWithdrawn",
+      "messages": {
+        "EvClaimWithdrawn": {
+          "$ref": "#/components/messages/EvClaimWithdrawn"
+        }
+      }
+    },
+    "EvDenialNotified": {
+      "address": "EvDenialNotified",
+      "messages": {
+        "EvDenialNotified": {
+          "$ref": "#/components/messages/EvDenialNotified"
+        }
+      }
+    },
+    "EvDuplicateAccidentFound": {
+      "address": "EvDuplicateAccidentFound",
+      "messages": {
+        "EvDuplicateAccidentFound": {
+          "$ref": "#/components/messages/EvDuplicateAccidentFound"
+        }
+      },
+      "x-publisher": [
+        "AccidentInfoExchange"
+      ]
+    },
+    "EvInitialResponded": {
+      "address": "EvInitialResponded",
+      "messages": {
+        "EvInitialResponded": {
+          "$ref": "#/components/messages/EvInitialResponded"
+        }
+      }
+    },
+    "EvJibaisekiSurveyEscalated": {
+      "address": "EvJibaisekiSurveyEscalated",
+      "messages": {
+        "EvJibaisekiSurveyEscalated": {
+          "$ref": "#/components/messages/EvJibaisekiSurveyEscalated"
+        }
+      },
+      "x-publisher": [
+        "Giroj"
+      ]
+    },
+    "EvJibaisekiSurveyReported": {
+      "address": "EvJibaisekiSurveyReported",
+      "messages": {
+        "EvJibaisekiSurveyReported": {
+          "$ref": "#/components/messages/EvJibaisekiSurveyReported"
+        }
+      },
+      "x-publisher": [
+        "Giroj"
+      ]
+    },
+    "EvJibaisekiSurveyRequested": {
+      "address": "EvJibaisekiSurveyRequested",
+      "messages": {
+        "EvJibaisekiSurveyRequested": {
+          "$ref": "#/components/messages/EvJibaisekiSurveyRequested"
+        }
+      },
+      "x-subscriber": [
+        "Giroj"
+      ]
+    },
+    "EvSettlementAgreed": {
+      "address": "EvSettlementAgreed",
+      "messages": {
+        "EvSettlementAgreed": {
+          "$ref": "#/components/messages/EvSettlementAgreed"
+        }
+      }
+    },
+    "EvSettlementEnded": {
+      "address": "EvSettlementEnded",
+      "messages": {
+        "EvSettlementEnded": {
+          "$ref": "#/components/messages/EvSettlementEnded"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "EvAccidentQueried": {
+        "name": "EvAccidentQueried",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAccidentQueried",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "事故受付の有無の照会",
+        "x-rdra-ish-raised-by-usecases": [
+          "QueryAccidentExchange"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvAdrComplaintAnswered": {
+        "name": "EvAdrComplaintAnswered",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAdrComplaintAnswered",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "ADR 苦情への回答",
+        "x-rdra-ish-raised-by-usecases": [
+          "AnswerAdrComplaint"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvAdrComplaintNotified": {
+        "name": "EvAdrComplaintNotified",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAdrComplaintNotified",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "ADR 苦情の通知",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "received",
+            "to": "adr_complaint"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordAdrComplaint"
+        ]
+      },
+      "EvAdrDisputeFiled": {
+        "name": "EvAdrDisputeFiled",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAdrDisputeFiled",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "紛争解決手続の申立て",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "adr_complaint",
+            "to": "adr_dispute"
+          },
+          {
+            "from": "received",
+            "to": "adr_dispute"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordDisputeFiled"
+        ]
+      },
+      "EvAdrDisputeTerminated": {
+        "name": "EvAdrDisputeTerminated",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAdrDisputeTerminated",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "紛争解決手続の終了",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "adr_dispute",
+            "to": "terminated"
+          },
+          {
+            "from": "proposal_received",
+            "to": "terminated"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordDisputeTerminated"
+        ]
+      },
+      "EvAdrProposalAnswered": {
+        "name": "EvAdrProposalAnswered",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAdrProposalAnswered",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "和解案への回答",
+        "x-rdra-ish-raised-by-usecases": [
+          "AcceptProposal",
+          "RejectProposal"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvAdrProposalPresented": {
+        "name": "EvAdrProposalPresented",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvAdrProposalPresented",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "和解案の提示",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "adr_dispute",
+            "to": "proposal_received"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordProposal"
+        ]
+      },
+      "EvClaimPaid": {
+        "name": "EvClaimPaid",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimPaid",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "保険金の支払",
+        "x-rdra-ish-raised-by-usecases": [
+          "PayClaim"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "assessed",
+            "to": "closed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [
+          "BucSubrogation"
+        ],
+        "x-rdra-ish-triggers-usecases": [
+          "CloseCase",
+          "StartSubrogation"
+        ]
+      },
+      "EvClaimWithdrawn": {
+        "name": "EvClaimWithdrawn",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimWithdrawn",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "請求の取下げ",
+        "x-rdra-ish-raised-by-usecases": [
+          "WithdrawClaim"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "assessed",
+            "to": "closed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "CloseCase"
+        ]
+      },
+      "EvDenialNotified": {
+        "name": "EvDenialNotified",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDenialNotified",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "不払いの通知",
+        "x-rdra-ish-raised-by-usecases": [
+          "NotifyDenial"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "assessed",
+            "to": "closed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "CloseCase",
+          "FileComplaint"
+        ]
+      },
+      "EvDuplicateAccidentFound": {
+        "name": "EvDuplicateAccidentFound",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDuplicateAccidentFound",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "他社での事故受付の判明",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "FlagSuspectedFraud"
+        ]
+      },
+      "EvInitialResponded": {
+        "name": "EvInitialResponded",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvInitialResponded",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "初期対応の完了",
+        "x-rdra-ish-raised-by-usecases": [
+          "RespondInitially"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "SendClaimForms"
+        ]
+      },
+      "EvJibaisekiSurveyEscalated": {
+        "name": "EvJibaisekiSurveyEscalated",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvJibaisekiSurveyEscalated",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "上部機関・審査会での審査",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "sent",
+            "to": "under_review"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordJibaisekiEscalation"
+        ]
+      },
+      "EvJibaisekiSurveyReported": {
+        "name": "EvJibaisekiSurveyReported",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvJibaisekiSurveyReported",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "自賠責損害調査の結果の報告",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "sent",
+            "to": "reported"
+          },
+          {
+            "from": "under_review",
+            "to": "reported"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordJibaisekiResult"
+        ]
+      },
+      "EvJibaisekiSurveyRequested": {
+        "name": "EvJibaisekiSurveyRequested",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvJibaisekiSurveyRequested",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "自賠責損害調査の依頼",
+        "x-rdra-ish-raised-by-usecases": [
+          "SendJibaisekiSurvey"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvSettlementAgreed": {
+        "name": "EvSettlementAgreed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvSettlementAgreed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "示談の成立",
+        "x-rdra-ish-raised-by-usecases": [
+          "AgreeSettlement"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "investigating",
+            "to": "assessed"
+          },
+          {
+            "from": "investigating",
+            "to": "assessed"
+          },
+          {
+            "from": "negotiating",
+            "to": "assessed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "AssessDamage"
+        ]
+      },
+      "EvSettlementEnded": {
+        "name": "EvSettlementEnded",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvSettlementEnded",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "示談代行の終了（不調・不実施）",
+        "x-rdra-ish-raised-by-usecases": [
+          "DeclineSettlementService",
+          "EndNegotiationUnresolved"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "investigating",
+            "to": "assessed"
+          },
+          {
+            "from": "investigating",
+            "to": "assessed"
+          },
+          {
+            "from": "negotiating",
+            "to": "assessed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "AssessDamage"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish event catalog",
+    "version": "0.1.0"
+  },
+  "operations": {
+    "consumeEvAdrComplaintNotified": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAdrComplaintNotified"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAdrComplaintNotified/messages/EvAdrComplaintNotified"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "received",
+          "to": "adr_complaint"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordAdrComplaint"
+      ]
+    },
+    "consumeEvAdrDisputeFiled": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAdrDisputeFiled"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAdrDisputeFiled/messages/EvAdrDisputeFiled"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "adr_complaint",
+          "to": "adr_dispute"
+        },
+        {
+          "from": "received",
+          "to": "adr_dispute"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordDisputeFiled"
+      ]
+    },
+    "consumeEvAdrDisputeTerminated": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAdrDisputeTerminated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAdrDisputeTerminated/messages/EvAdrDisputeTerminated"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "adr_dispute",
+          "to": "terminated"
+        },
+        {
+          "from": "proposal_received",
+          "to": "terminated"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordDisputeTerminated"
+      ]
+    },
+    "consumeEvAdrProposalPresented": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvAdrProposalPresented"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAdrProposalPresented/messages/EvAdrProposalPresented"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "adr_dispute",
+          "to": "proposal_received"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordProposal"
+      ]
+    },
+    "consumeEvClaimPaid": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimPaid"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimPaid/messages/EvClaimPaid"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "assessed",
+          "to": "closed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [
+        "BucSubrogation"
+      ],
+      "x-rdra-ish-triggers-usecases": [
+        "CloseCase",
+        "StartSubrogation"
+      ]
+    },
+    "consumeEvClaimWithdrawn": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimWithdrawn"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimWithdrawn/messages/EvClaimWithdrawn"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "assessed",
+          "to": "closed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "CloseCase"
+      ]
+    },
+    "consumeEvDenialNotified": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDenialNotified"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDenialNotified/messages/EvDenialNotified"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "assessed",
+          "to": "closed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "CloseCase",
+        "FileComplaint"
+      ]
+    },
+    "consumeEvDuplicateAccidentFound": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDuplicateAccidentFound"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDuplicateAccidentFound/messages/EvDuplicateAccidentFound"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "FlagSuspectedFraud"
+      ]
+    },
+    "consumeEvInitialResponded": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvInitialResponded"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvInitialResponded/messages/EvInitialResponded"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "SendClaimForms"
+      ]
+    },
+    "consumeEvJibaisekiSurveyEscalated": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvJibaisekiSurveyEscalated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvJibaisekiSurveyEscalated/messages/EvJibaisekiSurveyEscalated"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "sent",
+          "to": "under_review"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordJibaisekiEscalation"
+      ]
+    },
+    "consumeEvJibaisekiSurveyReported": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvJibaisekiSurveyReported"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvJibaisekiSurveyReported/messages/EvJibaisekiSurveyReported"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "sent",
+          "to": "reported"
+        },
+        {
+          "from": "under_review",
+          "to": "reported"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordJibaisekiResult"
+      ]
+    },
+    "consumeEvSettlementAgreed": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvSettlementAgreed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSettlementAgreed/messages/EvSettlementAgreed"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "investigating",
+          "to": "assessed"
+        },
+        {
+          "from": "investigating",
+          "to": "assessed"
+        },
+        {
+          "from": "negotiating",
+          "to": "assessed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "AssessDamage"
+      ]
+    },
+    "consumeEvSettlementEnded": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvSettlementEnded"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSettlementEnded/messages/EvSettlementEnded"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "investigating",
+          "to": "assessed"
+        },
+        {
+          "from": "investigating",
+          "to": "assessed"
+        },
+        {
+          "from": "negotiating",
+          "to": "assessed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "AssessDamage"
+      ]
+    },
+    "publishEvAccidentQueried": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAccidentQueried"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAccidentQueried/messages/EvAccidentQueried"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "QueryAccidentExchange"
+      ]
+    },
+    "publishEvAdrComplaintAnswered": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAdrComplaintAnswered"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAdrComplaintAnswered/messages/EvAdrComplaintAnswered"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "AnswerAdrComplaint"
+      ]
+    },
+    "publishEvAdrProposalAnswered": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvAdrProposalAnswered"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvAdrProposalAnswered/messages/EvAdrProposalAnswered"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "AcceptProposal",
+        "RejectProposal"
+      ]
+    },
+    "publishEvClaimPaid": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvClaimPaid"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimPaid/messages/EvClaimPaid"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "PayClaim"
+      ]
+    },
+    "publishEvClaimWithdrawn": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvClaimWithdrawn"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimWithdrawn/messages/EvClaimWithdrawn"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "WithdrawClaim"
+      ]
+    },
+    "publishEvDenialNotified": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvDenialNotified"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDenialNotified/messages/EvDenialNotified"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "NotifyDenial"
+      ]
+    },
+    "publishEvInitialResponded": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvInitialResponded"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvInitialResponded/messages/EvInitialResponded"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RespondInitially"
+      ]
+    },
+    "publishEvJibaisekiSurveyRequested": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvJibaisekiSurveyRequested"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvJibaisekiSurveyRequested/messages/EvJibaisekiSurveyRequested"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "SendJibaisekiSurvey"
+      ]
+    },
+    "publishEvSettlementAgreed": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvSettlementAgreed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSettlementAgreed/messages/EvSettlementAgreed"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "AgreeSettlement"
+      ]
+    },
+    "publishEvSettlementEnded": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvSettlementEnded"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSettlementEnded/messages/EvSettlementEnded"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DeclineSettlementService",
+        "EndNegotiationUnresolved"
+      ]
+    }
+  }
+}

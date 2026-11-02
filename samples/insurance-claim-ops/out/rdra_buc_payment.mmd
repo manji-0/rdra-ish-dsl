@@ -1,0 +1,423 @@
+%% rdra-ish diagram=rdra scope=buc:BucPayment model=samples/insurance-claim-ops
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state condition
+%% omitted: (none)
+flowchart LR
+  subgraph layer_value["システム価値"]
+    extsystem__AccidentInfoExchange[["自動車事故情報交換システム（損保協会の共同利用制度）"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    business__ClaimPayment[\"保険金の請求と支払"/]:::business
+    %% desc business__ClaimPayment: 保険金請求の案内と請求完了、支払期限とその延長、支払・不払の決裁と通知、支払、請求権代位による求償。
+    buc__BucPayment["支払・不払の決定と支払"]:::buc
+    %% desc buc__BucPayment: 請求完了日を含めて30日以内に、支払事由・免責事由・損害額・契約の効力の確認を終えて払う。特別な照会や調査が要るときは、確認する事項と終える時期を通知して、事由に応じて60〜180日まで延ばせる。決裁権限は支払と不払いで差があり、不正請求の疑いがある事案は上位の決裁者が決める。払えないときは、根拠となる約款の条項と調査の結果を説明して通知する。期限を過ぎて払うときは遅延利息を付ける。同じ請求に二度は払わない。
+    buc__BucSubrogation["求償（請求権代位）"]:::buc
+    %% desc buc__BucSubrogation: 保険会社は保険金を払うと、払った額と被保険者の債権の額のいずれか少ない額を限度に、被保険者が相手方に持つ損害賠償請求権を当然に取得する（請求権代位）。被保険者の残りの債権が優先する。保険会社は相手方（とその保険会社）に求償し、回収するか断念する。相手方への請求権は、損害と加害者を知った時から3年（人身損害は5年）で時効にかかる。
+    flow__PaymentFlow["支払・不払の流れ"]:::flow
+    flow__SubrogationFlow["求償の流れ"]:::flow
+    step__AbandonStep["断念"]:::step
+    step__CloseStep["事故案件の完了"]:::step
+    step__ConfirmStep["確認（請求完了日を含めて30日）"]:::step
+    step__DecisionStep["支払・不払の決裁"]:::step
+    step__DenialStep["不払いの理由の説明と通知"]:::step
+    step__ExtendStep["延長と通知（60〜180日）"]:::step
+    step__LapseStep["時効（3年・人身5年）"]:::step
+    step__OverdueStep["期限の経過（遅延利息）"]:::step
+    step__PayStep["支払と完了の連絡"]:::step
+    step__RecoveryStep["回収"]:::step
+    step__SeniorDecisionStep["上位の決裁"]:::step
+    step__SubrogationStartStep["代位による債権の取得と求償の開始"]:::step
+    step__SuspicionStep["疑義事案の登録"]:::step
+    timer__PaymentDeadline(("支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）")):::timer
+    timer__SubrogationLimitation(("求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）")):::timer
+    medium__AccidentHotline["事故受付センター（電話）"]:::medium
+    medium__ClaimDocuments["書面（請求書・示談書・見積書）"]:::medium
+    medium__HandlerTerminal["損害サービスの端末"]:::medium
+    permission__CaseHandle["事故案件の担当"]:::permission
+    permission__ComplaintFile["苦情の申出"]:::permission
+    permission__PaymentDecide["支払・不払の決裁"]:::permission
+    permission__SuspectedClaimDecide["疑義事案の決裁"]:::permission
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AbandonSubrogation("求償の断念"):::usecase
+    %% desc usecase__AbandonSubrogation: 相手方に資力がないなど、回収の見込みがないときに求償をやめる。
+    usecase__CloseCase("事故案件の完了"):::usecase
+    %% desc usecase__CloseCase: 請求の支払・不払の通知・取下げを受けて、事故案件を完了にする。過失の判断が残っていれば先に済ませる。
+    usecase__CompleteClaim("請求完了の確認"):::usecase
+    %% desc usecase__CompleteClaim: 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。
+    usecase__DecideClaim("支払・不払の決裁"):::usecase
+    %% desc usecase__DecideClaim: 支払決裁者が調査の結果と請求書類から、保険金を支払うか、免責・解除などで支払わないかを決める。
+    usecase__DecideSuspectedClaim("疑義事案の支払・不払の決裁"):::usecase
+    %% desc usecase__DecideSuspectedClaim: 不正請求の疑いがある請求を、上位の決裁者（不正請求への対応を専門とする担当）が決める。
+    usecase__ExplainDenialReason("不払いの理由の説明"):::usecase
+    %% desc usecase__ExplainDenialReason: 支払わない根拠となる約款の条項と、調査で確かめた事実を、契約者等と被害者に説明する。
+    usecase__ExtendPaymentPeriod("支払期限の延長と通知"):::usecase
+    %% desc usecase__ExtendPaymentPeriod: 特別な照会または調査が欠かせないとき、延長事由（被災地の調査60日、鑑定等の照会90日、後遺障害の照会120日、警察等の照会180日、国外の調査180日）を選び、確認する事項と終える時期を請求者に通知する。
+    usecase__FileComplaint("苦情の申出"):::usecase
+    %% desc usecase__FileComplaint: 契約者・被保険者または被害者が、支払・不払や対応について保険会社に苦情を申し出る。
+    usecase__FlagSuspectedFraud("不正請求の疑いの登録"):::usecase
+    %% desc usecase__FlagSuspectedFraud: 事故状況・因果関係・修理や治療の内容に不自然な点があるか、他社での事故受付が分かったとき、請求を疑義事案として登録し、深く調べる。
+    usecase__LapseSubrogation("求償する債権の時効"):::usecase
+    %% desc usecase__LapseSubrogation: 相手方への損害賠償請求権が時効（3年、人身損害は5年）にかかり、求償を終える。
+    usecase__MarkPaymentOverdue("支払期限の経過"):::usecase
+    %% desc usecase__MarkPaymentOverdue: 支払期限（30日、延長したときは延長の日数）を過ぎても支払・不払の通知をしていない請求に、遅延利息の起算を記録する。
+    usecase__NotifyDenial("不払いの通知"):::usecase
+    %% desc usecase__NotifyDenial: 理由を説明したうえで、支払わないことを書面で通知する。了解が得られなければ、そんぽADRセンターなどの相談機関を案内する。
+    usecase__NotifyPaymentCompleted("支払完了の連絡"):::usecase
+    %% desc usecase__NotifyPaymentCompleted: 保険金を払ったことと支払手続が終わったことを請求者に連絡する。
+    usecase__PayClaim("保険金の支払"):::usecase
+    %% desc usecase__PayClaim: 支払金額と内訳（主たる保険金と特約・費用保険金）、算定の理由を説明して、被保険者・被害者・修理工場に払う。期限を過ぎていれば遅延利息を加える。
+    usecase__RecoverSubrogation("求償の回収"):::usecase
+    %% desc usecase__RecoverSubrogation: 相手方またはその保険会社から求償した額を回収する。
+    usecase__StartSubrogation("求償の開始"):::usecase
+    %% desc usecase__StartSubrogation: 保険金を払った請求について、被保険者から移った損害賠償請求権の額（払った額と被保険者の債権のいずれか少ない額）を確かめ、相手方への求償を始める。
+    screen__CaseScreen["事故案件画面"]:::screen
+    screen__ClaimScreen["保険金請求画面"]:::screen
+    screen__ComplaintScreen["苦情・ADR 画面"]:::screen
+    screen__DecisionScreen["支払査定画面"]:::screen
+    screen__InvestigationScreen["損害調査画面"]:::screen
+    screen__JibaisekiScreen["自賠責損害調査画面"]:::screen
+    screen__PaymentScreen["支払画面"]:::screen
+    screen__RepairScreen["修理見積画面"]:::screen
+    screen__SettlementScreen["示談画面"]:::screen
+    screen__SubrogationScreen["求償画面"]:::screen
+    field__CaseStatusField["案件の状態"]:::field
+    field__ClaimStatusField["請求の状態"]:::field
+    field__ComplaintStatusField["苦情・紛争の状態"]:::field
+    field__CompletedOnField["請求完了日"]:::field
+    field__ExtensionField["延長事由"]:::field
+    field__FraudField["不正請求の疑い"]:::field
+    field__GradeExplainedField["等級の変動の説明"]:::field
+    field__InsuredConsentField["被保険者の同意"]:::field
+    field__JibaisekiStatusField["自賠責損害調査の状態"]:::field
+    field__LateInterestField["遅延利息"]:::field
+    field__LiabilityField["賠償責任"]:::field
+    field__PayeeField["支払先"]:::field
+    field__PeriodField["支払期限"]:::field
+    field__ProposalField["和解案の種類"]:::field
+    field__RepairAmountField["修理費"]:::field
+    field__RepairApprovedField["着工の承認"]:::field
+    field__SettlementStatusField["示談の状態"]:::field
+    field__SubrogationStatusField["求償の状態"]:::field
+    field__SurveyMethodField["調査の手法"]:::field
+    field__SurveyStatusField["調査の状態"]:::field
+    field__VictimConsentField["被害者の同意"]:::field
+    event__EvClaimPaid>"保険金の支払"]:::event
+    event__EvClaimWithdrawn>"請求の取下げ"]:::event
+    event__EvDenialNotified>"不払いの通知"]:::event
+    event__EvDuplicateAccidentFound>"他社での事故受付の判明"]:::event
+  end
+  subgraph layer_system["システム"]
+    api__CaseApi{{"事故案件 API"}}:::api
+    api__ClaimApi{{"保険金請求 API"}}:::api
+    api__ComplaintCreateApi{{"苦情受付 API"}}:::api
+    api__DecisionApi{{"支払査定 API"}}:::api
+    api__PaymentApi{{"支払完了連絡 API"}}:::api
+    api__PaymentCreateApi{{"保険金支払 API"}}:::api
+    api__SubrogationApi{{"求償 API"}}:::api
+    api__SubrogationCreateApi{{"求償開始 API"}}:::api
+    entity__Claim[("保険金請求")]:::entity
+    entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
+    entity__Complaint[("苦情・紛争")]:::entity
+    entity__Investigation[("損害調査")]:::entity
+    entity__JibaisekiSurvey[("自賠責損害調査")]:::entity
+    entity__Payment[("保険金の支払")]:::entity
+    entity__RepairEstimate[("修理見積")]:::entity
+    entity__Settlement[("示談（示談代行）")]:::entity
+    entity__Subrogation[("求償（請求権代位）")]:::entity
+    state__ClaimCase_status_assessed((("損害確定"))):::state
+    state__ClaimCase_status_closed((("完了"))):::state
+    state__Claim_period_ended((("期限の管理を終了"))):::state
+    state__Claim_period_extended((("延長期間中"))):::state
+    state__Claim_period_not_started((("未起算"))):::state
+    state__Claim_period_overdue((("期限経過"))):::state
+    state__Claim_period_running((("30日の期間中"))):::state
+    state__Claim_status_completed((("請求完了"))):::state
+    state__Claim_status_decided_denial((("不払決定"))):::state
+    state__Claim_status_decided_payment((("支払決定"))):::state
+    state__Claim_status_denial_notified((("不払通知済"))):::state
+    state__Claim_status_paid((("支払済"))):::state
+    state__Claim_status_submitted((("請求書類の提出"))):::state
+    state__Payment_completed((("支払完了の連絡済"))):::state
+    state__Payment_instructed((("支払手続"))):::state
+    state__Subrogation_abandoned((("回収の断念"))):::state
+    state__Subrogation_open((("求償中"))):::state
+    state__Subrogation_recovered((("回収"))):::state
+    state__Subrogation_time_barred((("時効消滅"))):::state
+    condition__ClaimBeforeDecision{"請求書類の提出から決裁の前である"}:::condition
+    condition__ClaimPaid{"保険金を支払った請求で、まだ求償していない"}:::condition
+    condition__ClaimUnderConfirmation{"請求完了の後、支払・不払を決める前である"}:::condition
+    condition__DenialDecided{"不払いを決めた"}:::condition
+    condition__FraudSuspected{"不正請求の疑いがある"}:::condition
+    condition__LiabilityDetermined{"賠償責任の有無を判断している"}:::condition
+    condition__NoFraudSuspicion{"不正請求の疑いがない"}:::condition
+    condition__NotPaidYet{"支払済みの案件は再度支払わない"}:::condition
+    condition__ReasonExplained{"不払いの理由を説明した"}:::condition
+  end
+  api__CaseApi -.-> permission__CaseHandle
+  api__CaseApi -.->|updates| entity__ClaimCase
+  api__ClaimApi -.->|updates| entity__Claim
+  api__ComplaintCreateApi -.->|creates| entity__Complaint
+  api__ComplaintCreateApi -.-> permission__ComplaintFile
+  api__DecisionApi -.->|updates| entity__Claim
+  api__PaymentApi -.-> permission__CaseHandle
+  api__PaymentApi -.->|updates| entity__Payment
+  api__PaymentCreateApi -.->|creates| entity__Payment
+  api__PaymentCreateApi -.-> permission__CaseHandle
+  api__PaymentCreateApi -.->|updates| entity__Claim
+  api__SubrogationApi -.->|updates| entity__Subrogation
+  api__SubrogationCreateApi -.->|creates| entity__Subrogation
+  api__SubrogationCreateApi -.-> permission__CaseHandle
+  buc__BucPayment --> business__ClaimPayment
+  buc__BucPayment --> flow__PaymentFlow
+  buc__BucPayment --> usecase__CloseCase
+  buc__BucPayment --> usecase__DecideClaim
+  buc__BucPayment --> usecase__DecideSuspectedClaim
+  buc__BucPayment --> usecase__ExplainDenialReason
+  buc__BucPayment --> usecase__ExtendPaymentPeriod
+  buc__BucPayment --> usecase__FlagSuspectedFraud
+  buc__BucPayment --> usecase__MarkPaymentOverdue
+  buc__BucPayment --> usecase__NotifyDenial
+  buc__BucPayment --> usecase__NotifyPaymentCompleted
+  buc__BucPayment --> usecase__PayClaim
+  buc__BucSubrogation --> business__ClaimPayment
+  buc__BucSubrogation --> flow__SubrogationFlow
+  buc__BucSubrogation --> usecase__AbandonSubrogation
+  buc__BucSubrogation --> usecase__LapseSubrogation
+  buc__BucSubrogation --> usecase__RecoverSubrogation
+  buc__BucSubrogation --> usecase__StartSubrogation
+  condition__ClaimBeforeDecision -.->|applies_to| usecase__FlagSuspectedFraud
+  condition__ClaimBeforeDecision -.-> entity__Claim
+  %% derived condition__ClaimBeforeDecision -> entity__Claim from holds
+  condition__ClaimPaid -.->|applies_to| usecase__StartSubrogation
+  condition__ClaimPaid -.-> entity__Claim
+  %% derived condition__ClaimPaid -> entity__Claim from holds
+  condition__ClaimUnderConfirmation -.->|applies_to| usecase__ExtendPaymentPeriod
+  condition__ClaimUnderConfirmation -.-> entity__Claim
+  %% derived condition__ClaimUnderConfirmation -> entity__Claim from holds
+  condition__DenialDecided -.->|applies_to| usecase__ExplainDenialReason
+  condition__DenialDecided -.-> entity__Claim
+  %% derived condition__DenialDecided -> entity__Claim from holds
+  condition__FraudSuspected -.->|applies_to| usecase__DecideSuspectedClaim
+  condition__LiabilityDetermined -.->|applies_to| usecase__CloseCase
+  condition__LiabilityDetermined -.-> entity__ClaimCase
+  %% derived condition__LiabilityDetermined -> entity__ClaimCase from holds
+  condition__NoFraudSuspicion -.->|applies_to| usecase__DecideClaim
+  condition__NotPaidYet -.->|applies_to| usecase__PayClaim
+  condition__NotPaidYet -.-> entity__Claim
+  %% derived condition__NotPaidYet -> entity__Claim from holds
+  condition__ReasonExplained -.->|applies_to| usecase__NotifyDenial
+  entity__Claim ---|N:1| entity__ClaimCase
+  entity__Complaint ---|N:1| entity__ClaimCase
+  entity__Investigation ---|1:1| entity__ClaimCase
+  entity__JibaisekiSurvey ---|N:1| entity__ClaimCase
+  entity__Payment ---|1:1| entity__Claim
+  entity__RepairEstimate ---|N:1| entity__ClaimCase
+  entity__Settlement ---|1:1| entity__ClaimCase
+  entity__Subrogation ---|1:1| entity__Claim
+  event__EvClaimPaid -.-> buc__BucSubrogation
+  event__EvClaimPaid -.-> usecase__CloseCase
+  event__EvClaimPaid -.-> usecase__StartSubrogation
+  event__EvClaimWithdrawn -.-> usecase__CloseCase
+  event__EvDenialNotified -.-> usecase__CloseCase
+  event__EvDenialNotified -.-> usecase__FileComplaint
+  event__EvDuplicateAccidentFound -.-> usecase__FlagSuspectedFraud
+  extsystem__AccidentInfoExchange -.-> event__EvDuplicateAccidentFound
+  field__CaseStatusField -.-> entity__ClaimCase
+  field__ClaimStatusField -.-> entity__Claim
+  field__ComplaintStatusField -.-> entity__Complaint
+  field__CompletedOnField -.-> entity__Claim
+  field__ExtensionField -.-> entity__Claim
+  field__FraudField -.-> entity__Claim
+  field__GradeExplainedField -.-> entity__Claim
+  field__InsuredConsentField -.-> entity__Settlement
+  field__JibaisekiStatusField -.-> entity__JibaisekiSurvey
+  field__LateInterestField -.-> entity__Payment
+  field__LiabilityField -.-> entity__ClaimCase
+  field__PayeeField -.-> entity__Payment
+  field__PeriodField -.-> entity__Claim
+  field__ProposalField -.-> entity__Complaint
+  field__RepairAmountField -.-> entity__RepairEstimate
+  field__RepairApprovedField -.-> entity__RepairEstimate
+  field__SettlementStatusField -.-> entity__Settlement
+  field__SubrogationStatusField -.-> entity__Subrogation
+  field__SurveyMethodField -.-> entity__Investigation
+  field__SurveyStatusField -.-> entity__Investigation
+  field__VictimConsentField -.-> entity__Settlement
+  flow__PaymentFlow --> step__CloseStep
+  flow__PaymentFlow --> step__ConfirmStep
+  flow__PaymentFlow --> step__DecisionStep
+  flow__PaymentFlow --> step__DenialStep
+  flow__PaymentFlow --> step__ExtendStep
+  flow__PaymentFlow --> step__OverdueStep
+  flow__PaymentFlow --> step__PayStep
+  flow__PaymentFlow --> step__SeniorDecisionStep
+  flow__PaymentFlow --> step__SuspicionStep
+  flow__SubrogationFlow --> step__AbandonStep
+  flow__SubrogationFlow --> step__LapseStep
+  flow__SubrogationFlow --> step__RecoveryStep
+  flow__SubrogationFlow --> step__SubrogationStartStep
+  screen__CaseScreen --> field__CaseStatusField
+  screen__CaseScreen --> field__LiabilityField
+  screen__CaseScreen -.-> screen__ClaimScreen
+  screen__CaseScreen -.-> screen__InvestigationScreen
+  screen__CaseScreen -.-> screen__JibaisekiScreen
+  screen__CaseScreen -.-> screen__RepairScreen
+  screen__CaseScreen -.-> screen__SettlementScreen
+  screen__ClaimScreen --> field__ClaimStatusField
+  screen__ClaimScreen --> field__CompletedOnField
+  screen__ClaimScreen --> field__GradeExplainedField
+  screen__ClaimScreen -.-> screen__DecisionScreen
+  screen__ComplaintScreen --> field__ComplaintStatusField
+  screen__ComplaintScreen --> field__ProposalField
+  screen__DecisionScreen --> field__ExtensionField
+  screen__DecisionScreen --> field__FraudField
+  screen__DecisionScreen --> field__PeriodField
+  screen__DecisionScreen -.-> screen__ComplaintScreen
+  screen__DecisionScreen -.-> screen__PaymentScreen
+  screen__InvestigationScreen --> field__SurveyMethodField
+  screen__InvestigationScreen --> field__SurveyStatusField
+  screen__InvestigationScreen -.-> screen__CaseScreen
+  screen__JibaisekiScreen --> field__JibaisekiStatusField
+  screen__PaymentScreen --> field__LateInterestField
+  screen__PaymentScreen --> field__PayeeField
+  screen__PaymentScreen -.-> screen__CaseScreen
+  screen__PaymentScreen -.-> screen__SubrogationScreen
+  screen__RepairScreen --> field__RepairAmountField
+  screen__RepairScreen --> field__RepairApprovedField
+  screen__SettlementScreen --> field__InsuredConsentField
+  screen__SettlementScreen --> field__SettlementStatusField
+  screen__SettlementScreen --> field__VictimConsentField
+  screen__SettlementScreen -.-> screen__CaseScreen
+  screen__SubrogationScreen --> field__SubrogationStatusField
+  step__AbandonStep -.-> usecase__AbandonSubrogation
+  step__CloseStep -.-> usecase__CloseCase
+  step__ConfirmStep -->|branches| step__ExtendStep
+  step__ConfirmStep -->|branches| step__SuspicionStep
+  step__ConfirmStep -.-> usecase__CompleteClaim
+  step__ConfirmStep -.->|excepts| step__OverdueStep
+  step__ConfirmStep -->|precedes| step__DecisionStep
+  step__DecisionStep -->|branches| step__DenialStep
+  step__DecisionStep -.-> usecase__DecideClaim
+  step__DecisionStep -->|precedes| step__PayStep
+  step__DenialStep -.-> usecase__ExplainDenialReason
+  step__DenialStep -.-> usecase__NotifyDenial
+  step__DenialStep -->|precedes| step__CloseStep
+  step__ExtendStep -.-> usecase__ExtendPaymentPeriod
+  step__ExtendStep -->|precedes| step__DecisionStep
+  step__LapseStep -.-> timer__SubrogationLimitation
+  step__LapseStep -.-> usecase__LapseSubrogation
+  step__OverdueStep -.-> timer__PaymentDeadline
+  step__OverdueStep -.-> usecase__MarkPaymentOverdue
+  step__PayStep -.-> usecase__NotifyPaymentCompleted
+  step__PayStep -.-> usecase__PayClaim
+  step__PayStep -->|precedes| step__CloseStep
+  step__RecoveryStep -.-> usecase__RecoverSubrogation
+  step__SeniorDecisionStep -->|branches| step__DenialStep
+  step__SeniorDecisionStep -.-> usecase__DecideSuspectedClaim
+  step__SeniorDecisionStep -->|precedes| step__PayStep
+  step__SubrogationStartStep -->|branches| step__AbandonStep
+  step__SubrogationStartStep -.-> event__EvClaimPaid
+  step__SubrogationStartStep -.-> usecase__StartSubrogation
+  step__SubrogationStartStep -.->|excepts| step__LapseStep
+  step__SubrogationStartStep -->|precedes| step__RecoveryStep
+  step__SuspicionStep -.-> event__EvDuplicateAccidentFound
+  step__SuspicionStep -.-> usecase__FlagSuspectedFraud
+  step__SuspicionStep -->|precedes| step__SeniorDecisionStep
+  timer__PaymentDeadline -.-> usecase__MarkPaymentOverdue
+  timer__SubrogationLimitation -.-> usecase__LapseSubrogation
+  usecase__AbandonSubrogation -.-> screen__SubrogationScreen
+  usecase__AbandonSubrogation -.-> api__SubrogationApi
+  usecase__AbandonSubrogation -.-> medium__HandlerTerminal
+  usecase__AbandonSubrogation -.-> permission__CaseHandle
+  usecase__AbandonSubrogation -.->|transitions Subrogation.status open->abandoned| state__Subrogation_abandoned
+  usecase__CloseCase -.-> api__CaseApi
+  usecase__CloseCase -.->|transitions ClaimCase.status assessed->closed| state__ClaimCase_status_closed
+  usecase__CompleteClaim -.-> screen__ClaimScreen
+  usecase__CompleteClaim -.-> api__ClaimApi
+  usecase__CompleteClaim -.-> medium__HandlerTerminal
+  usecase__CompleteClaim -.-> permission__CaseHandle
+  usecase__CompleteClaim -.->|transitions Claim.period not_started->running| state__Claim_period_running
+  usecase__CompleteClaim -.->|transitions Claim.status submitted->completed| state__Claim_status_completed
+  usecase__DecideClaim -.-> screen__DecisionScreen
+  usecase__DecideClaim -.-> api__DecisionApi
+  usecase__DecideClaim -.-> medium__HandlerTerminal
+  usecase__DecideClaim -.-> permission__PaymentDecide
+  usecase__DecideClaim -.->|transitions Claim.status completed->decided_denial| state__Claim_status_decided_denial
+  usecase__DecideClaim -.->|transitions Claim.status completed->decided_payment| state__Claim_status_decided_payment
+  usecase__DecideSuspectedClaim -.-> screen__DecisionScreen
+  usecase__DecideSuspectedClaim -.-> api__DecisionApi
+  usecase__DecideSuspectedClaim -.-> medium__HandlerTerminal
+  usecase__DecideSuspectedClaim -.-> permission__SuspectedClaimDecide
+  usecase__DecideSuspectedClaim -.->|transitions Claim.status completed->decided_denial| state__Claim_status_decided_denial
+  usecase__DecideSuspectedClaim -.->|transitions Claim.status completed->decided_payment| state__Claim_status_decided_payment
+  usecase__ExplainDenialReason -.-> screen__DecisionScreen
+  usecase__ExplainDenialReason -.-> api__DecisionApi
+  usecase__ExplainDenialReason -.-> medium__ClaimDocuments
+  usecase__ExplainDenialReason -.-> permission__CaseHandle
+  usecase__ExtendPaymentPeriod -.-> screen__ClaimScreen
+  usecase__ExtendPaymentPeriod -.-> api__ClaimApi
+  usecase__ExtendPaymentPeriod -.-> medium__HandlerTerminal
+  usecase__ExtendPaymentPeriod -.-> permission__CaseHandle
+  usecase__ExtendPaymentPeriod -.->|transitions Claim.period running->extended| state__Claim_period_extended
+  usecase__FileComplaint -.-> screen__ComplaintScreen
+  usecase__FileComplaint -.-> api__ComplaintCreateApi
+  usecase__FileComplaint -.-> medium__AccidentHotline
+  usecase__FileComplaint -.-> permission__ComplaintFile
+  usecase__FlagSuspectedFraud -.-> screen__DecisionScreen
+  usecase__FlagSuspectedFraud -.-> api__DecisionApi
+  usecase__FlagSuspectedFraud -.-> medium__HandlerTerminal
+  usecase__FlagSuspectedFraud -.-> permission__CaseHandle
+  usecase__LapseSubrogation -.-> api__SubrogationApi
+  usecase__LapseSubrogation -.->|transitions Subrogation.status open->time_barred| state__Subrogation_time_barred
+  usecase__MarkPaymentOverdue -.-> api__ClaimApi
+  usecase__MarkPaymentOverdue -.->|transitions Claim.period extended->overdue| state__Claim_period_overdue
+  usecase__MarkPaymentOverdue -.->|transitions Claim.period running->overdue| state__Claim_period_overdue
+  usecase__NotifyDenial -.-> screen__DecisionScreen
+  usecase__NotifyDenial -.-> api__DecisionApi
+  usecase__NotifyDenial -.-> event__EvDenialNotified
+  usecase__NotifyDenial -.-> medium__ClaimDocuments
+  usecase__NotifyDenial -.-> permission__CaseHandle
+  usecase__NotifyDenial -.->|transitions Claim.period extended->ended| state__Claim_period_ended
+  usecase__NotifyDenial -.->|transitions Claim.period overdue->ended| state__Claim_period_ended
+  usecase__NotifyDenial -.->|transitions Claim.period running->ended| state__Claim_period_ended
+  usecase__NotifyDenial -.->|transitions Claim.status decided_denial->denial_notified| state__Claim_status_denial_notified
+  usecase__NotifyPaymentCompleted -.-> screen__PaymentScreen
+  usecase__NotifyPaymentCompleted -.-> api__PaymentApi
+  usecase__NotifyPaymentCompleted -.-> medium__HandlerTerminal
+  usecase__NotifyPaymentCompleted -.-> permission__CaseHandle
+  usecase__NotifyPaymentCompleted -.->|transitions Payment.status instructed->completed| state__Payment_completed
+  usecase__PayClaim -.-> screen__PaymentScreen
+  usecase__PayClaim -.-> api__PaymentCreateApi
+  usecase__PayClaim -.-> event__EvClaimPaid
+  usecase__PayClaim -.-> medium__HandlerTerminal
+  usecase__PayClaim -.-> permission__CaseHandle
+  usecase__PayClaim -.->|transitions Claim.period extended->ended| state__Claim_period_ended
+  usecase__PayClaim -.->|transitions Claim.period overdue->ended| state__Claim_period_ended
+  usecase__PayClaim -.->|transitions Claim.period running->ended| state__Claim_period_ended
+  usecase__PayClaim -.->|transitions Claim.status decided_payment->paid| state__Claim_status_paid
+  usecase__RecoverSubrogation -.-> screen__SubrogationScreen
+  usecase__RecoverSubrogation -.-> api__SubrogationApi
+  usecase__RecoverSubrogation -.-> medium__HandlerTerminal
+  usecase__RecoverSubrogation -.-> permission__CaseHandle
+  usecase__RecoverSubrogation -.->|transitions Subrogation.status open->recovered| state__Subrogation_recovered
+  usecase__StartSubrogation -.-> screen__SubrogationScreen
+  usecase__StartSubrogation -.-> api__SubrogationCreateApi
+  usecase__StartSubrogation -.-> medium__HandlerTerminal
+  usecase__StartSubrogation -.-> permission__CaseHandle
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef medium fill:#f1f3f5,stroke:#333,color:#000;
+  classDef permission fill:#f1f3f5,stroke:#333,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef field fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

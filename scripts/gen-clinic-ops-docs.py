@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generate design-doc.md (engineers) and prd.md (PdM) for a sample: clinic-ops (the default),
-patent-ops, or food-permit-ops.
+patent-ops, food-permit-ops, or insurance-claim-ops.
 
 Every fact comes from the model through the CLI: `list ... --format json` for the elements and
 their links, `list` and `csv` with `--format markdown` for the tables, and the diagrams that
@@ -10,7 +10,7 @@ sample in SAMPLES, the chapter order and the sentences that introduce each chapt
 scripts/check-sample-artifacts.sh runs it for each sample after regenerating the artifacts and
 fails when a document differs from what is committed:
 
-    python3 -I scripts/gen-clinic-ops-docs.py target/debug/rdra-ish [clinic-ops|patent-ops|food-permit-ops]
+    python3 -I scripts/gen-clinic-ops-docs.py target/debug/rdra-ish [clinic-ops|patent-ops|food-permit-ops|insurance-claim-ops]
 """
 import json
 import re
@@ -107,6 +107,35 @@ SAMPLES = {
 ''',
         'rdra_appendix': ('不利益処分と公表 BUC の RDRA 全体図', 'rdra_buc_disposition.mmd'),
         'metrics_note': '実際の保健所で使うときは、その自治体の実績で置き換える。',
+        'no_flow_note': '',
+    },
+    'insurance-claim-ops': {
+        'title': 'Insurance Claim Ops',
+        # The BUC chapters in the order a claim runs from the accident report to the recovery.
+        'chapters': [
+            'BucIntake', 'BucInvestigation', 'BucRepair', 'BucSettlement', 'BucJibaiseki', 'BucClaim',
+            'BucPayment', 'BucSubrogation', 'BucComplaint',
+        ],
+        'state_tables': {'ClaimCase': 'states_claim_case.txt', 'Settlement': 'states_settlement.txt',
+                         'Claim': 'states_claim.txt'},
+        'subject': '題材は日本の損害保険会社（自動車保険）の損害サービス部門の保険金支払業務（事故受付と初期対応、損害調査と過失の判断、修理見積と着工の承認、示談代行、自賠責の損害調査、保険金の請求、支払・不払の決定と支払、請求権代位による求償、苦情と ADR）で、保険料・引受、損害額の算定の中身、調停・訴訟、自賠責の異議申立と紛争処理、残存物代位は対象外。',
+        'overview': '''対象は損害保険会社の損害サービス部門が行う自動車保険の保険金支払業務である。業務を 9 の BUC に分け、内部システムは `ClaimSystem`（保険金支払システム）1 つにまとめている。損保料率機構（自賠責損害調査事務所）、そんぽADRセンター、自動車事故情報交換システムは外部システムとしてイベントでつなぐ。契約者・被保険者、被害者、代理店、修理工場、アジャスターはアクターとして業務フローに現れる。
+
+業務の骨格は約款の支払時期（請求完了日を含めて30日、特別な照会・調査で60〜180日）と、監督指針・損保協会ガイドラインの支払管理である。期間（支払期限、請求権の時効、求償する債権の時効）はタイマーで表し、期間が過ぎたときに起きること（遅延利息の起算・時効消滅）を状態で表す。
+
+| 論点 | このモデル |
+|---|---|
+| 事故の通知 | 契約者は遅滞なく保険会社か代理店に通知する。保険会社は担保種目ごとに担当者を決めて案内し、請求の手続と書類を説明する |
+| 損害確認 | アジャスターが損害調査をし、過失割合を裁判例で検討して賠償責任を判断する。修理は修理費の協定と着工の承認の後 |
+| 示談代行 | 賠償責任のある対人・対物賠償の事故で、被保険者と被害者の同意を得て行う。過失ゼロでは行わない |
+| 自賠責 | 一括払いでは自賠責の請求書類を損保料率機構に送り、その調査結果に基づいて支払額を決める |
+| 支払期限 | 請求完了日を含めて30日。特別な照会・調査は事由により60・90・120・180日に延ばし、確認事項と時期を通知する。過ぎれば遅延利息 |
+| 決裁 | 支払と不払いで決裁権限に差がある。不正請求の疑いがある請求は上位の決裁者が決める。不払いは根拠となる約款の条項と調査結果を説明してから通知する |
+| 支払後 | 払った額を限度に被保険者の損害賠償請求権が移り（請求権代位）、相手方に求償する |
+| 苦情と ADR | 了解が得られなければ相談機関を案内する。そんぽADRセンターの特別調停案は会社が受諾する |
+''',
+        'rdra_appendix': ('支払・不払の決定と支払 BUC の RDRA 全体図', 'rdra_buc_payment.mmd'),
+        'metrics_note': '実際の損害保険会社で使うときは、その会社の実績で置き換える。',
         'no_flow_note': '',
     },
 }
