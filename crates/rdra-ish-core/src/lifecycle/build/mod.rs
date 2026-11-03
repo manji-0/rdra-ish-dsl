@@ -16,7 +16,8 @@ use super::{Built, Scope, TransitionSystem};
 use crate::analysis::{applied_bodies, AppliedBody};
 use crate::model::{
     ApiKey, CmpOpModel, CmpRhs, ColumnType, ConditionKey, CrossConstraintScope, EffectValue,
-    EntityKey, FkId, Join, Min, ModelColumn, NodeRef, RelKind, SemanticModel, SetValue, UseCaseKey,
+    EntityKey, FkId, Join, LinkKind, Min, ModelColumn, NodeRef, RelKind, SemanticModel, SetValue,
+    UseCaseKey,
 };
 use crate::resolver::reachable_from_bucs;
 use crate::tx::{infer_usecase_transactions, UcWrite, WriteKind};
@@ -1548,7 +1549,7 @@ impl<'m> Builder<'m> {
 }
 
 impl Builder<'_> {
-    /// Whether a `links` of the use case follows key `fk`.
+    /// Whether a `links`, `relinks` or `unlinks` of the use case follows key `fk`.
     fn linked_key(&self, uc: UseCaseKey, fk: FkId) -> bool {
         self.model
             .links
@@ -1556,10 +1557,17 @@ impl Builder<'_> {
             .any(|l| l.origin == uc && l.key == Some(fk))
     }
 
-    /// `links(UC, Child, Parent)` on the step that writes the child: the child's owner on the
-    /// key is unlinked (`GuardWhy::Link`) and becomes the parent row the step binds, which is
-    /// the row it writes, the row an earlier step of its run wrote, or else any present parent,
-    /// bound as a `Parent` param of the key. A linked child waits: there is no relink.
+    /// `links`, `relinks` or `unlinks(UC, Child, Parent)` on the step that writes the child,
+    /// each a guard (`GuardWhy::Link`) and an assignment on the child's owner slot of the key.
+    /// The parent the step binds is the row it writes, the row an earlier step of its run
+    /// wrote, or else any present parent, bound as a `Parent` param of the key.
+    /// - `links`: the child is unlinked, and the owner becomes the bound parent.
+    /// - `relinks`: the child is linked (no guard on a mandatory key, whose child always is),
+    ///   and the owner becomes the bound parent, the one it already has included: a move
+    ///   that had to differ could never run at one instance per entity, which is what
+    ///   `check` and `states` explore.
+    /// - `unlinks`: the child is linked, to the bound parent when the step writes one, and the
+    ///   owner becomes unlinked. The step binds no parent otherwise, since nothing reads it.
     fn link_effects(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
         let model = self.model;
         for (idx, link) in model.links.iter().enumerate() {
@@ -1576,26 +1584,42 @@ impl Builder<'_> {
                 continue;
             };
             let site = Site::new(ModelRef::Link(idx), &link.site);
-            a.guards.push(Guard {
-                pred: Pred::Cmp(
-                    Term::Slot {
-                        var,
-                        at: At::Param(c),
-                    },
-                    CmpOp::Eq,
-                    Term::Lit(Value::NULL),
-                ),
-                why: GuardWhy::Link,
-                site: site.clone(),
-            });
-            let p = match a.row_of(parent) {
-                Some(p) => p,
-                None => a.param(parent, ParamRole::Parent { key: fk }),
+            let optional = matches!(
+                self.ts.vars[var.index()].domain,
+                Domain::Instance { optional: true, .. }
+            );
+            let owner = Term::Slot {
+                var,
+                at: At::Param(c),
+            };
+            let bound = a.row_of(parent);
+            let guard = match link.kind {
+                LinkKind::Links => Some(Pred::Cmp(owner, CmpOp::Eq, Term::Lit(Value::NULL))),
+                LinkKind::Relinks if !optional => None,
+                LinkKind::Relinks => Some(Pred::Cmp(owner, CmpOp::Ne, Term::Lit(Value::NULL))),
+                LinkKind::Unlinks => Some(match bound {
+                    Some(p) => Pred::Cmp(owner, CmpOp::Eq, Term::Index(At::Param(p))),
+                    None => Pred::Cmp(owner, CmpOp::Ne, Term::Lit(Value::NULL)),
+                }),
+            };
+            if let Some(pred) = guard {
+                a.guards.push(Guard {
+                    pred,
+                    why: GuardWhy::Link,
+                    site: site.clone(),
+                });
+            }
+            let rhs = match link.kind {
+                LinkKind::Unlinks => Rhs::Lit(Value::NULL),
+                LinkKind::Links | LinkKind::Relinks => Rhs::Param(match bound {
+                    Some(p) => p,
+                    None => a.param(parent, ParamRole::Parent { key: fk }),
+                }),
             };
             a.effects.push(Effect::Assign {
                 var,
                 param: c,
-                rhs: Rhs::Param(p),
+                rhs,
                 site,
             });
         }

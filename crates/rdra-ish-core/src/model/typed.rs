@@ -184,7 +184,9 @@ pub enum TypedPredicate {
         entity: EntityKey,
         column: std::string::String,
     },
+    /// `links`, `relinks` or `unlinks`, by `kind`.
     Links {
+        kind: super::LinkKind,
         origin: UseCaseKey,
         child: EntityKey,
         parent: EntityKey,

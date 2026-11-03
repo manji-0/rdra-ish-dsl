@@ -110,11 +110,36 @@ impl SetValue {
     }
 }
 
-/// `links(UseCase, Child, Parent)`: the use case links an existing child row to an existing
-/// parent row through the `.optional()` key `key`, which `analysis::fk::resolve_links` picks
-/// once the keys exist (`None` after it reported why there is none).
+/// Which of the three link forms a statement is: the predicate name, and what it does to the
+/// child's owner on the key (docs/state-derivation.md, "Owners").
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkKind {
+    /// `links`: an unlinked child becomes linked to the bound parent.
+    Links,
+    /// `relinks`: a linked child becomes linked to the bound parent, the same one included.
+    Relinks,
+    /// `unlinks`: a linked child, the one under the bound parent when the step writes the
+    /// parent, becomes unlinked.
+    Unlinks,
+}
+
+impl LinkKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            LinkKind::Links => "links",
+            LinkKind::Relinks => "relinks",
+            LinkKind::Unlinks => "unlinks",
+        }
+    }
+}
+
+/// `links(UseCase, Child, Parent)`, `relinks(..)` or `unlinks(..)`: the use case links, moves
+/// or unlinks an existing child row on the key `key` from the child to the parent, which
+/// `analysis::fk::resolve_links` picks once the keys exist (`None` after it reported why
+/// there is none).
 #[derive(Debug, Clone)]
 pub struct Link {
+    pub kind: LinkKind,
     pub origin: UseCaseKey,
     pub child: EntityKey,
     pub parent: EntityKey,

@@ -1,7 +1,9 @@
 //! Relate bindings: mandatory owners need a present parent, optional owners may stay unlinked.
 
 use super::*;
-use crate::lifecycle::{Effect, GuardWhy, InvKind, ParamRole, Rhs, Value};
+use crate::lifecycle::{
+    Action, At, CmpOp, Effect, GuardWhy, InvKind, ParamRole, Pred, Rhs, Term, Value,
+};
 
 /// clinic-ops' Charge/Claim shape: the claim's creator updates the charge it bills.
 fn billing(relate: &str) -> String {
@@ -656,6 +658,202 @@ fn a_links_in_a_later_step_links_to_the_runs_parent() {
         !d.has("Case", |x| matches!(
             x,
             StateDiag::ConstraintViolated { .. }
+        )),
+        "{:?}",
+        d.diags
+    );
+}
+
+/// The assignment above with a reassignment and a release (#92): `Reassign` moves the case
+/// to another handler, `Release` takes its handler away. `{relate}` is the key, `{extra}`
+/// what else the use cases do.
+fn reassignment(relate: &str, extra: &str) -> String {
+    format!(
+        r#"
+entity Handler "担当" {{ id: Int @pk  busy: Bool @default(false) }}
+entity Case "案件" {{ id: Int @pk  status: Enum(new, assigned) @default(new) }}
+{relate}
+usecase OpenCase "受付"
+usecase Assign "担当を割り当てる"
+usecase Reassign "担当を替える"
+usecase Release "担当を外す"
+creates(OpenCase, Case)
+transitions(Assign, Case.status, new -> assigned)
+links(Assign, Case, Handler)
+relinks(Reassign, Case, Handler)
+transitions(Release, Case.status, assigned -> new)
+unlinks(Release, Case, Handler)
+{extra}
+"#
+    )
+}
+
+fn action<'a>(ts: &'a TransitionSystem, name: &str) -> &'a Action {
+    ts.actions().iter().find(|a| a.name == name).unwrap()
+}
+
+/// The index of the handler row the action writes, or the one step 1 of its run wrote.
+fn handler_param(ts: &TransitionSystem, a: &Action) -> u8 {
+    a.params
+        .iter()
+        .position(|p| {
+            ts.entity(p.entity).id == "Handler"
+                && matches!(p.role, ParamRole::Existing | ParamRole::Earlier { step: 1 })
+        })
+        .expect("the handler the step binds") as u8
+}
+
+fn guards_on(a: &Action, p: u8) -> bool {
+    a.guards.iter().any(|g| {
+        g.why == GuardWhy::Link
+            && matches!(&g.pred, Pred::Cmp(_, CmpOp::Eq, Term::Index(At::Param(x))) if *x == p)
+    })
+}
+
+fn assigns(a: &Action, p: u8) -> bool {
+    a.effects.iter().any(|e| {
+        matches!(
+            e,
+            Effect::Assign { rhs: Rhs::Param(x), .. } if *x == p
+        )
+    })
+}
+
+/// `relinks` runs on a linked child and binds a present parent, the same one included, so
+/// at one instance per entity it still runs; `unlinks` runs on a linked child, binds no
+/// parent, and leaves it unlinked, which `.has/.none` on the child see.
+#[test]
+fn a_relinks_moves_a_linked_child_and_an_unlinks_frees_it() {
+    let src = reassignment(
+        "relate(Case, Handler, N:1).optional()",
+        "invariant(Case).when(status == assigned).has(Handler)\n\
+         invariant(Case).when(status == new).none(Handler)",
+    );
+    let d = derive_src(&src);
+    assert_eq!(d.rows("Case"), vec!["status=new", "status=assigned"]);
+    assert!(
+        !d.has("Case", |x| matches!(
+            x,
+            StateDiag::ConstraintViolated { .. }
+        )),
+        "{:?}",
+        d.diags
+    );
+    assert!(never_runs(&d).is_empty(), "{:?}", d.diags);
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let reassign = action(&ts, "Reassign");
+    assert!(reassign.guards.iter().any(|g| g.why == GuardWhy::Link));
+    assert!(reassign
+        .params
+        .iter()
+        .any(|p| matches!(p.role, ParamRole::Parent { .. })));
+    let release = action(&ts, "Release");
+    assert!(release.guards.iter().any(|g| g.why == GuardWhy::Link));
+    assert!(release.params.iter().all(|p| p.role.is_written()));
+    assert!(release.effects.iter().any(|e| matches!(
+        e,
+        Effect::Assign {
+            rhs: Rhs::Lit(Value::NULL),
+            ..
+        }
+    )));
+}
+
+/// The parent the use case writes is the one the child moves to, or is taken from: Reassign
+/// marks the handler it moves the case to busy, and Release frees the case's own handler.
+#[test]
+fn a_relinks_and_an_unlinks_to_a_written_parent_use_the_row_the_step_writes() {
+    let src = reassignment(
+        "relate(Case, Handler, N:1).optional()",
+        "updates(Assign, Handler)\nsets(Assign, Handler.busy == true)\n\
+         updates(Reassign, Handler)\nsets(Reassign, Handler.busy == true)\n\
+         updates(Release, Handler)\nsets(Release, Handler.busy == false)\n\
+         condition Free \"空き\"\nholds(Free, Handler.busy == false)\n\
+         applies_to(Free, Assign)\napplies_to(Free, Reassign)\n\
+         invariant(Case).when(status == assigned).has(Handler.busy == true)",
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let release = action(&ts, "Release");
+    assert!(guards_on(release, handler_param(&ts, release)));
+    let reassign = action(&ts, "Reassign");
+    assert!(assigns(reassign, handler_param(&ts, reassign)));
+    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
+    assert!(
+        !d.has("Case", |x| matches!(
+            x,
+            StateDiag::ConstraintViolated { .. }
+        )),
+        "{:?}",
+        d.diags
+    );
+}
+
+/// In a split use case the child moves to, or is taken from, the row an earlier step of the
+/// run wrote (#80): the handler step 1 writes is the one step 2 relinks the case to, and the
+/// one step 2 unlinks it from.
+#[test]
+fn a_relinks_and_an_unlinks_in_a_later_step_use_the_runs_parent() {
+    let src = reassignment(
+        "relate(Case, Handler, N:1).optional()",
+        "api HandlerApi \"handler\"\napi CaseApi \"case\"\n\
+         invokes(Reassign, HandlerApi)\ninvokes(Reassign, CaseApi)\n\
+         invokes(Release, HandlerApi)\ninvokes(Release, CaseApi)\n\
+         updates(HandlerApi, Handler)\nupdates(CaseApi, Case)\n\
+         sets(Reassign, Handler.busy == true)\nsets(Release, Handler.busy == false)",
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let reassign = action(&ts, "Reassign_2");
+    assert!(assigns(reassign, handler_param(&ts, reassign)));
+    let release = action(&ts, "Release_2");
+    assert!(guards_on(release, handler_param(&ts, release)));
+}
+
+/// A child of a mandatory key always has a parent, so `relinks` moves it with no guard,
+/// while `links` and `unlinks` on such a key are rejected at load (`LinkOnMandatoryKey`).
+#[test]
+fn a_relinks_on_a_mandatory_key_moves_the_child_with_no_guard() {
+    let src = r#"
+entity Ward "病棟" { id: Int @pk }
+entity Bed "病床" { id: Int @pk }
+relate(Bed, Ward, N:1)
+usecase OpenWard "開設"
+usecase AddBed "増床"
+usecase MoveBed "移動"
+creates(OpenWard, Ward)
+creates(AddBed, Bed)
+relinks(MoveBed, Bed, Ward)
+"#;
+    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+    let moved = action(&ts, "MoveBed");
+    assert!(moved.guards.iter().all(|g| g.why != GuardWhy::Link));
+    assert!(moved
+        .params
+        .iter()
+        .any(|p| matches!(p.role, ParamRole::Parent { .. })));
+    assert!(moved.effects.iter().any(|e| matches!(
+        e,
+        Effect::Assign {
+            rhs: Rhs::Param(_),
+            ..
+        }
+    )));
+    let d = derive_scoped(&model_from(src), Bounds::VERIFY, &Scope::ALL);
+    assert!(never_runs(&d).is_empty(), "{:?}", d.diags);
+}
+
+/// `unlinks` does not check that a `1..*` parent keeps a child: taking the only case away
+/// from a handler breaks `MinCard_Case_Handler`, as `links` leaves `Unique_*` to the rule.
+#[test]
+fn an_unlinks_on_a_min_card_key_leaves_the_minimum_to_the_rule() {
+    let src = reassignment(
+        "relate(Case, Handler, 1..*:1).optional()\nusecase Hire \"採用\"\ncreates(Hire, Handler)",
+        "",
+    );
+    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
+    assert!(
+        d.diags.iter().any(|x| matches!(
+            &x.diag,
+            StateDiag::ConstraintViolated { name, kind: InvKind::MinCard, .. } if name == "MinCard_Case_Handler"
         )),
         "{:?}",
         d.diags

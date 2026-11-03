@@ -87,7 +87,9 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
         "after" => Some(vec![vec!["usecase"]]),
         "relate" => Some(vec![vec!["entity"], vec!["entity"], vec!["_card"]]),
         "sets" | "drives" => Some(vec![vec!["usecase"]]),
-        "links" => Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]]),
+        "links" | "relinks" | "unlinks" => {
+            Some(vec![vec!["usecase"], vec!["entity"], vec!["entity"]])
+        }
         "chooses" => Some(vec![vec!["usecase"], vec!["_col"], vec!["_val"]]),
         "forbidden" | "invariant" | "required" | "exclusive" => Some(vec![vec!["entity"]]),
         _ => None,
@@ -104,7 +106,7 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
         "invariant" => &["when", "then", "has", "none", "along", "role", "label"],
         "required" | "exclusive" => &["label"],
         "holds" => &["has", "none", "along", "role"],
-        "sets" | "links" => &["role"],
+        "sets" | "links" | "relinks" | "unlinks" => &["role"],
         "after" => &["assert", "label"],
         "exposes" => &["append", "upsert", "caller"],
         "navigates" => &["via"],
@@ -180,6 +182,8 @@ pub const KNOWN_PREDICATES: &[&str] = &[
     "sets",
     "drives",
     "links",
+    "relinks",
+    "unlinks",
     "chooses",
     "forbidden",
     "invariant",

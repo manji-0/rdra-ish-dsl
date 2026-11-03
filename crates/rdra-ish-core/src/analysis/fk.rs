@@ -482,14 +482,17 @@ fn along_links(
     links
 }
 
-/// After the keys exist: each `links(UC, Child, Parent)` follows the one key from the child to
-/// the parent (`SemanticModel::join_key` with its `.role`), which must be `.optional()`, since a
-/// child of a mandatory key always has its parent. No key is `LinkWithoutKey`, a mandatory one
-/// `LinkOnMandatoryKey`, several with no `.role` naming one `AmbiguousOwnerLink`; such a link
-/// keeps no key and the lifecycle leaves it out.
+/// After the keys exist: each `links`, `relinks` or `unlinks(UC, Child, Parent)` follows the
+/// one key from the child to the parent (`SemanticModel::join_key` with its `.role`). A
+/// `links` or `unlinks` needs an `.optional()` key, since a child of a mandatory key always
+/// has its parent; a `relinks` moves a child on either. No key is `LinkWithoutKey`, a
+/// mandatory one `LinkOnMandatoryKey`, several with no `.role` naming one
+/// `AmbiguousOwnerLink`, and a second form of one use case on a key it already follows
+/// `ConflictingLinks`; such a link keeps no key and the lifecycle leaves it out.
 pub(crate) fn resolve_links(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
     for index in 0..model.links.len() {
         let link = &model.links[index];
+        let pred = link.kind.name();
         let (usecase, child, parent) = (
             model.use_cases[link.origin].id.clone(),
             model.entities[link.child].id.clone(),
@@ -501,7 +504,7 @@ pub(crate) fn resolve_links(model: &mut SemanticModel, diags: &mut Vec<Diagnosti
             Join::Ambiguous(candidates) => {
                 let err = ambiguous_owner_link(
                     model,
-                    &format!("links({usecase}, {child}, {parent})"),
+                    &format!("{pred}({usecase}, {child}, {parent})"),
                     link.child,
                     link.parent,
                     &candidates,
@@ -512,6 +515,7 @@ pub(crate) fn resolve_links(model: &mut SemanticModel, diags: &mut Vec<Diagnosti
         };
         let Some(id) = key else {
             let err = RdraError::LinkWithoutKey {
+                pred: pred.to_string(),
                 usecase,
                 child,
                 parent,
@@ -520,12 +524,25 @@ pub(crate) fn resolve_links(model: &mut SemanticModel, diags: &mut Vec<Diagnosti
             continue;
         };
         let fk = model.foreign_key(id);
-        if !fk.optional() {
+        let role = model.key_role(fk).to_string();
+        if !fk.optional() && link.kind != LinkKind::Relinks {
             let err = RdraError::LinkOnMandatoryKey {
-                usecase,
+                statement: format!("{pred}({usecase}, {child}, {parent})"),
                 child,
                 parent,
-                role: model.key_role(fk).to_string(),
+                role,
+            };
+            diags.push(Diagnostic::error_at_opt(err, link.site.clone()));
+            continue;
+        }
+        let earlier = model.links[..index]
+            .iter()
+            .find(|l| l.origin == link.origin && l.key == Some(id));
+        if let Some(first) = earlier {
+            let err = RdraError::ConflictingLinks {
+                statement: format!("{pred}({usecase}, {child}, {parent})"),
+                role,
+                first: format!("{}({usecase}, {child}, {parent})", first.kind.name()),
             };
             diags.push(Diagnostic::error_at_opt(err, link.site.clone()));
             continue;
@@ -567,8 +584,10 @@ pub(crate) fn check_join_selectors(model: &SemanticModel, diags: &mut Vec<Diagno
     }
     for link in &model.links {
         let on = format!(
-            "that joins {} to {} (links)",
-            model.entities[link.child].id, model.entities[link.parent].id
+            "that joins {} to {} ({})",
+            model.entities[link.child].id,
+            model.entities[link.parent].id,
+            link.kind.name()
         );
         let ends = vec![link.child, link.parent];
         sites.push((link.by.as_slice(), ends, on, link.site.as_ref()));

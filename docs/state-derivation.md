@@ -142,6 +142,8 @@ effects apply together to the pre-state:
 | `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
 | `drives(UC, E.col op rhs, bool)` | The comparison variable becomes `bool`. |
 | `links(UC, Child, Parent)` | Guard: the child's owner on the key is unlinked. Effect: the owner becomes the parent row the step binds, the one it writes, the one an earlier step of its run wrote, or else any present parent, bound as a parameter of the key (see Owners). A `links` counts as a write of the child. |
+| `relinks(UC, Child, Parent)` | Guard: the owner is linked (none on a mandatory key, whose child always is). Effect: the owner becomes the parent row the step binds, as for `links`, the one it already has included. Counts as a write of the child. |
+| `unlinks(UC, Child, Parent)` | Guard: the owner is the parent row the step binds when it writes one (or an earlier step of its run wrote one), else that the owner is linked. Effect: the owner becomes unlinked. Binds no parent otherwise. Counts as a write of the child. |
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
 | `transitions(UC, E.col, (a, b) -> z)` | One arm per listed source, `a -> z` and `b -> z`, as if each were written on its own line; a `.when(Cond)` after the list guards each arm. |
 | `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
@@ -220,7 +222,14 @@ child to the new parent. The rule depends on the key:
 `links(UC, Child, Parent)` links an existing child by the same rule: the key is
 `.optional()`, the guard is `owner == null` (`GuardWhy::Link`, "the child is not linked
 to a parent yet"), and the owner becomes the parent row the step binds. A linked child
-waits, so no `links` moves a child, and no form unlinks one.
+waits, so no `links` moves a child. `relinks(UC, Child, Parent)` moves one: the guard is
+`owner != null` (none on a mandatory key), and the owner becomes the parent row the step
+binds, the one it already has included, since a move that had to differ could never run
+at `Bounds::STATES`, one instance per entity. `unlinks(UC, Child, Parent)` frees one: the
+guard is `owner == p` for the parent row `p` the step writes or an earlier step of its run
+wrote, else `owner != null`, and the owner becomes `null`; no parent is bound otherwise.
+Each is `GuardWhy::Link` at its `ModelRef::Link`, whose kind picks the guard text. One use
+case states one of the three per key (`ConflictingLinks`).
 
 <a id="joins"></a>**Joins.** A `.along(A, B)` hop, a `.has/.none(...)`, the link between a `holds`
 body's existing instance and the other instances of the guard, and a copy source each read

@@ -344,19 +344,30 @@ pub enum RdraError {
         condition: String,
     },
 
-    #[error("links({usecase}, {child}, {parent}) follows no key: no relate makes {parent} the parent of {child}\n  hint: declare `relate({child}, {parent}, N:1).optional()`; a `links` names the child first, so swap the two if the key runs the other way")]
+    #[error("{pred}({usecase}, {child}, {parent}) follows no key: no relate makes {parent} the parent of {child}\n  hint: declare `relate({child}, {parent}, N:1).optional()`; a `{pred}` names the child first, so swap the two if the key runs the other way")]
     LinkWithoutKey {
+        pred: String,
         usecase: String,
         child: String,
         parent: String,
     },
 
-    #[error("links({usecase}, {child}, {parent}) follows the key `{role}`, which is not `.optional()`: a {child} always has its {parent}, so there is nothing to link\n  hint: add `.optional()` to the relate so a {child} starts unlinked, or write the {parent} in the use case that creates the {child}")]
+    #[error("{statement} follows the key `{role}`, which is not `.optional()`: a {child} always has its {parent}, so it is never unlinked\n  hint: add `.optional()` to the relate so a {child} can be without its {parent}; a {child} that always has one is moved with `relinks`, and linked by the use case that creates it when that use case writes the {parent}")]
     LinkOnMandatoryKey {
-        usecase: String,
+        /// `links(UC, Child, Parent)` or `unlinks(..)`.
+        statement: String,
         child: String,
         parent: String,
         role: String,
+    },
+
+    #[error("{statement} follows the key `{role}`, which `{first}` of the same use case already follows\n  hint: a use case states one of `links`, `relinks`, `unlinks` per key; give the other to a second use case")]
+    ConflictingLinks {
+        /// The second statement, `unlinks(UC, Child, Parent)`.
+        statement: String,
+        role: String,
+        /// The first statement on the key.
+        first: String,
     },
 
     #[error("`{pred}(...).when({got})` does not name a condition\n  hint: {hint}")]

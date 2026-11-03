@@ -27,10 +27,17 @@
   parent row through the `.optional()` key from the child to the parent, named with
   `.role(role)` where several join them. The use case writes the child, binds the parent
   it writes, the one an earlier step of its run wrote, or else any present parent, and
-  links the child while it is unlinked; a linked child waits, so no `links` moves a child,
-  and there is no unlink form yet. `check`, `states`, the TLA+ export and `verify` read
-  the link as they read a key a creation sets. No key is `LinkWithoutKey`, a mandatory one
-  `LinkOnMandatoryKey`, several with no `.role` naming one `AmbiguousOwnerLink`.
+  links the child while it is unlinked; a linked child waits, so no `links` moves a child.
+  `check`, `states`, the TLA+ export and `verify` read the link as they read a key a
+  creation sets. No key is `LinkWithoutKey`, a mandatory one `LinkOnMandatoryKey`, several
+  with no `.role` naming one `AmbiguousOwnerLink`.
+- `relinks(UC, Child, Parent)` and `unlinks(UC, Child, Parent)` (#92), beside `links` with
+  the same key rule and `.role`: `relinks` moves a linked child to the parent the use case
+  binds, the same one included, so a reassignment at one instance per entity still runs,
+  and takes a mandatory key too, since such a child always has a parent to move from;
+  `unlinks` leaves a linked child unlinked on an `.optional()` key, the child under the
+  parent the use case writes when it writes one. One use case states one of the three per
+  key; a second is `ConflictingLinks`. `check` names the guard of each form.
 - The warning `GuardReadsLaterStep` (#89): a `holds` body applied to a split use case compares
   an entity that only a later transaction group creates. The guard is read before the first
   group, when the run has no row of it yet, so it reads rows that are not the run's and often

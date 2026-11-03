@@ -8,6 +8,7 @@ use rdra_ish_core::lifecycle::{
     GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace,
     TraceStep, TransitionSystem,
 };
+use rdra_ish_core::model::LinkKind;
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
 /// A lifecycle finding as `check`, `states`, `verify`, and the generator gates print it:
@@ -383,7 +384,15 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
             )
         }
         (GuardWhy::Owner, _) => "the bound instances belong to each other (relate)".to_string(),
-        (GuardWhy::Link, _) => "the child is not linked to a parent yet (links)".to_string(),
+        (GuardWhy::Link, ModelRef::Link(i)) => match model.links[*i].kind {
+            LinkKind::Links => "the child is not linked to a parent yet (links)".to_string(),
+            LinkKind::Relinks => "the child is linked to a parent (relinks)".to_string(),
+            LinkKind::Unlinks => {
+                "the child is linked to a parent, the bound one when the step writes it (unlinks)"
+                    .to_string()
+            }
+        },
+        (GuardWhy::Link, _) => "the child is linked as the link form needs".to_string(),
         (GuardWhy::Copy, _) => "the column takes the value it copies (sets)".to_string(),
         (GuardWhy::Clock, _) => "now has room to tick".to_string(),
         (GuardWhy::TransitionFrom, _) => {

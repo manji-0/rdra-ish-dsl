@@ -411,8 +411,10 @@ pub enum GuardWhy {
     /// The child param belongs to the parent param, or is unlinked before a created parent
     /// links it.
     Owner,
-    /// `links(UC, Child, Parent)`: the child param is unlinked on the key before the step
-    /// links it to the parent param.
+    /// `links`, `relinks` or `unlinks(UC, Child, Parent)`, by the kind of the
+    /// `ModelRef::Link` at its site: the child param is unlinked on the key before a `links`,
+    /// linked before a `relinks`, and linked (to the bound parent, when the step writes one)
+    /// before an `unlinks`.
     Link,
     /// `now` has room to tick.
     Clock,

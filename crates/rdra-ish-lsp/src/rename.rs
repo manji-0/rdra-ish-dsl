@@ -307,6 +307,14 @@ performs(Staff, Book)
                 ENTITY_TGT,
                 "relate(A, Tgt, N:1).optional()\nusecase U \"u\"\nlinks(U, A, Tgt).role(Tgt)",
             ),
+            ("relinks", "role") => (
+                ENTITY_TGT,
+                "relate(A, Tgt, N:1).optional()\nusecase U \"u\"\nrelinks(U, A, Tgt).role(Tgt)",
+            ),
+            ("unlinks", "role") => (
+                ENTITY_TGT,
+                "relate(A, Tgt, N:1).optional()\nusecase U \"u\"\nunlinks(U, A, Tgt).role(Tgt)",
+            ),
             ("invariant", "when") => (
                 ENTITY_TGT,
                 "invariant(A).when(Tgt.status == x).then(A.status == y)",

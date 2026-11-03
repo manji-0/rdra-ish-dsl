@@ -785,10 +785,12 @@ fn process_sets_predicate(
     }
 }
 
-/// `links(UseCase, Child, Parent)`, with `.role(role)` where several keys join the two. The
-/// key is picked once the keys exist (`fk::resolve_links`).
+/// `links(UseCase, Child, Parent)`, `relinks(..)` or `unlinks(..)` (`kind`), with
+/// `.role(role)` where several keys join the two. The key is picked once the keys exist
+/// (`fk::resolve_links`).
 fn process_links_predicate(
     model: &mut SemanticModel,
+    kind: LinkKind,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
     ctx: DiagCtxt,
@@ -802,6 +804,7 @@ fn process_links_predicate(
         return;
     };
     model.links.push(Link {
+        kind,
         origin: *origin,
         child: *child,
         parent: *parent,
@@ -810,6 +813,7 @@ fn process_links_predicate(
         site: Some(ctx.locate(pred.span.clone())),
     });
     model.typed_predicates.push(TypedPredicate::Links {
+        kind,
         origin: *origin,
         child: *child,
         parent: *parent,
@@ -1854,7 +1858,9 @@ pub(crate) fn process_predicate(
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
         "drives" => process_drives_predicate(model, pred, &resolved, ctx, diags),
-        "links" => process_links_predicate(model, pred, &resolved, ctx),
+        "links" => process_links_predicate(model, LinkKind::Links, pred, &resolved, ctx),
+        "relinks" => process_links_predicate(model, LinkKind::Relinks, pred, &resolved, ctx),
+        "unlinks" => process_links_predicate(model, LinkKind::Unlinks, pred, &resolved, ctx),
         "chooses" => process_chooses_predicate(model, pred, &resolved, ctx, diags),
         "combines" => {
             super::condition::process_combines_predicate(model, pred, &resolved, ctx, diags)

@@ -101,7 +101,12 @@ Also ask:
    write `links(Assign, Case, Handler)`: the key from the child to the parent must be
    `.optional()`, the use case binds a present parent (the one it writes, when it does)
    and links the unlinked child to it, and a child that already has a parent waits. A
-   `holds` guard that compares the parent, or `updates` on it, picks which parent.
+   `holds` guard that compares the parent, or `updates` on it, picks which parent. A
+   reassignment is `relinks(Reassign, Case, Handler)`: a linked child moves to the parent
+   the use case binds, the same one included (a `holds` guard on the parent keeps the move
+   real). A release is `unlinks(Release, Case, Handler)`: a linked child, the one under the
+   parent the use case writes when it writes one, becomes unlinked. One use case states one
+   of the three per key (`ConflictingLinks`); `relinks` alone also takes a mandatory key.
 9. Add `drives(UC, E.col op rhs, true|false)` when rules depend on a derived comparison and
    the model does not track the values. Prefer Int / Money / Decimal columns plus
    `sets(UC, E.col == N)` when the quantity itself must be checked: a comparison

@@ -218,7 +218,7 @@ pub fn typed_predicate_name(pred: &TypedPredicate) -> &'static str {
         TypedPredicate::MapsField { .. } => "maps_field",
         TypedPredicate::SetsColumn { .. } => "sets",
         TypedPredicate::Chooses { .. } => "chooses",
-        TypedPredicate::Links { .. } => "links",
+        TypedPredicate::Links { kind, .. } => kind.name(),
         TypedPredicate::Drives { .. } => "drives",
         TypedPredicate::After { .. } => "after",
         TypedPredicate::Forbidden { .. } => "forbidden",

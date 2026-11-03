@@ -1551,7 +1551,7 @@ parent, with `.role(<first role>)` added, or, when the use case has neither, say
 | `.has(...)` or `.none(...)` | the link from the quantified row to the rows the statement binds |
 | `holds(Cond, ...)` itself, before any `.has/.none` | the link between an entity the body compares and the other entities of the guard |
 | `sets(UC, E.col == F.col)` | the key from the target row to the source row |
-| `links(UC, Child, Parent)` | the key from the child to the parent |
+| `links`, `relinks` or `unlinks(UC, Child, Parent)` | the key from the child to the parent |
 
 ```rdra
 relate(BusinessPermit, PermitApplication, 1:1)                  // registered under
@@ -1742,13 +1742,16 @@ condition is `WhenRequiresCondition`; an undefined name is `UndefinedSymbol`. A 
 without a `holds` body (one linked by `combines` only) is `WhenConditionWithoutBody`, since
 it has nothing to guard with.
 
-### Linking an existing child to a parent: `links`
+### Linking, moving and unlinking an existing child: `links`, `relinks`, `unlinks`
 
 `links(UseCase, Child, Parent)` declares that the use case links an existing child row to
 an existing parent row through the `.optional()` key from the child to the parent: a case
 opened without a handler gets one, a charge posted on its own is billed under a claim. The
 use case writes the child (as a `sets` does, with no `updates` line needed) and reads the
-parent.
+parent. `relinks(UseCase, Child, Parent)` moves a linked child to another parent, and
+`unlinks(UseCase, Child, Parent)` takes its parent away. The three take the same arguments,
+follow the same key, and bind the parent by the same rule, so a reassignment reads as the
+inverse of the assignment.
 
 ```rdra
 entity Handler "Handler" { id: Int @pk  busy: Bool @default(false) }
@@ -1773,10 +1776,8 @@ invariant(Case).when(status == assigned).has(Handler).label("An assigned case ha
   assigned case never runs (`Runs_<UseCase>`: its guards hold in some state each, but
   never together). When the child is always created linked (its creator writes the
   parent), the `links` guard alone blocks, and `check` names it: "guard: the child is not
-  linked to a parent yet (links)". 1.1 has no form that relinks or unlinks a child; a reassignment
-  is modelled as two use cases once such a form exists, and a child that must be able to
-  move is one whose key is mandatory, where a use case that creates the new parent moves
-  it (see [Owners](./state-derivation.md#actions)).
+  linked to a parent yet (links)". A child that moves is `relinks`, one that loses its
+  parent `unlinks`, below.
 - **Which key.** The one key from the child to the parent, or, among several, the one
   `.role(role)` names (see [Which key a join follows](#which-key-a-join-follows)). The key
   must be `.optional()`: a child of a mandatory key always has its parent, so there is
@@ -1789,12 +1790,54 @@ invariant(Case).when(status == assigned).has(Handler).label("An assigned case ha
 - A created child in the same use case needs no `links`: a parent the use case writes
   links it, and so does a `holds` guard that compares the parent (see Owners).
 
+**Moving and unlinking.** `relinks(UseCase, Child, Parent)` moves a linked child to the
+parent the use case binds, and `unlinks(UseCase, Child, Parent)` leaves a linked child
+unlinked. Both name the parent as `links` does, so the key, its `.role`, and the parent
+the step binds follow the one rule above, and a child with two optional parents (a
+handler and a team) says which link it drops.
+
+```rdra
+usecase Reassign "Move the case to another handler"
+usecase Release "Take the handler off the case"
+updates(Reassign, Handler)
+sets(Reassign, Handler.busy == true)
+relinks(Reassign, Case, Handler)
+updates(Release, Handler)
+sets(Release, Handler.busy == false)
+transitions(Release, Case.status, assigned -> new)
+unlinks(Release, Case, Handler)
+condition Free "A free handler"
+holds(Free, Handler.busy == false)
+applies_to(Free, Reassign)
+```
+
+- **`relinks` moves a linked child.** The guard is that the child is linked on the key;
+  the owner becomes the parent the step binds, by the same rule as `links` (the row it
+  writes, the row an earlier step of its run wrote, or else any present parent). The
+  parent it already has is allowed: a move that had to differ could never run at one
+  instance per entity, which is what `check` and `states` explore, so every `relinks`
+  would be `Runs_<UseCase>` there. A guard that reads the parent, as `Free` above, keeps
+  the move real. A mandatory key is allowed too: its child always has a parent, so the
+  guard is empty and the step is the move a created parent makes (see Owners).
+- **`unlinks` frees a linked child.** The guard is that the child is linked, to the parent
+  the step binds when it writes one (`Release` frees the case's own handler); the owner
+  becomes unlinked. The key must be `.optional()`. The step binds no parent otherwise,
+  since nothing reads it. A `1..*` key is not checked by the `unlinks` itself: taking the
+  only child from a parent breaks `MinCard_<Child>_<role>`.
+- **One form per key.** A use case states one of `links`, `relinks`, `unlinks` on a key; a
+  second is `ConflictingLinks`, since their guards cannot hold together or their effects
+  overwrite each other. A use case that links one key and unlinks another is fine.
+- `check` names the guard that blocks: "the child is not linked to a parent yet (links)",
+  "the child is linked to a parent (relinks)", or "the child is linked to a parent, the
+  bound one when the step writes it (unlinks)".
+
 | Diagnostic | When |
 |---|---|
 | `LinkWithoutKey` | No key makes `Parent` the parent of `Child`. The hint declares the relate, and says to swap the two when the key runs the other way. |
-| `LinkOnMandatoryKey` | The key is not `.optional()`. |
+| `LinkOnMandatoryKey` | The key of a `links` or `unlinks` is not `.optional()`. |
 | `AmbiguousOwnerLink` | Several keys join the two and no `.role(role)` names one; the hint adds `.role(<first role>)`. |
 | `UnknownOwnerRole` | `.role(role)` names no key between the two. |
+| `ConflictingLinks` | A second `links`, `relinks` or `unlinks` of one use case on one key. |
 
 A guarded arm that is never taken while its use case runs and some instance reaches its
 `from` state is the `ArmNeverTaken` warning of `check` (`Arm_<UseCase>_<from>_<to>`): its

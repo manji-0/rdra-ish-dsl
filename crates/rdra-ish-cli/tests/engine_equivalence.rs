@@ -2073,6 +2073,55 @@ fn bfs_and_tlc_agree_on_links() {
     }
 }
 
+/// `relinks` and `unlinks` in both engines (#92): `Reassign` moves a linked case to the
+/// handler it marks busy, `Release` frees the case's own handler and unlinks it. With
+/// `{REASSIGN_GUARD}` keeping Reassign to a free handler, each handler holds one case and the
+/// rules hold. Without it Reassign stacks a second case on a busy handler, and Release then
+/// frees that handler under the other case: `Quantifier_Case_0` fails at two instances.
+const RELINKS: &str = r#"
+entity Handler "担当" { id: Int @pk  busy: Bool @default(false) }
+entity Case "案件" { id: Int @pk  status: Enum(new, assigned) @default(new) }
+relate(Case, Handler, N:1).optional()
+usecase OpenCase "受付"
+usecase Assign "担当を割り当てる"
+usecase Reassign "担当を替える"
+usecase Release "担当を外す"
+creates(OpenCase, Case)
+updates(Assign, Handler)
+transitions(Assign, Case.status, new -> assigned)
+sets(Assign, Handler.busy == true)
+links(Assign, Case, Handler)
+updates(Reassign, Handler)
+sets(Reassign, Handler.busy == true)
+relinks(Reassign, Case, Handler)
+updates(Release, Handler)
+sets(Release, Handler.busy == false)
+transitions(Release, Case.status, assigned -> new)
+unlinks(Release, Case, Handler)
+condition Free "空き"
+holds(Free, Handler.busy == false)
+applies_to(Free, Assign)
+{REASSIGN_GUARD}
+invariant(Case).when(status == assigned).has(Handler.busy == true)
+invariant(Case).when(status == new).none(Handler)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_relinks_and_unlinks() {
+    let guarded = check_fixture(
+        "relinks_guarded",
+        &RELINKS.replace("{REASSIGN_GUARD}", "applies_to(Free, Reassign)"),
+    );
+    let stacked = check_fixture("relinks_stacked", &RELINKS.replace("{REASSIGN_GUARD}", ""));
+    if let (Some(guarded), Some(stacked)) = (guarded, stacked) {
+        assert!(guarded.is_empty(), "{guarded:?}");
+        assert_eq!(
+            stacked.into_iter().collect::<Vec<_>>(),
+            vec!["Quantifier_Case_0".to_string()]
+        );
+    }
+}
+
 #[test]
 fn bfs_and_tlc_agree_on_a_date_sets() {
     if let Some(violated) = check_fixture("date_sets", DATE_SETS) {

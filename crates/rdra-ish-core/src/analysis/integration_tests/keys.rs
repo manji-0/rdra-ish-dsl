@@ -3,7 +3,9 @@
 use super::support::entity_key;
 use crate::analysis::build_model;
 use crate::diagnostics::RdraError;
-use crate::model::{ColumnType, CrossConstraintScope, Join, Max, Min, SemanticModel, UniqueSource};
+use crate::model::{
+    ColumnType, CrossConstraintScope, Join, LinkKind, Max, Min, SemanticModel, UniqueSource,
+};
 use rdra_ish_syntax::parse;
 
 fn build(src: &str) -> (SemanticModel, Vec<RdraError>) {
@@ -659,12 +661,53 @@ fn a_links_follows_the_optional_key_from_the_child_to_the_parent() {
     assert_eq!(model.foreign_key(key).role.as_deref(), Some("backup"));
 }
 
+/// `relinks` and `unlinks` follow the key as `links` does (#92): the one from the child to
+/// the parent, or the one `.role` names. A `relinks` may follow a mandatory key, since a child
+/// that always has a parent can still move.
+#[test]
+fn a_relinks_and_an_unlinks_follow_the_key_as_a_links_does() {
+    let model = built(&format!(
+        "{ASSIGNMENT}\nrelate(Case, Handler, N:1).optional()\nrelate(Case, Handler, N:1).optional().role(backup)\n\
+         usecase Reassign \"reassign\"\nusecase Release \"release\"\n\
+         relinks(Reassign, Case, Handler).role(backup)\nunlinks(Release, Case, Handler).role(backup)\nrelinks(Assign, Note, Case)\n"
+    ));
+    let kinds: Vec<(LinkKind, Option<&str>)> = model
+        .links
+        .iter()
+        .map(|l| {
+            (
+                l.kind,
+                l.key
+                    .map(|k| model.foreign_key(k).role.as_deref().unwrap_or("-")),
+            )
+        })
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            (LinkKind::Relinks, Some("backup")),
+            (LinkKind::Unlinks, Some("backup")),
+            (LinkKind::Relinks, Some("-")),
+        ]
+    );
+}
+
 #[test]
 fn a_links_without_a_usable_key_is_an_error_naming_the_fix() {
     for (links, check) in [
         (
             "relate(Case, Handler, N:1).optional()\nlinks(Assign, Handler, Case)",
             RdraError::LinkWithoutKey {
+                pred: "links".into(),
+                usecase: "Assign".into(),
+                child: "Handler".into(),
+                parent: "Case".into(),
+            },
+        ),
+        (
+            "relate(Case, Handler, N:1).optional()\nunlinks(Assign, Handler, Case)",
+            RdraError::LinkWithoutKey {
+                pred: "unlinks".into(),
                 usecase: "Assign".into(),
                 child: "Handler".into(),
                 parent: "Case".into(),
@@ -673,7 +716,16 @@ fn a_links_without_a_usable_key_is_an_error_naming_the_fix() {
         (
             "links(Assign, Note, Case)",
             RdraError::LinkOnMandatoryKey {
-                usecase: "Assign".into(),
+                statement: "links(Assign, Note, Case)".into(),
+                child: "Note".into(),
+                parent: "Case".into(),
+                role: "Case".into(),
+            },
+        ),
+        (
+            "unlinks(Assign, Note, Case)",
+            RdraError::LinkOnMandatoryKey {
+                statement: "unlinks(Assign, Note, Case)".into(),
                 child: "Note".into(),
                 parent: "Case".into(),
                 role: "Case".into(),
@@ -687,6 +739,23 @@ fn a_links_without_a_usable_key_is_an_error_naming_the_fix() {
             "{links}"
         );
         assert_eq!(model.links[0].key, None, "{links}");
+    }
+    // One use case states one link form per key; the second one is the error.
+    for second in ["relinks", "unlinks", "links"] {
+        let (model, errors) = build(&format!(
+            "{ASSIGNMENT}\nrelate(Case, Handler, N:1).optional()\nlinks(Assign, Case, Handler)\n{second}(Assign, Case, Handler)\n"
+        ));
+        assert_eq!(
+            errors.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            vec![RdraError::ConflictingLinks {
+                statement: format!("{second}(Assign, Case, Handler)"),
+                role: "Handler".into(),
+                first: "links(Assign, Case, Handler)".into(),
+            }
+            .to_string()],
+            "{second}"
+        );
+        assert!(model.links[0].key.is_some() && model.links[1].key.is_none());
     }
     let (_, errors) = build(&format!(
         "{ASSIGNMENT}\nrelate(Case, Handler, N:1).optional()\nrelate(Case, Handler, N:1).optional().role(backup)\nlinks(Assign, Case, Handler)\n"
