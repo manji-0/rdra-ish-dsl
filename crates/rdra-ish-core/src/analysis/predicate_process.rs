@@ -1777,8 +1777,8 @@ pub(crate) fn process_predicate(
             }
             return;
         }
-        if let Some(by) = pred.chain.iter().find(|cc| cc.name == "by") {
-            push_error(ctx, diags, by.span.clone(), RdraError::ByWithoutAlong);
+        if let Some(role) = pred.chain.iter().find(|cc| cc.name == "role") {
+            push_error(ctx, diags, role.span.clone(), RdraError::RoleWithoutJoin);
         }
     }
 

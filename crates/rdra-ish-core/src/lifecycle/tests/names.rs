@@ -138,7 +138,7 @@ fn one_of_each() -> Vec<StateDiag> {
             a: "Application".into(),
             b: "Permit".into(),
             roles: "application, renews".into(),
-            rewrite: ".none(Permit).by(application)".into(),
+            rewrite: ".none(Permit).role(application)".into(),
             site: site(),
         },
         StateDiag::ContradictoryDrivenComparison {

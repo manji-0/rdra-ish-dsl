@@ -3,7 +3,7 @@
 use rdra_ish_core::{node_ref_kind, DeclSite, LookupResult, SemanticModel};
 
 /// The symbol kind of a `relate` key's role: declared by `relate(..).role(x)`, referred to
-/// by the `.by(x)` that picks the key of a join.
+/// by the `.role(x)` that picks the key of a join.
 pub const ROLE_KIND: &str = "role";
 use rdra_ish_syntax::ast::{
     Ast, AstTemporalFormula, ChainCall, Expr, InstanceDecl, Item, Operand, PredicateArg, QRef, Span,
@@ -128,7 +128,7 @@ pub fn find_symbol_references(ast: &Ast, target: &SymbolTarget) -> Vec<Span> {
 }
 
 /// The references in `ast` to `target`. A role is referred to only where a role is written,
-/// in `relate(..).role(x)` and in a `.by(x)` that picks a key, so a value or a medium
+/// in `relate(..).role(x)` and in a `.role(x)` that picks a key, so a value or a medium
 /// spelled the same is not one of them.
 pub fn references_to<'a>(ast: &'a Ast, target: &SymbolTarget) -> Vec<&'a QRef> {
     if target.kind != ROLE_KIND {
@@ -142,12 +142,10 @@ pub fn references_to<'a>(ast: &'a Ast, target: &SymbolTarget) -> Vec<&'a QRef> {
         let Item::Predicate(pred) = item else {
             continue;
         };
-        let method = match pred.name.as_str() {
-            "relate" => "role",
-            "belongs" => continue,
-            _ => "by",
-        };
-        for call in pred.chain.iter().filter(|call| call.name == method) {
+        if pred.name == "belongs" {
+            continue;
+        }
+        for call in pred.chain.iter().filter(|call| call.name == "role") {
             for arg in &call.args {
                 if let PredicateArg::Ref(qref) = arg {
                     if qref.kind_qualifier.is_none() && qref.parts == [target.id.as_str()] {

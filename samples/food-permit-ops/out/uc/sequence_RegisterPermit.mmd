@@ -12,7 +12,7 @@ sequenceDiagram
   actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への登録
   usecase__GrantPermit ->> api__PermitRegistrationApi: 営業許可の決定
   screen__PermitLedgerScreen ->> api__PermitRegistrationApi: 営業許可登録 API
-  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit).by(PermitApplication)
+  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit).role(PermitApplication)
     api__PermitRegistrationApi ->> entity__PermitApplication: read
     api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
     api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）

@@ -85,10 +85,12 @@ const FORMS: &[(&str, Expect)] = &[
     // a bare entity: no linked row at all (#73)
     ("invariant(Order).when(status == paid).none(Ticket)", Recorded),
     ("invariant(Order).when(status == paid).has(Ticket)", Recorded),
-    ("invariant(Order).when(status == paid).none(Ticket).by(order)", Recorded),
-    ("invariant(Order).when(status == paid).none(Ticket).by(nosuch)", Error),
+    ("invariant(Order).when(status == paid).none(Ticket).role(order)", Recorded),
+    ("invariant(Order).when(status == paid).none(Ticket).role(nosuch)", Error),
+    // `.by(...)` that picks a key is `.role(...)` (#87)
+    ("invariant(Order).when(status == paid).none(Ticket).by(order)", Error),
     ("invariant(Order).when(status == paid).none(Nosuch)", Error),
-    ("invariant(Order).by(order).when(status == paid).none(Ticket)", Error),
+    ("invariant(Order).role(order).when(status == paid).none(Ticket)", Error),
     (
         "invariant(Order).when(status == paid).none(status == open)",
         Error,
@@ -139,9 +141,10 @@ const FORMS: &[(&str, Expect)] = &[
     ("holds(Ready, Order.kind not in (\"a\"))", Error),
     ("holds(Ready, Order.status == paid).none()", Error),
     ("holds(Ready, Order.status == paid).none(Ticket)", Recorded),
-    ("holds(Ready, Order.status == paid).none(Ticket).by(order)", Recorded),
-    ("holds(Ready, Ticket.status == done).by(order)", Recorded),
-    ("holds(Ready, Ticket.status == done).by(nosuch)", Error),
+    ("holds(Ready, Order.status == paid).none(Ticket).role(order)", Recorded),
+    ("holds(Ready, Ticket.status == done).role(order)", Recorded),
+    ("holds(Ready, Ticket.status == done).role(nosuch)", Error),
+    ("holds(Ready, Ticket.status == done).by(order)", Error),
     // maps_field
     ("maps_field(F, Order.status)", Recorded),
     ("maps_field(F, Order.nosuch)", Error),

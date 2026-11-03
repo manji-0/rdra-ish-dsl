@@ -79,12 +79,12 @@ numbers), the comment says the modeling is the model's assumption.
 - **The permit is registered under its application, one per application.**
   `relate(BusinessPermit, PermitApplication, 1:1)`, and `RegisterPermit` runs only on a new
   application that has no permit yet (`holds(NoPermitYet, PermitApplication.kind ==
-  new).none(BusinessPermit).by(PermitApplication)`): `.none(BusinessPermit)` says "no permit"
+  new).none(BusinessPermit).role(PermitApplication)`): `.none(BusinessPermit)` says "no permit"
   and reads only the link (#71, #73). The 1:1 checks the result as
   `Unique_BusinessPermit_PermitApplication`.
 - **A renewal names the permit it renews.** `relate(PermitApplication, BusinessPermit,
   N:1).optional().role(renews)`: a new application names none. With the registration key, two
-  keys join the two entities, so each guard and rule between them names its key with `.by`
+  keys join the two entities, so each guard and rule between them names its key with `.role`
   (#73). `RenewsValidPermit` (`失効後の更新はできない`) reads `BusinessPermit.status == valid`
   through `renews` on `ApplyRenewal` and `RenewPermit`. On `ApplyRenewal`, which creates the
   application, the guard also links the new application to the valid permit it reads.
@@ -192,7 +192,7 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
 - **(G/B) A guard could not say which key joins two entities.** With `renews` beside the
   registration key, `.along(...)` reported the join as ambiguous, and a condition or quantifier
   silently took the first key. Fixed by #73: one rule resolves every join, ambiguity is the
-  error `AmbiguousOwnerLink` naming the candidates, and `.by(role)` picks one on a `holds`, a
+  error `AmbiguousOwnerLink` naming the candidates, and `.role(role)` picks one on a `holds`, a
   `.has/.none`, a copy, and `.along`. The renewal guard is in the model.
 - **(D) `list --kind rule` prints value labels for `==` but not for `!=`, `in`, or `not in` in a
   rule**, while a condition's `in` gets them (`kind != improvement_order`,

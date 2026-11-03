@@ -9,7 +9,7 @@ sequenceDiagram
   participant entity__PermitApplication as 営業許可申請
   actor__BusinessOperator ->> screen__RenewalScreen: 継続（更新）の申請
   screen__RenewalScreen ->> api__RenewalApi: 更新申請 API
-  alt 失効後の更新はできない: (BusinessPermit.status == 有効).by(renews)
+  alt 失効後の更新はできない: (BusinessPermit.status == 有効).role(renews)
     api__RenewalApi ->> entity__BusinessPermit: read
     api__RenewalApi ->> entity__PermitApplication: create kind=renewal
     api__RenewalApi -->> screen__RenewalScreen: done

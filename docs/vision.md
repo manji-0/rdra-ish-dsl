@@ -106,7 +106,7 @@ DSL keeps these rules and adds what a normalized relational model needs:
   one child with the same role are `DuplicateRelateRole`.
 - A relation can adopt columns the child declares with `.key(cols)`, and it can
   reference a composite key: a parent `@pk(site, shelf)` yields one child column per key
-  column, and DBML prints the composite `Ref`. `.along(A, B).by(role)` picks the key a
+  column, and DBML prints the composite `Ref`. `.along(A, B).role(role)` picks the key a
   constraint follows when two keys join the same pair.
 - `@check(expr)` and `@derived(expr)` parse into typed expressions. A quoted form is a
   parse error. Each `@check` is the invariant `Check_<Entity>_<column>_<n>`, which BFS

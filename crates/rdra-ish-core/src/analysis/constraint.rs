@@ -32,7 +32,7 @@ pub(crate) fn arg_as_str(arg: &PredicateArg) -> Option<String> {
     }
 }
 
-/// The chain call a `.by(role)` at `at` selects the key of: the nearest `.along`, `.has` or
+/// The chain call a `.role(role)` at `at` selects the key of: the nearest `.along`, `.has` or
 /// `.none` before it, or `None` when it follows none, where it selects the key of the
 /// statement itself (a `holds` body, a copy).
 fn by_owner(chain: &[ChainCall], at: usize) -> Option<usize> {
@@ -41,22 +41,22 @@ fn by_owner(chain: &[ChainCall], at: usize) -> Option<usize> {
         .rposition(|cc| matches!(cc.name.as_str(), "along" | "has" | "none"))
 }
 
-/// The roles the `.by(..)` calls that select the key of `owner` name (see [`by_owner`]).
+/// The roles the `.role(..)` calls that select the key of `owner` name (see [`by_owner`]).
 pub(crate) fn selectors(chain: &[ChainCall], owner: Option<usize>) -> Vec<String> {
     chain
         .iter()
         .enumerate()
-        .filter(|(at, cc)| cc.name == "by" && by_owner(chain, *at) == owner)
+        .filter(|(at, cc)| cc.name == "role" && by_owner(chain, *at) == owner)
         .flat_map(|(_, cc)| cc.args.iter().filter_map(arg_as_str))
         .collect()
 }
 
-/// The `.by(..)` calls that follow no `.along`, `.has` or `.none`, on a statement that has
+/// The `.role(..)` calls that follow no `.along`, `.has` or `.none`, on a statement that has
 /// no key of its own to select.
 pub(crate) fn report_leading_by(chain: &[ChainCall], ctx: DiagCtxt, diags: &mut Vec<Diagnostic>) {
     for (at, cc) in chain.iter().enumerate() {
-        if cc.name == "by" && by_owner(chain, at).is_none() {
-            push_error(ctx, diags, cc.span.clone(), RdraError::ByWithoutAlong);
+        if cc.name == "role" && by_owner(chain, at).is_none() {
+            push_error(ctx, diags, cc.span.clone(), RdraError::RoleWithoutJoin);
         }
     }
 }
@@ -730,7 +730,7 @@ fn collect_cross_along_path(
     Some((at, path))
 }
 
-/// The scope of a cross-entity `forbidden` or `invariant`. A `.by(..)` that follows no
+/// The scope of a cross-entity `forbidden` or `invariant`. A `.role(..)` that follows no
 /// `.along`, `.has` or `.none` is reported here.
 pub(crate) fn cross_scope_semantics_from_chain(
     model: &SemanticModel,
@@ -885,7 +885,7 @@ pub(crate) fn process_invariant(
 
 /// The related entity, conditions and kind of one `.has(...)` / `.none(...)` chain call. The
 /// related entity is the one a bare first argument names (`.none(Permit)`, any row at all), or
-/// else the first one the conditions name other than `anchor`. `by` holds the `.by(role)`
+/// else the first one the conditions name other than `anchor`. `by` holds the `.role(role)`
 /// selectors that follow the call. `None` only with an error reported, so a quantifier is
 /// never dropped silently.
 pub(crate) fn resolve_related_quantifier(

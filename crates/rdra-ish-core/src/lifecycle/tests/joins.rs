@@ -1,7 +1,7 @@
 //! Joins over two keys (#73): every join a guard, a quantifier, or a copy makes follows the
 //! key [`crate::model::SemanticModel::join_key`] picks, so a second key between the same two
 //! entities never changes which rows a rule reads. Two keys from one child to one parent
-//! (#75) bind a parent row each, and a parent the use case writes takes only the key its `.by`
+//! (#75) bind a parent row each, and a parent the use case writes takes only the key its `.role`
 //! names (#76).
 
 use super::*;
@@ -23,21 +23,21 @@ creates(Issue, App)
 sets(Issue, App.kind == new)
 creates(Register, Permit)
 condition NoPermitYet "許可がまだない新規申請"
-holds(NoPermitYet, App.kind == new).none(Permit).by(App)
+holds(NoPermitYet, App.kind == new).none(Permit).role(App)
 applies_to(NoPermitYet, Register)
 creates(Apply, App)
 sets(Apply, App.kind == renewal)
 reads(Apply, Permit)
 condition Renewable "更新する許可が有効"
-holds(Renewable, Permit.status == valid).by(renews)
+holds(Renewable, Permit.status == valid).role(renews)
 applies_to(Renewable, Apply)
 applies_to(Renewable, Renew)
 transitions(Renew, App.status, open -> done)
 transitions(Expire, Permit.status, valid -> expired)
 condition NotRenewed "更新済みの申請がない"
-holds(NotRenewed, Permit.status == valid).none(App.status == done).by({EXPIRY})
+holds(NotRenewed, Permit.status == valid).none(App.status == done).role({EXPIRY})
 applies_to(NotRenewed, Expire)
-forbidden(App, Permit, App.status == done, Permit.status == expired).along(App, Permit).by(renews)
+forbidden(App, Permit, App.status == done, Permit.status == expired).along(App, Permit).role(renews)
 "#;
 
 fn at_verify(src: &str) -> Derived {
@@ -68,18 +68,18 @@ fn the_key_a_quantifier_names_decides_the_verdict() {
     assert!(violated(&registered), "{:?}", registered.diags);
 }
 
-/// Without `.by`, every join between App and Permit is ambiguous: the body's witness, the
+/// Without `.role`, every join between App and Permit is ambiguous: the body's witness, the
 /// quantifiers, and the analysis's `.along`. The lifecycle names the candidates and the
 /// rewrite, and links nothing.
 #[test]
 fn a_join_two_keys_could_follow_is_ambiguous() {
     let src = RENEWAL
-        .replace(".by(App)", "")
+        .replace(".role(App)", "")
         .replace(
-            ".by(renews)\napplies_to(Renewable",
+            ".role(renews)\napplies_to(Renewable",
             "\napplies_to(Renewable",
         )
-        .replace(".by({EXPIRY})", "");
+        .replace(".role({EXPIRY})", "");
     let model = model_from(&src);
     let diags: Vec<StateDiag> = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL)
         .diags
@@ -106,14 +106,14 @@ fn a_join_two_keys_could_follow_is_ambiguous() {
     assert_eq!(
         ambiguous,
         [
-            (".none(...)".to_string(), ".none(...).by(App)".to_string()),
+            (".none(...)".to_string(), ".none(...).role(App)".to_string()),
             (
                 ".none(Permit)".to_string(),
-                ".none(Permit).by(App)".to_string()
+                ".none(Permit).role(App)".to_string()
             ),
             (
                 "holds(Renewable, ...)".to_string(),
-                "holds(Renewable, ...).by(App)".to_string()
+                "holds(Renewable, ...).role(App)".to_string()
             ),
         ]
     );
@@ -157,7 +157,7 @@ fn a_parent_param_is_not_relinked_and_a_guard_links_an_optional_key() {
     );
 }
 
-/// A copy between two entities two keys join names the key to its source with `.by`.
+/// A copy between two entities two keys join names the key to its source with `.role`.
 #[test]
 fn a_copy_through_two_keys_names_its_key() {
     let src = r#"
@@ -185,11 +185,11 @@ sets(Fix, Permit.kind == Site.kind)
     assert!(
         ambiguous.iter().any(
             |d| matches!(d, StateDiag::AmbiguousOwnerLink { rewrite, .. }
-            if rewrite == "sets(Fix, Permit.kind == Site.kind).by(home)")
+            if rewrite == "sets(Fix, Permit.kind == Site.kind).role(home)")
         ),
         "{ambiguous:?}"
     );
-    let named = build(&format!("{src}.by(branch)\n").replace("\n.by(", ".by("));
+    let named = build(&format!("{src}.role(branch)\n").replace("\n.role(", ".role("));
     assert!(
         !named.iter().any(|d| matches!(
             d,
@@ -221,9 +221,9 @@ creates(Place, Order)
 transitions(Ship, Order.status, open -> shipped)
 transitions(Cancel, Order.status, open -> cancelled)
 condition ShipsEast "東へ出荷する"
-holds(ShipsEast, Address.region == east).by({SHIP})
+holds(ShipsEast, Address.region == east).role({SHIP})
 applies_to(ShipsEast, Ship)
-forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(bill_to)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).role(bill_to)
 "#;
 
 fn order_violated(d: &Derived) -> bool {
@@ -293,15 +293,15 @@ fn placed_under(by: &str) -> String {
         )
 }
 
-/// An atom on a parent the action binds reads the row its `.by` key joins (#75): the
+/// An atom on a parent the action binds reads the row its `.role` key joins (#75): the
 /// `bill_to` guard keeps every placed order billed to the east, the `ship_to` guard does not.
 #[test]
 fn a_guard_on_a_parent_param_reads_the_key_its_by_names() {
-    assert!(!order_violated(&at_verify(&placed_under(".by(bill_to)"))));
-    assert!(order_violated(&at_verify(&placed_under(".by(ship_to)"))));
+    assert!(!order_violated(&at_verify(&placed_under(".role(bill_to)"))));
+    assert!(order_violated(&at_verify(&placed_under(".role(ship_to)"))));
 }
 
-/// With two parent params of one entity and no `.by`, the atom's row is ambiguous.
+/// With two parent params of one entity and no `.role`, the atom's row is ambiguous.
 #[test]
 fn a_guard_on_two_parent_params_without_by_is_ambiguous() {
     let model = model_from(&placed_under(""));
@@ -309,7 +309,7 @@ fn a_guard_on_two_parent_params_without_by_is_ambiguous() {
     assert!(
         diags.iter().any(|d| matches!(&d.diag,
             StateDiag::AmbiguousOwnerLink { statement, rewrite, .. }
-            if statement == "holds(PlacesEast, ...)" && rewrite == "holds(PlacesEast, ...).by(ship_to)")),
+            if statement == "holds(PlacesEast, ...)" && rewrite == "holds(PlacesEast, ...).role(ship_to)")),
         "{diags:?}"
     );
 }
@@ -318,7 +318,7 @@ fn a_guard_on_two_parent_params_without_by_is_ambiguous() {
 /// (#73) through a param of its own, beside the mandatory `ship_to`'s.
 #[test]
 fn a_guard_links_an_optional_key_beside_a_mandatory_one() {
-    let src = placed_under(".by(bill_to)").replace(
+    let src = placed_under(".role(bill_to)").replace(
         "relate(Order, Address, N:1).role(bill_to)",
         "relate(Order, Address, N:1).optional().role(bill_to)",
     );
@@ -330,13 +330,13 @@ fn a_guard_links_an_optional_key_beside_a_mandatory_one() {
     assert!(!order_violated(&at_verify(&src)));
 }
 
-/// An after-assert has no `.by`: an entity the step binds through two parent params is bound
+/// An after-assert has no `.role`: an entity the step binds through two parent params is bound
 /// over every row, so an address in the west fails it even when both keys point east.
 #[test]
 fn an_after_assert_over_two_parent_params_reads_every_row() {
     let src = format!(
-        "{}condition BillsEast \"東へ請求する\"\nholds(BillsEast, Address.region == east).by(bill_to)\napplies_to(BillsEast, Place)\nafter(Place).assert(Address.region == east)\n",
-        placed_under(".by(ship_to)")
+        "{}condition BillsEast \"東へ請求する\"\nholds(BillsEast, Address.region == east).role(bill_to)\napplies_to(BillsEast, Place)\nafter(Place).assert(Address.region == east)\n",
+        placed_under(".role(ship_to)")
     );
     let d = at_verify(&src);
     assert!(
@@ -372,7 +372,7 @@ transitions(Cancel, Order.status, open -> cancelled)
 condition BillsEast "請求先が東"
 holds(BillsEast, Address.region == east){KEY}
 applies_to(BillsEast, ShipBilled)
-forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(ship_to)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).role(ship_to)
 "#;
 
 fn written_parent(key: &str) -> String {
@@ -402,23 +402,27 @@ fn owner_guards(ts: &TransitionSystem) -> Vec<String> {
     roles
 }
 
-/// A use case that writes the parent binds the written row to the key a `.by` of it names,
+/// A use case that writes the parent binds the written row to the key a `.role` of it names,
 /// not to every key of the child (#76). Billed to the checked address, the order may ship to
 /// another, in the west: the violation is reachable. Before, both keys were on the written
 /// row, and `verify` said ok.
 #[test]
 fn a_written_parent_takes_only_the_key_its_by_names() {
-    let billed = model_from(&written_parent(".by(bill_to)"));
+    let billed = model_from(&written_parent(".role(bill_to)"));
     let ts = TransitionSystem::build(&billed, Bounds::VERIFY, &Scope::ALL).ts;
     assert_eq!(owner_guards(&ts), ["bill_to"]);
-    assert!(order_violated(&at_verify(&written_parent(".by(bill_to)"))));
-    assert!(!order_violated(&at_verify(&written_parent(".by(ship_to)"))));
+    assert!(order_violated(&at_verify(&written_parent(
+        ".role(bill_to)"
+    ))));
+    assert!(!order_violated(&at_verify(&written_parent(
+        ".role(ship_to)"
+    ))));
 }
 
-/// Two keys and no `.by` of the use case naming one is `AmbiguousOwnerLink`, as for any other
-/// join (#73): the error names the guard that compares the address with `.by(ship_to)` added,
+/// Two keys and no `.role` of the use case naming one is `AmbiguousOwnerLink`, as for any other
+/// join (#73): the error names the guard that compares the address with `.role(ship_to)` added,
 /// the first key declared. The link is left unbound, so the guard reads an address unrelated
-/// to the order. A use case with no guard or copy that reads the parent is told where a `.by`
+/// to the order. A use case with no guard or copy that reads the parent is told where a `.role`
 /// can go.
 #[test]
 fn a_written_parent_without_by_is_ambiguous() {
@@ -439,7 +443,7 @@ fn a_written_parent_without_by_is_ambiguous() {
         ambiguous,
         vec![(
             "holds(BillsEast, ...)".to_string(),
-            "holds(BillsEast, ...).by(ship_to)".to_string()
+            "holds(BillsEast, ...).role(ship_to)".to_string()
         )]
     );
     let unread = src
@@ -459,17 +463,17 @@ fn a_written_parent_without_by_is_ambiguous() {
         .collect();
     assert_eq!(
         rewrites,
-        vec![".by(ship_to) on a holds guard applied to ShipBilled that compares Address, or on a copy from Address in it".to_string()]
+        vec![".role(ship_to) on a holds guard applied to ShipBilled that compares Address, or on a copy from Address in it".to_string()]
     );
 }
 
-/// An order created with an address it creates takes the new address on the key the `.by`
+/// An order created with an address it creates takes the new address on the key the `.role`
 /// names, and a row of its own on the other.
 #[test]
 fn a_created_parent_takes_the_named_key_of_a_created_child() {
     let src = TWO_KEYS.replace("{SHIP}", "ship_to").replace(
         "creates(Place, Order)",
-        "creates(Place, Order)\ncreates(Place, Address)\nsets(Place, Address.region == east)\ncondition NewShipTo \"新しい配送先\"\nholds(NewShipTo, Address.region == east).by(ship_to)\napplies_to(NewShipTo, Place)",
+        "creates(Place, Order)\ncreates(Place, Address)\nsets(Place, Address.region == east)\ncondition NewShipTo \"新しい配送先\"\nholds(NewShipTo, Address.region == east).role(ship_to)\napplies_to(NewShipTo, Place)",
     );
     let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
     let place = ts
@@ -498,7 +502,7 @@ fn a_created_parent_takes_the_named_key_of_a_created_child() {
 
 #[test]
 fn a_written_parent_on_one_key_keeps_the_cone_exact() {
-    let model = model_from(&written_parent(".by(bill_to)"));
+    let model = model_from(&written_parent(".role(bill_to)"));
     let (exact, _) = super::cone::assert_cones_exact("written_parent", &model, Bounds::VERIFY);
     assert!(exact > 0);
 }

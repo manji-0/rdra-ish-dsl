@@ -73,9 +73,9 @@ fn cross_parts(model: &SemanticModel, conds: &[CrossEntityCondition]) -> Vec<Str
         .collect()
 }
 
-/// `.by(a).by(b)` for the selectors of a join, empty without one.
+/// `.role(a).role(b)` for the selectors of a join, empty without one.
 pub fn by_display(by: &[String]) -> String {
-    by.iter().map(|role| format!(".by({role})")).collect()
+    by.iter().map(|role| format!(".role({role})")).collect()
 }
 
 fn all_of(parts: &[String]) -> String {

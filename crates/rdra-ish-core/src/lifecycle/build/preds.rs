@@ -1658,12 +1658,12 @@ pub(super) fn ambiguous_owner_link(
         a: model.entities[a].id.clone(),
         b: model.entities[b].id.clone(),
         roles: roles.join(", "),
-        rewrite: format!("{statement}.by({})", roles[0]),
+        rewrite: format!("{statement}.role({})", roles[0]),
         site: site.clone(),
     }
 }
 
-/// `.none(Related.col == v).by(role)` as written, for a diagnostic that names the call.
+/// `.none(Related.col == v).role(role)` as written, for a diagnostic that names the call.
 fn quantifier_display(model: &crate::model::SemanticModel, q: &RelatedQuantifier) -> String {
     let method = match q.kind {
         QuantifierKind::Has => "has",

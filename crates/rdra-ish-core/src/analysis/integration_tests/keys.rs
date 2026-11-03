@@ -1,4 +1,4 @@
-//! `.role(..)`, `.key(..)`, composite parent keys and `.along(..).by(..)`.
+//! `.role(..)`, `.key(..)`, composite parent keys and `.along(..).role(..)`.
 
 use super::support::entity_key;
 use crate::analysis::build_model;
@@ -336,13 +336,15 @@ fn along_between_two_keys_is_ambiguous_without_by() {
         matches!(errors.as_slice(), [RdraError::AmbiguousOwnerLink { roles, .. }] if roles == "ship_to, bill_to"),
         "{errors:?}"
     );
-    assert!(errors[0].to_string().contains("`.along(...).by(ship_to)`"));
+    assert!(errors[0]
+        .to_string()
+        .contains("`.along(...).role(ship_to)`"));
     assert_eq!(hop_roles(&model), [None]);
 }
 
 #[test]
 fn by_picks_the_key_with_its_role() {
-    let model = built(&format!("{TWO_ADDRESSES}\n{FORBID}.by(bill_to)\n"));
+    let model = built(&format!("{TWO_ADDRESSES}\n{FORBID}.role(bill_to)\n"));
     assert_eq!(hop_roles(&model), [Some("bill_to".to_string())]);
 }
 
@@ -364,7 +366,7 @@ forbidden(Order, Address, Order.id == 0, Address.id == 0).along(Order, Address)
 
 #[test]
 fn by_naming_no_key_on_the_path_is_unknown_owner_role() {
-    let (_, errors) = build(&format!("{TWO_ADDRESSES}\n{FORBID}.by(ship)\n"));
+    let (_, errors) = build(&format!("{TWO_ADDRESSES}\n{FORBID}.role(ship)\n"));
     assert!(
         errors
             .iter()
@@ -377,11 +379,11 @@ fn by_naming_no_key_on_the_path_is_unknown_owner_role() {
 fn by_without_along_is_an_error() {
     let (_, errors) = build(&format!(
         "{TWO_ADDRESSES}
-forbidden(Order, Address, Order.status == shipped, Address.status == closed).by(ship_to)
+forbidden(Order, Address, Order.status == shipped, Address.status == closed).role(ship_to)
 "
     ));
     assert!(
-        matches!(errors.as_slice(), [RdraError::ByWithoutAlong]),
+        matches!(errors.as_slice(), [RdraError::RoleWithoutJoin]),
         "{errors:?}"
     );
 }
@@ -406,14 +408,14 @@ relate(Order, Address, N:M).via(OrderAddress){chain}
 #[test]
 fn by_on_a_single_entity_constraint_is_an_error() {
     for constraint in [
-        "forbidden(Order, status == shipped).by(ship_to)",
-        "invariant(Order).when(status == shipped).then(status == shipped).by(ship_to)",
+        "forbidden(Order, status == shipped).role(ship_to)",
+        "invariant(Order).when(status == shipped).then(status == shipped).role(ship_to)",
     ] {
         let (_, errors) = build(&format!("{TWO_ADDRESSES}\n{constraint}\n"));
         assert!(
             errors
                 .iter()
-                .any(|e| matches!(e, RdraError::ByWithoutAlong)),
+                .any(|e| matches!(e, RdraError::RoleWithoutJoin)),
             "{constraint}: {errors:?}"
         );
     }
@@ -583,9 +585,9 @@ relate(Staff, Staff, N:1).optional().role(mentor)
 #[test]
 fn a_selector_naming_no_key_of_the_join_is_unknown_owner_role() {
     for statement in [
-        "condition C \"c\"\nholds(C, Permit.status == valid).by(renew)",
-        "condition C \"c\"\nholds(C, Application.status == open).none(Permit).by(renew)",
-        "invariant(Application).when(status == done).none(Permit).by(renew)",
+        "condition C \"c\"\nholds(C, Permit.status == valid).role(renew)",
+        "condition C \"c\"\nholds(C, Application.status == open).none(Permit).role(renew)",
+        "invariant(Application).when(status == done).none(Permit).role(renew)",
     ] {
         let (_, errors) = build(&format!("{RENEWS}\n{statement}\n"));
         assert!(
@@ -597,10 +599,10 @@ fn a_selector_naming_no_key_of_the_join_is_unknown_owner_role() {
         );
     }
     let (_, errors) = build(&format!(
-        "{RENEWS}\nusecase U \"u\"\nupdates(U, Permit)\nsets(U, Permit.status == valid).by(renews)\n"
+        "{RENEWS}\nusecase U \"u\"\nupdates(U, Permit)\nsets(U, Permit.status == valid).role(renews)\n"
     ));
     assert!(
-        matches!(errors.as_slice(), [RdraError::ByWithoutAlong]),
+        matches!(errors.as_slice(), [RdraError::RoleWithoutJoin]),
         "a literal sets joins nothing: {errors:?}"
     );
 }
@@ -608,10 +610,10 @@ fn a_selector_naming_no_key_of_the_join_is_unknown_owner_role() {
 #[test]
 fn a_selector_before_the_quantifier_of_an_invariant_selects_nothing() {
     let (_, errors) = build(&format!(
-        "{RENEWS}\ninvariant(Application).by(renews).when(status == done).none(Permit)\n"
+        "{RENEWS}\ninvariant(Application).role(renews).when(status == done).none(Permit)\n"
     ));
     assert!(
-        matches!(errors.as_slice(), [RdraError::ByWithoutAlong]),
+        matches!(errors.as_slice(), [RdraError::RoleWithoutJoin]),
         "{errors:?}"
     );
 }
@@ -619,7 +621,7 @@ fn a_selector_before_the_quantifier_of_an_invariant_selects_nothing() {
 #[test]
 fn each_selector_belongs_to_the_call_before_it() {
     let model = built(&format!(
-        "{RENEWS}\ncondition C \"c\"\nholds(C, Application.status == open).by(renews).none(Permit).by(Application)\n"
+        "{RENEWS}\ncondition C \"c\"\nholds(C, Application.status == open).role(renews).none(Permit).role(Application)\n"
     ));
     let body = model
         .conditions

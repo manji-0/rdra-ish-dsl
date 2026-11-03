@@ -204,7 +204,7 @@ The forms #52 to #75 added were used as documented: `in` and `not in`, multi-arm
 with a `.when` per arm, two lifecycle columns on one entity (`ClaimCase.status` and `liability`,
 `Claim.status` and `period`), `chooses`, a copy into a created row (#69), `.none(Entity)` and
 `.has(Entity)` (#73), `leads_to(...).fair(...)` on cones (#67), an `after` assert, and `verify
---deny-undecided`. Every pair of entities has one key, so no `.by(role)` was needed; no rule
+--deny-undecided`. Every pair of entities has one key, so no `.role(role)` was needed; no rule
 needed `drives` or a guarded `chooses`.
 
 What the model could say but `verify` could not check, and what it could not say:

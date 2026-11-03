@@ -158,6 +158,12 @@ pub const LEGACY_FORMS: &[LegacyForm] = &[
             legacy_rule_scope,
         ),
     },
+    LegacyForm {
+        id: "by-picks-a-key",
+        instead: "`.role(role)` after `holds`, `.has`, `.none`, `.along`, and a copy",
+        status: Status::Removed { since: "1.0.0" },
+        detect: Detect::Predicate(&["holds", "sets", "forbidden", "invariant"], legacy_by_role),
+    },
 ];
 
 /// What to do instead of a removed keyword or predicate, if `word` is one.
@@ -433,6 +439,23 @@ fn legacy_rule_scope(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
     Some((rewritten, message))
 }
 
+/// `.by(role)` where it picks the key of a join: `.role(role)`, as `relate(..).role(..)`
+/// names it. `belongs(..).by(Medium)` names a medium and keeps `.by`.
+fn legacy_by_role(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    if !pred.chain.iter().any(|cc| cc.name == "by") {
+        return None;
+    }
+    let mut rewritten = pred.clone();
+    for cc in rewritten.chain.iter_mut().filter(|cc| cc.name == "by") {
+        cc.name = "role".into();
+    }
+    let message = format!(
+        "`.by(...)` that picks a key is `.role(...)`; write `{}`",
+        format_predicate(&rewritten)
+    );
+    Some((rewritten, message))
+}
+
 /// The entities of the `Entity.column` operands of `expr`, left to right.
 fn entities_of(expr: &Expr) -> Vec<&QRef> {
     match expr {
@@ -702,7 +725,7 @@ mod tests {
     #[test]
     fn sets_and_drives_on_entity_columns_parse() {
         assert!(messages("sets(Pay, Order.status == paid)\n").is_empty());
-        assert!(messages("sets(Fix, Permit.kind == Site.kind).by(home)\n").is_empty());
+        assert!(messages("sets(Fix, Permit.kind == Site.kind).role(home)\n").is_empty());
         assert!(messages("drives(Sell, Stock.stock < selling, true)\n").is_empty());
     }
 
@@ -759,6 +782,37 @@ mod tests {
         ] {
             assert!(messages(&format!("{src}\n")).is_empty(), "{src}");
         }
+    }
+
+    #[test]
+    fn by_that_picks_a_key_names_the_role_to_write() {
+        for (old, new) in [
+            (
+                "holds(C, Address.region == east).by(bill_to)",
+                "holds(C, Address.region == east).role(bill_to)",
+            ),
+            (
+                "invariant(Order).when(status == paid).none(Ticket).by(order)",
+                "invariant(Order).when(status == paid).none(Ticket).role(order)",
+            ),
+            (
+                "forbidden(A, C, A.x == 1, C.y == 2).along(A, B, C).by(home).by(main)",
+                "forbidden(A, C, A.x == 1, C.y == 2).along(A, B, C).role(home).role(main)",
+            ),
+            (
+                "sets(Fix, Permit.kind == Site.kind).by(home)",
+                "sets(Fix, Permit.kind == Site.kind).role(home)",
+            ),
+        ] {
+            assert_eq!(
+                messages(&format!("{old}\n")),
+                vec![format!(
+                    "`.by(...)` that picks a key is `.role(...)`; write `{new}`"
+                )],
+                "{old}"
+            );
+        }
+        assert!(messages("belongs(Sell, Shop).by(Counter)\n").is_empty());
     }
 
     #[test]

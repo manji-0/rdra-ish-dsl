@@ -1198,10 +1198,10 @@ fn check_fixture(name: &str, src: &str) -> Option<BTreeSet<String>> {
 }
 
 /// Two keys join App and Permit: the permit is registered under its application (1:1), and
-/// a renewal application `renews` a permit. Every join names its key with `.by` (#73): the
-/// registration guard's `.none(Permit).by(App)`, the renewal's `holds(..).by(renews)`, which
+/// a renewal application `renews` a permit. Every join names its key with `.role` (#73): the
+/// registration guard's `.none(Permit).role(App)`, the renewal's `holds(..).role(renews)`, which
 /// also links the renewal to the valid permit it reads, and the expiry's
-/// `.none(App.status == done).by(EXPIRY_KEY)`. Through `renews` the expiry waits for no
+/// `.none(App.status == done).role(EXPIRY_KEY)`. Through `renews` the expiry waits for no
 /// renewal of the permit to be done, so the forbidden state is unreachable; through the
 /// registration key it reads the new application, which is never renewed, so a permit
 /// expires under a done renewal and both engines report the violation.
@@ -1219,21 +1219,21 @@ creates(Issue, App)
 sets(Issue, App.kind == new)
 creates(Register, Permit)
 condition NoPermitYet "許可がまだない新規申請"
-holds(NoPermitYet, App.kind == new).none(Permit).by(App)
+holds(NoPermitYet, App.kind == new).none(Permit).role(App)
 applies_to(NoPermitYet, Register)
 creates(Apply, App)
 sets(Apply, App.kind == renewal)
 reads(Apply, Permit)
 condition Renewable "更新する許可が有効"
-holds(Renewable, Permit.status == valid).by(renews)
+holds(Renewable, Permit.status == valid).role(renews)
 applies_to(Renewable, Apply)
 applies_to(Renewable, Renew)
 transitions(Renew, App.status, open -> done)
 transitions(Expire, Permit.status, valid -> expired)
 condition NotRenewed "更新済みの申請がない"
-holds(NotRenewed, Permit.status == valid).none(App.status == done).by(EXPIRY_KEY)
+holds(NotRenewed, Permit.status == valid).none(App.status == done).role(EXPIRY_KEY)
 applies_to(NotRenewed, Expire)
-forbidden(App, Permit, App.status == done, Permit.status == expired).along(App, Permit).by(renews)
+forbidden(App, Permit, App.status == done, Permit.status == expired).along(App, Permit).role(renews)
 "#;
 
 #[test]
@@ -1273,9 +1273,9 @@ creates(Place, Order)
 transitions(Ship, Order.status, open -> shipped)
 transitions(Cancel, Order.status, open -> cancelled)
 condition ShipsEast "東へ出荷する"
-holds(ShipsEast, Address.region == east).by(SHIP_KEY)
+holds(ShipsEast, Address.region == east).role(SHIP_KEY)
 applies_to(ShipsEast, Ship)
-forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(bill_to)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).role(bill_to)
 "#;
 
 #[test]
@@ -1289,7 +1289,7 @@ fn bfs_and_tlc_agree_on_two_keys_to_one_parent() {
 }
 
 /// `ShipBilled` checks the address it writes and ships the order (#76). The written address is
-/// the order's on the key the guard's `.by(BILLED_KEY)` names only; the other key keeps its own
+/// the order's on the key the guard's `.role(BILLED_KEY)` names only; the other key keeps its own
 /// row. Billed to it, the order may ship to an address in the west, and both engines reach the
 /// violation; shipped to it, the guard rules it out.
 const WRITTEN_PARENT: &str = r#"
@@ -1311,9 +1311,9 @@ sets(ShipBilled, Address.checked == true)
 transitions(ShipBilled, Order.status, open -> shipped)
 transitions(Cancel, Order.status, open -> cancelled)
 condition BillsEast "請求先が東"
-holds(BillsEast, Address.region == east).by(BILLED_KEY)
+holds(BillsEast, Address.region == east).role(BILLED_KEY)
 applies_to(BillsEast, ShipBilled)
-forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).by(ship_to)
+forbidden(Order, Address, Order.status == shipped, Address.region == west).along(Order, Address).role(ship_to)
 "#;
 
 #[test]

@@ -367,7 +367,7 @@ fn resolve_junction_keys(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>)
 
 /// Fills each `.along(..)` path's `links` (of a `forbidden`, an `invariant`, or a `holds`
 /// body): the one key between each pair of neighbours, or
-/// the one whose role `.by(..)` names when several join them.
+/// the one whose role `.role(..)` names when several join them.
 pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
     let scopes = model
         .cross_forbidden_constraints
@@ -470,7 +470,7 @@ fn along_links(
     links
 }
 
-/// Each `.by(role)` of a `.has`/`.none`, a `holds` body, or a copy must name a key that
+/// Each `.role(role)` of a `.has`/`.none`, a `holds` body, or a copy must name a key that
 /// touches an entity whose join it picks the key for: the related entity of a quantifier,
 /// an entity a body compares, the target or the source of a copy. Otherwise it is
 /// `UnknownOwnerRole`. Which join a selector serves depends on the use case a body guards,
@@ -551,7 +551,7 @@ fn quantifier_selectors<'a>(model: &SemanticModel, q: &'a RelatedQuantifier) -> 
 }
 
 /// `AmbiguousOwnerLink` for a join of `a` and `b` that `site` makes, which `candidates` could
-/// follow. The hint rewrites `site` with a `.by(..)` naming the first candidate.
+/// follow. The hint rewrites `site` with a `.role(..)` naming the first candidate.
 pub fn ambiguous_owner_link(
     model: &SemanticModel,
     site: &str,

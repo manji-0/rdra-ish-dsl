@@ -255,14 +255,14 @@ pub enum StateDiag {
         site: Site,
     },
     /// A `.has`/`.none`, a `holds` body, or a copy joins two entities that several keys
-    /// join, and no `.by(role)` names one. The analysis reports the same for `.along`.
+    /// join, and no `.role(role)` names one. The analysis reports the same for `.along`.
     AmbiguousOwnerLink {
         /// The statement, such as `.none(...)` or `holds(Cond, ...)`.
         statement: String,
         a: String,
         b: String,
         roles: String,
-        /// The statement with the `.by(role)` that picks the first candidate.
+        /// The statement with the `.role(role)` that picks the first candidate.
         rewrite: String,
         site: Site,
     },

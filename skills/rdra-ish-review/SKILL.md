@@ -176,7 +176,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
     - Rules that mention multiple entities use multi-entity `forbidden` or `invariant`
     - Multi-entity conditions qualify columns as `Entity.column`
     - Relation-scoped rules use `.along(EntityA, EntityB, ...)` only when the listed
-      entities are connected by a declared `relate` path (`.by(role)` when two keys join
+      entities are connected by a declared `relate` path (`.role(role)` when two keys join
       a pair)
     - Review each broken rule `check` reports: `error[<rule name>]` (such as
       `CrossForbidden_Order_0`) with the rule's site and a shortest counterexample of use
@@ -280,8 +280,8 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
 | `required` | Entity | condition(s) | — |
 | `exclusive` | Entity | condition(s) | — |
-| `forbidden` (multi-entity) | Entity... | cross-entity condition(s) | optional `.along(...)` / `.by(role)` |
-| `invariant` (multi-entity) | Entity... | `.when(...)` / `.then(...)` chains | optional `.along(...)` / `.by(role)` |
+| `forbidden` (multi-entity) | Entity... | cross-entity condition(s) | optional `.along(...)` / `.role(role)` |
+| `invariant` (multi-entity) | Entity... | `.when(...)` / `.then(...)` chains | optional `.along(...)` / `.role(role)` |
 | `when` | conditions... | `.none` / `.has` conditions | — |
 | `property` | Name | optional label | `always` / `eventually` / `leads_to` |
 | `after` | UseCase | `.assert(...)` | — |

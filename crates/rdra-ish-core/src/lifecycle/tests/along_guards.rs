@@ -115,7 +115,7 @@ fn a_path_with_an_unrelated_hop_is_unbindable() {
 }
 
 /// A claim can move to another case (`moved_from`), so two keys join a claim and a case; a
-/// `.by` after the `.along` picks the hop's key, and the verdict follows it.
+/// `.role` after the `.along` picks the hop's key, and the verdict follows it.
 #[test]
 fn a_by_after_along_picks_the_key_of_a_hop() {
     let src = CASE
@@ -125,12 +125,12 @@ fn a_by_after_along_picks_the_key_of_a_hop() {
         )
         .replace(
             "forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, Case, Settlement)",
-            "forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, Case, Settlement).by(home)",
+            "forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, Case, Settlement).role(home)",
         );
     let along = |by: &str| {
         model_from(&src.replace(
             "{GUARD}",
-            &format!(".along(Claim, Case, Settlement).by({by})"),
+            &format!(".along(Claim, Case, Settlement).role({by})"),
         ))
     };
     assert!(!violated(&along("home")));

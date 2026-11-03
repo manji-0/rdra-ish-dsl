@@ -88,7 +88,7 @@ pub enum RdraError {
     #[error("entity '{child}' has two relate keys with role '{role}'\n  hint: add `.role(...)` to one of them so each key gets its own columns and owner")]
     DuplicateRelateRole { child: String, role: String },
 
-    #[error("{statement} cannot tell which key joins {pair}: roles {roles}\n  hint: name one with `{statement}.by({first})`")]
+    #[error("{statement} cannot tell which key joins {pair}: roles {roles}\n  hint: name one with `{statement}.role({first})`")]
     AmbiguousOwnerLink {
         /// The statement that joins them, such as `.along(...)`.
         statement: String,
@@ -98,7 +98,7 @@ pub enum RdraError {
         first: String,
     },
 
-    #[error(".by({role}) names no key {on}\n  hint: use the role of such a key, or the parent id of one without `.role(...)`: {roles}")]
+    #[error(".role({role}) names no key {on}\n  hint: use the role of such a key, or the parent id of one without `.role(...)`: {roles}")]
     UnknownOwnerRole {
         role: String,
         /// Where the key would be, such as `on .along(A, B)`.
@@ -109,8 +109,8 @@ pub enum RdraError {
     #[error(".{method}(...) on relate(..., N:M) has no key to shape: an N:M holds no key of its own\n  hint: write the junction's two keys as `relate(Junction, A, N:1).{method}(...)` and `relate(Junction, B, N:1)` instead of `.via(Junction)`")]
     KeyOptionOnManyToMany { method: String },
 
-    #[error(".by(...) picks the key of the .along(...), .has(...) or .none(...) before it, and this constraint has none before it\n  hint: put `.by(...)` after `.along(A, B)`, `.has(...)` or `.none(...)`, or drop it")]
-    ByWithoutAlong,
+    #[error(".role(...) picks the key of the .along(...), .has(...) or .none(...) before it, and this constraint has none before it\n  hint: put `.role(...)` after `.along(A, B)`, `.has(...)` or `.none(...)`, or drop it")]
+    RoleWithoutJoin,
 
     #[error("{pred}(...) names no condition, so it states no rule\n  hint: add the condition it forbids or requires, such as `{pred}(Entity, column == value)`")]
     RuleWithoutCondition { pred: String },

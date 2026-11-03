@@ -27,7 +27,7 @@ flowchart LR
   condition__NewApplication{"新規の申請である"}:::condition
   %% holds condition__NewApplication: PermitApplication.kind == 新規
   condition__NoPermitYet{"新規の申請で、まだ許可が登録されていない"}:::condition
-  %% holds condition__NoPermitYet: (PermitApplication.kind == 新規).none(BusinessPermit).by(PermitApplication)
+  %% holds condition__NoPermitYet: (PermitApplication.kind == 新規).none(BusinessPermit).role(PermitApplication)
   condition__NotRevocation{"取消ではない処分である"}:::condition
   %% holds condition__NotRevocation: Disposition.kind in (施設の整備改善命令, 営業の停止)
   condition__NotificationRequiredType{"届出業種である"}:::condition
@@ -47,7 +47,7 @@ flowchart LR
   condition__RenewalApplication{"継続（更新）の申請である"}:::condition
   %% holds condition__RenewalApplication: PermitApplication.kind == 継続（更新）
   condition__RenewsValidPermit{"失効後の更新はできない"}:::condition
-  %% holds condition__RenewsValidPermit: (BusinessPermit.status == 有効).by(renews)
+  %% holds condition__RenewsValidPermit: (BusinessPermit.status == 有効).role(renews)
   condition__RevocationKind{"許可の取消である"}:::condition
   %% holds condition__RevocationKind: Disposition.kind == 許可の取消
   condition__SuspensionKind{"営業の停止である"}:::condition

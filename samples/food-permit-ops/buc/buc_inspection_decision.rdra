@@ -172,7 +172,7 @@ raises(RegisterPermit, EvPermitIssued)
 // only the link, the registration key (`.by(PermitApplication)`, since a renewal's `renews` key
 // joins the two as well); the 1:1 relate checks the result as Unique_BusinessPermit_PermitApplication.
 condition NoPermitYet "新規の申請で、まだ許可が登録されていない"
-holds(NoPermitYet, PermitApplication.kind == new).none(BusinessPermit).by(PermitApplication)
+holds(NoPermitYet, PermitApplication.kind == new).none(BusinessPermit).role(PermitApplication)
 applies_to(NoPermitYet, RegisterPermit)
 triggers(EvPermitIssued, FoodSanitationSystem)
 
@@ -320,7 +320,7 @@ invariant(BusinessPermit).when(operating == true).then(certificate_issued == tru
 
 // The 営業の種類 is a 記載事項 of the application (egov-shokuhin-eiseihou-shikoukisoku-323M40000100023.txt:880), and
 // the permit is given for it.
-forbidden(BusinessPermit, PermitApplication, BusinessPermit.business_type != PermitApplication.business_type).along(BusinessPermit, PermitApplication).by(PermitApplication).label("許可の営業の種類は申請の営業の種類と同じ")
+forbidden(BusinessPermit, PermitApplication, BusinessPermit.business_type != PermitApplication.business_type).along(BusinessPermit, PermitApplication).role(PermitApplication).label("許可の営業の種類は申請の営業の種類と同じ")
 
 // Requirement traceability
 requirement ReqPermitOnlyCompliantFacility "施設基準に適合した施設にだけ許可し、不許可には理由を示す"

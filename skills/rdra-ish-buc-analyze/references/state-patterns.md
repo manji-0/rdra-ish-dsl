@@ -112,7 +112,7 @@ under it the values that step changed.
 | `PatternCapReached` / `StateCapReached` error | The exploration stopped at a cap, so no rule verdict is sound | Raise `--max-patterns` or `--max-states` on `check` or `states`, or narrow with `--entity` or `--buc`. The `StateCapReached` message names the columns the cone varies in and the use cases that reached the most states; a column of another entity there came in through a guard |
 | `not checked:` block | A scope or a cap left targets or findings undecided | Report them as not checked, never as passed |
 | `UnbindableScope` | `.along(...)` names entities that no `relate` binds | Error. Declare the `relate`, or drop `.along` for a rule over every pair |
-| `AmbiguousOwnerLink` | Two keys join a pair that a `.along`, a `.has/.none`, a `holds` body, or a copy joins | Error. Name one with `.by(role)` after that call |
+| `AmbiguousOwnerLink` | Two keys join a pair that a `.along`, a `.has/.none`, a `holds` body, or a copy joins | Error. Name one with `.role(role)` after that call |
 | `UnbindableCondition` | A condition body is applied to a use case that writes nothing | Error. Apply it to a use case that writes, or drop the body |
 | `UnboundCopySource` | A `sets(UC, E.col == F.src)` copies from an `F` the step binds to no one row | Error. Relate `E` to `F` as its parent, or copy in the use case that writes `F` |
 | `ContradictoryDrivenComparison` | A use case drives a comparison one way while its own Int `sets` make it the other | Error. Fix the `sets` or drop the `drives` |

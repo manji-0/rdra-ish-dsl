@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Rewrite .rdra sources to the 1.0 syntax: effects name `Entity.column`, rules their entity.
+"""Rewrite .rdra sources to the 1.0 syntax: effects name `Entity.column`, rules their
+entities, and `.role(...)` picks the key of a join.
 
 usage: migrate-syntax-v3.py [--dry-run] PATH...
 
@@ -19,8 +20,11 @@ Rewrites, each of which the parser now rejects with a message naming the new for
      one entity becomes that entity's rule: `CrossForbidden_A_0` is now `Forbidden_A_0`,
      `CrossInv_A_0` is now `Inv_A_0`. A rule whose conditions qualify no column is left
      for the load error to name.
+  5. .by(role) after holds, sets, forbidden, invariant  ->  .role(role)
+     `.by(...)` that picks the key of a join is `.role(...)`, as in `relate(..).role(..)`.
+     `belongs(Buc, Business).by(Medium)` names a medium and keeps `.by`.
 
-A call may span lines, and a chain after it (`.by(...)`) is kept as written. Text-level and
+A call and its chain may span lines. Text-level and
 idempotent: the new forms match none of the old patterns, so a second run changes nothing.
 Every edit is printed.
 """
@@ -40,9 +44,10 @@ TRUTH_RE = re.compile(r"^\s*(?:true|false)\s*$")
 # A call starts a line, follows a non-word character, or follows the `\n` escape of a string
 # literal in a test source.
 CALL_RE = re.compile(
-    r"(?:(?<=\\n)|(?<![\w.]))(?P<name>sets|drives|forbidden|required|exclusive|invariant)\("
+    r"(?:(?<=\\n)|(?<![\w.]))(?P<name>sets|drives|forbidden|required|exclusive|invariant|holds)\("
 )
 RULES = ("forbidden", "required", "exclusive", "invariant")
+KEY_SELECTING = ("holds", "sets", "forbidden", "invariant")
 CHAIN_RE = re.compile(r"\s*(?://[^\n]*\s*)*\.(\w+)\(")
 QCOL_RE = re.compile(r"(?<![\w.:])((?:\w+::)?[A-Za-z_]\w*)\.[A-Za-z_]\w*")
 CMP_RE = re.compile(r"==|!=|<=|>=|<|>|\bin\b")
@@ -107,7 +112,15 @@ def rewrite_call(name: str, args: list[str]) -> tuple[str, str, str] | None:
     return name, rest, name
 
 
-def chain_after(text: str, close: int) -> list[tuple[str, list[str]]]:
+@dataclass
+class ChainCall:
+    name: str
+    args: list[str]
+    name_at: int
+    close: int
+
+
+def chain_after(text: str, close: int) -> list[ChainCall]:
     """The `.name(args)` calls chained after the `)` at `close`."""
     calls = []
     at = close + 1
@@ -116,9 +129,24 @@ def chain_after(text: str, close: int) -> list[tuple[str, list[str]]]:
         if parsed is None:
             break
         args, end = parsed
-        calls.append((m.group(1), args))
+        calls.append(ChainCall(m.group(1), args, m.start(1), end))
         at = end + 1
     return calls
+
+
+def rename_by(text: str, close: int, chain: list[ChainCall]) -> tuple[str, int] | None:
+    """The chain after the `)` at `close` with each `.by(` renamed `.role(`, and the index
+    after it, or `None` when the chain has no `.by(...)`."""
+    bys = [cc for cc in chain if cc.name == "by"]
+    if not bys:
+        return None
+    out, at = [], close + 1
+    for cc in bys:
+        out += [text[at : cc.name_at], "role"]
+        at = cc.name_at + len("by")
+    end = chain[-1].close + 1
+    out.append(text[at:end])
+    return "".join(out), end
 
 
 def entities(conditions: list[str]) -> list[str]:
@@ -131,13 +159,13 @@ def entities(conditions: list[str]) -> list[str]:
     return found
 
 
-def rewrite_rule(name: str, args: list[str], chain: list[tuple[str, list[str]]]) -> str | None:
+def rewrite_rule(name: str, args: list[str], chain: list[ChainCall]) -> str | None:
     """The argument text of a rule written without its leading entity, with the entities its
     conditions name in front, or `None` when the rule has its entity or names none."""
     if name == "invariant":
         if any(arg.strip() for arg in args):
             return None
-        conditions = [a for method in ("when", "then") for n, cargs in chain if n == method for a in cargs]
+        conditions = [a for method in ("when", "then") for cc in chain if cc.name == method for a in cc.args]
         scope = entities(conditions)
         return ", ".join(scope) if scope else None
     if not args or not CMP_RE.search(STRING_RE.sub('""', args[0])):
@@ -174,23 +202,33 @@ def migrate_text(text: str, path: Path, report: Report) -> str:
             continue
         args, close = parsed
         name = m.group("name")
+        chain = chain_after(text, close)
+        kinds = []
+        rest = ",".join(args)
         if name in RULES:
-            rest = rewrite_rule(name, args, chain_after(text, close))
-            rewritten = None if rest is None else (name, rest, "rule-scope")
-        else:
-            rewritten = rewrite_call(name, args)
-        if rewritten is None:
+            if (scoped := rewrite_rule(name, args, chain)) is not None:
+                rest = scoped
+                kinds.append("rule-scope")
+        elif name in ("sets", "drives"):
+            if (rewritten := rewrite_call(name, args)) is not None:
+                name, rest, kind = rewritten
+                kinds.append(kind)
+        end = close + 1
+        tail = ""
+        if m.group("name") in KEY_SELECTING and (renamed := rename_by(text, close, chain)):
+            tail, end = renamed
+            kinds.append("by-role")
+        if not kinds:
             continue
-        name, rest, kind = rewritten
-        new = f"{name}({rest})"
-        old = text[m.start() : close + 1]
+        new = f"{name}({rest}){tail}"
+        old = text[m.start() : end]
         line = text.count("\n", 0, m.start()) + 1
         print(f"{path}:{line}: - {' '.join(old.split())}")
         print(f"{path}:{line}: + {' '.join(new.split())}")
-        report.edits[kind] += 1
+        report.edits.update(kinds)
         out.append(text[pos : m.start()])
         out.append(new)
-        pos = close + 1
+        pos = end
     out.append(text[pos:])
     return "".join(out)
 

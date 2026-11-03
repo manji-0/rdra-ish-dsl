@@ -376,7 +376,7 @@ transitions(Ship, Order.status, pending -> shipped)
 relate(Order, Address, N:1).role(ship_to)
 relate(Order, Address, N:1).role(bill_to)
 forbidden(Order, Address, Order.status == shipped, Address.status == closed)
-  .along(Order, Address).by({role})
+  .along(Order, Address).role({role})
 "#
         )
     };

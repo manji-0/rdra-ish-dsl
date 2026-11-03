@@ -135,17 +135,17 @@ pub enum Join {
     /// No key joins the two entities.
     Unrelated,
     Key(FkId),
-    /// Several keys join them, and no `.by(role)` names exactly one. Holds the candidates.
+    /// Several keys join them, and no `.role(role)` names exactly one. Holds the candidates.
     Ambiguous(Vec<FkId>),
 }
 
 impl SemanticModel {
-    /// The name `.by(..)` picks a key by: its role, or the parent id when it has none.
+    /// The name `.role(..)` picks a key by: its role, or the parent id when it has none.
     pub fn key_role<'a>(&'a self, fk: &'a ForeignKey) -> &'a str {
         fk.role_or(&self.entities[fk.parent].id)
     }
 
-    /// Whether `.by(selector)` names `fk`. Case-insensitive, so `.by(Order)` names the key
+    /// Whether `.role(selector)` names `fk`. Case-insensitive, so `.role(Order)` names the key
     /// whose default role is `order`.
     pub fn key_named(&self, fk: &ForeignKey, selector: &str) -> bool {
         self.key_role(fk).eq_ignore_ascii_case(selector)

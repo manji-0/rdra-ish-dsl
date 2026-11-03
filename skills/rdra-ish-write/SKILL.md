@@ -174,8 +174,8 @@ kinds fail to parse, with a hint naming the replacement.
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
 | `required` | `(Entity, col == val\|col op rhs, ...)` | always-required state facts |
 | `exclusive` | `(Entity, col == val\|col op rhs, ...)` | mutually exclusive state facts |
-| `forbidden` (multi-entity) | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)[.by(role)]]` | forbidden combination across entities |
-| `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.by(role)]]` | required co-occurrence across entities |
+| `forbidden` (multi-entity) | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)[.role(role)]]` | forbidden combination across entities |
+| `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.role(role)]]` | required co-occurrence across entities |
 | `when` | `(...).none/has(...)` | to-many quantifier (prefer `Entity.col`) |
 | `property` | `Name ["label"] always\|eventually\|leads_to(...)` | temporal path property, checked by `verify` only |
 | `after` | `(UseCase).assert(...)` | predicate on the state each step of the use case leaves |

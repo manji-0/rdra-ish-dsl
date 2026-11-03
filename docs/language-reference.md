@@ -257,11 +257,11 @@ only the methods below, and any other name is an `unknown chain method` error
 | `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
 | `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
-| `forbidden` | `.along(...)`, `.by(...)`, `.label("...")` |
-| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)`, `.label("...")` |
+| `forbidden` | `.along(...)`, `.role(...)`, `.label("...")` |
+| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")` |
 | `required`, `exclusive` | `.label("...")` |
-| `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.by(...)` |
-| `sets` | `.by(...)`, on a copy (`column == Source.column`) |
+| `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
+| `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`) |
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | every other predicate (including `combines`) | none |
@@ -1312,7 +1312,7 @@ every row, so `.none(Related.status in (<every value>))` is the same guard as `.
 and the lifecycle reads only the link for it (see
 [Set membership](#set-membership-in-and-not-in)). Write `.none(Related)`: it says "no related
 row" without listing values, and it does not change meaning when the column gains a value.
-When two keys join the body's entities, `.by(role)` names the one to follow (see
+When two keys join the body's entities, `.role(role)` names the one to follow (see
 [Which key a join follows](#which-key-a-join-follows)).
 
 ```rdra
@@ -1361,7 +1361,7 @@ is explored, not blocked.
   to the entities it relates to; without a `relate`, it is independent.
 - `.along(A, B, C)` names the path instead: the guard reads the instance of each path
   entity the keys between neighbours join, starting from the instance the use case binds.
-  Only the hops link; the one-hop links of the item above are not added. A `.by(role)` after
+  Only the hops link; the one-hop links of the item above are not added. A `.role(role)` after
   the `.along` picks the key of a hop that two keys join, as on a `forbidden`.
 - A compared entity that no key, direct or along the path, joins to an instance the use case
   binds is the `UnjoinedGuardRead` warning: the guard holds when any row of it anywhere
@@ -1487,33 +1487,33 @@ same rows:
 
 - One key between the two entities (in either direction) is the join. A model with one key
   per pair writes no selector, and a selector does not change such a join.
-- Several keys (two relates, or two self-relates of one entity) need `.by(role)`, which
-  names the key by its role, or by its parent id when it has no `.role` (`.by(Order)` names
+- Several keys (two relates, or two self-relates of one entity) need `.role(role)`, which
+  names the key by its role, or by its parent id when it has no `.role` (`.role(Order)` names
   the key of `relate(Line, Order, N:1)`; case does not matter). The join follows the one key
   the selector names.
 - Several keys and no selector naming exactly one is `AmbiguousOwnerLink`, an error that
-  names the candidate roles and the statement with `.by(<first role>)` added. The join is
+  names the candidate roles and the statement with `.role(<first role>)` added. The join is
   left unlinked.
 
-`.by` names the same row whether or not the guarded use case binds the entity. A use case
+`.role` names the same row whether or not the guarded use case binds the entity. A use case
 that creates a child under two keys to one parent it does not write (`ship_to` and `bill_to`
 from `Order` to `Address`) binds one parent row per key, and the two rows may differ. A
-`holds` comparison or a copy source on that parent reads the row of the key its `.by` names,
-and with no `.by` the comparison is `AmbiguousOwnerLink`. A use case that binds one parent
+`holds` comparison or a copy source on that parent reads the row of the key its `.role` names,
+and with no `.role` the comparison is `AmbiguousOwnerLink`. A use case that binds one parent
 row reads it without a selector.
 
 A parent the use case writes joins a child it writes through one key the same way. With one
 key from the child to the parent, the written row is the child's parent on that key. With
-several, it is the child's parent only on the keys that a `.by` of the use case names: the
-`.by` of a `holds` guard applied to it (after the body or after an `.along` hop) or of a copy
+several, it is the child's parent only on the keys that a `.role` of the use case names: the
+`.role` of a `holds` guard applied to it (after the body or after an `.along` hop) or of a copy
 in it. Every other key is bound as if the use case did not write the parent: a created child
 takes a parent row of its own on it, and an updated child keeps whatever row it has. So a use
 case that updates the billing address and ships the order
-(`holds(BillsEast, Address.region == east).by(bill_to)`) reads the order's `bill_to` address,
-and the order may ship to another one. With several keys and no `.by` of the use case
+(`holds(BillsEast, Address.region == east).role(bill_to)`) reads the order's `bill_to` address,
+and the order may ship to another one. With several keys and no `.role` of the use case
 naming any of them, the join is `AmbiguousOwnerLink`, as it is for any other statement: the
 error names the use case's `holds` body that compares the parent, or its copy from the
-parent, with `.by(<first role>)` added, or, when the use case has neither, says that a
+parent, with `.role(<first role>)` added, or, when the use case has neither, says that a
 `holds` guard applied to it or a copy in it must name the key.
 
 `.by(role)` belongs to the call before it:
@@ -1530,11 +1530,11 @@ relate(BusinessPermit, PermitApplication, 1:1)                  // registered un
 relate(PermitApplication, BusinessPermit, N:1).optional().role(renews)
 
 // A new application gets one permit: no permit registered under it yet.
-holds(NoPermitYet, PermitApplication.kind == new).none(BusinessPermit).by(PermitApplication)
+holds(NoPermitYet, PermitApplication.kind == new).none(BusinessPermit).role(PermitApplication)
 // A renewal reads, and links to, the permit it renews.
-holds(RenewsValidPermit, BusinessPermit.status == valid).by(renews)
+holds(RenewsValidPermit, BusinessPermit.status == valid).role(renews)
 forbidden(BusinessPermit, PermitApplication, BusinessPermit.business_type != PermitApplication.business_type)
-  .along(BusinessPermit, PermitApplication).by(PermitApplication)
+  .along(BusinessPermit, PermitApplication).role(PermitApplication)
 ```
 
 The selector is a chain call rather than a qualified reference such as
@@ -1544,14 +1544,14 @@ per pair, the common case, never writes it.
 
 | Diagnostic | When |
 |---|---|
-| `AmbiguousOwnerLink` | Several keys join two entities a statement joins, and no `.by(role)` names one. The lifecycle reports it for a guard, a quantifier, a copy, and a parent and child one use case writes (it depends on the use case a guard is on); the analysis for `.along`. |
-| `UnknownOwnerRole` | `.by(role)` names no key on the `.along` path, no key of the quantified entity, no key of an entity the `holds` body compares, or no key between a copy's target and source. |
+| `AmbiguousOwnerLink` | Several keys join two entities a statement joins, and no `.role(role)` names one. The lifecycle reports it for a guard, a quantifier, a copy, and a parent and child one use case writes (it depends on the use case a guard is on); the analysis for `.along`. |
+| `UnknownOwnerRole` | `.role(role)` names no key on the `.along` path, no key of the quantified entity, no key of an entity the `holds` body compares, or no key between a copy's target and source. |
 | `UnjoinedGuardRead` | A `holds` body compares an entity that no key joins to a row the guarded use case binds, so any row of it satisfies the guard (a warning). |
-| `ByWithoutAlong` | `.by(...)` on a `forbidden` or `invariant` follows no `.along`, `.has` or `.none`, or `.by(...)` on a `sets` that copies nothing. |
+| `RoleWithoutJoin` | `.role(...)` on a `forbidden` or `invariant` follows no `.along`, `.has` or `.none`, or `.role(...)` on a `sets` that copies nothing. |
 
-In LSP, a role is a symbol: go to definition on `.by(renews)` opens the `relate` that
+In LSP, a role is a symbol: go to definition on `.role(renews)` opens the `relate` that
 declares `.role(renews)`, and find references and rename cover the `.role(...)` and every
-`.by(...)` that names it. A `.by(Order)` that names a key by its parent id is a reference
+`.role(...)` that names it. A `.role(Order)` that names a key by its parent id is a reference
 to the entity `Order`.
 
 ### Cardinality ranges
@@ -1776,7 +1776,7 @@ way a `holds` atom on that entity reads it (see
   A child created under a mandatory relate reads the parent it is created under. An updated
   child reads the parent that its foreign key names, and the use case waits while an
   `.optional()` key is unlinked. When two keys join the target and the source, the copy
-  names the one to follow: `sets(Fix, Permit.kind == Site.kind).by(home)` (see
+  names the one to follow: `sets(Fix, Permit.kind == Site.kind).role(home)` (see
   [Which key a join follows](#which-key-a-join-follows)).
 
 Any other source is `UnboundCopySource`, an error, and the copy is not applied:
@@ -1842,7 +1842,7 @@ case that drives a comparison to one truth while its own Int `sets` make it the 
 | `true` | The comparison holds after this use case runs. |
 | `false` | The comparison does not hold after this use case runs. |
 
-The forms that name the entity apart from the column, `sets(UC, E, col == v)` and
+The forms that name the entity apart from the column, `sets(UC, E.col == v)` and
 `drives(UC, E, cmp, true|false)`, and the four-argument `sets(UC, E, cmp, true|false)`,
 fail to load with the rewrite to write (see
 [Deprecated and removed forms](#deprecated-and-removed-forms)).
@@ -2396,8 +2396,8 @@ rewrites these too.
 
 | Removed | Use instead |
 |---|---|
-| `forbidden(A.col == v, B.col == w)`, and `required` / `exclusive` the same way | `forbidden(A, B, A.col == v, B.col == w)`; `forbidden(A, A.col == v)` for one entity. |
-| `invariant().when(A.col == v).then(B.col == w)` | `invariant(A, B).when(A.col == v).then(B.col == w)`; `invariant(A).when(...).none(...)` for a quantified rule. |
+| `forbidden(A, B, A.col == v, B.col == w)`, and `required` / `exclusive` the same way | `forbidden(A, B, A.col == v, B.col == w)`; `forbidden(A, A.col == v)` for one entity. |
+| `invariant(A, B).when(A.col == v).then(B.col == w)` | `invariant(A, B).when(A.col == v).then(B.col == w)`; `invariant(A).when(...).none(...)` for a quantified rule. |
 
 These spellings were removed in 1.0.0 so that every predicate names a column as
 `Entity.column`. The load error gives the rewritten line, as in ``write `sets(Pay,
@@ -2406,9 +2406,18 @@ place and is safe to run twice.
 
 | Removed | Use instead |
 |---|---|
-| `sets(UseCase, Entity, column == value)`, `sets(UseCase, Entity, column == Source.column)` | `sets(UseCase, Entity.column == value)`, `sets(UseCase, Entity.column == Source.column)`. A `.by(...)` after a copy is kept. |
+| `sets(UseCase, Entity.column == value)`, `sets(UseCase, Entity.column == Source.column)` | `sets(UseCase, Entity.column == value)`, `sets(UseCase, Entity.column == Source.column)`. A `.by(...)` after a copy becomes `.role(...)`, as below. |
 | `drives(UseCase, Entity, column op rhs, true \| false)` | `drives(UseCase, Entity.column op rhs, true \| false)`. |
 | `sets(UseCase, Entity, column op rhs, true \| false)`, the four-argument `sets` | `drives(UseCase, Entity.column op rhs, true \| false)`. `sets` assigns a value; a comparison driven true or false is [`drives`](#driving-comparison-propositions-with-drives). |
+
+`.by(...)` that picks the key of a join is `.role(...)`, as `relate(..).role(..)` declares
+the key, since 1.0.0; `belongs(Buc, Business).by(Medium)` names a medium and keeps `.by`. A
+`.by(...)` after a `holds` body, `.has(...)`, `.none(...)`, `.along(...)`, or a copy fails to
+load with the line to write, and `scripts/migrate-syntax-v3.py` rewrites it.
+
+| Removed | Use instead |
+|---|---|
+| `holds(Cond, ...).by(role)`, `.has(...).by(role)`, `.none(...).by(role)`, `.along(...).by(role)`, `sets(UC, E.col == F.col).by(role)` | The same with `.role(role)`. |
 
 These spellings were removed in 0.4.0 so that each predicate has one form: the use case
 comes first, a column is always `Entity.column`, and each keyword is one word.

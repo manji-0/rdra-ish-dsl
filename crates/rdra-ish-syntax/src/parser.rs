@@ -1576,7 +1576,7 @@ performs(Customer, Browse) /* predicate comment */
     fn a_kind_qualified_ref_in_a_chain_argument_still_parses() {
         for (src, kind, id) in [
             (
-                "forbidden(Order, status == b).by(actor::Customer)",
+                "forbidden(Order, status == b).role(actor::Customer)",
                 Kind::Actor,
                 "Customer",
             ),
@@ -1602,7 +1602,7 @@ performs(Customer, Browse) /* predicate comment */
     fn a_bare_kind_word_outside_caller_is_a_syntax_error() {
         for src in [
             "relate(Line, Order, N:1).role(actor)",
-            "forbidden(Order, status == b).by(system)",
+            "forbidden(Order, status == b).role(system)",
             "performs(actor, U)",
         ] {
             let (_, errors) = parse(src);

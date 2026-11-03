@@ -216,12 +216,12 @@ performs(Staff, Book)
         assert_eq!(edits.len(), 3, "{edits:?}");
     }
 
-    /// A key's role is a symbol: `.role(renews)` declares it, and the `.by(renews)` of a
+    /// A key's role is a symbol: `relate(..).role(renews)` declares it, and the `.role(renews)` of a
     /// `holds`, a `.none(..)` and a copy refer to it (#73). A value spelled the same is not a
     /// reference, and renaming onto another role of the model is a conflict.
     #[test]
-    fn renames_a_key_role_and_each_by_that_picks_it() {
-        let src = "entity Permit \"p\" {\n  id: Int @pk\n  status: Enum(valid, renews)\n}\nentity App \"a\" {\n  id: Int @pk\n  status: Enum(open, renews)\n}\nrelate(Permit, App, 1:1)\nrelate(App, Permit, N:1).optional().role(renews)\ncondition C \"c\"\nholds(C, Permit.status == valid).by(renews)\ncondition D \"d\"\nholds(D, App.status == open).none(Permit).by(renews)\n";
+    fn renames_a_key_role_and_each_role_that_picks_it() {
+        let src = "entity Permit \"p\" {\n  id: Int @pk\n  status: Enum(valid, renews)\n}\nentity App \"a\" {\n  id: Int @pk\n  status: Enum(open, renews)\n}\nrelate(Permit, App, 1:1)\nrelate(App, Permit, N:1).optional().role(renews)\ncondition C \"c\"\nholds(C, Permit.status == valid).role(renews)\ncondition D \"d\"\nholds(D, App.status == open).none(Permit).role(renews)\n";
         let root = std::env::temp_dir().join(format!("rdra-rename-role-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&root);
         let file = root.join("sample.rdra");
@@ -232,24 +232,24 @@ performs(Staff, Book)
             &Default::default(),
         );
         let uri = path_to_uri(&file).unwrap();
-        let by_at = src.find(".by(renews)").unwrap() + 4;
-        let role_at = src.find(".role(renews)").unwrap() + 6;
-        for offset in [by_at, role_at] {
+        let pick_at = src.find("valid).role(renews)").unwrap() + "valid).role(".len();
+        let role_at = src.find(".optional().role(renews)").unwrap() + ".optional().role(".len();
+        for offset in [pick_at, role_at] {
             let edit = workspace_rename(&analysis, &file, offset, "continues").unwrap();
             let edits = edit
                 .changes
                 .expect("changes")
                 .remove(&uri)
                 .expect("file edits");
-            // `.role(renews)` and the two `.by(renews)`; not the two enum values.
+            // The relate's `.role(renews)` and the two that pick it; not the two enum values.
             assert_eq!(edits.len(), 3, "{edits:?}");
         }
         assert_eq!(
-            workspace_rename(&analysis, &file, by_at, "renews"),
+            workspace_rename(&analysis, &file, pick_at, "renews"),
             Err(RenameError::Conflict)
         );
         let (_, _, ast) = &analysis.program.sources[0];
-        let reference = reference_at_offset(ast, by_at).expect("reference");
+        let reference = reference_at_offset(ast, pick_at).expect("reference");
         let decl = crate::refs::resolve_decl_site(&analysis.model, reference).expect("decl");
         assert!(src[decl.span.clone()].starts_with("relate(App, Permit, N:1)"));
         std::fs::remove_dir_all(&root).ok();
@@ -289,15 +289,15 @@ performs(Staff, Book)
                 "forbidden(A).along(A, Tgt).when(Tgt.status == x)",
             ),
             (_, "label") => return None,
-            ("forbidden" | "invariant", "by") => return None,
-            // `.by(Tgt)` names the key by its parent id when the key has no role.
-            ("holds", "by") => (
+            ("forbidden" | "invariant", "role") => return None,
+            // `.role(Tgt)` names the key by its parent id when the key has no role.
+            ("holds", "role") => (
                 ENTITY_TGT,
-                "relate(A, Tgt, N:1)\ncondition C \"c\"\nholds(C, Tgt.status == x).by(Tgt)",
+                "relate(A, Tgt, N:1)\ncondition C \"c\"\nholds(C, Tgt.status == x).role(Tgt)",
             ),
-            ("sets", "by") => (
+            ("sets", "role") => (
                 ENTITY_TGT,
-                "relate(A, Tgt, N:1)\nusecase U \"u\"\nupdates(U, A)\nsets(U, A.status == Tgt.status).by(Tgt)",
+                "relate(A, Tgt, N:1)\nusecase U \"u\"\nupdates(U, A)\nsets(U, A.status == Tgt.status).role(Tgt)",
             ),
             ("invariant", "when") => (
                 ENTITY_TGT,

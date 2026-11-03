@@ -200,10 +200,10 @@ its own parent parameter. Two keys from one child to one parent that the action 
 write (`ship_to` and `bill_to` from `Order` to `Address`) therefore range over the parent's
 rows independently, so a child created under both may point at one row or at two. A parent
 the action writes is the child's parent only on the keys it takes: the one key from the child
-to the parent, or, among several, each key that a `.by` of the use case's `holds` guards (after
+to the parent, or, among several, each key that a `.role` of the use case's `holds` guards (after
 the body or an `.along` hop) or copies names. On every other key the action binds the child as
 if it did not write the parent: a created child gets a parent parameter of that key, and an
-updated child gets no owner guard. So `.by` names the written row as it names any other: the
+updated child gets no owner guard. So `.role` names the written row as it names any other: the
 row of the key the use case reads it through.
 
 **Relinking.** An action that creates the parent and updates an existing child links the
@@ -218,7 +218,7 @@ child to the new parent. The rule depends on the key:
 <a id="joins"></a>**Joins.** A `.along(A, B)` hop, a `.has/.none(...)`, the link between a `holds`
 body's existing instance and the other instances of the guard, and a copy source each read
 the owner of one key. `SemanticModel::join_key` picks it: the one key between the two
-entities, or among several the one a `.by(role)` names. Several keys with no selector naming
+entities, or among several the one a `.role(role)` names. Several keys with no selector naming
 one is `AmbiguousOwnerLink` (an error), and the two are left unlinked (see
 [language-reference.md](./language-reference.md#which-key-a-join-follows)). The builder never
 picks a key itself, so the explorer and the TLA+ printer read the same owner.
@@ -231,17 +231,17 @@ case's action:
   parameter before the effects, except for a created entity, where it reads the
   instance as the action leaves it, so the condition constrains the creation.
 - An atom on a parent the action only reads follows the key [Joins](#joins) picks for the
-  body, with the body's `.by`: it reads that key's parent parameter. One parent parameter
-  of the entity, with several keys and no `.by` naming one, is the row the atom reads.
-  Several parent parameters of the entity and no `.by` naming one is `AmbiguousOwnerLink`.
-  A `.by` naming a key with no parent parameter reads an existing instance through that
-  key, as the next item says. So `.by` names the same row whether or not the action binds
+  body, with the body's `.role`: it reads that key's parent parameter. One parent parameter
+  of the entity, with several keys and no `.role` naming one, is the row the atom reads.
+  Several parent parameters of the entity and no `.role` naming one is `AmbiguousOwnerLink`.
+  A `.role` naming a key with no parent parameter reads an existing instance through that
+  key, as the next item says. So `.role` names the same row whether or not the action binds
   the entity: the row the key joins to the child.
 - An atom on any other entity reads an existing instance. The atoms on one such
   entity share one instance, which a direct `relate` owner links to the parameters it
   relates to. Without a `relate`, the instance is independent.
 - With `.along(A, B, ..)`, each path entity the action does not bind is such an instance,
-  and the owner of each hop's key (the key [Joins](#joins) picks, with the `.by` after
+  and the owner of each hop's key (the key [Joins](#joins) picks, with the `.role` after
   the `.along`) links neighbours; no other link is added. The guard reads the instances
   the path joins to the action's parameters, as `.along` binds a multi-entity rule.
 - An instance of a compared entity that no chain of links reaches from a parameter of the action is
@@ -281,10 +281,10 @@ witness.
 - When the action has a parameter for `F`, the copy reads that parameter: an updated,
   parent, or `Earlier` parameter before the effects, a created one as the action leaves
   it. Among the parent parameters of several keys to `F`, it reads the one of the key
-  `.by` names, as a condition atom does. An `F` an earlier step of the use case wrote is
+  `.role` names, as a condition atom does. An `F` an earlier step of the use case wrote is
   the `Earlier` parameter, the row of the run.
 - When `F` is the parent of the target through the key `join_key` picks (with the copy's
-  `.by(role)`), and the action updates the target, `F` joins the action as a parent
+  `.role(role)`), and the action updates the target, `F` joins the action as a parent
   parameter, with the owner guard
   `owner[target] == F`. An unlinked `.optional()` owner fails that guard, so the action
   waits. A created target under a mandatory `relate` already has its parent as a parameter
@@ -619,7 +619,7 @@ after(ExecuteCertIssue)
 An entity the step binds reads that row: the row the step writes, else its one parent
 parameter. An entity the step binds through several parent parameters (two keys to it, see
 **Owners** under [Actions](#actions)) or does not bind at all is read on every present row, since an `after`
-has no `.by` to pick one. A step that ends in a state that fails the predicate is
+has no `.role` to pick one. A step that ends in a state that fails the predicate is
 `AfterAssertViolated`, naming the state the step reached. Equality and comparison forms both work. An `after` on a
 use case with no action is `AssertOnInertUseCase`.
 
@@ -679,7 +679,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
-| `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.by(role)` names one. The message names the candidate roles and the statement with the `.by` to add; the join is left unlinked. |
+| `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
 | `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |

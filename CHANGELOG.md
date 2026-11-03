@@ -11,7 +11,7 @@
   same gap on `Prescription.refill_limit`; `IssueRefillPrescription` now sets it.
 - `holds` takes `.along(A, B, C)` (#77): the guard reads the instances of the path entities
   that the keys between neighbours join to the rows the guarded use case binds, as the
-  `.along` of a `forbidden` or `invariant` binds a rule, and only the hops link. A `.by(role)`
+  `.along` of a `forbidden` or `invariant` binds a rule, and only the hops link. A `.role(role)`
   after the `.along` picks the key of a hop that two keys join. One meaning in `check`,
   `states`, the TLA+ export and `verify`: the path's keys are resolved by
   `SemanticModel::join_key` with the rules' paths, and the lifecycle builds its links with the
@@ -23,16 +23,16 @@
   and the fix: the `.along(...)` of the shortest key path, or writing the entity in the use
   case. Of the samples, only clinic-ops drew it, on a real modeling error (below).
 
-- `.by(role)` names the key a join follows wherever two keys join the same two entities
+- `.role(role)` names the key a join follows wherever two keys join the same two entities
   (#73): after `.has(...)` or `.none(...)` (on an `invariant` or a `holds`), after a `holds`
   body (the link from an entity it compares to the entities the guarded use case binds),
   after a copy `sets(UC, E.col == F.col)`, and after `.along(...)` as before. One resolver,
   `SemanticModel::join_key`, decides every join for `check`, `states`, the TLA+ export and
-  `verify`: one key is the join and needs no selector; among several, the one `.by` names (its
+  `verify`: one key is the join and needs no selector; among several, the one `.role` names (its
   role, or its parent id when it has no `.role`); otherwise `AmbiguousOwnerLink`, an error
-  naming the candidate roles and the statement with `.by(<first role>)` added. A `.by` naming
+  naming the candidate roles and the statement with `.role(<first role>)` added. A `.role` naming
   no key of the join is `UnknownOwnerRole`. In LSP a role is a symbol: definition, references
-  and rename cover `relate(..).role(x)` and each `.by(x)`.
+  and rename cover `relate(..).role(x)` and each `.role(x)`.
 - `.has(Related)` and `.none(Related)` ask for some, or no, linked row of `Related` and read
   only the link (#73). `.none(Child)` builds the same cones as `.none(Child.status in (<every
   value>))`, which stays valid; the samples use the direct form.
@@ -296,6 +296,20 @@
 
 ### Changed
 
+- `.role(role)` picks the key of a join, as `relate(..).role(role)` declares it (#87): after a
+  `holds` body, `.has(...)`, `.none(...)`, `.along(...)`, and a copy
+  `sets(UC, E.col == F.col)`. `.by` had two meanings: `belongs(...).by(Medium)` names a medium,
+  and `.by` after those calls picked a key. `belongs(...).by(Medium)` keeps `.by`. A `.by(...)`
+  that picks a key, `.along(A, B).by(role)` of 0.4.0 included, fails to load with the line to
+  write: ``write `holds(RenewsValidPermit, BusinessPermit.status == valid).role(renews)` ``.
+  `ByWithoutAlong` is `RoleWithoutJoin`; `AmbiguousOwnerLink` and `UnknownOwnerRole` print
+  `.role(...)`, and `list --kind rule`, the condition diagram, and the sequence diagram print
+  a guard's or rule's selector as `.role(...)`. In LSP, definition, references, and rename of a role cover each
+  `.role(x)` that picks it. `scripts/migrate-syntax-v3.py` rewrites `.by` after `holds`,
+  `sets`, `forbidden`, and `invariant` and leaves `belongs` alone; it rewrote the 3 lines of
+  `samples/food-permit-ops` that use it, and the generated diagrams and documents of that
+  sample print `.role(...)`.
+
 - `Caps::VERIFY`, the `verify` BFS cap per cone, rises from 2,097,152 (2^21) to 8,388,608
   (2^23), and the `bounds:` line says `8388608 states per BFS cone`. Since the guard of a use
   case holds for every transaction group (#80), the views of `Prescription` (4,266,635 states
@@ -366,8 +380,8 @@
   TLA+ export and `verify` read the same guards. The groups still run in any order, so a
   guard does not make one group wait for another.
 
-- A `.by(role)` belongs to the `.along(...)`, `.has(...)` or `.none(...)` before it (#73). On
-  a `forbidden` or `invariant`, a `.by` written before `.along(...)`, which `.along` used to
+- A `.role(role)` belongs to the `.along(...)`, `.has(...)` or `.none(...)` before it (#73). On
+  a `forbidden` or `invariant`, a `.role` written before `.along(...)`, which `.along` used to
   take, is now `ByWithoutAlong`; move it after the `.along`.
 
 - The incremental modeling stages put screens before data (#72). The interaction boundary
@@ -514,8 +528,8 @@
   the entity apart from the column fail to load with the line to write: `sets(UC, E, col ==
   v)` gives ``write `sets(UC, E.col == v)` ``, `drives(UC, E, cmp, b)` gives ``write
   `drives(UC, E.col op rhs, b)` ``, and the four-argument `sets(UC, E, cmp, b)`, deprecated
-  during this release's development, gives the same `drives`; a `.by(...)` after a copy is
-  kept. There is no deprecation period before 1.0 (docs/compatibility.md). Migrate with
+  during this release's development, gives the same `drives`; a `.by(...)` after a copy
+  becomes `.role(...)` (see Changed). There is no deprecation period before 1.0 (docs/compatibility.md). Migrate with
   `python3 scripts/migrate-syntax-v3.py <workspace>`, which rewrites the three forms in
   `.rdra` files and in any file named on the command line, spans lines, and is safe to run
   twice. It rewrote 154 lines of the samples (the skill samples share their files), 5 of
@@ -554,13 +568,13 @@
   had to have both on it, so a use case that checks the billing address could only ship an
   order billed and shipped to one address, and `verify` missed every violation that needs the
   two apart. The written row now takes the one key from the child to the parent, or, among
-  several, the keys a `.by` of the use case names (of a `holds` guard on it, after the body or
-  an `.along` hop, or of a copy in it), so `.by` names the written row as it names any other.
+  several, the keys a `.role` of the use case names (of a `holds` guard on it, after the body or
+  an `.along` hop, or of a copy in it), so `.role` names the written row as it names any other.
   Every other key is bound as if the use case did not write the parent: a created child takes
-  a parent row of its own on it, and an updated child keeps its row. Several keys and no `.by`
+  a parent row of its own on it, and an updated child keeps its row. Several keys and no `.role`
   of the use case naming any of them is `AmbiguousOwnerLink`, as for any other join (#73): the
   error names the use case's `holds` body that compares the parent, or its copy from the
-  parent, with `.by(<first role>)` added, or, with neither, says a `holds` guard applied to the
+  parent, with `.role(<first role>)` added, or, with neither, says a `holds` guard applied to the
   use case or a copy in it must name the key. `MinCardNeedsCreate` counts a child only when the
   step links it to the new parent. No sample has two keys from one child to one parent; no
   sample's output changes.
@@ -578,7 +592,7 @@
   minutes (#74). The README's soak findings and known gaps give the numbers.
 
 - A condition or quantifier between two entities that two keys join no longer follows the
-  first key silently (#73); it is `AmbiguousOwnerLink` until `.by(role)` names one. A copy's
+  first key silently (#73); it is `AmbiguousOwnerLink` until `.role(role)` names one. A copy's
   source follows the same rule.
 - An action never relinks a parent parameter, a row it only reads (#73). With a second key
   from the parent's entity back to the created child's, `RegisterPermit` in a model with
@@ -590,10 +604,10 @@
   has its own parent parameter, an `.optional()` key included when a guard links it, in the
   lifecycle builder that the explorer, the TLA+ export and `verify` read. No sample has two
   such keys, and no sample's cone changes size.
-- A `holds` comparison or a copy source on a parent the use case binds follows `.by` (#75).
-  Before, it read the bound parameter whatever `.by` named. It now reads the parent parameter
-  of the key `.by` names, or an existing row through that key when the use case binds none
-  for it; with two parent parameters of the entity and no `.by` naming one it is
+- A `holds` comparison or a copy source on a parent the use case binds follows `.role` (#75).
+  Before, it read the bound parameter whatever `.role` named. It now reads the parent parameter
+  of the key `.role` names, or an existing row through that key when the use case binds none
+  for it; with two parent parameters of the entity and no `.role` naming one it is
   `AmbiguousOwnerLink`. An `after(UC).assert` reads an entity the step binds through two
   parent parameters on every row.
 

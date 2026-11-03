@@ -127,7 +127,7 @@ pub enum CrossConstraintScope {
     /// `.along(A, B, ..)`: only instances connected by the keys between neighbours.
     RelationPath {
         path: Vec<EntityKey>,
-        /// `.by(role)`: on a hop that two keys join, the one with this role.
+        /// `.role(role)`: on a hop that two keys join, the one with this role.
         by: Vec<String>,
         /// The key joining `path[i]` and `path[i + 1]`. `None` when no key joins them, or
         /// when the hop is ambiguous (reported as `AmbiguousOwnerLink`).
@@ -193,7 +193,7 @@ pub struct RelatedQuantifier {
     pub kind: QuantifierKind,
     pub related: EntityKey,
     pub conditions: Vec<CrossEntityCondition>,
-    /// `.by(role)` after the call: the key a link to `related` follows where several could.
+    /// `.role(role)` after the call: the key a link to `related` follows where several could.
     pub by: Vec<String>,
 
     /// Source site of the chain call.

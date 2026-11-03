@@ -114,15 +114,15 @@ invariant(Order, Payment)
 - Add `.along(...)` only for relation-scoped linked-instance intent. Each adjacent pair
   needs a `relate` (it supplies `Child_owner_Parent`), else `UnbindableScope`.
 - Two relates between the same pair of entities (distinct `.role`s, or one each way) need
-  `.by(role)` on every join of the pair: `.along(Order, Address).by(ship_to)`,
-  `.none(Address).by(bill_to)`, `holds(C, Address.status == open).by(ship_to)`, and a copy's
-  `sets(...).by(ship_to)`. Without it the join is `AmbiguousOwnerLink`, which names the
-  candidates and the rewrite. `.by(Address)` names a key without `.role` by its parent id.
+  `.role(role)` on every join of the pair: `.along(Order, Address).role(ship_to)`,
+  `.none(Address).role(bill_to)`, `holds(C, Address.status == open).role(ship_to)`, and a copy's
+  `sets(...).role(ship_to)`. Without it the join is `AmbiguousOwnerLink`, which names the
+  candidates and the rewrite. `.role(Address)` names a key without `.role` by its parent id.
   A use case that writes the `Address` and the `Order` puts the written address on the keys
-  its guards' or copies' `.by` name, and on neither of two keys without one.
+  its guards' or copies' `.role` name, and on neither of two keys without one.
 - `.none(Related)` / `.has(Related)` ask for no linked row, or some, and read only the link.
 - A `holds` guard reads an entity two hops from the use case's row through
-  `.along(A, B, C)`, with `.by(role)` after it per hop. A compared entity that no key joins
+  `.along(A, B, C)`, with `.role(role)` after it per hop. A compared entity that no key joins
   to the use case's rows is `UnjoinedGuardRead` (warning): any row of it satisfies the guard.
 - Diagnostic ids may still say `Cross*` even though surface syntax is
   multi-entity `forbidden` / `invariant`.

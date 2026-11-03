@@ -1551,7 +1551,7 @@ impl Builder<'_> {
     /// `AmbiguousOwnerLink` for a parent the use case writes that several keys join to a
     /// child it writes, none of which a `.by` of the use case names. The statement is the
     /// first `holds` body applied to the use case that compares the parent, else its first
-    /// copy from the parent, with `.by(<first role>)` as the rewrite; a use case with neither
+    /// copy from the parent, with `.role(<first role>)` as the rewrite; a use case with neither
     /// is told where a `.by` can go.
     fn ambiguous_written_parent(&mut self, uc: UseCaseKey, fk: FkId, candidates: &[FkId]) {
         let model = self.model;
@@ -1611,7 +1611,7 @@ impl Builder<'_> {
                     b: model.entities[parent].id.clone(),
                     roles: roles.join(", "),
                     rewrite: format!(
-                        ".by({}) on a holds guard applied to {uc_id} that compares {}, or on a copy from {} in it",
+                        ".role({}) on a holds guard applied to {uc_id} that compares {}, or on a copy from {} in it",
                         roles[0], model.entities[parent].id, model.entities[parent].id
                     ),
                     site: Site::new(

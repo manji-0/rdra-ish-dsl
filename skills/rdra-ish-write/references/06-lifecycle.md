@@ -72,7 +72,7 @@ Also ask:
    one use case; do not split it per value. A body that reads a related entity
    (`holds(Renewable, Permit.status == valid)`) follows the `relate` between it and the
    entity the use case writes; when two relates join them, name the one with
-   `.by(role)` after the body (`holds(Renewable, Permit.status == valid).by(renews)`). On a
+   `.role(role)` after the body (`holds(Renewable, Permit.status == valid).role(renews)`). On a
    use case that creates the child of an `.optional()` key, such a guard also links the
    new row to the parent it reads. "No related row" is `.none(Related)`. An entity two
    hops away, such as the settlement of the case a claim belongs to, needs the path:
@@ -87,7 +87,7 @@ Also ask:
    Application.kind)`. The source must be a row the step binds: an entity the use case
    writes in the same or an earlier transaction group, or the parent of the target through a `relate`
    (a created child reads the parent it is created under; with two relates to the source,
-   name one: `sets(Fix, Permit.kind == Site.kind).by(home)`). Any other source is
+   name one: `sets(Fix, Permit.kind == Site.kind).role(home)`). Any other source is
    `UnboundCopySource`; give the target a `relate` to the source instead of leaving the
    value a free choice. The two columns hold one set of values (`SetsCopyMismatch`).
 9. Add `drives(UC, E.col op rhs, true|false)` when rules depend on a derived comparison and

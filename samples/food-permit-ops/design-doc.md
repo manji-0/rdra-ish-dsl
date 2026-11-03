@@ -640,7 +640,7 @@ sequenceDiagram
   actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への登録
   usecase__GrantPermit ->> api__PermitRegistrationApi: 営業許可の決定
   screen__PermitLedgerScreen ->> api__PermitRegistrationApi: 営業許可登録 API
-  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit).by(PermitApplication)
+  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit).role(PermitApplication)
     api__PermitRegistrationApi ->> entity__PermitApplication: read
     api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
     api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
@@ -847,7 +847,7 @@ sequenceDiagram
   participant entity__PermitApplication as 営業許可申請
   actor__BusinessOperator ->> screen__RenewalScreen: 継続（更新）の申請
   screen__RenewalScreen ->> api__RenewalApi: 更新申請 API
-  alt 失効後の更新はできない: (BusinessPermit.status == 有効).by(renews)
+  alt 失効後の更新はできない: (BusinessPermit.status == 有効).role(renews)
     api__RenewalApi ->> entity__BusinessPermit: read
     api__RenewalApi ->> entity__PermitApplication: create kind=renewal
     api__RenewalApi -->> screen__RenewalScreen: done
@@ -874,7 +874,7 @@ sequenceDiagram
   participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
   actor__PermitAuthority ->> screen__InspectionScreen: 更新の許可の決定
   screen__InspectionScreen ->> api__DecisionApi: 許可決定 API
-  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and 失効後の更新はできない: (BusinessPermit.status == 有効).by(renews) and PermitApplication.status == 検査待
+  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and 失効後の更新はできない: (BusinessPermit.status == 有効).role(renews) and PermitApplication.status == 検査待
     api__DecisionApi ->> entity__Inspection: read
     api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 許可
     api__DecisionApi -) api__PermitTermApi: 更新の許可
@@ -2571,7 +2571,7 @@ erDiagram
 | condition | 申請が検査待で、まだ検査の予定がない | PermitApplication | (PermitApplication.status == 検査待).none(Inspection) | ScheduleInspection | samples/food-permit-ops/buc/buc_inspection_decision.rdra:120 |
 | condition | 施設検査で施設基準に適合した | Inspection | Inspection.status == 適合 | GrantPermit\|RenewPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:144 |
 | condition | 新規の申請である | PermitApplication | PermitApplication.kind == 新規 | GrantPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:148 |
-| condition | 新規の申請で、まだ許可が登録されていない | PermitApplication | (PermitApplication.kind == 新規).none(BusinessPermit).by(PermitApplication) | RegisterPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:175 |
+| condition | 新規の申請で、まだ許可が登録されていない | PermitApplication | (PermitApplication.kind == 新規).none(BusinessPermit).role(PermitApplication) | RegisterPermit | samples/food-permit-ops/buc/buc_inspection_decision.rdra:175 |
 | condition | 許可が有効である | BusinessPermit | BusinessPermit.status == 有効 | AppointHygieneManager\|IssueCertificate | samples/food-permit-ops/buc/buc_inspection_decision.rdra:185 |
 | condition | 許可が有効で、許可証の交付を受けている | BusinessPermit | BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true | StartBusiness | samples/food-permit-ops/buc/buc_inspection_decision.rdra:205 |
 | forbidden | 施設基準に適合しない施設には許可しない | PermitApplication\|Inspection | PermitApplication.status == 許可 AND Inspection.status != 適合 |  | samples/food-permit-ops/buc/buc_inspection_decision.rdra:311 |
@@ -2585,7 +2585,7 @@ erDiagram
 | condition | 窓口（紙）で出した申請である | PermitApplication | PermitApplication.channel == 保健所の窓口（紙） | WithdrawApplication | samples/food-permit-ops/buc/buc_permit_application.rdra:140 |
 | condition | 許可が終わっていない（有効か停止中） | BusinessPermit | BusinessPermit.status in (有効, 営業停止中) | FileChangeNotice\|FileSuccessionNotice | samples/food-permit-ops/buc/buc_permit_changes.rdra:82 |
 | condition | 継続（更新）の申請である | PermitApplication | PermitApplication.kind == 継続（更新） | RenewPermit | samples/food-permit-ops/buc/buc_renewal.rdra:85 |
-| condition | 失効後の更新はできない | BusinessPermit | (BusinessPermit.status == 有効).by(renews) | ApplyRenewal\|RenewPermit | samples/food-permit-ops/buc/buc_renewal.rdra:92 |
+| condition | 失効後の更新はできない | BusinessPermit | (BusinessPermit.status == 有効).role(renews) | ApplyRenewal\|RenewPermit | samples/food-permit-ops/buc/buc_renewal.rdra:92 |
 | after | 失効した許可は更新できない | BusinessPermit | BusinessPermit.status == 有効 | ExtendPermitTerm | samples/food-permit-ops/buc/buc_renewal.rdra:177 |
 
 ## 6. CRUD と権限

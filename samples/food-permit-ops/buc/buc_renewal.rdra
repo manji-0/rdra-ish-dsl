@@ -89,7 +89,7 @@ applies_to(InspectionPassed, RenewPermit)
 // 失効した許可は更新できず、新規の申請からやり直す (toshima-ku-kyoka-go-tetsuzuki.md:39; README): the
 // permit the renewal names is still valid when the 営業者 applies and when the 保健所 decides.
 condition RenewsValidPermit "失効後の更新はできない"
-holds(RenewsValidPermit, BusinessPermit.status == valid).by(renews)
+holds(RenewsValidPermit, BusinessPermit.status == valid).role(renews)
 applies_to(RenewsValidPermit, ApplyRenewal)
 applies_to(RenewsValidPermit, RenewPermit)
 
