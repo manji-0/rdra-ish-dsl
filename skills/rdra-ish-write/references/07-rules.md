@@ -72,8 +72,8 @@ Also ask:
    list of every value of a column. When two keys join the two entities, name the one the rule
    follows after the call: `.none(Permit).role(Application)` (the role, or the parent id of a key
    without `.role`).
-10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after each
-    step of the use case) and `property` for a temporal rule (only `verify` evaluates
+10. Add `after(...).assert(...)` for a postcondition (`check` evaluates it after the
+    last step of the use case, on the run's rows) and `property` for a temporal rule (only `verify` evaluates
     it; see skill `rdra-ish-verify`).
 11. End every rule with `.label("...")`: one quoted sentence that says the rule as the
     business would, not as the formula. A comment above the rule is lost to

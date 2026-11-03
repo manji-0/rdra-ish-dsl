@@ -153,7 +153,8 @@ The transition system follows these rules:
    effects span k groups is k actions, named `<UseCase>_1` to `<UseCase>_k`, and one
    run of the use case takes them in order on the rows its earlier steps bound. The
    checker interleaves every other action between two steps of a run, so it explores the
-   states in between. `after(UseCase).assert` holds after each of the k steps.
+   states in between. `after(UseCase).assert` holds after the last of the k steps, on the
+   run's rows.
 
 ## Verification is bounded, fails closed, and points at the model
 

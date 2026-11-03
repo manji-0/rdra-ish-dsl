@@ -187,6 +187,11 @@ fn one_of_each() -> Vec<StateDiag> {
             fix: "add `.along(Claim, ClaimCase, Settlement)`".into(),
             site: site(),
         },
+        StateDiag::UnboundAfterRead {
+            anchor: "Pay".into(),
+            entity: "Desk".into(),
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -220,7 +225,8 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::UnsupportedComparison { .. }
             | StateDiag::DerivedColumnRead { .. }
             | StateDiag::UnresolvedPropertyAtom { .. }
-            | StateDiag::UnjoinedGuardRead { .. } => {}
+            | StateDiag::UnjoinedGuardRead { .. }
+            | StateDiag::UnboundAfterRead { .. } => {}
         }
     }
     all

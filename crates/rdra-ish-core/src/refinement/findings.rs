@@ -43,7 +43,8 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::UnresolvedPropertyAtom { .. }
-        | StateDiag::UnjoinedGuardRead { .. } => StageId::Lifecycle,
+        | StateDiag::UnjoinedGuardRead { .. }
+        | StateDiag::UnboundAfterRead { .. } => StageId::Lifecycle,
     }
 }
 

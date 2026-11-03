@@ -622,6 +622,37 @@ fn bfs_and_tlc_agree_on_transition_choices() {
     check_fixture("transition_choice", TRANSITION_CHOICE);
 }
 
+/// `after(Pay).assert` on a use case of two transaction groups is read after the last step
+/// on the run's rows (#83): the order step 1 marked paid is step 2's `Earlier` row, and the
+/// payment step 2 creates is captured, so the assert holds although another order's payment
+/// is refunded. `{REFUND}` lets a refund run between the two steps of the other order.
+const AFTER_SPLIT: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Payment "決済" { id: Int @pk  status: Enum(captured, refunded) @default(captured) }
+relate(Payment, Order, N:1)
+api OrderApi "mark paid"
+api PaymentApi "capture"
+usecase Place "注文"
+usecase Pay "支払"
+usecase Refund "返金"
+creates(Place, Order)
+invokes(Pay, OrderApi)
+invokes(Pay, PaymentApi)
+updates(OrderApi, Order)
+creates(PaymentApi, Payment)
+transitions(Pay, Order.status, pending -> paid)
+updates(Refund, Payment)
+transitions(Refund, Payment.status, captured -> refunded)
+after(Pay).assert(Order.status == paid, Payment.status == captured)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_an_after_assert_of_a_split_use_case() {
+    if let Some(violated) = check_fixture("after_split", AFTER_SPLIT) {
+        assert!(!violated.contains("AfterAssert_Pay_0"), "{violated:?}");
+    }
+}
+
 /// A guard per `transitions` arm (#62): of three arms from `searched`, filing needs the right
 /// on the row itself and the fast route needs an open gate on another entity (an `Exists`
 /// witness), beside an unguarded arm; a gate created closed and opened later; a guarded arm

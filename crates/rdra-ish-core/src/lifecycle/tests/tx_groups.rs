@@ -171,8 +171,21 @@ fn provenance_names_the_use_case_not_the_group_step() {
     assert!(via.iter().all(|uc| !uc.starts_with("Pay_")), "{via:?}");
 }
 
+fn after_violated(d: &Derived, anchor: &str) -> bool {
+    d.diags.iter().any(|x| {
+        matches!(
+            &x.diag,
+            StateDiag::AfterAssertViolated { anchor: a, .. } if a == anchor
+        )
+    })
+}
+
+/// `after(UC).assert` is read once per run, after its last step, on the run's rows (#83):
+/// the payment step 1 captured is the last step's `Earlier` row, so the assert never sees
+/// the state between the two steps, and a run whose last step leaves the assert false
+/// violates it.
 #[test]
-fn after_assert_is_checked_after_each_group_step() {
+fn after_assert_is_checked_after_the_last_step_of_a_run() {
     let src = split_pay("after(Pay).assert(Order.status == paid, Payment.status == captured)");
     let ts = built(&src);
     let [a] = ts.after_asserts() else {
@@ -183,24 +196,78 @@ fn after_assert_is_checked_after_each_group_step() {
         .iter()
         .map(|s| ts.actions()[s.act.index()].name.clone())
         .collect();
-    assert_eq!(steps, vec!["Pay_1", "Pay_2"]);
-    // The first step binds its own group's entity and the later group's is universally
-    // bound; the second step binds the run's payment too.
-    let binders: Vec<Vec<String>> = a
-        .steps
-        .iter()
-        .map(|s| s.binders.iter().map(|e| ts.entity(*e).id.clone()).collect())
-        .collect();
-    assert_eq!(binders, vec![vec!["Order"], vec![]]);
-    // After Pay_1 alone the Order is still pending: the assert sees the in-between state.
-    let d = derive_src(&src);
+    assert_eq!(steps, vec!["Pay_2"]);
+    assert!(a.steps[0].binders.is_empty());
+    assert!(!after_violated(&derive_src(&src), "Pay"));
+    let broken =
+        split_pay("after(Pay).assert(Order.status == pending, Payment.status == captured)");
+    assert!(after_violated(&derive_src(&broken), "Pay"));
+}
+
+/// The invokes order decides which step creates the payment. Created first, it is the last
+/// step's `Earlier` row; created last, the order is. Either way the assert reads the run's
+/// payment, not another order's refunded one, so it holds at two instances. A `Refund` that
+/// runs between the two steps refunds the run's payment, and the assert sees that.
+#[test]
+fn after_assert_reads_the_rows_of_the_run_in_either_step_order() {
+    let pay = |first: &str, second: &str, refund: bool| {
+        let refund = if refund {
+            "usecase Refund \"返金\"\nupdates(Refund, Payment)\ntransitions(Refund, Payment.status, captured -> refunded)"
+        } else {
+            ""
+        };
+        format!(
+            r#"
+entity Order "注文" {{ id: Int @pk  status: Enum(pending, paid) @default(pending) }}
+entity Payment "決済" {{ id: Int @pk  status: Enum(captured, refunded) @default(captured) }}
+relate(Payment, Order, N:1)
+api OrderApi "mark paid"
+api PaymentApi "capture"
+usecase Place "注文"
+usecase Pay "支払"
+creates(Place, Order)
+invokes(Pay, {first})
+invokes(Pay, {second})
+updates(OrderApi, Order)
+creates(PaymentApi, Payment)
+transitions(Pay, Order.status, pending -> paid)
+{refund}
+after(Pay).assert(Order.status == paid, Payment.status == captured)
+"#
+        )
+    };
+    let holds = |first: &str, second: &str, refund: bool| {
+        let model = model_from(&pay(first, second, refund));
+        let two = derive_scoped(&model, Bounds::VERIFY, &Scope::ALL);
+        !after_violated(&two, "Pay")
+    };
+    assert!(holds("PaymentApi", "OrderApi", false));
+    assert!(holds("OrderApi", "PaymentApi", true));
+    assert!(!holds("PaymentApi", "OrderApi", true));
+}
+
+/// An `after` atom on an entity the run never binds reads every present row of it, and
+/// says so.
+#[test]
+fn an_after_atom_on_an_entity_the_run_never_binds_warns() {
+    let unbound = |extra: &str| -> Vec<(String, String)> {
+        TransitionSystem::build(&model_from(&split_pay(extra)), Bounds::STATES, &Scope::ALL)
+            .diags
+            .iter()
+            .filter_map(|d| match &d.diag {
+                StateDiag::UnboundAfterRead { anchor, entity, .. } => {
+                    Some((anchor.clone(), entity.clone()))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(
+        unbound("sets(Staff, Desk.open == true)\nafter(Pay).assert(Desk.open == true)"),
+        vec![("Pay".to_string(), "Desk".to_string())]
+    );
     assert!(
-        d.diags.iter().any(|x| matches!(
-            &x.diag,
-            StateDiag::AfterAssertViolated { anchor, .. } if anchor == "Pay"
-        )),
-        "{:?}",
-        d.diags
+        unbound("after(Pay).assert(Order.status == paid, Payment.status == captured)").is_empty()
     );
 }
 

@@ -553,6 +553,16 @@
 
 ### Fixed
 
+- `after(UC).assert` on a use case whose writes span several transaction groups is read
+  once per run, after the last step, on the run's rows (#83). It was read after every step,
+  so `after(Pay).assert(Order.status == paid, Payment.status == captured)` on a `Pay` that
+  captures the payment through one API and marks the order through another failed after
+  the first step, where the order is still pending, and with the APIs the other way round
+  `verify` read a refunded payment of another order. An entity an earlier step wrote is the
+  last step's `Earlier` row. An atom on an entity no step of the run binds is read on every
+  present row, as before, and now draws the `UnboundAfterRead` warning, the `after` twin
+  of `UnjoinedGuardRead`. The four `after`s of the samples are on single-transaction use
+  cases and keep their verdicts.
 - A `.has`/`.none` on a `holds` with `.along` counts along the path (#81). The path entities
   were each a witness that had to exist, so `holds(NoOpenLoan, Member.status ==
   active).none(Loan.status == open).along(Member, Loan)` read "some loan of the member exists

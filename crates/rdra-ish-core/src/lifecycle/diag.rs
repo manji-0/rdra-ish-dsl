@@ -314,6 +314,13 @@ pub enum StateDiag {
         column: String,
         site: Site,
     },
+    /// An `after(UC).assert` atom reads an entity no step of the use case's run binds, so it
+    /// is read on every present row.
+    UnboundAfterRead {
+        anchor: String,
+        entity: String,
+        site: Site,
+    },
 }
 
 /// `「label」: ` for a labelled rule, so a violation names the rule in the author's words.
@@ -420,6 +427,7 @@ impl StateDiag {
             StateDiag::UnjoinedGuardRead {
                 condition, usecase, ..
             } => with("UnjoinedGuardRead", &[condition, usecase]),
+            StateDiag::UnboundAfterRead { anchor, .. } => with("UnboundAfterRead", &[anchor]),
         };
         raw.chars()
             .map(|c| {
@@ -469,7 +477,8 @@ impl StateDiag {
             | StateDiag::NeverRuns { .. }
             | StateDiag::ArmNeverTaken { .. }
             | StateDiag::ValueNeverChosen { .. }
-            | StateDiag::UnjoinedGuardRead { .. } => Severity::Warning,
+            | StateDiag::UnjoinedGuardRead { .. }
+            | StateDiag::UnboundAfterRead { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -830,6 +839,10 @@ impl fmt::Display for StateDiag {
             } => write!(
                 f,
                 "holds({condition}, ...) on {usecase} reads {entity}, which no key joins to a row {usecase} binds, so any {entity} row satisfies it; {fix}"
+            ),
+            StateDiag::UnboundAfterRead { anchor, entity, .. } => write!(
+                f,
+                "after({anchor}) reads {entity}, which no step of {anchor} binds, so every present {entity} row must satisfy it; write {entity} in {anchor} to read the run's row"
             ),
         }
     }

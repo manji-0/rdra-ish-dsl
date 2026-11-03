@@ -597,8 +597,8 @@ pub enum InvText {
     },
 }
 
-/// `after(UC).assert(..)`: a post-state predicate checked after every action of the use case,
-/// so after each transaction group of a split one.
+/// `after(UC).assert(..)`: a post-state predicate checked after the last action of the use
+/// case, so once per run of a split one, on the run's rows.
 #[derive(Clone, Debug)]
 pub struct AfterAssert {
     pub name: String,

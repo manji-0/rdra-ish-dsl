@@ -1482,14 +1482,16 @@ impl<'m> Builder<'m> {
 
     // ── R-after ──────────────────────────────────────────────────────────────
 
-    /// One step per action of the anchor use case, so a split use case is checked after each
-    /// transaction group. A scope entity the step does not bind is universally bound.
+    /// One step, the last action of the anchor use case, so a split use case is checked once
+    /// per run, after its last transaction group, on the run's rows: an entity an earlier
+    /// step wrote is the last step's `Earlier` param. An entity no param of the step binds is
+    /// universally bound, and `UnboundAfterRead`.
     pub(super) fn after_asserts(&mut self) {
         let model = self.model;
         for (i, ta) in model.temporal_assertions.iter().enumerate() {
             let site = Site::new(ModelRef::TemporalAssertion(i), &ta.site);
             let anchor = model.use_cases[ta.anchor].id.clone();
-            let Some(acts) = self.uc_actions.get(&ta.anchor).cloned() else {
+            let Some(&act) = self.uc_actions.get(&ta.anchor).and_then(|acts| acts.last()) else {
                 if !self.active_ucs.contains(&ta.anchor) {
                     self.diag(
                         ta.scope.clone(),
@@ -1508,24 +1510,31 @@ impl<'m> Builder<'m> {
                     entities.push(ek);
                 }
             }
-            let mut steps = Vec::new();
-            for act in acts {
-                let params = self.ts.actions[act.index()].params.clone();
-                let mut binding: Binding = Vec::new();
-                let mut binders = Vec::new();
-                for &ek in &entities {
-                    let e = self.ent_of[&ek];
-                    match self.read_param(&params, e, &[]) {
-                        Some(p) => binding.push((ek, At::Param(p))),
-                        None => {
-                            binding.push((ek, At::Bound(binders.len() as u8)));
-                            binders.push(e);
+            let params = self.ts.actions[act.index()].params.clone();
+            let mut binding: Binding = Vec::new();
+            let mut binders = Vec::new();
+            for &ek in &entities {
+                let e = self.ent_of[&ek];
+                match self.read_param(&params, e, &[]) {
+                    Some(p) => binding.push((ek, At::Param(p))),
+                    None => {
+                        binding.push((ek, At::Bound(binders.len() as u8)));
+                        binders.push(e);
+                        if !params.iter().any(|p| p.entity == e) {
+                            self.diag(
+                                vec![ek],
+                                StateDiag::UnboundAfterRead {
+                                    anchor: anchor.clone(),
+                                    entity: model.entities[ek].id.clone(),
+                                    site: site.clone(),
+                                },
+                            );
                         }
                     }
                 }
-                let post = self.cross_all(&ta.requireds, &binding, &site);
-                steps.push(AfterStep { act, binders, post });
             }
+            let post = self.cross_all(&ta.requireds, &binding, &site);
+            let steps = vec![AfterStep { act, binders, post }];
             self.ts.after.push(AfterAssert {
                 name: format!("AfterAssert_{anchor}_{i}"),
                 anchor,

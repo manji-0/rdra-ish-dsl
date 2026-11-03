@@ -178,7 +178,7 @@ kinds fail to parse, with a hint naming the replacement.
 | `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.role(role)]]` | required co-occurrence across entities |
 | `when` | `(...).none/has(...)` | to-many quantifier (prefer `Entity.col`) |
 | `property` | `Name ["label"] always\|eventually\|leads_to(...)` | temporal path property, checked by `verify` only |
-| `after` | `(UseCase).assert(...)` | predicate on the state each step of the use case leaves |
+| `after` | `(UseCase).assert(...)` | predicate on the state each run of the use case leaves, read after its last step |
 | `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation and generated key; see below |
 | `has_permission` | `(Actor, Permission)` | actor-side grant |
 | `requires_permission` | `(UseCase\|Api, Permission)` | UC/API required authority |

@@ -65,9 +65,10 @@ after(Sell).assert(Item.sold >= 1)
 
 - Equality and comparison forms become an independent TLA `PROPERTY`
   `AfterAssert_<UC>_<n>`, `[][(\A p : UC(p) => post')]_vars` (not injected into the
-  effects). `check` and `states` check the same predicate after each step of the use
-  case, so a use case split into k transaction groups must satisfy it after each step of
-  a run, on that run's rows.
+  effects). `check` and `states` check the same predicate after the last step of the use
+  case, so a use case split into k transaction groups must satisfy it once per run, after
+  step k, on that run's rows; the states between two steps are not checked. An atom on
+  an entity no step binds is read on every present row (`UnboundAfterRead`).
 - An `after` on a use case that changes nothing is `AssertOnInertUseCase`.
 
 UC `precondition` / `postcondition` / `guard` strings are **review metadata only**

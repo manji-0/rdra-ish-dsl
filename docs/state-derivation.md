@@ -319,7 +319,7 @@ value of the source is a value of the target, so the guard always keeps one succ
 | `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. An unlinked optional child belongs to none. It holds vacuously at one instance. |
 | `relate(Child, Parent, 1..*:1)` | `MinCard_<Child>_<role>`: every present parent slot is owned by a present child, in every state. Info `MinCardNeedsCreate` names each use case that creates the parent and no child in the same transaction group. A pre-existing parent of a created child fails at the start and draws a warning; a pre-existing child of a pre-existing parent starts linked slot for slot. |
 | `col: T @check(expr)` | `Check_<Entity>_<column>_<n>`: no present slot makes `expr` false. A comparison over a null operand is unknown and passes (SQL semantics), so `qty: Int @null @check(qty >= 1)` holds while `qty` is null. A comparison with a value reads the column's slot: `@check(status == open or closed_at == present)` is `status = open \/ closed_at = present`, and `qty == null` asks whether `qty` is null rather than being unknown. A created slot starts at the base value: `@check(qty >= 1)` without `@default(1)` or a creating `sets` fails at creation. |
-| `after(UC).assert(...)` | A predicate on the state each step of `UC` leaves, checked on every step of every action of `UC`. An entity the step does not write is read as it stands. |
+| `after(UC).assert(...)` | A predicate on the state each run of `UC` leaves, checked on every step of the last action of `UC`. An entity an earlier step wrote is read on the run's row; an entity no step binds is read on every present row, with the `UnboundAfterRead` warning. |
 | `property` with `always`, `eventually`, `leads_to` | Data only. BFS does not evaluate it, and `check` prints a `note:` that TLC does. |
 
 Every check reads the instances that exist. A rule over an entity with no instance
@@ -612,23 +612,26 @@ conditions.
 
 ### Temporal anchor assertions
 
-`after(UseCase).assert(...)` checks a predicate on the state that each step of the use
-case leaves. A use case split into k groups is checked after each step, so the assert
-sees the state between two steps of a run; an entity an earlier step wrote is read on the
-run's row (the `Earlier` parameter), and an entity the step does not bind is universally
-bound.
+`after(UseCase).assert(...)` checks a predicate on the state that each run of the use
+case leaves. A use case split into k groups is checked once per run, after its last step
+(see [Runs of a split use case](#runs)): an entity an earlier step wrote is read on the
+run's row (the last step's `Earlier` parameter), and the state between two steps is not
+checked. Another use case that runs between two steps changes the run's rows, and the
+assert sees that.
 
 ```rdra
 after(ExecuteCertIssue)
   .assert(CertificateOrder.status == executed, ClientCertificate.status == active)
 ```
 
-An entity the step binds reads that row: the row the step writes, else its one parent
-parameter. An entity the step binds through several parent parameters (two keys to it, see
-**Owners** under [Actions](#actions)) or does not bind at all is read on every present row, since an `after`
-has no `.role` to pick one. A step that ends in a state that fails the predicate is
-`AfterAssertViolated`, naming the state the step reached. Equality and comparison forms both work. An `after` on a
-use case with no action is `AssertOnInertUseCase`.
+An entity the last step binds reads that row: the row the step writes, the row an earlier
+step wrote, else its one parent parameter. An entity the step binds through several parent
+parameters (two keys to it, see **Owners** under [Actions](#actions)) is read on every
+present row, since an `after` has no `.role` to pick one. An entity no step binds is read on
+every present row too, and that is the `UnboundAfterRead` warning: the assert says
+nothing about the run's rows there. A step that ends in a state that fails the predicate
+is `AfterAssertViolated`, naming the state the step reached. Equality and comparison forms
+both work. An `after` on a use case with no action is `AssertOnInertUseCase`.
 
 ### Multi-entity and quantifier constraints
 
@@ -685,6 +688,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
+| `UnboundAfterRead { anchor, entity }` | `UnboundAfterRead_<E>_<anchor>` | warning | An `after(UC).assert` atom reads an entity that no step of the use case's run binds, so every present row of it must satisfy the atom. Write the entity in the use case to read the run's row. |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |

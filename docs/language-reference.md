@@ -227,7 +227,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `decides` | `(Adr, Buc \| UseCase \| Api \| System \| Entity \| Requirement \| Nfr \| Constraint \| Dto)` | The ADR records a design decision that affects the target element. Use this for impact review and design traceability without making the target depend on a document file path. |
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). The child side, the `N` of `N:1` / `1:N` or the left of `1:1`, may be a range `lo..hi` with `lo` 0 or 1 and `hi` 1 or `*`: `relate(OrderLine, Order, 1..*:1)` says every `Order` has at least one `OrderLine`, and the lifecycle checks it as the invariant `MinCard_<Child>_<role>`. A range on the parent side is an error; write `.optional()` for a parent that may be absent. For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. For `1:1` the left end is the child: it holds the key column, marked unique. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
 | `transitions` | `(UseCase, Entity.column, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. `.when(Condition)` guards this arm only. See [Guard one arm](#guard-one-arm-when). |
-| `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each step of the use case leaves. |
+| `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each run of the use case leaves, read after its last step on the run's rows. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
 | `sets` | `(UseCase, Entity.column == value)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. `Entity.column == Source.column` copies a value. |
 | `drives` | `(UseCase, Entity.column op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
@@ -2086,12 +2086,23 @@ owner (an `.optional()` relate not yet linked) is not linked for `.along`.
 
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific
 use-case boundary instead of against every reachable state. The tool checks the predicate
-on the state that each step of the use case leaves. A use case whose writes span k
-transaction groups is k steps, and the assertion holds after each one, on the rows of
-that run: the state between two steps is checked too. Comparison forms
-are also valid, for example
+on the state that each run of the use case leaves. A use case whose writes span k
+transaction groups is k steps, run in order as one run (see [Runs of a split use
+case](./state-derivation.md#runs)), and the assertion is read once per run, after the
+last step, on the rows of that run: an entity an earlier step wrote is read on the row
+that step wrote, and the state between two steps is not checked. An atom on an entity no
+step of the use case writes or binds is read on every present row, and draws the
+`UnboundAfterRead` warning; write the entity in the use case to read the run's row.
+Comparison forms are also valid, for example
 `after(ExecuteCertIssue).assert(CertificateOrder.status == executed)`. An `after` on a
 use case that changes nothing is `AssertOnInertUseCase`.
+
+```rdra
+// Pay captures the payment through PaymentApi and marks the order through OrderApi: two
+// transactions, one run. The assert reads the order and the payment of that run after
+// the second, whichever API runs first.
+after(Pay).assert(Order.status == paid, Payment.status == captured)
+```
 
 ### Temporal path properties
 
