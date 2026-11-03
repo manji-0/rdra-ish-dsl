@@ -11,14 +11,20 @@ DSL commits to, and the order of work that gets there.
 
 ## Two findings change the starting point
 
-`verify` can report success without checking anything. When an entity has one
-`transitions`, the TLA+ export drops every `sets` effect of a use case that raises no
-event (`crates/rdra-ish-emit/src/tla.rs:1154`). A column that no exported action
-writes stays at its initial value, so a `forbidden` rule on it holds vacuously. A
-nine-line model with a reachable forbidden state gets `TLC: OK` and exit code 0. The
-same model also shows that `states` and the TLA export start from different initial
-states. Until both are fixed, a passing `verify` proves nothing about a model that
-mixes events and plain `sets`.
+When this vision was written, `verify` could report success without checking anything.
+The TLA+ export was a second reader of the model, with its own lifecycle rules. When an
+entity had one `transitions`, it dropped every `sets` effect of a use case that raised no
+event. A column that no exported action wrote stayed at its initial value, so a
+`forbidden` rule on it held vacuously: a nine-line model with a reachable forbidden state
+got `TLC: OK` and exit code 0. The same model also showed that `states` and the TLA
+export started from different initial states.
+
+Both are fixed since v0.3.0. The TLA+ emitter no longer reads the model. It prints the one
+`TransitionSystem` that `states`, `check`, and `verify` all read, so BFS and TLC cannot
+disagree on what a use case does, and the `engine_equivalence` test checks that on every
+sample (see [state-derivation.md](./state-derivation.md) and the header of
+`crates/rdra-ish-emit/src/tla/mod.rs`). A passing `verify` now holds within the bounds
+its `bounds:` line prints.
 
 The removal of `condition` and `variation` in 181f6cb contradicts RDRA 3.0. The
 author defines the システム layer as 「システムで管理する情報、状態、ビジネスルール」,

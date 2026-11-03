@@ -23,15 +23,15 @@ Store の構造が固まったため、補充状態と次回補充予定日の l
 |---|---|---|
 | State axis | `restock_status` | normal, scheduled, blocked |
 | Nullable axis | `next_restock_date` | null / present |
-| Event | `RestockScheduled` | normal -> scheduled と予定日 present |
-| Event | `RestockBlocked` | scheduled -> blocked と予定日 null |
+| Transition | `ChangeNextRestockDate` | normal -> scheduled と予定日 present |
+| Transition | `BlockScheduledRestock` | scheduled -> blocked と予定日 null |
 
 ## 4. 要求一覧
 
 | ID | 要求 | 優先度 |
 |---|---|---|
 | R-601 | 補充状態を normal, scheduled, blocked として到達検証できること | Must |
-| R-602 | 補充予定日の設定と状態変化を同じイベントで説明できること | Must |
+| R-602 | 補充予定日の設定と状態変化を同じユースケースで説明できること | Must |
 | R-603 | 補充停止時に予定日が残らないことを表現できること | Should |
 
 ## 5. レビュー観点

@@ -15,8 +15,8 @@
 |---|---|---|
 | State axis | `restock_status` | normal, scheduled, blocked |
 | Nullable axis | `next_restock_date` | null / present |
-| Event | `RestockScheduled` | normal -> scheduled と予定日 present |
-| Event | `RestockBlocked` | scheduled -> blocked と予定日 null |
+| Transition | `ChangeNextRestockDate` | normal -> scheduled と予定日 present |
+| Transition | `BlockScheduledRestock` | scheduled -> blocked と予定日 null |
 
 ## 3. 設計判断
 
@@ -24,7 +24,7 @@
 |---|---|
 | restock_status を Enum にする | 主要な業務状態を状態軸として導出するため |
 | next_restock_date を @null にする | 予定日の有無を状態パターンとして検証するため |
-| sets を event に付ける | usecase 操作ではなく状態遷移イベントの効果として説明するため |
+| transitions と sets を usecase に直接書く | 状態遷移と予定日の効果を、それを起こす usecase 操作に結び付けて説明するため |
 
 ## 4. 生成成果物
 
