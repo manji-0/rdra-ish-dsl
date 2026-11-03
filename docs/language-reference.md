@@ -1625,6 +1625,21 @@ transitions(CancelOrder, Order.status, pending -> cancelled)
 transitions(ExpireOrder, Order.status, pending -> cancelled)
 ```
 
+One use case that moves several states to one target lists the sources in parentheses.
+`(a, b) -> z` is one arm per listed source, each as if written on its own line: `check`,
+`states`, the diagrams, `list --kind transition`, and the TLA+ export see the expanded
+arms, and a `.when(Cond)` after the list guards every one of them. A one-element list,
+`(a) -> z`, is `a -> z`. The list has no `*`: "every state" would have to decide whether
+it includes `z` itself and the end states, so write the sources out.
+
+```rdra
+transitions(CancelOrder, Order.status, (pending, held, confirmed) -> cancelled)
+// the same three arms
+transitions(CancelOrder, Order.status, pending -> cancelled)
+transitions(CancelOrder, Order.status, held -> cancelled)
+transitions(CancelOrder, Order.status, confirmed -> cancelled)
+```
+
 Several arms of one use case from one state on one column are a choice. One run of the
 use case takes exactly one of them, and the actor decides which:
 

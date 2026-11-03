@@ -429,9 +429,10 @@ pub enum PredicateArg {
     Lit(std::string::String),
     /// Comparison or logical expression (e.g. `stock < selling`, `status == cancelled`).
     Expr(Expr),
-    /// State transition endpoint: `pending -> paid`.
+    /// State transition arms: `pending -> paid`, or `(pending, held) -> paid` for one arm
+    /// per source. `from` holds one source per arm, as written, never empty.
     Transition {
-        from: std::string::String,
+        from: Vec<std::string::String>,
         to: std::string::String,
     },
     /// Cardinality literal: `N:1`, `1:N`, `1:1`, `N:M`.

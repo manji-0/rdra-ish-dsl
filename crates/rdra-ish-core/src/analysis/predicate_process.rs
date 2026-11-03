@@ -69,7 +69,9 @@ pub(super) fn predicate_arg_display(arg: &PredicateArg) -> String {
         }
         PredicateArg::Lit(s) => s.clone(),
         PredicateArg::Expr(_) => "<expr>".to_string(),
-        PredicateArg::Transition { from, to } => format!("{from} -> {to}"),
+        PredicateArg::Transition { from, to } => {
+            format!("{} -> {to}", rdra_ish_syntax::format::format_sources(from))
+        }
         PredicateArg::Card(c) => c.clone(),
     }
 }
@@ -332,7 +334,7 @@ fn process_transitions_predicate(
         }
     };
 
-    let (from, to) = match pred.args.get(2) {
+    let (froms, to) = match pred.args.get(2) {
         Some(PredicateArg::Transition { from, to }) => (from.clone(), to.clone()),
         Some(arg) => {
             push_error(
@@ -411,11 +413,16 @@ fn process_transitions_predicate(
         return;
     };
 
-    for variant in [&from, &to] {
-        if !variants
+    // Normalize to declared enum casing.
+    let declared = |variant: &str| {
+        variants
             .iter()
-            .any(|v| v == variant || v.eq_ignore_ascii_case(variant))
-        {
+            .find(|v| *v == variant || v.eq_ignore_ascii_case(variant))
+            .cloned()
+    };
+    let mut arms = Vec::new();
+    for variant in froms.iter().chain(std::iter::once(&to)) {
+        let Some(value) = declared(variant) else {
             push_error(
                 ctx,
                 diags,
@@ -427,37 +434,30 @@ fn process_transitions_predicate(
                 },
             );
             return;
-        }
+        };
+        arms.push(value);
     }
+    let to = arms.pop().unwrap_or(to);
 
-    // Normalize to declared enum casing.
-    let from = variants
-        .iter()
-        .find(|v| *v == &from || v.eq_ignore_ascii_case(&from))
-        .cloned()
-        .unwrap_or(from);
-    let to = variants
-        .iter()
-        .find(|v| *v == &to || v.eq_ignore_ascii_case(&to))
-        .cloned()
-        .unwrap_or(to);
-
-    model.state_transitions.push(crate::model::StateTransition {
-        site: Some(ctx.locate(pred.span.clone())),
-        usecase: *usecase,
-        entity: entity_key,
-        column: column.clone(),
-        from: from.clone(),
-        to: to.clone(),
-        guard,
-    });
-    model.typed_predicates.push(TypedPredicate::Transitions {
-        entity: entity_key,
-        column,
-        usecase: *usecase,
-        from,
-        to,
-    });
+    // `(a, b) -> z` is one arm per source, each as if written on its own line.
+    for from in arms {
+        model.state_transitions.push(crate::model::StateTransition {
+            site: Some(ctx.locate(pred.span.clone())),
+            usecase: *usecase,
+            entity: entity_key,
+            column: column.clone(),
+            from: from.clone(),
+            to: to.clone(),
+            guard,
+        });
+        model.typed_predicates.push(TypedPredicate::Transitions {
+            entity: entity_key,
+            column: column.clone(),
+            usecase: *usecase,
+            from,
+            to: to.clone(),
+        });
+    }
 }
 
 /// `chooses(UseCase, Entity.column)` on a column typed by a variation, or

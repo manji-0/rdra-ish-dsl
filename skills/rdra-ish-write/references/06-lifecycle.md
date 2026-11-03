@@ -42,7 +42,10 @@ Also ask:
 2. Add `transitions(UseCase, Entity.col, from -> to)` for lifecycle movement, naming
    the use case that drives each edge. States are not declared: each variant a
    `transitions` names, and each value a creating use case sets, is a state of the
-   state model. An entity may have several lifecycle columns (a procedure `status` and
+   state model. A use case that moves several states to one target lists them once,
+   `transitions(Cancel, Order.status, (pending, held) -> cancelled)`: one arm per
+   listed source, the same as one line per source, and a `.when(Cond)` after the list
+   guards each arm. An entity may have several lifecycle columns (a procedure `status` and
    a `publication` that moves on its own): give each its own `transitions`, and do not
    split the entity or fake one with guarded `sets`. Each column is its own state model,
    and guards and rules may read any of them. A use case that moves two of them takes one

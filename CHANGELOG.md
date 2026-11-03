@@ -9,6 +9,10 @@
   `expires_at < now` has a deadline the use case sets instead of a column no use case
   writes. The `EffectOnNonStateColumn` message now lists every column type a `sets` value
   fits.
+- `transitions(UC, E.col, (a, b) -> z)` (#89): one arm per listed source, the same as
+  one line per source, with a `.when(Cond)` after the list guarding each arm. `fmt` keeps
+  the list as written. There is no `* -> z`: whether "every state" includes the target
+  and the end states has no one answer, so the sources are written out.
 
 ## v1.0.0 - 2026-11-03
 

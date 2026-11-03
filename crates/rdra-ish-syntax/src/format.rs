@@ -677,8 +677,16 @@ fn format_predicate_arg(arg: &PredicateArg) -> String {
         PredicateArg::Ref(qref) => format_qref(qref),
         PredicateArg::Lit(value) => quote_string(value),
         PredicateArg::Expr(expr) => format_expr(expr),
-        PredicateArg::Transition { from, to } => format!("{from} -> {to}"),
+        PredicateArg::Transition { from, to } => format!("{} -> {to}", format_sources(from)),
         PredicateArg::Card(card) => card.clone(),
+    }
+}
+
+/// The sources of a transition arm as written: `a`, or `(a, b)` for a list.
+pub fn format_sources(from: &[String]) -> String {
+    match from {
+        [one] => one.clone(),
+        many => format!("({})", many.join(", ")),
     }
 }
 
@@ -799,6 +807,10 @@ mod tests {
         assert_formats_to(
             "transitions( Pay,Order.status, pending->paid )\n",
             "transitions(Pay, Order.status, pending -> paid)\n",
+        );
+        assert_formats_to(
+            "transitions(Cancel, Order.status, ( pending,held )->cancelled)\n",
+            "transitions(Cancel, Order.status, (pending, held) -> cancelled)\n",
         );
         assert_formats_to(
             "maps_field( Total ,Order.total )\n",

@@ -142,6 +142,7 @@ effects apply together to the pre-state:
 | `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
 | `drives(UC, E.col op rhs, bool)` | The comparison variable becomes `bool`. |
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
+| `transitions(UC, E.col, (a, b) -> z)` | One arm per listed source, `a -> z` and `b -> z`, as if each were written on its own line; a `.when(Cond)` after the list guards each arm. |
 | `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |
 | `chooses(UC, E.col)` | The variation column takes any value of the variation: one successor per value, as on a creation. On a created instance it is the creation's choice. A column no rule, condition, assert, `property`, or `sets` reads has no variable, so nothing tells its values apart and the `chooses` adds no successor. |

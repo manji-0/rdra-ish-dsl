@@ -283,3 +283,43 @@ transitions(Decide, Doc.status, open -> drop)
     assert!(!rows.iter().any(|r| r == "kind=a, status=done"), "{rows:?}");
     assert!(arm_never_taken(&d).is_empty(), "{:?}", d.diags);
 }
+
+/// `(a, b) -> z` is one arm per source (#89): the list form and the one-line-per-source form
+/// reach the same states, and a `.when` on the list guards every arm, so the arm from the
+/// state the guard never admits is reported as never taken.
+#[test]
+fn a_source_list_is_one_arm_per_source_with_the_guard_on_each() {
+    const ORDER: &str = r#"
+usecase Place "Place"
+usecase Hold "Hold"
+usecase Cancel "Cancel"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, held, paid, cancelled) @default(pending)
+  flagged: Bool @default(false)
+}
+creates(Place, Order)
+transitions(Hold, Order.status, pending -> held)
+sets(Hold, Order.flagged == true)
+condition Flagged "flagged"
+holds(Flagged, Order.flagged == true)
+"#;
+    let listed = derive_src(&format!(
+        "{ORDER}\ntransitions(Cancel, Order.status, (pending, held) -> cancelled).when(Flagged)"
+    ));
+    let expanded = derive_src(&format!(
+        "{ORDER}\ntransitions(Cancel, Order.status, pending -> cancelled).when(Flagged)\ntransitions(Cancel, Order.status, held -> cancelled).when(Flagged)"
+    ));
+    assert_eq!(listed.rows("Order"), expanded.rows("Order"));
+    assert_eq!(
+        listed.rows("Order"),
+        [
+            "flagged=false, status=pending",
+            "flagged=true, status=held",
+            "flagged=true, status=cancelled"
+        ]
+    );
+    // A pending order is never flagged, so the arm from pending is never taken on either form.
+    assert_eq!(arm_never_taken(&listed), ["Cancel pending -> cancelled"]);
+    assert_eq!(arm_never_taken(&expanded), ["Cancel pending -> cancelled"]);
+}

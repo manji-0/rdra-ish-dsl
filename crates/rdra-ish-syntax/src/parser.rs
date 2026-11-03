@@ -581,9 +581,14 @@ fn card_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone
         .map(|(left, right)| PredicateArg::Card(format!("{left}:{right}")))
 }
 
-/// `pending -> paid` 遷移端点。
+/// `pending -> paid` 遷移端点, or `(pending, held) -> paid`: one arm per listed source.
 fn transition_arg() -> impl Parser<Token, PredicateArg, Error = Simple<Token>> + Clone {
-    ident()
+    let one = ident().map(|from| vec![from]);
+    let many = ident()
+        .separated_by(just(Token::Comma))
+        .at_least(1)
+        .delimited_by(just(Token::LParen), just(Token::RParen));
+    one.or(many)
         .then_ignore(just(Token::Arrow))
         .then(ident())
         .map(|(from, to)| PredicateArg::Transition { from, to })
@@ -1788,8 +1793,35 @@ performs(actor::Add, usecase::Add)
             .expect("predicate not found");
         assert!(matches!(
             &pred.args[2],
-            PredicateArg::Transition { from, to } if from == "pending" && to == "paid"
+            PredicateArg::Transition { from, to } if from == &["pending"] && to == "paid"
         ));
+    }
+
+    #[test]
+    fn a_transition_lists_its_sources_in_parentheses() {
+        let ast = parse_ok("transitions(Expire, Order.status, (pending, held) -> cancelled)");
+        let Some(Item::Predicate(pred)) = ast.items.first() else {
+            panic!("no predicate");
+        };
+        assert!(matches!(
+            &pred.args[2],
+            PredicateArg::Transition { from, to } if from == &["pending", "held"] && to == "cancelled"
+        ));
+        let ast = parse_ok("transitions(Expire, Order.status, (pending) -> cancelled)");
+        let Some(Item::Predicate(pred)) = ast.items.first() else {
+            panic!("no predicate");
+        };
+        assert!(matches!(
+            &pred.args[2],
+            PredicateArg::Transition { from, .. } if from == &["pending"]
+        ));
+        for src in [
+            "transitions(Expire, Order.status, () -> cancelled)",
+            "transitions(Expire, Order.status, * -> cancelled)",
+        ] {
+            let (_, errors) = parse(src);
+            assert!(!errors.is_empty(), "{src} parsed");
+        }
     }
 
     #[test]

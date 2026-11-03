@@ -575,3 +575,35 @@ fn a_fair_split_use_case_is_fair_on_each_action() {
         "{tla}"
     );
 }
+
+/// `transitions(UC, E.col, (a, b) -> z)` exports the same module as one line per source
+/// (#89), guard included, so TLC reads the two spellings as one model.
+#[test]
+fn a_transition_source_list_exports_as_its_expanded_lines() {
+    const ORDER: &str = r#"
+usecase Place "Place"
+usecase Hold "Hold"
+usecase Cancel "Cancel"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, held, paid, cancelled) @default(pending)
+  flagged: Bool @default(false)
+}
+creates(Place, Order)
+transitions(Hold, Order.status, pending -> held)
+sets(Hold, Order.flagged == true)
+condition Flagged "flagged"
+holds(Flagged, Order.flagged == true)
+"#;
+    let listed = format!(
+        "{ORDER}\ntransitions(Cancel, Order.status, (pending, held) -> cancelled).when(Flagged)"
+    );
+    let expanded = format!(
+        "{ORDER}\ntransitions(Cancel, Order.status, pending -> cancelled).when(Flagged)\ntransitions(Cancel, Order.status, held -> cancelled).when(Flagged)"
+    );
+    let listed = print(&system(&listed), PrintMode::Check, "M");
+    let expanded = print(&system(&expanded), PrintMode::Check, "M");
+    assert!(listed.tla.contains("Cancel(p0) =="), "{}", listed.tla);
+    assert_eq!(listed.tla, expanded.tla);
+    assert_eq!(listed.cfg, expanded.cfg);
+}
