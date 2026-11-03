@@ -233,7 +233,13 @@ applies_to(Audited, Refund)
         .find(|(_, c)| c.id == "Audited")
         .unwrap();
     assert_eq!(guards.len(), 1, "{guards:?}");
-    assert_eq!(guards[0].0, GuardWhy::Condition { cond: audited });
+    assert_eq!(
+        guards[0].0,
+        GuardWhy::Condition {
+            cond: audited,
+            later: None
+        }
+    );
     assert_eq!(guards[0].1.fact, ModelRef::Condition(audited));
     assert!(guards[0].1.span.is_some(), "the guard has a site");
 }
@@ -306,5 +312,11 @@ fn a_crowded_creation_still_names_a_guard_on_its_successor_that_never_holds() {
         .find(|(_, c)| c.id == "Unsettled")
         .unwrap();
     let whys: Vec<GuardWhy> = guards.iter().map(|(why, _)| *why).collect();
-    assert_eq!(whys, [GuardWhy::Condition { cond: unsettled }]);
+    assert_eq!(
+        whys,
+        [GuardWhy::Condition {
+            cond: unsettled,
+            later: None
+        }]
+    );
 }

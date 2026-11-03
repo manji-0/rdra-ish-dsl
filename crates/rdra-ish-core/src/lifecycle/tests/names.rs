@@ -198,6 +198,27 @@ fn one_of_each() -> Vec<StateDiag> {
             child: "Child".into(),
             site: site(),
         },
+        StateDiag::GuardReadsLaterStep {
+            condition: "Captured".into(),
+            usecase: "Pay".into(),
+            entity: "Payment".into(),
+            step: 2,
+            apis: vec!["PaymentApi".into()],
+            site: site(),
+        },
+        StateDiag::DrivenComparisonColumnWritten {
+            usecase: "Restock".into(),
+            column: "stock".into(),
+            proposition: "Stock.stock < selling".into(),
+            drivers: vec!["Sell".into()],
+            sites: vec![],
+        },
+        StateDiag::DefaultOnVariationIgnored {
+            column: "method".into(),
+            value: "cash".into(),
+            created: true,
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -233,7 +254,10 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::UnresolvedPropertyAtom { .. }
             | StateDiag::UnjoinedGuardRead { .. }
             | StateDiag::UnboundAfterRead { .. }
-            | StateDiag::DeleteLeavesChildren { .. } => {}
+            | StateDiag::DeleteLeavesChildren { .. }
+            | StateDiag::GuardReadsLaterStep { .. }
+            | StateDiag::DrivenComparisonColumnWritten { .. }
+            | StateDiag::DefaultOnVariationIgnored { .. } => {}
         }
     }
     all

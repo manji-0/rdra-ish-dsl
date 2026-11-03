@@ -4,9 +4,9 @@
 use std::fmt;
 
 use rdra_ish_core::lifecycle::{
-    derive_states_built, label_prefix, ActionOrigin, Blocked, BoundsLine, Caps, Change, GuardWhy,
-    InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace,
-    TraceStep,
+    derive_states_built, label_prefix, ActionOrigin, Birth, Blocked, BoundsLine, Caps, Change,
+    GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace,
+    TraceStep, TransitionSystem,
 };
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
@@ -84,7 +84,10 @@ pub(crate) fn state_findings(
         })
     });
     let violations = report.diags.iter().filter_map(|d| {
-        let text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
+        let mut text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
+        if report.bounds.instances.get() == 1 {
+            text.push_str(&one_instance_note(&d.diag, &ts));
+        }
         Some(Finding::new(&d.diag, &[], text))
     });
     let unattributed = report
@@ -116,6 +119,42 @@ pub(crate) fn state_findings(
         findings,
         not_checked: (!not_checked.is_empty()).then(|| not_checked.to_string()),
     }
+}
+
+/// The last row of a deadlock error at one instance per entity when a way out needs an
+/// instance of an entity some use case creates, which one slot may never leave for it: a
+/// second instance can, so the deadlock may be the bound's, not the model's. Empty otherwise.
+fn one_instance_note(diag: &StateDiag, ts: &TransitionSystem) -> String {
+    let StateDiag::Deadlock { exits, .. } = diag else {
+        return String::new();
+    };
+    if diag.severity() != Severity::Error {
+        return String::new();
+    }
+    let created = |entity: &str| {
+        ts.entities()
+            .iter()
+            .any(|e| e.id == entity && e.birth == Birth::Created)
+    };
+    let mut short: Vec<&str> = Vec::new();
+    for x in exits {
+        let needs = match &x.why {
+            Blocked::NoInstance(needs) | Blocked::Apart(needs) => needs,
+            _ => continue,
+        };
+        for need in needs.iter().filter(|n| created(&n.entity)) {
+            if !short.contains(&need.entity.as_str()) {
+                short.push(&need.entity);
+            }
+        }
+    }
+    if short.is_empty() {
+        return String::new();
+    }
+    format!(
+        "\n  at one instance per entity, a way out needs a {} row the one slot never leaves for it; the deadlock may clear at --instance-count 2 (`rdra-ish verify` runs two)",
+        short.join(" or ")
+    )
 }
 
 /// `render_violation` prints it once, as a block with sites, instead of once per view.
@@ -293,7 +332,13 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
                 froms.join(" or ")
             )
         }
-        (GuardWhy::Condition { cond }, _) => format!("condition {}", model.conditions[cond].id),
+        (GuardWhy::Condition { cond, later }, _) => match later {
+            Some(ek) => format!(
+                "condition {}, read before the transaction that creates {} (GuardReadsLaterStep)",
+                model.conditions[cond].id, model.entities[ek].id
+            ),
+            None => format!("condition {}", model.conditions[cond].id),
+        },
         (GuardWhy::ArmCondition { .. }, ModelRef::Transition(i)) => {
             let st = &model.state_transitions[*i];
             let guarded: Vec<String> = model
@@ -749,6 +794,9 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
         | StateDiag::UnboundAfterRead { .. }
-        | StateDiag::DeleteLeavesChildren { .. } => diag.to_string(),
+        | StateDiag::DeleteLeavesChildren { .. }
+        | StateDiag::GuardReadsLaterStep { .. }
+        | StateDiag::DrivenComparisonColumnWritten { .. }
+        | StateDiag::DefaultOnVariationIgnored { .. } => diag.to_string(),
     }
 }

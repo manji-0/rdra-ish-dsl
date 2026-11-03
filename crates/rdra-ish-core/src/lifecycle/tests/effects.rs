@@ -519,3 +519,123 @@ sets(Make, Item.stock == 9)
         }
     )));
 }
+
+/// A driven comparison is a variable of its own, which only `drives` moves (#89). A use case
+/// that `sets` a column the comparison reads and does not drive it leaves the comparison at its
+/// last truth: the warning `DrivenComparisonColumnWritten` names it, once per column. A use
+/// case that drives the comparison itself draws nothing.
+#[test]
+fn a_sets_of_a_column_a_driven_comparison_reads_says_the_comparison_goes_stale() {
+    let src = |restock: &str| {
+        format!(
+            r#"
+entity Stock "在庫" {{ id: Int @pk  stock: Int @default(3)  selling: Int @default(1) }}
+usecase Sell "販売"
+usecase Restock "入荷"
+updates(Sell, Stock)
+drives(Sell, Stock.stock < selling, true)
+updates(Restock, Stock)
+sets(Restock, Stock.stock == 5)
+{restock}
+forbidden(Stock, stock == 5, stock < selling)
+"#
+        )
+    };
+    let written = |restock: &str| {
+        derive_src(&src(restock))
+            .diags
+            .iter()
+            .filter_map(|x| match &x.diag {
+                StateDiag::DrivenComparisonColumnWritten {
+                    usecase,
+                    column,
+                    drivers,
+                    ..
+                } => Some((usecase.clone(), column.clone(), drivers.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        written(""),
+        vec![("Restock".into(), "stock".into(), vec!["Sell".into()])]
+    );
+    assert!(written("drives(Restock, Stock.stock < selling, false)").is_empty());
+    let d = derive_src(&src(""));
+    let diag = d
+        .diags
+        .iter()
+        .map(|x| &x.diag)
+        .find(|x| matches!(x, StateDiag::DrivenComparisonColumnWritten { .. }))
+        .expect("DrivenComparisonColumnWritten");
+    assert_eq!(diag.severity(), crate::lifecycle::Severity::Warning);
+    assert!(
+        diag.to_string()
+            .contains("drives(Restock, Stock.stock < selling, true)"),
+        "{diag}"
+    );
+}
+
+/// A variation column starts at any of its values, so its `@default` picks nothing (#89): the
+/// info `DefaultOnVariationIgnored` says so on a row no use case creates and on a created row
+/// some creation leaves unset. When every creation sets the column, nothing is said.
+#[test]
+fn a_default_on_a_variation_column_says_it_does_not_pick_the_start() {
+    let src = |extra: &str| {
+        format!(
+            r#"
+variation Method "支払方法" {{
+  cash "現金"
+  card "カード"
+}}
+entity Account "口座" {{ id: Int @pk  method: Method @default(cash)  active: Bool @default(true) }}
+entity Ticket "伝票" {{ id: Int @pk  method: Method @default(cash)  open: Bool @default(true) }}
+usecase Close "解約"
+usecase Open "起票"
+updates(Close, Account)
+sets(Close, Account.active == false)
+creates(Open, Ticket)
+{extra}
+forbidden(Account, method == card, active == false)
+forbidden(Ticket, method == card, open == false)
+"#
+        )
+    };
+    let ignored = |extra: &str| {
+        let d = derive_src(&src(extra));
+        let mut out: Vec<(String, bool)> = Vec::new();
+        for entity in ["Account", "Ticket"] {
+            out.extend(d.entity(entity).diagnostics.iter().filter_map(|x| match x {
+                StateDiag::DefaultOnVariationIgnored {
+                    column, created, ..
+                } => Some((format!("{entity}.{column}"), *created)),
+                _ => None,
+            }));
+        }
+        out
+    };
+    assert_eq!(
+        ignored(""),
+        vec![
+            ("Account.method".to_string(), false),
+            ("Ticket.method".to_string(), true)
+        ]
+    );
+    assert_eq!(
+        ignored("sets(Open, Ticket.method == cash)"),
+        vec![("Account.method".to_string(), false)]
+    );
+    let d = derive_src(&src(""));
+    let info = d
+        .diags
+        .iter()
+        .map(|x| &x.diag)
+        .find(|x| {
+            matches!(
+                x,
+                StateDiag::DefaultOnVariationIgnored { created: true, .. }
+            )
+        })
+        .expect("DefaultOnVariationIgnored");
+    assert_eq!(info.severity(), crate::lifecycle::Severity::Info);
+}

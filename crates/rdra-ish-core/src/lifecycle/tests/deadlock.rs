@@ -104,7 +104,13 @@ fn a_paid_order_that_ship_never_leaves_is_one_error() {
         panic!("{:?}", exits[0].why)
     };
     let whys: Vec<GuardWhy> = guards.iter().map(|(why, _)| *why).collect();
-    assert_eq!(whys, [GuardWhy::Condition { cond: packed }]);
+    assert_eq!(
+        whys,
+        [GuardWhy::Condition {
+            cond: packed,
+            later: None
+        }]
+    );
     assert!(d.has("Order", |x| matches!(x, StateDiag::Deadlock { .. })));
 }
 

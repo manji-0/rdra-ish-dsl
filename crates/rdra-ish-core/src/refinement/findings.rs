@@ -45,7 +45,10 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
         | StateDiag::UnboundAfterRead { .. }
-        | StateDiag::DeleteLeavesChildren { .. } => StageId::Lifecycle,
+        | StateDiag::DeleteLeavesChildren { .. }
+        | StateDiag::GuardReadsLaterStep { .. }
+        | StateDiag::DrivenComparisonColumnWritten { .. }
+        | StateDiag::DefaultOnVariationIgnored { .. } => StageId::Lifecycle,
     }
 }
 

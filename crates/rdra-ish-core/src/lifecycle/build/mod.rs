@@ -55,6 +55,9 @@ struct Builder<'m> {
     altered: Vec<Vec<EntityKey>>,
     /// The entities of the use case action being built, if any.
     acting: Vec<EntityKey>,
+    /// The entity each `holds` body on a split use case reads before the later transaction
+    /// group that writes it (`GuardReadsLaterStep`), for the guard's `Runs_` row.
+    later_reads: HashMap<(UseCaseKey, ConditionKey), EntityKey>,
 }
 
 impl<'m> Builder<'m> {
@@ -74,6 +77,7 @@ impl<'m> Builder<'m> {
             diags: Vec::new(),
             altered: Vec::new(),
             acting: Vec::new(),
+            later_reads: HashMap::new(),
         }
     }
 
@@ -144,12 +148,13 @@ impl<'m> Builder<'m> {
 
     fn entities(&mut self) {
         let model = self.model;
-        let created: HashSet<EntityKey> = infer_usecase_transactions(model)
-            .iter()
-            .flat_map(|utx| utx.writes())
-            .filter(|w| w.kind == WriteKind::Creates)
-            .map(|w| w.entity)
-            .collect();
+        let mut creators: HashMap<EntityKey, HashSet<UseCaseKey>> = HashMap::new();
+        for utx in infer_usecase_transactions(model) {
+            for w in utx.writes().filter(|w| w.kind == WriteKind::Creates) {
+                creators.entry(w.entity).or_default().insert(utx.usecase);
+            }
+        }
+        let created: HashSet<EntityKey> = creators.keys().copied().collect();
         let mut keys: Vec<EntityKey> = model
             .entities
             .keys()
@@ -176,6 +181,7 @@ impl<'m> Builder<'m> {
             for col in &model.entities[ek].columns {
                 if let Some(var) = self.column_var(e, ek, col, birth) {
                     columns.push(var);
+                    self.variation_default(ek, col, var, creators.get(&ek));
                 }
             }
             for key in naming::driven_props(model, ek) {
@@ -324,6 +330,41 @@ impl<'m> Builder<'m> {
         Some(var)
     }
 
+    /// `DefaultOnVariationIgnored` for a variation column with a `@default`, whose start is
+    /// any value of the variation, unless every use case that creates the entity (`creators`)
+    /// sets the column, so no row takes the start the `@default` names.
+    fn variation_default(
+        &mut self,
+        ek: EntityKey,
+        col: &ModelColumn,
+        var: VarId,
+        creators: Option<&HashSet<UseCaseKey>>,
+    ) {
+        let model = self.model;
+        let (ColumnType::Variation(_), Some(value)) = (&col.col_type, &col.default_val) else {
+            return;
+        };
+        let sets = |uc: &UseCaseKey| {
+            model
+                .column_effects
+                .iter()
+                .any(|ce| ce.origin == *uc && ce.entity == ek && ce.column == col.name)
+        };
+        if creators.is_some_and(|ucs| ucs.iter().all(sets)) {
+            return;
+        }
+        let site = self.ts.vars[var.index()].site.clone();
+        self.diag(
+            vec![ek],
+            StateDiag::DefaultOnVariationIgnored {
+                column: col.name.clone(),
+                value: value.clone(),
+                created: creators.is_some(),
+                site,
+            },
+        );
+    }
+
     /// One owner var per foreign key. An `.optional()` key's owner starts and may stay
     /// unlinked (`null`). A pre-existing child starts linked: an N:1 child to any parent slot
     /// (or unlinked, when optional), a 1:1 child or the child of a `1..*` key to the parent
@@ -457,6 +498,7 @@ impl<'m> Builder<'m> {
             let id = &model.use_cases[uc].id;
             let written_apis: HashSet<ApiKey> = utx.writes().filter_map(|w| w.via_api).collect();
             self.run_mark_vars(uc, &entities);
+            self.later_step_reads(uc, &groups, &written_apis);
             for (g, writes) in groups.iter().enumerate() {
                 let name = match entities.len() {
                     1 => id.clone(),

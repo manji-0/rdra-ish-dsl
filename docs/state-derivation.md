@@ -145,7 +145,7 @@ effects apply together to the pre-state:
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
 | `transitions(UC, E.col, (a, b) -> z)` | One arm per listed source, `a -> z` and `b -> z`, as if each were written on its own line; a `.when(Cond)` after the list guards each arm. |
 | `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
-| a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |
+| a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice; info `DefaultOnVariationIgnored` says so where some row starts at any value. |
 | `chooses(UC, E.col)` | The variation column takes any value of the variation: one successor per value, as on a creation. On a created instance it is the creation's choice. A column no rule, condition, assert, `property`, or `sets` reads has no variable, so nothing tells its values apart and the `chooses` adds no successor. |
 | `chooses(UC, E.col, v).when(Cond)` | The column takes one of the listed values: one successor per value. A guarded value is taken only when the body of `Cond` holds on the pre-state; the column gets one guard on the successor, `\/ (col' = v /\ body)` over its listed values (an unguarded value's body is `TRUE`), built as an arm guard is. A guarded value gives the column a variable. |
 | a column the use case does not write | Unchanged. |
@@ -486,7 +486,9 @@ states of the cone for each check that `moves` makes, one check at a time:
   slot is still free does not block the action.
 - **Guards.** Each guard (a `transitions` from-state, an `applies_to` condition, a relate
   link, the clock) that holds under no binding of any reachable state prints as `guard:`
-  with its site. A guard that holds somewhere is left out.
+  with its site. A guard that holds somewhere is left out. A condition guard of a split use case that reads
+  an entity only a later group creates ends in `read before the transaction that creates
+  <Entity> (GuardReadsLaterStep)`.
 - **Never together.** Every guard holds in some reachable state, but never all of them in
   one. The warning says so in its first line.
 
@@ -541,6 +543,15 @@ error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid fore
          Order#1.status: pending -> paid   skills/rdra-ish-verify/samples/deadlock.rdra:28:1
 warning[Runs_Ship]: use case Ship can never run: each of its guards holds in some reachable state, but never all of them in one
   declared: use case Ship   skills/rdra-ish-verify/samples/deadlock.rdra:14:1
+```
+
+At one instance per entity, a way out that needs a row of an entity some use case creates may
+find none: the one slot was deleted, or never freed for it. `check` then ends the deadlock error
+with a row that says so, and that the deadlock may clear at `--instance-count 2`, which
+`verify` runs. The error keeps its name and severity:
+
+```
+  at one instance per entity, a way out needs a Voucher row the one slot never leaves for it; the deadlock may clear at --instance-count 2 (`rdra-ish verify` runs two)
 ```
 
 A deadlock is an error, unless some way out lacks only a free slot of an entity it creates,
@@ -696,16 +707,19 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `NoCreationPath` | `NoCreationPath_<E>` | info | No use case creates the entity. It starts present. |
 | `MinCardNeedsCreate { usecase, child }` | `MinCardNeedsCreate_<E>_<usecase>_<child>` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
 | `DeleteLeavesChildren { usecase, parent, child }` | `DeleteLeavesChildren_<E>_<usecase>_<child>` | info | A use case deletes the parent of a key with `.on_delete(cascade)`, which the lifecycle does not read: the child rows stay and every rule still sees them. Add `deletes(UC, Child)` to remove them with the parent. |
+| `DefaultOnVariationIgnored { column, value, created }` | `DefaultOnVariationIgnored_<E>_<column>` | info | A variation column has a `@default`, and some row starts at any value of the variation: the entity is not created, or a use case creates it without setting the column. Not raised when every creating use case sets the column. |
 | `MinCardOfPreExistingParent { child }` | `MinCardOfPreExistingParent_<E>_<child>` | warning | The parent of a `1..*` key starts present but every child starts absent, so `MinCard_*` fails at the start. |
 | `PreExistingChildOfCreatedParent { parent }` | `PreExistingChildOfCreatedParent_<E>_<parent>` | warning | No use case creates the entity, but some use case creates the parent of its mandatory `relate`. Each slot starts owned by a parent slot that is still `absent`. |
 | `ConflictingEffects { usecase, column }` | `ConflictingEffects_<E>_<usecase>_<column>` | error | One use case assigns two values to one column. |
 | `DoubleModeledEnum { column, usecase }` | `DoubleModeledEnum_<E>_<usecase>_<column>` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
+| `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column that a driven comparison reads and does not drive the comparison, so the comparison keeps the truth its last `drives` gave whatever the column holds. Add a `drives` of the comparison to the use case with the truth the new value gives. |
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal lies outside `0..max`. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | The `.along` of a multi-entity rule, or of an `invariant` with `.has`/`.none`, names a hop that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
+| `GuardReadsLaterStep { condition, usecase, entity, step, apis }` | `GuardReadsLaterStep_<E>_<condition>_<usecase>` | warning | A `holds` body applied to a split use case compares an entity that only a later transaction group creates. The guard is read before the first group, when the run has no row of the entity yet, so it reads rows that are not the run's, and often never holds. The message names `applies_to(Cond, Api)` for each API of that group that creates the entity. The `guard:` row of the first group's `Runs_` warning says the same. |
 | `UnboundAfterRead { anchor, entity }` | `UnboundAfterRead_<E>_<anchor>` | warning | An `after(UC).assert` atom reads an entity that no step of the use case's run binds, so every present row of it must satisfy the atom. Write the entity in the use case to read the run's row. |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |

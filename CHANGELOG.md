@@ -31,6 +31,23 @@
   and there is no unlink form yet. `check`, `states`, the TLA+ export and `verify` read
   the link as they read a key a creation sets. No key is `LinkWithoutKey`, a mandatory one
   `LinkOnMandatoryKey`, several with no `.role` naming one `AmbiguousOwnerLink`.
+- The warning `GuardReadsLaterStep` (#89): a `holds` body applied to a split use case compares
+  an entity that only a later transaction group creates. The guard is read before the first
+  group, when the run has no row of it yet, so it reads rows that are not the run's and often
+  never holds. The message names `applies_to(Cond, Api)` for the API of that group, and the
+  `guard:` row of the first group's `Runs_` warning ends in `read before the transaction that
+  creates <Entity> (GuardReadsLaterStep)`.
+- The warning `DrivenComparisonColumnWritten` (#89): a use case `sets` a column that a driven
+  comparison reads and does not drive the comparison, so the comparison keeps the truth its
+  last `drives` gave. The message names the `drives` to add.
+- The info `DefaultOnVariationIgnored` (#89): a variation column has a `@default`, and some row
+  starts at any value of the variation, since `@default` does not pick a variation column's
+  start. It is not raised when every use case that creates the entity sets the column. Of the
+  samples, clinic-ops (`Appointment.referral`, `Charge.kind`, `InsurancePolicy.limit_category`)
+  and patent-ops (`OfficeAction.amendment`) draw it; each value is the actor's choice there.
+- A deadlock error of `check` at one instance per entity, where a way out needs a row of an
+  entity some use case creates, ends with a row that says the deadlock may clear at
+  `--instance-count 2`, which `verify` runs (#89). The error keeps its name and severity.
 
 ### Changed
 

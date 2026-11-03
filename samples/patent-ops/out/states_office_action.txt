@@ -60,4 +60,6 @@ Entity: OfficeAction (拒絶理由通知)
   final  closed    false     true           limited    no       yes       BucOfficeAction/CloseOfficeActionDocket, BucOfficeAction/DraftResponse, BucOfficeAction/ExpireResponseTerm, BucOfficeAction/FileResponse, BucOfficeAction/ReceiveFinalOfficeAction, BucOfficeAction/ReceiveOfficeAction, BucOfficeAction/RequestLateExtension, BucOfficeAction/RequestTermExtension
 
   reachable: 54 / bound: 96
+  diagnostics:
+    [info][DefaultOnVariationIgnored_OfficeAction_amendment] amendment is typed by a variation, so states, check and verify start it at any value of the variation, and @default(limited) does not pick its start; to start a created row at limited, write sets(UseCase, Entity.amendment == limited) in the use case that creates it
 

@@ -329,6 +329,36 @@ pub enum StateDiag {
         child: String,
         site: Site,
     },
+    /// A `holds` body applied to a split use case, which its first transaction group carries,
+    /// compares an entity that only a later group creates, so it reads rows that are not the
+    /// run's.
+    GuardReadsLaterStep {
+        condition: String,
+        usecase: String,
+        entity: String,
+        /// The 1-based transaction group that creates the entity.
+        step: usize,
+        /// The APIs through which that group creates the entity.
+        apis: Vec<String>,
+        site: Site,
+    },
+    /// A use case `sets` a column that a comparison another use case `drives` reads, and does
+    /// not drive the comparison itself, so the comparison keeps its last driven truth.
+    DrivenComparisonColumnWritten {
+        usecase: String,
+        column: String,
+        proposition: String,
+        drivers: Vec<String>,
+        sites: Vec<Site>,
+    },
+    /// `@default` on a variation column, whose start value is any value of the variation.
+    DefaultOnVariationIgnored {
+        column: String,
+        value: String,
+        /// Some use case creates the entity, so a creation can set the column.
+        created: bool,
+        site: Site,
+    },
 }
 
 /// `「label」: ` for a labelled rule, so a violation names the rule in the author's words.
@@ -439,6 +469,15 @@ impl StateDiag {
             StateDiag::DeleteLeavesChildren { usecase, child, .. } => {
                 with("DeleteLeavesChildren", &[usecase, child])
             }
+            StateDiag::GuardReadsLaterStep {
+                condition, usecase, ..
+            } => with("GuardReadsLaterStep", &[condition, usecase]),
+            StateDiag::DrivenComparisonColumnWritten {
+                usecase, column, ..
+            } => with("DrivenComparisonColumnWritten", &[usecase, column]),
+            StateDiag::DefaultOnVariationIgnored { column, .. } => {
+                with("DefaultOnVariationIgnored", &[column])
+            }
         };
         raw.chars()
             .map(|c| {
@@ -482,7 +521,8 @@ impl StateDiag {
             }
             StateDiag::NoCreationPath
             | StateDiag::MinCardNeedsCreate { .. }
-            | StateDiag::DeleteLeavesChildren { .. } => Severity::Info,
+            | StateDiag::DeleteLeavesChildren { .. }
+            | StateDiag::DefaultOnVariationIgnored { .. } => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::PreExistingChildOfCreatedParent { .. }
@@ -491,7 +531,9 @@ impl StateDiag {
             | StateDiag::ArmNeverTaken { .. }
             | StateDiag::ValueNeverChosen { .. }
             | StateDiag::UnjoinedGuardRead { .. }
-            | StateDiag::UnboundAfterRead { .. } => Severity::Warning,
+            | StateDiag::UnboundAfterRead { .. }
+            | StateDiag::GuardReadsLaterStep { .. }
+            | StateDiag::DrivenComparisonColumnWritten { .. } => Severity::Warning,
             StateDiag::ConflictingEffects { .. }
             | StateDiag::DoubleModeledEnum { .. }
             | StateDiag::PatternCapReached { .. }
@@ -866,6 +908,66 @@ impl fmt::Display for StateDiag {
                 f,
                 "{usecase} deletes a {parent} whose key from {child} says .on_delete(cascade), which the lifecycle does not read: the {child} rows stay, and every rule still sees them; add deletes({usecase}, {child}) to remove them with it"
             ),
+            StateDiag::GuardReadsLaterStep {
+                condition,
+                usecase,
+                entity,
+                step,
+                apis,
+                ..
+            } => {
+                write!(
+                    f,
+                    "holds({condition}, ...) on {usecase} reads {entity}, which only transaction {step} of {usecase} creates; the guard is read before transaction 1, when the run has no {entity} row yet, so it reads {entity} rows that are not the run's"
+                )?;
+                if apis.is_empty() {
+                    return write!(
+                        f,
+                        "; order the use case's invokes so {entity} is created first, or guard it with a condition on what transaction 1 writes"
+                    );
+                }
+                let to: Vec<String> = apis
+                    .iter()
+                    .map(|api| format!("applies_to({condition}, {api})"))
+                    .collect();
+                write!(
+                    f,
+                    "; apply it to the API that creates {entity} instead: {}",
+                    to.join(" or ")
+                )
+            }
+            StateDiag::DrivenComparisonColumnWritten {
+                usecase,
+                column,
+                proposition,
+                drivers,
+                ..
+            } => write!(
+                f,
+                "{usecase} sets {column}, which the comparison {proposition} reads, but only {} drives that comparison, so after {usecase} it keeps its last driven truth whatever {column} holds; add drives({usecase}, {proposition}, true) or false, the truth the new value gives",
+                drivers.join(" and ")
+            ),
+            StateDiag::DefaultOnVariationIgnored {
+                column,
+                value,
+                created,
+                ..
+            } => {
+                write!(
+                    f,
+                    "{column} is typed by a variation, so states, check and verify start it at any value of the variation, and @default({value}) does not pick its start"
+                )?;
+                match created {
+                    true => write!(
+                        f,
+                        "; to start a created row at {value}, write sets(UseCase, Entity.{column} == {value}) in the use case that creates it"
+                    ),
+                    false => write!(
+                        f,
+                        "; no use case creates this entity, so every rule is checked for each value"
+                    ),
+                }
+            }
         }
     }
 }

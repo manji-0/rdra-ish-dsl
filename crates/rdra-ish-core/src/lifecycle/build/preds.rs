@@ -13,11 +13,12 @@ use crate::lifecycle::types::{
 };
 use crate::lifecycle::EntId;
 use crate::model::{
-    CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossConstraintScope,
-    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Join, Min,
-    QuantifierKind, RefAction, RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs,
-    UseCaseKey,
+    ApiKey, CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs,
+    CrossConstraintScope, CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId,
+    HoldsBody, Join, Min, QuantifierKind, RefAction, RelatedQuantifier, TemporalExpr,
+    TemporalFormula, TemporalRhs, UseCaseKey,
 };
+use crate::tx::{UcWrite, WriteKind};
 
 /// Binds each entity of a predicate to a slot reference.
 type Binding = Vec<(EntityKey, At)>;
@@ -740,6 +741,71 @@ impl<'m> Builder<'m> {
         self.unique_keys();
         self.min_cards();
         self.cascade_deletes();
+        self.driven_columns_written();
+    }
+
+    /// `DrivenComparisonColumnWritten` per use case that `sets` a column a driven comparison
+    /// reads and does not drive that comparison: the comparison is a variable of its own,
+    /// which only a `drives` moves, so it keeps its last driven truth.
+    fn driven_columns_written(&mut self) {
+        let model = self.model;
+        let mut seen: Vec<(EntityKey, String)> = Vec::new();
+        for pe in &model.proposition_effects {
+            let key = pe.prop.axis_key();
+            let Some(&e) = self.ent_of.get(&pe.entity) else {
+                continue;
+            };
+            if seen.contains(&(pe.entity, key.clone()))
+                || !self.prop_var.contains_key(&(e, key.clone()))
+            {
+                continue;
+            }
+            seen.push((pe.entity, key.clone()));
+            let driving: Vec<(UseCaseKey, Site)> = model
+                .proposition_effects
+                .iter()
+                .enumerate()
+                .filter(|(_, other)| other.entity == pe.entity && other.prop.axis_key() == key)
+                .map(|(i, other)| {
+                    (
+                        other.origin,
+                        Site::new(ModelRef::PropositionEffect(i), &other.site),
+                    )
+                })
+                .collect();
+            let mut drivers: Vec<String> = Vec::new();
+            for (uc, _) in &driving {
+                let id = model.use_cases[*uc].id.clone();
+                if !drivers.contains(&id) {
+                    drivers.push(id);
+                }
+            }
+            let mut columns = vec![pe.prop.lhs_column.as_str()];
+            if let CmpRhs::Column(c) = &pe.prop.rhs {
+                columns.push(c);
+            }
+            let proposition = format!("{}.{}", model.entities[pe.entity].id, pe.prop.display());
+            for (i, ce) in model.column_effects.iter().enumerate() {
+                if ce.entity != pe.entity
+                    || !columns.contains(&ce.column.as_str())
+                    || driving.iter().any(|(uc, _)| *uc == ce.origin)
+                {
+                    continue;
+                }
+                let mut sites = vec![Site::new(ModelRef::ColumnEffect(i), &ce.site)];
+                sites.extend(driving.iter().map(|(_, site)| site.clone()));
+                self.diag(
+                    vec![pe.entity],
+                    StateDiag::DrivenComparisonColumnWritten {
+                        usecase: model.use_cases[ce.origin].id.clone(),
+                        column: ce.column.clone(),
+                        proposition: proposition.clone(),
+                        drivers: drivers.clone(),
+                        sites,
+                    },
+                );
+            }
+        }
     }
 
     /// `DeleteLeavesChildren` per key with `.on_delete(cascade)` and use case that deletes
@@ -1192,11 +1258,73 @@ impl<'m> Builder<'m> {
             let pred = self.body_pred(b.usecase, b.cond, params, &site);
             guards.push(Guard {
                 pred,
-                why: GuardWhy::Condition { cond: b.cond },
+                why: GuardWhy::Condition {
+                    cond: b.cond,
+                    later: self.later_reads.get(&(b.usecase, b.cond)).copied(),
+                },
                 site,
             });
         }
         guards
+    }
+
+    /// `GuardReadsLaterStep` for each `holds` body that step 1 of the split use case `uc`
+    /// carries and that compares an entity step 1 does not write and a later step creates:
+    /// the guard is read before step 1, when the run has no row of it yet, so it reads rows
+    /// that are not the run's. `groups` lists each step's writes, in transaction order.
+    pub(super) fn later_step_reads(
+        &mut self,
+        uc: UseCaseKey,
+        groups: &[Vec<UcWrite>],
+        written_apis: &HashSet<ApiKey>,
+    ) {
+        let model = self.model;
+        let Some(first) = groups.first() else {
+            return;
+        };
+        for b in self.step_bodies(uc, first, 0, written_apis) {
+            let later = b
+                .body
+                .conds
+                .iter()
+                .flat_map(cond_entities)
+                .filter(|ek| !first.iter().any(|w| w.entity == *ek))
+                .find_map(|ek| {
+                    let (step, writes) =
+                        groups.iter().enumerate().skip(1).find(|(_, writes)| {
+                            writes
+                                .iter()
+                                .any(|w| w.entity == ek && w.kind == WriteKind::Creates)
+                        })?;
+                    let mut apis: Vec<String> = Vec::new();
+                    for api in writes
+                        .iter()
+                        .filter(|w| w.entity == ek && w.kind == WriteKind::Creates)
+                        .filter_map(|w| w.via_api)
+                    {
+                        let id = model.apis[api].id.clone();
+                        if !apis.contains(&id) {
+                            apis.push(id);
+                        }
+                    }
+                    Some((ek, step + 1, apis))
+                });
+            let Some((ek, step, apis)) = later else {
+                continue;
+            };
+            self.later_reads.insert((uc, b.cond), ek);
+            self.diag(
+                vec![ek],
+                StateDiag::GuardReadsLaterStep {
+                    condition: model.conditions[b.cond].id.clone(),
+                    usecase: model.use_cases[uc].id.clone(),
+                    entity: model.entities[ek].id.clone(),
+                    step,
+                    apis,
+                    site: Site::new(ModelRef::Condition(b.cond), &b.body.site),
+                },
+            );
+        }
     }
 
     /// The `holds` body of `ck` over an action's params, as [`Self::condition_guards`] reads it.

@@ -719,3 +719,89 @@ transitions(Review, Audit.status, open -> closed)
     assert_eq!(stderr.matches("not decided").count(), 2, "{stderr}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn check_source(name: &str, src: &str) -> String {
+    let dir = std::env::temp_dir().join(format!("rdra-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let dir = dunce::canonicalize(&dir).unwrap();
+    let file = dir.join(format!("{name}.rdra"));
+    std::fs::write(&file, src).unwrap();
+    let output = run(&["check", file.to_str().unwrap()]);
+    let _ = std::fs::remove_dir_all(&dir);
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+/// A guard on a split use case that reads what only its second transaction writes draws
+/// `GuardReadsLaterStep`, and the `Runs_` row of the first transaction says why its guard
+/// never holds (#89).
+#[test]
+fn check_says_a_guard_reads_a_later_transaction() {
+    let stderr = check_source(
+        "later-step",
+        r#"entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+entity Payment "決済" { id: Int @pk  status: Enum(captured, refunded) @default(captured) }
+relate(Payment, Order, N:1)
+api OrderApi "mark paid"
+api PaymentApi "capture"
+usecase Place "注文確定"
+usecase Pay "決済"
+creates(Place, Order)
+invokes(Pay, OrderApi)
+invokes(Pay, PaymentApi)
+updates(OrderApi, Order)
+creates(PaymentApi, Payment)
+transitions(Pay, Order.status, pending -> paid)
+condition Captured "決済済み"
+holds(Captured, Payment.status == captured)
+applies_to(Captured, Pay)
+"#,
+    );
+    assert!(
+        stderr.contains("warning[GuardReadsLaterStep_Payment_Captured_Pay]: ")
+            && stderr.contains("applies_to(Captured, PaymentApi)"),
+        "{stderr}"
+    );
+    let runs = stderr
+        .split("warning[Runs_Pay_1]")
+        .nth(1)
+        .expect("Runs_Pay_1");
+    assert!(
+        runs.contains(
+            "guard: condition Captured, read before the transaction that creates Payment (GuardReadsLaterStep)"
+        ),
+        "{runs}"
+    );
+}
+
+/// A deadlock whose way out needs a row of an entity some use case creates, which the one
+/// slot of `check` never leaves, ends with a row that says a second instance may clear it
+/// (#89). The error keeps its name.
+#[test]
+fn check_says_a_one_instance_deadlock_may_clear_at_two() {
+    let stderr = check_source(
+        "one-slot",
+        r#"entity Order "注文" { id: Int @pk  status: Enum(pending, done) @default(pending) }
+entity Voucher "券" { id: Int @pk  used: Bool }
+relate(Order, Voucher, N:1).optional()
+usecase Issue "発券"
+usecase Place "注文"
+usecase Use "使用"
+creates(Issue, Voucher)
+creates(Place, Order)
+deletes(Place, Voucher)
+updates(Use, Order)
+updates(Use, Voucher)
+transitions(Use, Order.status, pending -> done)
+sets(Use, Voucher.used == true)
+forbidden(Voucher, used == true)
+"#,
+    );
+    let deadlock = stderr
+        .split("error[Deadlock_Order_status_pending]")
+        .nth(1)
+        .expect("Deadlock_Order_status_pending");
+    assert!(
+        deadlock.contains("the deadlock may clear at --instance-count 2"),
+        "{stderr}"
+    );
+}

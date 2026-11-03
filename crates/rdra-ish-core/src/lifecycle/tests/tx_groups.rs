@@ -548,3 +548,106 @@ applies_to(Settled, Close)
         .any(|x| matches!(&x.diag, StateDiag::Deadlock { value, .. } if value == "negotiating"));
     assert!(found, "the vetoed run deadlocks: {:?}", d.diags);
 }
+
+/// Pay marks the order paid through one API and creates its payment through another, so the
+/// payment is created in the second transaction group. `{extra}` completes the model.
+fn pay_then_capture(extra: &str) -> String {
+    format!(
+        r#"
+entity Order "注文" {{ id: Int @pk  status: Enum(pending, paid) @default(pending) }}
+entity Payment "決済" {{ id: Int @pk  status: Enum(captured, refunded) @default(captured) }}
+relate(Payment, Order, N:1)
+api OrderApi "mark paid"
+api PaymentApi "capture"
+usecase Place "注文確定"
+usecase Pay "決済"
+creates(Place, Order)
+invokes(Pay, OrderApi)
+invokes(Pay, PaymentApi)
+updates(OrderApi, Order)
+creates(PaymentApi, Payment)
+transitions(Pay, Order.status, pending -> paid)
+{extra}
+"#
+    )
+}
+
+/// A `holds` body on a split use case is read before its first transaction (#89). A body that
+/// compares an entity only a later group creates reads rows that are not the run's: the
+/// warning `GuardReadsLaterStep` names the API of that group to apply it to, and the guard's
+/// `GuardWhy` carries the entity for the `Runs_` row. A body on what step 1 writes, one
+/// applied to the later group's API, or one on a parent a later group only updates (its row
+/// is the run's through the key) draws nothing.
+#[test]
+fn a_guard_on_what_a_later_transaction_creates_names_the_api_to_apply_it_to() {
+    let later = |src: &str| {
+        derive_src(src)
+            .diags
+            .iter()
+            .filter_map(|x| match &x.diag {
+                StateDiag::GuardReadsLaterStep {
+                    condition,
+                    entity,
+                    step,
+                    apis,
+                    ..
+                } => Some((condition.clone(), entity.clone(), *step, apis.clone())),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let captured = "condition Captured \"決済済み\"\nholds(Captured, Payment.status == captured)\n";
+    let on_pay = pay_then_capture(&format!("{captured}applies_to(Captured, Pay)"));
+    assert_eq!(
+        later(&on_pay),
+        vec![(
+            "Captured".to_string(),
+            "Payment".to_string(),
+            2,
+            vec!["PaymentApi".to_string()]
+        )]
+    );
+    assert!(later(&pay_then_capture(&format!(
+        "{captured}applies_to(Captured, PaymentApi)"
+    )))
+    .is_empty());
+    assert!(later(&pay_then_capture(
+        "condition Open \"未払い\"\nholds(Open, Order.status == pending)\napplies_to(Open, Pay)"
+    ))
+    .is_empty());
+    assert!(later(&split_pay(
+        "condition Rush \"急ぎ\"\nholds(Rush, Order.rush == true)\napplies_to(Rush, Pay)"
+    ))
+    .is_empty());
+
+    let ts = built(&on_pay);
+    let model = model_from(&on_pay);
+    let payment = model
+        .entities
+        .iter()
+        .find(|(_, e)| e.id == "Payment")
+        .map(|(k, _)| k);
+    let first = &ts.actions()[action_names(&ts)
+        .iter()
+        .position(|n| n == "Pay_1")
+        .expect("Pay_1")];
+    assert!(
+        first
+            .guards
+            .iter()
+            .any(|g| matches!(g.why, GuardWhy::Condition { later, .. } if later == payment)),
+        "{:?}",
+        first.guards
+    );
+    let (message, severity) = derive_src(&on_pay)
+        .diags
+        .iter()
+        .find(|x| matches!(x.diag, StateDiag::GuardReadsLaterStep { .. }))
+        .map(|x| (x.diag.to_string(), x.diag.severity()))
+        .expect("GuardReadsLaterStep");
+    assert!(
+        message.contains("applies_to(Captured, PaymentApi)"),
+        "{message}"
+    );
+    assert_eq!(severity, crate::lifecycle::Severity::Warning);
+}

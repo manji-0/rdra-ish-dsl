@@ -46,4 +46,6 @@ Entity: Appointment (予約・受診)
   exempt      completed      present        present       null           no       yes       BucAppointmentScheduling/BookAppointment, BucAppointmentScheduling/ReserveAppointment, BucClinicalEncounter/CompleteConsultation, BucClinicalEncounter/OpenEncounter, BucFollowupCare/ScheduleFollowUpVisit, BucVisitCheckIn/CheckInPatient, BucVisitPayment/CalculateVisitBill, BucVisitPayment/IssueReceipt, BucVisitPayment/SettleAtKiosk, BucVisitPayment/SettleAtWindow
 
   reachable: 40 / bound: 320
+  diagnostics:
+    [info][DefaultOnVariationIgnored_Appointment_referral] referral is typed by a variation, so states, check and verify start it at any value of the variation, and @default(revisit) does not pick its start; to start a created row at revisit, write sets(UseCase, Entity.referral == revisit) in the use case that creates it
 

@@ -416,8 +416,13 @@ pub enum GuardWhy {
     Link,
     /// `now` has room to tick.
     Clock,
-    /// `holds(Cond, ..)` of a condition that `applies_to` the use case.
-    Condition { cond: ConditionKey },
+    /// `holds(Cond, ..)` of a condition that `applies_to` the use case. `later` is the entity
+    /// it reads that only a later transaction group of the use case writes
+    /// (`GuardReadsLaterStep`).
+    Condition {
+        cond: ConditionKey,
+        later: Option<EntityKey>,
+    },
     /// `transitions(..).when(Cond)` or `chooses(.., value).when(Cond)`: the successor takes an
     /// arm, or a value, of the column whose guard held on the pre-state. `cond` is the first
     /// guarded arm's or value's condition.

@@ -219,7 +219,10 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
         | StateDiag::UnboundAfterRead { .. }
-        | StateDiag::DeleteLeavesChildren { .. } => d.to_string(),
+        | StateDiag::DeleteLeavesChildren { .. }
+        | StateDiag::GuardReadsLaterStep { .. }
+        | StateDiag::DrivenComparisonColumnWritten { .. }
+        | StateDiag::DefaultOnVariationIgnored { .. } => d.to_string(),
     };
     format!("[{label}][{}] {body}", d.name(&[entity]))
 }
