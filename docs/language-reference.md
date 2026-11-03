@@ -2447,8 +2447,8 @@ rewrites these too.
 
 | Removed | Use instead |
 |---|---|
-| `forbidden(A, B, A.col == v, B.col == w)`, and `required` / `exclusive` the same way | `forbidden(A, B, A.col == v, B.col == w)`; `forbidden(A, A.col == v)` for one entity. |
-| `invariant(A, B).when(A.col == v).then(B.col == w)` | `invariant(A, B).when(A.col == v).then(B.col == w)`; `invariant(A).when(...).none(...)` for a quantified rule. |
+| `forbidden(A.col == v, B.col == w)`, and `required` / `exclusive` the same way | `forbidden(A, B, A.col == v, B.col == w)`; `forbidden(A, A.col == v)` for one entity. |
+| `invariant().when(A.col == v).then(B.col == w)` | `invariant(A, B).when(A.col == v).then(B.col == w)`; `invariant(A).when(...).none(...)` for a quantified rule. |
 
 These spellings were removed in 1.0.0 so that every predicate names a column as
 `Entity.column`. The load error gives the rewritten line, as in ``write `sets(Pay,
@@ -2457,7 +2457,7 @@ place and is safe to run twice.
 
 | Removed | Use instead |
 |---|---|
-| `sets(UseCase, Entity.column == value)`, `sets(UseCase, Entity.column == Source.column)` | `sets(UseCase, Entity.column == value)`, `sets(UseCase, Entity.column == Source.column)`. A `.by(...)` after a copy becomes `.role(...)`, as below. |
+| `sets(UseCase, Entity, column == value)`, `sets(UseCase, Entity, column == Source.column)` | `sets(UseCase, Entity.column == value)`, `sets(UseCase, Entity.column == Source.column)`. A `.by(...)` after a copy becomes `.role(...)`, as below. |
 | `drives(UseCase, Entity, column op rhs, true \| false)` | `drives(UseCase, Entity.column op rhs, true \| false)`. |
 | `sets(UseCase, Entity, column op rhs, true \| false)`, the four-argument `sets` | `drives(UseCase, Entity.column op rhs, true \| false)`. `sets` assigns a value; a comparison driven true or false is [`drives`](#driving-comparison-propositions-with-drives). |
 
