@@ -110,7 +110,7 @@ DSL keeps these rules and adds what a normalized relational model needs:
   constraint follows when two keys join the same pair.
 - `@check(expr)` and `@derived(expr)` parse into typed expressions. A quoted form is a
   parse error. Each `@check` is the invariant `Check_<Entity>_<column>_<n>`, which BFS
-  and TLC check alike with SQL null semantics. A `@derived` column is never a state
+  and TLC check alike, two-valued like every rule. A `@derived` column is never a state
   variable: a logical one is read as its expression, and an arithmetic one cannot be
   read by a constraint.
 - A relation can state a minimum cardinality on its child side, such as `1..*:1`.

@@ -310,6 +310,15 @@
   `samples/food-permit-ops` that use it, and the generated diagrams and documents of that
   sample print `.role(...)`.
 
+- `@check` reads a comparison as every other rule does: two-valued, where null satisfies
+  no comparison but `!=` (#84). It had SQL semantics, under which a comparison over a null
+  operand was unknown and passed, so `qty: Int @null @check(qty >= 1)` held while `qty` was
+  null and `invariant(Item).when(status == done).then(qty >= 1)` on the same row failed. A
+  `@check` that admits null now says so: `@check(qty == null or qty >= 1)`. A `@null`
+  column with no `@default` under a `@check` that does not admit null fails at creation. A
+  logical `@derived` column keeps SQL semantics, since it is a value, not a rule. The
+  language reference's comparison section has the null semantics of every rule form. No
+  sample has a `@check` on a `@null` column.
 - `Caps::VERIFY`, the `verify` BFS cap per cone, rises from 2,097,152 (2^21) to 8,388,608
   (2^23), and the `bounds:` line says `8388608 states per BFS cone`. Since the guard of a use
   case holds for every transaction group (#80), the views of `Prescription` (4,266,635 states

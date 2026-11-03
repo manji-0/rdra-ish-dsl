@@ -703,11 +703,13 @@ creates(Add, Line)
 }
 
 #[test]
-fn a_null_operand_leaves_a_check_unknown_which_passes() {
-    let src = |value: &str| {
+/// A `@check` is two-valued like every other rule (#84): null satisfies no comparison but
+/// `!=`, so a check that admits null says `qty == null or ...`.
+fn a_null_operand_fails_a_check_unless_the_check_admits_null() {
+    let src = |expr: &str, value: &str| {
         format!(
             r#"
-entity Line "明細" {{ id: Int @pk  qty: Int @null @check(qty >= 1 and qty <= 4) }}
+entity Line "明細" {{ id: Int @pk  qty: Int @null @default(2) @check({expr}) }}
 usecase Add "追加"
 usecase Set "設定"
 creates(Add, Line)
@@ -715,9 +717,43 @@ sets(Set, Line.qty == {value})
 "#
         )
     };
-    assert!(!violated(&derive_src(&src("null")), "Line", InvKind::Check));
-    assert!(!violated(&derive_src(&src("2")), "Line", InvKind::Check));
-    assert!(violated(&derive_src(&src("5")), "Line", InvKind::Check));
+    let bounded = "qty >= 1 and qty <= 4";
+    assert!(violated(
+        &derive_src(&src(bounded, "null")),
+        "Line",
+        InvKind::Check
+    ));
+    assert!(!violated(
+        &derive_src(&src(bounded, "2")),
+        "Line",
+        InvKind::Check
+    ));
+    assert!(violated(
+        &derive_src(&src(bounded, "5")),
+        "Line",
+        InvKind::Check
+    ));
+    let admits = "qty == null or (qty >= 1 and qty <= 4)";
+    assert!(!violated(
+        &derive_src(&src(admits, "null")),
+        "Line",
+        InvKind::Check
+    ));
+    assert!(violated(
+        &derive_src(&src(admits, "5")),
+        "Line",
+        InvKind::Check
+    ));
+    assert!(!violated(
+        &derive_src(&src("qty != 3", "null")),
+        "Line",
+        InvKind::Check
+    ));
+    assert!(violated(
+        &derive_src(&src("not (qty != 3)", "null")),
+        "Line",
+        InvKind::Check
+    ));
 }
 
 #[test]

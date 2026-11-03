@@ -2293,6 +2293,23 @@ variation, or Bool columns compare with `==` / `!=` when they have one set of va
 written `status != Order.previous`. When `rhs` is `now`, the left-hand column must be of
 type `Date` or `DateTime`.
 
+#### Null
+
+A comparison is true or false, never unknown. A `@null` column that holds `null`
+satisfies no comparison with a value, a column, or `now` (`qty >= 1`, `qty == 3`, `qty <
+Order.limit` are all false), and satisfies every `!=` (`qty != 3` is true). `col == null`
+and `col == present` ask about null itself, and `col in (...)` is the `or` of its
+equalities. Every rule form reads a comparison this way: `forbidden`, `required`,
+`exclusive`, `invariant` with `.when`, `.then`, `.has`, and `.none`, `holds`,
+`after(...).assert(...)`, `property`, and `@check`. So `required(Item, qty >= 0)` fails
+on a row whose `qty` is null, `forbidden(Item, status == done, qty < 1)` does not fire on
+it, and `qty: Int @null @check(qty >= 1)` fails while `qty` is null, at creation too when
+nothing sets it. A rule that admits null says so: `@check(qty == null or qty >= 1)`,
+`invariant(Item).when(status == done).then(qty == null or qty >= 1)`. The one exception
+is a logical `@derived` column, which is a value, not a rule: `bulk: Bool @derived(qty >=
+3)` is neither `true` nor `false` while `qty` is null, so `bulk == true` and `bulk ==
+false` are both false there and `bulk == null` is true.
+
 #### Semantics and interaction with `sets`
 
 A comparison expression is evaluated on the values of its columns: Int, Money, Decimal,

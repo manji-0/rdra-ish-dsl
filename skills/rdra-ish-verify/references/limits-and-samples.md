@@ -37,7 +37,8 @@
   case that creates the parent without a child in the same transaction fails it, at one
   instance too, so `check` finds it.
 - **`@check`**: one `INVARIANT Check_<Entity>_<column>_<n>` per `@check(expr)`. A null
-  operand leaves a comparison unknown, which passes (SQL semantics). A `@derived` column
+  operand satisfies no comparison but `!=`, as in every rule; `@check(qty == null or qty
+  >= 1)` admits null. A `@derived` column
   is never a state var: a Bool one is read as its expression, and an arithmetic one
   cannot be read (`DerivedColumnRead`).
 - **Temporal `property`**: one lowering path. `export` lists every name in one `.cfg`; `verify`

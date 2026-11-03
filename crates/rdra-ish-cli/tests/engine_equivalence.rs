@@ -646,6 +646,33 @@ transitions(Refund, Payment.status, captured -> refunded)
 after(Pay).assert(Order.status == paid, Payment.status == captured)
 "#;
 
+/// `@check` is two-valued (#84): null fails `qty >= 1` from creation on, `{ADMIT}` lets a
+/// check admit it, and both engines read `!=` as true on null.
+const NULL_CHECK: &str = r#"
+entity Line "明細" { id: Int @pk  qty: Int @null @check({ADMIT}qty >= 1) @check(qty != 3) }
+usecase Add "追加"
+usecase Fill "数量"
+creates(Add, Line)
+updates(Fill, Line)
+sets(Fill, Line.qty == 2)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_null_in_a_check() {
+    let strict = check_fixture("null_check_strict", &NULL_CHECK.replace("{ADMIT}", ""));
+    let admits = check_fixture(
+        "null_check_admits",
+        &NULL_CHECK.replace("{ADMIT}", "qty == null or "),
+    );
+    if let (Some(strict), Some(admits)) = (strict, admits) {
+        assert_eq!(
+            strict.into_iter().collect::<Vec<_>>(),
+            vec!["Check_Line_qty_0".to_string()]
+        );
+        assert!(admits.is_empty(), "{admits:?}");
+    }
+}
+
 #[test]
 fn bfs_and_tlc_agree_on_an_after_assert_of_a_split_use_case() {
     if let Some(violated) = check_fixture("after_split", AFTER_SPLIT) {

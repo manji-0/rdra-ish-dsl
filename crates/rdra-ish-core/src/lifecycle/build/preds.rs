@@ -457,7 +457,28 @@ impl<'m> Builder<'m> {
 
     // ── Column expressions (`@check`, logical `@derived`) ────────────────────
 
-    /// `expr` under SQL semantics, where a comparison over a null operand is unknown.
+    /// `expr` as every rule reads a comparison: two-valued, so a null operand satisfies no
+    /// comparison but `!=`, and `col == null` admits it.
+    fn check_expr(&mut self, ek: EntityKey, at: At, expr: &CheckExpr, site: &Site) -> Pred {
+        match expr {
+            CheckExpr::Cmp(prop) => self.cmp_atom(ek, at, prop, site),
+            CheckExpr::Not(inner) => Pred::Not(Box::new(self.check_expr(ek, at, inner, site))),
+            CheckExpr::And(a, b) | CheckExpr::Or(a, b) => {
+                let parts = vec![
+                    self.check_expr(ek, at, a, site),
+                    self.check_expr(ek, at, b, site),
+                ];
+                if matches!(expr, CheckExpr::And(..)) {
+                    Pred::And(parts)
+                } else {
+                    Pred::Or(parts)
+                }
+            }
+        }
+    }
+
+    /// `expr` under SQL semantics, where a comparison over a null operand is unknown, for a
+    /// logical `@derived` column, whose value is then neither true nor false.
     /// `passes(expr, true)` holds unless `expr` is false; `passes(expr, false)` holds unless
     /// it is true. Without a nullable operand they are `expr` and `not expr`.
     fn passes(
@@ -551,7 +572,7 @@ impl<'m> Builder<'m> {
         }
     }
 
-    /// `Check_{entity}_{column}_{i}` per `@check`: no present slot makes the expression false.
+    /// `Check_{entity}_{column}_{i}` per `@check`: every present slot satisfies the expression.
     fn column_checks(&mut self) {
         let model = self.model;
         for (ek, entity) in &model.entities {
@@ -562,7 +583,7 @@ impl<'m> Builder<'m> {
                         column: col.name.clone(),
                     };
                     let site = Site::new(fact, &check.site);
-                    let body = self.passes(ek, At::Bound(0), &check.expr, true, &site);
+                    let body = self.check_expr(ek, At::Bound(0), &check.expr, &site);
                     self.ts.invariants.push(Invariant {
                         name: format!("Check_{}_{}_{i}", entity.id, col.name),
                         kind: InvKind::Check,

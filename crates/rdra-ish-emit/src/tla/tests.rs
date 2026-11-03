@@ -203,7 +203,7 @@ applies_to(Quiet, Pay)
 }
 
 #[test]
-fn a_column_check_is_an_invariant_that_passes_on_null() {
+fn a_column_check_is_an_invariant_that_fails_on_null() {
     let bundle = print(&system(&sample("check_unmet.rdra")), PrintMode::Check, "M");
     assert!(bundle.tla.contains(
         "Check_CartLine_qty_0 == \\A b0 \\in CartLine_Ids : (CartLine_exists[b0] = \"present\") => (CartLine_qty[b0] >= 1)\n"
@@ -214,7 +214,7 @@ fn a_column_check_is_an_invariant_that_passes_on_null() {
     );
     let tla = print(&nullable, PrintMode::Check, "M").tla;
     assert!(tla.contains(
-        "Check_L_qty_0 == \\A b0 \\in L_Ids : (L_exists[b0] = \"present\") => ((L_qty[b0] = -1) \\/ (L_qty[b0] # -1 /\\ L_qty[b0] >= 1))\n"
+        "Check_L_qty_0 == \\A b0 \\in L_Ids : (L_exists[b0] = \"present\") => (L_qty[b0] # -1 /\\ L_qty[b0] >= 1)\n"
     ), "{tla}");
 }
 
