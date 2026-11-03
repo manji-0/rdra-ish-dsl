@@ -141,6 +141,12 @@ fn a_body_on_a_use_case_that_writes_nothing_is_unbindable() {
         .collect();
     assert_eq!(unbindable.len(), 1, "{:?}", d.diags);
     assert!(crate::lifecycle::has_errors(&d.diags));
+    let message = unbindable[0].diag.to_string();
+    assert!(
+        message.contains("sets(Look, Entity.reminded == true)")
+            && message.contains("raise an event"),
+        "the message names the ways to give the use case a step: {message}"
+    );
 }
 
 #[test]

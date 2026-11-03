@@ -107,28 +107,13 @@ pub fn resolve_overlaid(
     let declared = declared_modules(&sources);
 
     // Second pass: add edges now that all SourceIds are assigned.
-    let edge_info: Vec<(PathBuf, Vec<DottedName>)> = sources
-        .iter()
-        .map(|(p, _, ast)| {
-            let imports = ast
-                .items
-                .iter()
-                .filter_map(|item| {
-                    if let Item::Import(imp) = item {
-                        Some(imp.path.clone())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            (p.clone(), imports)
-        })
-        .collect();
-
-    for (from_path, imports) in &edge_info {
-        let from_id = *path_to_id.get(from_path).unwrap();
-        let from_ni = node_indices[from_id];
-        for dotted in imports {
+    let mut edges: Vec<ImportEdge> = Vec::new();
+    for (from_id, (_, _, ast)) in sources.iter().enumerate() {
+        for item in &ast.items {
+            let Item::Import(imp) = item else {
+                continue;
+            };
+            let dotted = &imp.path;
             let by_module = declared.get(&dotted.0.join(".")).copied();
             let by_path = || {
                 let dep_path = resolve_import_path(dotted, include_paths)?;
@@ -136,7 +121,13 @@ pub fn resolve_overlaid(
                 path_to_id.get(&dep_canon).copied()
             };
             if let Some(to_id) = by_module.or_else(by_path) {
-                graph.add_edge(from_ni, node_indices[to_id], ());
+                graph.add_edge(node_indices[from_id], node_indices[to_id], ());
+                edges.push(ImportEdge {
+                    from: from_id,
+                    to: to_id,
+                    module: dotted.0.join("."),
+                    span: imp.span.clone(),
+                });
             }
         }
     }
@@ -149,22 +140,15 @@ pub fn resolve_overlaid(
                 .iter()
                 .map(|ni| sources[graph[*ni]].0.display().to_string())
                 .collect();
-            let source_id = graph[scc[0]];
-            let span = sources[source_id]
-                .2
-                .items
-                .iter()
-                .find_map(|item| {
-                    if let Item::Import(imp) = item {
-                        Some(imp.span.clone())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or(0..0);
+            let members: Vec<SourceId> = scc.iter().map(|ni| graph[*ni]).collect();
+            let closing = closing_import(&edges, &members);
             diags.push(Diagnostic::warning_at(
-                RdraError::CircularImport { files },
-                LocatedSpan::new(source_id, span),
+                RdraError::CircularImport {
+                    files,
+                    closing: closing.module.clone(),
+                    closing_file: sources[closing.from].0.display().to_string(),
+                },
+                LocatedSpan::new(closing.from, closing.span.clone()),
             ));
         }
     }
@@ -177,6 +161,48 @@ pub fn resolve_overlaid(
         },
         diags,
     )
+}
+
+/// One `import` line that names a loaded file.
+struct ImportEdge {
+    from: SourceId,
+    to: SourceId,
+    module: String,
+    span: Span,
+}
+
+/// The import that closes a cycle among `members`: walking their imports in load order from
+/// the first-loaded member, the first one back to a file still on the walk.
+fn closing_import<'e>(edges: &'e [ImportEdge], members: &[SourceId]) -> &'e ImportEdge {
+    fn walk<'e>(
+        at: SourceId,
+        edges: &'e [ImportEdge],
+        members: &[SourceId],
+        stack: &mut Vec<SourceId>,
+        done: &mut HashSet<SourceId>,
+    ) -> Option<&'e ImportEdge> {
+        stack.push(at);
+        for edge in edges
+            .iter()
+            .filter(|e| e.from == at && members.contains(&e.to))
+        {
+            if stack.contains(&edge.to) {
+                return Some(edge);
+            }
+            if done.contains(&edge.to) {
+                continue;
+            }
+            if let Some(found) = walk(edge.to, edges, members, stack, done) {
+                return Some(found);
+            }
+        }
+        stack.pop();
+        done.insert(at);
+        None
+    }
+    let start = *members.iter().min().expect("a cycle has members");
+    walk(start, edges, members, &mut Vec::new(), &mut HashSet::new())
+        .expect("a strongly connected component of two or more files has a cycle")
 }
 
 /// Each `module` path to the first loaded source that declares it. A second declarer is
@@ -417,11 +443,31 @@ pub fn build_merged_model(
         }
     }
 
-    let (model, model_diags) =
+    let (model, mut model_diags) =
         crate::analysis::build_model_items_with_scopes(&located_items, import_scopes);
+    name_missing_imports(&model, &mut model_diags);
     all_diags.extend(model_diags);
 
     (model, all_diags)
+}
+
+/// Gives the first `UndefinedSymbol` of a file per module the hint `add import <module>`,
+/// when one loaded module the file does not import declares the name.
+fn name_missing_imports(model: &SemanticModel, diags: &mut [Diagnostic]) {
+    let mut hinted: HashSet<(SourceId, String)> = HashSet::new();
+    for d in diags {
+        let (RdraError::UndefinedSymbol { id, import }, Some(at)) = (&mut d.error, &d.location)
+        else {
+            continue;
+        };
+        let name = id.rsplit("::").next().unwrap_or(id);
+        let Some(module) = model.import_scopes.unimported_declarer(at.source_id, name) else {
+            continue;
+        };
+        if hinted.insert((at.source_id, module.to_string())) {
+            *import = Some(module.to_string());
+        }
+    }
 }
 
 /// Return all `NodeRef`s reachable from a BUC node via RDRA relations (forward BFS only).
@@ -687,21 +733,21 @@ performs(Customer, Work)
         assert!(
             !errors.iter().any(|d| matches!(
                 &d.error,
-                RdraError::UndefinedSymbol { id } if id == "S"
+                RdraError::UndefinedSymbol { id, .. } if id == "S"
             )),
             "S should resolve: {errors:?}"
         );
         assert!(
             errors.iter().any(|d| matches!(
                 &d.error,
-                RdraError::UndefinedSymbol { id } if id == "Staff"
+                RdraError::UndefinedSymbol { id, .. } if id == "Staff"
             )),
             "Staff should be hidden: {errors:?}"
         );
         assert!(
             errors.iter().any(|d| matches!(
                 &d.error,
-                RdraError::UndefinedSymbol { id } if id == "Customer"
+                RdraError::UndefinedSymbol { id, .. } if id == "Customer"
             )),
             "Customer should be hidden: {errors:?}"
         );
@@ -738,14 +784,14 @@ performs(Staff, Work)
         assert!(
             errors.iter().any(|d| matches!(
                 &d.error,
-                RdraError::UndefinedSymbol { id } if id.contains("x.")
+                RdraError::UndefinedSymbol { id, .. } if id.contains("x.")
             )),
             "x.Staff should fail: {errors:?}"
         );
         assert!(
             errors.iter().any(|d| matches!(
                 &d.error,
-                RdraError::UndefinedSymbol { id } if id == "Staff"
+                RdraError::UndefinedSymbol { id, .. } if id == "Staff"
             )),
             "bare Staff should fail under alias import: {errors:?}"
         );
@@ -1105,6 +1151,72 @@ actor Staff "スタッフ"
         );
         // Sources are still collected (2 files).
         assert_eq!(program.sources.len(), 2);
+        // a.rdra loads first and imports b.mod, so b.mod's `import a` closes the cycle.
+        let closing = warnings.iter().find_map(|d| match &d.error {
+            RdraError::CircularImport {
+                closing,
+                closing_file,
+                ..
+            } => Some((closing.as_str(), closing_file.as_str(), d.location.clone())),
+            _ => None,
+        });
+        let (module, file, at) = closing.expect("CircularImport");
+        assert_eq!(module, "a");
+        assert!(file.ends_with("mod.rdra"), "{file}");
+        assert_eq!(at.map(|at| at.source_id), Some(1));
+    }
+
+    #[test]
+    fn an_undefined_name_another_module_declares_names_the_import_once_per_file() {
+        let dir = make_temp_dir("missing_import");
+        let shared_dir = dir.join("shared");
+        fs::create_dir_all(&shared_dir).unwrap();
+        write_file(
+            &shared_dir.join("actors.rdra"),
+            "module shared.actors\nactor Customer \"顧客\"\n",
+        );
+        write_file(
+            &shared_dir.join("entities.rdra"),
+            "module shared.entities\nentity Order \"注文\" { id: Int @pk }\n",
+        );
+        write_file(
+            &dir.join("main.rdra"),
+            "import shared.actors\nusecase Buy \"購入\"\nperforms(Customer, Buy)\ncreates(Buy, Order)\nreads(Buy, Order)\nreads(Buy, Ghost)\n",
+        );
+        let (program, _) = resolve(
+            &[dir.join("main.rdra"), shared_dir.join("entities.rdra")],
+            std::slice::from_ref(&dir),
+        );
+        let (_, diags) = build_merged_model(&program, &[dir]);
+        let undefined: Vec<(String, Option<String>)> = diags
+            .iter()
+            .filter_map(|d| match &d.error {
+                RdraError::UndefinedSymbol { id, import } => Some((id.clone(), import.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            undefined,
+            vec![
+                ("Order".into(), Some("shared.entities".into())),
+                ("Order".into(), None),
+                ("Ghost".into(), None),
+            ]
+        );
+        let hinted = diags
+            .iter()
+            .find(|d| {
+                matches!(
+                    &d.error,
+                    RdraError::UndefinedSymbol {
+                        import: Some(_),
+                        ..
+                    }
+                )
+            })
+            .map(|d| d.error.to_string())
+            .unwrap_or_default();
+        assert!(hinted.contains("add `import shared.entities`"), "{hinted}");
     }
 
     #[test]

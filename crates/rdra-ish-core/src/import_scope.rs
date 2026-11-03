@@ -22,6 +22,8 @@ pub struct FileScope {
     pub flat: HashMap<String, Vec<FlatBinding>>,
     /// `import M as alias` → module path string (`shared.actors`).
     pub namespaces: HashMap<String, String>,
+    /// The module path of every `import` line, whatever its form.
+    pub imported: Vec<String>,
     /// When true, skip visibility checks (single-file / legacy open scope).
     pub unrestricted: bool,
 }
@@ -67,6 +69,25 @@ impl ImportScopes {
 
     pub fn module_for_source(&self, source_id: SourceId) -> Option<&str> {
         self.source_modules.get(&source_id).map(String::as_str)
+    }
+
+    /// The one loaded module that declares `id`, when the file `source_id` imports and does
+    /// not import that module, so `import <module>` would make `id` visible.
+    pub fn unimported_declarer(&self, source_id: SourceId, id: &str) -> Option<&str> {
+        let scope = self.by_source.get(&source_id)?;
+        if scope.unrestricted {
+            return None;
+        }
+        let mut declarers = self
+            .source_exports
+            .iter()
+            .filter(|(src, exports)| **src != source_id && exports.contains_key(id))
+            .map(|(src, _)| self.source_modules.get(src));
+        let module = declarers.next()??;
+        if declarers.next().is_some() || scope.imported.iter().any(|m| m == module) {
+            return None;
+        }
+        Some(module)
     }
 
     /// Resolve all flat bindings for a local name under the file scope.
@@ -311,6 +332,7 @@ pub fn build_import_scopes(
         // Imports first, then locals — redefinition of an imported name errors on the local decl.
         for imp in imports {
             let module_path = imp.path.0.join(".");
+            scope.imported.push(module_path.clone());
             let Some(&mod_source) = scopes.module_sources.get(&module_path) else {
                 diags.push(ImportScopeDiagnostic {
                     source_id,

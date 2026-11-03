@@ -538,6 +538,7 @@ pub(crate) fn resolve_entity_qref(
                     qref,
                     RdraError::UndefinedSymbol {
                         id: format!("entity::{}", id),
+                        import: None,
                     },
                 );
                 None
@@ -565,7 +566,12 @@ pub(crate) fn resolve_entity_qref(
             None
         }
         LookupResult::NotFound => {
-            push_error_qref(ctx, diags, qref, RdraError::UndefinedSymbol { id });
+            push_error_qref(
+                ctx,
+                diags,
+                qref,
+                RdraError::UndefinedSymbol { id, import: None },
+            );
             None
         }
         LookupResult::Ambiguous(kinds) => {

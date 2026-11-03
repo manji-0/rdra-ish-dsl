@@ -368,6 +368,7 @@ fn resolve_combines_target(
                         qref,
                         RdraError::UndefinedSymbol {
                             id: qref_display(qref),
+                            import: None,
                         },
                     );
                     None
@@ -381,6 +382,7 @@ fn resolve_combines_target(
                 qref,
                 RdraError::UndefinedSymbol {
                     id: qref_display(qref),
+                    import: None,
                 },
             );
             None

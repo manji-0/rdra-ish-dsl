@@ -19,8 +19,13 @@ pub enum RdraError {
     #[error("duplicate module '{module}'\n  hint: each module path must be declared in exactly one file")]
     DuplicateModule { module: String },
 
-    #[error("undefined symbol: {id}")]
-    UndefinedSymbol { id: String },
+    #[error("undefined symbol: {id}{}", import.as_ref().map_or(String::new(), |module| format!("\n  hint: {id} is defined in module {module}, which this file does not import; add `import {module}`")))]
+    UndefinedSymbol {
+        id: String,
+        /// A loaded module that declares `id` and the file does not import, on the first
+        /// such error of the file.
+        import: Option<String>,
+    },
 
     #[error("ambiguous reference: '{id}' matches multiple declarations ({kinds})\n  hint: if kinds differ, qualify with `kind::{id}`; if the same kind appears in multiple modules, use `import M as a` then `a.{id}`")]
     AmbiguousReference { id: String, kinds: String },
@@ -195,8 +200,14 @@ pub enum RdraError {
     #[error("deprecated syntax in '{path}': {msg}")]
     DeprecatedSyntax { path: String, msg: String },
 
-    #[error("circular import detected among files: {}", files.join(", "))]
-    CircularImport { files: Vec<String> },
+    #[error("circular import detected among files: {}; `import {closing}` in {closing_file} closes the cycle\n  hint: move what the files share into a module that imports none of them, or drop that import", files.join(", "))]
+    CircularImport {
+        files: Vec<String>,
+        /// The module path of the import that closes the cycle.
+        closing: String,
+        /// The file that holds that import.
+        closing_file: String,
+    },
 
     #[error("usecase '{usecase}' writes '{entity}' in its own transaction after the FK-grouped writes\n  hint: it has no FK link to them; if it must be atomic with them, model the operation through an API boundary")]
     SeparateTxInferred { usecase: String, entity: String },
@@ -566,7 +577,10 @@ pub enum RdraError {
     #[error("unknown predicate '{name}'\n  hint: check spelling; known predicates include performs, reads, sets, transitions, forbidden, …")]
     UnknownPredicate { name: String },
 
-    #[error("predicate '{name}' expects {expected} argument(s), got {got}\n  hint: check the predicate signature in the language reference")]
+    #[error(
+        "predicate '{name}' expects {expected} argument(s), got {got}\n  hint: {}",
+        arity_hint(name)
+    )]
     WrongArity {
         name: String,
         expected: String,
@@ -665,6 +679,13 @@ pub struct Diagnostic {
 
 /// Hint for `TypeMismatch`: an event passed where `transitions`, `sets`, or `drives` now takes a use case
 /// names the migration; every other mismatch keeps the generic hint.
+fn arity_hint(name: &str) -> &'static str {
+    match name {
+        "holds" => "holds(C, ...) needs a comparison after the condition, on an entity the guarded use case writes; `.none(...)` and `.has(...)` count the rows linked to that entity's row, so they cannot stand alone: write `holds(C, Order.status == pending).none(Line)`",
+        _ => "check the predicate signature in the language reference",
+    }
+}
+
 fn type_mismatch_hint(pred: &str, id: &str, actual: &str) -> String {
     if actual == "event" && matches!(pred, "transitions" | "sets" | "drives") {
         let event = id.strip_prefix("event::").unwrap_or(id);

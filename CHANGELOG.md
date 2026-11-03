@@ -32,6 +32,23 @@
   the link as they read a key a creation sets. No key is `LinkWithoutKey`, a mandatory one
   `LinkOnMandatoryKey`, several with no `.role` naming one `AmbiguousOwnerLink`.
 
+### Changed
+
+- Four load and check messages say what to write (#89). No error or warning is added or
+  removed, and no verdict changes.
+  - `holds(C).none(...)` or `holds(C).has(...)` with no comparison is still `WrongArity`; the
+    hint says that a comparison on an entity the guarded use case writes comes before the
+    `.none` or `.has`, as in `holds(C, Order.status == pending).none(Line)`.
+  - `UnbindableCondition` on a use case that writes nothing names the ways to give it a step:
+    write what it records, such as `sets(UC, Entity.reminded == true)`, or raise an event and
+    guard the use case it triggers.
+  - `undefined symbol: X` in a file that imports, where one loaded module the file does not
+    import declares `X`, adds a hint that names `M` and the line to add, `import M`. Each
+    file gets the hint once per module.
+  - The circular import warning names the import that closes the cycle and points at it:
+    walking the imports in load order from the first-loaded file of the cycle, the first one
+    back to a file still on the walk.
+
 ## v1.0.0 - 2026-11-03
 
 From this release on, rdra-ish follows semantic versioning, and docs/compatibility.md lists

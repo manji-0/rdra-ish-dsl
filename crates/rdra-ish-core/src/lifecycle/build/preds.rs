@@ -1586,7 +1586,10 @@ impl<'m> Builder<'m> {
                 b.usecase,
                 b.cond,
                 b.body.conds.iter().flat_map(cond_entities).collect(),
-                "the use case writes nothing, so no action carries the guard".to_string(),
+                format!(
+                    "the use case writes nothing, so no action carries the guard; to give it a step, write what it records, such as a flag `sets({uc}, Entity.reminded == true)`, or raise an event and guard the use case it triggers",
+                    uc = model.use_cases[b.usecase].id
+                ),
                 &Site::new(ModelRef::Condition(b.cond), &b.body.site),
             );
         }

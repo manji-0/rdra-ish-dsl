@@ -217,7 +217,7 @@ fn combines_with_an_unknown_column_or_symbol_is_reported() {
     assert!(
         errors(&diags)
             .iter()
-            .any(|e| matches!(e, RdraError::UndefinedSymbol { id } if id == "Ghost")),
+            .any(|e| matches!(e, RdraError::UndefinedSymbol { id, .. } if id == "Ghost")),
         "{diags:?}"
     );
     let (_, diags) = with("condition C \"C\"\ncombines(C, Collect)\n");
@@ -283,7 +283,7 @@ fn body_values_are_checked_against_the_column() {
     let (_, diags) = with("condition C \"C\"\nholds(C, Ghost.x == 1)\n");
     assert_eq!(errors(&diags).len(), 1, "{diags:?}");
     assert!(
-        matches!(errors(&diags)[0], RdraError::UndefinedSymbol { id } if id == "Ghost"),
+        matches!(errors(&diags)[0], RdraError::UndefinedSymbol { id, .. } if id == "Ghost"),
         "{diags:?}"
     );
     let (_, diags) = with("condition C \"C\"\nholds(C, Payment.nope == 1)\n");
@@ -305,6 +305,17 @@ fn holds_needs_a_comparison_after_the_condition() {
             .iter()
             .any(|e| matches!(e, RdraError::WrongArity { name, .. } if name == "holds")),
         "{diags:?}"
+    );
+    let (_, diags) = with("condition C \"C\"\nholds(C).none(Payment)\n");
+    let arity = errors(&diags)
+        .into_iter()
+        .find(|e| matches!(e, RdraError::WrongArity { name, .. } if name == "holds"))
+        .map(|e| e.to_string())
+        .unwrap_or_default();
+    assert!(
+        arity.contains("cannot stand alone")
+            && arity.contains("an entity the guarded use case writes"),
+        "a body of only `.none` says a comparison comes first: {arity}"
     );
     let (_, diags) = with("condition C \"C\"\nholds(C, Payment)\n");
     assert!(

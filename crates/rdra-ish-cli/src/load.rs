@@ -48,7 +48,10 @@ mod tests {
                 path: "m.rdra".into(),
                 msg: "write `new(...)`".into(),
             }),
-            Diagnostic::warning(RdraError::UndefinedSymbol { id: "X".into() }),
+            Diagnostic::warning(RdraError::UndefinedSymbol {
+                id: "X".into(),
+                import: None,
+            }),
         ];
         deny_deprecated(&mut diags);
         let warnings: Vec<bool> = diags.iter().map(|d| d.is_warning).collect();

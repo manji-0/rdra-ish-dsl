@@ -379,6 +379,7 @@ fn process_transitions_predicate(
             arg_span(&pred.args[1]),
             RdraError::UndefinedSymbol {
                 id: entity_id.clone(),
+                import: None,
             },
         );
         return;
@@ -501,7 +502,10 @@ fn process_chooses_predicate(
             ctx,
             diags,
             span,
-            RdraError::UndefinedSymbol { id: entity_id },
+            RdraError::UndefinedSymbol {
+                id: entity_id,
+                import: None,
+            },
         );
         return;
     };

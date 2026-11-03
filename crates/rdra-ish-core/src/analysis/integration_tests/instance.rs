@@ -206,7 +206,7 @@ fn maps_field_checks_the_entity_and_the_column_it_names() {
     ));
     assert!(matches!(
         errors("maps_field(F, Ghost.total)").as_slice(),
-        [RdraError::UndefinedSymbol { id }] if id == "Ghost"
+        [RdraError::UndefinedSymbol { id, .. }] if id == "Ghost"
     ));
     assert!(matches!(
         errors("maps_field(F, total)").as_slice(),

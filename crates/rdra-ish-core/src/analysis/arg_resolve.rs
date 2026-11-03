@@ -126,7 +126,12 @@ pub(crate) fn resolve_entity_name(
 }
 
 fn push_undefined(ctx: DiagCtxt, diags: &mut Vec<Diagnostic>, span: Span, id: String) {
-    push_error(ctx, diags, span, RdraError::UndefinedSymbol { id });
+    push_error(
+        ctx,
+        diags,
+        span,
+        RdraError::UndefinedSymbol { id, import: None },
+    );
 }
 
 fn resolve_from_bindings(
