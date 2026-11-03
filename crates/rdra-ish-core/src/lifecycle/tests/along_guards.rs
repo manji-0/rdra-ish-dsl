@@ -194,3 +194,171 @@ fn a_path_through_an_optional_key_links_the_created_child() {
     assert_eq!(linked(".along(Claim, Case, Settlement)"), Some(true));
     assert_eq!(linked(""), Some(false));
 }
+
+/// A member withdraws while no loan of theirs is open. `{PATH}` is the `.along` of the guard,
+/// `{EXTRA}` any further statement.
+const LIBRARY: &str = r#"
+entity Member "会員" { id: Int @pk  status: Enum(active, withdrawn) @default(active) }
+entity Card "カード" { id: Int @pk  status: Enum(valid, lost) @default(valid) }
+entity Loan "貸出" { id: Int @pk  status: Enum(open, returned) @default(open) }
+relate(Card, Member, N:1)
+relate(Loan, Card, N:1)
+usecase Register "登録"
+usecase IssueCard "カード発行"
+usecase Lend "貸出"
+usecase Return "返却"
+usecase Withdraw "退会"
+creates(Register, Member)
+creates(IssueCard, Card)
+creates(Lend, Loan)
+transitions(Return, Loan.status, open -> returned)
+transitions(Withdraw, Member.status, active -> withdrawn)
+condition MemberActive "有効な会員"
+holds(MemberActive, Member.status == active)
+applies_to(MemberActive, IssueCard)
+condition CardOfActive "有効な会員のカード"
+holds(CardOfActive, Member.status == active).along(Loan, Card, Member)
+applies_to(CardOfActive, Lend)
+condition NoOpenLoan "未返却なし"
+holds(NoOpenLoan, Member.status == active).none(Loan.status == open){PATH}
+applies_to(NoOpenLoan, Withdraw)
+{EXTRA}
+"#;
+
+fn library(path: &str, extra: &str) -> SemanticModel {
+    model_from(&LIBRARY.replace("{PATH}", path).replace("{EXTRA}", extra))
+}
+
+/// Every diagnostic of the model at two instances, each target on its own cone as `verify`
+/// explores them: the build's, the verdicts, and each entity's state-model findings.
+fn verify_diags(model: &SemanticModel) -> Vec<StateDiag> {
+    let built = TransitionSystem::build(model, Bounds::VERIFY, &Scope::ALL);
+    let run = built.ts.explore_targets(
+        &built.selection.targets,
+        Caps::new(Caps::DEFAULT_PATTERNS, 1_000_000),
+    );
+    let views = run.entity_views(&built.ts, model, &built.diags);
+    built
+        .diags
+        .iter()
+        .chain(run.verdicts())
+        .map(|d| d.diag.clone())
+        .chain(views.into_iter().flat_map(|v| v.diagnostics))
+        .collect()
+}
+
+fn deadlocked(model: &SemanticModel, entity: &str) -> bool {
+    verify_diags(model)
+        .iter()
+        .any(|d| matches!(d, StateDiag::Deadlock { entity: e, .. } if e == entity))
+}
+
+/// `.none(Loan.status == open).along(Member, Card, Loan)` counts the loans of the member's
+/// cards: a member with no card or no loan withdraws (#81). The path entities are the rows
+/// the quantifier counts, not witnesses that must exist.
+#[test]
+fn a_none_along_a_path_holds_when_no_row_is_on_the_path() {
+    assert!(!deadlocked(
+        &library(".along(Member, Card, Loan)", ""),
+        "Member"
+    ));
+}
+
+/// Along the path, the guard counts the loans of the member's own cards: no member withdraws
+/// while a loan on one of their cards is open. The rule sees the violation once the guard is
+/// off the use case.
+#[test]
+fn a_none_along_a_path_counts_the_rows_of_its_own_chain() {
+    let rule = "forbidden(Member, Loan, Member.status == withdrawn, Loan.status == open).along(Member, Card, Loan)";
+    let violated = |model: &SemanticModel| {
+        verify_diags(model).iter().any(|d| {
+            matches!(d, StateDiag::ConstraintViolated { name, .. } if name == "CrossForbidden_Member_0")
+        })
+    };
+    assert!(!violated(&library(".along(Member, Card, Loan)", rule)));
+    let unguarded = LIBRARY
+        .replace("{PATH}", ".along(Member, Card, Loan)")
+        .replace("applies_to(NoOpenLoan, Withdraw)", "")
+        .replace("{EXTRA}", rule);
+    assert!(violated(&model_from(&unguarded)));
+}
+
+/// `.has(Loan.status == open).along(Member, Card, Loan)` needs an open loan on the member's
+/// chain: `Remind` never runs while every loan is returned from the start, and runs once a
+/// loan opens.
+#[test]
+fn a_has_along_a_path_needs_a_row_on_the_path() {
+    let never_runs = |default: &str| {
+        let src = LIBRARY
+            .replace("{PATH}", "")
+            .replace(
+                "Enum(open, returned) @default(open)",
+                &format!("Enum(open, returned) @default({default})"),
+            )
+            .replace(
+                "status: Enum(active, withdrawn) @default(active) }",
+                "status: Enum(active, withdrawn) @default(active)  reminded: Bool @default(false) }",
+            )
+            .replace(
+                "{EXTRA}",
+                r#"usecase Remind "督促"
+sets(Remind, Member.reminded == true)
+condition HasOpenLoan "未返却あり"
+holds(HasOpenLoan, Member.status == active).has(Loan.status == open).along(Member, Card, Loan)
+applies_to(HasOpenLoan, Remind)"#,
+            );
+        verify_diags(&model_from(&src))
+            .iter()
+            .any(|d| matches!(d, StateDiag::NeverRuns { action, .. } if action == "Remind"))
+    };
+    assert!(never_runs("returned"));
+    assert!(!never_runs("open"));
+}
+
+/// A path that puts the counted entity before any anchor, goes on past it, or joins a compared
+/// entity through it binds the guard wrong, and says how to write it.
+#[test]
+fn a_counted_entity_out_of_place_on_the_path_is_unbindable() {
+    let reasons = |path: &str, body: &str| -> String {
+        let src = LIBRARY
+            .replace("{PATH}", path)
+            .replace("holds(NoOpenLoan, Member.status == active)", body)
+            .replace(
+                "{EXTRA}",
+                r#"entity Fine "延滞金" { id: Int @pk  paid: Bool @default(false) }
+relate(Fine, Loan, N:1)
+usecase Charge "請求"
+creates(Charge, Fine)"#,
+            );
+        TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL)
+            .diags
+            .into_iter()
+            .filter_map(|d| match d.diag {
+                StateDiag::UnbindableCondition { reason, .. } => Some(reason),
+                _ => None,
+            })
+            .collect::<Vec<String>>()
+            .join("\n")
+    };
+    let body = "holds(NoOpenLoan, Member.status == active)";
+    let before = reasons(".along(Loan, Card, Member)", body);
+    assert!(
+        before.contains("names Loan, which `.none` counts, before any entity Withdraw binds"),
+        "{before}"
+    );
+    let past = reasons(".along(Member, Card, Loan, Fine)", body);
+    assert!(
+        past.contains("goes on past Loan, which `.none` counts, to Fine"),
+        "{past}"
+    );
+    let compares = "holds(NoOpenLoan, Member.status == active, Fine.paid == true)";
+    let through = reasons(".along(Member, Card, Loan, Fine)", compares);
+    assert!(
+        through.contains("joins Fine, which the body compares, through Loan"),
+        "{through}"
+    );
+    for reasons in [&before, &past, &through] {
+        assert_eq!(reasons.lines().count(), 1, "{reasons}");
+    }
+    assert!(reasons(".along(Member, Card, Loan)", body).is_empty());
+}

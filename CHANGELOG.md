@@ -553,6 +553,17 @@
 
 ### Fixed
 
+- A `.has`/`.none` on a `holds` with `.along` counts along the path (#81). The path entities
+  were each a witness that had to exist, so `holds(NoOpenLoan, Member.status ==
+  active).none(Loan.status == open).along(Member, Loan)` read "some loan of the member exists
+  and none is open", and `verify` reported a member with no loan stuck at `active` as a
+  `Deadlock`. The quantified entity, and the path entities between it and the nearest
+  earlier one the use case binds or the body compares, are now bound inside the quantifier
+  with the hops' links: `.none` holds when no chain reaches a matching row, `.has` when some
+  chain does. An entity the body compares stays a witness. A path that names the counted
+  entity before any anchor, goes on past it, or joins a compared entity through it is
+  `UnbindableCondition` with the rewrite. BFS and TLC read the same predicate; the engine
+  equivalence suite has the case.
 - `states --entity`, `check --entity` and `verify --entity` print the use cases no selected
   cone keeps as one `not checked:` line that counts them and names three, not one line each
   (#79). `states --entity Claim` on `samples/insurance-claim-ops` printed 39 lines before its

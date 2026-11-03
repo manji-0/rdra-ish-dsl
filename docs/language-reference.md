@@ -1363,6 +1363,24 @@ is explored, not blocked.
   entity the keys between neighbours join, starting from the instance the use case binds.
   Only the hops link; the one-hop links of the item above are not added. A `.role(role)` after
   the `.along` picks the key of a hop that two keys join, as on a `forbidden`.
+- A `.has(...)` or `.none(...)` whose entity the path names, and the body does not compare,
+  counts along the path: the rows of that entity, and of every path entity between it and
+  the nearest entity before it that the use case binds or the body compares, that the hops'
+  keys chain to that row. `.none` holds when no such chain reaches a matching row, so a row
+  with no chain at all passes; `.has` when some chain does. A `.by` after the `.has`/`.none`
+  is not read on a counted entity; the `.by` after the `.along` picks each hop's key. An
+  entity the body compares is a witness even when a `.has`/`.none` also names it: some
+  linked row satisfies the comparisons, and the quantifier counts every linked row on its
+  own. A path that names the counted entity before any entity the use case binds or the
+  body compares, goes on past it to an entity nothing counts, or joins a compared entity
+  through it, is `UnbindableCondition`, and the error says how to write it.
+
+```rdra
+// A member withdraws while no loan on any of their cards is open. A member with no card,
+// or whose cards have no loan, withdraws: nothing on the path has to exist.
+holds(NoOpenLoan, Member.status == active).none(Loan.status == open).along(Member, Card, Loan)
+applies_to(NoOpenLoan, Withdraw)
+```
 - A compared entity that no key, direct or along the path, joins to an instance the use case
   binds is the `UnjoinedGuardRead` warning: the guard holds when any row of it anywhere
   satisfies the body. The warning names the entity, the use case, and the fix: the `.along`

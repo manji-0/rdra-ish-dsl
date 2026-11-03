@@ -243,7 +243,13 @@ case's action:
 - With `.along(A, B, ..)`, each path entity the action does not bind is such an instance,
   and the owner of each hop's key (the key [Joins](#joins) picks, with the `.role` after
   the `.along`) links neighbours; no other link is added. The guard reads the instances
-  the path joins to the action's parameters, as `.along` binds a multi-entity rule.
+  the path joins to the action's parameters, as `.along` binds a multi-entity rule. A path
+  entity a `.has`/`.none` quantifies, and no atom reads, is no such instance: it and the
+  path entities between it and the nearest earlier path entity the action binds or an
+  atom reads are bound inside the quantifier, with the hops' owner links, every one
+  `Forall` for `.none` (no chain from the anchor's instance reaches a matching instance)
+  and `Exists` for `.has` (some chain does). The hop into such an entity links inside the
+  quantifier only, so the guard needs no instance on the path to exist.
 - An instance of a compared entity that no chain of links reaches from a parameter of the action is
   `UnjoinedGuardRead`, a warning: any present row of the entity satisfies the guard.
 - In a use case with k groups, the body is the precondition of the run: step 1 carries
@@ -264,7 +270,8 @@ case's action:
   name no condition, so they read the owner and the instance's existence only. The instance a created parameter takes is absent there, so the quantifier
   never reads it; an updated parameter's instance is present and is quantified with its
   pre-state values. The quantified instance is its own binder even when the action or
-  another atom binds the same entity.
+  another atom binds the same entity. With `.along`, a quantified entity the path names
+  and no atom reads is counted along the path (above), and its `.by` is not read.
 - `applies_to(Condition, System)` adds no guard, and a condition with no body is a
   trace link.
 - A body applied to a use case that writes nothing is `UnbindableCondition`.
@@ -676,7 +683,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal lies outside `0..max`. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
-| `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds. |
+| `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |

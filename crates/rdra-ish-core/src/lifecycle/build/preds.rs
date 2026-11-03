@@ -14,12 +14,44 @@ use crate::lifecycle::types::{
 use crate::lifecycle::EntId;
 use crate::model::{
     CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossConstraintScope,
-    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, Join, Min, QuantifierKind,
-    RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
+    CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Join, Min,
+    QuantifierKind, RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
 type Binding = Vec<(EntityKey, At)>;
+
+/// What an entity of a `holds` body's `.along` path is to the guard ([`Builder::path_roles`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PathRole {
+    /// A row the action binds.
+    Bound,
+    /// A row some present instance supplies: the body compares it, or nothing counts it.
+    Witness,
+    /// The row a `.has`/`.none` counts along the path.
+    Counted,
+    /// A row of a counted entity's chain, between its anchor and it.
+    Hop,
+}
+
+impl PathRole {
+    /// Bound in the guard's outer scope, where a counted entity's chain starts.
+    fn is_outer(self) -> bool {
+        matches!(self, PathRole::Bound | PathRole::Witness)
+    }
+}
+
+/// The part of a `holds` body's `.along` path a `.has`/`.none` counts along
+/// ([`Builder::quantified_along`]): from its anchor to the counted entity, with the keys of
+/// its hops, and what an unbindable hop is reported on.
+struct Chain<'a> {
+    uc: UseCaseKey,
+    ck: ConditionKey,
+    segment: &'a [EntityKey],
+    keys: &'a [Option<FkId>],
+    read: &'a [EntityKey],
+    site: &'a Site,
+}
 
 fn at_of(binding: &Binding, ek: EntityKey) -> Option<At> {
     binding.iter().find(|(k, _)| *k == ek).map(|(_, at)| *at)
@@ -1065,9 +1097,12 @@ impl<'m> Builder<'m> {
     }
 
     /// The `holds` body of `ck` over an action's params, as [`Self::condition_guards`] reads it.
-    /// With `.along(..)`, the path's keys join its rows: each path entity the action does not
-    /// bind is a witness, and only the hops link. Without it, each witness links to each
-    /// bound entity or other witness that one key joins it to.
+    /// With `.along(..)`, the path's keys join its rows and only the hops link: a path entity
+    /// the action does not bind is a witness, or, when a `.has`/`.none` counts it and the body
+    /// does not compare it, the quantifier's row, counted along the path from the nearest
+    /// entity before it that the action binds or the body compares ([`Self::path_roles`]).
+    /// Without a path, each witness links to each bound entity or other witness that one key
+    /// joins it to.
     pub(super) fn body_pred(
         &mut self,
         uc: UseCaseKey,
@@ -1099,12 +1134,19 @@ impl<'m> Builder<'m> {
             binding.push((ek, at));
         }
         let read: Vec<EntityKey> = body.conds.iter().flat_map(cond_entities).collect();
-        let path: &[EntityKey] = match &body.along {
-            CrossConstraintScope::RelationPath { path, .. } => path,
-            CrossConstraintScope::GlobalProduct => &[],
+        let (path, keys): (&[EntityKey], &[Option<FkId>]) = match &body.along {
+            CrossConstraintScope::RelationPath { path, links, .. } => (path, links),
+            CrossConstraintScope::GlobalProduct => (&[], &[]),
         };
+        let roles = self.path_roles(uc, ck, body, path, &binding, &read, &body_site);
         let mut witnesses = Vec::new();
-        for &ek in path.iter().chain(&read) {
+        let outer = path
+            .iter()
+            .zip(&roles)
+            .filter(|(_, role)| **role == PathRole::Witness)
+            .map(|(ek, _)| *ek)
+            .chain(read.iter().copied());
+        for ek in outer {
             if at_of(&binding, ek).is_none() {
                 binding.push((ek, At::Bound(witnesses.len() as u8)));
                 witnesses.push(self.ent_of[&ek]);
@@ -1114,35 +1156,37 @@ impl<'m> Builder<'m> {
         let mut parts = Vec::new();
         // The pairs of entities a key joins, linked or reported as ambiguous.
         let mut joined: Vec<(EntityKey, EntityKey)> = Vec::new();
-        match &body.along {
-            CrossConstraintScope::RelationPath { links, .. } => {
-                match self.hop_links(path, links, &binding) {
-                    Ok(links) => parts.extend(links),
-                    Err(reason) => self.diag(
-                        read.clone(),
-                        StateDiag::UnbindableCondition {
-                            condition: model.conditions[ck].id.clone(),
-                            usecase: model.use_cases[uc].id.clone(),
-                            reason,
-                            site: body_site.clone(),
-                        },
-                    ),
-                }
-                joined.extend(path.windows(2).map(|hop| (hop[0], hop[1])));
-            }
-            CrossConstraintScope::GlobalProduct => {
-                for (i, &x) in binding.iter().enumerate() {
-                    for &y in &binding[i + 1..] {
-                        if !(witness(x) || witness(y)) {
-                            continue;
-                        }
-                        if model.join_key(x.0, y.0, &body.by) != Join::Unrelated {
-                            joined.push((x.0, y.0));
-                        }
-                        parts.extend(self.owner_link(x, y, &body.by, &statement, &body_site));
+        if path.is_empty() {
+            for (i, &x) in binding.iter().enumerate() {
+                for &y in &binding[i + 1..] {
+                    if !(witness(x) || witness(y)) {
+                        continue;
                     }
+                    if model.join_key(x.0, y.0, &body.by) != Join::Unrelated {
+                        joined.push((x.0, y.0));
+                    }
+                    parts.extend(self.owner_link(x, y, &body.by, &statement, &body_site));
                 }
             }
+        } else {
+            // The hops between two entities of the outer scope link there; a hop into a
+            // counted entity's chain links inside its quantifier.
+            let mut from = 0;
+            while from < path.len() {
+                let mut to = from + 1;
+                while to < path.len() && roles[from].is_outer() && roles[to].is_outer() {
+                    to += 1;
+                }
+                if to - from >= 2 {
+                    let (run, hops) = (&path[from..to], &keys[from..to - 1]);
+                    parts.extend(self.path_links(uc, ck, run, hops, &binding, &read, &body_site));
+                }
+                from = to;
+            }
+            if path.len() < 2 {
+                parts.extend(self.path_links(uc, ck, path, keys, &binding, &read, &body_site));
+            }
+            joined.extend(path.windows(2).map(|hop| (hop[0], hop[1])));
         }
         self.unjoined_reads(uc, ck, &binding, &joined, &read, &body_site);
         parts.extend(
@@ -1150,8 +1194,31 @@ impl<'m> Builder<'m> {
                 .iter()
                 .map(|c| self.cross_atom(c, &binding, site)),
         );
+        let depth = witnesses.len() as u8;
         for q in &body.quantifiers {
-            parts.push(self.quantified(q, &binding, witnesses.len() as u8, site));
+            let counted = path
+                .iter()
+                .position(|ek| *ek == q.related)
+                .filter(|&r| roles[r] == PathRole::Counted);
+            let pred = match counted {
+                Some(r) => {
+                    let anchor = (0..r)
+                        .rev()
+                        .find(|&i| roles[i].is_outer())
+                        .expect("a counted entity follows an anchor");
+                    let chain = Chain {
+                        uc,
+                        ck,
+                        segment: &path[anchor..=r],
+                        keys: &keys[anchor..r],
+                        read: &read,
+                        site: &body_site,
+                    };
+                    self.quantified_along(q, &binding, depth, chain, site)
+                }
+                None => self.quantified(q, &binding, depth, site),
+            };
+            parts.push(pred);
         }
         witnesses
             .into_iter()
@@ -1160,6 +1227,175 @@ impl<'m> Builder<'m> {
                 entity,
                 body: Box::new(inner),
             })
+    }
+
+    /// The role of each entity of a `holds` body's `.along` path on an action that binds
+    /// `binding` (its params), where the body compares `read`. A counted entity's chain runs
+    /// from the nearest bound or compared entity before it; a path that names a counted
+    /// entity before any such anchor, or goes on past a counted entity to an entity nothing
+    /// counts, is `UnbindableCondition`, and the entity is read as a witness.
+    #[allow(clippy::too_many_arguments)]
+    fn path_roles(
+        &mut self,
+        uc: UseCaseKey,
+        ck: ConditionKey,
+        body: &HoldsBody,
+        path: &[EntityKey],
+        binding: &Binding,
+        read: &[EntityKey],
+        site: &Site,
+    ) -> Vec<PathRole> {
+        let model = self.model;
+        let outer = |ek: EntityKey| at_of(binding, ek).is_some() || read.contains(&ek);
+        let counting = |ek: EntityKey| {
+            body.quantifiers
+                .iter()
+                .find(|q| q.related == ek)
+                .map(|q| match q.kind {
+                    QuantifierKind::Has => "has",
+                    QuantifierKind::None => "none",
+                })
+        };
+        let id = |ek: EntityKey| model.entities[ek].id.as_str();
+        let mut roles: Vec<PathRole> = Vec::with_capacity(path.len());
+        for (i, &ek) in path.iter().enumerate() {
+            let anchor = (0..i).rev().find(|&j| outer(path[j]));
+            let run_end = (i + 1..path.len())
+                .find(|&j| outer(path[j]))
+                .unwrap_or(path.len());
+            let last_counted = (anchor.map_or(0, |a| a + 1)..i)
+                .rev()
+                .find(|&j| roles[j] == PathRole::Counted);
+            let counted_after = (i + 1..run_end).any(|j| counting(path[j]).is_some());
+            let reason = if at_of(binding, ek).is_some() {
+                roles.push(PathRole::Bound);
+                continue;
+            } else if read.contains(&ek) {
+                roles.push(PathRole::Witness);
+                let Some(c) = last_counted else {
+                    continue;
+                };
+                format!(
+                    "along(..) joins {}, which the body compares, through {}, which `.{}` counts; put {} before {}",
+                    id(ek), id(path[c]), counting(path[c]).unwrap_or("none"), id(ek), id(path[c])
+                )
+            } else if let Some(kind) = counting(ek) {
+                if anchor.is_some() {
+                    roles.push(PathRole::Counted);
+                    continue;
+                }
+                roles.push(PathRole::Witness);
+                format!(
+                    "along(..) names {}, which `.{kind}` counts, before any entity {} binds or the body compares; start the path at one",
+                    id(ek),
+                    model.use_cases[uc].id
+                )
+            } else if counted_after && anchor.is_some() {
+                roles.push(PathRole::Hop);
+                continue;
+            } else {
+                roles.push(PathRole::Witness);
+                let Some(c) = last_counted else {
+                    continue;
+                };
+                format!(
+                    "along(..) goes on past {}, which `.{}` counts, to {}, which nothing reads; end the path at {}",
+                    id(path[c]), counting(path[c]).unwrap_or("none"), id(ek), id(path[c])
+                )
+            };
+            self.unbindable(uc, ck, vec![ek], reason, site);
+        }
+        roles
+    }
+
+    /// `UnbindableCondition` on `entities`: the body of `ck` applied to `uc` guards nothing
+    /// for `reason`.
+    fn unbindable(
+        &mut self,
+        uc: UseCaseKey,
+        ck: ConditionKey,
+        entities: Vec<EntityKey>,
+        reason: String,
+        site: &Site,
+    ) {
+        let model = self.model;
+        self.diag(
+            entities,
+            StateDiag::UnbindableCondition {
+                condition: model.conditions[ck].id.clone(),
+                usecase: model.use_cases[uc].id.clone(),
+                reason,
+                site: site.clone(),
+            },
+        );
+    }
+
+    /// [`Self::hop_links`] over `path`, or the `UnbindableCondition` it reports and no link.
+    #[allow(clippy::too_many_arguments)]
+    fn path_links(
+        &mut self,
+        uc: UseCaseKey,
+        ck: ConditionKey,
+        path: &[EntityKey],
+        keys: &[Option<FkId>],
+        binding: &Binding,
+        read: &[EntityKey],
+        site: &Site,
+    ) -> Vec<Pred> {
+        match self.hop_links(path, keys, binding) {
+            Ok(links) => links,
+            Err(reason) => {
+                self.unbindable(uc, ck, read.to_vec(), reason, site);
+                Vec::new()
+            }
+        }
+    }
+
+    /// [`Self::quantified`] along a path: `chain.segment` runs from an entity `binding` binds
+    /// to `q.related`, whose entities after the first are bound at `depth`, `depth + 1`, .. in
+    /// path order. Every row of each entity between, and of `q.related`, that the hops' keys
+    /// chain to the anchor's row is counted: `Forall` for `.none`, so no chain reaches a
+    /// matching row, and `Exists` for `.has`, so some chain does.
+    fn quantified_along(
+        &mut self,
+        q: &RelatedQuantifier,
+        binding: &Binding,
+        depth: u8,
+        chain: Chain<'_>,
+        site: &Site,
+    ) -> Pred {
+        let Chain {
+            uc,
+            ck,
+            segment,
+            keys,
+            read,
+            site: body_site,
+        } = chain;
+        let rows = &segment[1..];
+        let mut inner: Binding = binding
+            .iter()
+            .filter(|(ek, _)| !rows.contains(ek))
+            .copied()
+            .collect();
+        for (i, &ek) in rows.iter().enumerate() {
+            inner.push((ek, At::Bound(depth + i as u8)));
+        }
+        let links = self.path_links(uc, ck, segment, keys, &inner, read, body_site);
+        let conds = self.cross_all(&q.conditions, &inner, site);
+        let link = Pred::And(links);
+        let body = match q.kind {
+            QuantifierKind::Has => Pred::And(vec![link, conds]),
+            QuantifierKind::None => implies(link, Pred::Not(Box::new(conds))),
+        };
+        rows.iter().rev().fold(body, |body, ek| {
+            let entity = self.ent_of[ek];
+            let body = Box::new(body);
+            match q.kind {
+                QuantifierKind::Has => Pred::Exists { entity, body },
+                QuantifierKind::None => Pred::Forall { entity, body },
+            }
+        })
     }
 
     /// `UnjoinedGuardRead` for each entity the body compares that is a witness no chain of
@@ -1234,15 +1470,12 @@ impl<'m> Builder<'m> {
             if self.active_ucs.contains(&b.usecase) {
                 continue;
             }
-            self.diag(
+            self.unbindable(
+                b.usecase,
+                b.cond,
                 b.body.conds.iter().flat_map(cond_entities).collect(),
-                StateDiag::UnbindableCondition {
-                    condition: model.conditions[b.cond].id.clone(),
-                    usecase: model.use_cases[b.usecase].id.clone(),
-                    reason: "the use case writes nothing, so no action carries the guard"
-                        .to_string(),
-                    site: Site::new(ModelRef::Condition(b.cond), &b.body.site),
-                },
+                "the use case writes nothing, so no action carries the guard".to_string(),
+                &Site::new(ModelRef::Condition(b.cond), &b.body.site),
             );
         }
     }

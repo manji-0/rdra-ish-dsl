@@ -1249,6 +1249,58 @@ fn bfs_and_tlc_agree_on_the_key_a_join_names() {
     }
 }
 
+/// A `.none` on a `holds` counts along the guard's `.along` path (#81): `Withdraw` runs while no
+/// loan on any of the member's cards is open, and a member with no card or no loan withdraws,
+/// so no member is stuck. The rule forbids a withdrawn member with an open loan on their
+/// chain; `{GUARD}` is the `applies_to` that keeps it, and without it both engines reach the
+/// violation.
+const NONE_ALONG_PATH: &str = r#"
+entity Member "会員" { id: Int @pk  status: Enum(active, withdrawn) @default(active) }
+entity Card "カード" { id: Int @pk }
+entity Loan "貸出" { id: Int @pk  status: Enum(open, returned) @default(open) }
+relate(Card, Member, N:1)
+relate(Loan, Card, N:1)
+usecase Register "登録"
+usecase IssueCard "カード発行"
+usecase Lend "貸出"
+usecase Return "返却"
+usecase Withdraw "退会"
+creates(Register, Member)
+creates(IssueCard, Card)
+creates(Lend, Loan)
+transitions(Return, Loan.status, open -> returned)
+transitions(Withdraw, Member.status, active -> withdrawn)
+condition MemberActive "有効な会員"
+holds(MemberActive, Member.status == active)
+applies_to(MemberActive, IssueCard)
+condition CardOfActive "有効な会員のカード"
+holds(CardOfActive, Member.status == active).along(Loan, Card, Member)
+applies_to(CardOfActive, Lend)
+condition NoOpenLoan "未返却なし"
+holds(NoOpenLoan, Member.status == active).none(Loan.status == open).along(Member, Card, Loan)
+{GUARD}
+forbidden(Member, Loan, Member.status == withdrawn, Loan.status == open).along(Member, Card, Loan)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_none_along_a_path() {
+    let guarded = check_fixture(
+        "none_along_guarded",
+        &NONE_ALONG_PATH.replace("{GUARD}", "applies_to(NoOpenLoan, Withdraw)"),
+    );
+    let unguarded = check_fixture(
+        "none_along_unguarded",
+        &NONE_ALONG_PATH.replace("{GUARD}", ""),
+    );
+    if let (Some(guarded), Some(unguarded)) = (guarded, unguarded) {
+        assert!(!guarded.contains("CrossForbidden_Member_0"), "{guarded:?}");
+        assert!(
+            unguarded.contains("CrossForbidden_Member_0"),
+            "{unguarded:?}"
+        );
+    }
+}
+
 /// Two mandatory keys from Order to Address, and `Place` creates the order without writing an
 /// address (#75). Each key has its own parent param, so an order may ship to one address and
 /// bill another. `Ship` runs while the `SHIP_KEY` address is in the east, and the rule forbids
