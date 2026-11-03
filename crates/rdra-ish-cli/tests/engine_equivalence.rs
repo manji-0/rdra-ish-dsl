@@ -2017,3 +2017,30 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
     }
     let _ = std::fs::remove_dir_all(&scratch);
 }
+
+/// A `Date` column set to a number is a point on the `now` clock in both engines (#89): the
+/// deadline `Issue` sets is passed by `Tick` alone, so the rule that an active coupon is in
+/// date is violated, and `Expire`, guarded by the deadline, runs only after it.
+const DATE_SETS: &str = r#"
+entity Coupon "クーポン" { id: Int @pk  status: Enum(active, expired) @default(active)  expires_at: Date }
+usecase Issue "発行"
+usecase Expire "失効"
+creates(Issue, Coupon)
+sets(Issue, Coupon.expires_at == 2)
+transitions(Expire, Coupon.status, active -> expired)
+condition PastDeadline "期限を過ぎた"
+holds(PastDeadline, Coupon.expires_at < now)
+applies_to(PastDeadline, Expire)
+forbidden(Coupon, status == active, expires_at < now)
+forbidden(Coupon, status == expired, expires_at >= now)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_date_sets() {
+    if let Some(violated) = check_fixture("date_sets", DATE_SETS) {
+        assert_eq!(
+            violated.into_iter().collect::<Vec<_>>(),
+            vec!["Forbidden_Coupon_0".to_string()]
+        );
+    }
+}

@@ -79,10 +79,14 @@ Also ask:
    `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
    Settlement)`. Without it the guard reads any settlement, and `check` warns
    `UnjoinedGuardRead` with the `.along(...)` to add.
-8. Add `sets(UseCase, Entity.col == val)` for enum, nullable, boolean, and Int
+8. Add `sets(UseCase, Entity.col == val)` for enum, nullable, boolean, Int, and Date
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). A `sets` on a column that `transitions`
-   drives is an error unless the use case creates the entity.
+   drives is an error unless the use case creates the entity. A `Date` or `DateTime`
+   column takes a number, a point on the clock `now` ticks through
+   (`sets(Issue, Coupon.expires_at == 3)`), so a rule that reads `expires_at < now` has a
+   deadline to reach; a column the use case stamps with the current time is `@null` and
+   set to `present`.
    When the value comes from another row, copy it: `sets(Register, Permit.kind ==
    Application.kind)`. The source must be a row the step binds: an entity the use case
    writes in the same or an earlier transaction group, or the parent of the target through a `relate`
@@ -253,8 +257,8 @@ temporal properties.
   concrete triggered use cases are contained by the downstream BUC.
 - `check` reports no `Witness_*` or `Deadlock_*` error, and each `Runs_*` warning is
   understood.
-- `sets` captures relevant enum, nullable, boolean, and Int effects, and `drives` the
-  comparison effects.
+- `sets` captures relevant enum, nullable, boolean, Int, and Date effects, and `drives`
+  the comparison effects.
 - AsyncAPI export is meaningful when events, raises/triggers/transitions, and
   outbox-like handoffs are part of the review.
 

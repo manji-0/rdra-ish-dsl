@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `sets(UC, E.date == N)` on a `Date` or `DateTime` column (#89): the number is a point on
+  the clock `now` ticks through, as an Int literal is on an Int column, so a rule that reads
+  `expires_at < now` has a deadline the use case sets instead of a column no use case
+  writes. The `EffectOnNonStateColumn` message now lists every column type a `sets` value
+  fits.
+
 ## v1.0.0 - 2026-11-03
 
 From this release on, rdra-ish follows semantic versioning, and docs/compatibility.md lists

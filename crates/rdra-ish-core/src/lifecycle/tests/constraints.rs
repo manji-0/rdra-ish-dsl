@@ -873,3 +873,35 @@ after(ExecuteCertIssue).assert(CertificateOrder.status == executed).label("発�
         .to_string()
         .starts_with("「発行後は実行済」: after(")));
 }
+
+/// A `Date` column takes a number, a point on the clock: the creation places the deadline at
+/// 2, `expires_at < now` holds once the clock has ticked past it, and the rule that an active
+/// coupon is not past its deadline is reachable through `Tick` alone.
+#[test]
+fn a_date_sets_places_the_deadline_on_the_clock() {
+    const COUPON: &str = r#"
+entity Coupon "クーポン" { id: Int @pk  status: Enum(active, expired) @default(active)  expires_at: Date }
+usecase Issue "発行"
+usecase Expire "失効"
+creates(Issue, Coupon)
+sets(Issue, Coupon.expires_at == 2)
+transitions(Expire, Coupon.status, active -> expired)
+condition PastDeadline "期限を過ぎた"
+holds(PastDeadline, Coupon.expires_at < now)
+applies_to(PastDeadline, Expire)
+"#;
+    let d = derive_src(&format!(
+        "{COUPON}\nforbidden(Coupon, status == active, expires_at < now)"
+    ));
+    assert!(violated(&d, "Coupon", InvKind::Forbidden));
+    assert_eq!(witnesses(&d, "Coupon"), vec!["expires_at=2, status=active"]);
+    assert!(d
+        .rows("Coupon")
+        .contains(&"expires_at=2, status=expired".to_string()));
+
+    // Expire runs only after the deadline: before it, the coupon is active and in date.
+    let d = derive_src(&format!(
+        "{COUPON}\nforbidden(Coupon, status == expired, expires_at >= now)"
+    ));
+    assert!(!violated(&d, "Coupon", InvKind::Forbidden));
+}

@@ -341,7 +341,7 @@ pub enum RdraError {
     #[error("null/present effect on non-nullable column '{col}'\n  hint: only @null columns accept `null`/`present`")]
     NullOnNonNullable { col: String },
 
-    #[error("effect on non-state column '{col}' (type {col_type}): only Enum, Bool, or @null columns define state\n  hint: use `null`, `present`, an enum variant, `true`/`false`, or an integer literal for Int/Money/Decimal")]
+    #[error("effect on non-state column '{col}' (type {col_type}): a `sets` value is an enum variant, `true`/`false`, `null`/`present` on a @null column, or an integer literal on an Int, Money, Decimal, Date, or DateTime column\n  hint: a Date or DateTime value is a point on the `now` clock (0..5), so write `sets(UC, E.{col} == 3)`; a String column holds no state unless it is @null")]
     EffectOnNonStateColumn { col: String, col_type: String },
 
     #[error("PostgreSQL type name '{name}' is not valid in sets(...); use `present` for a non-null nullable value\n  hint: declare display/storage types with entity annotations or DBML export inference")]

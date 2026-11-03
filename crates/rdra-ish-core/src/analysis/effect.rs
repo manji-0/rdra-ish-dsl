@@ -119,13 +119,16 @@ pub(crate) fn parse_effect_value(
                 value: lit.to_string(),
             }),
         },
-        ColumnType::Int | ColumnType::Money | ColumnType::Decimal => lit
-            .parse::<i64>()
-            .map(EffectValue::Int)
-            .map_err(|_| RdraError::EffectOnNonStateColumn {
+        ColumnType::Int
+        | ColumnType::Money
+        | ColumnType::Decimal
+        | ColumnType::Date
+        | ColumnType::DateTime => lit.parse::<i64>().map(EffectValue::Int).map_err(|_| {
+            RdraError::EffectOnNonStateColumn {
                 col: col.name.clone(),
                 col_type: format!("{:?} (expected integer literal)", col.col_type),
-            }),
+            }
+        }),
         _ => Err(RdraError::EffectOnNonStateColumn {
             col: col.name.clone(),
             col_type: format!("{:?}", col.col_type),
@@ -345,6 +348,7 @@ mod tests {
         let enum_col = model_column("status", ColumnType::Enum(vec!["open".to_string()]));
         let bool_col = model_column("active", ColumnType::Bool);
         let int_col = model_column("count", ColumnType::Int);
+        let date_col = model_column("due", ColumnType::Date);
 
         assert!(matches!(
             parse_effect_value(&SlotMap::with_key(), &string_col, "null"),
@@ -364,6 +368,14 @@ mod tests {
         );
         assert!(matches!(
             parse_effect_value(&SlotMap::with_key(), &int_col, "nope"),
+            Err(RdraError::EffectOnNonStateColumn { .. })
+        ));
+        assert_eq!(
+            parse_effect_value(&SlotMap::with_key(), &date_col, "3").unwrap(),
+            EffectValue::Int(3)
+        );
+        assert!(matches!(
+            parse_effect_value(&SlotMap::with_key(), &date_col, "now"),
             Err(RdraError::EffectOnNonStateColumn { .. })
         ));
     }

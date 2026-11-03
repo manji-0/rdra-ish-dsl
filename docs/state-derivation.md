@@ -307,7 +307,9 @@ copy of the same column in the action is `ConflictingEffects`. The analysis chec
 value of the source is a value of the target, so the guard always keeps one successor.
 
 **Clock.** When something compares a column to `now`, a `Tick` action adds one to
-`now` until it reaches the top of the Int range.
+`now` until it reaches the top of the Int range. A `Date` or `DateTime` column is a point
+on the same clock: `sets(UC, E.due == 3)` places it at 3, and `due < now` holds once the
+clock has ticked past it.
 
 ### Checks
 

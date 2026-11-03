@@ -1752,6 +1752,9 @@ sets(usecase::Enable, Switch.enabled == true)
 // Int column: a number
 sets(usecase::Restock, Stock.stock == 3)
 
+// Date or DateTime column: a point on the `now` clock
+sets(usecase::Issue, Coupon.expires_at == 3)
+
 // Nullable column: make it non-null
 sets(usecase::Login, UserAccount.last_login_at == present)
 
@@ -1766,7 +1769,8 @@ names `scripts/migrate-phase3.py`.
 |---|---|---|
 | Enum variant name | `Enum` column | Set the column to that variant. |
 | `true` / `false` | `Bool` column | Set the boolean value. |
-| A number | `Int` column | Set the column to that value. |
+| A number | `Int`, `Money`, `Decimal` column | Set the column to that value. |
+| A number | `Date`, `DateTime` column | Set the column to that point on the `now` clock (see below). |
 | `present` | `@null` column | Make the column non-null (value present). |
 | `null` | `@null` column | Make the column null. |
 | `Entity.column` | A column of the same type | Copy the value of another row's column (see below). |
@@ -1774,6 +1778,16 @@ names `scripts/migrate-phase3.py`.
 `sets` records which value a use case leaves, not how it is stored. A storage type name
 such as `timestamptz` is not a value; write `present` for a nullable column the use case
 fills. The storage type belongs on the column's type and the DBML export.
+
+A `Date` or `DateTime` column takes the same literal as an `Int` column: a number in the
+Int range, read as a point on the clock that `now` ticks through (see
+[Driving comparison propositions](#driving-comparison-propositions-with-drives) and
+[Clock](./state-derivation.md#actions)). `sets(Issue, Coupon.expires_at == 3)` then
+makes `expires_at < now` false until the clock passes 3 and true after, so a rule such as
+`forbidden(Coupon, status == active, expires_at < now)` has a deadline to reach instead
+of a column no use case writes (`UnwrittenConstrainedVar`). `now` itself is not a value a
+`sets` leaves; a column the use case stamps with the current time is a `@null` column
+set to `present`.
 
 ### Copying a value from another row
 
