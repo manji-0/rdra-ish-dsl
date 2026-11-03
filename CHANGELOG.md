@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## v1.1.0 - 2026-11-04
+
+Upgrading from v1.0.0 needs no change to a model: every model that loads on 1.0.0 loads with
+the same verdict, errors, state counts and rule names. New forms (`links`, `relinks`,
+`unlinks`, `transitions` with a list of sources, `.when(Condition)` on a rule, `sets` on a
+Date column) and new warnings, infos and lint rules are additive. One exit status changes as a
+fix (#94): `csv` and `list` write on lifecycle errors with a note and exit 0, where they exited
+1; a script that relied on `csv` or `list` to fail on a lifecycle error runs `check` instead.
 
 ### Added
 
