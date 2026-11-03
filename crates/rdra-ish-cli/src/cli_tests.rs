@@ -930,6 +930,7 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
         rows,
         vec![
             "BookedPatient,予約済みの患者,\"(Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment)\",,Appointment.status,BatchVerifyEligibility",
+            "ChargeOfSignedEncounter,署名済みの診療記録のコストだけ登録する,\"(Encounter.status in (署名済, 修正済)).along(Charge, Encounter)\",,Encounter.status,CreateCharge",
             "CopayCappedAtLimit,窓口負担は負担割合で計算し、限度額情報があれば限度額までとする,,BurdenRatio|LimitCategory,Appointment.status,CalculateVisitBill",
             "OrderConfirmedByPhysician,医師が確定したオーダ,\"ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済\",,ClinicalOrder.status,CollectSpecimen",
             "TransferNotPossible,振替・分割の対象外（負担割合の相違・公費）,,PayerChange,ClaimStatement.status,RecordClaimReturn",

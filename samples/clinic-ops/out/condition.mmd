@@ -4,6 +4,8 @@
 flowchart LR
   condition__BookedPatient{"予約済みの患者"}:::condition
   %% holds condition__BookedPatient: (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment)
+  condition__ChargeOfSignedEncounter{"署名済みの診療記録のコストだけ登録する"}:::condition
+  %% holds condition__ChargeOfSignedEncounter: (Encounter.status in (署名済, 修正済)).along(Charge, Encounter)
   condition__CopayCappedAtLimit{"窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}:::condition
   condition__OrderConfirmedByPhysician{"医師が確定したオーダ"}:::condition
   %% holds condition__OrderConfirmedByPhysician: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済
@@ -13,6 +15,7 @@ flowchart LR
   statemodel__Appointment_status[["Appointment.status"]]:::statemodel
   statemodel__ClaimStatement_status[["ClaimStatement.status"]]:::statemodel
   statemodel__ClinicalOrder_status[["ClinicalOrder.status"]]:::statemodel
+  statemodel__Encounter_status[["Encounter.status"]]:::statemodel
   subgraph variation__AuditSeverity["監査指摘の重大度"]
     variation__AuditSeverity__low["低"]:::value
     variation__AuditSeverity__moderate["中"]:::value
@@ -79,11 +82,16 @@ flowchart LR
   %% desc usecase__CalculateVisitBill: 会計計算入力で予約を会計待ちにする。
   usecase__CollectSpecimen("採血"):::usecase
   %% desc usecase__CollectSpecimen: 医師が確定したオーダだけを採取する。
+  usecase__CreateCharge("コスト情報の登録"):::usecase
+  %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
   usecase__RecordClaimReturn("返戻レセプトの取込"):::usecase
   %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
   condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   condition__BookedPatient -.-> statemodel__Appointment_status
   %% derived condition__BookedPatient -> statemodel__Appointment_status from holds
+  condition__ChargeOfSignedEncounter -.->|applies_to| usecase__CreateCharge
+  condition__ChargeOfSignedEncounter -.-> statemodel__Encounter_status
+  %% derived condition__ChargeOfSignedEncounter -> statemodel__Encounter_status from holds
   condition__CopayCappedAtLimit -.->|applies_to| usecase__CalculateVisitBill
   condition__CopayCappedAtLimit -.-> statemodel__Appointment_status
   condition__CopayCappedAtLimit -.-> variation__BurdenRatio

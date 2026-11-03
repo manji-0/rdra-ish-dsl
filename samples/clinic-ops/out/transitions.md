@@ -15,20 +15,20 @@
 | Appointment | status | 精算済 (settled) | 完了 (completed) | 領収証・明細書の交付 (IssueReceipt) |  | 医事課 会計担当 | samples/clinic-ops/buc/buc_visit_payment.rdra:123 |
 | CarePlan | status | 作成済 (open) | 経過観察中 (monitoring) | 患者応答の確認 (ReviewPatientResponse) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:63 |
 | CarePlan | status | 経過観察中 (monitoring) | 終了 (closed) | ケアプランの終了 (CloseCarePlan) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:76 |
-| ClaimStatement | status | 作成中 (drafting) | 院内点検中 (inspecting) | レセプトの院内点検 (InspectClaimStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:118 |
-| ClaimStatement | status | 院内点検中 (inspecting) | 保留 (on_hold) | レセプトの保留（月遅れ） (HoldClaimStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:123 |
-| ClaimStatement | status | 院内点検中 (inspecting) | 請求済 (submitted) | レセプト請求 (SubmitClaimStatements) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:135 |
-| ClaimStatement | status | 保留 (on_hold) | 院内点検中 (inspecting) | 保留レセプトの再提出準備 (ReleaseHeldStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:127 |
-| ClaimStatement | status | 請求済 (submitted) | 受付不能・要確認 (receipt_error) | 受付不能・要確認の確認 (RecordReceiptError) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:144 |
-| ClaimStatement | status | 請求済 (submitted) | 審査中 (under_review) | レセプト受付（審査へ） (ReceiveClaimAccepted) |  |  | samples/clinic-ops/buc/buc_billing_claims.rdra:155 |
-| ClaimStatement | status | 受付不能・要確認 (receipt_error) | 請求済 (submitted) | エラー分レセプトの再送 (ResendErroredStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:150 |
-| ClaimStatement | status | 審査中 (under_review) | 支払済 (paid) | 診療報酬の入金 (PostPayment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:208 |
-| ClaimStatement | status | 審査中 (under_review) | 返戻 (returned) | 返戻レセプトの取込 (RecordClaimReturn) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:171 |
-| ClaimStatement | status | 審査中 (under_review) | 査定 (assessed) | 査定の取込 (RecordClaimAssessment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:193 |
-| ClaimStatement | status | 返戻 (returned) | 院内点検中 (inspecting) | 返戻レセプトの訂正（再請求） (CorrectReturnedStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:186 |
-| ClaimStatement | status | 査定 (assessed) | 支払済 (paid) | 診療報酬の入金 (PostPayment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:209 |
-| ClaimStatement | status | 査定 (assessed) | 再審査請求中 (rereview) | 再審査請求 (RequestReexamination) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:201 |
-| ClaimStatement | status | 再審査請求中 (rereview) | 支払済 (paid) | 診療報酬の入金 (PostPayment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:210 |
+| ClaimStatement | status | 作成中 (drafting) | 院内点検中 (inspecting) | レセプトの院内点検 (InspectClaimStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:124 |
+| ClaimStatement | status | 院内点検中 (inspecting) | 保留 (on_hold) | レセプトの保留（月遅れ） (HoldClaimStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:129 |
+| ClaimStatement | status | 院内点検中 (inspecting) | 請求済 (submitted) | レセプト請求 (SubmitClaimStatements) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:141 |
+| ClaimStatement | status | 保留 (on_hold) | 院内点検中 (inspecting) | 保留レセプトの再提出準備 (ReleaseHeldStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:133 |
+| ClaimStatement | status | 請求済 (submitted) | 受付不能・要確認 (receipt_error) | 受付不能・要確認の確認 (RecordReceiptError) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:150 |
+| ClaimStatement | status | 請求済 (submitted) | 審査中 (under_review) | レセプト受付（審査へ） (ReceiveClaimAccepted) |  |  | samples/clinic-ops/buc/buc_billing_claims.rdra:161 |
+| ClaimStatement | status | 受付不能・要確認 (receipt_error) | 請求済 (submitted) | エラー分レセプトの再送 (ResendErroredStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:156 |
+| ClaimStatement | status | 審査中 (under_review) | 支払済 (paid) | 診療報酬の入金 (PostPayment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:214 |
+| ClaimStatement | status | 審査中 (under_review) | 返戻 (returned) | 返戻レセプトの取込 (RecordClaimReturn) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:177 |
+| ClaimStatement | status | 審査中 (under_review) | 査定 (assessed) | 査定の取込 (RecordClaimAssessment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:199 |
+| ClaimStatement | status | 返戻 (returned) | 院内点検中 (inspecting) | 返戻レセプトの訂正（再請求） (CorrectReturnedStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:192 |
+| ClaimStatement | status | 査定 (assessed) | 支払済 (paid) | 診療報酬の入金 (PostPayment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:215 |
+| ClaimStatement | status | 査定 (assessed) | 再審査請求中 (rereview) | 再審査請求 (RequestReexamination) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:207 |
+| ClaimStatement | status | 再審査請求中 (rereview) | 支払済 (paid) | 診療報酬の入金 (PostPayment) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:216 |
 | ClinicalOrder | status | オーダ済 (ordered) | オーダ済 (ordered) | 代行入力オーダの確定 (ConfirmProxyOrder) |  | 医師 | samples/clinic-ops/buc/buc_orders_results.rdra:96 |
 | ClinicalOrder | status | オーダ済 (ordered) | 採取済 (collected) | 採血 (CollectSpecimen) | 医師が確定したオーダ | 看護師 | samples/clinic-ops/buc/buc_orders_results.rdra:105 |
 | ClinicalOrder | status | オーダ済 (ordered) | 取消 (cancelled) | オーダの取消 (CancelClinicalOrder) |  | 医師 | samples/clinic-ops/buc/buc_orders_results.rdra:154 |

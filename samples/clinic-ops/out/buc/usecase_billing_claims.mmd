@@ -80,6 +80,7 @@ flowchart LR
     state__ClaimStatement_returned((("返戻"))):::state
     state__ClaimStatement_submitted((("請求済"))):::state
     state__ClaimStatement_under_review((("審査中"))):::state
+    condition__ChargeOfSignedEncounter{"署名済みの診療記録のコストだけ登録する"}:::condition
     condition__TransferNotPossible{"振替・分割の対象外（負担割合の相違・公費）"}:::condition
   end
   actor__ClaimsClerk -.-> usecase__CorrectReturnedStatement
@@ -97,6 +98,7 @@ flowchart LR
   actor__ClaimsClerk -.-> usecase__ReviewClaimTransfer
   actor__ClaimsClerk -.-> usecase__SubmitClaimStatements
   actor__ClaimsClerk -.-> usecase__VoidCharge
+  condition__ChargeOfSignedEncounter -.->|applies_to| usecase__CreateCharge
   condition__TransferNotPossible -.->|applies_to| usecase__RecordClaimReturn
   event__EvClaimAccepted -.-> usecase__ReceiveClaimAccepted
   event__EvClaimAssessed -.-> usecase__RecordClaimAssessment

@@ -99,6 +99,12 @@ sets(CreateCharge, Charge.kind == insured)
 sets(CreateCharge, Charge.origin == chart)
 triggers(EvEncounterSigned, BucBillingClaims)
 triggers(EvEncounterSigned, CreateCharge)
+// EvEncounterSigned guarantees a signed Encounter. The DSL keeps no event order in a state, so this
+// guard encodes that precondition: the charge's own Encounter is signed, or amended after it was
+// (amended is reachable only from signed). No source in the research set states it separately.
+condition ChargeOfSignedEncounter "署名済みの診療記録のコストだけ登録する"
+holds(ChargeOfSignedEncounter, Encounter.status in (signed, amended)).along(Charge, Encounter)
+applies_to(ChargeOfSignedEncounter, CreateCharge)
 
 // One レセプト per patient, 診療月, and payer, made from the month's 診療行為. It reads the Charges
 // and does not move them: a Charge has no state that billing changes, and writing it here would tie

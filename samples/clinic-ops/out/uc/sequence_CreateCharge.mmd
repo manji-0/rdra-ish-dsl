@@ -1,6 +1,6 @@
 %% rdra-ish diagram=sequence scope=usecase:CreateCharge model=samples/clinic-ops
 %% kinds: usecase screen api entity
-%% omitted: buc medium event
+%% omitted: buc medium event condition
 sequenceDiagram
   participant usecase__SignEncounter as 診療記録の署名
   participant screen__ChargeWorklistScreen as コスト一覧画面
@@ -9,6 +9,10 @@ sequenceDiagram
   participant entity__Charge as コスト（診療行為）
   usecase__SignEncounter ->> api__CreateChargeApi: 診療記録の署名
   screen__ChargeWorklistScreen ->> api__CreateChargeApi: コスト登録 API
-  api__CreateChargeApi ->> entity__Encounter: read
-  api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
-  api__CreateChargeApi -->> screen__ChargeWorklistScreen: done
+  alt 署名済みの診療記録のコストだけ登録する: (Encounter.status in (署名済, 修正済)).along(Charge, Encounter)
+    api__CreateChargeApi ->> entity__Encounter: read
+    api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: done
+  else guard fails
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: rejected
+  end

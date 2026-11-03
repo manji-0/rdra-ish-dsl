@@ -2538,7 +2538,7 @@ flowchart LR
 
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
-| コスト情報の登録<br>`CreateCharge` | 署名時のカルテ由来コスト情報の登録（システム起動）。 | `ChargeWorklistScreen` | `CreateChargeApi` | （なし） |
+| コスト情報の登録<br>`CreateCharge` | 署名時のカルテ由来コスト情報の登録（システム起動）。 | `ChargeWorklistScreen` | `CreateChargeApi` | 署名済みの診療記録のコストだけ登録する |
 | レセプト作成<br>`GenerateClaimStatement` | 月初のレセプト作成。 | `ClaimScreen` | `GenerateClaimApi` | （なし） |
 | レセプトの院内点検<br>`InspectClaimStatement` | 院内点検。 | `ClaimScreen` | `ClaimEditApi` | （なし） |
 | レセプトの保留（月遅れ）<br>`HoldClaimStatement` | 保留（月遅れ）。 | `ClaimScreen` | `ClaimEditApi` | （なし） |
@@ -2561,7 +2561,7 @@ flowchart LR
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:CreateCharge model=samples/clinic-ops
 %% kinds: usecase screen api entity
-%% omitted: buc medium event
+%% omitted: buc medium event condition
 sequenceDiagram
   participant usecase__SignEncounter as 診療記録の署名
   participant screen__ChargeWorklistScreen as コスト一覧画面
@@ -2570,9 +2570,13 @@ sequenceDiagram
   participant entity__Charge as コスト（診療行為）
   usecase__SignEncounter ->> api__CreateChargeApi: 診療記録の署名
   screen__ChargeWorklistScreen ->> api__CreateChargeApi: コスト登録 API
-  api__CreateChargeApi ->> entity__Encounter: read
-  api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
-  api__CreateChargeApi -->> screen__ChargeWorklistScreen: done
+  alt 署名済みの診療記録のコストだけ登録する: (Encounter.status in (署名済, 修正済)).along(Charge, Encounter)
+    api__CreateChargeApi ->> entity__Encounter: read
+    api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: done
+  else guard fails
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: rejected
+  end
 ```
 
 </details>
@@ -4310,7 +4314,8 @@ erDiagram
 
 | kind | label | entities | rule | applies_to | site |
 | --- | --- | --- | --- | --- | --- |
-| condition | 振替・分割の対象外（負担割合の相違・公費） |  |  | RecordClaimReturn | samples/clinic-ops/buc/buc_billing_claims.rdra:178 |
+| condition | 署名済みの診療記録のコストだけ登録する | Encounter | (Encounter.status in (署名済, 修正済)).along(Charge, Encounter) | CreateCharge | samples/clinic-ops/buc/buc_billing_claims.rdra:106 |
+| condition | 振替・分割の対象外（負担割合の相違・公費） |  |  | RecordClaimReturn | samples/clinic-ops/buc/buc_billing_claims.rdra:184 |
 | condition | 医師が確定したオーダ | ClinicalOrder | ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済 | CollectSpecimen | samples/clinic-ops/buc/buc_orders_results.rdra:111 |
 | condition | 予約済みの患者 | Appointment | (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment) | BatchVerifyEligibility | samples/clinic-ops/buc/buc_visit_checkin.rdra:106 |
 | condition | 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする |  |  | CalculateVisitBill | samples/clinic-ops/buc/buc_visit_payment.rdra:73 |
