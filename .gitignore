@@ -9,3 +9,6 @@ editors/vscode/out/
 # Nix
 /result
 /.direnv/
+# Default output of a command run at the repository root (verify, export, csv)
+/out/
+/out.*
