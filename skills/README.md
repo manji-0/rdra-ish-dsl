@@ -50,7 +50,7 @@ gh skill install OWNER/REPO rdra-ish-verify --agent cursor --scope user
 
 | Skill | Role |
 |---|---|
-| `rdra-ish-write` | Author DSL by refinement stage (step files 0 to 6) |
+| `rdra-ish-write` | Author DSL by refinement stage (step files 0 to 7) |
 | `rdra-ish-buc-create` | Create a BUC from requirements |
 | `rdra-ish-buc-update` | Extend an existing BUC |
 | `rdra-ish-buc-analyze` | Analyze coverage, access, API boundaries, and lifecycle findings |

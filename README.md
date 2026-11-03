@@ -57,6 +57,14 @@ uv tool install rdra-ish
 rdra-ish --help
 ```
 
+rdra-ish follows semantic versioning from 1.0.0. [Compatibility](./docs/compatibility.md)
+lists what a minor or patch release keeps: a model that loads keeps loading, and `check`
+and `verify` give it the same verdict within the same printed bounds.
+
+Upgrading a model written for 0.4.x: run `python3 scripts/migrate-syntax-v3.py <model dir>`,
+then `rdra-ish check`. The [v1.0.0 notes](./CHANGELOG.md#v100---2026-11-03) list the
+rewritten forms and the verdicts that change.
+
 ## Quick Start
 
 ```sh
@@ -103,7 +111,7 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
 - [State Derivation](./docs/state-derivation.md)
 - [Formal Verification (TLA+/TLC)](./docs/formal-verification.md)
-- [Compatibility](./docs/compatibility.md) — what a 1.0 release keeps stable
+- [Compatibility](./docs/compatibility.md) — what each release from 1.0.0 keeps stable
 - [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
 - [Changelog](./CHANGELOG.md)
 - Agent skills: [`skills/README.md`](./skills/README.md)
@@ -115,9 +123,15 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - `samples/clinic-ops`: larger model with APIs, events, and access constraints, with a
   generated design document ([`design-doc.md`](./samples/clinic-ops/design-doc.md)) and PRD
   ([`prd.md`](./samples/clinic-ops/prd.md))
+- `samples/patent-ops`, `samples/food-permit-ops`, `samples/insurance-claim-ops`: three
+  Japanese business domains (a company's patent work, a 保健所's food business permits, a
+  non-life insurer's motor claims), modeled from primary sources and passing
+  `verify --deny-undecided`
 - `samples/personal-info`: personal data management sample
+- `samples/api-contract`: API contract metadata and the OpenAPI export
 - `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from
-  `samples/formal-verification/`; check files individually)
+  `samples/formal-verification/` and, for a model that must fail,
+  `samples/formal-verification-fail/`; check files individually)
 
 ## Development
 
@@ -149,14 +163,16 @@ uvx maturin publish
 
 ```text
 crates/
-  rdra-ish-syntax/   Lexer, parser, AST
+  rdra-ish-syntax/   Lexer, parser, AST, removed-form table
   rdra-ish-core/     Semantic model, type checks, state derivation
-  rdra-ish-emit/     Mermaid/CSV/state emitters
+  rdra-ish-emit/     Mermaid/CSV/state/TLA+ emitters
   rdra-ish-cli/      rdra-ish command
-samples/
-  clinic-ops/
-  ec-site/
-  personal-info/
+  rdra-ish-lsp/      Language server
+editors/vscode/      VS Code extension for the language server
+docs/                Language, CLI, state derivation, verification, compatibility
+skills/              Agent skills
+samples/             Example models (see Samples)
+scripts/             Migration scripts, sample artifact and verification checks
 ```
 
 ## License
