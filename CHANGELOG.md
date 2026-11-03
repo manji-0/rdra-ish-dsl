@@ -23,6 +23,14 @@
   not a condition is `RuleWhenArg`. Before, a condition id in an invariant's `.when` was
   reported as `InvariantWithoutWhen`, which said nothing about the condition. `lint` does
   not flag such a condition as `condition-no-rdra-anchor`.
+- `links(UC, Child, Parent)` (#89): the use case links an existing child row to an existing
+  parent row through the `.optional()` key from the child to the parent, named with
+  `.role(role)` where several join them. The use case writes the child, binds the parent
+  it writes, the one an earlier step of its run wrote, or else any present parent, and
+  links the child while it is unlinked; a linked child waits, so no `links` moves a child,
+  and there is no unlink form yet. `check`, `states`, the TLA+ export and `verify` read
+  the link as they read a key a creation sets. No key is `LinkWithoutKey`, a mandatory one
+  `LinkOnMandatoryKey`, several with no `.role` naming one `AmbiguousOwnerLink`.
 
 ## v1.0.0 - 2026-11-03
 

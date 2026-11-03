@@ -587,6 +587,7 @@ impl<'m> Builder<'m> {
         self.transition_effects(uc, &mut a);
         self.creation_choices(&mut a);
         self.owner_bindings(uc, bodies, &mut a);
+        self.link_effects(uc, &mut a);
         self.copy_effects(uc, &mut a, groups);
         self.run_marks(uc, &mut a, step, groups.len());
         let guards = self.condition_guards(bodies, &a.params);
@@ -1436,6 +1437,10 @@ impl<'m> Builder<'m> {
             let VarKind::Owner { fk, .. } = self.ts.vars[var.index()].kind else {
                 continue;
             };
+            if self.linked_key(uc, fk) {
+                // `links` binds this key: see `link_effects`.
+                continue;
+            }
             let site = self.ts.vars[var.index()].site.clone();
             let written = match a.row_of(parent) {
                 Some(p) => match self.written_parent_key(uc, fk) {
@@ -1501,12 +1506,66 @@ impl<'m> Builder<'m> {
 }
 
 impl Builder<'_> {
+    /// Whether a `links` of the use case follows key `fk`.
+    fn linked_key(&self, uc: UseCaseKey, fk: FkId) -> bool {
+        self.model
+            .links
+            .iter()
+            .any(|l| l.origin == uc && l.key == Some(fk))
+    }
+
+    /// `links(UC, Child, Parent)` on the step that writes the child: the child's owner on the
+    /// key is unlinked (`GuardWhy::Link`) and becomes the parent row the step binds, which is
+    /// the row it writes, the row an earlier step of its run wrote, or else any present parent,
+    /// bound as a `Parent` param of the key. A linked child waits: there is no relink.
+    fn link_effects(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
+        let model = self.model;
+        for (idx, link) in model.links.iter().enumerate() {
+            if link.origin != uc {
+                continue;
+            }
+            let Some(fk) = link.key else { continue };
+            let (Some(&child), Some(&parent)) =
+                (self.ent_of.get(&link.child), self.ent_of.get(&link.parent))
+            else {
+                continue;
+            };
+            let (Some(c), Some(var)) = (a.param_of(child), self.owner_var(fk)) else {
+                continue;
+            };
+            let site = Site::new(ModelRef::Link(idx), &link.site);
+            a.guards.push(Guard {
+                pred: Pred::Cmp(
+                    Term::Slot {
+                        var,
+                        at: At::Param(c),
+                    },
+                    CmpOp::Eq,
+                    Term::Lit(Value::NULL),
+                ),
+                why: GuardWhy::Link,
+                site: site.clone(),
+            });
+            let p = match a.row_of(parent) {
+                Some(p) => p,
+                None => a.param(parent, ParamRole::Parent { key: fk }),
+            };
+            a.effects.push(Effect::Assign {
+                var,
+                param: c,
+                rhs: Rhs::Param(p),
+                site,
+            });
+        }
+    }
+
     /// Which key joins a row of `fk`'s parent that the use case writes to a child it writes
     /// (#76): `Join::Key(fk)` for the one key from that child to that parent, or, among
     /// several, when a `.by` of the use case's `holds` guards (the body's or an `.along` hop's)
-    /// or of its copies names `fk`, so `.by` names the same row as elsewhere; `Join::Key` of
-    /// another key when a `.by` names only others; `Join::Ambiguous` when no `.by` names any of
-    /// them, which is `AmbiguousOwnerLink` as for any other join.
+    /// or of its copies names `fk`, or a `links` of the use case follows it, so `.by` names the
+    /// same row as elsewhere; `Join::Key` of another key when a `.by` names only others;
+    /// `Join::Ambiguous` when no `.by` names any of them, which is `AmbiguousOwnerLink` as for
+    /// any other join.
     fn written_parent_key(&self, uc: UseCaseKey, fk: FkId) -> Join {
         let model = self.model;
         let key = model.foreign_key(fk);
@@ -1518,6 +1577,12 @@ impl Builder<'_> {
         if parallel.len() == 1 {
             return Join::Key(fk);
         }
+        let linked = model
+            .links
+            .iter()
+            .filter(|l| l.origin == uc)
+            .filter_map(|l| l.key)
+            .filter(|id| parallel.contains(id));
         let guards = applied_bodies(model)
             .into_iter()
             .filter(|b| b.usecase == uc)
@@ -1541,6 +1606,7 @@ impl Builder<'_> {
                     .copied()
                     .find(|id| model.key_named(model.foreign_key(*id), role))
             })
+            .chain(linked)
             .collect();
         match named.iter().find(|id| **id == fk).or(named.first()) {
             Some(id) => Join::Key(*id),

@@ -234,6 +234,8 @@ pub enum ModelRef {
     /// Index into `SemanticModel::state_transitions`.
     Transition(usize),
     ColumnEffect(usize),
+    /// Index into `SemanticModel::links`.
+    Link(usize),
     /// Index into `SemanticModel::column_choices`.
     ColumnChoice(usize),
     PropositionEffect(usize),
@@ -409,6 +411,9 @@ pub enum GuardWhy {
     /// The child param belongs to the parent param, or is unlinked before a created parent
     /// links it.
     Owner,
+    /// `links(UC, Child, Parent)`: the child param is unlinked on the key before the step
+    /// links it to the parent param.
+    Link,
     /// `now` has room to tick.
     Clock,
     /// `holds(Cond, ..)` of a condition that `applies_to` the use case.

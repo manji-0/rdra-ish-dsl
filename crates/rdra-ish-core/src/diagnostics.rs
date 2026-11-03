@@ -333,6 +333,21 @@ pub enum RdraError {
         condition: String,
     },
 
+    #[error("links({usecase}, {child}, {parent}) follows no key: no relate makes {parent} the parent of {child}\n  hint: declare `relate({child}, {parent}, N:1).optional()`; a `links` names the child first, so swap the two if the key runs the other way")]
+    LinkWithoutKey {
+        usecase: String,
+        child: String,
+        parent: String,
+    },
+
+    #[error("links({usecase}, {child}, {parent}) follows the key `{role}`, which is not `.optional()`: a {child} always has its {parent}, so there is nothing to link\n  hint: add `.optional()` to the relate so a {child} starts unlinked, or write the {parent} in the use case that creates the {child}")]
+    LinkOnMandatoryKey {
+        usecase: String,
+        child: String,
+        parent: String,
+        role: String,
+    },
+
     #[error("`{pred}(...).when({got})` does not name a condition\n  hint: {hint}")]
     RuleWhenArg {
         pred: String,
@@ -683,6 +698,15 @@ impl Diagnostic {
             error: e,
             is_warning: false,
             location: Some(location),
+        }
+    }
+
+    /// An error at a fact's site, which a synthesized fact may not have.
+    pub fn error_at_opt(e: RdraError, location: Option<crate::location::LocatedSpan>) -> Self {
+        Self {
+            error: e,
+            is_warning: false,
+            location,
         }
     }
 

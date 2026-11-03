@@ -110,6 +110,20 @@ impl SetValue {
     }
 }
 
+/// `links(UseCase, Child, Parent)`: the use case links an existing child row to an existing
+/// parent row through the `.optional()` key `key`, which `analysis::fk::resolve_links` picks
+/// once the keys exist (`None` after it reported why there is none).
+#[derive(Debug, Clone)]
+pub struct Link {
+    pub origin: UseCaseKey,
+    pub child: EntityKey,
+    pub parent: EntityKey,
+    /// `.role(role)`: the key to follow where several join the child to the parent.
+    pub by: Vec<String>,
+    pub key: Option<super::FkId>,
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
 /// `sets(...)` 述語由来のカラム効果（解析後）
 #[derive(Debug, Clone)]
 pub struct ColumnEffect {

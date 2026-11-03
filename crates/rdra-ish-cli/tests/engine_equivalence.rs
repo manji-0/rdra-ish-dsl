@@ -2035,6 +2035,44 @@ forbidden(Coupon, status == active, expires_at < now)
 forbidden(Coupon, status == expired, expires_at >= now)
 "#;
 
+/// `links(UC, Child, Parent)` in both engines (#89): the case opens unlinked, `Assign` binds a
+/// present handler, marks it busy and links the case to it, so the assigned case's handler is
+/// busy; `Reassign` never runs, since an assigned case is linked. On `{CARD}` `1:1` two cases
+/// linked to one handler break `Unique_Case_Handler` at two instances.
+const LINKS: &str = r#"
+entity Handler "担当" { id: Int @pk  busy: Bool @default(false) }
+entity Case "案件" { id: Int @pk  status: Enum(new, assigned) @default(new) }
+relate(Case, Handler, {CARD}).optional()
+usecase OpenCase "受付"
+usecase Assign "担当を割り当てる"
+usecase Reassign "担当を替える"
+usecase Free "手空き"
+creates(OpenCase, Case)
+updates(Assign, Handler)
+transitions(Assign, Case.status, new -> assigned)
+sets(Assign, Handler.busy == true)
+links(Assign, Case, Handler)
+links(Reassign, Case, Handler)
+condition Assigned "割当済"
+holds(Assigned, Case.status == assigned)
+applies_to(Assigned, Reassign)
+sets(Free, Handler.busy == false)
+invariant(Case).when(status == assigned).has(Handler)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_links() {
+    let many = check_fixture("links_n_to_one", &LINKS.replace("{CARD}", "N:1"));
+    let one = check_fixture("links_one_to_one", &LINKS.replace("{CARD}", "1:1"));
+    if let (Some(many), Some(one)) = (many, one) {
+        assert!(many.is_empty(), "{many:?}");
+        assert_eq!(
+            one.into_iter().collect::<Vec<_>>(),
+            vec!["Unique_Case_Handler".to_string()]
+        );
+    }
+}
+
 #[test]
 fn bfs_and_tlc_agree_on_a_date_sets() {
     if let Some(violated) = check_fixture("date_sets", DATE_SETS) {

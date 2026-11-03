@@ -184,6 +184,11 @@ pub enum TypedPredicate {
         entity: EntityKey,
         column: std::string::String,
     },
+    Links {
+        origin: UseCaseKey,
+        child: EntityKey,
+        parent: EntityKey,
+    },
     Drives {
         origin: UseCaseKey,
         entity: EntityKey,

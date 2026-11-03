@@ -1550,6 +1550,7 @@ parent, with `.role(<first role>)` added, or, when the use case has neither, say
 | `.has(...)` or `.none(...)` | the link from the quantified row to the rows the statement binds |
 | `holds(Cond, ...)` itself, before any `.has/.none` | the link between an entity the body compares and the other entities of the guard |
 | `sets(UC, E.col == F.col)` | the key from the target row to the source row |
+| `links(UC, Child, Parent)` | the key from the child to the parent |
 
 ```rdra
 relate(BusinessPermit, PermitApplication, 1:1)                  // registered under
@@ -1738,6 +1739,60 @@ transitions(DecideFiling, InventionDisclosure.status, searched -> decided_abando
 condition is `WhenRequiresCondition`; an undefined name is `UndefinedSymbol`. A condition
 without a `holds` body (one linked by `combines` only) is `WhenConditionWithoutBody`, since
 it has nothing to guard with.
+
+### Linking an existing child to a parent: `links`
+
+`links(UseCase, Child, Parent)` declares that the use case links an existing child row to
+an existing parent row through the `.optional()` key from the child to the parent: a case
+opened without a handler gets one, a charge posted on its own is billed under a claim. The
+use case writes the child (as a `sets` does, with no `updates` line needed) and reads the
+parent.
+
+```rdra
+entity Handler "Handler" { id: Int @pk  busy: Bool @default(false) }
+entity Case "Case" { id: Int @pk  status: Enum(new, assigned) @default(new) }
+relate(Case, Handler, N:1).optional()
+
+usecase OpenCase "Open a case"
+usecase Assign "Assign a handler to the case"
+creates(OpenCase, Case)
+transitions(Assign, Case.status, new -> assigned)
+links(Assign, Case, Handler)
+invariant(Case).when(status == assigned).has(Handler).label("An assigned case has a handler")
+```
+
+- **The parent is the row the step binds for it.** The row the use case writes
+  (`updates(Assign, Handler)` with `sets(Assign, Handler.busy == true)` links the case to
+  the handler it marks busy), the row an earlier step of a split use case wrote (see
+  [Runs of a split use case](./state-derivation.md#runs)), or else any present parent, as
+  a mandatory key binds one for a created child.
+- **A linked child waits.** The guard is that the child is unlinked on the key, so a
+  `links` never moves a child to another parent, and a use case that only links an
+  assigned case never runs (`Runs_<UseCase>`: its guards hold in some state each, but
+  never together). When the child is always created linked (its creator writes the
+  parent), the `links` guard alone blocks, and `check` names it: "guard: the child is not
+  linked to a parent yet (links)". 1.1 has no form that relinks or unlinks a child; a reassignment
+  is modelled as two use cases once such a form exists, and a child that must be able to
+  move is one whose key is mandatory, where a use case that creates the new parent moves
+  it (see [Owners](./state-derivation.md#actions)).
+- **Which key.** The one key from the child to the parent, or, among several, the one
+  `.role(role)` names (see [Which key a join follows](#which-key-a-join-follows)). The key
+  must be `.optional()`: a child of a mandatory key always has its parent, so there is
+  nothing to link.
+- **Rules read the link as any other.** A `.has/.none` on the child, an `.along` through
+  the key, and a `holds` guard that joins the child to its parent see the parent after
+  the step. A `1:1` key is not checked by the `links` itself: two children linked to one
+  parent break `Unique_<Child>_<role>`, and a guard such as
+  `holds(Free, Handler.busy == false).none(Case)` on the use case keeps the parent free.
+- A created child in the same use case needs no `links`: a parent the use case writes
+  links it, and so does a `holds` guard that compares the parent (see Owners).
+
+| Diagnostic | When |
+|---|---|
+| `LinkWithoutKey` | No key makes `Parent` the parent of `Child`. The hint declares the relate, and says to swap the two when the key runs the other way. |
+| `LinkOnMandatoryKey` | The key is not `.optional()`. |
+| `AmbiguousOwnerLink` | Several keys join the two and no `.role(role)` names one; the hint adds `.role(<first role>)`. |
+| `UnknownOwnerRole` | `.role(role)` names no key between the two. |
 
 A guarded arm that is never taken while its use case runs and some instance reaches its
 `from` state is the `ArmNeverTaken` warning of `check` (`Arm_<UseCase>_<from>_<to>`): its

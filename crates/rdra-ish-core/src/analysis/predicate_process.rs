@@ -781,6 +781,37 @@ fn process_sets_predicate(
     }
 }
 
+/// `links(UseCase, Child, Parent)`, with `.role(role)` where several keys join the two. The
+/// key is picked once the keys exist (`fk::resolve_links`).
+fn process_links_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+) {
+    let (
+        Some(Some(NodeRef::UseCase(origin))),
+        Some(Some(NodeRef::Entity(child))),
+        Some(Some(NodeRef::Entity(parent))),
+    ) = (resolved.first(), resolved.get(1), resolved.get(2))
+    else {
+        return;
+    };
+    model.links.push(Link {
+        origin: *origin,
+        child: *child,
+        parent: *parent,
+        by: super::constraint::selectors(&pred.chain, None),
+        key: None,
+        site: Some(ctx.locate(pred.span.clone())),
+    });
+    model.typed_predicates.push(TypedPredicate::Links {
+        origin: *origin,
+        child: *child,
+        parent: *parent,
+    });
+}
+
 fn process_drives_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -1819,6 +1850,7 @@ pub(crate) fn process_predicate(
         "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
         "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
         "drives" => process_drives_predicate(model, pred, &resolved, ctx, diags),
+        "links" => process_links_predicate(model, pred, &resolved, ctx),
         "chooses" => process_chooses_predicate(model, pred, &resolved, ctx, diags),
         "combines" => {
             super::condition::process_combines_predicate(model, pred, &resolved, ctx, diags)

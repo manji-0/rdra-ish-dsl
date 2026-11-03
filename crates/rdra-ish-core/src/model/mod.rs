@@ -254,6 +254,8 @@ pub struct SemanticModel {
     pub outbox_events: HashSet<EventKey>,
     pub state_transitions: Vec<StateTransition>,
     pub column_effects: Vec<ColumnEffect>,
+    /// `links(UseCase, Child, Parent)`: an existing child linked to an existing parent.
+    pub links: Vec<Link>,
     /// `chooses(UseCase, Entity.column)`: variation columns the actor picks again.
     pub column_choices: Vec<ColumnChoice>,
     /// `drives(origin, Entity.column op rhs, bool)` で宣言された比較命題の真偽効果

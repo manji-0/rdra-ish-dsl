@@ -1,7 +1,7 @@
 //! Relate bindings: mandatory owners need a present parent, optional owners may stay unlinked.
 
 use super::*;
-use crate::lifecycle::{InvKind, Value};
+use crate::lifecycle::{Effect, GuardWhy, InvKind, ParamRole, Rhs, Value};
 
 /// clinic-ops' Charge/Claim shape: the claim's creator updates the charge it bills.
 fn billing(relate: &str) -> String {
@@ -512,4 +512,152 @@ fn mandatory_child_moves_to_a_created_parent() {
 fn a_creating_action_that_links_an_existing_child_needs_no_create_hint() {
     let d = derive_src(&relinking("relate(Charge, Claim, 1..*:1).optional()", ""));
     assert!(needs_create(&d).is_empty(), "{:?}", d.diags);
+}
+
+/// A case is opened unlinked and `Assign` links it to a handler (#89). `{relate}` is the key,
+/// `{assign}` what else Assign does.
+fn assignment(relate: &str, assign: &str) -> String {
+    format!(
+        r#"
+entity Handler "担当" {{ id: Int @pk  busy: Bool @default(false) }}
+entity Case "案件" {{ id: Int @pk  status: Enum(new, assigned) @default(new) }}
+{relate}
+usecase OpenCase "受付"
+usecase Assign "担当を割り当てる"
+creates(OpenCase, Case)
+transitions(Assign, Case.status, new -> assigned)
+links(Assign, Case, Handler)
+{assign}
+"#
+    )
+}
+
+fn never_runs(d: &Derived) -> Vec<String> {
+    d.diags
+        .iter()
+        .filter_map(|x| match &x.diag {
+            StateDiag::NeverRuns { action, .. } => Some(action.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// `links` binds any present parent and links the child to it: the assigned case has a
+/// handler, which a `.has(Handler)` on it sees. Its guard is that the child is unlinked, so a
+/// second `links` on an assigned case never runs, and says so by the `links` guard.
+#[test]
+fn a_links_binds_a_present_parent_and_links_the_child_once() {
+    let src = assignment(
+        "relate(Case, Handler, N:1).optional()",
+        "invariant(Case).when(status == assigned).has(Handler)\n\
+         usecase Reassign \"担当を替える\"\nlinks(Reassign, Case, Handler)\n\
+         condition Assigned \"割当済\"\nholds(Assigned, Case.status == assigned)\napplies_to(Assigned, Reassign)",
+    );
+    let d = derive_src(&src);
+    assert_eq!(d.rows("Case"), vec!["status=new", "status=assigned"]);
+    assert!(
+        !d.has("Case", |x| matches!(
+            x,
+            StateDiag::ConstraintViolated { .. }
+        )),
+        "{:?}",
+        d.diags
+    );
+    assert_eq!(never_runs(&d), vec!["Reassign"]);
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let reassign = ts.actions().iter().find(|a| a.name == "Reassign").unwrap();
+    assert!(reassign.guards.iter().any(|g| g.why == GuardWhy::Link));
+    assert!(reassign
+        .params
+        .iter()
+        .any(|p| matches!(p.role, ParamRole::Parent { .. })));
+}
+
+/// The parent the use case writes is the one the child is linked to: Assign marks the
+/// handler busy, and the assigned case's handler is that one.
+#[test]
+fn a_links_to_a_written_parent_links_the_row_the_step_writes() {
+    let d = derive_src(&assignment(
+        "relate(Case, Handler, N:1).optional()",
+        "updates(Assign, Handler)\nsets(Assign, Handler.busy == true)\n\
+         invariant(Case).when(status == assigned).has(Handler.busy == true)\n\
+         invariant(Case).when(status == assigned).none(Handler.busy == false)",
+    ));
+    assert!(
+        !d.has("Case", |x| matches!(
+            x,
+            StateDiag::ConstraintViolated { .. }
+        )),
+        "{:?}",
+        d.diags
+    );
+}
+
+/// An `.along` path through the linked key reaches the grandparent: the assigned case's
+/// handler's team is open, which only a case linked to its handler can satisfy.
+#[test]
+fn a_links_is_followed_by_an_along_path_through_the_key() {
+    let d = derive_src(&assignment(
+        "relate(Case, Handler, N:1).optional()\n\
+         entity Team \"班\" { id: Int @pk  open: Bool @default(true) }\n\
+         relate(Handler, Team, N:1)\n\
+         usecase Hire \"採用\"\ncreates(Hire, Handler)",
+        "invariant(Case).when(status == assigned).has(Team.open == true).along(Case, Handler, Team)",
+    ));
+    assert_eq!(d.rows("Case"), vec!["status=new", "status=assigned"]);
+    assert!(
+        !d.has("Case", |x| matches!(
+            x,
+            StateDiag::ConstraintViolated { .. }
+        )),
+        "{:?}",
+        d.diags
+    );
+}
+
+/// `links` does not check that a 1:1 parent is free: two cases linked to one handler break
+/// `Unique_Case_Handler` at two slots, as a guard with `.none(Case)` on the handler would
+/// prevent.
+#[test]
+fn a_links_on_a_one_to_one_key_leaves_uniqueness_to_the_rule() {
+    let src = assignment("relate(Case, Handler, 1:1).optional()", "");
+    let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
+    assert!(d.diags.iter().any(|x| matches!(
+        &x.diag,
+        StateDiag::ConstraintViolated { name, kind: InvKind::Unique, .. } if name == "Unique_Case_Handler"
+    )));
+}
+
+/// In a split use case the child links to the row an earlier step of the run wrote: the
+/// handler step 1 marks busy is the one step 2 links the case to.
+#[test]
+fn a_links_in_a_later_step_links_to_the_runs_parent() {
+    let src = assignment(
+        "relate(Case, Handler, N:1).optional()",
+        "api HandlerApi \"handler\"\napi CaseApi \"case\"\n\
+         invokes(Assign, HandlerApi)\ninvokes(Assign, CaseApi)\n\
+         updates(HandlerApi, Handler)\nupdates(CaseApi, Case)\n\
+         sets(Assign, Handler.busy == true)\n\
+         invariant(Case).when(status == assigned).has(Handler.busy == true)",
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let step_2 = ts.actions().iter().find(|a| a.name == "Assign_2").unwrap();
+    let earlier = step_2
+        .params
+        .iter()
+        .position(|p| matches!(p.role, ParamRole::Earlier { step: 1 }))
+        .expect("the handler step 1 wrote") as u8;
+    assert!(step_2.effects.iter().any(|e| matches!(
+        e,
+        Effect::Assign { rhs: Rhs::Param(p), .. } if *p == earlier
+    )));
+    let d = derive_src(&src);
+    assert!(
+        !d.has("Case", |x| matches!(
+            x,
+            StateDiag::ConstraintViolated { .. }
+        )),
+        "{:?}",
+        d.diags
+    );
 }

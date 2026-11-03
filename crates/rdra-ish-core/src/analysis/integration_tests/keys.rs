@@ -632,3 +632,77 @@ fn each_selector_belongs_to_the_call_before_it() {
     assert_eq!(body.quantifiers[0].by, ["Application"]);
     assert!(body.quantifiers[0].conditions.is_empty());
 }
+
+const ASSIGNMENT: &str = r#"
+entity Handler "Handler" { id: Int @pk  busy: Bool @default(false) }
+entity Case "Case" { id: Int @pk  status: Enum(new, assigned) @default(new) }
+entity Note "Note" { id: Int @pk }
+relate(Note, Case, N:1)
+usecase Assign "assign"
+"#;
+
+/// `links(UC, Child, Parent)` follows the one `.optional()` key from the child to the parent,
+/// or the one its `.role` names (#89).
+#[test]
+fn a_links_follows_the_optional_key_from_the_child_to_the_parent() {
+    let model = built(&format!(
+        "{ASSIGNMENT}\nrelate(Case, Handler, N:1).optional()\nlinks(Assign, Case, Handler)\n"
+    ));
+    let key = model.links[0].key.expect("the key");
+    assert_eq!(model.foreign_key(key).child, entity_key(&model, "Case"));
+    assert_eq!(model.foreign_key(key).parent, entity_key(&model, "Handler"));
+
+    let model = built(&format!(
+        "{ASSIGNMENT}\nrelate(Case, Handler, N:1).optional()\nrelate(Case, Handler, N:1).optional().role(backup)\nlinks(Assign, Case, Handler).role(backup)\n"
+    ));
+    let key = model.links[0].key.expect("the key");
+    assert_eq!(model.foreign_key(key).role.as_deref(), Some("backup"));
+}
+
+#[test]
+fn a_links_without_a_usable_key_is_an_error_naming_the_fix() {
+    for (links, check) in [
+        (
+            "relate(Case, Handler, N:1).optional()\nlinks(Assign, Handler, Case)",
+            RdraError::LinkWithoutKey {
+                usecase: "Assign".into(),
+                child: "Handler".into(),
+                parent: "Case".into(),
+            },
+        ),
+        (
+            "links(Assign, Note, Case)",
+            RdraError::LinkOnMandatoryKey {
+                usecase: "Assign".into(),
+                child: "Note".into(),
+                parent: "Case".into(),
+                role: "Case".into(),
+            },
+        ),
+    ] {
+        let (model, errors) = build(&format!("{ASSIGNMENT}\n{links}\n"));
+        assert_eq!(
+            errors.iter().map(ToString::to_string).collect::<Vec<_>>(),
+            vec![check.to_string()],
+            "{links}"
+        );
+        assert_eq!(model.links[0].key, None, "{links}");
+    }
+    let (_, errors) = build(&format!(
+        "{ASSIGNMENT}\nrelate(Case, Handler, N:1).optional()\nrelate(Case, Handler, N:1).optional().role(backup)\nlinks(Assign, Case, Handler)\n"
+    ));
+    assert!(
+        matches!(errors.as_slice(), [RdraError::AmbiguousOwnerLink { statement, first, .. }]
+            if statement == "links(Assign, Case, Handler)" && first == "Handler"),
+        "{errors:?}"
+    );
+    let (_, errors) = build(&format!(
+        "{ASSIGNMENT}\nrelate(Case, Handler, N:1).optional()\nlinks(Assign, Case, Handler).role(nope)\n"
+    ));
+    assert!(
+        errors
+            .iter()
+            .any(|e| matches!(e, RdraError::UnknownOwnerRole { role, .. } if role == "nope")),
+        "{errors:?}"
+    );
+}

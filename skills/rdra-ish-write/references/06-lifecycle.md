@@ -97,6 +97,11 @@ Also ask:
    name one: `sets(Fix, Permit.kind == Site.kind).role(home)`). Any other source is
    `UnboundCopySource`; give the target a `relate` to the source instead of leaving the
    value a free choice. The two columns hold one set of values (`SetsCopyMismatch`).
+   When a use case gives an existing row its parent (a handler assigned to an open case),
+   write `links(Assign, Case, Handler)`: the key from the child to the parent must be
+   `.optional()`, the use case binds a present parent (the one it writes, when it does)
+   and links the unlinked child to it, and a child that already has a parent waits. A
+   `holds` guard that compares the parent, or `updates` on it, picks which parent.
 9. Add `drives(UC, E.col op rhs, true|false)` when rules depend on a derived comparison and
    the model does not track the values. Prefer Int / Money / Decimal columns plus
    `sets(UC, E.col == N)` when the quantity itself must be checked: a comparison

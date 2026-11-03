@@ -482,6 +482,58 @@ fn along_links(
     links
 }
 
+/// After the keys exist: each `links(UC, Child, Parent)` follows the one key from the child to
+/// the parent (`SemanticModel::join_key` with its `.role`), which must be `.optional()`, since a
+/// child of a mandatory key always has its parent. No key is `LinkWithoutKey`, a mandatory one
+/// `LinkOnMandatoryKey`, several with no `.role` naming one `AmbiguousOwnerLink`; such a link
+/// keeps no key and the lifecycle leaves it out.
+pub(crate) fn resolve_links(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
+    for index in 0..model.links.len() {
+        let link = &model.links[index];
+        let (usecase, child, parent) = (
+            model.use_cases[link.origin].id.clone(),
+            model.entities[link.child].id.clone(),
+            model.entities[link.parent].id.clone(),
+        );
+        let key = match model.join_key(link.child, link.parent, &link.by) {
+            Join::Key(id) if model.foreign_key(id).child == link.child => Some(id),
+            Join::Key(_) | Join::Unrelated => None,
+            Join::Ambiguous(candidates) => {
+                let err = ambiguous_owner_link(
+                    model,
+                    &format!("links({usecase}, {child}, {parent})"),
+                    link.child,
+                    link.parent,
+                    &candidates,
+                );
+                diags.push(Diagnostic::error_at_opt(err, link.site.clone()));
+                continue;
+            }
+        };
+        let Some(id) = key else {
+            let err = RdraError::LinkWithoutKey {
+                usecase,
+                child,
+                parent,
+            };
+            diags.push(Diagnostic::error_at_opt(err, link.site.clone()));
+            continue;
+        };
+        let fk = model.foreign_key(id);
+        if !fk.optional() {
+            let err = RdraError::LinkOnMandatoryKey {
+                usecase,
+                child,
+                parent,
+                role: model.key_role(fk).to_string(),
+            };
+            diags.push(Diagnostic::error_at_opt(err, link.site.clone()));
+            continue;
+        }
+        model.links[index].key = Some(id);
+    }
+}
+
 /// Each `.role(role)` of a `.has`/`.none`, a `holds` body, or a copy must name a key that
 /// touches an entity whose join it picks the key for: the related entity of a quantifier,
 /// an entity a body compares, the target or the source of a copy. Otherwise it is
@@ -512,6 +564,14 @@ pub(crate) fn check_join_selectors(model: &SemanticModel, diags: &mut Vec<Diagno
             let ends = vec![ce.entity, source.entity];
             sites.push((ce.by.as_slice(), ends, on, ce.site.as_ref()));
         }
+    }
+    for link in &model.links {
+        let on = format!(
+            "that joins {} to {} (links)",
+            model.entities[link.child].id, model.entities[link.parent].id
+        );
+        let ends = vec![link.child, link.parent];
+        sites.push((link.by.as_slice(), ends, on, link.site.as_ref()));
     }
     for (by, entities, on, site) in sites {
         let touching: Vec<&ForeignKey> = model
