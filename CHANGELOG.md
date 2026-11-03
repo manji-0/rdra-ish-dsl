@@ -101,9 +101,24 @@
   use case's BUC file, since in `shared/rules.rdra` it closes a circular import, and says that
   `fmt` rewrites files only with `--write`, that `csv` writes `out.<kind>.csv` and prints no
   rows, and that a one-instance deadlock may clear in `verify`.
+- `csv` and `list` write on lifecycle errors, with one note, and exit 0 instead of 1 (#94).
+  They print no reachability result, so by the 2026-10-28 rule only a model error stops
+  them. The kinds that change are `csv --kind actor`, `matrix`, `api`, `api-matrix`,
+  `screen-constraints`, `permission-callables`, `actor-permission-audit`, and
+  `business-inputs`, and every `list` kind: `actor`, `entity`, `requirement`, `adr`,
+  `adr-impact`, `goal`, `nfr`, `quality`, `constraint`, `buc`, `flow`, `step`, `usecase`,
+  `field`, `system`, `api`, `dto`, `variation`, `screen`, `event`, `timer`, `condition`,
+  `rule`, `permission-callables`, `actor-permission-audit`, `business-inputs`,
+  `buc-roles`, `transition`, and `surface`. `csv --kind entity` already wrote.
 
 ### Fixed
 
+- Whether a lifecycle error stops an output was decided by lists written in three places,
+  and the docs disagreed with them (#94): they had the sequence diagram refuse, which it
+  never did, and `states` refuse, where it prints its report with the `[error]` rows and
+  exits 1. One exhaustive classification of every `--kind` by what it reads now decides
+  it, and a test runs every kind of `list`, `csv`, `diagram`, and `export` against the
+  table in the CLI reference's [Lifecycle errors](docs/cli-reference.md#lifecycle-errors).
 - `export --kind tla` printed no note when `check` finds lifecycle errors, so a TLC run by
   hand passed a model with a deadlock or a state with no witness: the `.cfg` sets
   `CHECK_DEADLOCK FALSE`, and witnesses come only from the BFS (#93). The export now

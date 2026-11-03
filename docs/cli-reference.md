@@ -21,18 +21,33 @@ Diagnostics are written to stderr. A load or consistency diagnostic is `error: .
 
 - `check` and `lint` exit non-zero when semantic errors (or lint errors) are present.
 - Every generator subcommand refuses to emit when the model has parse or resolve errors.
-  Whether Error-severity state diagnostics also stop it depends on whether the output
-  prints the lifecycle. An output that prints it (`states`, `list`, `diagram --kind state`,
-  `csv` of every kind except `entity`, `export --kind typescript-states`) is
-  **fail-closed** and refuses. An output that reads only the data layer or the declared
-  facts (`diagram` of every kind except `state`, `csv --kind entity`, and `export` of
-  `dbml`, `json-schema`, `openapi`, `asyncapi`, and `mermaid-er`) is written, and the
-  command prints one stderr note that gives the error count and points to `rdra-ish check`.
-  `export --kind tla` and `verify` gate on parse errors plus the Error
-  diagnostics of the lifecycle transition system they print (built at `--instance-count`
-  / `--int-range-max`). The code decides this per kind in `ExportKind::reads_lifecycle()`
-  and `DiagramKind::reads_lifecycle()`.
+  Whether an Error-severity lifecycle finding also stops it depends on what the output
+  reads, as [Lifecycle errors](#lifecycle-errors) lists.
 - `fmt` only requires a parseable source; it does not run semantic analysis.
+
+---
+
+## Lifecycle errors
+
+An output that prints a reachability result is **fail-closed**: it refuses while `check`
+reports a lifecycle error. An output that prints none is written, and the command prints
+one stderr note that gives the error count and points to `rdra-ish check`. The exit status
+is then 0. `crates/rdra-ish-cli/src/lifecycle_gate.rs` classifies every `--kind` by what it
+reads, and `crates/rdra-ish-cli/tests/export_gate.rs` runs every kind against this table.
+
+| Output | Reads | On a lifecycle error |
+|---|---|---|
+| `list`, every kind | declared facts | writes, with a note |
+| `csv`, every kind | declared facts and the data layer | writes, with a note |
+| `diagram --kind state` | each state model's start states and reachable states | refuses, unless every error is a deadlock, which it colours |
+| `diagram`, every other kind | declared facts, `sequence` included | writes, with a note |
+| `export --kind typescript-states` | the reachable states | refuses |
+| `export --kind tla` | the transition system, built at `--instance-count` / `--int-range-max` | writes, with a note that TLC alone checks no deadlock or witness, so run `verify`; a build error of the system refuses |
+| `export`, every other kind | the data layer | writes, with a note |
+| `states` | the derivation, which is its output | prints the report with its `[error]` rows and exits 1 |
+
+`verify` refuses on a build error of the transition system it checks and reports every
+other finding itself.
 
 ---
 

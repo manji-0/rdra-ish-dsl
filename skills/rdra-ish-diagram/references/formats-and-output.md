@@ -18,11 +18,12 @@ machine-readable exports.
 is meant to be redrawn: render the `.mmd` with Mermaid CLI (`mmdc`), or hand it to a tool
 that draws SVG from it. `references/reading-diagrams.md` says what a redrawing must keep.
 
-Outputs that print the lifecycle (`diagram --kind state`, `csv` of every kind but
-`entity`, `export --kind typescript-states`) refuse to write while `check` reports a
-lifecycle error. The outputs of declared facts and the data layer (`diagram` of every
-other kind, `csv --kind entity`, and the `dbml`, `json-schema`, `openapi`, `asyncapi`,
-and ER exports) still write and print one note.
+Only the outputs that print reachable states (`diagram --kind state` and
+`export --kind typescript-states`) refuse to write while `check` reports a lifecycle
+error. The outputs of declared facts and the data layer (`diagram` of every other kind,
+`csv` and `list` of every kind, and the `dbml`, `json-schema`, `openapi`, `asyncapi`, ER,
+and `tla` exports) still write and print one note. TLC on the `tla` export finds no
+deadlock and no state without a witness, so run `verify` for those.
 
 ## Commands
 

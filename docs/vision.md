@@ -281,6 +281,11 @@ The maintainer decided these questions on 2026-10-28, during phase 5:
   outputs that print the lifecycle (`export --kind typescript-states`, the state and
   sequence diagrams, and the other CSV kinds) still refuse. The six verification samples
   with lifecycle errors now export DBML, JSON Schema, and the entity CSV.
+  That list was wrong against its own rule (#94). The sequence diagram never refused.
+  Every CSV kind and every `list` kind reads declared facts only, and since 1.1.0 they
+  write with the note. Only `export --kind typescript-states` and the state diagram refuse.
+  `crates/rdra-ish-cli/src/lifecycle_gate.rs` classifies each kind by what it reads, and
+  [Lifecycle errors](./cli-reference.md#lifecycle-errors) lists the result.
 - A minimum cardinality is always checked. `1..*:1` adds `MinCard_*` with no switch.
 - A 1:1 key is unique as an invariant, `Unique_*`, not as a guard on the use case that
   links.

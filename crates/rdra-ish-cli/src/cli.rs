@@ -420,14 +420,6 @@ pub(crate) enum DiagramKind {
     Event,
 }
 
-impl DiagramKind {
-    /// Whether a lifecycle error makes the diagram wrong. Only `state` reads the lifecycle, for
-    /// each state model's start states; the other kinds draw declared facts only.
-    pub(crate) fn reads_lifecycle(&self) -> bool {
-        matches!(self, DiagramKind::State)
-    }
-}
-
 #[derive(ValueEnum, Clone)]
 pub(crate) enum OutputFormat {
     Mermaid,
@@ -453,14 +445,6 @@ pub(crate) enum ExportKind {
     MermaidEr,
     /// TLA+ / TLC specification (writes companion `.cfg` next to `.tla`)
     Tla,
-}
-
-impl ExportKind {
-    /// Whether the output prints the derived lifecycle, so a lifecycle error makes it wrong.
-    /// TLA is not one: it builds its own system and reports violations through TLC.
-    pub(crate) fn reads_lifecycle(&self) -> bool {
-        matches!(self, ExportKind::TypeScriptStates)
-    }
 }
 
 #[derive(ValueEnum, Clone)]
