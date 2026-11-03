@@ -653,3 +653,113 @@ fn a_quantifier_path_off_the_anchor_or_the_counted_entity_is_an_error_with_the_r
         assert!(model.quantifier_constraints.is_empty(), "{path}");
     }
 }
+
+/// The rule table of a model, as `list --kind rule` prints it: kind, entities, text.
+fn rule_rows(src: &str) -> Vec<String> {
+    let (model, diags) = build_labelled(src);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    crate::rules::business_rules(&model)
+        .into_iter()
+        .filter(|r| r.kind != "condition")
+        .map(|r| format!("{} {}: {}", r.kind, r.entities.join(","), r.text))
+        .collect()
+}
+
+/// `.when(Cond)` on every kind of rule reads the condition's body as if its comparisons were
+/// written in place (#89): the rule table of the condition form is the inline form's, and the
+/// `holds` may come after the rule.
+#[test]
+fn a_rule_when_reads_the_conditions_body_as_its_own_comparisons() {
+    const CONDITIONS: &str = r#"
+condition Paid "paid"
+holds(Paid, Order.status == paid)
+condition Captured "captured"
+holds(Captured, Payment.status == captured, Payment.amount > 0)
+"#;
+    let with_conditions = rule_rows(&format!(
+        r#"
+forbidden(Order, paid_at == null).when(Paid)
+forbidden(Order).when(Paid)
+invariant(Order).when(Paid).then(paid_at == present)
+invariant(Order).when(Paid).when(total > 0).then(paid_at == present)
+forbidden(Order, Payment, Order.status == cancelled).when(Captured)
+invariant(Order, Payment).along(Order, Payment).when(Captured).then(Order.status == paid)
+invariant(Order).when(Paid).none(Payment.status == pending)
+invariant(Order).when(Paid).then(paid_at == present).none(Payment.status == pending)
+{CONDITIONS}"#
+    ));
+    let inline = rule_rows(
+        r#"
+forbidden(Order, paid_at == null, status == paid)
+forbidden(Order, status == paid)
+invariant(Order).when(status == paid).then(paid_at == present)
+invariant(Order).when(total > 0).when(status == paid).then(paid_at == present)
+forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured, Payment.amount > 0)
+invariant(Order, Payment).along(Order, Payment).when(Payment.status == captured, Payment.amount > 0).then(Order.status == paid)
+invariant(Order).when(status == paid).none(Payment.status == pending)
+invariant(Order).when(status == paid).then(paid_at == present).none(Payment.status == pending)
+"#,
+    );
+    assert_eq!(with_conditions, inline);
+    assert!(
+        with_conditions[0].contains("status == paid"),
+        "{with_conditions:?}"
+    );
+}
+
+#[test]
+fn a_rule_when_rejects_what_it_cannot_read() {
+    let errors = |extra: &str| -> Vec<RdraError> {
+        let (_, diags) = build_labelled(extra);
+        diags
+            .into_iter()
+            .filter(|d| !d.is_warning)
+            .map(|d| d.error)
+            .collect()
+    };
+    // No body.
+    let errs =
+        errors("condition Paid \"paid\"\ninvariant(Order).when(Paid).then(paid_at == present)\n");
+    assert!(
+        matches!(errs.as_slice(), [RdraError::WhenConditionWithoutBody { pred, subject, condition }]
+            if pred == "invariant" && subject == "Order" && condition == "Paid"),
+        "{errs:?}"
+    );
+    // A quantifier in the body.
+    let errs = errors(
+        "condition Lone \"lone\"\nholds(Lone, Order.status == paid).none(Payment)\nforbidden(Order, paid_at == null).when(Lone)\n",
+    );
+    assert!(
+        matches!(errs.as_slice(), [RdraError::RuleWhenConditionScope { pred, condition, .. }]
+            if pred == "forbidden" && condition == "Lone"),
+        "{errs:?}"
+    );
+    // Another entity on an entity-local rule.
+    let errs = errors(
+        "condition Captured \"captured\"\nholds(Captured, Payment.status == captured)\nforbidden(Order, status == cancelled).when(Captured)\n",
+    );
+    assert!(
+        matches!(errs.as_slice(), [RdraError::RuleWhenConditionScope { reason, fix, .. }]
+            if reason.contains("compares Payment") && fix.contains("forbidden(Order, Payment, ...)")),
+        "{errs:?}"
+    );
+    // Not a condition.
+    let errs = errors("invariant(Order).when(Payment).then(paid_at == present)\n");
+    assert!(
+        matches!(errs.as_slice(), [RdraError::RuleWhenArg { pred, got, .. }]
+            if pred == "invariant" && got == "Payment"),
+        "{errs:?}"
+    );
+    let errs = errors("forbidden(Order, paid_at == null).when(status == paid)\n");
+    assert!(
+        matches!(errs.as_slice(), [RdraError::RuleWhenArg { pred, .. }] if pred == "forbidden"),
+        "{errs:?}"
+    );
+    // The condition is still the rule's once its `holds` is read: no InvariantWithoutWhen.
+    let errs = errors("invariant(Order).when(Nope).then(paid_at == present)\n");
+    assert!(
+        matches!(errs.as_slice(), [RdraError::UndefinedSymbol { .. }]),
+        "{errs:?}"
+    );
+}

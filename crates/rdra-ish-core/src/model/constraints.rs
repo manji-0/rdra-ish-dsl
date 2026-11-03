@@ -214,6 +214,26 @@ pub struct QuantifierConstraint {
     pub label: Option<std::string::String>,
 }
 
+/// Which rule a `.when(Cond)` belongs to: an index into the model's list of that kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleRef {
+    Forbidden(usize),
+    Invariant(usize),
+    CrossForbidden(usize),
+    CrossInvariant(usize),
+    Quantifier(usize),
+}
+
+/// `.when(Cond)` on a `forbidden` or an `invariant`: the condition whose `holds` body joins
+/// the rule's conditions, or its guards, once every predicate is read, since the body may
+/// come later in the file than the rule (`analysis::constraint::resolve_rule_guards`).
+#[derive(Debug, Clone)]
+pub struct RuleGuard {
+    pub rule: RuleRef,
+    pub condition: super::ConditionKey,
+    pub site: Option<crate::location::LocatedSpan>,
+}
+
 // ── Temporal properties (TLA+ / TLC) ──────────────────────────────────────────
 
 /// Atomic comparison over an entity column (equality or arithmetic).

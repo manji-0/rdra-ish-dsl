@@ -607,3 +607,58 @@ holds(Flagged, Order.flagged == true)
     assert_eq!(listed.tla, expanded.tla);
     assert_eq!(listed.cfg, expanded.cfg);
 }
+
+/// `.when(Cond)` on a rule exports the module the rule with the body's comparisons written in
+/// place exports (#89), for an entity-local invariant and `forbidden`, a cross-entity
+/// invariant, and a quantifier.
+#[test]
+fn a_rule_when_condition_exports_as_its_inline_form() {
+    const COUPON: &str = r#"
+entity Coupon "Coupon" { id: Int @pk  status: Enum(active, expired) @default(active)  expires_at: Date }
+entity Handler "Handler" { id: Int @pk  busy: Bool @default(false) }
+relate(Coupon, Handler, N:1)
+usecase Issue "Issue"
+usecase Expire "Expire"
+usecase Free "Free"
+creates(Issue, Coupon)
+sets(Issue, Coupon.expires_at == 2)
+transitions(Expire, Coupon.status, active -> expired)
+sets(Free, Handler.busy == false)
+condition PastDeadline "past the deadline"
+holds(PastDeadline, Coupon.expires_at < now)
+condition Busy "busy"
+holds(Busy, Handler.busy == true)
+"#;
+    let with_conditions = format!(
+        r#"{COUPON}
+invariant(Coupon).when(PastDeadline).then(status == expired)
+forbidden(Coupon, status == active).when(PastDeadline)
+invariant(Coupon, Handler).along(Coupon, Handler).when(Busy).then(Coupon.status == expired)
+invariant(Coupon).when(PastDeadline).none(Handler.busy == true)
+"#
+    );
+    let inline = format!(
+        r#"{COUPON}
+invariant(Coupon).when(expires_at < now).then(status == expired)
+forbidden(Coupon, status == active, expires_at < now)
+invariant(Coupon, Handler).along(Coupon, Handler).when(Handler.busy == true).then(Coupon.status == expired)
+invariant(Coupon).when(expires_at < now).none(Handler.busy == true)
+"#
+    );
+    let with_conditions = print(&system(&with_conditions), PrintMode::Check, "M");
+    let inline = print(&system(&inline), PrintMode::Check, "M");
+    for name in [
+        "Inv_Coupon_0",
+        "Forbidden_Coupon_0",
+        "CrossInv_Coupon_0",
+        "Quantifier_Coupon_0",
+    ] {
+        assert!(
+            with_conditions.cfg.contains(name),
+            "{name}: {}",
+            with_conditions.cfg
+        );
+    }
+    assert_eq!(with_conditions.tla, inline.tla);
+    assert_eq!(with_conditions.cfg, inline.cfg);
+}

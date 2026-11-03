@@ -42,7 +42,12 @@ Also ask:
 1. Add `forbidden(Entity, ...)` for invalid combinations inside one entity.
 2. Add `exclusive(Entity, ...)` for mutually exclusive state facts.
 3. Add `invariant(Entity).when(...).then(...)` for single-entity required
-   co-occurrences.
+   co-occurrences. When the guard is a business rule the model already states as a
+   `condition` with a `holds` body (one that `applies_to` a use case, say), name it:
+   `invariant(Entity).when(Cond).then(...)` and `forbidden(Entity, ...).when(Cond)` read
+   the body's comparisons as if written in place, so the rule and the guard stay one
+   statement. The body must compare the rule's entities only and carry no
+   `.has/.none/.along`; write those on the rule.
 4. Add `required(Entity, ...)` only for facts that truly apply to every reachable state.
 5. Use comparison propositions when rules depend on expressions such as
    `stock < selling`, and add matching `drives(UC, E.col op rhs, true/false)` effects.
@@ -127,9 +132,12 @@ required(Order, total >= 0)
 // 3. Comparisons, cross-entity rules, quantifiers, postconditions, properties
 drives(SellOut, Stock.stock < selling, true)
 sets(SellOut, Stock.reorder == true)
+condition BelowFloor "The stock is below its selling floor"
+holds(BelowFloor, Stock.stock < Stock.selling)
 invariant(Stock)
-  .when(stock < selling)
+  .when(BelowFloor)
   .then(reorder == true)
+  .label("Stock below its floor is flagged for reorder")
 
 forbidden(Order, Payment,
   Order.status == cancelled,

@@ -316,7 +316,7 @@ clock has ticked past it.
 
 | Declaration | Check |
 |---|---|
-| `forbidden`, `invariant`, `required`, `exclusive` | An invariant over the present slots of the entity, evaluated in every reachable state. |
+| `forbidden`, `invariant`, `required`, `exclusive` | An invariant over the present slots of the entity, evaluated in every reachable state. A `.when(Cond)` on a `forbidden` or an `invariant` adds the comparisons of the condition's `holds` body to the rule before it is built, so the check is the one the comparisons written in place give. |
 | Multi-entity `forbidden`, `invariant` | An invariant over every combination of present slots. `.along(A, B)` restricts it to combinations that the `relate` owners link. |
 | `invariant(E).when(...).has/none(R.col == v)` | An invariant over the present slots of `E` and the related slots of `R`. A `relate` links them through its owner; without one, `R` is independent. |
 | `relate(Child, Parent, 1:1)` | `Unique_<Child>_<role>`: no two present children belong to one parent slot. An unlinked optional child belongs to none. It holds vacuously at one instance. |

@@ -288,6 +288,10 @@ performs(Staff, Book)
                 ENTITY_TGT,
                 "forbidden(A).along(A, Tgt).when(Tgt.status == x)",
             ),
+            ("forbidden", "when") => (
+                CONDITION_TGT,
+                "forbidden(A, A.status == x).when(Tgt)",
+            ),
             (_, "label") => return None,
             ("forbidden" | "invariant", "role") => return None,
             // `.role(Tgt)` names the key by its parent id when the key has no role.

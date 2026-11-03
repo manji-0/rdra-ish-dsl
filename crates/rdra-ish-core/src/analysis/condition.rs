@@ -576,7 +576,7 @@ pub(crate) fn check_write_guards(model: &mut SemanticModel, diags: &mut Vec<Diag
         diags.push(Diagnostic {
             error: RdraError::WhenConditionWithoutBody {
                 pred: pred.into(),
-                usecase: model.use_cases[uc].id.clone(),
+                subject: model.use_cases[uc].id.clone(),
                 condition: model.conditions[ck].id.clone(),
             },
             is_warning: false,

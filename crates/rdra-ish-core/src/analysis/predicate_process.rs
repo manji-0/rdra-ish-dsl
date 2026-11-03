@@ -12,9 +12,10 @@ use rdra_ish_syntax::ast::*;
 use super::arg_resolve::resolve_arg;
 use super::comparison::resolve_comparison;
 use super::constraint::{
-    arg_as_str, collect_entity_conditions, context_value_from_arg, process_after_predicate,
-    process_forbidden as process_cross_forbidden, process_invariant as process_cross_invariant,
-    resolve_entity_equals_from_comparison, rule_label,
+    arg_as_str, collect_entity_conditions, context_value_from_arg, forbidden_when_conditions,
+    process_after_predicate, process_forbidden as process_cross_forbidden,
+    process_invariant as process_cross_invariant, push_rule_guards,
+    resolve_entity_equals_from_comparison, rule_label, when_condition_ref,
 };
 use super::effect::parse_effect_value;
 use super::nodes::node_kind_tag_str;
@@ -1051,8 +1052,11 @@ fn process_forbidden_predicate(
     ) else {
         return;
     };
+    let Ok(when) = forbidden_when_conditions(model, pred, ctx, diags) else {
+        return;
+    };
 
-    if conditions.equals.is_empty() && conditions.comparisons.is_empty() {
+    if conditions.equals.is_empty() && conditions.comparisons.is_empty() && when.is_empty() {
         let err = RdraError::RuleWithoutCondition {
             pred: pred.name.clone(),
         };
@@ -1066,6 +1070,8 @@ fn process_forbidden_predicate(
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
         });
+        let rule = RuleRef::Forbidden(model.forbidden_constraints.len() - 1);
+        push_rule_guards(model, rule, &when, ctx);
         model
             .typed_predicates
             .push(TypedPredicate::Forbidden { entity: entity_key });
@@ -1177,6 +1183,8 @@ fn process_invariant_predicate(
     let entity_cols = model.entities[entity_key].columns.clone();
     let mut guards: Vec<(String, EffectValue)> = Vec::new();
     let mut guard_comparisons: Vec<ComparisonProp> = Vec::new();
+    // `.when(Cond)` calls: their bodies join the guards after every predicate is read.
+    let mut when: Vec<(ConditionKey, Span)> = Vec::new();
     let mut requireds: Vec<(String, EffectValue)> = Vec::new();
     let mut required_comparisons: Vec<ComparisonProp> = Vec::new();
 
@@ -1185,6 +1193,16 @@ fn process_invariant_predicate(
         let is_required = cc.name == "then";
         if !is_guard && !is_required {
             continue;
+        }
+        if is_guard {
+            match when_condition_ref(model, &pred.name, cc, ctx, diags) {
+                Ok(Some(ck)) => {
+                    when.push((ck, cc.span.clone()));
+                    continue;
+                }
+                Ok(None) => {}
+                Err(()) => return,
+            }
         }
 
         let mut processed_eq = false;
@@ -1270,7 +1288,7 @@ fn process_invariant_predicate(
         }
     }
 
-    let has_guards = !guards.is_empty() || !guard_comparisons.is_empty();
+    let has_guards = !guards.is_empty() || !guard_comparisons.is_empty() || !when.is_empty();
     let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
     if !has_requireds {
         let err = RdraError::InvariantWithoutConsequence;
@@ -1289,6 +1307,8 @@ fn process_invariant_predicate(
             requireds,
             required_comparisons,
         });
+        let rule = RuleRef::Invariant(model.entity_invariants.len() - 1);
+        push_rule_guards(model, rule, &when, ctx);
         model
             .typed_predicates
             .push(TypedPredicate::Invariant { entity: entity_key });

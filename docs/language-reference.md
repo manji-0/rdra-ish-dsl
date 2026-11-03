@@ -1340,7 +1340,10 @@ the RDRA diagram, and `lint` all read it, so a body and its links cannot disagre
 names neither a variation column nor a lifecycle column, and guards no use case, is `lint`
 `condition-no-rdra-anchor`. A body guards a use case through `applies_to` a use case or an
 API, or through `.when` on a `transitions` arm or a `chooses` value; such a body is the use
-case's rule even when it reads only `Bool` or nullable columns, so it is not flagged. Do not
+case's rule even when it reads only `Bool` or nullable columns, so it is not flagged. A body
+that a `forbidden` or an `invariant` reads through `.when(Cond)` (see
+[`.when(Condition)` on a rule](#when-condition-on-a-rule)) is that rule's condition and is
+not flagged either. Do not
 add a comparison on the state the use case already moves from to anchor it: the transition
 already requires that state. `applies_to(Condition, System)` adds no guard, so it does not
 exempt the body.
@@ -1975,6 +1978,19 @@ forbidden(Stock, status == on_sale, stock < selling)
 forbidden(Coupon, expired_at < now)
 ```
 
+A `.when(Condition)` after the arguments adds the comparisons of the condition's `holds`
+body to the list, as if they were written among the arguments, so a business rule stated
+once as a `condition` guards use cases and names forbidden states alike (see
+[`.when(Condition)` on a rule](#when-condition-on-a-rule)):
+
+```rdra
+condition PastDeadline "the deadline has passed"
+holds(PastDeadline, Coupon.expires_at < now)
+forbidden(Coupon, status == active).when(PastDeadline)
+// the same rule
+forbidden(Coupon, status == active, expires_at < now)
+```
+
 Each condition is either a `column == value` tuple or a comparison expression. All
 conditions are combined with **AND**: the state is forbidden only when **every** condition
 holds at once. If any reachable state satisfies all conditions, a `ConstraintViolated`
@@ -2027,6 +2043,47 @@ guard and a requirement — joined by implication. A flat tuple list cannot expr
 conditions are the trigger and which are the obligation. The method-chain form keeps
 the two sides syntactically separate (`.when` vs `.then`) and lets each side accumulate
 any number of AND-ed conditions unambiguously, while reading naturally left to right.
+
+#### `.when(Condition)` on a rule
+
+A `.when(...)` of an `invariant`, or a `.when(...)` after the arguments of a `forbidden`,
+may name a condition instead of a comparison. The rule then reads the comparisons of the
+condition's `holds` body as if they were written in that `.when(...)` (an invariant: more
+guards) or among the arguments (a `forbidden`: more conditions). A business rule stated
+once as a condition thus guards the use case it `applies_to` and names the state the rule
+reads, and `check` names a violation by the rule as the comparisons written in place would:
+
+```rdra
+condition PastDeadline "the deadline has passed"
+holds(PastDeadline, Coupon.expires_at < now)
+applies_to(PastDeadline, Expire)
+
+invariant(Coupon).when(PastDeadline).then(status == expired)
+  .label("Past its deadline, a coupon is expired")
+// the same rule
+invariant(Coupon).when(expires_at < now).then(status == expired)
+```
+
+- It takes the same `.when(Cond)` on every kind of rule: an entity-local `invariant` or
+  `forbidden`, a multi-entity one (`invariant(Order, Payment).when(Captured)`, whose body
+  may name any of the rule's entities, and whose entities join the rule's as inline
+  comparisons do), and a quantifier (`invariant(Order).when(Paid).none(Payment.status ==
+  pending)`). `.when(Cond)` and `.when(column == value)` mix on one invariant, AND-ed as
+  every `.when` is; a `forbidden` takes a condition only, since its comparisons are its
+  arguments.
+- The `holds` may come later in the file than the rule, as it may for a `transitions` arm.
+- The rule's name (`Inv_Coupon_0`, `Forbidden_Coupon_0`) and its row in `list --kind
+  rule` are those of the inline form. `rdra-ish list --kind rule` prints the comparisons
+  the condition contributed in the rule's text.
+- The condition's body is read for its comparisons only: a body with `.has(...)`,
+  `.none(...)`, `.along(...)` or `.role(...)` is `RuleWhenConditionScope`, whose hint says
+  to write the quantifier, the path or the key on the rule itself. On an entity-local rule
+  a body that compares another entity is the same error, with the multi-entity rule to
+  write. A condition with no body is `WhenConditionWithoutBody`, as on an arm, and a
+  `.when(X)` where `X` is not a condition is `RuleWhenArg`.
+- A condition only a rule reads is still an RDRA 条件 tied to no use case: `lint` keeps its
+  `rdra-condition-no-buc` warning until the condition `applies_to` a use case of a BUC.
+  It is not `condition-no-rdra-anchor`: the rule anchors it.
 
 ### `required` — always-required state facts
 

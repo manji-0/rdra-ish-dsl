@@ -13,6 +13,16 @@
   one line per source, with a `.when(Cond)` after the list guarding each arm. `fmt` keeps
   the list as written. There is no `* -> z`: whether "every state" includes the target
   and the end states has no one answer, so the sources are written out.
+- `.when(Condition)` on an `invariant` and on a `forbidden` (#89): the rule reads the
+  comparisons of the condition's `holds` body as if they were written in place, on an
+  entity-local rule, a multi-entity one, and a quantifier, so a business rule stated once
+  as a condition guards use cases and names states alike. The `holds` may follow the rule.
+  A condition with no body is `WhenConditionWithoutBody`; a body with `.has/.none`,
+  `.along` or `.role`, or one that compares an entity an entity-local rule does not read,
+  is `RuleWhenConditionScope` with the rule to write; `.when(X)` on a rule where `X` is
+  not a condition is `RuleWhenArg`. Before, a condition id in an invariant's `.when` was
+  reported as `InvariantWithoutWhen`, which said nothing about the condition. `lint` does
+  not flag such a condition as `condition-no-rdra-anchor`.
 
 ## v1.0.0 - 2026-11-03
 

@@ -325,11 +325,27 @@ pub enum RdraError {
     #[error("`{pred}(...).when(...)` must name one condition, once\n  hint: declare `condition Name \"...\"` with `holds(Name, Entity.column == value)` and write `.when(Name)`; to guard every step of the use case write `applies_to(Name, UseCase)` instead")]
     WhenRequiresCondition { pred: String },
 
-    #[error("condition '{condition}' guards `{pred}({usecase}, ...)` with `.when({condition})` but has no `holds` body to guard with\n  hint: write `holds({condition}, Entity.column == value)`; a condition linked by `combines` only documents a variation or state model and cannot guard")]
+    #[error("condition '{condition}' guards `{pred}({subject}, ...)` with `.when({condition})` but has no `holds` body to guard with\n  hint: write `holds({condition}, Entity.column == value)`; a condition linked by `combines` only documents a variation or state model and cannot guard")]
     WhenConditionWithoutBody {
         pred: String,
-        usecase: String,
+        /// The use case of a `transitions` arm or a `chooses` value, or the entity of a rule.
+        subject: String,
         condition: String,
+    },
+
+    #[error("`{pred}(...).when({got})` does not name a condition\n  hint: {hint}")]
+    RuleWhenArg {
+        pred: String,
+        got: String,
+        hint: String,
+    },
+
+    #[error("`{pred}(...).when({condition})` cannot read condition '{condition}': {reason}\n  hint: {fix}")]
+    RuleWhenConditionScope {
+        pred: String,
+        condition: String,
+        reason: String,
+        fix: String,
     },
 
     #[error("transitions column '{col}' on entity '{entity}' must be an inline Enum column\n  hint: lifecycle transitions bind an inline Enum status/lifecycle column; a column typed by a variation is an attribute and has no lifecycle")]

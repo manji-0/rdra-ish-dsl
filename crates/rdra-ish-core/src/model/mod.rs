@@ -274,6 +274,9 @@ pub struct SemanticModel {
     pub temporal_assertions: Vec<TemporalAssertion>,
     /// `has` / `none` チェーンで宣言された to-many 量化制約
     pub quantifier_constraints: Vec<QuantifierConstraint>,
+    /// `.when(Cond)` on a `forbidden` or an `invariant`, in source order. The body of each
+    /// condition is spliced into its rule after every predicate is read.
+    pub rule_guards: Vec<RuleGuard>,
     /// `property Id "..." leads_to/always/eventually(...)` 時相プロパティ
     pub temporal_properties: Vec<TemporalProperty>,
     /// What `exposes` and `shares` publish to other models.

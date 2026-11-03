@@ -905,3 +905,48 @@ applies_to(PastDeadline, Expire)
     ));
     assert!(!violated(&d, "Coupon", InvKind::Forbidden));
 }
+
+/// `.when(Cond)` on a rule reads the condition's body (#89): the verdict and the witness are
+/// those of the rule with the comparisons written in place, for an invariant, a `forbidden`,
+/// and a quantifier.
+#[test]
+fn a_rule_when_condition_is_checked_as_its_inline_form() {
+    const COUPON: &str = r#"
+entity Coupon "クーポン" { id: Int @pk  status: Enum(active, expired) @default(active)  expires_at: Date }
+entity Handler "担当" { id: Int @pk  busy: Bool @default(false) }
+relate(Coupon, Handler, N:1)
+usecase Issue "発行"
+usecase Expire "失効"
+creates(Issue, Coupon)
+sets(Issue, Coupon.expires_at == 2)
+transitions(Expire, Coupon.status, active -> expired)
+condition PastDeadline "期限を過ぎた"
+holds(PastDeadline, Coupon.expires_at < now)
+"#;
+    for (with_condition, inline, witness) in [
+        (
+            "invariant(Coupon).when(PastDeadline).then(status == expired)",
+            "invariant(Coupon).when(expires_at < now).then(status == expired)",
+            "expires_at=2, status=active",
+        ),
+        (
+            "forbidden(Coupon, status == active).when(PastDeadline)",
+            "forbidden(Coupon, status == active, expires_at < now)",
+            "expires_at=2, status=active",
+        ),
+        (
+            "invariant(Coupon).when(PastDeadline).none(Handler.busy == false)",
+            "invariant(Coupon).when(expires_at < now).none(Handler.busy == false)",
+            "Coupon(expires_at=2)",
+        ),
+    ] {
+        let a = derive_src(&format!("{COUPON}\n{with_condition}"));
+        let b = derive_src(&format!("{COUPON}\n{inline}"));
+        assert_eq!(
+            witnesses(&a, "Coupon"),
+            witnesses(&b, "Coupon"),
+            "{with_condition}"
+        );
+        assert_eq!(witnesses(&a, "Coupon"), vec![witness], "{with_condition}");
+    }
+}
