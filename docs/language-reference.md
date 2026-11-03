@@ -8,7 +8,9 @@ and export is a projection of the same model.
 
 A source file (`.rdra`) consists of an optional `module` declaration, zero or more
 `import` declarations, and a sequence of instance declarations, entity bodies,
-predicate calls, and constraint declarations, in any order.
+predicate calls, and rules (`forbidden`, `invariant`, `required`, `exclusive`), in any
+order. The kind `constraint` is something else: an NFR-style guardrail (see
+[Requirements and Traceability](#requirements-and-traceability)).
 
 ## The Review Spine
 
@@ -25,7 +27,7 @@ same order:
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
 | Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
-| Lifecycle and rules | `transitions`, `sets`, `drives`, and constraint declarations | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
+| Lifecycle and rules | `transitions`, `chooses`, `sets`, `drives`, and the rules `forbidden`, `invariant`, `required`, `exclusive` | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
 
 A kind is part of the language only when some review output consumes it. The
 [kind index](#kind-index) lists that output for every kind.
@@ -228,7 +230,6 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). The child side, the `N` of `N:1` / `1:N` or the left of `1:1`, may be a range `lo..hi` with `lo` 0 or 1 and `hi` 1 or `*`: `relate(OrderLine, Order, 1..*:1)` says every `Order` has at least one `OrderLine`, and the lifecycle checks it as the invariant `MinCard_<Child>_<role>`. A range on the parent side is an error; write `.optional()` for a parent that may be absent. For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. For `1:1` the left end is the child: it holds the key column, marked unique. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
 | `transitions` | `(UseCase, Entity.column, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. `.when(Condition)` guards this arm only. See [Guard one arm](#guard-one-arm-when). |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each run of the use case leaves, read after its last step on the run's rows. |
-| `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
 | `sets` | `(UseCase, Entity.column == value)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. `Entity.column == Source.column` copies a value. |
 | `drives` | `(UseCase, Entity.column op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 | `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
@@ -838,7 +839,7 @@ these rules:
 | Diagnostic | When |
 |---|---|
 | `PublishedEntityMutated` | an `append` entity gets `updates`, or any published entity gets `deletes` or `transitions` |
-| `PublishedEntityReadByOwner` | the owner reads a published entity: `reads`, `shows`, `maps_field`, a `holds` body, `combines`, or a constraint (`forbidden`, `invariant`, `required`, `exclusive`, `when`, `after`) |
+| `PublishedEntityReadByOwner` | the owner reads a published entity: `reads`, `shows`, `maps_field`, a `holds` body, `combines`, or a rule (`forbidden`, `invariant`, `required`, `exclusive`, `after`) |
 | `PublishedEntityKeysInternal` | a `relate` joins a published entity to an internal one, in either direction |
 | `PublishedNotInSourceTx` | a use case writes a published entity but makes no internal change, or makes several internal transactions, so the published row has no one transaction to join; or it writes the published entity through an API that makes no internal change, because each API is its own transaction |
 | `InternalEntityExposed` | `exposes(System, Entity)` without `.append()` or `.upsert()`; publish a projection instead |
@@ -1103,7 +1104,7 @@ is optional/nullable in the payload.
 | `@index(a, b)` | Declares a composite index over the named columns. |
 | `@check(expr)` | A check constraint: `expr` is a condition over the entity's own columns (`and`, `or`, `not` over comparisons), typed like a `forbidden` comparison. A missing column is `UnknownColumn`; arithmetic is `ArithNotInCheck`. The lifecycle checks it as the invariant `Check_<Entity>_<column>_<n>` (see [state-derivation.md](./state-derivation.md#checks)). |
 | `@null` | Makes the column nullable. A nullable column is a **state axis** with values `{null, present}`. |
-| `@default(v)` | Declares a default value `v`. Used as the seed value in state derivation. |
+| `@default(v)` | Declares a default value `v`. State derivation starts the column at `v`, except a column typed by a variation: a row of it starts at any value of the variation unless the use case that creates it sets the column, and `@default` does not pick the start (info `DefaultOnVariationIgnored`; see [Actions](./state-derivation.md#actions)). |
 | `@label("...")` | Overrides the column's display label. |
 | `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
 | `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
@@ -1375,8 +1376,8 @@ is explored, not blocked.
   counts along the path: the rows of that entity, and of every path entity between it and
   the nearest entity before it that the use case binds or the body compares, that the hops'
   keys chain to that row. `.none` holds when no such chain reaches a matching row, so a row
-  with no chain at all passes; `.has` when some chain does. A `.by` after the `.has`/`.none`
-  is not read on a counted entity; the `.by` after the `.along` picks each hop's key. An
+  with no chain at all passes; `.has` when some chain does. A `.role` after the `.has`/`.none`
+  is not read on a counted entity; the `.role` after the `.along` picks each hop's key. An
   entity the body compares is a witness even when a `.has`/`.none` also names it: some
   linked row satisfies the comparisons, and the quantifier counts every linked row on its
   own. A path that names the counted entity before any entity the use case binds or the
@@ -1611,9 +1612,10 @@ parent is `.optional()`.
 ## Lifecycle
 
 Lifecycle predicates turn interaction effects into entity states. `transitions`
-declares state machine edges, `sets` declares column effects, and the constraint
-declarations in [Entity State Constraints](#entity-state-constraints) say which
-combinations must never or must always hold. `rdra-ish states` derives the reachable
+declares state machine edges, `chooses` lets the actor pick a variation value again,
+`sets` and `drives` declare column effects, and the rules in
+[Entity State Constraints](#entity-state-constraints) say which combinations must never or
+must always hold. `rdra-ish states` derives the reachable
 patterns, and `export --kind tla` / `verify --backend tlc` check temporal properties.
 
 ### `transitions` and the state machine
@@ -1964,15 +1966,18 @@ fail to load with the rewrite to write (see
 
 <!-- derived-from ./state-derivation.md#temporal-anchor-assertions -->
 
-State constraints assert facts about the **reachable state space** of an entity. They
-are evaluated on the reachable states of the lifecycle transition system: a constraint is
-only reported as violated if a reachable state actually witnesses the violation.
-Unreachable bad states never trigger a diagnostic.
+Rules assert facts about the **reachable state space** of an entity. They are evaluated
+on the reachable states of the lifecycle transition system: a rule is only reported as
+violated if a reachable state actually witnesses the violation. Unreachable bad states
+never trigger a diagnostic. This reference calls `forbidden`, `invariant`, `required`, and
+`exclusive` rules, as `list --kind rule` does; the diagnostic `ConstraintViolated` and the
+section name keep the older word, and the kind `constraint` is an NFR guardrail, not a
+rule.
 
-There are four entity-local constraint forms. Each one names a common shape in the
-reachable state space:
+There are four entity-local rule forms. Each one names a common shape in the reachable
+state space:
 
-| Predicate | Constraint shape | Use when |
+| Predicate | Rule shape | Use when |
 |---|---|---|
 | `forbidden` | no reachable pattern may satisfy all listed conditions | Invalid combinations |
 | `invariant` | when guards hold, required conditions must also hold | Conditional co-occurrence |
@@ -1990,7 +1995,7 @@ and `after(UseCase)` without `.assert(...)` is `AfterWithoutAssert`.
 
 ### Labelling a rule
 
-A constraint says what is forbidden or required, not why. `.label("...")` names the rule in
+A rule says what is forbidden or required, not why. `.label("...")` names the rule in
 the business's words, on any of `forbidden`, `invariant` (with `.then(...)` or
 `.has/.none(...)`), `required`, `exclusive`, and `after(...).assert(...)`, single- or
 multi-entity:

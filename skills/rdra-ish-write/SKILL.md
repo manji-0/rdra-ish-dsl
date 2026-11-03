@@ -100,6 +100,11 @@ Placement rules:
   `invokes`, API contract links, `raises`, `triggers`, `coordinates`, access
   constraints, conditions applied to the BUC's use cases, compensations, and `sets`.
 - Do not put BUC-specific predicates in shared files.
+- A `condition` or `property` that names a use case (`applies_to(Cond, UseCase)`,
+  `.fair(UseCase)`) goes in that use case's `buc/buc_<name>.rdra`, with its `holds` body.
+  In `shared/rules.rdra` it would import the BUC module, which imports `shared.rules`: a
+  circular import, which `check` warns about. Keep `shared/rules.rdra` to rules and
+  conditions that name only entities, variations, and other shared vocabulary.
 - Every file starts with `module <dotted.name>`, and the dotted module should mirror
   the file path.
 - Keep broad imports during exploration; narrow imports after shared files split.
@@ -249,7 +254,10 @@ import shared.actors.{Staff as S}
   it guards each use case it `applies_to` (Step 6).
 - `check` evaluates every rule, quantifier, and `after(UC).assert` at one instance per
   entity. A temporal `property`, and a rule that needs two instances, need `verify`
-  (skill `rdra-ish-verify`).
+  (skill `rdra-ish-verify`). A deadlock can also come from the one slot: when a way out
+  needs a row of an entity some use case creates and the slot was used up, the `check`
+  error ends with `the deadlock may clear at --instance-count 2`. Run `verify` before
+  changing the model for it.
 
 ### Common Mistakes
 
@@ -280,6 +288,12 @@ import shared.actors.{Staff as S}
 - Adding API method/path metadata without DTO request/response links when payload
   review or OpenAPI export is expected.
 - Forgetting `rdra-ish lint` and `rdra-ish fmt --check` before final handoff.
+- Running `rdra-ish fmt src/` and expecting the files to change: without a flag, `fmt`
+  prints the formatted source to stdout. `fmt --write src/` rewrites the files, and
+  `fmt --check src/` only lists the files that differ.
+- Looking for `rdra-ish csv` rows on stdout: `csv` writes a file and prints
+  `wrote <path>`. Without `-o` the file is `out.<kind>.csv` in the current directory
+  (`out.matrix.csv` for `--kind matrix`); `-o review/crud` writes `review/crud.matrix.csv`.
 - Checking only `screen-constraints` for access review; also run
   `permission-callables` and `actor-permission-audit`.
 - Modeling event-started BUCs only as `triggers(Event, UseCase)` when the BUC

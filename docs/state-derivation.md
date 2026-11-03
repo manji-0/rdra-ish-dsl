@@ -278,7 +278,7 @@ case's action:
   never reads it; an updated parameter's instance is present and is quantified with its
   pre-state values. The quantified instance is its own binder even when the action or
   another atom binds the same entity. With `.along`, a quantified entity the path names
-  and no atom reads is counted along the path (above), and its `.by` is not read.
+  and no atom reads is counted along the path (above), and its `.role` is not read.
 - `applies_to(Condition, System)` adds no guard, and a condition with no body is a
   trace link.
 - A body applied to a use case that writes nothing is `UnbindableCondition`.

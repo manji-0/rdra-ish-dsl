@@ -77,6 +77,17 @@
   - The circular import warning names the import that closes the cycle and points at it:
     walking the imports in load order from the first-loaded file of the cycle, the first one
     back to a file still on the walk.
+  - `invariant(E).when(C)` where `C` is a condition says that a rule's `.when(...)` takes
+    comparisons, not a condition id, instead of saying the rule has no `.when(...)`.
+- The language reference and the skills say what the tools do (#89). `@default` on a variation
+  column does not pick its start, as state-derivation.md said and the language reference did
+  not. The predicate table no longer lists the removed top-level `when`, and the Review Spine
+  and the Lifecycle overview list `chooses`. The prose calls `forbidden`, `invariant`,
+  `required`, and `exclusive` rules, as `list --kind rule` does, and keeps `constraint` for the
+  NFR kind. Skill `rdra-ish-write` puts a condition or property that names a use case in that
+  use case's BUC file, since in `shared/rules.rdra` it closes a circular import, and says that
+  `fmt` rewrites files only with `--write`, that `csv` writes `out.<kind>.csv` and prints no
+  rows, and that a one-instance deadlock may clear in `verify`.
 
 ## v1.0.0 - 2026-11-03
 

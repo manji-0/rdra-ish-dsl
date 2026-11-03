@@ -489,8 +489,9 @@ parse error, and `fmt` refuses the file.
 | `--write` | flag | off | Rewrite files in place. |
 | `--check` | flag | off | Exit with status `1` and print `needs formatting:` rows when any file differs from the canonical format. |
 
-Without `--write` or `--check`, formatted source is written to stdout. With multiple
-input files, each output block is prefixed by a `// <path>` marker.
+Without `--write` or `--check`, formatted source is written to stdout and no file
+changes: `rdra-ish fmt src/` only prints, and `rdra-ish fmt --write src/` rewrites the
+files. With multiple input files, each output block is prefixed by a `// <path>` marker.
 
 ---
 
@@ -949,7 +950,9 @@ rdra-ish csv <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [-o <OUT>]
 | `--format` | `csv` \| `markdown` | `csv` | `markdown` writes the same rows as a Markdown table, to paste into a design doc or a PRD, with the extension `.<kind>.md`. A `\|` in a cell is escaped and a line break becomes `<br>`. |
 | `-o`, `--out` | path | `out` | Output file path. A path with an extension is used as is (`-o x.dat` writes `x.dat`). Otherwise `.<kind>.csv` is appended to the path: `-o out` (the default) writes `out.matrix.csv` for `--kind matrix` and `out.entity.csv` for `--kind entity`, and `-o foo` writes `foo.matrix.csv`. |
 
-The command writes the CSV, or the Markdown table, to the output path and prints `wrote <path>`.
+The command writes the CSV, or the Markdown table, to the output path and prints `wrote <path>`;
+it prints no rows to stdout. Without `-o`, `rdra-ish csv src/ --kind matrix` writes
+`out.matrix.csv` in the current directory.
 
 ---
 
