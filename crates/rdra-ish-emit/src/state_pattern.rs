@@ -218,7 +218,8 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::PropertyViolated { .. }
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
-        | StateDiag::UnboundAfterRead { .. } => d.to_string(),
+        | StateDiag::UnboundAfterRead { .. }
+        | StateDiag::DeleteLeavesChildren { .. } => d.to_string(),
     };
     format!("[{label}][{}] {body}", d.name(&[entity]))
 }

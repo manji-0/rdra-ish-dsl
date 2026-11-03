@@ -4,6 +4,12 @@
 
 ### Added
 
+- The info `DeleteLeavesChildren` (#85): a use case `deletes` the parent of a key with
+  `.on_delete(cascade)`, which the lifecycle does not read, so the children stay present
+  after the parent is gone and every rule still sees them. It names the use case, the
+  parent, and the child, and says to `deletes` the child too. The language reference and
+  state-derivation.md say that `.on_delete` and `.on_update` do not reach `states`,
+  `check`, or `verify`, and that a `deletes` removes one row.
 - `lint` `field-column-unwritten` warns on a screen field mapped (`maps_field`) to a `@null`
   column that no `sets` and no `chooses` gives a value (#79). In `samples/insurance-claim-ops`,
   `Claim.completed_on` (the field 請求完了日) stayed an axis at `null` in `states` until

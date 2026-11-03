@@ -137,7 +137,7 @@ effects apply together to the pre-state:
 | Source | Effect and guard |
 |---|---|
 | `creates(UC, E)` | The slot becomes `present`, with the columns at their base values. The creating use case's `sets` and transitions then apply. |
-| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. |
+| `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. Only that slot: a child whose key to `E` says `.on_delete(cascade)` stays present, since the lifecycle does not read `.on_delete`, and every rule still sees it. Info `DeleteLeavesChildren` names each such use case and child; a use case that removes the children with the parent `deletes` the child too, which removes one child row per run and draws no info. |
 | `sets(UC, E.col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
 | `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
 | `drives(UC, E.col op rhs, bool)` | The comparison variable becomes `bool`. |
@@ -678,6 +678,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnwrittenConstrainedVar { column }` | `UnwrittenConstrainedVar_<E>_<column>` | warning | A constraint or a condition guard reads a column that no use case writes, so it checks only the start value. |
 | `NoCreationPath` | `NoCreationPath_<E>` | info | No use case creates the entity. It starts present. |
 | `MinCardNeedsCreate { usecase, child }` | `MinCardNeedsCreate_<E>_<usecase>_<child>` | info | A use case creates the parent of a `1..*` key and no child in the same transaction group, so `MinCard_*` fails after it unless the use case also creates a child. A child that the action links by update counts. |
+| `DeleteLeavesChildren { usecase, parent, child }` | `DeleteLeavesChildren_<E>_<usecase>_<child>` | info | A use case deletes the parent of a key with `.on_delete(cascade)`, which the lifecycle does not read: the child rows stay and every rule still sees them. Add `deletes(UC, Child)` to remove them with the parent. |
 | `MinCardOfPreExistingParent { child }` | `MinCardOfPreExistingParent_<E>_<child>` | warning | The parent of a `1..*` key starts present but every child starts absent, so `MinCard_*` fails at the start. |
 | `PreExistingChildOfCreatedParent { parent }` | `PreExistingChildOfCreatedParent_<E>_<parent>` | warning | No use case creates the entity, but some use case creates the parent of its mandatory `relate`. Each slot starts owned by a parent slot that is still `absent`. |
 | `ConflictingEffects { usecase, column }` | `ConflictingEffects_<E>_<usecase>_<column>` | error | One use case assigns two values to one column. |

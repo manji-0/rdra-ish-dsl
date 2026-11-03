@@ -15,7 +15,8 @@ use crate::lifecycle::EntId;
 use crate::model::{
     CheckExpr, CmpOpModel, CmpRhs, ComparisonProp, ConditionKey, CrossCmpRhs, CrossConstraintScope,
     CrossEntityCondition, DerivedExpr, EffectValue, EntityKey, FkId, HoldsBody, Join, Min,
-    QuantifierKind, RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs, UseCaseKey,
+    QuantifierKind, RefAction, RelatedQuantifier, TemporalExpr, TemporalFormula, TemporalRhs,
+    UseCaseKey,
 };
 
 /// Binds each entity of a predicate to a slot reference.
@@ -724,6 +725,46 @@ impl<'m> Builder<'m> {
         self.quantifiers();
         self.unique_keys();
         self.min_cards();
+        self.cascade_deletes();
+    }
+
+    /// `DeleteLeavesChildren` per key with `.on_delete(cascade)` and use case that deletes
+    /// its parent and not its child: a delete removes the one row, so the children stay,
+    /// and the lifecycle does not read the cascade.
+    fn cascade_deletes(&mut self) {
+        let model = self.model;
+        for (_, fk) in model
+            .foreign_keys()
+            .filter(|(_, fk)| fk.on_delete == Some(RefAction::Cascade))
+        {
+            let (parent, child) = (self.ent_of[&fk.parent], self.ent_of[&fk.child]);
+            let deletes = |a: &Action, e: EntId| {
+                a.effects.iter().any(|eff| {
+                    matches!(eff, Effect::Delete { param } if a.params[usize::from(*param)].entity == e)
+                })
+            };
+            let deleting: Vec<UseCaseKey> = self
+                .ts
+                .actions
+                .iter()
+                .filter(|a| deletes(a, parent) && !deletes(a, child))
+                .filter_map(|a| match a.origin {
+                    ActionOrigin::UseCase { uc, .. } => Some(uc),
+                    _ => None,
+                })
+                .collect();
+            for uc in deleting {
+                self.diag(
+                    vec![fk.parent],
+                    StateDiag::DeleteLeavesChildren {
+                        usecase: model.use_cases[uc].id.clone(),
+                        parent: model.entities[fk.parent].id.clone(),
+                        child: model.entities[fk.child].id.clone(),
+                        site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
+                    },
+                );
+            }
+        }
     }
 
     /// `MinCard_{child}_{role}` per child-side range `1..*` / `1..1`: every present parent

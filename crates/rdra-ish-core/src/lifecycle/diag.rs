@@ -321,6 +321,14 @@ pub enum StateDiag {
         entity: String,
         site: Site,
     },
+    /// A use case deletes the parent of a key with `.on_delete(cascade)`, which the lifecycle
+    /// does not read: the children stay, and every rule still sees them.
+    DeleteLeavesChildren {
+        usecase: String,
+        parent: String,
+        child: String,
+        site: Site,
+    },
 }
 
 /// `「label」: ` for a labelled rule, so a violation names the rule in the author's words.
@@ -428,6 +436,9 @@ impl StateDiag {
                 condition, usecase, ..
             } => with("UnjoinedGuardRead", &[condition, usecase]),
             StateDiag::UnboundAfterRead { anchor, .. } => with("UnboundAfterRead", &[anchor]),
+            StateDiag::DeleteLeavesChildren { usecase, child, .. } => {
+                with("DeleteLeavesChildren", &[usecase, child])
+            }
         };
         raw.chars()
             .map(|c| {
@@ -469,7 +480,9 @@ impl StateDiag {
             StateDiag::Deadlock { exits, .. } if exits.iter().any(|x| x.why.only_free_slots()) => {
                 Severity::Warning
             }
-            StateDiag::NoCreationPath | StateDiag::MinCardNeedsCreate { .. } => Severity::Info,
+            StateDiag::NoCreationPath
+            | StateDiag::MinCardNeedsCreate { .. }
+            | StateDiag::DeleteLeavesChildren { .. } => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::PreExistingChildOfCreatedParent { .. }
@@ -843,6 +856,15 @@ impl fmt::Display for StateDiag {
             StateDiag::UnboundAfterRead { anchor, entity, .. } => write!(
                 f,
                 "after({anchor}) reads {entity}, which no step of {anchor} binds, so every present {entity} row must satisfy it; write {entity} in {anchor} to read the run's row"
+            ),
+            StateDiag::DeleteLeavesChildren {
+                usecase,
+                parent,
+                child,
+                ..
+            } => write!(
+                f,
+                "{usecase} deletes a {parent} whose key from {child} says .on_delete(cascade), which the lifecycle does not read: the {child} rows stay, and every rule still sees them; add deletes({usecase}, {child}) to remove them with it"
             ),
         }
     }

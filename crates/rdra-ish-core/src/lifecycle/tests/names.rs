@@ -192,6 +192,12 @@ fn one_of_each() -> Vec<StateDiag> {
             entity: "Desk".into(),
             site: site(),
         },
+        StateDiag::DeleteLeavesChildren {
+            usecase: "DeleteParent".into(),
+            parent: "Parent".into(),
+            child: "Child".into(),
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -226,7 +232,8 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::DerivedColumnRead { .. }
             | StateDiag::UnresolvedPropertyAtom { .. }
             | StateDiag::UnjoinedGuardRead { .. }
-            | StateDiag::UnboundAfterRead { .. } => {}
+            | StateDiag::UnboundAfterRead { .. }
+            | StateDiag::DeleteLeavesChildren { .. } => {}
         }
     }
     all

@@ -199,7 +199,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. |
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
 | `updates` | `(UseCase \| Api, Entity)` | The use case or API updates the entity. Produces a transition operation in state derivation. |
-| `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. |
+| `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. It removes one row; the children of a key with `.on_delete(cascade)` stay (info `DeleteLeavesChildren`), so a use case that removes them `deletes` the child too. |
 | `displays` | `(UseCase, Screen)` | The use case displays the screen. |
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `navigates` | `(Screen, Screen)` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
@@ -241,7 +241,12 @@ With the default role (the parent id in lowercase) and a parent key `id`, that i
 With `.optional().on_delete(set_null).on_update(cascade)`, the generated column is
 nullable, marked `fk_optional`, and carries the delete/update actions for CSV/list
 review. An action other than `cascade`, `restrict`, `set_null`, `set_default`, or
-`no_action` is `UnknownRefAction`. [Keys and roles](#relate-and-fk-generation) covers
+`no_action` is `UnknownRefAction`. The lifecycle does not read `.on_delete` or
+`.on_update`: `states`, `check`, and `verify` delete only the row a `deletes` names, and a
+child under an `.on_delete(cascade)` key stays present after its parent is deleted, where
+every rule still sees it. The info `DeleteLeavesChildren` names each use case that
+deletes such a parent and not the child; write `deletes(UC, Child)` too to remove a
+child with it, one row per run. [Keys and roles](#relate-and-fk-generation) covers
 `.role`, `.key`, and composite parent keys.
 
 ### Chain methods

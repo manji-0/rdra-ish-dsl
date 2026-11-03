@@ -242,6 +242,76 @@ transitions(Deactive, Item.status, active -> inactive)
     assert_eq!(via, vec!["Create", "Remove"]);
 }
 
+/// A `deletes` removes one row; a child under an `.on_delete(cascade)` key stays, so every
+/// rule still sees it (#85). The use case that deletes such a parent draws the info
+/// `DeleteLeavesChildren`, once per key; a key with no cascade, or a use case that deletes
+/// the child too, draws nothing.
+#[test]
+fn a_delete_leaves_the_children_of_a_cascade_key_and_says_so() {
+    let src = |on_delete: &str, extra: &str| {
+        format!(
+            r#"
+entity Parent "親" {{ id: Int @pk }}
+entity Child "子" {{ id: Int @pk  alive: Bool @default(true) }}
+relate(Child, Parent, N:1){on_delete}
+usecase CreateParent "親作成"
+usecase CreateChild "子作成"
+usecase DeleteParent "親削除"
+creates(CreateParent, Parent)
+creates(CreateChild, Child)
+deletes(DeleteParent, Parent)
+{extra}
+invariant(Child).when(alive == true).has(Parent).label("every child has a parent")
+"#
+        )
+    };
+    let d = derive_src(&src(".on_delete(cascade)", ""));
+    let left: Vec<(String, String, String)> = d
+        .diags
+        .iter()
+        .filter_map(|x| match &x.diag {
+            StateDiag::DeleteLeavesChildren {
+                usecase,
+                parent,
+                child,
+                ..
+            } => Some((usecase.clone(), parent.clone(), child.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        left,
+        vec![("DeleteParent".into(), "Parent".into(), "Child".into())]
+    );
+    assert_eq!(left_diag(&d).severity(), crate::lifecycle::Severity::Info);
+    assert!(d.has("Child", |x| matches!(
+        x,
+        StateDiag::ConstraintViolated {
+            kind: crate::lifecycle::InvKind::Quantifier,
+            ..
+        }
+    )));
+    let silent = |on_delete: &str, extra: &str| {
+        !derive_src(&src(on_delete, extra))
+            .diags
+            .iter()
+            .any(|x| matches!(x.diag, StateDiag::DeleteLeavesChildren { .. }))
+    };
+    assert!(silent("", ""));
+    assert!(silent(
+        ".on_delete(cascade)",
+        "deletes(DeleteParent, Child)"
+    ));
+}
+
+fn left_diag(d: &Derived) -> &StateDiag {
+    d.diags
+        .iter()
+        .map(|x| &x.diag)
+        .find(|x| matches!(x, StateDiag::DeleteLeavesChildren { .. }))
+        .expect("DeleteLeavesChildren")
+}
+
 #[test]
 fn creation_status_is_a_start_even_off_the_transition_start() {
     let d = derive_src(

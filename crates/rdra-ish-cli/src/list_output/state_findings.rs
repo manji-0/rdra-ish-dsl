@@ -747,6 +747,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::PropertyViolated { .. }
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
-        | StateDiag::UnboundAfterRead { .. } => diag.to_string(),
+        | StateDiag::UnboundAfterRead { .. }
+        | StateDiag::DeleteLeavesChildren { .. } => diag.to_string(),
     }
 }
