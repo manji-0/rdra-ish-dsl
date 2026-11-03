@@ -818,6 +818,7 @@ pub(crate) fn process_invariant(
     let mut requireds = Vec::new();
     let mut quantified = false;
     let label = rule_label(pred, ctx, diags);
+    let along = along_scope(model, pred, ctx, diags);
     for (at, cc) in pred.chain.iter().enumerate() {
         match cc.name.as_str() {
             "when" => guards.extend(collect_cross_chain_conditions(
@@ -846,16 +847,16 @@ pub(crate) fn process_invariant(
                         anchor,
                         guards: guards.clone(),
                         quantifier,
+                        along: along.clone(),
                     });
             }
             _ => {}
         }
     }
 
+    report_leading_by(&pred.chain, ctx, diags);
     if requireds.is_empty() {
-        if quantified {
-            report_leading_by(&pred.chain, ctx, diags);
-        } else {
+        if !quantified {
             let err = RdraError::InvariantWithoutConsequence;
             push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
         }
@@ -869,7 +870,7 @@ pub(crate) fn process_invariant(
 
     add_condition_entities_to_scope(&mut scope, &guards);
     add_condition_entities_to_scope(&mut scope, &requireds);
-    let scope_semantics = cross_scope_semantics_from_chain(model, pred, ctx, diags);
+    let scope_semantics = along;
     model.cross_entity_invariants.push(CrossEntityInvariant {
         label,
         site: Some(ctx.locate(pred.span.clone())),
@@ -905,6 +906,62 @@ pub(crate) fn resolve_related_quantifier(
         push_error_unless_reported(ctx, diags, before, cc.span.clone(), err);
     }
     quantifier
+}
+
+/// The `.along` path of a `.has`/`.none` invariant chains the counted rows to the anchor's
+/// when it runs from the anchor to the counted entity, each entity once. Any other shape is
+/// `QuantifierAlongShape`, with the path rewritten as the shortest key path from the anchor to
+/// the counted entity, or, with no key path, from the anchor to the counted entity through the
+/// other path entities in order. Runs once the keys exist; a misshapen rule is dropped.
+pub(crate) fn check_quantifier_paths(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
+    let constraints = std::mem::take(&mut model.quantifier_constraints);
+    for c in constraints {
+        match quantifier_path_misfit(model, &c) {
+            None => model.quantifier_constraints.push(c),
+            Some(err) => diags.push(match &c.quantifier.site {
+                Some(site) => Diagnostic::error_at(err, site.clone()),
+                None => Diagnostic::error(err),
+            }),
+        }
+    }
+}
+
+fn quantifier_path_misfit(
+    model: &SemanticModel,
+    c: &crate::model::QuantifierConstraint,
+) -> Option<RdraError> {
+    let CrossConstraintScope::RelationPath { path, .. } = &c.along else {
+        return None;
+    };
+    let (anchor, q) = (c.anchor, &c.quantifier);
+    let mut seen: Vec<EntityKey> = Vec::new();
+    for ek in path {
+        push_unique_entity(&mut seen, *ek);
+    }
+    let each_once = seen.len() == path.len();
+    if path.len() >= 2 && path[0] == anchor && path[path.len() - 1] == q.related && each_once {
+        return None;
+    }
+    let id = |ek: &EntityKey| model.entities[*ek].id.clone();
+    let fix = model.key_path(&[anchor], q.related).unwrap_or_else(|| {
+        let mut fix = vec![anchor];
+        for ek in path {
+            if *ek != anchor && *ek != q.related {
+                push_unique_entity(&mut fix, *ek);
+            }
+        }
+        fix.push(q.related);
+        fix
+    });
+    Some(RdraError::QuantifierAlongShape {
+        method: match q.kind {
+            crate::model::QuantifierKind::Has => "has".to_string(),
+            crate::model::QuantifierKind::None => "none".to_string(),
+        },
+        ends: format!("{} to {}", id(&anchor), id(&q.related)),
+        path: path.iter().map(id).collect::<Vec<_>>().join(", "),
+        fix: fix.iter().map(id).collect::<Vec<_>>().join(", "),
+    })
 }
 
 fn related_quantifier(

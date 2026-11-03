@@ -42,16 +42,30 @@ impl PathRole {
     }
 }
 
-/// The part of a `holds` body's `.along` path a `.has`/`.none` counts along
-/// ([`Builder::quantified_along`]): from its anchor to the counted entity, with the keys of
-/// its hops, and what an unbindable hop is reported on.
+/// The part of an `.along` path a `.has`/`.none` counts along ([`Builder::quantified_along`]):
+/// from its anchor to the counted entity, with the keys of its hops, and what an unbindable
+/// hop is reported on.
 struct Chain<'a> {
-    uc: UseCaseKey,
-    ck: ConditionKey,
     segment: &'a [EntityKey],
     keys: &'a [Option<FkId>],
-    read: &'a [EntityKey],
+    owner: PathOwner<'a>,
     site: &'a Site,
+}
+
+/// The statement an `.along` path belongs to, which a hop no key binds is reported on
+/// ([`Builder::path_links`]).
+enum PathOwner<'a> {
+    /// The `holds` body of `ck` applied to `uc`, comparing `read`: `UnbindableCondition`.
+    Body {
+        uc: UseCaseKey,
+        ck: ConditionKey,
+        read: &'a [EntityKey],
+    },
+    /// A rule over `scope`: `UnbindableScope`.
+    Rule {
+        constraint: &'a str,
+        scope: &'a [EntityKey],
+    },
 }
 
 fn at_of(binding: &Binding, ek: EntityKey) -> Option<At> {
@@ -925,20 +939,11 @@ impl<'m> Builder<'m> {
         else {
             return Some((binding, Pred::True));
         };
-        let fail = |b: &mut Self, reason: String| {
-            b.diag(
-                scope.to_vec(),
-                StateDiag::UnbindableScope {
-                    constraint: constraint.to_string(),
-                    reason,
-                    site: site.clone(),
-                },
-            );
-            None
-        };
         if let Some(out) = scope.iter().find(|ek| !path.contains(ek)) {
             let id = self.model.entities[*out].id.clone();
-            return fail(self, format!("along(..) does not cover {id}"));
+            let reason = format!("along(..) does not cover {id}");
+            self.unbindable_scope(scope, constraint, reason, site);
+            return None;
         }
         // A path entity the conditions do not read joins the binders. The conditions do not
         // depend on it, so binding it universally under the link is binding it existentially.
@@ -949,8 +954,29 @@ impl<'m> Builder<'m> {
         }
         match self.hop_links(path, keys, &binding) {
             Ok(links) => Some((binding, Pred::And(links))),
-            Err(reason) => fail(self, reason),
+            Err(reason) => {
+                self.unbindable_scope(scope, constraint, reason, site);
+                None
+            }
         }
+    }
+
+    /// `UnbindableScope` on `scope`: the rule `constraint` binds nothing for `reason`.
+    fn unbindable_scope(
+        &mut self,
+        scope: &[EntityKey],
+        constraint: &str,
+        reason: String,
+        site: &Site,
+    ) {
+        self.diag(
+            scope.to_vec(),
+            StateDiag::UnbindableScope {
+                constraint: constraint.to_string(),
+                reason,
+                site: site.clone(),
+            },
+        );
     }
 
     /// The owner links of the hops of an `.along(..)` path, each through the key resolved
@@ -1098,7 +1124,6 @@ impl<'m> Builder<'m> {
             let site = Site::new(ModelRef::Quantifier(i), &q.site);
             let anchor: Binding = vec![(c.anchor, At::Bound(0))];
             let guards = self.cross_all(&c.guards, &anchor, &site);
-            let inner = self.quantified(q, &anchor, 1, &site);
             let kind = match q.kind {
                 QuantifierKind::Has => "has",
                 QuantifierKind::None => "none",
@@ -1113,6 +1138,22 @@ impl<'m> Builder<'m> {
             if !q.conditions.is_empty() {
                 constraint.push_str(&format!(" where ({})", cross_display(model, &q.conditions)));
             }
+            let inner = match &c.along {
+                CrossConstraintScope::RelationPath { path, links, .. } => {
+                    constraint.push_str(&format!(" along {}", entity_list(model, path)));
+                    let chain = Chain {
+                        segment: path,
+                        keys: links,
+                        owner: PathOwner::Rule {
+                            constraint: &constraint,
+                            scope: &[c.anchor],
+                        },
+                        site: &site,
+                    };
+                    self.quantified_along(q, &anchor, 1, chain, &site)
+                }
+                CrossConstraintScope::GlobalProduct => self.quantified(q, &anchor, 1, &site),
+            };
             let text = InvText::Quantifier {
                 anchor: model.entities[c.anchor].id.clone(),
                 related: model.entities[q.related].id.clone(),
@@ -1216,6 +1257,11 @@ impl<'m> Builder<'m> {
         }
         let witness = |(_, at): (EntityKey, At)| matches!(at, At::Bound(_));
         let mut parts = Vec::new();
+        let owner = PathOwner::Body {
+            uc,
+            ck,
+            read: &read,
+        };
         // The pairs of entities a key joins, linked or reported as ambiguous.
         let mut joined: Vec<(EntityKey, EntityKey)> = Vec::new();
         if path.is_empty() {
@@ -1241,12 +1287,12 @@ impl<'m> Builder<'m> {
                 }
                 if to - from >= 2 {
                     let (run, hops) = (&path[from..to], &keys[from..to - 1]);
-                    parts.extend(self.path_links(uc, ck, run, hops, &binding, &read, &body_site));
+                    parts.extend(self.path_links(run, hops, &binding, &owner, &body_site));
                 }
                 from = to;
             }
             if path.len() < 2 {
-                parts.extend(self.path_links(uc, ck, path, keys, &binding, &read, &body_site));
+                parts.extend(self.path_links(path, keys, &binding, &owner, &body_site));
             }
             joined.extend(path.windows(2).map(|hop| (hop[0], hop[1])));
         }
@@ -1269,11 +1315,13 @@ impl<'m> Builder<'m> {
                         .find(|&i| roles[i].is_outer())
                         .expect("a counted entity follows an anchor");
                     let chain = Chain {
-                        uc,
-                        ck,
                         segment: &path[anchor..=r],
                         keys: &keys[anchor..r],
-                        read: &read,
+                        owner: PathOwner::Body {
+                            uc,
+                            ck,
+                            read: &read,
+                        },
                         site: &body_site,
                     };
                     self.quantified_along(q, &binding, depth, chain, site)
@@ -1392,22 +1440,26 @@ impl<'m> Builder<'m> {
         );
     }
 
-    /// [`Self::hop_links`] over `path`, or the `UnbindableCondition` it reports and no link.
-    #[allow(clippy::too_many_arguments)]
+    /// [`Self::hop_links`] over `path`, or the error it reports on `owner` and no link.
     fn path_links(
         &mut self,
-        uc: UseCaseKey,
-        ck: ConditionKey,
         path: &[EntityKey],
         keys: &[Option<FkId>],
         binding: &Binding,
-        read: &[EntityKey],
+        owner: &PathOwner<'_>,
         site: &Site,
     ) -> Vec<Pred> {
         match self.hop_links(path, keys, binding) {
             Ok(links) => links,
             Err(reason) => {
-                self.unbindable(uc, ck, read.to_vec(), reason, site);
+                match *owner {
+                    PathOwner::Body { uc, ck, read } => {
+                        self.unbindable(uc, ck, read.to_vec(), reason, site);
+                    }
+                    PathOwner::Rule { constraint, scope } => {
+                        self.unbindable_scope(scope, constraint, reason, site);
+                    }
+                }
                 Vec::new()
             }
         }
@@ -1427,12 +1479,10 @@ impl<'m> Builder<'m> {
         site: &Site,
     ) -> Pred {
         let Chain {
-            uc,
-            ck,
             segment,
             keys,
-            read,
-            site: body_site,
+            owner,
+            site: path_site,
         } = chain;
         let rows = &segment[1..];
         let mut inner: Binding = binding
@@ -1443,7 +1493,7 @@ impl<'m> Builder<'m> {
         for (i, &ek) in rows.iter().enumerate() {
             inner.push((ek, At::Bound(depth + i as u8)));
         }
-        let links = self.path_links(uc, ck, segment, keys, &inner, read, body_site);
+        let links = self.path_links(segment, keys, &inner, &owner, path_site);
         let conds = self.cross_all(&q.conditions, &inner, site);
         let link = Pred::And(links);
         let body = match q.kind {
@@ -1499,7 +1549,7 @@ impl<'m> Builder<'m> {
             reported.push(ek);
             let usecase = &model.use_cases[uc].id;
             let entity = &model.entities[ek].id;
-            let fix = match key_path(model, &bound, ek) {
+            let fix = match model.key_path(&bound, ek) {
                 Some(path) => {
                     let ids: Vec<&str> =
                         path.iter().map(|e| model.entities[*e].id.as_str()).collect();
@@ -1784,41 +1834,6 @@ impl<'m> Builder<'m> {
             );
         }
     }
-}
-
-/// The shortest chain of keys from one of `from` to `to`, both ends included.
-fn key_path(
-    model: &crate::model::SemanticModel,
-    from: &[EntityKey],
-    to: EntityKey,
-) -> Option<Vec<EntityKey>> {
-    let mut prev: Vec<(EntityKey, Option<EntityKey>)> = from.iter().map(|&e| (e, None)).collect();
-    let mut frontier: Vec<EntityKey> = from.to_vec();
-    while !frontier.is_empty() && !prev.iter().any(|(e, _)| *e == to) {
-        let mut next = Vec::new();
-        for &at in &frontier {
-            for (_, fk) in model.foreign_keys() {
-                let other = match (fk.child == at, fk.parent == at) {
-                    (true, _) => fk.parent,
-                    (_, true) => fk.child,
-                    _ => continue,
-                };
-                if !prev.iter().any(|(e, _)| *e == other) {
-                    prev.push((other, Some(at)));
-                    next.push(other);
-                }
-            }
-        }
-        frontier = next;
-    }
-    let mut path = vec![to];
-    let mut at = to;
-    while let (_, Some(p)) = prev.iter().find(|(e, _)| *e == at)? {
-        path.push(*p);
-        at = *p;
-    }
-    path.reverse();
-    Some(path)
 }
 
 /// The entities a body atom reads, left operand first.

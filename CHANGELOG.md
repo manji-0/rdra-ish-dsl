@@ -568,6 +568,21 @@
 
 ### Fixed
 
+- A `.has`/`.none` on an `invariant` with `.along` counts along the path (#90). The analysis
+  read the `.along` only with `.then`, so `invariant(Member).when(status ==
+  withdrawn).none(Loan.status == open).along(Member, Card, Loan)` kept no path and the
+  lifecycle joined the loans to the member by one key, which does not exist, so it counted
+  every loan in the system. The path is now kept on the rule, its hops' keys resolved as a
+  `forbidden`'s are, and the lifecycle binds the counted entity and the entities between it
+  and the anchor inside the quantifier with the hops' links, the same code a `holds` path
+  uses (#81): `.none` holds when no chain from the anchor's row reaches a matching row,
+  `.has` when some chain does, and nothing on the path has to exist. A path that does not
+  run from the anchor to the counted entity, each entity once, is `QuantifierAlongShape`,
+  with the shortest key path as the rewrite; a hop no key joins is `UnbindableScope`.
+  `list --kind rule` prints the path. BFS and TLC read the same predicate; the engine
+  equivalence suite has a three-entity case where the one-hop reading and the path give
+  different verdicts. No sample writes this form, so their verdicts and state counts are
+  unchanged.
 - `after(UC).assert` on a use case whose writes span several transaction groups is read
   once per run, after the last step, on the run's rows (#83). It was read after every step,
   so `after(Pay).assert(Order.status == paid, Payment.status == captured)` on a `Pay` that

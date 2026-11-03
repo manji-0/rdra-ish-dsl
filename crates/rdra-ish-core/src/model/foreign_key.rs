@@ -187,6 +187,38 @@ impl SemanticModel {
             .map(|(i, fk)| (FkId::at(i), fk))
     }
 
+    /// The shortest chain of keys from one of `from` to `to`, both ends included.
+    pub fn key_path(&self, from: &[EntityKey], to: EntityKey) -> Option<Vec<EntityKey>> {
+        let mut prev: Vec<(EntityKey, Option<EntityKey>)> =
+            from.iter().map(|&e| (e, None)).collect();
+        let mut frontier: Vec<EntityKey> = from.to_vec();
+        while !frontier.is_empty() && !prev.iter().any(|(e, _)| *e == to) {
+            let mut next = Vec::new();
+            for &at in &frontier {
+                for (_, fk) in self.foreign_keys() {
+                    let other = match (fk.child == at, fk.parent == at) {
+                        (true, _) => fk.parent,
+                        (_, true) => fk.child,
+                        _ => continue,
+                    };
+                    if !prev.iter().any(|(e, _)| *e == other) {
+                        prev.push((other, Some(at)));
+                        next.push(other);
+                    }
+                }
+            }
+            frontier = next;
+        }
+        let mut path = vec![to];
+        let mut at = to;
+        while let (_, Some(p)) = prev.iter().find(|(e, _)| *e == at)? {
+            path.push(*p);
+            at = *p;
+        }
+        path.reverse();
+        Some(path)
+    }
+
     pub fn foreign_key(&self, id: FkId) -> &ForeignKey {
         &self.foreign_keys[id.index()]
     }

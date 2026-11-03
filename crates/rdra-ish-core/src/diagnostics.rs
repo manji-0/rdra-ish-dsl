@@ -127,6 +127,18 @@ pub enum RdraError {
     #[error(".{method}(...) names no condition on a related entity\n  hint: write `.{method}(Related.column == value)`")]
     QuantifierWithoutCondition { method: String },
 
+    #[error(".along({path}) does not run from {ends}, which `.{method}(...)` counts, each entity once\n  hint: write `.along({fix})`, the key path from the anchor to the counted entity, or drop `.along(...)` to count the rows one key joins to the anchor")]
+    QuantifierAlongShape {
+        method: String,
+        /// `Anchor to Related`.
+        ends: String,
+        /// The path as written.
+        path: String,
+        /// The shortest key path from the anchor to the counted entity, or, without one, the
+        /// anchor, the other path entities in order, and the counted entity.
+        fix: String,
+    },
+
     #[error("after({usecase}) asserts nothing\n  hint: add `.assert(Entity.column == value)` for what holds after '{usecase}' runs")]
     AfterWithoutAssert { usecase: String },
 

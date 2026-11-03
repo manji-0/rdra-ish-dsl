@@ -362,3 +362,68 @@ creates(Charge, Fine)"#,
     }
     assert!(reasons(".along(Member, Card, Loan)", body).is_empty());
 }
+
+/// Whether the rule `name` is violated at two instances.
+fn rule_violated(model: &SemanticModel, name: &str) -> bool {
+    verify_diags(model)
+        .iter()
+        .any(|d| matches!(d, StateDiag::ConstraintViolated { name: n, .. } if n == name))
+}
+
+/// The library model with `Withdraw` guarded along the path and `rule`, and the same without
+/// the guard.
+fn guarded_and_unguarded(rule: &str) -> (SemanticModel, SemanticModel) {
+    let guarded = library(".along(Member, Card, Loan)", rule);
+    let unguarded = LIBRARY
+        .replace("{PATH}", ".along(Member, Card, Loan)")
+        .replace("applies_to(NoOpenLoan, Withdraw)", "")
+        .replace("{EXTRA}", rule);
+    (guarded, model_from(&unguarded))
+}
+
+/// `invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card,
+/// Loan)` counts the loans of the member's own cards (#90). With `Withdraw` guarded, the rule
+/// holds at two instances while another member's loan is open; read one hop from the anchor,
+/// with no key between Member and Loan, it would count every loan and fail there. Without the
+/// guard a member withdraws with an open loan on their chain, and the rule sees it.
+#[test]
+fn an_invariant_none_along_a_path_counts_the_rows_of_its_own_chain() {
+    let (guarded, unguarded) = guarded_and_unguarded(
+        "invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)",
+    );
+    assert!(!rule_violated(&guarded, "Quantifier_Member_0"));
+    assert!(rule_violated(&unguarded, "Quantifier_Member_0"));
+}
+
+/// `invariant(Loan).when(status == open).has(Member.status == active).along(Loan, Card, Member)`
+/// needs the member of the loan's own card to be active. Without the guard on `Withdraw`, that
+/// member withdraws while the loan is open and the rule fails. (Both readings fail it there,
+/// in the state where that member is the only one; the `.none` above is where they part.)
+#[test]
+fn an_invariant_has_along_a_path_needs_the_row_of_its_own_chain() {
+    let (guarded, unguarded) = guarded_and_unguarded(
+        "invariant(Loan).when(status == open).has(Member.status == active).along(Loan, Card, Member)",
+    );
+    assert!(!rule_violated(&guarded, "Quantifier_Loan_0"));
+    assert!(rule_violated(&unguarded, "Quantifier_Loan_0"));
+}
+
+/// A hop of a quantified invariant's path that no key joins is `UnbindableScope` on the rule.
+#[test]
+fn a_quantifier_path_with_an_unrelated_hop_is_unbindable() {
+    let rule = r#"entity Branch "支店" { id: Int @pk }
+invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Branch, Loan)"#;
+    let reasons: Vec<String> =
+        TransitionSystem::build(&library("", rule), Bounds::STATES, &Scope::ALL)
+            .diags
+            .into_iter()
+            .filter_map(|d| match d.diag {
+                StateDiag::UnbindableScope { reason, .. } => Some(reason),
+                _ => None,
+            })
+            .collect();
+    assert_eq!(
+        reasons,
+        vec!["no N:1, 1:N, or 1:1 relate binds Member and Branch".to_string()]
+    );
+}

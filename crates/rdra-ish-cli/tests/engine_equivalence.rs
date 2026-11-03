@@ -1359,6 +1359,59 @@ fn bfs_and_tlc_agree_on_a_none_along_a_path() {
     }
 }
 
+/// A `.none` and a `.has` on an `invariant` count along the rule's `.along` path (#90), as on
+/// a `holds` (#81). Guarded, both rules hold at two instances, and the `.none` is where the
+/// path and the one-hop reading part: no key joins Member and Loan, so one hop from the
+/// anchor `Quantifier_Member_0` would count another member's open loan and fail. Unguarded,
+/// a member withdraws with an open loan on their own chain, and both engines reach both
+/// violations.
+const QUANTIFIER_ALONG_PATH: &str = r#"
+entity Member "会員" { id: Int @pk  status: Enum(active, withdrawn) @default(active) }
+entity Card "カード" { id: Int @pk }
+entity Loan "貸出" { id: Int @pk  status: Enum(open, returned) @default(open) }
+relate(Card, Member, N:1)
+relate(Loan, Card, N:1)
+usecase Register "登録"
+usecase IssueCard "カード発行"
+usecase Lend "貸出"
+usecase Return "返却"
+usecase Withdraw "退会"
+creates(Register, Member)
+creates(IssueCard, Card)
+creates(Lend, Loan)
+transitions(Return, Loan.status, open -> returned)
+transitions(Withdraw, Member.status, active -> withdrawn)
+condition MemberActive "有効な会員"
+holds(MemberActive, Member.status == active)
+applies_to(MemberActive, IssueCard)
+condition CardOfActive "有効な会員のカード"
+holds(CardOfActive, Member.status == active).along(Loan, Card, Member)
+applies_to(CardOfActive, Lend)
+condition NoOpenLoan "未返却なし"
+holds(NoOpenLoan, Member.status == active).none(Loan.status == open).along(Member, Card, Loan)
+{GUARD}
+invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)
+invariant(Loan).when(status == open).has(Member.status == active).along(Loan, Card, Member)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_quantifier_along_a_path() {
+    let guarded = check_fixture(
+        "quantifier_along_guarded",
+        &QUANTIFIER_ALONG_PATH.replace("{GUARD}", "applies_to(NoOpenLoan, Withdraw)"),
+    );
+    let unguarded = check_fixture(
+        "quantifier_along_unguarded",
+        &QUANTIFIER_ALONG_PATH.replace("{GUARD}", ""),
+    );
+    if let (Some(guarded), Some(unguarded)) = (guarded, unguarded) {
+        for rule in ["Quantifier_Member_0", "Quantifier_Loan_1"] {
+            assert!(!guarded.contains(rule), "{rule}: {guarded:?}");
+            assert!(unguarded.contains(rule), "{rule}: {unguarded:?}");
+        }
+    }
+}
+
 /// Two mandatory keys from Order to Address, and `Place` creates the order without writing an
 /// address (#75). Each key has its own parent param, so an order may ship to one address and
 /// bill another. `Ship` runs while the `SHIP_KEY` address is in the east, and the rule forbids

@@ -642,7 +642,15 @@ links count. Both forms get a real verdict, not a warning. `.along` needs a
 outside the scope is bound under the link, so a pair counts when some instances of the
 middle entities connect it.
 
-`invariant(E).when(...).none(R.col == v)` and `.has(...)` evaluate over the present slots. At one
+`invariant(E).when(...).none(R.col == v)` and `.has(...)` evaluate over the present slots,
+the related slot linked to the anchor's by the owner of the one key between them (the key
+[Joins](#joins) picks), or independent without one. With `.along(E, .., R)`, the related
+entity and every entity between are bound inside the quantifier, with the hops' owner links,
+as a quantified entity of a `holds` path is ([Actions](#actions)): every one `Forall` for
+`.none`, so no chain of linked instances from the anchor's reaches a matching one, and
+`Exists` for `.has`, so some chain does. No instance on the path has to exist. The path
+runs from the anchor to the counted entity, each entity once, or the analysis reports
+`QuantifierAlongShape`; a hop no key joins is `UnbindableScope`. At one
 instance per entity, `states` sees one `E` and one `R`. Use `verify` with
 `--instance-count 2` or more for rules that need two instances.
 
@@ -686,7 +694,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal lies outside `0..max`. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
-| `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
+| `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | The `.along` of a multi-entity rule, or of an `invariant` with `.has`/`.none`, names a hop that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
 | `UnboundAfterRead { anchor, entity }` | `UnboundAfterRead_<E>_<anchor>` | warning | An `after(UC).assert` atom reads an entity that no step of the use case's run binds, so every present row of it must satisfy the atom. Write the entity in the use case to read the run's row. |

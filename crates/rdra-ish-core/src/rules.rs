@@ -6,8 +6,8 @@ use crate::analysis::{body_condition_display, condition_body_display, effect_val
 use crate::lint::node_id;
 use crate::location::LocatedSpan;
 use crate::model::{
-    values_display, CmpRhs, ComparisonProp, CrossEntityCondition, EffectValue, EntityKey, NodeRef,
-    QuantifierKind, RelKind, SemanticModel,
+    values_display, CmpRhs, ComparisonProp, CrossConstraintScope, CrossEntityCondition,
+    EffectValue, EntityKey, NodeRef, QuantifierKind, RelKind, SemanticModel,
 };
 
 /// One row of the business-rule table.
@@ -76,6 +76,18 @@ fn cross_parts(model: &SemanticModel, conds: &[CrossEntityCondition]) -> Vec<Str
 /// `.role(a).role(b)` for the selectors of a join, empty without one.
 pub fn by_display(by: &[String]) -> String {
     by.iter().map(|role| format!(".role({role})")).collect()
+}
+
+/// `.along(A, B).role(r)` for a statement's path with its hop selectors, empty without one.
+pub fn along_display(model: &SemanticModel, scope: &CrossConstraintScope) -> String {
+    let CrossConstraintScope::RelationPath { path, by, .. } = scope else {
+        return String::new();
+    };
+    let ids: Vec<&str> = path
+        .iter()
+        .map(|e| model.entities[*e].id.as_str())
+        .collect();
+    format!(".along({}){}", ids.join(", "), by_display(by))
 }
 
 fn all_of(parts: &[String]) -> String {
@@ -174,6 +186,7 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
             text.push_str(&format!("({})", all_of(&cross_parts(model, &q.conditions))));
         }
         text.push_str(&by_display(&q.by));
+        text.push_str(&along_display(model, &c.along));
         let entities = entity_ids(model, &[c.anchor, q.related]);
         push("quantifier", &c.label, entities, text, vec![], &q.site);
     }

@@ -206,6 +206,9 @@ pub struct QuantifierConstraint {
     pub anchor: EntityKey,
     pub guards: Vec<CrossEntityCondition>,
     pub quantifier: RelatedQuantifier,
+    /// `.along(Anchor, .., Related)`: the path whose keys chain the counted rows to the
+    /// anchor's, in place of the one-hop link. `GlobalProduct` when the rule has none.
+    pub along: CrossConstraintScope,
 
     /// `.label("...")`: the rule in the author's words, for the rule table and violations.
     pub label: Option<std::string::String>,

@@ -76,6 +76,7 @@ pub fn build_model_items_with_scopes(
     condition::check_choices(&model, &mut diags);
     resolve_foreign_keys(&mut model, &mut diags);
     effect::reject_key_copies(&model, &mut diags);
+    constraint::check_quantifier_paths(&mut model, &mut diags);
     resolve_along_links(&mut model, &mut diags);
     check_join_selectors(&model, &mut diags);
     diags.extend(crate::event_flow::api_route_diagnostics(&model));

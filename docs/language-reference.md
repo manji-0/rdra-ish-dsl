@@ -1571,6 +1571,7 @@ per pair, the common case, never writes it.
 | `UnknownOwnerRole` | `.role(role)` names no key on the `.along` path, no key of the quantified entity, no key of an entity the `holds` body compares, or no key between a copy's target and source. |
 | `UnjoinedGuardRead` | A `holds` body compares an entity that no key joins to a row the guarded use case binds, so any row of it satisfies the guard (a warning). |
 | `RoleWithoutJoin` | `.role(...)` on a `forbidden` or `invariant` follows no `.along`, `.has` or `.none`, or `.role(...)` on a `sets` that copies nothing. |
+| `QuantifierAlongShape` | The `.along` of an `invariant` with `.has` or `.none` does not run from the anchor to the counted entity, each entity once. The hint writes the shortest key path between the two. |
 
 In LSP, a role is a symbol: go to definition on `.role(renews)` opens the `relate` that
 declares `.role(renews)`, and find references and rename cover the `.role(...)` and every
@@ -2167,6 +2168,23 @@ closed).has(Invoice)` says a closed order has an invoice, and reads only the lin
 `QuantifierWithoutCondition`. `states` runs one instance per entity, so use
 `verify --instance-count 2` for rules that need two related instances. To make a use case
 respect such a rule, put the same `.none(...)` on a `holds` guard (see Conditions).
+
+`.along(Anchor, .., Related)` after the `.has(...)` or `.none(...)` counts along the path
+instead of the one hop, as on a `holds` (see Conditions): the rows of the related entity,
+and of every entity between, that the hops' keys chain to the anchor's row. `.none` holds
+when no such chain reaches a matching row, so an anchor with no chain at all passes; `.has`
+holds when some chain does. Nothing on the path has to exist. The path starts at the
+anchor and ends at the counted entity, each entity once; any other shape is
+`QuantifierAlongShape`, and the error writes the path as the shortest key path between the
+two. A hop that no key joins is `UnbindableScope`. A `.role(role)` after the `.along`
+picks the key of a hop that two keys join; a `.role` after the `.has`/`.none` is not read
+when the rule has a path.
+
+```rdra
+// A withdrawn member has no open loan on any of their cards. Without the path, no key
+// joins Member and Loan, and the rule would count every loan in the system.
+invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)
+```
 
 #### Fairness: `.fair(UseCase, ...)`
 

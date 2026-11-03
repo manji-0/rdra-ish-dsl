@@ -577,3 +577,79 @@ fn label_is_not_a_chain_method_of_other_predicates() {
         "{diags:?}"
     );
 }
+
+const LIBRARY: &str = r#"
+entity Member "会員" { id: Int @pk  status: Enum(active, withdrawn) @default(active) }
+entity Card "カード" { id: Int @pk }
+entity Loan "貸出" { id: Int @pk  status: Enum(open, returned) @default(open) }
+entity Fine "延滞金" { id: Int @pk }
+relate(Card, Member, N:1)
+relate(Loan, Card, N:1)
+relate(Fine, Loan, N:1)
+"#;
+
+fn library_rule(rule: &str) -> (SemanticModel, Vec<RdraError>) {
+    let (ast, parse_errors) = parse(&format!("{LIBRARY}{rule}\n"));
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors = diags
+        .into_iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error)
+        .collect();
+    (model, errors)
+}
+
+/// The `.along` of a `.has`/`.none` invariant is kept on the rule with its hops' keys (#90), and
+/// the rule table prints it.
+#[test]
+fn a_quantified_invariant_keeps_its_path() {
+    let (model, errors) = library_rule(
+        "invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)",
+    );
+    assert!(errors.is_empty(), "{errors:?}");
+    let [constraint] = model.quantifier_constraints.as_slice() else {
+        panic!("{:?}", model.quantifier_constraints);
+    };
+    let CrossConstraintScope::RelationPath { path, links, .. } = &constraint.along else {
+        panic!("{:?}", constraint.along);
+    };
+    let ids: Vec<&str> = path
+        .iter()
+        .map(|e| model.entities[*e].id.as_str())
+        .collect();
+    assert_eq!(ids, ["Member", "Card", "Loan"]);
+    assert!(links.iter().all(Option::is_some), "{links:?}");
+    let rules = crate::rules::business_rules(&model);
+    assert_eq!(
+        rules[0].text,
+        "when Member.status == withdrawn then none Loan(Loan.status == open).along(Member, Card, Loan)"
+    );
+}
+
+/// A path that does not run from the anchor to the counted entity, each entity once, is
+/// `QuantifierAlongShape`, rewritten from the anchor to the counted entity through the other
+/// path entities in order.
+#[test]
+fn a_quantifier_path_off_the_anchor_or_the_counted_entity_is_an_error_with_the_rewrite() {
+    for (path, fix) in [
+        ("Loan, Card, Member", "Member, Card, Loan"),
+        ("Card, Loan", "Member, Card, Loan"),
+        ("Member, Card, Loan, Fine", "Member, Card, Loan"),
+        ("Member, Card, Card, Loan", "Member, Card, Loan"),
+        ("Loan", "Member, Card, Loan"),
+    ] {
+        let (model, errors) = library_rule(&format!(
+            "invariant(Member).when(status == withdrawn).none(Loan.status == open).along({path})"
+        ));
+        assert!(
+            matches!(
+                errors.as_slice(),
+                [RdraError::QuantifierAlongShape { method, ends, path: p, fix: f }]
+                    if method == "none" && ends == "Member to Loan" && p == path && f == fix
+            ),
+            "{path}: {errors:?}"
+        );
+        assert!(model.quantifier_constraints.is_empty(), "{path}");
+    }
+}

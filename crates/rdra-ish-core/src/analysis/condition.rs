@@ -199,14 +199,7 @@ pub fn condition_body_display(
         text = format!("({text})");
     }
     text.push_str(&crate::rules::by_display(&body.by));
-    if let CrossConstraintScope::RelationPath { path, by, .. } = &body.along {
-        let ids: Vec<&str> = path
-            .iter()
-            .map(|e| model.entities[*e].id.as_str())
-            .collect();
-        text.push_str(&format!(".along({})", ids.join(", ")));
-        text.push_str(&crate::rules::by_display(by));
-    }
+    text.push_str(&crate::rules::along_display(model, &body.along));
     for q in &body.quantifiers {
         let method = match q.kind {
             QuantifierKind::Has => "has",

@@ -385,6 +385,12 @@ pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Dia
                 .values()
                 .filter_map(|c| c.body.as_ref())
                 .map(|b| (&b.along, &b.site)),
+        )
+        .chain(
+            model
+                .quantifier_constraints
+                .iter()
+                .map(|c| (&c.along, &c.quantifier.site)),
         );
     let resolved: Vec<Vec<Option<FkId>>> = scopes
         .map(|(scope, site)| match scope {
@@ -410,6 +416,12 @@ pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Dia
                 .values_mut()
                 .filter_map(|c| c.body.as_mut())
                 .map(|b| &mut b.along),
+        )
+        .chain(
+            model
+                .quantifier_constraints
+                .iter_mut()
+                .map(|c| &mut c.along),
         );
     for (scope, resolved) in scopes.zip(resolved) {
         if let CrossConstraintScope::RelationPath { links, .. } = scope {
