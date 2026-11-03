@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## v1.0.0 - 2026-11-03
+
+From this release on, rdra-ish follows semantic versioning, and docs/compatibility.md lists
+what a minor or patch release keeps: a model that loads keeps loading, and `check` and
+`verify` give it the same verdict within the same printed bounds.
+
+Upgrading from v0.4.0: run `python3 scripts/migrate-syntax-v3.py <model dir>` to rewrite
+`sets(UC, E, col == v)` as `sets(UC, E.col == v)`, `drives(UC, E, cmp, b)` and the
+four-argument `sets` as `drives(UC, E.col op rhs, b)`, a rule with no leading entity as one
+that names its entities first, and a `.by(role)` that picks a key as `.role(role)`. Each old
+form fails to load with the line to write. Verdicts change where the old reading was wrong:
+a `@check` no longer passes on null, an `after(UC).assert` on a use case through several
+APIs is read once after the run, a `.has`/`.none` with `.along` counts along the path, and
+the transaction groups of one use case run in order under the use case's guard.
 
 ### Added
 
