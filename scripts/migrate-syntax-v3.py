@@ -235,12 +235,12 @@ def migrate_text(text: str, path: Path, report: Report) -> str:
 
 def migrate_file(path: Path, dry_run: bool) -> Report:
     report = Report()
-    text = path.read_text(encoding="utf-8")
+    text = path.read_bytes().decode("utf-8")
     new_text = migrate_text(text, path, report)
     if new_text != text:
         report.files.append(path)
         if not dry_run:
-            path.write_text(new_text, encoding="utf-8")
+            path.write_bytes(new_text.encode("utf-8"))
     return report
 
 
