@@ -45,6 +45,18 @@
   start. It is not raised when every use case that creates the entity sets the column. Of the
   samples, clinic-ops (`Appointment.referral`, `Charge.kind`, `InsurancePolicy.limit_category`)
   and patent-ops (`OfficeAction.amendment`) draw it; each value is the actor's choice there.
+- Four `lint` rules (#89), none of them an error. The warnings
+  `comparison-unsatisfiable-in-range` and `comparison-trivial-in-range` mark a comparison of
+  an Int, Money, or Decimal column with a literal that no value, or every value, in `0..5`
+  satisfies (`qty > 5`, `qty >= 0`), in a rule or a `holds` body; a `@null` column is never
+  trivial, since null fails an order comparison. The info `triggered-usecase-unguarded` marks
+  a use case only an event or a timer starts that writes something and has no condition
+  guard and no `transitions` from-state, so `check` runs it before the event too. The info
+  `condition-applied-without-body` marks a condition with no `holds` body and no `combines`
+  that `applies_to` a use case or an API, which guards nothing; one that `combines` is an RDRA
+  trace link and is not marked. Of the samples, only clinic-ops draws one:
+  `triggered-usecase-unguarded` on `CreateCharge`, which `EvEncounterSigned` starts and which
+  `check` runs before any encounter is signed.
 - A deadlock error of `check` at one instance per entity, where a way out needs a row of an
   entity some use case creates, ends with a row that says the deadlock may clear at
   `--instance-count 2`, which `verify` runs (#89). The error keeps its name and severity.

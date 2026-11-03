@@ -234,6 +234,17 @@ It also emits these `info` rows:
   `invariant(...).when(...).none/has(...)`, or `after(...).assert(...)` with no
   [`.label("...")`](./language-reference.md#labelling-a-rule), so `list --kind rule` shows it
   with an empty label. It is not shown in the editor.
+- `triggered-usecase-unguarded` marks a use case that only an event or a timer starts (no
+  `performs` names it), that writes something, and that no condition guards and no
+  `transitions` gives a from-state. The order of `raises` and `triggers` adds no guard, so
+  `check` and `verify` run it in every reachable state, before the event too. The hint is to
+  add the state the event follows as a `holds` body applied to the use case, or as a
+  `transitions` arm.
+- `condition-applied-without-body` marks a condition with no `holds` body and no `combines`
+  that `applies_to` a use case or an API. It guards nothing and links no variation or state
+  model: `check` and `verify` run the use case whether or not it holds. The hint is to write
+  the body when it should guard the use case. A condition that `combines` is an RDRA trace
+  link and is not marked.
 
 These rules are `warning` rows:
 
@@ -256,6 +267,15 @@ These rules are `warning` rows:
   `holds` body names neither a variation-typed column nor a lifecycle column and guards no use
   case. A body that `applies_to` a use case or an API, or that a `transitions` arm or a
   `chooses` value names in `.when`, is a guard and is not flagged.
+
+- `comparison-unsatisfiable-in-range` warns on a comparison of an Int, Money, or Decimal
+  column with a literal that no value in `0..5`, the Int range `check` and `verify` explore,
+  satisfies, such as `qty > 5` or `qty < 0`, in a rule or a `holds` body. What it guards or
+  forbids never applies there.
+- `comparison-trivial-in-range` warns on such a comparison that every value in `0..5`
+  satisfies, such as `qty >= 0` or `qty <= 5`, on a column that is not `@null`. It constrains
+  nothing there. The hint of both is to compare with a value inside the range, or to drop the
+  comparison.
 
 - `deprecated-syntax` warns on a
   [deprecated form](./language-reference.md#deprecated-and-removed-forms): the model loads

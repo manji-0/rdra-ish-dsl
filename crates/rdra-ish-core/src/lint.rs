@@ -5,7 +5,8 @@ use std::collections::HashMap;
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::LocatedSpan;
 use crate::model::{
-    node_ref_kind, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StepKey,
+    node_ref_kind, CmpOpModel, CmpRhs, ColumnType, ComparisonProp, CrossCmpRhs,
+    CrossEntityCondition, EntityKey, NodeRef, RelKind, SemanticModel, StateKey, StepKey,
 };
 use crate::rdra_rules::{owned_by_registry, rdra_findings};
 use crate::refinement::{assess, Assessment, Depth, Next, StageId};
@@ -251,6 +252,9 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_enum_attributes(model, &mut findings);
     lint_unwritten_field_columns(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
+    lint_bodiless_guards(model, &mut findings);
+    lint_int_comparisons(model, &mut findings);
+    lint_unguarded_triggered(model, &mut findings);
     lint_rule_labels(model, &mut findings);
     lint_goals(model, &mut findings);
     lint_screen_transitions(model, &mut findings);
@@ -752,6 +756,253 @@ fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
                 condition.id
             ),
             "apply it to the use case it guards with `applies_to`, compare a column typed by a variation or a column some `transitions` moves, or use `combines` to link the condition for traceability",
+        );
+    }
+}
+
+/// A condition with no `holds` body and no `combines` that `applies_to` a use case or an API
+/// guards nothing in `check` and `verify` and links no variation or state model, so it is
+/// only a name: the use case runs whether or not it holds. One that `combines` is an RDRA
+/// trace link and is left alone.
+fn lint_bodiless_guards(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for (key, condition) in &model.conditions {
+        if condition.body.is_some() || !crate::analysis::condition_edges(model, key).is_empty() {
+            continue;
+        }
+        let guarded: Vec<String> = model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::AppliesTo && rel.from == NodeRef::Condition(key))
+            .filter_map(|rel| match &rel.to {
+                NodeRef::UseCase(uc) => Some(model.use_cases[*uc].id.clone()),
+                NodeRef::Api(api) => Some(model.apis[*api].id.clone()),
+                _ => None,
+            })
+            .collect();
+        if guarded.is_empty() {
+            continue;
+        }
+        push_element_info(
+            model,
+            issues,
+            "condition",
+            &condition.id,
+            "condition-applied-without-body",
+            &format!(
+                "condition {} applies to {} but has no holds body, so check and verify run {} whether or not it holds",
+                condition.id,
+                guarded.join(", "),
+                if guarded.len() == 1 { "it" } else { "them" }
+            ),
+            &format!(
+                "write the rule as `holds({}, Entity.column == value)` to guard the use case, or keep it as a trace link",
+                condition.id
+            ),
+        );
+    }
+}
+
+/// An order comparison of a numeric column with an Int literal, where a rule or a `holds`
+/// body writes it.
+struct IntComparison {
+    entity: EntityKey,
+    column: String,
+    op: CmpOpModel,
+    value: i64,
+    site: Option<LocatedSpan>,
+}
+
+fn int_comparisons(model: &SemanticModel) -> Vec<IntComparison> {
+    let mut out = Vec::new();
+    let mut single = |entity: EntityKey, props: &[ComparisonProp], site: &Option<LocatedSpan>| {
+        for prop in props {
+            if let CmpRhs::IntLit(value) = prop.rhs {
+                out.push(IntComparison {
+                    entity,
+                    column: prop.lhs_column.clone(),
+                    op: prop.op,
+                    value,
+                    site: site.clone(),
+                });
+            }
+        }
+    };
+    for c in &model.forbidden_constraints {
+        single(c.entity, &c.comparisons, &c.site);
+    }
+    for c in &model.required_constraints {
+        single(c.entity, &c.comparisons, &c.site);
+    }
+    for c in &model.exclusive_constraints {
+        single(c.entity, &c.comparisons, &c.site);
+    }
+    for c in &model.entity_invariants {
+        single(c.entity, &c.guard_comparisons, &c.site);
+        single(c.entity, &c.required_comparisons, &c.site);
+    }
+    let mut cross = |conds: &mut dyn Iterator<Item = &CrossEntityCondition>,
+                     site: &Option<LocatedSpan>| {
+        for cond in conds {
+            if let CrossEntityCondition::Comparison(prop) = cond {
+                if let CrossCmpRhs::IntLit(value) = prop.rhs {
+                    out.push(IntComparison {
+                        entity: prop.lhs.entity,
+                        column: prop.lhs.column.clone(),
+                        op: prop.op,
+                        value,
+                        site: site.clone(),
+                    });
+                }
+            }
+        }
+    };
+    for c in &model.cross_forbidden_constraints {
+        cross(&mut c.conditions.iter(), &c.site);
+    }
+    for c in &model.cross_entity_invariants {
+        cross(&mut c.guards.iter().chain(&c.requireds), &c.site);
+    }
+    for c in &model.quantifier_constraints {
+        cross(
+            &mut c.guards.iter().chain(&c.quantifier.conditions),
+            &c.quantifier.site,
+        );
+    }
+    for (_, condition) in &model.conditions {
+        if let Some(body) = &condition.body {
+            cross(&mut body.read_conditions(), &body.site);
+        }
+    }
+    out
+}
+
+/// A comparison of an Int, Money or Decimal column with a literal that no value of the bounded
+/// range `0..int_max` satisfies never holds, and one that every value satisfies, on a column
+/// that is not `@null`, always does: `check` and `verify` explore only that range, so the rule
+/// or the guard that writes it means something other than it says there.
+fn lint_int_comparisons(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    let max = i64::from(crate::lifecycle::Bounds::STATES.int_max);
+    let mut seen: Vec<(EntityKey, String, &'static str, i64, Option<LocatedSpan>)> = Vec::new();
+    for c in int_comparisons(model) {
+        let entity = &model.entities[c.entity];
+        let Some(column) = entity.columns.iter().find(|col| col.name == c.column) else {
+            continue;
+        };
+        if !matches!(
+            column.col_type,
+            ColumnType::Int | ColumnType::Money | ColumnType::Decimal
+        ) {
+            continue;
+        }
+        let holds = |v: i64| match c.op {
+            CmpOpModel::Lt => Some(v < c.value),
+            CmpOpModel::Le => Some(v <= c.value),
+            CmpOpModel::Gt => Some(v > c.value),
+            CmpOpModel::Ge => Some(v >= c.value),
+            _ => None,
+        };
+        let Some(count) = (0..=max)
+            .map(holds)
+            .try_fold(0, |n, h| h.map(|h| n + usize::from(h)))
+        else {
+            continue;
+        };
+        let key = (
+            c.entity,
+            c.column.clone(),
+            c.op.as_str(),
+            c.value,
+            c.site.clone(),
+        );
+        if seen.contains(&key) {
+            continue;
+        }
+        let text = format!("{}.{} {} {}", entity.id, c.column, c.op.as_str(), c.value);
+        let (rule, message, hint) = if count == 0 {
+            (
+                "comparison-unsatisfiable-in-range",
+                format!(
+                    "{text} holds for no value in 0..{max}, the Int range check and verify explore, so what it guards or forbids never applies"
+                ),
+                format!("compare with a value inside 0..{max}, or drop the comparison"),
+            )
+        } else if count == (max + 1) as usize && !column.is_nullable {
+            (
+                "comparison-trivial-in-range",
+                format!(
+                    "{text} holds for every value in 0..{max}, the Int range check and verify explore, so it constrains nothing"
+                ),
+                format!("drop the comparison, or compare with a value inside 0..{max} that some value fails"),
+            )
+        } else {
+            continue;
+        };
+        seen.push(key);
+        let mut issue = LintIssue::new(
+            LintSeverity::Warning,
+            rule,
+            "entity",
+            entity.id.clone(),
+            message,
+            hint,
+        );
+        if let Some(site) = c.site {
+            issue = issue.with_location(site);
+        }
+        issues.push(issue);
+    }
+}
+
+/// A use case only an event or a timer starts runs, in `check` and `verify`, in every state
+/// where it can: the order of `raises` and `triggers` adds no guard. With no condition guard
+/// and no `transitions` from-state, nothing keeps it from running before the event.
+fn lint_unguarded_triggered(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    let writing: std::collections::HashSet<_> = crate::tx::infer_usecase_transactions(model)
+        .iter()
+        .filter(|utx| utx.writes().next().is_some())
+        .map(|utx| utx.usecase)
+        .collect();
+    let guarded: std::collections::HashSet<_> = crate::analysis::applied_bodies(model)
+        .iter()
+        .map(|b| b.usecase)
+        .collect();
+    let mut triggered: Vec<_> = crate::access::triggered_use_cases(model)
+        .into_iter()
+        .collect();
+    triggered.sort_by(|a, b| model.use_cases[*a].id.cmp(&model.use_cases[*b].id));
+    for uc in triggered {
+        let performed = model
+            .relations
+            .iter()
+            .any(|rel| rel.kind == RelKind::Performs && rel.to == NodeRef::UseCase(uc));
+        let from_state = model.state_transitions.iter().any(|t| t.usecase == uc);
+        if performed || from_state || guarded.contains(&uc) || !writing.contains(&uc) {
+            continue;
+        }
+        let starters: Vec<String> = model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Triggers && rel.to == NodeRef::UseCase(uc))
+            .filter_map(|rel| match &rel.from {
+                NodeRef::Event(e) => Some(format!("event {}", model.events[*e].id)),
+                NodeRef::Timer(t) => Some(format!("timer {}", model.timers[*t].id)),
+                _ => None,
+            })
+            .collect();
+        let id = &model.use_cases[uc].id;
+        push_element_info(
+            model,
+            issues,
+            "usecase",
+            id,
+            "triggered-usecase-unguarded",
+            &format!(
+                "use case {id} is started only by {}, and no condition guards it and no transitions gives it a from-state, so check and verify run it in every reachable state, before the event too",
+                starters.join(" and ")
+            ),
+            &format!(
+                "add the state the event follows as a guard: `holds(C, Entity.column == value)` with `applies_to(C, {id})`, or a `transitions({id}, Entity.column, from -> to)` arm"
+            ),
         );
     }
 }
@@ -1798,5 +2049,105 @@ forbidden(Order, status == open, paid_at == present)
         assert!(lint_review_diagnostics(&model)
             .iter()
             .all(|d| !d.error.to_string().contains("rule-unlabeled")));
+    }
+}
+
+#[cfg(test)]
+mod range_and_guard_tests {
+    use super::*;
+    use crate::build_model;
+    use rdra_ish_syntax::parse;
+
+    fn findings(src: &str, rule: &str) -> Vec<LintIssue> {
+        let (ast, parse_errors) = parse(src);
+        assert!(parse_errors.is_empty(), "{parse_errors:?}");
+        let (model, diags) = build_model(&ast);
+        assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+        collect_findings(&model)
+            .into_iter()
+            .filter(|issue| issue.rule == rule)
+            .collect()
+    }
+
+    const ORDER: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending)  qty: Int  left: Int @null }
+usecase Place "注文"
+usecase Pay "支払"
+usecase Remind "督促"
+creates(Place, Order)
+updates(Pay, Order)
+transitions(Pay, Order.status, pending -> paid)
+"#;
+
+    /// `check` and `verify` read an Int column in 0..5 (#89): a comparison no value there
+    /// satisfies, and one every value satisfies on a column that is not `@null`, are lint
+    /// warnings; one some value fails is not flagged, and neither is `left >= 0`, which null
+    /// fails.
+    #[test]
+    fn a_comparison_the_int_range_decides_is_a_warning() {
+        let src = format!(
+            "{ORDER}forbidden(Order, qty > 5)\nrequired(Order, qty <= 5)\nforbidden(Order, qty > 2, status == paid)\nforbidden(Order, left >= 0, status == paid)\ncondition Empty \"空\"\nholds(Empty, Order.qty < 0)\napplies_to(Empty, Pay)\n"
+        );
+        let unsat: Vec<String> = findings(&src, "comparison-unsatisfiable-in-range")
+            .into_iter()
+            .inspect(|i| assert_eq!(i.severity, LintSeverity::Warning))
+            .map(|i| i.message)
+            .collect();
+        assert_eq!(unsat.len(), 2, "{unsat:?}");
+        assert!(
+            unsat[0].starts_with("Order.qty > 5 holds for no value in 0..5"),
+            "{unsat:?}"
+        );
+        assert!(
+            unsat[1].starts_with("Order.qty < 0 holds for no value"),
+            "{unsat:?}"
+        );
+        let trivial: Vec<String> = findings(&src, "comparison-trivial-in-range")
+            .into_iter()
+            .inspect(|i| assert_eq!(i.severity, LintSeverity::Warning))
+            .map(|i| i.message)
+            .collect();
+        assert_eq!(trivial.len(), 1, "{trivial:?}");
+        assert!(
+            trivial[0].starts_with("Order.qty <= 5 holds for every value"),
+            "{trivial:?}"
+        );
+    }
+
+    /// A use case only an event starts runs before the event too (#89): with no guard and no
+    /// from-state it is the info `triggered-usecase-unguarded`. A guard, a from-state, or an
+    /// actor that performs it clears the info.
+    #[test]
+    fn a_triggered_use_case_with_no_guard_is_info() {
+        let triggered = format!(
+            "{ORDER}event Paid \"支払済み\"\nraises(Pay, Paid)\ntriggers(Paid, Remind)\nupdates(Remind, Order)\nsets(Remind, Order.qty == 1)\n"
+        );
+        let ids = |src: &str| -> Vec<String> {
+            findings(src, "triggered-usecase-unguarded")
+                .into_iter()
+                .inspect(|i| assert_eq!(i.severity, LintSeverity::Info))
+                .map(|i| i.subject_id)
+                .collect()
+        };
+        assert_eq!(ids(&triggered), vec!["Remind".to_string()]);
+        assert!(ids(&format!(
+            "{triggered}condition IsPaid \"支払済み\"\nholds(IsPaid, Order.status == paid)\napplies_to(IsPaid, Remind)\n"
+        ))
+        .is_empty());
+        assert!(ids(&format!(
+            "{triggered}actor Clerk \"係\"\nperforms(Clerk, Remind)\n"
+        ))
+        .is_empty());
+    }
+
+    /// A condition with no `holds` body guards nothing in `check` (#89), so applying it to a
+    /// use case is the info `condition-applied-without-body`.
+    #[test]
+    fn a_bodiless_condition_applied_to_a_use_case_is_info() {
+        let src = format!("{ORDER}condition Bare \"本文なし\"\napplies_to(Bare, Pay)\ncondition Kept \"本文あり\"\nholds(Kept, Order.status == pending)\napplies_to(Kept, Pay)\ncondition Traced \"追跡\"\ncombines(Traced, Order.status)\napplies_to(Traced, Pay)\n");
+        let found = findings(&src, "condition-applied-without-body");
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].subject_id, "Bare");
+        assert_eq!(found[0].severity, LintSeverity::Info);
     }
 }
