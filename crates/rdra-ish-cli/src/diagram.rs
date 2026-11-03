@@ -17,7 +17,9 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::DiagramKind;
-use crate::list_output::{note_state_errors, reject_state_errors_except_deadlock};
+use crate::list_output::{
+    note_state_errors, reject_state_errors_except_deadlock, READS_NO_LIFECYCLE,
+};
 use crate::load::reject_model_errors;
 use rdra_ish_core::{load_project, Project};
 
@@ -59,7 +61,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
             derive_states_built(&model, &LifecycleScope::ALL, Bounds::STATES, Caps::STATES);
         state.marks = StateMarks::from_report(&report);
     } else {
-        note_state_errors(&program, &model);
+        note_state_errors(&program, &model, READS_NO_LIFECYCLE);
     }
 
     for buc_id in &buc {

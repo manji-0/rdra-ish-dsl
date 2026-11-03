@@ -50,6 +50,13 @@ constraint, one `PROPERTY` per `after` assertion and temporal property, and
 `CHECK_DEADLOCK FALSE`. Lifecycle models often end in terminal states with no enabled
 action, and `Spec` allows stuttering.
 
+TLC on the exported pair therefore checks the invariants and properties only. It does not
+find a deadlock or a state with no witness. Those come from the BFS that `check` and
+`verify` run (see [What `verify` checks](#what-verify-checks)), and `verify` runs TLC and
+the BFS both.
+When `check` finds lifecycle errors, `export --kind tla` still writes the pair, exits 0,
+and prints one note with the error count that says to run `verify`.
+
 ## Mapping
 
 | RDRA | TLA+ |

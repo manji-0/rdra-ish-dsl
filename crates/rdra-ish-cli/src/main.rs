@@ -21,7 +21,7 @@ use export::export_artifact;
 use fmt_cmd::run_fmt;
 use list_output::{
     format_lint_issues, format_rules, format_transitions, list_elements, note_state_errors,
-    reject_state_errors, state_findings,
+    reject_state_errors, state_findings, READS_NO_LIFECYCLE, TLC_MISSES_STATE_MODELS,
 };
 use load::{deny_deprecated, eprint_diagnostic, reject_model_errors};
 use rdra_ish_core::lifecycle::{Caps, Scope, Severity};
@@ -232,7 +232,7 @@ fn main() -> Result<()> {
             if kind.reads_lifecycle() {
                 reject_state_errors(&program, &model)?;
             } else if !matches!(kind, ExportKind::Tla) {
-                note_state_errors(&program, &model);
+                note_state_errors(&program, &model, READS_NO_LIFECYCLE);
             }
 
             let view = View::whole();
@@ -246,6 +246,7 @@ fn main() -> Result<()> {
                 };
                 let bounds = export::tla_bounds(instance_count, int_range_max)?;
                 let bundle = export::tla_bundle(&model, bounds, module_name)?;
+                note_state_errors(&program, &model, TLC_MISSES_STATE_MODELS);
                 let (tla_path, cfg_path) = if out.extension().is_some_and(|e| e == "tla") {
                     let cfg = out.with_extension("cfg");
                     (out.clone(), cfg)

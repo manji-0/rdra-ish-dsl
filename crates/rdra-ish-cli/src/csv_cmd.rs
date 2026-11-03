@@ -14,7 +14,7 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{CsvFormat, CsvKind};
-use crate::list_output::{note_state_errors, reject_state_errors};
+use crate::list_output::{note_state_errors, reject_state_errors, READS_NO_LIFECYCLE};
 use crate::load::reject_model_errors;
 use rdra_ish_core::{load_project, Project};
 
@@ -28,7 +28,7 @@ pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBu
     reject_model_errors(&program, &diags)?;
     // The entity list is the data layer; the other CSVs keep the lifecycle gate.
     if matches!(kind, CsvKind::Entity) {
-        note_state_errors(&program, &model);
+        note_state_errors(&program, &model, READS_NO_LIFECYCLE);
     } else {
         reject_state_errors(&program, &model)?;
     }

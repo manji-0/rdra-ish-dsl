@@ -82,6 +82,31 @@ fn diagrams_of_declared_facts_draw_despite_lifecycle_errors() {
     }
 }
 
+/// TLC does not look for deadlocks or witnesses, so the note sends a hand-run TLC user to
+/// `verify`; the export itself still writes and exits 0.
+#[test]
+fn tla_export_writes_with_a_note_that_names_verify() {
+    let dir = scratch("export_gate_tla");
+    for sample in [
+        "samples/formal-verification/deadlock.rdra",
+        "samples/formal-verification/unwitnessed_state.rdra",
+        FAILING,
+    ] {
+        let out = dir.join(Path::new(sample).file_stem().unwrap());
+        let output = rdra_ish(&["export", sample, "--kind", "tla"], &out);
+        assert!(output.status.success(), "{sample}: {output:?}");
+        assert!(out.join("RdraSpec.tla").is_file(), "{sample} wrote no .tla");
+        assert!(out.join("RdraSpec.cfg").is_file(), "{sample} wrote no .cfg");
+        assert_eq!(note_count(&output), 1, "{sample}: {output:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("CHECK_DEADLOCK FALSE"),
+            "{sample}: {stderr}"
+        );
+        assert!(stderr.contains("rdra-ish verify"), "{sample}: {stderr}");
+    }
+}
+
 #[test]
 fn lifecycle_exports_refuse_on_lifecycle_errors() {
     let dir = scratch("export_gate_lifecycle");

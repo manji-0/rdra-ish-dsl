@@ -102,6 +102,14 @@
   `fmt` rewrites files only with `--write`, that `csv` writes `out.<kind>.csv` and prints no
   rows, and that a one-instance deadlock may clear in `verify`.
 
+### Fixed
+
+- `export --kind tla` printed no note when `check` finds lifecycle errors, so a TLC run by
+  hand passed a model with a deadlock or a state with no witness: the `.cfg` sets
+  `CHECK_DEADLOCK FALSE`, and witnesses come only from the BFS (#93). The export now
+  prints the note the other data exports print, with the error count, and says that TLC
+  alone checks neither, so run `verify`. It still writes the pair and exits 0.
+
 ## v1.0.0 - 2026-11-03
 
 From this release on, rdra-ish follows semantic versioning, and docs/compatibility.md lists

@@ -653,18 +653,23 @@ fn reject_errors_where(
     Ok(())
 }
 
-/// Data-layer outputs read no reachability result, so lifecycle errors only earn a note.
-pub(crate) fn note_state_errors(program: &ResolvedProgram, model: &SemanticModel) {
+/// An output that prints no reachability result writes on lifecycle errors, with one note
+/// that counts them and ends in `why`, the reason the output is still worth writing.
+pub(crate) fn note_state_errors(program: &ResolvedProgram, model: &SemanticModel, why: &str) {
     let errors = state_consistency_findings(program, model)
         .into_iter()
         .filter(|finding| finding.severity == Severity::Error)
         .count();
     if errors > 0 {
-        eprintln!(
-            "note: the lifecycle has {errors} error(s) (see `rdra-ish check`); this output does not read the lifecycle"
-        );
+        eprintln!("note: the lifecycle has {errors} error(s) (see `rdra-ish check`); {why}");
     }
 }
+
+/// The reason a data-layer or declared-facts output writes on lifecycle errors.
+pub(crate) const READS_NO_LIFECYCLE: &str = "this output does not read the lifecycle";
+
+/// The reason the TLA+ export writes on lifecycle errors, and what TLC alone misses.
+pub(crate) const TLC_MISSES_STATE_MODELS: &str = "TLC alone does not check deadlocks or witnesses (the .cfg sets CHECK_DEADLOCK FALSE); run `rdra-ish verify`, which adds them";
 
 /// A constraint violation in the wording `check` has always used for its kind.
 fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> {
