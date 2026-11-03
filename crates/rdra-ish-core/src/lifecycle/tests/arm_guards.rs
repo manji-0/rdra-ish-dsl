@@ -28,7 +28,7 @@ transitions(Decide, Doc.status, searched -> secret)
 transitions(Decide, Doc.status, searched -> drop)
 "#;
 
-const OPENS: &str = "sets(Unlock, Gate, open == true)";
+const OPENS: &str = "sets(Unlock, Gate.open == true)";
 
 fn arm_never_taken(d: &Derived) -> Vec<String> {
     d.diags
@@ -90,7 +90,7 @@ entity Doc "届出" {
   acquired: Bool @default(false)
 }
 creates(Submit, Doc)
-sets(Acquire, Doc, acquired == true)
+sets(Acquire, Doc.acquired == true)
 condition Acquired "権利を取得している"
 holds(Acquired, Doc.acquired == true)
 transitions(Decide, Doc.status, searched -> file).when(Acquired)
@@ -189,7 +189,7 @@ entity Doc "届出" {
 }
 creates(Submit, Doc)
 usecase Approve "Approve"
-sets(Approve, Doc, ok == true)
+sets(Approve, Doc.ok == true)
 condition Good "Good"
 holds(Good, Doc.ok == true)
 condition Bad "Bad"

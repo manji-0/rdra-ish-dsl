@@ -83,7 +83,7 @@ creates(Open, Session)
 creates(Open, SessionView)
 transitions(Logout, Session.status, active -> ended)
 updates(Logout, SessionView)
-sets(Logout, SessionView, status == ended)
+sets(Logout, SessionView.status == ended)
 exposes(Auth, SessionView).upsert()
 "#;
 
@@ -209,7 +209,7 @@ fn a_condition_guards_the_first_step_of_the_use_case_and_an_api_body_its_own_ste
     let conditions = |target: &str, body: &str| {
         split_pay(&format!(
             "condition Ready \"可\"\nholds(Ready, {body})\napplies_to(Ready, {target})\n\
-             usecase Rush \"急ぎ\"\nsets(Rush, Order, rush == true)\nsets(Staff, Desk, open == true)"
+             usecase Rush \"急ぎ\"\nsets(Rush, Order.rush == true)\nsets(Staff, Desk.open == true)"
         ))
     };
     let guarded = |ts: &TransitionSystem| -> Vec<String> {
@@ -407,7 +407,7 @@ updates(ClaimApi, Claim)
 transitions(OpenSettlement, Claim.status, open -> negotiating)
 invokes(OpenSettlement, SettlementApi)
 creates(SettlementApi, Settlement)
-sets(Flag, Claim, flagged == true)
+sets(Flag, Claim.flagged == true)
 condition NoSettlementYet "示談未作成"
 holds(NoSettlementYet, Claim.status == negotiating).none(Settlement)
 applies_to(NoSettlementYet, Flag)
@@ -433,7 +433,7 @@ fn another_use_case_interleaves_between_two_steps_of_a_run() {
     );
     let without_flag = INTERLEAVED_SPLIT
         .replace("applies_to(NoSettlementYet, Flag)", "")
-        .replace("sets(Flag, Claim, flagged == true)", "");
+        .replace("sets(Flag, Claim.flagged == true)", "");
     let d = derive_src(&without_flag);
     assert!(
         !d.diags
@@ -465,7 +465,7 @@ updates(ClaimApi, Claim)
 transitions(OpenSettlement, Claim.status, open -> negotiating)
 invokes(OpenSettlement, SettlementApi)
 creates(SettlementApi, Settlement)
-sets(Veto, Claim, ok == false)
+sets(Veto, Claim.ok == false)
 transitions(Close, Claim.status, negotiating -> closed)
 condition Ok "可"
 holds(Ok, Claim.ok == true)

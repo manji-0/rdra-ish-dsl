@@ -17,12 +17,12 @@ entity SessionView "Session (published)" {{ view_id: Int @pk  status: Enum(activ
 entity LoginLog "Login log" {{ id: Int @pk  result: Enum(ok, failed) }}
 creates(Login, Session)
 updates(Login, SessionView)
-sets(Login, SessionView, status == active)
+sets(Login, SessionView.status == active)
 creates(Login, LoginLog)
-sets(Login, LoginLog, result == ok)
+sets(Login, LoginLog.result == ok)
 transitions(Revoke, Session.status, active -> revoked)
 updates(Revoke, SessionView)
-sets(Revoke, SessionView, status == ended)
+sets(Revoke, SessionView.status == ended)
 exposes(Auth, Login)
 exposes(Auth, SessionView).upsert()
 exposes(Auth, LoginLog).append()
@@ -178,7 +178,7 @@ fn a_published_entity_keys_only_to_a_published_entity() {
 #[test]
 fn a_published_write_outside_an_internal_change_is_reported() {
     let names = publication_names(&owner(
-        "usecase Audit \"Audit\"\nperforms(User, Audit)\nupdates(Audit, SessionView)\nsets(Audit, SessionView, status == ended)",
+        "usecase Audit \"Audit\"\nperforms(User, Audit)\nupdates(Audit, SessionView)\nsets(Audit, SessionView.status == ended)",
     ));
     assert_eq!(names, [("PublishedNotInSourceTx", false)]);
     let two_groups = owner(
@@ -210,7 +210,7 @@ entity Session "Session" { id: Int @pk  status: Enum(active, revoked) @default(a
 entity SessionView "Session (published)" { id: Int @pk  status: Enum(active, ended) }
 creates(SessionApi, Session)
 creates(ViewApi, SessionView)
-sets(Login, SessionView, status == active)
+sets(Login, SessionView.status == active)
 exposes(Auth, SessionView).upsert()
 "#;
     let msgs: Vec<String> = diagnostics(src)

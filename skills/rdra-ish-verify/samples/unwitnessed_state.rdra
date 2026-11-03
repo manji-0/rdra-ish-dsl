@@ -30,7 +30,7 @@ transitions(Pay, Order.status, pending -> paid)
 transitions(Ship, Order.status, paid -> shipped)
 transitions(Refund, Order.status, shipped -> refunded)
 
-sets(Ship, Order, shipped_at == present)
+sets(Ship, Order.shipped_at == present)
 
 condition RefundWindow "返金受付期間"
 holds(RefundWindow, Order.status == pending)

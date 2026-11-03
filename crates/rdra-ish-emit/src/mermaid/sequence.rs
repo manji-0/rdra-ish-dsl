@@ -597,7 +597,7 @@ reads(PayApi, Bill)
 updates(PayApi, Bill)
 creates(PayApi, Receipt)
 transitions(Pay, Bill.status, open -> paid)
-sets(Pay, Bill, paid_at == present)
+sets(Pay, Bill.paid_at == present)
 condition Billable "Billable bill"
 holds(Billable, Bill.status == open)
 applies_to(Billable, Pay)
@@ -728,7 +728,7 @@ updates(Decide, Doc)
 transitions(Decide, Doc.status, searched -> file)
 transitions(Decide, Doc.status, searched -> secret)
 transitions(Decide, Doc.status, held -> drop)
-sets(Decide, Doc, flag == true)
+sets(Decide, Doc.flag == true)
 "#;
 
     /// An arm's own `.when(Cond)` heads its `alt` branch, and a single guarded arm carries it

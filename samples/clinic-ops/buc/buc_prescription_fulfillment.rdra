@@ -92,7 +92,7 @@ creates(DraftPrescriptionApi, Prescription)
 // リフィル処方箋 states that it is one and its upper limit of uses (egov-ryotan-kisoku-332M50000100015.txt:481).
 displays(IssueRefillPrescription, PrescriptionScreen)
 invokes(IssueRefillPrescription, DraftPrescriptionApi)
-sets(IssueRefillPrescription, Prescription, refill_limit == present)
+sets(IssueRefillPrescription, Prescription.refill_limit == present)
 
 // The signed 処方箋 is sent to the 電子処方箋管理サービス, also when a paper one is printed
 // (mhlw-denshi-shohousen-unyou.txt:28-30); the paper one carries an 引換番号 (:131). The patient takes it
@@ -103,7 +103,7 @@ invokes(IssueOutsidePrescription, IssuePrescriptionApi)
 updates(IssuePrescriptionApi, Prescription)
 raises(IssueOutsidePrescription, EvPrescriptionIssued)
 transitions(IssueOutsidePrescription, Prescription.status, drafted -> issued)
-sets(IssueOutsidePrescription, Prescription, sent_at == present)
+sets(IssueOutsidePrescription, Prescription.sent_at == present)
 triggers(EvPrescriptionIssued, EPrescriptionService)
 
 displays(IssueInhouseVoucher, PrescriptionScreen)
@@ -122,7 +122,7 @@ transitions(CounselMedication, Prescription.status, audited -> counseled)
 displays(HandOverMedication, DispensingScreen)
 invokes(HandOverMedication, DispensingApi)
 transitions(HandOverMedication, Prescription.status, counseled -> dispensed)
-sets(HandOverMedication, Prescription, dispensed_at == present)
+sets(HandOverMedication, Prescription.dispensed_at == present)
 
 // 薬剤師は、処方せん中に疑わしい点があるときは…確かめた後でなければ調剤してはならない
 // (egov-yakuzaishihou-335AC0000000146.txt:202), and changes a prescription only with the physician's
@@ -150,7 +150,7 @@ updates(ConfirmDispenseApi, Prescription)
 raises(EPrescriptionService, EvPrescriptionDispensed)
 triggers(EvPrescriptionDispensed, ConfirmDispense)
 transitions(ConfirmDispense, Prescription.status, issued -> dispensed)
-sets(ConfirmDispense, Prescription, dispensed_at == present)
+sets(ConfirmDispense, Prescription.dispensed_at == present)
 
 // 使用期間は、交付の日を含めて四日以内 (egov-ryotan-kisoku-332M50000100015.txt:311), holidays included
 // (mhlw-shohousen-shiyoukikan.md:185). The DSL counts no days, so a timer moves an unused 処方箋.

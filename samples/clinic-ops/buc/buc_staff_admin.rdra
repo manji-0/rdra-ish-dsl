@@ -46,17 +46,17 @@ updates(ManageProviderScheduleApi, Provider)
 displays(BlockScheduleSlot, ScheduleAdminScreen)
 invokes(BlockScheduleSlot, BlockScheduleSlotApi)
 updates(BlockScheduleSlotApi, ProviderSchedule)
-sets(BlockScheduleSlot, ProviderSchedule, blocked == true)
+sets(BlockScheduleSlot, ProviderSchedule.blocked == true)
 
 displays(ConfigureRoom, RoomAdminScreen)
 invokes(ConfigureRoom, RoomAdminApi)
 creates(RoomAdminApi, Room)
 updates(RoomAdminApi, Room)
-sets(ConfigureRoom, Room, occupancy_status == available)
+sets(ConfigureRoom, Room.occupancy_status == available)
 
 displays(ReleaseRoom, RoomAdminScreen)
 updates(ReleaseRoom, Room)
-sets(ReleaseRoom, Room, occupancy_status == available)
+sets(ReleaseRoom, Room.occupancy_status == available)
 
 displays(ReviewAuditEvents, AuditReviewScreen)
 invokes(ReviewAuditEvents, AuditApi)
@@ -66,7 +66,7 @@ shows(AuditReviewScreen, AuditEvent)
 
 displays(ResolveAuditFinding, AuditReviewScreen)
 updates(ResolveAuditFinding, AuditEvent)
-sets(ResolveAuditFinding, AuditEvent, is_resolved == true)
+sets(ResolveAuditFinding, AuditEvent.is_resolved == true)
 
 // Access constraints
 requires_permission(ManageProviderSchedule, ProviderScheduleAdmin)

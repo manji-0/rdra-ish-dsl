@@ -1210,7 +1210,7 @@ module buc.payment
 import shared.entities
 usecase Capture "Capture Payment"
 raises(usecase::Capture, event::Capture)
-sets(usecase::Capture, Payment, status == captured)
+sets(usecase::Capture, Payment.status == captured)
 "#,
         );
 

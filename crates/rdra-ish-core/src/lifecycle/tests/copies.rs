@@ -1,4 +1,4 @@
-//! `sets(UC, E, column == F.source)` (#69): the step leaves in `column` the value the row of
+//! `sets(UC, E.column == F.source)` (#69): the step leaves in `column` the value the row of
 //! `F` it binds holds, read as a condition atom on `F` reads it.
 
 use super::*;
@@ -29,8 +29,8 @@ usecase Approve "承認"
 usecase Register "登録"
 usecase Refresh "更新"
 creates(Apply, Application)
-sets(Staff, Application, staffed == true)
-sets(Pay, Application, fee == 3)
+sets(Staff, Application.staffed == true)
+sets(Pay, Application.fee == 3)
 transitions(Approve, Application.status, submitted -> approved)
 creates(Register, Permit)
 updates(Refresh, Permit)
@@ -43,11 +43,11 @@ forbidden(Permit, Application, Permit.fee != Application.fee).along(Permit, Appl
 "#;
 
 const COPIES: &str = r#"
-sets(Register, Permit, kind == Application.kind)
-sets(Register, Permit, staffed == Application.staffed)
-sets(Register, Permit, fee == Application.fee)
-sets(Refresh, Permit, staffed == Application.staffed)
-sets(Refresh, Permit, fee == Application.fee)
+sets(Register, Permit.kind == Application.kind)
+sets(Register, Permit.staffed == Application.staffed)
+sets(Register, Permit.fee == Application.fee)
+sets(Refresh, Permit.staffed == Application.staffed)
+sets(Refresh, Permit.fee == Application.fee)
 "#;
 
 fn violated(d: &Derived) -> Vec<String> {
@@ -138,7 +138,7 @@ relate(Invoice, Order, N:1)
 usecase Open "開始"
 creates(Open, Order)
 creates(Open, Invoice)
-sets(Open, Invoice, kind == Order.kind)
+sets(Open, Invoice.kind == Order.kind)
 forbidden(Invoice, Order, Invoice.kind != Order.kind)
 "#,
     );
@@ -166,7 +166,7 @@ invokes(Open, {first_api})
 invokes(Open, {second_api})
 creates(OrderApi, Order)
 creates(InvoiceApi, Invoice)
-sets(Open, Invoice, kind == Order.kind)
+sets(Open, Invoice.kind == Order.kind)
 forbidden(Invoice, Order, Invoice.kind != Order.kind)
 "#
         )
@@ -199,8 +199,8 @@ usecase Make "作成"
 usecase Flip "切替"
 usecase Mirror "写し"
 creates(Make, Flag)
-sets(Flip, Flag, on == true)
-sets(Mirror, Flag, shadow == Flag.on)
+sets(Flip, Flag.on == true)
+sets(Mirror, Flag.shadow == Flag.on)
 forbidden(Flag, on == false, shadow == true)
 "#,
     );
@@ -235,11 +235,11 @@ usecase Label "札付け"
 creates(Place, Order)
 creates(AddLine, Line)
 updates(Fix, Order)
-sets(Fix, Order, kind == Line.kind)
+sets(Fix, Order.kind == Line.kind)
 creates(Jot, Note)
-sets(Jot, Note, kind == Order.kind)
+sets(Jot, Note.kind == Order.kind)
 creates(Label, Tag)
-sets(Label, Tag, kind == Order.kind)
+sets(Label, Tag.kind == Order.kind)
 "#;
     let unbound: Vec<(String, String)> = build_diags(src)
         .into_iter()
@@ -280,13 +280,13 @@ usecase Spawn "派生"
 creates(Make, Parent)
 creates(Born, Child)
 updates(Both, Child)
-sets(Both, Child, on == true)
-sets(Both, Child, on == Parent.on)
+sets(Both, Child.on == true)
+sets(Both, Child.on == Parent.on)
 transitions(Move, Child.status, a -> b)
 updates(Move, Child)
-sets(Move, Child, status == Parent.status)
+sets(Move, Child.status == Parent.status)
 creates(Spawn, Child)
-sets(Spawn, Child, status == Parent.status)
+sets(Spawn, Child.status == Parent.status)
 "#;
     let diags = build_diags(src);
     assert!(

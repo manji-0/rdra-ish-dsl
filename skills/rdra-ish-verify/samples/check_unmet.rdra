@@ -17,4 +17,4 @@ contains(BucCart, AddLine)
 contains(BucCart, ClearQty)
 
 creates(AddLine, CartLine)
-sets(ClearQty, CartLine, qty == 0)
+sets(ClearQty, CartLine.qty == 0)

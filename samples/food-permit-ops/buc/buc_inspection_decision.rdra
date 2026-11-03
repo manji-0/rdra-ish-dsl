@@ -153,7 +153,7 @@ displays(DenyPermit, DecisionScreen)
 invokes(DenyPermit, DecisionApi)
 transitions(DenyPermit, PermitApplication.status, awaiting_inspection -> denied)
 transitions(DenyPermit, PermitApplication.status, returned -> denied)
-sets(DenyPermit, PermitApplication, reason_shown == true)
+sets(DenyPermit, PermitApplication.reason_shown == true)
 raises(DenyPermit, EvApplicationReturned)
 
 // The event gives no order (#30), so `check` also lets a permit be registered before its
@@ -164,7 +164,7 @@ displays(RegisterPermit, PermitLedgerScreen)
 invokes(RegisterPermit, PermitRegistrationApi)
 creates(PermitRegistrationApi, BusinessPermit)
 reads(PermitRegistrationApi, PermitApplication)
-sets(RegisterPermit, BusinessPermit, business_type == PermitApplication.business_type)
+sets(RegisterPermit, BusinessPermit.business_type == PermitApplication.business_type)
 raises(RegisterPermit, EvPermitIssued)
 
 // One permit per application (一施設一許可, mhlw-eigyou-kisei-qa.txt:131): the permit is registered
@@ -179,7 +179,7 @@ triggers(EvPermitIssued, FoodSanitationSystem)
 displays(IssueCertificate, PermitLedgerScreen)
 invokes(IssueCertificate, PermitApi)
 updates(PermitApi, BusinessPermit)
-sets(IssueCertificate, BusinessPermit, certificate_issued == true)
+sets(IssueCertificate, BusinessPermit.certificate_issued == true)
 
 condition PermitValid "許可が有効である"
 holds(PermitValid, BusinessPermit.status == valid)
@@ -189,7 +189,7 @@ applies_to(PermitValid, AppointHygieneManager)
 displays(AppointHygieneManager, PermitLedgerScreen)
 invokes(AppointHygieneManager, OperatorPermitApi)
 updates(OperatorPermitApi, BusinessPermit)
-sets(AppointHygieneManager, BusinessPermit, hygiene_manager_appointed == true)
+sets(AppointHygieneManager, BusinessPermit.hygiene_manager_appointed == true)
 
 // 営業の許可後速やかに食品衛生責任者を選定 (mhlw-2019-seishokuhatsu1227-2-sekou.txt:435): a valid permit
 // without one ends with one appointed, or with the permit's end, once the operator's
@@ -199,7 +199,7 @@ property HygieneManagerEventuallyAppointed "有効な許可には食品衛生責
 
 displays(StartBusiness, PermitLedgerScreen)
 invokes(StartBusiness, OperatorPermitApi)
-sets(StartBusiness, BusinessPermit, operating == true)
+sets(StartBusiness, BusinessPermit.operating == true)
 
 condition CertifiedAndValid "許可が有効で、許可証の交付を受けている"
 holds(CertifiedAndValid, BusinessPermit.status == valid, BusinessPermit.certificate_issued == true)

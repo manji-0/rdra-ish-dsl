@@ -11,7 +11,7 @@
 //! a message ending in "write `<new form>`", or `None` when the call is not in the legacy
 //! form. To remove it, change the row's status to `Status::Removed`.
 
-use crate::ast::{Expr, Operand, PredicateArg, PredicateCall, Span};
+use crate::ast::{Expr, Operand, PredicateArg, PredicateCall, QRef, QualifiedColumnRef, Span};
 use crate::format::format_predicate;
 
 /// Where a legacy form is in its life.
@@ -132,13 +132,22 @@ pub const LEGACY_FORMS: &[LegacyForm] = &[
         detect: Detect::Grammar,
     },
     LegacyForm {
+        id: "sets-entity-argument",
+        instead: "`sets(UseCase, Entity.column == value)`",
+        status: Status::Removed { since: "1.0.0" },
+        detect: Detect::Predicate("sets", legacy_sets_entity),
+    },
+    LegacyForm {
         id: "sets-four-arguments",
-        instead: "`drives(UseCase, Entity, comparison, true|false)`",
-        status: Status::Deprecated {
-            since: "0.5.0",
-            removed_in: "2.0.0",
-        },
+        instead: "`drives(UseCase, Entity.column op value, true|false)`",
+        status: Status::Removed { since: "1.0.0" },
         detect: Detect::Predicate("sets", legacy_sets_truth),
+    },
+    LegacyForm {
+        id: "drives-entity-argument",
+        instead: "`drives(UseCase, Entity.column op value, true|false)`",
+        status: Status::Removed { since: "1.0.0" },
+        detect: Detect::Predicate("drives", legacy_drives_entity),
     },
 ];
 
@@ -276,16 +285,82 @@ fn legacy_transitions(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
     Some((rewritten, message))
 }
 
+/// The call with its entity argument folded into the comparison after it: `sets(UC, E, col ==
+/// v)` becomes `sets(UC, E.col == v)`. `None` unless the second argument is an entity and the
+/// third a comparison.
+fn fold_entity_argument(pred: &PredicateCall) -> Option<PredicateCall> {
+    let [_, PredicateArg::Ref(entity), PredicateArg::Expr(expr), ..] = pred.args.as_slice() else {
+        return None;
+    };
+    let mut rewritten = pred.clone();
+    let expr = PredicateArg::Expr(qualify_lhs(expr, entity));
+    rewritten.args.splice(1..3, [expr]);
+    Some(rewritten)
+}
+
+/// `expr` with the bare column on the left of each comparison written `entity.column`.
+fn qualify_lhs(expr: &Expr, entity: &QRef) -> Expr {
+    match expr {
+        Expr::Cmp(cmp) => {
+            let mut cmp = cmp.clone();
+            if let Operand::Column(column) = &cmp.lhs {
+                cmp.lhs = Operand::QualifiedColumn(QualifiedColumnRef {
+                    entity: entity.clone(),
+                    column: column.clone(),
+                    span: entity.span.clone(),
+                });
+            }
+            Expr::Cmp(cmp)
+        }
+        Expr::Not(inner) => Expr::Not(Box::new(qualify_lhs(inner, entity))),
+        Expr::And(a, b) => Expr::And(
+            Box::new(qualify_lhs(a, entity)),
+            Box::new(qualify_lhs(b, entity)),
+        ),
+        Expr::Or(a, b) => Expr::Or(
+            Box::new(qualify_lhs(a, entity)),
+            Box::new(qualify_lhs(b, entity)),
+        ),
+    }
+}
+
+/// `sets(UC, E, col == v)`: the column is `Entity.column`, as in every other predicate.
+fn legacy_sets_entity(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    if pred.args.len() != 3 {
+        return None;
+    }
+    let rewritten = fold_entity_argument(pred)?;
+    let message = format!(
+        "`sets` names the column as `Entity.column`; write `{}`",
+        format_predicate(&rewritten)
+    );
+    Some((rewritten, message))
+}
+
 /// `sets(UC, E, cmp, true|false)`: `sets` assigns a value, and a comparison driven true or
 /// false is `drives`. Every four-argument call is renamed; `drives` reports a bad argument.
 fn legacy_sets_truth(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
     if pred.args.len() != 4 {
         return None;
     }
-    let mut rewritten = pred.clone();
+    let mut rewritten = fold_entity_argument(pred).unwrap_or_else(|| pred.clone());
     rewritten.name = "drives".into();
     let message = format!(
-        "`sets` with a true/false argument drives a comparison, which is now `drives`; write `{}`",
+        "`sets` with a true/false argument drives a comparison, which is `drives`; write `{}`",
+        format_predicate(&rewritten)
+    );
+    Some((rewritten, message))
+}
+
+/// `drives(UC, E, cmp, true|false)`: the column is `Entity.column`, as in every other
+/// predicate.
+fn legacy_drives_entity(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    if pred.args.len() != 4 {
+        return None;
+    }
+    let rewritten = fold_entity_argument(pred)?;
+    let message = format!(
+        "`drives` names the column as `Entity.column`; write `{}`",
         format_predicate(&rewritten)
     );
     Some((rewritten, message))
@@ -487,48 +562,58 @@ mod tests {
     }
 
     #[test]
-    fn four_argument_sets_loads_as_drives_with_a_warning() {
-        let src = "sets(Sell, Stock, stock < selling, true)\n";
-        let parsed = crate::parse_with_deprecations(src);
-        assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
-        let messages: Vec<_> = parsed.deprecations.iter().map(|d| &d.message).collect();
+    fn sets_with_an_entity_argument_names_the_rewrite() {
+        for (old, new) in [
+            (
+                "sets(Pay, Order, status == paid)",
+                "sets(Pay, Order.status == paid)",
+            ),
+            (
+                "sets(Pay, Order, Order.status == paid)",
+                "sets(Pay, Order.status == paid)",
+            ),
+            (
+                "sets(Fix, Permit, kind == Site.kind).by(home)",
+                "sets(Fix, Permit.kind == Site.kind).by(home)",
+            ),
+        ] {
+            assert_eq!(
+                messages(&format!("{old}\n")),
+                vec![format!(
+                    "`sets` names the column as `Entity.column`; write `{new}`"
+                )],
+                "{old}"
+            );
+        }
+    }
+
+    #[test]
+    fn four_argument_sets_names_the_drives_to_write() {
         assert_eq!(
-            messages,
+            messages("sets(Sell, Stock, stock < selling, true)\n"),
             vec![
-                "`sets` with a true/false argument drives a comparison, which is now `drives`; \
-                 write `drives(Sell, Stock, stock < selling, true)` \
-                 (deprecated since 0.5.0, removed in 2.0.0; `rdra-ish fmt --write` rewrites it)"
+                "`sets` with a true/false argument drives a comparison, which is `drives`; \
+                 write `drives(Sell, Stock.stock < selling, true)`"
             ]
         );
-        assert_eq!(parsed.deprecations[0].span, 0..src.len() - 1);
-        let Some(crate::ast::Item::Predicate(pred)) = parsed.ast.items.first() else {
-            panic!("no predicate");
-        };
-        assert_eq!(pred.name, "drives");
     }
 
     #[test]
-    fn fmt_rewrites_four_argument_sets_to_drives() {
+    fn drives_with_an_entity_argument_names_the_rewrite() {
         assert_eq!(
-            crate::format_source("// sold out\nsets(Sell, Stock, stock < selling, false)\n")
-                .unwrap(),
-            "// sold out\ndrives(Sell, Stock, stock < selling, false)\n"
+            messages("drives(Refund, Stock, stock < selling, false)\n"),
+            vec![
+                "`drives` names the column as `Entity.column`; \
+                 write `drives(Refund, Stock.stock < selling, false)`"
+            ]
         );
     }
 
     #[test]
-    fn a_deprecated_form_is_not_a_parse_error() {
-        assert!(messages("sets(Sell, Stock, stock < selling, true)\n").is_empty());
-    }
-
-    #[test]
-    fn three_argument_sets_is_left_alone() {
-        let parsed = crate::parse_with_deprecations("sets(Pay, Order, status == paid)\n");
-        assert!(parsed.deprecations.is_empty());
-        let Some(crate::ast::Item::Predicate(pred)) = parsed.ast.items.first() else {
-            panic!("no predicate");
-        };
-        assert_eq!(pred.name, "sets");
+    fn sets_and_drives_on_entity_columns_parse() {
+        assert!(messages("sets(Pay, Order.status == paid)\n").is_empty());
+        assert!(messages("sets(Fix, Permit.kind == Site.kind).by(home)\n").is_empty());
+        assert!(messages("drives(Sell, Stock.stock < selling, true)\n").is_empty());
     }
 
     #[test]

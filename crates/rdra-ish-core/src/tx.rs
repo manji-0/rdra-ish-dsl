@@ -863,7 +863,7 @@ usecase Close "締める"
 usecase Book  "記帳する"
 usecase Open  "開く"
 transitions(Close, Order.status, open -> closed)
-sets(Close, Audit, seen == true)
+sets(Close, Audit.seen == true)
 updates(Book, Ledger)
 updates(Open, Order)
 creates(Open, Order)

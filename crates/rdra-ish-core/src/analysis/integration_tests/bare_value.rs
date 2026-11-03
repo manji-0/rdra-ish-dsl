@@ -171,7 +171,7 @@ fn after_assert_reads_the_value() {
 
 #[test]
 fn sets_reads_the_value() {
-    let model = ok("sets(U, E, method == cash)\n");
+    let model = ok("sets(U, E.method == cash)\n");
     let ce = &model.column_effects[0];
     assert_eq!(
         (ce.column.as_str(), ce.value.literal()),
@@ -370,7 +370,7 @@ fn a_quoted_value_does_not_parse_where_the_grammar_takes_a_token() {
     for extra in [
         "transitions(U, E.status, \"pending\" -> paid)",
         "transitions(U, E.status, pending -> \"paid\")",
-        "sets(U, E, status == \"paid\")",
+        "sets(U, E.status == \"paid\")",
         "condition C \"C\"\nholds(C, E.status == \"paid\")",
         "condition C \"C\"\nholds(C, E.status in (\"paid\", open))",
         "condition C \"C\"\nholds(C, E.status not in (\"paid\"))",

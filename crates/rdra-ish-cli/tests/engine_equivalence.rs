@@ -569,7 +569,7 @@ usecase Occupy "入室"
 creates(Book, Visit)
 transitions(Arrive, Visit.status, booked -> arrived)
 creates(Open, Payment)
-sets(Insure, Payment, method == insurance)
+sets(Insure, Payment.method == insurance)
 transitions(Pay, Payment.status, open -> paid)
 creates(Prepare, Room)
 transitions(Occupy, Room.state, free -> busy)
@@ -608,7 +608,7 @@ transitions(Decide, Doc.status, searched -> drop)
 transitions(Decide, Doc.status, file -> drop)
 transitions(Decide, Doc.route, none -> fast)
 transitions(Decide, Doc.route, none -> slow)
-sets(Decide, Doc, flag == true)
+sets(Decide, Doc.flag == true)
 creates(Decide, Log)
 transitions(Withdraw, Doc.status, secret -> searched)
 usecase Reroute "経路の取消"
@@ -641,9 +641,9 @@ usecase Open "開門"
 usecase Decide "判断"
 usecase Route "経路"
 creates(Submit, Doc)
-sets(Acquire, Doc, acquired == true)
+sets(Acquire, Doc.acquired == true)
 creates(Build, Gate)
-sets(Open, Gate, open == true)
+sets(Open, Gate.open == true)
 condition Acquired "権利を取得している"
 holds(Acquired, Doc.acquired == true)
 condition GateOpen "関門が開いている"
@@ -689,14 +689,14 @@ usecase Draft "応答案の作成"
 usecase File "提出"
 usecase Reopen "最後の通知"
 creates(Receive, Notice)
-sets(Receive, Notice, scope == limited)
+sets(Receive, Notice.scope == limited)
 chooses(Receive, Notice.route)
 transitions(Draft, Notice.status, open -> drafted)
 chooses(Draft, Notice.scope)
 chooses(Draft, Notice.route)
 transitions(File, Notice.status, drafted -> filed)
 transitions(Reopen, Notice.status, filed -> open)
-sets(Reopen, Notice, final == true)
+sets(Reopen, Notice.final == true)
 forbidden(Notice, final == true, scope == free)
 forbidden(Notice, status == filed, route == mail, scope == free)
 "#;
@@ -734,10 +734,10 @@ chooses(Receive, Notice.scope, limited)
 chooses(Receive, Notice.scope, none)
 transitions(Draft, Notice.status, open -> drafted)
 transitions(Reopen, Notice.status, drafted -> open)
-sets(Reopen, Notice, final == true)
-sets(Reopen, Notice, scope == limited)
+sets(Reopen, Notice.final == true)
+sets(Reopen, Notice.scope == limited)
 creates(Build, Gate)
-sets(Open, Gate, open == true)
+sets(Open, Gate.open == true)
 condition NotFinal "最後の通知でない"
 holds(NotFinal, Notice.final == false)
 condition GateOpen "関門が開いている"
@@ -776,7 +776,7 @@ invokes(Pay, PayOrderApi)
 updates(PayOrderApi, Order)
 transitions(Pay, Order.status, pending -> paid)
 transitions(Pay, Payment.status, pending -> captured)
-sets(Rush, Order, rush == true)
+sets(Rush, Order.rush == true)
 condition Ready "可"
 holds(Ready, Order.rush == true)
 applies_to(Ready, Pay)
@@ -856,7 +856,7 @@ updates(ClaimApi, Claim)
 transitions(OpenSettlement, Claim.status, open -> negotiating)
 invokes(OpenSettlement, SettlementApi)
 creates(SettlementApi, Settlement)
-sets(Flag, Claim, flagged == true)
+sets(Flag, Claim.flagged == true)
 condition NoSettlementYet "示談未作成"
 holds(NoSettlementYet, Claim.status == negotiating).none(Settlement)
 applies_to(NoSettlementYet, Flag)
@@ -885,12 +885,12 @@ entity SessionView "Session (published)" { view_id: Int @pk  status: Enum(active
 entity LoginRecord "Login record" { id: Int @pk  result: Enum(succeeded, failed) }
 creates(Login, Session)
 creates(Login, LoginRecord)
-sets(Login, LoginRecord, result == succeeded)
+sets(Login, LoginRecord.result == succeeded)
 updates(Login, SessionView)
-sets(Login, SessionView, status == active)
+sets(Login, SessionView.status == active)
 transitions(Revoke, Session.status, active -> revoked)
 updates(Revoke, SessionView)
-sets(Revoke, SessionView, status == ended)
+sets(Revoke, SessionView.status == ended)
 exposes(Auth, Login)
 exposes(Auth, SessionView).upsert()
 exposes(Auth, LoginRecord).append()
@@ -954,12 +954,12 @@ usecase Pack "梱包"
 usecase Send "発送"
 creates(Place, Order)
 transitions(Pay, Order.status, pending -> paid)
-sets(Pay, Order, paid_at == present)
+sets(Pay, Order.paid_at == present)
 transitions(Ship, Order.status, paid -> shipped)
 transitions(Cancel, Order.status, pending -> cancelled)
 transitions(Cancel, Order.status, paid -> cancelled)
-sets(Bump, Order, qty == 2)
-sets(Bump, Order, rush == true)
+sets(Bump, Order.qty == 2)
+sets(Bump, Order.rush == true)
 creates(Pack, Parcel)
 transitions(Send, Parcel.state, packed -> sent)
 condition Open "未確定"
@@ -998,9 +998,9 @@ usecase Send "発送"
 creates(Place, Order)
 transitions(Pay, Order.status, pending -> paid)
 creates(Pack, Parcel)
-sets(Pack, Order, last == pack)
+sets(Pack, Order.last == pack)
 transitions(Send, Parcel.state, packed -> sent)
-sets(Send, Order, last == send)
+sets(Send, Order.last == send)
 condition Packable "梱包可"
 holds(Packable, Order.status == paid).none(Parcel.state == sent)
 applies_to(Packable, Pack)
@@ -1075,7 +1075,7 @@ fn bfs_and_tlc_agree_on_two_lifecycle_columns() {
     check_fixture("two_lifecycles", TWO_LIFECYCLES);
 }
 
-/// `sets(UC, E, column == F.source)` (#69): a permit created under its application copies the
+/// `sets(UC, E.column == F.source)` (#69): a permit created under its application copies the
 /// application's kind, and an update copies `staffed` from the application its owner names.
 /// Without the copies the permit's kind is a free choice and `staffed` keeps its default, so
 /// both rules break; with them the kind rule holds and the `staffed` rule breaks only while the
@@ -1103,7 +1103,7 @@ usecase Approve "承認"
 usecase Register "登録"
 usecase Refresh "更新"
 creates(Apply, Application)
-sets(Staff, Application, staffed == true)
+sets(Staff, Application.staffed == true)
 transitions(Approve, Application.status, submitted -> approved)
 creates(Register, Permit)
 updates(Refresh, Permit)
@@ -1119,7 +1119,7 @@ after(Refresh).assert(Permit.staffed == true)
 fn bfs_and_tlc_agree_on_copies() {
     check_fixture("no_copies", COPIES);
     let copies = format!(
-        "{COPIES}\nsets(Register, Permit, kind == Application.kind)\nsets(Register, Permit, staffed == Application.staffed)\nsets(Refresh, Permit, staffed == Application.staffed)\n"
+        "{COPIES}\nsets(Register, Permit.kind == Application.kind)\nsets(Register, Permit.staffed == Application.staffed)\nsets(Refresh, Permit.staffed == Application.staffed)\n"
     );
     check_fixture("copies", &copies);
     check_fixture("copy_in_one_step", COPY_IN_ONE_STEP);
@@ -1140,7 +1140,7 @@ usecase Open "開始"
 usecase Reissue "再発行"
 creates(Open, Order)
 creates(Open, Invoice)
-sets(Open, Invoice, kind == Order.kind)
+sets(Open, Invoice.kind == Order.kind)
 creates(Reissue, Invoice)
 forbidden(Invoice, Order, Invoice.kind != Order.kind).along(Invoice, Order)
 "#;
@@ -1216,13 +1216,13 @@ usecase Apply "更新申請"
 usecase Renew "更新"
 usecase Expire "失効"
 creates(Issue, App)
-sets(Issue, App, kind == new)
+sets(Issue, App.kind == new)
 creates(Register, Permit)
 condition NoPermitYet "許可がまだない新規申請"
 holds(NoPermitYet, App.kind == new).none(Permit).by(App)
 applies_to(NoPermitYet, Register)
 creates(Apply, App)
-sets(Apply, App, kind == renewal)
+sets(Apply, App.kind == renewal)
 reads(Apply, Permit)
 condition Renewable "更新する許可が有効"
 holds(Renewable, Permit.status == valid).by(renews)
@@ -1266,9 +1266,9 @@ usecase Place "注文"
 usecase Ship "出荷"
 usecase Cancel "取消"
 creates(AddEast, Address)
-sets(AddEast, Address, region == east)
+sets(AddEast, Address.region == east)
 creates(AddWest, Address)
-sets(AddWest, Address, region == west)
+sets(AddWest, Address.region == west)
 creates(Place, Order)
 transitions(Ship, Order.status, open -> shipped)
 transitions(Cancel, Order.status, open -> cancelled)
@@ -1303,11 +1303,11 @@ usecase Place "注文"
 usecase ShipBilled "請求先を確認して出荷"
 usecase Cancel "取消"
 creates(AddEast, Address)
-sets(AddEast, Address, region == east)
+sets(AddEast, Address.region == east)
 creates(AddWest, Address)
-sets(AddWest, Address, region == west)
+sets(AddWest, Address.region == west)
 creates(Place, Order)
-sets(ShipBilled, Address, checked == true)
+sets(ShipBilled, Address.checked == true)
 transitions(ShipBilled, Order.status, open -> shipped)
 transitions(Cancel, Order.status, open -> cancelled)
 condition BillsEast "請求先が東"
@@ -1583,7 +1583,7 @@ creates(File, Application)
 creates(Draft, Permit)
 updates(Issue, Permit)
 transitions(Issue, Permit.status, draft -> issued)
-sets(Issue, Permit, kind == Application.kind)
+sets(Issue, Permit.kind == Application.kind)
 property IssueEventually leads_to(Permit.status == draft, Permit.status == issued).fair(Issue)
 property IssueEventuallyPlain leads_to(Permit.status == draft, Permit.status == issued)
 "#;
@@ -1608,10 +1608,10 @@ usecase Upgrade "昇格"
 usecase Link "紐付け"
 creates(Place, Order)
 transitions(Pay, Order.status, pending -> paid)
-sets(Pay, Order, tier == Customer.tier)
+sets(Pay, Order.tier == Customer.tier)
 transitions(Ship, Order.status, paid -> shipped)
 creates(Join, Customer)
-sets(Upgrade, Customer, tier == gold)
+sets(Upgrade, Customer.tier == gold)
 creates(Link, Customer)
 updates(Link, Order)
 property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship)
@@ -1708,7 +1708,7 @@ usecase OpenWh "開場"
 creates(Place, Order)
 transitions(Pay, Order.status, pending -> paid)
 transitions(Ship, Order.status, paid -> shipped)
-sets(Annotate, Order, note == true)
+sets(Annotate, Order.note == true)
 creates(Build, Warehouse)
 transitions(OpenWh, Warehouse.state, closed -> open)
 condition Open "倉庫が開いている"

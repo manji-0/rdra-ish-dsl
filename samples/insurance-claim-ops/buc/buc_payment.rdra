@@ -113,7 +113,7 @@ applies_to(ClaimUnderConfirmation, ExtendPaymentPeriod)
 displays(FlagSuspectedFraud, DecisionScreen)
 invokes(FlagSuspectedFraud, DecisionApi)
 updates(DecisionApi, Claim)
-sets(FlagSuspectedFraud, Claim, fraud_suspected == true)
+sets(FlagSuspectedFraud, Claim.fraud_suspected == true)
 raises(AccidentInfoExchange, EvDuplicateAccidentFound)
 triggers(EvDuplicateAccidentFound, FlagSuspectedFraud)
 
@@ -135,7 +135,7 @@ displays(DecideSuspectedClaim, DecisionScreen)
 invokes(DecideSuspectedClaim, DecisionApi)
 transitions(DecideSuspectedClaim, Claim.status, completed -> decided_payment)
 transitions(DecideSuspectedClaim, Claim.status, completed -> decided_denial)
-sets(DecideSuspectedClaim, Claim, senior_approved == true)
+sets(DecideSuspectedClaim, Claim.senior_approved == true)
 
 condition FraudSuspected "不正請求の疑いがある"
 holds(FraudSuspected, Claim.fraud_suspected == true)
@@ -143,7 +143,7 @@ applies_to(FraudSuspected, DecideSuspectedClaim)
 
 displays(ExplainDenialReason, DecisionScreen)
 invokes(ExplainDenialReason, DecisionApi)
-sets(ExplainDenialReason, Claim, reason_explained == true)
+sets(ExplainDenialReason, Claim.reason_explained == true)
 
 condition DenialDecided "不払いを決めた"
 holds(DenialDecided, Claim.status == decided_denial)
@@ -171,7 +171,7 @@ transitions(PayClaim, Claim.status, decided_payment -> paid)
 transitions(PayClaim, Claim.period, running -> ended)
 transitions(PayClaim, Claim.period, extended -> ended)
 transitions(PayClaim, Claim.period, overdue -> ended)
-sets(PayClaim, Payment, late_interest == Claim.late_interest_due)
+sets(PayClaim, Payment.late_interest == Claim.late_interest_due)
 raises(PayClaim, EvClaimPaid)
 
 condition NotPaidYet "支払済みの案件は再度支払わない"
@@ -188,7 +188,7 @@ transitions(NotifyPaymentCompleted, Payment.status, instructed -> completed)
 invokes(MarkPaymentOverdue, ClaimApi)
 transitions(MarkPaymentOverdue, Claim.period, running -> overdue)
 transitions(MarkPaymentOverdue, Claim.period, extended -> overdue)
-sets(MarkPaymentOverdue, Claim, late_interest_due == true)
+sets(MarkPaymentOverdue, Claim.late_interest_due == true)
 triggers(PaymentDeadline, MarkPaymentOverdue)
 
 // Started by the events from the claim, no performer. Events give no order (#30), so the guard

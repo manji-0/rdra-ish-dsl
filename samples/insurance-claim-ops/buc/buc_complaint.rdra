@@ -91,7 +91,7 @@ transitions(ResolveComplaint, Complaint.status, received -> resolved)
 
 displays(GuideToAdr, ComplaintScreen)
 invokes(GuideToAdr, ComplaintApi)
-sets(GuideToAdr, Complaint, adr_guided == true)
+sets(GuideToAdr, Complaint.adr_guided == true)
 
 condition ComplaintOpen "苦情を受け付けて解決していない"
 holds(ComplaintOpen, Complaint.status == received)

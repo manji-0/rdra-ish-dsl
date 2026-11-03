@@ -21,7 +21,7 @@ usecase CloseStore "店舗を閉じる"
 api StoreAdminApi "店舗管理API"
 invokes(CloseStore, StoreAdminApi)
 updates(StoreAdminApi, Store)
-sets(CloseStore, Store, status == closed)
+sets(CloseStore, Store.status == closed)
 "#,
     );
     assert_eq!(d.rows("Store"), vec!["status=open", "status=closed"]);
@@ -66,7 +66,7 @@ usecase DeliverUc  "配達確認"
 creates(Place,         Order)
 updates(usecase::DeliverUc, Order)
 transitions(usecase::DeliverUc, Order.status, pending -> delivered)
-sets(usecase::DeliverUc, Order, delivered_at == present)
+sets(usecase::DeliverUc, Order.delivered_at == present)
 "#,
     );
     assert_eq!(
@@ -122,10 +122,10 @@ usecase SetB   "Bセット"
 usecase SetC   "Cセット"
 usecase SetD   "Dセット"
 creates(Create, Multi)
-sets(usecase::SetA, Multi, a == present)
-sets(usecase::SetB, Multi, b == present)
-sets(usecase::SetC, Multi, c == present)
-sets(usecase::SetD, Multi, d == present)
+sets(usecase::SetA, Multi.a == present)
+sets(usecase::SetB, Multi.b == present)
+sets(usecase::SetC, Multi.c == present)
+sets(usecase::SetD, Multi.d == present)
 "#,
     );
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
@@ -147,9 +147,9 @@ usecase Create "生成"
 usecase SetA   "Aセット"
 usecase SetB   "Bセット"
 creates(Create, Multi)
-sets(usecase::SetA, Multi, a == present)
-sets(usecase::SetB, Multi, b == present)
-sets(usecase::SetB, Multi, n == 3)
+sets(usecase::SetA, Multi.a == present)
+sets(usecase::SetB, Multi.b == present)
+sets(usecase::SetB, Multi.n == 3)
 "#,
     );
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
@@ -191,7 +191,7 @@ usecase Create  "作成"
 usecase Publish "公開"
 creates(Create,  Doc)
 updates(Publish, Doc)
-sets(usecase::Publish, Doc, metadata == present)
+sets(usecase::Publish, Doc.metadata == present)
 "#,
     );
     assert_eq!(d.rows("Doc"), vec!["metadata=null", "metadata=present"]);
@@ -210,7 +210,7 @@ usecase Create "作成"
 usecase Enable "有効化"
 creates(Create, Switch)
 updates(Enable, Switch)
-sets(usecase::Enable, Switch, enabled == true)
+sets(usecase::Enable, Switch.enabled == true)
 "#,
     );
     assert_eq!(d.rows("Switch"), vec!["enabled=false", "enabled=true"]);
@@ -250,7 +250,7 @@ entity Order "O" { id: Int @pk  status: Enum(draft, placed, shipped) @default(dr
 usecase Place "place"
 usecase Ship "ship"
 creates(Place, Order)
-sets(Place, Order, status == shipped)
+sets(Place, Order.status == shipped)
 updates(Ship, Order)
 transitions(Ship, Order.status, placed -> shipped)
 "#,
@@ -282,7 +282,7 @@ usecase Close "close"
 usecase Reopen "reopen"
 creates(Place, Order)
 transitions(Close, Order.status, open -> closed)
-sets(Reopen, Order, status == open)
+sets(Reopen, Order.status == open)
 "#,
     );
     assert!(d.has(
@@ -300,8 +300,8 @@ entity Item "商品" { id: Int @pk  status: Enum(active, archived) @default(acti
 usecase Restock "補充"
 creates(Restock, Item)
 updates(Restock, Item)
-sets(Restock, Item, stock == 1)
-sets(Restock, Item, stock == 2)
+sets(Restock, Item.stock == 1)
+sets(Restock, Item.stock == 2)
 "#,
     );
     let conflict = d.entity("Item").diagnostics.iter().find_map(|x| match x {
@@ -325,7 +325,7 @@ entity Order "O" { id: Int @pk  flagged: Bool }
 usecase Place "place"
 usecase Flag "flag"
 creates(Place, Order)
-sets(Flag, Order, flagged == true)
+sets(Flag, Order.flagged == true)
 "#,
     );
     assert_eq!(d.rows("Order"), vec!["flagged=false", "flagged=true"]);
@@ -372,7 +372,7 @@ entity Item "商品" { id: Int @pk  stock: Int @default(0)  size: Size  note: St
 usecase Make "作る"
 usecase Fill "補充"
 creates(Make, Item)
-sets(Fill, Item, stock == 3)
+sets(Fill, Item.stock == 3)
 required(Item, size == small)
 "#,
     );
@@ -422,7 +422,7 @@ required(Stock, size == small)
         vec!["size=small", "size=large"],
         "a pre-existing instance starts at any value"
     );
-    let d = derive_src(&src("sets(Make, Item, size == large)"));
+    let d = derive_src(&src("sets(Make, Item.size == large)"));
     assert_eq!(
         d.rows("Item"),
         vec!["size=large"],
@@ -437,7 +437,7 @@ fn int_literal_outside_the_bound_is_an_error() {
 entity Item "商品" { id: Int @pk  stock: Int @default(0) }
 usecase Make "作る"
 creates(Make, Item)
-sets(Make, Item, stock == 9)
+sets(Make, Item.stock == 9)
 "#,
     );
     assert!(d.has("Item", |x| matches!(

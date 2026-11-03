@@ -64,7 +64,7 @@ creates(Place, Order)
 creates(Pay, Payment)
 updates(Pay, Order)
 transitions(Pay, Order.status, pending -> paid)
-sets(Pay, Payment, state == captured)
+sets(Pay, Payment.state == captured)
 forbidden(Order, Payment, Order.status == pending, Payment.state == captured)
 "#;
     let model = model_from(src);
@@ -151,7 +151,7 @@ variation Tier "階層" {
 }
 entity Member "会員" { id: Int @pk  tier: Tier  active: Bool @default(true) }
 usecase Promote "昇格"
-sets(Promote, Member, tier == gold)
+sets(Promote, Member.tier == gold)
 "#;
     let model = model_from(src);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
@@ -174,7 +174,7 @@ entity Ticket "券" { id: Int @pk  used: Bool }
 usecase Issue "発行"
 usecase Use "使用"
 creates(Issue, Ticket)
-sets(Use, Ticket, used == true)
+sets(Use, Ticket.used == true)
 "#;
     let model = model_from(src);
     let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);

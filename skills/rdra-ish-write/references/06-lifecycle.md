@@ -79,20 +79,20 @@ Also ask:
    `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
    Settlement)`. Without it the guard reads any settlement, and `check` warns
    `UnjoinedGuardRead` with the `.along(...)` to add.
-8. Add `sets(UseCase, Entity, col == val)` for enum, nullable, boolean, and Int
+8. Add `sets(UseCase, Entity.col == val)` for enum, nullable, boolean, and Int
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). A `sets` on a column that `transitions`
    drives is an error unless the use case creates the entity.
-   When the value comes from another row, copy it: `sets(Register, Permit, kind ==
+   When the value comes from another row, copy it: `sets(Register, Permit.kind ==
    Application.kind)`. The source must be a row the step binds: an entity the use case
    writes in the same or an earlier transaction group, or the parent of the target through a `relate`
    (a created child reads the parent it is created under; with two relates to the source,
-   name one: `sets(Fix, Permit, kind == Site.kind).by(home)`). Any other source is
+   name one: `sets(Fix, Permit.kind == Site.kind).by(home)`). Any other source is
    `UnboundCopySource`; give the target a `relate` to the source instead of leaving the
    value a free choice. The two columns hold one set of values (`SetsCopyMismatch`).
-9. Add `drives(UC, E, cmp, true|false)` when rules depend on a derived comparison and
+9. Add `drives(UC, E.col op rhs, true|false)` when rules depend on a derived comparison and
    the model does not track the values. Prefer Int / Money / Decimal columns plus
-   `sets(UC, E, col == N)` when the quantity itself must be checked: a comparison
+   `sets(UC, E.col == N)` when the quantity itself must be checked: a comparison
    reads those values in `states` and in TLA+.
 10. Add `after(UseCase).assert(...)` for a postcondition of that use case, and
     `property Name ["label"] always|eventually|leads_to(...)` for a temporal path
@@ -114,7 +114,7 @@ usecase FulfillOrder "Fulfill Order"
 creates(CreateOrder, Order)
 transitions(SubmitOrder, Order.status, draft -> submitted)
 transitions(FulfillOrder, Order.status, submitted -> fulfilled)
-sets(SubmitOrder, Order, submitted_at == present)
+sets(SubmitOrder, Order.submitted_at == present)
 ```
 
 Event-started BUC, a timer, and a condition with a body:
@@ -210,7 +210,7 @@ usecase Register "Register"
 
 creates(Apply, Application)
 creates(Register, Permit)
-sets(Register, Permit, kind == Application.kind)
+sets(Register, Permit.kind == Application.kind)
 ```
 
 ## Validation

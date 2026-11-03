@@ -574,7 +574,7 @@ usecase Make "作成"
 usecase Flip "切替"
 creates(Make, E)
 transitions(Flip, E.status, a -> b)
-sets(Flip, E, seen == true)
+sets(Flip, E.seen == true)
 condition Fresh "新規"
 holds(Fresh, E.status == a)
 applies_to(Fresh, Make)

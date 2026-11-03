@@ -16,10 +16,10 @@ usecase Cancel "取消"
 usecase Bump "数量"
 creates(Place, Order)
 transitions(Pay, Order.status, pending -> paid)
-sets(Pay, Order, was_paid == true)
+sets(Pay, Order.was_paid == true)
 transitions(Cancel, Order.status, pending -> cancelled)
 transitions(Cancel, Order.status, paid -> cancelled)
-sets(Bump, Order, qty == 2)
+sets(Bump, Order.qty == 2)
 "#;
 
 fn violated(src: &str, kind: InvKind) -> bool {

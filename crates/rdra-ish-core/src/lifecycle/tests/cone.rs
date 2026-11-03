@@ -292,7 +292,7 @@ usecase Ask "起票"
 creates(Place, Order)
 transitions(Pay, Order.status, pending -> paid)
 transitions(Ship, Order.status, paid -> shipped)
-sets(Ship, Order, note == true)
+sets(Ship, Order.note == true)
 creates(Ship, Receipt)
 creates(Build, Warehouse)
 transitions(OpenWh, Warehouse.state, closed -> open)

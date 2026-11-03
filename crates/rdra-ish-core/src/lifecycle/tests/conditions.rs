@@ -56,7 +56,7 @@ fn a_bound_atom_reads_the_param() {
     assert!(!reaches_paid(&without), "{:?}", without.rows("Payment"));
     let model = model_from(&clinic(
         "holds(Ready, Payment.method == insurance)",
-        "usecase Insure \"保険\"\nsets(Insure, Payment, method == insurance)",
+        "usecase Insure \"保険\"\nsets(Insure, Payment.method == insurance)",
     ));
     let guards = pay_guards(&model);
     assert!(

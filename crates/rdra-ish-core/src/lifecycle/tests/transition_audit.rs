@@ -66,7 +66,7 @@ transitions(Decide, Doc.status, file -> drop)",
     (
         "transitions(Decide, Doc.status, searched -> file)
 transitions(Decide, Doc.status, searched -> drop)
-sets(Decide, Doc, flag == true)
+sets(Decide, Doc.flag == true)
 creates(Decide, Log)",
         Edges,
     ),
@@ -119,7 +119,7 @@ applies_to(Never, Decide)",
     (
         "condition Flagged \"Flagged\"
 holds(Flagged, Doc.flag == true)
-sets(Reopen, Doc, flag == true)
+sets(Reopen, Doc.flag == true)
 transitions(Decide, Doc.status, searched -> file).when(Flagged)
 transitions(Decide, Doc.status, searched -> drop)",
         Edges,
@@ -128,7 +128,7 @@ transitions(Decide, Doc.status, searched -> drop)",
     (
         "entity Gate \"関門\" { id: Int @pk  open: Bool @default(false) }
 creates(Reopen, Gate)
-sets(Reopen, Gate, open == true)
+sets(Reopen, Gate.open == true)
 condition Open \"Open\"
 holds(Open, Gate.open == true)
 transitions(Decide, Doc.status, searched -> file).when(Open)
@@ -162,7 +162,7 @@ chooses(Decide, Doc.scope, broad)
     (
         "condition Flagged \"Flagged\"
 holds(Flagged, Doc.flag == true)
-sets(Reopen, Doc, flag == true)
+sets(Reopen, Doc.flag == true)
 chooses(Decide, Doc.scope, broad).when(Flagged)
 chooses(Decide, Doc.scope, narrow)
 {READS_SCOPE}",

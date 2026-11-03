@@ -510,7 +510,7 @@ pub(super) const LIFECYCLE: StageSpec = StageSpec {
                             SubjectKind::Entity,
                             &decl.id,
                             format!(
-                                "add `transitions({}.<column>, UseCase, from -> to)` or `sets(UseCase, {}, ...)` for a use case that moves {}",
+                                "add `transitions({}.<column>, UseCase, from -> to)` or `sets(UseCase, {}.<column> == value)` for a use case that moves {}",
                                 decl.id,
                                 decl.id,
                                 axes.join(" / ")

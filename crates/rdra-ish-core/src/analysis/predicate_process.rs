@@ -523,7 +523,7 @@ fn process_chooses_predicate(
             uc = model.use_cases[usecase].id
         )),
         ColumnType::Bool => Some(format!(
-            "write `sets({uc}, {entity_id}, {column} == true)` for a fixed value, or type the column by a `variation` whose values the actor picks",
+            "write `sets({uc}, {entity_id}.{column} == true)` for a fixed value, or type the column by a `variation` whose values the actor picks",
             uc = model.use_cases[usecase].id
         )),
         _ => Some("declare a `variation` with the values the actor picks and type the column by it".to_string()),
@@ -764,15 +764,17 @@ fn process_sets_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some((origin, entity_key)) = effect_target(resolved) else {
+    let before = diags.len();
+    let Some(target) = effect_target(model, pred, resolved, ctx, diags) else {
         return;
     };
-    let before = diags.len();
-    let recorded = record_sets_effect(model, pred, origin, entity_key, ctx, diags);
+    let recorded = target.entity.is_some_and(|entity| {
+        record_sets_effect(model, pred, target.origin, entity, target.cmp, ctx, diags)
+    });
     if !recorded {
         let err = RdraError::SetsNoEffect {
-            usecase: model.use_cases[origin].id.clone(),
-            entity: model.entities[entity_key].id.clone(),
+            usecase: model.use_cases[target.origin].id.clone(),
+            entity: target.entity_id(model),
         };
         push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
     }
@@ -785,40 +787,79 @@ fn process_drives_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some((origin, entity_key)) = effect_target(resolved) else {
+    let before = diags.len();
+    let Some(target) = effect_target(model, pred, resolved, ctx, diags) else {
         return;
     };
-    let before = diags.len();
-    let recorded = record_drives_effect(model, pred, origin, entity_key, ctx, diags);
+    let recorded = target.entity.is_some_and(|entity| {
+        record_drives_effect(model, pred, target.origin, entity, target.cmp, ctx, diags)
+    });
     if !recorded {
         let err = RdraError::DrivesNoEffect {
-            usecase: model.use_cases[origin].id.clone(),
-            entity: model.entities[entity_key].id.clone(),
+            usecase: model.use_cases[target.origin].id.clone(),
+            entity: target.entity_id(model),
         };
         push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
     }
 }
 
-/// The use case and entity a `sets` or `drives` names first.
-fn effect_target(resolved: &[Option<NodeRef>]) -> Option<(UseCaseKey, EntityKey)> {
-    match (resolved.first(), resolved.get(1)) {
-        (Some(Some(NodeRef::UseCase(origin))), Some(Some(NodeRef::Entity(entity)))) => {
-            Some((*origin, *entity))
-        }
-        _ => None,
+/// What a `sets` or `drives` writes: the use case it names first, and the entity and
+/// comparison of its second argument, `Entity.column op rhs`.
+struct EffectTarget<'a> {
+    origin: UseCaseKey,
+    /// `None` when the second argument names no entity column; the caller reports it.
+    entity: Option<EntityKey>,
+    cmp: Option<&'a Comparison>,
+}
+
+impl EffectTarget<'_> {
+    fn entity_id(&self, model: &SemanticModel) -> String {
+        self.entity
+            .map_or_else(|| "Entity".to_string(), |k| model.entities[k].id.clone())
     }
 }
 
-/// The comparison a `sets` or `drives` names third, or `None` after reporting a set
-/// membership: a use case leaves one value.
-fn effect_comparison<'a>(
+/// The target of a `sets` or `drives`, or `None` when its use case or its entity does not
+/// resolve, either of which is already reported.
+fn effect_target<'a>(
+    model: &SemanticModel,
     pred: &'a PredicateCall,
+    resolved: &[Option<NodeRef>],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<EffectTarget<'a>> {
+    let Some(Some(NodeRef::UseCase(origin))) = resolved.first() else {
+        return None;
+    };
+    let cmp = match pred.args.get(1) {
+        Some(PredicateArg::Expr(Expr::Cmp(cmp))) => Some(cmp),
+        _ => None,
+    };
+    let entity = match cmp.map(|cmp| &cmp.lhs) {
+        Some(Operand::QualifiedColumn(qcol)) => Some(super::constraint::resolve_entity_qref(
+            model,
+            &pred.name,
+            &qcol.entity,
+            ctx,
+            diags,
+        )?),
+        _ => None,
+    };
+    Some(EffectTarget {
+        origin: *origin,
+        entity,
+        cmp,
+    })
+}
+
+/// `cmp`, or `None` after reporting a set membership: a use case leaves one value.
+fn effect_comparison<'a>(
+    pred: &PredicateCall,
+    cmp: Option<&'a Comparison>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<&'a Comparison> {
-    let Some(PredicateArg::Expr(Expr::Cmp(cmp))) = pred.args.get(2) else {
-        return None;
-    };
+    let cmp = cmp?;
     if cmp.op.is_membership() {
         let col = match &cmp.lhs {
             Operand::Column(name) => name.clone(),
@@ -864,19 +905,17 @@ fn push_column_effect(
     });
 }
 
-/// Records the column effect `sets(UC, E, column == value)` states, and says whether it did.
+/// Records the column effect `sets(UC, E.column == value)` states, and says whether it did.
 fn record_sets_effect(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     origin: UseCaseKey,
     entity_key: EntityKey,
+    cmp: Option<&Comparison>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
-    if pred.args.len() > 3 {
-        return false;
-    }
-    let Some(cmp) = effect_comparison(pred, ctx, diags) else {
+    let Some(cmp) = effect_comparison(pred, cmp, ctx, diags) else {
         return false;
     };
     let entity_id = model.entities[entity_key].id.clone();
@@ -906,18 +945,19 @@ fn record_sets_effect(
     true
 }
 
-/// Records the comparison `drives(UC, E, cmp, true|false)` drives, and says whether it did.
-/// A value equality (`status == paid, true`) sets the value, as `sets` does; driving one
-/// `false` is an error, since it names no value to leave.
+/// Records the comparison `drives(UC, E.column op rhs, true|false)` drives, and says whether
+/// it did. A value equality (`E.status == paid, true`) sets the value, as `sets` does; driving
+/// one `false` is an error, since it names no value to leave.
 fn record_drives_effect(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     origin: UseCaseKey,
     entity_key: EntityKey,
+    cmp: Option<&Comparison>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
-    let truth = match pred.args.get(3) {
+    let truth = match pred.args.get(2) {
         Some(PredicateArg::Ref(q)) if q.kind_qualifier.is_none() && q.parts.len() == 1 => {
             q.parts[0].as_str()
         }
@@ -929,7 +969,7 @@ fn record_drives_effect(
         "false" => false,
         _ => return false,
     };
-    let Some(cmp) = effect_comparison(pred, ctx, diags) else {
+    let Some(cmp) = effect_comparison(pred, cmp, ctx, diags) else {
         return false;
     };
     let entity_id = model.entities[entity_key].id.clone();
@@ -1791,8 +1831,8 @@ pub(crate) fn process_predicate(
 fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraError> {
     let got = pred.args.len();
     let (expected, ok) = match pred.name.as_str() {
-        "sets" => ("at least 2".into(), got >= 2),
-        "drives" => ("4".into(), got == 4),
+        "sets" => ("2".into(), got == 2),
+        "drives" => ("3".into(), got == 3),
         "after" => ("at least 1".into(), got >= 1),
         // Cross-entity `invariant` may be empty before `.when(...).none/has(...)`.
         "invariant" => ("0 or more".into(), true),

@@ -40,7 +40,7 @@ transitions(DeliverOrder, Order.status, shipped -> delivered)
 transitions(CancelOrder, Order.status, pending -> cancelled)
 transitions(ReopenOrder, Order.status, cancelled -> pending)
 
-sets(usecase::DeliverOrder, Order, delivered_at == present)
+sets(usecase::DeliverOrder, Order.delivered_at == present)
 
 property NeverShipped "an order never ships"
   always(Order.status != shipped)

@@ -1093,7 +1093,7 @@ entity Doc "文書" {
 }
 usecase Publish "公開する"
 transitions(Publish, Doc.status, draft -> published)
-sets(Publish, Doc, kind == report)
+sets(Publish, Doc.kind == report)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
@@ -1122,7 +1122,7 @@ entity Memo "メモ" {
 usecase Publish "公開する"
 usecase Jot "書く"
 transitions(Publish, Doc.status, draft -> published)
-sets(Jot, Memo, kind == todo)
+sets(Jot, Memo.kind == todo)
 "#;
         let model = model_from(src);
         let mut view = View::whole();
@@ -1447,7 +1447,7 @@ usecase Submit "提出"
 usecase Publish "公開"
 usecase Reopen "戻す"
 creates(Submit, Doc)
-sets(Submit, Doc, status == review)
+sets(Submit, Doc.status == review)
 transitions(Publish, Doc.status, review -> published)
 transitions(Reopen, Doc.status, published -> review)
 "#;

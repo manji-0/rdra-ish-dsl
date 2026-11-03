@@ -266,7 +266,7 @@ pub enum StateDiag {
         rewrite: String,
         site: Site,
     },
-    /// `sets(UC, E, column == F.source)` where the step binds no one row of `F` to read.
+    /// `sets(UC, E.column == F.source)` where the step binds no one row of `F` to read.
     UnboundCopySource {
         usecase: String,
         column: String,

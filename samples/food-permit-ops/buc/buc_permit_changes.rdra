@@ -106,8 +106,8 @@ invokes(FileClosureNotice, ClosureApi)
 updates(ClosureApi, BusinessPermit)
 transitions(FileClosureNotice, BusinessPermit.status, valid -> closed)
 transitions(FileClosureNotice, BusinessPermit.status, suspended -> closed)
-sets(FileClosureNotice, BusinessPermit, operating == false)
-sets(FileClosureNotice, BusinessPermit, certificate_issued == false)
+sets(FileClosureNotice, BusinessPermit.operating == false)
+sets(FileClosureNotice, BusinessPermit.certificate_issued == false)
 
 // Access constraints
 requires_permission(FileChangeNotice, ApplicationSubmit)

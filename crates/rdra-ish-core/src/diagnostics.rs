@@ -338,7 +338,7 @@ pub enum RdraError {
     #[error("PostgreSQL type name '{name}' is not valid in sets(...); use `present` for a non-null nullable value\n  hint: declare display/storage types with entity annotations or DBML export inference")]
     PgTypeNameInSets { name: String },
 
-    #[error("sets({usecase}, {entity}, ...) sets nothing: the third argument must be `column == value` or `column == Entity.column`\n  hint: write `sets({usecase}, {entity}, status == paid)` to set a value, `sets({usecase}, {entity}, kind == Parent.kind)` to copy one, or `drives({usecase}, {entity}, stock < selling, true)` to drive a comparison true or false")]
+    #[error("sets({usecase}, ...) sets nothing: the second argument must be `Entity.column == value` or `Entity.column == Source.column`\n  hint: write `sets({usecase}, {entity}.status == paid)` to set a value, `sets({usecase}, {entity}.kind == Parent.kind)` to copy one, or `drives({usecase}, {entity}.stock < selling, true)` to drive a comparison true or false")]
     SetsNoEffect { usecase: String, entity: String },
 
     #[error("sets(..., {target} == {copied}) cannot copy: the columns {reason}\n  hint: copy between columns of one Enum, one variation, Bool, Int-typed (Int, Money, Decimal) or Date-typed (Date, DateTime) columns; a nullable source needs a nullable target")]
@@ -350,10 +350,10 @@ pub enum RdraError {
         reason: String,
     },
 
-    #[error("drives({usecase}, {entity}, ...) drives nothing: the third argument must be a comparison and the fourth `true` or `false`\n  hint: write `drives({usecase}, {entity}, stock < selling, true)`, or `sets({usecase}, {entity}, status == paid)` to set a value")]
+    #[error("drives({usecase}, ...) drives nothing: the second argument must be a comparison on `Entity.column` and the third `true` or `false`\n  hint: write `drives({usecase}, {entity}.stock < selling, true)`, or `sets({usecase}, {entity}.status == paid)` to set a value")]
     DrivesNoEffect { usecase: String, entity: String },
 
-    #[error("drives(..., {col} == {value}, false) is invalid: a value equality driven false names no value to leave\n  hint: write `sets(..., {col} == other)` with the value the use case leaves; `drives` with `false` is for a comparison such as `stock < selling`")]
+    #[error("drives(..., {col} == {value}, false) is invalid: a value equality driven false names no value to leave\n  hint: write `sets(..., Entity.{col} == other)` with the value the use case leaves; `drives` with `false` is for a comparison such as `stock < selling`")]
     DrivesFalseOnEquals { col: String, value: String },
 
     #[error("unknown effect value '{value}' for column '{col}': not an enum variant, bool, null/present, or integer\n  hint: see the allowed value vocabulary in the docs")]
@@ -404,7 +404,7 @@ pub enum RdraError {
     #[error("`in` / `not in` needs a column with a fixed set of values, but '{col}' has type {col_type}\n  hint: use it on an Enum, variation, Bool, Int, Money, Decimal, or @null column; compare other columns with `==`, `!=`, `<`, or `>`")]
     SetColumnNotEnumerable { col: String, col_type: String },
 
-    #[error("{pred}(..., {col} in (...)) is invalid: a use case leaves one value, not a set\n  hint: write `sets(UseCase, Entity, {col} == value)`; `in` and `not in` belong in rules, `holds`, `after`, `@check`, and `property`")]
+    #[error("{pred}(..., {col} in (...)) is invalid: a use case leaves one value, not a set\n  hint: write `sets(UseCase, Entity.{col} == value)`; `in` and `not in` belong in rules, `holds`, `after`, `@check`, and `property`")]
     EffectMembership { pred: String, col: String },
 
     #[error(

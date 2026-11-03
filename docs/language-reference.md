@@ -229,8 +229,8 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `transitions` | `(UseCase, Entity.column, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. `.when(Condition)` guards this arm only. See [Guard one arm](#guard-one-arm-when). |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each step of the use case leaves. |
 | `when` | `(conditions...).none/has(conditions...)` | A to-many quantifier constraint (replaces `forbidden_when`). Prefer qualified columns such as `Cert.status == revoked`. |
-| `sets` | `(UseCase, Entity, col == val)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. |
-| `drives` | `(UseCase, Entity, col op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. Replaces the deprecated four-argument `sets`. |
+| `sets` | `(UseCase, Entity.column == value)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. `Entity.column == Source.column` copies a value. |
+| `drives` | `(UseCase, Entity.column op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 | `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
 | `chooses` | `(UseCase, Entity.column, value)` | One value the actor may pick; the lines of one use case and column list the choice. `.when(Condition)` guards this value only. See [Guard one value](#guard-one-value-when). |
 
@@ -666,7 +666,7 @@ Supported field clauses are:
 screen item corresponds to a logical data column. `lint` `field-column-unwritten` warns on a
 field mapped to a `@null` column that no `sets` and no `chooses` gives a value: `states` keeps
 that column at `null`, so the screen shows a value the model never produces. Add
-`sets(UseCase, Entity, column == present)` to the use case that records it.
+`sets(UseCase, Entity.column == present)` to the use case that records it.
 
 ### Screen transitions
 
@@ -807,9 +807,9 @@ entity SessionView "Session (published)" {
   status: Enum(active, ended)
 }
 updates(SessionApi, SessionView)
-sets(Login, SessionView, status == active)
+sets(Login, SessionView.status == active)
 updates(Revoke, SessionView)
-sets(Revoke, SessionView, status == ended)
+sets(Revoke, SessionView.status == ended)
 
 exposes(AuthSystem, Login)                   // callable on behalf of an actor
 exposes(AuthSystem, SessionView).upsert()
@@ -1200,7 +1200,7 @@ chooses(DraftResponse, OfficeAction.amendment)
   effects.
 - A `chooses` counts as a write of the entity, as a `sets` does, with no CRUD edge needed.
 - On the creating use case it is the creation's own choice and changes nothing.
-- `chooses` is a new predicate, not `sets(.., col == any)`: a variation may name a value
+- `chooses` is a new predicate, not `sets(.., E.col == any)`: a variation may name a value
   `any`, and `sets` fixes one value.
 - To offer only some values, list them, one `chooses(UC, E.col, value)` line each; to
   offer a value only in some states, guard its line with `.when` (below).
@@ -1481,7 +1481,7 @@ A statement that reads two related entities joins them through a key: an `.along
 hop (on a `forbidden`, an `invariant`, or a `holds`), a `.has(...)` or `.none(...)` (on an
 `invariant` or a `holds`), the link between an
 entity a `holds` body compares and an entity the guarded use case writes, and the source of
-a copy (`sets(UC, E, col == F.col)`). Every one of them resolves the key by one rule
+a copy (`sets(UC, E.col == F.col)`). Every one of them resolves the key by one rule
 (`SemanticModel::join_key`), so `check`, `states`, the TLA+ export and `verify` read the
 same rows:
 
@@ -1523,7 +1523,7 @@ parent, with `.by(<first role>)` added, or, when the use case has neither, says 
 | `.along(A, B, ...)` | each hop that several keys join |
 | `.has(...)` or `.none(...)` | the link from the quantified row to the rows the statement binds |
 | `holds(Cond, ...)` itself, before any `.has/.none` | the link between an entity the body compares and the other entities of the guard |
-| `sets(UC, E, col == F.col)` | the key from the target row to the source row |
+| `sets(UC, E.col == F.col)` | the key from the target row to the source row |
 
 ```rdra
 relate(BusinessPermit, PermitApplication, 1:1)                  // registered under
@@ -1714,24 +1714,25 @@ which rewrites a model to one line per use case that raises the event. See
 
 ## Value Vocabulary for `sets`
 
-The third argument of `sets` is an unquoted assignment `column == value`. The value is a
-bare word or number, and what it may be depends on the target column's type:
+The second argument of `sets` is an unquoted assignment `Entity.column == value`, its
+column written `Entity.column` as in every other predicate. The value is a bare word or
+number, and what it may be depends on the target column's type:
 
 ```
 // Enum column: a variant
-sets(usecase::Capture, Payment, status == captured)
+sets(usecase::Capture, Payment.status == captured)
 
 // Bool column
-sets(usecase::Enable, Switch, enabled == true)
+sets(usecase::Enable, Switch.enabled == true)
 
 // Int column: a number
-sets(usecase::Restock, Stock, stock == 3)
+sets(usecase::Restock, Stock.stock == 3)
 
 // Nullable column: make it non-null
-sets(usecase::Login, UserAccount, last_login_at == present)
+sets(usecase::Login, UserAccount.last_login_at == present)
 
 // Nullable column: make it null
-sets(usecase::Logout, Session, token == null)
+sets(usecase::Logout, Session.token == null)
 ```
 
 The origin of `sets` is always a use case. An event origin is a `TypeMismatch` whose hint
@@ -1758,7 +1759,7 @@ leaves in the target column the value that the source column holds:
 ```
 relate(BusinessPermit, PermitApplication, N:1)
 creates(RegisterPermit, BusinessPermit)
-sets(RegisterPermit, BusinessPermit, business_type == PermitApplication.business_type)
+sets(RegisterPermit, BusinessPermit.business_type == PermitApplication.business_type)
 ```
 
 The source is the row that the step already binds for its entity. The step reads it the
@@ -1767,7 +1768,7 @@ way a `holds` atom on that entity reads it (see
 
 - **A row the step writes.** The use case writes the entity in the same transaction group.
   The step reads an updated row before it changes it, and a created row as the step leaves
-  it. A copy within one row (`sets(UC, E, shadow == E.flag)`) reads that row.
+  it. A copy within one row (`sets(UC, E.shadow == E.flag)`) reads that row.
 - **A row an earlier step of the run wrote.** The use case writes the entity in an earlier
   transaction group (an API invoked before the target's). The step reads that run's row
   before it changes anything (see [Runs of a split use case](./state-derivation.md#runs)).
@@ -1775,7 +1776,7 @@ way a `holds` atom on that entity reads it (see
   A child created under a mandatory relate reads the parent it is created under. An updated
   child reads the parent that its foreign key names, and the use case waits while an
   `.optional()` key is unlinked. When two keys join the target and the source, the copy
-  names the one to follow: `sets(Fix, Permit, kind == Site.kind).by(home)` (see
+  names the one to follow: `sets(Fix, Permit.kind == Site.kind).by(home)` (see
   [Which key a join follows](#which-key-a-join-follows)).
 
 Any other source is `UnboundCopySource`, an error, and the copy is not applied:
@@ -1791,8 +1792,9 @@ Every value of the source must be a value of the target. The two columns are one
 (the same variants), one variation, two Bool columns, two Int-typed columns (Int, Money,
 Decimal), two Date-typed columns (Date, DateTime), or two `@null` String columns. A
 nullable source needs a nullable target, and a `@derived` source is rejected. Any other
-pair is `SetsCopyMismatch`. Only `==` with a qualified column copies: `kind != Parent.kind`
-and a bare column (`qty == limit`) set nothing and are `SetsNoEffect`.
+pair is `SetsCopyMismatch`. Only `==` with a qualified column copies: `E.kind !=
+Parent.kind` and a bare column on the right (`E.qty == limit`) set nothing and are
+`SetsNoEffect`.
 
 A use case leaves one value per column. A copy and a literal `sets` of one column, or two
 copies from different columns, are `ConflictingEffects`. A copy and a `chooses` of one
@@ -1809,39 +1811,41 @@ a choice of the column's value, then the guard `col'[p] = source[q]`.
 
 A **comparison proposition** (`col op rhs`, e.g. `stock < selling`, `expired_at < now`) is
 evaluated on the Int values of its columns over `0..5` and on `now`. Change the columns
-with `sets(Restock, Stock, stock == 3)` and the comparison follows. When the model does
+with `sets(Restock, Stock.stock == 3)` and the comparison follows. When the model does
 not track the values, drive the truth value of the comparison instead with `drives`:
 
 ```
 // Tell the model that Sell causes (stock < selling) to become true
-drives(Sell,   Stock, stock < selling, true)
+drives(Sell, Stock.stock < selling, true)
 
 // Tell the model that Refund causes (stock < selling) to become false
-drives(Refund, Stock, stock < selling, false)
+drives(Refund, Stock.stock < selling, false)
 ```
 
-The third argument is the bare comparison expression (no quotes); the fourth argument is
-the bare boolean literal `true` or `false`. `sets` assigns a value and `drives` drives a
-comparison, so each predicate has one meaning. A value equality driven true
-(`drives(Pay, Order, status == paid, true)`) sets the value, as `sets(Pay, Order, status
-== paid)` does; driven `false` it names no value to leave and is `DrivesFalseOnEquals`.
-A `drives` whose third argument is not a comparison or whose fourth is not `true` or
-`false` is `DrivesNoEffect`; a `sets` with a comparison such as `stock < selling` or
-`status != paid` sets nothing and is `SetsNoEffect`, whose hint names `drives`. A use case
+The second argument is the bare comparison expression (no quotes), its left-hand column
+written `Entity.column`; the third argument is the bare boolean literal `true` or `false`.
+`sets` assigns a value and `drives` drives a comparison, so each predicate has one
+meaning. A value equality driven true (`drives(Pay, Order.status == paid, true)`) sets the
+value, as `sets(Pay, Order.status == paid)` does; driven `false` it names no value to leave
+and is `DrivesFalseOnEquals`. A `drives` whose second argument is not a comparison on
+`Entity.column` or whose third is not `true` or `false` is `DrivesNoEffect`; a `sets` with a
+comparison such as `Stock.stock < selling` or `Order.status != paid`, or with a bare column
+(`status == paid`), sets nothing and is `SetsNoEffect`, whose hint names `drives`. A use case
 leaves one value, so a set membership (`status in (a, b)`) in `sets` or `drives` is
 `EffectMembership`. Once any `drives` names a comparison, the comparison is a Bool
 variable that only those `drives` change, and the Int columns no longer define it. A use
 case that drives a comparison to one truth while its own Int `sets` make it the other is
 `ContradictoryDrivenComparison`, an error.
 
-| Fourth argument | Meaning |
+| Third argument | Meaning |
 |---|---|
 | `true` | The comparison holds after this use case runs. |
 | `false` | The comparison does not hold after this use case runs. |
 
-`sets(UC, E, cmp, true|false)`, the four-argument `sets` that `drives` replaces, is
-deprecated since 0.5.0 and removed in 2.0.0; it still loads as `drives`, with a warning
-(see [Deprecated and removed forms](#deprecated-and-removed-forms)).
+The forms that name the entity apart from the column, `sets(UC, E, col == v)` and
+`drives(UC, E, cmp, true|false)`, and the four-argument `sets(UC, E, cmp, true|false)`,
+fail to load with the rewrite to write (see
+[Deprecated and removed forms](#deprecated-and-removed-forms)).
 
 ---
 
@@ -2107,7 +2111,7 @@ entity. `after(UseCase).assert(...)` becomes an independent TLA `PROPERTY`,
 injected into the effects. Every constraint is its own `INVARIANT`; see
 [formal-verification.md](./formal-verification.md).
 
-`sets(UC, Entity, intCol == 3)` assigns an Int effect. Int, Money, Decimal, Date, and
+`sets(UC, Entity.intCol == 3)` assigns an Int effect. Int, Money, Decimal, Date, and
 DateTime columns that something names become `0..5` variables in `states` and in the TLA+
 export (nullable ones add `null`). The export domain is a fixed approximation (default
 `0..5`, override with `--int-range-max`), and an Int literal outside it is
@@ -2265,16 +2269,16 @@ type `Date` or `DateTime`.
 
 A comparison expression is evaluated on the values of its columns: Int, Money, Decimal,
 Date, and DateTime columns that it names become `0..5` variables, and `now` is a clock
-that ticks up to 5. Change the values with `sets(UC, Entity, col == N)`. To say that a
+that ticks up to 5. Change the values with `sets(UC, Entity.col == N)`. To say that a
 use case makes the comparison true or false without modeling the values, drive it
 explicitly with `drives`, and the comparison becomes a Bool variable:
 
 ```
 // Declare that the Sell use case causes (stock < selling) to become true
-drives(Sell,   Stock, stock < selling, true)
+drives(Sell, Stock.stock < selling, true)
 
 // Declare that the Refund use case causes (stock < selling) to become false
-drives(Refund, Stock, stock < selling, false)
+drives(Refund, Stock.stock < selling, false)
 ```
 
 A comparison that no `drives` names is not a variable. It reads the Int values, so a
@@ -2376,20 +2380,21 @@ A form leaves the language in two stages:
 2. **Removed** no earlier than the next major release. A model that still uses the form
    fails to load, with a message that gives the rewritten line.
 
-A deprecation warning looks like this:
-
-```text
-warning: model.rdra:14:1: deprecated syntax in 'model.rdra': `sets` with a true/false argument drives a comparison, which is now `drives`; write `drives(Sell, Stock, stock < selling, true)` (deprecated since 0.5.0, removed in 2.0.0; `rdra-ish fmt --write` rewrites it)
-```
-
 `LEGACY_FORMS` in `crates/rdra-ish-syntax/src/removed.rs` is the one list of these forms,
-with each form's status and versions.
-
-| Deprecated | Since | Removed in | Use instead |
-|---|---|---|---|
-| `sets(UseCase, Entity, comparison, true \| false)` | 0.5.0 | 2.0.0 | `drives(UseCase, Entity, comparison, true \| false)`. `sets` assigns a value; a comparison driven true or false is [`drives`](#driving-comparison-propositions-with-drives). |
+with each form's status and versions. No form is deprecated now.
 
 The forms below were removed before 1.0, without a deprecated stage.
+
+These spellings were removed in 1.0.0 so that every predicate names a column as
+`Entity.column`. The load error gives the rewritten line, as in ``write `sets(Pay,
+Order.status == paid)` ``. `scripts/migrate-syntax-v3.py <workspace>` rewrites all three in
+place and is safe to run twice.
+
+| Removed | Use instead |
+|---|---|
+| `sets(UseCase, Entity, column == value)`, `sets(UseCase, Entity, column == Source.column)` | `sets(UseCase, Entity.column == value)`, `sets(UseCase, Entity.column == Source.column)`. A `.by(...)` after a copy is kept. |
+| `drives(UseCase, Entity, column op rhs, true \| false)` | `drives(UseCase, Entity.column op rhs, true \| false)`. |
+| `sets(UseCase, Entity, column op rhs, true \| false)`, the four-argument `sets` | `drives(UseCase, Entity.column op rhs, true \| false)`. `sets` assigns a value; a comparison driven true or false is [`drives`](#driving-comparison-propositions-with-drives). |
 
 These spellings were removed in 0.4.0 so that each predicate has one form: the use case
 comes first, a column is always `Entity.column`, and each keyword is one word.

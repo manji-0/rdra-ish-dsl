@@ -76,18 +76,18 @@ usecase CompleteAccounting "会計確定"
 usecase CancelReception "取消"
 usecase StartCorrection "訂正開始"
 creates(ReceiveDispense, DispenseReception)
-sets(CompleteAccounting, DispenseReception, validity == active)
-sets(CompleteAccounting, DispenseReception, progress == completed)
-sets(CompleteAccounting, DispenseReception, correction == none)
-sets(CompleteAccounting, DispenseReception, recalc == false)
-sets(CancelReception, DispenseReception, validity == cancelled)
-sets(CancelReception, DispenseReception, progress == open)
-sets(CancelReception, DispenseReception, correction == none)
-sets(CancelReception, DispenseReception, recalc == false)
-sets(StartCorrection, DispenseReception, validity == active)
-sets(StartCorrection, DispenseReception, progress == open)
-sets(StartCorrection, DispenseReception, correction == correcting)
-sets(StartCorrection, DispenseReception, recalc == true)
+sets(CompleteAccounting, DispenseReception.validity == active)
+sets(CompleteAccounting, DispenseReception.progress == completed)
+sets(CompleteAccounting, DispenseReception.correction == none)
+sets(CompleteAccounting, DispenseReception.recalc == false)
+sets(CancelReception, DispenseReception.validity == cancelled)
+sets(CancelReception, DispenseReception.progress == open)
+sets(CancelReception, DispenseReception.correction == none)
+sets(CancelReception, DispenseReception.recalc == false)
+sets(StartCorrection, DispenseReception.validity == active)
+sets(StartCorrection, DispenseReception.progress == open)
+sets(StartCorrection, DispenseReception.correction == correcting)
+sets(StartCorrection, DispenseReception.recalc == true)
 forbidden(DispenseReception, validity == cancelled, progress == completed)
 forbidden(DispenseReception, validity == cancelled, correction == correcting)
 forbidden(DispenseReception, progress == completed, correction == correcting)
@@ -108,7 +108,7 @@ fn invariant_when_then_is_checked() {
     assert!(violated(&d, "Order", InvKind::Invariant));
     assert_eq!(witnesses(&d, "Order"), vec!["note=null, status=paid"]);
     let d = derive_src(&format!(
-        "{ORDER}\nsets(Pay, Order, note == present)\ninvariant(Order).when(status == paid).then(note == present)"
+        "{ORDER}\nsets(Pay, Order.note == present)\ninvariant(Order).when(status == paid).then(note == present)"
     ));
     assert!(!violated(&d, "Order", InvKind::Invariant));
 }
@@ -120,7 +120,7 @@ fn required_and_exclusive_are_checked() {
     let d = derive_src(&format!("{ORDER}\nrequired(Order, status == pending)"));
     assert!(violated(&d, "Order", InvKind::Required));
     let d = derive_src(&format!(
-        "{ORDER}\nsets(Cancel, Order, note == present)\nexclusive(Order, status == cancelled, note == present)"
+        "{ORDER}\nsets(Cancel, Order.note == present)\nexclusive(Order, status == cancelled, note == present)"
     ));
     assert!(violated(&d, "Order", InvKind::Exclusive));
 }
@@ -133,8 +133,8 @@ entity Item "I" { id: Int @pk  stock: Int  selling: Int  status: Enum(on, off) }
 usecase Make "作る"
 usecase Sell "売る"
 creates(Make, Item)
-drives(Make, Item, stock < selling, false)
-drives(Sell, Item, stock < selling, true)
+drives(Make, Item.stock < selling, false)
+drives(Sell, Item.stock < selling, true)
 forbidden(Item, status == on, stock < selling)
 "#,
     );
@@ -156,9 +156,9 @@ entity Item "Item" {
 usecase Sell "Sell"
 creates(Sell, Item)
 updates(Sell, Item)
-sets(Sell, Item, stock == 0)
-sets(Sell, Item, selling == 1)
-drives(Sell, Item, stock < selling, DRIVEN)
+sets(Sell, Item.stock == 0)
+sets(Sell, Item.selling == 1)
+drives(Sell, Item.stock < selling, DRIVEN)
 forbidden(Item, stock < selling)
 "#;
     let d = derive_src(&src.replace("DRIVEN", "false"));
@@ -193,7 +193,7 @@ entity Item "I" { id: Int @pk  stock: Int @default(2)  selling: Int @default(1) 
 usecase Make "作る"
 usecase Sell "売る"
 creates(Make, Item)
-sets(Sell, Item, stock == 0)
+sets(Sell, Item.stock == 0)
 forbidden(Item, stock < selling)
 "#,
     );
@@ -209,7 +209,7 @@ entity Item "I" { id: Int @pk  stock: Int @default(2)  cap: Int @null }
 usecase Make "作る"
 usecase Cap "上限"
 creates(Make, Item)
-sets(Cap, Item, cap == 2)
+sets(Cap, Item.cap == 2)
 forbidden(Item, stock < cap)
 "#,
     );
@@ -503,7 +503,7 @@ entity ClientCertificate "Client Certificate" { id: Int @pk  status: Enum(active
 entity TerminalCertAssignment "Terminal Cert Assignment" { id: Int @pk  status: Enum(active, inactive) @default(inactive) }
 creates(RevokeCert, ClientCertificate)
 creates(AssignTerminal, TerminalCertAssignment)
-sets(RevokeCert, ClientCertificate, status == revoked)
+sets(RevokeCert, ClientCertificate.status == revoked)
 invariant(ClientCertificate).when(ClientCertificate.status == revoked)
   .none(TerminalCertAssignment.status == active)
 "#,
@@ -532,8 +532,8 @@ creates(Place,   Order)
 updates(Deliver, Order)
 updates(Refund,  Order)
 transitions(Deliver, Order.status, pending -> delivered)
-sets(usecase::Refund, Order, refunded == true)
-sets(usecase::Refund, Order, refund_id == present)
+sets(usecase::Refund, Order.refunded == true)
+sets(usecase::Refund, Order.refund_id == present)
 invariant(Order)
   .when(status == delivered)
   .when(refunded == false)
@@ -660,8 +660,8 @@ entity Stock "在庫" {
 }
 usecase ListItem "出品"
 creates(ListItem, Stock)
-sets(ListItem, Stock, status == on_sale)
-drives(ListItem, Stock, stock < selling, true)
+sets(ListItem, Stock.status == on_sale)
+drives(ListItem, Stock.stock < selling, true)
 invariant(Stock)
   .when(status == on_sale)
   .then(stock < selling)
@@ -683,10 +683,10 @@ creates(Add, Line)
 
 #[test]
 fn a_check_is_an_invariant_a_use_case_can_break() {
-    let d = derive_src(&format!("{CART}\nsets(Clear, Line, qty == 0)"));
+    let d = derive_src(&format!("{CART}\nsets(Clear, Line.qty == 0)"));
     assert!(violated(&d, "Line", InvKind::Check));
     assert_eq!(witnesses(&d, "Line"), vec!["qty=0"]);
-    let d = derive_src(&format!("{CART}\nsets(Clear, Line, qty == 3)"));
+    let d = derive_src(&format!("{CART}\nsets(Clear, Line.qty == 3)"));
     assert!(!violated(&d, "Line", InvKind::Check));
 }
 
@@ -711,7 +711,7 @@ entity Line "明細" {{ id: Int @pk  qty: Int @null @check(qty >= 1 and qty <= 4
 usecase Add "追加"
 usecase Set "設定"
 creates(Add, Line)
-sets(Set, Line, qty == {value})
+sets(Set, Line.qty == {value})
 "#
         )
     };
@@ -729,7 +729,7 @@ entity Line "明細" {{ id: Int @pk  qty: Int @default(1)  bulk: Bool @derived(q
 usecase Add "追加"
 usecase Set "設定"
 creates(Add, Line)
-sets(Set, Line, qty == {qty})
+sets(Set, Line.qty == {qty})
 forbidden(Line, bulk == true)
 "#
         )

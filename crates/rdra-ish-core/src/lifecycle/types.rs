@@ -417,7 +417,7 @@ pub enum GuardWhy {
     /// arm, or a value, of the column whose guard held on the pre-state. `cond` is the first
     /// guarded arm's or value's condition.
     ArmCondition { cond: ConditionKey },
-    /// `sets(UC, E, column == F.source)`: the successor's column holds the source row's value.
+    /// `sets(UC, E.column == F.source)`: the successor's column holds the source row's value.
     Copy,
     /// The run mark of the bound row is `step`: `0` on a row step 1 takes (in no run), `i`
     /// on an `Earlier` row step `i + 1` continues.

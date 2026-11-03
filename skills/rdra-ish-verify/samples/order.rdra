@@ -29,7 +29,7 @@ transitions(ShipOrder, Order.status, paid -> shipped)
 transitions(DeliverOrder, Order.status, shipped -> delivered)
 transitions(CancelOrder, Order.status, pending -> cancelled)
 
-sets(usecase::DeliverOrder, Order, delivered_at == present)
+sets(usecase::DeliverOrder, Order.delivered_at == present)
 
 after(DeliverOrder).assert(Order.status == delivered, Order.delivered_at == present)
 

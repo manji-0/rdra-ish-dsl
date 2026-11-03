@@ -77,13 +77,13 @@ fn default_outside_the_variation_values_is_rejected() {
 
 #[test]
 fn sets_value_is_checked_against_the_variation_values() {
-    let ok = format!("{PAYMENT}usecase Pay \"Pay\"\nsets(Pay, Payment, method == cash)\n");
+    let ok = format!("{PAYMENT}usecase Pay \"Pay\"\nsets(Pay, Payment.method == cash)\n");
     let (model, diags) = build(&ok);
     assert!(errors(&diags).is_empty(), "{diags:?}");
     assert!(model.column_effects.iter().any(|e| e.column == "method"
         && e.value.literal() == Some(&EffectValue::EnumVariant("cash".into()))));
 
-    let bad = format!("{PAYMENT}usecase Pay \"Pay\"\nsets(Pay, Payment, method == crypto)\n");
+    let bad = format!("{PAYMENT}usecase Pay \"Pay\"\nsets(Pay, Payment.method == crypto)\n");
     let (_, diags) = build(&bad);
     let errs = errors(&diags);
     assert!(

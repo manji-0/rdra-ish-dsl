@@ -773,7 +773,7 @@ impl<'m> Builder<'m> {
                 Ok(at) => at,
                 Err(CopyMiss::Ambiguous(candidates)) => {
                     let statement = format!(
-                        "sets({}, {}, {} == {}.{})",
+                        "sets({}, {}.{} == {}.{})",
                         model.use_cases[uc].id,
                         model.entities[ce.entity].id,
                         ce.column,
@@ -1584,7 +1584,7 @@ impl Builder<'_> {
                 (ce.origin == uc && ce.entity == child && source.entity == parent).then(|| {
                     (
                         format!(
-                            "sets({}, {}, {} == {}.{})",
+                            "sets({}, {}.{} == {}.{})",
                             model.use_cases[uc].id,
                             model.entities[child].id,
                             ce.column,

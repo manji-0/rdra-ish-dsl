@@ -449,7 +449,7 @@ usecase GenerateClaim "請求作成"
 creates(CreateCharge, Charge)
 creates(GenerateClaim, Claim)
 updates(GenerateClaim, Charge)
-sets(GenerateClaim, Claim, origin == generated)
+sets(GenerateClaim, Claim.origin == generated)
 {relate}
 {extra}
 "#

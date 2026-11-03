@@ -71,7 +71,7 @@ triggers(ExpiryNoticeDue, SendExpiryNotice)
 displays(ApplyRenewal, RenewalScreen)
 invokes(ApplyRenewal, RenewalApi)
 creates(RenewalApi, PermitApplication)
-sets(ApplyRenewal, PermitApplication, kind == renewal)
+sets(ApplyRenewal, PermitApplication.kind == renewal)
 reads(RenewalApi, BusinessPermit)
 
 displays(RenewPermit, InspectionScreen)
@@ -103,7 +103,7 @@ transitions(ExtendPermitTerm, BusinessPermit.status, valid -> valid)
 invokes(ExpirePermit, PermitTermApi)
 transitions(ExpirePermit, BusinessPermit.status, valid -> expired)
 transitions(ExpirePermit, BusinessPermit.status, suspended -> expired)
-sets(ExpirePermit, BusinessPermit, operating == false)
+sets(ExpirePermit, BusinessPermit.operating == false)
 triggers(PermitTermEnd, ExpirePermit)
 
 // Access constraints

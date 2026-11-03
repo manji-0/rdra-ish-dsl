@@ -143,7 +143,7 @@ not.
 | 等級の変動を説明してから請求の意思を確かめる | `GradeExplained` on `SubmitClaim` |
 | 不正請求の疑いがある請求は上位の決裁者が決める | `NoFraudSuspicion` on `DecideClaim`, `ClaimBeforeDecision` on `FlagSuspectedFraud` |
 | 不払いは理由を説明してから通知する | `ReasonExplained` on `NotifyDenial` |
-| 支払期限を過ぎた支払には遅延利息を付ける | the copy `sets(PayClaim, Payment, late_interest == Claim.late_interest_due)` |
+| 支払期限を過ぎた支払には遅延利息を付ける | the copy `sets(PayClaim, Payment.late_interest == Claim.late_interest_due)` |
 | 支払後に求償権が移る (and the after-assert 求償は保険金を支払った請求についてだけ始める) | `ClaimPaid` on `StartSubrogation` |
 | 特別調停案は会社が受諾する | `OrdinaryProposal` on `RejectProposal` |
 

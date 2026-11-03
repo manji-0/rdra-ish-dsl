@@ -131,4 +131,5 @@ A form that a later major release removes goes through these steps:
    rewrite.
 
 Before 1.0.0 there is no deprecation period: a removed form fails to load at once, and the
-message names the rewrite, as `writes` and the top-level `when(...)` rule do in 0.4.0.
+message names the rewrite, as `writes` and the top-level `when(...)` rule do in 0.4.0 and
+`sets(UseCase, Entity, column == value)` does in 1.0.0.

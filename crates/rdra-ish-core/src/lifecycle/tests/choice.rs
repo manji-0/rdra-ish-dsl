@@ -146,7 +146,7 @@ fn a_condition_guards_every_arm() {
 entity Gate "関門" {{ id: Int @pk  open: Bool @default(false) }}
 usecase Unlock "Unlock"
 creates(Unlock, Gate)
-sets(Unlock, Gate, open == true)
+sets(Unlock, Gate.open == true)
 condition Ready "Ready"
 holds(Ready, Gate.open == true)
 applies_to(Ready, Decide)

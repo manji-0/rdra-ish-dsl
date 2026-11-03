@@ -1,4 +1,4 @@
-// order.rdra without `sets(DeliverOrder, Order, delivered_at == present)`.
+// order.rdra without `sets(DeliverOrder, Order.delivered_at == present)`.
 // DeliverOrder still drives shipped -> delivered, so after(DeliverOrder).assert
 // binds to that action and its delivered_at postcondition fails
 // (expected TLC fail / counterexample on the AfterAssert property, not a vacuous pass).

@@ -33,7 +33,7 @@ updates(Pay, Order)
 creates(Record, Audit)
 
 transitions(Pay, Order.status, pending -> paid)
-sets(Pay, Order, amount == 2)
+sets(Pay, Order.amount == 2)
 
 forbidden(Order, amount > 2)
 forbidden(Audit, score > 3)

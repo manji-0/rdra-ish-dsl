@@ -72,7 +72,7 @@ transitions(SubmitDraft, DraftingOrder.status, revising -> drafted)
 
 displays(ConfirmDraftByInventor, DraftReviewScreen)
 invokes(ConfirmDraftByInventor, DraftReviewApi)
-sets(ConfirmDraftByInventor, DraftingOrder, inventor_checked == true)
+sets(ConfirmDraftByInventor, DraftingOrder.inventor_checked == true)
 
 condition DraftDelivered "案が納品されている"
 holds(DraftDelivered, DraftingOrder.status == drafted)
@@ -81,7 +81,7 @@ applies_to(DraftDelivered, ConfirmDraftByInventor)
 displays(RequestDraftRevision, DraftReviewScreen)
 invokes(RequestDraftRevision, DraftReviewApi)
 transitions(RequestDraftRevision, DraftingOrder.status, drafted -> revising)
-sets(RequestDraftRevision, DraftingOrder, inventor_checked == false)
+sets(RequestDraftRevision, DraftingOrder.inventor_checked == false)
 
 displays(ApproveDraft, DraftReviewScreen)
 invokes(ApproveDraft, DraftReviewApi)

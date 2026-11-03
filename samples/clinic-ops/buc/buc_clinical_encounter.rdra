@@ -82,7 +82,7 @@ invokes(SignEncounter, SignEncounterApi)
 updates(SignEncounterApi, Encounter)
 raises(SignEncounter, EvEncounterSigned)
 transitions(SignEncounter, Encounter.status, documented -> signed)
-sets(SignEncounter, Encounter, signed_at == present)
+sets(SignEncounter, Encounter.signed_at == present)
 
 displays(AmendEncounter, EncounterWorkspaceScreen)
 invokes(AmendEncounter, AmendEncounterApi)
@@ -93,7 +93,7 @@ displays(IssueReferralLetter, ReferralLetterScreen)
 invokes(IssueReferralLetter, IssueReferralLetterApi)
 creates(IssueReferralLetterApi, ReferralLetter)
 reads(IssueReferralLetterApi, Encounter)
-sets(IssueReferralLetter, ReferralLetter, direction == outbound)
+sets(IssueReferralLetter, ReferralLetter.direction == outbound)
 
 // 診察終了 is the physician's own step after signing, and its event, not the signature, starts
 // 計算・会計: the visit waits for 会計計算 only once the consultation is over.
@@ -102,7 +102,7 @@ invokes(CompleteConsultation, CompleteConsultationApi)
 updates(CompleteConsultationApi, Appointment)
 updates(CompleteConsultationApi, Room)
 transitions(CompleteConsultation, Appointment.status, in_consult -> awaiting_calc)
-sets(CompleteConsultation, Room, occupancy_status == cleaning)
+sets(CompleteConsultation, Room.occupancy_status == cleaning)
 raises(CompleteConsultation, EvConsultationCompleted)
 
 // Screen fields

@@ -13,7 +13,7 @@ entity Order "Order" {
 }
 usecase Pay "Pay"
 transitions(Pay, Order.status, open -> paid)
-sets(Pay, Order, note == present)
+sets(Pay, Order.note == present)
 "#;
     let (ast, errors) = parse(src);
     assert!(errors.is_empty(), "parse errors: {errors:?}");

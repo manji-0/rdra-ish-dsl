@@ -34,7 +34,7 @@ holds one value per slot.
 | A `@null` column of any other type | `null`, `present` | Always |
 | An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, a `@check`, an applied condition body, an `after` assertion, or a `property` names it |
 | A column typed by a [`variation`](./language-reference.md#variations) | the variation's values | Something names it, as for Int |
-| A comparison proposition (`stock < selling`) | `false`, `true` | `drives(UC, E, cmp, bool)` drives the comparison |
+| A comparison proposition (`stock < selling`) | `false`, `true` | `drives(UC, E.col op rhs, bool)` drives the comparison |
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
 | A run mark `<E>._run_<UC>` | `none`, `1`, .., `k-1` | A use case split into k transaction groups writes the entity in a group before its last (see [Runs of a split use case](#runs)) |
 | `now` | `0..5` | Something compares a column to `now` |
@@ -138,9 +138,9 @@ effects apply together to the pre-state:
 |---|---|
 | `creates(UC, E)` | The slot becomes `present`, with the columns at their base values. The creating use case's `sets` and transitions then apply. |
 | `deletes(UC, E)` | The slot becomes `deleted` and its columns return to the base value. A deleted slot is never reused. |
-| `sets(UC, E, col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
-| `sets(UC, E, col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
-| `drives(UC, E, cmp, bool)` | The comparison variable becomes `bool`. |
+| `sets(UC, E.col == val)` | `col := val`. A `sets` counts as a write even without a CRUD edge. |
+| `sets(UC, E.col == F.src)` | `col` takes the value of `F.src` in the row of `F` that the step binds (see [Copies](#actions)). |
+| `drives(UC, E.col op rhs, bool)` | The comparison variable becomes `bool`. |
 | `transitions(UC, E.col, a -> b)` | Guard `col == a`, effect `col := b`. The arms of one use case on one column make one guard, `col` is one of their `from` values, and one effect. Arms from one state to several (`a -> b`, `a -> c`) are a choice: one successor per arm. |
 | `transitions(UC, E.col, a -> b).when(Cond)` | The arm is taken only when the body of `Cond` holds on the pre-state. A column with a guarded arm gets one more guard, on the pre-state and the successor: the step takes some arm whose guard held, `\/ (col = a /\ col' = b /\ body)` over the column's arms (an unguarded arm's body is `TRUE`). |
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice. |
@@ -274,7 +274,7 @@ case can run before the use case that raises its event. A rule that depends on t
 order needs the precondition the order guarantees as a `condition` guard on the triggered
 use case ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 
-**Copies.** `sets(UC, E, col == F.src)` reads the row of `F` that a condition atom on `F`
+**Copies.** `sets(UC, E.col == F.src)` reads the row of `F` that a condition atom on `F`
 would read, with one restriction: the row must be bound to the step, never an independent
 witness.
 
@@ -678,7 +678,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | A multi-entity rule's `.along` names entities that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
-| `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E, col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
+| `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.by(role)` names one. The message names the candidate roles and the statement with the `.by` to add; the join is left unlinked. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |

@@ -88,8 +88,8 @@ numbers), the comment says the modeling is the model's assumption.
   (#73). `RenewsValidPermit` (`失効後の更新はできない`) reads `BusinessPermit.status == valid`
   through `renews` on `ApplyRenewal` and `RenewPermit`. On `ApplyRenewal`, which creates the
   application, the guard also links the new application to the valid permit it reads.
-- **The permit copies the application's 営業の種類.** `sets(RegisterPermit, BusinessPermit,
-  business_type == PermitApplication.business_type)` (#69), and the rule
+- **The permit copies the application's 営業の種類.** `sets(RegisterPermit,
+  BusinessPermit.business_type == PermitApplication.business_type)` (#69), and the rule
   `許可の営業の種類は申請の営業の種類と同じ` reads both through the registration key.
 - **The disposition has two lifecycle columns.** `Disposition.status` follows the procedure
   (処分案 to 確定) and `Disposition.publication` the publication (未公表, 公表中, 公表終了, and
@@ -204,7 +204,7 @@ in the tool, (D) diagnostic, documentation, or diagram quality, or (M) a modelin
   as a deadlock that "needs a free slot". Eight APIs were split into a create API and an update API.
 - **(G) A created row cannot copy a value from the row that caused it**, so `RegisterPermit` could
   not give the permit the application's `business_type`, and the permit's type was a free choice.
-  Fixed by #69: `sets(RegisterPermit, BusinessPermit, business_type ==
+  Fixed by #69: `sets(RegisterPermit, BusinessPermit.business_type ==
   PermitApplication.business_type)` copies it from the application the permit is registered under,
   and a rule checks that the two agree. The 食品衛生責任者 is not copied: the application has no
   column for it, and `hygiene_manager_appointed` still starts `false`.

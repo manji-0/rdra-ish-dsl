@@ -691,7 +691,7 @@ transitions(CapturePay, Order.status, pending -> paid)
 transitions(ShipOrder, Order.status, paid -> shipped)
 transitions(DeliverOrder, Order.status, shipped -> delivered)
 transitions(CancelOrder, Order.status, pending -> cancelled)
-sets(usecase::DeliverOrder, Order, delivered_at == present)
+sets(usecase::DeliverOrder, Order.delivered_at == present)
 "#;
 
     #[test]
@@ -747,7 +747,7 @@ usecase Add "登録"
 usecase Restock "補充"
 creates(Add, Item)
 updates(Restock, Item)
-sets(Restock, Item, stock == 3)
+sets(Restock, Item.stock == 3)
 forbidden(Item, stock < 1)
 "#,
         );

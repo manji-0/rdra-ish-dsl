@@ -255,8 +255,8 @@ fn mutated(
 ) -> RdraError {
     let id = model.entities[entity].id.clone();
     let hint = match predicate {
-        "deletes" => format!("a published row is never deleted; write its end state with `sets(UseCase, {id}, col == val)`"),
-        "transitions" => format!("a transition reads the row's current state, and the owner only writes {id}; use `sets(UseCase, {id}, col == val)`"),
+        "deletes" => format!("a published row is never deleted; write its end state with `sets(UseCase, {id}.col == val)`"),
+        "transitions" => format!("a transition reads the row's current state, and the owner only writes {id}; use `sets(UseCase, {id}.col == val)`"),
         _ => format!("an append entity only grows; add a row with `creates(UseCase, {id})` and `sets(...)`, or publish it with `.upsert()`"),
     };
     RdraError::PublishedEntityMutated {

@@ -711,7 +711,7 @@ fn lint_unwritten_field_columns(model: &SemanticModel, issues: &mut Vec<LintIssu
                 "{} shows {}.{}, a nullable column that no use case sets, so it stays null",
                 field.id, entity.id, mapping.column
             ),
-            "add sets(UseCase, Entity, column == present) where the value is given, or drop the column's @null",
+            "add sets(UseCase, Entity.column == present) where the value is given, or drop the column's @null",
         );
     }
 }
@@ -1486,7 +1486,7 @@ maps_field(DoneOn, Claim.done_on)
         };
         assert_eq!(unwritten(&model_from(&src(""))), 1);
         assert_eq!(
-            unwritten(&model_from(&src("sets(Close, Claim, done_on == present)"))),
+            unwritten(&model_from(&src("sets(Close, Claim.done_on == present)"))),
             0
         );
     }
@@ -1586,7 +1586,7 @@ variation PaymentMethod "Payment Method" {
   card
 }
 transitions(Pay, Order.status, pending -> paid)
-sets(Place, Order, priority == high)
+sets(Place, Order.priority == high)
 "#,
         );
         let flagged = enum_attribute_columns(&model);
@@ -1713,7 +1713,7 @@ invokes(Review, PayApi)
 updates(PayApi, Pay)
 transitions(Settle, Pay.status, open -> paid)
 transitions(Hold, Pay.status, open -> held).when(Large)
-sets(Review, Pay, flagged == true)
+sets(Review, Pay.flagged == true)
 condition Big "Big"
 holds(Big, Pay.amount > 100)
 applies_to(Big, Settle)

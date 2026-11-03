@@ -41,9 +41,9 @@ entity SessionView "Session (published)" {
   status: Enum(active, ended)
 }
 updates(SessionApi, SessionView)
-sets(Login, SessionView, status == active)
+sets(Login, SessionView.status == active)
 updates(Revoke, SessionView)
-sets(Revoke, SessionView, status == ended)
+sets(Revoke, SessionView.status == ended)
 
 event EvLoggedIn "Logged in"
 event EvSessionEnded "Session ended"

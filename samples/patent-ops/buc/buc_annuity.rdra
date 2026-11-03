@@ -78,7 +78,7 @@ triggers(MaintenanceReview, ReviewMaintenance)
 displays(DecideToLetLapse, MaintenanceReviewScreen)
 invokes(DecideToLetLapse, MaintenanceApi)
 updates(MaintenanceApi, Patent)
-sets(DecideToLetLapse, Patent, maintain == false)
+sets(DecideToLetLapse, Patent.maintain == false)
 
 condition InForce "特許権が存続している"
 holds(InForce, Patent.status == in_force)
@@ -89,9 +89,9 @@ displays(PayAnnuity, AnnuityScreen)
 invokes(PayAnnuity, AnnuityApi)
 updates(AnnuityApi, Patent)
 reads(AnnuityApi, FeeSchedule)
-sets(PayAnnuity, Patent, next_year_paid == true)
-sets(PayAnnuity, Patent, last_payment == regular)
-sets(PayAnnuity, Patent, surcharge == null)
+sets(PayAnnuity, Patent.next_year_paid == true)
+sets(PayAnnuity, Patent.last_payment == regular)
+sets(PayAnnuity, Patent.surcharge == null)
 raises(PayAnnuity, EvFeesPaid)
 triggers(AnnuityDueDate, PayAnnuity)
 
@@ -101,7 +101,7 @@ applies_to(AnnuityDue, PayAnnuity)
 
 // Started by the timer, no performer: the system updates the annuity record.
 invokes(RollOverAnnuityYear, AnnuityApi)
-sets(RollOverAnnuityYear, Patent, next_year_paid == false)
+sets(RollOverAnnuityYear, Patent.next_year_paid == false)
 triggers(AnnuityDueDate, RollOverAnnuityYear)
 
 condition YearPaid "存続中で、次の年が納付済"
@@ -120,8 +120,8 @@ applies_to(YearUnpaid, EnterGracePeriod)
 displays(PayLateAnnuity, AnnuityScreen)
 invokes(PayLateAnnuity, AnnuityApi)
 transitions(PayLateAnnuity, Patent.status, grace -> in_force)
-sets(PayLateAnnuity, Patent, last_payment == late)
-sets(PayLateAnnuity, Patent, surcharge == present)
+sets(PayLateAnnuity, Patent.last_payment == late)
+sets(PayLateAnnuity, Patent.surcharge == present)
 raises(PayLateAnnuity, EvFeesPaid)
 triggers(LatePaymentDeadline, PayLateAnnuity)
 
@@ -141,8 +141,8 @@ invariant(Patent).when(status == lapsed).then(next_year_paid == false).label("�
 displays(RestorePatent, AnnuityScreen)
 invokes(RestorePatent, AnnuityApi)
 transitions(RestorePatent, Patent.status, lapsed -> in_force)
-sets(RestorePatent, Patent, last_payment == late)
-sets(RestorePatent, Patent, surcharge == present)
+sets(RestorePatent, Patent.last_payment == late)
+sets(RestorePatent, Patent.surcharge == present)
 raises(RestorePatent, EvRestorationRequested)
 
 displays(AbandonPatent, MaintenanceReviewScreen)

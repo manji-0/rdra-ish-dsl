@@ -390,7 +390,7 @@ entity Order \"Order\" {{
   note: String @null
 }}
 creates(PlaceOrder, Order)
-sets(PlaceOrder, Order, note == present)
+sets(PlaceOrder, Order.note == present)
 "
         ),
     );
@@ -445,7 +445,7 @@ entity Order \"Order\" {{
   qty: Int
   stock: Int
 }}
-drives(PlaceOrder, Order, qty > stock, false)
+drives(PlaceOrder, Order.qty > stock, false)
 forbidden(Order, qty > stock)
 "
         ),

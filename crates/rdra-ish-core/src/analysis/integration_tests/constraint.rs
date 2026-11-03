@@ -200,7 +200,7 @@ entity Stock "在庫" {
   selling: Int
 }
 updates(Sell, Stock)
-drives(Sell, Stock, stock < selling, true)
+drives(Sell, Stock.stock < selling, true)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {:?}", parse_errors);

@@ -1,4 +1,4 @@
-//! `sets(UC, E, column == F.source)` (#69): a copy is typed against its target column.
+//! `sets(UC, E.column == F.source)` (#69): a copy is typed against its target column.
 
 use crate::diagnostics::RdraError;
 use crate::model::*;
@@ -70,18 +70,14 @@ fn copy_of(line: &str) -> (String, String, String) {
 #[test]
 fn a_qualified_column_is_a_copy() {
     for (line, column, source) in [
-        ("sets(U, Child, kind == Parent.kind)", "kind", "kind"),
-        (
-            "sets(U, Child, status == Parent.status)",
-            "status",
-            "status",
-        ),
-        ("sets(U, Child, on == Parent.on)", "on", "on"),
-        ("sets(U, Child, count == Parent.amount)", "count", "amount"),
-        ("sets(U, Child, maybe == Parent.count)", "maybe", "count"),
-        ("sets(U, Child, maybe == Parent.maybe)", "maybe", "maybe"),
-        ("sets(U, Child, due == Parent.due)", "due", "due"),
-        ("sets(U, Child, Child.on == Parent.on)", "on", "on"),
+        ("sets(U, Child.kind == Parent.kind)", "kind", "kind"),
+        ("sets(U, Child.status == Parent.status)", "status", "status"),
+        ("sets(U, Child.on == Parent.on)", "on", "on"),
+        ("sets(U, Child.count == Parent.amount)", "count", "amount"),
+        ("sets(U, Child.maybe == Parent.count)", "maybe", "count"),
+        ("sets(U, Child.maybe == Parent.maybe)", "maybe", "maybe"),
+        ("sets(U, Child.due == Parent.due)", "due", "due"),
+        ("sets(U, Child.on == Parent.on)", "on", "on"),
     ] {
         assert_eq!(
             copy_of(line),
@@ -95,13 +91,13 @@ fn a_qualified_column_is_a_copy() {
 fn a_source_whose_values_the_target_cannot_hold_is_a_mismatch() {
     for line in [
         // Two variations, even with the same value names.
-        "sets(U, Child, kind == Parent.route)",
+        "sets(U, Child.kind == Parent.route)",
         // Two Enums with different variants.
-        "sets(U, Child, status == Parent.other)",
-        "sets(U, Child, on == Parent.status)",
-        "sets(U, Child, count == Parent.due)",
+        "sets(U, Child.status == Parent.other)",
+        "sets(U, Child.on == Parent.status)",
+        "sets(U, Child.count == Parent.due)",
         // A null has no image in a non-null column.
-        "sets(U, Child, count == Parent.maybe)",
+        "sets(U, Child.count == Parent.maybe)",
     ] {
         let (_, errors) = build(line);
         assert!(
@@ -113,7 +109,7 @@ fn a_source_whose_values_the_target_cannot_hold_is_a_mismatch() {
 
 #[test]
 fn a_copy_into_a_column_without_state_is_rejected() {
-    let (_, errors) = build("sets(U, Child, name == Parent.name)");
+    let (_, errors) = build("sets(U, Child.name == Parent.name)");
     assert!(
         matches!(
             errors.as_slice(),
@@ -127,7 +123,7 @@ fn a_copy_into_a_column_without_state_is_rejected() {
 #[test]
 fn a_foreign_key_is_no_copy_source_or_target() {
     let (ast, errors) = parse(&format!(
-        "{BASE}entity Other \"O\" {{\n  id: Int @pk\n  ref_id: Int\n  count: Int\n}}\nrelate(Other, Parent, N:1).key(ref_id)\nusecase V \"V\"\ncreates(V, Other)\nsets(V, Other, count == Other.ref_id)\n"
+        "{BASE}entity Other \"O\" {{\n  id: Int @pk\n  ref_id: Int\n  count: Int\n}}\nrelate(Other, Parent, N:1).key(ref_id)\nusecase V \"V\"\ncreates(V, Other)\nsets(V, Other.count == Other.ref_id)\n"
     ));
     assert!(errors.is_empty(), "parse errors: {errors:?}");
     let (_, diags) = crate::analysis::build_model(&ast);
@@ -146,7 +142,7 @@ fn a_foreign_key_is_no_copy_source_or_target() {
 
 #[test]
 fn an_unknown_source_column_is_reported_once() {
-    let (_, errors) = build("sets(U, Child, kind == Parent.nope)");
+    let (_, errors) = build("sets(U, Child.kind == Parent.nope)");
     assert!(
         matches!(errors.as_slice(), [RdraError::UnknownColumn { col, .. }] if col == "nope"),
         "{errors:?}"
@@ -157,8 +153,8 @@ fn an_unknown_source_column_is_reported_once() {
 #[test]
 fn only_an_equality_with_a_qualified_column_copies() {
     for line in [
-        "sets(U, Child, kind != Parent.kind)",
-        "sets(U, Child, count == maybe)",
+        "sets(U, Child.kind != Parent.kind)",
+        "sets(U, Child.count == maybe)",
     ] {
         let (_, errors) = build(line);
         assert!(
@@ -171,7 +167,7 @@ fn only_an_equality_with_a_qualified_column_copies() {
 /// A copy is a `sets`: with a `chooses` of the same column it is `ChoosesAndSets`.
 #[test]
 fn a_copy_and_a_choice_of_one_column_conflict() {
-    let (_, errors) = build("sets(U, Child, kind == Parent.kind)\nchooses(U, Child.kind)");
+    let (_, errors) = build("sets(U, Child.kind == Parent.kind)\nchooses(U, Child.kind)");
     assert!(
         errors
             .iter()

@@ -25,11 +25,11 @@ entity Notice "通知" {
   scope: Scope
 }
 creates(Receive, Notice)
-sets(Receive, Notice, scope == limited)
+sets(Receive, Notice.scope == limited)
 transitions(Draft, Notice.status, open -> drafted)
 transitions(Reopen, Notice.status, drafted -> open)
-sets(Reopen, Notice, final == true)
-sets(Reopen, Notice, scope == limited)
+sets(Reopen, Notice.final == true)
+sets(Reopen, Notice.scope == limited)
 condition NotFinal "最後の通知でない"
 holds(NotFinal, Notice.final == false)
 forbidden(Notice, final == true, scope == free)
@@ -180,7 +180,7 @@ fn a_value_listed_twice_is_enabled_by_either_line() {
 /// On the creating use case the listed values restrict the creation's own choice.
 #[test]
 fn listed_values_restrict_a_creation() {
-    let src = NOTICE.replace("sets(Receive, Notice, scope == limited)\n", "");
+    let src = NOTICE.replace("sets(Receive, Notice.scope == limited)\n", "");
     let d = derive_src(&format!(
         "{src}\nchooses(Receive, Notice.scope, limited)\nchooses(Receive, Notice.scope, none)\n"
     ));
@@ -275,7 +275,7 @@ usecase Receive "受領"
 usecase Draft "作成"
 entity Notice "通知" { id: Int @pk  scope: Scope }
 creates(Receive, Notice)
-sets(Receive, Notice, scope == limited)
+sets(Receive, Notice.scope == limited)
 condition WasLimited "限定だった"
 holds(WasLimited, Notice.scope == limited)
 chooses(Draft, Notice.scope, free).when(WasLimited)

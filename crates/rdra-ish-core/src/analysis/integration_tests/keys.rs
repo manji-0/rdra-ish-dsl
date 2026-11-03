@@ -597,7 +597,7 @@ fn a_selector_naming_no_key_of_the_join_is_unknown_owner_role() {
         );
     }
     let (_, errors) = build(&format!(
-        "{RENEWS}\nusecase U \"u\"\nupdates(U, Permit)\nsets(U, Permit, status == valid).by(renews)\n"
+        "{RENEWS}\nusecase U \"u\"\nupdates(U, Permit)\nsets(U, Permit.status == valid).by(renews)\n"
     ));
     assert!(
         matches!(errors.as_slice(), [RdraError::ByWithoutAlong]),

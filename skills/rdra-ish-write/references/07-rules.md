@@ -45,7 +45,7 @@ Also ask:
    co-occurrences.
 4. Add `required(Entity, ...)` only for facts that truly apply to every reachable state.
 5. Use comparison propositions when rules depend on expressions such as
-   `stock < selling`, and add matching `drives(..., expr, true/false)` effects.
+   `stock < selling`, and add matching `drives(UC, E.col op rhs, true/false)` effects.
    On an Enum, variation, or Bool column, a bare right-hand side is a value
    (`status == paid`, `status != cancelled`) even when a column has the same name, so
    name values as plain words without a prefix. Compare two such columns with a
@@ -59,7 +59,7 @@ Also ask:
    cross-product; keep it off rules that truly forbid global co-existence. A rule that a
    row agrees with its parent (`forbidden(Permit, Application, Permit.kind !=
    Application.kind).along(Permit, Application)`) holds only when the use case that
-   creates the row copies the value (`sets(Register, Permit, kind == Application.kind)`);
+   creates the row copies the value (`sets(Register, Permit.kind == Application.kind)`);
    without the copy the value is a free choice and `check` reports the rule. The guard
    that makes such a rule hold takes the same path:
    `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
@@ -125,8 +125,8 @@ invariant(Order)
 required(Order, total >= 0)
 
 // 3. Comparisons, cross-entity rules, quantifiers, postconditions, properties
-drives(SellOut, Stock, stock < selling, true)
-sets(SellOut, Stock, reorder == true)
+drives(SellOut, Stock.stock < selling, true)
+sets(SellOut, Stock.reorder == true)
 invariant(Stock)
   .when(stock < selling)
   .then(reorder == true)
@@ -173,7 +173,7 @@ terms: one line per use case step with the instances it binds and its `path:line
 and under each step the values it changed and the `transitions` arm or `sets` that
 wrote them. Read the trace before touching the rule: the fix is often a missing effect
 upstream. In this sample of skill `rdra-ish-verify`, DeliverOrder lacks
-`sets(DeliverOrder, Order, delivered_at == present)`, and the warning above the error
+`sets(DeliverOrder, Order.delivered_at == present)`, and the warning above the error
 says so:
 
 ```text
@@ -204,10 +204,10 @@ error[Inv_Order_0]: invariant Inv_Order_0 is violated: invariant violated: when 
 - Required lifecycle effects have corresponding `sets` or transitions.
 - `NoWitness`, `Deadlock`, `NeverRuns`, `UnwrittenConstrainedVar`, and `NoCreationPath`
   findings are reviewed instead of ignored.
-- A comparison reads the Int values of its columns. Move them with `sets(UC, E, col == N)`,
-  or drive the comparison with `drives(..., expr, true/false)`. A use case that drives it one
-  way while its own Int `sets` make it the other is `ContradictoryDrivenComparison`, an
-  error.
+- A comparison reads the Int values of its columns. Move them with `sets(UC, E.col == N)`,
+  or drive the comparison with `drives(UC, E.col op rhs, true/false)`. A use case that
+  drives it one way while its own Int `sets` make it the other is
+  `ContradictoryDrivenComparison`, an error.
 - The final model can explain BUC scope, actor authority, API/system boundaries,
   entity structure, lifecycle, and rules as a single refinement chain.
 

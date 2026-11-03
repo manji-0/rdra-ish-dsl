@@ -133,7 +133,7 @@ pub(crate) fn parse_effect_value(
     }
 }
 
-/// `sets(UC, E, column == F.source)`: the target column of `E` and the column it copies, or
+/// `sets(UC, E.column == F.source)`: the target column of `E` and the column it copies, or
 /// `None` when the comparison is no copy (another operator, or a right-hand side that is not
 /// `Entity.column`). `Err` after reporting an unknown column or entity, or a source whose
 /// values the target cannot hold.

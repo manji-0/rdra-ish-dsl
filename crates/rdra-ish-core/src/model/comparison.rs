@@ -80,7 +80,7 @@ impl CmpRhs {
 
 /// `stock < selling` のような比較命題。
 /// BFS 状態空間では「デフォルト false の派生 Bool 軸」として扱われる。
-/// 真偽は `drives(origin, entity, <expr>, true/false)` によって駆動される。
+/// 真偽は `drives(origin, Entity.column op rhs, true/false)` によって駆動される。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ComparisonProp {
     /// 比較左辺のカラム名（必ずカラム参照）。
@@ -112,7 +112,7 @@ impl ComparisonProp {
     }
 }
 
-/// `drives(origin, entity, <comparison_expr>, true/false)` で宣言された
+/// `drives(origin, Entity.column op rhs, true/false)` で宣言された
 /// 比較命題の真偽効果（解析後）。
 #[derive(Debug, Clone)]
 pub struct PropositionEffect {

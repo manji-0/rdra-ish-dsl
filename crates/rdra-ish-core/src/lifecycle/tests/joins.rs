@@ -20,13 +20,13 @@ usecase Apply "更新申請"
 usecase Renew "更新"
 usecase Expire "失効"
 creates(Issue, App)
-sets(Issue, App, kind == new)
+sets(Issue, App.kind == new)
 creates(Register, Permit)
 condition NoPermitYet "許可がまだない新規申請"
 holds(NoPermitYet, App.kind == new).none(Permit).by(App)
 applies_to(NoPermitYet, Register)
 creates(Apply, App)
-sets(Apply, App, kind == renewal)
+sets(Apply, App.kind == renewal)
 reads(Apply, Permit)
 condition Renewable "更新する許可が有効"
 holds(Renewable, Permit.status == valid).by(renews)
@@ -171,7 +171,7 @@ relate(Permit, Site, N:1).role(home)
 relate(Permit, Site, N:1).role(branch)
 usecase Fix "修正"
 updates(Fix, Permit)
-sets(Fix, Permit, kind == Site.kind)
+sets(Fix, Permit.kind == Site.kind)
 "#;
     let build = |src: &str| -> Vec<StateDiag> {
         let model = model_from(src);
@@ -185,7 +185,7 @@ sets(Fix, Permit, kind == Site.kind)
     assert!(
         ambiguous.iter().any(
             |d| matches!(d, StateDiag::AmbiguousOwnerLink { rewrite, .. }
-            if rewrite == "sets(Fix, Permit, kind == Site.kind).by(home)")
+            if rewrite == "sets(Fix, Permit.kind == Site.kind).by(home)")
         ),
         "{ambiguous:?}"
     );
@@ -214,9 +214,9 @@ usecase Place "注文"
 usecase Ship "出荷"
 usecase Cancel "取消"
 creates(AddEast, Address)
-sets(AddEast, Address, region == east)
+sets(AddEast, Address.region == east)
 creates(AddWest, Address)
-sets(AddWest, Address, region == west)
+sets(AddWest, Address.region == west)
 creates(Place, Order)
 transitions(Ship, Order.status, open -> shipped)
 transitions(Cancel, Order.status, open -> cancelled)
@@ -362,11 +362,11 @@ usecase Place "注文"
 usecase ShipBilled "請求先を確認して出荷"
 usecase Cancel "取消"
 creates(AddEast, Address)
-sets(AddEast, Address, region == east)
+sets(AddEast, Address.region == east)
 creates(AddWest, Address)
-sets(AddWest, Address, region == west)
+sets(AddWest, Address.region == west)
 creates(Place, Order)
-sets(ShipBilled, Address, checked == true)
+sets(ShipBilled, Address.checked == true)
 transitions(ShipBilled, Order.status, open -> shipped)
 transitions(Cancel, Order.status, open -> cancelled)
 condition BillsEast "請求先が東"
@@ -469,7 +469,7 @@ fn a_written_parent_without_by_is_ambiguous() {
 fn a_created_parent_takes_the_named_key_of_a_created_child() {
     let src = TWO_KEYS.replace("{SHIP}", "ship_to").replace(
         "creates(Place, Order)",
-        "creates(Place, Order)\ncreates(Place, Address)\nsets(Place, Address, region == east)\ncondition NewShipTo \"新しい配送先\"\nholds(NewShipTo, Address.region == east).by(ship_to)\napplies_to(NewShipTo, Place)",
+        "creates(Place, Order)\ncreates(Place, Address)\nsets(Place, Address.region == east)\ncondition NewShipTo \"新しい配送先\"\nholds(NewShipTo, Address.region == east).by(ship_to)\napplies_to(NewShipTo, Place)",
     );
     let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
     let place = ts

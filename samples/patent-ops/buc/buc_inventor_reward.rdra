@@ -64,7 +64,7 @@ displays(NotifyReward, RewardScreen)
 invokes(NotifyReward, OpinionApi)
 updates(OpinionApi, InventorReward)
 transitions(NotifyReward, InventorReward.status, decided -> notified)
-sets(NotifyReward, InventorReward, notified_at == present)
+sets(NotifyReward, InventorReward.notified_at == present)
 
 displays(RecordInventorOpinion, RewardScreen)
 invokes(RecordInventorOpinion, OpinionApi)

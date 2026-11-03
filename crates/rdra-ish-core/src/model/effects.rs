@@ -91,7 +91,7 @@ pub struct ChosenValue {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
-/// What `sets(UC, E, column == rhs)` leaves in the column.
+/// What `sets(UC, E.column == rhs)` leaves in the column.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum SetValue {
     /// `column == value`: a literal of the column's type.

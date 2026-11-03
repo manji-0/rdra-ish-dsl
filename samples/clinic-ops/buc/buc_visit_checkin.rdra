@@ -95,7 +95,7 @@ creates(OnlineEligibilityApi, EligibilityCheck)
 reads(OnlineEligibilityApi, InsurancePolicy)
 raises(CheckInPatient, EvAppointmentCheckedIn)
 transitions(CheckInPatient, Appointment.status, scheduled -> checked_in)
-sets(CheckInPatient, Appointment, checked_in_at == present)
+sets(CheckInPatient, Appointment.checked_in_at == present)
 triggers(EvAppointmentCheckedIn, OnlineEligibilitySystem)
 
 // 一括照会 checks the 資格 of the patients booked ahead (mhlw-2023-online-shikaku-tebiki-001085572.txt:365).
@@ -114,7 +114,7 @@ displays(ReceiveEligibilityValid, EligibilityScreen)
 invokes(ReceiveEligibilityValid, EligibilityResultApi)
 triggers(EvEligibilityChecked, ReceiveEligibilityValid)
 transitions(ReceiveEligibilityValid, EligibilityCheck.result, pending -> valid)
-sets(ReceiveEligibilityValid, EligibilityCheck, reference_no == present)
+sets(ReceiveEligibilityValid, EligibilityCheck.reference_no == present)
 
 displays(ReceiveEligibilityInvalid, EligibilityScreen)
 invokes(ReceiveEligibilityInvalid, EligibilityResultApi)
@@ -146,8 +146,8 @@ transitions(ConfirmEligibilityInOutageMode, EligibilityCheck.result, pending -> 
 displays(ReceiveReferralLetter, ReferralScreen)
 invokes(ReceiveReferralLetter, ReferralLetterApi)
 creates(ReferralLetterApi, ReferralLetter)
-sets(ReceiveReferralLetter, ReferralLetter, direction == inbound)
-sets(ReceiveReferralLetter, ReferralLetter, received_at == present)
+sets(ReceiveReferralLetter, ReferralLetter.direction == inbound)
+sets(ReceiveReferralLetter, ReferralLetter.received_at == present)
 
 displays(AssignRoom, RoomBoardScreen)
 invokes(AssignRoom, AssignRoomApi)
@@ -155,7 +155,7 @@ updates(AssignRoomApi, Room)
 updates(AssignRoomApi, Appointment)
 // Only a checked-in visit is roomed. The self-transition is the guard; the status stays.
 transitions(AssignRoom, Appointment.status, checked_in -> checked_in)
-sets(AssignRoom, Room, occupancy_status == occupied)
+sets(AssignRoom, Room.occupancy_status == occupied)
 
 displays(PrepareEncounter, CheckInScreen)
 invokes(PrepareEncounter, PrepareEncounterApi)

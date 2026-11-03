@@ -26,7 +26,7 @@ creates(File, Application)
 transitions(OrderAmendment, Application.status, filed -> formality_order)
 transitions(Amend, Application.status, formality_order -> filed)
 transitions(Grant, Application.status, filed -> granted)
-sets(PayFees, Application, fees_paid == true)
+sets(PayFees, Application.fees_paid == true)
 transitions(Register, Application.status, granted -> registered)
 transitions(Dismiss, Application.status, granted -> dismissed)
 

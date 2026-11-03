@@ -64,7 +64,7 @@ action, and `Spec` allows stuttering.
 | `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
 | Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
 | `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments and the `UNCHANGED` that bind every primed variable it reads. |
-| Comparison proposition driven by `drives(..., cmp, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |
+| Comparison proposition driven by `drives(UC, E.col op rhs, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |
 | `col in (a, b)` / `col not in (a, b)` | `E_col[b0] \in {"a", "b"}` / `E_col[b0] \notin {"a", "b"}`, the same disjunction of equalities that `states` evaluates. A nullable Int value `present` keeps the `\/` form. |
 | `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |
 | Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `CrossForbidden_Order_0`). Each ranges over the present instances. |
@@ -93,7 +93,7 @@ property StockOk
 property SettlesOrEnds
   eventually(Order.status in (delivered, cancelled))
 
-sets(Restock, Item, stock == 3)
+sets(Restock, Item.stock == 3)
 forbidden(Item, stock < selling)
 
 after(DeliverOrder).assert(Order.status == delivered, Order.delivered_at == present)
@@ -156,7 +156,7 @@ quantifier reads inside them, the existence of each instance it binds, the sourc
 transition, the clock when it ticks, the columns it assigns, transitions, or chooses, and the
 existence of each entity it creates or deletes. Closed means what it means for an invariant's
 cone: every action that writes a var of the cone reads only vars of the cone, with two
-exceptions. A copy guard (`sets(UC, Child, col == Parent.col)`) whose target column is
+exceptions. A copy guard (`sets(UC, Child.col == Parent.col)`) whose target column is
 outside the cone is dropped with the column, and a creation of an entity outside the cone
 is dropped with its slot (the `FreesSlots` case below). The cone decides the property's
 verdict under the property's own fairness because, for a fair action `A`, whether `A(p)` is
@@ -373,7 +373,7 @@ The rules for each flag and for deferral are in
   fails: `Cancel` runs between `Pay_1` and `Pay_2`. `split_run_order` passes: the
   settlement step runs once, after the case step, under that case. `quantifier_none`
   still fails.
-- **Int arithmetic.** Comparisons and `sets(..., col == N)` on Int, Money, Decimal,
+- **Int arithmetic.** Comparisons and `sets(..., E.col == N)` on Int, Money, Decimal,
   Date, and DateTime columns use TLC integers on `IntRange` (default `0..5`, override
   with `--int-range-max`). A literal outside that window is
   `IntLiteralOutOfBounds` in `check` and `states` too: raise `--int-range-max` or lower

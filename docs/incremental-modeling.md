@@ -500,7 +500,7 @@ updates(CapturePayment, Order)
 
 transitions(CapturePayment, Order.status, pending -> paid)
 transitions(CancelOrder, Order.status, pending -> cancelled)
-sets(CapturePayment, Order, paid_at == present)
+sets(CapturePayment, Order.paid_at == present)
 ```
 
 Each transition names the use case that moves the state, as the 遷移UC column of an RDRA
@@ -608,7 +608,7 @@ but carry more modeling obligations: a comparison needs `sets` that move its col
 participating entities' instances unless `.along` links them.
 
 ```rdra
-drives(SellItem, Inventory, stock < selling, true)
+drives(SellItem, Inventory.stock < selling, true)
 forbidden(Inventory, stock < selling)
 
 forbidden(Order, Payment,

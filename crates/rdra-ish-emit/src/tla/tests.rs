@@ -34,7 +34,7 @@ entity Session "Session" { id: Int @pk  status: Enum(active, revoked) @default(a
 entity LoginRecord "Login record" { id: Int @pk  result: Enum(succeeded, failed) }
 creates(Login, Session)
 creates(Login, LoginRecord)
-sets(Login, LoginRecord, result == succeeded)
+sets(Login, LoginRecord.result == succeeded)
 exposes(Auth, LoginRecord).append()
 "#;
 
@@ -210,7 +210,7 @@ fn a_column_check_is_an_invariant_that_passes_on_null() {
     ), "{}", bundle.tla);
     assert!(bundle.cfg.contains("INVARIANT Check_CartLine_qty_0\n"));
     let nullable = system(
-        "entity L \"L\" { id: Int @pk  qty: Int @null @check(qty >= 1) }\nusecase A \"A\"\ncreates(A, L)\nsets(A, L, qty == 2)\n",
+        "entity L \"L\" { id: Int @pk  qty: Int @null @check(qty >= 1) }\nusecase A \"A\"\ncreates(A, L)\nsets(A, L.qty == 2)\n",
     );
     let tla = print(&nullable, PrintMode::Check, "M").tla;
     assert!(tla.contains(
@@ -266,7 +266,7 @@ usecase Drop "Drop"
 creates(Make, Item)
 updates(Fill, Item)
 deletes(Drop, Item)
-sets(Fill, Item, qty == 3)
+sets(Fill, Item.qty == 3)
 forbidden(Item, qty < 2)
 "#;
 
@@ -500,7 +500,7 @@ usecase Cancel "C"
 usecase Bump "B"
 creates(Place, Order)
 transitions(Cancel, Order.status, pending -> cancelled)
-sets(Bump, Order, qty == 2)
+sets(Bump, Order.qty == 2)
 condition Unpaid "U"
 holds(Unpaid, Order.status not in (paid))
 applies_to(Unpaid, Cancel)

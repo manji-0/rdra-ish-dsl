@@ -86,7 +86,7 @@ creates(ClaimCreateApi, Claim)
 displays(ConfirmClaimIntent, ClaimScreen)
 invokes(ConfirmClaimIntent, ClaimApi)
 updates(ClaimApi, Claim)
-sets(ConfirmClaimIntent, Claim, grade_explained == true)
+sets(ConfirmClaimIntent, Claim.grade_explained == true)
 
 condition ClaimGuided "請求の案内をした段階である"
 holds(ClaimGuided, Claim.status == guided)
@@ -106,7 +106,7 @@ displays(CompleteClaim, ClaimScreen)
 invokes(CompleteClaim, ClaimApi)
 transitions(CompleteClaim, Claim.status, submitted -> completed)
 transitions(CompleteClaim, Claim.period, not_started -> running)
-sets(CompleteClaim, Claim, completed_on == present)
+sets(CompleteClaim, Claim.completed_on == present)
 
 // A use case that moves both columns runs only where each column has an arm from its state, so a
 // claim withdrawn before its period starts needs an arm from `not_started` too (README, Soak findings).

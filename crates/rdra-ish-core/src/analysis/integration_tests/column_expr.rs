@@ -162,7 +162,7 @@ fn a_sets_or_transitions_on_a_derived_column_is_derived_column_written() {
   big: Bool @derived(total >= 3)
 }
 usecase Mark "Mark"
-sets(Mark, Order, big == true)
+sets(Mark, Order.big == true)
 "#,
     );
     assert!(

@@ -23,11 +23,11 @@ entity Notice "通知" {
   route: Route
 }
 creates(Receive, Notice)
-sets(Receive, Notice, scope == limited)
-sets(Receive, Notice, route == mail)
+sets(Receive, Notice.scope == limited)
+sets(Receive, Notice.route == mail)
 transitions(Draft, Notice.status, open -> drafted)
 transitions(Reopen, Notice.status, drafted -> open)
-sets(Reopen, Notice, final == true)
+sets(Reopen, Notice.final == true)
 forbidden(Notice, status == drafted, scope == free)
 forbidden(Notice, status == drafted, route == online)
 "#;
@@ -101,7 +101,7 @@ fn two_chosen_columns_take_every_pair() {
 /// On the creating use case `chooses` is the creation's own choice: nothing changes.
 #[test]
 fn chooses_on_a_creation_is_the_creations_choice() {
-    let src = DRAFT.replace("sets(Receive, Notice, scope == limited)\n", "");
+    let src = DRAFT.replace("sets(Receive, Notice.scope == limited)\n", "");
     let with = derive_src(&format!("{src}\nchooses(Receive, Notice.scope)\n"));
     let without = derive_src(&src);
     assert_eq!(with.rows("Notice"), without.rows("Notice"));

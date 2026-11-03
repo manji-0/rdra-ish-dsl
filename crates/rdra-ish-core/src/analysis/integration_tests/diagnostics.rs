@@ -443,8 +443,8 @@ entity Order "注文" {
 }
 usecase Pay "支払"
 usecase Refund "返金"
-drives(Pay, Order, status == paid, false)
-drives(Refund, Order, stock < selling, false)
+drives(Pay, Order.status == paid, false)
+drives(Refund, Order.stock < selling, false)
 "#;
     let (ast, parse_errors) = parse(src);
     assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
@@ -565,7 +565,7 @@ fn transitions_keyed_by_an_event_names_the_codemod() {
 
 #[test]
 fn sets_with_an_event_origin_names_the_codemod() {
-    let errors = event_origin_errors("sets(event::EvPay, Order, paid_at == present)");
+    let errors = event_origin_errors("sets(event::EvPay, Order.paid_at == present)");
     assert!(
         errors
             .iter()
@@ -576,7 +576,7 @@ fn sets_with_an_event_origin_names_the_codemod() {
 
 #[test]
 fn other_type_mismatches_keep_the_generic_hint() {
-    let errors = event_origin_errors("sets(Order, Order, paid_at == present)");
+    let errors = event_origin_errors("sets(Order, Order.paid_at == present)");
     assert!(
         errors
             .iter()

@@ -26,7 +26,7 @@
 - `.by(role)` names the key a join follows wherever two keys join the same two entities
   (#73): after `.has(...)` or `.none(...)` (on an `invariant` or a `holds`), after a `holds`
   body (the link from an entity it compares to the entities the guarded use case binds),
-  after a copy `sets(UC, E, col == F.col)`, and after `.along(...)` as before. One resolver,
+  after a copy `sets(UC, E.col == F.col)`, and after `.along(...)` as before. One resolver,
   `SemanticModel::join_key`, decides every join for `check`, `states`, the TLA+ export and
   `verify`: one key is the join and needs no selector; among several, the one `.by` names (its
   role, or its parent id when it has no `.role`); otherwise `AmbiguousOwnerLink`, an error
@@ -66,7 +66,7 @@
   (--deny-undecided fails the run)`. `verify --deny-undecided` makes that an error
   (`verification incomplete: ...`, exit 1). Findings a `--buc` or `--entity` scope leaves
   open do not count.
-- `sets(UseCase, Entity, column == Source.column)` copies a value from another row (#69).
+- `sets(UseCase, Entity.column == Source.column)` copies a value from another row (#69).
   The use case leaves in the column the value the source column holds in the row the step
   binds, read as a `holds` atom on that entity reads it: a row the use case writes in the
   same transaction group (before the step on an update, as the step leaves it on a
@@ -124,14 +124,14 @@
   gains `GrantEnds`, checked on a 4,105-state cone (its whole model explored 14 million
   states in 11 minutes without finishing). `lifecycle_measure` lists property cones too.
 
-- `drives(UseCase, Entity, comparison, true | false)` drives a comparison proposition true or
-  false (#51, condition 4). It is what the four-argument `sets` did: `sets` assigned a value
+- `drives(UseCase, Entity.column op rhs, true | false)` drives a comparison proposition true
+  or false (#51, condition 4). It is what the four-argument `sets` did: `sets` assigned a value
   with three arguments and drove a comparison with four, two meanings told apart by arity.
   Now `sets` only assigns, and `drives` only drives. A `drives` records the same proposition
   effect, so `states`, `check`, and the TLA+ export are unchanged. A value equality driven
-  true (`drives(Pay, Order, status == paid, true)`) still sets the value; driven false it is
-  `DrivesFalseOnEquals` (was `SetsFalseOnEquals`). A `drives` with a third argument that is
-  not a comparison, or a fourth that is not `true` or `false`, is `DrivesNoEffect`. A `sets`
+  true (`drives(Pay, Order.status == paid, true)`) still sets the value; driven false it is
+  `DrivesFalseOnEquals` (was `SetsFalseOnEquals`). A `drives` with a second argument that is
+  not a comparison, or a third that is not `true` or `false`, is `DrivesNoEffect`. A `sets`
   with a comparison is `SetsNoEffect`, whose hint now names `drives`. A set membership in
   either is `EffectMembership` (was `SetsMembership`), naming the predicate.
 
@@ -143,8 +143,9 @@
   makes it an error; `fmt` prints the current form, so `fmt --write` is the migration. A form
   is deprecated in a minor release and removed no earlier than the next major one.
   `LEGACY_FORMS` in `crates/rdra-ish-syntax/src/removed.rs` lists every legacy form with its
-  status; the forms removed in 0.3.0 and 0.4.0 stay load errors. The four-argument `sets` is
-  the first deprecated form (see Deprecated).
+  status; the forms removed in 0.3.0 and 0.4.0 stay load errors. No form is deprecated in
+  this release: the four-argument `sets`, deprecated while this release was in development, is
+  removed (see Removed).
   `language-reference.md` "Removed forms" is now "Deprecated and removed forms".
 
 - `.fair(UseCase, ...)` on an `eventually` / `leads_to` property assumes each listed use case is
@@ -502,13 +503,25 @@
   link from the application to its drafting order, which takes three cones past 10,000,000
   states at 2 instances. The README names both as known verification gaps (#51, condition 5).
 
-### Deprecated
+### Removed
 
-- `sets(UseCase, Entity, comparison, true | false)`, the four-argument `sets`, is deprecated
-  since 0.5.0 and removed in 2.0.0 (#51, condition 4); write `drives(...)` with the same
-  arguments. It still loads as `drives` with a `DeprecatedSyntax` warning, `lint` lists it as
-  `deprecated-syntax`, and `rdra-ish fmt --write` rewrites it. Every four-argument `sets` in
-  the docs, skills, and tests is rewritten; no sample used it.
+- `sets` and `drives` name their column as `Entity.column`, as every other predicate does
+  (#82, #88): `sets(UseCase, Entity.column == value)`, the copy `sets(UseCase, Entity.column
+  == Source.column)`, and `drives(UseCase, Entity.column op rhs, true | false)`. Before,
+  `sets(Pay, Order.paid_at == present)` loaded, passed `check`, `lint`, and `fmt`, and set
+  nothing; now it is the form, and a `sets` or `drives` whose column names no entity
+  (`sets(Pay, paid_at == present)`) is `SetsNoEffect` or `DrivesNoEffect`. The forms that name
+  the entity apart from the column fail to load with the line to write: `sets(UC, E, col ==
+  v)` gives ``write `sets(UC, E.col == v)` ``, `drives(UC, E, cmp, b)` gives ``write
+  `drives(UC, E.col op rhs, b)` ``, and the four-argument `sets(UC, E, cmp, b)`, deprecated
+  during this release's development, gives the same `drives`; a `.by(...)` after a copy is
+  kept. There is no deprecation period before 1.0 (docs/compatibility.md). Migrate with
+  `python3 scripts/migrate-syntax-v3.py <workspace>`, which rewrites the three forms in
+  `.rdra` files and in any file named on the command line, spans lines, and is safe to run
+  twice. It rewrote 154 lines of the samples (the skill samples share their files), 5 of
+  `tests/fixtures`, and the docs, skills, and tests; every sample derives the same states,
+  findings, rule names, and TLA+ export as before. `fmt --write` cannot migrate them, since
+  `fmt` refuses a file that fails to load.
 
 ### Fixed
 

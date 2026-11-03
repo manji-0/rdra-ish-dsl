@@ -32,7 +32,7 @@ fn a_violated_rule_reports_its_shortest_trace_once() {
     // Three patterns violate it (paid with either flag, shipped); only the first reached is
     // reported.
     let d = derive_src(&format!(
-        "{ORDER}\nusecase Flag \"印\"\nupdates(Flag, Order)\nsets(Flag, Order, flagged == true)\nforbidden(Order, status == paid)"
+        "{ORDER}\nusecase Flag \"印\"\nupdates(Flag, Order)\nsets(Flag, Order.flagged == true)\nforbidden(Order, status == paid)"
     ));
     let found = traces(&d);
     assert_eq!(found.len(), 1, "{found:?}");

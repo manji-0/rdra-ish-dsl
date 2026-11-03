@@ -190,10 +190,10 @@ performs(Staff, Book)
         std::fs::remove_dir(root).ok();
     }
 
-    /// The source of a copy (`sets(UC, E, col == Src.col)`, #69) is a reference to `Src`.
+    /// The source of a copy (`sets(UC, E.col == Src.col)`, #69) is a reference to `Src`.
     #[test]
     fn renames_the_source_entity_of_a_copy() {
-        let src = "variation K \"k\" {\n  a \"a\"\n  b \"b\"\n}\nentity Src \"s\" {\n  id: Int @pk\n  kind: K\n}\nentity Dst \"d\" {\n  id: Int @pk\n  kind: K\n}\nrelate(Dst, Src, N:1)\nusecase Make \"m\"\ncreates(Make, Dst)\nsets(Make, Dst, kind == Src.kind)\n";
+        let src = "variation K \"k\" {\n  a \"a\"\n  b \"b\"\n}\nentity Src \"s\" {\n  id: Int @pk\n  kind: K\n}\nentity Dst \"d\" {\n  id: Int @pk\n  kind: K\n}\nrelate(Dst, Src, N:1)\nusecase Make \"m\"\ncreates(Make, Dst)\nsets(Make, Dst.kind == Src.kind)\n";
         let root = std::env::temp_dir().join(format!("rdra-rename-copy-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&root);
         let file = root.join("sample.rdra");
@@ -297,7 +297,7 @@ performs(Staff, Book)
             ),
             ("sets", "by") => (
                 ENTITY_TGT,
-                "relate(A, Tgt, N:1)\nusecase U \"u\"\nupdates(U, A)\nsets(U, A, status == Tgt.status).by(Tgt)",
+                "relate(A, Tgt, N:1)\nusecase U \"u\"\nupdates(U, A)\nsets(U, A.status == Tgt.status).by(Tgt)",
             ),
             ("invariant", "when") => (
                 ENTITY_TGT,

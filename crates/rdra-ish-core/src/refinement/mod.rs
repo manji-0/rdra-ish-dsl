@@ -697,7 +697,7 @@ entity Other \"Other\" {{
 displays(PlaceOrder, Checkout)
 creates(PlaceOrder, Order)
 transitions(PlaceOrder, Order.status, pending -> paid)
-sets(PlaceOrder, Order, paid_at == present)
+sets(PlaceOrder, Order.paid_at == present)
 forbidden(Other, open == false)
 "
         );

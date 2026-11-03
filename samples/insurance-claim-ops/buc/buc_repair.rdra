@@ -69,7 +69,7 @@ transitions(AgreeRepairCost, RepairEstimate.status, submitted -> agreed)
 
 displays(ApproveRepairStart, RepairScreen)
 invokes(ApproveRepairStart, RepairEstimateApi)
-sets(ApproveRepairStart, RepairEstimate, approved == true)
+sets(ApproveRepairStart, RepairEstimate.approved == true)
 
 condition RepairCostAgreed "修理費を協定した"
 holds(RepairCostAgreed, RepairEstimate.status == agreed)

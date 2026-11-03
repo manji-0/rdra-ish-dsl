@@ -243,8 +243,8 @@ These rules are `warning` rows:
   [`variation`](./language-reference.md#variations).
 - `field-column-unwritten` warns on a screen field mapped by `maps_field` to a `@null` column
   that no `sets` and no `chooses` gives a value. `states` keeps the column at `null`, so the
-  field shows a value the model never produces. The hint is to add `sets(UseCase, Entity,
-  column == present)`.
+  field shows a value the model never produces. The hint is to add `sets(UseCase,
+  Entity.column == present)`.
 - `rdra-*` rules are the RDRA definition sheet's 不整合 columns that lint enforces: an actor,
   external system, entity, condition, variation, or timer that no BUC reaches
   (`rdra-actor-no-buc`, `rdra-extsystem-no-buc`, `rdra-entity-no-buc`,

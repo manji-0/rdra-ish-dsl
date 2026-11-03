@@ -172,7 +172,7 @@ Name the use case that drives each state edge with
 `transitions(CancelOrder, Order.status, pending -> cancelled)`; states are the Enum
 variants and are never declared. For every use case that changes a nullable column, a
 `Bool` flag, an Int, or an inline `Enum` that has no `transitions`, add
-`sets(UseCase, Entity, column == value)`. A value the actor chooses and no use case
+`sets(UseCase, Entity.column == value)`. A value the actor chooses and no use case
 sets (a payment method, a channel) is not a state: type that column by a `variation`.
 
 ### Step 5 — Update shared files if needed

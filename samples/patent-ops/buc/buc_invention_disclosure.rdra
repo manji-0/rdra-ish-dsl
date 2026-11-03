@@ -77,7 +77,7 @@ transitions(ResubmitDisclosure, InventionDisclosure.status, returned -> submitte
 // when the 規程 says so in advance. The model assumes the company has such a 規程.
 displays(JudgeEmployeeInvention, DisclosureReviewScreen)
 invokes(JudgeEmployeeInvention, DisclosureReviewApi)
-sets(JudgeEmployeeInvention, InventionDisclosure, right_acquired == true)
+sets(JudgeEmployeeInvention, InventionDisclosure.right_acquired == true)
 
 condition EmployeeInvention "職務発明である"
 holds(EmployeeInvention, InventionDisclosure.category == employee)
@@ -88,7 +88,7 @@ applies_to(EmployeeInvention, JudgeEmployeeInvention)
 // (niigata-u-2023-hatsumei-flowchart.txt:139).
 displays(AcquireRightsByAssignment, DisclosureReviewScreen)
 invokes(AcquireRightsByAssignment, DisclosureReviewApi)
-sets(AcquireRightsByAssignment, InventionDisclosure, right_acquired == true)
+sets(AcquireRightsByAssignment, InventionDisclosure.right_acquired == true)
 
 condition NonEmployeeInvention "職務発明に当たらない"
 holds(NonEmployeeInvention, InventionDisclosure.category == nonemployee)

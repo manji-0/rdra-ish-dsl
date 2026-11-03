@@ -20,10 +20,10 @@ contains(BucOrderFlagging, Ship)
 contains(BucOrderFlagging, Flag)
 
 creates(Place, Order)
-sets(Place, Order, status == placed)
+sets(Place, Order.status == placed)
 updates(Ship, Order)
 updates(Flag, Order)
-sets(Flag, Order, flagged == true)
+sets(Flag, Order.flagged == true)
 
 transitions(Ship, Order.status, placed -> shipped)
 

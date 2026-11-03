@@ -88,11 +88,11 @@ applies_to(SettlementEligible, OpenSettlement)
 displays(RecordInsuredConsent, SettlementScreen)
 invokes(RecordInsuredConsent, SettlementApi)
 updates(SettlementApi, Settlement)
-sets(RecordInsuredConsent, Settlement, insured_consent == true)
+sets(RecordInsuredConsent, Settlement.insured_consent == true)
 
 displays(RecordVictimConsent, SettlementScreen)
 invokes(RecordVictimConsent, SettlementApi)
-sets(RecordVictimConsent, Settlement, victim_consent == true)
+sets(RecordVictimConsent, Settlement.victim_consent == true)
 
 condition ConsentPending "示談代行の同意を確かめている"
 holds(ConsentPending, Settlement.status == consent_pending)

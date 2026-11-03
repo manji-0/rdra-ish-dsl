@@ -76,9 +76,9 @@ usecase Send "発送"
 creates(Place, Order)
 transitions(Pay, Order.status, pending -> paid)
 creates(Pack, Parcel)
-sets(Pack, Order, last == pack)
+sets(Pack, Order.last == pack)
 transitions(Send, Parcel.state, packed -> sent)
-sets(Send, Order, last == send)
+sets(Send, Order.last == send)
 condition Packable "梱包可"
 holds(Packable, Order.status == paid).none(Parcel.state == sent)
 applies_to(Packable, Pack)
