@@ -4,6 +4,12 @@
 
 ### Added
 
+- `--instance-count` and `--int-range-max` on `check` and `states` (#95), with the names,
+  meaning and validation of `verify`'s. The defaults stay the bounds they always ran at, 1
+  instance per entity and Int `0..5`, so a run without the flags prints what it did before;
+  the `bounds:` and `OK:` lines print the values used. A larger value makes more states per
+  cone, so `--max-states` is reached sooner. `docs/compatibility.md`'s advice to pass the
+  bounds as flags now holds for `check`.
 - `sets(UC, E.date == N)` on a `Date` or `DateTime` column (#89): the number is a point on
   the clock `now` ticks through, as an Int literal is on an Int column, so a rule that reads
   `expires_at < now` has a deadline the use case sets instead of a column no use case

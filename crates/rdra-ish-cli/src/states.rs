@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use rdra_ish_core::lifecycle::{derive_states_built, Caps, Scope, Site};
+use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Scope, Site};
 use rdra_ish_core::{entity_state_variants, format_location};
 use rdra_ish_emit::{
     state_pattern::{render_csv, render_json, render_table},
@@ -18,6 +18,7 @@ use rdra_ish_core::{load_project, Project};
 pub fn run_states(
     inputs: &[PathBuf],
     format: StatesFormat,
+    bounds: Bounds,
     caps: Caps,
     scope: &ScopeArgs,
 ) -> Result<()> {
@@ -31,7 +32,7 @@ pub fn run_states(
     let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
 
     // Exit on structured severity (not string scan) so csv / typescript also fail-closed.
-    let (report, ts) = derive_states_built(&model, &scope, caps);
+    let (report, ts) = derive_states_built(&model, &scope, bounds, caps);
     eprintln!("{}", report.bounds_line(&model));
     for d in report.unattributed() {
         eprintln!("{}", Finding::new(d, &[], state_diag_message(d)));

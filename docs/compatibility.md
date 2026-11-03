@@ -112,9 +112,9 @@ result that changes for a model within the same printed bounds is a breaking cha
 unless it fixes a bug that the changelog names.
 
 To keep a result reproducible across releases, pass the bounds a command takes as flags
-instead of relying on the defaults: `--max-states` for `check` and `states`, and
-`--instance-count` and `--int-range-max` for `verify`. The [Bounds](./state-derivation.md#bounds)
-table lists the fixed bounds of `check`.
+instead of relying on the defaults: `--instance-count`, `--int-range-max`, and
+`--max-states` for `check` and `states`, and `--instance-count` and `--int-range-max` for
+`verify`. The [Bounds](./state-derivation.md#bounds) table lists each command's defaults.
 [Known verification gaps](./formal-verification.md#known-verification-gaps) lists what the
 bounds leave unchecked.
 

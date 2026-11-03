@@ -805,3 +805,108 @@ forbidden(Voucher, used == true)
         "{stderr}"
     );
 }
+
+/// Two cases linked to one handler break `Unique_Case_Handler` only with a second slot per
+/// entity (#95): `check` and `states` run one by default, and `--instance-count` and
+/// `--int-range-max` size the system and the `bounds:` line they print.
+const TWO_CASES_ONE_HANDLER: &str = r#"entity Handler "担当" { id: Int @pk  busy: Bool @default(false) }
+entity Case "案件" { id: Int @pk  status: Enum(new, assigned) @default(new) }
+relate(Case, Handler, 1:1).optional()
+usecase OpenCase "受付"
+usecase Assign "担当を割り当てる"
+creates(OpenCase, Case)
+updates(Assign, Handler)
+transitions(Assign, Case.status, new -> assigned)
+sets(Assign, Handler.busy == true)
+links(Assign, Case, Handler)
+"#;
+
+fn run_on_source(name: &str, src: &str, args: &[&str]) -> (Option<i32>, String, String) {
+    let dir = std::env::temp_dir().join(format!("rdra-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join(format!("{name}.rdra"));
+    std::fs::write(&file, src).unwrap();
+    let (command, rest) = args.split_first().unwrap();
+    let mut full = vec![*command, file.to_str().unwrap()];
+    full.extend_from_slice(rest);
+    let output = run(&full);
+    let _ = std::fs::remove_dir_all(&dir);
+    (
+        output.status.code(),
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+    )
+}
+
+#[test]
+fn check_bounds_flags_size_the_system() {
+    let (code, stdout, stderr) = run_on_source("bounds-default", TWO_CASES_ONE_HANDLER, &["check"]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stderr.starts_with("bounds: 1 instance per entity, Int 0..5; "),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("Unique_Case_Handler"), "{stderr}");
+    assert!(
+        stdout.ends_with("OK: no errors within 1 instance per entity, Int 0..5\n"),
+        "{stdout}"
+    );
+
+    let (code, _, stderr) = run_on_source(
+        "bounds-two",
+        TWO_CASES_ONE_HANDLER,
+        &["check", "--instance-count", "2", "--int-range-max", "3"],
+    );
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.starts_with("bounds: 2 instances per entity, Int 0..3; "),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Unique_Case_Handler"), "{stderr}");
+    assert!(!stderr.contains("TLA+"), "{stderr}");
+}
+
+#[test]
+fn states_bounds_flags_change_the_bounds_line() {
+    let (_, _, stderr) = run_on_source("states-default", TWO_CASES_ONE_HANDLER, &["states"]);
+    assert!(
+        stderr.starts_with("bounds: 1 instance per entity, Int 0..5; "),
+        "{stderr}"
+    );
+    let (_, _, stderr) = run_on_source(
+        "states-two",
+        TWO_CASES_ONE_HANDLER,
+        &["states", "--instance-count", "2"],
+    );
+    assert!(
+        stderr.starts_with("bounds: 2 instances per entity, Int 0..5; "),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn check_rejects_bounds_verify_rejects() {
+    for (flag, value, message) in [
+        (
+            "--instance-count",
+            "0",
+            "--instance-count must be between 1 and 255",
+        ),
+        (
+            "--instance-count",
+            "256",
+            "--instance-count must be between 1 and 255",
+        ),
+        ("--int-range-max", "0", "--int-range-max must be >= 1"),
+        (
+            "--int-range-max",
+            "256",
+            "--int-range-max must be at most 255",
+        ),
+    ] {
+        let (code, _, stderr) =
+            run_on_source("bounds-bad", TWO_CASES_ONE_HANDLER, &["check", flag, value]);
+        assert_eq!(code, Some(1), "{flag} {value}: {stderr}");
+        assert!(stderr.contains(message), "{flag} {value}: {stderr}");
+    }
+}

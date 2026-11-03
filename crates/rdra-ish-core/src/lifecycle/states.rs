@@ -199,16 +199,16 @@ impl StatesReport {
 /// cone. A `--buc` that drops use cases leaves the progress findings undecided; `--entity`
 /// does not, because each selected cone is exact.
 pub fn derive_states(model: &SemanticModel, scope: &Scope, caps: Caps) -> StatesReport {
-    derive_states_built(model, scope, caps).0
+    derive_states_built(model, scope, Bounds::STATES, caps).0
 }
 
-/// `derive_states`, and the system it explored, which names what the scope left out.
+/// `derive_states` at `bounds`, and the system it explored, which names what the scope left out.
 pub fn derive_states_built(
     model: &SemanticModel,
     scope: &Scope,
+    bounds: Bounds,
     caps: Caps,
 ) -> (StatesReport, TransitionSystem) {
-    let bounds = Bounds::STATES;
     let built = TransitionSystem::build(model, bounds, scope);
     let mut run = built.ts.explore_targets(&built.selection.targets, caps);
     if !scope.bucs.is_empty() {

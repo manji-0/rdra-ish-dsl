@@ -43,6 +43,17 @@ pub fn export_artifact(
 
 /// `--instance-count` and `--int-range-max` as the system's bounds.
 pub fn tla_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
+    let bounds = checked_bounds(instance_count, int_range_max)?;
+    if bounds.instances.get() == 1 {
+        eprintln!(
+            "warning: --instance-count 1 yields singleton Entity_Ids; multi-entity .along / quantifiers cannot distinguish instances"
+        );
+    }
+    Ok(bounds)
+}
+
+/// `--instance-count` and `--int-range-max` as the system's bounds, validated and silent.
+pub fn checked_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
     let Some(instances) = u8::try_from(instance_count).ok().and_then(NonZeroU8::new) else {
         bail!("--instance-count must be between 1 and 255");
     };
@@ -53,11 +64,6 @@ pub fn tla_bounds(instance_count: u32, int_range_max: u32) -> Result<Bounds> {
         Ok(n) => n,
         Err(_) => bail!("--int-range-max must be at most 255"),
     };
-    if instances.get() == 1 {
-        eprintln!(
-            "warning: --instance-count 1 yields singleton Entity_Ids; multi-entity .along / quantifiers cannot distinguish instances"
-        );
-    }
     Ok(Bounds { instances, int_max })
 }
 

@@ -55,6 +55,7 @@ fn main() -> Result<()> {
             deny_deprecated: deny,
             max_patterns,
             max_states,
+            bounds,
             scope,
         } => {
             let Project {
@@ -82,7 +83,7 @@ fn main() -> Result<()> {
             let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
             let caps = Caps::new(max_patterns, max_states);
-            let lifecycle = state_findings(&program, &model, &scope, caps);
+            let lifecycle = state_findings(&program, &model, &scope, bounds.bounds()?, caps);
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
                 let as_error = strict && is_strict_access_gap(&diag.error);
@@ -297,8 +298,15 @@ fn main() -> Result<()> {
             format,
             max_patterns,
             max_states,
+            bounds,
             scope,
-        } => run_states(&inputs, format, Caps::new(max_patterns, max_states), &scope)?,
+        } => run_states(
+            &inputs,
+            format,
+            bounds.bounds()?,
+            Caps::new(max_patterns, max_states),
+            &scope,
+        )?,
 
         Commands::Verify {
             inputs,

@@ -4,9 +4,9 @@
 use std::fmt;
 
 use rdra_ish_core::lifecycle::{
-    derive_states_built, label_prefix, ActionOrigin, Birth, Blocked, BoundsLine, Caps, Change,
-    GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag, Trace,
-    TraceStep, TransitionSystem,
+    derive_states_built, label_prefix, ActionOrigin, Birth, Blocked, Bounds, BoundsLine, Caps,
+    Change, GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site,
+    StateDiag, Trace, TraceStep, TransitionSystem,
 };
 use rdra_ish_core::model::LinkKind;
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
@@ -50,7 +50,7 @@ pub(crate) fn state_consistency_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
 ) -> Vec<Finding> {
-    state_findings(program, model, &Scope::ALL, Caps::STATES).findings
+    state_findings(program, model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings
 }
 
 /// What `check` prints of the lifecycle: the bounds and scope, the findings, and the
@@ -67,9 +67,10 @@ pub(crate) fn state_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
     scope: &Scope,
+    bounds: Bounds,
     caps: Caps,
 ) -> StateFindings {
-    let (report, ts) = derive_states_built(model, scope, caps);
+    let (report, ts) = derive_states_built(model, scope, bounds, caps);
     let on_views = report.views.iter().flat_map(|result| {
         let diags = result.diagnostics.iter().filter(|d| !has_block(d));
         diags.map(move |diag| {

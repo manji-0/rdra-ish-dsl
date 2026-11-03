@@ -351,7 +351,8 @@ The bounds are inputs of the system, and every result states them.
 
 | Command | Instances per entity | Int range |
 |---|---|---|
-| `states`, `check`, and the generators | 1 | `0..5` |
+| `states`, `check` | `--instance-count` (default 1) | `0..--int-range-max` (default 5) |
+| the generators | 1 | `0..5` |
 | `export --kind tla`, `verify` | `--instance-count` (default 2) | `0..--int-range-max` (default 5) |
 
 `states` prints its bounds on stderr first:

@@ -175,6 +175,8 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
         max_states: usize,
         #[command(flatten)]
+        bounds: BoundsArgs,
+        #[command(flatten)]
         scope: ScopeArgs,
     },
     /// Generate a Mermaid diagram (.mmd)
@@ -305,6 +307,8 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
         max_states: usize,
         #[command(flatten)]
+        bounds: BoundsArgs,
+        #[command(flatten)]
         scope: ScopeArgs,
     },
     /// Formally verify temporal/safety properties via an external checker
@@ -335,6 +339,24 @@ pub(crate) enum Commands {
         #[command(flatten)]
         scope: ScopeArgs,
     },
+}
+
+/// The size of the system `check` and `states` explore. The defaults are `Bounds::STATES`;
+/// `verify` and `export --kind tla` default to two instances instead.
+#[derive(Args, Clone, Debug)]
+pub(crate) struct BoundsArgs {
+    /// Instances (slots) per entity
+    #[arg(long, default_value_t = 1)]
+    pub(crate) instance_count: u32,
+    /// The Int domain is `0..=N`
+    #[arg(long, default_value_t = 5)]
+    pub(crate) int_range_max: u32,
+}
+
+impl BoundsArgs {
+    pub(crate) fn bounds(&self) -> anyhow::Result<rdra_ish_core::lifecycle::Bounds> {
+        crate::export::checked_bounds(self.instance_count, self.int_range_max)
+    }
 }
 
 /// The part of the model `check`, `states`, and `verify` cover.

@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use rdra_ish_core::lifecycle::{derive_states_built, Caps, Scope as LifecycleScope};
+use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Scope as LifecycleScope};
 use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     mermaid::{
@@ -55,7 +55,8 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     if kind.reads_lifecycle() {
         // A deadlock is coloured in the diagram, not a reason to refuse it.
         reject_state_errors_except_deadlock(&program, &model)?;
-        let (report, _) = derive_states_built(&model, &LifecycleScope::ALL, Caps::STATES);
+        let (report, _) =
+            derive_states_built(&model, &LifecycleScope::ALL, Bounds::STATES, Caps::STATES);
         state.marks = StateMarks::from_report(&report);
     } else {
         note_state_errors(&program, &model);
