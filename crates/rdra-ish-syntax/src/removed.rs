@@ -183,29 +183,62 @@ pub(crate) struct LegacyCall {
 }
 
 /// The legacy form `pred` is written in, if any, rewritten to its current form.
+/// Every row whose form the call is written in rewrites it in turn, so a call in two legacy
+/// forms (a copy `sets(UC, E, col == F.col).by(role)`) gets one message naming each reason
+/// and the line that loads.
 pub(crate) fn legacy_predicate(pred: &PredicateCall) -> Option<LegacyCall> {
-    LEGACY_FORMS.iter().find_map(|form| {
+    let mut current = pred.clone();
+    let mut messages = Vec::new();
+    let mut deprecation = None;
+    let mut removed = false;
+    for form in LEGACY_FORMS {
         let Detect::Predicate(names, rewrite) = form.detect else {
-            return None;
+            continue;
         };
-        if !names.contains(&pred.name.as_str()) {
-            return None;
+        if !names.contains(&current.name.as_str()) {
+            continue;
         }
-        let (rewritten, message) = rewrite(pred)?;
-        Some(match form.status {
-            Status::Removed { .. } => LegacyCall {
-                rewritten,
-                message,
-                deprecated: false,
-            },
-            Status::Deprecated { since, removed_in } => LegacyCall {
-                rewritten,
-                message: format!(
-                    "{message} (deprecated since {since}, removed in {removed_in}; `rdra-ish fmt --write` rewrites it)"
-                ),
-                deprecated: true,
-            },
-        })
+        let Some((rewritten, message)) = rewrite(&current) else {
+            continue;
+        };
+        messages.push(message);
+        match form.status {
+            Status::Removed { .. } => removed = true,
+            Status::Deprecated { since, removed_in } => {
+                deprecation.get_or_insert((since, removed_in));
+            }
+        }
+        current = rewritten;
+    }
+    if messages.is_empty() {
+        return None;
+    }
+    // One form: its own message. Several: each reason, then the line that loads.
+    let mut message = match messages.as_slice() {
+        [one] => one.clone(),
+        _ => {
+            let reasons: Vec<&str> = messages
+                .iter()
+                .map(|m| m.rsplit_once("; write `").map_or(m.as_str(), |(r, _)| r))
+                .collect();
+            format!(
+                "{}; write `{}`",
+                reasons.join("; "),
+                format_predicate(&current)
+            )
+        }
+    };
+    // A removed form makes the call an error; only an all-deprecated call still loads.
+    let deprecation = deprecation.filter(|_| !removed);
+    if let Some((since, removed_in)) = deprecation {
+        message.push_str(&format!(
+            " (deprecated since {since}, removed in {removed_in}; `rdra-ish fmt --write` rewrites it)"
+        ));
+    }
+    Some(LegacyCall {
+        rewritten: current,
+        message,
+        deprecated: deprecation.is_some(),
     })
 }
 
@@ -419,6 +452,8 @@ fn legacy_rule_scope(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
     }
     let mut rewritten = pred.clone();
     let shown = if scope.is_empty() {
+        // Nothing to name: the message shows a placeholder, and the call is kept so the
+        // analysis reports no symbol `Entity`.
         let mut shown = pred.clone();
         let entity = QRef {
             kind_qualifier: None,
@@ -685,16 +720,36 @@ mod tests {
                 "sets(Pay, Order, Order.status == paid)",
                 "sets(Pay, Order.status == paid)",
             ),
-            (
-                "sets(Fix, Permit, kind == Site.kind).by(home)",
-                "sets(Fix, Permit.kind == Site.kind).by(home)",
-            ),
         ] {
             assert_eq!(
                 messages(&format!("{old}\n")),
                 vec![format!(
                     "`sets` names the column as `Entity.column`; write `{new}`"
                 )],
+                "{old}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_call_in_two_removed_forms_names_both_and_the_line_that_loads() {
+        for (old, reasons, new) in [
+            (
+                "sets(Fix, Permit, kind == Site.kind).by(home)",
+                "`sets` names the column as `Entity.column`; \
+                 `.by(...)` that picks a key is `.role(...)`",
+                "sets(Fix, Permit.kind == Site.kind).role(home)",
+            ),
+            (
+                "invariant().when(Order.status == paid).none(Ticket).by(order)",
+                "`invariant` names the entities it ranges over first; \
+                 `.by(...)` that picks a key is `.role(...)`",
+                "invariant(Order).when(Order.status == paid).none(Ticket).role(order)",
+            ),
+        ] {
+            assert_eq!(
+                messages(&format!("{old}\n")),
+                vec![format!("{reasons}; write `{new}`")],
                 "{old}"
             );
         }
