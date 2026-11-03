@@ -522,6 +522,20 @@
   `tests/fixtures`, and the docs, skills, and tests; every sample derives the same states,
   findings, rule names, and TLA+ export as before. `fmt --write` cannot migrate them, since
   `fmt` refuses a file that fails to load.
+- A rule names the entities it ranges over first (#86). `forbidden`, `required` and
+  `exclusive` whose first argument is a condition, and `invariant()` with no entity, fail to
+  load. Leaving the entity out renamed the rule: `forbidden(Order.status == paid)` was
+  `CrossForbidden_Order_0` and `forbidden(Order, status == paid)` `Forbidden_Order_0`, and the
+  invariant names are part of the compatibility promise. `required(Order.total >= 0)` and
+  `exclusive(...)` without their entity loaded and recorded nothing. The error gives the line
+  with the entities the conditions name in front, those of each `.when(...)` before those of
+  each `.then(...)`, the order in which the scope was inferred, so a rule over several
+  entities keeps its name: ``write `forbidden(Order, Ticket, Order.status == paid,
+  Ticket.status == pending)` ``. A rule over one entity becomes that entity's rule
+  (`Forbidden_<E>_<n>`, `Inv_<E>_<n>`). Every multi-entity rule already had this form, so
+  nothing is lost. `scripts/migrate-syntax-v3.py` rewrites them; no sample used them.
+  `QuantifierScopeUnknown` is gone with `invariant()`, the only rule that could have no
+  entity.
 
 ### Fixed
 

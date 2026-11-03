@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rewrite .rdra sources to the 1.0 syntax: every column an effect names is `Entity.column`.
+"""Rewrite .rdra sources to the 1.0 syntax: effects name `Entity.column`, rules their entity.
 
 usage: migrate-syntax-v3.py [--dry-run] PATH...
 
@@ -12,6 +12,13 @@ Rewrites, each of which the parser now rejects with a message naming the new for
      sets(UseCase, Entity, column == Src.column)   ->  sets(UseCase, Entity.column == Src.column)
   2. drives(UseCase, Entity, column op rhs, b)     ->  drives(UseCase, Entity.column op rhs, b)
   3. sets(UseCase, Entity, column op rhs, b)       ->  drives(UseCase, Entity.column op rhs, b)
+  4. forbidden(A.x == 1, B.y == 2)                 ->  forbidden(A, B, A.x == 1, B.y == 2)
+     (and `required`, `exclusive`): the entities the conditions name, in order, lead.
+     invariant().when(A.x == 1).then(B.y == 2)     ->  invariant(A, B).when(...).then(...)
+     The entities of every `.when(...)`, then of every `.then(...)`, lead. A rule over
+     one entity becomes that entity's rule: `CrossForbidden_A_0` is now `Forbidden_A_0`,
+     `CrossInv_A_0` is now `Inv_A_0`. A rule whose conditions qualify no column is left
+     for the load error to name.
 
 A call may span lines, and a chain after it (`.by(...)`) is kept as written. Text-level and
 idempotent: the new forms match none of the old patterns, so a second run changes nothing.
@@ -32,7 +39,14 @@ LHS_RE = re.compile(r"^(?P<ws>\s*)(?P<col>[A-Za-z_]\w*)(?P<rest>\s*(?:==|!=|<=|>
 TRUTH_RE = re.compile(r"^\s*(?:true|false)\s*$")
 # A call starts a line, follows a non-word character, or follows the `\n` escape of a string
 # literal in a test source.
-CALL_RE = re.compile(r"(?:(?<=\\n)|(?<![\w.]))(?P<name>sets|drives)\(")
+CALL_RE = re.compile(
+    r"(?:(?<=\\n)|(?<![\w.]))(?P<name>sets|drives|forbidden|required|exclusive|invariant)\("
+)
+RULES = ("forbidden", "required", "exclusive", "invariant")
+CHAIN_RE = re.compile(r"\s*(?://[^\n]*\s*)*\.(\w+)\(")
+QCOL_RE = re.compile(r"(?<![\w.:])((?:\w+::)?[A-Za-z_]\w*)\.[A-Za-z_]\w*")
+CMP_RE = re.compile(r"==|!=|<=|>=|<|>|\bin\b")
+STRING_RE = re.compile(r'"(?:[^"\\]|\\.)*"')
 
 
 def call_args(text: str, open_at: int) -> tuple[list[str], int] | None:
@@ -93,6 +107,48 @@ def rewrite_call(name: str, args: list[str]) -> tuple[str, str, str] | None:
     return name, rest, name
 
 
+def chain_after(text: str, close: int) -> list[tuple[str, list[str]]]:
+    """The `.name(args)` calls chained after the `)` at `close`."""
+    calls = []
+    at = close + 1
+    while (m := CHAIN_RE.match(text, at)) is not None:
+        parsed = call_args(text, m.end() - 1)
+        if parsed is None:
+            break
+        args, end = parsed
+        calls.append((m.group(1), args))
+        at = end + 1
+    return calls
+
+
+def entities(conditions: list[str]) -> list[str]:
+    """The entities of the `Entity.column` operands of `conditions`, in order, once each."""
+    found: list[str] = []
+    for cond in conditions:
+        for m in QCOL_RE.finditer(STRING_RE.sub('""', cond)):
+            if m.group(1) not in found:
+                found.append(m.group(1))
+    return found
+
+
+def rewrite_rule(name: str, args: list[str], chain: list[tuple[str, list[str]]]) -> str | None:
+    """The argument text of a rule written without its leading entity, with the entities its
+    conditions name in front, or `None` when the rule has its entity or names none."""
+    if name == "invariant":
+        if any(arg.strip() for arg in args):
+            return None
+        conditions = [a for method in ("when", "then") for n, cargs in chain if n == method for a in cargs]
+        scope = entities(conditions)
+        return ", ".join(scope) if scope else None
+    if not args or not CMP_RE.search(STRING_RE.sub('""', args[0])):
+        return None
+    scope = entities(args)
+    if not scope:
+        return None
+    rest = ",".join(args)
+    return ", ".join(scope) + "," + (rest if rest[:1].isspace() else " " + rest)
+
+
 @dataclass
 class Report:
     edits: Counter = field(default_factory=Counter)
@@ -117,7 +173,12 @@ def migrate_text(text: str, path: Path, report: Report) -> str:
         if parsed is None:
             continue
         args, close = parsed
-        rewritten = rewrite_call(m.group("name"), args)
+        name = m.group("name")
+        if name in RULES:
+            rest = rewrite_rule(name, args, chain_after(text, close))
+            rewritten = None if rest is None else (name, rest, "rule-scope")
+        else:
+            rewritten = rewrite_call(name, args)
         if rewritten is None:
             continue
         name, rest, kind = rewritten

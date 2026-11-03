@@ -775,7 +775,7 @@ relate(Ticket, Order, N:1)
 creates(Place, Ticket)
 invariant(Order).when(status != pending).then(status != paid, status != cancelled)
 forbidden(Order, status in (paid, cancelled), note == null)
-forbidden(Order.status not in (pending), Ticket.status == open)
+forbidden(Order, Ticket, Order.status not in (pending), Ticket.status == open)
 "#
     ));
     let texts: Vec<String> = d

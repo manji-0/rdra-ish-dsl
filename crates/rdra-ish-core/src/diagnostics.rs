@@ -127,9 +127,6 @@ pub enum RdraError {
     #[error(".{method}(...) names no condition on a related entity\n  hint: write `.{method}(Related.column == value)`")]
     QuantifierWithoutCondition { method: String },
 
-    #[error("invariant().{method}(...) has no entity to range over\n  hint: name it, `invariant(Entity).when(...).{method}(...)`, or qualify a `.when(...)` column as `Entity.column`")]
-    QuantifierScopeUnknown { method: String },
-
     #[error("after({usecase}) asserts nothing\n  hint: add `.assert(Entity.column == value)` for what holds after '{usecase}' runs")]
     AfterWithoutAssert { usecase: String },
 

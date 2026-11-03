@@ -6,7 +6,7 @@
 //! [`Status::Removed`]: a load error naming the same rewrite. Only a [`Detect::Predicate`]
 //! form can be deprecated, since only a rewrite function keeps it loading.
 //!
-//! To deprecate a predicate form, add one row with `Detect::Predicate(rewrite_fn)` and
+//! To deprecate a predicate form, add one row with `Detect::Predicate(&[name], rewrite_fn)` and
 //! `Status::Deprecated { .. }`, where `rewrite_fn` returns the call in its current form and
 //! a message ending in "write `<new form>`", or `None` when the call is not in the legacy
 //! form. To remove it, change the row's status to `Status::Removed`.
@@ -36,8 +36,8 @@ pub type Rewrite = fn(&PredicateCall) -> Option<(PredicateCall, String)>;
 pub enum Detect {
     /// A removed keyword or predicate name: the row's `id` is the word.
     Keyword,
-    /// A call of the named predicate, rewritten by the function.
-    Predicate(&'static str, Rewrite),
+    /// A call of one of the named predicates, rewritten by the function.
+    Predicate(&'static [&'static str], Rewrite),
     /// Matched where it occurs in the grammar (the top-level `when(...)` rule, the two-word
     /// `acceptance criteria`); the row documents it.
     Grammar,
@@ -111,13 +111,13 @@ pub const LEGACY_FORMS: &[LegacyForm] = &[
         id: "transitions-column-first",
         instead: "`transitions(UseCase, Entity.column, from -> to)`",
         status: Status::Removed { since: "0.4.0" },
-        detect: Detect::Predicate("transitions", legacy_transitions),
+        detect: Detect::Predicate(&["transitions"], legacy_transitions),
     },
     LegacyForm {
         id: "maps_field-three-arguments",
         instead: "`maps_field(Field, Entity.column)`",
         status: Status::Removed { since: "0.4.0" },
-        detect: Detect::Predicate("maps_field", legacy_maps_field),
+        detect: Detect::Predicate(&["maps_field"], legacy_maps_field),
     },
     LegacyForm {
         id: "top-level-when",
@@ -135,19 +135,28 @@ pub const LEGACY_FORMS: &[LegacyForm] = &[
         id: "sets-entity-argument",
         instead: "`sets(UseCase, Entity.column == value)`",
         status: Status::Removed { since: "1.0.0" },
-        detect: Detect::Predicate("sets", legacy_sets_entity),
+        detect: Detect::Predicate(&["sets"], legacy_sets_entity),
     },
     LegacyForm {
         id: "sets-four-arguments",
         instead: "`drives(UseCase, Entity.column op value, true|false)`",
         status: Status::Removed { since: "1.0.0" },
-        detect: Detect::Predicate("sets", legacy_sets_truth),
+        detect: Detect::Predicate(&["sets"], legacy_sets_truth),
     },
     LegacyForm {
         id: "drives-entity-argument",
         instead: "`drives(UseCase, Entity.column op value, true|false)`",
         status: Status::Removed { since: "1.0.0" },
-        detect: Detect::Predicate("drives", legacy_drives_entity),
+        detect: Detect::Predicate(&["drives"], legacy_drives_entity),
+    },
+    LegacyForm {
+        id: "rule-without-entity",
+        instead: "`forbidden(Entity, ...)`, `invariant(Entity).when(...)`",
+        status: Status::Removed { since: "1.0.0" },
+        detect: Detect::Predicate(
+            &["forbidden", "required", "exclusive", "invariant"],
+            legacy_rule_scope,
+        ),
     },
 ];
 
@@ -170,10 +179,10 @@ pub(crate) struct LegacyCall {
 /// The legacy form `pred` is written in, if any, rewritten to its current form.
 pub(crate) fn legacy_predicate(pred: &PredicateCall) -> Option<LegacyCall> {
     LEGACY_FORMS.iter().find_map(|form| {
-        let Detect::Predicate(name, rewrite) = form.detect else {
+        let Detect::Predicate(names, rewrite) = form.detect else {
             return None;
         };
-        if name != pred.name {
+        if !names.contains(&pred.name.as_str()) {
             return None;
         }
         let (rewritten, message) = rewrite(pred)?;
@@ -364,6 +373,87 @@ fn legacy_drives_entity(pred: &PredicateCall) -> Option<(PredicateCall, String)>
         format_predicate(&rewritten)
     );
     Some((rewritten, message))
+}
+
+/// A rule without its leading entity: `forbidden`, `required` or `exclusive` whose first
+/// argument is a condition, or `invariant()`. The entities its conditions name become its
+/// scope, in the order the analysis inferred them: the conditions of `forbidden`, `required`
+/// and `exclusive` as written, and those of each `.when(...)` before each `.then(...)`. One
+/// entity is then the rule of that entity (`Forbidden_<E>_<n>`, `Inv_<E>_<n>`), not a
+/// cross-entity rule as before.
+fn legacy_rule_scope(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
+    let conditions: Vec<&PredicateArg> = if pred.name == "invariant" {
+        if !pred.args.is_empty() {
+            return None;
+        }
+        ["when", "then"]
+            .iter()
+            .flat_map(|method| {
+                pred.chain
+                    .iter()
+                    .filter(move |cc| cc.name == *method)
+                    .flat_map(|cc| &cc.args)
+            })
+            .collect()
+    } else {
+        if !matches!(pred.args.first(), Some(PredicateArg::Expr(_))) {
+            return None;
+        }
+        pred.args.iter().collect()
+    };
+    let mut scope: Vec<QRef> = Vec::new();
+    for arg in conditions {
+        if let PredicateArg::Expr(expr) = arg {
+            for entity in entities_of(expr) {
+                if !scope.iter().any(|known| same_ref(known, entity)) {
+                    scope.push(entity.clone());
+                }
+            }
+        }
+    }
+    let mut rewritten = pred.clone();
+    let shown = if scope.is_empty() {
+        let mut shown = pred.clone();
+        let entity = QRef {
+            kind_qualifier: None,
+            parts: vec!["Entity".into()],
+            span: pred.span.start..pred.span.start,
+        };
+        shown.args.insert(0, PredicateArg::Ref(entity));
+        format_predicate(&shown)
+    } else {
+        let refs = scope.into_iter().map(PredicateArg::Ref);
+        rewritten.args.splice(0..0, refs);
+        format_predicate(&rewritten)
+    };
+    let message = format!(
+        "`{}` names the entities it ranges over first; write `{shown}`",
+        pred.name
+    );
+    Some((rewritten, message))
+}
+
+/// The entities of the `Entity.column` operands of `expr`, left to right.
+fn entities_of(expr: &Expr) -> Vec<&QRef> {
+    match expr {
+        Expr::Cmp(cmp) => [&cmp.lhs, &cmp.rhs]
+            .into_iter()
+            .filter_map(|op| match op {
+                Operand::QualifiedColumn(qcol) => Some(&qcol.entity),
+                _ => None,
+            })
+            .collect(),
+        Expr::Not(inner) => entities_of(inner),
+        Expr::And(a, b) | Expr::Or(a, b) => {
+            let mut entities = entities_of(a);
+            entities.extend(entities_of(b));
+            entities
+        }
+    }
+}
+
+fn same_ref(a: &QRef, b: &QRef) -> bool {
+    a.kind_qualifier == b.kind_qualifier && a.parts == b.parts
 }
 
 fn legacy_maps_field(pred: &PredicateCall) -> Option<(PredicateCall, String)> {
@@ -614,6 +704,61 @@ mod tests {
         assert!(messages("sets(Pay, Order.status == paid)\n").is_empty());
         assert!(messages("sets(Fix, Permit.kind == Site.kind).by(home)\n").is_empty());
         assert!(messages("drives(Sell, Stock.stock < selling, true)\n").is_empty());
+    }
+
+    #[test]
+    fn a_rule_without_its_entity_names_the_scope_to_write() {
+        for (old, new) in [
+            (
+                "forbidden(Order.status == paid, Ticket.status == pending)",
+                "forbidden(Order, Ticket, Order.status == paid, Ticket.status == pending)",
+            ),
+            (
+                "required(Order.total >= 0).label(\"x\")",
+                "required(Order, Order.total >= 0).label(\"x\")",
+            ),
+            (
+                "exclusive(Order.status == paid, Order.total > 3)",
+                "exclusive(Order, Order.status == paid, Order.total > 3)",
+            ),
+            (
+                "invariant().then(Ticket.status == done).when(Order.status == paid)",
+                "invariant(Order, Ticket).then(Ticket.status == done).when(Order.status == paid)",
+            ),
+            (
+                "invariant().when(Order.status == paid).none(Ticket.status == pending)",
+                "invariant(Order).when(Order.status == paid).none(Ticket.status == pending)",
+            ),
+            (
+                "invariant().none(Ticket.status == pending)",
+                "invariant(Entity).none(Ticket.status == pending)",
+            ),
+            (
+                "forbidden(status == paid)",
+                "forbidden(Entity, status == paid)",
+            ),
+        ] {
+            let name = &old[..old.find('(').unwrap()];
+            assert_eq!(
+                messages(&format!("{old}\n")),
+                vec![format!(
+                    "`{name}` names the entities it ranges over first; write `{new}`"
+                )],
+                "{old}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_rule_with_its_entity_parses() {
+        for src in [
+            "forbidden(Order, status == paid)",
+            "forbidden(Order, Ticket, Order.status == paid, Ticket.status == pending)",
+            "required(Order, total >= 0)",
+            "invariant(Order).when(status == paid).none(Ticket.status == pending)",
+        ] {
+            assert!(messages(&format!("{src}\n")).is_empty(), "{src}");
+        }
     }
 
     #[test]

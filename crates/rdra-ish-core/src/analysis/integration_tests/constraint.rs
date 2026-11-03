@@ -389,7 +389,7 @@ invariant(Order, Payment)
 }
 
 #[test]
-fn test_cross_invariant_can_infer_scope_from_qualified_columns() {
+fn test_cross_invariant_ranges_over_its_leading_entities() {
     let src = r#"
 entity Order "注文" {
   id: Int @pk
@@ -399,7 +399,7 @@ entity Payment "支払い" {
   id: Int @pk
   status: Enum(pending, captured)
 }
-invariant()
+invariant(Order, Payment)
   .when(Order.status == paid)
   .then(Payment.status == captured)
 "#;

@@ -1753,28 +1753,22 @@ pub(crate) fn process_predicate(
     }
 
     // Unified forbidden/invariant: detect cross-entity vs single-entity form.
-    // Cross-entity: first arg is Expr, `.along(...)`, two+ leading entity refs
+    // Cross-entity: `.along(...)`, two or more leading entity refs
     // (e.g. `forbidden(Order, Payment, Order.status == x, ...)`), or an invariant whose
-    // `.has/.none(...)` ranges over related rows, its scope inferred from their columns.
-    // Single-entity: `forbidden(Order, status == x)`.
+    // `.has/.none(...)` ranges over related rows. Single-entity: `forbidden(Order, status == x)`.
     if pred.name == "forbidden" || pred.name == "invariant" {
         let leading_entities = pred
             .args
             .iter()
             .take_while(|a| matches!(a, PredicateArg::Ref(_)))
             .count();
-        let is_cross = pred
-            .args
-            .first()
-            .is_some_and(|a| matches!(a, PredicateArg::Expr(_)))
-            || pred.chain.iter().any(|cc| cc.name == "along")
+        let is_cross = pred.chain.iter().any(|cc| cc.name == "along")
             || leading_entities >= 2
             || (pred.name == "invariant"
-                && (pred.args.is_empty()
-                    || pred
-                        .chain
-                        .iter()
-                        .any(|cc| matches!(cc.name.as_str(), "has" | "none"))));
+                && pred
+                    .chain
+                    .iter()
+                    .any(|cc| matches!(cc.name.as_str(), "has" | "none")));
         if is_cross {
             match pred.name.as_str() {
                 "forbidden" => process_cross_forbidden(model, pred, ctx, diags),
@@ -1834,9 +1828,7 @@ fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraEr
         "sets" => ("2".into(), got == 2),
         "drives" => ("3".into(), got == 3),
         "after" => ("at least 1".into(), got >= 1),
-        // Cross-entity `invariant` may be empty before `.when(...).none/has(...)`.
-        "invariant" => ("0 or more".into(), true),
-        "forbidden" | "required" | "exclusive" => ("at least 1".into(), got >= 1),
+        "forbidden" | "invariant" | "required" | "exclusive" => ("at least 1".into(), got >= 1),
         "holds" => ("at least 2".into(), got >= 2),
         "transitions" => ("3".into(), got == 3),
         "chooses" => ("2 or 3".into(), got == 2 || got == 3),

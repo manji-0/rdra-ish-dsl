@@ -2022,9 +2022,10 @@ Cross-entity constraints describe rules that mention columns from more than one 
 They are parsed, type-checked, and checked by `states` and `verify` over every
 combination of the participating entities' present instances.
 
-Use `Entity.column` when a condition points at a column. The optional leading entity
-arguments declare the intended scope; when omitted, the scope is inferred from qualified
-column references.
+Use `Entity.column` when a condition points at a column. The leading entity arguments
+declare the scope, and every rule names them. A rule of one entity without `.along(...)` is
+that entity's rule (`Forbidden_Order_0`); a rule of several, or one with `.along(...)`, is a
+cross-entity rule (`CrossForbidden_Order_0`).
 
 ```
 forbidden(Order, Payment,
@@ -2123,15 +2124,13 @@ anchor condition holds and some related instance satisfies the related condition
 `relate` between the two entities links the related instance through its owner; without
 one, the related side is independent. The related condition reads the related instance,
 also when the related entity is the anchor's own: `invariant(Task).when(status == done)
-.none(Task.status == open)` fails while one task is done and another open. A one-entity `invariant` takes the related entity
-from the qualified columns of `.has/.none(...)`, so it is the same rule as
-`invariant(Entity, Related)`, and `invariant()` takes its entity from the qualified
-columns of `.when(...)`. `.has(Related)` and `.none(Related)` name the entity alone and
-range over every linked row: `invariant(Order).when(status == closed).has(Invoice)` says a
-closed order has an invoice, and reads only the link. A `.has(...)` or `.none(...)` that
-names nothing, as `.none()`, is
-`QuantifierWithoutCondition`, and `invariant()` with no entity in its scope or its
-`.when(...)` is `QuantifierScopeUnknown`. `states` runs one instance per entity, so use
+.none(Task.status == open)` fails while one task is done and another open. A one-entity
+`invariant` takes the related entity from the qualified columns of `.has/.none(...)`, so it
+is the same rule as `invariant(Entity, Related)`. `.has(Related)` and `.none(Related)` name
+the entity alone and range over every linked row: `invariant(Order).when(status ==
+closed).has(Invoice)` says a closed order has an invoice, and reads only the link. A
+`.has(...)` or `.none(...)` that names nothing, as `.none()`, is
+`QuantifierWithoutCondition`. `states` runs one instance per entity, so use
 `verify --instance-count 2` for rules that need two related instances. To make a use case
 respect such a rule, put the same `.none(...)` on a `holds` guard (see Conditions).
 
@@ -2384,6 +2383,21 @@ A form leaves the language in two stages:
 with each form's status and versions. No form is deprecated now.
 
 The forms below were removed before 1.0, without a deprecated stage.
+
+A rule names the entities it ranges over first. `forbidden`, `required` and `exclusive`
+whose first argument is a condition, and `invariant()` with no entity, were removed in 1.0.0:
+the same rule over one entity was named `CrossForbidden_<E>_<n>` or `CrossInv_<E>_<n>` when
+its entity was left out and `Forbidden_<E>_<n>` or `Inv_<E>_<n>` when it was written, and
+`required` and `exclusive` without their entity recorded nothing. The load error gives the
+line with the entities its conditions name in front, those of each `.when(...)` before those
+of each `.then(...)`: ``write `forbidden(Order, Ticket, Order.status == paid, Ticket.status
+== pending)` ``. A rule over several entities keeps its name. `scripts/migrate-syntax-v3.py`
+rewrites these too.
+
+| Removed | Use instead |
+|---|---|
+| `forbidden(A.col == v, B.col == w)`, and `required` / `exclusive` the same way | `forbidden(A, B, A.col == v, B.col == w)`; `forbidden(A, A.col == v)` for one entity. |
+| `invariant().when(A.col == v).then(B.col == w)` | `invariant(A, B).when(A.col == v).then(B.col == w)`; `invariant(A).when(...).none(...)` for a quantified rule. |
 
 These spellings were removed in 1.0.0 so that every predicate names a column as
 `Entity.column`. The load error gives the rewritten line, as in ``write `sets(Pay,

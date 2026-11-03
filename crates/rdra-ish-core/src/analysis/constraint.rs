@@ -828,14 +828,9 @@ pub(crate) fn process_invariant(
             )),
             "has" | "none" => {
                 quantified = true;
-                // The anchor is the first entity named, by the scope or else by a guard.
-                let mut anchor_scope = scope.clone();
-                add_condition_entities_to_scope(&mut anchor_scope, &guards);
-                let Some(&anchor) = anchor_scope.first() else {
-                    let err = RdraError::QuantifierScopeUnknown {
-                        method: cc.name.clone(),
-                    };
-                    push_error(ctx, diags, cc.span.clone(), err);
+                // The anchor is the first entity the scope names. An empty scope is a
+                // leading entity that did not resolve, which is reported.
+                let Some(&anchor) = scope.first() else {
                     continue;
                 };
                 let by = selectors(&pred.chain, Some(at));

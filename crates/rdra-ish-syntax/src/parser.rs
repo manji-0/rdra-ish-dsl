@@ -1641,7 +1641,7 @@ performs(Customer, Browse) /* predicate comment */
     #[test]
     fn test_parse_cross_forbidden_with_along_chain() {
         let ast = parse_ok(
-            r#"forbidden(Order.status == cancelled, Payment.status == captured).along(Order, Payment)"#,
+            r#"forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)"#,
         );
         let pred = ast
             .items
@@ -1655,7 +1655,7 @@ performs(Customer, Browse) /* predicate comment */
             })
             .expect("predicate not found");
         assert_eq!(pred.name, "forbidden");
-        assert_eq!(pred.args.len(), 2);
+        assert_eq!(pred.args.len(), 4);
         assert_eq!(pred.chain.len(), 1);
         assert_eq!(pred.chain[0].name, "along");
         assert_eq!(pred.chain[0].args.len(), 2);
@@ -1840,7 +1840,7 @@ performs(actor::Add, usecase::Add)
     /// クロスエンティティ比較式 `Order.total > Payment.amount` がパースされること
     #[test]
     fn test_parse_comparison_qualified_columns() {
-        let ast = parse_ok("forbidden(Order.total > Payment.amount)");
+        let ast = parse_ok("forbidden(Order, Payment, Order.total > Payment.amount)");
         let pred = ast
             .items
             .iter()
@@ -1852,7 +1852,7 @@ performs(actor::Add, usecase::Add)
                 }
             })
             .expect("predicate not found");
-        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[0] {
+        if let PredicateArg::Expr(Expr::Cmp(cmp)) = &pred.args[2] {
             if let Operand::QualifiedColumn(lhs) = &cmp.lhs {
                 assert_eq!(lhs.entity.parts, vec!["Order"]);
                 assert_eq!(lhs.column, "total");
@@ -1867,7 +1867,7 @@ performs(actor::Add, usecase::Add)
                 panic!("expected qualified rhs");
             }
         } else {
-            panic!("expected Expr(Cmp), got {:?}", pred.args[0]);
+            panic!("expected Expr(Cmp), got {:?}", pred.args[2]);
         }
     }
 

@@ -41,13 +41,17 @@ const FORMS: &[(&str, Expect)] = &[
         Recorded,
     ),
     (
-        "forbidden(Order.status == paid, Ticket.status == pending)",
+        "forbidden(Order, Ticket, Order.status == paid, Ticket.status == pending).along(Ticket, Order)",
         Recorded,
     ),
+    // a rule names its entities first (#86)
     (
-        "forbidden(Order.status == paid, Ticket.status == pending).along(Ticket, Order)",
-        Recorded,
+        "forbidden(Order.status == paid, Ticket.status == pending)",
+        Error,
     ),
+    ("forbidden(Order.status == paid)", Error),
+    ("required(Order.total >= 0)", Error),
+    ("exclusive(Order.status == paid, Order.total > 3)", Error),
     // required
     ("required(Order, total >= 0)", Recorded),
     ("required(Order)", Error),
@@ -100,11 +104,11 @@ const FORMS: &[(&str, Expect)] = &[
     ),
     (
         "invariant().when(Order.status == paid).none(Ticket.status == pending)",
-        Recorded,
+        Error,
     ),
     (
         "invariant().when(Order.status == paid).then(Ticket.status == done)",
-        Recorded,
+        Error,
     ),
     ("invariant(Order, Ticket).when(Order.status == paid)", Error),
     (
