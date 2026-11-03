@@ -404,7 +404,7 @@ fn verify_prints_the_bounds_line_and_an_ok_line_that_repeats_them() {
     assert!(output.status.success(), "{stdout}");
     assert!(
         stdout.lines().any(|l| l
-            == "bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded"),
+            == "bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded"),
         "{stdout}"
     );
     assert_eq!(

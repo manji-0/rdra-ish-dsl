@@ -63,15 +63,16 @@ Each figure is a cone size from `crates/rdra-ish-core/examples/lifecycle_measure
   order, the disclosure, and their columns to every cone that reads the application. `check` would
   pass: its largest cone grows from 1,034 to 4,175 states, under the cap of 65,536. At the 2
   instances of `verify`, the cones of `PatentApplication`, `Patent`, and `OfficeAction` pass
-  10,000,000 states (the measurement stopped there), and three more pass the BFS cap of 2,097,152.
+  10,000,000 states (the measurement stopped there), and three more pass the former BFS cap of 2,097,152 (not remeasured against the current 8,388,608).
   Both are left out, so neither `check` nor `verify` checks that only approved drafts are filed.
-- **`OfficeAction` is checked by BFS at 1 instance only.** The two guards that read the application
+- **`OfficeAction` is compared with TLC at 1 instance only.** The two guards that read the application
   (`UnderExamination`, `ExaminationOver`) put its state into the office action's cone, which reaches
-  1,034 states at 1 instance and 4,818,909 at 2. `verify` still runs TLC on the whole cone (its
-  invariants hold, in about 75 s), but its BFS stops at 2,097,152 states, so whether an office action
-  can get stuck at `open`, `drafted`, `overdue`, or `answered` is decided by `check` at 1 instance and
-  listed under `not checked:` by `verify`. `engine_equivalence` compares the office action's cones
-  with TLC at 1 instance only (`VERIFY_FALLBACK`).
+  1,034 states at 1 instance and 4,818,909 at 2. `verify` runs TLC on the whole cone (its
+  invariants hold) and its BFS, under the cap of 8,388,608 states, decides whether an office action
+  can get stuck at `open`, `drafted`, `overdue`, or `answered` (about 75 s in all). Before the cap
+  was raised from 2,097,152, those four checks were listed under `not checked:`.
+  `engine_equivalence` compares the office action's cones with TLC at 1 instance only
+  (`VERIFY_FALLBACK`).
 
 ## Diagnostics left in place
 

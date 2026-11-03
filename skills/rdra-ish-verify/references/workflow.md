@@ -62,7 +62,7 @@ line and raw trace follow. Here `Pay` writes through two APIs, so it is two acti
 
 ```text
 $ rdra-ish verify samples/cross_order_payment_split.rdra
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
@@ -118,7 +118,7 @@ clear (`deadlock at the bound`) are warnings:
 
 ```text
 $ rdra-ish verify samples/deadlock.rdra
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 cones: 0 for 0 invariant(s) and 0 after-assert(s)
 temporal properties: none
 error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state

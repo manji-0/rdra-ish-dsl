@@ -295,6 +295,18 @@
 
 ### Changed
 
+- `Caps::VERIFY`, the `verify` BFS cap per cone, rises from 2,097,152 (2^21) to 8,388,608
+  (2^23), and the `bounds:` line says `8388608 states per BFS cone`. Since the guard of a use
+  case holds for every transaction group (#80), the views of `Prescription` (4,266,635 states
+  at 2 instances) and `Charge` (6,629,659) in clinic-ops passed the old cap, so `verify`
+  left six of its stuck-state findings under `not checked:`; `verify --deny-undecided` now
+  exits 0 on every sample, patent-ops's four `OfficeAction` checks included. The cost is
+  time and memory on the largest cones: `verify samples/clinic-ops` takes about 2.5 minutes
+  and 3.5 GB (it took 2 minutes and 2 GB with those findings undecided). The whole-model
+  temporal run keeps its own stop at 2,097,152 distinct states (`WHOLE_MODEL_STATE_CAP` in
+  `verify.rs`), and `--temporal-budget` still bounds its time. CI's `formal-verify` job
+  gets longer timeouts for the extra minutes.
+
 - The transaction groups of one use case run in order, as one run on one run's rows (#80).
   A use case whose writes span k groups (two APIs, for example) is k actions, `<UC>_1` to
   `<UC>_k`, and one run of the use case is `<UC>_1`, then `<UC>_2`, up to `<UC>_k`, each on

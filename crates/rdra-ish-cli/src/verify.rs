@@ -34,6 +34,11 @@ use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
 
+/// Distinct states a whole-model temporal run may reach before it is stopped. Separate from
+/// `Caps::VERIFY`, the BFS cap per cone: TLC's memory and time grow with this one, and
+/// `--temporal-budget` bounds only the time.
+const WHOLE_MODEL_STATE_CAP: u64 = 1 << 21;
+
 /// `bounds` is `(--instance-count, --int-range-max)`; `budget` is `--temporal-budget`, the
 /// wall time a whole-model property run gets.
 /// What `verify` spends on a check it may not finish, and whether one it leaves undecided
@@ -402,7 +407,7 @@ fn undecided_hint(capped: bool) -> &'static str {
 }
 
 /// A whole-model property run under a budget: TLC's progress lines (about one a minute) print
-/// as they come, and the run is killed past `budget` or past `Caps::VERIFY` distinct states,
+/// as they come, and the run is killed past `budget` or past `WHOLE_MODEL_STATE_CAP` distinct states,
 /// and left undecided unless TLC had already printed its verdict.
 fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration) -> Result<Ran> {
     let tla = format!("{}.tla", job.module);
@@ -438,7 +443,7 @@ fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration)
     .collect();
     drop(tx);
     let start = Instant::now();
-    let cap = Caps::VERIFY.states as u64;
+    let cap = WHOLE_MODEL_STATE_CAP;
     let mut log = String::new();
     let mut stopped: Option<String> = None;
     let mut capped = false;

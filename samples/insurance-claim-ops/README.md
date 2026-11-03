@@ -224,7 +224,7 @@ What the model could say but `verify` could not check, and what it could not say
   to the case's (60,193): `lifecycle_measure -- 3000000 verify` stops the views of `Claim`,
   `Payment`, and `Subrogation`, the rule, and 13 more targets past 3,000,000 states (10 to 17 s
   each); `verify --deny-undecided` stops the `Claim`, `Payment`, and `Subrogation` BFS cones at
-  2,097,152 states with 11 findings `not decided`, and its 6 TLC runs on those cones had not
+  the former cap of 2,097,152 states with 11 findings `not decided`, and its 6 TLC runs on those cones had not
   finished after 20 minutes, each with 0.8 to 1.6 GB of states on disk. Reading the right
   settlement does not shrink the cone: the case's states interleave with the claim's either way
   (#74). The rule and the guard are left out (Known verification gaps).

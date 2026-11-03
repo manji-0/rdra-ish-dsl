@@ -130,7 +130,7 @@ Each figure is a cone size at the 2 instances of `verify`, from
   | `Disposition` | 23,156 | 231,493 |
   | `BusinessPermit` | 8,023 | 7,813 |
 
-  The view of `PermitApplication` is 2,995 states under the `verify` cap of 2,097,152, so
+  The view of `PermitApplication` is a quarter of the `verify` cap of 8,388,608 states, so
   `verify` decides every check: `tlc_result: ok`, no deadlock, every use case runs, in 18 s and
   700 MB locally. A change that grows the application's cone further takes the view past the
   cap; measure it first. Before #73 the guard could not be written: the only link between the

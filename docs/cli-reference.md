@@ -1033,7 +1033,7 @@ decided` and is listed under `not checked:`. Stdout or stderr carries one `tlc_r
 line. Exits non-zero when TLC is missing or reports a violation.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped
-at 2,097,152 states per cone; the `bounds:` line names the cap as `2097152 states per BFS
+at 8,388,608 states per cone; the `bounds:` line names the cap as `8388608 states per BFS
 cone`. A state of a state model with no witness there, and a deadlock, print as in `check`
 and fail the run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line
 follows, and the exit status is 1. A deadlock at the bound and a use case that never runs

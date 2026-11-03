@@ -49,7 +49,7 @@ A passing run names its bounds first and last:
 
 ```text
 $ rdra-ish verify samples/order.rdra
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run

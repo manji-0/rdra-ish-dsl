@@ -233,7 +233,7 @@ case writes, and a condition on a creating use case that reads a column the crea
 not assign.
 
 Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
-2,097,152 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
+8,388,608 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
 error fails `verify` even when every TLC check passes: the run prints `tlc_result: ok` and
@@ -247,13 +247,14 @@ warning, which does not fail the run. A cone that stops at the cap decides nothi
 unwitnessed states, its deadlocks, or its actions with no edge, and `verify` lists each
 under `not checked:`. The
 pass ends with a `state models (BFS on N entity cones): ...` summary line. On clinic-ops
-this pass takes about 13 s and 350 MB; its largest cone is `Charge` (969,167
-states). On patent-ops the `OfficeAction` cone (4,818,909 states) stops at the cap, so
-its four stuck-state checks are listed under `not checked:` (see the sample's README).
+this pass takes about 2 minutes and 3.5 GB; its largest cones are `Charge` (6,629,659 states
+at 2 instances) and `Prescription` (4,266,635), both under the cap. On patent-ops the
+`OfficeAction` cone (4,818,909 states) is under it too, so `verify` decides all four of its
+stuck-state checks (see the sample's README).
 
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
@@ -338,7 +339,7 @@ rest. The whole run still fails on it:
 
 ```
 $ rdra-ish verify samples/formal-verification/partial_scope.rdra --entity Order
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 2097152 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 scope: --entity Order
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none, no whole-model run
@@ -487,14 +488,17 @@ gaps.
   accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
   it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
   new model's cones under 200,000 states at 2 instances if you want the agreement tested.
-- **The `verify` BFS stops at 2,097,152 states per cone.** The BFS pass that finds missing
+- **The `verify` BFS stops at 8,388,608 states per cone.** The BFS pass that finds missing
   witnesses, deadlocks, use cases that never run, arms never taken, and values never chosen
-  stops at `Caps::VERIFY`, 2^21 states. A cone that stops there decides none of these
-  findings. TLC still checks its invariants. See it: each undecided finding under
-  `not checked:` on stdout, as patent-ops prints for the four stuck-state checks of
-  `OfficeAction`, and the `warning:` on stderr that counts them (`--deny-undecided` fails
-  the run instead). What you can do: rely on `check` at 1 instance for those findings, or
-  shrink the cone, for example by removing a guard that pulls another entity's columns in.
+  stops at `Caps::VERIFY`, 2^23 states. A cone that stops there decides none of these
+  findings. TLC still checks its invariants. Every sample cone is under the cap at 2
+  instances (the largest, `Charge` of clinic-ops, has 6,629,659 states), so
+  `verify --deny-undecided` passes on all of them; the price is clinic-ops's 2.5 minutes
+  and 3.5 GB. See it: each undecided finding under `not checked:` on stdout and the
+  `warning:` on stderr that counts them (`--deny-undecided` fails the run instead). What
+  you can do: rely on `check` at 1 instance for those findings, or shrink the cone, for
+  example by removing a guard that pulls another entity's columns in. The whole-model
+  temporal run below keeps its own cap of 2,097,152 distinct states.
 - **`check` stops at 65,536 states per cone.** A cone past the cap is the
   `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone.
   See it: the error, whose message names the variables the reached states vary in. What
@@ -545,7 +549,7 @@ gaps.
   `失効後の更新はできない` guards `ApplyRenewal` and `RenewPermit` on that permit's status. The
   guard adds the permit's existence, its status and the `renews` link to the application's
   cone: at 2 instances the view of `PermitApplication` grows from 127,165 to 2,094,157
-  states, 2,995 under the cap of 2,097,152, and the views of `Inspection` and `Disposition`
+  states, a quarter of the cap of 8,388,608, and the views of `Inspection` and `Disposition`
   from 14,197 and 23,156 to about 232,000 each. `verify` decides every check (18 s locally).
   The interleaving of the permit's 31 reachable states with the application's is inherent to
   an exact cone; reducing it is #74. At 1 instance a renewal needs a second application slot,
