@@ -135,7 +135,9 @@ of that entity's slots, so it reaches a superset: the `bounds:` line says so (`e
 check does not read are unbounded`). An `ok` on every cone is the whole-model `ok`, and a
 violation on a cone is a violation of the model, possibly with more instances of the
 unread entity than the bound. For a temporal property this is the `FreesSlots` case
-below. Cones over the same variables share one run.
+below. Cones over the same variables share one run. A cone with an independent
+sub-lifecycle is explored and printed reduced by it (see
+[Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)).
 This keeps clinic-ops tractable: a whole-model run at `InstanceCount=2` took 62 s and
 11 GB on ec-site and did not finish in 300 s on clinic-ops.
 
@@ -224,7 +226,9 @@ a lasso that creates more instances than the bound allows, so only its `ok` is t
 counterexample sends the property to the whole model. Each property's line names what
 happened: `Cone_P [P]: ok (111 states)`, `Cone_P [P]: counterexample (43 states, Cone_P_WF:
 counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs the whole model's
-WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A property without `.fair` rests on
+WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A cone reduced by its independent
+sub-lifecycle (the next section) adds `Cone_P_Full: counterexample` after a counterexample on
+the reduced cone, before the `_WF` note. A property without `.fair` rests on
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
 `HygieneManagerEventuallyAppointed` runs on a 243-state cone and the whole `verify` takes
@@ -253,11 +257,16 @@ hide a stuck instance. The same pass finds each use case that never runs (see
 warning, which does not fail the run. A cone that stops at the cap decides nothing about its
 unwitnessed states, its deadlocks, or its actions with no edge, and `verify` lists each
 under `not checked:`. The
-pass ends with a `state models (BFS on N entity cones): ...` summary line. On clinic-ops
-this pass takes about 2 minutes and 3.5 GB; its largest cones are `Charge` (6,629,659 states
-at 2 instances) and `Prescription` (4,266,635), both under the cap. On patent-ops the
-`OfficeAction` cone (4,818,909 states) is under it too, so `verify` decides all four of its
-stuck-state checks (see the sample's README).
+pass ends with a `state models (BFS on N entity cones): ...` summary line. The cap counts the
+states of the reduced cone (see
+[Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)); the
+sub-lifecycle it explores to reduce a cone has the same cap, and a cone whose sub-lifecycle
+passes it runs unreduced. On clinic-ops the whole `verify` takes about 40 s and 1.4 GB (it
+took 2.5 minutes and 3.7 GB before the reduction); its largest cone is `EligibilityCheck`
+(1,784,808 states at 2 instances, which nothing reduces), while `Charge`, past the cap
+unreduced, is 38,533 states reduced and `Prescription` (4,266,635 unreduced) is 1,690. On
+patent-ops the `OfficeAction` cone (4,818,909 states unreduced, 1,341,705 reduced) is under
+the cap too, so `verify` decides all four of its stuck-state checks (see the sample's README).
 
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra --backend tlc
@@ -332,6 +341,84 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
     then loops back to step 7
 violated: Error: Temporal properties were violated.
 ```
+
+### Reduction by an independent sub-lifecycle
+
+<!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
+<!-- derived-from #temporal-properties-on-a-cone -->
+A cone often holds a second lifecycle that its targets never write and read only in part: the
+claim's cone in insurance-claim-ops holds the case's settlement, the charge's cone in
+clinic-ops holds the appointment and the encounter. Every state of that lifecycle interleaves
+with every state of the target's, and an exact cone cannot be smaller than that product. Since
+#74 `verify` explores and prints each cone reduced by such a sub-lifecycle
+(`TransitionSystem::reduced`), and the reduced cone decides what the cone decides. `check`
+and `states` explore the cone unreduced.
+
+The cone's vars split into a target side T and the rest S:
+
+- T holds one var the targets read (every var they read is tried as the anchor, and the
+  split with the largest S wins), the writes of the actions the targets keep (the fair use
+  cases of a property, the steps of an `after` assertion), and, by closure, every write of
+  an action that writes or reads a var of T. An entity's vars share a side. So every action
+  that writes S reads only S: S is a transition system of its own, which the rest of the
+  cone never writes and reads only through `obs`, the S vars that T's actions and the
+  targets' checks read (guards, transition sources, copy sources, the formula of a property).
+  A check that reads S outside `obs`, an `after` assertion on an S action, and a property
+  whose `.fair` names an S action are dropped from the reduced cone and decided on their own
+  cones, where what they read is T or `obs`.
+- S is explored on its own, as a cone with the same reduction applied to it, so a reduction
+  nests, and its reachable states are quotiented by divergence-blind stuttering equivalence
+  with respect to `obs`: the coarsest partition in which two states agree on `obs`, and
+  whenever a step of S takes one of them out of its class into a class `c`, a path of S steps
+  takes the other into `c`. The reduced cone keeps one representative S state per class in
+  its state, runs T's actions on it unchanged, and replaces S's actions by class moves: from
+  a class, by the last action of a path that leaves it, into the class the path enters. In
+  TLA+ the sub-lifecycle is one variable `S_class`, a `Rep_<var>` table per observed var that
+  the var's name reads, and a `Succ_<A>` table per S action (the snapshot
+  `a_reduced_cone_prints_its_sub_lifecycle_as_classes` in `crates/rdra-ish-emit/src/tla/tests.rs`).
+  An unobserved S (`obs` empty) is one class with no moves.
+
+**Proof obligation.** Let C be the cone and R the reduced cone. The relation
+`(t, s) ~ (t, rep(class(s)))` between their states is a divergence-blind stuttering
+bisimulation that preserves T and `obs`:
+
+1. Related states agree on T and on `obs`: a class is a block of the partition, whose first
+   refinement is by `obs`.
+2. A T step of C from `(t, s)` is a T step of R from `(t, rep)` and back: a T action reads T
+   and `obs` only (`obs` is what T's actions read of S) and writes T only, so it is enabled
+   in both and leads to related states.
+3. An S step of C from `(t, s)` stays in `s`'s class, which is a stutter step of R, or enters
+   a class `c'`; then a path of S steps takes `rep` into `c'` (the partition is stable), and
+   its last step is a class move of R into `c'`, whose target is related to the step's. A
+   class move of R from `(t, rep)` into `c'` is matched by that path from `s`, every state
+   of which but the last is related to `(t, rep)`.
+4. An initial state `(t0, s0)` of C is related to the initial state `(t0, rep(class(s0)))`
+   of R, and R has no other initial state.
+
+A divergence-blind stuttering bisimulation preserves every formula of CTL\* without the next
+operator, and the reduced cone's findings are such formulas over T and `obs`: a state is
+reached (a witness, a violated invariant), an edge is taken
+(a use case that runs, an arm taken, a violated `after` assertion), and from every reached
+state with a present slot some path takes an edge that moves it (no deadlock). A property
+`Fair_P => (...)` over T and `obs` whose fair actions are T actions is a stuttering-invariant
+formula over T and `obs` under a fairness that reads T and `obs`, so the `Cone_<P>` run, whose
+`Spec` admits stuttering, decides on R what it decides on C. What the bisimulation does not
+preserve is `WF_vars(Next)`: a class that loops inside itself forever never stutters in C under
+`WF_vars(Next)` while R stands still, so the `_WF` run stays on the unreduced cone, and a
+counterexample of the `Cone_<P>` run on R is repeated on the unreduced cone as `Cone_<P>_Full`,
+whose lasso the printed trace reads (`verify` reports that run's outcome beside the first's; an
+`ok` there is a tool bug, reported as such).
+
+A trace of R is lifted to a path of C before it is printed (`TransitionSystem::lift`): a T step
+is itself, and a class move becomes the path of S steps that realizes it from the concrete S
+state the lifted path holds, which exists by 3, recursively through nested reductions. The
+violation is read again on the lifted last state, so the message is built from a real state,
+and a printed counterexample can be longer than the reduced one and name a use case of S on a
+step. The tests in `crates/rdra-ish-core/src/lifecycle/tests/reduce.rs` compare the reduced and
+unreduced exploration of every sample cone (the states on T and `obs`, the views, the verdicts,
+and that every lifted path is a path of the cone), and `engine_equivalence` runs TLC on each
+reduced cone against its BFS and checks that each check the reduced cone keeps has the cone's
+verdict.
 
 ### Part of a model
 
@@ -420,32 +507,37 @@ The rules for each flag and for deferral are in
   - The verdict of each invariant and `after` assertion. Every trace TLC prints for a
     violation must replay through the BFS step relation and end in the check TLC named.
 
-  At 2 instances, a cone whose BFS passes the test's cap of 200,000 states is compared at
-  1 instance only. The test lists these cones in `VERIFY_FALLBACK` and fails when the list
-  changes. Today they are in `samples/clinic-ops`, `samples/patent-ops`, and
-  `samples/food-permit-ops` (states at 2 instances, measured with `lifecycle_measure`; the
-  food-permit-ops cones are listed under the next item):
+  At 2 instances, a cone whose BFS, reduced as `verify` explores it, passes the test's cap
+  of 200,000 states is compared at 1 instance only. The test lists these cones in
+  `VERIFY_FALLBACK` and fails when the list changes. Today they are in `samples/clinic-ops`,
+  `samples/patent-ops`, and `samples/food-permit-ops` (states at 2 instances, measured with
+  `lifecycle_measure`; the food-permit-ops cones are listed under the next item):
 
-  | Cone (first target that reads it; clinic-ops unless named) | States |
-  |---|---:|
-  | entity `Charge` | over 3,000,000 |
-  | entity `Prescription` | over 3,000,000 |
-  | entity `EligibilityCheck` (the guard `BookedPatient` reads the booked patient's appointment along its policy, #77) | 1,784,808 |
-  | invariant `Inv_Prescription_4` | 1,126,335 |
-  | entity `ClinicalOrder` | 619,835 |
-  | entity `LabResult` | 619,835 |
-  | invariant `Forbidden_ClinicalOrder_1` (also `Unique_LabResult_ClinicalOrder`) | 619,835 |
-  | invariant `Inv_ClinicalOrder_3` | 619,835 |
-  | entity `PatientMessage` | 441,287 |
-  | entity `CarePlan` | 299,467 |
-  | patent-ops entity `OfficeAction` | 4,818,909 |
-  | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 4,818,909 |
+  | Cone (first target that reads it) | States | Unreduced |
+  |---|---:|---:|
+  | clinic-ops entity `EligibilityCheck` (the guard `BookedPatient` reads the booked patient's appointment along its policy, #77) | 1,784,808 | 1,784,808 |
+  | patent-ops entity `OfficeAction` | 1,341,705 | 4,818,909 |
+  | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 1,341,705 | 4,818,909 |
+  | insurance-claim-ops entity `Payment` | 814,191 | over 8,388,608 |
+  | insurance-claim-ops entity `Claim` | 754,247 | over 8,388,608 |
+  | insurance-claim-ops invariant `CrossForbidden_Payment_3` (also `AfterAssert_PayClaim_0`) | 707,071 | over 8,388,608 |
+  | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (with the claim's other rules) | 573,751 | over 8,388,608 |
 
-  Every clinic-ops cone that reads `Appointment.status` carries the two run marks of
-  `CheckInPatient`, which checks the appointment in through one API and creates the
-  eligibility check through another (#80): 2.3 to 2.6 times the states it had when the
-  two steps ran in any order. The other 29 clinic-ops cones at 2 instances (811,945 states
-  in total, the largest `Appointment` at 188,699) are compared. CI runs the test with `cargo test --release`
+  The insurance-claim-ops cones hold the settlement guard of `CompleteClaim` (see the
+  sample's README), which #74 made checkable. Before the reduction the list held 19 cones:
+  the clinic-ops views of `Charge` (over 8,388,608 states unreduced, 38,533 reduced),
+  `Prescription` (4,266,635; 1,690), `ClinicalOrder` and `LabResult` (619,835; 250),
+  `PatientMessage` (441,287; 381) and `CarePlan` (299,467; 269), the invariants
+  `Forbidden_ClinicalOrder_1`, `Inv_ClinicalOrder_3` and `Inv_Prescription_4`, and the
+  food-permit-ops view of `Disposition` with its two invariants (231,493; 13,230). These
+  cones are compared at 2 instances reduced only: their unreduced BFS passes the cap, so the
+  unreduced cone is compared with TLC at 1 instance, and at 2 the reduced cone's BFS, its
+  TLC run, and its verdicts against the unreduced verdicts at 1 instance. Every clinic-ops
+  cone that reads `Appointment.status` carries the two run marks of `CheckInPatient`, which
+  checks the appointment in through one API and creates the eligibility check through
+  another (#80): 2.3 to 2.6 times the states it had when the two steps ran in any order. The
+  other 30 clinic-ops cones at 2 instances (the largest `Appointment` at 188,699) are
+  compared unreduced and reduced. CI runs the test with `cargo test --release`
   and sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job. The debug build took
   315 s on the CI runner, over its 300 s budget; the release build takes 121 s locally
   (Apple silicon, measured).
@@ -473,36 +565,44 @@ gaps.
   What you can do: state what the event order guarantees as a `condition` guard on the
   triggered use case.
 - **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that
-  BFS and TLC agree on the states, edges, findings, and verdicts of every cone. A cone whose
-  BFS passes the test's cap of 200,000 states at 2 instances is compared at 1 instance only.
-  `VERIFY_FALLBACK` in `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 19 cones
-  today:
-  - `samples/clinic-ops`: entities `CarePlan`, `Charge`, `ClinicalOrder`, `EligibilityCheck`,
-    `LabResult`, `PatientMessage`, and `Prescription`, and invariants
-    `Forbidden_ClinicalOrder_1`, `Inv_ClinicalOrder_3`, and `Inv_Prescription_4`. Each reaches
-    299,467 to over 3,000,000 states at 2 instances (the table under
+  BFS and TLC agree on the states, edges, findings, and verdicts of every cone, unreduced
+  and reduced. A cone whose BFS, reduced as `verify` explores it, passes the test's cap of
+  200,000 states at 2 instances is compared at 1 instance only. `VERIFY_FALLBACK` in
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 13 cones today (19 before the
+  reduction of #74, which took 12 off the list and put the 6 insurance-claim-ops cones on it):
+  - `samples/clinic-ops`: entity `EligibilityCheck`, 1,784,808 states at 2 instances, which
+    nothing reduces (the table under
     [Approximations and limitations](#approximations-and-limitations)).
   - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
     (with `Exclusive_OfficeAction_0`). The guards that read the application put its state
-    into the cone, which reaches 4,818,909 states at 2 instances.
-  - `samples/food-permit-ops`: entities `Disposition`, `Inspection`, and `PermitApplication`,
-    and invariants `Forbidden_Disposition_2`, `Inv_Disposition_0`, `Inv_PermitApplication_1`,
-    and `Inv_PermitApplication_2`. The renewal guard `失効後の更新はできない` puts the renewed
-    permit's existence and status into them (#73): 231,493 to 232,885 states at 2 instances,
-    and 2,094,157 for the view of `PermitApplication`.
+    into the cone, which reaches 4,818,909 states at 2 instances, 1,341,705 reduced.
+  - `samples/food-permit-ops`: entities `Inspection` and `PermitApplication`, and invariants
+    `Inv_PermitApplication_1` and `Inv_PermitApplication_2`. The renewal guard
+    `失効後の更新はできない` puts the renewed permit's existence and status into them (#73):
+    232,885 states at 2 instances, and 2,094,157 for the view of `PermitApplication`. Every
+    entity in these cones reads the application, so no side is independent and nothing
+    reduces.
+  - `samples/insurance-claim-ops`: entities `Claim` and `Payment`, invariants
+    `Forbidden_Claim_0`, `Forbidden_Claim_4`, and `CrossForbidden_Payment_3`, and the
+    after-assert of `PayClaim`. The settlement guard of `CompleteClaim` joins the case's
+    lifecycle to the claim's; reduced by it (63,823 states in 443 classes) they reach 573,751
+    to 814,191 states at 2 instances, unreduced over 8,388,608.
 
   `verify` still checks these cones at 2 instances: TLC runs on each, and BFS runs on each
-  clinic-ops cone. Only the agreement of the two engines is tested at 1 instance. This is
+  entity cone. Only the agreement of the two engines is tested at 1 instance. This is
   accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
   it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
   new model's cones under 200,000 states at 2 instances if you want the agreement tested.
 - **The `verify` BFS stops at 8,388,608 states per cone.** The BFS pass that finds missing
   witnesses, deadlocks, use cases that never run, arms never taken, and values never chosen
   stops at `Caps::VERIFY`, 2^23 states. A cone that stops there decides none of these
-  findings. TLC still checks its invariants. Every sample cone is under the cap at 2
-  instances (the largest, `Charge` of clinic-ops, has 6,629,659 states), so
-  `verify --deny-undecided` passes on all of them; the price is clinic-ops's 2.5 minutes
-  and 3.5 GB. See it: each undecided finding under `not checked:` on stdout and the
+  findings. TLC still checks its invariants. The cap counts the states of the cone reduced
+  by its independent sub-lifecycle (see
+  [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)).
+  Every sample cone is under the cap at 2 instances (the largest, `PermitApplication` of
+  food-permit-ops, has 2,094,157 states; `Charge` of clinic-ops, over 8,388,608 unreduced,
+  has 38,533), so `verify --deny-undecided` passes on all of them; the price is clinic-ops's
+  40 s and 1.4 GB. See it: each undecided finding under `not checked:` on stdout and the
   `warning:` on stderr that counts them (`--deny-undecided` fails the run instead). What
   you can do: rely on `check` at 1 instance for those findings, or shrink the cone, for
   example by removing a guard that pulls another entity's columns in. The whole-model
@@ -562,7 +662,9 @@ gaps.
   states, a quarter of the cap of 8,388,608, and the views of `Inspection` and `Disposition`
   from 14,197 and 23,156 to about 232,000 each. `verify` decides every check (18 s locally).
   The interleaving of the permit's 31 reachable states with the application's is inherent to
-  an exact cone; reducing it is #74. At 1 instance a renewal needs a second application slot,
+  an exact cone, and the reduction of #74 leaves the application's and the inspection's cones
+  as they are, since every entity in them reads the application; it takes the disposition's
+  view to 13,230 states. At 1 instance a renewal needs a second application slot,
   so `check` warns that `ApplyRenewal` and `RenewPermit` never run. The sample also joins a
   disposition's decision to the permit's ledger by an event. Its temporal property, that a
   valid permit without a 食品衛生責任者 ends with one appointed, is checked on its cone. See it:

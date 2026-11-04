@@ -19,6 +19,32 @@
   with the same verdict, errors, state counts and rule names: `.when` on `sets` was an
   `UnknownChainMethod` error.
 
+### Changed
+
+- `verify` explores and checks each cone reduced by its independent sub-lifecycle (#74): the
+  entities of the cone that its targets' actions never write are explored on their own and
+  quotiented by stuttering equivalence with respect to what the rest of the cone reads of
+  them, and the reduced cone decides what the cone decides (the argument is in
+  `docs/formal-verification.md`, "Reduction by an independent sub-lifecycle"). Verdicts,
+  error names and `// expect` headers do not change; the printed state counts shrink, which
+  `docs/compatibility.md` does not cover. A counterexample trace is lifted to a path of the
+  cone before it is printed, so it can be longer than the reduced one and name a use case of
+  the sub-lifecycle on a step; a temporal counterexample on the reduced cone is repeated on
+  the unreduced cone (`Cone_<P>_Full`), whose lasso the trace reads, and the property's line
+  names that run beside the first. On clinic-ops `verify --deny-undecided` takes about 40 s
+  and 1.4 GB (2.5 minutes and 3.7 GB before): the `Charge` cone goes from over 8,388,608
+  states to 38,533, `Prescription` from 4,266,635 to 1,690; on patent-ops `OfficeAction`
+  from 4,818,909 to 1,341,705. `engine_equivalence` compares the reduced cones with TLC as
+  well, and `VERIFY_FALLBACK` holds 13 cones (19 before). `check` and `states` explore the
+  cone unreduced.
+- insurance-claim-ops states the settlement guard and the rule it left out: `CompleteClaim`
+  runs on a first-party claim or once the case's settlement is agreed
+  (`.when(ClaimFirstParty)`, `.when(SettlementSigned)`), and a liability claim is not
+  completed before (`賠償の請求は示談書がそろってから完了する`). `verify --deny-undecided` decides
+  every check in about 60 s; the claim's cones, 754,247 states reduced, join
+  `VERIFY_FALLBACK`.
+
+
 ## v1.1.0 - 2026-11-04
 
 Upgrading from v1.0.0 needs no change to a model: every model that loads on 1.0.0 loads with

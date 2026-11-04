@@ -399,6 +399,11 @@ cone of influence:
   `personal-info`, and the formal-verification samples, and the superset where a cone
   frees slots.
 - **Shared.** Targets with the same cone are explored once.
+- **Reduced in `verify`.** `verify` explores each cone reduced by its independent
+  sub-lifecycle, the entities of the cone that its targets' actions never write, quotiented
+  by what they read of it; the reduced cone decides what the cone decides (see
+  [formal-verification.md](./formal-verification.md#reduction-by-an-independent-sub-lifecycle)).
+  `check` and `states` explore the cone unreduced.
 
 BFS starts from every initial state, applies every enabled action, and stops when
 no new state appears or a cap is hit.
