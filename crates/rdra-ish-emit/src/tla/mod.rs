@@ -48,7 +48,7 @@ pub struct TlaBundle {
 }
 
 pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBundle {
-    let module_name = sanitize_module_name(module_name);
+    let module_name = module_name_of(module_name);
     let names = TlaNames::new(ts);
     let wf_next = !matches!(mode, PrintMode::ConeProperty(_)) && needs_fairness(ts);
     let tla = module::render(ts, &names, &module_name, wf_next);
@@ -199,7 +199,8 @@ pub(crate) fn sanitize_ident(s: &str) -> String {
     out
 }
 
-fn sanitize_module_name(s: &str) -> String {
+/// The module name `print` gives `s`: without a `.tla` or `.cfg` suffix, as an identifier.
+pub fn module_name_of(s: &str) -> String {
     let stem = s.trim();
     let stem = stem
         .strip_suffix(".tla")

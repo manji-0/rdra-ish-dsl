@@ -71,6 +71,39 @@ struct Spec {
     cfg: String,
 }
 
+/// The module names one run writes into its directory. A name an earlier module took gets the
+/// first free `_<k>`, k from 2, so no spec or its `.states` and `.tmp` dirs overwrite
+/// another's; a run whose names collide with nothing keeps every name.
+#[derive(Default)]
+struct Modules(BTreeSet<String>);
+
+impl Modules {
+    fn claim(&mut self, want: &str) -> String {
+        let base = tla::module_name_of(want);
+        let mut name = base.clone();
+        let mut k = 2;
+        while !self.0.insert(name.clone()) {
+            name = format!("{base}_{k}");
+            k += 1;
+        }
+        name
+    }
+
+    /// The `n`th rerun cfg of `module`: `<module>_rest<n>.cfg`, unless that is another
+    /// module's cfg. Rerun names cannot collide with each other: each ends in its own
+    /// module's name, `_rest<n>`, and the suffix this adds.
+    fn rest_cfg(&self, module: &str, n: usize) -> String {
+        let base = format!("{module}_rest{n}");
+        let mut name = base.clone();
+        let mut k = 2;
+        while self.0.contains(&name) {
+            name = format!("{base}_{k}");
+            k += 1;
+        }
+        format!("{name}.cfg")
+    }
+}
+
 /// One TLC run: a module, its cfg, and the checks it answers.
 struct Job {
     module: String,
@@ -185,7 +218,12 @@ fn out_dir(out: Option<PathBuf>) -> Result<(PathBuf, String, bool)> {
 /// Each distinct cone of a selected invariant or after-assert, in target order, named after
 /// the first check that reads it. Cones over the same vars share one run: an action kept for
 /// an after-assert writes nothing in the cone, so it adds edges but no states.
-fn cone_jobs(ts: &TransitionSystem, names: &TlaNames, targets: &[Target]) -> Vec<Job> {
+fn cone_jobs(
+    ts: &TransitionSystem,
+    names: &TlaNames,
+    targets: &[Target],
+    modules: &mut Modules,
+) -> Vec<Job> {
     let mut at: BTreeMap<VarSet, usize> = BTreeMap::new();
     let mut order: Vec<(Cone, String, Vec<Target>)> = Vec::new();
     for &target in targets {
@@ -211,7 +249,8 @@ fn cone_jobs(ts: &TransitionSystem, names: &TlaNames, targets: &[Target]) -> Vec
         .map(|(cone, first, shared)| {
             let seeds = shared.iter().map(|t| ts.target_seed(*t));
             let sub = ts.reduced_cone(&cone, seeds, Caps::VERIFY);
-            let bundle = tla::print(&sub, PrintMode::Safety, &format!("Cone_{first}"));
+            let module = modules.claim(&format!("Cone_{first}"));
+            let bundle = tla::print(&sub, PrintMode::Safety, &module);
             let n = &bundle.names;
             let checks = (0..sub.invariants().len())
                 .map(|i| n.invariant(i).to_string())
@@ -233,13 +272,19 @@ fn cone_jobs(ts: &TransitionSystem, names: &TlaNames, targets: &[Target]) -> Vec
 }
 
 /// One run per temporal property on its cone, module `Cone_<property>`, with the `_WF`
-/// module (the same cone with `WF_vars(Next)`) printed beside it for the second run.
-fn property_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
-    (0..ts.properties().len())
-        .map(|i| {
+/// module (the same cone with `WF_vars(Next)`) printed beside it for the second run. Every
+/// `Cone_<property>` is claimed before any `_Full` or `_WF`, so each property's own module
+/// keeps its name.
+fn property_jobs(ts: &TransitionSystem, names: &TlaNames, modules: &mut Modules) -> Vec<Job> {
+    let plain: Vec<String> = (0..ts.properties().len())
+        .map(|i| modules.claim(&format!("Cone_{}", names.property(i))))
+        .collect();
+    plain
+        .into_iter()
+        .enumerate()
+        .map(|(i, module)| {
             let name = names.property(i);
             let cone = PropertyCone::new(ts, i);
-            let module = format!("Cone_{name}");
             let plain = cone.bundle(ConeRun::Plain, &module);
             let spec = |b: TlaBundle| Spec {
                 module: b.module_name,
@@ -248,12 +293,14 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
             };
             let mut names = plain.names;
             let full = cone.is_reduced().then(|| {
-                let b = cone.bundle(ConeRun::Full, &format!("{module}_Full"));
+                let b = cone.bundle(ConeRun::Full, &modules.claim(&format!("{module}_Full")));
                 names = b.names.clone();
                 spec(b)
             });
-            let wf = (cone.kind != LtlKind::Always)
-                .then(|| spec(cone.bundle(ConeRun::WfNext, &format!("{module}_WF"))));
+            let wf = (cone.kind != LtlKind::Always).then(|| {
+                let module = modules.claim(&format!("{module}_WF"));
+                spec(cone.bundle(ConeRun::WfNext, &module))
+            });
             Job {
                 module: plain.module_name,
                 tla: plain.tla,
@@ -271,11 +318,12 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
         .collect()
 }
 
-/// `properties()[i]` on the whole system, module `<whole>_<property>`: the same module text
-/// as the whole-model module, fairness included, and a cfg that names the one property.
-fn whole_job(ts: &TransitionSystem, names: &TlaNames, whole: &str, i: usize) -> Job {
+/// `properties()[i]` on the whole system, module `module` (`<whole>_<property>`): the same
+/// module text as the whole-model module, fairness included, and a cfg that names the one
+/// property.
+fn whole_job(ts: &TransitionSystem, names: &TlaNames, module: &str, i: usize) -> Job {
     let name = names.property(i);
-    let bundle = tla::print(ts, PrintMode::Property(i), &format!("{whole}_{name}"));
+    let bundle = tla::print(ts, PrintMode::Property(i), module);
     Job {
         module: bundle.module_name,
         tla: bundle.tla,
@@ -291,7 +339,7 @@ fn whole_job(ts: &TransitionSystem, names: &TlaNames, whole: &str, i: usize) -> 
 /// is would otherwise go unreported. The reruns' violations and logs join the first run's.
 /// A property cone run that finds a counterexample is followed by the `_WF` run when the
 /// verdict asks for it (`property_cone`).
-fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
+fn run_job(tlc: &Path, dir: &Path, modules: &Modules, job: &Job, workers: &str) -> Result<Ran> {
     let cfg = format!("{}.cfg", job.module);
     let safety = matches!(job.kind, JobKind::Cone(_));
     let mut ran = run_cfg(tlc, dir, &job.module, job.heap(), &cfg, workers, safety)?;
@@ -304,7 +352,7 @@ fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
                     break;
                 }
                 reruns += 1;
-                let cfg_name = format!("{}_rest{reruns}.cfg", job.module);
+                let cfg_name = modules.rest_cfg(&job.module, reruns);
                 let cfg = tla::cfg_without(&cs.system, &cs.names, PrintMode::Safety, &found);
                 let path = dir.join(&cfg_name);
                 fs::write(&path, cfg)
@@ -541,10 +589,10 @@ fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration)
 }
 
 /// Runs the cone jobs, up to 8 at once with one TLC worker each.
-fn run_cones(tlc: &Path, dir: &Path, jobs: &[Job]) -> Result<Vec<Ran>> {
+fn run_cones(tlc: &Path, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<Vec<Ran>> {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     run_some(jobs, cores.min(8), "1", |job, workers| {
-        run_job(tlc, dir, job, workers)
+        run_job(tlc, dir, modules, job, workers)
     })
 }
 
@@ -662,11 +710,18 @@ fn run_tlc(
     let (dir, whole_name, keep) = out_dir(out)?;
     let names = TlaNames::new(&ts);
 
-    let mut jobs = cone_jobs(&ts, &names, &selection.targets);
-    let cones = jobs.len();
     // A scope checks no property: `--buc` drops use cases fairness would read, and an error
     // `--entity` defers may sit in a property's cone.
     let temporal = !ts.properties().is_empty() && scope.is_whole();
+    // The whole-model module keeps the name `-o` gives it; the generated names yield.
+    let mut modules = Modules::default();
+    let whole_stem = whole_name.clone();
+    let whole_name = match temporal {
+        true => modules.claim(&whole_name),
+        false => whole_name,
+    };
+    let mut jobs = cone_jobs(&ts, &names, &selection.targets, &mut modules);
+    let cones = jobs.len();
     let line =
         BoundsLine::verify(bounds, Some(Caps::VERIFY)).with_scope(scope.line(model, &selection));
     println!("{line}");
@@ -700,8 +755,12 @@ fn run_tlc(
     // The whole-model module with every property, for a run by hand; verify runs a property
     // on it only when its cone leaves it undecided.
     let whole = temporal.then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));
+    let mut whole_modules = Vec::new();
     if temporal {
-        jobs.extend(property_jobs(&ts, &names));
+        jobs.extend(property_jobs(&ts, &names, &mut modules));
+        whole_modules = (0..ts.properties().len())
+            .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
+            .collect();
     }
     let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
     let end = End {
@@ -744,7 +803,7 @@ fn run_tlc(
         return end.finish(&line, &[]);
     }
     let tlc = find_tlc()?;
-    let mut ran = run_cones(&tlc, &dir, &jobs)?;
+    let mut ran = run_cones(&tlc, &dir, &modules, &jobs)?;
     for (job, r) in jobs.iter().zip(&ran) {
         println!("{}", r.line(&job.module, &job.checks));
     }
@@ -755,7 +814,9 @@ fn run_tlc(
         .zip(&ran)
         .filter(|(_, r)| r.undecided.is_some())
         .filter_map(|(job, _)| match &job.kind {
-            JobKind::PropertyCone(p) => Some(whole_job(&ts, &names, &whole_name, p.index)),
+            JobKind::PropertyCone(p) => {
+                Some(whole_job(&ts, &names, &whole_modules[p.index], p.index))
+            }
             _ => None,
         })
         .collect();

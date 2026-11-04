@@ -596,3 +596,195 @@ property P eventually(E.status == b)
     assert!(lines.contains(&"tlc_result: ok"), "{stdout}");
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+/// Runs `verify` on `src` with `-o <tmp>/<out>`; returns stdout, stderr, the exit code, and
+/// the out dir.
+fn verify_model(test: &str, src: &str, out: &str) -> (String, String, Option<i32>, PathBuf) {
+    let tmp = scratch(test);
+    let model = tmp.join("m.rdra");
+    std::fs::write(&model, src).unwrap();
+    let dir = tmp.join("out");
+    let target = dir.join(out);
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[model.to_str().unwrap(), "-o", target.to_str().unwrap()],
+    );
+    (
+        String::from_utf8_lossy(&output.stdout).into_owned(),
+        String::from_utf8_lossy(&output.stderr).into_owned(),
+        output.status.code(),
+        dir,
+    )
+}
+
+/// A leads_to `P` fails only on the cone with `WF_vars(Next)`, module `Cone_P_WF`.
+const WF_NAMED: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, delivered, cancelled) @default(pending)  delivered_at: DateTime @null }
+usecase Place "注文"
+usecase Deliver "配達"
+usecase Cancel "取消"
+usecase Reopen "再開"
+creates(Place, Order)
+transitions(Deliver, Order.status, pending -> delivered)
+sets(Deliver, Order.delivered_at == present)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Reopen, Order.status, cancelled -> pending)
+property P "注文はいずれ届く"
+  leads_to(Order.status == pending, Order.status == delivered)
+property P_WF "届いた注文には日時がある"
+  always(Order.status != delivered or Order.delivered_at == present)
+"#;
+
+/// `Q`'s cone reduces the gate, so its counterexample is read on the unreduced cone, module
+/// `Cone_Q_Full`.
+const FULL_NAMED: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase BuildGate "設置"
+usecase Swing "開く"
+usecase Unlatch "掛け金を外す"
+usecase Submit "投入"
+usecase Start "開始"
+creates(BuildGate, Gate)
+transitions(Swing, Gate.status, shut -> open)
+sets(Unlatch, Gate.latch == true)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+property Q "作業は待つ"
+  always(Job.status == waiting)
+property Q_Full "作業はまだ待つ"
+  always(Job.status == waiting)
+"#;
+
+/// A property named like another property's `_WF` or `_Full` module keeps `Cone_<name>`, and
+/// the other module takes `_2`; the two shared one file, so the first property's second run
+/// read the wrong spec and ended in `tool_error`.
+#[test]
+fn a_property_named_like_another_property_module_keeps_its_own_spec() {
+    if !have_tlc() {
+        return;
+    }
+    let (stdout, stderr, code, dir) = verify_model("verify_cli_wf_named", WF_NAMED, "M.tla");
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("Cone_P [P]: counterexample (")
+                && l.ends_with(", Cone_P_WF_2: counterexample)")),
+        "{stdout}"
+    );
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("Cone_P_WF [P_WF]: ok (")),
+        "{stdout}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(dir.join("cones.txt")).unwrap(),
+        "Cone_P.tla: P\nCone_P_WF_2.tla: P\nCone_P_WF.tla: P_WF\n"
+    );
+    assert!(
+        stderr.contains("error[P]: property P is violated: "),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("error[P_WF]"), "{stderr}");
+
+    let (stdout, stderr, code, dir) = verify_model("verify_cli_full_named", FULL_NAMED, "M.tla");
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    for (module, property, full) in [
+        ("Cone_Q", "Q", "Cone_Q_Full_2"),
+        ("Cone_Q_Full", "Q_Full", "Cone_Q_Full_Full"),
+    ] {
+        assert!(
+            stdout.lines().any(|l| l
+                .starts_with(&format!("{module} [{property}]: counterexample ("))
+                && l.ends_with(&format!(", {full}: counterexample)"))),
+            "{stdout}"
+        );
+        assert!(
+            stderr.contains(&format!(
+                "error[{property}]: property {property} is violated: "
+            )),
+            "{stderr}"
+        );
+    }
+    assert!(dir.join("Cone_Q_Full_2.tla").exists());
+    assert!(!stdout.contains("tool_error"), "{stdout}");
+}
+
+/// A cone reruns without the check it has reported, from `Cone_CrossInv_Order_0_rest1.cfg`,
+/// the cfg of the property `CrossInv_Order_0_rest1`; the rerun takes `_rest1_2.cfg`, and the
+/// property's cfg still names the property.
+#[test]
+fn a_rerun_cfg_named_like_a_property_module_leaves_that_cfg() {
+    if !have_tlc() {
+        return;
+    }
+    let src = format!(
+        "{SAME_STATE_RULES}property CrossInv_Order_0_rest1 \"注文は払われない\"\n  always(Order.status == pending)\n"
+    );
+    let (stdout, stderr, code, dir) = verify_model("verify_cli_rest_named", &src, "M.tla");
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    assert!(
+        stderr.contains("error[CrossInv_Order_0]: invariant CrossInv_Order_0 is violated: "),
+        "{stderr}"
+    );
+    let cfg = |name: &str| std::fs::read_to_string(dir.join(format!("{name}.cfg"))).unwrap();
+    assert!(
+        cfg("Cone_CrossInv_Order_0_rest1").contains("PROPERTY CrossInv_Order_0_rest1\n"),
+        "{}",
+        cfg("Cone_CrossInv_Order_0_rest1")
+    );
+    let rest = cfg("Cone_CrossInv_Order_0_rest1_2");
+    assert!(rest.contains("INVARIANT CrossInv_Order_0\n"), "{rest}");
+    assert!(!rest.contains("Forbidden_Parcel_0"), "{rest}");
+}
+
+/// `-o Cone.tla` names the whole-model module `Cone`, so the whole-model run of `P` is
+/// `Cone_P`, the name of `P`'s cone: the whole-model spec takes `Cone_P_2`, and the cone's
+/// spec is left as it ran.
+#[test]
+fn a_whole_model_run_named_like_a_cone_leaves_the_cone_spec() {
+    if !have_tlc() {
+        return;
+    }
+    let src = r#"entity E "E" { id: Int @pk  status: Enum(a, b) @default(a)  seen: Bool @default(false) }
+usecase Make "作成"
+usecase Flip "切替"
+creates(Make, E)
+transitions(Flip, E.status, a -> b)
+sets(Flip, E.seen == true)
+condition Fresh "新規"
+holds(Fresh, E.status == a)
+applies_to(Fresh, Make)
+property P eventually(E.status == b)
+"#;
+    let (stdout, stderr, code, dir) = verify_model("verify_cli_whole_named", src, "Cone.tla");
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    let lines: Vec<&str> = stdout.lines().collect();
+    assert!(
+        lines
+            .iter()
+            .any(|l| l.starts_with("Cone_P [P]: not decided (")),
+        "{stdout}"
+    );
+    assert!(
+        lines.iter().any(|l| l.starts_with("Cone_P_2 [P]: ok (")),
+        "{stdout}"
+    );
+    let cone = std::fs::read_to_string(dir.join("Cone_P.tla")).unwrap();
+    assert!(cone.starts_with("---- MODULE Cone_P ----\n"), "{cone}");
+    assert!(!cone.contains("WF_vars(Next)"), "the cone's spec: {cone}");
+    let whole = std::fs::read_to_string(dir.join("Cone_P_2.tla")).unwrap();
+    assert!(
+        whole.contains("WF_vars(Next)"),
+        "the whole-model spec: {whole}"
+    );
+    assert!(dir.join("Cone.tla").exists());
+}
