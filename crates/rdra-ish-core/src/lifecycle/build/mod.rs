@@ -31,6 +31,7 @@ pub(super) fn build(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Bui
     b.invariants();
     b.after_asserts();
     b.properties();
+    b.name_generated_checks_apart();
     b.unwritten_vars();
     b.finish(scope)
 }
@@ -557,6 +558,35 @@ impl<'m> Builder<'m> {
             }
             taken.insert(name.clone());
             a.name = name;
+        }
+    }
+
+    /// An invariant or after-assert name (`Check_<E>_<column>_<n>`, `Unique_<Child>_<role>`,
+    /// ...) that a temporal property's or use case's id, or an earlier check's name, already
+    /// spells takes the first free `<name>_<k>`, k from 2, as a generated action name does.
+    /// Entity, column, and role ids may hold `_`, so two generated names can coincide; a
+    /// model whose names collide with nothing keeps every name.
+    fn name_generated_checks_apart(&mut self) {
+        let model = self.model;
+        let mut taken: HashSet<String> = model
+            .temporal_properties
+            .iter()
+            .map(|p| p.id.clone())
+            .chain(model.use_cases.values().map(|uc| uc.id.clone()))
+            .collect();
+        let names = self
+            .ts
+            .invariants
+            .iter_mut()
+            .map(|i| &mut i.name)
+            .chain(self.ts.after.iter_mut().map(|a| &mut a.name));
+        for name in names {
+            let base = name.clone();
+            let mut k = 2;
+            while !taken.insert(name.clone()) {
+                *name = format!("{base}_{k}");
+                k += 1;
+            }
         }
     }
 

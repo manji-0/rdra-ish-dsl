@@ -1,8 +1,11 @@
 //! Every finding has a name that `error[<name>]:` can carry and the sample headers can match.
 
+use super::model_from;
 use crate::lifecycle::trace::{Inst, Trace};
 use crate::lifecycle::types::{ActionOrigin, InvKind, InvText, LtlKind, ModelRef, Site};
-use crate::lifecycle::{Blocked, CapGrowth, Exit, Loop, StateDiag};
+use crate::lifecycle::{
+    Blocked, Bounds, CapGrowth, Exit, Loop, Scope, StateDiag, TransitionSystem,
+};
 
 /// One value of each variant, with key fields that hold characters a name cannot.
 fn one_of_each() -> Vec<StateDiag> {
@@ -304,4 +307,71 @@ fn one_finding_on_two_entity_views_keeps_two_names() {
     assert_eq!(cap.name(&["Order"]), "StateCapReached_Order");
     assert_eq!(cap.name(&["Payment"]), "StateCapReached_Payment");
     assert_eq!(StateDiag::NoCreationPath.name(&[]), "NoCreationPath");
+}
+
+fn check_names(src: &str) -> Vec<String> {
+    let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
+    ts.invariants()
+        .iter()
+        .map(|i| i.name.clone())
+        .chain(ts.after_asserts().iter().map(|a| a.name.clone()))
+        .collect()
+}
+
+/// Ids may hold `_`, so `Check_Cart_Line_qty_0` is both `Cart.Line_qty`'s check and
+/// `Cart_Line.qty`'s, and `MinCard_A_B_C` both `A_B`'s key to `C` and `A`'s to `B_C`: the
+/// later check takes the next free name, and each finding names one rule.
+#[test]
+fn a_check_name_an_earlier_check_spells_takes_the_next_free_name() {
+    let src = r#"
+entity Cart "カート" { id: Int @pk  Line_qty: Int @default("1") @check(Line_qty >= 1) }
+entity Cart_Line "明細" { id: Int @pk  qty: Int @default("1") @check(qty >= 1) }
+entity A "A" { id: Int @pk }
+entity A_B "AB" { id: Int @pk }
+entity B_C "BC" { id: Int @pk }
+entity C "C" { id: Int @pk }
+usecase Make "作成"
+creates(Make, Cart)
+creates(Make, Cart_Line)
+creates(Make, A)
+creates(Make, A_B)
+creates(Make, B_C)
+creates(Make, C)
+sets(Make, Cart.Line_qty == 1)
+sets(Make, Cart_Line.qty == 1)
+relate(A_B, C, 1..*:1)
+relate(A, B_C, 1..*:1)
+"#;
+    let mut names = check_names(src);
+    names.sort();
+    assert_eq!(
+        names,
+        [
+            "Check_Cart_Line_qty_0",
+            "Check_Cart_Line_qty_0_2",
+            "MinCard_A_B_C",
+            "MinCard_A_B_C_2"
+        ]
+    );
+}
+
+/// A temporal property or a use case named like a generated check keeps its id, as a use case
+/// does beside a split use case's steps; the check takes the next free name.
+#[test]
+fn a_check_name_a_model_id_spells_takes_the_next_free_name() {
+    let src = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+usecase Submit "投入"
+usecase Forbidden_Job_1 "開始"
+creates(Submit, Job)
+transitions(Forbidden_Job_1, Job.status, waiting -> running)
+forbidden(Job, status == running)
+forbidden(Job, status == waiting)
+property Forbidden_Job_0 "作業は待つ"
+  always(Job.status == waiting)
+"#;
+    assert_eq!(check_names(src), ["Forbidden_Job_0_2", "Forbidden_Job_1_2"]);
+    let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
+    assert_eq!(ts.properties()[0].name, "Forbidden_Job_0");
+    assert!(ts.actions().iter().any(|a| a.name == "Forbidden_Job_1"));
 }
