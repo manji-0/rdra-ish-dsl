@@ -320,10 +320,12 @@ def has_reduced_cone(d):
 def verify_both(bin_, model, instances, timeout, work):
     """Each side's observation, or "timeout"; and whether the users' run reduced a cone."""
     sides = {}
+    for side in ("reduced", "plain"):
+        shutil.rmtree(work / side, ignore_errors=True)
     for side, extra in (("reduced", {}), ("plain", {"RDRA_ISH_NO_REDUCE": "1"})):
         d = work / side
-        shutil.rmtree(d, ignore_errors=True)
-        env = dict(os.environ, **extra)
+        env = {k: v for k, v in os.environ.items() if k != "RDRA_ISH_NO_REDUCE"}
+        env.update(extra)
         cmd = [bin_, "verify", "--deny-undecided", "--instance-count", str(instances), "-o", str(d), str(model)]
         rc, out = sh(cmd, timeout, env=env, cwd=work)
         (work / f"{side}.out").write_text(out)
