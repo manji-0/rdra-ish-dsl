@@ -379,7 +379,11 @@ The cone's vars split into a target side T and the rest S:
   Each table is one tuple literal with a cell per class, which TLC evaluates cell by cell
   whatever the class count; a chain of `@@` entries nests once per entry, and a sub-lifecycle
   of a thousand classes overflowed the JVM's stack. An unobserved S (`obs` empty) is one
-  class with no moves.
+  class with no moves. When every state of S is a class of its own and S was not reduced
+  inside, the quotient is the identity and would reduce nothing, so the cone stays unreduced
+  (#101): it keeps all its checks, its module has no `S_class`, and a property's
+  counterexample needs no `_Full` run. A nested reduction still counts: an S whose own
+  reduction shrank it is reduced, even when its classes are its states.
 
 **Proof obligation.** Let C be the cone and R the reduced cone. The relation
 `(t, s) ~ (t, rep(class(s)))` between their states is a divergence-blind stuttering
@@ -421,7 +425,9 @@ step. The tests in `crates/rdra-ish-core/src/lifecycle/tests/reduce.rs` compare 
 unreduced exploration of every sample cone (the states on T and `obs`, the views, the verdicts,
 and that every lifted path is a path of the cone), and `engine_equivalence` runs TLC on each
 reduced cone against its BFS and checks that each check the reduced cone keeps has the cone's
-verdict.
+verdict. `scripts/reduction-diff.py` compares whole `verify` runs, reduced and unreduced, on
+random models (see the `engine_equivalence` item under
+[Approximations and limitations](#approximations-and-limitations)).
 
 ### Part of a model
 
@@ -544,6 +550,26 @@ The rules for each flag and for deferral are in
   and sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job. The debug build took
   315 s on the CI runner, over its 300 s budget; the release build takes 121 s locally
   (Apple silicon, measured).
+
+  `scripts/reduction-diff.py` is the differential test of the reduction on random models
+  (#102). Per seed it generates a model of three to five entities: `relate` chains,
+  guards with `has` and `none`, `.along` rules, a use case split over two APIs, `chooses`
+  with and without `.when`, a `Date` deadline that a timer's use case waits for with a `now`
+  comparison, `after` assertions and temporal properties, at 2 or 3 instances per entity. It
+  runs `verify --deny-undecided` on the model as users run it and again with every cone
+  unreduced (the test hook `RDRA_ISH_NO_REDUCE`, which is not a setting), and compares the
+  exit code, the finding names, the verdict of each check, and the state-model summary; the
+  state counts and traces differ by design. A diverging model is copied out as `.rdra`, and
+  `minimize` shrinks it by deleting lines while it still diverges. A seed past the per-run
+  timeout is listed with the side that timed out, never dropped. CI runs a fixed set of
+  quick seeds in formal-verify with `--fail-on-timeout`, so a seed that slows down fails the
+  job rather than leaving the set; larger sweeps run locally under `nix develop`:
+
+  ```sh
+  cargo build --release -p rdra-ish-cli
+  nix develop -c python3 -I scripts/reduction-diff.py --timeout 120 \
+    run target/release/rdra-ish --seeds 0:500
+  ```
 - User-facing state diagnostics for multi-entity rules say **multi-entity**. The
   `Cross*` prefix in some constraint names is historical.
 

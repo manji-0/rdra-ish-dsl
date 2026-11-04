@@ -52,6 +52,19 @@
   from 4,818,909 to 1,341,705. `engine_equivalence` compares the reduced cones with TLC as
   well, and `VERIFY_FALLBACK` holds 13 cones (19 before). `check` and `states` explore the
   cone unreduced.
+- A cone whose sub-lifecycle quotients to itself (every state of it a class of its own, and
+  no reduction inside it) is not reduced (#101): the quotient would remove no state, and the
+  reduced module carried `S_class`, a `Rep_<var>` table per observed var and a `Succ_<A>`
+  table per action for nothing (249 KB for one cone of 1,294 classes), and a counterexample
+  to a property ran a second time as `Cone_<P>_Full`. Such a cone's module has none of them,
+  and it keeps the checks the reduced cone handed to other cones. Verdicts, error names and
+  the state counts of runs that finish do not change. Of the 89 sample targets whose cone `verify` reduced, 49 had
+  such a cone (`lifecycle_measure` at `verify`'s bounds and 200,000 states).
+- `scripts/reduction-diff.py` runs `verify` reduced and unreduced on random models and
+  compares the verdicts (#102): models with three to five entities, timers, `now`
+  comparisons, `chooses`, split use cases and `.along` rules, at 2 or 3 instances. A
+  diverging model is written out and can be minimized; a seed past the timeout is listed.
+  CI runs a fixed set of seeds in the formal-verify job.
 - insurance-claim-ops states the settlement guard and the rule it left out: `CompleteClaim`
   runs on a first-party claim or once the case's settlement is agreed
   (`.when(ClaimFirstParty)`, `.when(SettlementSigned)`), and a liability claim is not
