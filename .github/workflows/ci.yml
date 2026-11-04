@@ -24,12 +24,14 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
-        # The whole-sample engine comparison and the domain-sample reduction run in release in
-        # formal-verify.
+        # These run in release in formal-verify; in debug they take most of this step.
         run: >-
           cargo test --all --
           --skip bfs_and_tlc_reach_the_same_states_and_verdicts
           --skip reduced_domain_cones_decide_what_the_cones_decide
+          --skip a_property_cone_decides_what_the_whole_model_decides
+          --skip bfs_and_tlc_agree_on_a_sub_lifecycle_of_many_classes
+          --skip bfs_and_tlc_agree_on_two_actions_of_one_name
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
       - name: skill snippets
