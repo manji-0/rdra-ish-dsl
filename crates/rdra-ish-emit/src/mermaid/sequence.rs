@@ -77,12 +77,19 @@ fn write_label(
             .iter()
             .filter(|e| e.origin == usecase && e.entity == entity)
             .filter(|e| !transitions.iter().any(|t| t.column == e.column))
-            .map(|e| match &e.value {
-                SetValue::Value(v) => format!("{}={}", e.column, effect_value(v)),
-                SetValue::Copy(source) => format!(
-                    "{}={}.{}",
-                    e.column, model.entities[source.entity].id, source.column
-                ),
+            .map(|e| {
+                let set = match &e.value {
+                    SetValue::Value(v) => format!("{}={}", e.column, effect_value(v)),
+                    SetValue::Copy(source) => format!(
+                        "{}={}.{}",
+                        e.column, model.entities[source.entity].id, source.column
+                    ),
+                };
+                // A `sets(..).when(Cond)` value, with its guard as a `chooses` value shows it.
+                match e.guard {
+                    Some(ck) => format!("{set} [{}]", model.conditions[ck].label),
+                    None => set,
+                }
             }),
     );
     // A `chooses`: the actor picks one of the variation's values, or of the listed ones.

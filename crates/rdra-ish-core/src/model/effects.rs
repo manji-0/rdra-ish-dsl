@@ -162,6 +162,9 @@ pub struct ColumnEffect {
     pub value: SetValue,
     /// `.role(role)` on a copy: the key that leads to the source row, where several could.
     pub by: Vec<String>,
+    /// `.when(Cond)` on a literal: the use case leaves the value only while the condition's
+    /// `holds` body holds.
+    pub guard: Option<ConditionKey>,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,

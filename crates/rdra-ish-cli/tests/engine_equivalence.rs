@@ -814,6 +814,60 @@ fn bfs_and_tlc_agree_on_choice_guards() {
     check_fixture("choice_guards", CHOICE_GUARDS);
 }
 
+/// `sets(..).when(Cond)` (#98): each reason leaves its own deadline on the created extension,
+/// a value is read on an updated row before the step, a guard that never holds drops its value,
+/// and the timer's use case ends the period once `now` reaches the deadline. `Flag` after
+/// `Remind` leaves an urgent claim reminded at 4, which `Inv_Claim_1` reports.
+const SET_GUARDS: &str = r#"
+variation Reason "延長事由" {
+  disaster "被災地の調査"
+  expert "鑑定等の照会"
+  overseas "国外の調査"
+}
+entity Claim "請求" { id: Int @pk  period: Enum(running, extended, overdue) @default(running)  urgent: Bool @default(false)  reminder_day: Int @null }
+entity Extension "延長" { id: Int @pk  reason: Reason  due_on: Date }
+relate(Extension, Claim, 1:1)
+usecase File "請求"
+usecase Flag "急ぎ"
+usecase Extend "延長"
+usecase Remind "督促の予定"
+usecase MarkOverdue "期限の経過"
+creates(File, Claim)
+sets(Flag, Claim.urgent == true)
+creates(Extend, Extension)
+updates(Extend, Claim)
+transitions(Extend, Claim.period, running -> extended)
+condition Disaster "被災地の調査で延ばす"
+holds(Disaster, Extension.reason == disaster)
+condition Expert "鑑定等の照会で延ばす"
+holds(Expert, Extension.reason == expert)
+condition Never "起きない"
+holds(Never, Extension.reason == expert, Extension.due_on == 0)
+sets(Extend, Extension.due_on == 2).when(Disaster)
+sets(Extend, Extension.due_on == 3).when(Expert)
+sets(Extend, Extension.due_on == 5).when(Never)
+condition Urgent "急ぎの請求"
+holds(Urgent, Claim.urgent == true)
+condition NotUrgent "急ぎでない請求"
+holds(NotUrgent, Claim.urgent == false)
+sets(Remind, Claim.reminder_day == 1).when(Urgent)
+sets(Remind, Claim.reminder_day == 4).when(NotUrgent)
+timer Deadline "支払期限の到来"
+triggers(Deadline, MarkOverdue)
+updates(MarkOverdue, Claim)
+condition Passed "延ばした期限が来た"
+holds(Passed, Extension.due_on <= now)
+transitions(MarkOverdue, Claim.period, extended -> overdue).when(Passed)
+invariant(Extension).when(reason == expert).then(due_on == 3)
+invariant(Claim).when(urgent == true).then(reminder_day != 4)
+forbidden(Claim, Extension, Claim.period == overdue, Extension.due_on > now).along(Extension, Claim)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_set_guards() {
+    check_fixture("set_guards", SET_GUARDS);
+}
+
 /// A use case split into two transaction groups (one API each): an after-assert checked after
 /// each step, with the other group's entity universally bound, and a condition guard on every
 /// group's step.

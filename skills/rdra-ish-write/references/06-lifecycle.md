@@ -61,9 +61,11 @@ Also ask:
 5. Connect an external system through events: `raises(ExtSystem, Event)` inbound,
    `triggers(Event, ExtSystem)` outbound.
 6. Declare a `timer` and `triggers(Timer, UseCase)` for a schedule that starts a use
-   case. Keep that use case in a BUC. A timer has no parameter. When the deadline depends on
-   a reason, declare one timer per period, let each trigger its own use case, and guard
-   that use case with a `condition` on the reason (see the third pattern below).
+   case. Keep that use case in a BUC. A timer has no parameter: it is about the rows its use
+   case writes, which the use case's guards read. When the deadline depends on a reason, put
+   the deadline in a `Date` column, set it with one `sets(UseCase, Entity.due == N).when(Cond)`
+   per reason, and guard the timer's use case with `holds(Due, Entity.due <= now)` (see the
+   third pattern below).
 7. Declare a `condition` for a business rule that selects when a use case applies.
    Without a body it is a trace link (`combines` its variation and lifecycle column);
    with `holds(Cond, Entity.col == value, ...)` it guards each use case it
@@ -84,7 +86,11 @@ Also ask:
    `UnjoinedGuardRead` with the `.along(...)` to add.
 8. Add `sets(UseCase, Entity.col == val)` for enum, nullable, boolean, Int, and Date
    effects not explained by transitions (`chooses` and `sets` on one column in one use
-   case are an error). A `sets` on a column that `transitions`
+   case are an error). To let the row pick the value, write one line per value with
+   `.when(Cond)`: `sets(Extend, Extension.due_on == 3).when(ExpertInquiry)`. The guard reads a
+   created row after the step and an updated row before it, so put a reason the same use
+   case picks on the row it creates. Keep the guards disjoint; an unguarded `sets` of the
+   same column beside them is `ConflictingEffects`. A `sets` on a column that `transitions`
    drives is an error unless the use case creates the entity. A `Date` or `DateTime`
    column takes a number, a point on the clock `now` ticks through
    (`sets(Issue, Coupon.expires_at == 3)`), so a rule that reads `expires_at < now` has a
@@ -152,58 +158,62 @@ holds(CardPayment, Payment.method == card)
 applies_to(CardPayment, CapturePayment)
 ```
 
-A deadline that depends on a reason: one timer per period, each use case guarded by the
-reason it serves.
+A deadline that depends on a reason: the reason sets the deadline on the row it creates,
+and the timer's use case waits for the clock to reach it.
 
 ```rdra
 variation ExtensionReason "Extension reason" {
-  none "No extension"
-  disaster_area "Disaster area"
-  foreign_survey "Overseas survey"
+  disaster_area "Disaster area (60 days)"
+  expert_inquiry "Expert inquiry (90 days)"
 }
 
 entity Claim "Claim" {
   id: Int @pk
-  status: Enum(waiting, overdue) @default(waiting)
-  extension: ExtensionReason @default(none)
+  period: Enum(running, extended, overdue) @default(running)
 }
+
+entity Extension "Extension" {
+  id: Int @pk
+  reason: ExtensionReason
+  due_on: Date
+}
+
+relate(Extension, Claim, 1:1)
 
 buc BucClaim "Claim"
 usecase FileClaim "File a claim"
-usecase RecordExtension "Record the extension reason"
-usecase FlagOverdue30 "Flag overdue after 30 days"
-usecase FlagOverdue60 "Flag overdue after 60 days"
-usecase FlagOverdue120 "Flag overdue after 120 days"
+usecase ExtendPeriod "Extend the payment period"
+usecase FlagOverdue "Flag the claim overdue"
 contains(BucClaim, FileClaim)
-contains(BucClaim, RecordExtension)
-contains(BucClaim, FlagOverdue30)
-contains(BucClaim, FlagOverdue60)
-contains(BucClaim, FlagOverdue120)
+contains(BucClaim, ExtendPeriod)
+contains(BucClaim, FlagOverdue)
 
 creates(FileClaim, Claim)
-updates(RecordExtension, Claim)
-chooses(RecordExtension, Claim.extension)
-transitions(FlagOverdue30, Claim.status, waiting -> overdue)
-transitions(FlagOverdue60, Claim.status, waiting -> overdue)
-transitions(FlagOverdue120, Claim.status, waiting -> overdue)
+creates(ExtendPeriod, Extension)
+updates(ExtendPeriod, Claim)
+transitions(ExtendPeriod, Claim.period, running -> extended)
 
-timer After30Days "30 days after filing"
-timer After60Days "60 days after filing"
-timer After120Days "120 days after filing"
-triggers(After30Days, FlagOverdue30)
-triggers(After60Days, FlagOverdue60)
-triggers(After120Days, FlagOverdue120)
+condition DisasterArea "A disaster-area survey"
+holds(DisasterArea, Extension.reason == disaster_area)
+condition ExpertInquiry "An expert inquiry"
+holds(ExpertInquiry, Extension.reason == expert_inquiry)
+sets(ExtendPeriod, Extension.due_on == 2).when(DisasterArea)
+sets(ExtendPeriod, Extension.due_on == 3).when(ExpertInquiry)
 
-condition NoExtension "No extension was recorded"
-holds(NoExtension, Claim.extension == none)
-condition DisasterArea "A disaster-area extension was recorded"
-holds(DisasterArea, Claim.extension == disaster_area)
-condition ForeignSurvey "An overseas-survey extension was recorded"
-holds(ForeignSurvey, Claim.extension == foreign_survey)
-applies_to(NoExtension, FlagOverdue30)
-applies_to(DisasterArea, FlagOverdue60)
-applies_to(ForeignSurvey, FlagOverdue120)
+timer PaymentDeadline "Payment deadline"
+triggers(PaymentDeadline, FlagOverdue)
+updates(FlagOverdue, Claim)
+condition DeadlinePassed "The extended deadline has come"
+holds(DeadlinePassed, Extension.due_on <= now)
+transitions(FlagOverdue, Claim.period, extended -> overdue).when(DeadlinePassed)
+
+invariant(Extension).when(reason == expert_inquiry).then(due_on == 3).label("An expert inquiry ends at mark 3")
+forbidden(Claim, Extension, Claim.period == overdue, Extension.due_on > now).along(Extension, Claim).label("No claim is overdue before its deadline")
 ```
+
+The clock counts marks, not days: pick marks that keep the order of the periods (60 days at
+2, 90 days at 3), and read a passing check as "this deadline comes after that one and nothing
+passes it early".
 
 A created row that copies a value from the row it is created under:
 

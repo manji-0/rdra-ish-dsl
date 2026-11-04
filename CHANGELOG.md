@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `sets(UC, E.col == value).when(Condition)` (#98): the use case leaves the value only while
+  the condition's `holds` body holds, read as a `chooses(..).when(Cond)` value guard reads it,
+  on a created row after the step and on an updated row before it. The lines of one column
+  are one choice, and a use case none of whose lines is enabled does not run. A deadline can
+  so follow the row's reason: `sets(Extend, Extension.due_on == 3).when(ExpertInquiry)`, and
+  the timer's use case waits for it with `holds(Due, Extension.due_on <= now)`. A timer
+  needs no parameter for this: it is about the rows its use case writes, and that use
+  case's guards read them. An unguarded `sets` or a copy of the same column beside a guarded
+  line is `ConflictingEffects`, `.when` on a copy is the new error `SetsWhenOnCopy`, and a
+  guarded value never left is the `ValueNeverChosen` warning. `check`, `states`, the TLA+
+  export and `verify` read the lines as they read guarded `chooses` values; the sequence
+  diagram writes the guard in `[...]` after the value. Every model that loads on 1.1.0 loads
+  with the same verdict, errors, state counts and rule names: `.when` on `sets` was an
+  `UnknownChainMethod` error.
+
 ## v1.1.0 - 2026-11-04
 
 Upgrading from v1.0.0 needs no change to a model: every model that loads on 1.0.0 loads with

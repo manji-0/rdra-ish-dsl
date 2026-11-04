@@ -770,11 +770,23 @@ fn process_sets_predicate(
     diags: &mut Vec<Diagnostic>,
 ) {
     let before = diags.len();
+    let Ok(guard) = when_condition(model, pred, ctx, diags) else {
+        return;
+    };
     let Some(target) = effect_target(model, pred, resolved, ctx, diags) else {
         return;
     };
     let recorded = target.entity.is_some_and(|entity| {
-        record_sets_effect(model, pred, target.origin, entity, target.cmp, ctx, diags)
+        record_sets_effect(
+            model,
+            pred,
+            target.origin,
+            entity,
+            target.cmp,
+            guard,
+            ctx,
+            diags,
+        )
     });
     if !recorded {
         let err = RdraError::SetsNoEffect {
@@ -920,6 +932,7 @@ fn effect_comparison<'a>(
     Some(cmp)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_column_effect(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -927,6 +940,7 @@ fn push_column_effect(
     entity: EntityKey,
     column: String,
     value: SetValue,
+    guard: Option<ConditionKey>,
     ctx: DiagCtxt,
 ) {
     let by = super::constraint::selectors(&pred.chain, None);
@@ -937,6 +951,7 @@ fn push_column_effect(
         column: column.clone(),
         value,
         by,
+        guard,
     });
     model.typed_predicates.push(TypedPredicate::SetsColumn {
         origin,
@@ -945,13 +960,16 @@ fn push_column_effect(
     });
 }
 
-/// Records the column effect `sets(UC, E.column == value)` states, and says whether it did.
+/// Records the column effect `sets(UC, E.column == value)` states, with its `.when(Cond)`
+/// guard, and says whether it did.
+#[allow(clippy::too_many_arguments)]
 fn record_sets_effect(
     model: &mut SemanticModel,
     pred: &PredicateCall,
     origin: UseCaseKey,
     entity_key: EntityKey,
     cmp: Option<&Comparison>,
+    guard: Option<ConditionKey>,
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
@@ -978,10 +996,24 @@ fn record_sets_effect(
     let Some((column, value)) = value else {
         return false;
     };
-    if let SetValue::Value(_) = &value {
-        super::constraint::report_leading_by(&pred.chain, ctx, diags);
+    match &value {
+        SetValue::Value(_) => super::constraint::report_leading_by(&pred.chain, ctx, diags),
+        SetValue::Copy(source) if guard.is_some() => {
+            push_error(
+                ctx,
+                diags,
+                pred.span.clone(),
+                RdraError::SetsWhenOnCopy {
+                    usecase: model.use_cases[origin].id.clone(),
+                    column: format!("{entity_id}.{column}"),
+                    copied: format!("{}.{}", model.entities[source.entity].id, source.column),
+                },
+            );
+            return true;
+        }
+        SetValue::Copy(_) => {}
     }
-    push_column_effect(model, pred, origin, entity_key, column, value, ctx);
+    push_column_effect(model, pred, origin, entity_key, column, value, guard, ctx);
     true
 }
 
@@ -1024,7 +1056,7 @@ fn record_drives_effect(
     ) {
         Ok(Some((column, value))) if truth => {
             let value = SetValue::Value(value);
-            push_column_effect(model, pred, origin, entity_key, column, value, ctx);
+            push_column_effect(model, pred, origin, entity_key, column, value, None, ctx);
             true
         }
         Ok(Some((col, _))) => {

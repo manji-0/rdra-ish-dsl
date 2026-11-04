@@ -723,8 +723,8 @@ fn lint_unwritten_field_columns(model: &SemanticModel, issues: &mut Vec<LintIssu
 /// A `holds` body that names neither a variation column nor a lifecycle column is not
 /// RDRA 条件: it combines no バリエーション and no 状態モデル. A body that guards a use case
 /// is exempt: it is the use case's rule, and a guard has no other way to be written. It
-/// guards one through `applies_to` a use case or an API, or `.when` on a `transitions` arm or
-/// a `chooses` value (those link the guarded column, so `condition_edges` is not empty). A
+/// guards one through `applies_to` a use case or an API, or `.when` on a `transitions` arm, a
+/// `chooses` value, or a `sets` value (each a `Guards` relation, see `check_write_guards`). A
 /// body a `forbidden` or `invariant` reads through `.when(Cond)` is that rule's condition
 /// and is exempt the same way.
 fn lint_condition_anchors(model: &SemanticModel, issues: &mut Vec<LintIssue>) {

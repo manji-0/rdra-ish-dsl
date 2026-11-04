@@ -230,7 +230,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `relate` | `(Entity, Entity, Card)` | Declares an ER relationship and auto-generates the FK columns. `Card` is one of `1:1`, `1:N`, `N:1`, `N:M` (unquoted). The child side, the `N` of `N:1` / `1:N` or the left of `1:1`, may be a range `lo..hi` with `lo` 0 or 1 and `hi` 1 or `*`: `relate(OrderLine, Order, 1..*:1)` says every `Order` has at least one `OrderLine`, and the lifecycle checks it as the invariant `MinCard_<Child>_<role>`. A range on the parent side is an error; write `.optional()` for a parent that may be absent. For `N:M`, require `.via(JunctionEntity)` where the junction is distinct from both ends: the model keeps the logical N:M edge **and synthesizes** two `N:1` edges `Junction→A` / `Junction→B` (FK columns, composite unique on the FK pair when missing, TLA owner links, ER crowfoot, `.along` paths). Equivalent manual form: two explicit `N:1` relates from the junction. For `1:1` the left end is the child: it holds the key column, marked unique. FK options can be chained with `.optional()`, `.on_delete(action)`, and `.on_update(action)` (for `N:M`, options apply to both generated FKs). An `.optional()` relate lets the child exist unlinked in `states` and in the TLA+ export; a mandatory relate does not. |
 | `transitions` | `(UseCase, Entity.column, from -> to)` | A lifecycle edge on an Enum column: the use case moves the entity from the first variant to the second. `.when(Condition)` guards this arm only. See [Guard one arm](#guard-one-arm-when). |
 | `after` | `(UseCase).assert(...)` | A temporal anchor assertion: a predicate on the state that each run of the use case leaves, read after its last step on the run's rows. |
-| `sets` | `(UseCase, Entity.column == value)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. `Entity.column == Source.column` copies a value. |
+| `sets` | `(UseCase, Entity.column == value)` | An explicit column effect, read by state derivation. Use `present` (not PostgreSQL type names) for nullable non-null. `Entity.column == Source.column` copies a value. `.when(Condition)` on a literal leaves the value only while the condition holds; see [A value that follows a condition](#a-value-that-follows-a-condition-when). |
 | `drives` | `(UseCase, Entity.column op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 | `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
 | `chooses` | `(UseCase, Entity.column, value)` | One value the actor may pick; the lines of one use case and column list the choice. `.when(Condition)` guards this value only. See [Guard one value](#guard-one-value-when). |
@@ -267,7 +267,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")` |
 | `required`, `exclusive` | `.label("...")` |
 | `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
-| `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`) |
+| `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`); `.when(Condition)`, at most once, on a literal value: the condition's `holds` body guards this value |
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | every other predicate (including `combines`) | none |
@@ -482,69 +482,82 @@ with its `triggers` edges.
 
 #### A deadline that depends on a reason
 
-A timer has no parameter, so it cannot wait 30 days for one claim and 60 for another. Declare
-one timer per period, let each trigger its own use case, and guard that use case with a
-`condition` on the reason. The timer whose period does not fit the row finds its use case
-not applicable and does nothing:
+<!-- constrained-by #a-value-that-follows-a-condition-when -->
+
+A timer has no parameter, and it needs none: it is about the rows its use case binds. A
+condition applied to that use case, or guarding one of its arms with `.when`, reads those
+rows, including a `Date` column compared with `now`. So a deadline is a `Date` column on
+the row, the timer's use case waits for `due_on <= now`, and the use case that starts the
+period sets `due_on` from the reason with one `sets(..).when(Cond)` line per reason
+([A value that follows a condition](#a-value-that-follows-a-condition-when)):
 
 ```rdra
 variation ExtensionReason "Extension reason" {
-  none "No extension"
-  disaster_area "Disaster area"
-  foreign_survey "Overseas survey"
+  disaster_area "Disaster area (60 days)"
+  expert_inquiry "Expert inquiry (90 days)"
 }
 
 entity Claim "Claim" {
   id: Int @pk
-  status: Enum(waiting, overdue) @default(waiting)
-  extension: ExtensionReason @default(none)
+  period: Enum(running, extended, overdue) @default(running)
 }
+
+entity Extension "Extension" {
+  id: Int @pk
+  reason: ExtensionReason
+  due_on: Date
+}
+
+relate(Extension, Claim, 1:1)
 
 buc BucClaim "Claim"
 usecase FileClaim "File a claim"
-usecase RecordExtension "Record the extension reason"
-usecase FlagOverdue30 "Flag overdue after 30 days"
-usecase FlagOverdue60 "Flag overdue after 60 days"
-usecase FlagOverdue120 "Flag overdue after 120 days"
+usecase ExtendPeriod "Extend the payment period"
+usecase FlagOverdue "Flag the claim overdue"
 contains(BucClaim, FileClaim)
-contains(BucClaim, RecordExtension)
-contains(BucClaim, FlagOverdue30)
-contains(BucClaim, FlagOverdue60)
-contains(BucClaim, FlagOverdue120)
+contains(BucClaim, ExtendPeriod)
+contains(BucClaim, FlagOverdue)
 
 creates(FileClaim, Claim)
-updates(RecordExtension, Claim)
-chooses(RecordExtension, Claim.extension)
-transitions(FlagOverdue30, Claim.status, waiting -> overdue)
-transitions(FlagOverdue60, Claim.status, waiting -> overdue)
-transitions(FlagOverdue120, Claim.status, waiting -> overdue)
+creates(ExtendPeriod, Extension)
+updates(ExtendPeriod, Claim)
+transitions(ExtendPeriod, Claim.period, running -> extended)
 
-timer After30Days "30 days after filing"
-timer After60Days "60 days after filing"
-timer After120Days "120 days after filing"
-triggers(After30Days, FlagOverdue30)
-triggers(After60Days, FlagOverdue60)
-triggers(After120Days, FlagOverdue120)
+condition DisasterArea "A disaster-area survey"
+holds(DisasterArea, Extension.reason == disaster_area)
+condition ExpertInquiry "An expert inquiry"
+holds(ExpertInquiry, Extension.reason == expert_inquiry)
+sets(ExtendPeriod, Extension.due_on == 2).when(DisasterArea)
+sets(ExtendPeriod, Extension.due_on == 3).when(ExpertInquiry)
 
-condition NoExtension "No extension was recorded"
-holds(NoExtension, Claim.extension == none)
-condition DisasterArea "A disaster-area extension was recorded"
-holds(DisasterArea, Claim.extension == disaster_area)
-condition ForeignSurvey "An overseas-survey extension was recorded"
-holds(ForeignSurvey, Claim.extension == foreign_survey)
-applies_to(NoExtension, FlagOverdue30)
-applies_to(DisasterArea, FlagOverdue60)
-applies_to(ForeignSurvey, FlagOverdue120)
+timer PaymentDeadline "Payment deadline"
+triggers(PaymentDeadline, FlagOverdue)
+updates(FlagOverdue, Claim)
+condition DeadlinePassed "The extended deadline has come"
+holds(DeadlinePassed, Extension.due_on <= now)
+transitions(FlagOverdue, Claim.period, extended -> overdue).when(DeadlinePassed)
+
+invariant(Extension).when(reason == expert_inquiry).then(due_on == 3)
+forbidden(Claim, Extension, Claim.period == overdue, Extension.due_on > now).along(Extension, Claim)
 ```
 
-- **The guard picks the period.** `applies_to(DisasterArea, FlagOverdue60)` lets the 60-day
-  use case run only on a claim whose `extension` is `disaster_area`. Without it, an
-  `after(FlagOverdue60).assert(Claim.extension == disaster_area)` fails with a counterexample
-  at `extension=none`.
-- **The reason is chosen before the deadline.** `chooses(RecordExtension, Claim.extension)`
-  gives the column a value; a column nothing reads or chooses adds no variable.
-- **The model does not count days.** Each timer only says that its use case may fire; the
-  names `After30Days`, `After60Days` and `After120Days` carry the period.
+- **The reason sets the deadline.** `ExtendPeriod` creates the extension, the actor picks
+  its reason, and each `sets(..).when(..)` reads the reason of the created row after the
+  step. The `invariant` fails with a counterexample if the expert inquiry's line sets
+  another mark.
+- **The timer waits for the row's deadline.** `.when(DeadlinePassed)` on the arm reads the
+  extension of the claim the use case updates, through the `relate`. Without it, the
+  `forbidden` fails: the timer flags a claim whose deadline has not come.
+- **The clock counts marks, not days.** `now` starts at 0 and ticks to the top of the Int
+  range (`0..5` by default), so a deadline is a mark on that clock. Pick marks that keep
+  the order of the periods: here 60 days is 2 and 90 days is 3. The clock is shared by
+  every row, so a row whose period starts after the clock has ticked starts late. The
+  checks say which deadline comes first and that nothing passes it early, not how many
+  days lie between.
+
+The older form still works: one timer per period, each triggering its own use case guarded
+by a condition on the reason. It needs no `Date` column, but no rule can then say when the
+period ends.
 
 ### Business flows
 
@@ -1248,6 +1261,9 @@ chooses(DraftResponse, OfficeAction.amendment, limited)
 - **A value listed twice is enabled by either line**, as an arm declared twice is: an
   unguarded line lifts the guard, two guards are joined with or. It is not an error.
 - On the creating use case the listed values restrict the creation's own choice.
+
+A `sets` value takes `.when` the same way; see
+[A value that follows a condition](#a-value-that-follows-a-condition-when).
 
 A value that is not one of the variation's is `InvalidVariationValue`, whose hint lists the
 values, and a quoted value, `chooses(UC, E.col, "a")`, is `QuotedValue` (write it bare).
@@ -1962,6 +1978,51 @@ column.
 
 `check`, `states`, the TLA+ export, and `verify` read a copy the same way. TLA+ writes it as
 a choice of the column's value, then the guard `col'[p] = source[q]`.
+
+### A value that follows a condition: `.when`
+
+<!-- constrained-by #guard-one-value-when -->
+
+`sets(UseCase, Entity.column == value).when(Condition)` leaves the value only while the
+condition's `holds` body holds. One line per value lets the row's own columns pick what the
+use case leaves, such as a deadline that follows a reason:
+
+```rdra
+condition ExpertInquiry "An expert inquiry"
+holds(ExpertInquiry, Extension.reason == expert_inquiry)
+condition DisasterArea "A disaster-area survey"
+holds(DisasterArea, Extension.reason == disaster_area)
+
+sets(ExtendPeriod, Extension.due_on == 3).when(ExpertInquiry)
+sets(ExtendPeriod, Extension.due_on == 2).when(DisasterArea)
+```
+
+- **The guard is read as a `chooses` value guard reads it**
+  ([Guard one value](#guard-one-value-when)). On a row the use case creates it reads the row
+  after the step, so it sees the variation value the actor picks on the creation. On a row
+  the use case updates it reads the state the use case starts from, so a guard on a column
+  the same use case changes sees the old value.
+- **The lines of one column are one choice.** The use case leaves the value of a line whose
+  guard holds. No line enabled, no run: a reason that no line names never runs the use
+  case. Two lines whose guards hold at once both leave their value, one run each, so keep
+  the guards disjoint; `states` shows both values where they overlap. A value two lines give
+  is enabled by either guard.
+- **One column takes either guarded lines or one unguarded value.** An unguarded `sets` or a
+  copy of the column beside a guarded line is `ConflictingEffects`. A `chooses` of the column
+  is `ChoosesAndSets`, as for any `sets`.
+- **Only a literal is guarded.** `.when` on a copy (`Entity.column == Source.column`) is
+  `SetsWhenOnCopy`; write `applies_to(Cond, UseCase)` to guard the whole use case.
+- **The condition needs a body.** `WhenRequiresCondition` and `WhenConditionWithoutBody`
+  apply as for a `transitions` arm.
+
+A guarded value that is never left while its use case runs is the `ValueNeverChosen`
+warning of `check` (`Choice_<UseCase>_<Entity>_<column>_<value>`), with the wording a
+`chooses` value has: its guard never holds where the use case runs. The sequence diagram
+writes the guard in `[...]` after the value, and the RDRA, use case, and condition diagrams
+draw a `when` edge from the condition to the use case, derived `via sets Entity.column value`.
+`check`, `states`, the TLA+ export, and
+`verify` read the lines as a guarded `chooses`: TLA+ picks the value, then the guard
+`\/ (col'[p] = v /\ guard)` over the lines.
 
 ### Driving comparison propositions with `drives`
 

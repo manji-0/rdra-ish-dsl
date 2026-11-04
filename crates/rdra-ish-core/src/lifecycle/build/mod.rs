@@ -700,10 +700,14 @@ impl<'m> Builder<'m> {
 
     fn sets_effects(&mut self, uc: UseCaseKey, a: &mut ActionDraft) {
         let model = self.model;
-        for (idx, ce) in model.column_effects.iter().enumerate() {
-            if ce.origin != uc {
-                continue;
-            }
+        // Unguarded lines first, so a guarded line of a column they write conflicts with them.
+        let lines = model
+            .column_effects
+            .iter()
+            .enumerate()
+            .filter(|(_, ce)| ce.origin == uc);
+        let (guarded, unguarded): (Vec<_>, Vec<_>) = lines.partition(|(_, ce)| ce.guard.is_some());
+        for (idx, ce) in unguarded.into_iter().chain(guarded) {
             let SetValue::Value(value) = &ce.value else {
                 continue;
             };
@@ -735,7 +739,19 @@ impl<'m> Builder<'m> {
                 continue;
             }
             let domain = decl.domain.clone();
-            match self.effect_value(&domain, value, &site, ce.entity) {
+            let rhs = self.effect_value(&domain, value, &site, ce.entity);
+            if let Some(ck) = ce.guard {
+                let values = match rhs {
+                    EffectRhs::Value(v) => vec![v],
+                    EffectRhs::AnyNonNull => (1..domain.size(self.bounds))
+                        .map(|i| Value(i as u8))
+                        .collect(),
+                    EffectRhs::None => continue,
+                };
+                self.guarded_set(a, uc, ce.entity, var, p, values, (ck, site));
+                continue;
+            }
+            match rhs {
                 EffectRhs::Value(v) => self.assign(a, uc, ce.entity, var, p, Rhs::Lit(v), site),
                 EffectRhs::AnyNonNull => {
                     let values: Vec<Value> = (1..domain.size(self.bounds))
@@ -768,6 +784,73 @@ impl<'m> Builder<'m> {
             let site = Site::new(ModelRef::PropositionEffect(idx), &pe.site);
             self.check_driven_truth(uc, idx, &site);
             self.assign(a, uc, pe.entity, var, p, Rhs::Lit(v), site);
+        }
+    }
+
+    /// `sets(UC, E.col == v).when(Cond)`: one guarded value of a choice that the step's
+    /// `GuardWhy::ArmCondition` guard filters, as a guarded `chooses` value is. The lines of
+    /// one column join one `Choose`, and a value two lines give is enabled by either. An
+    /// unguarded `sets` of the column conflicts with it, and so does a copy (`copy_effects`).
+    #[allow(clippy::too_many_arguments)]
+    fn guarded_set(
+        &mut self,
+        a: &mut ActionDraft,
+        uc: UseCaseKey,
+        ek: EntityKey,
+        var: VarId,
+        p: u8,
+        values: Vec<Value>,
+        (ck, site): (ConditionKey, Site),
+    ) {
+        let cond = (ck, self.model.conditions[ck].id.clone());
+        let guarded = a.effects.iter().position(|eff| {
+            matches!(eff, Effect::Choose { var: v, param: q, conds, .. }
+                if (*v, *q) == (var, p) && !conds.is_empty() && conds.iter().all(|c| !c.is_empty()))
+        });
+        let at = match guarded {
+            Some(at) => at,
+            None => {
+                if let Some(old) = prior_write(a, var, p) {
+                    let column = self.ts.var_name(var);
+                    self.diag(
+                        vec![ek],
+                        StateDiag::ConflictingEffects {
+                            usecase: self.model.use_cases[uc].id.clone(),
+                            column,
+                            sites: vec![old, site],
+                        },
+                    );
+                    return;
+                }
+                a.effects.push(Effect::Choose {
+                    var,
+                    param: p,
+                    values: Vec::new(),
+                    sites: Vec::new(),
+                    conds: Vec::new(),
+                });
+                a.effects.len() - 1
+            }
+        };
+        let Effect::Choose {
+            values: have,
+            sites,
+            conds,
+            ..
+        } = &mut a.effects[at]
+        else {
+            return;
+        };
+        for v in values {
+            match have.iter().position(|x| *x == v) {
+                Some(i) if !conds[i].contains(&cond) => conds[i].push(cond.clone()),
+                Some(_) => {}
+                None => {
+                    have.push(v);
+                    sites.push(site.clone());
+                    conds.push(vec![cond.clone()]);
+                }
+            }
         }
     }
 

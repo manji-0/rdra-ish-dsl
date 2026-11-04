@@ -333,6 +333,13 @@ pub enum RdraError {
         col: String,
     },
 
+    #[error("`sets({usecase}, {column} == {copied}).when(...)` guards a copy\n  hint: `.when` guards a literal value, `sets({usecase}, {column} == value).when(Cond)`; to guard the copy write `applies_to(Cond, {usecase})`")]
+    SetsWhenOnCopy {
+        usecase: String,
+        column: String,
+        copied: String,
+    },
+
     #[error("`{pred}(...).when(...)` must name one condition, once\n  hint: declare `condition Name \"...\"` with `holds(Name, Entity.column == value)` and write `.when(Name)`; to guard every step of the use case write `applies_to(Name, UseCase)` instead")]
     WhenRequiresCondition { pred: String },
 

@@ -150,6 +150,7 @@ effects apply together to the pre-state:
 | a variation column of a created instance | The instance takes any value of the variation, unless the creating use case sets it. `@default` never pins the choice; info `DefaultOnVariationIgnored` says so where some row starts at any value. |
 | `chooses(UC, E.col)` | The variation column takes any value of the variation: one successor per value, as on a creation. On a created instance it is the creation's choice. A column no rule, condition, assert, `property`, or `sets` reads has no variable, so nothing tells its values apart and the `chooses` adds no successor. |
 | `chooses(UC, E.col, v).when(Cond)` | The column takes one of the listed values: one successor per value. A guarded value is taken only when the body of `Cond` holds on the pre-state; the column gets one guard on the successor, `\/ (col' = v /\ body)` over its listed values (an unguarded value's body is `TRUE`), built as an arm guard is. A guarded value gives the column a variable. |
+| `sets(UC, E.col == v).when(Cond)` | One listed value per line, read as a guarded `chooses` value: one successor per value, taken only when the body of `Cond` holds, on the pre-state for an updated instance and after the step for a created one. The column gets one guard on the successor, `\/ (col' = v /\ body)` over the lines. No line enabled, no successor. An unguarded `sets` or a copy of the same column in the action is `ConflictingEffects`. |
 | a column the use case does not write | Unchanged. |
 
 A `creates(Api, E)` reached through `invokes(UC, Api)` counts as a creation by `UC`.
@@ -161,8 +162,10 @@ multiply: each combination of one value per choice is a successor. The guards re
 pre-state, so they hold or fail for every arm together, and `after(UC).assert` is checked
 on every successor. In the TLA+ export a choice of transitions is
 `\E v \in (CASE col = a -> {b, c} [] ... [] OTHER -> {col}) : col' = [col EXCEPT ![p] = v]`;
-a column whose arms leave each state for one target keeps the deterministic `CASE`. A `sets`
-is never a choice: two values for one column in one use case are `ConflictingEffects`.
+a column whose arms leave each state for one target keeps the deterministic `CASE`. An
+unguarded `sets` is never a choice: two values for one column in one use case are
+`ConflictingEffects`. Guarded `sets` lines of one column are a choice, as listed `chooses`
+values are.
 
 **Arm guards.** `.when(Cond)` filters the successors of a choice: the explorer forks every
 arm, or every listed value of a `chooses`, from the pre-state, then keeps the successors
@@ -325,7 +328,10 @@ value of the source is a value of the target, so the guard always keeps one succ
 **Clock.** When something compares a column to `now`, a `Tick` action adds one to
 `now` until it reaches the top of the Int range. A `Date` or `DateTime` column is a point
 on the same clock: `sets(UC, E.due == 3)` places it at 3, and `due < now` holds once the
-clock has ticked past it.
+clock has ticked past it. A deadline that depends on the row is one guarded `sets` per case,
+`sets(UC, E.due == 3).when(Cond)`, and the timer's use case waits for it with a guard such as
+`holds(Due, E.due <= now)` (see
+[A deadline that depends on a reason](./language-reference.md#a-deadline-that-depends-on-a-reason)).
 
 ### Checks
 

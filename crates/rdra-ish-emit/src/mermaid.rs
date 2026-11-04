@@ -32,7 +32,7 @@ use crate::{
     OnDeadlock, Scope, StatesEmitter, View, OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::analysis::transition_guard_labels;
-use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, Relation, SemanticModel};
+use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, Relation, SemanticModel, SetValue};
 use rdra_ish_core::{buc_members, state_id, state_key, state_models, StateModel};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 
@@ -276,9 +276,9 @@ fn kinds_by_layer(nodes: &[NodeRef]) -> Vec<&'static str> {
 }
 
 /// What a `when` edge from `condition` to `usecase` is derived from: `via` and each
-/// `transitions` arm (`transitions <Entity>.<column> <from>-><to>`) and `chooses` value
-/// (`chooses <Entity>.<column> <value>`) of the use case that `.when(condition)` guards,
-/// in declaration order, `, `-joined.
+/// `transitions` arm (`transitions <Entity>.<column> <from>-><to>`), `chooses` value
+/// (`chooses <Entity>.<column> <value>`), and `sets` value (`sets <Entity>.<column> <value>`)
+/// of the use case that `.when(condition)` guards, in declaration order, `, `-joined.
 fn guard_derivation(model: &SemanticModel, condition: &NodeRef, usecase: &NodeRef) -> String {
     let (NodeRef::Condition(ck), NodeRef::UseCase(uk)) = (condition, usecase) else {
         return String::new();
@@ -307,7 +307,26 @@ fn guard_derivation(model: &SemanticModel, condition: &NodeRef, usecase: &NodeRe
                 .filter(|v| v.guard == Some(*ck))
                 .map(move |v| format!("chooses {}.{} {}", entity(c.entity), c.column, v.value))
         });
-    format!("via {}", arms.chain(values).collect::<Vec<_>>().join(", "))
+    let sets = model
+        .column_effects
+        .iter()
+        .filter(|e| e.origin == *uk && e.guard == Some(*ck))
+        .filter_map(|e| match &e.value {
+            SetValue::Value(v) => Some(format!(
+                "sets {}.{} {}",
+                entity(e.entity),
+                e.column,
+                v.literal()
+            )),
+            SetValue::Copy(_) => None,
+        });
+    format!(
+        "via {}",
+        arms.chain(values)
+            .chain(sets)
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
 }
 
 /// The `when` edge of a `Guards` relation: a condition to the use case whose arm or value

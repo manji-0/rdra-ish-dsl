@@ -358,6 +358,7 @@ performs(Staff, Book)
                 "transitions(U, A.status, x -> y).when(Tgt)",
             ),
             ("chooses", "when") => (CONDITION_TGT, "chooses(U, A.status, x).when(Tgt)"),
+            ("sets", "when") => (CONDITION_TGT, "sets(U, A.status == x).when(Tgt)"),
             _ => panic!(
                 "`{pred}(...).{method}(...)` has no rename sample: add one, or `None` if it takes no symbol"
             ),

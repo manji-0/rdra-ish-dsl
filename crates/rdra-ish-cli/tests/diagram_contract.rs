@@ -1510,7 +1510,7 @@ fn every_condition_diagram_of_every_sample_keeps_the_contract() {
     assert!(values > 40, "only {values} values drawn");
 }
 
-/// A `.when(Cond)` on a `transitions` arm or a `chooses` value is drawn as a `when` edge from
+/// A `.when(Cond)` on a `transitions` arm, a `chooses` value, or a `sets` value is drawn as a `when` edge from
 /// the condition to the use case in each diagram that draws `applies_to`, labelled because a
 /// condition to a use case is two relations there, and derived from the arms and values it
 /// guards: the same edges in every kind.
@@ -1546,7 +1546,9 @@ fn a_when_guard_is_a_labelled_derived_edge_wherever_applies_to_is_drawn() {
                     !vias.is_empty()
                         && vias.iter().all(|via| {
                             let via = via.trim();
-                            via.starts_with("transitions ") || via.starts_with("chooses ")
+                            via.starts_with("transitions ")
+                                || via.starts_with("chooses ")
+                                || via.starts_with("sets ")
                         }),
                     "{root} {kind}: {edge:?} via {vias:?}"
                 );

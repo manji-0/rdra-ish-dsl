@@ -553,8 +553,8 @@ pub(crate) fn check_choices(model: &SemanticModel, diags: &mut Vec<Diagnostic>) 
     }
 }
 
-/// After every predicate is processed: a `.when(Cond)` guard, on a `transitions` arm or a
-/// `chooses` value, needs the condition's `holds` body, which may come later in the file than
+/// After every predicate is processed: a `.when(Cond)` guard, on a `transitions` arm, a
+/// `chooses` value, or a `sets` value, needs the condition's `holds` body, which may come later in the file than
 /// the guarded write. Each guard that has its body becomes a `Guards` relation to its use case,
 /// once.
 pub(crate) fn check_write_guards(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
@@ -567,8 +567,12 @@ pub(crate) fn check_write_guards(model: &mut SemanticModel, diags: &mut Vec<Diag
             .iter()
             .filter_map(move |v| Some(("chooses", v.guard?, c.origin, &v.site)))
     });
+    let sets = model
+        .column_effects
+        .iter()
+        .filter_map(|ce| Some(("sets", ce.guard?, ce.origin, &ce.site)));
     let mut guards: Vec<(ConditionKey, UseCaseKey)> = Vec::new();
-    for (pred, ck, uc, site) in arms.chain(values) {
+    for (pred, ck, uc, site) in arms.chain(values).chain(sets) {
         if model.conditions[ck].body.is_some() {
             if !guards.contains(&(ck, uc)) {
                 guards.push((ck, uc));
