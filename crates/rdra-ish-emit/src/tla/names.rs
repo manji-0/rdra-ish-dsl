@@ -11,6 +11,8 @@ use super::{render_value, sanitize_ident};
 const RESERVED: &[&str] = &[
     "vars", "Init", "Next", "Spec", "TypeOK", "InstanceCount", "IntRange", "FirstAbsent",
     "now", "nothing", "ex", "i", "j", "Int", "Nat",
+    "Print", "PrintT", "Assert", "JavaTime", "Permutations", "SortSeq", "RandomElement", "Any",
+    "ToString", "TLCEval", "TLCGet", "TLCSet",
     "ASSUME", "ASSUMPTION", "AXIOM", "BOOLEAN", "CASE", "CHOOSE", "CONSTANT", "CONSTANTS",
     "DOMAIN", "ELSE", "ENABLED", "EXCEPT", "EXTENDS", "FALSE", "IF", "IN", "INSTANCE", "LAMBDA",
     "LET", "LOCAL", "MODULE", "OTHER", "STRING", "SUBSET", "THEN", "THEOREM", "TRUE",
@@ -29,6 +31,10 @@ pub struct TlaNames {
     properties: Vec<String>,
     /// `Fair_<property>` for a property with `.fair(...)`.
     fair: Vec<Option<String>>,
+    /// The class var of a reduced cone (`TransitionSystem::reduced`), which stands for the S
+    /// vars: `Rep_<var>` tables give each S var the printed module reads, and `Succ_<action>`
+    /// the class moves of each S action.
+    class: Option<String>,
 }
 
 struct Taken(HashSet<String>);
@@ -109,6 +115,7 @@ impl TlaNames {
             .iter()
             .map(|x| (!x.fair.is_empty()).then(|| taken.claim(&format!("Fair_{}", x.name))))
             .collect();
+        let class = ts.reduction().map(|_| taken.claim("S_class"));
         TlaNames {
             vars,
             ids,
@@ -117,7 +124,34 @@ impl TlaNames {
             after,
             properties,
             fair,
+            class,
         }
+    }
+
+    /// The class var of a reduced cone.
+    pub fn class(&self) -> Option<&str> {
+        self.class.as_deref()
+    }
+
+    /// The module's state variables: every var outside S, then the class var of a reduced
+    /// cone.
+    pub fn state_vars(&self, ts: &TransitionSystem) -> Vec<String> {
+        let r = ts.reduction();
+        ts.var_ids()
+            .filter(|v| !r.is_some_and(|r| r.is_s_var(*v)))
+            .map(|v| self.vars[v.index()].clone())
+            .chain(self.class.clone())
+            .collect()
+    }
+
+    /// `Rep_<var>`: the table an S var reads by class.
+    pub fn rep_table(&self, v: VarId) -> String {
+        format!("Rep_{}", self.vars[v.index()])
+    }
+
+    /// `Succ_<action>`: an S action's class moves.
+    pub fn succ_table(&self, a: ActId) -> String {
+        format!("Succ_{}", self.actions[a.index()])
     }
 
     pub fn var(&self, v: VarId) -> &str {
@@ -167,23 +201,33 @@ impl TlaNames {
         ts.action_ids().nth(i)
     }
 
-    /// The key of each slot: `name[k]` (TLA index, from 1) per instance, bare `now`.
+    /// The key of each slot: `name[k]` (TLA index, from 1) per instance, bare `now`, and the
+    /// class var of a reduced cone in place of its S vars.
     pub fn slot_keys(&self, ts: &TransitionSystem) -> Vec<String> {
+        let r = ts.reduction();
         let mut out = Vec::new();
         for (i, d) in ts.vars().iter().enumerate() {
+            if r.is_some_and(|r| r.is_s_var(VarId::at_index(i))) {
+                continue;
+            }
             let name = &self.vars[i];
             match d.kind {
                 VarKind::Now => out.push(name.clone()),
                 _ => out.extend((1..=ts.bounds.slots()).map(|k| format!("{name}[{k}]"))),
             }
         }
+        out.extend(self.class.clone());
         out
     }
 
     /// A reached state as TLC prints it: slot key to value text.
     pub fn canon(&self, ts: &TransitionSystem, state: &State) -> BTreeMap<String, String> {
+        let r = ts.reduction();
         let mut out = BTreeMap::new();
         for var in ts.var_ids() {
+            if r.is_some_and(|r| r.is_s_var(var)) {
+                continue;
+            }
             let d = ts.var(var);
             let name = &self.vars[var.index()];
             match d.kind {
@@ -199,6 +243,12 @@ impl TlaNames {
                     }
                 }
             }
+        }
+        if let (Some(r), Some(class)) = (r, &self.class) {
+            let c = r
+                .class(state)
+                .expect("a reduced state holds a representative");
+            out.insert(class.clone(), (c + 1).to_string());
         }
         out
     }
@@ -230,7 +280,11 @@ impl TlaNames {
                 (keys, values)
             })
             .collect();
-        Decoder { ts, vars }
+        Decoder {
+            ts,
+            vars,
+            class: self.class.clone(),
+        }
     }
 }
 
@@ -239,12 +293,29 @@ pub struct Decoder<'a> {
     ts: &'a TransitionSystem,
     /// Per var: the key of each slot, and the value each text names.
     vars: Vec<(Vec<String>, HashMap<String, Value>)>,
+    class: Option<String>,
 }
 
 impl Decoder<'_> {
     pub fn decode(&self, canon: &BTreeMap<String, String>) -> Option<State> {
         let mut used = 0;
+        // A reduced cone's S vars come from the class var's representative.
+        let class: Option<u32> = match (self.ts.reduction(), &self.class) {
+            (Some(r), Some(key)) => {
+                let text = canon.get(key)?;
+                let c = text.parse::<u32>().ok()?.checked_sub(1)?;
+                (usize::try_from(c).ok()? < r.classes()).then_some(c)?;
+                used += 1;
+                Some(c)
+            }
+            _ => None,
+        };
         let state = self.ts.state_from(|var, slot| {
+            if let (Some(r), Some(c)) = (self.ts.reduction(), class) {
+                if let Some(v) = r.rep_value(c, var, slot) {
+                    return Some(v);
+                }
+            }
             let (keys, values) = &self.vars[var.index()];
             let text = canon.get(&keys[slot])?;
             used += 1;

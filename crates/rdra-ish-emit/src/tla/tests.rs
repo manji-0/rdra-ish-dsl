@@ -1,6 +1,6 @@
 use super::*;
 use rdra_ish_core::analysis::build_model;
-use rdra_ish_core::lifecycle::{has_errors, Bounds, Scope};
+use rdra_ish_core::lifecycle::{has_errors, Bounds, Caps, Scope, Target};
 use rdra_ish_syntax::parse;
 
 fn system(src: &str) -> TransitionSystem {
@@ -661,4 +661,73 @@ invariant(Coupon).when(expires_at < now).none(Handler.busy == true)
     }
     assert_eq!(with_conditions.tla, inline.tla);
     assert_eq!(with_conditions.cfg, inline.cfg);
+}
+
+/// A gate with an unobserved latch and a key behind it; a job starts only at an open gate.
+/// The job's cone reduces the gate and the key (#74).
+const GATE: &str = r#"
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Crack "少し開ける"
+usecase Unlatch "掛け金を外す"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+transitions(Unlock, Key.status, locked -> unlocked)
+transitions(Crack, Gate.status, shut -> half)
+sets(Unlatch, Gate.latch == true)
+transitions(Swing, Gate.status, half -> open)
+condition Unlatched "掛け金が外れている"
+holds(Unlatched, Gate.latch == true)
+applies_to(Unlatched, Swing)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+"#;
+
+/// A reduced cone prints its sub-lifecycle as one variable over its classes: a table of the
+/// representative's value per observed var, which the var's name reads, and a successor
+/// table per class move, which steps the class and leaves the target side unchanged.
+#[test]
+fn a_reduced_cone_prints_its_sub_lifecycle_as_classes() {
+    let ts = system(GATE);
+    let job = ts
+        .targets()
+        .into_iter()
+        .find(|t| matches!(t, Target::Entity(e) if ts.entity(*e).id == "Job"))
+        .expect("the Job view");
+    let cone = ts.target_cone(job);
+    let reduced = ts.reduced_cone(&cone, [ts.target_seed(job)], Caps::VERIFY);
+    let r = reduced
+        .reduction()
+        .expect("the job's cone reduces the gate");
+    assert!(r.classes() > 1);
+    let bundle = print(&reduced, PrintMode::Safety, "Cone");
+    let tla = &bundle.tla;
+    assert!(tla.contains("EXTENDS Integers, TLC"), "{tla}");
+    assert!(
+        tla.contains(&format!("S_class \\in 1..{}", r.classes())),
+        "{tla}"
+    );
+    assert!(tla.contains("\nRep_Gate_status == <<"), "{tla}");
+    assert!(
+        tla.contains("\nGate_status == Rep_Gate_status[S_class]"),
+        "{tla}"
+    );
+    assert!(tla.contains("\nSucc_Swing == "), "{tla}");
+    assert!(tla.contains("S_class' \\in Succ_Swing[S_class]"), "{tla}");
+    assert!(
+        !tla.contains("Gate_latch") && !tla.contains("Key_status"),
+        "unobserved sub-lifecycle vars are not state vars: {tla}"
+    );
+    insta::assert_snapshot!(tla);
 }
