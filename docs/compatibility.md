@@ -79,6 +79,10 @@ written by hand can name them:
   `Fair_<P>`.
 - Variables and constants: `<E>_exists`, `<E>_<col>`, `<Child>_owner_<Parent>`, `now`,
   `InstanceCount`, and `IntRange`.
+- State-model specs of `export`: the modules `StateModel_<E>` with their cfgs
+  `StateModel_<E>.cfg` and `StateModel_<E>_witnesses.cfg`, and their invariants
+  `Deadlock_<E>_<col>_<s>` and `Witness_<E>_<col>_<s>`, which have the names of the
+  findings `check` prints.
 
 `<n>` is the rule's index among the model's rules of that kind, in load order, so it moves
 when the model adds a rule of the same kind before it, on any entity. That is a change to
@@ -99,7 +103,11 @@ with no collision keeps every name above:
   variable, and a variable before an action. A column `run_Go` beside the run mark of a
   split use case `Go` gives `Job_run_Go` and `Job_run_Go_2`.
 - The `Rep_<var>` and `Succ_<action>` tables of a reduced cone, and its `S_class`, yield to
-  every other name.
+  every other name but a state-model spec's `Deadlock_` and `Witness_` invariants, which
+  yield to every other name.
+- The files `export` writes yield in this order: the whole-model module keeps the name `-o`
+  gives it, then each `StateModel_<E>` and its `StateModel_<E>_witnesses` cfg, compared
+  ignoring case.
 - The files `verify` writes yield in this order: the whole-model module keeps the name `-o`
   gives it, then each check's `Cone_<name>`, then the `_Full` and `_WF` modules, the
   whole-model run `<whole>_<P>`, and the rerun cfg `<module>_rest<n>.cfg`. File names are

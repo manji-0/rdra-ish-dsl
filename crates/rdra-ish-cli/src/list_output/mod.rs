@@ -24,8 +24,7 @@ use render::{format_rows, format_sorted_id_labels};
 pub(crate) use state_findings::state_consistency_findings;
 pub(crate) use state_findings::{
     note_state_errors, reject_state_errors, reject_state_errors_except_deadlock, render_violation,
-    state_diag_message, state_findings, Finding, TraceSource, READS_NO_LIFECYCLE,
-    TLC_MISSES_STATE_MODELS,
+    state_diag_message, state_findings, Finding, TraceSource, READS_NO_LIFECYCLE, TLA_STATE_MODELS,
 };
 pub(crate) use transitions::format_transitions;
 

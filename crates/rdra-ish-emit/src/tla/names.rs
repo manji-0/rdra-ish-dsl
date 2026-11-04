@@ -2,7 +2,9 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use rdra_ish_core::lifecycle::{ActId, EntId, State, TransitionSystem, Value, VarId, VarKind};
+use rdra_ish_core::lifecycle::{
+    ActId, EntId, ModelState, State, TransitionSystem, Value, VarId, VarKind,
+};
 
 use super::{render_value, sanitize_ident};
 
@@ -38,6 +40,21 @@ pub struct TlaNames {
     /// `Rep_<var>` per S var the rest reads, and `Succ_<action>` per S action, by index.
     rep: Vec<Option<String>>,
     succ: Vec<Option<String>>,
+    /// The state-model checks `print_state_models` prints, by state; empty in every other
+    /// module.
+    states: Vec<StateCheck>,
+}
+
+/// One state of an entity's state model, and the invariants that check it: `witness` is
+/// violated where the state is reached, and `deadlock` where an instance at it has no move
+/// left. Each is named as `check` names the finding.
+#[derive(Clone, Debug)]
+pub struct StateCheck {
+    pub entity: EntId,
+    pub var: VarId,
+    pub value: Value,
+    pub witness: String,
+    pub deadlock: Option<String>,
 }
 
 /// The names claimed so far, and every name the module asks for: a renamed item's `_<k>`
@@ -82,6 +99,15 @@ fn is_binder(name: &str) -> bool {
 
 impl TlaNames {
     pub fn new(ts: &TransitionSystem) -> Self {
+        Self::with_state_models(ts, &[])
+    }
+
+    /// `new`, and the names of the state-model checks of `entities`.
+    pub fn with_state_models(ts: &TransitionSystem, entities: &[EntId]) -> Self {
+        let model_states: Vec<(EntId, ModelState)> = entities
+            .iter()
+            .flat_map(|&e| ts.state_model_states(e).into_iter().map(move |s| (e, s)))
+            .collect();
         let entity = |e: EntId| ts.entity(e).id.clone();
         let properties: Vec<String> = ts.properties().iter().map(|x| x.name.clone()).collect();
         let invariants: Vec<String> = ts.invariants().iter().map(|x| x.name.clone()).collect();
@@ -132,6 +158,8 @@ impl TlaNames {
                 .chain(&ids)
                 .chain(vars.iter().flatten())
                 .chain(&actions)
+                .chain(model_states.iter().map(|(_, s)| &s.witness))
+                .chain(model_states.iter().filter_map(|(_, s)| s.deadlock.as_ref()))
                 .map(|n| sanitize_ident(n))
                 .collect(),
         };
@@ -167,6 +195,16 @@ impl TlaNames {
                 succ[a.index()] = Some(taken.claim(&format!("Succ_{}", actions[a.index()])));
             }
         }
+        let states = model_states
+            .into_iter()
+            .map(|(entity, s)| StateCheck {
+                entity,
+                var: s.var,
+                value: s.value,
+                witness: taken.claim(&s.witness),
+                deadlock: s.deadlock.map(|d| taken.claim(&d)),
+            })
+            .collect();
         TlaNames {
             vars,
             ids,
@@ -178,7 +216,13 @@ impl TlaNames {
             class,
             rep,
             succ,
+            states,
         }
+    }
+
+    /// The state-model checks of the module, in entity and `state_model_states` order.
+    pub fn states(&self) -> &[StateCheck] {
+        &self.states
     }
 
     /// The class var of a reduced cone.

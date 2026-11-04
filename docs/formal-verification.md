@@ -21,7 +21,7 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [-
 
 | Command | Role |
 |---|---|
-| `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model |
+| `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs that check the deadlocks and witnesses |
 | `verify --backend tlc` | Print one spec per cone of influence and one per temporal property, then run `tlc` / `tlc2` from `PATH` |
 | `states`, `check` | BFS on the same system, with no TLC dependency |
 
@@ -32,7 +32,8 @@ transition system they print, for example `IntLiteralOutOfBounds` or `DoubleMode
 
 If `-o` ends with `.tla`, the sibling `.cfg` is written next to it and the file stem is the
 module name. If `-o` is a directory (or has no extension), `export` writes
-`<dir>/RdraSpec.tla` and `<dir>/RdraSpec.cfg`. `verify -o <dir>` writes one
+`<dir>/RdraSpec.tla` and `<dir>/RdraSpec.cfg`. Beside them it writes the state-model specs
+(see [State models with TLC alone](#state-models-with-tlc-alone)). `verify -o <dir>` writes one
 `Cone_<first check>.tla` and `.cfg` pair per cone of an invariant or after-assert, one
 `Cone_<Property>` pair per temporal property (its cone without `WF_vars(Next)`) with a
 `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` (the same cone with
@@ -50,12 +51,66 @@ constraint, one `PROPERTY` per `after` assertion and temporal property, and
 `CHECK_DEADLOCK FALSE`. Lifecycle models often end in terminal states with no enabled
 action, and `Spec` allows stuttering.
 
-TLC on the exported pair therefore checks the invariants and properties only. It does not
-find a deadlock or a state with no witness. Those come from the BFS that `check` and
-`verify` run (see [What `verify` checks](#what-verify-checks)), and `verify` runs TLC and
-the BFS both.
-When `check` finds lifecycle errors, `export --kind tla` still writes the pair, exits 0,
-and prints one note with the error count that says to run `verify`.
+TLC on the whole-model pair therefore checks the invariants and properties only. The
+state-model specs beside it check the deadlocks and the witnesses.
+When `check` finds lifecycle errors, `export --kind tla` still writes every spec, exits 0,
+and prints one note with the error count that names the state-model specs and `verify`.
+
+### State models with TLC alone
+
+<!-- constrained-by #what-verify-checks -->
+`check` and `verify` find a deadlock or a state with no witness by BFS on each entity's
+cone (see [What `verify` checks](#what-verify-checks)). `export --kind tla` writes the same
+cones as TLA+, so TLC alone reaches the states the BFS reaches and finds the same
+findings. For each cone whose entities have a state model, `export` writes three files:
+
+| File | Checks |
+|---|---|
+| `StateModel_<E>.tla` | The cone, reduced as `verify` explores it, with one `Witness_<E>_<col>_<s>` invariant per state `s` of each state model and one `Deadlock_<E>_<col>_<s>` invariant per state with a way out to another state |
+| `StateModel_<E>.cfg` | `TypeOK` and the `Deadlock_` invariants |
+| `StateModel_<E>_witnesses.cfg` | `TypeOK` and the `Witness_` invariants |
+
+`<E>` is the first entity of the cone with a state model. Entities with one cone share
+its spec. The invariants have the names of the findings `check` prints.
+
+`Deadlock_<E>_<col>_<s>` says that wherever an instance is at `s`, some step can still
+change the column's cone: the column, its entity's existence, and every variable that the
+steps writing them read. It is `ENABLED (Next /\ c' # c)`, with `c` the tuple of those
+variables. A step outside that cone cannot move the column or open its way out, so a column
+that another use case toggles back and forth does not hide the deadlock. TLC reports the
+invariant violated in a state with an instance at `s` and no move of the cone left, which
+is the deadlock `check` reports. A model with no deadlock passes:
+
+```
+tlc -continue -config StateModel_Order.cfg StateModel_Order.tla
+```
+
+`Witness_<E>_<col>_<s>` says that no instance is ever at `s`. TLC reports it violated
+where `s` is reached, so a healthy model violates every `Witness_` invariant and TLC exits
+non-zero. A `Witness_` invariant that TLC does not report is a state with no witness:
+
+```
+tlc -continue -config StateModel_Order_witnesses.cfg StateModel_Order.tla
+```
+
+With `-continue`, TLC reports one violated invariant per state, the first in cfg order.
+An invariant violated only in states where an earlier one is violated is not reported.
+Rerun without the reported invariants until a run reports no new one, as `verify` does
+for its cones.
+
+The TLC reading differs from `check` in two cases:
+
+- TLC reports a deadlock in a state with no move of the column's cone left. An instance
+  can also be stuck while that cone keeps moving forever, for example while another
+  instance of the entity cycles through its states. `check` reports that deadlock, since no
+  path moves the instance, and TLC does not, since every state still has a move. No sample
+  has such a deadlock, and the `engine_equivalence` test fails on a sample that adds one in
+  a cone it runs (every cone but those `VERIFY_FALLBACK` lists).
+- `check` reports a deadlock as a warning when only the instance bound blocks its way out.
+  TLC reports the invariant violated, as for an error.
+
+`verify` does not run these specs: its BFS reports the same findings, and its output
+stays as it was.
 
 ## Mapping
 
@@ -252,7 +307,9 @@ no `OK:` line, and exits 1. A deadlock, an instance that no path moves off a sta
 way out (see [state-derivation.md](./state-derivation.md#deadlocks)), fails it the same way;
 one whose way out lacks only a free slot is a warning at the bound. TLC's own deadlock check
 stays off: every bounded model ends with no enabled action, and an always-enabled loop would
-hide a stuck instance. The same pass finds each use case that never runs (see
+hide a stuck instance. The `StateModel_` specs that `export` writes let TLC alone find the
+same deadlocks and missing witnesses on the same cones (see
+[State models with TLC alone](#state-models-with-tlc-alone)). The same pass finds each use case that never runs (see
 [state-derivation.md](./state-derivation.md#use-cases-that-never-run)) and prints it as a
 warning, which does not fail the run. A cone that stops at the cap decides nothing about its
 unwitnessed states, its deadlocks, or its actions with no edge, and `verify` lists each
@@ -515,6 +572,9 @@ The rules for each flag and for deferral are in
     deadlocks (by name and severity).
   - The verdict of each invariant and `after` assertion. Every trace TLC prints for a
     violation must replay through the BFS step relation and end in the check TLC named.
+  - At 2 instances, the deadlocks and missing witnesses TLC alone finds on the
+    `StateModel_` specs `export` writes, rerun by hand as the specs' cfgs say, and those the
+    BFS finds.
 
   At 2 instances, a cone whose BFS, reduced as `verify` explores it, passes the test's cap
   of 300,000 states is compared at 1 instance only. The test decides this on the run
@@ -780,8 +840,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
 | `check_unmet.rdra` | fail, fail | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
 | `check_met.rdra` | pass, pass | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
-| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together) |
-| `deadlock.rdra` | fail, pass | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs |
+| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
+| `deadlock.rdra` | fail, pass | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
 | `partial_scope.rdra` | fail, not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
 | `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
 

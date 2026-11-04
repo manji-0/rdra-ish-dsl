@@ -602,7 +602,9 @@ is listed under `not checked:` as `whether some Order can get stuck at status = 
 decided: ...`, and is neither an error nor a warning. TLC's own deadlock check stays off (`CHECK_DEADLOCK FALSE`):
 every bounded model ends with no enabled action, because a deleted slot is never reused; a
 cone spec drops actions; and TLC cannot see one instance stuck while other actions keep
-running.
+running. The `StateModel_` specs of `export --kind tla` check each deadlock with TLC as an
+invariant instead (see
+[formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)).
 
 ```
 $ rdra-ish states samples/formal-verification/order.rdra

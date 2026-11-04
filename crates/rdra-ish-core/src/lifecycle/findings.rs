@@ -140,6 +140,18 @@ impl Adjacency {
     }
 }
 
+/// One state of a state model, with the names of the findings `state_model_findings` gives it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModelState {
+    pub var: VarId,
+    pub value: Value,
+    /// The name of its `NoWitness` error.
+    pub witness: String,
+    /// The name of a `Deadlock` at it, for a state with a way out to another state; an end
+    /// state has none.
+    pub deadlock: Option<String>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct StateModelFindings {
     /// Each state of the entity's state models, column by column in declared value order.
@@ -186,6 +198,33 @@ impl TransitionSystem {
             out.extend(values.into_iter().map(|v| (var, v)));
         }
         out
+    }
+
+    /// The states of `e`'s state models in `state_model_findings` order: every state has a
+    /// witness verdict, and every state with a way out to another state a deadlock verdict.
+    pub fn state_model_states(&self, e: EntId) -> Vec<ModelState> {
+        let entity = &self.entity(e).id;
+        self.state_model_values(e)
+            .into_iter()
+            .map(|(var, value)| {
+                let column = self.var_name(var);
+                let open = Self::has_way_on(&self.exits(e, var, value));
+                ModelState {
+                    var,
+                    value,
+                    witness: StateDiag::witness_name(entity, &column, &self.value_text(var, value)),
+                    deadlock: open.then(|| {
+                        StateDiag::deadlock_name(entity, &column, &self.value_text(var, value))
+                    }),
+                }
+            })
+            .collect()
+    }
+
+    /// Some way out moves to another state; a state whose only way out deletes the instance is
+    /// an end state.
+    fn has_way_on(exits: &[ExitArm]) -> bool {
+        exits.iter().any(|x| x.to.is_some())
     }
 
     /// Witnesses of `e`'s state models on `g`, a graph of this system.
@@ -282,7 +321,7 @@ impl TransitionSystem {
         let open: Vec<(VarId, Value, Vec<ExitArm>)> = targets
             .iter()
             .map(|&(var, value)| (var, value, self.exits(e, var, value)))
-            .filter(|(_, _, exits)| exits.iter().any(|x| x.to.is_some()))
+            .filter(|(_, _, exits)| Self::has_way_on(exits))
             .collect();
         if !g.complete {
             return open

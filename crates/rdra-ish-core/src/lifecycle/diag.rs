@@ -368,7 +368,30 @@ pub fn label_prefix(label: &Option<String>) -> String {
         .map_or_else(String::new, |label| format!("「{label}」: "))
 }
 
+/// `raw` with each character outside `[A-Za-z0-9_]` as `_`.
+fn ident(raw: &str) -> String {
+    raw.chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
 impl StateDiag {
+    /// The `name` of a `NoWitness` of `entity.column = value`.
+    pub fn witness_name(entity: &str, column: &str, value: &str) -> String {
+        ident(&format!("Witness_{entity}_{column}_{value}"))
+    }
+
+    /// The `name` of a `Deadlock` at `entity.column = value`.
+    pub fn deadlock_name(entity: &str, column: &str, value: &str) -> String {
+        ident(&format!("Deadlock_{entity}_{column}_{value}"))
+    }
+
     /// The stable name findings print and expectations and engine comparisons match: the
     /// check's own name for a violated invariant or assert, which TLC reports too;
     /// `Witness_<entity>_<column>_<value>`, `Runs_<action>`, `Deadlock_<entity>_<column>_<value>`,
@@ -391,7 +414,7 @@ impl StateDiag {
                 column,
                 value,
                 ..
-            } => format!("Witness_{entity}_{column}_{value}"),
+            } => Self::witness_name(entity, column, value),
             StateDiag::NeverRuns { action, .. } => format!("Runs_{action}"),
             StateDiag::ArmNeverTaken {
                 action, from, to, ..
@@ -407,7 +430,7 @@ impl StateDiag {
                 column,
                 value,
                 ..
-            } => format!("Deadlock_{entity}_{column}_{value}"),
+            } => Self::deadlock_name(entity, column, value),
             // The column is already `<entity>.<column>`.
             StateDiag::DerivedColumnRead { column, .. } => format!("DerivedColumnRead_{column}"),
             StateDiag::UnreachableEnumVariant { column, variant } => {
@@ -479,15 +502,7 @@ impl StateDiag {
                 with("DefaultOnVariationIgnored", &[column])
             }
         };
-        raw.chars()
-            .map(|c| {
-                if c.is_ascii_alphanumeric() || c == '_' {
-                    c
-                } else {
-                    '_'
-                }
-            })
-            .collect()
+        ident(&raw)
     }
 
     /// The counterexample of a violated constraint, assert, or property (for a property, the

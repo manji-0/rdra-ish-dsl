@@ -1,0 +1,14 @@
+---
+source: crates/rdra-ish-emit/src/tla/tests.rs
+expression: bundle.cfg
+---
+\* A Deadlock_<E>_<col>_<s> TLC reports violated is that deadlock: an instance at s,
+\* which has a way out, in a state with no move left. A model without one passes.
+\* With -continue TLC reports one invariant per state, the first here: rerun
+\* without the reported ones until a run reports no new one.
+SPECIFICATION Spec
+INVARIANT TypeOK
+INVARIANT Deadlock_Order_status_pending
+INVARIANT Deadlock_Order_status_paid
+INVARIANT Deadlock_Order_status_shipped
+CHECK_DEADLOCK FALSE

@@ -34,8 +34,8 @@ pub use diag::{
 pub use explore::{Caps, ComponentRun, Edge, Exploration, Graph, LabelledEdges};
 pub use expr::State;
 pub use findings::{
-    ActionRuns, ArmTaken, Progress, Runs, StateModelFindings, Taken, ValueProgress, ValueWitness,
-    Witness,
+    ActionRuns, ArmTaken, ModelState, Progress, Runs, StateModelFindings, Taken, ValueProgress,
+    ValueWitness, Witness,
 };
 pub use lasso::{LassoReplay, Loop};
 pub use reduce::{ClassMove, Reduction, Step};

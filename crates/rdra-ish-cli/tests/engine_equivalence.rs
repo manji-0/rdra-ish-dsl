@@ -2793,3 +2793,235 @@ fn bfs_and_tlc_agree_on_a_date_sets() {
         );
     }
 }
+
+/// The invariants a cfg lists, in order.
+fn cfg_invariants(cfg: &str) -> Vec<String> {
+    cfg.lines()
+        .filter_map(|l| l.strip_prefix("INVARIANT "))
+        .filter(|n| *n != "TypeOK")
+        .map(str::to_string)
+        .collect()
+}
+
+/// The invariants TLC finds violated on `module` with `cfg`, as a user reruns it by hand:
+/// `-continue` reports one invariant per state, so each rerun drops the reported ones, until
+/// a run reports no new one.
+fn violated_by_hand(
+    tlc: &Path,
+    dir: &Path,
+    module: &str,
+    cfg: &str,
+    label: &str,
+) -> BTreeSet<String> {
+    // `run_tlc` runs the module as `Cone.tla`.
+    let tla = std::fs::read_to_string(dir.join(format!("{module}.tla")))
+        .expect("module")
+        .replacen(&format!("MODULE {module} "), "MODULE Cone ", 1);
+    let mut found = BTreeSet::new();
+    for rerun in 0.. {
+        let keep: Vec<&str> = cfg
+            .lines()
+            .filter(|l| {
+                l.strip_prefix("INVARIANT ")
+                    .is_none_or(|n| !found.contains(n))
+            })
+            .collect();
+        let (_, log) = run_tlc(
+            tlc,
+            &dir.join(format!("{module}-{label}-{rerun}")),
+            &["-continue"],
+            &tla,
+            &(keep.join("\n") + "\n"),
+        );
+        let run = TlcRun::parse(&log);
+        assert!(
+            log.contains(" 0 states left on queue"),
+            "{module} ({label}): TLC did not finish\n{log}"
+        );
+        let new = run.violated_names();
+        if new.is_subset(&found) {
+            return found;
+        }
+        found.extend(new);
+    }
+    unreachable!()
+}
+
+/// The deadlocks and missing witnesses of `input` at `Bounds::VERIFY` that TLC alone finds on
+/// the `StateModel_` specs `export --kind tla` writes into `dir`, asserted equal to those
+/// `verify`'s BFS finds: a `Deadlock_` TLC reports violated with the spec's cfg, and a
+/// `Witness_` it does not report with its `_witnesses` cfg. A cone in `VERIFY_FALLBACK` under
+/// `label` is too large to run here; its findings are only checked to be listed.
+fn tlc_alone_and_bfs(tlc: &Path, dir: &Path, label: &str, input: &str) -> BTreeSet<String> {
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+    let model = load(input);
+    let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
+    // A build error stops `export` and `verify` before either engine runs.
+    if rdra_ish_core::lifecycle::has_errors(&built.diags) {
+        return BTreeSet::new();
+    }
+    let ts = built.ts;
+    let entities: Vec<Target> = ts.entity_ids().map(Target::Entity).collect();
+    let bfs: BTreeSet<String> = ts
+        .explore_targets_reduced(&entities, Caps::VERIFY)
+        .verdicts()
+        .iter()
+        .map(|d| d.diag.name(&[]))
+        .filter(|n| n.starts_with("Witness_") || n.starts_with("Deadlock_"))
+        .collect();
+    drop(ts);
+    let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .args(["export", "--kind", "tla", "-o"])
+        .arg(dir)
+        .arg(repo().join(input))
+        .output()
+        .expect("run export");
+    assert!(out.status.success(), "{label}: {out:?}");
+    let mut modules: Vec<String> = std::fs::read_dir(dir)
+        .expect("export dir")
+        .filter_map(|f| {
+            let name = f.ok()?.file_name().into_string().ok()?;
+            let stem = name.strip_suffix(".tla")?;
+            stem.starts_with("StateModel_").then(|| stem.to_string())
+        })
+        .collect();
+    modules.sort();
+    // A `<module>_witnesses` stem takes a `_<k>` suffix only on a collision, which no input here
+    // has.
+    let cfg = |name: &str| {
+        std::fs::read_to_string(dir.join(format!("{name}.cfg")))
+            .unwrap_or_else(|e| panic!("{label}: {name}.cfg: {e}"))
+    };
+    let mut listed = BTreeSet::new();
+    let mut run: Vec<&String> = Vec::new();
+    for m in &modules {
+        listed.extend(cfg_invariants(&cfg(m)));
+        listed.extend(cfg_invariants(&cfg(&format!("{m}_witnesses"))));
+        let entity = format!("entity {}", &m["StateModel_".len()..]);
+        if !VERIFY_FALLBACK.contains(&(label, entity.as_str())) {
+            run.push(m);
+        }
+    }
+    let missing: BTreeSet<&String> = bfs.difference(&listed).collect();
+    assert!(missing.is_empty(), "{label}: no spec checks {missing:?}");
+    let next = AtomicUsize::new(0);
+    let results: Mutex<Vec<(BTreeSet<String>, BTreeSet<String>)>> = Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                while let Some(m) = run.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let deadlocks = violated_by_hand(tlc, dir, m, &cfg(m), "deadlocks");
+                    let witnesses = cfg(&format!("{m}_witnesses"));
+                    let reached = violated_by_hand(tlc, dir, m, &witnesses, "witnesses");
+                    let mut checked: BTreeSet<String> =
+                        cfg_invariants(&cfg(m)).into_iter().collect();
+                    checked.extend(cfg_invariants(&witnesses));
+                    let unreached = cfg_invariants(&witnesses)
+                        .into_iter()
+                        .filter(|w| !reached.contains(w));
+                    let found = deadlocks.into_iter().chain(unreached).collect();
+                    results.lock().unwrap().push((checked, found));
+                }
+            });
+        }
+    });
+    let (checked, found): (BTreeSet<String>, BTreeSet<String>) = results
+        .into_inner()
+        .unwrap()
+        .into_iter()
+        .fold(Default::default(), |(mut c, mut f), (c2, f2)| {
+            c.extend(c2);
+            f.extend(f2);
+            (c, f)
+        });
+    let expected: BTreeSet<String> = bfs.intersection(&checked).cloned().collect();
+    assert_eq!(found, expected, "{label}: TLC alone and BFS");
+    found
+}
+
+/// `tlc`, or `None` with the reason printed; `RDRA_REQUIRE_TLC=1` turns the skip into a
+/// failure.
+fn require_tlc() -> Option<PathBuf> {
+    let tlc = find_tlc();
+    if tlc.is_none() {
+        let reason = "tlc not on PATH (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_TLC").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_TLC=1 but {reason}"
+        );
+        println!("skipped: {reason}");
+    }
+    tlc
+}
+
+#[test]
+fn tlc_alone_finds_the_deadlocks_and_missing_witnesses_bfs_finds() {
+    let Some(tlc) = require_tlc() else { return };
+    let scratch = std::env::temp_dir().join(format!("rdra-state-models-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    let mut found_any = BTreeSet::new();
+    for sample in samples() {
+        // `-o` names a directory only without an extension.
+        let dir = scratch.join(sample.replace(['/', '.'], "_"));
+        found_any.extend(tlc_alone_and_bfs(&tlc, &dir, &sample, &sample));
+    }
+    let _ = std::fs::remove_dir_all(&scratch);
+    for name in [
+        "Deadlock_Order_status_paid",
+        "Deadlock_Order_status_shipped",
+        "Witness_Order_status_refunded",
+    ] {
+        assert!(found_any.contains(name), "no sample shows {name}");
+    }
+}
+
+/// `deadlock.rdra` with a flag that Mark and Unmark toggle forever: a paid Order still has a
+/// move, but none of its status's cone, so the toggle does not hide the deadlock from TLC.
+const TOGGLED_DEADLOCK: &str = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  flag: Bool @default(false)
+}
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Ship "発送"
+usecase Express "即日発送"
+usecase Mark "印"
+usecase Unmark "印消し"
+creates(Place, Order)
+updates(Pay, Order)
+updates(Ship, Order)
+updates(Express, Order)
+updates(Mark, Order)
+updates(Unmark, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Express, Order.status, pending -> shipped)
+sets(Mark, Order.flag == true)
+sets(Unmark, Order.flag == false)
+condition Packed "梱包済み"
+holds(Packed, Order.status == pending)
+applies_to(Packed, Ship)
+"#;
+
+#[test]
+fn tlc_alone_finds_a_deadlock_beside_a_toggled_column() {
+    let Some(tlc) = require_tlc() else { return };
+    let scratch = std::env::temp_dir().join(format!("rdra-toggled-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let file = scratch.join("toggled.rdra");
+    std::fs::write(&file, TOGGLED_DEADLOCK).expect("write model");
+    let found = tlc_alone_and_bfs(
+        &tlc,
+        &scratch.join("tla"),
+        "toggled",
+        file.to_str().unwrap(),
+    );
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert_eq!(
+        found.into_iter().collect::<Vec<_>>(),
+        ["Deadlock_Order_status_paid"]
+    );
+}

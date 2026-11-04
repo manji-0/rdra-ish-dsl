@@ -18,7 +18,7 @@ use rdra_ish_emit::{EmitError, Emitter, Explored, OnDeadlock, StatesEmitter, Vie
 use crate::cli::{CsvKind, ListKind};
 use crate::list_output::{
     note_state_errors, reject_state_errors, reject_state_errors_except_deadlock,
-    READS_NO_LIFECYCLE, TLC_MISSES_STATE_MODELS,
+    READS_NO_LIFECYCLE, TLA_STATE_MODELS,
 };
 
 /// What an output reads of the lifecycle.
@@ -96,7 +96,7 @@ pub(crate) fn gate(
 ) -> anyhow::Result<()> {
     match reads {
         Reads::Declared => note_state_errors(program, model, READS_NO_LIFECYCLE),
-        Reads::System => note_state_errors(program, model, TLC_MISSES_STATE_MODELS),
+        Reads::System => note_state_errors(program, model, TLA_STATE_MODELS),
         Reads::States => reject_state_errors(program, model)?,
         Reads::StatesDrawingDeadlocks => reject_state_errors_except_deadlock(program, model)?,
     }

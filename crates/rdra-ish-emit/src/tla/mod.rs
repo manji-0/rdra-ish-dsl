@@ -14,9 +14,9 @@ mod tests;
 
 use std::collections::BTreeSet;
 
-use rdra_ish_core::lifecycle::{Domain, Ltl, TransitionSystem, Value};
+use rdra_ish_core::lifecycle::{Domain, EntId, Ltl, TransitionSystem, Value};
 
-pub use names::{Decoder, TlaNames};
+pub use names::{Decoder, StateCheck, TlaNames};
 
 /// What the cfg asks TLC to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,6 +36,11 @@ pub enum PrintMode {
     ConeProperty(usize),
     /// No INVARIANT or PROPERTY lines, so `tlc -dump` sees the whole reachable set.
     Explore,
+    /// `TypeOK` and the `Deadlock_` invariants of a `print_state_models` module.
+    Deadlocks,
+    /// `TypeOK` and the `Witness_` invariants of a `print_state_models` module, each violated
+    /// where its state is reached.
+    Witnesses,
 }
 
 /// Files written by `export --kind tla` and `verify --backend tlc`.
@@ -44,6 +49,8 @@ pub struct TlaBundle {
     pub module_name: String,
     pub tla: String,
     pub cfg: String,
+    /// The `Witnesses` cfg of a `print_state_models` module.
+    pub witness_cfg: Option<String>,
     pub names: TlaNames,
 }
 
@@ -57,6 +64,30 @@ pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBu
         module_name,
         tla,
         cfg,
+        witness_cfg: None,
+        names,
+    }
+}
+
+/// The module of `ts`, an entity cone, with the state-model checks of `entities`: `cfg` is
+/// the `Deadlocks` cfg and `witness_cfg` the `Witnesses` one. TLC on the cone reaches the
+/// states BFS reaches, so the checks report what `state_model_findings` reports, except a
+/// deadlock while the column's cone keeps moving forever (docs/formal-verification.md,
+/// "State models with TLC alone").
+pub fn print_state_models(
+    ts: &TransitionSystem,
+    entities: &[EntId],
+    module_name: &str,
+) -> TlaBundle {
+    let module_name = module_name_of(module_name);
+    let names = TlaNames::with_state_models(ts, entities);
+    let tla = module::render(ts, &names, &module_name, false);
+    let none = BTreeSet::new();
+    TlaBundle {
+        cfg: cfg_without(ts, &names, PrintMode::Deadlocks, &none),
+        witness_cfg: Some(cfg_without(ts, &names, PrintMode::Witnesses, &none)),
+        module_name,
+        tla,
         names,
     }
 }
@@ -140,6 +171,7 @@ pub fn cfg_without(
         PrintMode::Temporal => (false, all),
         PrintMode::Property(i) | PrintMode::ConeProperty(i) => (false, i..i + 1),
         PrintMode::Explore => (false, 0..0),
+        PrintMode::Deadlocks | PrintMode::Witnesses => return state_cfg(names, mode, skip),
     };
     let mut out = String::from("SPECIFICATION Spec\n");
     if mode != PrintMode::Explore {
@@ -169,6 +201,31 @@ pub fn cfg_without(
     for i in properties {
         out.push_str(&format!("PROPERTY {}\n", names.property(i)));
     }
+    out
+}
+
+/// The cfg of a `print_state_models` module, without the checks `skip` names.
+fn state_cfg(names: &TlaNames, mode: PrintMode, skip: &BTreeSet<String>) -> String {
+    let (head, checks): (&str, Vec<&str>) = match mode {
+        PrintMode::Deadlocks => (
+            "\\* A Deadlock_<E>_<col>_<s> TLC reports violated is that deadlock: an instance at s,\n\
+             \\* which has a way out, in a state with no move left. A model without one passes.\n",
+            names.states().iter().filter_map(|s| s.deadlock.as_deref()).collect(),
+        ),
+        _ => (
+            "\\* Each Witness_<E>_<col>_<s> says no instance is ever at s, so TLC reports it violated\n\
+             \\* where s is reached: a healthy model violates every one. A Witness_ TLC does not\n\
+             \\* report is a state with no witness.\n",
+            names.states().iter().map(|s| s.witness.as_str()).collect(),
+        ),
+    };
+    let rerun = "\\* With -continue TLC reports one invariant per state, the first here: rerun\n\
+                 \\* without the reported ones until a run reports no new one.\n";
+    let mut out = format!("{head}{rerun}SPECIFICATION Spec\nINVARIANT TypeOK\n");
+    for name in checks.into_iter().filter(|n| !skip.contains(*n)) {
+        out.push_str(&format!("INVARIANT {name}\n"));
+    }
+    out.push_str("CHECK_DEADLOCK FALSE\n");
     out
 }
 

@@ -1,0 +1,16 @@
+---
+source: crates/rdra-ish-emit/src/tla/tests.rs
+expression: "bundle.witness_cfg.expect(\"a witness cfg\")"
+---
+\* Each Witness_<E>_<col>_<s> says no instance is ever at s, so TLC reports it violated
+\* where s is reached: a healthy model violates every one. A Witness_ TLC does not
+\* report is a state with no witness.
+\* With -continue TLC reports one invariant per state, the first here: rerun
+\* without the reported ones until a run reports no new one.
+SPECIFICATION Spec
+INVARIANT TypeOK
+INVARIANT Witness_Order_status_pending
+INVARIANT Witness_Order_status_paid
+INVARIANT Witness_Order_status_shipped
+INVARIANT Witness_Order_status_refunded
+CHECK_DEADLOCK FALSE

@@ -929,3 +929,137 @@ property Start "作業は待つ"
     assert!(actions.contains(&("Start_2", "Start_2")), "{actions:?}");
     assert_eq!(names.property(0), "Start");
 }
+
+/// The entity `id` of `ts`.
+fn entity_named(ts: &TransitionSystem, id: &str) -> EntId {
+    ts.entity_ids()
+        .find(|e| ts.entity(*e).id == id)
+        .expect("the entity")
+}
+
+/// A state-model module checks a witness per state and a deadlock per state with a way out,
+/// each under the name `check` gives the finding; its two cfgs say how TLC reads them.
+#[test]
+fn state_model_snapshot() {
+    let ts = system(&sample("unwitnessed_state.rdra"));
+    let order = entity_named(&ts, "Order");
+    let bundle = print_state_models(&ts, &[order], "StateModel_Order");
+    assert!(bundle
+        .tla
+        .starts_with("---- MODULE StateModel_Order ----\n"));
+    insta::assert_snapshot!(bundle.tla);
+    insta::assert_snapshot!("state_model_cfg", bundle.cfg);
+    insta::assert_snapshot!(
+        "state_model_witnesses_cfg",
+        bundle.witness_cfg.expect("a witness cfg")
+    );
+}
+
+/// `refunded` is an end state: it has a witness check and no deadlock check.
+#[test]
+fn an_end_state_has_no_deadlock_check() {
+    let ts = system(&sample("unwitnessed_state.rdra"));
+    let order = entity_named(&ts, "Order");
+    let names = print_state_models(&ts, &[order], "M").names;
+    let checks: Vec<(&str, Option<&str>)> = names
+        .states()
+        .iter()
+        .map(|s| (s.witness.as_str(), s.deadlock.as_deref()))
+        .collect();
+    assert_eq!(
+        checks,
+        [
+            (
+                "Witness_Order_status_pending",
+                Some("Deadlock_Order_status_pending")
+            ),
+            (
+                "Witness_Order_status_paid",
+                Some("Deadlock_Order_status_paid")
+            ),
+            (
+                "Witness_Order_status_shipped",
+                Some("Deadlock_Order_status_shipped")
+            ),
+            ("Witness_Order_status_refunded", None),
+        ]
+    );
+}
+
+/// On a reduced cone the checks read the target side, which the reduction never folds. Start
+/// reads the gate, which is in the sub-lifecycle, so the vars a Job deadlock watches hold
+/// the class var: a class move is a move.
+#[test]
+fn a_reduced_state_model_reads_its_own_entity() {
+    let reduced = reduced_job_cone(GATE);
+    assert!(reduced.reduction().is_some());
+    let job = entity_named(&reduced, "Job");
+    let tla = print_state_models(&reduced, &[job], "M").tla;
+    let watched = "<<Job_exists, Job_status, Job_owner_Gate, S_class>>";
+    assert!(
+        tla.contains(&format!(
+            "\nDeadlock_Job_status_waiting == \\A b0 \\in Job_Ids : (Job_exists[b0] = \"present\" /\\ Job_status[b0] = \"waiting\") => ENABLED (Next /\\ {watched}' # {watched})\n"
+        )),
+        "{tla}"
+    );
+    assert!(tla.contains("\nWitness_Job_status_running == "), "{tla}");
+}
+
+/// A column that only its own use cases write is the deadlock's whole cone: a toggle of
+/// another column is no move of it.
+#[test]
+fn a_deadlock_watches_its_column_cone_only() {
+    let src = r#"
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  flag: Bool @default(false)
+}
+usecase Place "注文確定"
+usecase Pay "支払い"
+usecase Mark "印"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+updates(Mark, Order)
+sets(Mark, Order.flag == true)
+"#;
+    let ts = system(src);
+    let order = entity_named(&ts, "Order");
+    let tla = print_state_models(&ts, &[order], "M").tla;
+    assert!(
+        tla.contains("\nVARIABLES Order_exists, Order_status, Order_flag\n"),
+        "{tla}"
+    );
+    let watched = "<<Order_exists, Order_status>>";
+    assert!(
+        tla.contains(&format!("ENABLED (Next /\\ {watched}' # {watched})\n")),
+        "{tla}"
+    );
+}
+
+/// A generated check yields to a model name of its spelling: a property named like a witness
+/// keeps its name, and the check takes `_2`.
+#[test]
+fn a_state_model_check_yields_to_a_model_name() {
+    let src = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid) @default(pending) }
+usecase Place "注文確定"
+usecase Pay "支払い"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+property Witness_Order_status_paid "paid stays reachable"
+  always(Order.status != pending or Order.status == pending)
+"#;
+    let ts = system(src);
+    let order = entity_named(&ts, "Order");
+    let names = print_state_models(&ts, &[order], "M").names;
+    assert_eq!(names.property(0), "Witness_Order_status_paid");
+    let witnesses: Vec<&str> = names.states().iter().map(|s| s.witness.as_str()).collect();
+    assert_eq!(
+        witnesses,
+        [
+            "Witness_Order_status_pending",
+            "Witness_Order_status_paid_2"
+        ]
+    );
+}

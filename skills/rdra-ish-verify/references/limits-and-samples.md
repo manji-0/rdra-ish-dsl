@@ -56,7 +56,10 @@
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
   each entity's cone, at the same bounds as TLC (capped at 8,388,608 states per cone).
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
-  action, and TLC cannot see one instance stuck while others keep moving.
+  action, and TLC cannot see one instance stuck while others keep moving. `export --kind
+  tla` writes the same cones as `StateModel_<E>.tla` with `Deadlock_` and `Witness_`
+  invariants, so TLC alone finds them too; a `Witness_` TLC does not report violated is
+  the missing witness (`docs/formal-verification.md`, "State models with TLC alone").
 - **Cones**: `verify` checks each invariant, `after` assertion, and temporal property on
   its cone of influence, and a temporal property on the whole model only when its cone does
   not decide it (`docs/formal-verification.md`, "Temporal properties on a cone").

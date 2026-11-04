@@ -66,6 +66,7 @@ pub(super) fn render(
     }
     next(ts, names, wf_next, &mut out);
     checks(ts, names, &mut out);
+    state_checks(ts, names, &mut out);
     out.push_str("====\n");
     out
 }
@@ -627,4 +628,58 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     {
         out.push('\n');
     }
+}
+
+/// A `Witness_` and, for a state with a way out, a `Deadlock_` invariant per state of the
+/// state models `names` lists. A deadlock is a reached state with an instance at the state and
+/// no move left of the column's cone: no step of `Next` changes a var of it. The cone is
+/// closed, so the steps that change it read only it, and no other step changes whether the
+/// column can move; a move elsewhere, such as a column toggled back and forth, does not hide
+/// the deadlock.
+fn state_checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+    if names.states().is_empty() {
+        return;
+    }
+    out.push_str(
+        "\\* State models (docs/formal-verification.md, \"State models with TLC alone\"): the\n\
+         \\* .cfg checks the Deadlock_ invariants, and the _witnesses.cfg the Witness_ ones.\n",
+    );
+    for s in names.states() {
+        let exists = ts.entity(s.entity).exists;
+        assert!(
+            !in_s(ts, s.var) && !in_s(ts, exists),
+            "the state model of {} is in the cone's reduced sub-lifecycle",
+            ts.entity(s.entity).id
+        );
+        let ctx = Ctx {
+            ts,
+            names,
+            primed: false,
+            depth: 1,
+        };
+        let at = format!(
+            "{} /\\ {}[b0] = {}",
+            ctx.present(s.entity, "b0"),
+            names.var(s.var),
+            render_value(&ts.var(s.var).domain, s.value)
+        );
+        let ids = names.ids(s.entity);
+        out.push_str(&format!("{} == \\A b0 \\in {ids} : ~({at})\n", s.witness));
+        if let Some(deadlock) = &s.deadlock {
+            let cone = ts.cone(&[s.var, exists].into_iter().collect(), &BTreeSet::new());
+            // The class var stands for the S vars of a reduced cone; its move may leave the
+            // cone's vars as they were, which counts it as a move and never adds a deadlock.
+            let moved: Vec<&str> = ts
+                .var_ids()
+                .filter(|v| cone.contains(v) && !in_s(ts, *v))
+                .map(|v| names.var(v))
+                .chain(names.class().filter(|_| cone.iter().any(|v| in_s(ts, *v))))
+                .collect();
+            let moved = format!("<<{}>>", moved.join(", "));
+            out.push_str(&format!(
+                "{deadlock} == \\A b0 \\in {ids} : ({at}) => ENABLED (Next /\\ {moved}' # {moved})\n"
+            ));
+        }
+    }
+    out.push('\n');
 }

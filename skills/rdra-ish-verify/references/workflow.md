@@ -20,12 +20,15 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 |---|---|
 | `check`, `states` | BFS on the transition system, by default at one instance per entity (`--instance-count`, `--int-range-max` change it); no TLC |
 | `verify --backend tlc` | BFS on each entity's cone at the TLC bounds, then TLC on one spec per cone of influence and one per temporal property |
-| `export --kind tla` | Write the whole-model `.tla` **and** sibling `.cfg` for reading or a run by hand |
+| `export --kind tla` | Write the whole-model `.tla` **and** sibling `.cfg` for reading or a run by hand, and a `StateModel_<E>` spec per entity cone that checks its deadlocks and witnesses with TLC |
 
 ### Output Paths
 
 - `export -o X.tla` names the module `X` and writes `X.cfg` beside it; `-o DIR` writes
-  `DIR/RdraSpec.tla` and `DIR/RdraSpec.cfg`.
+  `DIR/RdraSpec.tla` and `DIR/RdraSpec.cfg`. Beside them go `StateModel_<E>.tla`, its
+  `.cfg` (a violated `Deadlock_` invariant is a deadlock), and `StateModel_<E>_witnesses.cfg`
+  (TLC reports every reached state's `Witness_` invariant violated; one it does not report
+  is a missing witness; rerun with `-continue` without the reported ones until none is new).
 - `verify -o DIR` writes one `Cone_<first check>.tla` / `.cfg` pair per cone, one
   `Cone_<Property>` pair per temporal property with a `Cone_<Property>_WF` pair beside it
   for an `eventually` or `leads_to` (TLC runs each property alone, because it does not name

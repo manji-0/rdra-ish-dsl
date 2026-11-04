@@ -31,7 +31,7 @@ use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
 use states::run_states;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use verify::run_verify;
 
 fn is_strict_access_gap(error: &RdraError) -> bool {
@@ -247,7 +247,10 @@ fn main() -> Result<()> {
                     "RdraSpec"
                 };
                 let bounds = export::tla_bounds(instance_count, int_range_max)?;
-                let bundle = export::tla_bundle(&model, bounds, module_name)?;
+                let export::TlaExport {
+                    whole: bundle,
+                    state_models,
+                } = export::tla_export(&model, bounds, module_name)?;
                 gate(&program, &model, Reads::System)?;
                 let (tla_path, cfg_path) = if out.extension().is_some_and(|e| e == "tla") {
                     let cfg = out.with_extension("cfg");
@@ -275,12 +278,26 @@ fn main() -> Result<()> {
                 } else {
                     (out.with_extension("tla"), out.with_extension("cfg"))
                 };
-                fs::write(&tla_path, &bundle.tla)
-                    .with_context(|| format!("failed to write {}", tla_path.display()))?;
-                fs::write(&cfg_path, &bundle.cfg)
-                    .with_context(|| format!("failed to write {}", cfg_path.display()))?;
-                println!("wrote {}", tla_path.display());
-                println!("wrote {}", cfg_path.display());
+                let dir = match tla_path.parent() {
+                    Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+                    _ => PathBuf::from("."),
+                };
+                let mut files = vec![(tla_path, bundle.tla), (cfg_path, bundle.cfg)];
+                for (sm, witnesses) in state_models {
+                    files.push((dir.join(format!("{}.tla", sm.module_name)), sm.tla));
+                    files.push((dir.join(format!("{}.cfg", sm.module_name)), sm.cfg));
+                    let cfg = sm
+                        .witness_cfg
+                        .expect("a state-model module has a witness cfg");
+                    files.push((dir.join(format!("{witnesses}.cfg")), cfg));
+                }
+                for (path, text) in &files {
+                    fs::write(path, text)
+                        .with_context(|| format!("failed to write {}", path.display()))?;
+                }
+                for (path, _) in &files {
+                    println!("wrote {}", path.display());
+                }
             } else if let Some((gated, ext)) = artifact {
                 let content = gated.emit(&model, &view)?;
 

@@ -223,10 +223,11 @@ fn the_state_diagram_draws_a_model_whose_only_error_is_a_deadlock() {
     assert!(out.with_extension("mmd").is_file());
 }
 
-/// TLC does not look for deadlocks or witnesses, so the note sends a hand-run TLC user to
-/// `verify`; the export itself still writes and exits 0.
+/// The whole-model cfg checks the rules, so the note sends a hand-run TLC user to the
+/// `StateModel_` specs beside it for the deadlocks and witnesses, and names `verify`; the
+/// export itself still writes them all and exits 0.
 #[test]
-fn tla_export_writes_with_a_note_that_names_verify() {
+fn tla_export_writes_with_a_note_that_names_the_state_model_specs() {
     let dir = scratch("export_gate_tla");
     for sample in [
         "samples/formal-verification/deadlock.rdra",
@@ -245,12 +246,16 @@ fn tla_export_writes_with_a_note_that_names_verify() {
         assert!(output.status.success(), "{sample}: {output:?}");
         assert!(out.join("RdraSpec.tla").is_file(), "{sample} wrote no .tla");
         assert!(out.join("RdraSpec.cfg").is_file(), "{sample} wrote no .cfg");
+        for file in [
+            "StateModel_Order.tla",
+            "StateModel_Order.cfg",
+            "StateModel_Order_witnesses.cfg",
+        ] {
+            assert!(out.join(file).is_file(), "{sample} wrote no {file}");
+        }
         assert_eq!(note_count(&output), 1, "{sample}: {output:?}");
         let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            stderr.contains("CHECK_DEADLOCK FALSE"),
-            "{sample}: {stderr}"
-        );
+        assert!(stderr.contains("StateModel_"), "{sample}: {stderr}");
         assert!(stderr.contains("rdra-ish verify"), "{sample}: {stderr}");
     }
 }
