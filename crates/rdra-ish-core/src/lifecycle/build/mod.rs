@@ -1,6 +1,14 @@
 //! `SemanticModel` -> `TransitionSystem`. The only reader of the model's lifecycle facts:
 //! columns, `transitions`, `sets`, CRUD edges, relates, constraints, asserts, and properties.
 
+mod actions;
+mod links;
+mod naming;
+mod preds;
+mod sets;
+mod transitions;
+mod vars;
+
 use std::collections::{HashMap, HashSet};
 
 use super::diag::{Diag, StateDiag};
@@ -11,14 +19,6 @@ use super::types::{
 use super::{Built, Scope, TransitionSystem};
 use crate::model::{ConditionKey, EntityKey, FkId, NodeRef, RelKind, SemanticModel, UseCaseKey};
 use naming::Named;
-
-mod actions;
-mod links;
-mod naming;
-mod preds;
-mod sets;
-mod transitions;
-mod vars;
 
 pub(super) fn build(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Built {
     let mut b = Builder::new(model, bounds);
