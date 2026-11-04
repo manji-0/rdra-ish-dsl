@@ -496,7 +496,9 @@ impl TransitionSystem {
     }
 
     /// The cone as a system, reduced under `caps` by what its targets read and keep: the
-    /// seeds and keeps of every target that shares the cone, united.
+    /// seeds and keeps of every target that shares the cone, united. With `RDRA_ISH_NO_REDUCE`
+    /// set the cone stays unreduced, for the differential test `scripts/reduction-diff.py`,
+    /// which runs `verify` both ways and compares the verdicts.
     pub fn reduced_cone(
         &self,
         cone: &Cone,
@@ -504,6 +506,9 @@ impl TransitionSystem {
         caps: Caps,
     ) -> TransitionSystem {
         let sys = self.restrict_to(&cone.vars, &cone.keep);
+        if std::env::var_os("RDRA_ISH_NO_REDUCE").is_some() {
+            return sys;
+        }
         let local: Vec<Seed> = seeds
             .into_iter()
             .map(|(seed, keep)| {
