@@ -376,7 +376,10 @@ The cone's vars split into a target side T and the rest S:
   TLA+ the sub-lifecycle is one variable `S_class`, a `Rep_<var>` table per observed var that
   the var's name reads, and a `Succ_<A>` table per S action (the snapshot
   `a_reduced_cone_prints_its_sub_lifecycle_as_classes` in `crates/rdra-ish-emit/src/tla/tests.rs`).
-  An unobserved S (`obs` empty) is one class with no moves.
+  Each table is one tuple literal with a cell per class, which TLC evaluates cell by cell
+  whatever the class count; a chain of `@@` entries nests once per entry, and a sub-lifecycle
+  of a thousand classes overflowed the JVM's stack. An unobserved S (`obs` empty) is one
+  class with no moves.
 
 **Proof obligation.** Let C be the cone and R the reduced cone. The relation
 `(t, s) ~ (t, rep(class(s)))` between their states is a divergence-blind stuttering

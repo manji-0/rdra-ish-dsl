@@ -1939,6 +1939,176 @@ fn bfs_and_tlc_agree_on_two_actions_of_one_name() {
     }
 }
 
+/// A sub-lifecycle of 1294 classes (a random model, minimized): four entities whose steps
+/// `E1`'s reads join in no way, so every one of them is an S var of `P0`'s cone. Each
+/// `Succ_<A>` table of the reduced cone's TLA+ module has a cell per class; printed as a
+/// chain of `@@`, TLC overflowed its stack evaluating it, and `verify` reported `tool_error`
+/// on a cone 1.1 decided (`ok`, 5176 states).
+const MANY_CLASSES: &str = r#"
+entity E0 "e0" {
+  status: Enum(s0, s1, s2) @default(s0)
+}
+entity E1 "e1" {
+  status: Enum(s0, s1) @default(s0)
+}
+entity E2 "e2" {
+  status: Enum(s0, s1) @default(s0)
+}
+entity E3 "e3" {
+  status: Enum(s0, s1, s2) @default(s0)
+}
+usecase New3 "New3"
+creates(New3, E3)
+usecase T0_0 "T0_0"
+usecase T1_0 "T1_0"
+usecase T1_1 "T1_1"
+usecase T3_0 "T3_0"
+transitions(T0_0, E0.status, s1 -> s2)
+transitions(T0_0, E0.status, s0 -> s2)
+transitions(T1_0, E1.status, s0 -> s1)
+condition C0 "C0"
+holds(C0, E0.status in (s1, s2)).none(E1.status == s0)
+applies_to(C0, T1_0)
+transitions(T1_1, E1.status, s0 -> s1)
+condition C1 "C1"
+holds(C1, E2.status == s0).none(E3.status == s0)
+applies_to(C1, T1_1)
+transitions(T3_0, E3.status, s0 -> s1)
+condition C6 "C6"
+holds(C6, E2.status == s1)
+transitions(T3_0, E3.status, s1 -> s2).when(C6)
+usecase S "S"
+transitions(S, E0.status, s2 -> s1)
+transitions(S, E2.status, s1 -> s0)
+usecase S_1 "S_1"
+transitions(S_1, E2.status, s0 -> s1)
+property P0
+  leads_to(E1.status == s1, E1.status == s1)
+"#;
+
+/// The random model (seed 2563) whose reduced cones overflowed TLC's stack the same way while
+/// its property and three of its checks have counterexamples: `P0` on a cone of 11480 states,
+/// and the two forbidden states and the `after` assertion of `T1_0` on cones that reduce
+/// (the `after` assertion of `T0_1` holds).
+const MANY_CLASSES_COUNTEREXAMPLE: &str = r#"
+entity E0 "e0" {
+  id: Int @pk
+  status: Enum(s0, s1, s2, s3) @default(s0)
+  flag: Bool @default(false)
+}
+
+entity E1 "e1" {
+  id: Int @pk
+  status: Enum(s0, s1) @default(s0)
+  flag: Bool @default(false)
+}
+
+entity E2 "e2" {
+  id: Int @pk
+  status: Enum(s0, s1, s2) @default(s0)
+}
+
+entity E3 "e3" {
+  id: Int @pk
+  status: Enum(s0, s1) @default(s0)
+}
+
+relate(E1, E0, N:1).optional()
+relate(E2, E1, N:1)
+relate(E3, E1, N:1)
+
+usecase New0 "New0"
+creates(New0, E0)
+usecase New1 "New1"
+creates(New1, E1)
+usecase New2 "New2"
+creates(New2, E2)
+usecase New3 "New3"
+creates(New3, E3)
+usecase T0_0 "T0_0"
+updates(T0_0, E0)
+usecase T0_1 "T0_1"
+updates(T0_1, E0)
+usecase T1_0 "T1_0"
+updates(T1_0, E1)
+usecase T1_1 "T1_1"
+updates(T1_1, E1)
+usecase T2_0 "T2_0"
+updates(T2_0, E2)
+usecase T2_1 "T2_1"
+updates(T2_1, E2)
+usecase T2_2 "T2_2"
+updates(T2_2, E2)
+usecase T3_0 "T3_0"
+updates(T3_0, E3)
+
+transitions(T0_0, E0.status, s0 -> s1)
+sets(T0_0, E0.flag == true)
+condition C0 "C0"
+holds(C0, E1.status == s1).none(E2.status == s2)
+transitions(T0_1, E0.status, s0 -> s1).when(C0)
+condition C1 "C1"
+holds(C1, E1.status == s0).has(E3.status == s0)
+transitions(T0_1, E0.status, s1 -> s2).when(C1)
+condition C2 "C2"
+holds(C2, E1.status == s1).none(E3)
+transitions(T0_1, E0.status, s2 -> s3).when(C2)
+sets(T0_1, E0.flag == true)
+condition C3 "C3"
+holds(C3, E1.status == s0).none(E3.status == s1)
+applies_to(C3, T0_1)
+condition C4 "C4"
+holds(C4, E3.status == s0)
+transitions(T1_0, E1.status, s0 -> s1).when(C4)
+transitions(T1_0, E1.status, s1 -> s0)
+sets(T1_0, E1.flag == true)
+condition C5 "C5"
+holds(C5, E3.status == s1)
+applies_to(C5, T1_0)
+condition C6 "C6"
+holds(C6, E3.status == s1)
+transitions(T1_1, E1.status, s0 -> s1).when(C6)
+condition C7 "C7"
+holds(C7, E2.status in (s2, s1))
+applies_to(C7, T1_1)
+transitions(T2_0, E2.status, s0 -> s1)
+transitions(T2_0, E2.status, s2 -> s1)
+condition C8 "C8"
+holds(C8, E2.status in (s1, s2))
+transitions(T2_1, E2.status, s1 -> s2).when(C8)
+transitions(T2_2, E2.status, s1 -> s0)
+transitions(T3_0, E3.status, s0 -> s1)
+condition C9 "C9"
+holds(C9, E3.status == s1)
+transitions(T3_0, E3.status, s0 -> s1).when(C9)
+
+forbidden(E1, E3, E1.status == s1, E3.status == s1).along(E1, E3)
+forbidden(E2, status == s1)
+after(T1_0).assert(E1.status == s1)
+after(T0_1).assert(E0.status == s2)
+property P0
+  always(E0.status != s0)
+"#;
+
+/// The reduced safety cones of the seed-2563 model (its `after` assertions, whose cones
+/// reduce) decide what the unreduced cones decide, through TLC.
+#[test]
+fn bfs_and_tlc_agree_on_a_sub_lifecycle_of_many_classes() {
+    if let Some(violated) =
+        check_fixture("many_classes_counterexample", MANY_CLASSES_COUNTEREXAMPLE)
+    {
+        let expected: BTreeSet<String> = [
+            "Forbidden_E2_0",
+            "CrossForbidden_E1_0",
+            "AfterAssert_T1_0_0",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        assert_eq!(violated, expected);
+    }
+}
+
 type TemporalCase = (&'static str, &'static str, &'static [(&'static str, Why)]);
 
 const TEMPORAL_CASES: &[TemporalCase] = &[
@@ -1973,6 +2143,12 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ("whole_cone", WHOLE_CONE, &[]),
     ("guard_on_unassigned", GUARD_ON_UNASSIGNED, &[]),
     ("reduced_gate", REDUCED_GATE, &[]),
+    ("many_classes", MANY_CLASSES, &[]),
+    (
+        "many_classes_counterexample",
+        MANY_CLASSES_COUNTEREXAMPLE,
+        &[],
+    ),
     (
         "copy_parent",
         COPY_PARENT,
@@ -2224,6 +2400,11 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
             assert!(
                 *name != "reduced_gate" || cone.is_reduced(),
                 "{label}: the gate's cone is not reduced"
+            );
+            let classes = cone.reduced.reduction().map_or(0, |r| r.classes());
+            assert!(
+                *name != "many_classes" || classes >= 1000,
+                "{label}: the sub-lifecycle has {classes} classes, which exercises no depth"
             );
             let dir = scratch.join(format!("{}-{i}", name.replace('/', "_")));
             let plain = cone.bundle(ConeRun::Plain, "Cone");

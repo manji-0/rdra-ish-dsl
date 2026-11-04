@@ -713,7 +713,7 @@ fn a_reduced_cone_prints_its_sub_lifecycle_as_classes() {
     assert!(r.classes() > 1);
     let bundle = print(&reduced, PrintMode::Safety, "Cone");
     let tla = &bundle.tla;
-    assert!(tla.contains("EXTENDS Integers, TLC"), "{tla}");
+    assert!(tla.contains("EXTENDS Integers\n"), "{tla}");
     assert!(
         tla.contains(&format!("S_class \\in 1..{}", r.classes())),
         "{tla}"
@@ -723,7 +723,17 @@ fn a_reduced_cone_prints_its_sub_lifecycle_as_classes() {
         tla.contains("\nGate_status == Rep_Gate_status[S_class]"),
         "{tla}"
     );
-    assert!(tla.contains("\nSucc_Swing == "), "{tla}");
+    // Each table is one tuple with a cell per class: TLC's evaluation depth stays flat however
+    // many classes there are, where a chain of `@@` nests once per entry (and overflowed).
+    let swing = tla
+        .lines()
+        .find_map(|l| l.strip_prefix("Succ_Swing == "))
+        .expect("the Swing table");
+    assert!(
+        swing.starts_with("<<{") && swing.ends_with("}>>") && !swing.contains("@@"),
+        "{swing}"
+    );
+    assert_eq!(swing.matches('{').count(), r.classes(), "{swing}");
     assert!(tla.contains("S_class' \\in Succ_Swing[S_class]"), "{tla}");
     assert!(
         !tla.contains("Gate_latch") && !tla.contains("Key_status"),

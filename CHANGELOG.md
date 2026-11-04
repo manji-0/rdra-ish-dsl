@@ -12,6 +12,10 @@
   transaction number off the name. The run findings of a cone aggregate by the action's
   identity, and a step's label prints its transaction number from its origin. A model whose
   generated names collide with nothing keeps every name and every output.
+- The `Succ_<A>` table of a reduced cone's TLA+ module is one tuple with a cell per class,
+  not a chain of `@@` entries, which TLC evaluated one nested call per entry: a
+  sub-lifecycle of about a thousand classes overflowed the JVM's stack, and `verify`
+  reported `tool_error` on a cone that 1.1 decided. The module no longer extends `TLC`.
 
 ### Added
 
