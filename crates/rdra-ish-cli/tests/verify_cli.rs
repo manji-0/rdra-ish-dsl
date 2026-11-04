@@ -636,9 +636,16 @@ property P_WF "届いた注文には日時がある"
   always(Order.status != delivered or Order.delivered_at == present)
 "#;
 
-/// `Q`'s cone reduces the gate, so its counterexample is read on the unreduced cone, module
-/// `Cone_Q_Full`.
+/// `Q`'s cone reduces the gate and the key behind it, so its counterexample is read on the
+/// unreduced cone, module `Cone_Q_Full`. The key is what the reduction folds: the gate's states
+/// alone are each a class (#101).
 const FULL_NAMED: &str = r#"
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+usecase Unlock "解錠"
+transitions(Unlock, Key.status, locked -> unlocked)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
 entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut)  latch: Bool @default(false) }
 entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
 relate(Job, Gate, N:1)
