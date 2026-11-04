@@ -178,9 +178,21 @@ are compared with TLC at 1 instance only by `engine_equivalence` (`VERIFY_FALLBA
 
 ## Known verification gaps
 
-- **The payment period is not tied to its reason.** `PaymentDeadline` cannot read
-  `Claim.extension`, so nothing checks that a 90-day extension ends at 90 days; the model checks
-  only that a claim paid after its deadline carries the late interest.
+- **The payment period is not tied to its reason.** The deadline can be written to follow the
+  reason, `sets(ExtendPaymentPeriod, E.due_on == N).when(<reason>)` per reason with
+  `MarkPaymentOverdue` waiting for `due_on <= now` (#98), but `verify` cannot check it at the
+  cap. Measured at 2 instances with `lifecycle_measure -- 20000000 verify` (reduced; main:
+  Claim cone 754,247 states, `verify` about 55 s at 1.26 GB):
+  - A `PaymentExtension` entity with the reason and a `due_on`: the Claim cone passes
+    20,000,000 states and `verify` passes 6 GB without deciding.
+  - The reason and `due_on` on `Claim`, 5 reasons (marks 2 to 5): the Claim view is not
+    finished after 7 minutes and 5.8 GB.
+  - The reason and `due_on` on `Claim`, 1 reason: the Claim view passes 20,000,000 states
+    after 126 s.
+  The clock `now` (6 values), the reason (5), and the deadline (7) join the claim's cone, and
+  the reduction separates only 2,658 sub-lifecycle states. So nothing checks that a 90-day
+  extension ends at 90 days; the model checks only that a claim paid after its deadline
+  carries the late interest.
 - **The case closes without reading its claims.** `CloseCase` runs on the claim's events, which
   give no order (#30).
 - **A double payment is stopped by the lifecycle, not by the guard.** `Unique_Payment_Claim`

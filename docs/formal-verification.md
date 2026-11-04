@@ -596,6 +596,15 @@ gaps.
   accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
   it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
   new model's cones under 200,000 states at 2 instances if you want the agreement tested.
+- **insurance-claim-ops cannot check that a payment deadline follows its reason.** The
+  deadline is writable, `sets(UC, E.due_on == N).when(Reason)` with a timer use case that
+  waits for `due_on <= now` (#98), but the cone it adds does not decide at the cap: with a
+  `PaymentExtension` entity the Claim cone passes 20,000,000 states and `verify` passes 6 GB;
+  with the reason and `due_on` on `Claim`, the Claim view passes 20,000,000 states with one
+  reason (126 s) and is unfinished after 7 minutes and 5.8 GB with five. Without the deadline
+  the Claim cone is 754,247 states reduced. See it:
+  [Known verification gaps](../samples/insurance-claim-ops/README.md#known-verification-gaps).
+  What you can do: keep the reason out of the checked rules, as the sample does.
 - **The `verify` BFS stops at 8,388,608 states per cone.** The BFS pass that finds missing
   witnesses, deadlocks, use cases that never run, arms never taken, and values never chosen
   stops at `Caps::VERIFY`, 2^23 states. A cone that stops there decides none of these
