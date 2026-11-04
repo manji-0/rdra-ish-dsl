@@ -536,8 +536,8 @@ The rules for each flag and for deferral are in
   cone that reads `Appointment.status` carries the two run marks of `CheckInPatient`, which
   checks the appointment in through one API and creates the eligibility check through
   another (#80): 2.3 to 2.6 times the states it had when the two steps ran in any order. The
-  other 30 clinic-ops cones at 2 instances (the largest `Appointment` at 188,699) are
-  compared unreduced and reduced. CI runs the test with `cargo test --release`
+  other 29 clinic-ops cones at 2 instances (the largest `Appointment` at 188,699) are
+  compared unreduced, and reduced where they reduce. CI runs the test with `cargo test --release`
   and sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job. The debug build took
   315 s on the CI runner, over its 300 s budget; the release build takes 121 s locally
   (Apple silicon, measured).

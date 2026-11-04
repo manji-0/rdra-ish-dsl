@@ -1817,8 +1817,8 @@ transitions(Start, Job.status, waiting -> running)
 condition GateOpen "門が開いている"
 holds(GateOpen, Gate.status == open)
 applies_to(GateOpen, Start)
-eventually(Job, status == running).fair(Start).label("JobStarts")
-always(Job, status == waiting).label("JobWaits")
+property JobStarts "作業はいずれ始まる" eventually(Job.status == running).fair(Start)
+property JobWaits "作業は始まらない" always(Job.status == waiting)
 "#;
 
 type TemporalCase = (&'static str, &'static str, &'static [(&'static str, Why)]);
@@ -2098,10 +2098,15 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
         };
         let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
         let mut undecided = Vec::new();
+        let mut full_runs = 0;
         for i in 0..ts.properties().len() {
             let property = &ts.properties()[i].name;
             let label = format!("{name}: {property}");
             let cone = PropertyCone::new(&ts, i);
+            assert!(
+                *name != "reduced_gate" || cone.is_reduced(),
+                "{label}: the gate's cone is not reduced"
+            );
             let dir = scratch.join(format!("{}-{i}", name.replace('/', "_")));
             let plain = cone.bundle(ConeRun::Plain, "Cone");
             assert!(
@@ -2125,6 +2130,7 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                     "{label}: the reduced cone finds a counterexample the cone does not\n{l}"
                 );
                 (first, run, log, names) = (again, r, l, full.names);
+                full_runs += 1;
             }
             let mut verdict = cone.verdict(first, None);
             if verdict == Verdict::NeedsWfNext {
@@ -2173,6 +2179,10 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
         }
         let expected: Vec<(&str, Why)> = expected.to_vec();
         assert_eq!(undecided, expected, "{name}: the undecided properties");
+        assert!(
+            *name != "reduced_gate" || full_runs == 2,
+            "{name}: {full_runs} counterexamples on the reduced cone, read on the Full run"
+        );
     }
     let _ = std::fs::remove_dir_all(&scratch);
 }
