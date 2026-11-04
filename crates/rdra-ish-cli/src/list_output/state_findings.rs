@@ -692,9 +692,9 @@ pub(crate) fn note_state_errors(program: &ResolvedProgram, model: &SemanticModel
 /// The reason a data-layer or declared-facts output writes on lifecycle errors.
 pub(crate) const READS_NO_LIFECYCLE: &str = "this output does not read the lifecycle";
 
-/// The reason the TLA+ export writes on lifecycle errors, and where TLC finds the deadlocks
+/// The reason the TLA+ export writes on lifecycle errors, and where TLC checks the deadlocks
 /// and missing witnesses.
-pub(crate) const TLA_STATE_MODELS: &str = "the whole-model .cfg checks the rules only; TLC finds the deadlocks and missing witnesses with the StateModel_* specs written beside it, and `rdra-ish verify` reports them too";
+pub(crate) const TLA_STATE_MODELS: &str = "the whole-model .cfg checks the rules only; the StateModel_* specs written beside it let TLC check the deadlocks and missing witnesses, but a deadlock pass there is no proof, and `rdra-ish verify` decides them";
 
 /// A constraint violation in the wording `check` has always used for its kind.
 fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> {
