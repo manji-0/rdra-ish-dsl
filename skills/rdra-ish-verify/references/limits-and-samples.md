@@ -59,7 +59,8 @@
   action, and TLC cannot see one instance stuck while others keep moving. `export --kind
   tla` writes the same cones as `StateModel_<E>.tla` with `Deadlock_` and `Witness_`
   invariants, so TLC alone finds them too; a `Witness_` TLC does not report violated is
-  the missing witness (`docs/formal-verification.md`, "State models with TLC alone").
+  the missing witness. A TLC pass on the `Deadlock_` invariants is no proof: a cycle in the
+  column's cone hides a deadlock, and `verify` or `check` decides it (`docs/formal-verification.md`, "State models with TLC alone").
 - **Cones**: `verify` checks each invariant, `after` assertion, and temporal property on
   its cone of influence, and a temporal property on the whole model only when its cone does
   not decide it (`docs/formal-verification.md`, "Temporal properties on a cone").

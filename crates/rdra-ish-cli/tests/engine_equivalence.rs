@@ -3106,3 +3106,58 @@ fn tlc_alone_finds_a_deadlock_beside_a_toggled_column() {
         ["Deadlock_Order_status_paid"]
     );
 }
+
+/// `deadlock.rdra`'s shape with Ship guarded by a column that Flip and Flop move back and
+/// forth: a paid Order is stuck, which the BFS reports, but every state keeps a move of the
+/// status's cone, so TLC alone passes the `Deadlock_` invariants. The known gap of the
+/// `StateModel_` specs (docs/formal-verification.md, "State models with TLC alone"); an exact
+/// encoding fails this test.
+const CYCLING_CONE_DEADLOCK: &str = r#"
+entity Order "o" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  review: Enum(a, b, ok) @default(a)
+}
+usecase Place "p"
+usecase Pay "p"
+usecase Ship "s"
+usecase Flip "f"
+usecase Flop "g"
+usecase Express "x"
+creates(Place, Order)
+updates(Pay, Order)
+updates(Ship, Order)
+updates(Flip, Order)
+updates(Flop, Order)
+updates(Express, Order)
+transitions(Express, Order.status, pending -> shipped)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Flip, Order.review, a -> b)
+transitions(Flop, Order.review, b -> a)
+condition Ok "ok"
+holds(Ok, Order.review == ok)
+applies_to(Ok, Ship)
+"#;
+
+#[test]
+fn tlc_alone_misses_a_deadlock_while_its_cone_cycles() {
+    let Some(tlc) = require_tlc() else { return };
+    let scratch = std::env::temp_dir().join(format!("rdra-cycling-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&scratch);
+    std::fs::create_dir_all(&scratch).expect("scratch dir");
+    let file = scratch.join("cycling.rdra");
+    std::fs::write(&file, CYCLING_CONE_DEADLOCK).expect("write model");
+    let exported = export_state_models(&scratch.join("tla"), "cycling", file.to_str().unwrap())
+        .expect("the model builds");
+    assert!(
+        exported.bfs.contains("Deadlock_Order_status_paid"),
+        "BFS: {:?}",
+        exported.bfs
+    );
+    let module = "StateModel_Order";
+    let cfg = read_cfg(&exported.dir, "cycling", module);
+    let (deadlocks, _) = violated_by_hand(&tlc, &exported.dir, module, &cfg, "deadlocks", true);
+    let _ = std::fs::remove_dir_all(&scratch);
+    assert!(deadlocks.is_empty(), "TLC alone: {deadlocks:?}");
+}

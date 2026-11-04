@@ -603,7 +603,7 @@ decided: ...`, and is neither an error nor a warning. TLC's own deadlock check s
 every bounded model ends with no enabled action, because a deleted slot is never reused; a
 cone spec drops actions; and TLC cannot see one instance stuck while other actions keep
 running. The `StateModel_` specs of `export --kind tla` check each deadlock with TLC as an
-invariant instead (see
+invariant instead, which a cycle in the column's cone can hide (see
 [formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)).
 
 ```

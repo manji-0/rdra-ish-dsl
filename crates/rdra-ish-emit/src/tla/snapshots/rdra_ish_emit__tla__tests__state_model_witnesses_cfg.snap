@@ -4,7 +4,8 @@ expression: "bundle.witness_cfg.expect(\"a witness cfg\")"
 ---
 \* Each Witness_<E>_<col>_<s> says no instance is ever at s, so TLC reports it violated
 \* where s is reached: a healthy model violates every one. A Witness_ TLC does not
-\* report is a state with no witness.
+\* report is a state with no witness. -continue prints a trace for each violating
+\* state; on a large cone rerun without it, which reports one invariant per run.
 \* With -continue TLC reports one invariant per state, the first here: rerun
 \* without the reported ones until a run reports no new one.
 SPECIFICATION Spec

@@ -52,11 +52,14 @@
   state with a way out, named as `check` names the findings. `StateModel_<E>.cfg` checks the
   `Deadlock_` invariants: TLC reports one violated in a state with an instance at `s` and no
   step left that changes the column's cone, so a column another use case toggles does not
-  hide the deadlock, and a model without a deadlock passes. `StateModel_<E>_witnesses.cfg`
+  hide the deadlock. A pass does not prove that there is none: a cycle anywhere in the
+  column's cone, such as another column a guard reads that moves back and forth, hides it,
+  and `check` and `verify` still decide the deadlocks. `StateModel_<E>_witnesses.cfg`
   checks the `Witness_` invariants, each violated where its state is reached: one TLC does
   not report is a missing witness. On every sample TLC alone finds what the BFS finds, which
-  `engine_equivalence` checks. An instance stuck while its column's cone keeps moving forever
-  is reported by the BFS and not by TLC; no sample has one. The note on
+  `engine_equivalence` checks, and the test pins one model whose deadlock TLC misses. The
+  docs warn that `-continue` prints a trace for each violating state, and that `export`
+  leaves the `StateModel_` files of an earlier export in place. The note on
   lifecycle errors names the new specs in place of saying that TLC alone checks no deadlock
   or witness. `verify`, `check`, and their output do not change.
 - `sets(UC, E.col == value).when(Condition)` (#98): the use case leaves the value only while

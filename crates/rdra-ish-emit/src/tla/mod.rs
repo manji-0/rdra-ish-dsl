@@ -209,13 +209,15 @@ fn state_cfg(names: &TlaNames, mode: PrintMode, skip: &BTreeSet<String>) -> Stri
     let (head, checks): (&str, Vec<&str>) = match mode {
         PrintMode::Deadlocks => (
             "\\* A Deadlock_<E>_<col>_<s> TLC reports violated is that deadlock: an instance at s,\n\
-             \\* which has a way out, in a state with no move left. A model without one passes.\n",
+             \\* which has a way out, in a state with no move left. A pass does not prove there is\n\
+             \\* none: a cycle anywhere in the column's cone hides it. rdra-ish verify decides.\n",
             names.states().iter().filter_map(|s| s.deadlock.as_deref()).collect(),
         ),
         _ => (
             "\\* Each Witness_<E>_<col>_<s> says no instance is ever at s, so TLC reports it violated\n\
              \\* where s is reached: a healthy model violates every one. A Witness_ TLC does not\n\
-             \\* report is a state with no witness.\n",
+             \\* report is a state with no witness. -continue prints a trace for each violating\n\
+             \\* state; on a large cone rerun without it, which reports one invariant per run.\n",
             names.states().iter().map(|s| s.witness.as_str()).collect(),
         ),
     };

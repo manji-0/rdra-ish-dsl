@@ -61,8 +61,10 @@ and prints one note with the error count that names the state-model specs and `v
 <!-- constrained-by #what-verify-checks -->
 `check` and `verify` find a deadlock or a state with no witness by BFS on each entity's
 cone (see [What `verify` checks](#what-verify-checks)). `export --kind tla` writes the same
-cones as TLA+, so TLC alone reaches the states the BFS reaches and finds the same
-findings. For each cone whose entities have a state model, `export` writes three files:
+cones as TLA+, so TLC alone reaches the states the BFS reaches. TLC finds the same missing
+witnesses, and a deadlock it reports is one `check` reports, but a TLC pass does not prove
+that no deadlock exists (see below). `check` and `verify` decide the deadlocks. For each
+cone whose entities have a state model, `export` writes three files:
 
 | File | Checks |
 |---|---|
@@ -71,7 +73,9 @@ findings. For each cone whose entities have a state model, `export` writes three
 | `StateModel_<E>_witnesses.cfg` | `TypeOK` and the `Witness_` invariants |
 
 `<E>` is the first entity of the cone with a state model. Entities with one cone share
-its spec. The invariants have the names of the findings `check` prints.
+its spec. The invariants have the names of the findings `check` prints. `export` does not
+remove the `StateModel_` files that an earlier export wrote into the same directory, so a
+spec of an entity cone that no longer exists stays there. Export into an empty directory.
 
 `Deadlock_<E>_<col>_<s>` says that wherever an instance is at `s`, some step can still
 change the column's cone: the column, its entity's existence, and every variable that the
@@ -79,7 +83,9 @@ steps writing them read. It is `ENABLED (Next /\ c' # c)`, with `c` the tuple of
 variables. A step outside that cone cannot move the column or open its way out, so a column
 that another use case toggles back and forth does not hide the deadlock. TLC reports the
 invariant violated in a state with an instance at `s` and no move of the cone left, which
-is the deadlock `check` reports. A model with no deadlock passes:
+is a deadlock `check` reports. A pass does not prove that the model has no deadlock: a
+cycle anywhere in the column's cone keeps a move enabled and hides it (see the first case
+below):
 
 ```
 tlc -continue -config StateModel_Order.cfg StateModel_Order.tla
@@ -98,14 +104,27 @@ An invariant violated only in states where an earlier one is violated is not rep
 Rerun without the reported invariants until a run reports no new one, as `verify` does
 for its cones.
 
+With `-continue`, TLC also prints a trace for each state that violates an invariant. On the
+witnesses cfg that is almost every reached state: 1.5 GB of output for the clinic-ops cone
+of `Encounter` (93,425 states). TLC has no flag that leaves the traces out
+(`-difftrace` only shortens each one). For a large cone, run the witnesses cfg without
+`-continue`: TLC stops at the first violated invariant, and each rerun without the
+reported ones finds the next. The `engine_equivalence` test does this above 1,000 states.
+
 The TLC reading differs from `check` in two cases:
 
 - TLC reports a deadlock in a state with no move of the column's cone left. An instance
-  can also be stuck while that cone keeps moving forever, for example while another
-  instance of the entity cycles through its states. `check` reports that deadlock, since no
-  path moves the instance, and TLC does not, since every state still has a move. No sample
-  has such a deadlock, and the `engine_equivalence` test fails on a sample that adds one in
-  a cone it runs (every cone but those `VERIFY_FALLBACK` lists).
+  can also be stuck while that cone keeps moving forever. `check` reports that deadlock,
+  since no path moves the instance off `s`, and TLC passes, since every state still has a
+  move of the cone. Any cycle in the cone hides it, even at 1 instance: another column of
+  the instance that a guard reads, a related entity that a guard reads, or another
+  instance of the entity. For example, Ship moves an Order from `paid` to `shipped` only
+  while `review == ok`, and Flip and Flop move `review` between `a` and `b` forever, so a
+  paid Order is stuck; Express makes `shipped` reachable from `pending`. `check` reports
+  `Deadlock_Order_status_paid`, and TLC on `StateModel_Order.cfg` reports nothing. The
+  `engine_equivalence` test pins this case. No TLC invariant expresses the BFS check, which
+  asks whether any path from the state moves the instance. An invariant on one step of the
+  instance would report an instance that waits for a step of another row.
 - `check` reports a deadlock as a warning when only the instance bound blocks its way out.
   TLC reports the invariant violated, as for an error.
 
@@ -308,7 +327,7 @@ way out (see [state-derivation.md](./state-derivation.md#deadlocks)), fails it t
 one whose way out lacks only a free slot is a warning at the bound. TLC's own deadlock check
 stays off: every bounded model ends with no enabled action, and an always-enabled loop would
 hide a stuck instance. The `StateModel_` specs that `export` writes let TLC alone find the
-same deadlocks and missing witnesses on the same cones (see
+same missing witnesses and the deadlocks that no cycle of the cone hides (see
 [State models with TLC alone](#state-models-with-tlc-alone)). The same pass finds each use case that never runs (see
 [state-derivation.md](./state-derivation.md#use-cases-that-never-run)) and prints it as a
 warning, which does not fail the run. A cone that stops at the cap decides nothing about its
@@ -574,7 +593,8 @@ The rules for each flag and for deferral are in
     violation must replay through the BFS step relation and end in the check TLC named.
   - At 2 instances, the deadlocks and missing witnesses TLC alone finds on the
     `StateModel_` specs `export` writes, rerun by hand as the specs' cfgs say, and those the
-    BFS finds.
+    BFS finds. A witnesses cfg of a cone above 1,000 states is rerun without `-continue`.
+    A cone that `VERIFY_FALLBACK` lists is left out of this comparison, by both engines.
 
   At 2 instances, a cone whose BFS, reduced as `verify` explores it, passes the test's cap
   of 300,000 states is compared at 1 instance only. The test decides this on the run

@@ -26,7 +26,8 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 
 - `export -o X.tla` names the module `X` and writes `X.cfg` beside it; `-o DIR` writes
   `DIR/RdraSpec.tla` and `DIR/RdraSpec.cfg`. Beside them go `StateModel_<E>.tla`, its
-  `.cfg` (a violated `Deadlock_` invariant is a deadlock), and `StateModel_<E>_witnesses.cfg`
+  `.cfg` (a violated `Deadlock_` invariant is a deadlock; a pass is no proof, `verify`
+  decides), and `StateModel_<E>_witnesses.cfg`
   (TLC reports every reached state's `Witness_` invariant violated; one it does not report
   is a missing witness; rerun with `-continue` without the reported ones until none is new).
 - `verify -o DIR` writes one `Cone_<first check>.tla` / `.cfg` pair per cone, one
