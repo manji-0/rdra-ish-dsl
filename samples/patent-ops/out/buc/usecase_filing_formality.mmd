@@ -28,7 +28,7 @@ flowchart LR
     usecase__RecordDismissal("出願の却下の記録"):::usecase
     %% desc usecase__RecordDismissal: 補正がなく出願が却下されたことを記録する。
     usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
-    %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。
+    %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録する。
     usecase__RecordPublication("出願公開の記録"):::usecase
     %% desc usecase__RecordPublication: 出願から1年6月で出願が公開されたことを記録する。
     usecase__SubmitFormalityAmendment("手続補正書の提出"):::usecase
@@ -56,6 +56,7 @@ flowchart LR
     state__PatentApplication_filed((("出願済（方式審査）"))):::state
     state__PatentApplication_formality_order((("手続補正指令への対応中"))):::state
     state__PatentApplication_priority_withdrawn((("取下げ擬制（国内優先権の基礎）"))):::state
+    condition__DraftsApproved{"出願書類が承認されている"}:::condition
     condition__PriorityBase{"国内優先権の基礎とされ、まだ係属している出願である"}:::condition
     condition__PriorityBasePending{"先の出願が係属し、査定を受けていない"}:::condition
     condition__StillPending{"出願が係属している"}:::condition
@@ -67,6 +68,7 @@ flowchart LR
   actor__PatentAttorney -.-> usecase__FileApplication
   actor__PatentAttorney -.-> usecase__ReceiveFormalityOrder
   actor__PatentAttorney -.-> usecase__SubmitFormalityAmendment
+  condition__DraftsApproved -.->|applies_to| usecase__FileApplication
   condition__PriorityBase -.->|applies_to| usecase__DeemPriorityBaseWithdrawn
   condition__PriorityBasePending -.->|applies_to| usecase__ClaimDomesticPriority
   condition__StillPending -.->|applies_to| usecase__RecordPublication
@@ -100,10 +102,11 @@ flowchart LR
   %% derived usecase__FileApplication -> entity__PatentApplication via api__FilingApi
   usecase__FileApplication -.-> screen__FilingScreen
   usecase__FileApplication -.-> event__EvApplicationFiled
-  usecase__FileApplication -.->|reads| entity__DraftingOrder
-  %% derived usecase__FileApplication -> entity__DraftingOrder via api__FilingApi
   usecase__FileApplication -.->|reads| entity__FeeSchedule
   %% derived usecase__FileApplication -> entity__FeeSchedule via api__FilingApi
+  usecase__FileApplication -.->|transitions DraftingOrder.status approved->filed| state__DraftingOrder_filed
+  usecase__FileApplication -.->|updates| entity__DraftingOrder
+  %% derived usecase__FileApplication -> entity__DraftingOrder via api__FilingApi
   usecase__ReceiveFormalityOrder -.-> screen__ApplicationDocketScreen
   usecase__ReceiveFormalityOrder -.->|transitions PatentApplication.status filed->formality_order| state__PatentApplication_formality_order
   usecase__ReceiveFormalityOrder -.->|updates| entity__PatentApplication
@@ -114,8 +117,6 @@ flowchart LR
   %% derived usecase__RecordDismissal -> entity__PatentApplication via api__ApplicationDocketApi
   usecase__RecordFilingReceipt -.-> screen__ApplicationDocketScreen
   usecase__RecordFilingReceipt -.->|reads| entity__PatentApplication
-  usecase__RecordFilingReceipt -.->|transitions DraftingOrder.status approved->filed| state__DraftingOrder_filed
-  usecase__RecordFilingReceipt -.->|updates| entity__DraftingOrder
   usecase__RecordPublication -.-> screen__ApplicationDocketScreen
   usecase__RecordPublication -.->|updates| entity__PatentApplication
   %% derived usecase__RecordPublication -> entity__PatentApplication via api__ApplicationDocketApi

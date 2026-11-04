@@ -109,7 +109,7 @@ flowchart LR
     usecase__RecordDismissal("出願の却下の記録"):::usecase
     %% desc usecase__RecordDismissal: 補正がなく出願が却下されたことを記録する。
     usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
-    %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。
+    %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録する。
     usecase__RecordPublication("出願公開の記録"):::usecase
     %% desc usecase__RecordPublication: 出願から1年6月で出願が公開されたことを記録する。
     usecase__RecordRegistration("設定登録の記録"):::usecase
@@ -186,15 +186,12 @@ flowchart LR
     api__ResponseFilingApi{{"応答提出 API"}}:::api
     api__RewardApi{{"相当の利益 API"}}:::api
     entity__DivisionalFiling[("分割出願")]:::entity
-    entity__DraftingOrder[("出願依頼")]:::entity
     entity__FeeSchedule[("料金表")]:::entity
     entity__InventionDisclosure[("発明届出")]:::entity
     entity__InventorReward[("相当の利益")]:::entity
     entity__OfficeAction[("拒絶理由通知")]:::entity
     entity__Patent[("特許権")]:::entity
     entity__PatentApplication[("特許出願")]:::entity
-    state__DraftingOrder_approved((("出願承認済"))):::state
-    state__DraftingOrder_filed((("出願済"))):::state
     state__OfficeAction_answered((("応答済"))):::state
     state__OfficeAction_closed((("案件終了"))):::state
     state__OfficeAction_drafted((("応答案作成済"))):::state
@@ -344,11 +341,9 @@ flowchart LR
   %% derived condition__YearPaid -> entity__Patent from holds
   condition__YearUnpaid -.->|applies_to| usecase__EnterGracePeriod
   entity__DivisionalFiling ---|N:1| entity__PatentApplication
-  entity__DraftingOrder ---|N:1| entity__InventionDisclosure
   entity__InventorReward ---|N:1| entity__InventionDisclosure
   entity__OfficeAction ---|N:1| entity__PatentApplication
   entity__Patent ---|1:1| entity__PatentApplication
-  entity__PatentApplication ---|1:1| entity__DraftingOrder
   event__EvAcceleratedExamRequested -.-> extsystem__Jpo
   event__EvAppealRequested -.-> extsystem__Jpo
   event__EvApplicationDismissed -.-> usecase__RecordDismissal
@@ -615,8 +610,6 @@ flowchart LR
   usecase__RecordFilingReceipt -.->|reads| entity__PatentApplication
   usecase__RecordFilingReceipt -.-> medium__IpWorkstation
   usecase__RecordFilingReceipt -.-> permission__DocketManage
-  usecase__RecordFilingReceipt -.->|transitions DraftingOrder.status approved->filed| state__DraftingOrder_filed
-  usecase__RecordFilingReceipt -.->|updates| entity__DraftingOrder
   usecase__RecordPublication -.-> screen__ApplicationDocketScreen
   usecase__RecordPublication -.-> api__ApplicationDocketApi
   usecase__RecordPublication -.-> medium__IpWorkstation

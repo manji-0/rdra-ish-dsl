@@ -643,8 +643,8 @@ flowchart LR
   actor__PatentAttorney --> screen__FilingScreen
   api__ApplicationDocketApi -->|U| entity__PatentApplication
   api__FilingApi -->|C| entity__PatentApplication
-  api__FilingApi -->|R| entity__DraftingOrder
   api__FilingApi -->|R| entity__FeeSchedule
+  api__FilingApi -->|U| entity__DraftingOrder
   api__FilingApi -.->|特許願の提出| extsystem__Jpo
   api__FormalityApi -->|U| entity__PatentApplication
   api__FormalityApi -.->|手続補正書の提出| extsystem__Jpo
@@ -668,7 +668,6 @@ flowchart LR
   timer__PriorityClaimDeadline -.-> api__PriorityClaimApi
   timer__PublicationCheck -.-> api__ApplicationDocketApi
   usecase__RecordFilingReceipt -->|R| entity__PatentApplication
-  usecase__RecordFilingReceipt -->|U| entity__DraftingOrder
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
@@ -694,8 +693,8 @@ flowchart LR
 
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
-| 電子出願<br>`FileApplication` | 承認された出願書類を、代理人の弁理士がインターネット出願ソフトで特許庁に出す。 | `FilingScreen` | `FilingApi` | （なし） |
-| 出願番号・出願日の記録<br>`RecordFilingReceipt` | 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。 | `ApplicationDocketScreen` | `RecordFilingReceipt` | （なし） |
+| 電子出願<br>`FileApplication` | 承認された出願書類を、代理人の弁理士がインターネット出願ソフトで特許庁に出す。 | `FilingScreen` | `FilingApi` | 出願書類が承認されている |
+| 出願番号・出願日の記録<br>`RecordFilingReceipt` | 受領書の出願番号と出願日を記録する。 | `ApplicationDocketScreen` | `RecordFilingReceipt` | （なし） |
 | 手続補正指令書の受領<br>`ReceiveFormalityOrder` | 方式の不備を指摘する手続補正指令書を受け取り、出願を補正待ちにする。 | `ApplicationDocketScreen` | `FormalityApi` | （なし） |
 | 手続補正書の提出<br>`SubmitFormalityAmendment` | 指令書の発送日から2月以内に手続補正書を出す。 | `ApplicationDocketScreen` | `FormalityApi` | （なし） |
 | 出願の却下の記録<br>`RecordDismissal` | 補正がなく出願が却下されたことを記録する。 | `ApplicationDocketScreen` | `ApplicationDocketApi` | （なし） |
@@ -708,26 +707,31 @@ flowchart LR
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:FileApplication model=samples/patent-ops
 %% kinds: actor usecase screen api entity extsystem
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__PatentAttorney as 弁理士（特許事務所）
   participant usecase__ApproveDraft as 出願書類の承認
   participant screen__FilingScreen as 出願画面
   participant api__FilingApi as 出願 API
-  participant entity__DraftingOrder as 出願依頼
   participant entity__FeeSchedule as 料金表
+  participant entity__DraftingOrder as 出願依頼
   participant entity__PatentApplication as 特許出願
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   participant api__RewardApi as 相当の利益 API
   actor__PatentAttorney ->> screen__FilingScreen: 電子出願
   usecase__ApproveDraft ->> api__FilingApi: 出願書類の承認
   screen__FilingScreen ->> api__FilingApi: 出願 API
-  api__FilingApi ->> entity__DraftingOrder: read
-  api__FilingApi ->> entity__FeeSchedule: read
-  api__FilingApi ->> entity__PatentApplication: create
-  api__FilingApi -) extsystem__Jpo: 特許願の提出
-  api__FilingApi -) api__RewardApi: 特許願の提出
-  api__FilingApi -->> screen__FilingScreen: done
+  alt 出願書類が承認されている: DraftingOrder.status == 出願承認済
+    api__FilingApi ->> entity__FeeSchedule: read
+    Note over api__FilingApi: transaction (API atomic boundary)
+    api__FilingApi ->> entity__DraftingOrder: update status 出願承認済 -> 出願済
+    api__FilingApi ->> entity__PatentApplication: create
+    api__FilingApi -) extsystem__Jpo: 特許願の提出
+    api__FilingApi -) api__RewardApi: 特許願の提出
+    api__FilingApi -->> screen__FilingScreen: done
+  else guard fails
+    api__FilingApi -->> screen__FilingScreen: rejected
+  end
 ```
 
 </details>
@@ -744,17 +748,11 @@ sequenceDiagram
   participant screen__ApplicationDocketScreen as 出願案件・期限管理画面
   participant usecase__RecordFilingReceipt as 出願番号・出願日の記録
   participant entity__PatentApplication as 特許出願
-  participant entity__DraftingOrder as 出願依頼
   actor__IpStaff ->> screen__ApplicationDocketScreen: 出願番号・出願日の記録
   extsystem__Jpo ->> usecase__RecordFilingReceipt: 受領書（出願番号）
   screen__ApplicationDocketScreen ->> usecase__RecordFilingReceipt: 出願番号・出願日の記録
-  alt DraftingOrder.status == 出願承認済
-    usecase__RecordFilingReceipt ->> entity__PatentApplication: read
-    usecase__RecordFilingReceipt ->> entity__DraftingOrder: update status 出願承認済 -> 出願済
-    usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: done
-  else guard fails
-    usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: rejected
-  end
+  usecase__RecordFilingReceipt ->> entity__PatentApplication: read
+  usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: done
 ```
 
 </details>
@@ -2287,8 +2285,8 @@ stateDiagram-v2
     state__DraftingOrder_drafted --> state__DraftingOrder_approved : 出願書類の承認 [発明者が内容を確認している]
     %% transition usecase__SubmitDraft
     state__DraftingOrder_revising --> state__DraftingOrder_drafted : 出願書類案の納品
-    %% transition usecase__RecordFilingReceipt
-    state__DraftingOrder_approved --> state__DraftingOrder_filed : 出願番号・出願日の記録
+    %% transition usecase__FileApplication
+    state__DraftingOrder_approved --> state__DraftingOrder_filed : 電子出願 [出願書類が承認されている]
     state__DraftingOrder_filed --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
@@ -2972,7 +2970,7 @@ erDiagram
 | PatentApplication | 特許出願 | priority_base | Bool | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatentApplication | 特許出願 | first_fees_paid | Bool | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatentApplication | 特許出願 | fee_period_extended | Bool | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| PatentApplication | 特許出願 | draftingorder_id | Int | false | true | false | true | DraftingOrder | true |  |  | true |  |  | false | false | false |  |
+| PatentApplication | 特許出願 | draftingorder_id | Int | false | true | false | true | DraftingOrder | false |  |  | false |  |  | false | false | false |  |
 | PatentFirm | 特許事務所 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatentFirm | 特許事務所 | name | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatentFirm | 特許事務所 | technical_field | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
@@ -3003,9 +3001,10 @@ erDiagram
 | forbidden | 審査請求をしていない出願は早期審査の対象にならない | PatentApplication | PatentApplication.accelerated == true AND PatentApplication.exam_requested_at == null |  | samples/patent-ops/buc/buc_examination_request.rdra:113 |
 | condition | 会社が特許を受ける権利を取得している | InventionDisclosure | InventionDisclosure.right_acquired == true | DecideFiling | samples/patent-ops/buc/buc_filing_decision.rdra:68 |
 | forbidden | 会社が特許を受ける権利を取得していない発明は出願を決めない | InventionDisclosure | InventionDisclosure.status == 出願決定 AND InventionDisclosure.right_acquired == false |  | samples/patent-ops/buc/buc_filing_decision.rdra:70 |
-| condition | 出願が係属している | PatentApplication | PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済) | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:132 |
-| condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:147 |
-| condition | 国内優先権の基礎とされ、まだ係属している出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:165 |
+| condition | 出願書類が承認されている | DraftingOrder | DraftingOrder.status == 出願承認済 | FileApplication | samples/patent-ops/buc/buc_filing_formality.rdra:86 |
+| condition | 出願が係属している | PatentApplication | PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済) | RecordPublication | samples/patent-ops/buc/buc_filing_formality.rdra:134 |
+| condition | 先の出願が係属し、査定を受けていない | PatentApplication | PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) | ClaimDomesticPriority | samples/patent-ops/buc/buc_filing_formality.rdra:149 |
+| condition | 国内優先権の基礎とされ、まだ係属している出願である | PatentApplication | PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) | DeemPriorityBaseWithdrawn | samples/patent-ops/buc/buc_filing_formality.rdra:167 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | JudgeEmployeeInvention | samples/patent-ops/buc/buc_invention_disclosure.rdra:83 |
 | condition | 職務発明に当たらない | InventionDisclosure | InventionDisclosure.category == 職務発明に当たらない発明 | AcquireRightsByAssignment | samples/patent-ops/buc/buc_invention_disclosure.rdra:94 |
 | condition | 職務発明である | InventionDisclosure | InventionDisclosure.category == 職務発明 | DecideReward | samples/patent-ops/buc/buc_inventor_reward.rdra:60 |
@@ -3022,9 +3021,9 @@ erDiagram
 | condition | 第1〜3年分の特許料を納付している | PatentApplication | PatentApplication.first_fees_paid == true | RecordRegistration | samples/patent-ops/buc/buc_registration.rdra:86 |
 | invariant | 特許料（第1〜3年分）を納付していない出願は設定登録されない | PatentApplication | when PatentApplication.status == 設定登録済 then PatentApplication.first_fees_paid == true |  | samples/patent-ops/buc/buc_registration.rdra:90 |
 | condition | 第1〜3年分の特許料を納付していない | PatentApplication | PatentApplication.first_fees_paid == false | RecordRegistrationDismissal | samples/patent-ops/buc/buc_registration.rdra:102 |
-| invariant | 発明者に通知していない相当の利益は支払わない | InventorReward | when InventorReward.status == 支払済 then InventorReward.notified_at == present |  | samples/patent-ops/shared/entities.rdra:224 |
-| invariant | 追納には特許料と同額の割増特許料を加える | Patent | when Patent.last_payment == 追納 then Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:227 |
-| forbidden | 期限内の納付には割増特許料を付けない | Patent | Patent.last_payment == 期限内の納付 AND Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:228 |
+| invariant | 発明者に通知していない相当の利益は支払わない | InventorReward | when InventorReward.status == 支払済 then InventorReward.notified_at == present |  | samples/patent-ops/shared/entities.rdra:222 |
+| invariant | 追納には特許料と同額の割増特許料を加える | Patent | when Patent.last_payment == 追納 then Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:225 |
+| forbidden | 期限内の納付には割増特許料を付けない | Patent | Patent.last_payment == 期限内の納付 AND Patent.surcharge == present |  | samples/patent-ops/shared/entities.rdra:226 |
 
 ## 6. CRUD と権限
 
@@ -3044,7 +3043,7 @@ erDiagram
 | DraftingOrderApi |  | C |  |  | R |  |  |  |  | R |  |
 | ExaminationRequestApi |  |  |  | R |  |  |  |  | U |  |  |
 | FeePaymentApi |  |  |  | R |  |  |  |  | U |  |  |
-| FilingApi |  | R |  | R |  |  |  |  | C |  |  |
+| FilingApi |  | U |  | R |  |  |  |  | C |  |  |
 | FilingDecisionApi |  |  |  |  | U |  |  |  |  |  |  |
 | FormalityApi |  |  |  |  |  |  |  |  | U |  |  |
 | MaintenanceApi |  |  |  |  |  |  |  | U |  |  |  |
@@ -3213,7 +3212,7 @@ flowchart LR
   event__EvFilingReceipt>"受領書（出願番号）"]:::event
   extsystem__Jpo -.-> event__EvFilingReceipt
   usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
-  %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。
+  %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録する。
   event__EvFilingReceipt -.-> usecase__RecordFilingReceipt
   event__EvFinalOfficeAction>"最後の拒絶理由通知書"]:::event
   extsystem__Jpo -.-> event__EvFinalOfficeAction

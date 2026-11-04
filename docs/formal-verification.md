@@ -265,7 +265,7 @@ passes it runs unreduced. On clinic-ops the whole `verify` takes about 40 s and 
 took 2.5 minutes and 3.7 GB before the reduction); its largest cone is `EligibilityCheck`
 (1,784,808 states at 2 instances, which nothing reduces), while `Charge`, past the cap
 unreduced, is 38,533 states reduced and `Prescription` (4,266,635 unreduced) is 1,690. On
-patent-ops the `OfficeAction` cone (4,818,909 states unreduced, 1,341,705 reduced) is under
+patent-ops the `OfficeAction` cone (over 8,388,608 states unreduced, 1,341,707 reduced) is under
 the cap too, so `verify` decides all four of its stuck-state checks (see the sample's README).
 
 ```
@@ -525,8 +525,11 @@ The rules for each flag and for deferral are in
   | Cone (first target that reads it) | States | Unreduced |
   |---|---:|---:|
   | clinic-ops entity `EligibilityCheck` (the guard `BookedPatient` reads the booked patient's appointment along its policy, #77) | 1,784,808 | 1,784,808 |
-  | patent-ops entity `OfficeAction` | 1,341,705 | 4,818,909 |
-  | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 1,341,705 | 4,818,909 |
+  | patent-ops entity `OfficeAction` | 1,341,707 | over 8,388,608 |
+  | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 1,341,707 | over 8,388,608 |
+  | patent-ops entity `PatentApplication` | 293,833 | 2,167,411 |
+  | patent-ops entity `Patent` | 202,569 | 1,494,339 |
+  | patent-ops invariant `Forbidden_Patent_4` (also `Inv_Patent_4`) | 202,569 | 1,494,339 |
   | insurance-claim-ops entity `Payment` | 814,191 | over 8,388,608 |
   | insurance-claim-ops entity `Claim` | 754,247 | over 8,388,608 |
   | insurance-claim-ops invariant `CrossForbidden_Payment_3` (also `AfterAssert_PayClaim_0`) | 707,071 | over 8,388,608 |
@@ -597,14 +600,15 @@ gaps.
   BFS and TLC agree on the states, edges, findings, and verdicts of every cone, unreduced
   and reduced. A cone whose BFS, reduced as `verify` explores it, passes the test's cap of
   200,000 states at 2 instances is compared at 1 instance only. `VERIFY_FALLBACK` in
-  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 13 cones today (19 before the
-  reduction of #74, which took 12 off the list and put the 6 insurance-claim-ops cones on it):
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 16 cones today (19 before the
+  reduction of #74, which took 12 off the list and put the 6 insurance-claim-ops cones on it, and the patent-ops filing guard put 3 patent-ops cones on it):
   - `samples/clinic-ops`: entity `EligibilityCheck`, 1,784,808 states at 2 instances, which
     nothing reduces (the table under
     [Approximations and limitations](#approximations-and-limitations)).
-  - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
-    (with `Exclusive_OfficeAction_0`). The guards that read the application put its state
-    into the cone, which reaches 4,818,909 states at 2 instances, 1,341,705 reduced.
+  - `samples/patent-ops`: entities `OfficeAction`, `PatentApplication` and `Patent`, and
+    invariants `Forbidden_OfficeAction_3` (with `Exclusive_OfficeAction_0`) and
+    `Forbidden_Patent_4`. The guards that read the application put its state
+    into the cone, with the drafting order and the disclosure that the filing's guard adds: over 8,388,608 states at 2 instances, 1,341,707 reduced.
   - `samples/food-permit-ops`: entities `Inspection` and `PermitApplication`, and invariants
     `Inv_PermitApplication_1` and `Inv_PermitApplication_2`. The renewal guard
     `失効後の更新はできない` puts the renewed permit's existence and status into them (#73):
@@ -684,14 +688,6 @@ gaps.
   cones only with `.fair`). See it: `not decided` on the
   property's line and under `not checked:`. What you can do: add `.fair(...)` naming the
   use cases the property relies on, which keeps it on its cone, or raise the budget.
-- **patent-ops does not check that a filing follows approved drafts.** `FileApplication`
-  should require `DraftingOrder.status == approved` through a mandatory link from the
-  application to its drafting order. With that link, the cones of `PatentApplication`,
-  `Patent`, and `OfficeAction` pass 10,000,000 states at 2 instances, so the guard and the
-  link are left out. See it:
-  [Known verification gaps](../samples/patent-ops/README.md#known-verification-gaps) in the
-  sample's README. What you can do: state such a rule only where its cone stays within the
-  `verify` cap, or check it in a smaller model.
 - **food-permit-ops checks its renewal guard just under the cap.** A renewal application
   names the permit it renews (`renews`, a second key between the two entities since #73), and
   `失効後の更新はできない` guards `ApplyRenewal` and `RenewPermit` on that permit's status. The

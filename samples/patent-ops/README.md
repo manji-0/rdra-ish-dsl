@@ -42,8 +42,10 @@ reward occasions, the goals' numbers), the comment says the modeling is the mode
   office action and its response are their own lifecycle (`OfficeAction`), so the response states
   are not multiplied by every fee and publication column. An office action arrives only for an
   application under examination (`UnderExamination`), and the IP department closes an office
-  action's docket only after the examination is over (`ExaminationOver`). The filing does not move
-  the drafting order: the filing receipt does.
+  action's docket only after the examination is over (`ExaminationOver`). The filing takes the
+  approved drafts: `DraftsApproved` guards it, it requires the application's drafting order, and
+  it moves the order to `filed` in the same step, so one order cannot back two applications. The
+  receipt records the number and date and leaves the order alone.
 - `GrantEnds` states that a granted application ends registered or dismissed, under
   `.fair(RecordRegistration, RecordRegistrationDismissal)` (特許法66条, 18条). `verify` checks it
   on the cone of what it reads and of the two use cases (the application's status and fee
@@ -56,24 +58,17 @@ reward occasions, the goals' numbers), the comment says the modeling is the mode
 The state space limits what this model says and how far `verify` checks it (#51, condition 5).
 Each figure is a cone size from `crates/rdra-ish-core/examples/lifecycle_measure.rs`.
 
-- **The filing does not check that the drafts were approved.** `FileApplication` should require
-  `DraftingOrder.status == approved`, and an application should require its drafting order
-  (`relate(PatentApplication, DraftingOrder, 1:1)` without `.optional()`). With the link optional,
-  `check` reports that `FileApplication` never runs under the guard. The required link adds the
-  order, the disclosure, and their columns to every cone that reads the application. `check` would
-  pass: its largest cone grows from 1,034 to 4,175 states, under the cap of 65,536. At the 2
-  instances of `verify`, the cones of `PatentApplication`, `Patent`, and `OfficeAction` pass
-  10,000,000 states (the measurement stopped there), and three more pass the former BFS cap of 2,097,152 (not remeasured against the current 8,388,608).
-  Both are left out, so neither `check` nor `verify` checks that only approved drafts are filed.
 - **`OfficeAction` is compared with TLC at 1 instance only.** The two guards that read the application
-  (`UnderExamination`, `ExaminationOver`) put its state into the office action's cone, which reaches
-  1,034 states at 1 instance and 4,818,909 at 2, 1,341,705 reduced by its independent
-  sub-lifecycle (#74). `verify` runs TLC on the reduced cone (its
+  (`UnderExamination`, `ExaminationOver`) put its state into the office action's cone, and the
+  required link to the drafting order (`DraftsApproved`) adds the order and the disclosure. The
+  cone passes 8,388,608 states unreduced at 2 instances and is 1,341,707 reduced by its
+  independent sub-lifecycle (#74). `verify` runs TLC on the reduced cone (its
   invariants hold) and its BFS, under the cap of 8,388,608 states, decides whether an office action
-  can get stuck at `open`, `drafted`, `overdue`, or `answered` (about 20 s in all). Before the cap
+  can get stuck at `open`, `drafted`, `overdue`, or `answered` (about 30 s and 0.75 GB in all). Before the cap
   was raised from 2,097,152, those four checks were listed under `not checked:`.
-  `engine_equivalence` compares the office action's cones with TLC at 1 instance only
-  (`VERIFY_FALLBACK`).
+  `engine_equivalence` compares the office action's cones, and the cones of `PatentApplication`
+  and `Patent` (293,833 and 202,569 reduced; the filing guard's link adds the drafting order to
+  them), with TLC at 1 instance only (`VERIFY_FALLBACK`).
 
 ## Diagnostics left in place
 

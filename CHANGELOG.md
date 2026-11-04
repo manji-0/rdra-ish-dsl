@@ -91,6 +91,14 @@
   comparisons, `chooses`, split use cases and `.along` rules, at 2 or 3 instances. A
   diverging model is written out and can be minimized; a seed past the timeout is listed.
   CI runs a fixed set of seeds in the formal-verify job.
+- patent-ops states the filing guard it left out: `FileApplication` runs only on
+  approved drafts (`DraftsApproved`), the application requires its drafting order, and the
+  filing moves the order to `filed`, so one order cannot back two applications (the receipt
+  no longer moves it). Re-measured under the reduction of #74, `verify --deny-undecided`
+  decides every check in about 30 s and 0.75 GB; the largest cone, `OfficeAction`, is
+  1,341,707 states reduced (over 8,388,608 unreduced, 4,818,909 before). The cones of
+  `PatentApplication` and `Patent` (293,833 and 202,569 reduced) join `VERIFY_FALLBACK`,
+  which holds 16 cones.
 - insurance-claim-ops states the settlement guard and the rule it left out: `CompleteClaim`
   runs on a first-party claim or once the case's settlement is agreed
   (`.when(ClaimFirstParty)`, `.when(SettlementSigned)`), and a liability claim is not

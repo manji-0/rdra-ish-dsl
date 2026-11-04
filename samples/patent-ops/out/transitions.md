@@ -4,7 +4,7 @@
 | DraftingOrder | status | 原稿受領 (drafted) | 修正依頼中 (revising) | 出願書類の修正依頼 (RequestDraftRevision) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_application_drafting.rdra:83 |
 | DraftingOrder | status | 原稿受領 (drafted) | 出願承認済 (approved) | 出願書類の承認 (ApproveDraft) | 発明者が内容を確認している | 知的財産部 担当者 | samples/patent-ops/buc/buc_application_drafting.rdra:88 |
 | DraftingOrder | status | 修正依頼中 (revising) | 原稿受領 (drafted) | 出願書類案の納品 (SubmitDraft) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_application_drafting.rdra:71 |
-| DraftingOrder | status | 出願承認済 (approved) | 出願済 (filed) | 出願番号・出願日の記録 (RecordFilingReceipt) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_filing_formality.rdra:90 |
+| DraftingOrder | status | 出願承認済 (approved) | 出願済 (filed) | 電子出願 (FileApplication) | 出願書類が承認されている | 弁理士（特許事務所） | samples/patent-ops/buc/buc_filing_formality.rdra:78 |
 | InventionDisclosure | status | 受付待ち (submitted) | 差戻し (returned) | 届出書の差戻し (ReturnDisclosure) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_invention_disclosure.rdra:69 |
 | InventionDisclosure | status | 受付待ち (submitted) | 受付済 (accepted) | 届出の受付と付番 (AcceptDisclosure) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_invention_disclosure.rdra:65 |
 | InventionDisclosure | status | 差戻し (returned) | 受付待ち (submitted) | 届出書の再提出 (ResubmitDisclosure) |  | 発明者 | samples/patent-ops/buc/buc_invention_disclosure.rdra:74 |
@@ -32,16 +32,16 @@
 | Patent | status | 追納期間中 (grace) | 消滅（特許料の不納） (lapsed) | 追納期間の経過による消滅 (LapseUnpaidPatent) |  |  | samples/patent-ops/buc/buc_annuity.rdra:134 |
 | Patent | status | 追納期間中 (grace) | 存続期間満了 (expired) | 存続期間の満了 (ExpirePatentTerm) |  |  | samples/patent-ops/buc/buc_annuity.rdra:156 |
 | Patent | status | 消滅（特許料の不納） (lapsed) | 存続中 (in_force) | 特許権の回復 (RestorePatent) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_annuity.rdra:143 |
-| PatentApplication | status | 出願済（方式審査） (filed) | 手続補正指令への対応中 (formality_order) | 手続補正指令書の受領 (ReceiveFormalityOrder) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_filing_formality.rdra:99 |
+| PatentApplication | status | 出願済（方式審査） (filed) | 手続補正指令への対応中 (formality_order) | 手続補正指令書の受領 (ReceiveFormalityOrder) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_filing_formality.rdra:101 |
 | PatentApplication | status | 出願済（方式審査） (filed) | 審査請求済（審査中） (examining) | 出願審査の請求 (RequestExamination) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_examination_request.rdra:72 |
 | PatentApplication | status | 出願済（方式審査） (filed) | 取下げ擬制（審査請求なし） (deemed_withdrawn) | 審査請求期間の経過 (DeemWithdrawnNoRequest) |  |  | samples/patent-ops/buc/buc_examination_request.rdra:90 |
-| PatentApplication | status | 出願済（方式審査） (filed) | 取下げ擬制（国内優先権の基礎） (priority_withdrawn) | 先の出願の取下げ擬制 (DeemPriorityBaseWithdrawn) | 国内優先権の基礎とされ、まだ係属している出願である |  | samples/patent-ops/buc/buc_filing_formality.rdra:157 |
+| PatentApplication | status | 出願済（方式審査） (filed) | 取下げ擬制（国内優先権の基礎） (priority_withdrawn) | 先の出願の取下げ擬制 (DeemPriorityBaseWithdrawn) | 国内優先権の基礎とされ、まだ係属している出願である |  | samples/patent-ops/buc/buc_filing_formality.rdra:159 |
 | PatentApplication | status | 出願済（方式審査） (filed) | 取下げ・放棄 (withdrawn) | 出願の取下げ・放棄 (WithdrawApplication) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_examination_request.rdra:103 |
-| PatentApplication | status | 手続補正指令への対応中 (formality_order) | 出願済（方式審査） (filed) | 手続補正書の提出 (SubmitFormalityAmendment) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_filing_formality.rdra:108 |
-| PatentApplication | status | 手続補正指令への対応中 (formality_order) | 却下 (dismissed) | 出願の却下の記録 (RecordDismissal) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_filing_formality.rdra:118 |
+| PatentApplication | status | 手続補正指令への対応中 (formality_order) | 出願済（方式審査） (filed) | 手続補正書の提出 (SubmitFormalityAmendment) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_filing_formality.rdra:110 |
+| PatentApplication | status | 手続補正指令への対応中 (formality_order) | 却下 (dismissed) | 出願の却下の記録 (RecordDismissal) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_filing_formality.rdra:120 |
 | PatentApplication | status | 審査請求済（審査中） (examining) | 特許査定 (granted) | 特許査定の受領 (ReceiveDecisionToGrant) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_office_action.rdra:212 |
 | PatentApplication | status | 審査請求済（審査中） (examining) | 拒絶査定 (rejected) | 拒絶査定の受領 (ReceiveDecisionOfRejection) |  | 知的財産部 担当者 | samples/patent-ops/buc/buc_office_action.rdra:219 |
-| PatentApplication | status | 審査請求済（審査中） (examining) | 取下げ擬制（国内優先権の基礎） (priority_withdrawn) | 先の出願の取下げ擬制 (DeemPriorityBaseWithdrawn) | 国内優先権の基礎とされ、まだ係属している出願である |  | samples/patent-ops/buc/buc_filing_formality.rdra:158 |
+| PatentApplication | status | 審査請求済（審査中） (examining) | 取下げ擬制（国内優先権の基礎） (priority_withdrawn) | 先の出願の取下げ擬制 (DeemPriorityBaseWithdrawn) | 国内優先権の基礎とされ、まだ係属している出願である |  | samples/patent-ops/buc/buc_filing_formality.rdra:160 |
 | PatentApplication | status | 審査請求済（審査中） (examining) | 取下げ・放棄 (withdrawn) | 出願の取下げ・放棄 (WithdrawApplication) |  | 弁理士（特許事務所） | samples/patent-ops/buc/buc_examination_request.rdra:104 |
 | PatentApplication | status | 特許査定 (granted) | 設定登録済 (registered) | 設定登録の記録 (RecordRegistration) | 第1〜3年分の特許料を納付している | 知的財産部 担当者 | samples/patent-ops/buc/buc_registration.rdra:80 |
 | PatentApplication | status | 特許査定 (granted) | 却下 (dismissed) | 特許料の不納による却下の記録 (RecordRegistrationDismissal) | 第1〜3年分の特許料を納付していない | 知的財産部 担当者 | samples/patent-ops/buc/buc_registration.rdra:97 |

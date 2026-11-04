@@ -448,7 +448,12 @@
         "x-rdra-ish-raised-by-usecases": [
           "ApproveDraft"
         ],
-        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "approved",
+            "to": "filed"
+          }
+        ],
         "x-rdra-ish-triggers-bucs": [
           "BucFilingFormality"
         ],
@@ -539,12 +544,7 @@
         },
         "title": "受領書（出願番号）",
         "x-rdra-ish-raised-by-usecases": [],
-        "x-rdra-ish-transitions": [
-          {
-            "from": "approved",
-            "to": "filed"
-          }
-        ],
+        "x-rdra-ish-transitions": [],
         "x-rdra-ish-triggers-bucs": [],
         "x-rdra-ish-triggers-usecases": [
           "RecordFilingReceipt"
@@ -884,7 +884,12 @@
           "$ref": "#/channels/EvDraftApproved/messages/EvDraftApproved"
         }
       ],
-      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "approved",
+          "to": "filed"
+        }
+      ],
       "x-rdra-ish-triggers-bucs": [
         "BucFilingFormality"
       ],
@@ -921,12 +926,7 @@
           "$ref": "#/channels/EvFilingReceipt/messages/EvFilingReceipt"
         }
       ],
-      "x-rdra-ish-transitions": [
-        {
-          "from": "approved",
-          "to": "filed"
-        }
-      ],
+      "x-rdra-ish-transitions": [],
       "x-rdra-ish-triggers-bucs": [],
       "x-rdra-ish-triggers-usecases": [
         "RecordFilingReceipt"

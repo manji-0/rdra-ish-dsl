@@ -1,22 +1,27 @@
 %% rdra-ish diagram=sequence scope=usecase:FileApplication model=samples/patent-ops
 %% kinds: actor usecase screen api entity extsystem
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 sequenceDiagram
   actor actor__PatentAttorney as 弁理士（特許事務所）
   participant usecase__ApproveDraft as 出願書類の承認
   participant screen__FilingScreen as 出願画面
   participant api__FilingApi as 出願 API
-  participant entity__DraftingOrder as 出願依頼
   participant entity__FeeSchedule as 料金表
+  participant entity__DraftingOrder as 出願依頼
   participant entity__PatentApplication as 特許出願
   participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
   participant api__RewardApi as 相当の利益 API
   actor__PatentAttorney ->> screen__FilingScreen: 電子出願
   usecase__ApproveDraft ->> api__FilingApi: 出願書類の承認
   screen__FilingScreen ->> api__FilingApi: 出願 API
-  api__FilingApi ->> entity__DraftingOrder: read
-  api__FilingApi ->> entity__FeeSchedule: read
-  api__FilingApi ->> entity__PatentApplication: create
-  api__FilingApi -) extsystem__Jpo: 特許願の提出
-  api__FilingApi -) api__RewardApi: 特許願の提出
-  api__FilingApi -->> screen__FilingScreen: done
+  alt 出願書類が承認されている: DraftingOrder.status == 出願承認済
+    api__FilingApi ->> entity__FeeSchedule: read
+    Note over api__FilingApi: transaction (API atomic boundary)
+    api__FilingApi ->> entity__DraftingOrder: update status 出願承認済 -> 出願済
+    api__FilingApi ->> entity__PatentApplication: create
+    api__FilingApi -) extsystem__Jpo: 特許願の提出
+    api__FilingApi -) api__RewardApi: 特許願の提出
+    api__FilingApi -->> screen__FilingScreen: done
+  else guard fails
+    api__FilingApi -->> screen__FilingScreen: rejected
+  end

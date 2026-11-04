@@ -7,14 +7,8 @@ sequenceDiagram
   participant screen__ApplicationDocketScreen as 出願案件・期限管理画面
   participant usecase__RecordFilingReceipt as 出願番号・出願日の記録
   participant entity__PatentApplication as 特許出願
-  participant entity__DraftingOrder as 出願依頼
   actor__IpStaff ->> screen__ApplicationDocketScreen: 出願番号・出願日の記録
   extsystem__Jpo ->> usecase__RecordFilingReceipt: 受領書（出願番号）
   screen__ApplicationDocketScreen ->> usecase__RecordFilingReceipt: 出願番号・出願日の記録
-  alt DraftingOrder.status == 出願承認済
-    usecase__RecordFilingReceipt ->> entity__PatentApplication: read
-    usecase__RecordFilingReceipt ->> entity__DraftingOrder: update status 出願承認済 -> 出願済
-    usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: done
-  else guard fails
-    usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: rejected
-  end
+  usecase__RecordFilingReceipt ->> entity__PatentApplication: read
+  usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: done

@@ -10,6 +10,8 @@ flowchart LR
   %% holds condition__DivisionPossible: PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定)
   condition__DraftDelivered{"案が納品されている"}:::condition
   %% holds condition__DraftDelivered: DraftingOrder.status == 原稿受領
+  condition__DraftsApproved{"出願書類が承認されている"}:::condition
+  %% holds condition__DraftsApproved: DraftingOrder.status == 出願承認済
   condition__EmployeeInvention{"職務発明である"}:::condition
   %% holds condition__EmployeeInvention: InventionDisclosure.category == 職務発明
   condition__EmployeeInventionReward{"職務発明である"}:::condition
@@ -99,6 +101,8 @@ flowchart LR
   %% desc usecase__DraftResponse: 弁理士が意見書と、必要なら補正書の案を作る。補正の範囲は、限定のない補正か、請求項の削除・減縮・誤記の訂正・釈明に限った補正（または意見書だけ）かを選ぶ。最後の拒絶理由通知には限った補正だけが使える。
   usecase__EnterGracePeriod("納付期限の経過"):::usecase
   %% desc usecase__EnterGracePeriod: 次の年の特許料を納めないまま納付期限が過ぎ、追納期間に入る。
+  usecase__FileApplication("電子出願"):::usecase
+  %% desc usecase__FileApplication: 承認された出願書類を、代理人の弁理士がインターネット出願ソフトで特許庁に出す。
   usecase__FileDivisionalApplication("分割出願"):::usecase
   %% desc usecase__FileDivisionalApplication: 補正できる時期、特許査定の謄本から30日、最初の拒絶査定の謄本から3月の間に、出願の一部を新たな出願にする。
   usecase__JudgeEmployeeInvention("職務発明の判定"):::usecase
@@ -140,6 +144,9 @@ flowchart LR
   condition__DraftDelivered -.->|applies_to| usecase__ConfirmDraftByInventor
   condition__DraftDelivered -.-> statemodel__DraftingOrder_status
   %% derived condition__DraftDelivered -> statemodel__DraftingOrder_status from holds
+  condition__DraftsApproved -.->|applies_to| usecase__FileApplication
+  condition__DraftsApproved -.-> statemodel__DraftingOrder_status
+  %% derived condition__DraftsApproved -> statemodel__DraftingOrder_status from holds
   condition__EmployeeInvention -.->|applies_to| usecase__JudgeEmployeeInvention
   condition__EmployeeInvention -.-> variation__InventionCategory
   %% derived condition__EmployeeInvention -> variation__InventionCategory from holds

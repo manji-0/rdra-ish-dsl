@@ -16,8 +16,7 @@ usecase FileApplication "電子出願"
   description "承認された出願書類を、代理人の弁理士がインターネット出願ソフトで特許庁に出す。"
 
 // 【整理番号】 in the 願書 (jpo-tetuzuki-02-01-gansho.txt:196); 出願番号通知 (niigata-u-2023-hatsumei-flowchart.txt:130-135).
-usecase RecordFilingReceipt "出願番号・出願日の記録"
-  description "受領書の出願番号と出願日を記録し、出願依頼を出願済にする。"
+usecase RecordFilingReceipt "出願番号・出願日の記録" description "受領書の出願番号と出願日を記録する。"
 
 // 方式要件を満たしていない手続は…手続の補正が命じられます (jpo-tetuzuki-02-20-kyakka-hoseishirei.txt:6).
 usecase ReceiveFormalityOrder "手続補正指令書の受領"
@@ -68,26 +67,29 @@ contains(IpManagementSystem, FormalityApi)
 contains(IpManagementSystem, PriorityClaimApi)
 contains(IpManagementSystem, PriorityBaseApi)
 
-// The filing should check that the drafts were approved (DraftingOrder.status == approved) and link
-// the application to its order. Neither is modelled: the link puts the order, the disclosure,
-// and their columns into every cone that reads the application, and at the 2 instances of
-// `verify` nine cones pass 3,000,000 states. It is a known verification gap (see README).
+// The filing takes the approved drafts: the application is linked to its order, and the order is
+// filed in the same step, so one order cannot back two applications. That the IP department files
+// only what the inventor-checked drafts approved is the model's reading of the review
+// (keiyakuwatch-chizaibu-gyomu.md:147-152, 〔まとめ〕), not a rule of the law.
 displays(FileApplication, FilingScreen)
 invokes(FileApplication, FilingApi)
 creates(FilingApi, PatentApplication)
-reads(FilingApi, DraftingOrder)
+updates(FilingApi, DraftingOrder)
+transitions(FileApplication, DraftingOrder.status, approved -> filed)
 reads(FilingApi, FeeSchedule)
 raises(FileApplication, EvApplicationFiled)
 triggers(EvDraftApproved, BucFilingFormality)
 triggers(EvDraftApproved, FileApplication)
 triggers(EvApplicationFiled, Jpo)
 
-// The filing writes only the application and the receipt closes the order, so the order's review
-// states stay out of the application's state space (see README).
+condition DraftsApproved "出願書類が承認されている"
+holds(DraftsApproved, DraftingOrder.status == approved)
+applies_to(DraftsApproved, FileApplication)
+
+// The filing already filed the order, so the receipt records the number and date on the application
+// and leaves the order alone.
 displays(RecordFilingReceipt, ApplicationDocketScreen)
-updates(RecordFilingReceipt, DraftingOrder)
 reads(RecordFilingReceipt, PatentApplication)
-transitions(RecordFilingReceipt, DraftingOrder.status, approved -> filed)
 raises(Jpo, EvFilingReceipt)
 triggers(EvFilingReceipt, RecordFilingReceipt)
 

@@ -26,8 +26,8 @@ flowchart LR
   actor__PatentAttorney --> screen__FilingScreen
   api__ApplicationDocketApi -->|U| entity__PatentApplication
   api__FilingApi -->|C| entity__PatentApplication
-  api__FilingApi -->|R| entity__DraftingOrder
   api__FilingApi -->|R| entity__FeeSchedule
+  api__FilingApi -->|U| entity__DraftingOrder
   api__FilingApi -.->|特許願の提出| extsystem__Jpo
   api__FormalityApi -->|U| entity__PatentApplication
   api__FormalityApi -.->|手続補正書の提出| extsystem__Jpo
@@ -51,7 +51,6 @@ flowchart LR
   timer__PriorityClaimDeadline -.-> api__PriorityClaimApi
   timer__PublicationCheck -.-> api__ApplicationDocketApi
   usecase__RecordFilingReceipt -->|R| entity__PatentApplication
-  usecase__RecordFilingReceipt -->|U| entity__DraftingOrder
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

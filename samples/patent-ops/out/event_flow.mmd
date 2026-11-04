@@ -109,7 +109,7 @@ flowchart LR
   event__EvFilingReceipt>"受領書（出願番号）"]:::event
   extsystem__Jpo -.-> event__EvFilingReceipt
   usecase__RecordFilingReceipt("出願番号・出願日の記録"):::usecase
-  %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録し、出願依頼を出願済にする。
+  %% desc usecase__RecordFilingReceipt: 受領書の出願番号と出願日を記録する。
   event__EvFilingReceipt -.-> usecase__RecordFilingReceipt
   event__EvFinalOfficeAction>"最後の拒絶理由通知書"]:::event
   extsystem__Jpo -.-> event__EvFinalOfficeAction

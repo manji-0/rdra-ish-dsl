@@ -179,9 +179,7 @@ entity InventorReward "相当の利益" {
 relate(InventionDisclosure, Employee, N:1)
 relate(DraftingOrder, InventionDisclosure, N:1)
 relate(DraftingOrder, PatentFirm, N:1)
-// Optional so that `verify` stays practical; the filing should require the link (README, known
-// verification gaps).
-relate(PatentApplication, DraftingOrder, 1:1).optional()
+relate(PatentApplication, DraftingOrder, 1:1)
 relate(PriorityClaim, PatentApplication, N:1)
 relate(DivisionalFiling, PatentApplication, N:1)
 relate(OfficeAction, PatentApplication, N:1)

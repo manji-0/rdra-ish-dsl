@@ -65,7 +65,10 @@ const STATE_CAP: usize = 200_000;
 const VERIFY_FALLBACK: &[(&str, &str)] = &[
     ("samples/clinic-ops", "entity EligibilityCheck"),
     ("samples/patent-ops", "entity OfficeAction"),
+    ("samples/patent-ops", "entity Patent"),
+    ("samples/patent-ops", "entity PatentApplication"),
     ("samples/patent-ops", "invariant Forbidden_OfficeAction_3"),
+    ("samples/patent-ops", "invariant Forbidden_Patent_4"),
     ("samples/food-permit-ops", "entity Inspection"),
     ("samples/food-permit-ops", "entity PermitApplication"),
     (

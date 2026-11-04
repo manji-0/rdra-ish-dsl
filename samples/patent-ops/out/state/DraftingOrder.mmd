@@ -18,8 +18,8 @@ stateDiagram-v2
     state__DraftingOrder_drafted --> state__DraftingOrder_approved : 出願書類の承認 [発明者が内容を確認している]
     %% transition usecase__SubmitDraft
     state__DraftingOrder_revising --> state__DraftingOrder_drafted : 出願書類案の納品
-    %% transition usecase__RecordFilingReceipt
-    state__DraftingOrder_approved --> state__DraftingOrder_filed : 出願番号・出願日の記録
+    %% transition usecase__FileApplication
+    state__DraftingOrder_approved --> state__DraftingOrder_filed : 電子出願 [出願書類が承認されている]
     state__DraftingOrder_filed --> [*]
   }
   classDef stateend fill:#dfd,stroke:#383,color:#141
