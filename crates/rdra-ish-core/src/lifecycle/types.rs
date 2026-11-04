@@ -48,6 +48,11 @@ macro_rules! id_type {
             pub(crate) fn at(index: usize) -> Self {
                 $name(u16::try_from(index).expect("lifecycle id overflow"))
             }
+
+            /// The id at an index a system's own list gave out (`var_ids`, `action_ids`).
+            pub fn at_index(index: usize) -> Self {
+                Self::at(index)
+            }
         }
     };
 }

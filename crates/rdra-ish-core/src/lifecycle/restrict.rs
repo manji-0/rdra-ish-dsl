@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 
 use super::cone::VarSet;
 use super::types::{
-    ActId, Action, AfterAssert, AfterStep, At, Domain, Effect, EntId, Guard, Invariant, Ltl,
-    ParamRole, Pred, Property, Rhs, Term, VarId, VarKind,
+    ActId, Action, AfterAssert, AfterStep, At, Domain, Effect, EntId, EntityDecl, Guard, Invariant,
+    Ltl, ParamRole, Pred, Property, Rhs, Term, VarDecl, VarId, VarKind,
 };
 use super::TransitionSystem;
 
@@ -216,6 +216,11 @@ impl TransitionSystem {
     /// and only its effects on `vars`. Invariants, asserts, and properties stay when everything
     /// they read is in `vars`. For a closed `vars` (see `cone`) its reachable states are the
     /// projection of this system's.
+    ///
+    /// An owner var in `vars` whose parent's existence is not (the sub-lifecycle of
+    /// `TransitionSystem::reduced` may hold a child of an entity outside it) keeps its domain
+    /// through a stub of the parent: an entity of its existence alone, after every var of
+    /// `vars`, which no action here writes.
     pub fn restrict_to(&self, vars: &VarSet, keep: &BTreeSet<ActId>) -> TransitionSystem {
         let mut map = Remap {
             ent: vec![None; self.entities.len()],
@@ -228,6 +233,15 @@ impl TransitionSystem {
             .collect();
         for (n, &i) in kept_entities.iter().enumerate() {
             map.ent[i] = Some(EntId::at(n));
+        }
+        let mut stubs: Vec<usize> = Vec::new();
+        for &v in vars {
+            if let VarKind::Owner { parent, .. } = self.vars[v.index()].kind {
+                if map.ent[parent.index()].is_none() {
+                    map.ent[parent.index()] = Some(EntId::at(kept_entities.len() + stubs.len()));
+                    stubs.push(parent.index());
+                }
+            }
         }
         let mut out = TransitionSystem::empty(self.bounds);
         out.api_ids = self.api_ids.clone();
@@ -260,6 +274,20 @@ impl TransitionSystem {
                 .filter_map(|v| map.var[v.index()])
                 .collect();
             out.entities.push(decl);
+        }
+        for &i in &stubs {
+            let parent = &self.entities[i];
+            let exists = VarId::at(out.vars.len());
+            out.vars.push(VarDecl {
+                kind: VarKind::Exists(map.e(EntId::at(i))),
+                ..self.vars[parent.exists.index()].clone()
+            });
+            out.entities.push(EntityDecl {
+                exists,
+                columns: Vec::new(),
+                owners: Vec::new(),
+                ..parent.clone()
+            });
         }
         for (i, action) in self.actions.iter().enumerate() {
             let effects: Vec<Effect> = action

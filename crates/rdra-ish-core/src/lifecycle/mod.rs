@@ -13,6 +13,7 @@ mod explore;
 mod expr;
 mod findings;
 mod lasso;
+mod reduce;
 mod restrict;
 mod select;
 mod starts;
@@ -25,7 +26,7 @@ mod view;
 #[cfg(test)]
 mod tests;
 
-pub use cone::{Cone, Target, VarSet};
+pub use cone::{Cone, Seed, Target, VarSet};
 pub use diag::{
     created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,
     Severity, StateDiag, VarSpread,
@@ -37,6 +38,7 @@ pub use findings::{
     Witness,
 };
 pub use lasso::{LassoReplay, Loop};
+pub use reduce::{ClassMove, Reduction, Step};
 pub use restrict::Component;
 pub use select::{NotChecked, Scope, Selection, UnknownId};
 pub use states::{derive_states, derive_states_built, BoundsLine, StatesReport};
@@ -80,6 +82,8 @@ pub struct TransitionSystem {
     width: usize,
     /// The id of each API a `New` param is created through (`Param::via_api`).
     api_ids: std::collections::HashMap<crate::model::ApiKey, String>,
+    /// The S side of a reduced cone (`reduced`).
+    reduction: Option<std::sync::Arc<Reduction>>,
 }
 
 impl TransitionSystem {
@@ -100,6 +104,7 @@ impl TransitionSystem {
             offsets: Vec::new(),
             width: 0,
             api_ids: std::collections::HashMap::new(),
+            reduction: None,
         }
     }
 

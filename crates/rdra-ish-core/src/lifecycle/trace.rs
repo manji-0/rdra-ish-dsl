@@ -7,6 +7,7 @@ use std::fmt;
 use super::cone::{Cone, Target};
 use super::diag::StateDiag;
 use super::expr::State;
+use super::reduce::Step;
 use super::types::{
     ActId, ActionOrigin, Domain, Effect, EntId, ParamRole, Site, Value, VarId, VarKind,
 };
@@ -341,33 +342,63 @@ impl TransitionSystem {
         Ok(Replay { states, moves })
     }
 
-    /// The replayed path in model terms.
+    /// The replayed path in model terms, lifted on a reduced system.
     pub(crate) fn replay_trace(&self, replay: &Replay) -> Trace {
-        let pairs = replay.states.windows(2).zip(&replay.moves);
+        let (start, steps) = self.lifted_replay(replay);
+        self.trace_from(&start, &steps)
+    }
+
+    /// A path from `start` in model terms.
+    pub(crate) fn trace_from(&self, start: &State, steps: &[Step]) -> Trace {
+        let mut pre = start;
         Trace {
-            start: self.trace_start(&replay.states[0]),
-            steps: pairs
-                .map(|(s, (act, params))| self.trace_step(*act, params, &s[0], &s[1]))
+            start: self.trace_start(start),
+            steps: steps
+                .iter()
+                .map(|(act, params, post)| {
+                    let step = self.trace_step(*act, params, pre, post);
+                    pre = post;
+                    step
+                })
                 .collect(),
             over_bound: Vec::new(),
         }
     }
 
+    /// The replay as a path from its first state, lifted (`lift`) and flattened.
+    fn lifted_replay(&self, replay: &Replay) -> (State, Vec<Step>) {
+        let steps: Vec<Step> = replay
+            .moves
+            .iter()
+            .zip(replay.states.iter().skip(1))
+            .map(|((act, params), post)| (*act, params.clone(), post.clone()))
+            .collect();
+        self.lifted(&replay.states[0], &steps)
+    }
+
+    /// `lift`, flattened.
+    pub(crate) fn lifted(&self, start: &State, steps: &[Step]) -> (State, Vec<Step>) {
+        let (start, groups) = self.lift(start, steps);
+        (start, groups.into_iter().flatten().collect())
+    }
+
     /// The violation of `target` the replayed trace ends in, built by the code BFS reports
     /// with, so its text does not depend on the engine that found the trace. `None` when the
-    /// last state (for an after-assert, the last step) does not violate it.
+    /// last state (for an after-assert, the last step) does not violate it. On a reduced
+    /// system the trace is lifted first and the violation read on the lifted last state.
     pub fn explain(&self, target: Target, replay: &Replay) -> Option<StateDiag> {
-        let last = replay.states.last()?;
+        let (start, steps) = self.lifted_replay(replay);
+        let last = steps.last().map_or(&start, |s| &s.2);
         let mut d = match target {
             Target::Entity(_) => return None,
             Target::Invariant(i) => self.invariant_violation(i, last)?,
             Target::AfterAssert(i) => {
-                let (act, params) = replay.moves.last()?;
+                let (act, params, _) = steps.last()?;
                 self.after_violation(i, *act, params, last)?
             }
         };
         if let Some(t) = d.diag.trace_mut() {
-            *t = self.replay_trace(replay);
+            *t = self.trace_from(&start, &steps);
         }
         Some(d.diag)
     }

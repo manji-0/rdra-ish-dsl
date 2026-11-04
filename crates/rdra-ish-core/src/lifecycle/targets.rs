@@ -175,21 +175,48 @@ struct ArmSoFar {
 impl TransitionSystem {
     /// Explores each target on its cone; targets with the same cone share one run.
     pub fn explore_targets(&self, targets: &[Target], caps: Caps) -> TargetExploration {
-        let mut cones: Vec<ConeRun> = Vec::new();
+        self.explore_targets_with(targets, caps, false)
+    }
+
+    /// `explore_targets` with each cone reduced by its independent sub-lifecycle
+    /// (`TransitionSystem::reduced`), as `verify` explores.
+    pub fn explore_targets_reduced(&self, targets: &[Target], caps: Caps) -> TargetExploration {
+        self.explore_targets_with(targets, caps, true)
+    }
+
+    fn explore_targets_with(
+        &self,
+        targets: &[Target],
+        caps: Caps,
+        reduce: bool,
+    ) -> TargetExploration {
+        let mut groups: Vec<(Cone, Vec<Target>)> = Vec::new();
         let mut index: HashMap<Cone, usize> = HashMap::new();
         let mut answered = Vec::new();
         for &target in targets {
             let cone = self.target_cone(target);
             let at = *index.entry(cone.clone()).or_insert_with(|| {
-                let run = self.restrict_to(&cone.vars, &cone.keep).run(caps);
-                cones.push(ConeRun {
-                    cone: cone.clone(),
-                    run,
-                });
-                cones.len() - 1
+                groups.push((cone.clone(), Vec::new()));
+                groups.len() - 1
             });
+            groups[at].1.push(target);
             answered.push((target, at));
         }
+        let cones: Vec<ConeRun> = groups
+            .into_iter()
+            .map(|(cone, shared)| {
+                let system = if reduce {
+                    let seeds = shared.iter().map(|t| self.target_seed(*t));
+                    self.reduced_cone(&cone, seeds, caps)
+                } else {
+                    self.restrict_to(&cone.vars, &cone.keep)
+                };
+                ConeRun {
+                    cone,
+                    run: system.run(caps),
+                }
+            })
+            .collect();
         let mut out = TargetExploration {
             cones: Vec::new(),
             targets: Vec::new(),

@@ -16,6 +16,8 @@ use super::types::{
 use super::TransitionSystem;
 
 pub type VarSet = BTreeSet<VarId>;
+/// What a target reads and the actions it keeps: the seed of its cone.
+pub type Seed = (VarSet, BTreeSet<ActId>);
 
 /// What a view or verdict reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -111,7 +113,7 @@ impl TransitionSystem {
         }
     }
 
-    fn action_writes(&self, action: &Action) -> VarSet {
+    pub(crate) fn action_writes(&self, action: &Action) -> VarSet {
         action
             .effects
             .iter()
@@ -121,7 +123,7 @@ impl TransitionSystem {
 
     /// Each copy guard of the action: the var it pins and what it reads. Without the pinned var
     /// the guard always holds for some value of it, so the copy is read only with that var.
-    fn copy_reads(&self, action: &Action) -> Vec<(VarId, VarSet)> {
+    pub(crate) fn copy_reads(&self, action: &Action) -> Vec<(VarId, VarSet)> {
         action
             .guards
             .iter()
@@ -161,22 +163,7 @@ impl TransitionSystem {
                     grew = true;
                 }
             }
-            // A slot's vars mean nothing without its existence, and an owner var's domain
-            // names its parent's slots.
-            let existences: Vec<VarId> = s
-                .iter()
-                .flat_map(|v| match self.var(*v).kind {
-                    VarKind::Owner { child, parent, .. } => {
-                        vec![self.entity(child).exists, self.entity(parent).exists]
-                    }
-                    VarKind::Column { entity, .. }
-                    | VarKind::Prop { entity, .. }
-                    | VarKind::Run { entity, .. } => {
-                        vec![self.entity(entity).exists]
-                    }
-                    VarKind::Exists(_) | VarKind::Now => Vec::new(),
-                })
-                .collect();
+            let existences: Vec<VarId> = s.iter().flat_map(|v| self.existences(*v)).collect();
             for e in existences {
                 grew |= s.insert(e);
             }
@@ -186,8 +173,42 @@ impl TransitionSystem {
         }
     }
 
+    /// The existence var of the entity a var belongs to; `None` for an existence or the clock.
+    pub(crate) fn own_existence(&self, v: VarId) -> Option<VarId> {
+        match self.var(v).kind {
+            VarKind::Owner { child: entity, .. }
+            | VarKind::Column { entity, .. }
+            | VarKind::Prop { entity, .. }
+            | VarKind::Run { entity, .. } => Some(self.entity(entity).exists),
+            VarKind::Exists(_) | VarKind::Now => None,
+        }
+    }
+
+    /// The existence vars a var means nothing without: a slot's vars need its existence, and
+    /// an owner var's domain names its parent's slots.
+    pub(crate) fn existences(&self, v: VarId) -> Vec<VarId> {
+        match self.var(v).kind {
+            VarKind::Owner { child, parent, .. } => {
+                vec![self.entity(child).exists, self.entity(parent).exists]
+            }
+            VarKind::Column { entity, .. }
+            | VarKind::Prop { entity, .. }
+            | VarKind::Run { entity, .. } => vec![self.entity(entity).exists],
+            VarKind::Exists(_) | VarKind::Now => Vec::new(),
+        }
+    }
+
     /// The cone a target reads.
     pub fn target_cone(&self, target: Target) -> Cone {
+        let (seed, keep) = self.target_seed(target);
+        Cone {
+            vars: self.cone(&seed, &keep),
+            keep,
+        }
+    }
+
+    /// What a target reads directly, and the actions its cone keeps whatever they write.
+    pub fn target_seed(&self, target: Target) -> Seed {
         let mut seed = VarSet::new();
         let mut keep = BTreeSet::new();
         match target {
@@ -226,10 +247,7 @@ impl TransitionSystem {
                 }
             }
         }
-        Cone {
-            vars: self.cone(&seed, &keep),
-            keep,
-        }
+        (seed, keep)
     }
 
     /// The cone a temporal property is checked on: what its formula reads, and each action of
@@ -240,6 +258,16 @@ impl TransitionSystem {
     /// other action outside the cone stutters for it (docs/formal-verification.md, "Temporal
     /// properties on a cone").
     pub fn property_cone(&self, i: usize) -> Cone {
+        let (seed, keep) = self.property_seed(i);
+        Cone {
+            vars: self.cone(&seed, &keep),
+            keep,
+        }
+    }
+
+    /// What a property reads directly, with its fair actions' writes and new slots, and those
+    /// actions as kept.
+    pub fn property_seed(&self, i: usize) -> Seed {
         let p = &self.properties[i];
         let mut seed = VarSet::new();
         let mut keep = BTreeSet::new();
@@ -263,10 +291,7 @@ impl TransitionSystem {
                 seed.insert(self.entity(param.entity).exists);
             }
         }
-        Cone {
-            vars: self.cone(&seed, &keep),
-            keep,
-        }
+        (seed, keep)
     }
 
     /// Every var an action writes is in `vars`: every step that changes the whole system

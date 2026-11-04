@@ -8,6 +8,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use super::cone::VarSet;
 use super::diag::{CapGrowth, Diag, StateDiag, VarSpread};
 use super::expr::{Env, State};
+use super::reduce::Step;
 use super::restrict::Component;
 use super::trace::Trace;
 use super::types::{
@@ -165,58 +166,59 @@ impl ComponentRun {
     }
 
     /// The BFS path to `states[at]` in model terms: a shortest one, since BFS reaches states
-    /// in depth order.
+    /// in depth order. On a reduced system the path is lifted (`TransitionSystem::lift`).
     pub fn trace_to(&self, at: u32) -> Trace {
-        let path = self.path_to(at);
-        let start = path.first().map_or(at, |e| e.from);
-        let ts = &self.system;
-        Trace {
-            start: ts.trace_start(&self.states[start as usize]),
-            steps: path
-                .iter()
-                .map(|e| {
-                    let (act, params) = self.step(e);
-                    let (pre, post) = (&self.states[e.from as usize], &self.states[e.to as usize]);
-                    ts.trace_step(act, params, pre, post)
-                })
-                .collect(),
-            over_bound: Vec::new(),
-        }
+        self.lifted_trace(at, None).0
     }
 
     /// The trace of a violation: the path to the violating state, or for an after-assert the
     /// path to the step's source and the step itself. The step need not be on the BFS path to
-    /// its target, which another path may reach first.
-    fn trace_of(&self, reach: &Reach) -> Trace {
+    /// its target, which another path may reach first. Also the trace's last state.
+    fn trace_of(&self, reach: &Reach) -> (Trace, State) {
         match reach {
-            Reach::State(at) => self.trace_to(*at),
+            Reach::State { at, .. } => self.lifted_trace(*at, None),
             Reach::Step {
                 from,
                 act,
                 params,
                 to,
-            } => {
-                let mut trace = self.trace_to(*from);
-                let pre = &self.states[*from as usize];
-                trace
-                    .steps
-                    .push(self.system.trace_step(*act, params, pre, to));
-                trace
-            }
+                ..
+            } => self.lifted_trace(*from, Some((*act, params.clone(), to.clone()))),
         }
+    }
+
+    /// The path to `states[at]`, then `extra`, lifted and in model terms, with its last state.
+    fn lifted_trace(&self, at: u32, extra: Option<Step>) -> (Trace, State) {
+        let path = self.path_to(at);
+        let first = path.first().map_or(at, |e| e.from);
+        let mut steps: Vec<Step> = path
+            .iter()
+            .map(|e| {
+                let (act, params) = self.step(e);
+                (act, params.into(), self.states[e.to as usize].clone())
+            })
+            .collect();
+        steps.extend(extra);
+        let ts = &self.system;
+        let (start, steps) = ts.lifted(&self.states[first as usize], &steps);
+        (
+            ts.trace_from(&start, &steps),
+            steps.last().map_or(start, |s| s.2.clone()),
+        )
     }
 }
 
 /// Where a violation was seen.
 enum Reach {
-    /// `states[at]` violates an invariant.
-    State(u32),
-    /// The step from `states[from]` to `to` fails an after-assert.
+    /// `states[at]` violates `invariants()[inv]`.
+    State { at: u32, inv: usize },
+    /// The step from `states[from]` to `to` fails `after_asserts()[after]`.
     Step {
         from: u32,
         act: ActId,
         params: Box<[u8]>,
         to: State,
+        after: usize,
     },
 }
 
@@ -324,7 +326,19 @@ impl TransitionSystem {
             bindings: bindings.list,
         };
         for (at, reach) in &violations {
-            let trace = run.trace_of(reach);
+            let (trace, last) = run.trace_of(reach);
+            // A reduced run holds representatives: the message describes the lifted state.
+            if run.system.reduction().is_some() {
+                let rebuilt = match reach {
+                    Reach::State { inv, .. } => run.system.invariant_violation(*inv, &last),
+                    Reach::Step {
+                        after, act, params, ..
+                    } => run.system.after_violation(*after, *act, params, &last),
+                };
+                if let Some(d) = rebuilt {
+                    run.diags[*at].diag = d.diag;
+                }
+            }
             if let Some(t) = run.diags[*at].diag.trace_mut() {
                 *t = trace;
             }
@@ -371,6 +385,18 @@ impl TransitionSystem {
                         s
                     })
                 })
+                .collect();
+        }
+        // A reduced system starts each S part at its class's representative.
+        if let Some(r) = self.reduction() {
+            let mut seen = HashSet::new();
+            out = out
+                .into_iter()
+                .map(|s| {
+                    r.canonical_initial(&s)
+                        .expect("an initial S state has a class")
+                })
+                .filter(|s| seen.insert(s.clone()))
                 .collect();
         }
         out
@@ -495,7 +521,13 @@ impl TransitionSystem {
 
     /// Every move from `s`, in BFS order: actions by index, then `bindings`, then the
     /// successors of each binding whose pre-guards hold, keeping those whose post-guards hold.
+    /// With a reduction, the S actions are left out and the class moves come last.
     pub(crate) fn moves<'s>(&'s self, s: &'s State) -> impl Iterator<Item = Move> + 's {
+        self.moves_of(s, true)
+    }
+
+    /// `moves` without the reduction.
+    pub(crate) fn raw_moves<'s>(&'s self, s: &'s State) -> impl Iterator<Item = Move> + 's {
         self.actions
             .iter()
             .enumerate()
@@ -989,7 +1021,8 @@ impl<'t> Bfs<'t> {
         let ts = self.ts;
         let action = &ts.actions[act.index()];
         for (p, param) in action.params.iter().enumerate() {
-            if !param.role.is_written() {
+            let in_s = ts.reduction().is_some_and(|r| r.is_s_entity(param.entity));
+            if !param.role.is_written() || in_s {
                 continue;
             }
             let (e, slot) = (param.entity, usize::from(params[p]));
@@ -1046,7 +1079,7 @@ impl<'t> Bfs<'t> {
                 continue;
             }
             if let Some(d) = ts.invariant_violation(i, s) {
-                self.violation(&inv.name, d, Reach::State(at));
+                self.violation(&inv.name, d, Reach::State { at, inv: i });
             }
         }
     }
@@ -1063,6 +1096,7 @@ impl<'t> Bfs<'t> {
                     act,
                     params: params.into(),
                     to: s2.clone(),
+                    after: i,
                 };
                 self.violation(&a.name, d, reach);
             }
