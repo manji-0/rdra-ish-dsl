@@ -269,16 +269,28 @@ fn assert_reduction_exact(sample: &str, model: &SemanticModel, bounds: Bounds) -
     reductions
 }
 
-#[test]
-fn reduced_cones_decide_what_the_cones_decide() {
+fn reductions_in(samples: &[&str]) -> usize {
     let mut reductions = 0;
-    for sample in SAMPLES.iter().chain(DOMAIN_SAMPLES) {
+    for sample in samples {
         let model = load(sample);
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
             reductions += assert_reduction_exact(sample, &model, bounds);
         }
     }
-    assert!(reductions >= 40, "{reductions} cones reduced");
+    reductions
+}
+
+#[test]
+fn reduced_cones_decide_what_the_cones_decide() {
+    let reductions = reductions_in(SAMPLES);
+    assert!(reductions >= 30, "{reductions} cones reduced");
+}
+
+/// The domain samples explore millions of states; CI runs this in release in formal-verify.
+#[test]
+fn reduced_domain_cones_decide_what_the_cones_decide() {
+    let reductions = reductions_in(DOMAIN_SAMPLES);
+    assert!(reductions >= 100, "{reductions} cones reduced");
 }
 
 #[test]

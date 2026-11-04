@@ -24,8 +24,12 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
-        # The whole-sample engine comparison runs in release in formal-verify.
-        run: cargo test --all -- --skip bfs_and_tlc_reach_the_same_states_and_verdicts
+        # The whole-sample engine comparison and the domain-sample reduction run in release in
+        # formal-verify.
+        run: >-
+          cargo test --all --
+          --skip bfs_and_tlc_reach_the_same_states_and_verdicts
+          --skip reduced_domain_cones_decide_what_the_cones_decide
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
       - name: skill snippets
@@ -46,5 +50,7 @@ jobs:
       - name: Check and verify every sample against its expect header
         run: scripts/verify-samples.sh target/release/rdra-ish
         timeout-minutes: 20
+      - name: A reduced cone decides what its cone decides on the domain samples
+        run: cargo test --release -p rdra-ish-core --lib reduced_domain_cones_decide_what_the_cones_decide
       - name: Lifecycle BFS and TLC agree on every sample
         run: RDRA_REQUIRE_TLC=1 cargo test --release -p rdra-ish-cli --test engine_equivalence
