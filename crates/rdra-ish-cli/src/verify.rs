@@ -24,7 +24,7 @@ use rdra_ish_core::lifecycle::{
     TransitionSystem, VarSet,
 };
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
-use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
+use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
 use crate::cli::VerifyBackend;
 use crate::export::{checked_system, tla_bounds};
@@ -89,12 +89,15 @@ enum JobKind {
     Whole(usize),
 }
 
-/// A property on its cone; the `_WF` module beside it adds `WF_vars(Next)` for the second
-/// run an `eventually` or `leads_to` may need.
+/// A property on its cone; the `_Full` module beside it is the unreduced cone, run after a
+/// counterexample on the reduced one, and the `_WF` module adds `WF_vars(Next)` for the
+/// second run an `eventually` or `leads_to` may need. `names` are the unreduced cone's, which
+/// both of those print.
 struct PropertyJob {
     index: usize,
     cone: PropertyCone,
     names: TlaNames,
+    full: Option<Spec>,
     wf: Option<Spec>,
 }
 
@@ -184,7 +187,7 @@ fn out_dir(out: Option<PathBuf>) -> Result<(PathBuf, String, bool)> {
 /// an after-assert writes nothing in the cone, so it adds edges but no states.
 fn cone_jobs(ts: &TransitionSystem, names: &TlaNames, targets: &[Target]) -> Vec<Job> {
     let mut at: BTreeMap<VarSet, usize> = BTreeMap::new();
-    let mut order: Vec<(Cone, String)> = Vec::new();
+    let mut order: Vec<(Cone, String, Vec<Target>)> = Vec::new();
     for &target in targets {
         let first = match target {
             Target::Entity(_) => continue,
@@ -193,17 +196,21 @@ fn cone_jobs(ts: &TransitionSystem, names: &TlaNames, targets: &[Target]) -> Vec
         };
         let cone = ts.target_cone(target);
         match at.get(&cone.vars) {
-            Some(&k) => order[k].0.keep.extend(cone.keep),
+            Some(&k) => {
+                order[k].0.keep.extend(cone.keep);
+                order[k].2.push(target);
+            }
             None => {
                 at.insert(cone.vars.clone(), order.len());
-                order.push((cone, first));
+                order.push((cone, first, vec![target]));
             }
         }
     }
     order
         .into_iter()
-        .map(|(cone, first)| {
-            let sub = ts.restrict_to(&cone.vars, &cone.keep);
+        .map(|(cone, first, shared)| {
+            let seeds = shared.iter().map(|t| ts.target_seed(*t));
+            let sub = ts.reduced_cone(&cone, seeds, Caps::VERIFY);
             let bundle = tla::print(&sub, PrintMode::Safety, &format!("Cone_{first}"));
             let n = &bundle.names;
             let checks = (0..sub.invariants().len())
@@ -234,14 +241,19 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
             let cone = PropertyCone::new(ts, i);
             let module = format!("Cone_{name}");
             let plain = cone.bundle(ConeRun::Plain, &module);
-            let wf = (cone.kind != LtlKind::Always).then(|| {
-                let b = cone.bundle(ConeRun::WfNext, &format!("{module}_WF"));
-                Spec {
-                    module: b.module_name,
-                    tla: b.tla,
-                    cfg: b.cfg,
-                }
+            let spec = |b: TlaBundle| Spec {
+                module: b.module_name,
+                tla: b.tla,
+                cfg: b.cfg,
+            };
+            let mut names = plain.names;
+            let full = cone.is_reduced().then(|| {
+                let b = cone.bundle(ConeRun::Full, &format!("{module}_Full"));
+                names = b.names.clone();
+                spec(b)
             });
+            let wf = (cone.kind != LtlKind::Always)
+                .then(|| spec(cone.bundle(ConeRun::WfNext, &format!("{module}_WF"))));
             Job {
                 module: plain.module_name,
                 tla: plain.tla,
@@ -250,7 +262,8 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames) -> Vec<Job> {
                 kind: JobKind::PropertyCone(Box::new(PropertyJob {
                     index: i,
                     cone,
-                    names: plain.names,
+                    names,
+                    full,
                     wf,
                 })),
             }
@@ -306,7 +319,27 @@ fn run_job(tlc: &Path, dir: &Path, job: &Job, workers: &str) -> Result<Ran> {
         }
         JobKind::PropertyCone(p) => {
             let (cone, wf) = (&p.cone, &p.wf);
-            let plain = ran.outcome;
+            let mut plain = ran.outcome;
+            // A counterexample on the reduced cone is real, but its lasso is read on the
+            // unreduced cone, whose run gives the verdict from here on.
+            if let (Outcome::Counterexample, Some(full)) = (plain, &p.full) {
+                let cfg = format!("{}.cfg", full.module);
+                let more = run_cfg(tlc, dir, &full.module, job.heap(), &cfg, workers, false)?;
+                ran.notes
+                    .push(format!("{}: {}", full.module, more.outcome.as_str()));
+                ran.log.push_str(&more.log);
+                ran.run = more.run;
+                plain = match more.outcome {
+                    Outcome::Ok => {
+                        ran.notes.push(
+                            "the reduced cone finds a counterexample the cone does not (a tool bug)"
+                                .to_string(),
+                        );
+                        Outcome::ToolError
+                    }
+                    other => other,
+                };
+            }
             let mut verdict = cone.verdict(plain, None);
             if verdict == Verdict::NeedsWfNext {
                 let wf = wf
@@ -682,9 +715,10 @@ fn run_tlc(
         write_spec(&dir, &job.module, &job.tla, &job.cfg)?;
         index.push_str(&format!("{}.tla: {}\n", job.module, job.checks.join(" ")));
         if let JobKind::PropertyCone(p) = &job.kind {
-            let Some(wf) = &p.wf else { continue };
-            write_spec(&dir, &wf.module, &wf.tla, &wf.cfg)?;
-            index.push_str(&format!("{}.tla: {}\n", wf.module, job.checks.join(" ")));
+            for extra in p.full.iter().chain(&p.wf) {
+                write_spec(&dir, &extra.module, &extra.tla, &extra.cfg)?;
+                index.push_str(&format!("{}.tla: {}\n", extra.module, job.checks.join(" ")));
+            }
         }
     }
     if let Some(w) = &whole {
@@ -825,7 +859,7 @@ fn state_models(
         .copied()
         .filter(|t| matches!(t, Target::Entity(_)))
         .collect();
-    let mut run = ts.explore_targets(&entities, Caps::VERIFY);
+    let mut run = ts.explore_targets_reduced(&entities, Caps::VERIFY);
     if !scope.bucs.is_empty() {
         run.defer_progress();
     }

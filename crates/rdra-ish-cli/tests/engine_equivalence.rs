@@ -4,7 +4,10 @@
 //! never run, deadlocks) of every entity are the same on both graphs; and the invariants and
 //! after-asserts TLC finds violated are the ones the BFS found violated.
 //!
-//! Every sample runs at `Bounds::STATES` and `Bounds::VERIFY`. A cone whose BFS passes
+//! Every sample runs at `Bounds::STATES` and `Bounds::VERIFY`, on each cone and, where the
+//! cone has an independent sub-lifecycle, on the cone reduced by it as `verify` explores it
+//! (`TransitionSystem::reduced_cone`): the reduced cone's BFS and TLC agree the same way, and
+//! the checks it keeps have the cone's verdicts. A cone whose BFS as `verify` runs it passes
 //! `STATE_CAP` at VERIFY is compared at STATES only; `VERIFY_FALLBACK` lists those cones, so a
 //! cone that grows past the cap fails the test until it is listed.
 //!
@@ -43,7 +46,7 @@ use std::sync::Mutex;
 
 use property_cone::{ConeRun, PropertyCone, Verdict, Why};
 use rdra_ish_core::lifecycle::{
-    ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, Runs, Scope, State,
+    ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, Runs, Scope, Seed, State,
     StateDiag, StateModelFindings, Taken, Target, TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
@@ -56,29 +59,15 @@ use tlc_replay::{explain_property, explain_violation};
 /// below it.
 const STATE_CAP: usize = 200_000;
 
-/// `(sample, cone)`: the cones whose BFS at `Bounds::VERIFY` passes `STATE_CAP`, each named by
-/// the first target that reads it. Each is compared at `Bounds::STATES`.
+/// `(sample, cone)`: the cones whose BFS at `Bounds::VERIFY`, reduced as `verify` explores
+/// it, passes `STATE_CAP`, each named by the first target that reads it. Each is compared at
+/// `Bounds::STATES`.
 const VERIFY_FALLBACK: &[(&str, &str)] = &[
-    ("samples/clinic-ops", "entity CarePlan"),
-    ("samples/clinic-ops", "entity Charge"),
-    ("samples/clinic-ops", "entity ClinicalOrder"),
     ("samples/clinic-ops", "entity EligibilityCheck"),
-    ("samples/clinic-ops", "entity LabResult"),
-    ("samples/clinic-ops", "entity PatientMessage"),
-    ("samples/clinic-ops", "entity Prescription"),
-    ("samples/clinic-ops", "invariant Forbidden_ClinicalOrder_1"),
-    ("samples/clinic-ops", "invariant Inv_ClinicalOrder_3"),
-    ("samples/clinic-ops", "invariant Inv_Prescription_4"),
     ("samples/patent-ops", "entity OfficeAction"),
     ("samples/patent-ops", "invariant Forbidden_OfficeAction_3"),
-    ("samples/food-permit-ops", "entity Disposition"),
     ("samples/food-permit-ops", "entity Inspection"),
     ("samples/food-permit-ops", "entity PermitApplication"),
-    (
-        "samples/food-permit-ops",
-        "invariant Forbidden_Disposition_2",
-    ),
-    ("samples/food-permit-ops", "invariant Inv_Disposition_0"),
     (
         "samples/food-permit-ops",
         "invariant Inv_PermitApplication_1",
@@ -86,6 +75,18 @@ const VERIFY_FALLBACK: &[(&str, &str)] = &[
     (
         "samples/food-permit-ops",
         "invariant Inv_PermitApplication_2",
+    ),
+    ("samples/insurance-claim-ops", "entity Claim"),
+    ("samples/insurance-claim-ops", "entity Payment"),
+    ("samples/insurance-claim-ops", "invariant Forbidden_Claim_0"),
+    ("samples/insurance-claim-ops", "invariant Forbidden_Claim_4"),
+    (
+        "samples/insurance-claim-ops",
+        "invariant CrossForbidden_Payment_3",
+    ),
+    (
+        "samples/insurance-claim-ops",
+        "after AfterAssert_PayClaim_0",
     ),
 ];
 
@@ -178,6 +179,8 @@ fn replay_violations(label: &str, ts: &TransitionSystem, names: &TlaNames, run: 
 
 struct ConeReport {
     states: usize,
+    /// The invariants and after-asserts of the printed cone, by TLA name.
+    checks: BTreeSet<String>,
     violated: BTreeSet<String>,
 }
 
@@ -417,8 +420,13 @@ fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeRe
         check.tla
     );
     replay_violations(label, ts, names, &parsed);
+    let checks = (0..ts.invariants().len())
+        .map(|i| names.invariant(i).to_string())
+        .chain((0..ts.after_asserts().len()).map(|i| names.after(i).to_string()))
+        .collect();
     ConeReport {
         states: run.states.len(),
+        checks,
         violated,
     }
 }
@@ -476,8 +484,18 @@ struct ModelReport {
     violated: BTreeSet<String>,
 }
 
-/// Every cone of the model at these bounds, explored and checked in parallel; returns the
-/// cones whose BFS passes `STATE_CAP`, which are not compared.
+/// What one cone's exploration found: the cone's report when its BFS finished under the cap,
+/// the reduced cone's when the cone reduces and its BFS finished, and whether the run
+/// `verify` uses (the reduced one when there is one) finished.
+struct ConeRuns {
+    plain: Option<ConeReport>,
+    reduced: Option<ConeReport>,
+    decided: bool,
+}
+
+/// Every cone of the model at these bounds, explored and checked in parallel, unreduced and
+/// reduced; returns the cones whose BFS as `verify` runs it passes `STATE_CAP`, which are
+/// not compared.
 fn check_model(
     tlc: &Path,
     scratch: &Path,
@@ -487,55 +505,86 @@ fn check_model(
 ) -> ModelReport {
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
-    let mut cones: Vec<(Cone, String)> = Vec::new();
+    let mut cones: Vec<(Cone, String, Vec<Seed>)> = Vec::new();
     for t in ts.targets() {
         let cone = ts.target_cone(t);
-        if !cones.iter().any(|(c, _)| *c == cone) {
-            cones.push((cone, target_label(&ts, t)));
+        match cones.iter_mut().find(|(c, _, _)| *c == cone) {
+            Some((_, _, seeds)) => seeds.push(ts.target_seed(t)),
+            None => cones.push((cone, target_label(&ts, t), vec![ts.target_seed(t)])),
         }
     }
+    let caps = Caps::new(usize::MAX, STATE_CAP);
     let next = AtomicUsize::new(0);
-    let reports: Mutex<Vec<(usize, Option<ConeReport>)>> = Mutex::new(Vec::new());
+    let reports: Mutex<Vec<(usize, ConeRuns)>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for _ in 0..workers {
             s.spawn(|| loop {
                 let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some((cone, name)) = cones.get(i) else {
+                let Some((cone, name, seeds)) = cones.get(i) else {
                     break;
                 };
-                let run = ts
-                    .restrict_to(&cone.vars, &cone.keep)
-                    .run(Caps::new(usize::MAX, STATE_CAP));
-                let report = run.complete.then(|| {
-                    let label = format!("{sample} at {bounds:?}, cone {i} ({name})");
-                    let dir = scratch.join(format!(
-                        "{}-{}-{i}",
-                        sample.replace('/', "_"),
-                        bounds.instances
-                    ));
-                    check_cone(tlc, &dir, &label, &run)
+                let label = format!("{sample} at {bounds:?}, cone {i} ({name})");
+                let dir = scratch.join(format!(
+                    "{}-{}-{i}",
+                    sample.replace('/', "_"),
+                    bounds.instances
+                ));
+                let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
+                let plain = run.complete.then(|| check_cone(tlc, &dir, &label, &run));
+                // The sub-lifecycle is explored by BFS alone, under `verify`'s cap.
+                let system = ts.reduced_cone(cone, seeds.iter().cloned(), Caps::VERIFY);
+                let reduced_run = system.reduction().is_some().then(|| system.run(caps));
+                let reduced = reduced_run.as_ref().filter(|r| r.complete).map(|r| {
+                    check_cone(tlc, &dir.join("reduced"), &format!("{label}, reduced"), r)
                 });
-                reports.lock().unwrap().push((i, report));
+                // The reduced cone keeps the checks that read its target side and what it
+                // observes of the sub-lifecycle; each of those has the cone's verdict.
+                if let (Some(a), Some(b)) = (&plain, &reduced) {
+                    let kept: BTreeSet<String> =
+                        a.violated.intersection(&b.checks).cloned().collect();
+                    assert_eq!(
+                        b.violated, kept,
+                        "{label}: the reduced cone's verdicts differ from the cone's"
+                    );
+                }
+                let decided = reduced_run.as_ref().map_or(run.complete, |r| r.complete);
+                reports.lock().unwrap().push((
+                    i,
+                    ConeRuns {
+                        plain,
+                        reduced,
+                        decided,
+                    },
+                ));
             });
         }
     });
     let mut reports = reports.into_inner().unwrap();
     reports.sort_by_key(|(i, _)| *i);
-    let checked: Vec<&ConeReport> = reports.iter().filter_map(|(_, r)| r.as_ref()).collect();
+    let checked: Vec<&ConeReport> = reports
+        .iter()
+        .filter_map(|(_, r)| r.plain.as_ref())
+        .collect();
     let states: usize = checked.iter().map(|r| r.states).sum();
+    let reduced: Vec<&ConeReport> = reports
+        .iter()
+        .filter_map(|(_, r)| r.reduced.as_ref())
+        .collect();
+    let reduced_states: usize = reduced.iter().map(|r| r.states).sum();
     let violated: BTreeSet<String> = checked
         .iter()
         .flat_map(|r| r.violated.iter().cloned())
         .collect();
     let capped: Vec<String> = reports
         .iter()
-        .filter(|(_, r)| r.is_none())
+        .filter(|(_, r)| !r.decided)
         .map(|(i, _)| cones[*i].1.clone())
         .collect();
     println!(
-        "{sample} instances={}: {} cones, {states} states, violated {violated:?}, past the cap {capped:?}",
+        "{sample} instances={}: {} cones, {states} states ({} reduced, {reduced_states} states), violated {violated:?}, past the cap {capped:?}",
         bounds.instances,
-        checked.len()
+        checked.len(),
+        reduced.len()
     );
     ModelReport { capped, violated }
 }
@@ -1734,6 +1783,44 @@ fn a_corrupted_tlc_trace_does_not_replay() {
 /// A property's cone decides what the whole model decides: an `ok` on the cone is an `ok` on
 /// the whole model, a counterexample is a counterexample, and the properties the cone leaves
 /// undecided are the ones expected, with the reason. Each fixture names what it exercises.
+/// Two properties on a cone that reduces its sub-lifecycle (#74): a gate behind a key that
+/// opens and closes forever, and a job that starts only at an open gate. `JobStarts` fails on
+/// the reduced cone and, under `WF_vars(Next)`, on the unreduced one (the gate loops while
+/// `Start` is enabled only now and then), and `JobWaits` fails on the reduced cone alone; each
+/// counterexample is read on the `Full` run, whose lasso is a path of the unreduced cone.
+const REDUCED_GATE: &str = r#"
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Crack "少し開ける"
+usecase Unlatch "掛け金を外す"
+usecase Swing "開く"
+usecase Close "閉める"
+usecase Submit "投入"
+usecase Start "開始"
+transitions(Unlock, Key.status, locked -> unlocked)
+transitions(Crack, Gate.status, shut -> half)
+sets(Unlatch, Gate.latch == true)
+transitions(Swing, Gate.status, half -> open)
+transitions(Close, Gate.status, open -> shut)
+condition Unlatched "掛け金が外れている"
+holds(Unlatched, Gate.latch == true)
+applies_to(Unlatched, Swing)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+eventually(Job, status == running).fair(Start).label("JobStarts")
+always(Job, status == waiting).label("JobWaits")
+"#;
+
 type TemporalCase = (&'static str, &'static str, &'static [(&'static str, Why)]);
 
 const TEMPORAL_CASES: &[TemporalCase] = &[
@@ -1767,6 +1854,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ),
     ("whole_cone", WHOLE_CONE, &[]),
     ("guard_on_unassigned", GUARD_ON_UNASSIGNED, &[]),
+    ("reduced_gate", REDUCED_GATE, &[]),
     (
         "copy_parent",
         COPY_PARENT,
@@ -2020,7 +2108,24 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                 !plain.tla.contains("WF_vars(Next)"),
                 "{label}: the plain cone run assumes WF_vars(Next)"
             );
-            let (first, mut run, mut log) = run_property(&tlc, &dir.join("plain"), &plain);
+            let (mut first, mut run, mut log) = run_property(&tlc, &dir.join("plain"), &plain);
+            let mut names = plain.names.clone();
+            // As `verify` does: a counterexample on the reduced cone is read on the unreduced
+            // one, whose run gives the outcome from here on.
+            if first == Outcome::Counterexample && cone.is_reduced() {
+                let full = cone.bundle(ConeRun::Full, "Cone");
+                assert!(
+                    !full.tla.contains("S_class"),
+                    "{label}: the Full run is reduced"
+                );
+                let (again, r, l) = run_property(&tlc, &dir.join("full"), &full);
+                assert_eq!(
+                    again,
+                    Outcome::Counterexample,
+                    "{label}: the reduced cone finds a counterexample the cone does not\n{l}"
+                );
+                (first, run, log, names) = (again, r, l, full.names);
+            }
             let mut verdict = cone.verdict(first, None);
             if verdict == Verdict::NeedsWfNext {
                 let wf = cone.bundle(ConeRun::WfNext, "Cone");
@@ -2030,7 +2135,7 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                 );
                 let (second, r, l) = run_property(&tlc, &dir.join("wf"), &wf);
                 verdict = cone.verdict(first, Some(second));
-                (run, log) = (r, l);
+                (run, log, names) = (r, l, wf.names);
             }
             let whole = tla::print(&ts, PrintMode::Property(i), "Cone");
             let (whole_outcome, _, whole_log) = run_property(&tlc, &dir.join("whole"), &whole);
@@ -2052,7 +2157,7 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                         "{label}: the cone finds a counterexample, the whole model does not\n{log}"
                     );
                     for v in &run.violations {
-                        explain_property(&cone.system, &plain.names, cone.index, v).unwrap_or_else(
+                        explain_property(&cone.system, &names, cone.index, v).unwrap_or_else(
                             |why| panic!("{label}: the cone's lasso does not replay: {why}\n{log}"),
                         );
                     }

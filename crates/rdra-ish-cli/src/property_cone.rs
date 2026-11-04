@@ -18,8 +18,16 @@
 //!
 //! An `always` property needs the `Plain` run only. A cone that frees an entity's slots
 //! (`cone_frees_slots`) reaches a superset, so only its `ok` counts.
+//!
+//! The `Plain` run is on the cone reduced by its independent sub-lifecycle
+//! (`TransitionSystem::reduced`), which is stuttering equivalent to the cone with respect to
+//! what the property and its fair actions read, and `Spec` admits stuttering in that run, so
+//! its `ok` is the cone's. A counterexample there is real, but the reduced cone's lasso does
+//! not lift step by step, so the `Full` run repeats the `Plain` run on the unreduced cone and
+//! the verdict reads from it; the `WfNext` run is on the unreduced cone, where `WF_vars(Next)`
+//! keeps its meaning.
 
-use rdra_ish_core::lifecycle::{LtlKind, TransitionSystem};
+use rdra_ish_core::lifecycle::{Caps, LtlKind, TransitionSystem};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle};
 
 use crate::tlc_output::Outcome;
@@ -28,6 +36,10 @@ pub struct PropertyCone {
     /// The cone as a system; `index` is the property's index in it.
     pub system: TransitionSystem,
     pub index: usize,
+    /// The cone reduced for the `Plain` run, and the property's index in it; `system` and
+    /// `index` again when nothing reduces.
+    pub reduced: TransitionSystem,
+    pub reduced_index: usize,
     pub kind: LtlKind,
     /// An action of the cone creates an entity the cone does not count, so a counterexample
     /// may create more instances than the bound allows.
@@ -40,7 +52,10 @@ pub struct PropertyCone {
 /// One TLC run on the cone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ConeRun {
+    /// The property alone, on the reduced cone.
     Plain,
+    /// The property alone, on the unreduced cone, after a `Plain` counterexample.
+    Full,
     WfNext,
 }
 
@@ -89,21 +104,38 @@ impl PropertyCone {
         // A create writes the created entity's existence, so a cone that holds every write
         // counts every slot, and the `WfNext` run's `ok` needs no slot caveat.
         debug_assert!(!whole || !frees_slots);
+        let reduced = ts.reduced_cone(&cone, [ts.property_seed(i)], Caps::VERIFY);
+        let reduced_index = reduced
+            .properties()
+            .iter()
+            .position(|p| p.name == *name)
+            .expect("the reduced cone keeps the property it is for");
         PropertyCone {
             frees_slots,
             whole,
             kind: ts.properties()[i].formula.kind(),
             system,
             index,
+            reduced,
+            reduced_index,
         }
     }
 
+    /// The `Plain` run is on a reduced cone, so a counterexample there asks for `Full`.
+    pub fn is_reduced(&self) -> bool {
+        self.reduced.reduction().is_some()
+    }
+
     pub fn bundle(&self, run: ConeRun, module: &str) -> TlaBundle {
-        let mode = match run {
-            ConeRun::Plain => PrintMode::ConeProperty(self.index),
-            ConeRun::WfNext => PrintMode::Property(self.index),
-        };
-        tla::print(&self.system, mode, module)
+        match run {
+            ConeRun::Plain => tla::print(
+                &self.reduced,
+                PrintMode::ConeProperty(self.reduced_index),
+                module,
+            ),
+            ConeRun::Full => tla::print(&self.system, PrintMode::ConeProperty(self.index), module),
+            ConeRun::WfNext => tla::print(&self.system, PrintMode::Property(self.index), module),
+        }
     }
 
     /// The verdict after the `Plain` run and, when it ran, the `WfNext` run.
