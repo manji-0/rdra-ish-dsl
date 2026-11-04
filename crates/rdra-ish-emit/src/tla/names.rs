@@ -40,19 +40,35 @@ pub struct TlaNames {
     succ: Vec<Option<String>>,
 }
 
-struct Taken(HashSet<String>);
+/// The names claimed so far, and every name the module asks for: a renamed item's `_<k>`
+/// skips a name another item asks for, so `Start` taking `Start_2` cannot push a use case
+/// `Start_2` to `Start_2_2`.
+struct Taken {
+    taken: HashSet<String>,
+    wanted: HashSet<String>,
+}
 
 impl Taken {
     fn claim(&mut self, raw: &str) -> String {
         let base = sanitize_ident(raw);
         let mut name = base.clone();
         let mut n = 2;
-        while is_binder(&name) || RESERVED.contains(&name.as_str()) || !self.0.insert(name.clone())
+        while is_binder(&name)
+            || RESERVED.contains(&name.as_str())
+            || !self.taken.insert(name.clone())
         {
             name = format!("{base}_{n}");
             n += 1;
+            while self.wanted.contains(&name) {
+                name = format!("{base}_{n}");
+                n += 1;
+            }
         }
         name
+    }
+
+    fn claim_all(&mut self, raws: &[String]) -> Vec<String> {
+        raws.iter().map(|raw| self.claim(raw)).collect()
     }
 }
 
@@ -66,25 +82,33 @@ fn is_binder(name: &str) -> bool {
 
 impl TlaNames {
     pub fn new(ts: &TransitionSystem) -> Self {
-        let mut taken = Taken(HashSet::new());
         let entity = |e: EntId| ts.entity(e).id.clone();
-        let ids = (0..ts.entities().len())
-            .map(|i| taken.claim(&format!("{}_Ids", ts.entities()[i].id)))
+        let properties: Vec<String> = ts.properties().iter().map(|x| x.name.clone()).collect();
+        let invariants: Vec<String> = ts.invariants().iter().map(|x| x.name.clone()).collect();
+        let after: Vec<String> = ts.after_asserts().iter().map(|x| x.name.clone()).collect();
+        let fair: Vec<Option<String>> = ts
+            .properties()
+            .iter()
+            .map(|x| (!x.fair.is_empty()).then(|| format!("Fair_{}", x.name)))
             .collect();
-        let vars: Vec<String> = ts
+        let ids: Vec<String> = ts
+            .entities()
+            .iter()
+            .map(|e| format!("{}_Ids", e.id))
+            .collect();
+        // `None` for `now`, which is reserved.
+        let vars: Vec<Option<String>> = ts
             .vars()
             .iter()
             .map(|d| match &d.kind {
-                VarKind::Now => "now".to_string(),
-                VarKind::Exists(e) => taken.claim(&format!("{}_exists", entity(*e))),
+                VarKind::Now => None,
+                VarKind::Exists(e) => Some(format!("{}_exists", entity(*e))),
                 VarKind::Column {
                     entity: e, column, ..
-                } => taken.claim(&format!("{}_{column}", entity(*e))),
-                VarKind::Prop { entity: e, key } => {
-                    taken.claim(&format!("{}_prop_{key}", entity(*e)))
-                }
+                } => Some(format!("{}_{column}", entity(*e))),
+                VarKind::Prop { entity: e, key } => Some(format!("{}_prop_{key}", entity(*e))),
                 VarKind::Run { entity: e, usecase } => {
-                    taken.claim(&format!("{}_run_{usecase}", entity(*e)))
+                    Some(format!("{}_run_{usecase}", entity(*e)))
                 }
                 VarKind::Owner {
                     child,
@@ -93,33 +117,44 @@ impl TlaNames {
                     ..
                 } => {
                     let name = role.clone().unwrap_or_else(|| entity(*parent));
-                    taken.claim(&format!("{}_owner_{name}", entity(*child)))
+                    Some(format!("{}_owner_{name}", entity(*child)))
                 }
             })
             .collect();
-        // A property keeps its declared name before a use case's: an action's name is not
-        // one the export promises (docs/compatibility.md, "The TLA+ export").
-        let properties = ts
-            .properties()
+        let actions: Vec<String> = ts.actions().iter().map(|a| a.name.clone()).collect();
+        let mut taken = Taken {
+            taken: HashSet::new(),
+            wanted: properties
+                .iter()
+                .chain(&invariants)
+                .chain(&after)
+                .chain(fair.iter().flatten())
+                .chain(&ids)
+                .chain(vars.iter().flatten())
+                .chain(&actions)
+                .map(|n| sanitize_ident(n))
+                .collect(),
+        };
+        // The names docs/compatibility.md ("The TLA+ export") promises are claimed first, so
+        // an `<E>_Ids` set, a var, or an action spelled like one takes the suffix. Core keeps
+        // the rule names apart from the properties and from each other, so a rule prints here
+        // as `check` prints it.
+        let properties = taken.claim_all(&properties);
+        let invariants = taken.claim_all(&invariants);
+        let after = taken.claim_all(&after);
+        let fair = fair
             .iter()
-            .map(|x| taken.claim(&x.name))
+            .map(|f| f.as_ref().map(|f| taken.claim(f)))
             .collect();
-        let actions: Vec<String> = ts.actions().iter().map(|a| taken.claim(&a.name)).collect();
-        let invariants = ts
-            .invariants()
+        let ids = taken.claim_all(&ids);
+        let vars: Vec<String> = vars
             .iter()
-            .map(|x| taken.claim(&x.name))
+            .map(|v| {
+                v.as_ref()
+                    .map_or_else(|| "now".to_string(), |v| taken.claim(v))
+            })
             .collect();
-        let after = ts
-            .after_asserts()
-            .iter()
-            .map(|x| taken.claim(&x.name))
-            .collect();
-        let fair = ts
-            .properties()
-            .iter()
-            .map(|x| (!x.fair.is_empty()).then(|| taken.claim(&format!("Fair_{}", x.name))))
-            .collect();
+        let actions = taken.claim_all(&actions);
         let class = ts.reduction().map(|_| taken.claim("S_class"));
         // Claimed last, so a model id that spells one takes no name from anything else.
         let mut rep = vec![None; vars.len()];

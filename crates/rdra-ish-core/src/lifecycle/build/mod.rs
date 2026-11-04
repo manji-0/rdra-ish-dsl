@@ -562,30 +562,37 @@ impl<'m> Builder<'m> {
     }
 
     /// An invariant or after-assert name (`Check_<E>_<column>_<n>`, `Unique_<Child>_<role>`,
-    /// ...) that a temporal property's or use case's id, or an earlier check's name, already
-    /// spells takes the first free `<name>_<k>`, k from 2, as a generated action name does.
-    /// Entity, column, and role ids may hold `_`, so two generated names can coincide; a
-    /// model whose names collide with nothing keeps every name.
+    /// ...) that a temporal property's id or an earlier check's name already spells takes the
+    /// first free `<name>_<k>`, k from 2, that no other check is named. Entity, column, and
+    /// role ids may hold `_`, so two generated names can coincide; a model whose names collide
+    /// with nothing keeps every name. A use case's id is not avoided: the TLA+ module renames
+    /// the action instead, as action names are not promised (docs/compatibility.md).
     fn name_generated_checks_apart(&mut self) {
-        let model = self.model;
-        let mut taken: HashSet<String> = model
+        let mut taken: HashSet<String> = self
+            .model
             .temporal_properties
             .iter()
             .map(|p| p.id.clone())
-            .chain(model.use_cases.values().map(|uc| uc.id.clone()))
             .collect();
-        let names = self
+        let names: Vec<&mut String> = self
             .ts
             .invariants
             .iter_mut()
             .map(|i| &mut i.name)
-            .chain(self.ts.after.iter_mut().map(|a| &mut a.name));
+            .chain(self.ts.after.iter_mut().map(|a| &mut a.name))
+            .collect();
+        let wanted: HashSet<String> = names.iter().map(|n| n.to_string()).collect();
         for name in names {
             let base = name.clone();
             let mut k = 2;
             while !taken.insert(name.clone()) {
-                *name = format!("{base}_{k}");
-                k += 1;
+                loop {
+                    *name = format!("{base}_{k}");
+                    k += 1;
+                    if !wanted.contains(name.as_str()) {
+                        break;
+                    }
+                }
             }
         }
     }

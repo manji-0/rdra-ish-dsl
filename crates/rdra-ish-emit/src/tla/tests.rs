@@ -832,3 +832,100 @@ sets(Mark, Job.owner_Gate == true)
         assert_eq!(names.decode(ts, &names.canon(ts, s)).as_ref(), Some(s));
     }
 }
+
+/// A property and a rule keep the names `check` prints beside a var or an action of that
+/// spelling, which the export does not promise to keep (docs/compatibility.md): the var or
+/// action takes the next free name, and a state TLC prints still decodes to the state it is.
+#[test]
+fn a_property_or_rule_keeps_its_name_beside_a_var_or_action() {
+    let property_like_a_var = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running, done) @default(waiting) }
+usecase Submit "投入"
+usecase Start "開始"
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+property Job_status "never running"
+  always(Job.status != running)
+"#;
+    let rule_like_a_var_and_an_action = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+entity Forbidden "x" { id: Int @pk  Job_0: Enum(a, b) @default(a) }
+usecase Submit "投入"
+usecase Forbidden_Job_0 "開始"
+usecase Flip "flip"
+creates(Submit, Job)
+creates(Submit, Forbidden)
+transitions(Forbidden_Job_0, Job.status, waiting -> running)
+transitions(Flip, Forbidden.Job_0, a -> b)
+forbidden(Job, status == running)
+"#;
+    let bundle = print(&system(property_like_a_var), PrintMode::Check, "M");
+    assert_eq!(bundle.names.property(0), "Job_status");
+    assert!(bundle.names.vars().iter().any(|v| v == "Job_status_2"));
+    assert!(
+        bundle.cfg.contains("PROPERTY Job_status\n"),
+        "{}",
+        bundle.cfg
+    );
+
+    let ts = system(rule_like_a_var_and_an_action);
+    let bundle = print(&ts, PrintMode::Safety, "M");
+    assert_eq!(ts.invariants()[0].name, "Forbidden_Job_0");
+    assert_eq!(bundle.names.invariant(0), "Forbidden_Job_0");
+    assert!(
+        bundle.cfg.contains("INVARIANT Forbidden_Job_0\n"),
+        "{}",
+        bundle.cfg
+    );
+    let names = &bundle.names;
+    let mut taken: Vec<&str> = names
+        .vars()
+        .iter()
+        .map(String::as_str)
+        .chain(ts.action_ids().map(|a| names.action(a)))
+        .collect();
+    taken.sort_unstable();
+    assert_eq!(
+        taken
+            .iter()
+            .filter(|n| n.starts_with("Forbidden_Job_0"))
+            .collect::<Vec<_>>(),
+        [&"Forbidden_Job_0_2", &"Forbidden_Job_0_3"]
+    );
+    let run = ts.run(Caps::new(usize::MAX, 100_000));
+    let names = TlaNames::new(&run.system);
+    for s in &run.states {
+        assert_eq!(
+            names
+                .decode(&run.system, &names.canon(&run.system, s))
+                .as_ref(),
+            Some(s)
+        );
+    }
+}
+
+/// A renamed item's suffix skips a name another item asks for: beside a property `Start`,
+/// the use case `Start` becomes `Start_3`, and a use case `Start_2` keeps its name.
+#[test]
+fn a_renamed_action_skips_another_actions_name() {
+    let src = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running, done) @default(waiting) }
+usecase Submit "投入"
+usecase Start "開始"
+usecase Start_2 "完了"
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+transitions(Start_2, Job.status, running -> done)
+property Start "作業は待つ"
+  always(Job.status == waiting)
+"#;
+    let ts = system(src);
+    let names = TlaNames::new(&ts);
+    let actions: Vec<(&str, &str)> = ts
+        .action_ids()
+        .map(|a| (ts.actions()[a.index()].name.as_str(), names.action(a)))
+        .collect();
+    assert!(actions.contains(&("Start", "Start_3")), "{actions:?}");
+    assert!(actions.contains(&("Start_2", "Start_2")), "{actions:?}");
+    assert_eq!(names.property(0), "Start");
+}

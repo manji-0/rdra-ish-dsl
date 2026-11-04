@@ -2008,6 +2008,49 @@ applies_to(GateOpen, Go)
 forbidden(Job, status == running, run_Go == true, exists == true, owner_Gate == true)
 "#;
 
+/// A use case `Forbidden_Order_0` split into steps `Forbidden_Order_0_1` and
+/// `Forbidden_Order_0_2` beside the check `Forbidden_Order_0`, which keeps its name.
+const SPLIT_USE_CASE_NAMED_LIKE_A_CHECK: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, cancelled) @default(pending) }
+entity Payment "決済" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+usecase Place "注文確定"
+usecase Forbidden_Order_0 "決済確定"
+usecase Cancel "キャンセル"
+api PayOrderApi "Order payment API"
+api CapturePaymentApi "Payment capture API"
+buc B "b"
+contains(B, Place)
+contains(B, Forbidden_Order_0)
+contains(B, Cancel)
+creates(Place, Order)
+creates(Place, Payment)
+invokes(Forbidden_Order_0, CapturePaymentApi)
+updates(CapturePaymentApi, Payment)
+invokes(Forbidden_Order_0, PayOrderApi)
+updates(PayOrderApi, Order)
+updates(Cancel, Order)
+transitions(Forbidden_Order_0, Order.status, pending -> paid)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Forbidden_Order_0, Payment.status, pending -> captured)
+relate(Payment, Order, N:1)
+forbidden(Order, status == cancelled)
+"#;
+
+/// The column `Forbidden.Job_0` and the use case `Forbidden_Job_0` spell the check
+/// `Forbidden_Job_0`: the check keeps its name, and the var and the action take suffixes.
+const RULE_NAMED_LIKE_A_VAR: &str = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+entity Forbidden "x" { id: Int @pk  Job_0: Enum(a, b) @default(a) }
+usecase Submit "投入"
+usecase Forbidden_Job_0 "開始"
+usecase Flip "flip"
+creates(Submit, Job)
+creates(Submit, Forbidden)
+transitions(Forbidden_Job_0, Job.status, waiting -> running)
+transitions(Flip, Forbidden.Job_0, a -> b)
+forbidden(Job, status == running)
+"#;
+
 #[test]
 fn bfs_and_tlc_agree_on_generated_names_beside_model_ids() {
     for (name, src, expected) in [
@@ -2018,6 +2061,16 @@ fn bfs_and_tlc_agree_on_generated_names_beside_model_ids() {
         ),
         ("check_names", CHECK_NAMES, &["Check_Cart_Line_qty_0_2"]),
         ("var_names", VAR_NAMES, &["Forbidden_Job_0"]),
+        (
+            "split_use_case_named_like_a_check",
+            SPLIT_USE_CASE_NAMED_LIKE_A_CHECK,
+            &["Forbidden_Order_0"],
+        ),
+        (
+            "rule_named_like_a_var",
+            RULE_NAMED_LIKE_A_VAR,
+            &["Forbidden_Job_0"],
+        ),
     ] {
         if let Some(violated) = check_fixture(name, src) {
             let expected: BTreeSet<String> = expected.iter().map(|s| s.to_string()).collect();

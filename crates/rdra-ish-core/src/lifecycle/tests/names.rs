@@ -355,10 +355,11 @@ relate(A, B_C, 1..*:1)
     );
 }
 
-/// A temporal property or a use case named like a generated check keeps its id, as a use case
-/// does beside a split use case's steps; the check takes the next free name.
+/// A temporal property named like a generated check keeps its id; the check takes the next
+/// free name. A use case named like one leaves the check its name: the TLA+ module renames
+/// the action, whose name is not promised.
 #[test]
-fn a_check_name_a_model_id_spells_takes_the_next_free_name() {
+fn a_check_name_a_property_spells_takes_the_next_free_name() {
     let src = r#"
 entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
 usecase Submit "投入"
@@ -370,8 +371,94 @@ forbidden(Job, status == waiting)
 property Forbidden_Job_0 "作業は待つ"
   always(Job.status == waiting)
 "#;
-    assert_eq!(check_names(src), ["Forbidden_Job_0_2", "Forbidden_Job_1_2"]);
+    assert_eq!(check_names(src), ["Forbidden_Job_0_2", "Forbidden_Job_1"]);
     let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
     assert_eq!(ts.properties()[0].name, "Forbidden_Job_0");
     assert!(ts.actions().iter().any(|a| a.name == "Forbidden_Job_1"));
+}
+
+/// A use case named like a check leaves the check its name whether the use case makes no
+/// action (it has no effect) or splits into steps `<UC>_1` and `<UC>_2`.
+#[test]
+fn a_use_case_named_like_a_check_leaves_the_check_its_name() {
+    let inert = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+usecase Submit "投入"
+usecase Start "開始"
+usecase Forbidden_Job_0 "何もしない"
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+forbidden(Job, status == running)
+"#;
+    assert_eq!(check_names(inert), ["Forbidden_Job_0"]);
+    let ts = TransitionSystem::build(
+        &model_from(SPLIT_NAMED_LIKE_A_CHECK),
+        Bounds::STATES,
+        &Scope::ALL,
+    )
+    .ts;
+    assert_eq!(
+        ts.invariants()
+            .iter()
+            .map(|i| i.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Forbidden_Order_0"]
+    );
+    let steps: Vec<&str> = ts
+        .actions()
+        .iter()
+        .map(|a| a.name.as_str())
+        .filter(|n| n.starts_with("Forbidden_Order_0"))
+        .collect();
+    assert_eq!(steps, ["Forbidden_Order_0_1", "Forbidden_Order_0_2"]);
+}
+
+/// A use case `Forbidden_Order_0` split into two steps beside the check `Forbidden_Order_0`.
+const SPLIT_NAMED_LIKE_A_CHECK: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, cancelled) @default(pending) }
+entity Payment "決済" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+usecase Place "注文確定"
+usecase Forbidden_Order_0 "決済確定"
+usecase Cancel "キャンセル"
+api PayOrderApi "Order payment API"
+api CapturePaymentApi "Payment capture API"
+buc B "b"
+contains(B, Place)
+contains(B, Forbidden_Order_0)
+contains(B, Cancel)
+creates(Place, Order)
+creates(Place, Payment)
+invokes(Forbidden_Order_0, CapturePaymentApi)
+updates(CapturePaymentApi, Payment)
+invokes(Forbidden_Order_0, PayOrderApi)
+updates(PayOrderApi, Order)
+updates(Cancel, Order)
+transitions(Forbidden_Order_0, Order.status, pending -> paid)
+transitions(Cancel, Order.status, pending -> cancelled)
+transitions(Forbidden_Order_0, Payment.status, pending -> captured)
+relate(Payment, Order, N:1)
+forbidden(Order, status == cancelled)
+"#;
+
+/// A renamed check skips a suffix another check is named: beside a property
+/// `Forbidden_Job_0`, the first forbidden becomes `Forbidden_Job_0_3`, as entity `Job_0`'s
+/// forbidden, the third, is `Forbidden_Job_0_2`.
+#[test]
+fn a_renamed_check_skips_another_checks_name() {
+    let src = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+entity Job_0 "x" { id: Int @pk  status: Enum(a, b) @default(a) }
+usecase Submit "投入"
+creates(Submit, Job)
+creates(Submit, Job_0)
+forbidden(Job, status == running)
+forbidden(Job, status == waiting)
+forbidden(Job_0, status == b)
+property Forbidden_Job_0 "作業は待つ"
+  always(Job.status == waiting)
+"#;
+    assert_eq!(
+        check_names(src),
+        ["Forbidden_Job_0_3", "Forbidden_Job_1", "Forbidden_Job_0_2"]
+    );
 }

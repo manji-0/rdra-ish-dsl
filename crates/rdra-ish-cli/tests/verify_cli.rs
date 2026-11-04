@@ -788,3 +788,34 @@ property P eventually(E.status == b)
     );
     assert!(dir.join("Cone.tla").exists());
 }
+
+/// A property named like a var (`Job_status`, the column `Job.status`) keeps its name in
+/// `verify`'s labels and findings; the var takes `_2`.
+#[test]
+fn a_property_named_like_a_var_keeps_its_name() {
+    if !have_tlc() {
+        return;
+    }
+    let src = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running, done) @default(waiting) }
+usecase Submit "投入"
+usecase Start "開始"
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+property Job_status "never running"
+  always(Job.status != running)
+"#;
+    let (stdout, stderr, code, _dir) = verify_model("verify_cli_property_var", src, "M.tla");
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.starts_with("Cone_Job_status [Job_status]: counterexample (")),
+        "{stdout}"
+    );
+    assert!(
+        stderr.contains("error[Job_status]: property Job_status is violated: "),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Job_status_2[1] = "), "{stderr}");
+}

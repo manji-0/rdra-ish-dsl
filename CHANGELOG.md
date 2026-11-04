@@ -22,10 +22,14 @@
   - A rule name: entity, column and role ids may hold `_`, so `Cart.Line_qty`'s check and
     `Cart_Line.qty`'s were both `Check_Cart_Line_qty_0` (and `MinCard_A_B_C` both `A_B`'s key
     to `C` and `A`'s to `B_C`), and `verify` listed one name as `ok` and as a counterexample.
-    A rule name that a temporal property or a use case is named takes `_2` too, so the
-    property keeps its declared name: it printed as `Forbidden_Job_0_2`.
-  - A temporal property named like a use case keeps its name in the TLA+ module and in
-    `verify`, and the use case's action takes `_2`.
+    A rule name that a temporal property is named takes `_2` too, so the property keeps its
+    declared name: it printed as `Forbidden_Job_0_2`.
+  - In the TLA+ module, a rule or a temporal property keeps the name `check` prints beside
+    a var, an action, or an `<E>_Ids` set of that spelling, which takes `_2` instead. A
+    property `Job_status` beside the column `Job.status` was `Job_status_2` in `verify`,
+    and an entity `Forbidden` with a column `Job_0` left `INVARIANT Forbidden_Job_0_2` in
+    the cfg under the finding `error[Forbidden_Job_0]`. A suffix skips a name another item
+    asks for, so a renamed `Start` beside a use case `Start_2` becomes `Start_3`.
   - The `Rep_<var>` and `Succ_<action>` tables of a reduced cone: a use case named
     `Succ_Swing` or `Rep_Gate_status` defined the name twice, and SANY failed the cone with
     `tool_error`.

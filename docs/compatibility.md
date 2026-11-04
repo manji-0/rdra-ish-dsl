@@ -84,15 +84,20 @@ written by hand can name them:
 when the model adds a rule of the same kind before it, on any entity. That is a change to
 the model, not to the tool.
 
-A name that another name already took gets the first free `_<k>` suffix, `k` from 2. The
-suffix appears only on a collision, so a model with no collision keeps every name above:
+A name that another name already took gets the first free `_<k>` suffix, `k` from 2, that
+no other item of the module is named. The suffix appears only on a collision, so a model
+with no collision keeps every name above:
 
-- A rule name yields to a temporal property's id, a use case's id, and an earlier rule's
-  name. Ids may hold `_`, so `Cart.Line_qty` and `Cart_Line.qty` both give
-  `Check_Cart_Line_qty_0`; the second check is `Check_Cart_Line_qty_0_2` in `check` too.
-- In the module, a variable keeps its name before a later variable, a property, an action,
-  or a rule, and a property keeps its declared name before an action. A column `run_Go`
-  beside the run mark of a split use case `Go` gives `Job_run_Go` and `Job_run_Go_2`.
+- A rule name yields to a temporal property's id and an earlier rule's name, in `check` and
+  in the module alike. Ids may hold `_`, so `Cart.Line_qty` and `Cart_Line.qty` both give
+  `Check_Cart_Line_qty_0`; the second check is `Check_Cart_Line_qty_0_2`.
+- In the module, the properties, the rules, and `Fair_<P>` come first, in that order. A
+  variable, an `<E>_Ids` set, or an action spelled like one of them yields: a property
+  `Job_status` beside the column `Job.status` keeps its name, and the variable is
+  `Job_status_2`. A use case's id does not move a rule's or a property's name.
+- Among the rest, an `<E>_Ids` set comes before a variable, a variable before a later
+  variable, and a variable before an action. A column `run_Go` beside the run mark of a
+  split use case `Go` gives `Job_run_Go` and `Job_run_Go_2`.
 - The `Rep_<var>` and `Succ_<action>` tables of a reduced cone, and its `S_class`, yield to
   every other name.
 - The files `verify` writes yield in this order: the whole-model module keeps the name `-o`
