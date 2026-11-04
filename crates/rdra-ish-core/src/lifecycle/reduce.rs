@@ -180,7 +180,9 @@ struct Quotient {
 
 impl Quotient {
     /// The quotient of `raw`, the S subsystem of `cone`, by stuttering equivalence with
-    /// respect to `obs`; `None` when S does not fit under `caps`. An unobserved S is one
+    /// respect to `obs`; `None` when S does not fit under `caps`, or when the quotient is the
+    /// identity on an S that no inner reduction shrank, which would reduce nothing (#101).
+    /// An unobserved S is one
     /// class, held at an initial S state, with no moves: nothing on T reads it, so no path
     /// through it is told from staying put.
     fn of(
@@ -235,6 +237,9 @@ impl Quotient {
             .collect();
         let edges: Vec<(u32, u32)> = run.graph().edges().map(|(a, b, _)| (a, b)).collect();
         let blocks = stuttering_blocks(n, &edges, &initial);
+        if sub.reduction().is_none() && blocks.iter().collect::<BTreeSet<_>>().len() == n {
+            return None;
+        }
         let mut rep_of_block: HashMap<u32, u32> = HashMap::new();
         let mut reps: Vec<Box<[u8]>> = Vec::new();
         let mut class_of: HashMap<Box<[u8]>, u32> = HashMap::new();
@@ -290,9 +295,9 @@ impl Quotient {
 }
 
 /// The split of a cone.
-struct Split {
+pub(super) struct Split {
     t: VarSet,
-    s: VarSet,
+    pub(super) s: VarSet,
     t_actions: BTreeSet<ActId>,
     s_actions: BTreeSet<ActId>,
     obs: VarSet,
@@ -344,7 +349,7 @@ impl TransitionSystem {
     /// The split of the cone for its targets' seeds and kept actions: of the splits anchored
     /// at each var the seeds read, the one with the largest S, the first on a tie. What the
     /// seeds read of S is observed, so every target's check reads T and `obs` only.
-    fn split(&self, seeds: &[Seed]) -> Split {
+    pub(super) fn split(&self, seeds: &[Seed]) -> Split {
         let reads: Vec<VarSet> = self.actions.iter().map(|a| self.action_reads(a)).collect();
         let writes: Vec<VarSet> = self.actions.iter().map(|a| self.action_writes(a)).collect();
         let keep: BTreeSet<ActId> = seeds.iter().flat_map(|(_, k)| k.iter().copied()).collect();
@@ -505,10 +510,20 @@ impl TransitionSystem {
         seeds: impl IntoIterator<Item = Seed>,
         caps: Caps,
     ) -> TransitionSystem {
-        let sys = self.restrict_to(&cone.vars, &cone.keep);
+        let (sys, local) = self.cone_system(cone, seeds);
         if std::env::var_os("RDRA_ISH_NO_REDUCE").is_some() {
             return sys;
         }
+        sys.reduced(&local, caps)
+    }
+
+    /// The cone as a system, and the seeds in its ids.
+    pub(super) fn cone_system(
+        &self,
+        cone: &Cone,
+        seeds: impl IntoIterator<Item = Seed>,
+    ) -> (TransitionSystem, Vec<Seed>) {
+        let sys = self.restrict_to(&cone.vars, &cone.keep);
         let local: Vec<Seed> = seeds
             .into_iter()
             .map(|(seed, keep)| {
@@ -528,7 +543,7 @@ impl TransitionSystem {
                 (seed_local, keep_local)
             })
             .collect();
-        sys.reduced(&local, caps)
+        (sys, local)
     }
 
     /// The S subsystem, with the reduction S was explored under.

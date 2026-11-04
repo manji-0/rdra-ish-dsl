@@ -1943,8 +1943,21 @@ fn bfs_and_tlc_agree_on_two_actions_of_one_name() {
 /// `E1`'s reads join in no way, so every one of them is an S var of `P0`'s cone. Each
 /// `Succ_<A>` table of the reduced cone's TLA+ module has a cell per class; printed as a
 /// chain of `@@`, TLC overflowed its stack evaluating it, and `verify` reported `tool_error`
-/// on a cone 1.1 decided (`ok`, 5176 states).
+/// on a cone 1.1 decided (`ok`, 5176 states). Each of the 1294 states is a class of its own,
+/// which alone reduces nothing (#101); `E4`, which only enables `S_1`, is a sub-lifecycle of
+/// the sub-lifecycle that its own reduction folds away, so the 1294 classes are of an S
+/// reduced inside and the cone stays reduced.
 const MANY_CLASSES: &str = r#"
+entity E4 "e4" {
+  status: Enum(s0, s1) @default(s0)
+}
+usecase New4 "New4"
+creates(New4, E4)
+usecase T4_0 "T4_0"
+transitions(T4_0, E4.status, s0 -> s1)
+condition C9 "C9"
+holds(C9, E4.status == s1)
+applies_to(C9, S_1)
 entity E0 "e0" {
   status: Enum(s0, s1, s2) @default(s0)
 }
@@ -1988,8 +2001,9 @@ property P0
 
 /// The random model (seed 2563) whose reduced cones overflowed TLC's stack the same way while
 /// its property and three of its checks have counterexamples: `P0` on a cone of 11480 states,
-/// and the two forbidden states and the `after` assertion of `T1_0` on cones that reduce
-/// (the `after` assertion of `T0_1` holds).
+/// and the two forbidden states and the `after` assertion of `T1_0` (the `after` assertion
+/// of `T0_1` holds). Its cones reduced to 1640 classes of 1640 states, so since #101 they
+/// stay unreduced and keep these verdicts.
 const MANY_CLASSES_COUNTEREXAMPLE: &str = r#"
 entity E0 "e0" {
   id: Int @pk
@@ -2090,8 +2104,8 @@ property P0
   always(E0.status != s0)
 "#;
 
-/// The reduced safety cones of the seed-2563 model (its `after` assertions, whose cones
-/// reduce) decide what the unreduced cones decide, through TLC.
+/// The safety cones of the seed-2563 model decide, through TLC, what the unreduced cones
+/// decide. Its sub-lifecycles quotient to themselves, so since #101 no cone of it reduces.
 #[test]
 fn bfs_and_tlc_agree_on_a_sub_lifecycle_of_many_classes() {
     if let Some(violated) =

@@ -17,10 +17,17 @@ const DOMAIN_SAMPLES: &[&str] = &[
     "samples/insurance-claim-ops",
 ];
 
-/// A gate with an unobserved latch and a key behind it; a job starts only at an open gate.
-/// The job's cone reduces the gate, whose own cone reduces the key.
+/// A gate with an unobserved latch, a key behind it, and a card behind the key; a job starts
+/// only at an open gate. The job's cone reduces the gate, whose own cone reduces the key, in
+/// which the card is folded away.
 const GATE: &str = r#"
+entity Card "札" { id: Int @pk  status: Enum(blank, issued) @default(blank) }
 entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+usecase Issue "札を出す"
+transitions(Issue, Card.status, blank -> issued)
+condition CardIssued "札が出ている"
+holds(CardIssued, Card.status == issued)
+applies_to(CardIssued, Unlock)
 entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut)  latch: Bool @default(false) }
 entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
 relate(Gate, Key, N:1)
@@ -51,7 +58,8 @@ forbidden(Job, status == running).label("作業は始まらない")
 
 /// A split use case `Go` (two APIs, so `Go_1` and `Go_2`) beside a use case named `Go_1`
 /// that moves the gate the job's cone reduces: the gate's action and the job's first step
-/// share a name, and only the action's identity tells them apart.
+/// share a name, and only the action's identity tells them apart. The key behind `Go_1` is
+/// what the reduction folds: the gate's states alone are each a class (#101).
 const COLLIDING_T_FIRST: &str = r#"
 entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
 entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
@@ -71,6 +79,12 @@ transitions(Go, Job.status, waiting -> running)
 invokes(Go, NoteApi)
 creates(NoteApi, Note)
 transitions(Go_1, Gate.status, shut -> open)
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+usecase Unlock "解錠"
+transitions(Unlock, Key.status, locked -> unlocked)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Go_1)
 condition GateOpen "門が開いている"
 holds(GateOpen, Gate.status == open)
 applies_to(GateOpen, Go)
@@ -90,6 +104,12 @@ usecase Submit "投入"
 api JobApi "作業 API"
 api NoteApi "記録 API"
 transitions(Go_1, Gate.status, shut -> open)
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+usecase Unlock "解錠"
+transitions(Unlock, Key.status, locked -> unlocked)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Go_1)
 creates(BuildGate, Gate)
 creates(Submit, Job)
 invokes(Go, JobApi)
@@ -129,9 +149,59 @@ transitions(Go, Crew.status, idle -> busy)
 invokes(Go, NoteApi)
 creates(NoteApi, Note)
 transitions(Go_1, Gate.status, shut -> open)
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+usecase Unlock "解錠"
+transitions(Unlock, Key.status, locked -> unlocked)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Go_1)
 condition GateOpen "門が開いている"
 holds(GateOpen, Gate.status == open)
 applies_to(GateOpen, Go)
+"#;
+
+/// A random model, minimized (#101): every one of the 1294 states of `P0`'s independent
+/// sub-lifecycle is a class of its own, so quotienting it would reduce nothing.
+const IDENTITY_QUOTIENT: &str = r#"
+entity E0 "e0" {
+  status: Enum(s0, s1, s2) @default(s0)
+}
+entity E1 "e1" {
+  status: Enum(s0, s1) @default(s0)
+}
+entity E2 "e2" {
+  status: Enum(s0, s1) @default(s0)
+}
+entity E3 "e3" {
+  status: Enum(s0, s1, s2) @default(s0)
+}
+usecase New3 "New3"
+creates(New3, E3)
+usecase T0_0 "T0_0"
+usecase T1_0 "T1_0"
+usecase T1_1 "T1_1"
+usecase T3_0 "T3_0"
+transitions(T0_0, E0.status, s1 -> s2)
+transitions(T0_0, E0.status, s0 -> s2)
+transitions(T1_0, E1.status, s0 -> s1)
+condition C0 "C0"
+holds(C0, E0.status in (s1, s2)).none(E1.status == s0)
+applies_to(C0, T1_0)
+transitions(T1_1, E1.status, s0 -> s1)
+condition C1 "C1"
+holds(C1, E2.status == s0).none(E3.status == s0)
+applies_to(C1, T1_1)
+transitions(T3_0, E3.status, s0 -> s1)
+condition C6 "C6"
+holds(C6, E2.status == s1)
+transitions(T3_0, E3.status, s1 -> s2).when(C6)
+usecase S "S"
+transitions(S, E0.status, s2 -> s1)
+transitions(S, E2.status, s1 -> s0)
+usecase S_1 "S_1"
+transitions(S_1, E2.status, s0 -> s1)
+property P0
+  leads_to(E1.status == s1, E1.status == s1)
 "#;
 
 fn entity_target(ts: &TransitionSystem, id: &str) -> Target {
@@ -280,17 +350,18 @@ fn reductions_in(samples: &[&str]) -> usize {
     reductions
 }
 
+/// Most bundled sample cones quotient to themselves and stay unreduced (#101); two reduce.
 #[test]
 fn reduced_cones_decide_what_the_cones_decide() {
     let reductions = reductions_in(SAMPLES);
-    assert!(reductions >= 30, "{reductions} cones reduced");
+    assert!(reductions >= 2, "{reductions} cones reduced");
 }
 
 /// The domain samples explore millions of states; CI runs this in release in formal-verify.
 #[test]
 fn reduced_domain_cones_decide_what_the_cones_decide() {
     let reductions = reductions_in(DOMAIN_SAMPLES);
-    assert!(reductions >= 100, "{reductions} cones reduced");
+    assert!(reductions >= 53, "{reductions} cones reduced");
 }
 
 #[test]
@@ -414,11 +485,14 @@ fn the_job_cone_nests_two_reductions() {
     let sub = sys.sub_system(red);
     let inner = sub.reduction().expect("the gate's cone reduces the key");
     let key_vars: Vec<String> = inner.vars().iter().map(|v| sub.var_name(*v)).collect();
+    assert_eq!(
+        key_vars,
+        ["Card._exists", "status", "Key._exists", "status"],
+        "the gate's sub-lifecycle is the key and its card"
+    );
     assert!(
-        key_vars
-            .iter()
-            .all(|n| n.starts_with("Key") || n == "status"),
-        "{key_vars:?}"
+        inner.classes() < inner.states,
+        "the key's cone folds the card"
     );
     assert!(
         red.classes() < red.states,
@@ -426,4 +500,34 @@ fn the_job_cone_nests_two_reductions() {
         red.classes(),
         red.states
     );
+}
+
+/// A cone whose independent sub-lifecycle quotients to itself is not reduced: it keeps its
+/// checks, and its run is the cone's, states and verdicts alike.
+#[test]
+fn an_identity_quotient_leaves_the_cone_unreduced() {
+    let model = model_from(IDENTITY_QUOTIENT);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let (sys, seeds) = ts.cone_system(&ts.property_cone(0), [ts.property_seed(0)]);
+    let s = sys.split(&seeds).s;
+    assert_eq!(
+        s.len(),
+        7,
+        "the property's cone has an independent sub-lifecycle"
+    );
+    assert!(
+        sys.reduced(&seeds, Caps::VERIFY).reduction().is_none(),
+        "the property's cone is not reduced"
+    );
+    let e1 = entity_target(&ts, "E1");
+    let plain = ts.explore_targets(&[e1], Caps::VERIFY);
+    let reduced = ts.explore_targets_reduced(&[e1], Caps::VERIFY);
+    let cone = &reduced.cone_of(e1).run;
+    assert!(
+        cone.system.reduction().is_none(),
+        "E1's cone is not reduced"
+    );
+    assert_eq!(cone.states.len(), 5176);
+    assert_eq!(cone.states, plain.cone_of(e1).run.states);
+    assert_eq!(diag_names(&plain), diag_names(&reduced));
 }
