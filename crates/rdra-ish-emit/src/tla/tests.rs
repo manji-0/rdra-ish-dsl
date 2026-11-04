@@ -697,16 +697,21 @@ applies_to(GateOpen, Start)
 /// A reduced cone prints its sub-lifecycle as one variable over its classes: a table of the
 /// representative's value per observed var, which the var's name reads, and a successor
 /// table per class move, which steps the class and leaves the target side unchanged.
-#[test]
-fn a_reduced_cone_prints_its_sub_lifecycle_as_classes() {
-    let ts = system(GATE);
+/// The Job view's cone of `src`, reduced.
+fn reduced_job_cone(src: &str) -> TransitionSystem {
+    let ts = system(src);
     let job = ts
         .targets()
         .into_iter()
         .find(|t| matches!(t, Target::Entity(e) if ts.entity(*e).id == "Job"))
         .expect("the Job view");
     let cone = ts.target_cone(job);
-    let reduced = ts.reduced_cone(&cone, [ts.target_seed(job)], Caps::VERIFY);
+    ts.reduced_cone(&cone, [ts.target_seed(job)], Caps::VERIFY)
+}
+
+#[test]
+fn a_reduced_cone_prints_its_sub_lifecycle_as_classes() {
+    let reduced = reduced_job_cone(GATE);
     let r = reduced
         .reduction()
         .expect("the job's cone reduces the gate");
@@ -740,4 +745,90 @@ fn a_reduced_cone_prints_its_sub_lifecycle_as_classes() {
         "unobserved sub-lifecycle vars are not state vars: {tla}"
     );
     insta::assert_snapshot!(tla);
+}
+
+/// A use case named like a reduction table keeps its name, and the table takes the next free
+/// one; SANY rejected the module that defined both.
+#[test]
+fn a_reduction_table_a_use_case_spells_takes_the_next_free_name() {
+    let src = GATE
+        .replace("Submit", "Succ_Swing")
+        .replace("Start", "Rep_Gate_status");
+    let tla = print(&reduced_job_cone(&src), PrintMode::Safety, "Cone").tla;
+    for line in [
+        "\nRep_Gate_status_2 == <<",
+        "\nGate_status == Rep_Gate_status_2[S_class]\n",
+        "\nSucc_Swing_2 == <<",
+        "\nRep_Gate_status(p0) ==\n",
+        "\nSucc_Swing(p0, p1) ==\n",
+        "S_class' \\in Succ_Swing_2[S_class]",
+    ] {
+        assert!(tla.contains(line), "{line:?} missing\n{tla}");
+    }
+}
+
+/// A temporal property keeps its declared name beside a use case of that name, which the
+/// export does not promise to keep (docs/compatibility.md).
+#[test]
+fn a_property_keeps_its_name_beside_a_use_case_of_that_name() {
+    let src = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+usecase Submit "投入"
+usecase Start "開始"
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+property Start "作業は待つ"
+  always(Job.status == waiting)
+"#;
+    let bundle = print(&system(src), PrintMode::Check, "M");
+    assert_eq!(bundle.names.property(0), "Start");
+    assert!(bundle.tla.contains("\nStart_2(p0) ==\n"), "{}", bundle.tla);
+    assert!(bundle.cfg.contains("PROPERTY Start\n"), "{}", bundle.cfg);
+}
+
+/// Columns named like the run mark, existence, and owner vars (`run_Go`, `exists`,
+/// `owner_Gate`) give two vars one spelling; the later var takes the next free name, and a
+/// state TLC prints decodes to the state it is.
+#[test]
+fn a_column_named_like_a_generated_var_decodes_apart() {
+    let src = r#"
+entity Gate "門" { id: Int @pk }
+entity Note "記録" { id: Int @pk }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting)  run_Go: Bool @default(false)  exists: Bool @default(false)  owner_Gate: Bool @default(false) }
+relate(Job, Gate, N:1)
+usecase Go "開始"
+usecase BuildGate "設置"
+usecase Submit "投入"
+usecase Mark "印"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+transitions(Go, Job.status, waiting -> running)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+sets(Mark, Job.run_Go == true)
+sets(Mark, Job.exists == true)
+sets(Mark, Job.owner_Gate == true)
+"#;
+    let run = system(src).run(Caps::new(usize::MAX, 100_000));
+    let ts = &run.system;
+    let names = TlaNames::new(ts);
+    let mut vars: Vec<&str> = names.vars().iter().map(String::as_str).collect();
+    vars.sort_unstable();
+    for pair in [
+        ["Job_exists", "Job_exists_2"],
+        ["Job_owner_Gate", "Job_owner_Gate_2"],
+        ["Job_run_Go", "Job_run_Go_2"],
+    ] {
+        assert!(pair.iter().all(|v| vars.contains(v)), "{vars:?}");
+    }
+    let mut unique = vars.clone();
+    unique.dedup();
+    assert_eq!(unique, vars);
+    for s in &run.states {
+        assert_eq!(names.decode(ts, &names.canon(ts, s)).as_ref(), Some(s));
+    }
 }

@@ -35,6 +35,9 @@ pub struct TlaNames {
     /// vars: `Rep_<var>` tables give each S var the printed module reads, and `Succ_<action>`
     /// the class moves of each S action.
     class: Option<String>,
+    /// `Rep_<var>` per S var the rest reads, and `Succ_<action>` per S action, by index.
+    rep: Vec<Option<String>>,
+    succ: Vec<Option<String>>,
 }
 
 struct Taken(HashSet<String>);
@@ -68,7 +71,7 @@ impl TlaNames {
         let ids = (0..ts.entities().len())
             .map(|i| taken.claim(&format!("{}_Ids", ts.entities()[i].id)))
             .collect();
-        let vars = ts
+        let vars: Vec<String> = ts
             .vars()
             .iter()
             .map(|d| match &d.kind {
@@ -94,7 +97,14 @@ impl TlaNames {
                 }
             })
             .collect();
-        let actions = ts.actions().iter().map(|a| taken.claim(&a.name)).collect();
+        // A property keeps its declared name before a use case's: an action's name is not
+        // one the export promises (docs/compatibility.md, "The TLA+ export").
+        let properties = ts
+            .properties()
+            .iter()
+            .map(|x| taken.claim(&x.name))
+            .collect();
+        let actions: Vec<String> = ts.actions().iter().map(|a| taken.claim(&a.name)).collect();
         let invariants = ts
             .invariants()
             .iter()
@@ -105,17 +115,23 @@ impl TlaNames {
             .iter()
             .map(|x| taken.claim(&x.name))
             .collect();
-        let properties = ts
-            .properties()
-            .iter()
-            .map(|x| taken.claim(&x.name))
-            .collect();
         let fair = ts
             .properties()
             .iter()
             .map(|x| (!x.fair.is_empty()).then(|| taken.claim(&format!("Fair_{}", x.name))))
             .collect();
         let class = ts.reduction().map(|_| taken.claim("S_class"));
+        // Claimed last, so a model id that spells one takes no name from anything else.
+        let mut rep = vec![None; vars.len()];
+        let mut succ = vec![None; actions.len()];
+        if let Some(r) = ts.reduction() {
+            for &v in r.obs() {
+                rep[v.index()] = Some(taken.claim(&format!("Rep_{}", vars[v.index()])));
+            }
+            for &a in r.s_actions() {
+                succ[a.index()] = Some(taken.claim(&format!("Succ_{}", actions[a.index()])));
+            }
+        }
         TlaNames {
             vars,
             ids,
@@ -125,6 +141,8 @@ impl TlaNames {
             properties,
             fair,
             class,
+            rep,
+            succ,
         }
     }
 
@@ -145,13 +163,15 @@ impl TlaNames {
     }
 
     /// `Rep_<var>`: the table an S var reads by class.
-    pub fn rep_table(&self, v: VarId) -> String {
-        format!("Rep_{}", self.vars[v.index()])
+    pub fn rep_table(&self, v: VarId) -> &str {
+        self.rep[v.index()]
+            .as_deref()
+            .expect("an S var the rest reads")
     }
 
     /// `Succ_<action>`: an S action's class moves.
-    pub fn succ_table(&self, a: ActId) -> String {
-        format!("Succ_{}", self.actions[a.index()])
+    pub fn succ_table(&self, a: ActId) -> &str {
+        self.succ[a.index()].as_deref().expect("an S action")
     }
 
     pub fn var(&self, v: VarId) -> &str {
