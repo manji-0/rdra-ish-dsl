@@ -8,7 +8,7 @@ use rdra_ish_core::lifecycle::{
     Change, GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site,
     StateDiag, Trace, TraceStep, TransitionSystem,
 };
-use rdra_ish_core::model::LinkKind;
+use rdra_ish_core::model::{LinkKind, SetValue};
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
 
 /// A lifecycle finding as `check`, `states`, `verify`, and the generator gates print it:
@@ -376,6 +376,28 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
                 "a value of {}.{} whose guard holds ({})",
                 model.entities[choice.entity].id,
                 choice.column,
+                values.join(", ")
+            )
+        }
+        (GuardWhy::ArmCondition { .. }, ModelRef::ColumnEffect(i)) => {
+            let line = &model.column_effects[*i];
+            let values: Vec<String> = model
+                .column_effects
+                .iter()
+                .filter(|ce| {
+                    (ce.origin, ce.entity, &ce.column) == (line.origin, line.entity, &line.column)
+                })
+                .filter_map(|ce| match (&ce.value, ce.guard) {
+                    (SetValue::Value(v), Some(ck)) => {
+                        Some(format!("{} when {}", v.literal(), model.conditions[ck].id))
+                    }
+                    _ => None,
+                })
+                .collect();
+            format!(
+                "a value of {}.{} whose guard holds ({})",
+                model.entities[line.entity].id,
+                line.column,
                 values.join(", ")
             )
         }

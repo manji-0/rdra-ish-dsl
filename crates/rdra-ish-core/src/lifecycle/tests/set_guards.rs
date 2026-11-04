@@ -269,3 +269,49 @@ fn a_guarded_present_is_left_only_where_its_guard_holds() {
         d.rows("Extension")
     );
 }
+
+/// The repro of #110: no rule but the guards reads the reason, so only the guards make it a
+/// state var. Picked on the claim's creation or by a later use case, each reason leaves its
+/// deadline, and the use case runs.
+const READ_ONLY_BY_THE_GUARDS: &str = r#"
+variation Reason "Reason" {
+  a "A"
+  b "B"
+}
+entity Claim "Claim" {
+  id: Int @pk
+  reason: Reason
+  due_on: Date
+  status: Enum(open, extended) @default(open)
+}
+usecase Open "Open"
+usecase PickReason "Pick reason"
+usecase Extend "Extend"
+creates(Open, Claim)
+chooses(PickReason, Claim.reason)
+condition IsA "A"
+holds(IsA, Claim.reason == a)
+condition IsB "B"
+holds(IsB, Claim.reason == b)
+transitions(Extend, Claim.status, open -> extended)
+sets(Extend, Claim.due_on == 2).when(IsA)
+sets(Extend, Claim.due_on == 3).when(IsB)
+"#;
+
+#[test]
+fn the_columns_only_a_guard_reads_are_state() {
+    let on_creation = READ_ONLY_BY_THE_GUARDS.replace("chooses(PickReason,", "chooses(Open,");
+    for src in [READ_ONLY_BY_THE_GUARDS, on_creation.as_str()] {
+        let d = derive_src(src);
+        assert!(d.diags.is_empty(), "{:?}", d.diags);
+        let rows = d.rows("Claim");
+        for (reason, due_on) in [("a", 2), ("b", 3)] {
+            assert!(
+                rows.iter().any(|r| r.contains("status=extended")
+                    && r.contains(&format!("reason={reason}"))
+                    && r.contains(&format!("due_on={due_on}"))),
+                "{rows:?}"
+            );
+        }
+    }
+}

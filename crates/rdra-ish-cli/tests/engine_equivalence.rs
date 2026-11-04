@@ -920,6 +920,48 @@ fn bfs_and_tlc_agree_on_set_guards() {
     check_fixture("set_guards", SET_GUARDS);
 }
 
+/// The repro of #110: only the guards read the reason. Both engines run `Extend` for either
+/// reason, so each `forbidden` on an extended claim's deadline is reached.
+const SET_GUARDS_ONLY_READER: &str = r#"
+variation Reason "Reason" {
+  a "A"
+  b "B"
+}
+entity Claim "Claim" {
+  id: Int @pk
+  reason: Reason
+  due_on: Date
+  status: Enum(open, extended) @default(open)
+}
+usecase Open "Open"
+usecase PickReason "Pick reason"
+usecase Extend "Extend"
+creates(Open, Claim)
+chooses(PickReason, Claim.reason)
+condition IsA "A"
+holds(IsA, Claim.reason == a)
+condition IsB "B"
+holds(IsB, Claim.reason == b)
+transitions(Extend, Claim.status, open -> extended)
+sets(Extend, Claim.due_on == 2).when(IsA)
+sets(Extend, Claim.due_on == 3).when(IsB)
+forbidden(Claim, status == extended, due_on == 2)
+forbidden(Claim, status == extended, due_on == 3)
+"#;
+
+#[test]
+fn bfs_and_tlc_read_the_columns_only_a_set_guard_reads() {
+    if let Some(violated) = check_fixture("set_guards_only_reader", SET_GUARDS_ONLY_READER) {
+        assert_eq!(
+            violated,
+            BTreeSet::from([
+                "Forbidden_Claim_0".to_string(),
+                "Forbidden_Claim_1".to_string()
+            ])
+        );
+    }
+}
+
 /// A use case split into two transaction groups (one API each): an after-assert checked after
 /// each step, with the other group's entity universally bound, and a condition guard on every
 /// group's step.

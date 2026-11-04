@@ -10,14 +10,16 @@ use crate::model::{
     DerivedExpr, EffectValue, EntityKey, SemanticModel, SetValue, TemporalExpr, TemporalRhs,
 };
 
-/// The conditions of every `.when(Cond)` guard, on a `transitions` arm or a `chooses` value.
+/// The conditions of every `.when(Cond)` guard, on a `transitions` arm, a `chooses` value or a
+/// `sets` value.
 fn when_guards(model: &SemanticModel) -> impl Iterator<Item = ConditionKey> + '_ {
     let arms = model.state_transitions.iter().filter_map(|t| t.guard);
     let values = model
         .column_choices
         .iter()
         .flat_map(|c| c.values.iter().filter_map(|v| v.guard));
-    arms.chain(values)
+    let sets = model.column_effects.iter().filter_map(|ce| ce.guard);
+    arms.chain(values).chain(sets)
 }
 
 #[derive(Default)]

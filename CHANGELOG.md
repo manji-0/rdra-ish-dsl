@@ -48,8 +48,10 @@
 - `sets(UC, E.col == value).when(Condition)` (#98): the use case leaves the value only while
   the condition's `holds` body holds, read as a `chooses(..).when(Cond)` value guard reads it,
   on a created row after the step and on an updated row before it. The lines of one column
-  are one choice, and a use case none of whose lines is enabled does not run. A deadline can
-  so follow the row's reason: `sets(Extend, Extension.due_on == 3).when(ExpertInquiry)`, and
+  are one choice, and a use case none of whose lines is enabled does not run. The columns
+  the guard's body reads are state, as an arm guard's are, also where no other rule reads
+  them (#110). A deadline can so follow the row's reason:
+  `sets(Extend, Extension.due_on == 3).when(ExpertInquiry)`, and
   the timer's use case waits for it with `holds(Due, Extension.due_on <= now)`. A timer
   needs no parameter for this: it is about the rows its use case writes, and that use
   case's guards read them. An unguarded `sets` or a copy of the same column beside a guarded

@@ -32,7 +32,7 @@ holds one value per slot.
 | An Enum column | the declared variants | Always |
 | A Bool column | `false`, `true` | Always |
 | A `@null` column of any other type | `null`, `present` | Always |
-| An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, a `@check`, an applied condition body, an `after` assertion, or a `property` names it |
+| An Int, Money, Decimal, Date, or DateTime column | `0..5` (plus `null` for `@null`) | A `sets`, a constraint, a `@check`, an applied condition body, the body of a `.when` guard on a `transitions` arm, a `chooses` value, or a `sets` value, an `after` assertion, or a `property` names it |
 | A column typed by a [`variation`](./language-reference.md#variations) | the variation's values | Something names it, as for Int |
 | A comparison proposition (`stock < selling`) | `false`, `true` | `drives(UC, E.col op rhs, bool)` drives the comparison |
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
