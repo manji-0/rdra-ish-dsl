@@ -1,7 +1,6 @@
 //! Hover documentation for symbols and predicates.
 
-use rdra_ish_core::model::NodeRef;
-use rdra_ish_core::{node_ref_kind, LookupResult, SemanticModel};
+use rdra_ish_core::{LookupResult, SemanticModel};
 use rdra_ish_syntax::ast::{Ast, Kind};
 use tower_lsp::lsp_types::{
     Hover, HoverContents, MarkupContent, MarkupKind, SignatureHelp, SignatureInformation,
@@ -74,7 +73,7 @@ fn symbol_hover(model: &SemanticModel, ast: &Ast, offset: usize) -> Option<Marku
                     LookupResult::Found(node) => node,
                     _ => return None,
                 };
-                node_ref_kind(node).to_string()
+                node.kind_tag().to_string()
             };
             (kind, id)
         }
@@ -95,7 +94,7 @@ fn symbol_hover(model: &SemanticModel, ast: &Ast, offset: usize) -> Option<Marku
 fn instance_label(model: &SemanticModel, kind: &str, id: &str) -> Option<String> {
     let kind = kind_from_name(kind)?;
     let node = model.symbols.lookup_qualified(&kind, id)?;
-    Some(node_ref_label(model, node))
+    Some(model.node_label(node).unwrap_or_default().to_string())
 }
 
 fn kind_from_name(name: &str) -> Option<Kind> {
@@ -127,38 +126,6 @@ fn kind_from_name(name: &str) -> Option<Kind> {
         "condition" => Kind::Condition,
         _ => return None,
     })
-}
-
-fn node_ref_label(model: &SemanticModel, node: &NodeRef) -> String {
-    match node {
-        NodeRef::Actor(k) => model.actors.get(*k).map(|v| v.label.clone()),
-        NodeRef::ExtSystem(k) => model.ext_systems.get(*k).map(|v| v.label.clone()),
-        NodeRef::System(k) => model.systems.get(*k).map(|v| v.label.clone()),
-        NodeRef::Requirement(k) => model.requirements.get(*k).map(|v| v.label.clone()),
-        NodeRef::Adr(k) => model.adrs.get(*k).map(|v| v.label.clone()),
-        NodeRef::Goal(k) => model.goals.get(*k).map(|v| v.label.clone()),
-        NodeRef::Nfr(k) => model.nfrs.get(*k).map(|v| v.label.clone()),
-        NodeRef::Quality(k) => model.qualities.get(*k).map(|v| v.label.clone()),
-        NodeRef::Constraint(k) => model.constraints.get(*k).map(|v| v.label.clone()),
-        NodeRef::Business(k) => model.businesses.get(*k).map(|v| v.label.clone()),
-        NodeRef::Buc(k) => model.bucs.get(*k).map(|v| v.label.clone()),
-        NodeRef::Flow(k) => model.flows.get(*k).map(|v| v.label.clone()),
-        NodeRef::Step(k) => model.steps.get(*k).map(|v| v.label.clone()),
-        NodeRef::UseCase(k) => model.use_cases.get(*k).map(|v| v.label.clone()),
-        NodeRef::Screen(k) => model.screens.get(*k).map(|v| v.label.clone()),
-        NodeRef::Field(k) => model.fields.get(*k).map(|v| v.label.clone()),
-        NodeRef::Event(k) => model.events.get(*k).map(|v| v.label.clone()),
-        NodeRef::Entity(k) => model.entities.get(*k).map(|v| v.label.clone()),
-        NodeRef::State(k) => model.states.get(*k).map(|v| v.label.clone()),
-        NodeRef::Api(k) => model.apis.get(*k).map(|v| v.label.clone()),
-        NodeRef::Dto(k) => model.dtos.get(*k).map(|v| v.label.clone()),
-        NodeRef::Timer(k) => model.timers.get(*k).map(|v| v.label.clone()),
-        NodeRef::Medium(k) => model.media.get(*k).map(|v| v.label.clone()),
-        NodeRef::Permission(k) => model.permissions.get(*k).map(|v| v.label.clone()),
-        NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.clone()),
-        NodeRef::Condition(k) => model.conditions.get(*k).map(|v| v.label.clone()),
-    }
-    .unwrap_or_default()
 }
 
 #[cfg(test)]

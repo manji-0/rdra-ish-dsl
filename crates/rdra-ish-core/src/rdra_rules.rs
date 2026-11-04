@@ -7,8 +7,8 @@
 
 use std::collections::HashSet;
 
-use crate::lint::{node_id, node_kind_display, push_element_lint, LintIssue};
-use crate::model::{node_ref_kind, ColumnType, NodeRef, SemanticModel};
+use crate::lint::{push_element_lint, LintIssue};
+use crate::model::{ColumnType, NodeRef, SemanticModel};
 use crate::resolver::reachable_from_bucs;
 
 /// Which RDRA definition sheet a row belongs to. `RdraIsh` marks rows rdra-ish adds.
@@ -374,16 +374,16 @@ pub fn rdra_findings(model: &SemanticModel) -> Vec<LintIssue> {
                     if closure.anchors(model, &node) {
                         continue;
                     }
-                    let Some(id) = node_id(model, &node) else {
+                    let Some(id) = model.node_id(&node) else {
                         continue;
                     };
-                    let subject_kind = node_kind_display(&node);
+                    let subject_kind = node.kind_tag();
                     push_element_lint(
                         model,
                         &mut findings,
-                        node_ref_kind(&node),
-                        &subject_kind,
-                        &id,
+                        subject_kind,
+                        subject_kind,
+                        id,
                         rule.id,
                         format!("{subject_kind} {id} is defined but connected to no BUC"),
                         rule.hint,
@@ -397,15 +397,15 @@ pub fn rdra_findings(model: &SemanticModel) -> Vec<LintIssue> {
                     if closure.contains(&node) || !seen.insert(transition.usecase) {
                         continue;
                     }
-                    let Some(id) = node_id(model, &node) else {
+                    let Some(id) = model.node_id(&node) else {
                         continue;
                     };
                     push_element_lint(
                         model,
                         &mut findings,
-                        node_ref_kind(&node),
+                        node.kind_tag(),
                         "usecase",
-                        &id,
+                        id,
                         rule.id,
                         format!("use case {id} transitions a state model but belongs to no BUC"),
                         rule.hint,
@@ -551,7 +551,7 @@ combines(Eligible, Method)
         let closure = reachable_from_bucs(&model, &["Checkout".to_string()]);
         let ids: HashSet<String> = closure
             .iter()
-            .filter_map(|node| node_id(&model, node))
+            .filter_map(|node| model.node_id(node).map(str::to_string))
             .collect();
         assert!(ids.contains("EvIn"), "inbound event missing: {ids:?}");
         assert!(

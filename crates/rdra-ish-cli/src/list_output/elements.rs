@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use crate::cli::ListFormat;
 
-use super::node_ref::{adr_targets, node_id, node_kind_name, node_label};
+use super::node_ref::adr_targets;
 use super::render::{bool_cell, format_rows, optional_cell, repeated_cell, site_cell};
 
 pub(crate) fn format_requirements(
@@ -157,12 +157,12 @@ pub(crate) fn format_adrs(
             let targets = adr_targets(model, key);
             let target_kinds = targets
                 .iter()
-                .map(|target| node_kind_name(target).to_string())
+                .map(|target| target.kind_tag().to_string())
                 .collect::<Vec<_>>()
                 .join("|");
             let target_ids = targets
                 .iter()
-                .filter_map(|target| node_id(model, target))
+                .filter_map(|target| model.node_id(target).map(str::to_string))
                 .collect::<Vec<_>>()
                 .join("|");
             [
@@ -206,9 +206,9 @@ pub(crate) fn format_adr_impacts(
                 adr.id.clone(),
                 adr.label.clone(),
                 optional_cell(&adr.status),
-                node_kind_name(&target).to_string(),
-                node_id(model, &target).unwrap_or_default(),
-                node_label(model, &target).unwrap_or_default(),
+                target.kind_tag().to_string(),
+                model.node_id(&target).unwrap_or_default().to_string(),
+                model.node_label(&target).unwrap_or_default().to_string(),
             ]);
         }
     }
@@ -625,7 +625,7 @@ pub(crate) fn format_conditions(
                     matches!(rel.kind, RelKind::AppliesTo | RelKind::Guards)
                         && rel.from == NodeRef::Condition(key)
                 })
-                .filter_map(|rel| node_id(model, &rel.to))
+                .filter_map(|rel| model.node_id(&rel.to).map(str::to_string))
                 .collect();
             targets.sort();
             targets.dedup();
@@ -691,9 +691,9 @@ fn linked<'a>(
         .iter()
         .filter(|r| r.kind == rel)
         .filter_map(other_end)
-        .filter(|node| node_kind_name(node) == kind)
+        .filter(|node| node.kind_tag() == kind)
     {
-        if let Some(id) = node_id(model, node) {
+        if let Some(id) = model.node_id(node).map(str::to_string) {
             if !ids.contains(&id) {
                 ids.push(id);
             }

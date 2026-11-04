@@ -22,6 +22,70 @@ use slotmap::SlotMap;
 use std::collections::HashSet;
 
 impl SemanticModel {
+    /// The declared id of `node`, or `None` when its key no longer resolves.
+    pub fn node_id(&self, node: &NodeRef) -> Option<&str> {
+        match node {
+            NodeRef::Actor(k) => self.actors.get(*k).map(|e| e.id.as_str()),
+            NodeRef::ExtSystem(k) => self.ext_systems.get(*k).map(|e| e.id.as_str()),
+            NodeRef::System(k) => self.systems.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Requirement(k) => self.requirements.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Adr(k) => self.adrs.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Goal(k) => self.goals.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Nfr(k) => self.nfrs.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Quality(k) => self.qualities.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Constraint(k) => self.constraints.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Business(k) => self.businesses.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Buc(k) => self.bucs.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Flow(k) => self.flows.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Step(k) => self.steps.get(*k).map(|e| e.id.as_str()),
+            NodeRef::UseCase(k) => self.use_cases.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Screen(k) => self.screens.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Field(k) => self.fields.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Event(k) => self.events.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Entity(k) => self.entities.get(*k).map(|e| e.id.as_str()),
+            NodeRef::State(k) => self.states.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Api(k) => self.apis.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Dto(k) => self.dtos.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Timer(k) => self.timers.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Medium(k) => self.media.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Permission(k) => self.permissions.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Variation(k) => self.variations.get(*k).map(|e| e.id.as_str()),
+            NodeRef::Condition(k) => self.conditions.get(*k).map(|e| e.id.as_str()),
+        }
+    }
+
+    /// The display label of `node`, or `None` when its key no longer resolves.
+    pub fn node_label(&self, node: &NodeRef) -> Option<&str> {
+        match node {
+            NodeRef::Actor(k) => self.actors.get(*k).map(|e| e.label.as_str()),
+            NodeRef::ExtSystem(k) => self.ext_systems.get(*k).map(|e| e.label.as_str()),
+            NodeRef::System(k) => self.systems.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Requirement(k) => self.requirements.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Adr(k) => self.adrs.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Goal(k) => self.goals.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Nfr(k) => self.nfrs.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Quality(k) => self.qualities.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Constraint(k) => self.constraints.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Business(k) => self.businesses.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Buc(k) => self.bucs.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Flow(k) => self.flows.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Step(k) => self.steps.get(*k).map(|e| e.label.as_str()),
+            NodeRef::UseCase(k) => self.use_cases.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Screen(k) => self.screens.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Field(k) => self.fields.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Event(k) => self.events.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Entity(k) => self.entities.get(*k).map(|e| e.label.as_str()),
+            NodeRef::State(k) => self.states.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Api(k) => self.apis.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Dto(k) => self.dtos.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Timer(k) => self.timers.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Medium(k) => self.media.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Permission(k) => self.permissions.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Variation(k) => self.variations.get(*k).map(|e| e.label.as_str()),
+            NodeRef::Condition(k) => self.conditions.get(*k).map(|e| e.label.as_str()),
+        }
+    }
+
     /// Values of an `Enum` or variation-typed column; `None` for scalar types.
     ///
     /// This is the single lookup every exporter uses for "what may this column hold".

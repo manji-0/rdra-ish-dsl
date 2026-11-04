@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 
 use crate::model::{
-    ColumnType, EffectValue, EntityKey, Exposed, ModelColumn, NodeRef, RelKind, SemanticModel,
-    SetValue, UseCaseKey,
+    ColumnType, EntityKey, Exposed, ModelColumn, NodeRef, RelKind, SemanticModel, SetValue,
+    UseCaseKey,
 };
 use crate::tx::infer_usecase_transactions;
 
@@ -178,7 +178,7 @@ fn effects_text(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -
         .iter()
         .filter(|e| e.origin == usecase && e.entity == entity)
         .map(|e| match &e.value {
-            SetValue::Value(v) => format!("{} == {}", e.column, effect_value_text(v)),
+            SetValue::Value(v) => format!("{} == {}", e.column, v.literal()),
             SetValue::Copy(source) => format!(
                 "{} == {}.{}",
                 e.column, model.entities[source.entity].id, source.column
@@ -210,16 +210,6 @@ fn effects_text(model: &SemanticModel, usecase: UseCaseKey, entity: EntityKey) -
         .filter(|e| e.origin == usecase && e.entity == entity)
         .map(|e| format!("{} == {}", e.prop.display(), e.truth));
     columns.chain(choices).chain(propositions).collect()
-}
-
-fn effect_value_text(value: &EffectValue) -> String {
-    match value {
-        EffectValue::EnumVariant(v) => v.clone(),
-        EffectValue::Bool(b) => b.to_string(),
-        EffectValue::Int(n) => n.to_string(),
-        EffectValue::Present | EffectValue::TypedPresent(_) => "present".to_string(),
-        EffectValue::Null => "null".to_string(),
-    }
 }
 
 fn columns_text(model: &SemanticModel, columns: &[ModelColumn]) -> String {

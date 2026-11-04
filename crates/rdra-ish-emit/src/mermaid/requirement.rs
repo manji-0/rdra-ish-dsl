@@ -5,9 +5,7 @@
 //! `omitted:` line names them.
 
 use super::{buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_label, node_line, quote, Header,
-};
+use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
 use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{Goal, NodeRef, RelKind, SemanticModel};
 use std::collections::HashSet;
@@ -45,7 +43,7 @@ fn measure(goal: &Goal) -> Option<String> {
 /// `node` with its `:::<kind>` and its `%% desc` line, at `indent`; a goal adds its measure
 /// under the label.
 fn declare_node(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str) {
-    let (Some(id), Some(label)) = (contract_id(model, node), node_label(model, node)) else {
+    let (Some(id), Some(label)) = (contract_id(model, node), model.node_label(node)) else {
         return;
     };
     let mut text = label_text(label);

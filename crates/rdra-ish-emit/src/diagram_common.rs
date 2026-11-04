@@ -31,70 +31,8 @@ pub(crate) fn lifecycle_start_states(
         .collect::<HashSet<_>>()
         .into_iter()
         .collect();
-    starts.sort_by_key(|sk| node_id(model, &NodeRef::State(*sk)).unwrap_or(""));
+    starts.sort_by_key(|sk| model.node_id(&NodeRef::State(*sk)).unwrap_or(""));
     starts
-}
-
-pub(crate) fn node_id<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'a str> {
-    match node {
-        NodeRef::Actor(k) => model.actors.get(*k).map(|a| a.id.as_str()),
-        NodeRef::ExtSystem(k) => model.ext_systems.get(*k).map(|e| e.id.as_str()),
-        NodeRef::System(k) => model.systems.get(*k).map(|s| s.id.as_str()),
-        NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.id.as_str()),
-        NodeRef::Adr(k) => model.adrs.get(*k).map(|a| a.id.as_str()),
-        NodeRef::Goal(k) => model.goals.get(*k).map(|g| g.id.as_str()),
-        NodeRef::Nfr(k) => model.nfrs.get(*k).map(|n| n.id.as_str()),
-        NodeRef::Quality(k) => model.qualities.get(*k).map(|q| q.id.as_str()),
-        NodeRef::Constraint(k) => model.constraints.get(*k).map(|c| c.id.as_str()),
-        NodeRef::Business(k) => model.businesses.get(*k).map(|b| b.id.as_str()),
-        NodeRef::Buc(k) => model.bucs.get(*k).map(|b| b.id.as_str()),
-        NodeRef::Flow(k) => model.flows.get(*k).map(|f| f.id.as_str()),
-        NodeRef::Step(k) => model.steps.get(*k).map(|s| s.id.as_str()),
-        NodeRef::UseCase(k) => model.use_cases.get(*k).map(|u| u.id.as_str()),
-        NodeRef::Screen(k) => model.screens.get(*k).map(|s| s.id.as_str()),
-        NodeRef::Field(k) => model.fields.get(*k).map(|f| f.id.as_str()),
-        NodeRef::Event(k) => model.events.get(*k).map(|e| e.id.as_str()),
-        NodeRef::Entity(k) => model.entities.get(*k).map(|e| e.id.as_str()),
-        NodeRef::State(k) => model.states.get(*k).map(|s| s.id.as_str()),
-        NodeRef::Api(k) => model.apis.get(*k).map(|a| a.id.as_str()),
-        NodeRef::Dto(k) => model.dtos.get(*k).map(|d| d.id.as_str()),
-        NodeRef::Timer(k) => model.timers.get(*k).map(|t| t.id.as_str()),
-        NodeRef::Medium(k) => model.media.get(*k).map(|m| m.id.as_str()),
-        NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.id.as_str()),
-        NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.id.as_str()),
-        NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.id.as_str()),
-    }
-}
-
-pub(crate) fn node_label<'a>(model: &'a SemanticModel, node: &NodeRef) -> Option<&'a str> {
-    match node {
-        NodeRef::Actor(k) => model.actors.get(*k).map(|a| a.label.as_str()),
-        NodeRef::ExtSystem(k) => model.ext_systems.get(*k).map(|e| e.label.as_str()),
-        NodeRef::System(k) => model.systems.get(*k).map(|s| s.label.as_str()),
-        NodeRef::Requirement(k) => model.requirements.get(*k).map(|r| r.label.as_str()),
-        NodeRef::Adr(k) => model.adrs.get(*k).map(|a| a.label.as_str()),
-        NodeRef::Goal(k) => model.goals.get(*k).map(|g| g.label.as_str()),
-        NodeRef::Nfr(k) => model.nfrs.get(*k).map(|n| n.label.as_str()),
-        NodeRef::Quality(k) => model.qualities.get(*k).map(|q| q.label.as_str()),
-        NodeRef::Constraint(k) => model.constraints.get(*k).map(|c| c.label.as_str()),
-        NodeRef::Business(k) => model.businesses.get(*k).map(|b| b.label.as_str()),
-        NodeRef::Buc(k) => model.bucs.get(*k).map(|b| b.label.as_str()),
-        NodeRef::Flow(k) => model.flows.get(*k).map(|f| f.label.as_str()),
-        NodeRef::Step(k) => model.steps.get(*k).map(|s| s.label.as_str()),
-        NodeRef::UseCase(k) => model.use_cases.get(*k).map(|u| u.label.as_str()),
-        NodeRef::Screen(k) => model.screens.get(*k).map(|s| s.label.as_str()),
-        NodeRef::Field(k) => model.fields.get(*k).map(|f| f.label.as_str()),
-        NodeRef::Event(k) => model.events.get(*k).map(|e| e.label.as_str()),
-        NodeRef::Entity(k) => model.entities.get(*k).map(|e| e.label.as_str()),
-        NodeRef::State(k) => model.states.get(*k).map(|s| s.label.as_str()),
-        NodeRef::Api(k) => model.apis.get(*k).map(|a| a.label.as_str()),
-        NodeRef::Dto(k) => model.dtos.get(*k).map(|d| d.label.as_str()),
-        NodeRef::Timer(k) => model.timers.get(*k).map(|t| t.label.as_str()),
-        NodeRef::Medium(k) => model.media.get(*k).map(|m| m.label.as_str()),
-        NodeRef::Permission(k) => model.permissions.get(*k).map(|p| p.label.as_str()),
-        NodeRef::Variation(k) => model.variations.get(*k).map(|v| v.label.as_str()),
-        NodeRef::Condition(k) => model.conditions.get(*k).map(|c| c.label.as_str()),
-    }
 }
 
 /// Type name shown in ER diagrams and CSV: scalar names, `Enum`, or the variation's id.
@@ -586,7 +524,7 @@ pub(crate) fn contract_id(model: &SemanticModel, node: &NodeRef) -> Option<Strin
     Some(format!(
         "{}__{}",
         node_kind_filter_name(node),
-        node_id(model, node)?
+        model.node_id(node)?
     ))
 }
 
@@ -720,7 +658,7 @@ pub(crate) fn declare_flow_node(
 ) -> Option<String> {
     let node_ref = node.node_ref();
     let id = contract_id(model, &node_ref)?;
-    let label = node_label(model, &node_ref)?;
+    let label = model.node_label(&node_ref)?;
     if declared.ids.insert(id.clone()) {
         let kind = node_kind_filter_name(&node_ref);
         out.push_str(&node_line("  ", &id, &quote(label), kind));

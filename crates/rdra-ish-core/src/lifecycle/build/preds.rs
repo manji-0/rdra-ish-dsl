@@ -2038,19 +2038,9 @@ fn one_slot_set(eqs: &[Pred]) -> Option<Pred> {
     Some(Pred::In(slot?.clone(), values))
 }
 
-pub(crate) fn effect_display(v: &EffectValue) -> String {
-    match v {
-        EffectValue::EnumVariant(s) => s.clone(),
-        EffectValue::Bool(b) => b.to_string(),
-        EffectValue::Int(n) => n.to_string(),
-        EffectValue::Present | EffectValue::TypedPresent(_) => "present".to_string(),
-        EffectValue::Null => "null".to_string(),
-    }
-}
-
 fn local_display(eqs: &[(String, EffectValue)], cmps: &[ComparisonProp]) -> String {
     eqs.iter()
-        .map(|(c, v)| format!("{c}={}", effect_display(v)))
+        .map(|(c, v)| format!("{c}={}", v.literal()))
         // A comparison prints as written, `status != oa` or `status in (a, b)`.
         .chain(cmps.iter().map(ComparisonProp::display))
         .collect::<Vec<_>>()
@@ -2075,7 +2065,7 @@ fn cross_display(model: &crate::model::SemanticModel, conds: &[CrossEntityCondit
                 "{}.{}={}",
                 model.entities[column.entity].id,
                 column.column,
-                effect_display(value)
+                value.literal()
             ),
             CrossEntityCondition::Comparison(p) => format!(
                 "{}.{} {} {}",

@@ -3,7 +3,6 @@
 //! `list --kind rule` prints it and `lint` reads it for rules that carry no label.
 
 use crate::analysis::{body_condition_display, condition_body_display, effect_value_display};
-use crate::lint::node_id;
 use crate::location::LocatedSpan;
 use crate::model::{
     values_display, CmpRhs, ComparisonProp, CrossConstraintScope, CrossEntityCondition,
@@ -210,7 +209,7 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
                 matches!(rel.kind, RelKind::AppliesTo | RelKind::Guards)
                     && rel.from == NodeRef::Condition(key)
             })
-            .filter_map(|rel| node_id(model, &rel.to))
+            .filter_map(|rel| model.node_id(&rel.to).map(str::to_string))
             .collect();
         applies_to.sort();
         applies_to.dedup();

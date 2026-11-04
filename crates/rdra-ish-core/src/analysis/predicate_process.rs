@@ -18,7 +18,6 @@ use super::constraint::{
     resolve_entity_equals_from_comparison, rule_label, when_condition_ref,
 };
 use super::effect::parse_effect_value;
-use super::nodes::node_kind_tag_str;
 
 fn resolve_predicate_args(
     model: &SemanticModel,
@@ -92,7 +91,7 @@ fn validate_predicate_arg_types(
             continue;
         }
         if let Some(Some(node)) = resolved.get(i) {
-            let actual = node_kind_tag_str(node);
+            let actual = node.kind_tag();
             if !expected_kinds.contains(&actual) {
                 push_error_arg(
                     ctx,
@@ -137,7 +136,7 @@ fn validate_contains_pair(
                 RdraError::TypeMismatch {
                     pred: pred.name.clone(),
                     id: "contains pair".to_string(),
-                    actual: format!("{} -> {}", node_kind_tag_str(from), node_kind_tag_str(to)),
+                    actual: format!("{} -> {}", from.kind_tag(), to.kind_tag()),
                     expected: "buc->usecase|buc->flow|flow->step|screen->field|system->api"
                         .to_string(),
                 },
@@ -163,7 +162,7 @@ fn validate_trigger_pair(
     let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) else {
         return true;
     };
-    let pair = (node_kind_tag_str(from), node_kind_tag_str(to));
+    let pair = (from.kind_tag(), to.kind_tag());
     // A kind outside the signature was already reported by `validate_predicate_arg_types`.
     let in_signature = sig[0].contains(&pair.0) && sig[1].contains(&pair.1);
     if TRIGGER_PAIRS.contains(&pair) || !in_signature {
@@ -229,7 +228,7 @@ fn process_maps_field_predicate(
             let err = RdraError::TypeMismatch {
                 pred: pred.name.clone(),
                 id: path.join("."),
-                actual: node_kind_tag_str(&other).to_string(),
+                actual: other.kind_tag().to_string(),
                 expected: "entity".to_string(),
             };
             push_error(ctx, diags, qref.span.clone(), err);
@@ -702,7 +701,7 @@ fn process_exposes_predicate(
     let Some(item) = crate::publication::exposed_item(target, &pred.chain) else {
         return;
     };
-    let kind = node_kind_tag_str(target).to_string();
+    let kind = target.kind_tag().to_string();
     let id = predicate_arg_display(&pred.args[1]);
     let error = match item {
         Ok(_) if model.publication.exposes(target) => RdraError::DuplicateExposure { kind, id },

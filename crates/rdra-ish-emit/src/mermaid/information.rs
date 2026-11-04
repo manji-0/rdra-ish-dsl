@@ -2,9 +2,7 @@
 //! diagram, each entity's state models, and the variations its columns take, without columns.
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_label, node_line, quote, Header,
-};
+use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
 use crate::{object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel};
 use std::collections::{BTreeSet, HashSet};
@@ -89,7 +87,7 @@ impl Emitter for InformationMermaidEmitter {
         }
         for (id, key) in &variations {
             let variation = &NodeRef::Variation(*key);
-            if let Some(label) = node_label(model, variation) {
+            if let Some(label) = model.node_label(variation) {
                 declare(&mut body, id, label, "variation");
                 if let Some(desc) = desc_line(model, variation, id) {
                     body.push_str(&format!("  {desc}\n"));

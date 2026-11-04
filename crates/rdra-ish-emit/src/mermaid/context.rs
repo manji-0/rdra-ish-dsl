@@ -4,7 +4,7 @@
 use super::{
     buc_members, buc_scope, declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge,
 };
-use crate::diagram_common::{class_defs, contract_id, edge_label, node_label, node_line, Header};
+use crate::diagram_common::{class_defs, contract_id, edge_label, node_line, Header};
 use crate::{
     collect_object_graph_nodes, object_graph_layer, EmitError, Emitter, ObjectGraphLayer, Scope,
     View,
@@ -124,7 +124,7 @@ impl Emitter for ContextMermaidEmitter {
         let via_of = |node: &NodeRef| -> Option<(String, String)> {
             Some((
                 contract_id(model, node)?,
-                node_label(model, node)?.to_string(),
+                model.node_label(node)?.to_string(),
             ))
         };
 

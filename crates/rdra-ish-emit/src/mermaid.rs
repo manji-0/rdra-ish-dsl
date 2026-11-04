@@ -23,8 +23,8 @@ pub use sequence::SequenceMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{
-    class_defs, col_type_str, contract_id, desc_line, edge_line, lifecycle_start_states, node_id,
-    node_label, node_line, quote, render_event_flows, Header,
+    class_defs, col_type_str, contract_id, desc_line, edge_line, lifecycle_start_states, node_line,
+    quote, render_event_flows, Header,
 };
 use crate::{
     collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
@@ -63,7 +63,7 @@ fn render_layered_nodes(
         let nodes: Vec<(&NodeRef, String, &str)> = nodes
             .iter()
             .filter(|nr| object_graph_layer(nr) == layer)
-            .filter_map(|nr| Some((nr, contract_id(model, nr)?, node_label(model, nr)?)))
+            .filter_map(|nr| Some((nr, contract_id(model, nr)?, model.node_label(nr)?)))
             .collect();
         if nodes.is_empty() {
             continue;
@@ -92,7 +92,7 @@ fn render_layered_nodes(
 
 /// `node` with its `:::<kind>` and its `%% desc` line, at `indent`.
 fn declare(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str) {
-    let (Some(id), Some(label)) = (contract_id(model, node), node_label(model, node)) else {
+    let (Some(id), Some(label)) = (contract_id(model, node), model.node_label(node)) else {
         return;
     };
     let kind = node_kind_filter_name(node);
@@ -842,8 +842,7 @@ impl Emitter for ErMermaidEmitter {
             if !is_visible(&rel.from) || !is_visible(&rel.to) {
                 continue;
             }
-            if let (Some(from_id), Some(to_id)) =
-                (node_id(model, &rel.from), node_id(model, &rel.to))
+            if let (Some(from_id), Some(to_id)) = (model.node_id(&rel.from), model.node_id(&rel.to))
             {
                 let Some(glyph) = crate::er_glyph(model, index) else {
                     continue;

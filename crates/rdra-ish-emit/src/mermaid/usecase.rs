@@ -6,7 +6,7 @@ use super::{
     buc_members, guard_edge, kinds_by_layer, omitted_linked_kinds, render_edges,
     render_layered_nodes, state_key, EdgeSet,
 };
-use crate::diagram_common::{class_defs, node_id, Header};
+use crate::diagram_common::{class_defs, Header};
 use crate::{collect_object_graph_nodes, object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, Relation, SemanticModel, UseCaseKey};
 use std::collections::HashSet;
@@ -45,7 +45,9 @@ pub(super) fn is_crud(kind: &RelKind) -> bool {
 /// contains, directly or through a step of one of its flows.
 pub(super) fn scoped_use_cases(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
     let named = |ids: &[String], node: &NodeRef| {
-        node_id(model, node).is_some_and(|id| ids.iter().any(|wanted| wanted == id))
+        model
+            .node_id(node)
+            .is_some_and(|id| ids.iter().any(|wanted| wanted == id))
     };
     let selected: Vec<NodeRef> = match scope {
         Scope::Whole => model.use_cases.keys().map(NodeRef::UseCase).collect(),

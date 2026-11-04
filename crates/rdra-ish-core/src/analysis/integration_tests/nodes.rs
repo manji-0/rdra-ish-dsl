@@ -1,12 +1,11 @@
 use super::support::*;
 use crate::analysis::instance::register_instance;
-use crate::analysis::nodes::node_kind_tag_str;
 use crate::location::DiagCtxt;
 use crate::model::*;
 use rdra_ish_syntax::ast::*;
 
 #[test]
-fn node_kind_tag_str_labels_each_node_ref_kind() {
+fn kind_tag_labels_each_node_ref_kind() {
     let mut model = SemanticModel::default();
     let mut diags = Vec::new();
     let cases = [
@@ -71,11 +70,11 @@ fn node_kind_tag_str_labels_each_node_ref_kind() {
     );
     for (kind, id, expected) in &cases {
         let node = model.symbols.lookup_qualified(kind, id).unwrap();
-        assert_eq!(node_kind_tag_str(node), *expected);
+        assert_eq!(node.kind_tag(), *expected);
     }
     let entity = model
         .symbols
         .lookup_qualified(&Kind::Entity, "EntityA")
         .unwrap();
-    assert_eq!(node_kind_tag_str(entity), "entity");
+    assert_eq!(entity.kind_tag(), "entity");
 }

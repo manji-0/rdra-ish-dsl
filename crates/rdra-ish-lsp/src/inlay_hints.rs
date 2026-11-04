@@ -1,6 +1,6 @@
 //! Inlay hints for predicate parameters and symbol kinds.
 
-use rdra_ish_core::{node_ref_kind, LookupResult, SemanticModel};
+use rdra_ish_core::{LookupResult, SemanticModel};
 use rdra_ish_syntax::ast::{Ast, Item, PredicateCall, QRef};
 use tower_lsp::lsp_types::{InlayHint, InlayHintKind, InlayHintLabel, Range};
 
@@ -88,7 +88,7 @@ fn reference_kind_hint(model: &SemanticModel, text: &str, qref: &QRef) -> Option
         LookupResult::Found(node) => node,
         _ => return None,
     };
-    let kind = node_ref_kind(node);
+    let kind = node.kind_tag();
     Some(InlayHint {
         position: byte_offset_to_position(text, qref.span.end),
         label: InlayHintLabel::String(kind.to_string()),

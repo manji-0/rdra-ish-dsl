@@ -14,7 +14,6 @@ use super::comparison::{
     type_category, BareRhs,
 };
 use super::effect::parse_effect_value;
-use super::nodes::node_kind_tag_str;
 use super::qref_util::qref_display;
 
 // ── 制約述語用ヘルパー ────────────────────────────────────────────────────────
@@ -109,7 +108,7 @@ pub(crate) fn when_condition_ref(
                 pred: pred.to_string(),
                 hint: format!(
                     "`{got}` is a {}; name a condition declared with `holds(Name, Entity.column == value)`, or write the comparison itself",
-                    node_kind_tag_str(&other)
+                    other.kind_tag()
                 ),
                 got,
             };
@@ -449,7 +448,7 @@ pub(crate) fn context_value_from_arg(
         PredicateArg::Lit(s) => Some(BusinessMappingContextValue::Text(s.clone())),
         PredicateArg::Ref(_) => {
             let node = resolve_arg(model, arg, ctx, diags)?;
-            let actual = node_kind_tag_str(&node);
+            let actual = node.kind_tag();
             if actual != expected_kind {
                 push_error(
                     ctx,
@@ -559,7 +558,7 @@ pub(crate) fn resolve_entity_qref(
                 RdraError::TypeMismatch {
                     pred: pred.to_string(),
                     id,
-                    actual: node_kind_tag_str(node).to_string(),
+                    actual: node.kind_tag().to_string(),
                     expected: "entity".to_string(),
                 },
             );

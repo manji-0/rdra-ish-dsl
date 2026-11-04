@@ -1,6 +1,6 @@
 //! Reference lookup at a cursor position.
 
-use rdra_ish_core::{node_ref_kind, DeclSite, LookupResult, SemanticModel};
+use rdra_ish_core::{DeclSite, LookupResult, SemanticModel};
 
 /// The symbol kind of a `relate` key's role: declared by `relate(..).role(x)`, referred to
 /// by the `.role(x)` that picks the key of a join.
@@ -61,7 +61,7 @@ pub fn resolve_decl_site(model: &SemanticModel, reference: ReferenceAt<'_>) -> O
                     LookupResult::Found(node) => node,
                     _ => return role_site(model, qref),
                 };
-                node_ref_kind(node)
+                node.kind_tag()
             };
             model.decl_sites.get(kind, id).cloned()
         }
@@ -113,7 +113,7 @@ pub fn symbol_target(model: &SemanticModel, reference: ReferenceAt<'_>) -> Optio
                         })
                     }
                 };
-                node_ref_kind(node).to_string()
+                node.kind_tag().to_string()
             };
             Some(SymbolTarget { kind, id })
         }

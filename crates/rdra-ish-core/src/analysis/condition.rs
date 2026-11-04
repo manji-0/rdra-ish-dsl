@@ -15,7 +15,6 @@ use super::constraint::{
     add_condition_entities_to_scope, along_scope, resolve_cross_condition,
     resolve_related_quantifier, selectors,
 };
-use super::nodes::node_kind_tag_str;
 use super::predicate_process::predicate_arg_display;
 use super::qref_util::qref_display;
 
@@ -316,7 +315,7 @@ fn resolve_combines_target(
             match resolve_arg(model, &PredicateArg::Ref(qref.clone()), ctx, diags)? {
                 NodeRef::Variation(key) => Some(CombinesTarget::Variation(key)),
                 other => {
-                    push_error_qref(ctx, diags, qref, mismatch(node_kind_tag_str(&other)));
+                    push_error_qref(ctx, diags, qref, mismatch(other.kind_tag()));
                     None
                 }
             }

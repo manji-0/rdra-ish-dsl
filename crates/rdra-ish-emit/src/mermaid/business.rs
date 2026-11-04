@@ -3,9 +3,7 @@
 //! each BUC is a table (`list --kind buc-roles`), not part of the diagram.
 
 use super::{declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{
-    class_defs, contract_id, desc_line, edge_label, node_id, node_label, quote, Header,
-};
+use crate::diagram_common::{class_defs, contract_id, desc_line, edge_label, quote, Header};
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use rdra_ish_core::{buc_handoffs, buc_members};
@@ -18,9 +16,9 @@ fn scoped_bucs(model: &SemanticModel, scope: &Scope) -> Vec<NodeRef> {
     collect_object_graph_nodes(model, &|node| {
         matches!(node, NodeRef::Buc(_))
             && match scope {
-                Scope::Bucs(ids) => {
-                    node_id(model, node).is_some_and(|id| ids.iter().any(|w| w == id))
-                }
+                Scope::Bucs(ids) => model
+                    .node_id(node)
+                    .is_some_and(|id| ids.iter().any(|w| w == id)),
                 Scope::Whole | Scope::UseCases(_) => true,
             }
     })
@@ -62,7 +60,7 @@ impl Emitter for BusinessMermaidEmitter {
         let mut belongs: Vec<(NodeRef, NodeRef)> = Vec::new();
         for buc in &bucs {
             let mut businesses = businesses_of(model, buc);
-            businesses.sort_by_key(|b| node_id(model, b).unwrap_or_default().to_string());
+            businesses.sort_by_key(|b| model.node_id(b).unwrap_or_default().to_string());
             let mut businesses = businesses.into_iter();
             if let Some(first) = businesses.next() {
                 nested.push((first, buc.clone()));
@@ -77,7 +75,7 @@ impl Emitter for BusinessMermaidEmitter {
         let mut body = String::new();
         for business in nodes.iter().filter(|nr| matches!(nr, NodeRef::Business(_))) {
             let (Some(id), Some(label)) =
-                (contract_id(model, business), node_label(model, business))
+                (contract_id(model, business), model.node_label(business))
             else {
                 continue;
             };
@@ -109,7 +107,7 @@ impl Emitter for BusinessMermaidEmitter {
                 contract_id(model, &from),
                 contract_id(model, &to),
                 contract_id(model, &event),
-                node_label(model, &event),
+                model.node_label(&event),
             ) {
                 flow.entry((from, edge_label(label), to))
                     .or_default()

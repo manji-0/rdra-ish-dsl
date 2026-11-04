@@ -8,7 +8,7 @@
 use super::omitted_linked_kinds;
 use super::robustness::controls_of;
 use super::usecase::scoped_use_cases;
-use crate::diagram_common::{contract_id, node_label, Header};
+use crate::diagram_common::{contract_id, Header};
 use crate::{node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{applied_bodies, condition_body_display};
 use rdra_ish_core::model::{
@@ -27,7 +27,7 @@ fn text(raw: &str) -> String {
 }
 
 fn label(model: &SemanticModel, node: &NodeRef) -> String {
-    text(node_label(model, node).unwrap_or_default())
+    text(model.node_label(node).unwrap_or_default())
 }
 
 fn effect_value(value: &EffectValue) -> String {

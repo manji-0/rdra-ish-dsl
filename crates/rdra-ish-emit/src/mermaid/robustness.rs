@@ -10,7 +10,7 @@
 
 use super::usecase::{is_crud, scoped_use_cases};
 use super::{kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, node_label, node_line, quote, Header};
+use crate::diagram_common::{class_defs, contract_id, node_line, quote, Header};
 use crate::{node_kind_filter_name, object_graph_rel_label, EmitError, Emitter, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{BTreeMap, HashSet};
@@ -33,7 +33,7 @@ fn crud_letters(kinds: &[RelKind]) -> String {
 
 /// A label safe on an edge: `|` would end it and `"` would read as a node.
 fn edge_label(model: &SemanticModel, node: &NodeRef) -> String {
-    quote(node_label(model, node).unwrap_or_default()).replace('|', "/")
+    quote(model.node_label(node).unwrap_or_default()).replace('|', "/")
 }
 
 /// The controls of each use case in scope: its APIs, and itself when it reads or writes
@@ -203,7 +203,7 @@ impl Emitter for RobustnessMermaidEmitter {
             body.push_str(&node_line(
                 "  ",
                 node_id,
-                &quote(node_label(model, node).unwrap_or_default()),
+                &quote(model.node_label(node).unwrap_or_default()),
                 node_kind_filter_name(node),
             ));
         }

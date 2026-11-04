@@ -1,5 +1,4 @@
 use crate::analysis::build_model;
-use crate::analysis::nodes::node_kind_tag_str;
 use crate::model::*;
 use rdra_ish_syntax::parse;
 
@@ -203,7 +202,7 @@ decides(AdrOutbox, PublishCustomerChanged)
         .filter(|relation| {
             relation.kind == RelKind::Decides && relation.from == NodeRef::Adr(adr_key)
         })
-        .map(|relation| node_kind_tag_str(&relation.to))
+        .map(|relation| relation.to.kind_tag())
         .collect();
     assert_eq!(target_kinds, vec!["system", "entity", "api"]);
 }

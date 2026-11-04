@@ -5,42 +5,6 @@ use super::refs::NodeRef;
 
 // ── Symbol table ─────────────────────────────────────────────────────────────
 
-/// Kind name string for a [`NodeRef`] (`"actor"`, `"usecase"`, …).
-pub fn node_ref_kind(node: &NodeRef) -> &'static str {
-    node_kind_tag(node)
-}
-
-fn node_kind_tag(node: &NodeRef) -> &'static str {
-    match node {
-        NodeRef::Actor(_) => "actor",
-        NodeRef::ExtSystem(_) => "extsystem",
-        NodeRef::System(_) => "system",
-        NodeRef::Requirement(_) => "requirement",
-        NodeRef::Adr(_) => "adr",
-        NodeRef::Goal(_) => "goal",
-        NodeRef::Nfr(_) => "nfr",
-        NodeRef::Quality(_) => "quality",
-        NodeRef::Constraint(_) => "constraint",
-        NodeRef::Business(_) => "business",
-        NodeRef::Buc(_) => "buc",
-        NodeRef::Flow(_) => "flow",
-        NodeRef::Step(_) => "step",
-        NodeRef::UseCase(_) => "usecase",
-        NodeRef::Screen(_) => "screen",
-        NodeRef::Field(_) => "field",
-        NodeRef::Event(_) => "event",
-        NodeRef::Entity(_) => "entity",
-        NodeRef::State(_) => "state",
-        NodeRef::Api(_) => "api",
-        NodeRef::Dto(_) => "dto",
-        NodeRef::Timer(_) => "timer",
-        NodeRef::Medium(_) => "medium",
-        NodeRef::Permission(_) => "permission",
-        NodeRef::Variation(_) => "variation",
-        NodeRef::Condition(_) => "condition",
-    }
-}
-
 fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
     matches!(
         (node, kind),
@@ -117,10 +81,10 @@ impl SymbolTable {
         module: Option<String>,
     ) -> bool {
         let entries = self.by_id.entry(id).or_default();
-        let kind = node_kind_tag(&node);
+        let kind = node.kind_tag();
         if entries
             .iter()
-            .any(|e| node_kind_tag(&e.node) == kind && e.module == module)
+            .any(|e| e.node.kind_tag() == kind && e.module == module)
         {
             return true;
         }
@@ -133,7 +97,7 @@ impl SymbolTable {
         match self.by_id.get(id) {
             None => LookupResult::NotFound,
             Some(v) if v.len() == 1 => LookupResult::Found(&v[0].node),
-            Some(v) => LookupResult::Ambiguous(v.iter().map(|e| node_kind_tag(&e.node)).collect()),
+            Some(v) => LookupResult::Ambiguous(v.iter().map(|e| e.node.kind_tag()).collect()),
         }
     }
 

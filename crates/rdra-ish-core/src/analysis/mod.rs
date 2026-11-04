@@ -12,7 +12,6 @@ mod effect;
 mod fk;
 mod instance;
 mod metadata;
-mod nodes;
 mod predicate_process;
 mod property;
 mod qref_util;

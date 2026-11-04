@@ -3,9 +3,7 @@
 //! step covers. A step one actor performs sits in that actor's swimlane.
 
 use super::{declare, omitted_linked_kinds, rdra_arrow, render_edges, GraphEdge};
-use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_id, node_label, quote, Header,
-};
+use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header};
 use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{HashMap, HashSet};
@@ -22,7 +20,9 @@ fn scoped_flows(model: &SemanticModel, scope: &Scope) -> Vec<NodeRef> {
                 .filter(|rel| {
                     rel.kind == RelKind::Contains
                         && matches!(rel.from, NodeRef::Buc(_))
-                        && node_id(model, &rel.from).is_some_and(|id| ids.iter().any(|w| w == id))
+                        && model
+                            .node_id(&rel.from)
+                            .is_some_and(|id| ids.iter().any(|w| w == id))
                 })
                 .map(|rel| rel.to.clone())
                 .collect(),
@@ -117,7 +117,7 @@ impl Emitter for FlowMermaidEmitter {
             let indent = match flow {
                 Some(flow) => {
                     let (Some(id), Some(label)) =
-                        (contract_id(model, flow), node_label(model, flow))
+                        (contract_id(model, flow), model.node_label(flow))
                     else {
                         continue;
                     };
@@ -140,12 +140,11 @@ impl Emitter for FlowMermaidEmitter {
                 steps.iter().any(|step| lane_of(step) == Some(nr))
             });
             for actor in &lanes {
-                let (Some(actor_id), Some(label)) =
-                    (node_id(model, actor), node_label(model, actor))
+                let (Some(actor_id), Some(label)) = (model.node_id(actor), model.node_label(actor))
                 else {
                     continue;
                 };
-                let flow_id = flow.and_then(|flow| node_id(model, flow)).unwrap_or("");
+                let flow_id = flow.and_then(|flow| model.node_id(flow)).unwrap_or("");
                 add_kind("lane");
                 body.push_str(&format!(
                     "{indent}subgraph lane__{flow_id}__{actor_id}[\"{}\"]\n\
