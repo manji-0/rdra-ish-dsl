@@ -1880,13 +1880,62 @@ holds(GateOpen, Gate.status == open)
 applies_to(GateOpen, Go)
 "#;
 
+/// A use case named `Tick` beside the clock's action, which is then `Tick_2`: the deadline
+/// passes by the clock alone, so the rule is violated, and the use case runs after it.
+const TICK_USE_CASE: &str = r#"
+entity Coupon "クーポン" { id: Int @pk  status: Enum(active, expired) @default(active)  expires_at: Date }
+usecase Issue "発行"
+usecase Tick "失効"
+creates(Issue, Coupon)
+sets(Issue, Coupon.expires_at == 2)
+transitions(Tick, Coupon.status, active -> expired)
+condition PastDeadline "期限を過ぎた"
+holds(PastDeadline, Coupon.expires_at < now)
+applies_to(PastDeadline, Tick)
+forbidden(Coupon, status == active, expires_at < now)
+"#;
+
+/// A use case named `Go_2` beside the second step of the split use case `Go`, which is then
+/// `Go_2_2`; the use case closes the gate, so a job can start only while it stays open.
+const GO_2_USE_CASE: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Go "開始"
+usecase Open "門を開ける"
+usecase Go_2 "門を閉める"
+usecase BuildGate "設置"
+usecase Submit "投入"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+transitions(Go, Job.status, waiting -> running)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+transitions(Open, Gate.status, shut -> open)
+transitions(Go_2, Gate.status, open -> shut)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Go)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
 #[test]
 fn bfs_and_tlc_agree_on_two_actions_of_one_name() {
-    if let Some(violated) = check_fixture("name_collision", NAME_COLLISION) {
-        assert_eq!(violated, BTreeSet::from(["Forbidden_Job_0".to_string()]));
-    }
-    if let Some(violated) = check_fixture("name_collision_two_params", NAME_COLLISION_TWO_PARAMS) {
-        assert!(violated.is_empty(), "{violated:?}");
+    for (name, src, expected) in [
+        ("name_collision", NAME_COLLISION, &["Forbidden_Job_0"][..]),
+        ("name_collision_two_params", NAME_COLLISION_TWO_PARAMS, &[]),
+        ("tick_use_case", TICK_USE_CASE, &["Forbidden_Coupon_0"]),
+        ("go_2_use_case", GO_2_USE_CASE, &["Forbidden_Job_0"]),
+    ] {
+        if let Some(violated) = check_fixture(name, src) {
+            let expected: BTreeSet<String> = expected.iter().map(|s| s.to_string()).collect();
+            assert_eq!(violated, expected, "{name}");
+        }
     }
 }
 

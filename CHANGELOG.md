@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Fixed
+
+- A generated action name, `<UC>_<n>` for a step of a split use case or `Tick` for the
+  clock, that is a use case's id takes the first free `<name>_<k>` from `_2` (`Go_1_2`,
+  `Tick_2`), so two actions never share a name. A model with a use case `Go_1` beside a
+  split use case `Go` merged the two in every output named by action: `check` reported
+  `whether Go_1 can run is not decided` while both ran, and a step's label read its
+  transaction number off the name. The run findings of a cone aggregate by the action's
+  identity, and a step's label prints its transaction number from its origin. A model whose
+  generated names collide with nothing keeps every name and every output.
+
 ### Added
 
 - `sets(UC, E.col == value).when(Condition)` (#98): the use case leaves the value only while

@@ -485,6 +485,10 @@ cone's `Graph` (its states and `(from, to, action)` edges).
 ### Use cases that never run
 
 An action is one use case, or one transaction group of a split use case (`Pay_1`, `Pay_2`).
+A generated name that is a use case's id, or an earlier generated name, takes the first free
+`<name>_<k>` from `_2` (a use case `Pay_1` beside the split `Pay` leaves the step `Pay_1_2`;
+a use case `Tick` beside the clock leaves it `Tick_2`), so action names are unique; a model
+whose generated names collide with nothing keeps every name.
 It runs when some edge of a cone that keeps it carries its label. A self-loop counts: an
 action that changes nothing still runs. An entity's cone keeps every action with a param on
 the entity that is not only a parent, with all of its guards, so each such cone decides the
