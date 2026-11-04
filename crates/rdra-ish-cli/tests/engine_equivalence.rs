@@ -1821,6 +1821,75 @@ property JobStarts "作業はいずれ始まる" eventually(Job.status == runnin
 property JobWaits "作業は始まらない" always(Job.status == waiting)
 "#;
 
+/// A split use case `Go` (steps `Go_1`, `Go_2`) beside a use case named `Go_1` that moves
+/// the gate the job's cone reduces (#74): two actions of one name, which only the action's
+/// identity tells apart. The job starts once the gate is open, so the rule is violated.
+const NAME_COLLISION: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Go "開始"
+usecase Go_1 "門を開ける"
+usecase BuildGate "設置"
+usecase Submit "投入"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+transitions(Go, Job.status, waiting -> running)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+transitions(Go_1, Gate.status, shut -> open)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Go)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// The collision where the job's first step binds a second entity, so the two actions of
+/// one name differ in their params too.
+const NAME_COLLISION_TWO_PARAMS: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+entity Crew "班" { id: Int @pk  status: Enum(idle, busy) @default(idle) }
+relate(Job, Gate, N:1)
+usecase Go "開始"
+usecase Go_1 "門を開ける"
+usecase BuildGate "設置"
+usecase Submit "投入"
+usecase Hire "雇う"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+creates(Hire, Crew)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+updates(JobApi, Crew)
+transitions(Go, Job.status, waiting -> running)
+transitions(Go, Crew.status, idle -> busy)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+transitions(Go_1, Gate.status, shut -> open)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Go)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_two_actions_of_one_name() {
+    if let Some(violated) = check_fixture("name_collision", NAME_COLLISION) {
+        assert_eq!(violated, BTreeSet::from(["Forbidden_Job_0".to_string()]));
+    }
+    if let Some(violated) = check_fixture("name_collision_two_params", NAME_COLLISION_TWO_PARAMS) {
+        assert!(violated.is_empty(), "{violated:?}");
+    }
+}
+
 type TemporalCase = (&'static str, &'static str, &'static [(&'static str, Why)]);
 
 const TEMPORAL_CASES: &[TemporalCase] = &[

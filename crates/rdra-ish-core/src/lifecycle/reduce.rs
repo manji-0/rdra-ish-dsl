@@ -55,8 +55,8 @@ pub struct Reduction {
     init: HashMap<Box<[u8]>, u32>,
     /// Per class, the class moves: the last action, its params, and the class entered.
     moves: Vec<Vec<ClassMove>>,
-    /// Each S subsystem action as the cone's; an S action reads only S, so its params are
-    /// the same there.
+    /// Each S subsystem action as the cone's (by `Action::source`); an S action reads only
+    /// S, so its params are the same there.
     acts: Vec<ActId>,
     /// The reduction S was explored with, in the S subsystem's ids.
     inner: Option<Arc<Reduction>>,
@@ -197,7 +197,7 @@ impl Quotient {
                 let at = cone
                     .actions
                     .iter()
-                    .position(|b| b.name == a.name)
+                    .position(|b| b.source == a.source)
                     .expect("an S action is an action of the cone");
                 ActId::at(at)
             })
@@ -515,8 +515,9 @@ impl TransitionSystem {
                 let keep_local: BTreeSet<ActId> = sys
                     .action_ids()
                     .filter(|a| {
-                        let name = &sys.actions[a.index()].name;
-                        keep.iter().any(|k| self.actions[k.index()].name == *name)
+                        let source = sys.actions[a.index()].source;
+                        keep.iter()
+                            .any(|k| self.actions[k.index()].source == source)
                     })
                     .collect();
                 (seed_local, keep_local)

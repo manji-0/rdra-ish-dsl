@@ -292,6 +292,10 @@ pub struct Action {
     /// The use case id, `<id>_<n>` for the n-th transaction group of a split use case, or
     /// `Tick`.
     pub name: String,
+    /// The action's id in the system it was built in. `restrict_to` keeps it, so it names
+    /// one action across a cone, its sub-lifecycle, and the whole system, where `name` may
+    /// not (a use case `Go_1` beside a split use case `Go`).
+    pub source: ActId,
     pub origin: ActionOrigin,
     /// The use case declaration, or `Synthesized` for `Tick`.
     pub site: Site,

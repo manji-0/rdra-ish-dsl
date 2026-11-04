@@ -6,7 +6,9 @@ use std::collections::BTreeSet;
 
 use super::cone::{load, SAMPLES};
 use super::*;
-use crate::lifecycle::{ComponentRun, State, Step, Target, TargetExploration, VarSet};
+use crate::lifecycle::{
+    Action, ActionOrigin, ComponentRun, State, Step, Target, TargetExploration, VarSet,
+};
 
 const DOMAIN_SAMPLES: &[&str] = &[
     "samples/clinic-ops",
@@ -45,6 +47,91 @@ condition GateOpen "門が開いている"
 holds(GateOpen, Gate.status == open)
 applies_to(GateOpen, Start)
 forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// A split use case `Go` (two APIs, so `Go_1` and `Go_2`) beside a use case named `Go_1`
+/// that moves the gate the job's cone reduces: the gate's action and the job's first step
+/// share a name, and only the action's identity tells them apart.
+const COLLIDING_T_FIRST: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Go "開始"
+usecase Go_1 "門を開ける"
+usecase BuildGate "設置"
+usecase Submit "投入"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+transitions(Go, Job.status, waiting -> running)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+transitions(Go_1, Gate.status, shut -> open)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Go)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// The same model with the gate's use case declared first.
+const COLLIDING_S_FIRST: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Go_1 "門を開ける"
+usecase Go "開始"
+usecase BuildGate "設置"
+usecase Submit "投入"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+transitions(Go_1, Gate.status, shut -> open)
+creates(BuildGate, Gate)
+creates(Submit, Job)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+transitions(Go, Job.status, waiting -> running)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Go)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// The collision with a second entity the first step writes, so the colliding actions
+/// differ in their params as well.
+const COLLIDING_TWO_PARAMS: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+entity Crew "班" { id: Int @pk  status: Enum(idle, busy) @default(idle) }
+relate(Job, Gate, N:1)
+usecase Go "開始"
+usecase Go_1 "門を開ける"
+usecase BuildGate "設置"
+usecase Submit "投入"
+usecase Hire "雇う"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+creates(Hire, Crew)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+updates(JobApi, Crew)
+transitions(Go, Job.status, waiting -> running)
+transitions(Go, Crew.status, idle -> busy)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+transitions(Go_1, Gate.status, shut -> open)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Go)
 "#;
 
 fn entity_target(ts: &TransitionSystem, id: &str) -> Target {
@@ -245,6 +332,50 @@ fn a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace() {
         steps(a[0])
     );
     assert_eq!(a[0].name(&[]), b[0].name(&[]));
+}
+
+/// Two actions of one name are two actions: the reduced cone relates the gate's action to
+/// itself, not to the job's first step, so it reaches what the cone reaches.
+#[test]
+fn a_sub_lifecycle_action_that_shares_a_name_with_a_target_step_keeps_its_identity() {
+    for (name, src, violated_count) in [
+        ("T first", COLLIDING_T_FIRST, 1),
+        ("S first", COLLIDING_S_FIRST, 1),
+        ("two params", COLLIDING_TWO_PARAMS, 0),
+    ] {
+        let model = model_from(src);
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+            let targets = ts.targets();
+            let plain = ts.explore_targets(&targets, Caps::VERIFY);
+            let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+            let job = entity_target(&ts, "Job");
+            let cone = reduced.cone_of(job);
+            let sys = &cone.run.system;
+            let red = sys.reduction().expect("the job's cone reduces the gate");
+            let is_gate_opener = |a: &Action| matches!(&a.origin, ActionOrigin::UseCase { uc, .. } if model.use_cases[*uc].id == "Go_1");
+            assert!(
+                red.s_actions()
+                    .iter()
+                    .any(|a| is_gate_opener(&sys.actions()[a.index()])),
+                "{name}: the gate's Go_1 is an S action"
+            );
+            assert!(
+                sys.actions().iter().filter(|a| a.name == "Go_1").count() == 2,
+                "{name}: two actions named Go_1"
+            );
+            assert_eq!(
+                diag_names(&plain),
+                diag_names(&reduced),
+                "{name} at {bounds:?}"
+            );
+            assert_eq!(
+                violated(&reduced).len(),
+                violated_count,
+                "{name} at {bounds:?}"
+            );
+        }
+    }
 }
 
 #[test]

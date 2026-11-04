@@ -435,6 +435,7 @@ impl<'m> Builder<'m> {
         self.ts.now?;
         Some(Action {
             name: "Tick".to_string(),
+            source: super::types::ActId::at(0),
             origin: ActionOrigin::Clock,
             site: Site::bare(ModelRef::Synthesized),
             params: Vec::new(),
@@ -518,6 +519,9 @@ impl<'m> Builder<'m> {
         }
         if let Some(tick) = self.tick() {
             self.ts.actions.push(tick);
+        }
+        for (i, a) in self.ts.actions.iter_mut().enumerate() {
+            a.source = super::types::ActId::at(i);
         }
         self.inert_conditions();
     }
@@ -638,6 +642,7 @@ impl<'m> Builder<'m> {
         self.arm_guards(uc, &mut a);
         Action {
             name,
+            source: super::types::ActId::at(0),
             origin: ActionOrigin::UseCase {
                 uc,
                 buc: first_buc(model, uc),
