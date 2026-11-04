@@ -2803,21 +2803,32 @@ fn cfg_invariants(cfg: &str) -> Vec<String> {
         .collect()
 }
 
+/// Above this many states a witnesses cfg runs without `-continue`: its invariants fail in
+/// most reached states, and `-continue` prints a trace for each (1.5 GB for a 93,425-state
+/// clinic-ops cone).
+const CONTINUE_STATES: u64 = 1_000;
+
 /// The invariants TLC finds violated on `module` with `cfg`, as a user reruns it by hand:
-/// `-continue` reports one invariant per state, so each rerun drops the reported ones, until
-/// a run reports no new one.
+/// each rerun drops the reported ones, until a run reports no new one or no invariant but
+/// `TypeOK` is left. A `continued` run explores every state and reports one invariant per
+/// state; another halts at the first (`run_tlc` runs one worker, so one is reported), and
+/// `TypeOK` is checked on every state only by the continued deadlocks run before it. Also
+/// returns the first run's distinct states when it finished.
 fn violated_by_hand(
     tlc: &Path,
     dir: &Path,
     module: &str,
     cfg: &str,
     label: &str,
-) -> BTreeSet<String> {
+    continued: bool,
+) -> (BTreeSet<String>, Option<u64>) {
     // `run_tlc` runs the module as `Cone.tla`.
     let tla = std::fs::read_to_string(dir.join(format!("{module}.tla")))
         .expect("module")
         .replacen(&format!("MODULE {module} "), "MODULE Cone ", 1);
+    let args: &[&str] = if continued { &["-continue"] } else { &[] };
     let mut found = BTreeSet::new();
+    let mut states = None;
     for rerun in 0.. {
         let keep: Vec<&str> = cfg
             .lines()
@@ -2826,42 +2837,83 @@ fn violated_by_hand(
                     .is_none_or(|n| !found.contains(n))
             })
             .collect();
+        let left = keep
+            .iter()
+            .filter_map(|l| l.strip_prefix("INVARIANT "))
+            .any(|n| n != "TypeOK");
+        if rerun > 0 && !left {
+            break;
+        }
         let (_, log) = run_tlc(
             tlc,
             &dir.join(format!("{module}-{label}-{rerun}")),
-            &["-continue"],
+            args,
             &tla,
             &(keep.join("\n") + "\n"),
         );
-        let run = TlcRun::parse(&log);
+        // A run that halts at an initial state says `is violated by the initial state:`,
+        // which `TlcRun` does not name.
+        let new: BTreeSet<String> = log
+            .lines()
+            .filter_map(|l| {
+                l.strip_prefix("Error: Invariant ")?
+                    .split_once(" is violated")
+            })
+            .map(|(name, _)| name.to_string())
+            .collect();
         assert!(
-            log.contains(" 0 states left on queue"),
+            !new.contains("TypeOK"),
+            "{module} ({label}): TypeOK violated\n{log}"
+        );
+        let finished = log.contains(" 0 states left on queue");
+        assert!(
+            finished || (!continued && !new.is_empty()),
             "{module} ({label}): TLC did not finish\n{log}"
         );
-        let new = run.violated_names();
+        if rerun == 0 && finished {
+            states = TlcRun::parse(&log).distinct_states;
+        }
         if new.is_subset(&found) {
-            return found;
+            break;
         }
         found.extend(new);
     }
-    unreachable!()
+    (found, states)
 }
 
-/// The deadlocks and missing witnesses of `input` at `Bounds::VERIFY` that TLC alone finds on
-/// the `StateModel_` specs `export --kind tla` writes into `dir`, asserted equal to those
-/// `verify`'s BFS finds: a `Deadlock_` TLC reports violated with the spec's cfg, and a
-/// `Witness_` it does not report with its `_witnesses` cfg. A cone in `VERIFY_FALLBACK` under
-/// `label` is too large to run here; its findings are only checked to be listed.
-fn tlc_alone_and_bfs(tlc: &Path, dir: &Path, label: &str, input: &str) -> BTreeSet<String> {
-    let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+/// A sample's `StateModel_` specs as `export --kind tla` writes them into `dir`, the ones TLC
+/// runs, and the deadlocks and missing witnesses `verify`'s BFS finds at `Bounds::VERIFY`. A
+/// cone in `VERIFY_FALLBACK` under `label` is too large to run here, and neither engine
+/// explores it.
+struct StateModels {
+    label: String,
+    dir: PathBuf,
+    run: Vec<String>,
+    bfs: BTreeSet<String>,
+}
+
+/// `input`'s [`StateModels`], or `None` when a build error stops `export` and `verify` before
+/// either engine runs.
+fn export_state_models(dir: &Path, label: &str, input: &str) -> Option<StateModels> {
     let model = load(input);
     let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
-    // A build error stops `export` and `verify` before either engine runs.
     if rdra_ish_core::lifecycle::has_errors(&built.diags) {
-        return BTreeSet::new();
+        return None;
     }
     let ts = built.ts;
-    let entities: Vec<Target> = ts.entity_ids().map(Target::Entity).collect();
+    let fallback: Vec<Cone> = ts
+        .entity_ids()
+        .filter(|e| {
+            let entity = format!("entity {}", ts.entity(*e).id);
+            VERIFY_FALLBACK.contains(&(label, entity.as_str()))
+        })
+        .map(|e| ts.target_cone(Target::Entity(e)))
+        .collect();
+    let entities: Vec<Target> = ts
+        .entity_ids()
+        .map(Target::Entity)
+        .filter(|t| !fallback.contains(&ts.target_cone(*t)))
+        .collect();
     let bfs: BTreeSet<String> = ts
         .explore_targets_reduced(&entities, Caps::VERIFY)
         .verdicts()
@@ -2886,17 +2938,15 @@ fn tlc_alone_and_bfs(tlc: &Path, dir: &Path, label: &str, input: &str) -> BTreeS
         })
         .collect();
     modules.sort();
-    // A `<module>_witnesses` stem takes a `_<k>` suffix only on a collision, which no input here
-    // has.
-    let cfg = |name: &str| {
-        std::fs::read_to_string(dir.join(format!("{name}.cfg")))
-            .unwrap_or_else(|e| panic!("{label}: {name}.cfg: {e}"))
-    };
     let mut listed = BTreeSet::new();
-    let mut run: Vec<&String> = Vec::new();
-    for m in &modules {
-        listed.extend(cfg_invariants(&cfg(m)));
-        listed.extend(cfg_invariants(&cfg(&format!("{m}_witnesses"))));
+    let mut run = Vec::new();
+    for m in modules {
+        listed.extend(cfg_invariants(&read_cfg(dir, label, &m)));
+        listed.extend(cfg_invariants(&read_cfg(
+            dir,
+            label,
+            &format!("{m}_witnesses"),
+        )));
         let entity = format!("entity {}", &m["StateModel_".len()..]);
         if !VERIFY_FALLBACK.contains(&(label, entity.as_str())) {
             run.push(m);
@@ -2904,38 +2954,66 @@ fn tlc_alone_and_bfs(tlc: &Path, dir: &Path, label: &str, input: &str) -> BTreeS
     }
     let missing: BTreeSet<&String> = bfs.difference(&listed).collect();
     assert!(missing.is_empty(), "{label}: no spec checks {missing:?}");
+    Some(StateModels {
+        label: label.to_string(),
+        dir: dir.to_path_buf(),
+        run,
+        bfs,
+    })
+}
+
+/// A `<module>_witnesses` stem takes a `_<k>` suffix only on a collision, which no input here
+/// has.
+fn read_cfg(dir: &Path, label: &str, name: &str) -> String {
+    std::fs::read_to_string(dir.join(format!("{name}.cfg")))
+        .unwrap_or_else(|e| panic!("{label}: {name}.cfg: {e}"))
+}
+
+/// The deadlocks and missing witnesses TLC alone finds on each sample's specs, asserted equal
+/// to those the BFS finds: a `Deadlock_` TLC reports violated with the spec's cfg, and a
+/// `Witness_` it does not report with its `_witnesses` cfg. The modules of all samples share
+/// one pool of TLC runs.
+fn tlc_alone_and_bfs(tlc: &Path, samples: &[StateModels]) -> Vec<BTreeSet<String>> {
+    let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
+    let jobs: Vec<(usize, &str)> = samples
+        .iter()
+        .enumerate()
+        .flat_map(|(i, s)| s.run.iter().map(move |m| (i, m.as_str())))
+        .collect();
     let next = AtomicUsize::new(0);
-    let results: Mutex<Vec<(BTreeSet<String>, BTreeSet<String>)>> = Mutex::new(Vec::new());
+    let checked = Mutex::new(vec![BTreeSet::new(); samples.len()]);
+    let found = Mutex::new(vec![BTreeSet::new(); samples.len()]);
     std::thread::scope(|s| {
         for _ in 0..workers {
             s.spawn(|| {
-                while let Some(m) = run.get(next.fetch_add(1, Ordering::SeqCst)) {
-                    let deadlocks = violated_by_hand(tlc, dir, m, &cfg(m), "deadlocks");
-                    let witnesses = cfg(&format!("{m}_witnesses"));
-                    let reached = violated_by_hand(tlc, dir, m, &witnesses, "witnesses");
-                    let mut checked: BTreeSet<String> =
-                        cfg_invariants(&cfg(m)).into_iter().collect();
-                    checked.extend(cfg_invariants(&witnesses));
+                while let Some(&(i, m)) = jobs.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let StateModels { label, dir, .. } = &samples[i];
+                    let deadlock_cfg = read_cfg(dir, label, m);
+                    let (deadlocks, states) =
+                        violated_by_hand(tlc, dir, m, &deadlock_cfg, "deadlocks", true);
+                    let witnesses = read_cfg(dir, label, &format!("{m}_witnesses"));
+                    let continued = states.is_some_and(|n| n <= CONTINUE_STATES);
+                    let (reached, _) =
+                        violated_by_hand(tlc, dir, m, &witnesses, "witnesses", continued);
                     let unreached = cfg_invariants(&witnesses)
                         .into_iter()
                         .filter(|w| !reached.contains(w));
-                    let found = deadlocks.into_iter().chain(unreached).collect();
-                    results.lock().unwrap().push((checked, found));
+                    found.lock().unwrap()[i].extend(deadlocks.into_iter().chain(unreached));
+                    checked.lock().unwrap()[i].extend(
+                        cfg_invariants(&deadlock_cfg)
+                            .into_iter()
+                            .chain(cfg_invariants(&witnesses)),
+                    );
                 }
             });
         }
     });
-    let (checked, found): (BTreeSet<String>, BTreeSet<String>) = results
-        .into_inner()
-        .unwrap()
-        .into_iter()
-        .fold(Default::default(), |(mut c, mut f), (c2, f2)| {
-            c.extend(c2);
-            f.extend(f2);
-            (c, f)
-        });
-    let expected: BTreeSet<String> = bfs.intersection(&checked).cloned().collect();
-    assert_eq!(found, expected, "{label}: TLC alone and BFS");
+    let checked = checked.into_inner().unwrap();
+    let found: Vec<BTreeSet<String>> = found.into_inner().unwrap();
+    for (i, s) in samples.iter().enumerate() {
+        let expected: BTreeSet<String> = s.bfs.intersection(&checked[i]).cloned().collect();
+        assert_eq!(found[i], expected, "{}: TLC alone and BFS", s.label);
+    }
     found
 }
 
@@ -2959,12 +3037,18 @@ fn tlc_alone_finds_the_deadlocks_and_missing_witnesses_bfs_finds() {
     let Some(tlc) = require_tlc() else { return };
     let scratch = std::env::temp_dir().join(format!("rdra-state-models-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&scratch);
-    let mut found_any = BTreeSet::new();
-    for sample in samples() {
-        // `-o` names a directory only without an extension.
-        let dir = scratch.join(sample.replace(['/', '.'], "_"));
-        found_any.extend(tlc_alone_and_bfs(&tlc, &dir, &sample, &sample));
-    }
+    let exported: Vec<StateModels> = samples()
+        .iter()
+        .filter_map(|sample| {
+            // `-o` names a directory only without an extension.
+            let dir = scratch.join(sample.replace(['/', '.'], "_"));
+            export_state_models(&dir, sample, sample)
+        })
+        .collect();
+    let found_any: BTreeSet<String> = tlc_alone_and_bfs(&tlc, &exported)
+        .into_iter()
+        .flatten()
+        .collect();
     let _ = std::fs::remove_dir_all(&scratch);
     for name in [
         "Deadlock_Order_status_paid",
@@ -3013,12 +3097,9 @@ fn tlc_alone_finds_a_deadlock_beside_a_toggled_column() {
     std::fs::create_dir_all(&scratch).expect("scratch dir");
     let file = scratch.join("toggled.rdra");
     std::fs::write(&file, TOGGLED_DEADLOCK).expect("write model");
-    let found = tlc_alone_and_bfs(
-        &tlc,
-        &scratch.join("tla"),
-        "toggled",
-        file.to_str().unwrap(),
-    );
+    let exported = export_state_models(&scratch.join("tla"), "toggled", file.to_str().unwrap())
+        .expect("the model builds");
+    let found = tlc_alone_and_bfs(&tlc, &[exported]).remove(0);
     let _ = std::fs::remove_dir_all(&scratch);
     assert_eq!(
         found.into_iter().collect::<Vec<_>>(),
