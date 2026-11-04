@@ -651,3 +651,81 @@ fn a_guard_on_what_a_later_transaction_creates_names_the_api_to_apply_it_to() {
     );
     assert_eq!(severity, crate::lifecycle::Severity::Warning);
 }
+
+/// A split use case `Go` beside use cases named `Go_1` and `Go_2`: the use cases keep their
+/// ids, and the steps take `Go_1_2` and `Go_2_2`. Declared in either order.
+#[test]
+fn a_split_step_whose_name_is_a_use_case_id_takes_the_next_free_name() {
+    let steps = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+usecase Go "開始"
+usecase BuildGate "設置"
+usecase Submit "投入"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+transitions(Go, Job.status, waiting -> running)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+"#;
+    let colliders = r#"
+usecase Go_1 "門を開ける"
+usecase Go_2 "門を閉める"
+transitions(Go_1, Gate.status, shut -> open)
+transitions(Go_2, Gate.status, open -> shut)
+"#;
+    for src in [format!("{steps}{colliders}"), format!("{colliders}{steps}")] {
+        let model = model_from(&src);
+        let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
+        let mut names = action_names(&ts);
+        names.sort();
+        assert_eq!(
+            names,
+            vec!["BuildGate", "Go_1", "Go_1_2", "Go_2", "Go_2_2", "Submit"],
+            "{src}"
+        );
+        for (name, uc) in [
+            ("Go_1_2", "Go"),
+            ("Go_2_2", "Go"),
+            ("Go_1", "Go_1"),
+            ("Go_2", "Go_2"),
+        ] {
+            let a = ts.actions().iter().find(|a| a.name == name).unwrap();
+            let ActionOrigin::UseCase { uc: key, .. } = &a.origin else {
+                panic!("{name}")
+            };
+            assert_eq!(model.use_cases[*key].id, uc, "{name}");
+        }
+    }
+    let plain = built(steps);
+    assert_eq!(
+        action_names(&plain),
+        vec!["Go_1", "Go_2", "BuildGate", "Submit"]
+    );
+}
+
+/// A use case named `Tick` beside the clock: the use case keeps its id, and the clock's
+/// action is `Tick_2`.
+#[test]
+fn the_clock_action_steps_aside_for_a_use_case_named_tick() {
+    let src = r#"
+entity Coupon "クーポン" { id: Int @pk  status: Enum(active, expired) @default(active)  expires_at: Date }
+usecase Issue "発行"
+usecase Tick "刻む"
+creates(Issue, Coupon)
+sets(Issue, Coupon.expires_at == 2)
+transitions(Tick, Coupon.status, active -> expired)
+forbidden(Coupon, status == active, expires_at < now)
+"#;
+    let ts = built(src);
+    let mut names = action_names(&ts);
+    names.sort();
+    assert_eq!(names, vec!["Issue", "Tick", "Tick_2"]);
+    let clock = ts.actions().iter().find(|a| a.name == "Tick_2").unwrap();
+    assert_eq!(clock.origin, ActionOrigin::Clock);
+}

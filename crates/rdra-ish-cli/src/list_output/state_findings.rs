@@ -173,11 +173,12 @@ fn has_block(diag: &StateDiag) -> bool {
 
 /// `use case Refund`, or `transaction 2 of Pay (Pay_2)` for one group of a split use case.
 fn action_label(model: &SemanticModel, action: &str, origin: &ActionOrigin) -> String {
-    if let ActionOrigin::UseCase { uc, .. } = origin {
+    if let ActionOrigin::UseCase {
+        uc, step: Some(n), ..
+    } = origin
+    {
         let id = &model.use_cases[*uc].id;
-        if let Some(n) = action.strip_prefix(&format!("{id}_")) {
-            return format!("transaction {n} of {id} ({action})");
-        }
+        return format!("transaction {n} of {id} ({action})");
     }
     format!("use case {action}")
 }
@@ -581,11 +582,12 @@ fn aligned(rows: Vec<(String, Option<String>)>) -> String {
 /// `Pay_1, transaction 1 of Pay [Payment#1]`.
 fn step_text(model: &SemanticModel, step: &TraceStep) -> String {
     let mut text = step.action.clone();
-    if let ActionOrigin::UseCase { uc, .. } = &step.origin {
+    if let ActionOrigin::UseCase {
+        uc, step: Some(n), ..
+    } = &step.origin
+    {
         let id = &model.use_cases[*uc].id;
-        if let Some(n) = step.action.strip_prefix(&format!("{id}_")) {
-            text.push_str(&format!(", transaction {n} of {id}"));
-        }
+        text.push_str(&format!(", transaction {n} of {id}"));
     }
     if !step.bound.is_empty() {
         let bound: Vec<String> = step.bound.iter().map(ToString::to_string).collect();

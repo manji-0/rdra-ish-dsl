@@ -502,9 +502,10 @@ impl<'m> Builder<'m> {
             self.run_mark_vars(uc, &entities);
             self.later_step_reads(uc, &groups, &written_apis);
             for (g, writes) in groups.iter().enumerate() {
-                let name = match entities.len() {
-                    1 => id.clone(),
-                    _ => format!("{id}_{}", g + 1),
+                let step = (entities.len() > 1).then(|| u8::try_from(g + 1).expect("few groups"));
+                let name = match step {
+                    None => id.clone(),
+                    Some(n) => format!("{id}_{n}"),
                 };
                 let bodies = self.step_bodies(uc, writes, g, &written_apis);
                 self.acting = entities[g].clone();
@@ -523,7 +524,40 @@ impl<'m> Builder<'m> {
         for (i, a) in self.ts.actions.iter_mut().enumerate() {
             a.source = super::types::ActId::at(i);
         }
+        self.name_generated_actions_apart();
         self.inert_conditions();
+    }
+
+    /// A generated action name, `<UC>_<n>` for a step of a split use case or `Tick` for the
+    /// clock, that is a use case's id or an earlier generated name takes the first free
+    /// `<name>_<k>`, k from 2, so action names are unique and a model whose generated names
+    /// collide with nothing keeps every name.
+    fn name_generated_actions_apart(&mut self) {
+        let model = self.model;
+        let generated = |a: &Action| match &a.origin {
+            ActionOrigin::Clock => true,
+            ActionOrigin::UseCase { uc, .. } => a.name != model.use_cases[*uc].id,
+        };
+        let mut taken: HashSet<String> = self
+            .ts
+            .actions
+            .iter()
+            .filter(|a| !generated(a))
+            .map(|a| a.name.clone())
+            .collect();
+        for a in &mut self.ts.actions {
+            if !generated(a) {
+                continue;
+            }
+            let mut name = a.name.clone();
+            let mut k = 2;
+            while taken.contains(&name) {
+                name = format!("{}_{k}", a.name);
+                k += 1;
+            }
+            taken.insert(name.clone());
+            a.name = name;
+        }
     }
 
     /// One run mark per slot of each entity a step before the last of a split use case
@@ -646,6 +680,7 @@ impl<'m> Builder<'m> {
             origin: ActionOrigin::UseCase {
                 uc,
                 buc: first_buc(model, uc),
+                step: (groups.len() > 1).then(|| u8::try_from(step + 1).expect("few groups")),
             },
             site: Site::new(
                 ModelRef::UseCase(uc),

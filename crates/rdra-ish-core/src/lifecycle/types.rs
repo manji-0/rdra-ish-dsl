@@ -315,6 +315,8 @@ pub enum ActionOrigin {
         uc: UseCaseKey,
         /// The first BUC that contains the use case, as provenance names it.
         buc: Option<BucKey>,
+        /// The transaction group of a split use case, from 1; `None` for one of one group.
+        step: Option<u8>,
     },
     /// The `now` tick; exists only when a predicate reads `now`.
     Clock,

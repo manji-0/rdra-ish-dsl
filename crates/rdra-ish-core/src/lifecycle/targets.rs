@@ -381,11 +381,11 @@ impl TransitionSystem {
             }
         }
         for a in findings.runs {
-            let name = &run.system.actions()[a.act.index()].name;
+            let source = run.system.actions()[a.act.index()].source;
             let at = self
                 .actions
                 .iter()
-                .position(|x| x.name == *name)
+                .position(|x| x.source == source)
                 .expect("a cone action is an action of the system");
             let r = &mut runs[at];
             r.kept = true;
@@ -400,11 +400,12 @@ impl TransitionSystem {
             }
         }
         for arm in findings.arms {
-            let name = &run.system.actions()[arm.act.index()].name;
+            let action = &run.system.actions()[arm.act.index()];
+            let (source, name) = (action.source, &action.name);
             let at = self
                 .actions
                 .iter()
-                .position(|x| x.name == *name)
+                .position(|x| x.source == source)
                 .expect("a cone action is an action of the system");
             let arms = &mut runs[at].arms;
             let i = match arms.iter().position(|a| a.site == arm.site) {

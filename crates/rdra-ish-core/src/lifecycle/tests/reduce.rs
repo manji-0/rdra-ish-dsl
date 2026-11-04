@@ -360,10 +360,14 @@ fn a_sub_lifecycle_action_that_shares_a_name_with_a_target_step_keeps_its_identi
                     .any(|a| is_gate_opener(&sys.actions()[a.index()])),
                 "{name}: the gate's Go_1 is an S action"
             );
-            assert!(
-                sys.actions().iter().filter(|a| a.name == "Go_1").count() == 2,
-                "{name}: two actions named Go_1"
-            );
+            let mut names: Vec<&str> = sys
+                .actions()
+                .iter()
+                .filter(|a| a.name.starts_with("Go_1"))
+                .map(|a| a.name.as_str())
+                .collect();
+            names.sort_unstable();
+            assert_eq!(names, ["Go_1", "Go_1_2"], "{name}: the step named apart");
             assert_eq!(
                 diag_names(&plain),
                 diag_names(&reduced),
@@ -374,6 +378,15 @@ fn a_sub_lifecycle_action_that_shares_a_name_with_a_target_step_keeps_its_identi
                 violated_count,
                 "{name} at {bounds:?}"
             );
+            // Every cone finishes, so no action's run is left undecided, whichever action of
+            // the two of one name a cone kept.
+            for run in [&plain, &reduced] {
+                assert!(
+                    run.undecided().is_empty(),
+                    "{name} at {bounds:?}: {:?}",
+                    run.undecided()
+                );
+            }
         }
     }
 }

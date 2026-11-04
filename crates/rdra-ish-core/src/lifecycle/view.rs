@@ -303,7 +303,7 @@ pub(crate) fn entity_view(
                 via: via[id]
                     .iter()
                     .filter_map(|act| match &ts.actions()[act.index()].origin {
-                        ActionOrigin::UseCase { uc, buc } => Some((
+                        ActionOrigin::UseCase { uc, buc, .. } => Some((
                             buc.map(|b| model.bucs[b].id.clone()),
                             model.use_cases[*uc].id.clone(),
                         )),
