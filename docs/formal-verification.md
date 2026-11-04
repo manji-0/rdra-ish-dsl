@@ -517,23 +517,36 @@ The rules for each flag and for deferral are in
     violation must replay through the BFS step relation and end in the check TLC named.
 
   At 2 instances, a cone whose BFS, reduced as `verify` explores it, passes the test's cap
-  of 200,000 states is compared at 1 instance only. The test lists these cones in
-  `VERIFY_FALLBACK` and fails when the list changes. Today they are in `samples/clinic-ops`,
-  `samples/patent-ops`, and `samples/food-permit-ops` (states at 2 instances, measured with
-  `lifecycle_measure`; the food-permit-ops cones are listed under the next item):
+  of 300,000 states is compared at 1 instance only. The test decides this on the run
+  `verify` uses: the reduced cone where the cone reduces, the cone itself where it does not.
+  It lists these cones in `VERIFY_FALLBACK` and fails when the list changes, so a cone that
+  grows past the cap fails it until it is listed. Today 10 cones in `samples/clinic-ops`,
+  `samples/patent-ops`, `samples/food-permit-ops` and `samples/insurance-claim-ops` are
+  listed. The table gives each listed cone and each cone the cap of 300,000 took off the
+  list, at 2 instances, measured with
+  `lifecycle_measure -- 9000000 verify <sample>` (`RDRA_CONE_VARS=1` prints the vars of the
+  cone and of its sub-lifecycle). "Sub-lifecycle" is the S side's states and classes; T is
+  what the reduction cannot move out of the target's side.
 
-  | Cone (first target that reads it) | States | Unreduced |
-  |---|---:|---:|
-  | clinic-ops entity `EligibilityCheck` (the guard `BookedPatient` reads the booked patient's appointment along its policy, #77) | 1,784,808 | 1,784,808 |
-  | patent-ops entity `OfficeAction` | 1,341,707 | over 8,388,608 |
-  | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 1,341,707 | over 8,388,608 |
-  | patent-ops entity `PatentApplication` | 293,833 | 2,167,411 |
-  | patent-ops entity `Patent` | 202,569 | 1,494,339 |
-  | patent-ops invariant `Forbidden_Patent_4` (also `Inv_Patent_4`) | 202,569 | 1,494,339 |
-  | insurance-claim-ops entity `Payment` | 814,191 | over 8,388,608 |
-  | insurance-claim-ops entity `Claim` | 754,247 | over 8,388,608 |
-  | insurance-claim-ops invariant `CrossForbidden_Payment_3` (also `AfterAssert_PayClaim_0`) | 707,071 | over 8,388,608 |
-  | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (with the claim's other rules) | 573,751 | over 8,388,608 |
+  | Cone (first target that reads it) | Reduced | Unreduced | Sub-lifecycle | Why it is this large |
+  |---|---:|---:|---:|---|
+  | clinic-ops entity `EligibilityCheck` | 1,784,808 | 1,784,808 | 36 / 36 | `CheckInPatient` checks the appointment in and creates the check (#80), so the appointment, the patient account and the check share T. S is the existence of the account balance, the location, the policy, the provider, its schedule and the room. `obs` tells every one of its 36 states apart, so the reduction removes no state. |
+  | patent-ops entity `OfficeAction` | 1,341,707 | over 9,000,000 | 14,953 / 185 | T is the office action alone. S is the application with its drafting order, disclosure, inventor and firm. The guards `UnderExamination` and `ExaminationOver` read the application's status, and the office action is owned by it, so 185 classes stay apart. The size is the office action's lifecycle at 2 instances times those classes. |
+  | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 1,341,707 | over 9,000,000 | 14,953 / 185 | The vars of `OfficeAction`'s cone; a cone of its own because it keeps the invariants' checks. |
+  | food-permit-ops entity `PermitApplication` | 2,094,157 | 2,094,157 | none | Every entity in the cone (the application, its inspection, the permit) reads the application, and the renewal guard `失効後の更新はできない` reads the renewed permit (#73). No side is independent of the target's, so nothing reduces. |
+  | insurance-claim-ops entity `Payment` | 814,191 | over 9,000,000 | 63,823 / 443 | S is the accident case with its investigation and settlement, which the guard of `CompleteClaim` reads. T is the claim and the payment: the claim's rules read its columns (`period`, `grade_explained`, `fraud_suspected`, `reason_explained`, `late_interest_due`), and the payment reads the claim. |
+  | insurance-claim-ops entity `Claim` | 754,247 | over 9,000,000 | 63,823 / 443 | As `Payment`, with `senior_approved` and `completed_on` in place of the payment's columns. |
+  | insurance-claim-ops invariant `CrossForbidden_Payment_3` (also `AfterAssert_PayClaim_0`, a separate cone of the same size) | 707,071 | over 9,000,000 | 63,823 / 443 | As `Payment`, without the payment's status. |
+  | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (two cones, with the claim's other rules) | 573,751 | over 9,000,000 | 63,823 / 443 | As `Claim`, with fewer of the claim's columns (no `completed_on` or `late_interest_due`). |
+  | patent-ops entity `PatentApplication` (compared at 2 instances since the cap of 300,000) | 293,833 | 2,167,411 | 73 / 73 | The filing guard `DraftsApproved` reads the drafting order and `FileApplication` moves the order to `filed`, so the order joins the application in T. S is the disclosure, its inventor and the firm; S is reduced inside, so its 73 states are already a quotient, and `obs` tells them all apart. |
+  | patent-ops entity `Patent` and invariant `Forbidden_Patent_4` (two cones; compared at 2 instances since the cap of 300,000) | 202,569 | 1,494,339 | 73 / 73 | As `PatentApplication`, with the patent's columns in T beside fewer of the application's. |
+  | food-permit-ops entity `Inspection` and invariants `Inv_PermitApplication_1` and `Inv_PermitApplication_2` (three cones; compared at 2 instances since the cap of 300,000) | 232,885 | 232,885 | none | As `PermitApplication`, without the application's `business_type` (and `reason_shown`, except in `Inv_PermitApplication_1`). |
+
+  Raising the cap from 200,000 to 300,000 took the cones of the last three rows, six in all,
+  off the list. The test went from 194 s to 239 and 243 s locally (18 cores, 8 workers; one
+  run before, two after), and every verdict stayed the same. The next cone, 573,751 states,
+  would need TLC to dump a state graph twice that size for each of the six
+  insurance-claim-ops cones.
 
   The insurance-claim-ops cones hold the settlement guard of `CompleteClaim` (see the
   sample's README), which #74 made checkable. Before the reduction the list held 19 cones:
@@ -541,14 +554,19 @@ The rules for each flag and for deferral are in
   `Prescription` (4,266,635; 1,690), `ClinicalOrder` and `LabResult` (619,835; 250),
   `PatientMessage` (441,287; 381) and `CarePlan` (299,467; 269), the invariants
   `Forbidden_ClinicalOrder_1`, `Inv_ClinicalOrder_3` and `Inv_Prescription_4`, and the
-  food-permit-ops view of `Disposition` with its two invariants (231,493; 13,230). These
-  cones are compared at 2 instances reduced only: their unreduced BFS passes the cap, so the
-  unreduced cone is compared with TLC at 1 instance, and at 2 the reduced cone's BFS, its
-  TLC run, and its verdicts against the unreduced verdicts at 1 instance. Every clinic-ops
+  food-permit-ops view of `Disposition` with its two invariants (231,493; 13,230). Except
+  for `CarePlan` and the three `Disposition` cones, which the cap of 300,000 admits
+  unreduced, these cones are compared at 2 instances reduced only: their unreduced BFS
+  passes the cap, so the unreduced cone is compared with TLC at 1 instance, and at 2 the
+  reduced cone's BFS, its TLC run, and its verdicts against the unreduced verdicts at 1
+  instance. The cap of 300,000 took the cones compared unreduced at 2 instances from 29 to
+  30 in clinic-ops (`CarePlan`) and from 14 to 20 in food-permit-ops (the three
+  `Disposition` and the three `Inspection` cones), and the reduced cones compared in
+  patent-ops from 10 to 13. Every clinic-ops
   cone that reads `Appointment.status` carries the two run marks of `CheckInPatient`, which
   checks the appointment in through one API and creates the eligibility check through
   another (#80): 2.3 to 2.6 times the states it had when the two steps ran in any order. The
-  other 29 clinic-ops cones at 2 instances (the largest `Appointment` at 188,699) are
+  other 30 clinic-ops cones at 2 instances (the largest `CarePlan` at 299,467) are
   compared unreduced, and reduced where they reduce. CI runs the test with `cargo test --release`
   and sets `RDRA_REQUIRE_TLC=1`, so a missing `tlc` fails the job. The debug build took
   315 s on the CI runner, over its 300 s budget; the release build takes 121 s locally
@@ -599,33 +617,32 @@ gaps.
 - **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that
   BFS and TLC agree on the states, edges, findings, and verdicts of every cone, unreduced
   and reduced. A cone whose BFS, reduced as `verify` explores it, passes the test's cap of
-  200,000 states at 2 instances is compared at 1 instance only. `VERIFY_FALLBACK` in
-  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 16 cones today (19 before the
-  reduction of #74, which took 12 off the list and put the 6 insurance-claim-ops cones on it, and the patent-ops filing guard put 3 patent-ops cones on it):
-  - `samples/clinic-ops`: entity `EligibilityCheck`, 1,784,808 states at 2 instances, which
-    nothing reduces (the table under
-    [Approximations and limitations](#approximations-and-limitations)).
-  - `samples/patent-ops`: entities `OfficeAction`, `PatentApplication` and `Patent`, and
-    invariants `Forbidden_OfficeAction_3` (with `Exclusive_OfficeAction_0`) and
-    `Forbidden_Patent_4`. The guards that read the application put its state
-    into the cone, with the drafting order and the disclosure that the filing's guard adds: over 8,388,608 states at 2 instances, 1,341,707 reduced.
-  - `samples/food-permit-ops`: entities `Inspection` and `PermitApplication`, and invariants
-    `Inv_PermitApplication_1` and `Inv_PermitApplication_2`. The renewal guard
-    `失効後の更新はできない` puts the renewed permit's existence and status into them (#73):
-    232,885 states at 2 instances, and 2,094,157 for the view of `PermitApplication`. Every
-    entity in these cones reads the application, so no side is independent and nothing
-    reduces.
+  300,000 states at 2 instances is compared at 1 instance only. `VERIFY_FALLBACK` in
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 10 cones today (19 before the
+  reduction of #74, 16 after the patent-ops filing guard, and 10 since the cap went from
+  200,000 to 300,000). The table under
+  [Approximations and limitations](#approximations-and-limitations) gives each cone's size
+  and what keeps it large:
+  - `samples/clinic-ops`: entity `EligibilityCheck`, 1,784,808 states, which nothing
+    reduces: its sub-lifecycle has as many classes as states.
+  - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
+    (with `Exclusive_OfficeAction_0`). The guards that read the application put it, with
+    the drafting order and the disclosure that the filing's guard adds, into the cone: over
+    9,000,000 states, 1,341,707 reduced to the office action times 185 classes of the
+    application's side.
+  - `samples/food-permit-ops`: entity `PermitApplication`, 2,094,157 states. Every entity in
+    the cone reads the application, so no side is independent and nothing reduces.
   - `samples/insurance-claim-ops`: entities `Claim` and `Payment`, invariants
     `Forbidden_Claim_0`, `Forbidden_Claim_4`, and `CrossForbidden_Payment_3`, and the
     after-assert of `PayClaim`. The settlement guard of `CompleteClaim` joins the case's
     lifecycle to the claim's; reduced by it (63,823 states in 443 classes) they reach 573,751
-    to 814,191 states at 2 instances, unreduced over 8,388,608.
+    to 814,191 states, unreduced over 9,000,000.
 
   `verify` still checks these cones at 2 instances: TLC runs on each, and BFS runs on each
   entity cone. Only the agreement of the two engines is tested at 1 instance. This is
   accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
   it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
-  new model's cones under 200,000 states at 2 instances if you want the agreement tested.
+  new model's cones under 300,000 states at 2 instances if you want the agreement tested.
 - **insurance-claim-ops cannot check that a payment deadline follows its reason.** The
   deadline is writable, `sets(UC, E.due_on == N).when(Reason)` with a timer use case that
   waits for `due_on <= now` (#98), but the cone it adds does not decide at the cap: with a

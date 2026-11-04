@@ -101,6 +101,12 @@
   1,341,707 states reduced (over 8,388,608 unreduced, 4,818,909 before). The cones of
   `PatentApplication` and `Patent` (293,833 and 202,569 reduced) join `VERIFY_FALLBACK`,
   which holds 16 cones.
+- `engine_equivalence` compares cones of up to 300,000 states at 2 instances (200,000
+  before), which takes the cones of `PatentApplication`, `Patent` and `Forbidden_Patent_4`
+  in patent-ops and of `Inspection` and its two invariants in food-permit-ops off
+  `VERIFY_FALLBACK`; it holds 10 cones. `docs/formal-verification.md` gives each listed
+  cone's size and what keeps the reduction from shrinking it, and `lifecycle_measure` with
+  `RDRA_CONE_VARS=1` prints the vars of a cone's sub-lifecycle.
 - insurance-claim-ops states the settlement guard and the rule it left out: `CompleteClaim`
   runs on a first-party claim or once the case's settlement is agreed
   (`.when(ClaimFirstParty)`, `.when(SettlementSigned)`), and a liability claim is not

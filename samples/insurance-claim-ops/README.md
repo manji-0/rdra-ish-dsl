@@ -173,7 +173,7 @@ in 224 classes. The cones at 2 instances, reduced, from `lifecycle_measure -- 20
 | `CrossForbidden_Subrogation_7`, `Unique_Subrogation_Claim`, the after-assert of `StartSubrogation` | 255 |
 | `Complaint`, `RepairEstimate`, `JibaisekiSurvey` | 483, 441, 189 |
 
-The six cones over 200,000 states (`Claim`, `Payment`, and the claim's and the payment's rules)
+The six cones over 300,000 states (`Claim`, `Payment`, and the claim's and the payment's rules)
 are compared with TLC at 1 instance only by `engine_equivalence` (`VERIFY_FALLBACK`).
 
 ## Known verification gaps

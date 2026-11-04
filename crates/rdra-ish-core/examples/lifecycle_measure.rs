@@ -8,14 +8,15 @@
 //!
 //! Run: `cargo run --release -p rdra-ish-core --example lifecycle_measure -- STATE_CAP [verify [SAMPLE]]`
 //! `SAMPLE` is a line of `samples.txt` or a path to any project. `RDRA_CONE_VARS=1` prints the
-//! vars of each cone under its line. `RDRA_REDUCED_ONLY=1` skips the unreduced exploration.
+//! vars of each cone under its line, and the vars of its sub-lifecycle where it reduces.
+//! `RDRA_REDUCED_ONLY=1` skips the unreduced exploration.
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::time::Instant;
 
 use rdra_ish_core::lifecycle::{
-    Bounds, Caps, Cone, Scope, Seed, Target, TransitionSystem, VarKind,
+    Bounds, Caps, Cone, Scope, Seed, Target, TransitionSystem, VarId, VarKind,
 };
 use rdra_ish_core::project::load_project;
 
@@ -25,6 +26,19 @@ fn target_name(ts: &TransitionSystem, t: Target) -> String {
         Target::Invariant(i) => format!("inv {}", ts.invariants()[i].name),
         Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
     }
+}
+
+fn var_names(ts: &TransitionSystem, vars: impl IntoIterator<Item = VarId>) -> String {
+    let names: Vec<String> = vars
+        .into_iter()
+        .map(|v| match &ts.var(v).kind {
+            VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
+                format!("{}.{}", ts.entity(*entity).id, ts.var_name(v))
+            }
+            _ => ts.var_name(v),
+        })
+        .collect();
+    names.join(" ")
 }
 
 fn main() {
@@ -80,6 +94,7 @@ fn main() {
         }
         let mut seen: HashMap<Cone, (usize, String)> = HashMap::new();
         let mut reduced_seen: HashMap<Cone, (String, String)> = HashMap::new();
+        let mut sub_vars: Option<String> = None;
         let mut worst: (usize, String) = (0, String::new());
         let targets = ts
             .targets()
@@ -125,6 +140,9 @@ fn main() {
                         Some(r) => format!("{}/{}", r.states, r.classes()),
                         None => "-".to_string(),
                     };
+                    sub_vars = system
+                        .reduction()
+                        .map(|r| var_names(&system, r.vars().iter().copied()));
                     let run = system.run(caps);
                     let n = if run.complete {
                         run.states.len().to_string()
@@ -154,17 +172,10 @@ fn main() {
                 rms
             );
             if show_vars {
-                let names: Vec<String> = cone
-                    .vars
-                    .iter()
-                    .map(|v| match &ts.var(*v).kind {
-                        VarKind::Column { entity, .. } | VarKind::Prop { entity, .. } => {
-                            format!("{}.{}", ts.entity(*entity).id, ts.var_name(*v))
-                        }
-                        _ => ts.var_name(*v),
-                    })
-                    .collect();
-                println!("    vars: {}", names.join(" "));
+                println!("    vars: {}", var_names(ts, cone.vars.iter().copied()));
+                if let Some(s) = sub_vars.take() {
+                    println!("    sub-lifecycle: {s}");
+                }
             }
             if states >= worst.0 {
                 let ids: Vec<&str> = entities.iter().map(|e| ts.entity(*e).id.as_str()).collect();

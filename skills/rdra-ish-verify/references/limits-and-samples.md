@@ -74,9 +74,9 @@
 - **BFS and TLC agree**: the repository test `engine_equivalence` runs both engines on every
   cone of every sample at 1 and 2 instances and compares the reached and initial states, the
   edge sets `(from, to, use case)`, the witness, never-runs, and deadlock findings by name,
-  and each check's verdict. A cone over 200,000 BFS states at 2 instances is compared at 1
-  instance only; the test pins those cones in `VERIFY_FALLBACK` (today 13 cones: 1 of
-  clinic-ops, 2 of patent-ops, 4 of food-permit-ops, and 6 of insurance-claim-ops).
+  and each check's verdict. A cone over 300,000 BFS states at 2 instances is compared at 1
+  instance only; the test pins those cones in `VERIFY_FALLBACK` (today 10 cones: 1 of
+  clinic-ops, 2 of patent-ops, 1 of food-permit-ops, and 6 of insurance-claim-ops).
 
 ## Bundled Samples
 

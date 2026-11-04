@@ -66,9 +66,10 @@ Each figure is a cone size from `crates/rdra-ish-core/examples/lifecycle_measure
   invariants hold) and its BFS, under the cap of 8,388,608 states, decides whether an office action
   can get stuck at `open`, `drafted`, `overdue`, or `answered` (about 30 s and 0.75 GB in all). Before the cap
   was raised from 2,097,152, those four checks were listed under `not checked:`.
-  `engine_equivalence` compares the office action's cones, and the cones of `PatentApplication`
-  and `Patent` (293,833 and 202,569 reduced; the filing guard's link adds the drafting order to
-  them), with TLC at 1 instance only (`VERIFY_FALLBACK`).
+  `engine_equivalence` compares the office action's cones with TLC at 1 instance only
+  (`VERIFY_FALLBACK`). The cones of `PatentApplication` and `Patent` (293,833 and 202,569
+  reduced; the filing guard's link adds the drafting order to them) are under its cap of
+  300,000 states and are compared at 2.
 
 ## Diagnostics left in place
 

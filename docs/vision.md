@@ -327,10 +327,10 @@ These questions were decided on 2026-10-29, during phase 6:
 - `verify` computes the witnesses, the use cases that never run, and the deadlocks by BFS on
   each entity cone, at the same bounds as TLC. The test `engine_equivalence` confirms them on
   TLC's state graph. It compares every cone of every sample at 2 instances, except a cone
-  whose BFS passes 200,000 states there, which it compares at 1 instance. The test lists
+  whose BFS passes 300,000 states there, which it compares at 1 instance. The test lists
   those cones in `VERIFY_FALLBACK` and fails when a cone joins or leaves the list, so the
-  coverage it gives up is always named. Today the list holds 13 cones: 1 of clinic-ops, 2 of
-  patent-ops, 4 of food-permit-ops, and 6 of insurance-claim-ops
+  coverage it gives up is always named. Today the list holds 10 cones: 1 of clinic-ops, 2 of
+  patent-ops, 1 of food-permit-ops, and 6 of insurance-claim-ops
   ([formal-verification.md](./formal-verification.md#known-verification-gaps) names them).
 - Each sample states its expected result in `// expect` lines of its first file in load
   order, so CI keeps no second list of samples. The deadlock check found one model defect:

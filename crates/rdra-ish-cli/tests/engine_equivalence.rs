@@ -56,29 +56,24 @@ use tlc_output::{parse_dot, Outcome, TlcRun};
 use tlc_replay::{explain_property, explain_violation};
 
 /// The largest cone the test compares. At `Bounds::STATES` every cone of every sample is far
-/// below it.
-const STATE_CAP: usize = 200_000;
+/// below it. At `Bounds::VERIFY` it admits the patent-ops cones of `PatentApplication` (293,833
+/// states reduced) and `Patent`, and the food-permit-ops cone of `Inspection`; the next cone
+/// is 573,751.
+const STATE_CAP: usize = 300_000;
 
 /// `(sample, cone)`: the cones whose BFS at `Bounds::VERIFY`, reduced as `verify` explores
 /// it, passes `STATE_CAP`, each named by the first target that reads it. Each is compared at
-/// `Bounds::STATES`.
+/// `Bounds::STATES`. docs/formal-verification.md tabulates their sizes and what keeps each
+/// large.
 const VERIFY_FALLBACK: &[(&str, &str)] = &[
+    // 1,784,808: its sub-lifecycle has as many classes as states, so nothing reduces.
     ("samples/clinic-ops", "entity EligibilityCheck"),
+    // 1,341,707 reduced: the office action times 185 classes of the application's side.
     ("samples/patent-ops", "entity OfficeAction"),
-    ("samples/patent-ops", "entity Patent"),
-    ("samples/patent-ops", "entity PatentApplication"),
     ("samples/patent-ops", "invariant Forbidden_OfficeAction_3"),
-    ("samples/patent-ops", "invariant Forbidden_Patent_4"),
-    ("samples/food-permit-ops", "entity Inspection"),
+    // 2,094,157: every entity reads the application, so nothing reduces.
     ("samples/food-permit-ops", "entity PermitApplication"),
-    (
-        "samples/food-permit-ops",
-        "invariant Inv_PermitApplication_1",
-    ),
-    (
-        "samples/food-permit-ops",
-        "invariant Inv_PermitApplication_2",
-    ),
+    // 573,751 to 814,191 reduced: the claim and the payment times 443 classes of the case.
     ("samples/insurance-claim-ops", "entity Claim"),
     ("samples/insurance-claim-ops", "entity Payment"),
     ("samples/insurance-claim-ops", "invariant Forbidden_Claim_0"),

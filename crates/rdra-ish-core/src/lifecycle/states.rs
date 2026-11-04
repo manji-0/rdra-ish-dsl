@@ -19,7 +19,7 @@ impl Caps {
 
     /// For BFS at `Bounds::VERIFY`: 2^23 states per cone. A cone past it leaves its state-model
     /// findings undecided; `engine_equivalence`'s `VERIFY_FALLBACK` names the sample cones
-    /// over 200,000 states there.
+    /// over 300,000 states there.
     pub const VERIFY: Caps = Caps::new(Caps::DEFAULT_PATTERNS, 1 << 23);
 }
 
