@@ -1939,6 +1939,93 @@ fn bfs_and_tlc_agree_on_two_actions_of_one_name() {
     }
 }
 
+/// The job's cone reduces the gate, whose latch it does not read, and two use cases are named
+/// like the reduced module's tables: `Succ_Swing` (Swing's class moves) and `Rep_Gate_status`
+/// (the gate's status by class). The tables take `_2`; the module that defined each name
+/// twice failed SANY.
+const REDUCTION_TABLE_NAMES: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase BuildGate "設置"
+usecase Swing "開く"
+usecase Unlatch "掛け金を外す"
+usecase Succ_Swing "投入"
+usecase Rep_Gate_status "開始"
+creates(BuildGate, Gate)
+transitions(Swing, Gate.status, shut -> open)
+sets(Unlatch, Gate.latch == true)
+creates(Succ_Swing, Job)
+transitions(Rep_Gate_status, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Rep_Gate_status)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+/// `Cart.Line_qty` and `Cart_Line.qty` both spell `Check_Cart_Line_qty_0`; the second check
+/// is `Check_Cart_Line_qty_0_2` in both engines.
+const CHECK_NAMES: &str = r#"
+entity Cart "カート" { id: Int @pk  Line_qty: Int @default("1") @check(Line_qty >= 1) }
+entity Cart_Line "明細" { id: Int @pk  qty: Int @default("1") @check(qty >= 1) }
+usecase AddCart "カート追加"
+usecase AddLine "明細追加"
+usecase ClearQty "数量クリア"
+creates(AddCart, Cart)
+creates(AddLine, Cart_Line)
+sets(ClearQty, Cart_Line.qty == 0)
+"#;
+
+/// Columns named like the run mark of the split use case `Go`, the existence var, and the
+/// owner var: each pair of vars has one spelling until the later takes `_2`, and TLC's
+/// states decode to the BFS's.
+const VAR_NAMES: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, open) @default(shut) }
+entity Note "記録" { id: Int @pk  status: Enum(written) @default(written) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting)  run_Go: Bool @default(false)  exists: Bool @default(false)  owner_Gate: Bool @default(false) }
+relate(Job, Gate, N:1)
+usecase Go "開始"
+usecase Open "門を開ける"
+usecase BuildGate "設置"
+usecase Submit "投入"
+usecase Mark "印"
+api JobApi "作業 API"
+api NoteApi "記録 API"
+creates(BuildGate, Gate)
+creates(Submit, Job)
+invokes(Go, JobApi)
+updates(JobApi, Job)
+transitions(Go, Job.status, waiting -> running)
+invokes(Go, NoteApi)
+creates(NoteApi, Note)
+transitions(Open, Gate.status, shut -> open)
+sets(Mark, Job.run_Go == true)
+sets(Mark, Job.exists == true)
+sets(Mark, Job.owner_Gate == true)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Go)
+forbidden(Job, status == running, run_Go == true, exists == true, owner_Gate == true)
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_generated_names_beside_model_ids() {
+    for (name, src, expected) in [
+        (
+            "reduction_table_names",
+            REDUCTION_TABLE_NAMES,
+            &["Forbidden_Job_0"][..],
+        ),
+        ("check_names", CHECK_NAMES, &["Check_Cart_Line_qty_0_2"]),
+        ("var_names", VAR_NAMES, &["Forbidden_Job_0"]),
+    ] {
+        if let Some(violated) = check_fixture(name, src) {
+            let expected: BTreeSet<String> = expected.iter().map(|s| s.to_string()).collect();
+            assert_eq!(violated, expected, "{name}");
+        }
+    }
+}
+
 /// A sub-lifecycle of 1294 classes (a random model, minimized): four entities whose steps
 /// `E1`'s reads join in no way, so every one of them is an S var of `P0`'s cone. Each
 /// `Succ_<A>` table of the reduced cone's TLA+ module has a cell per class; printed as a

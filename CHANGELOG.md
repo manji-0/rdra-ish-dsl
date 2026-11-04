@@ -16,6 +16,26 @@
   not a chain of `@@` entries, which TLC evaluated one nested call per entry: a
   sub-lifecycle of about a thousand classes overflowed the JVM's stack, and `verify`
   reported `tool_error` on a cone that 1.1 decided. The module no longer extends `TLC`.
+- Generated names that a model's ids spell no longer collide (#103). Each takes the first
+  free `<name>_<k>` from `_2` only on a collision, so a model whose names collide with
+  nothing keeps every name and every output.
+  - A rule name: entity, column and role ids may hold `_`, so `Cart.Line_qty`'s check and
+    `Cart_Line.qty`'s were both `Check_Cart_Line_qty_0` (and `MinCard_A_B_C` both `A_B`'s key
+    to `C` and `A`'s to `B_C`), and `verify` listed one name as `ok` and as a counterexample.
+    A rule name that a temporal property or a use case is named takes `_2` too, so the
+    property keeps its declared name: it printed as `Forbidden_Job_0_2`.
+  - A temporal property named like a use case keeps its name in the TLA+ module and in
+    `verify`, and the use case's action takes `_2`.
+  - The `Rep_<var>` and `Succ_<action>` tables of a reduced cone: a use case named
+    `Succ_Swing` or `Rep_Gate_status` defined the name twice, and SANY failed the cone with
+    `tool_error`.
+  - The files `verify` writes: a property `P_WF` or `P_Full` beside a property `P` shared
+    `Cone_P_WF` or `Cone_P_Full` with `P`'s second run, which then read the other spec
+    (`tool_error`, or `not decided` on a violated `P`); a property `X_rest1` shared its cfg
+    with the rerun of the cone `Cone_X`; and `-o Cone.tla` named `P`'s whole-model run
+    `Cone_P`, over `P`'s cone. The whole-model module keeps the name `-o` gives it, each
+    check's own `Cone_<name>` comes next, and the `_Full`, `_WF`, `_rest<n>` and
+    whole-model run names take `_2`.
 
 ### Added
 

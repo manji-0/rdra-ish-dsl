@@ -84,6 +84,21 @@ written by hand can name them:
 when the model adds a rule of the same kind before it, on any entity. That is a change to
 the model, not to the tool.
 
+A name that another name already took gets the first free `_<k>` suffix, `k` from 2. The
+suffix appears only on a collision, so a model with no collision keeps every name above:
+
+- A rule name yields to a temporal property's id, a use case's id, and an earlier rule's
+  name. Ids may hold `_`, so `Cart.Line_qty` and `Cart_Line.qty` both give
+  `Check_Cart_Line_qty_0`; the second check is `Check_Cart_Line_qty_0_2` in `check` too.
+- In the module, a variable keeps its name before a later variable, a property, an action,
+  or a rule, and a property keeps its declared name before an action. A column `run_Go`
+  beside the run mark of a split use case `Go` gives `Job_run_Go` and `Job_run_Go_2`.
+- The `Rep_<var>` and `Succ_<action>` tables of a reduced cone, and its `S_class`, yield to
+  every other name.
+- The files `verify` writes yield in this order: the whole-model module keeps the name `-o`
+  gives it, then each check's `Cone_<name>`, then the `_Full` and `_WF` modules, the
+  whole-model run `<whole>_<P>`, and the rerun cfg `<module>_rest<n>.cfg`.
+
 The module layout is not covered: the operator bodies, the order of definitions, the
 cone files `verify` writes, and how the use cases split into actions may change in a
 minor release.
