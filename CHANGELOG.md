@@ -39,7 +39,9 @@
     with the rerun of the cone `Cone_X`; and `-o Cone.tla` named `P`'s whole-model run
     `Cone_P`, over `P`'s cone. The whole-model module keeps the name `-o` gives it, each
     check's own `Cone_<name>` comes next, and the `_Full`, `_WF`, `_rest<n>` and
-    whole-model run names take `_2`.
+    whole-model run names take `_2`. File names are kept apart ignoring case: properties
+    `Ready` and `ready` wrote `Cone_Ready.tla` and `Cone_ready.tla`, one file on macOS and
+    Windows, and ended in `tool_error`; the second is now `Cone_ready_2.tla`.
 
 ### Added
 

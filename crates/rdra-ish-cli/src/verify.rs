@@ -73,7 +73,9 @@ struct Spec {
 
 /// The module names one run writes into its directory. A name an earlier module took gets the
 /// first free `_<k>`, k from 2, so no spec or its `.states` and `.tmp` dirs overwrite
-/// another's; a run whose names collide with nothing keeps every name.
+/// another's; a run whose names collide with nothing keeps every name. Names are kept apart
+/// ignoring ASCII case, as a file system that folds case would see them (`Cone_Ready.tla`
+/// and `Cone_ready.tla` are one file on macOS and Windows).
 #[derive(Default)]
 struct Modules(BTreeSet<String>);
 
@@ -82,7 +84,7 @@ impl Modules {
         let base = tla::module_name_of(want);
         let mut name = base.clone();
         let mut k = 2;
-        while !self.0.insert(name.clone()) {
+        while !self.0.insert(name.to_ascii_lowercase()) {
             name = format!("{base}_{k}");
             k += 1;
         }
@@ -96,7 +98,7 @@ impl Modules {
         let base = format!("{module}_rest{n}");
         let mut name = base.clone();
         let mut k = 2;
-        while self.0.contains(&name) {
+        while self.0.contains(&name.to_ascii_lowercase()) {
             name = format!("{base}_{k}");
             k += 1;
         }

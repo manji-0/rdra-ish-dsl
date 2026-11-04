@@ -102,7 +102,9 @@ with no collision keeps every name above:
   every other name.
 - The files `verify` writes yield in this order: the whole-model module keeps the name `-o`
   gives it, then each check's `Cone_<name>`, then the `_Full` and `_WF` modules, the
-  whole-model run `<whole>_<P>`, and the rerun cfg `<module>_rest<n>.cfg`.
+  whole-model run `<whole>_<P>`, and the rerun cfg `<module>_rest<n>.cfg`. File names are
+  compared ignoring case, as macOS and Windows compare them, so properties `Ready` and
+  `ready` write `Cone_Ready.tla` and `Cone_ready_2.tla`.
 
 The module layout is not covered: the operator bodies, the order of definitions, the
 cone files `verify` writes, and how the use cases split into actions may change in a

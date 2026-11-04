@@ -789,6 +789,50 @@ property P eventually(E.status == b)
     assert!(dir.join("Cone.tla").exists());
 }
 
+/// `property Ready` and `property ready` wrote `Cone_Ready.tla` and `Cone_ready.tla`, one file
+/// where the file system folds case (macOS, Windows), so a run read the other's spec and
+/// ended in `tool_error`. The later module takes `_2`; each property keeps its name.
+#[test]
+fn properties_whose_names_differ_in_case_write_two_files() {
+    if !have_tlc() {
+        return;
+    }
+    let src = r#"
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running, done) @default(waiting) }
+usecase Submit "投入"
+usecase Start "開始"
+usecase Finish "完了"
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+transitions(Finish, Job.status, running -> done)
+property Ready "x"
+  always(Job.status != running)
+property ready "y"
+  always(Job.status != done)
+"#;
+    let (stdout, stderr, code, dir) = verify_model("verify_cli_case_named", src, "M.tla");
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    assert_eq!(
+        std::fs::read_to_string(dir.join("cones.txt")).unwrap(),
+        "Cone_Ready.tla: Ready\nCone_ready_2.tla: ready\n"
+    );
+    for (module, property) in [("Cone_Ready", "Ready"), ("Cone_ready_2", "ready")] {
+        assert!(
+            stdout
+                .lines()
+                .any(|l| l.starts_with(&format!("{module} [{property}]: counterexample ("))),
+            "{stdout}"
+        );
+        assert!(
+            stderr.contains(&format!(
+                "error[{property}]: property {property} is violated: "
+            )),
+            "{stderr}"
+        );
+    }
+    assert!(!stdout.contains("tool_error"), "{stdout}");
+}
+
 /// A property named like a var (`Job_status`, the column `Job.status`) keeps its name in
 /// `verify`'s labels and findings; the var takes `_2`.
 #[test]
