@@ -2,7 +2,7 @@ use rdra_ish_core::{build_merged_model, resolve, RdraError};
 use rdra_ish_emit::{
     csv::{EntityListCsvEmitter, RelationMatrixCsvEmitter},
     mermaid::{ErMermaidEmitter, RdraMermaidEmitter, StateMermaidEmitter},
-    Emitter, View,
+    Emitter, Explored, StatesEmitter, View,
 };
 use std::path::PathBuf;
 
@@ -192,7 +192,9 @@ fn test_state_diagram() {
 
     let mut view = View::whole();
     view.state.entities = vec!["Order".to_string()];
-    let mermaid = StateMermaidEmitter.emit(&model, &view).unwrap();
+    let mermaid = StateMermaidEmitter
+        .emit(&model, &view, &Explored::default())
+        .unwrap();
 
     assert!(
         mermaid.contains("\nstateDiagram-v2\n"),

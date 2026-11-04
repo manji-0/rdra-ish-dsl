@@ -13,31 +13,37 @@ use rdra_ish_emit::{
     openapi::OpenApiJsonEmitter,
     tla::{self, PrintMode, TlaBundle},
     typescript::TypeScriptStateUnionEmitter,
-    Emitter, View,
 };
 
 use crate::cli::ExportKind;
+use crate::lifecycle_gate::Output;
 use crate::list_output::Finding;
 
-pub fn export_artifact(
-    model: &SemanticModel,
-    kind: &ExportKind,
-    view: &View,
-) -> Result<(String, &'static str)> {
+/// What an export kind writes: an artifact its emitter prints, or the TLA+ bundle, which is
+/// built from the transition system and is not an [`Emitter`].
+pub enum Export {
+    Artifact(Output, &'static str),
+    Tla,
+}
+
+pub fn export_output(kind: &ExportKind) -> Export {
     match kind {
-        ExportKind::Openapi => Ok((OpenApiJsonEmitter.emit(model, view)?, "openapi.json")),
-        ExportKind::Asyncapi => Ok((AsyncApiJsonEmitter.emit(model, view)?, "asyncapi.json")),
-        ExportKind::Dbml => Ok((DbmlEmitter.emit(model, view)?, "schema.dbml")),
-        ExportKind::JsonSchema => Ok((JsonSchemaEmitter.emit(model, view)?, "json-schema.json")),
-        ExportKind::TypeScriptStates => Ok((
-            TypeScriptStateUnionEmitter::default().emit(model, view)?,
+        ExportKind::Openapi => {
+            Export::Artifact(Output::declared(OpenApiJsonEmitter), "openapi.json")
+        }
+        ExportKind::Asyncapi => {
+            Export::Artifact(Output::declared(AsyncApiJsonEmitter), "asyncapi.json")
+        }
+        ExportKind::Dbml => Export::Artifact(Output::declared(DbmlEmitter), "schema.dbml"),
+        ExportKind::JsonSchema => {
+            Export::Artifact(Output::declared(JsonSchemaEmitter), "json-schema.json")
+        }
+        ExportKind::TypeScriptStates => Export::Artifact(
+            Output::states(TypeScriptStateUnionEmitter::default()),
             "entity-states.ts",
-        )),
-        ExportKind::MermaidEr => Ok((ErMermaidEmitter.emit(model, view)?, "er.mmd")),
-        ExportKind::Tla => Ok((
-            tla_bundle(model, Bounds::VERIFY, "RdraSpec")?.tla,
-            "RdraSpec.tla",
-        )),
+        ),
+        ExportKind::MermaidEr => Export::Artifact(Output::declared(ErMermaidEmitter), "er.mmd"),
+        ExportKind::Tla => Export::Tla,
     }
 }
 

@@ -3,8 +3,6 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Scope as LifecycleScope};
-use rdra_ish_core::SemanticModel;
 use rdra_ish_emit::{
     mermaid::{
         BusinessMermaidEmitter, ConditionMermaidEmitter, ContextMermaidEmitter, ErMermaidEmitter,
@@ -12,12 +10,12 @@ use rdra_ish_emit::{
         RequirementMermaidEmitter, RobustnessMermaidEmitter, ScreenMermaidEmitter,
         SequenceMermaidEmitter, StateMermaidEmitter, UsecaseMermaidEmitter,
     },
-    unknown_diagram_filter_kinds, Emitter, Filter, Scope, StateMarks, StateView, View,
+    unknown_diagram_filter_kinds, Filter, Scope, StateView, View,
 };
 use std::fs;
 
 use crate::cli::DiagramKind;
-use crate::lifecycle_gate::{gate, Reads};
+use crate::lifecycle_gate::Output;
 use crate::load::reject_model_errors;
 use rdra_ish_core::{load_project, Project};
 
@@ -52,13 +50,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
     let mut state = StateView::default();
-    let reads = kind.reads();
-    gate(&program, &model, reads)?;
-    if reads != Reads::Declared {
-        let (report, _) =
-            derive_states_built(&model, &LifecycleScope::ALL, Bounds::STATES, Caps::STATES);
-        state.marks = StateMarks::from_report(&report);
-    }
+    let gated = diagram_output(&kind).gate(&program, &model)?;
 
     for buc_id in &buc {
         if !model.bucs.values().any(|b| b.id == *buc_id) {
@@ -174,7 +166,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         }
     }
 
-    let diagram_text = emit_diagram(&model, &kind, &view)?;
+    let diagram_text = gated.emit(&model, &view)?;
     match out {
         Some(out) => {
             let out_path = out.with_extension("mmd");
@@ -188,21 +180,21 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
     Ok(())
 }
 
-fn emit_diagram(model: &SemanticModel, kind: &DiagramKind, view: &View) -> Result<String> {
+fn diagram_output(kind: &DiagramKind) -> Output {
     match kind {
-        DiagramKind::Rdra => Ok(RdraMermaidEmitter.emit(model, view)?),
-        DiagramKind::Context => Ok(ContextMermaidEmitter.emit(model, view)?),
-        DiagramKind::Requirement => Ok(RequirementMermaidEmitter.emit(model, view)?),
-        DiagramKind::Business => Ok(BusinessMermaidEmitter.emit(model, view)?),
-        DiagramKind::Usecase => Ok(UsecaseMermaidEmitter.emit(model, view)?),
-        DiagramKind::Robustness => Ok(RobustnessMermaidEmitter.emit(model, view)?),
-        DiagramKind::Sequence => Ok(SequenceMermaidEmitter.emit(model, view)?),
-        DiagramKind::Information => Ok(InformationMermaidEmitter.emit(model, view)?),
-        DiagramKind::Condition => Ok(ConditionMermaidEmitter.emit(model, view)?),
-        DiagramKind::Flow => Ok(FlowMermaidEmitter.emit(model, view)?),
-        DiagramKind::Screen => Ok(ScreenMermaidEmitter.emit(model, view)?),
-        DiagramKind::Er => Ok(ErMermaidEmitter.emit(model, view)?),
-        DiagramKind::State => Ok(StateMermaidEmitter.emit(model, view)?),
-        DiagramKind::Event => Ok(EventMermaidEmitter.emit(model, view)?),
+        DiagramKind::Rdra => Output::declared(RdraMermaidEmitter),
+        DiagramKind::Context => Output::declared(ContextMermaidEmitter),
+        DiagramKind::Requirement => Output::declared(RequirementMermaidEmitter),
+        DiagramKind::Business => Output::declared(BusinessMermaidEmitter),
+        DiagramKind::Usecase => Output::declared(UsecaseMermaidEmitter),
+        DiagramKind::Robustness => Output::declared(RobustnessMermaidEmitter),
+        DiagramKind::Sequence => Output::declared(SequenceMermaidEmitter),
+        DiagramKind::Information => Output::declared(InformationMermaidEmitter),
+        DiagramKind::Condition => Output::declared(ConditionMermaidEmitter),
+        DiagramKind::Flow => Output::declared(FlowMermaidEmitter),
+        DiagramKind::Screen => Output::declared(ScreenMermaidEmitter),
+        DiagramKind::Er => Output::declared(ErMermaidEmitter),
+        DiagramKind::State => Output::states(StateMermaidEmitter),
+        DiagramKind::Event => Output::declared(EventMermaidEmitter),
     }
 }

@@ -28,8 +28,8 @@ use crate::diagram_common::{
 };
 use crate::{
     collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
-    view_node_visible, view_relation_visible, EmitError, Emitter, ObjectGraphLayer, Scope, View,
-    OBJECT_GRAPH_LAYERS,
+    view_node_visible, view_relation_visible, EmitError, Emitter, Explored, ObjectGraphLayer,
+    OnDeadlock, Scope, StatesEmitter, View, OBJECT_GRAPH_LAYERS,
 };
 use rdra_ish_core::analysis::transition_guard_labels;
 use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, Relation, SemanticModel};
@@ -477,8 +477,17 @@ fn state_models_in_scope<'a>(
     models
 }
 
-impl Emitter for StateMermaidEmitter {
-    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+impl StatesEmitter for StateMermaidEmitter {
+    fn on_deadlock(&self) -> OnDeadlock {
+        OnDeadlock::Draw
+    }
+
+    fn emit(
+        &self,
+        model: &SemanticModel,
+        view: &View,
+        explored: &Explored,
+    ) -> Result<String, EmitError> {
         // A BUC scope draws each state model one of its use cases moves, whole.
         let in_scope: HashSet<NodeRef> = match &view.scope {
             Scope::Bucs(buc_ids) => rdra_ish_core::reachable_from_bucs(model, buc_ids),
@@ -496,7 +505,7 @@ impl Emitter for StateMermaidEmitter {
         }
         // The whole model is an index; a BUC or an entity scope already narrows it to full models.
         let index = matches!(view.scope, Scope::Whole | Scope::UseCases(_)) && entities.is_empty();
-        let marks = &view.state.marks;
+        let marks = explored.marks();
         let starts = lifecycle_start_states(
             model,
             models.iter().map(|sm| (sm.entity, sm.column.to_string())),
@@ -1096,7 +1105,9 @@ transitions(Publish, Doc.status, draft -> published)
 sets(Publish, Doc.kind == report)
 "#;
         let model = model_from(src);
-        let result = StateMermaidEmitter.emit(&model, &View::whole()).unwrap();
+        let result = StateMermaidEmitter
+            .emit(&model, &View::whole(), &Explored::default())
+            .unwrap();
         assert!(
             result.contains(
                 "%% omitted: Doc.tone (Enum without transitions)\n\
@@ -1127,7 +1138,9 @@ sets(Jot, Memo.kind == todo)
         let model = model_from(src);
         let mut view = View::whole();
         view.state.entities = vec!["Doc".to_string()];
-        let result = StateMermaidEmitter.emit(&model, &view).unwrap();
+        let result = StateMermaidEmitter
+            .emit(&model, &view, &Explored::default())
+            .unwrap();
         assert!(result.contains("%% omitted: Doc.tone "), "{result}");
         assert!(!result.contains("Memo."), "{result}");
         assert!(!result.contains("set-only"), "{result}");
@@ -1172,7 +1185,11 @@ transitions(Publish, Doc.status, draft -> published)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model).with_model_path("m.rdra"))
+            .emit(
+                &model,
+                &all_entities(&model).with_model_path("m.rdra"),
+                &Explored::default(),
+            )
             .unwrap();
         assert_eq!(
             result,
@@ -1206,7 +1223,7 @@ transitions(Publish, Doc.status, draft -> published)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         assert!(
             result.contains("    state \"下書き\" as state__Doc_draft\n"),
@@ -1236,7 +1253,7 @@ applies_to(Traced, Publish)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         assert!(
             result.contains(
@@ -1263,7 +1280,7 @@ transitions(Reopen, Doc.period, closed -> open)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         assert!(
             result.contains(
@@ -1299,7 +1316,7 @@ transitions(Decide, Doc.status, draft -> dropped)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         assert!(
             result
@@ -1334,7 +1351,7 @@ transitions(Finish, Ticket.phase, new -> done)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         assert_eq!(result.matches("as statemodel__").count(), 2, "{result}");
         let order = result
@@ -1372,7 +1389,7 @@ transitions(Review, D.review, none -> open)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         let block = |column: &str| {
             result
@@ -1425,7 +1442,11 @@ transitions(Ship, Parcel.status, packed -> sent)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &View::bucs(vec!["BucPay".to_string()]))
+            .emit(
+                &model,
+                &View::bucs(vec!["BucPay".to_string()]),
+                &Explored::default(),
+            )
             .unwrap();
         assert!(result.contains("scope=buc:BucPay"), "{result}");
         assert!(result.contains("statemodel__Order_status {"), "{result}");
@@ -1453,7 +1474,7 @@ transitions(Reopen, Doc.status, published -> review)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         assert!(result.contains("[*] --> state__Doc_review"), "{result}");
         assert!(!result.contains("[*] --> state__Doc_draft"), "{result}");
@@ -1473,7 +1494,7 @@ transitions(Thaw, Acct.status, frozen -> active)
 "#;
         let model = model_from(src);
         let result = StateMermaidEmitter
-            .emit(&model, &all_entities(&model))
+            .emit(&model, &all_entities(&model), &Explored::default())
             .unwrap();
         assert!(result.contains("[*] --> state__Acct_active"), "{result}");
         assert!(!result.contains("[*] --> state__Acct_frozen"), "{result}");
@@ -1800,7 +1821,7 @@ holds(Packed, Order.status == pending)
 applies_to(Packed, Ship)
 "#;
 
-    fn anomaly_view(entities: &[&str]) -> View {
+    fn anomaly_view(entities: &[&str]) -> (View, Explored) {
         let model = model_from(ANOMALIES);
         let report = rdra_ish_core::lifecycle::derive_states(
             &model,
@@ -1808,17 +1829,15 @@ applies_to(Packed, Ship)
             rdra_ish_core::lifecycle::Caps::STATES,
         );
         let mut view = View::whole();
-        view.state.marks = crate::StateMarks::from_report(&report);
         view.state.entities = entities.iter().map(|e| e.to_string()).collect();
-        view
+        (view, Explored::from_report(&report))
     }
 
     #[test]
     fn test_state_full_model_colours_unreachable_deadlock_and_end() {
         let model = model_from(ANOMALIES);
-        let out = StateMermaidEmitter
-            .emit(&model, &anomaly_view(&["Order"]))
-            .unwrap();
+        let (view, explored) = anomaly_view(&["Order"]);
+        let out = StateMermaidEmitter.emit(&model, &view, &explored).unwrap();
         assert!(out.contains("%% legend:"), "{out}");
         assert!(
             out.contains("class state__Order_lost stateunreachable"),
@@ -1839,9 +1858,8 @@ applies_to(Packed, Ship)
     #[test]
     fn test_state_whole_model_is_an_index() {
         let model = model_from(ANOMALIES);
-        let out = StateMermaidEmitter
-            .emit(&model, &anomaly_view(&[]))
-            .unwrap();
+        let (view, explored) = anomaly_view(&[]);
+        let out = StateMermaidEmitter.emit(&model, &view, &explored).unwrap();
         assert!(out.contains("4 状態 / 3 遷移 (--entity Order)"), "{out}");
         assert!(!out.contains("-->"), "{out}");
         assert!(!out.contains("class "), "{out}");

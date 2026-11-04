@@ -1,6 +1,6 @@
 //! TypeScript discriminated-union emitters for entity lifecycle states.
 
-use crate::{EmitError, Emitter, Scope, View};
+use crate::{EmitError, Explored, OnDeadlock, Scope, StatesEmitter, View};
 use rdra_ish_core::{
     collect_entity_state_variants, lifecycle::Caps, EntityStateVariant, EntityStateVariants,
     SemanticModel, StateFieldValue,
@@ -16,8 +16,17 @@ impl Default for TypeScriptStateUnionEmitter {
     }
 }
 
-impl Emitter for TypeScriptStateUnionEmitter {
-    fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
+impl StatesEmitter for TypeScriptStateUnionEmitter {
+    fn on_deadlock(&self) -> OnDeadlock {
+        OnDeadlock::Refuse
+    }
+
+    fn emit(
+        &self,
+        model: &SemanticModel,
+        view: &View,
+        _explored: &Explored,
+    ) -> Result<String, EmitError> {
         let buc_filter = match &view.scope {
             Scope::Bucs(ids) => ids.clone(),
             Scope::Whole | Scope::UseCases(_) => vec![],
@@ -176,7 +185,7 @@ sets(usecase::DeliverOrder, Order.delivered_at == present)
         let model = model_from(ORDER_SRC);
         let view = View::whole();
         let from_emitter = TypeScriptStateUnionEmitter::default()
-            .emit(&model, &view)
+            .emit(&model, &view, &Explored::default())
             .unwrap();
         let collections = collect_entity_state_variants(&model, &[], Caps::STATES);
         assert_eq!(from_emitter, emit_typescript_state_unions(&collections));

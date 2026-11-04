@@ -1,5 +1,6 @@
 use crate::cli::{ExportKind, ListFormat, ListKind};
-use crate::export::export_artifact;
+use crate::export::{export_output, Export};
+use crate::lifecycle_gate::Output;
 use crate::list_output::{
     format_lint_issues, list_elements, state_consistency_findings, state_diag_message,
 };
@@ -8,6 +9,17 @@ use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_core::{load_project, Project};
 use rdra_ish_emit::View;
 use std::path::PathBuf;
+
+fn export_artifact(
+    model: &SemanticModel,
+    kind: &ExportKind,
+    view: &View,
+) -> anyhow::Result<(String, &'static str)> {
+    match export_output(kind) {
+        Export::Artifact(Output::Declared(emitter), ext) => Ok((emitter.emit(model, view)?, ext)),
+        _ => panic!("not a declared-model artifact"),
+    }
+}
 
 #[test]
 fn load_project_rejects_missing_input_paths() {

@@ -107,7 +107,6 @@ impl StateMarks {
 pub struct StateView {
     /// Draw only these entities' state models (ids); empty means the scope decides.
     pub entities: Vec<String>,
-    pub marks: StateMarks,
 }
 
 #[derive(Debug, Clone)]
@@ -197,8 +196,51 @@ impl View {
     }
 }
 
+/// An emitter that reads the declared model and nothing of the lifecycle: its input is the
+/// model and the view, and neither carries an explored state.
 pub trait Emitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError>;
+}
+
+/// The explored states an output prints. Only a gate that has checked the lifecycle builds
+/// it, so a [`StatesEmitter`] cannot be reached without passing that gate.
+#[derive(Debug, Clone, Default)]
+pub struct Explored {
+    marks: StateMarks,
+}
+
+impl Explored {
+    pub fn from_report(report: &rdra_ish_core::lifecycle::StatesReport) -> Self {
+        Self {
+            marks: StateMarks::from_report(report),
+        }
+    }
+
+    pub fn marks(&self) -> &StateMarks {
+        &self.marks
+    }
+}
+
+/// What a state-reading output does with a deadlock the lifecycle found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OnDeadlock {
+    /// A deadlock is an error: the output is refused.
+    Refuse,
+    /// The output draws the deadlock, so a deadlock does not refuse it.
+    Draw,
+}
+
+/// An emitter that reads the explored states. It takes [`Explored`] besides the model and
+/// the view, and says what a deadlock does to it, so the lifecycle gate follows from the
+/// trait an emitter implements.
+pub trait StatesEmitter {
+    fn on_deadlock(&self) -> OnDeadlock;
+    fn emit(
+        &self,
+        model: &SemanticModel,
+        view: &View,
+        explored: &Explored,
+    ) -> Result<String, EmitError>;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

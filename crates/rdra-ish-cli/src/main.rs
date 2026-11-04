@@ -15,12 +15,12 @@ mod tlc_env;
 mod tlc_output;
 mod tlc_replay;
 mod verify;
-use cli::{Cli, Commands, ExportKind, ListFormat, ListKind};
+use cli::{Cli, Commands, ListFormat, ListKind};
 use csv_cmd::run_csv;
 use diagram::{run_diagram, DiagramRequest};
-use export::export_artifact;
+use export::{export_output, Export};
 use fmt_cmd::run_fmt;
-use lifecycle_gate::gate;
+use lifecycle_gate::{gate, Reads};
 use list_output::{
     format_lint_issues, format_rules, format_transitions, list_elements, state_findings,
 };
@@ -230,13 +230,15 @@ fn main() -> Result<()> {
                 ..
             } = load_project(&inputs, None)?;
             reject_model_errors(&program, &diags)?;
-            // The TLA+ export gates after `tla_bundle`, whose build errors stop it first.
-            if !matches!(kind, ExportKind::Tla) {
-                gate(&program, &model, kind.reads())?;
-            }
+            // An artifact gates by what its emitter reads. The TLA+ export gates after
+            // `tla_bundle`, whose build errors stop it first.
+            let artifact = match export_output(&kind) {
+                Export::Artifact(output, ext) => Some((output.gate(&program, &model)?, ext)),
+                Export::Tla => None,
+            };
 
             let view = View::whole();
-            if matches!(kind, ExportKind::Tla) {
+            if artifact.is_none() {
                 let module_name = if out.extension().is_some_and(|e| e == "tla") {
                     out.file_stem()
                         .and_then(|s| s.to_str())
@@ -246,7 +248,7 @@ fn main() -> Result<()> {
                 };
                 let bounds = export::tla_bounds(instance_count, int_range_max)?;
                 let bundle = export::tla_bundle(&model, bounds, module_name)?;
-                gate(&program, &model, kind.reads())?;
+                gate(&program, &model, Reads::System)?;
                 let (tla_path, cfg_path) = if out.extension().is_some_and(|e| e == "tla") {
                     let cfg = out.with_extension("cfg");
                     (out.clone(), cfg)
@@ -279,8 +281,8 @@ fn main() -> Result<()> {
                     .with_context(|| format!("failed to write {}", cfg_path.display()))?;
                 println!("wrote {}", tla_path.display());
                 println!("wrote {}", cfg_path.display());
-            } else {
-                let (content, ext) = export_artifact(&model, &kind, &view)?;
+            } else if let Some((gated, ext)) = artifact {
+                let content = gated.emit(&model, &view)?;
 
                 let out_path = if out.extension().is_some() {
                     out.clone()
