@@ -674,16 +674,18 @@ gaps.
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
   you can do: a change that grows the application's cone further takes the view past the cap;
   measure it with `lifecycle_measure` first.
-- **insurance-claim-ops does not gate a liability claim on its settlement.** A liability claim
-  is completed with the 示談書, but the claim and the settlement are both children of the
-  accident case. Since #77 the guard reads the settlement of the claim's own case
-  (`holds(..).along(Claim, ClaimCase, Settlement)`), but with it and the rule
-  `.along(Claim, ClaimCase, Settlement)` the claim's cone joins the case's: at 2 instances the
-  views of `Claim`, `Payment`, and `Subrogation` pass 3,000,000 states, and the TLC runs on
-  them had not finished after 20 minutes. Both are left out (#74). The sample's largest cone
-  is 60,193 states at 2 instances and `verify` takes about 5 s. See it:
-  [Known verification gaps](../samples/insurance-claim-ops/README.md#known-verification-gaps).
-  What you can do: give the two children a key of their own, or carry the fact on the claim.
+- **insurance-claim-ops checks its settlement guard reduced.** A liability claim is completed
+  with the 示談書, and the claim and the settlement are both children of the accident case. The
+  guard on `CompleteClaim` reads the settlement of the claim's own case
+  (`holds(..).along(Claim, ClaimCase, Settlement)`), and the rule `賠償の請求は示談書がそろってから完了する`
+  says the same on the claim's rows. Both join the claim's cone to the case's. Without the
+  reduction of #74 the views of `Claim`, `Payment`, and `Subrogation` passed 3,000,000 states at
+  2 instances and TLC had not finished after 20 minutes. Reduced, the claim's cone is 754,247
+  states, and `verify --deny-undecided` decides every check in about 60 s. The claim's cones
+  are in `VERIFY_FALLBACK`: `engine_equivalence` compares them with TLC at 1 instance only.
+  See it: [Verification](../samples/insurance-claim-ops/README.md#verification). What you can
+  do: a change that grows the case's cone (63,823 states, which nothing reduces) grows every
+  claim cone with it; measure it with `lifecycle_measure` first.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
   outside the selected BUCs, and those could reach, enable, or unblock a state. A missing
   witness, a use case that never runs, a deadlock, an arm never taken, and a value never
