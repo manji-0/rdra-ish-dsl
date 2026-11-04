@@ -405,8 +405,9 @@ The rules for each flag and for deferral are in
 - **Quantifiers.** `has` and `none` range over the `InstanceCount` ids. Where a `relate`
   declares the relationship, an owner function links the related instances. Otherwise the
   related side is independent.
-- `check` and `states` run BFS on the same system at one instance per entity, so `check`
-  finds the same violations as TLC in that window. The test `engine_equivalence`
+- `check` and `states` run BFS on the same system, at one instance per entity unless
+  `--instance-count` says otherwise, so `check` finds the same violations as TLC in that
+  window. The test `engine_equivalence`
   (`crates/rdra-ish-cli/tests/engine_equivalence.rs`) runs BFS and TLC on every cone of
   every sample, at 1 and at 2 instances per entity. On each cone it compares:
   - The reached states and the initial states. TLC's side is the graph that
@@ -515,12 +516,14 @@ gaps.
   Decimal, Date, and DateTime column takes values in `IntRange`. `now` starts in that range
   and a `Tick` action raises it to the top, so a run never sees a later time. See it: the
   `Int 0..5` in the `bounds:` line, and `IntLiteralOutOfBounds` for a literal outside it.
-  What you can do: `verify --int-range-max N` widens the range; `check` keeps `0..5`.
-- **Instances are bounded: 1 per entity in `check`, 2 in `verify`.** A rule that needs two
+  What you can do: `--int-range-max N` on `check`, `states`, `export`, or `verify` widens
+  the range.
+- **Instances are bounded: by default 1 per entity in `check` and `states`, 2 in `verify`.** A rule that needs two
   instances to break, such as `Unique_*`, holds vacuously in `check`. A rule that needs
   three is not checked by default. Each entity is created at most `InstanceCount` times,
   because a deleted slot is never reused. See it: the `bounds:` line. What you can do: run
-  `verify`, and raise `--instance-count` for a rule about more instances.
+  `verify`, or pass `--instance-count N` to `check`, `states`, or `verify` for a rule about
+  more instances.
 - **Temporal properties are checked only by `verify`, and a scoped run checks none.**
   `check` and `states` evaluate no `property` and print a `note:` that says so. A run with
   `--buc` or `--entity` checks no property: `--buc` drops use cases a property's fairness

@@ -18,7 +18,7 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 
 | Command | Role |
 |---|---|
-| `check`, `states` | BFS on the transition system at one instance per entity; no TLC |
+| `check`, `states` | BFS on the transition system, by default at one instance per entity (`--instance-count`, `--int-range-max` change it); no TLC |
 | `verify --backend tlc` | BFS on each entity's cone at the TLC bounds, then TLC on one spec per cone of influence and one per temporal property |
 | `export --kind tla` | Write the whole-model `.tla` **and** sibling `.cfg` for reading or a run by hand |
 

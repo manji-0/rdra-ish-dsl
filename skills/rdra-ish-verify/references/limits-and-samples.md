@@ -61,9 +61,10 @@
   its cone of influence, and a temporal property on the whole model only when its cone does
   not decide it (`docs/formal-verification.md`, "Temporal properties on a cone").
 - Int, Money, Decimal, Date, and DateTime columns that something names are variables over
-  `IntRange`; a `@null` one adds `null`, and a comparison over a null operand passes.
-- `states` and `check` read the same system at one instance per entity, so Int and `now`
-  columns that something names are `0..5` variables there too.
+  `IntRange`; a `@null` one adds `null`. A comparison over a null operand fails, except
+  `!=`, in every rule form including `@check`; write `col == null or ...` to admit null.
+- `states` and `check` read the same system, by default at one instance per entity and
+  `0..5`, so Int and `now` columns that something names are `0..5` variables there too.
 - Error diagnostics of the system stop `export` and `verify`; warnings go to stderr.
 - **Partial runs**: `--entity E` checks `E`'s view and the invariants and after-asserts that
   read `E`, each on its exact cone, and defers a build error no selected cone reads.
