@@ -1,9 +1,11 @@
 %% rdra-ish diagram=condition scope=buc:BucPayment model=samples/insurance-claim-ops
-%% kinds: condition statemodel usecase
+%% kinds: condition statemodel variation value usecase
 %% omitted: (none)
 flowchart LR
   condition__ClaimBeforeDecision{"請求書類の提出から決裁の前である"}:::condition
   %% holds condition__ClaimBeforeDecision: Claim.status in (請求書類の提出, 請求完了)
+  condition__ClaimFirstParty{"車両・人身傷害の事故の請求である"}:::condition
+  %% holds condition__ClaimFirstParty: ClaimCase.coverage in (車両, 人身傷害)
   condition__ClaimUnderConfirmation{"請求完了の後、支払・不払を決める前である"}:::condition
   %% holds condition__ClaimUnderConfirmation: Claim.status == 請求完了
   condition__DenialDecided{"不払いを決めた"}:::condition
@@ -18,11 +20,22 @@ flowchart LR
   %% holds condition__NotPaidYet: (Claim.status == 支払決定).none(Payment)
   condition__ReasonExplained{"不払いの理由を説明した"}:::condition
   %% holds condition__ReasonExplained: Claim.reason_explained == true
+  condition__SettlementSigned{"示談が成立している"}:::condition
+  %% holds condition__SettlementSigned: (Settlement.status == 示談成立).along(Claim, ClaimCase, Settlement)
   statemodel__ClaimCase_liability[["ClaimCase.liability"]]:::statemodel
   statemodel__ClaimCase_status[["ClaimCase.status"]]:::statemodel
   statemodel__Claim_status[["Claim.status"]]:::statemodel
+  statemodel__Settlement_status[["Settlement.status"]]:::statemodel
+  subgraph variation__Coverage["担保種目"]
+    variation__Coverage__bodily_liability["対人賠償"]:::value
+    variation__Coverage__property_liability["対物賠償"]:::value
+    variation__Coverage__vehicle["車両"]:::value
+    variation__Coverage__personal_injury["人身傷害"]:::value
+  end
   usecase__CloseCase("事故案件の完了"):::usecase
   %% desc usecase__CloseCase: 請求の支払・不払の通知・取下げを受けて、事故案件を完了にする。過失の判断が残っていれば先に済ませる。
+  usecase__CompleteClaim("請求完了の確認"):::usecase
+  %% desc usecase__CompleteClaim: 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。
   usecase__DecideClaim("支払・不払の決裁"):::usecase
   %% desc usecase__DecideClaim: 支払決裁者が調査の結果と請求書類から、保険金を支払うか、免責・解除などで支払わないかを決める。
   usecase__DecideSuspectedClaim("疑義事案の支払・不払の決裁"):::usecase
@@ -40,6 +53,12 @@ flowchart LR
   condition__ClaimBeforeDecision -.->|applies_to| usecase__FlagSuspectedFraud
   condition__ClaimBeforeDecision -.-> statemodel__Claim_status
   %% derived condition__ClaimBeforeDecision -> statemodel__Claim_status from holds
+  condition__ClaimFirstParty -.-> statemodel__Claim_status
+  %% derived condition__ClaimFirstParty -> statemodel__Claim_status from when
+  condition__ClaimFirstParty -.-> variation__Coverage
+  %% derived condition__ClaimFirstParty -> variation__Coverage from holds
+  condition__ClaimFirstParty -.->|when| usecase__CompleteClaim
+  %% derived condition__ClaimFirstParty -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   condition__ClaimUnderConfirmation -.->|applies_to| usecase__ExtendPaymentPeriod
   condition__ClaimUnderConfirmation -.-> statemodel__Claim_status
   %% derived condition__ClaimUnderConfirmation -> statemodel__Claim_status from holds
@@ -57,6 +76,14 @@ flowchart LR
   condition__NotPaidYet -.-> statemodel__Claim_status
   %% derived condition__NotPaidYet -> statemodel__Claim_status from holds
   condition__ReasonExplained -.->|applies_to| usecase__NotifyDenial
+  condition__SettlementSigned -.-> statemodel__Claim_status
+  %% derived condition__SettlementSigned -> statemodel__Claim_status from when
+  condition__SettlementSigned -.-> statemodel__Settlement_status
+  %% derived condition__SettlementSigned -> statemodel__Settlement_status from holds
+  condition__SettlementSigned -.->|when| usecase__CompleteClaim
+  %% derived condition__SettlementSigned -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
   classDef statemodel fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
+  classDef value fill:#f3d9fa,stroke:#862e9c,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

@@ -66,6 +66,7 @@ flowchart LR
     state__Payment_completed((("支払完了の連絡済"))):::state
     state__Payment_instructed((("支払手続"))):::state
     condition__ClaimBeforeDecision{"請求書類の提出から決裁の前である"}:::condition
+    condition__ClaimFirstParty{"車両・人身傷害の事故の請求である"}:::condition
     condition__ClaimUnderConfirmation{"請求完了の後、支払・不払を決める前である"}:::condition
     condition__DenialDecided{"不払いを決めた"}:::condition
     condition__FraudSuspected{"不正請求の疑いがある"}:::condition
@@ -73,6 +74,7 @@ flowchart LR
     condition__NoFraudSuspicion{"不正請求の疑いがない"}:::condition
     condition__NotPaidYet{"支払済みの案件は再度支払わない"}:::condition
     condition__ReasonExplained{"不払いの理由を説明した"}:::condition
+    condition__SettlementSigned{"示談が成立している"}:::condition
   end
   actor__ClaimHandler -.-> usecase__CompleteClaim
   actor__ClaimHandler -.-> usecase__ExplainDenialReason
@@ -84,6 +86,8 @@ flowchart LR
   actor__PaymentApprover -.-> usecase__DecideClaim
   actor__SeniorApprover -.-> usecase__DecideSuspectedClaim
   condition__ClaimBeforeDecision -.->|applies_to| usecase__FlagSuspectedFraud
+  condition__ClaimFirstParty -.->|when| usecase__CompleteClaim
+  %% derived condition__ClaimFirstParty -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   condition__ClaimUnderConfirmation -.->|applies_to| usecase__ExtendPaymentPeriod
   condition__DenialDecided -.->|applies_to| usecase__ExplainDenialReason
   condition__FraudSuspected -.->|applies_to| usecase__DecideSuspectedClaim
@@ -91,6 +95,8 @@ flowchart LR
   condition__NoFraudSuspicion -.->|applies_to| usecase__DecideClaim
   condition__NotPaidYet -.->|applies_to| usecase__PayClaim
   condition__ReasonExplained -.->|applies_to| usecase__NotifyDenial
+  condition__SettlementSigned -.->|when| usecase__CompleteClaim
+  %% derived condition__SettlementSigned -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   event__EvClaimPaid -.-> usecase__CloseCase
   event__EvClaimWithdrawn -.-> usecase__CloseCase
   event__EvDenialNotified -.-> usecase__CloseCase

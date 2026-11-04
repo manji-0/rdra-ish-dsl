@@ -120,8 +120,10 @@ Each figure is a cone size at the 2 instances of `verify`, from
   `失効後の更新はできない` (#73) adds the permit's existence and status and the `renews` link to
   the cones that hold the application. The cone is exact and column-level (#71), so the 31
   states the permit's two variables reach at 2 instances interleave with every state of the
-  application; a cone cannot be smaller than that projection, and reducing it is #74. Measured
-  with `lifecycle_measure -- 3000000 verify` at 2 instances, before and after the guard:
+  application; a cone cannot be smaller than that projection, and the reduction of #74 leaves
+  the application's and the inspection's cones as they are, since every entity in them reads
+  the application (it takes the view of `Disposition` to 13,230 states). Measured with
+  `lifecycle_measure -- 3000000 verify` at 2 instances, before and after the guard, unreduced:
 
   | View | Before | After |
   |---|---:|---:|

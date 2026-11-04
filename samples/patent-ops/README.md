@@ -67,9 +67,10 @@ Each figure is a cone size from `crates/rdra-ish-core/examples/lifecycle_measure
   Both are left out, so neither `check` nor `verify` checks that only approved drafts are filed.
 - **`OfficeAction` is compared with TLC at 1 instance only.** The two guards that read the application
   (`UnderExamination`, `ExaminationOver`) put its state into the office action's cone, which reaches
-  1,034 states at 1 instance and 4,818,909 at 2. `verify` runs TLC on the whole cone (its
+  1,034 states at 1 instance and 4,818,909 at 2, 1,341,705 reduced by its independent
+  sub-lifecycle (#74). `verify` runs TLC on the reduced cone (its
   invariants hold) and its BFS, under the cap of 8,388,608 states, decides whether an office action
-  can get stuck at `open`, `drafted`, `overdue`, or `answered` (about 75 s in all). Before the cap
+  can get stuck at `open`, `drafted`, `overdue`, or `answered` (about 20 s in all). Before the cap
   was raised from 2,097,152, those four checks were listed under `not checked:`.
   `engine_equivalence` compares the office action's cones with TLC at 1 instance only
   (`VERIFY_FALLBACK`).

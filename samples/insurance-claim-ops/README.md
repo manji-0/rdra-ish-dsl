@@ -129,7 +129,7 @@ permission, and no timer starts it.
 
 `rdra-ish list samples/insurance-claim-ops --kind rule` prints the labelled rules. Each was
 checked by mutation: dropping its guard or effect from a copy of the sample makes `check` or
-`verify` fail with the rule's name. 16 of 17 mutants fail; Soak findings names the one that does
+`verify` fail with the rule's name. 17 of 18 mutants fail; Soak findings names the one that does
 not.
 
 | Rule | Guard or effect it relies on |
@@ -141,6 +141,7 @@ not.
 | 賠償の事故は賠償責任を判断してから損害を確定する | the `.when(LiabilityDetermined)` arm of `AssessDamage` |
 | 修理見積は車両・対物賠償の事故だけ / 自賠責の損害調査は人身の事故だけ | `RepairCoverage`, `InjuryCoverage` |
 | 等級の変動を説明してから請求の意思を確かめる | `GradeExplained` on `SubmitClaim` |
+| 賠償の請求は示談書がそろってから完了する | `SettlementSigned` on the liability arm of `CompleteClaim` (`ClaimFirstParty` on the other) |
 | 不正請求の疑いがある請求は上位の決裁者が決める | `NoFraudSuspicion` on `DecideClaim`, `ClaimBeforeDecision` on `FlagSuspectedFraud` |
 | 不払いは理由を説明してから通知する | `ReasonExplained` on `NotifyDenial` |
 | 支払期限を過ぎた支払には遅延利息を付ける | the copy `sets(PayClaim, Payment.late_interest == Claim.late_interest_due)` |
@@ -154,28 +155,29 @@ not.
 ## Verification
 
 `check` reports no warning. `verify --deny-undecided` at 2 instances passes with `tlc_result: ok`
-in 4 to 5 s locally (about 460 MB). The cones at 2 instances, from `lifecycle_measure -- 3000000 verify`:
+in about 60 s locally (1.3 GB). The settlement guard on `CompleteClaim` joins the claim's cone
+to the case's, and `verify` explores each cone reduced by its independent sub-lifecycle (#74;
+[formal-verification.md](../../docs/formal-verification.md#reduction-by-an-independent-sub-lifecycle)):
+in the claim's cones the case, its investigation and its settlement are the sub-lifecycle,
+63,823 states in 443 classes, and in the subrogation's the claim's whole cone is, 573,751 states
+in 224 classes. The cones at 2 instances, reduced, from `lifecycle_measure -- 20000000 verify`:
 
 | Cone (targets) | States |
 |---|---:|
-| `ClaimCase`, `Investigation`, `Settlement` (8 rules, `Unique_Investigation_ClaimCase`, `Unique_Settlement_ClaimCase`) | 60,193 |
-| `SubrogationEnds` | 4,783 |
-| `Payment` (`支払期限を過ぎた支払には遅延利息を付ける`) | 3,995 |
-| `Subrogation` (`支払後に求償権が移る`, the after-assert) | 3,331 |
-| `Claim` (5 rules, `Unique_Payment_Claim`, `ClaimEventuallyDecided`) | 2,975 |
+| `Payment` (`支払期限を過ぎた支払には遅延利息を付ける`) | 814,191 |
+| `Claim` | 754,247 |
+| `CrossForbidden_Payment_3`, the after-assert of `PayClaim` | 707,071 |
+| the claim's rules (`Forbidden_Claim_0`, `Forbidden_Claim_1`, `Forbidden_Claim_4`, `Inv_Claim_0`, `CrossForbidden_Claim_0`, `Quantifier_Claim_0`, `Unique_Payment_Claim`), `ClaimEventuallyDecided` | 573,751 |
+| `ClaimCase`, `Investigation`, `Settlement` (8 rules, `Unique_Investigation_ClaimCase`, `Unique_Settlement_ClaimCase`; nothing reduces) | 63,823 |
+| `Subrogation`, `SubrogationEnds` | 372 |
+| `CrossForbidden_Subrogation_7`, `Unique_Subrogation_Claim`, the after-assert of `StartSubrogation` | 255 |
 | `Complaint`, `RepairEstimate`, `JibaisekiSurvey` | 483, 441, 189 |
 
-Every cone is under the 200,000 states `engine_equivalence` compares at 2 instances, so none is in
-`VERIFY_FALLBACK`.
+The six cones over 200,000 states (`Claim`, `Payment`, and the claim's and the payment's rules)
+are compared with TLC at 1 instance only by `engine_equivalence` (`VERIFY_FALLBACK`).
 
 ## Known verification gaps
 
-- **The settlement does not gate the liability claim.** A liability claim can be completed
-  only with the 示談書 (tokiomarine-2025-tap-yakkan.txt:4576-4577, :4596). Since #77 the guard
-  can read the settlement of the claim's own case,
-  `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase, Settlement)`,
-  but it joins the claim's cone to the case's, and `verify` does not finish at 2 instances.
-  The guard and the rule are not in the model (see Soak findings).
 - **The payment period is not tied to its reason.** `PaymentDeadline` cannot read
   `Claim.extension`, so nothing checks that a 90-day extension ends at 90 days; the model checks
   only that a claim paid after its deadline carries the late interest.
@@ -209,9 +211,9 @@ needed `drives` or a guarded `chooses`.
 
 What the model could say but `verify` could not check, and what it could not say:
 
-- **(V) A guard on the case's settlement does not fit the `verify` cap.** A liability claim is
-  completed with the 示談書 (tokiomarine-2025-tap-yakkan.txt:4576-4577, :4596): `Claim` and
-  `Settlement` are both children of `ClaimCase`. The rule is
+- **(V, fixed by #74) A guard on the case's settlement did not fit the `verify` cap.** A
+  liability claim is completed with the 示談書 (tokiomarine-2025-tap-yakkan.txt:4576-4577,
+  :4596): `Claim` and `Settlement` are both children of `ClaimCase`. The rule is
   `forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, ClaimCase, Settlement)`.
   Its guard was first rated (G): `holds(SettlementSigned, Settlement.status == agreed)` on
   `CompleteClaim` read any settlement of any case, with no warning. Since #77 `holds` takes
@@ -219,15 +221,17 @@ What the model could say but `verify` could not check, and what it could not say
   the path-less form is the `UnjoinedGuardRead` warning. The guard needs one arm per kind of
   claim, since a first-party claim has no settlement:
   `transitions(CompleteClaim, Claim.status, submitted -> completed)` declared once
-  `.when(FirstPartyCoverage)` and once `.when(SettlementSigned)`. With that model `check`
-  passes, but at 2 instances the guard and the rule still join the claim's cone (2,975 states)
-  to the case's (60,193): `lifecycle_measure -- 3000000 verify` stops the views of `Claim`,
+  `.when(ClaimFirstParty)` and once `.when(SettlementSigned)`. With that model `check`
+  passed, but at 2 instances the guard and the rule joined the claim's cone (2,975 states)
+  to the case's (60,193): `lifecycle_measure -- 3000000 verify` stopped the views of `Claim`,
   `Payment`, and `Subrogation`, the rule, and 13 more targets past 3,000,000 states (10 to 17 s
-  each); `verify --deny-undecided` stops the `Claim`, `Payment`, and `Subrogation` BFS cones at
-  the former cap of 2,097,152 states with 11 findings `not decided`, and its 6 TLC runs on those cones had not
-  finished after 20 minutes, each with 0.8 to 1.6 GB of states on disk. Reading the right
-  settlement does not shrink the cone: the case's states interleave with the claim's either way
-  (#74). The rule and the guard are left out (Known verification gaps).
+  each); `verify --deny-undecided` stopped the `Claim`, `Payment`, and `Subrogation` BFS cones
+  at the former cap of 2,097,152 states with 11 findings `not decided`, and its 6 TLC runs on
+  those cones had not finished after 20 minutes, each with 0.8 to 1.6 GB of states on disk.
+  Reading the right settlement does not shrink the cone: the case's states interleave with the
+  claim's either way. Since #74 `verify` quotients the case's lifecycle, which the claim's
+  actions never write, by what they read of it, and the rule and the guard are in the model
+  (Verification).
 - **(M, D) One timer stands for every payment period.** The payment period is 30 days, or 60,
   90, 120, or 180 by the extension reason (tokiomarine-2025-tap-yakkan.txt:4633, :4650-4658). One
   timer stands for all of them, and `chooses(ExtendPaymentPeriod, Claim.extension)` records a

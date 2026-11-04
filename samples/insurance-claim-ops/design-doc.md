@@ -974,7 +974,7 @@ flowchart LR
 | 請求書類の案内と送付<br>`SendClaimForms` | 担当者が請求者に請求の手続を説明し、請求書と、交通事故証明書・診断書・見積書・示談書など必要な書類を案内して送る。 | `ClaimScreen` | `ClaimCreateApi` | （なし） |
 | 等級の変動の説明と請求意思の確認<br>`ConfirmClaimIntent` | 保険金を請求すると次の契約の等級が下がる（3等級ダウン事故は1件につき3等級）ことを説明し、それでも請求するかを確かめる。 | `ClaimScreen` | `ClaimApi` | 請求の案内をした段階である |
 | 請求書類の提出<br>`SubmitClaim` | 請求者が保険会社の求める請求書類を出す。賠償の保険金では、示談書と、賠償金を払ったか被害者が承諾したことを示す書類を添える。 | `ClaimFormScreen` | `ClaimSubmitApi` | 等級の変動を説明して請求の意思を確かめた |
-| 請求完了の確認<br>`CompleteClaim` | 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。 | `ClaimScreen` | `ClaimApi` | （なし） |
+| 請求完了の確認<br>`CompleteClaim` | 担当者が必要な書類がそろったことを確かめ、請求完了日を記録して受領を連絡する。支払期限（30日）がこの日から始まる。 | `ClaimScreen` | `ClaimApi` | 車両・人身傷害の事故の請求である、示談が成立している |
 | 請求の取下げ<br>`WithdrawClaim` | 請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。 | `ClaimScreen` | `ClaimApi` | （なし） |
 | 請求権の時効による消滅<br>`TimeBarClaim` | 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。 | （なし） | `ClaimApi` | （なし） |
 
@@ -1052,7 +1052,7 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:CompleteClaim model=samples/insurance-claim-ops
 %% kinds: actor screen api entity
-%% omitted: buc step medium permission
+%% omitted: buc step medium permission condition
 sequenceDiagram
   actor actor__ClaimHandler as 損害サービス担当者
   participant screen__ClaimScreen as 保険金請求画面
@@ -1061,7 +1061,7 @@ sequenceDiagram
   actor__ClaimHandler ->> screen__ClaimScreen: 請求完了の確認
   screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
   alt Claim.status == 請求書類の提出 and Claim.period == 未起算
-    api__ClaimApi ->> entity__Claim: update status 請求書類の提出 -> 請求完了, period 未起算 -> 30日の期間中, completed_on=set
+    api__ClaimApi ->> entity__Claim: update status 請求書類の提出 -> 請求完了 [車両・人身傷害の事故の請求である], status 請求書類の提出 -> 請求完了 [示談が成立している], period 未起算 -> 30日の期間中, completed_on=set
     api__ClaimApi -->> screen__ClaimScreen: done
   else guard fails
     api__ClaimApi -->> screen__ClaimScreen: rejected
@@ -1939,7 +1939,9 @@ stateDiagram-v2
     %% transition usecase__TimeBarClaim
     state__Claim_status_guided --> state__Claim_status_time_barred : 請求権の時効による消滅 (Claim.period と同時)
     %% transition usecase__CompleteClaim
-    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認 (Claim.period と同時)
+    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認 (Claim.period と同時) [車両・人身傷害の事故の請求である]
+    %% transition usecase__CompleteClaim
+    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認 (Claim.period と同時) [示談が成立している]
     %% transition usecase__WithdrawClaim
     state__Claim_status_submitted --> state__Claim_status_withdrawn : 請求の取下げ (Claim.period と同時)
     %% transition usecase__TimeBarClaim
@@ -1987,16 +1989,16 @@ Entity: Claim (保険金請求)
   null          submitted        not_started  true             false            false            false             false              no       no        BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim
   null          withdrawn        ended        true             false            false            false             false              no       yes       BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucClaim/WithdrawClaim
   null          time_barred      ended        true             false            false            false             false              no       yes       BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucClaim/TimeBarClaim
-  present       completed        running      true             false            false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim
   null          submitted        not_started  true             true             false            false             false              no       no        BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/FlagSuspectedFraud
+  present       completed        running      true             false            false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim
+  null          withdrawn        ended        true             true             false            false             false              no       yes       BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucClaim/WithdrawClaim, BucPayment/FlagSuspectedFraud
+  null          time_barred      ended        true             true             false            false             false              no       yes       BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucClaim/TimeBarClaim, BucPayment/FlagSuspectedFraud
   present       withdrawn        ended        true             false            false            false             false              no       yes       BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucClaim/WithdrawClaim, BucPayment/ExtendPaymentPeriod
   present       completed        extended     true             false            false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/ExtendPaymentPeriod
   present       decided_payment  running      true             false            false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/DecideClaim
   present       decided_denial   running      true             false            false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/DecideClaim
   present       completed        overdue      true             false            false            false             true               no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/ExtendPaymentPeriod, BucPayment/MarkPaymentOverdue
   present       completed        running      true             true             false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/FlagSuspectedFraud
-  null          withdrawn        ended        true             true             false            false             false              no       yes       BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucClaim/WithdrawClaim, BucPayment/FlagSuspectedFraud
-  null          time_barred      ended        true             true             false            false             false              no       yes       BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucClaim/TimeBarClaim, BucPayment/FlagSuspectedFraud
   present       decided_payment  extended     true             false            false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/DecideClaim, BucPayment/ExtendPaymentPeriod
   present       decided_denial   extended     true             false            false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/DecideClaim, BucPayment/ExtendPaymentPeriod
   present       completed        extended     true             true             false            false             false              no       no        BucClaim/CompleteClaim, BucClaim/ConfirmClaimIntent, BucClaim/SendClaimForms, BucClaim/SubmitClaim, BucPayment/ExtendPaymentPeriod, BucPayment/FlagSuspectedFraud
@@ -2514,8 +2516,11 @@ erDiagram
 | --- | --- | --- | --- | --- | --- |
 | condition | 請求の案内をした段階である | Claim | Claim.status == 請求の案内済 | ConfirmClaimIntent | samples/insurance-claim-ops/buc/buc_claim.rdra:92 |
 | condition | 等級の変動を説明して請求の意思を確かめた | Claim | Claim.grade_explained == true | SubmitClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:101 |
-| forbidden | 等級の変動を説明してから請求の意思を確かめる | Claim | Claim.grade_explained == false AND Claim.status not in (請求の案内済, 取下げ, 時効消滅) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:212 |
-| forbidden | 請求完了から支払・通知までは支払期限を管理する | Claim | Claim.status in (請求完了, 支払決定, 不払決定) AND Claim.period in (未起算, 期限の管理を終了) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:214 |
+| condition | 車両・人身傷害の事故の請求である | ClaimCase | ClaimCase.coverage in (車両, 人身傷害) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:113 |
+| condition | 示談が成立している | Settlement | (Settlement.status == 示談成立).along(Claim, ClaimCase, Settlement) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:116 |
+| forbidden | 賠償の請求は示談書がそろってから完了する | Claim\|Settlement | Claim.status == 請求完了 AND Settlement.status != 示談成立 |  | samples/insurance-claim-ops/buc/buc_claim.rdra:219 |
+| forbidden | 等級の変動を説明してから請求の意思を確かめる | Claim | Claim.grade_explained == false AND Claim.status not in (請求の案内済, 取下げ, 時効消滅) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:221 |
+| forbidden | 請求完了から支払・通知までは支払期限を管理する | Claim | Claim.status in (請求完了, 支払決定, 不払決定) AND Claim.period in (未起算, 期限の管理を終了) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:223 |
 | condition | 苦情を受け付けて解決していない | Complaint | Complaint.status == 苦情受付 | GuideToAdr | samples/insurance-claim-ops/buc/buc_complaint.rdra:97 |
 | condition | 特別調停案ではない和解案である | Complaint | Complaint.proposal == 和解案 | RejectProposal | samples/insurance-claim-ops/buc/buc_complaint.rdra:139 |
 | forbidden | 特別調停案は会社が受諾する | Complaint | Complaint.proposal == 特別調停案 AND Complaint.status == 和解案を受諾しない |  | samples/insurance-claim-ops/buc/buc_complaint.rdra:230 |

@@ -44,8 +44,10 @@ flowchart LR
     state__Claim_status_submitted((("請求書類の提出"))):::state
     state__Claim_status_time_barred((("時効消滅"))):::state
     state__Claim_status_withdrawn((("取下げ"))):::state
+    condition__ClaimFirstParty{"車両・人身傷害の事故の請求である"}:::condition
     condition__ClaimGuided{"請求の案内をした段階である"}:::condition
     condition__GradeExplained{"等級の変動を説明して請求の意思を確かめた"}:::condition
+    condition__SettlementSigned{"示談が成立している"}:::condition
   end
   actor__ClaimHandler -.-> usecase__CompleteClaim
   actor__ClaimHandler -.-> usecase__ConfirmClaimIntent
@@ -53,8 +55,12 @@ flowchart LR
   actor__PolicyHolder -.-> usecase__SubmitClaim
   actor__PolicyHolder -.-> usecase__WithdrawClaim
   actor__Victim -.-> usecase__SubmitClaim
+  condition__ClaimFirstParty -.->|when| usecase__CompleteClaim
+  %% derived condition__ClaimFirstParty -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   condition__ClaimGuided -.->|applies_to| usecase__ConfirmClaimIntent
   condition__GradeExplained -.->|applies_to| usecase__SubmitClaim
+  condition__SettlementSigned -.->|when| usecase__CompleteClaim
+  %% derived condition__SettlementSigned -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   event__EvInitialResponded -.-> usecase__SendClaimForms
   timer__ClaimLimitation -.-> usecase__TimeBarClaim
   usecase__CompleteClaim -.-> screen__ClaimScreen

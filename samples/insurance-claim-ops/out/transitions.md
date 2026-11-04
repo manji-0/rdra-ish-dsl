@@ -1,31 +1,31 @@
 | entity | column | from | to | usecase | guards | actors | site |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Claim | period | 未起算 (not_started) | 30日の期間中 (running) | 請求完了の確認 (CompleteClaim) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_claim.rdra:108 |
-| Claim | period | 未起算 (not_started) | 期限の管理を終了 (ended) | 請求権の時効による消滅 (TimeBarClaim) |  |  | samples/insurance-claim-ops/buc/buc_claim.rdra:128 |
-| Claim | period | 未起算 (not_started) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:118 |
+| Claim | period | 未起算 (not_started) | 30日の期間中 (running) | 請求完了の確認 (CompleteClaim) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_claim.rdra:109 |
+| Claim | period | 未起算 (not_started) | 期限の管理を終了 (ended) | 請求権の時効による消滅 (TimeBarClaim) |  |  | samples/insurance-claim-ops/buc/buc_claim.rdra:135 |
+| Claim | period | 未起算 (not_started) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:125 |
 | Claim | period | 30日の期間中 (running) | 延長期間中 (extended) | 支払期限の延長と通知 (ExtendPaymentPeriod) | 請求完了の後、支払・不払を決める前である | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:105 |
 | Claim | period | 30日の期間中 (running) | 期限経過 (overdue) | 支払期限の経過 (MarkPaymentOverdue) |  |  | samples/insurance-claim-ops/buc/buc_payment.rdra:189 |
 | Claim | period | 30日の期間中 (running) | 期限の管理を終了 (ended) | 不払いの通知 (NotifyDenial) | 不払いの理由を説明した | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:155 |
 | Claim | period | 30日の期間中 (running) | 期限の管理を終了 (ended) | 保険金の支払 (PayClaim) | 支払済みの案件は再度支払わない | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:171 |
-| Claim | period | 30日の期間中 (running) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:119 |
+| Claim | period | 30日の期間中 (running) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:126 |
 | Claim | period | 延長期間中 (extended) | 期限経過 (overdue) | 支払期限の経過 (MarkPaymentOverdue) |  |  | samples/insurance-claim-ops/buc/buc_payment.rdra:190 |
 | Claim | period | 延長期間中 (extended) | 期限の管理を終了 (ended) | 不払いの通知 (NotifyDenial) | 不払いの理由を説明した | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:156 |
 | Claim | period | 延長期間中 (extended) | 期限の管理を終了 (ended) | 保険金の支払 (PayClaim) | 支払済みの案件は再度支払わない | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:172 |
-| Claim | period | 延長期間中 (extended) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:120 |
+| Claim | period | 延長期間中 (extended) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:127 |
 | Claim | period | 期限経過 (overdue) | 期限の管理を終了 (ended) | 不払いの通知 (NotifyDenial) | 不払いの理由を説明した | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:157 |
 | Claim | period | 期限経過 (overdue) | 期限の管理を終了 (ended) | 保険金の支払 (PayClaim) | 支払済みの案件は再度支払わない | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:173 |
-| Claim | period | 期限経過 (overdue) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:121 |
+| Claim | period | 期限経過 (overdue) | 期限の管理を終了 (ended) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:128 |
 | Claim | status | 請求の案内済 (guided) | 請求書類の提出 (submitted) | 請求書類の提出 (SubmitClaim) | 等級の変動を説明して請求の意思を確かめた | 契約者・被保険者\|被害者（損害賠償請求権者） | samples/insurance-claim-ops/buc/buc_claim.rdra:98 |
-| Claim | status | 請求の案内済 (guided) | 取下げ (withdrawn) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:115 |
-| Claim | status | 請求の案内済 (guided) | 時効消滅 (time_barred) | 請求権の時効による消滅 (TimeBarClaim) |  |  | samples/insurance-claim-ops/buc/buc_claim.rdra:126 |
-| Claim | status | 請求書類の提出 (submitted) | 請求完了 (completed) | 請求完了の確認 (CompleteClaim) |  | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_claim.rdra:107 |
-| Claim | status | 請求書類の提出 (submitted) | 取下げ (withdrawn) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:116 |
-| Claim | status | 請求書類の提出 (submitted) | 時効消滅 (time_barred) | 請求権の時効による消滅 (TimeBarClaim) |  |  | samples/insurance-claim-ops/buc/buc_claim.rdra:127 |
+| Claim | status | 請求の案内済 (guided) | 取下げ (withdrawn) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:122 |
+| Claim | status | 請求の案内済 (guided) | 時効消滅 (time_barred) | 請求権の時効による消滅 (TimeBarClaim) |  |  | samples/insurance-claim-ops/buc/buc_claim.rdra:133 |
+| Claim | status | 請求書類の提出 (submitted) | 請求完了 (completed) | 請求完了の確認 (CompleteClaim) | 車両・人身傷害の事故の請求である | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_claim.rdra:107 |
+| Claim | status | 請求書類の提出 (submitted) | 取下げ (withdrawn) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:123 |
+| Claim | status | 請求書類の提出 (submitted) | 時効消滅 (time_barred) | 請求権の時効による消滅 (TimeBarClaim) |  |  | samples/insurance-claim-ops/buc/buc_claim.rdra:134 |
 | Claim | status | 請求完了 (completed) | 支払決定 (decided_payment) | 支払・不払の決裁 (DecideClaim) | 不正請求の疑いがない | 支払決裁者 | samples/insurance-claim-ops/buc/buc_payment.rdra:127 |
 | Claim | status | 請求完了 (completed) | 支払決定 (decided_payment) | 疑義事案の支払・不払の決裁 (DecideSuspectedClaim) | 不正請求の疑いがある | 上位決裁者（不正請求対応） | samples/insurance-claim-ops/buc/buc_payment.rdra:136 |
 | Claim | status | 請求完了 (completed) | 不払決定 (decided_denial) | 支払・不払の決裁 (DecideClaim) | 不正請求の疑いがない | 支払決裁者 | samples/insurance-claim-ops/buc/buc_payment.rdra:128 |
 | Claim | status | 請求完了 (completed) | 不払決定 (decided_denial) | 疑義事案の支払・不払の決裁 (DecideSuspectedClaim) | 不正請求の疑いがある | 上位決裁者（不正請求対応） | samples/insurance-claim-ops/buc/buc_payment.rdra:137 |
-| Claim | status | 請求完了 (completed) | 取下げ (withdrawn) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:117 |
+| Claim | status | 請求完了 (completed) | 取下げ (withdrawn) | 請求の取下げ (WithdrawClaim) |  | 契約者・被保険者 | samples/insurance-claim-ops/buc/buc_claim.rdra:124 |
 | Claim | status | 支払決定 (decided_payment) | 支払済 (paid) | 保険金の支払 (PayClaim) | 支払済みの案件は再度支払わない | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:170 |
 | Claim | status | 不払決定 (decided_denial) | 不払通知済 (denial_notified) | 不払いの通知 (NotifyDenial) | 不払いの理由を説明した | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_payment.rdra:154 |
 | ClaimCase | liability | 未確定 (undetermined) | 賠償責任あり (at_fault) | 過失割合と賠償責任の判断 (DetermineFault) | 事故案件を調査しているか、損害を確定した | 損害サービス担当者 | samples/insurance-claim-ops/buc/buc_investigation.rdra:81 |

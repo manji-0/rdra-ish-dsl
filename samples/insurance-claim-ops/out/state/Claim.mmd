@@ -60,7 +60,9 @@ stateDiagram-v2
     %% transition usecase__TimeBarClaim
     state__Claim_status_guided --> state__Claim_status_time_barred : 請求権の時効による消滅 (Claim.period と同時)
     %% transition usecase__CompleteClaim
-    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認 (Claim.period と同時)
+    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認 (Claim.period と同時) [車両・人身傷害の事故の請求である]
+    %% transition usecase__CompleteClaim
+    state__Claim_status_submitted --> state__Claim_status_completed : 請求完了の確認 (Claim.period と同時) [示談が成立している]
     %% transition usecase__WithdrawClaim
     state__Claim_status_submitted --> state__Claim_status_withdrawn : 請求の取下げ (Claim.period と同時)
     %% transition usecase__TimeBarClaim

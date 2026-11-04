@@ -104,9 +104,16 @@ applies_to(GradeExplained, SubmitClaim)
 // The claim and its period move together: the 請求完了日 starts the 30 days.
 displays(CompleteClaim, ClaimScreen)
 invokes(CompleteClaim, ClaimApi)
-transitions(CompleteClaim, Claim.status, submitted -> completed)
+transitions(CompleteClaim, Claim.status, submitted -> completed).when(ClaimFirstParty)
+transitions(CompleteClaim, Claim.status, submitted -> completed).when(SettlementSigned)
 transitions(CompleteClaim, Claim.period, not_started -> running)
 sets(CompleteClaim, Claim.completed_on == present)
+
+condition ClaimFirstParty "車両・人身傷害の事故の請求である"
+holds(ClaimFirstParty, ClaimCase.coverage in (vehicle, personal_injury))
+
+condition SettlementSigned "示談が成立している"
+holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase, Settlement)
 
 // A use case that moves both columns runs only where each column has an arm from its state, so a
 // claim withdrawn before its period starts needs an arm from `not_started` too (README, Soak findings).
@@ -209,6 +216,8 @@ performs(ClaimHandler, CompleteStep)
 performs(PolicyHolder, WithdrawStep)
 
 // Rules
+forbidden(Claim, Settlement, Claim.status == completed, Settlement.status != agreed).along(Claim, ClaimCase, Settlement).label("賠償の請求は示談書がそろってから完了する")
+
 forbidden(Claim, status not in (guided, withdrawn, time_barred), grade_explained == false).label("等級の変動を説明してから請求の意思を確かめる")
 
 forbidden(Claim, status in (completed, decided_payment, decided_denial), period in (not_started, ended)).label("請求完了から支払・通知までは支払期限を管理する")

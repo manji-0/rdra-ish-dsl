@@ -1,6 +1,6 @@
 %% rdra-ish diagram=rdra scope=buc:BucPayment model=samples/insurance-claim-ops
 %% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
-%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state condition
+%% kinds: extsystem business buc flow step timer medium permission usecase screen field event api entity state variation condition
 %% omitted: (none)
 flowchart LR
   subgraph layer_value["システム価値"]
@@ -144,7 +144,9 @@ flowchart LR
     state__Subrogation_open((("求償中"))):::state
     state__Subrogation_recovered((("回収"))):::state
     state__Subrogation_time_barred((("時効消滅"))):::state
+    variation__Coverage[\"担保種目"\]:::variation
     condition__ClaimBeforeDecision{"請求書類の提出から決裁の前である"}:::condition
+    condition__ClaimFirstParty{"車両・人身傷害の事故の請求である"}:::condition
     condition__ClaimPaid{"保険金を支払った請求で、まだ求償していない"}:::condition
     condition__ClaimUnderConfirmation{"請求完了の後、支払・不払を決める前である"}:::condition
     condition__DenialDecided{"不払いを決めた"}:::condition
@@ -153,6 +155,7 @@ flowchart LR
     condition__NoFraudSuspicion{"不正請求の疑いがない"}:::condition
     condition__NotPaidYet{"支払済みの案件は再度支払わない"}:::condition
     condition__ReasonExplained{"不払いの理由を説明した"}:::condition
+    condition__SettlementSigned{"示談が成立している"}:::condition
   end
   api__CaseApi -.-> permission__CaseHandle
   api__CaseApi -.->|updates| entity__ClaimCase
@@ -189,6 +192,12 @@ flowchart LR
   condition__ClaimBeforeDecision -.->|applies_to| usecase__FlagSuspectedFraud
   condition__ClaimBeforeDecision -.-> entity__Claim
   %% derived condition__ClaimBeforeDecision -> entity__Claim from holds
+  condition__ClaimFirstParty -.-> entity__Claim
+  %% derived condition__ClaimFirstParty -> entity__Claim from holds
+  condition__ClaimFirstParty -.-> variation__Coverage
+  %% derived condition__ClaimFirstParty -> variation__Coverage from holds
+  condition__ClaimFirstParty -.->|when| usecase__CompleteClaim
+  %% derived condition__ClaimFirstParty -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   condition__ClaimPaid -.->|applies_to| usecase__StartSubrogation
   condition__ClaimPaid -.-> entity__Claim
   %% derived condition__ClaimPaid -> entity__Claim from holds
@@ -207,6 +216,12 @@ flowchart LR
   condition__NotPaidYet -.-> entity__Claim
   %% derived condition__NotPaidYet -> entity__Claim from holds
   condition__ReasonExplained -.->|applies_to| usecase__NotifyDenial
+  condition__SettlementSigned -.-> entity__Claim
+  %% derived condition__SettlementSigned -> entity__Claim from holds
+  condition__SettlementSigned -.-> entity__Settlement
+  %% derived condition__SettlementSigned -> entity__Settlement from holds
+  condition__SettlementSigned -.->|when| usecase__CompleteClaim
+  %% derived condition__SettlementSigned -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   entity__Claim ---|N:1| entity__ClaimCase
   entity__Complaint ---|N:1| entity__ClaimCase
   entity__Investigation ---|1:1| entity__ClaimCase
@@ -420,4 +435,5 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
   classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef variation fill:#f3d9fa,stroke:#862e9c,color:#000;
   classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;
