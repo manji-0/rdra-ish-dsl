@@ -239,7 +239,7 @@ impl TransitionSystem {
         }
         out.cones = cones;
         out.tally.entity_cones = entity_cones.len();
-        for (i, r) in self.merge_variants(runs, &mut out.verdicts) {
+        for (i, r) in self.merge_variants(runs, &mut out.verdicts, &mut out.undecided) {
             if r.fired {
                 for arm in r.arms.into_iter().filter(|a| !a.taken) {
                     if let Some(diag) = arm.never {
@@ -297,12 +297,13 @@ impl TransitionSystem {
     /// runs when any variant runs and takes an arm when any variant takes it, and a `NeverRuns`
     /// or an arm finding carries the use case's name. A variant that a complete cone shows
     /// never runs while another ran is a `TriggerNeverRuns` info; one that only capped cones
-    /// keep is not decided. Returns each action's index with what is reported
+    /// keep is undecided under its own name. Returns each action's index with what is reported
     /// under it: a group of variants under its first.
     fn merge_variants(
         &self,
         runs: Vec<RunsSoFar>,
         verdicts: &mut Vec<Diag>,
+        undecided: &mut Vec<Undecided>,
     ) -> Vec<(usize, RunsSoFar)> {
         let step_of = |i: usize| match self.actions[i].origin {
             ActionOrigin::UseCase { uc, step, .. } => Some((uc, step)),
@@ -334,7 +335,17 @@ impl TransitionSystem {
             let any_fired = g.iter().any(|&i| runs[i].as_ref().is_some_and(|r| r.fired));
             for &i in &g {
                 let r = runs[i].take().expect("a variant is merged once");
-                if any_fired && !r.fired && r.never.is_some() {
+                if any_fired && !r.fired && r.never.is_none() {
+                    if let Some((cone, why)) = &r.capped {
+                        undecided.push(Undecided {
+                            subject: Subject::Runs {
+                                action: self.actions[i].name.clone(),
+                            },
+                            cone: Some(cone.clone()),
+                            why: *why,
+                        });
+                    }
+                } else if any_fired && !r.fired {
                     let action = &self.actions[i];
                     verdicts.push(Diag {
                         entities: action

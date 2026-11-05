@@ -2,7 +2,7 @@
 //! raiser sets and each `<UC>_by_<Ev>` variant reads on the row it is anchored to (#112).
 
 use super::*;
-use crate::lifecycle::{Severity, Trace};
+use crate::lifecycle::{Severity, Subject, Trace};
 
 /// Every finding of a run as `(name, severity)`, in report order.
 fn findings(d: &Derived) -> Vec<(String, Severity)> {
@@ -225,7 +225,7 @@ holds(Never, Item.status == w)
 }
 
 /// The second event comes four steps after the first, so a cap that stops the cone between
-/// them leaves its variant undecided rather than never run.
+/// them leaves its variant undecided under its own name rather than never run.
 #[test]
 fn a_variant_a_capped_cone_never_reached_is_no_info() {
     let src = r#"
@@ -259,6 +259,15 @@ triggers(Ev2, Handle)
         assert!(
             !names.iter().any(|n| n.starts_with("TriggerNeverRuns")),
             "{states}: {names:?}"
+        );
+        let undecided: Vec<&Subject> = x.undecided().iter().map(|u| &u.subject).collect();
+        let open = Subject::Runs {
+            action: "Handle_by_Ev2".to_string(),
+        };
+        assert_eq!(
+            undecided.contains(&&open),
+            !complete,
+            "{states}: {undecided:?}"
         );
     }
 }
