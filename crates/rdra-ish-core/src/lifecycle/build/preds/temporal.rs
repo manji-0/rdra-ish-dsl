@@ -8,8 +8,8 @@ use crate::lifecycle::build::naming::property_entity;
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    AfterAssert, AfterStep, At, CmpOp, Effect, Guard, GuardWhy, Ltl, ModelRef, Pred, Property,
-    Site, Start, VarId, VarKind,
+    ActId, ActionOrigin, AfterAssert, AfterStep, At, CmpOp, Effect, Guard, GuardWhy, Ltl, ModelRef,
+    Pred, Property, Site, Start, VarId, VarKind,
 };
 use crate::model::{
     CrossEntityCondition, EffectValue, EntityKey, TemporalExpr, TemporalFormula, TemporalRhs,
@@ -18,7 +18,8 @@ use crate::model::{
 impl Builder<'_> {
     // ── R-after ──────────────────────────────────────────────────────────────
 
-    /// One step, the last action of the anchor use case, so a split use case is checked once
+    /// One step per last action of the anchor use case (one, or one per `<UC>_by_<Ev>`
+    /// variant of a use case several events trigger), so a split use case is checked once
     /// per run, after its last transaction group, on the run's rows: an entity an earlier
     /// step wrote is the last step's `Earlier` param. An entity no param of the step binds is
     /// universally bound, and `UnboundAfterRead`.
@@ -27,7 +28,7 @@ impl Builder<'_> {
         for (i, ta) in model.temporal_assertions.iter().enumerate() {
             let site = Site::new(ModelRef::TemporalAssertion(i), &ta.site);
             let anchor = model.use_cases[ta.anchor].id.clone();
-            let Some(&act) = self.uc_actions.get(&ta.anchor).and_then(|acts| acts.last()) else {
+            let Some(&last) = self.uc_actions.get(&ta.anchor).and_then(|acts| acts.last()) else {
                 if !self.active_ucs.contains(&ta.anchor) {
                     self.diag(
                         ta.scope.clone(),
@@ -46,31 +47,43 @@ impl Builder<'_> {
                     entities.push(ek);
                 }
             }
-            let params = self.ts.actions[act.index()].params.clone();
-            let mut binding: Binding = Vec::new();
-            let mut binders = Vec::new();
-            for &ek in &entities {
-                let e = self.ent_of[&ek];
-                match self.read_param(&params, e, &[]) {
-                    Some(p) => binding.push((ek, At::Param(p))),
-                    None => {
-                        binding.push((ek, At::Bound(binders.len() as u8)));
-                        binders.push(e);
-                        if !params.iter().any(|p| p.entity == e) {
-                            self.diag(
-                                vec![ek],
-                                StateDiag::UnboundAfterRead {
-                                    anchor: anchor.clone(),
-                                    entity: model.entities[ek].id.clone(),
-                                    site: site.clone(),
-                                },
-                            );
+            let step_of = |act: ActId| match self.ts.actions[act.index()].origin {
+                ActionOrigin::UseCase { step, .. } => step,
+                ActionOrigin::Clock => None,
+            };
+            let lasts: Vec<ActId> = self.uc_actions[&ta.anchor]
+                .iter()
+                .copied()
+                .filter(|a| step_of(*a) == step_of(last))
+                .collect();
+            let mut steps = Vec::new();
+            for act in lasts {
+                let params = self.ts.actions[act.index()].params.clone();
+                let mut binding: Binding = Vec::new();
+                let mut binders = Vec::new();
+                for &ek in &entities {
+                    let e = self.ent_of[&ek];
+                    match self.read_param(&params, e, &[]) {
+                        Some(p) => binding.push((ek, At::Param(p))),
+                        None => {
+                            binding.push((ek, At::Bound(binders.len() as u8)));
+                            binders.push(e);
+                            if !params.iter().any(|p| p.entity == e) {
+                                self.diag(
+                                    vec![ek],
+                                    StateDiag::UnboundAfterRead {
+                                        anchor: anchor.clone(),
+                                        entity: model.entities[ek].id.clone(),
+                                        site: site.clone(),
+                                    },
+                                );
+                            }
                         }
                     }
                 }
+                let post = self.cross_all(&ta.requireds, &binding, &site);
+                steps.push(AfterStep { act, binders, post });
             }
-            let post = self.cross_all(&ta.requireds, &binding, &site);
-            let steps = vec![AfterStep { act, binders, post }];
             self.ts.after.push(AfterAssert {
                 name: format!("AfterAssert_{anchor}_{i}"),
                 anchor,

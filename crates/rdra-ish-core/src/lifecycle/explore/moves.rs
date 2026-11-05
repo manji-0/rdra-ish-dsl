@@ -86,10 +86,12 @@ impl TransitionSystem {
                     None if crowd => (0..self.bounds.slots() as u8).collect(),
                     None => Vec::new(),
                 },
-                ParamRole::Existing | ParamRole::Parent { .. } => (0..self.bounds.slots())
-                    .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
-                    .map(|s| s as u8)
-                    .collect(),
+                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
+                    (0..self.bounds.slots())
+                        .filter(|&s| state.get(self, exists, s) == Value::PRESENT)
+                        .map(|s| s as u8)
+                        .collect()
+                }
                 // Matched by its run mark, a guard, whether or not the slot is present.
                 ParamRole::Earlier { .. } => (0..self.bounds.slots() as u8).collect(),
             };

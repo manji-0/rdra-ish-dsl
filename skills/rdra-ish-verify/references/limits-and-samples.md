@@ -114,6 +114,7 @@ expectations"). The table repeats each header; "ok" means the command passes.
 | `samples/temporal_unmet.rdra` | ok | `tlc=counterexample`, `NeverShipped` and `PendingLeadsToDelivered` | An `always` and a `leads_to` property that both fail; Reopen lets an Order be cancelled and reopened forever, so the `leads_to` lasso loops back |
 | `samples/unwitnessed_state.rdra` | fail `Witness_Order_status_refunded Deadlock_Order_status_shipped` | `tlc=ok`, fails on the same names | A `transitions` endpoint no use case reaches, and a shipped Order whose only way out is Refund; Refund warns `Runs_Refund` |
 | `samples/deadlock.rdra` | fail `Deadlock_Order_status_paid` | `tlc=ok`, fails on the same name | A way out that never opens: Ship's condition holds only while `pending`; Ship warns `Runs_Ship` |
+| `samples/event_order.rdra` | ok | `tlc=ok` | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after the event, on the executed order, so the `after(IssueCert).assert` on the order's status holds |
 | `samples/partial_scope.rdra` | fail `DerivedColumnRead_Audit_score` | fails before TLC; `--entity Order` gives `tlc=ok` | Audit's `forbidden` reads an arithmetic `@derived` column; `--entity Order` defers it under `not checked:` |
 | `samples/one_to_one_shared.rdra` | ok | `tlc=counterexample`, `Unique_Shipment_Order` | Two use cases link two Shipments to one Order; one instance cannot show it |
 | `samples/none_any_child.rdra` | ok | `tlc=ok` | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only; `Unique_Invoice_Order` holds |

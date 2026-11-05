@@ -251,6 +251,9 @@ fn blocked_rows(
                     ParamRole::Earlier { step } => format!(
                         "{indent}needs: the {entity} step {step} of this use case's run wrote"
                     ),
+                    ParamRole::Triggered => {
+                        format!("{indent}needs: an existing {entity} its event was raised on")
+                    }
                 };
                 (text, None)
             })
@@ -432,6 +435,10 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
             step + 1
         ),
         (GuardWhy::Run { .. }, _) => "the bound rows are at this step of the run".to_string(),
+        (GuardWhy::Raised { event }, _) => format!(
+            "event {} was raised on the bound row (triggers)",
+            model.events[event].id
+        ),
     }
 }
 
@@ -576,6 +583,11 @@ fn trace_block(
     for entity in &trace.over_bound {
         out.push_str(&format!(
             "\n  note: the {noun} creates more {entity} instances than the instance bound allows; this check's cone does not count {entity} slots, so the whole model may not reach it at this bound"
+        ));
+    }
+    for (usecase, event) in &trace.free_triggers {
+        out.push_str(&format!(
+            "\n  note: the {noun} runs {usecase} without {event} having been raised; this check's cone does not hold the use case that raises it, so the whole model may not reach it"
         ));
     }
     out
@@ -834,6 +846,9 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
         | StateDiag::UnboundAfterRead { .. }
+        | StateDiag::UnanchoredTrigger { .. }
+        | StateDiag::UnjoinedTrigger { .. }
+        | StateDiag::TriggerNeverRuns { .. }
         | StateDiag::DeleteLeavesChildren { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }

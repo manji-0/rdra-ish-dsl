@@ -4,7 +4,7 @@
 use std::num::NonZeroU8;
 
 use crate::location::LocatedSpan;
-use crate::model::{ApiKey, BucKey, ConditionKey, EntityKey, FkId, UseCaseKey};
+use crate::model::{ApiKey, BucKey, ConditionKey, EntityKey, EventKey, FkId, UseCaseKey};
 
 /// Bounds are an input to the semantics, not a printer option. Every report states them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -139,6 +139,15 @@ pub enum VarKind {
         entity: EntId,
         /// The use case id.
         usecase: String,
+    },
+    /// Whether `event` was raised on this row (docs/state-derivation.md, "Triggers"): the
+    /// last step of every use case that raises it sets it, the first step of every use case
+    /// the event triggers reads it, nothing clears it, a delete does not reset it (as `Run`),
+    /// and it is not a view axis. `Domain::Bool`, base `FALSE`.
+    Raised {
+        entity: EntId,
+        /// The event id.
+        event: String,
     },
     Now,
 }
@@ -317,6 +326,9 @@ pub enum ActionOrigin {
         buc: Option<BucKey>,
         /// The transaction group of a split use case, from 1; `None` for one of one group.
         step: Option<u8>,
+        /// The tracked event this copy of the first step runs on, when several events
+        /// trigger the use case (`<UC>_by_<Ev>`); `None` otherwise.
+        trigger: Option<EventKey>,
     },
     /// The `now` tick; exists only when a predicate reads `now`.
     Clock,
@@ -344,6 +356,11 @@ pub enum ParamRole {
     /// (`VarKind::Run`) rather than by its existence. The action does not write it, reads it
     /// as the row of its entity, links it to the rows it writes, and advances its mark.
     Earlier { step: u8 },
+    /// A present row of a mark entity that the use case a tracked event triggers does not
+    /// otherwise bind, selected by the event's mark (`GuardWhy::Raised`) and, when one direct
+    /// key joins the two entities, linked to the action's row of the other by it. The action
+    /// does not write it.
+    Triggered,
 }
 
 impl ParamRole {
@@ -352,8 +369,8 @@ impl ParamRole {
         matches!(self, ParamRole::New | ParamRole::Existing)
     }
 
-    /// A written row or an `Earlier` one: the action's one row of its entity, which keys,
-    /// condition atoms, copies, and after-asserts read.
+    /// A written row, an `Earlier` one, or a `Triggered` one: the action's one row of its
+    /// entity, which keys, condition atoms, copies, and after-asserts read.
     pub fn is_row(self) -> bool {
         !matches!(self, ParamRole::Parent { .. })
     }
@@ -445,6 +462,9 @@ pub enum GuardWhy {
     /// The run mark of the bound row is `step`: `0` on a row step 1 takes (in no run), `i`
     /// on an `Earlier` row step `i + 1` continues.
     Run { step: u8 },
+    /// `<E>._raised_<Ev>` of the bound row is `true`: the event was raised on it, so the use
+    /// case `triggers(Ev, UC)` starts may run on it.
+    Raised { event: EventKey },
 }
 
 #[derive(Clone, Debug)]

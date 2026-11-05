@@ -2,6 +2,7 @@
 //! columns, `transitions`, `sets`, CRUD edges, relates, constraints, asserts, and properties.
 
 mod actions;
+mod events;
 mod links;
 mod naming;
 mod preds;

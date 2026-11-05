@@ -320,9 +320,10 @@ impl<'m> Builder<'m> {
         if let Some(q) = self.read_param(&a.params, s, by) {
             return Ok(match a.params[usize::from(q)].role {
                 ParamRole::New => At::Next(q),
-                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Earlier { .. } => {
-                    At::Param(q)
-                }
+                ParamRole::Existing
+                | ParamRole::Parent { .. }
+                | ParamRole::Earlier { .. }
+                | ParamRole::Triggered => At::Param(q),
             });
         }
         let target = a.params[usize::from(p)].entity;

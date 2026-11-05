@@ -11,9 +11,45 @@ use std::collections::BTreeSet;
 
 use super::expr::State;
 use super::types::{
-    ActId, Action, ActionOrigin, Effect, EntId, Ltl, ParamRole, Pred, Term, VarId, VarKind,
+    ActId, Action, ActionOrigin, At, Effect, EntId, Guard, GuardWhy, Ltl, ParamRole, Pred, Term,
+    VarId, VarKind,
 };
 use super::TransitionSystem;
+
+/// The params a predicate names, in a slot or an index, in the pre-state or the successor.
+pub(crate) fn named_params(pred: &Pred) -> Vec<u8> {
+    fn term(t: &Term, out: &mut Vec<u8>) {
+        if let Term::Slot {
+            at: At::Param(p) | At::Next(p),
+            ..
+        }
+        | Term::Index(At::Param(p) | At::Next(p)) = t
+        {
+            if !out.contains(p) {
+                out.push(*p);
+            }
+        }
+    }
+    fn walk(pred: &Pred, out: &mut Vec<u8>) {
+        match pred {
+            Pred::True | Pred::False => {}
+            Pred::Cmp(a, _, b) => {
+                term(a, out);
+                term(b, out);
+            }
+            Pred::In(a, vs) => {
+                term(a, out);
+                vs.iter().for_each(|v| term(v, out));
+            }
+            Pred::Not(p) => walk(p, out),
+            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| walk(p, out)),
+            Pred::Forall { body, .. } | Pred::Exists { body, .. } => walk(body, out),
+        }
+    }
+    let mut out = Vec::new();
+    walk(pred, &mut out);
+    out
+}
 
 pub type VarSet = BTreeSet<VarId>;
 /// What a target reads and the actions it keeps: the seed of its cone.
@@ -73,6 +109,62 @@ impl TransitionSystem {
     /// `Earlier` slot is selected by its run mark, a guard. A copy's guard is read only with
     /// the var it pins (`copy_reads`).
     pub(crate) fn action_reads(&self, action: &Action) -> VarSet {
+        let mut out = self.plain_reads(action);
+        for (mark, reads) in self.mark_reads(action) {
+            out.insert(mark);
+            out.extend(reads);
+        }
+        out
+    }
+
+    /// The `Triggered` params of an action, each with the mark its guard reads.
+    pub(crate) fn triggered_params(&self, action: &Action) -> Vec<(u8, VarId)> {
+        action
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(_, param)| param.role == ParamRole::Triggered)
+            .filter_map(|(p, _)| {
+                let p = p as u8;
+                let mark = action.guards.iter().find_map(|g| match (&g.why, &g.pred) {
+                    (
+                        GuardWhy::Raised { .. },
+                        Pred::Cmp(
+                            Term::Slot {
+                                var,
+                                at: At::Param(q),
+                            },
+                            ..,
+                        ),
+                    ) if *q == p => Some(*var),
+                    _ => None,
+                })?;
+                Some((p, mark))
+            })
+            .collect()
+    }
+
+    /// The mark a guard belongs to: the one it reads, or the one that selects the `Triggered`
+    /// param it names (its link).
+    fn guard_mark(&self, action: &Action, g: &Guard) -> Option<VarId> {
+        if let GuardWhy::Raised { .. } = g.why {
+            let mut reads = VarSet::new();
+            self.pred_reads(&g.pred, &mut reads);
+            return reads.into_iter().next();
+        }
+        let triggered = self.triggered_params(action);
+        if triggered.is_empty() {
+            return None;
+        }
+        let named = named_params(&g.pred);
+        triggered
+            .into_iter()
+            .find(|(p, _)| named.contains(p))
+            .map(|(_, mark)| mark)
+    }
+
+    /// The reads other than those a mark brings (`mark_reads`).
+    pub(crate) fn plain_reads(&self, action: &Action) -> VarSet {
         let mut out = VarSet::new();
         for p in action
             .params
@@ -81,7 +173,11 @@ impl TransitionSystem {
         {
             out.insert(self.entity(p.entity).exists);
         }
-        for g in action.guards.iter().filter(|g| g.copy_target().is_none()) {
+        for g in action
+            .guards
+            .iter()
+            .filter(|g| g.copy_target().is_none() && self.guard_mark(action, g).is_none())
+        {
             self.pred_reads(&g.pred, &mut out);
         }
         for eff in &action.effects {
@@ -92,6 +188,31 @@ impl TransitionSystem {
                 Effect::Tick => out.extend(self.now),
                 _ => {}
             }
+        }
+        out
+    }
+
+    /// Per mark the action reads, what reading it brings besides the mark: the existence of
+    /// a `Triggered` param it selects and what that param's link guard reads. A cone that
+    /// leaves the mark out leaves these out with it (`cone`, `restrict_to`).
+    pub(crate) fn mark_reads(&self, action: &Action) -> Vec<(VarId, VarSet)> {
+        let mut out: Vec<(VarId, VarSet)> = Vec::new();
+        let mut add = |mark: VarId, reads: VarSet| match out.iter_mut().find(|(m, _)| *m == mark) {
+            Some((_, set)) => set.extend(reads),
+            None => out.push((mark, reads)),
+        };
+        for (p, mark) in self.triggered_params(action) {
+            let exists = self.entity(action.params[usize::from(p)].entity).exists;
+            add(mark, VarSet::from([exists]));
+        }
+        for g in action.guards.iter().filter(|g| g.copy_target().is_none()) {
+            let Some(mark) = self.guard_mark(action, g) else {
+                continue;
+            };
+            let mut reads = VarSet::new();
+            self.pred_reads(&g.pred, &mut reads);
+            reads.remove(&mark);
+            add(mark, reads);
         }
         out
     }
@@ -136,9 +257,14 @@ impl TransitionSystem {
             .collect()
     }
 
-    /// The smallest closed set holding `seed` and everything the `keep` actions read.
+    /// The smallest closed set holding `seed` and everything the `keep` actions read, except
+    /// that a mark is read exactly only by a `keep` action or when every action that sets it
+    /// is in the set by its own writes; otherwise it stays out, with the raiser's lifecycle,
+    /// and `restrict_to` drops the guards on it (docs/state-derivation.md, "Triggers").
     pub fn cone(&self, seed: &VarSet, keep: &BTreeSet<ActId>) -> VarSet {
-        let reads: Vec<VarSet> = self.actions.iter().map(|a| self.action_reads(a)).collect();
+        let reads: Vec<VarSet> = self.actions.iter().map(|a| self.plain_reads(a)).collect();
+        let marks: Vec<Vec<(VarId, VarSet)>> =
+            self.actions.iter().map(|a| self.mark_reads(a)).collect();
         let copies: Vec<(VarId, VarSet)> = self
             .actions
             .iter()
@@ -155,6 +281,20 @@ impl TransitionSystem {
                     taken[i] = true;
                     grew = true;
                     s.extend(reads[i].iter().copied());
+                }
+            }
+            for i in (0..self.actions.len()).filter(|&i| taken[i]) {
+                for (mark, r) in &marks[i] {
+                    let exact = keep.contains(&ActId::at(i))
+                        || (0..self.actions.len())
+                            .filter(|&j| writes[j].contains(mark))
+                            .all(|j| taken[j]);
+                    if exact {
+                        grew |= s.insert(*mark);
+                        for v in r {
+                            grew |= s.insert(*v);
+                        }
+                    }
                 }
             }
             for (target, r) in &copies {
@@ -179,7 +319,8 @@ impl TransitionSystem {
             VarKind::Owner { child: entity, .. }
             | VarKind::Column { entity, .. }
             | VarKind::Prop { entity, .. }
-            | VarKind::Run { entity, .. } => Some(self.entity(entity).exists),
+            | VarKind::Run { entity, .. }
+            | VarKind::Raised { entity, .. } => Some(self.entity(entity).exists),
             VarKind::Exists(_) | VarKind::Now => None,
         }
     }
@@ -193,7 +334,8 @@ impl TransitionSystem {
             }
             VarKind::Column { entity, .. }
             | VarKind::Prop { entity, .. }
-            | VarKind::Run { entity, .. } => vec![self.entity(entity).exists],
+            | VarKind::Run { entity, .. }
+            | VarKind::Raised { entity, .. } => vec![self.entity(entity).exists],
             VarKind::Exists(_) | VarKind::Now => Vec::new(),
         }
     }

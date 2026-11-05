@@ -180,9 +180,10 @@ impl<'m> Builder<'m> {
             };
             let at = match params[usize::from(i)].role {
                 ParamRole::New => At::Next(i),
-                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Earlier { .. } => {
-                    At::Param(i)
-                }
+                ParamRole::Existing
+                | ParamRole::Parent { .. }
+                | ParamRole::Earlier { .. }
+                | ParamRole::Triggered => At::Param(i),
             };
             binding.push((ek, at));
         }

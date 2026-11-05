@@ -5,10 +5,10 @@
 
 use std::collections::BTreeSet;
 
-use super::cone::VarSet;
+use super::cone::{named_params, VarSet};
 use super::types::{
     ActId, Action, AfterAssert, AfterStep, At, Domain, Effect, EntId, EntityDecl, Guard, Invariant,
-    Ltl, ParamRole, Pred, Property, Rhs, Term, VarDecl, VarId, VarKind,
+    Ltl, Param, ParamRole, Pred, Property, Rhs, Term, VarDecl, VarId, VarKind,
 };
 use super::TransitionSystem;
 
@@ -41,7 +41,8 @@ impl TransitionSystem {
             VarKind::Exists(e) => Some(e),
             VarKind::Column { entity, .. }
             | VarKind::Prop { entity, .. }
-            | VarKind::Run { entity, .. } => Some(entity),
+            | VarKind::Run { entity, .. }
+            | VarKind::Raised { entity, .. } => Some(entity),
             VarKind::Owner { child, .. } => Some(child),
             VarKind::Now => None,
         }
@@ -194,7 +195,8 @@ impl TransitionSystem {
                 VarKind::Exists(e)
                 | VarKind::Column { entity: e, .. }
                 | VarKind::Prop { entity: e, .. }
-                | VarKind::Run { entity: e, .. } => inside(e),
+                | VarKind::Run { entity: e, .. }
+                | VarKind::Raised { entity: e, .. } => inside(e),
                 VarKind::Owner { child, parent, .. } => inside(child) && inside(parent),
                 VarKind::Now => comp.now,
             })
@@ -213,7 +215,9 @@ impl TransitionSystem {
 
     /// The system over `vars` only. An action stays when it writes a var in `vars` or is in
     /// `keep`; it keeps every guard and param, except a copy's guard on a var outside `vars`,
-    /// and only its effects on `vars`. Invariants, asserts, and properties stay when everything
+    /// a guard on a var outside `vars` (a mark a cone left out), and a `Triggered` param
+    /// whose mark is outside `vars`, which goes with the guards that name it; and it keeps
+    /// only its effects on `vars`. Invariants, asserts, and properties stay when everything
     /// they read is in `vars`. For a closed `vars` (see `cone`) its reachable states are the
     /// projection of this system's.
     ///
@@ -305,11 +309,24 @@ impl TransitionSystem {
             }
             let mut action = action.clone();
             action.effects = effects;
-            action
-                .guards
-                .retain(|g| g.copy_target().is_none_or(|t| vars.contains(&t)));
-            let (action, params) =
-                drop_unread_new_params(action, |e| vars.contains(&self.entity(e).exists));
+            let havoced: Vec<u8> = self
+                .triggered_params(&action)
+                .into_iter()
+                .filter(|(_, mark)| !vars.contains(mark))
+                .map(|(p, _)| p)
+                .collect();
+            action.guards.retain(|g| {
+                if g.copy_target().is_some_and(|t| !vars.contains(&t)) {
+                    return false;
+                }
+                let mut reads = VarSet::new();
+                self.pred_reads(&g.pred, &mut reads);
+                reads.is_subset(vars) && !named_params(&g.pred).iter().any(|p| havoced.contains(p))
+            });
+            let (action, params) = drop_params(action, |p, param| {
+                (param.role == ParamRole::New && !vars.contains(&self.entity(param.entity).exists))
+                    || havoced.contains(&p)
+            });
             map.act[i] = Some(ActId::at(out.actions.len()));
             map.params[i] = params;
             out.actions.push(map.action(&action));
@@ -376,18 +393,18 @@ impl TransitionSystem {
     }
 }
 
-/// Drops each `New` param whose entity is outside the system, with nothing left to point at
-/// it, and renumbers the rest; the returned map takes an old param index to its new one, and
-/// is `None` when nothing was dropped. Outside a target's cone an entity never runs out of
-/// slots.
-fn drop_unread_new_params(
+/// Drops each param `drop` accepts (a `New` param whose entity is outside the system, with
+/// nothing left to point at it: outside a target's cone an entity never runs out of slots;
+/// or a `Triggered` param whose mark is outside it) and renumbers the rest; the returned map
+/// takes an old param index to its new one, and is `None` when nothing was dropped.
+fn drop_params(
     mut action: Action,
-    kept: impl Fn(EntId) -> bool,
+    drop: impl Fn(u8, &Param) -> bool,
 ) -> (Action, Option<Vec<Option<u8>>>) {
     let mut index: Vec<Option<u8>> = Vec::with_capacity(action.params.len());
     let mut params = Vec::new();
-    for p in &action.params {
-        if p.role == ParamRole::New && !kept(p.entity) {
+    for (i, p) in action.params.iter().enumerate() {
+        if drop(i as u8, p) {
             index.push(None);
         } else {
             index.push(Some(u8::try_from(params.len()).expect("params fit in u8")));
@@ -455,7 +472,7 @@ struct Remap {
     ent: Vec<Option<EntId>>,
     var: Vec<Option<VarId>>,
     act: Vec<Option<ActId>>,
-    /// Per source action, old param index to new, when `drop_unread_new_params` dropped one.
+    /// Per source action, old param index to new, when `drop_params` dropped one.
     params: Vec<Option<Vec<Option<u8>>>>,
 }
 
@@ -491,6 +508,10 @@ impl Remap {
             VarKind::Run { entity, usecase } => VarKind::Run {
                 entity: self.e(*entity),
                 usecase: usecase.clone(),
+            },
+            VarKind::Raised { entity, event } => VarKind::Raised {
+                entity: self.e(*entity),
+                event: event.clone(),
             },
             VarKind::Owner {
                 child,

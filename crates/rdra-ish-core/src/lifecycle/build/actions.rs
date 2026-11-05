@@ -78,6 +78,7 @@ impl<'m> Builder<'m> {
                 self.ts.actions.push(action);
             }
         }
+        self.event_marks();
         if let Some(tick) = self.tick() {
             self.ts.actions.push(tick);
         }
@@ -277,6 +278,7 @@ impl<'m> Builder<'m> {
                 uc,
                 buc: first_buc(model, uc),
                 step: (groups.len() > 1).then(|| u8::try_from(step + 1).expect("few groups")),
+                trigger: None,
             },
             site: Site::new(
                 ModelRef::UseCase(uc),
@@ -308,7 +310,7 @@ impl<'m> Builder<'m> {
                 ParamRole::New => None,
                 ParamRole::Existing => Some(0),
                 ParamRole::Earlier { .. } => Some(this - 1),
-                ParamRole::Parent { .. } => continue,
+                ParamRole::Parent { .. } | ParamRole::Triggered => continue,
             };
             let site = self.ts.vars[var.index()].site.clone();
             if let Some(mark) = expected {

@@ -197,6 +197,9 @@ impl TransitionSystem {
             VarKind::Run { entity, usecase } => {
                 format!("{}._run_{usecase}", self.entity(*entity).id)
             }
+            VarKind::Raised { entity, event } => {
+                format!("{}._raised_{event}", self.entity(*entity).id)
+            }
             VarKind::Now => "now".to_string(),
         }
     }

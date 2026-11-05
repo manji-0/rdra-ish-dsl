@@ -152,9 +152,10 @@ impl<'t> Bfs<'t> {
                         let name = format!("{}.{}", ts.entity(*entity).id, ts.var_name(v));
                         (name, range)
                     }
-                    VarKind::Exists(_) | VarKind::Owner { .. } | VarKind::Run { .. } => {
-                        (ts.var_name(v), None)
-                    }
+                    VarKind::Exists(_)
+                    | VarKind::Owner { .. }
+                    | VarKind::Run { .. }
+                    | VarKind::Raised { .. } => (ts.var_name(v), None),
                 };
                 VarSpread {
                     name,

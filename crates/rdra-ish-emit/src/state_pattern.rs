@@ -219,6 +219,9 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
         | StateDiag::UnboundAfterRead { .. }
+        | StateDiag::UnanchoredTrigger { .. }
+        | StateDiag::UnjoinedTrigger { .. }
+        | StateDiag::TriggerNeverRuns { .. }
         | StateDiag::DeleteLeavesChildren { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
@@ -589,6 +592,11 @@ fn trace_to_json(
         "start": changes(&trace.start),
         "steps": steps,
         "over_bound": trace.over_bound,
+        "free_triggers": trace
+            .free_triggers
+            .iter()
+            .map(|(usecase, event)| serde_json::json!({ "usecase": usecase, "event": event }))
+            .collect::<Vec<_>>(),
     })
 }
 

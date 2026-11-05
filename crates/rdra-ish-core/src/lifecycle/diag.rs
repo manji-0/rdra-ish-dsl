@@ -321,6 +321,29 @@ pub enum StateDiag {
         entity: String,
         site: Site,
     },
+    /// The use cases that raise an event bind no entity in common, so the event has no row to
+    /// be raised on: the use case it triggers runs as if the event were free.
+    UnanchoredTrigger {
+        event: String,
+        usecase: String,
+        raisers: Vec<String>,
+        site: Site,
+    },
+    /// The use case a tracked event triggers binds no row of the event's entity and no key
+    /// joins its rows to one, so any row the event was raised on lets it run.
+    UnjoinedTrigger {
+        event: String,
+        usecase: String,
+        entity: String,
+        site: Site,
+    },
+    /// A use case several tracked events trigger never runs after one of them, while it runs
+    /// after another.
+    TriggerNeverRuns {
+        usecase: String,
+        event: String,
+        site: Site,
+    },
     /// A use case deletes the parent of a key with `.on_delete(cascade)`, which the lifecycle
     /// does not read: the children stay, and every rule still sees them.
     DeleteLeavesChildren {
@@ -489,6 +512,15 @@ impl StateDiag {
                 condition, usecase, ..
             } => with("UnjoinedGuardRead", &[condition, usecase]),
             StateDiag::UnboundAfterRead { anchor, .. } => with("UnboundAfterRead", &[anchor]),
+            StateDiag::UnanchoredTrigger { event, usecase, .. } => {
+                with("UnanchoredTrigger", &[event, usecase])
+            }
+            StateDiag::UnjoinedTrigger { event, usecase, .. } => {
+                with("UnjoinedTrigger", &[event, usecase])
+            }
+            StateDiag::TriggerNeverRuns { usecase, event, .. } => {
+                with("TriggerNeverRuns", &[usecase, event])
+            }
             StateDiag::DeleteLeavesChildren { usecase, child, .. } => {
                 with("DeleteLeavesChildren", &[usecase, child])
             }
@@ -537,6 +569,9 @@ impl StateDiag {
             StateDiag::NoCreationPath
             | StateDiag::MinCardNeedsCreate { .. }
             | StateDiag::DeleteLeavesChildren { .. }
+            | StateDiag::UnanchoredTrigger { .. }
+            | StateDiag::UnjoinedTrigger { .. }
+            | StateDiag::TriggerNeverRuns { .. }
             | StateDiag::DefaultOnVariationIgnored { .. } => Severity::Info,
             StateDiag::UnreachableEnumVariant { .. }
             | StateDiag::UnwrittenConstrainedVar { .. }
@@ -913,6 +948,29 @@ impl fmt::Display for StateDiag {
             StateDiag::UnboundAfterRead { anchor, entity, .. } => write!(
                 f,
                 "after({anchor}) reads {entity}, which no step of {anchor} binds, so every present {entity} row must satisfy it; write {entity} in {anchor} to read the run's row"
+            ),
+            StateDiag::UnanchoredTrigger {
+                event,
+                usecase,
+                raisers,
+                ..
+            } => write!(
+                f,
+                "triggers({event}, {usecase}) orders nothing: the use cases that raise {event} ({}) bind no entity in common, so the event has no row to be raised on and {usecase} runs as if the event were free",
+                raisers.join(", ")
+            ),
+            StateDiag::UnjoinedTrigger {
+                event,
+                usecase,
+                entity,
+                ..
+            } => write!(
+                f,
+                "triggers({event}, {usecase}): {usecase} binds no row of {entity}, the entity {event} is raised on, and no key joins its rows to one, so any {entity} the event was raised on lets {usecase} run"
+            ),
+            StateDiag::TriggerNeverRuns { usecase, event, .. } => write!(
+                f,
+                "{usecase} never runs after {event}, while it runs after another of its events"
             ),
             StateDiag::DeleteLeavesChildren {
                 usecase,

@@ -1,0 +1,35 @@
+// A use case an event starts runs only after the event, on the row it was raised for (#30,
+// #112). IssueCert is triggered by EvOrderExecuted, which ExecuteCertIssue raises when it
+// moves the order to executed, so the certificate's order is executed when the assertion
+// after IssueCert reads it.
+// expect check: ok
+// expect verify: tlc=ok
+entity CertificateOrder "証明書発行依頼" {
+  id: Int @pk
+  status: Enum(requested, executed) @default(requested)
+}
+
+entity ClientCertificate "クライアント証明書" {
+  id: Int @pk
+}
+
+relate(ClientCertificate, CertificateOrder, N:1)
+
+usecase RequestCert "発行依頼"
+usecase ExecuteCertIssue "発行実行"
+usecase IssueCert "証明書作成"
+
+buc BucCertIssue "証明書発行"
+contains(BucCertIssue, RequestCert)
+contains(BucCertIssue, ExecuteCertIssue)
+contains(BucCertIssue, IssueCert)
+
+event EvOrderExecuted "発行実行済"
+
+creates(RequestCert, CertificateOrder)
+transitions(ExecuteCertIssue, CertificateOrder.status, requested -> executed)
+raises(ExecuteCertIssue, EvOrderExecuted)
+triggers(EvOrderExecuted, IssueCert)
+creates(IssueCert, ClientCertificate)
+
+after(IssueCert).assert(CertificateOrder.status == executed).label("証明書は実行済みの依頼にだけ作る")

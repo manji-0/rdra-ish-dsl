@@ -52,6 +52,10 @@ pub struct Trace {
     /// found it does not count their slots (`cone_frees_slots`), so the whole model at this
     /// bound may not reach the same state.
     pub over_bound: Vec<String>,
+    /// Use cases the trace runs without their event, as `(use case, event)` in step order
+    /// without repeats. The cone that found it left the event's mark out (`cone`), so the
+    /// step ran without the event, which the whole model may not allow.
+    pub free_triggers: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -149,6 +153,7 @@ impl TransitionSystem {
                 )
             }
             VarKind::Run { usecase, .. } => format!("run of {usecase}"),
+            VarKind::Raised { event, .. } => format!("raised {event}"),
             VarKind::Exists(_) | VarKind::Now => self.var_name(var),
         }
     }
@@ -290,9 +295,43 @@ impl TransitionSystem {
         }
     }
 
+    /// Sets what the cone cannot vouch for in `trace`: `over_bound` and `free_triggers`.
+    pub fn annotate(&self, cone: &Cone, trace: &mut Trace) {
+        trace.over_bound = self.over_bound(cone, trace);
+        trace.free_triggers = self.free_triggers(cone, trace);
+    }
+
+    /// The `(use case, event)` of each step whose event's mark the cone leaves out, in step
+    /// order without repeats.
+    fn free_triggers(&self, cone: &Cone, trace: &Trace) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = Vec::new();
+        for step in &trace.steps {
+            let Some(action) = self.actions.iter().find(|a| a.name == step.action) else {
+                continue;
+            };
+            for (mark, _) in self.mark_reads(action) {
+                if cone.vars.contains(&mark) {
+                    continue;
+                }
+                let VarKind::Raised { event, .. } = &self.var(mark).kind else {
+                    unreachable!("a mark is a Raised var")
+                };
+                let usecase = action
+                    .name
+                    .strip_suffix(&format!("_by_{event}"))
+                    .unwrap_or(&action.name);
+                let pair = (usecase.to_string(), event.clone());
+                if !out.contains(&pair) {
+                    out.push(pair);
+                }
+            }
+        }
+        out
+    }
+
     /// Entities whose slots the cone does not count and that the trace creates more often than
     /// the bound allows, in id order.
-    pub fn over_bound(&self, cone: &Cone, trace: &Trace) -> Vec<String> {
+    fn over_bound(&self, cone: &Cone, trace: &Trace) -> Vec<String> {
         if !self.cone_frees_slots(cone) {
             return Vec::new();
         }
@@ -362,6 +401,7 @@ impl TransitionSystem {
                 })
                 .collect(),
             over_bound: Vec::new(),
+            free_triggers: Vec::new(),
         }
     }
 

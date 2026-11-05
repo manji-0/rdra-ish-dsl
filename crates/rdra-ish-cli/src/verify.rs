@@ -624,7 +624,7 @@ fn model_traces(
             .map(|v| {
                 let mut diag = explain_violation(&cs.system, &cs.names, v)?;
                 if let Some(trace) = diag.trace_mut() {
-                    trace.over_bound = ts.over_bound(&cs.cone, trace);
+                    ts.annotate(&cs.cone, trace);
                 }
                 Ok(diag)
             })

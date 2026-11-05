@@ -77,7 +77,8 @@ fn owner_entity(kind: &VarKind) -> Option<EntId> {
         VarKind::Exists(e)
         | VarKind::Column { entity: e, .. }
         | VarKind::Prop { entity: e, .. }
-        | VarKind::Run { entity: e, .. } => Some(*e),
+        | VarKind::Run { entity: e, .. }
+        | VarKind::Raised { entity: e, .. } => Some(*e),
         VarKind::Owner { child, .. } => Some(*child),
         VarKind::Now => None,
     }
@@ -276,7 +277,7 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
         let exists = names.var(ts.entity(param.entity).exists);
         conj.push(match param.role {
             ParamRole::New => format!("FirstAbsent({exists}, p{p})"),
-            ParamRole::Existing | ParamRole::Parent { .. } => {
+            ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
                 format!("{exists}[p{p}] = \"present\"")
             }
             // Its run guard selects the slot.

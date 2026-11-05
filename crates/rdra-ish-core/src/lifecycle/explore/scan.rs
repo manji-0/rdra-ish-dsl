@@ -26,7 +26,9 @@ impl TransitionSystem {
                 let exists = self.entity(param.entity).exists;
                 let want = match param.role {
                     ParamRole::New => Value::ABSENT,
-                    ParamRole::Existing | ParamRole::Parent { .. } => Value::PRESENT,
+                    ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
+                        Value::PRESENT
+                    }
                     // Any slot binds it; its run guard says whether a run reached it.
                     ParamRole::Earlier { .. } => {
                         bound[p] = true;

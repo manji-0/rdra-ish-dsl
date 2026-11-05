@@ -136,6 +136,9 @@ impl TlaNames {
                 VarKind::Run { entity: e, usecase } => {
                     Some(format!("{}_run_{usecase}", entity(*e)))
                 }
+                VarKind::Raised { entity: e, event } => {
+                    Some(format!("{}_raised_{event}", entity(*e)))
+                }
                 VarKind::Owner {
                     child,
                     parent,

@@ -8,7 +8,7 @@ use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag};
 use super::explore::{Caps, ComponentRun};
 use super::findings::{Progress, Runs, Taken, Witness};
-use super::types::{ActionOrigin, EntId, Site};
+use super::types::{ActionOrigin, EntId, GuardWhy, Pred, Site, Term, VarKind};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
 use crate::model::{EntityKey, SemanticModel};
@@ -239,7 +239,7 @@ impl TransitionSystem {
         }
         out.cones = cones;
         out.tally.entity_cones = entity_cones.len();
-        for (i, r) in runs.into_iter().enumerate() {
+        for (i, r) in self.merge_variants(runs, &mut out.verdicts) {
             if r.fired {
                 for arm in r.arms.into_iter().filter(|a| !a.taken) {
                     if let Some(diag) = arm.never {
@@ -291,6 +291,133 @@ impl TransitionSystem {
         }
         out.targets = answered;
         out
+    }
+
+    /// The `<UC>_by_<Ev>` variants of one use case step are one use case to the findings: it
+    /// runs when any variant runs and takes an arm when any variant takes it, and a `NeverRuns`
+    /// or an arm finding carries the use case's name. A variant that never ran while another
+    /// did is a `TriggerNeverRuns` info. Returns each action's index with what is reported
+    /// under it: a group of variants under its first.
+    fn merge_variants(
+        &self,
+        runs: Vec<RunsSoFar>,
+        verdicts: &mut Vec<Diag>,
+    ) -> Vec<(usize, RunsSoFar)> {
+        let step_of = |i: usize| match self.actions[i].origin {
+            ActionOrigin::UseCase { uc, step, .. } => Some((uc, step)),
+            ActionOrigin::Clock => None,
+        };
+        let mut groups: Vec<Vec<usize>> = Vec::new();
+        for (i, a) in self.actions.iter().enumerate() {
+            let ActionOrigin::UseCase {
+                trigger: Some(_), ..
+            } = a.origin
+            else {
+                continue;
+            };
+            match groups.iter_mut().find(|g| step_of(g[0]) == step_of(i)) {
+                Some(g) => g.push(i),
+                None => groups.push(vec![i]),
+            }
+        }
+        let mut runs: Vec<Option<RunsSoFar>> = runs.into_iter().map(Some).collect();
+        for g in groups {
+            let (name, _) = self.variant_of(g[0]);
+            let rename = |d: &mut StateDiag| match d {
+                StateDiag::NeverRuns { action, .. }
+                | StateDiag::ArmNeverTaken { action, .. }
+                | StateDiag::ValueNeverChosen { action, .. } => *action = name.clone(),
+                _ => {}
+            };
+            let mut merged = RunsSoFar::default();
+            let any_fired = g.iter().any(|&i| runs[i].as_ref().is_some_and(|r| r.fired));
+            for &i in &g {
+                let r = runs[i].take().expect("a variant is merged once");
+                if any_fired && r.kept && !r.fired {
+                    let action = &self.actions[i];
+                    verdicts.push(Diag {
+                        entities: action
+                            .params
+                            .iter()
+                            .filter(|p| p.role.is_written())
+                            .map(|p| self.entity(p.entity).key)
+                            .collect(),
+                        diag: StateDiag::TriggerNeverRuns {
+                            usecase: name.clone(),
+                            event: self.variant_of(i).1,
+                            site: action.site.clone(),
+                        },
+                    });
+                }
+                merged.kept |= r.kept;
+                merged.fired |= r.fired;
+                merged.never = merged.never.or(r.never);
+                merged.capped = merged.capped.or(r.capped);
+                for arm in r.arms {
+                    match merged.arms.iter_mut().find(|a| a.site == arm.site) {
+                        Some(m) => {
+                            m.taken |= arm.taken;
+                            m.never = m.never.take().or(arm.never);
+                            m.capped = m.capped.take().or(arm.capped);
+                        }
+                        None => merged.arms.push(arm),
+                    }
+                }
+            }
+            if let Some(d) = &mut merged.never {
+                rename(d);
+            }
+            for arm in &mut merged.arms {
+                if let Some(d) = &mut arm.never {
+                    rename(d);
+                }
+                match &mut arm.subject {
+                    Subject::Arm { action, .. } | Subject::Choice { action, .. } => {
+                        *action = name.clone();
+                    }
+                    _ => {}
+                }
+            }
+            runs[g[0]] = Some(merged);
+        }
+        runs.into_iter()
+            .enumerate()
+            .filter_map(|(i, r)| Some((i, r?)))
+            .collect()
+    }
+
+    /// The use case step's name and the event id of a variant `<step>_by_<Ev>`: the event is
+    /// the one its mark guard reads.
+    fn variant_of(&self, i: usize) -> (String, String) {
+        let action = &self.actions[i];
+        let ActionOrigin::UseCase {
+            trigger: Some(event),
+            ..
+        } = action.origin
+        else {
+            unreachable!("a variant has a trigger")
+        };
+        let event = action
+            .guards
+            .iter()
+            .find_map(|g| match (&g.why, &g.pred) {
+                (GuardWhy::Raised { event: e }, Pred::Cmp(Term::Slot { var, .. }, _, _))
+                    if *e == event =>
+                {
+                    match &self.var(*var).kind {
+                        VarKind::Raised { event, .. } => Some(event.clone()),
+                        _ => None,
+                    }
+                }
+                _ => None,
+            })
+            .expect("a variant reads its event's mark");
+        let name = action
+            .name
+            .strip_suffix(&format!("_by_{event}"))
+            .expect("a variant is named <step>_by_<Ev>")
+            .to_string();
+        (name, event)
     }
 
     /// Whether the action can run is decided on the cones of the entities it binds other than
@@ -361,7 +488,7 @@ impl TransitionSystem {
                 Progress::Stuck { at, mut diag } => {
                     if let Some(trace) = diag.trace_mut() {
                         *trace = run.trace_to(at);
-                        trace.over_bound = self.over_bound(&cone.cone, trace);
+                        self.annotate(&cone.cone, trace);
                     }
                     out.tally.deadlocks += 1;
                     out.verdicts.push(Diag {
@@ -477,7 +604,7 @@ impl TransitionSystem {
             .cloned()
             .map(|mut d| {
                 if let Some(trace) = d.diag.trace_mut() {
-                    trace.over_bound = self.over_bound(&cone.cone, trace);
+                    self.annotate(&cone.cone, trace);
                 }
                 d
             })
@@ -625,7 +752,7 @@ impl TargetExploration {
                     });
                 let mut view = entity_view(model, run, local, build_diags, Some(verdicts));
                 for trace in view.patterns.iter_mut().filter_map(|p| p.witness.as_mut()) {
-                    trace.over_bound = ts.over_bound(&cone.cone, trace);
+                    ts.annotate(&cone.cone, trace);
                 }
                 view
             })

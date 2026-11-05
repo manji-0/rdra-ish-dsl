@@ -257,6 +257,9 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::UnresolvedPropertyAtom { .. }
             | StateDiag::UnjoinedGuardRead { .. }
             | StateDiag::UnboundAfterRead { .. }
+            | StateDiag::UnanchoredTrigger { .. }
+            | StateDiag::UnjoinedTrigger { .. }
+            | StateDiag::TriggerNeverRuns { .. }
             | StateDiag::DeleteLeavesChildren { .. }
             | StateDiag::GuardReadsLaterStep { .. }
             | StateDiag::DrivenComparisonColumnWritten { .. }
