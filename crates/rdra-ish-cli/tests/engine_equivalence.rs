@@ -19,7 +19,9 @@
 //! without the checks reported so far, until a rerun reports no new one.
 //!
 //! Every trace TLC prints for a violation replays through the BFS step relation, and the
-//! check `explain` builds at its end is the one TLC named.
+//! check `explain` builds at its end is the one TLC named. On a reduced cone the counterexample
+//! `verify` prints is TLC's trace lifted; it replays through the unreduced cone, which explains
+//! it as the same violation.
 //!
 //! Without `tlc` on PATH the TLC test is skipped with a printed reason; `RDRA_REQUIRE_TLC=1`
 //! turns the skip into a failure.
@@ -145,9 +147,48 @@ fn bfs_verdicts(run: &ComponentRun, names: &TlaNames) -> BTreeSet<String> {
         .collect()
 }
 
+/// The check a violation reports, as a target of `ts`, found by name: a reduced cone drops
+/// the checks that read its sub-lifecycle, so its indices are not the cone's.
+fn violated_target(ts: &TransitionSystem, diag: &StateDiag) -> Target {
+    match diag {
+        StateDiag::ConstraintViolated { name, .. } => Target::Invariant(
+            ts.invariants()
+                .iter()
+                .position(|inv| inv.name == *name)
+                .expect("violated invariant is in the cone"),
+        ),
+        StateDiag::AfterAssertViolated { site, .. } => Target::AfterAssert(
+            ts.after_asserts()
+                .iter()
+                .position(|a| a.site == *site)
+                .expect("violated assert is in the cone"),
+        ),
+        d => panic!("no invariant or after-assert: {d:?}"),
+    }
+}
+
 /// Each trace TLC printed replays step for step, with TLC's labels, and ends in the check TLC
-/// named.
-fn replay_violations(label: &str, ts: &TransitionSystem, names: &TlaNames, run: &TlcRun) {
+/// named. The counterexample `verify` prints for it is a path of `unreduced`, the cone `ts`
+/// reduces (or `ts` itself), with the steps TLC took on the target side, and `unreduced`
+/// explains that path as the same violation. On a reduced cone the path is longer than TLC's
+/// trace: a class move becomes the sub-lifecycle's steps that realize it (#109).
+fn replay_violations(
+    label: &str,
+    ts: &TransitionSystem,
+    unreduced: &TransitionSystem,
+    names: &TlaNames,
+    run: &TlcRun,
+) {
+    let s_actions = ts
+        .reduction()
+        .map(|r| r.s_actions().clone())
+        .unwrap_or_default();
+    let target_side = |acts: &[ActId]| -> Vec<ActId> {
+        acts.iter()
+            .copied()
+            .filter(|a| !s_actions.contains(a))
+            .collect()
+    };
     for v in &run.violations {
         let name = v.name.as_deref().expect("a safety run names its checks");
         let diag = explain_violation(ts, names, v)
@@ -157,21 +198,30 @@ fn replay_violations(label: &str, ts: &TransitionSystem, names: &TlaNames, run: 
             Some(name),
             "{label}: explain names another check"
         );
-        let steps: Vec<&str> = diag
-            .trace()
-            .expect("a violation has a trace")
-            .steps
+        let states: Vec<State> = v
+            .trace
             .iter()
-            .map(|s| s.action.as_str())
+            .map(|s| names.decode(ts, &s.state).expect("a state of the cone"))
             .collect();
-        let labels: Vec<&str> = v.trace[1..]
+        let labels: Vec<ActId> = v.trace[1..]
             .iter()
-            .map(|s| {
-                let a = names.action_index(ts, &s.label).expect("a known label");
-                ts.actions()[a.index()].name.as_str()
-            })
+            .map(|s| names.action_index(ts, &s.label).expect("a known label"))
             .collect();
-        assert_eq!(steps, labels, "{label}: {name} replays another path");
+        let replay = ts.replay(states, &labels).expect("TLC's trace replays");
+        let (path, steps) = ts.lifted_path(&replay);
+        assert_eq!(
+            target_side(&steps),
+            target_side(&labels),
+            "{label}: {name} replays another path"
+        );
+        let on_cone = unreduced.replay(path, &steps).unwrap_or_else(|e| {
+            panic!("{label}: the counterexample of {name} is no path of the unreduced cone: {e:?}")
+        });
+        assert_eq!(
+            unreduced.explain(violated_target(unreduced, &diag), &on_cone),
+            Some(diag),
+            "{label}: the unreduced cone explains the counterexample of {name} otherwise"
+        );
     }
 }
 
@@ -337,7 +387,14 @@ fn finding_names(ts: &TransitionSystem, f: &StateModelFindings) -> Vec<String> {
     witnesses.chain(runs).chain(deadlocks).chain(arms).collect()
 }
 
-fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeReport {
+/// `unreduced` is the cone `run` reduces, or `run`'s own system when it is not reduced.
+fn check_cone(
+    tlc: &Path,
+    dir: &Path,
+    label: &str,
+    run: &ComponentRun,
+    unreduced: &TransitionSystem,
+) -> ConeReport {
     let ts = &run.system;
     let check = tla::print(ts, PrintMode::Safety, "Cone");
     let names = &check.names;
@@ -417,7 +474,7 @@ fn check_cone(tlc: &Path, dir: &Path, label: &str, run: &ComponentRun) -> ConeRe
         "{label}: verdicts differ\n{}",
         check.tla
     );
-    replay_violations(label, ts, names, &parsed);
+    replay_violations(label, ts, unreduced, names, &parsed);
     let checks = (0..ts.invariants().len())
         .map(|i| names.invariant(i).to_string())
         .chain((0..ts.after_asserts().len()).map(|i| names.after(i).to_string()))
@@ -528,12 +585,20 @@ fn check_model(
                     bounds.instances
                 ));
                 let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
-                let plain = run.complete.then(|| check_cone(tlc, &dir, &label, &run));
+                let plain = run
+                    .complete
+                    .then(|| check_cone(tlc, &dir, &label, &run, &run.system));
                 // The sub-lifecycle is explored by BFS alone, under `verify`'s cap.
                 let system = ts.reduced_cone(cone, seeds.iter().cloned(), Caps::VERIFY);
                 let reduced_run = system.reduction().is_some().then(|| system.run(caps));
                 let reduced = reduced_run.as_ref().filter(|r| r.complete).map(|r| {
-                    check_cone(tlc, &dir.join("reduced"), &format!("{label}, reduced"), r)
+                    check_cone(
+                        tlc,
+                        &dir.join("reduced"),
+                        &format!("{label}, reduced"),
+                        r,
+                        &run.system,
+                    )
                 });
                 // The reduced cone keeps the checks that read its target side and what it
                 // observes of the sub-lifecycle; each of those has the cone's verdict.

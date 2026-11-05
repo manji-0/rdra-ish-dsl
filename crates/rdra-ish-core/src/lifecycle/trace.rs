@@ -365,6 +365,16 @@ impl TransitionSystem {
         }
     }
 
+    /// The path a printed counterexample of `replay` shows: on a reduced system, the replay
+    /// lifted to a path of the system without its reduction, as its states and the action of
+    /// each step; otherwise the replay itself.
+    pub fn lifted_path(&self, replay: &Replay) -> (Vec<State>, Vec<ActId>) {
+        let (start, steps) = self.lifted_replay(replay);
+        let actions = steps.iter().map(|s| s.0).collect();
+        let states = std::iter::once(start).chain(steps.into_iter().map(|s| s.2));
+        (states.collect(), actions)
+    }
+
     /// The replay as a path from its first state, lifted (`lift`) and flattened.
     fn lifted_replay(&self, replay: &Replay) -> (State, Vec<Step>) {
         let steps: Vec<Step> = replay
