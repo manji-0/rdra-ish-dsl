@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## v1.2.0 - 2026-11-05
+
+Upgrading from v1.1.0 needs no change to a model: every model that loads on 1.1.0 loads with
+the same verdict, errors and `// expect` results, and `check` and `states` print the same state
+counts. `verify` explores a cone reduced by its independent sub-lifecycle (#74), so the state
+counts it prints shrink and a counterexample can name a use case of the sub-lifecycle; state
+counts are outside `docs/compatibility.md`. A generated name changes only where two names
+collided (#103), which 1.1 got wrong. New forms (`sets(..).when(Condition)`) and the
+`StateModel_<E>` specs of `export --kind tla` are additive.
 
 ### Fixed
 
