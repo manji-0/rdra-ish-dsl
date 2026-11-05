@@ -118,7 +118,7 @@ impl Builder<'_> {
                 conditions,
             };
             self.push_invariant(
-                "CrossForbidden",
+                "MultiForbidden",
                 i,
                 InvKind::CrossForbidden,
                 &binding,
@@ -147,7 +147,7 @@ impl Builder<'_> {
                 requireds,
             };
             self.push_invariant(
-                "CrossInv",
+                "MultiInv",
                 i,
                 InvKind::CrossInvariant,
                 &binding,

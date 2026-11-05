@@ -384,7 +384,7 @@ forbidden(Order, Address, Order.status == shipped, Address.status == closed)
         let tla = print(&system(&src(role)), PrintMode::Check, "M").tla;
         let line = tla
             .lines()
-            .find(|l| l.starts_with("CrossForbidden_"))
+            .find(|l| l.starts_with("MultiForbidden_"))
             .expect("the forbidden prints as an invariant");
         assert!(line.contains(&format!("Order_owner_{role}")), "{line}");
         assert!(!line.contains(&format!("Order_owner_{other}")), "{line}");
@@ -650,7 +650,7 @@ invariant(Coupon).when(expires_at < now).none(Handler.busy == true)
     for name in [
         "Inv_Coupon_0",
         "Forbidden_Coupon_0",
-        "CrossInv_Coupon_0",
+        "MultiInv_Coupon_0",
         "Quantifier_Coupon_0",
     ] {
         assert!(

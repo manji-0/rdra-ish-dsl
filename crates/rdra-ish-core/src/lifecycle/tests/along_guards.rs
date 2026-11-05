@@ -38,7 +38,7 @@ fn violated(model: &SemanticModel) -> bool {
     derive_scoped(model, Bounds::VERIFY, &Scope::ALL)
         .diags
         .iter()
-        .any(|x| matches!(&x.diag, StateDiag::ConstraintViolated { name, .. } if name == "CrossForbidden_Claim_0"))
+        .any(|x| matches!(&x.diag, StateDiag::ConstraintViolated { name, .. } if name == "MultiForbidden_Claim_0"))
 }
 
 fn unjoined(model: &SemanticModel) -> Vec<StateDiag> {
@@ -272,7 +272,7 @@ fn a_none_along_a_path_counts_the_rows_of_its_own_chain() {
     let rule = "forbidden(Member, Loan, Member.status == withdrawn, Loan.status == open).along(Member, Card, Loan)";
     let violated = |model: &SemanticModel| {
         verify_diags(model).iter().any(|d| {
-            matches!(d, StateDiag::ConstraintViolated { name, .. } if name == "CrossForbidden_Member_0")
+            matches!(d, StateDiag::ConstraintViolated { name, .. } if name == "MultiForbidden_Member_0")
         })
     };
     assert!(!violated(&library(".along(Member, Card, Loan)", rule)));

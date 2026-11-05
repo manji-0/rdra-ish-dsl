@@ -26,7 +26,7 @@ fn check_prints_one_verdict_with_its_counterexample() {
     let expected = format!(
         "\
 bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check does not read are unbounded
-error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
+error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order(status=cancelled); Payment(status=captured)
   rule: {file}:44:1
   counterexample (3 steps):
     1. Place [Order#1, Payment#1]                            {file}:17:1
@@ -643,7 +643,7 @@ invariant(Order, Parcel).along(Parcel, Order).when(Parcel.state == sent).then(Or
         .collect();
     assert_eq!(
         verdicts,
-        ["Forbidden_Parcel_0", "CrossInv_Order_0"],
+        ["Forbidden_Parcel_0", "MultiInv_Order_0"],
         "{stderr}"
     );
     let _ = std::fs::remove_dir_all(&dir);

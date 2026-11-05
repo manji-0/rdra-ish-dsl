@@ -81,9 +81,9 @@ fn without_a_copy_the_created_row_does_not_follow_its_parent() {
     assert_eq!(
         violated(&d),
         [
-            "CrossForbidden_Permit_0",
-            "CrossForbidden_Permit_1",
-            "CrossForbidden_Permit_2"
+            "MultiForbidden_Permit_0",
+            "MultiForbidden_Permit_1",
+            "MultiForbidden_Permit_2"
         ],
         "{:?}",
         d.diags
@@ -100,12 +100,12 @@ fn a_copy_reads_the_parent_the_row_belongs_to() {
     ));
     let v = violated(&d);
     assert!(
-        !v.contains(&"CrossForbidden_Permit_0".to_string()),
+        !v.contains(&"MultiForbidden_Permit_0".to_string()),
         "the kind is copied at creation and never changes: {v:?}"
     );
     // `Staff` and `Pay` move the application after the permit exists, so the Bool and Int
     // rules still break until `Refresh` copies them again.
-    assert!(v.contains(&"CrossForbidden_Permit_1".to_string()), "{v:?}");
+    assert!(v.contains(&"MultiForbidden_Permit_1".to_string()), "{v:?}");
     let kinds = d.rows("Permit");
     assert!(
         kinds.iter().any(|r| r.contains("kind=drink"))

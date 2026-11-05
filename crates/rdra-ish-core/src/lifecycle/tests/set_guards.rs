@@ -99,7 +99,7 @@ fn the_timer_ends_the_period_only_once_the_clock_reaches_the_deadline() {
     assert!(violated(&d).is_empty(), "{:?}", d.diags);
     let unguarded = EXTENSION.replace("extended -> overdue).when(Passed)", "extended -> overdue)");
     let d = derive_src(&format!("{unguarded}\n{BY_REASON}\n"));
-    assert_eq!(violated(&d), ["CrossForbidden_Claim_0"], "{:?}", d.diags);
+    assert_eq!(violated(&d), ["MultiForbidden_Claim_0"], "{:?}", d.diags);
 }
 
 /// No line enabled, no run: a reason no line names leaves no deadline, so the use case does not

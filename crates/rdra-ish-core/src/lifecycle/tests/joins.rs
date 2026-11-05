@@ -46,7 +46,7 @@ fn at_verify(src: &str) -> Derived {
 
 fn violated(d: &Derived) -> bool {
     d.diags.iter().any(|x| {
-        matches!(&x.diag, StateDiag::ConstraintViolated { name, .. } if name == "CrossForbidden_App_0")
+        matches!(&x.diag, StateDiag::ConstraintViolated { name, .. } if name == "MultiForbidden_App_0")
     })
 }
 
@@ -228,7 +228,7 @@ forbidden(Order, Address, Order.status == shipped, Address.region == west).along
 
 fn order_violated(d: &Derived) -> bool {
     d.diags.iter().any(|x| {
-        matches!(&x.diag, StateDiag::ConstraintViolated { name, .. } if name == "CrossForbidden_Order_0")
+        matches!(&x.diag, StateDiag::ConstraintViolated { name, .. } if name == "MultiForbidden_Order_0")
     })
 }
 

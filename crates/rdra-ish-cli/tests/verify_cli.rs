@@ -125,7 +125,7 @@ fn a_tlc_counterexample_prints_in_model_terms() {
     assert_eq!(output.status.code(), Some(1), "{stderr}");
     let mut rest: &str = &stderr;
     for expected in [
-        "error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: ",
+        "error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: ",
         "  rule: ",
         "cross_order_payment_split.rdra:44:1",
         "  counterexample (3 steps, from TLC):",
@@ -133,7 +133,7 @@ fn a_tlc_counterexample_prints_in_model_terms() {
         "    2. Pay_1, transaction 1 of Pay [Payment#1]",
         "         Payment#1.status: pending -> captured",
         "    3. Cancel [Order#1]",
-        "violated: Error: Invariant CrossForbidden_Order_0 is violated.",
+        "violated: Error: Invariant MultiForbidden_Order_0 is violated.",
     ] {
         let at = rest
             .find(expected)
@@ -174,9 +174,9 @@ fn verify_reports_every_rule_that_fails_in_the_same_state() {
     assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
     let cone = stderr
         .split("\nCone_")
-        .find(|block| block.starts_with("CrossInv_Order_0 ("))
+        .find(|block| block.starts_with("MultiInv_Order_0 ("))
         .unwrap_or_else(|| panic!("no block for the cross-entity cone\n{stderr}"));
-    for name in ["Forbidden_Parcel_0", "CrossInv_Order_0"] {
+    for name in ["Forbidden_Parcel_0", "MultiInv_Order_0"] {
         assert!(
             cone.contains(&format!("error[{name}]: invariant {name} is violated: ")),
             "{name} missing\n{stderr}"
@@ -725,8 +725,8 @@ fn a_property_named_like_another_property_module_keeps_its_own_spec() {
     assert!(!stdout.contains("tool_error"), "{stdout}");
 }
 
-/// A cone reruns without the check it has reported, from `Cone_CrossInv_Order_0_rest1.cfg`,
-/// the cfg of the property `CrossInv_Order_0_rest1`; the rerun takes `_rest1_2.cfg`, and the
+/// A cone reruns without the check it has reported, from `Cone_MultiInv_Order_0_rest1.cfg`,
+/// the cfg of the property `MultiInv_Order_0_rest1`; the rerun takes `_rest1_2.cfg`, and the
 /// property's cfg still names the property.
 #[test]
 fn a_rerun_cfg_named_like_a_property_module_leaves_that_cfg() {
@@ -734,22 +734,22 @@ fn a_rerun_cfg_named_like_a_property_module_leaves_that_cfg() {
         return;
     }
     let src = format!(
-        "{SAME_STATE_RULES}property CrossInv_Order_0_rest1 \"注文は払われない\"\n  always(Order.status == pending)\n"
+        "{SAME_STATE_RULES}property MultiInv_Order_0_rest1 \"注文は払われない\"\n  always(Order.status == pending)\n"
     );
     let (stdout, stderr, code, dir) = verify_model("verify_cli_rest_named", &src, "M.tla");
     assert_eq!(code, Some(1), "{stdout}{stderr}");
     assert!(
-        stderr.contains("error[CrossInv_Order_0]: invariant CrossInv_Order_0 is violated: "),
+        stderr.contains("error[MultiInv_Order_0]: invariant MultiInv_Order_0 is violated: "),
         "{stderr}"
     );
     let cfg = |name: &str| std::fs::read_to_string(dir.join(format!("{name}.cfg"))).unwrap();
     assert!(
-        cfg("Cone_CrossInv_Order_0_rest1").contains("PROPERTY CrossInv_Order_0_rest1\n"),
+        cfg("Cone_MultiInv_Order_0_rest1").contains("PROPERTY MultiInv_Order_0_rest1\n"),
         "{}",
-        cfg("Cone_CrossInv_Order_0_rest1")
+        cfg("Cone_MultiInv_Order_0_rest1")
     );
-    let rest = cfg("Cone_CrossInv_Order_0_rest1_2");
-    assert!(rest.contains("INVARIANT CrossInv_Order_0\n"), "{rest}");
+    let rest = cfg("Cone_MultiInv_Order_0_rest1_2");
+    assert!(rest.contains("INVARIANT MultiInv_Order_0\n"), "{rest}");
     assert!(!rest.contains("Forbidden_Parcel_0"), "{rest}");
 }
 

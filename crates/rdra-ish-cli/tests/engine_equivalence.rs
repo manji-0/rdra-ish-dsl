@@ -82,7 +82,7 @@ const VERIFY_FALLBACK: &[(&str, &str)] = &[
     ("samples/insurance-claim-ops", "invariant Forbidden_Claim_4"),
     (
         "samples/insurance-claim-ops",
-        "invariant CrossForbidden_Payment_3",
+        "invariant MultiForbidden_Payment_3",
     ),
     (
         "samples/insurance-claim-ops",
@@ -1134,7 +1134,7 @@ fn bfs_and_tlc_agree_on_an_interleaving_between_two_steps() {
     if let Some(violated) = check_fixture("interleaved_split", INTERLEAVED_SPLIT) {
         assert_eq!(
             violated,
-            BTreeSet::from(["CrossForbidden_Claim_0".to_string()])
+            BTreeSet::from(["MultiForbidden_Claim_0".to_string()])
         );
     }
 }
@@ -1507,9 +1507,9 @@ fn bfs_and_tlc_agree_on_the_key_a_join_names() {
     let renews = check_fixture("join_renews", &JOIN_KEYS.replace("EXPIRY_KEY", "renews"));
     let registered = check_fixture("join_registered", &JOIN_KEYS.replace("EXPIRY_KEY", "App"));
     if let (Some(renews), Some(registered)) = (renews, registered) {
-        assert!(!renews.contains("CrossForbidden_App_0"), "{renews:?}");
+        assert!(!renews.contains("MultiForbidden_App_0"), "{renews:?}");
         assert!(
-            registered.contains("CrossForbidden_App_0"),
+            registered.contains("MultiForbidden_App_0"),
             "{registered:?}"
         );
     }
@@ -1559,9 +1559,9 @@ fn bfs_and_tlc_agree_on_a_none_along_a_path() {
         &NONE_ALONG_PATH.replace("{GUARD}", ""),
     );
     if let (Some(guarded), Some(unguarded)) = (guarded, unguarded) {
-        assert!(!guarded.contains("CrossForbidden_Member_0"), "{guarded:?}");
+        assert!(!guarded.contains("MultiForbidden_Member_0"), "{guarded:?}");
         assert!(
-            unguarded.contains("CrossForbidden_Member_0"),
+            unguarded.contains("MultiForbidden_Member_0"),
             "{unguarded:?}"
         );
     }
@@ -1654,8 +1654,8 @@ fn bfs_and_tlc_agree_on_two_keys_to_one_parent() {
     let ship = check_fixture("two_keys_ship", &TWO_KEYS.replace("SHIP_KEY", "ship_to"));
     let bill = check_fixture("two_keys_bill", &TWO_KEYS.replace("SHIP_KEY", "bill_to"));
     if let (Some(ship), Some(bill)) = (ship, bill) {
-        assert!(ship.contains("CrossForbidden_Order_0"), "{ship:?}");
-        assert!(!bill.contains("CrossForbidden_Order_0"), "{bill:?}");
+        assert!(ship.contains("MultiForbidden_Order_0"), "{ship:?}");
+        assert!(!bill.contains("MultiForbidden_Order_0"), "{bill:?}");
     }
 }
 
@@ -1698,8 +1698,8 @@ fn bfs_and_tlc_agree_on_a_written_parent_on_one_key() {
         &WRITTEN_PARENT.replace("BILLED_KEY", "ship_to"),
     );
     if let (Some(billed), Some(shipped)) = (billed, shipped) {
-        assert!(billed.contains("CrossForbidden_Order_0"), "{billed:?}");
-        assert!(!shipped.contains("CrossForbidden_Order_0"), "{shipped:?}");
+        assert!(billed.contains("MultiForbidden_Order_0"), "{billed:?}");
+        assert!(!shipped.contains("MultiForbidden_Order_0"), "{shipped:?}");
     }
 }
 
@@ -1738,8 +1738,8 @@ fn bfs_and_tlc_agree_on_a_guard_along_a_path() {
     );
     let anywhere = check_fixture("unjoined_guard", &ALONG_GUARD.replace("GUARD_PATH", ""));
     if let (Some(along), Some(anywhere)) = (along, anywhere) {
-        assert!(!along.contains("CrossForbidden_Claim_0"), "{along:?}");
-        assert!(anywhere.contains("CrossForbidden_Claim_0"), "{anywhere:?}");
+        assert!(!along.contains("MultiForbidden_Claim_0"), "{along:?}");
+        assert!(anywhere.contains("MultiForbidden_Claim_0"), "{anywhere:?}");
     }
 }
 
@@ -2407,7 +2407,7 @@ fn bfs_and_tlc_agree_on_a_sub_lifecycle_of_many_classes() {
     {
         let expected: BTreeSet<String> = [
             "Forbidden_E2_0",
-            "CrossForbidden_E1_0",
+            "MultiForbidden_E1_0",
             "AfterAssert_T1_0_0",
         ]
         .into_iter()
