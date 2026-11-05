@@ -69,14 +69,14 @@ const STATE_CAP: usize = 300_000;
 /// `Bounds::STATES`. docs/formal-verification.md tabulates their sizes and what keeps each
 /// large.
 const VERIFY_FALLBACK: &[(&str, &str)] = &[
-    // 1,784,808: its sub-lifecycle has as many classes as states, so nothing reduces.
+    // 905,528: nothing reduces.
     ("samples/clinic-ops", "entity EligibilityCheck"),
     // 1,341,707 reduced: the office action times 185 classes of the application's side.
     ("samples/patent-ops", "entity OfficeAction"),
     ("samples/patent-ops", "invariant Forbidden_OfficeAction_3"),
-    // 4,648,771 reduced: the permit's side times 143 classes of the disposition's (#112).
+    // 4,648,771 reduced: the permit's side times 444 classes of the disposition's (#112).
     ("samples/food-permit-ops", "entity BusinessPermit"),
-    // 573,751 to 814,191 reduced: the claim and the payment times 443 classes of the case.
+    // 633,787 to 903,987 reduced: the claim and the payment times 2,428 classes of the case.
     ("samples/insurance-claim-ops", "entity Claim"),
     // Reduced by the claim's and the payment's side in 4,368 classes under the case's two
     // bits (#112); the case's side alone has 63,823 states.
