@@ -286,7 +286,7 @@ pub(super) fn lint_unguarded_triggered(model: &SemanticModel, issues: &mut Vec<L
             id,
             "triggered-usecase-unguarded",
             &format!(
-                "use case {id} is started only by {}, and no condition guards it and no transitions gives it a from-state, so check and verify run it in every reachable state, before the event too",
+                "use case {id} is started only by {}, and no condition guards it and no transitions gives it a from-state, so once it may start check and verify run it in every state that follows, as often as it is enabled, since the record of a raised event is a latch and a timer is free",
                 starters.join(" and ")
             ),
             &format!(

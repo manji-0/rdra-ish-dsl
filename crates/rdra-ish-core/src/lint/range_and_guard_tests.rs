@@ -58,9 +58,10 @@ fn a_comparison_the_int_range_decides_is_a_warning() {
     );
 }
 
-/// A use case only an event starts runs before the event too (#89): with no guard and no
-/// from-state it is the info `triggered-usecase-unguarded`. A guard, a from-state, or an
-/// actor that performs it clears the info.
+/// A use case only an event starts runs, once the event was raised, in every state that
+/// follows (#89, #112): with no guard and no from-state it is the info
+/// `triggered-usecase-unguarded`. A guard, a from-state, or an actor that performs it clears
+/// the info.
 #[test]
 fn a_triggered_use_case_with_no_guard_is_info() {
     let triggered = format!(
