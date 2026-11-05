@@ -32,6 +32,15 @@ use super::expr::State;
 use super::types::{ActId, ActionOrigin, Effect, EntId, Rhs, Value, VarId, VarKind};
 use super::TransitionSystem;
 
+/// The most cells (`Reduction::tla_cells`) a reduced cone may print for TLC. Measured with
+/// TLC's 1 GB heap (#112): the insurance-claim-ops cones of 2,428 classes print 72,840 cells
+/// and `verify` runs them; the `ClaimCase` view's of 4,368 classes prints 104,832 (a 1.6 MB
+/// module) and TLC run by hand on it checks 52,687 states in 21 s at a peak of 912 MB; a
+/// random model's cone of 24,000 classes printed 326,400 and ran out of heap while the
+/// module was processed. A cone past the budget is explored through the split without
+/// inputs, or unreduced.
+const TLA_CELL_BUDGET: usize = 200_000;
+
 /// A step of a path: the action, its params, and the state it enters.
 pub type Step = (ActId, Box<[u8]>, State);
 /// A class move: the last action of a path that leaves the class, its params, and the class
@@ -76,6 +85,19 @@ pub struct Reduction {
 impl Reduction {
     pub fn classes(&self) -> usize {
         self.reps.len()
+    }
+
+    /// Whether this reduction, or one nested in it, has fewer classes than states. A quotient
+    /// that is the identity at every level reduces nothing (#101), whatever its depth: an
+    /// identity inner reduction does not make the outer one worthwhile.
+    fn shrinks(&self) -> bool {
+        self.reps.len() < self.states || self.inner.as_ref().is_some_and(|i| i.shrinks())
+    }
+
+    /// The cells the TLA+ printer writes for this reduction: one per class for each observed
+    /// var and each S action, and one per rise. `TLA_CELL_BUDGET` bounds it.
+    pub fn tla_cells(&self) -> usize {
+        self.reps.len() * (self.obs.len() + self.s_actions.len()) + self.rises.len()
     }
 
     /// The S vars, ascending.
@@ -407,7 +429,9 @@ impl Quotient {
             .collect();
         let (silent, rise_edges) = split_edges(&run, &ext.rise);
         let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
-        if sub.reduction().is_none() && blocks.iter().collect::<BTreeSet<_>>().len() == n {
+        if !sub.reduction().is_some_and(|r| r.shrinks())
+            && blocks.iter().collect::<BTreeSet<_>>().len() == n
+        {
             return None;
         }
         let mut rep_of_block: HashMap<u32, u32> = HashMap::new();
@@ -685,17 +709,36 @@ impl TransitionSystem {
         }
     }
 
-    /// This cone system with its S side reduced, when it has one and its S side fits under
-    /// `caps`; otherwise unchanged. `seeds` are what each target that shares the cone reads
-    /// and keeps.
+    /// This cone system with its S side reduced, when it has one, its S side fits under
+    /// `caps`, and the tables TLC would get fit under `TLA_CELL_BUDGET`; otherwise unchanged.
+    /// `seeds` are what each target that shares the cone reads and keeps.
     pub fn reduced(&self, seeds: &[Seed], caps: Caps) -> TransitionSystem {
-        let split = self.split_with(seeds, true);
-        if split.s.is_empty() {
-            return self.clone();
+        match self.reduced_with(seeds, caps, true) {
+            Ok(out) => out,
+            Err(true) => self
+                .reduced_with(seeds, caps, false)
+                .unwrap_or_else(|_| self.clone()),
+            Err(false) => self.clone(),
+        }
+    }
+
+    /// One attempt at `reduced`, with or without the inputs of S. `Err(true)` says the
+    /// printed tables would pass `TLA_CELL_BUDGET` under a split that had inputs, so the
+    /// split without them is worth a try; `Err(false)` that nothing reduces.
+    fn reduced_with(
+        &self,
+        seeds: &[Seed],
+        caps: Caps,
+        inputs: bool,
+    ) -> Result<TransitionSystem, bool> {
+        let split = self.split_with(seeds, inputs);
+        // Every S var observed by T makes the quotient the identity, whatever the inputs do.
+        if split.s.is_empty() || split.s.is_subset(&split.obs) {
+            return Err(false);
         }
         let ext = Extended::of(self, &split);
         let Some(quotient) = Quotient::of(&ext, caps) else {
-            return self.clone();
+            return Err(false);
         };
         let Quotient {
             reps,
@@ -746,10 +789,13 @@ impl TransitionSystem {
             inner,
             states: n,
         };
+        if reduction.tla_cells() > TLA_CELL_BUDGET {
+            return Err(!split.inputs.is_empty());
+        }
         let mut out = self.clone();
         out.reduction = Some(Arc::new(reduction));
         out.drop_unreadable_checks(&split);
-        out
+        Ok(out)
     }
 
     /// Drops the checks the reduced cone cannot evaluate: an invariant or after-assert that

@@ -279,6 +279,36 @@ transitions(Cancel, Order.status, open -> cancelled)
 forbidden(Order, status == cancelled).label("取消は起きない")
 "#;
 
+/// `Pay` reads the case through a quantifier with no T param (the condition joins the claim
+/// to its case by the owner), so in the case's view the claims read the case's status and
+/// existence; `reviewed` is read by no one on the case's side, so the claims' sub-lifecycle
+/// reduces. A claim still open when its case closes can never be paid, so the case is never
+/// archived.
+const CASE_FOLD: &str = r#"
+entity Case "事案" { id: Int @pk  status: Enum(open, closed, archived) @default(open) }
+entity Claim "請求" { id: Int @pk  status: Enum(open, paid) @default(open)  reviewed: Bool @default(false) }
+relate(Claim, Case, N:1)
+usecase OpenCase "受付"
+usecase File "請求"
+usecase Review "査読"
+usecase Pay "支払"
+usecase CloseCase "事案終了"
+usecase ArchiveCase "事案保管"
+event EvPaid "支払済"
+creates(OpenCase, Case)
+creates(File, Claim)
+sets(Review, Claim.reviewed == true)
+transitions(Pay, Claim.status, open -> paid).when(PayReady)
+condition PayReady "査読済みで事案が開いている"
+holds(PayReady, Claim.reviewed == true, Case.status == open)
+raises(Pay, EvPaid)
+transitions(CloseCase, Case.status, open -> closed)
+triggers(EvPaid, CloseCase)
+transitions(ArchiveCase, Case.status, closed -> archived).when(AllSettled)
+condition AllSettled "請求がすべて片付いている"
+holds(AllSettled, Case.status == closed).none(Claim.status == open)
+"#;
+
 /// A case closes once none of its claims is open, and a claim is paid once its case is
 /// flagged (#112): in the case's cone the claims read the case's flag and existence, which
 /// only rise, so they stay a sub-lifecycle with those two vars as its inputs.
@@ -754,4 +784,32 @@ fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
             );
         }
     }
+}
+
+/// A reduced cone counts the cells its TLA+ tables print (#112): one per class for each
+/// observed var and each S action, and one per rise. The case's view of `CASE_FOLD` prints
+/// 583 cells (74 classes, 65 rises), under the budget a cone may hand TLC.
+#[test]
+fn a_reduced_cone_counts_the_cells_its_tla_tables_print() {
+    let model = model_from(CASE_FOLD);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let case = entity_target(&ts, "Case");
+    let (sys, seeds) = ts.cone_system(&ts.target_cone(case), [ts.target_seed(case)]);
+    let reduced = sys.reduced(&seeds, Caps::VERIFY);
+    let red = reduced
+        .reduction()
+        .expect("the claims reduce under the case's inputs");
+    let rises: usize = (0..red.classes() as u32)
+        .map(|c| red.rises_from(c).len())
+        .sum();
+    assert_eq!(
+        red.tla_cells(),
+        red.classes() * (red.obs().len() + red.s_actions().len()) + rises
+    );
+    assert_eq!(
+        red.tla_cells(),
+        583,
+        "{} classes, {rises} rises",
+        red.classes()
+    );
 }
