@@ -41,7 +41,7 @@ pub struct TlaNames {
     rep: Vec<Option<String>>,
     succ: Vec<Option<String>>,
     /// `Rise`: per class and the inputs a T step leaves, the class it moves to, in a reduced
-    /// cone whose S side reads inputs of T.
+    /// cone whose S side reads inputs of T, raw or as bits.
     rise: Option<String>,
     /// The state-model checks `print_state_models` prints, by state; empty in every other
     /// module.
@@ -195,7 +195,7 @@ impl TlaNames {
         let mut succ = vec![None; actions.len()];
         let rise = ts
             .reduction()
-            .filter(|r| !r.inputs().is_empty())
+            .filter(|r| !r.inputs().is_empty() || !r.bits().is_empty())
             .map(|_| taken.claim("Rise"));
         if let Some(r) = ts.reduction() {
             for &v in r.obs() {
@@ -362,7 +362,7 @@ impl TlaNames {
         }
         if let (Some(r), Some(class)) = (r, &self.class) {
             let c = r
-                .class(state)
+                .class(ts, state)
                 .expect("a reduced state holds a representative");
             out.insert(class.clone(), (c + 1).to_string());
         }

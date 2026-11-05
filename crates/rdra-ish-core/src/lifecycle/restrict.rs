@@ -231,9 +231,10 @@ impl TransitionSystem {
 
     /// `restrict_to`, with the map from this system's items to the restricted system's. With
     /// `havoc` off, a `Triggered` param whose mark is outside `vars` is treated like any
-    /// other param (the extended sub-lifecycle of `reduced` reads the mark as an input). A
-    /// param on an entity the system neither keeps nor stubs goes with the guards that name
-    /// it either way: a rise of that sub-lifecycle binds rows of T it does not hold.
+    /// other param (the extended sub-lifecycle of `reduced` reads the mark as an input, or
+    /// folds it into a bit). A param on an entity the system neither keeps nor stubs goes
+    /// with the guards that name it either way: a rise of that sub-lifecycle binds rows of T
+    /// it does not hold.
     pub(crate) fn restrict_to_mapped(
         &self,
         vars: &VarSet,
@@ -462,11 +463,11 @@ fn drop_params(
     (action, Some(index))
 }
 
-fn renumber_by(index: &[Option<u8>]) -> impl Fn(&mut u8) + '_ {
+pub(crate) fn renumber_by(index: &[Option<u8>]) -> impl Fn(&mut u8) + '_ {
     |p: &mut u8| *p = index[usize::from(*p)].expect("a dropped param is unreferenced")
 }
 
-fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
+pub(crate) fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
     let term = |t: &mut Term| {
         if let Term::Slot {
             at: At::Param(p) | At::Next(p),
@@ -497,17 +498,17 @@ fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
 pub(crate) struct Remap {
     ent: Vec<Option<EntId>>,
     var: Vec<Option<VarId>>,
-    act: Vec<Option<ActId>>,
+    pub(crate) act: Vec<Option<ActId>>,
     /// Per source action, old param index to new, when `drop_params` dropped one.
-    params: Vec<Option<Vec<Option<u8>>>>,
+    pub(crate) params: Vec<Option<Vec<Option<u8>>>>,
 }
 
 impl Remap {
-    fn e(&self, e: EntId) -> EntId {
+    pub(crate) fn e(&self, e: EntId) -> EntId {
         self.ent[e.index()].expect("entity outside the component")
     }
 
-    fn v(&self, v: VarId) -> VarId {
+    pub(crate) fn v(&self, v: VarId) -> VarId {
         self.var[v.index()].expect("var outside the component")
     }
 
@@ -564,7 +565,7 @@ impl Remap {
         }
     }
 
-    fn pred(&self, p: &Pred) -> Pred {
+    pub(crate) fn pred(&self, p: &Pred) -> Pred {
         match p {
             Pred::True => Pred::True,
             Pred::False => Pred::False,

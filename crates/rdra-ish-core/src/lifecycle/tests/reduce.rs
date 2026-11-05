@@ -7,7 +7,8 @@ use std::collections::BTreeSet;
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, State, Step, Target, TargetExploration, VarSet,
+    Action, ActionOrigin, ComponentRun, Fold, FoldKey, State, Step, Target, TargetExploration,
+    VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -206,8 +207,10 @@ property P0
 
 /// A case's `CloseCase` is triggered by either of its claims' events (#112). In the claim's
 /// cone the case is the sub-lifecycle: `CloseCase_by_<Ev>` reads the claim's row (its
-/// existence, its owner key, its mark) through the `Triggered` param, and `DetermineFault`
-/// reads the claims through a quantifier, so the claims' vars are inputs. A claim stuck at
+/// existence, its owner key, its mark) through the `Triggered` param, so both variants fold
+/// into one input bit per case; `DetermineFault` reads the claims through a quantifier the
+/// node fold refuses (its body names the case param), so the claims' existence and status
+/// are raw inputs. A claim stuck at
 /// `open` in a case another claim closed is a deadlock that exists only after an input rose;
 /// a claim at `paid` whose case was never determined is one that exists only in the
 /// interleaving where the input rose before the case moved.
@@ -248,9 +251,10 @@ forbidden(Claim, status == denied).label("否認は起きない")
 "#;
 
 /// The order's payment triggers its shipment's `Ship`, whose `Triggered` param is the
-/// shipment's parent, and `Prepare` creates a shipment under an order: in the order's cone
-/// the shipments read the order's existence, status, and mark as inputs (#112). The order
-/// never reads whether a shipment is packed, so the sub-lifecycle reduces.
+/// shipment's parent, so the link guard keeps it and keys the bit by the order's slot;
+/// `Prepare` creates a shipment under an order, and the parent its effect names keys its
+/// bit, so the order's existence is no raw input (#112). The order never reads whether a
+/// shipment is packed, so the sub-lifecycle reduces.
 const ORDER_SHIP: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(open, paid, closed, cancelled) @default(open) }
 entity Shipment "出荷" { id: Int @pk  status: Enum(waiting, shipped) @default(waiting)  packed: Bool @default(false) }
@@ -280,10 +284,10 @@ forbidden(Order, status == cancelled).label("取消は起きない")
 "#;
 
 /// `Pay` reads the case through a quantifier with no T param (the condition joins the claim
-/// to its case by the owner), so in the case's view the claims read the case's status and
-/// existence; `reviewed` is read by no one on the case's side, so the claims' sub-lifecycle
-/// reduces. A claim still open when its case closes can never be paid, so the case is never
-/// archived.
+/// to its case by the owner), so in the case's view the read is a node fold: one bit per
+/// case, "the case is open", keyed by the row the link names; `reviewed` is read by no one
+/// on the case's side, so the claims' sub-lifecycle reduces. A claim still open when its
+/// case closes can never be paid (the bit fell), so the case is never archived.
 const CASE_FOLD: &str = r#"
 entity Case "事案" { id: Int @pk  status: Enum(open, closed, archived) @default(open) }
 entity Claim "請求" { id: Int @pk  status: Enum(open, paid) @default(open)  reviewed: Bool @default(false) }
@@ -669,9 +673,9 @@ fn an_identity_quotient_leaves_the_cone_unreduced() {
     assert_eq!(diag_names(&plain), diag_names(&reduced));
 }
 
-/// An S action that reads T vars which only rise stays in the sub-lifecycle, with those vars
-/// as its inputs (#112); one that reads a var some action lowers joins T, and with it the
-/// entity it writes. Without inputs every reader of T joins T.
+/// An S action that reads T vars which only rise stays in the sub-lifecycle, with those
+/// reads as its inputs, here folded into a bit each (#112); one that reads a var some action
+/// lowers joins T, and with it the entity it writes. Without inputs every reader of T joins T.
 #[test]
 fn a_sub_lifecycle_keeps_a_reader_of_monotone_vars_and_loses_a_reader_of_cyclic_ones() {
     let split_of = |src: &str, inputs: bool| {
@@ -687,31 +691,36 @@ fn a_sub_lifecycle_keeps_a_reader_of_monotone_vars_and_loses_a_reader_of_cyclic_
             .iter()
             .map(|a| sys.actions()[a.index()].name.clone())
             .collect();
-        (names(&split.s), names(&split.inputs), actions)
+        let folded: Vec<String> = split
+            .folds
+            .iter()
+            .map(|f| sys.actions()[f.act().index()].name.clone())
+            .collect();
+        (names(&split.s), names(&split.inputs), actions, folded)
     };
-    let (s, inputs, actions) = split_of(FLAGGED_CASE, true);
+    let (s, inputs, actions, folded) = split_of(FLAGGED_CASE, true);
     assert_eq!(
         s,
         ["Claim._exists", "status", "Claim._owner_Case"],
         "the claims are the sub-lifecycle"
     );
     assert_eq!(
-        inputs,
-        ["Case._exists", "flag"],
-        "the case's existence and flag are its inputs"
-    );
-    assert_eq!(
         actions,
         ["Pay", "File"],
-        "the claims' steps read the inputs"
+        "the claims' steps read the case's flag and existence"
     );
-    let (s, inputs, _) = split_of(&format!("{FLAGGED_CASE}{UNFLAGGED_CASE}"), true);
+    assert_eq!(folded, ["Pay", "File"], "each read folds into a bit");
+    assert!(inputs.is_empty(), "no raw input is left: {inputs:?}");
+    let (s, inputs, _, folded) = split_of(&format!("{FLAGGED_CASE}{UNFLAGGED_CASE}"), true);
     assert!(
         s.is_empty(),
         "a cleared flag is no input, so Pay joins T: {s:?}"
     );
-    assert!(inputs.is_empty(), "{inputs:?}");
-    let (s, _, _) = split_of(FLAGGED_CASE, false);
+    assert!(
+        inputs.is_empty() && folded.is_empty(),
+        "{inputs:?} {folded:?}"
+    );
+    let (s, _, _, _) = split_of(FLAGGED_CASE, false);
     assert!(s.is_empty(), "without inputs File and Pay join T: {s:?}");
 }
 
@@ -750,10 +759,29 @@ fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
                 );
                 continue;
             };
-            assert!(
-                !red.inputs().is_empty(),
-                "{name} at {bounds:?}: the sub-lifecycle reads inputs"
-            );
+            if name == "claim case" {
+                assert_eq!(
+                    red.bits().len(),
+                    1,
+                    "{name}: one bit for CloseCase's variants"
+                );
+                assert_eq!(red.bits()[0].len(), 2, "{name}: both variants share it");
+                assert!(
+                    red.inputs().len() >= 2,
+                    "{name}: the claims' status and existence are raw inputs"
+                );
+            } else {
+                assert_eq!(
+                    red.bits().len(),
+                    2,
+                    "{name}: one bit for Ship, keyed by the order, and one for Prepare"
+                );
+                assert!(
+                    red.inputs().is_empty(),
+                    "{name}: no raw input: {:?}",
+                    red.inputs()
+                );
+            }
             let (a, b) = (diag_names(&plain), diag_names(&reduced));
             assert_eq!(a, b, "{name} at {bounds:?}: verdicts");
             // A claim stuck in a case another claim closed needs two claims.
@@ -788,7 +816,7 @@ fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
 
 /// A reduced cone counts the cells its TLA+ tables print (#112): one per class for each
 /// observed var and each S action, and one per rise. The case's view of `CASE_FOLD` prints
-/// 583 cells (74 classes, 65 rises), under the budget a cone may hand TLC.
+/// 3,696 cells (336 classes, 1,344 rises), under the budget a cone may hand TLC.
 #[test]
 fn a_reduced_cone_counts_the_cells_its_tla_tables_print() {
     let model = model_from(CASE_FOLD);
@@ -798,7 +826,7 @@ fn a_reduced_cone_counts_the_cells_its_tla_tables_print() {
     let reduced = sys.reduced(&seeds, Caps::VERIFY);
     let red = reduced
         .reduction()
-        .expect("the claims reduce under the case's inputs");
+        .expect("the claims reduce under the case's bit");
     let rises: usize = (0..red.classes() as u32)
         .map(|c| red.rises_from(c).len())
         .sum();
@@ -808,8 +836,47 @@ fn a_reduced_cone_counts_the_cells_its_tla_tables_print() {
     );
     assert_eq!(
         red.tla_cells(),
-        583,
+        3696,
         "{} classes, {rises} rises",
         red.classes()
+    );
+}
+
+/// A quantifier over T with no T param folds into a bit keyed by the linked row (#112), the
+/// sub-lifecycle has no raw input left, and the reduced cone decides what the cone decides:
+/// the deadlock at `closed` exists only because the bit fell when the case closed.
+#[test]
+fn a_quantifier_over_t_folds_into_a_bit_keyed_by_the_linked_row() {
+    let model = model_from(CASE_FOLD);
+    for bounds in [Bounds::STATES, Bounds::VERIFY] {
+        assert_reduction_exact("case fold", &model, bounds);
+    }
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let target = entity_target(&ts, "Case");
+    let targets = ts.targets();
+    let plain = ts.explore_targets(&targets, Caps::VERIFY);
+    let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+    let cone = reduced.cone_of(target);
+    let red = cone.run.system.reduction().expect("the Case view reduces");
+    assert!(red.inputs().is_empty(), "no raw input: {:?}", red.inputs());
+    let linked: Vec<&Fold> = red
+        .bits()
+        .iter()
+        .flatten()
+        .filter(|f| matches!(f.key(), FoldKey::Linked { .. }))
+        .collect();
+    assert_eq!(linked.len(), 1, "Pay's node is the one linked fold");
+    assert_eq!(
+        cone.run.system.actions()[linked[0].act().index()].name,
+        "Pay"
+    );
+    let (a, b) = (diag_names(&plain), diag_names(&reduced));
+    assert_eq!(a, b, "verdicts");
+    for e in ["Deadlock_Case_status_open", "Deadlock_Case_status_closed"] {
+        assert!(a.contains(e), "{e} in {a:?}");
+    }
+    assert!(
+        cone.run.states.len() < plain.cone_of(target).run.states.len(),
+        "the reduced cone is smaller"
     );
 }

@@ -4,7 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rdra_ish_core::lifecycle::{
-    ActId, Action, ActionOrigin, Birth, Effect, EntId, Ltl, ParamRole, Pred, Rhs, Start,
+    ActId, Action, ActionOrigin, Birth, Effect, EntId, FoldKey, Ltl, ParamRole, Pred, Rhs, Start,
     TransitionSystem, Value, VarId, VarKind,
 };
 use rdra_ish_core::model::UseCaseKey;
@@ -164,11 +164,17 @@ fn reduction(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
         ));
     }
     if let Some(rise) = names.rise_table() {
-        let inputs: Vec<&str> = r.inputs().iter().map(|v| names.var(*v)).collect();
+        bits(ts, names, out);
+        let inputs: Vec<String> = r
+            .inputs()
+            .iter()
+            .map(|v| names.var(*v).to_string())
+            .chain((0..r.bits().len()).map(bit_name))
+            .collect();
         out.push_str(&format!(
-            "\\* The inputs of the sub-lifecycle ({}) are vars of the rest that only rise; a step\n\
-             \\* that changes one moves the class by {rise}: per class, the inputs after the step to\n\
-             \\* the class the representative is in under them.\n",
+            "\\* The inputs of the sub-lifecycle ({}) are vars of the rest that only rise, or bits\n\
+             \\* of it; a step that changes one moves the class by {rise}: per class, the inputs after\n\
+             \\* the step to the class the representative is in under them.\n",
             inputs.join(", ")
         ));
         let cells: Vec<String> = (0..r.classes() as u32)
@@ -190,33 +196,144 @@ fn reduction(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     out.push('\n');
 }
 
-/// The key of the `Rise` table: the inputs as a tuple, primed or not.
-fn input_key(ts: &TransitionSystem, names: &TlaNames, primed: bool) -> String {
+/// The key of the `Rise` table at a stage of a T step, as `Reduction::stages` orders them:
+/// the raw inputs, primed from the first stage on, then one tuple per bit group, whose
+/// slots are primed up to the stage's.
+fn input_key(
+    ts: &TransitionSystem,
+    names: &TlaNames,
+    raw_primed: bool,
+    bits_primed: usize,
+) -> String {
     let r = ts.reduction().expect("a reduced cone");
-    let items: Vec<String> = r
+    let slots = ts.bounds.slots();
+    let prime = |primed: bool| if primed { "'" } else { "" };
+    let mut items: Vec<String> = r
         .inputs()
         .iter()
-        .map(|v| format!("{}{}", names.var(*v), if primed { "'" } else { "" }))
+        .map(|v| format!("{}{}", names.var(*v), prime(raw_primed)))
         .collect();
+    for g in 0..r.bits().len() {
+        let cells: Vec<String> = (1..=slots)
+            .map(|c| {
+                format!(
+                    "{}({c}){}",
+                    bit_name(g),
+                    prime(g * slots + c - 1 < bits_primed)
+                )
+            })
+            .collect();
+        items.push(format!("<<{}>>", cells.join(", ")));
+    }
     format!("<<{}>>", items.join(", "))
 }
 
-/// The class after a T step that writes an input: the one `Rise` names for the inputs it
-/// leaves, or the class as it was when they did not change.
+/// The class after a T step, stage by stage: a stage whose key equals the previous one's
+/// leaves the class alone, and one that changed it looks the class up in `Rise`.
 fn rise_expr(ts: &TransitionSystem, names: &TlaNames) -> String {
+    let r = ts.reduction().expect("a reduced cone");
     let class = names.class().expect("a reduced cone names its class var");
     let rise = names
         .rise_table()
         .expect("a reduced cone with inputs has a Rise table");
-    let (prev, next) = (input_key(ts, names, false), input_key(ts, names, true));
-    format!("IF {next} = {prev} THEN {class} ELSE {rise}[{class}][{next}]")
+    let raw = !r.inputs().is_empty();
+    let mut stages: Vec<(String, String)> = Vec::new();
+    if raw {
+        stages.push((
+            input_key(ts, names, false, 0),
+            input_key(ts, names, true, 0),
+        ));
+    }
+    for k in 0..r.bits().len() * ts.bounds.slots() {
+        stages.push((
+            input_key(ts, names, raw, k),
+            input_key(ts, names, raw, k + 1),
+        ));
+    }
+    let mut expr = class.to_string();
+    for (i, (prev, next)) in stages.iter().enumerate() {
+        expr =
+            format!("LET c{i} == {expr} IN IF {next} = {prev} THEN c{i} ELSE {rise}[c{i}][{next}]");
+    }
+    expr
+}
+
+fn bit_name(g: usize) -> String {
+    format!("In_{g}")
+}
+
+/// The input bits as operators: `In_<g>(c)` holds when some fold of the group holds on slot
+/// `c` of its key. A fold keyed by a param holds when its folded guards hold for some
+/// binding of its other T params, each on a present row where its role needs one; a node
+/// fold when the row is present and the node's body holds with it as `b0`.
+fn bits(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+    let r = ts.reduction().expect("a reduced cone");
+    for (g, group) in r.bits().iter().enumerate() {
+        let mut variants = Vec::new();
+        for (k, fold) in group.iter().enumerate() {
+            let a = &ts.actions()[fold.act().index()];
+            let name = format!("{}_{k}", bit_name(g));
+            let mut ctx = Ctx {
+                ts,
+                names,
+                primed: false,
+                depth: 0,
+            };
+            variants.push(format!("{name}(c)"));
+            let key = match fold.key() {
+                FoldKey::Linked { entity, .. } => {
+                    ctx.depth = 1;
+                    let body = ctx.pred(fold.node_body().expect("a linked fold has its node"));
+                    let present = ctx.present(*entity, "b0");
+                    out.push_str(&format!(
+                        "{name}(c) == LET b0 == c IN {present} /\\ ({body})\n"
+                    ));
+                    continue;
+                }
+                FoldKey::Param(key) => *key,
+            };
+            let mut conj: Vec<String> = Vec::new();
+            let mut binders: Vec<String> = Vec::new();
+            for &(p, present) in fold.t_params() {
+                if p != key {
+                    binders.push(format!(
+                        "p{p} \\in {}",
+                        names.ids(a.params[usize::from(p)].entity)
+                    ));
+                }
+                if present {
+                    let exists = names.var(ts.entity(a.params[usize::from(p)].entity).exists);
+                    conj.push(format!("{exists}[p{p}] = \"present\""));
+                }
+            }
+            for &gi in fold.guards() {
+                conj.push(format!("({})", ctx.pred(&a.guards[gi].pred)));
+            }
+            let body = if conj.is_empty() {
+                "TRUE".to_string()
+            } else {
+                conj.join(" /\\ ")
+            };
+            let body = if binders.is_empty() {
+                body
+            } else {
+                format!("\\E {} : {body}", binders.join(", "))
+            };
+            out.push_str(&format!("{name}(p{key}) == {body}\n"));
+        }
+        out.push_str(&format!(
+            "{}(c) == {}\n",
+            bit_name(g),
+            variants.join(" \\/ ")
+        ));
+    }
 }
 
 /// The input bytes of a rise as the tuple `input_key` compares them with.
 fn input_tuple(ts: &TransitionSystem, bytes: &[u8]) -> String {
     let r = ts.reduction().expect("a reduced cone");
     let mut at = 0;
-    let items: Vec<String> = r
+    let mut items: Vec<String> = r
         .inputs()
         .iter()
         .map(|v| {
@@ -237,6 +354,13 @@ fn input_tuple(ts: &TransitionSystem, bytes: &[u8]) -> String {
             }
         })
         .collect();
+    for _ in r.bits() {
+        let slots: Vec<String> = (0..ts.bounds.slots())
+            .map(|k| if bytes[at + k] == 0 { "FALSE" } else { "TRUE" }.to_string())
+            .collect();
+        at += ts.bounds.slots();
+        items.push(format!("<<{}>>", slots.join(", ")));
+    }
     format!("<<{}>>", items.join(", "))
 }
 
@@ -383,11 +507,9 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
     conj.extend(pre.into_iter().map(guard));
     let (assigns, written) = effects(ts, names, a);
     conj.extend(assigns);
-    // A step that writes an input of the sub-lifecycle moves its class by the `Rise` table
-    // (#112); any other step leaves the class alone.
     let rises = ts
         .reduction()
-        .is_some_and(|r| r.inputs().iter().any(|v| written.contains(v)));
+        .is_some_and(|r| !r.bits().is_empty() || r.inputs().iter().any(|v| written.contains(v)));
     let unchanged: Vec<&str> = ts
         .var_ids()
         .filter(|v| !written.contains(v) && !in_s(ts, *v))

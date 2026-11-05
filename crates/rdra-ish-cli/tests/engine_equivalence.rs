@@ -24,7 +24,8 @@
 //! it as the same violation.
 //!
 //! Without `tlc` on PATH the TLC test is skipped with a printed reason; `RDRA_REQUIRE_TLC=1`
-//! turns the skip into a failure.
+//! turns the skip into a failure. `RDRA_EQV_TRACE=1` prints one line per cone and per
+//! state-model module with its sizes and wall times, to see where a run's time goes.
 
 #[path = "../src/property_cone.rs"]
 #[allow(dead_code)]
@@ -73,10 +74,13 @@ const VERIFY_FALLBACK: &[(&str, &str)] = &[
     // 1,341,707 reduced: the office action times 185 classes of the application's side.
     ("samples/patent-ops", "entity OfficeAction"),
     ("samples/patent-ops", "invariant Forbidden_OfficeAction_3"),
-    // 2,094,157: every entity reads the application, so nothing reduces.
-    ("samples/food-permit-ops", "entity PermitApplication"),
+    // 4,648,771 reduced: the permit's side times 143 classes of the disposition's (#112).
+    ("samples/food-permit-ops", "entity BusinessPermit"),
     // 573,751 to 814,191 reduced: the claim and the payment times 443 classes of the case.
     ("samples/insurance-claim-ops", "entity Claim"),
+    // Reduced by the claim's and the payment's side in 4,368 classes under the case's two
+    // bits (#112); the case's side alone has 63,823 states.
+    ("samples/insurance-claim-ops", "entity ClaimCase"),
     ("samples/insurance-claim-ops", "entity Payment"),
     ("samples/insurance-claim-ops", "invariant Forbidden_Claim_0"),
     ("samples/insurance-claim-ops", "invariant Forbidden_Claim_4"),
@@ -102,6 +106,23 @@ fn samples() -> Vec<String> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .map(str::to_string)
         .collect()
+}
+
+/// One trace line under `RDRA_EQV_TRACE=1`.
+fn trace(line: impl FnOnce() -> String) {
+    if std::env::var_os("RDRA_EQV_TRACE").is_some() {
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("after the epoch")
+            .as_secs();
+        eprintln!(
+            "trace {:02}:{:02}:{:02} {}",
+            (t / 3600) % 24,
+            (t / 60) % 60,
+            t % 60,
+            line()
+        );
+    }
 }
 
 fn load(sample: &str) -> SemanticModel {
@@ -584,13 +605,21 @@ fn check_model(
                     sample.replace('/', "_"),
                     bounds.instances
                 ));
+                let t0 = std::time::Instant::now();
                 let run = ts.restrict_to(&cone.vars, &cone.keep).run(caps);
+                let t_bfs = t0.elapsed().as_secs_f64();
                 let plain = run
                     .complete
                     .then(|| check_cone(tlc, &dir, &label, &run, &run.system));
+                let t_plain = t0.elapsed().as_secs_f64();
                 // The sub-lifecycle is explored by BFS alone, under `verify`'s cap.
                 let system = ts.reduced_cone(cone, seeds.iter().cloned(), Caps::VERIFY);
-                let reduced_run = system.reduction().is_some().then(|| system.run(caps));
+                let t_reduce = t0.elapsed().as_secs_f64();
+                let reduction = system
+                    .reduction()
+                    .map(|r| (r.classes(), r.inputs().len(), r.bits().len(), r.tla_cells()));
+                let reduced_run = reduction.is_some().then(|| system.run(caps));
+                let t_rbfs = t0.elapsed().as_secs_f64();
                 let reduced = reduced_run.as_ref().filter(|r| r.complete).map(|r| {
                     check_cone(
                         tlc,
@@ -598,6 +627,20 @@ fn check_model(
                         &format!("{label}, reduced"),
                         r,
                         &run.system,
+                    )
+                });
+                trace(|| {
+                    let sizes = |r: &ComponentRun| {
+                        format!("{} states{}", r.states.len(), if r.complete { "" } else { " CAPPED" })
+                    };
+                    format!(
+                        "{label}: plain {} (bfs {t_bfs:.1}s, tlc {:.1}s); reduction {reduction:?} (classes, inputs, bits, cells; {:.1}s); reduced run {} ({:.1}s); reduced tlc {:.1}s",
+                        sizes(&run),
+                        t_plain - t_bfs,
+                        t_reduce - t_plain,
+                        reduced_run.as_ref().map_or("none".to_string(), sizes),
+                        t_rbfs - t_reduce,
+                        t0.elapsed().as_secs_f64() - t_rbfs,
                     )
                 });
                 // The reduced cone keeps the checks that read its target side and what it
@@ -3028,6 +3071,7 @@ fn export_state_models(dir: &Path, label: &str, input: &str) -> Option<StateMode
         .map(Target::Entity)
         .filter(|t| !fallback.contains(&ts.target_cone(*t)))
         .collect();
+    let t0 = std::time::Instant::now();
     let bfs: BTreeSet<String> = ts
         .explore_targets_reduced(&entities, Caps::VERIFY)
         .verdicts()
@@ -3043,6 +3087,7 @@ fn export_state_models(dir: &Path, label: &str, input: &str) -> Option<StateMode
         .output()
         .expect("run export");
     assert!(out.status.success(), "{label}: {out:?}");
+    trace(|| format!("{label}: state models {:.1}s", t0.elapsed().as_secs_f64()));
     let mut modules: Vec<String> = std::fs::read_dir(dir)
         .expect("export dir")
         .filter_map(|f| {
@@ -3103,12 +3148,19 @@ fn tlc_alone_and_bfs(tlc: &Path, samples: &[StateModels]) -> Vec<BTreeSet<String
                 while let Some(&(i, m)) = jobs.get(next.fetch_add(1, Ordering::SeqCst)) {
                     let StateModels { label, dir, .. } = &samples[i];
                     let deadlock_cfg = read_cfg(dir, label, m);
+                    let t0 = std::time::Instant::now();
                     let (deadlocks, states) =
                         violated_by_hand(tlc, dir, m, &deadlock_cfg, "deadlocks", true);
                     let witnesses = read_cfg(dir, label, &format!("{m}_witnesses"));
                     let continued = states.is_some_and(|n| n <= CONTINUE_STATES);
                     let (reached, _) =
                         violated_by_hand(tlc, dir, m, &witnesses, "witnesses", continued);
+                    trace(|| {
+                        format!(
+                            "{label} {m}: tlc states {states:?}, {:.1}s",
+                            t0.elapsed().as_secs_f64()
+                        )
+                    });
                     let unreached = cfg_invariants(&witnesses)
                         .into_iter()
                         .filter(|w| !reached.contains(w));

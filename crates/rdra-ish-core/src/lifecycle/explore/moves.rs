@@ -57,7 +57,7 @@ impl TransitionSystem {
             out = out
                 .into_iter()
                 .map(|s| {
-                    r.canonical_initial(&s)
+                    r.canonical_initial(self, &s)
                         .expect("an initial S state has a class")
                 })
                 .filter(|s| seen.insert(s.clone()))

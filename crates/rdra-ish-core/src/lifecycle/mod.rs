@@ -38,7 +38,7 @@ pub use findings::{
     ValueWitness, Witness,
 };
 pub use lasso::{LassoReplay, Loop};
-pub use reduce::{ClassMove, Reduction, Step};
+pub use reduce::{ClassMove, Fold, FoldKey, Reduction, Step};
 pub use restrict::Component;
 pub use select::{NotChecked, Scope, Selection, UnknownId};
 pub use states::{derive_states, derive_states_built, BoundsLine, StatesReport};
