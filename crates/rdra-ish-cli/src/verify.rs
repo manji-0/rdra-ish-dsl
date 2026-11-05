@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity, StateDiag, Target,
-    TransitionSystem, VarSet,
+    Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity, StateDiag,
+    Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
@@ -689,8 +689,95 @@ fn run_tlc(
     };
     let mut jobs = cone_jobs(&ts, &names, &selection.targets, &mut modules);
     let cones = jobs.len();
+    let line = print_plan(
+        model,
+        &ts,
+        scope,
+        &selection,
+        bounds,
+        (cones, temporal),
+        budget,
+    );
+    // The whole-model module with every property, for a run by hand; verify runs a property
+    // on it only when its cone leaves it undecided.
+    let whole = temporal.then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));
+    let mut whole_modules = Vec::new();
+    if temporal {
+        jobs.extend(property_jobs(&ts, &names, &mut modules));
+        whole_modules = (0..ts.properties().len())
+            .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
+            .collect();
+    }
+    let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
+    let end = End {
+        bfs_errors,
+        capped,
+        deny_undecided,
+    };
+
+    let (mut index, index_path) = write_specs_and_index(&dir, &jobs, &whole, keep)?;
+
+    if jobs.is_empty() {
+        if !keep {
+            let _ = fs::remove_dir_all(&dir);
+        }
+        println!("nothing to check");
+        println!("tlc_result: ok");
+        return end.finish(&line, &[]);
+    }
+    let tlc = find_tlc()?;
+    let mut ran = run_cones(&tlc, &dir, &modules, &jobs)?;
+    for (job, r) in jobs.iter().zip(&ran) {
+        println!("{}", r.line(&job.module, &job.checks));
+    }
+
+    run_undecided_wholes(
+        (tlc.as_path(), dir.as_path()),
+        (&ts, &names),
+        &whole_modules,
+        budget,
+        (&mut jobs, &mut ran),
+        (&mut index, index_path.as_path()),
+    )?;
+    let undecided: Vec<String> = undecided_lines(&jobs, &ran);
+
+    let outcome = if ran.iter().any(|r| r.outcome == Outcome::Counterexample) {
+        Outcome::Counterexample
+    } else if ran.iter().any(|r| r.outcome == Outcome::ToolError) {
+        Outcome::ToolError
+    } else {
+        Outcome::Ok
+    };
+    if outcome == Outcome::Ok {
+        if !keep {
+            let _ = fs::remove_dir_all(&dir);
+        }
+        println!("tlc_result: ok");
+        return end.finish(&line, &undecided);
+    }
+    fail(
+        program,
+        model,
+        (&ts, &names),
+        (dir.as_path(), keep),
+        (jobs.as_slice(), ran.as_slice()),
+        outcome,
+    )
+}
+
+/// The header of a run: the bounds line, the cone and property counts, and the fairness
+/// assumptions. Returns the bounds line for the closing summary.
+fn print_plan(
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    scope: &Scope,
+    selection: &Selection,
+    bounds: Bounds,
+    (cones, temporal): (usize, bool),
+    budget: Duration,
+) -> BoundsLine {
     let line =
-        BoundsLine::verify(bounds, Some(Caps::VERIFY)).with_scope(scope.line(model, &selection));
+        BoundsLine::verify(bounds, Some(Caps::VERIFY)).with_scope(scope.line(model, selection));
     println!("{line}");
     let checked = |pick: fn(&Target) -> bool| selection.targets.iter().filter(|t| pick(t)).count();
     println!(
@@ -719,36 +806,30 @@ fn run_tlc(
             ucs.join(", ")
         );
     }
-    // The whole-model module with every property, for a run by hand; verify runs a property
-    // on it only when its cone leaves it undecided.
-    let whole = temporal.then(|| tla::print(&ts, PrintMode::Temporal, &whole_name));
-    let mut whole_modules = Vec::new();
-    if temporal {
-        jobs.extend(property_jobs(&ts, &names, &mut modules));
-        whole_modules = (0..ts.properties().len())
-            .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
-            .collect();
-    }
-    let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
-    let end = End {
-        bfs_errors,
-        capped,
-        deny_undecided,
-    };
+    line
+}
 
+/// Writes every job's specs, the whole-model module, and `cones.txt` under `dir`. Returns the
+/// index text and its path.
+fn write_specs_and_index(
+    dir: &Path,
+    jobs: &[Job],
+    whole: &Option<TlaBundle>,
+    keep: bool,
+) -> Result<(String, PathBuf)> {
     let mut index = String::new();
-    for job in &jobs {
-        write_spec(&dir, &job.module, &job.tla, &job.cfg)?;
+    for job in jobs {
+        write_spec(dir, &job.module, &job.tla, &job.cfg)?;
         index.push_str(&format!("{}.tla: {}\n", job.module, job.checks.join(" ")));
         if let JobKind::PropertyCone(p) = &job.kind {
             for extra in p.full.iter().chain(&p.wf) {
-                write_spec(&dir, &extra.module, &extra.tla, &extra.cfg)?;
+                write_spec(dir, &extra.module, &extra.tla, &extra.cfg)?;
                 index.push_str(&format!("{}.tla: {}\n", extra.module, job.checks.join(" ")));
             }
         }
     }
     if let Some(w) = &whole {
-        write_spec(&dir, &w.module_name, &w.tla, &w.cfg)?;
+        write_spec(dir, &w.module_name, &w.tla, &w.cfg)?;
     }
     let index_path = dir.join("cones.txt");
     fs::write(&index_path, &index)
@@ -760,53 +841,55 @@ fn run_tlc(
             index_path.display()
         );
     }
+    Ok((index, index_path))
+}
 
-    if jobs.is_empty() {
-        if !keep {
-            let _ = fs::remove_dir_all(&dir);
-        }
-        println!("nothing to check");
-        println!("tlc_result: ok");
-        return end.finish(&line, &[]);
-    }
-    let tlc = find_tlc()?;
-    let mut ran = run_cones(&tlc, &dir, &modules, &jobs)?;
-    for (job, r) in jobs.iter().zip(&ran) {
-        println!("{}", r.line(&job.module, &job.checks));
-    }
-
+/// Runs the properties the cones leave undecided on the whole model, under the budget, and
+/// appends their jobs and results.
+fn run_undecided_wholes(
+    (tlc, dir): (&Path, &Path),
+    (ts, names): (&TransitionSystem, &TlaNames),
+    whole_modules: &[String],
+    budget: Duration,
+    (jobs, ran): (&mut Vec<Job>, &mut Vec<Ran>),
+    (index, index_path): (&mut String, &Path),
+) -> Result<()> {
     // The properties the cones leave undecided run on the whole model, under the budget.
     let wholes: Vec<Job> = jobs
         .iter()
-        .zip(&ran)
+        .zip(&*ran)
         .filter(|(_, r)| r.undecided.is_some())
         .filter_map(|(job, _)| match &job.kind {
             JobKind::PropertyCone(p) => {
-                Some(whole_job(&ts, &names, &whole_modules[p.index], p.index))
+                Some(whole_job(ts, names, &whole_modules[p.index], p.index))
             }
             _ => None,
         })
         .collect();
     for job in &wholes {
-        write_spec(&dir, &job.module, &job.tla, &job.cfg)?;
+        write_spec(dir, &job.module, &job.tla, &job.cfg)?;
         index.push_str(&format!("{}.tla: {}\n", job.module, job.checks.join(" ")));
     }
     if !wholes.is_empty() {
-        fs::write(&index_path, &index)
+        fs::write(index_path, &index)
             .with_context(|| format!("failed to write {}", index_path.display()))?;
-        for r in &mut ran {
+        for r in &mut *ran {
             r.undecided = None;
         }
-        let more = run_wholes(&tlc, &dir, &wholes, budget)?;
+        let more = run_wholes(tlc, dir, &wholes, budget)?;
         for (job, r) in wholes.iter().zip(&more) {
             println!("{}", r.line(&job.module, &job.checks));
         }
         jobs.extend(wholes);
         ran.extend(more);
     }
-    let undecided: Vec<String> = jobs
-        .iter()
-        .zip(&ran)
+    Ok(())
+}
+
+/// The findings the whole-model runs leave undecided, one line each.
+fn undecided_lines(jobs: &[Job], ran: &[Ran]) -> Vec<String> {
+    jobs.iter()
+        .zip(ran)
         .filter_map(|(job, r)| {
             let why = r.undecided.as_ref()?;
             let states = r
@@ -819,26 +902,22 @@ fn run_tlc(
                 undecided_hint(r.capped)
             ))
         })
-        .collect();
+        .collect()
+}
 
-    let outcome = if ran.iter().any(|r| r.outcome == Outcome::Counterexample) {
-        Outcome::Counterexample
-    } else if ran.iter().any(|r| r.outcome == Outcome::ToolError) {
-        Outcome::ToolError
-    } else {
-        Outcome::Ok
-    };
-    if outcome == Outcome::Ok {
-        if !keep {
-            let _ = fs::remove_dir_all(&dir);
-        }
-        println!("tlc_result: ok");
-        return end.finish(&line, &undecided);
-    }
+/// Reports the failed jobs: their lifted counterexamples and TLC's summary. Always an error.
+fn fail(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    (ts, names): (&TransitionSystem, &TlaNames),
+    (dir, keep): (&Path, bool),
+    (jobs, ran): (&[Job], &[Ran]),
+    outcome: Outcome,
+) -> Result<()> {
     eprintln!("tlc_result: {}", outcome.as_str());
     let failed: Vec<String> = jobs
         .iter()
-        .zip(&ran)
+        .zip(ran)
         .filter(|(_, r)| r.outcome == outcome)
         .map(|(job, r)| {
             let mut body = format!(
@@ -847,7 +926,7 @@ fn run_tlc(
                 dir.join(format!("{}.tla", job.module)).display()
             );
             if r.outcome == Outcome::Counterexample {
-                for block in model_traces(program, model, (&ts, &names), &job.kind, &r.run) {
+                for block in model_traces(program, model, (ts, names), &job.kind, &r.run) {
                     body.push_str(&block);
                     body.push('\n');
                 }
