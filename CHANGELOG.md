@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- A rule over more than one entity is named `Multi*`, not `Cross*` (#111). The names in
+  `check`, `verify`, `export --kind tla` and the `.cfg` files follow; `<E>` and `<n>` are
+  decided as before, so every `<n>` and every other rule name stays as it was.
+
+  | Before | Now |
+  | --- | --- |
+  | `CrossForbidden_<E>_<n>` | `MultiForbidden_<E>_<n>` |
+  | `CrossInv_<E>_<n>` | `MultiInv_<E>_<n>` |
+
+  To migrate, replace the two prefixes in the `// expect` headers and in a hand-written
+  `.cfg` or script that names a rule. A model needs no change.
+
 ## v1.2.0 - 2026-11-05
 
 Upgrading from v1.1.0 needs no change to a model: every model that loads on 1.1.0 loads with
