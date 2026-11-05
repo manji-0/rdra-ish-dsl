@@ -24,15 +24,15 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
-        # These run in release in formal-verify and engine-equivalence; in debug they take most
-        # of this step.
+        # The comparisons with TLC run in release in engine-equivalence, and the domain-sample
+        # reduction in formal-verify; in debug they take most of this step. `--skip` matches a
+        # part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is skipped too.
         run: >-
           cargo test --all --
-          --skip bfs_and_tlc_reach_the_same_states_and_verdicts
-          --skip reduced_domain_cones_decide_what_the_cones_decide
+          --skip bfs_and_tlc_
+          --skip tlc_alone_
           --skip a_property_cone_decides_what_the_whole_model_decides
-          --skip bfs_and_tlc_agree_on_a_sub_lifecycle_of_many_classes
-          --skip bfs_and_tlc_agree_on_two_actions_of_one_name
+          --skip reduced_domain_cones_decide_what_the_cones_decide
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
       - name: skill snippets
