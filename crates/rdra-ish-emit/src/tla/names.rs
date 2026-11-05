@@ -40,6 +40,9 @@ pub struct TlaNames {
     /// `Rep_<var>` per S var the rest reads, and `Succ_<action>` per S action, by index.
     rep: Vec<Option<String>>,
     succ: Vec<Option<String>>,
+    /// `Rise`: per class and the inputs a T step leaves, the class it moves to, in a reduced
+    /// cone whose S side reads inputs of T.
+    rise: Option<String>,
     /// The state-model checks `print_state_models` prints, by state; empty in every other
     /// module.
     states: Vec<StateCheck>,
@@ -190,6 +193,10 @@ impl TlaNames {
         // Claimed last, so a model id that spells one takes no name from anything else.
         let mut rep = vec![None; vars.len()];
         let mut succ = vec![None; actions.len()];
+        let rise = ts
+            .reduction()
+            .filter(|r| !r.inputs().is_empty())
+            .map(|_| taken.claim("Rise"));
         if let Some(r) = ts.reduction() {
             for &v in r.obs() {
                 rep[v.index()] = Some(taken.claim(&format!("Rep_{}", vars[v.index()])));
@@ -219,8 +226,15 @@ impl TlaNames {
             class,
             rep,
             succ,
+            rise,
             states,
         }
+    }
+
+    /// `Rise`: the table of class moves a T step's inputs make, in a reduced cone whose S
+    /// side reads inputs.
+    pub fn rise_table(&self) -> Option<&str> {
+        self.rise.as_deref()
     }
 
     /// The state-model checks of the module, in entity and `state_model_states` order.
@@ -413,9 +427,13 @@ impl Decoder<'_> {
             _ => None,
         };
         let state = self.ts.state_from(|var, slot| {
+            // An input of S is a T var the module prints as itself, though the
+            // representative carries a value for it too.
             if let (Some(r), Some(c)) = (self.ts.reduction(), class) {
-                if let Some(v) = r.rep_value(c, var, slot) {
-                    return Some(v);
+                if r.is_s_var(var) {
+                    if let Some(v) = r.rep_value(c, var, slot) {
+                        return Some(v);
+                    }
                 }
             }
             let (keys, values) = &self.vars[var.index()];

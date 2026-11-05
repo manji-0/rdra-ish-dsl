@@ -204,6 +204,81 @@ property P0
   leads_to(E1.status == s1, E1.status == s1)
 "#;
 
+/// A case's `CloseCase` is triggered by either of its claims' events (#112). In the claim's
+/// cone the case is the sub-lifecycle: `CloseCase_by_<Ev>` reads the claim's row (its
+/// existence, its owner key, its mark) through the `Triggered` param, and `DetermineFault`
+/// reads the claims through a quantifier, so the claims' vars are inputs. A claim stuck at
+/// `open` in a case another claim closed is a deadlock that exists only after an input rose;
+/// a claim at `paid` whose case was never determined is one that exists only in the
+/// interleaving where the input rose before the case moved.
+const CLAIM_CASE: &str = r#"
+entity Case "事案" { id: Int @pk  status: Enum(open, closed) @default(open)  liability: Enum(undetermined, determined) @default(undetermined) }
+entity Claim "請求" { id: Int @pk  status: Enum(open, paid, denied, closed) @default(open) }
+relate(Claim, Case, N:1)
+usecase OpenCase "受付"
+usecase File "請求"
+usecase Pay "支払"
+usecase Deny "否認"
+usecase DetermineFault "過失判定"
+usecase CloseCase "事案終了"
+usecase Archive "保管"
+event EvPaid "支払済"
+event EvDenied "否認済"
+creates(OpenCase, Case)
+creates(File, Claim)
+transitions(Pay, Claim.status, open -> paid).when(CaseOpen)
+raises(Pay, EvPaid)
+transitions(Deny, Claim.status, open -> denied).when(CaseOpen)
+raises(Deny, EvDenied)
+condition CaseOpen "事案が開いている"
+holds(CaseOpen, Case.status == open)
+transitions(DetermineFault, Case.liability, undetermined -> determined).when(NoPaid)
+condition NoPaid "支払済の請求がない"
+holds(NoPaid, Case.status == open).none(Claim.status == paid)
+transitions(CloseCase, Case.status, open -> closed).when(Determined)
+condition Determined "過失判定済み"
+holds(Determined, Case.liability == determined)
+triggers(EvPaid, CloseCase)
+triggers(EvDenied, CloseCase)
+transitions(Archive, Claim.status, paid -> closed).when(CaseClosed)
+transitions(Archive, Claim.status, denied -> closed).when(CaseClosed)
+condition CaseClosed "事案が終了している"
+holds(CaseClosed, Case.status == closed)
+forbidden(Claim, status == denied).label("否認は起きない")
+"#;
+
+/// The order's payment triggers its shipment's `Ship`, whose `Triggered` param is the
+/// shipment's parent, and `Prepare` creates a shipment under an order: in the order's cone
+/// the shipments read the order's existence, status, and mark as inputs (#112). The order
+/// never reads whether a shipment is packed, so the sub-lifecycle reduces.
+const ORDER_SHIP: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid, closed, cancelled) @default(open) }
+entity Shipment "出荷" { id: Int @pk  status: Enum(waiting, shipped) @default(waiting)  packed: Bool @default(false) }
+relate(Shipment, Order, N:1)
+usecase Place "注文"
+usecase Prepare "準備"
+usecase Pack "梱包"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Close "完了"
+usecase Cancel "取消"
+event EvPaid "支払済"
+creates(Place, Order)
+creates(Prepare, Shipment)
+sets(Pack, Shipment.packed == true)
+transitions(Pay, Order.status, open -> paid)
+raises(Pay, EvPaid)
+transitions(Ship, Shipment.status, waiting -> shipped).when(Packed)
+condition Packed "梱包済み"
+holds(Packed, Shipment.packed == true)
+triggers(EvPaid, Ship)
+transitions(Close, Order.status, paid -> closed).when(Shipped)
+condition Shipped "出荷済み"
+holds(Shipped, Order.status == paid).has(Shipment.status == shipped)
+transitions(Cancel, Order.status, open -> cancelled)
+forbidden(Order, status == cancelled).label("取消は起きない")
+"#;
+
 /// A case closes once none of its claims is open, and a claim is paid once its case is
 /// flagged (#112): in the case's cone the claims read the case's flag and existence, which
 /// only rise, so they stay a sub-lifecycle with those two vars as its inputs.
@@ -511,9 +586,12 @@ fn the_job_cone_nests_two_reductions() {
     let run = ts.explore_targets_reduced(&[job], Caps::VERIFY);
     let sys = &run.cone_of(job).run.system;
     let red = sys.reduction().expect("reduced");
-    let sub = sys.sub_system(red);
-    let inner = sub.reduction().expect("the gate's cone reduces the key");
-    let key_vars: Vec<String> = inner.vars().iter().map(|v| sub.var_name(*v)).collect();
+    let inner = red.inner().expect("the gate's cone reduces the key");
+    let key_vars: Vec<String> = inner
+        .vars()
+        .iter()
+        .map(|v| sys.var_name(red.sub_vars()[v.index()]))
+        .collect();
     assert_eq!(
         key_vars,
         ["Card._exists", "status", "Key._exists", "status"],
@@ -538,7 +616,7 @@ fn an_identity_quotient_leaves_the_cone_unreduced() {
     let model = model_from(IDENTITY_QUOTIENT);
     let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
     let (sys, seeds) = ts.cone_system(&ts.property_cone(0), [ts.property_seed(0)]);
-    let s = sys.split_with(&seeds, false).s;
+    let s = sys.split_with(&seeds, true).s;
     assert_eq!(
         s.len(),
         7,
@@ -605,4 +683,75 @@ fn a_sub_lifecycle_keeps_a_reader_of_monotone_vars_and_loses_a_reader_of_cyclic_
     assert!(inputs.is_empty(), "{inputs:?}");
     let (s, _, _) = split_of(FLAGGED_CASE, false);
     assert!(s.is_empty(), "without inputs File and Pay join T: {s:?}");
+}
+
+/// A sub-lifecycle that reads inputs of T (#112) is still reduced, and the reduced cone
+/// decides what the cone decides: the deadlocks that exist only after an input rose or only
+/// in one interleaving of the rise with the sub-lifecycle, and the forbidden state.
+#[test]
+fn a_sub_lifecycle_that_reads_inputs_of_t_is_reduced_and_decides_the_same() {
+    for (name, src, anchor, expected) in [
+        (
+            "claim case",
+            CLAIM_CASE,
+            "Claim",
+            vec!["Deadlock_Claim_status_open", "Deadlock_Claim_status_paid"],
+        ),
+        ("order ship", ORDER_SHIP, "Order", vec![]),
+    ] {
+        let model = model_from(src);
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let reductions = assert_reduction_exact(name, &model, bounds);
+            assert!(
+                reductions >= 1,
+                "{name} at {bounds:?}: {reductions} cones reduced"
+            );
+            let ts = TransitionSystem::build(&model, bounds, &Scope::ALL).ts;
+            let target = entity_target(&ts, anchor);
+            let targets = ts.targets();
+            let plain = ts.explore_targets(&targets, Caps::VERIFY);
+            let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+            let cone = reduced.cone_of(target);
+            // At one instance the order's sub-lifecycle has a class per state (#101).
+            let Some(red) = cone.run.system.reduction() else {
+                assert!(
+                    bounds != Bounds::VERIFY,
+                    "{name} at {bounds:?}: the {anchor} view reduces"
+                );
+                continue;
+            };
+            assert!(
+                !red.inputs().is_empty(),
+                "{name} at {bounds:?}: the sub-lifecycle reads inputs"
+            );
+            let (a, b) = (diag_names(&plain), diag_names(&reduced));
+            assert_eq!(a, b, "{name} at {bounds:?}: verdicts");
+            // A claim stuck in a case another claim closed needs two claims.
+            let expected: Vec<&str> = match bounds {
+                Bounds::VERIFY => expected.clone(),
+                _ => expected
+                    .iter()
+                    .copied()
+                    .filter(|e| !e.ends_with("_open"))
+                    .collect(),
+            };
+            for e in &expected {
+                assert!(a.contains(*e), "{name} at {bounds:?}: {e} in {a:?}");
+            }
+            assert_eq!(
+                violated(&plain).len(),
+                1,
+                "{name} at {bounds:?}: the forbidden state"
+            );
+            assert_eq!(
+                violated(&reduced).len(),
+                1,
+                "{name} at {bounds:?}: the forbidden state"
+            );
+            assert!(
+                cone.run.states.len() < plain.cone_of(target).run.states.len(),
+                "{name} at {bounds:?}: the reduced cone is smaller"
+            );
+        }
+    }
 }

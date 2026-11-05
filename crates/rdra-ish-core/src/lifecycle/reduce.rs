@@ -1,17 +1,22 @@
 //! Reduction of a cone by an independent sub-lifecycle (#74). A cone's vars split into a
 //! target side T, which holds what the cone's verdicts read and every var an action writes
-//! when it writes or reads T, and the rest S, written only by actions that read only S; an
-//! entity's vars share a side. T reads S through the vars `obs`. S is a transition system of
-//! its own (`restrict_to` stubs a parent of its entities that is in T), and its states are
-//! quotiented by divergence-blind stuttering equivalence with respect to `obs`: two S states
-//! are equivalent when they agree on `obs` and every class a path of S-actions reaches from
-//! one is reached from the other. The reduced cone keeps one representative per class in
-//! the state, runs T-actions on it as they are, and replaces the S-actions by class moves:
-//! from a class, by the last action of a path that leaves it, to the class the path enters.
-//! The reduced cone is stuttering equivalent to the cone with respect to T and `obs`, so it
-//! reaches the same T-side states, the same findings on T's entities, and the same verdicts
-//! of the checks that read T and `obs`; a check that reads more of S is dropped and decided
-//! on its own cone (docs/formal-verification.md, "Reduction by an independent sub-lifecycle").
+//! when it writes or reads T, and the rest S, written only by actions that read S and T vars
+//! that only rise (#112, the inputs of S); an entity's vars share a side. T reads S through
+//! the vars `obs`. S with its inputs is a transition system of its own, the extended
+//! sub-lifecycle (`restrict_to` stubs a parent of its entities that is in T), in which the S
+//! actions are silent and a T action that writes an input is a rise, kept with the guards it
+//! has on S and the inputs. Its states are quotiented by the coarsest partition that is
+//! divergence-blind stuttering stable under the silent edges with respect to `obs` and the
+//! inputs, and strongly stable under the rises: two states are equivalent when they agree on
+//! `obs` and the inputs, every class a silent path reaches from one is reached from the other,
+//! and both rise into the same classes. The reduced cone keeps one representative per class in
+//! the state, runs T-actions on it as they are, moves the class along a rise when a T step
+//! changes the inputs, and replaces the S-actions by class moves: from a class, by the last
+//! action of a path that leaves it, to the class the path enters. The reduced cone is
+//! stuttering equivalent to the cone with respect to T and `obs`, so it reaches the same
+//! T-side states, the same findings on T's entities, and the same verdicts of the checks that
+//! read T and `obs`; a check that reads more of S is dropped and decided on its own cone
+//! (docs/formal-verification.md, "Reduction by an independent sub-lifecycle").
 //!
 //! A reduced trace is lifted back to a real one: a class move becomes the path of S-actions
 //! that realizes it from the concrete S state the trace holds, so a printed counterexample can
@@ -38,29 +43,33 @@ pub type ClassMove = (ActId, Box<[u8]>, u32);
 pub struct Reduction {
     /// S, ascending.
     vars: Vec<VarId>,
-    /// `(offset, width)` of each S var in the state.
-    spans: Vec<(usize, usize)>,
-    /// The S subsystem's bytes after its S vars: the stubs `restrict_to` adds for parents
-    /// outside S, which no S action writes.
+    /// The inputs of S: T vars the S actions read, which only rise.
+    inputs: Vec<VarId>,
+    /// S ∪ inputs, ascending: the vars of the extended sub-lifecycle in its layout.
+    all: Vec<VarId>,
+    /// `(offset, width, in S)` of each var of `all` in the state.
+    spans: Vec<(usize, usize, bool)>,
+    /// Per class and the input bytes a T step leaves, the class the representative is in
+    /// under those inputs.
+    rises: HashMap<(u32, Box<[u8]>), u32>,
+    /// The extended sub-lifecycle's bytes after its vars: the stubs `restrict_to` adds for
+    /// parents outside it, which no action there writes.
     tail: Box<[u8]>,
     s_actions: BTreeSet<ActId>,
     skip: Vec<bool>,
     s_entity: Vec<bool>,
     /// S vars the T-side actions read.
     obs: VarSet,
-    /// The representative of each class: its S bytes.
+    /// The representative of each class: its bytes as the extended sub-lifecycle's state.
     reps: Vec<Box<[u8]>>,
     class_of: HashMap<Box<[u8]>, u32>,
     /// Each initial S state's class.
     init: HashMap<Box<[u8]>, u32>,
     /// Per class, the class moves: the last action, its params, and the class entered.
     moves: Vec<Vec<ClassMove>>,
-    /// Each S subsystem action as the cone's (by `Action::source`); an S action reads only
-    /// S, so its params are the same there.
-    acts: Vec<ActId>,
-    /// The reduction S was explored with, in the S subsystem's ids.
+    /// The reduction the extended sub-lifecycle was explored with, in its ids.
     inner: Option<Arc<Reduction>>,
-    /// S states explored.
+    /// Extended S states explored.
     pub states: usize,
 }
 
@@ -72,6 +81,22 @@ impl Reduction {
     /// The S vars, ascending.
     pub fn vars(&self) -> &[VarId] {
         &self.vars
+    }
+
+    /// The inputs of S, ascending: T vars its actions read, each of which only rises.
+    pub fn inputs(&self) -> &[VarId] {
+        &self.inputs
+    }
+
+    /// The vars of the extended sub-lifecycle in its layout: S and the inputs, ascending; a
+    /// var of a nested reduction indexes them.
+    pub fn sub_vars(&self) -> &[VarId] {
+        &self.all
+    }
+
+    /// The reduction the extended sub-lifecycle was explored with, in its ids.
+    pub fn inner(&self) -> Option<&Reduction> {
+        self.inner.as_deref()
     }
 
     pub fn obs(&self) -> &VarSet {
@@ -91,20 +116,35 @@ impl Reduction {
         self.s_entity[e.index()]
     }
 
-    /// The S bytes of a state, as the S subsystem's state.
+    /// The S and input bytes of a state, as the extended sub-lifecycle's state: its vars in
+    /// their layout, then the stubs.
     pub(crate) fn key(&self, s: &State) -> Vec<u8> {
         let mut key = Vec::new();
-        for &(at, w) in &self.spans {
+        for &(at, w, _) in &self.spans {
             key.extend_from_slice(&s.0[at..at + w]);
         }
         key.extend_from_slice(&self.tail);
         key
     }
 
+    /// The input bytes of a state, in the extended sub-lifecycle's order.
+    pub(crate) fn input_bytes(&self, s: &State) -> Vec<u8> {
+        let mut out = Vec::new();
+        for &(at, w, in_s) in &self.spans {
+            if !in_s {
+                out.extend_from_slice(&s.0[at..at + w]);
+            }
+        }
+        out
+    }
+
+    /// Writes the S part of `bytes`, an extended sub-lifecycle state, into `s`.
     fn write(&self, s: &mut State, bytes: &[u8]) {
         let mut i = 0;
-        for &(at, w) in &self.spans {
-            s.0[at..at + w].copy_from_slice(&bytes[i..i + w]);
+        for &(at, w, in_s) in &self.spans {
+            if in_s {
+                s.0[at..at + w].copy_from_slice(&bytes[i..i + w]);
+            }
             i += w;
         }
     }
@@ -114,16 +154,56 @@ impl Reduction {
         self.class_of.get(self.key(s).as_slice()).copied()
     }
 
-    /// The representative's S bytes.
+    /// The representative's bytes, as the extended sub-lifecycle's state.
     pub fn rep(&self, class: u32) -> &[u8] {
         &self.reps[class as usize]
     }
 
-    /// The value of an S var's slot in a class's representative; `None` for a var outside S.
-    pub fn rep_value(&self, class: u32, var: VarId, slot: usize) -> Option<super::types::Value> {
-        let k = self.vars.iter().position(|v| *v == var)?;
-        let at: usize = self.spans[..k].iter().map(|(_, w)| w).sum();
-        Some(super::types::Value(self.reps[class as usize][at + slot]))
+    /// The value of a slot of a var of the extended sub-lifecycle in a class's
+    /// representative; `None` for a var outside it.
+    pub fn rep_value(&self, class: u32, var: VarId, slot: usize) -> Option<Value> {
+        let k = self.all.iter().position(|v| *v == var)?;
+        let at: usize = self.spans[..k].iter().map(|(_, w, _)| w).sum();
+        Some(Value(self.reps[class as usize][at + slot]))
+    }
+
+    /// The class a T step moves `class` to when it leaves the inputs at `inputs`.
+    pub fn rise(&self, class: u32, inputs: &[u8]) -> Option<u32> {
+        self.rises.get(&(class, inputs.into())).copied()
+    }
+
+    /// The stages of a T step's change of the inputs from `before` to `after`, each the
+    /// input bytes after it. One stage: a T action restricted to the extended sub-lifecycle
+    /// writes every input it writes at once.
+    pub fn stages(&self, before: &[u8], after: &[u8]) -> Vec<Vec<u8>> {
+        if before == after {
+            Vec::new()
+        } else {
+            vec![after.to_vec()]
+        }
+    }
+
+    /// The class a T step moves `class` to when it changes the inputs from `before` to
+    /// `after`, stage by stage.
+    pub fn recanon(&self, class: u32, before: &[u8], after: &[u8]) -> Option<u32> {
+        let mut c = class;
+        for stage in self.stages(before, after) {
+            c = self.rise(c, &stage)?;
+        }
+        Some(c)
+    }
+
+    /// The rises from a class, sorted: the input bytes a T step leaves and the class they put
+    /// the representative in.
+    pub fn rises_from(&self, class: u32) -> Vec<(&[u8], u32)> {
+        let mut out: Vec<(&[u8], u32)> = self
+            .rises
+            .iter()
+            .filter(|((c, _), _)| *c == class)
+            .map(|((_, k), to)| (k.as_ref(), *to))
+            .collect();
+        out.sort_unstable();
+        out
     }
 
     /// Whether the var is in S.
@@ -153,9 +233,9 @@ impl Reduction {
 
     /// The class moves from `s`: the last action, its params, and the successor.
     pub(crate) fn moves_from(&self, s: &State) -> Vec<Step> {
-        let Some(class) = self.class(s) else {
-            return Vec::new();
-        };
+        let class = self
+            .class(s)
+            .expect("a reduced state holds a representative");
         self.moves[class as usize]
             .iter()
             .map(|(act, params, to)| {
@@ -173,26 +253,52 @@ struct Quotient {
     class_of: HashMap<Box<[u8]>, u32>,
     init: HashMap<Box<[u8]>, u32>,
     moves: Vec<Vec<ClassMove>>,
-    acts: Vec<ActId>,
+    rises: HashMap<(u32, Box<[u8]>), u32>,
     inner: Option<Arc<Reduction>>,
     states: usize,
 }
 
-impl Quotient {
-    /// The quotient of `raw`, the S subsystem of `cone`, by stuttering equivalence with
-    /// respect to `obs`; `None` when S does not fit under `caps`, or when the quotient is the
-    /// identity on an S that no inner reduction shrank, which would reduce nothing (#101).
-    /// An unobserved S is one
-    /// class, held at an initial S state, with no moves: nothing on T reads it, so no path
-    /// through it is told from staying put.
-    fn of(
+/// The extended sub-lifecycle of a cone (`restrict_to(S ∪ inputs)`), with its actions sorted
+/// into the S actions of the cone, whose steps are silent, and the rises: T actions that
+/// write an input, kept with the guards they have on S and the inputs only.
+struct Extended {
+    system: TransitionSystem,
+    /// Per action of `system`, the cone's action it comes from.
+    acts: Vec<ActId>,
+    /// Per action of `system`, whether it is a rise.
+    rise: Vec<bool>,
+    obs_local: VarSet,
+    /// The inputs, in `system`'s ids.
+    inputs_local: VarSet,
+}
+
+impl Extended {
+    fn of(cone: &TransitionSystem, split: &Split) -> Self {
+        Self::build(cone, &split.s, &split.inputs, &split.s_actions, &split.obs)
+    }
+
+    /// The extended sub-lifecycle of a reduced cone, as `of` built it.
+    fn rebuild(cone: &TransitionSystem, r: &Reduction) -> Self {
+        Self::build(
+            cone,
+            &r.vars.iter().copied().collect(),
+            &r.inputs.iter().copied().collect(),
+            &r.s_actions,
+            &r.obs,
+        )
+    }
+
+    fn build(
         cone: &TransitionSystem,
-        raw: &TransitionSystem,
-        split: &Split,
-        caps: Caps,
-    ) -> Option<Self> {
-        let s_vars: Vec<VarId> = split.s.iter().copied().collect();
-        let acts: Vec<ActId> = raw
+        s: &VarSet,
+        inputs: &VarSet,
+        s_actions: &BTreeSet<ActId>,
+        obs: &VarSet,
+    ) -> Self {
+        let all: VarSet = s.union(inputs).copied().collect();
+        let (system, _) = cone.restrict_to_mapped(&all, &BTreeSet::new(), false);
+        let local = |v: &VarId| VarId::at(all.iter().position(|x| x == v).expect("in S ∪ inputs"));
+        let acts: Vec<ActId> = system
             .actions
             .iter()
             .map(|a| {
@@ -200,11 +306,75 @@ impl Quotient {
                     .actions
                     .iter()
                     .position(|b| b.source == a.source)
-                    .expect("an S action is an action of the cone");
+                    .expect("an action of the extended sub-lifecycle is an action of the cone");
                 ActId::at(at)
             })
             .collect();
-        if split.obs.is_empty() {
+        let rise = acts.iter().map(|a| !s_actions.contains(a)).collect();
+        Extended {
+            system,
+            acts,
+            rise,
+            obs_local: obs.iter().map(local).collect(),
+            inputs_local: inputs.iter().map(local).collect(),
+        }
+    }
+
+    /// The actions of `system` that are rises.
+    fn rise_actions(&self) -> BTreeSet<ActId> {
+        (0..self.rise.len())
+            .filter(|i| self.rise[*i])
+            .map(ActId::at)
+            .collect()
+    }
+}
+
+/// The partition of a run of the extended sub-lifecycle: the coarsest one that refines
+/// `initial` (the states' `obs` and inputs), is divergence-blind stuttering stable under the
+/// silent edges, and is strongly stable under the rise edges: two states of a block reach the
+/// same blocks by a rise. The blocks refine the inputs, so the block a rise enters names the
+/// inputs it set, and the second condition says that two equivalent states stay equivalent
+/// under every rise. Returns each state's block.
+fn quotient_blocks(
+    n: usize,
+    silent: &[(u32, u32)],
+    rises: &[(u32, u32)],
+    initial: &[u32],
+) -> Vec<u32> {
+    let mut block = stuttering_blocks(n, silent, initial);
+    if rises.is_empty() {
+        return block;
+    }
+    loop {
+        let mut signature: Vec<BTreeSet<u32>> = vec![BTreeSet::new(); n];
+        for &(x, y) in rises {
+            signature[x as usize].insert(block[y as usize]);
+        }
+        let mut index: HashMap<(u32, &BTreeSet<u32>), u32> = HashMap::new();
+        let refined: Vec<u32> = (0..n)
+            .map(|i| {
+                let len = index.len() as u32;
+                *index.entry((block[i], &signature[i])).or_insert(len)
+            })
+            .collect();
+        let before = block.iter().collect::<BTreeSet<_>>().len();
+        if index.len() == before {
+            return block;
+        }
+        block = stuttering_blocks(n, silent, &refined);
+    }
+}
+
+impl Quotient {
+    /// The quotient of the extended sub-lifecycle `ext` by stuttering equivalence with
+    /// respect to `obs` and the inputs; `None` when it does not fit under `caps`, or when the
+    /// quotient is the identity on an S that no inner reduction shrank, which would reduce
+    /// nothing (#101). An unobserved S is one class, held at an initial S state, with no
+    /// moves: nothing on T reads it, so no path through it is told from staying put, whatever
+    /// its inputs do.
+    fn of(ext: &Extended, caps: Caps) -> Option<Self> {
+        let raw = &ext.system;
+        if ext.obs_local.is_empty() {
             let initial = raw.initial_states();
             let rep = initial.first().expect("an initial state").0.clone();
             return Some(Quotient {
@@ -212,31 +382,31 @@ impl Quotient {
                 reps: vec![rep],
                 init: initial.iter().map(|st| (st.0.clone(), 0)).collect(),
                 moves: vec![Vec::new()],
-                acts,
+                rises: HashMap::new(),
                 inner: None,
                 states: initial.len(),
             });
         }
-        let local = |v: &VarId| VarId::at(s_vars.iter().position(|x| x == v).expect("in S"));
-        let obs_local: VarSet = split.obs.iter().map(local).collect();
-        let sub = raw.reduced(&[(obs_local.clone(), BTreeSet::new())], caps);
+        // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
+        let sub = raw.reduced(&[(ext.obs_local.clone(), ext.rise_actions())], caps);
         let run = sub.clone().run(caps);
         if !run.complete {
             return None;
         }
         let n = run.states.len();
+        let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
         let mut index: HashMap<State, u32> = HashMap::new();
         let initial: Vec<u32> = run
             .states
             .iter()
             .map(|st| {
-                let key = run.system.project(st, &obs_local);
+                let key = run.system.project(st, &key_vars);
                 let len = index.len() as u32;
                 *index.entry(key).or_insert(len)
             })
             .collect();
-        let edges: Vec<(u32, u32)> = run.graph().edges().map(|(a, b, _)| (a, b)).collect();
-        let blocks = stuttering_blocks(n, &edges, &initial);
+        let (silent, rise_edges) = split_edges(&run, &ext.rise);
+        let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
         if sub.reduction().is_none() && blocks.iter().collect::<BTreeSet<_>>().len() == n {
             return None;
         }
@@ -253,7 +423,8 @@ impl Quotient {
             class.push(c);
         }
         // Initial S states, as the cone's initial states project them, to their classes. The
-        // S subsystem canonicalizes them for its own reduction first, as the run did.
+        // extended sub-lifecycle canonicalizes them for its own reduction first, as the run
+        // did.
         let mut init: HashMap<Box<[u8]>, u32> = HashMap::new();
         for st in raw.initial_states() {
             let canonical = match sub.reduction() {
@@ -270,14 +441,25 @@ impl Quotient {
             init.insert(st.0.clone(), class[at]);
         }
         let mut moves: Vec<Vec<ClassMove>> = vec![Vec::new(); reps.len()];
+        let mut rises: HashMap<(u32, Box<[u8]>), u32> = HashMap::new();
         let mut seen: BTreeSet<(u32, ActId, Box<[u8]>, u32)> = BTreeSet::new();
         for e in run.edges() {
             let (x, y) = (e.from as usize, e.to as usize);
+            let (act, params) = run.step(e);
+            if ext.rise[act.index()] {
+                // Every state of a block rises into the same blocks; the representative's
+                // edges are enough.
+                if reps[class[x] as usize] == run.states[x].0 {
+                    let inputs = run.system.project(&run.states[y], &ext.inputs_local).0;
+                    let was = rises.insert((class[x], inputs), class[y]);
+                    assert!(was.is_none_or(|c| c == class[y]), "a rise is a function");
+                }
+                continue;
+            }
             if class[x] == class[y] {
                 continue;
             }
-            let (act, params) = run.step(e);
-            let act = acts[act.index()];
+            let act = ext.acts[act.index()];
             if seen.insert((class[x], act, params.into(), class[y])) {
                 moves[class[x] as usize].push((act, params.into(), class[y]));
             }
@@ -287,7 +469,7 @@ impl Quotient {
             class_of,
             init,
             moves,
-            acts,
+            rises,
             inner: sub.reduction.clone(),
             states: n,
         })
@@ -508,19 +690,11 @@ impl TransitionSystem {
     /// and keeps.
     pub fn reduced(&self, seeds: &[Seed], caps: Caps) -> TransitionSystem {
         let split = self.split_with(seeds, true);
-        // The quotient reads S alone until the extended sub-lifecycle lands, so a split with
-        // inputs gives way to the one without them.
-        let split = if split.inputs.is_empty() {
-            split
-        } else {
-            self.split_with(seeds, false)
-        };
         if split.s.is_empty() {
             return self.clone();
         }
-        let s_vars: Vec<VarId> = split.s.iter().copied().collect();
-        let raw = self.restrict_to(&split.s, &BTreeSet::new());
-        let Some(quotient) = Quotient::of(self, &raw, &split, caps) else {
+        let ext = Extended::of(self, &split);
+        let Some(quotient) = Quotient::of(&ext, caps) else {
             return self.clone();
         };
         let Quotient {
@@ -528,22 +702,23 @@ impl TransitionSystem {
             class_of,
             init,
             moves,
-            acts,
+            rises,
             inner,
             states: n,
         } = quotient;
-        let spans: Vec<(usize, usize)> = s_vars
+        let all: Vec<VarId> = split.s.union(&split.inputs).copied().collect();
+        let spans: Vec<(usize, usize, bool)> = all
             .iter()
             .map(|&v| {
                 let width = match self.var(v).kind {
                     VarKind::Now => 1,
                     _ => self.bounds.slots(),
                 };
-                (self.offset(v), width)
+                (self.offset(v), width, split.s.contains(&v))
             })
             .collect();
-        let s_width: usize = spans.iter().map(|(_, w)| w).sum();
-        let tail = raw.initial_states()[0].0[s_width..].into();
+        let width: usize = spans.iter().map(|(_, w, _)| w).sum();
+        let tail = ext.system.initial_states()[0].0[width..].into();
         let mut skip = vec![false; self.actions.len()];
         for a in &split.s_actions {
             skip[a.index()] = true;
@@ -554,8 +729,11 @@ impl TransitionSystem {
             .map(|e| split.s.contains(&e.exists))
             .collect();
         let reduction = Reduction {
-            vars: s_vars,
+            vars: split.s.iter().copied().collect(),
+            inputs: split.inputs.iter().copied().collect(),
+            all,
             spans,
+            rises,
             tail,
             s_actions: split.s_actions.clone(),
             skip,
@@ -565,7 +743,6 @@ impl TransitionSystem {
             class_of,
             init,
             moves,
-            acts,
             inner,
             states: n,
         };
@@ -666,14 +843,6 @@ impl TransitionSystem {
         (sys, local)
     }
 
-    /// The S subsystem, with the reduction S was explored under.
-    pub(crate) fn sub_system(&self, r: &Reduction) -> TransitionSystem {
-        let vars: VarSet = r.vars.iter().copied().collect();
-        let mut sub = self.restrict_to(&vars, &BTreeSet::new());
-        sub.reduction = r.inner.clone();
-        sub
-    }
-
     /// The moves of `s` without the reduction: the real step relation on a reduced state.
     pub(crate) fn plain_moves(&self, s: &State) -> Vec<Step> {
         self.moves_of(s, false)
@@ -692,26 +861,24 @@ impl TransitionSystem {
                 steps.iter().map(|s| vec![s.clone()]).collect(),
             );
         };
-        let sub = self.sub_system(r);
+        let ext = Extended::rebuild(self, r);
+        let mut sub = ext.system.clone();
+        sub.reduction = r.inner.clone();
         let run = sub.clone().run(Caps::new(usize::MAX, usize::MAX));
         let n = run.states.len();
-        let obs_local: VarSet = r
-            .obs
-            .iter()
-            .map(|v| VarId::at(r.vars.iter().position(|x| x == v).expect("obs in S")))
-            .collect();
+        let key_vars: VarSet = ext.obs_local.union(&ext.inputs_local).copied().collect();
         let mut index: HashMap<State, u32> = HashMap::new();
         let initial: Vec<u32> = run
             .states
             .iter()
             .map(|st| {
-                let key = run.system.project(st, &obs_local);
+                let key = run.system.project(st, &key_vars);
                 let len = index.len() as u32;
                 *index.entry(key).or_insert(len)
             })
             .collect();
-        let edges: Vec<(u32, u32)> = run.graph().edges().map(|(a, b, _)| (a, b)).collect();
-        let blocks = stuttering_blocks(n, &edges, &initial);
+        let (silent, rise_edges) = split_edges(&run, &ext.rise);
+        let blocks = quotient_blocks(n, &silent, &rise_edges, &initial);
         let at: HashMap<&State, u32> = run
             .states
             .iter()
@@ -724,7 +891,7 @@ impl TransitionSystem {
             .enumerate()
             .filter_map(|(i, s)| r.class_of.get(&s.0).map(|c| (*c, blocks[i])))
             .collect();
-        let succ = Succ::new(&run);
+        let succ = Succ::new(&run, &ext.rise);
         // The concrete start: an initial S state in the start's class. The run reaches its
         // initial states first.
         let start_block = block_of_class[&r
@@ -737,9 +904,9 @@ impl TransitionSystem {
             .find(|s| blocks[at[*s] as usize] == start_block)
             .expect("the start's class holds an initial S state")
             .clone();
-        // Each class move becomes a path of the run from the S state the path holds.
         enum Lifted {
-            T(ActId, Box<[u8]>, State),
+            /// A T step, and the rises of the extended sub-lifecycle it makes.
+            T(ActId, Box<[u8]>, State, usize),
             S(usize),
         }
         let mut level: Vec<Lifted> = Vec::new();
@@ -747,7 +914,29 @@ impl TransitionSystem {
         let mut s_at = at[&s0];
         for (act, params, post) in steps {
             if !r.skips(*act) {
-                level.push(Lifted::T(*act, params.clone(), post.clone()));
+                let after = run
+                    .system
+                    .project(&State(r.key(post).into()), &ext.inputs_local);
+                let before = run
+                    .system
+                    .project(&run.states[s_at as usize], &ext.inputs_local);
+                let stages = r.stages(&before.0, &after.0);
+                for stage in &stages {
+                    let e = succ
+                        .rises_from(s_at)
+                        .find(|e| {
+                            run.system
+                                .project(&run.states[e.to as usize], &ext.inputs_local)
+                                .0
+                                .as_ref()
+                                == stage.as_slice()
+                        })
+                        .expect("a T step's rise is a rise of the extended sub-lifecycle");
+                    let (a, p) = run.step(&e);
+                    s_steps.push((a, p.into(), run.states[e.to as usize].clone()));
+                    s_at = e.to;
+                }
+                level.push(Lifted::T(*act, params.clone(), post.clone(), stages.len()));
                 continue;
             }
             let target = block_of_class[&r.class(post).expect("a class move enters a class")];
@@ -761,8 +950,8 @@ impl TransitionSystem {
             }
             level.push(Lifted::S(count));
         }
-        // The S path is a path of the S subsystem under its own reduction: lift it there and
-        // splice the concrete S parts back under the T steps.
+        // The S path is a path of the extended sub-lifecycle under its own reduction: lift it
+        // there and splice the concrete S parts back under the T steps.
         let (s_start, lifted) = sub.lift(&s0, &s_steps);
         let mut lifted = lifted.into_iter();
         let mut out_start = start.clone();
@@ -772,7 +961,13 @@ impl TransitionSystem {
         for step in level {
             let mut group = Vec::new();
             match step {
-                Lifted::T(act, params, post) => {
+                Lifted::T(act, params, post, rises) => {
+                    // A rise's lifted step leaves S where it was; the T step below carries
+                    // the inputs.
+                    for _ in 0..rises {
+                        let group = lifted.next().expect("one group per rise");
+                        assert_eq!(group.len(), 1, "a rise lifts as itself");
+                    }
                     let mut next = post;
                     r.write(&mut next, &r.key(&cur));
                     debug_assert!(
@@ -789,7 +984,7 @@ impl TransitionSystem {
                         for (a, p, s_post) in lifted.next().expect("one group per S step") {
                             let mut next = cur.clone();
                             r.write(&mut next, &s_post.0);
-                            group.push((r.acts[a.index()], p, next.clone()));
+                            group.push((ext.acts[a.index()], p, next.clone()));
                             cur = next;
                         }
                     }
@@ -800,7 +995,9 @@ impl TransitionSystem {
         (out_start, out)
     }
 
-    /// The moves of `s`, with the reduction applied when the system has one and `reduced`.
+    /// The moves of `s`, with the reduction applied when the system has one and `reduced`: the
+    /// S actions are left out, the class moves come last, and a T step that sets an input of
+    /// S moves the representative to the class the inputs put it in.
     pub(crate) fn moves_of<'s>(
         &'s self,
         s: &'s State,
@@ -815,21 +1012,43 @@ impl TransitionSystem {
                     .collect()
             })
             .unwrap_or_default();
+        let inputs = r
+            .filter(|r| !r.inputs.is_empty())
+            .map(|r| (r, r.input_bytes(s)));
         self.raw_moves(s)
             .filter(move |m| r.is_none_or(|r| !r.skips(m.act)))
+            .map(move |mut m| {
+                if let Some((r, before)) = &inputs {
+                    let after = r.input_bytes(&m.next);
+                    if after != *before {
+                        let class = r.class(s).expect("a reduced state holds a representative");
+                        let to = r.recanon(class, before, &after).unwrap_or_else(|| {
+                            panic!(
+                                "a T step's rise is a rise of the extended sub-lifecycle: {} from class {class} inputs {before:?} to {after:?}, known {:?}",
+                                self.actions[m.act.index()].name,
+                                r.rises_from(class)
+                            )
+                        });
+                        r.write(&mut m.next, &r.reps[to as usize]);
+                    }
+                }
+                m
+            })
             .chain(extra)
     }
 }
 
-/// The moves of a run by source state, for shortest paths.
+/// The moves of a run by source state, for shortest paths over the silent edges, with the
+/// rise edges kept apart.
 struct Succ<'a> {
     run: &'a super::explore::ComponentRun,
     start: Vec<u32>,
     order: Vec<u32>,
+    is_rise: &'a [bool],
 }
 
 impl<'a> Succ<'a> {
-    fn new(run: &'a super::explore::ComponentRun) -> Self {
+    fn new(run: &'a super::explore::ComponentRun, is_rise: &'a [bool]) -> Self {
         let n = run.states.len();
         let mut start = vec![0u32; n + 1];
         for e in run.edges() {
@@ -844,16 +1063,35 @@ impl<'a> Succ<'a> {
             order[fill[e.from as usize] as usize] = k as u32;
             fill[e.from as usize] += 1;
         }
-        Succ { run, start, order }
+        Succ {
+            run,
+            start,
+            order,
+            is_rise,
+        }
     }
 
-    fn edges_from(&self, at: u32) -> impl Iterator<Item = super::explore::Edge> + '_ {
+    fn all_from(&self, at: u32) -> impl Iterator<Item = super::explore::Edge> + '_ {
         self.order[self.start[at as usize] as usize..self.start[at as usize + 1] as usize]
             .iter()
             .map(|k| self.run.edges()[*k as usize])
     }
 
-    /// The BFS path from `from` to the first state `done` accepts, as edges.
+    fn is_rise(&self, e: &super::explore::Edge) -> bool {
+        self.is_rise[self.run.step(e).0.index()]
+    }
+
+    /// The silent edges from `at`.
+    fn edges_from(&self, at: u32) -> impl Iterator<Item = super::explore::Edge> + '_ {
+        self.all_from(at).filter(move |e| !self.is_rise(e))
+    }
+
+    /// The rise edges from `at`.
+    fn rises_from(&self, at: u32) -> impl Iterator<Item = super::explore::Edge> + '_ {
+        self.all_from(at).filter(move |e| self.is_rise(e))
+    }
+
+    /// The BFS path over silent edges from `from` to the first state `done` accepts.
     fn shortest_path(&self, from: u32, done: impl Fn(u32) -> bool) -> Vec<super::explore::Edge> {
         if done(from) {
             return Vec::new();
@@ -950,6 +1188,23 @@ fn stuttering_blocks(n: usize, edges: &[(u32, u32)], initial: &[u32]) -> Vec<u32
             return block;
         }
     }
+}
+
+/// Edges of a run by state index.
+type Edges = Vec<(u32, u32)>;
+
+/// The edges of a run of the extended sub-lifecycle, the silent ones and the rises apart.
+fn split_edges(run: &super::explore::ComponentRun, is_rise: &[bool]) -> (Edges, Edges) {
+    let mut silent = Vec::new();
+    let mut rises = Vec::new();
+    for (a, b, act) in run.graph().edges() {
+        if is_rise[act.index()] {
+            rises.push((a, b));
+        } else {
+            silent.push((a, b));
+        }
+    }
+    (silent, rises)
 }
 
 /// Whether a var's write edges form no cycle; a self-loop is not one.

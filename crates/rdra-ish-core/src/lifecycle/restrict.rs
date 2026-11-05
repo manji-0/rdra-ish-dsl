@@ -226,6 +226,20 @@ impl TransitionSystem {
     /// through a stub of the parent: an entity of its existence alone, after every var of
     /// `vars`, which no action here writes.
     pub fn restrict_to(&self, vars: &VarSet, keep: &BTreeSet<ActId>) -> TransitionSystem {
+        self.restrict_to_mapped(vars, keep, true).0
+    }
+
+    /// `restrict_to`, with the map from this system's items to the restricted system's. With
+    /// `havoc` off, a `Triggered` param whose mark is outside `vars` is treated like any
+    /// other param (the extended sub-lifecycle of `reduced` reads the mark as an input). A
+    /// param on an entity the system neither keeps nor stubs goes with the guards that name
+    /// it either way: a rise of that sub-lifecycle binds rows of T it does not hold.
+    pub(crate) fn restrict_to_mapped(
+        &self,
+        vars: &VarSet,
+        keep: &BTreeSet<ActId>,
+        havoc: bool,
+    ) -> (TransitionSystem, Remap) {
         let mut map = Remap {
             ent: vec![None; self.entities.len()],
             var: vec![None; self.vars.len()],
@@ -309,12 +323,22 @@ impl TransitionSystem {
             }
             let mut action = action.clone();
             action.effects = effects;
-            let havoced: Vec<u8> = self
+            let mut havoced: Vec<u8> = self
                 .triggered_params(&action)
                 .into_iter()
-                .filter(|(_, mark)| !vars.contains(mark))
+                .filter(|(_, mark)| havoc && !vars.contains(mark))
                 .map(|(p, _)| p)
                 .collect();
+            havoced.extend(
+                action
+                    .params
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, p)| {
+                        p.role != ParamRole::New && map.ent[p.entity.index()].is_none()
+                    })
+                    .map(|(i, _)| i as u8),
+            );
             action.guards.retain(|g| {
                 if g.copy_target().is_some_and(|t| !vars.contains(&t)) {
                     return false;
@@ -389,14 +413,15 @@ impl TransitionSystem {
             }
         }
         out.layout();
-        out
+        (out, map)
     }
 }
 
 /// Drops each param `drop` accepts (a `New` param whose entity is outside the system, with
 /// nothing left to point at it: outside a target's cone an entity never runs out of slots;
-/// or a `Triggered` param whose mark is outside it) and renumbers the rest; the returned map
-/// takes an old param index to its new one, and is `None` when nothing was dropped.
+/// a `Triggered` param whose mark is outside it; or a param on an entity outside it) and
+/// renumbers the rest; the returned map takes an old param index to its new one, and is
+/// `None` when nothing was dropped.
 fn drop_params(
     mut action: Action,
     drop: impl Fn(u8, &Param) -> bool,
@@ -468,7 +493,8 @@ fn renumber_pred(pred: &mut Pred, at: &impl Fn(&mut u8)) {
     }
 }
 
-struct Remap {
+/// This system's ids to the restricted system's.
+pub(crate) struct Remap {
     ent: Vec<Option<EntId>>,
     var: Vec<Option<VarId>>,
     act: Vec<Option<ActId>>,
