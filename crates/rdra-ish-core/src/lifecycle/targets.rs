@@ -295,8 +295,9 @@ impl TransitionSystem {
 
     /// The `<UC>_by_<Ev>` variants of one use case step are one use case to the findings: it
     /// runs when any variant runs and takes an arm when any variant takes it, and a `NeverRuns`
-    /// or an arm finding carries the use case's name. A variant that never ran while another
-    /// did is a `TriggerNeverRuns` info. Returns each action's index with what is reported
+    /// or an arm finding carries the use case's name. A variant that a complete cone shows
+    /// never runs while another ran is a `TriggerNeverRuns` info; one that only capped cones
+    /// keep is not decided. Returns each action's index with what is reported
     /// under it: a group of variants under its first.
     fn merge_variants(
         &self,
@@ -333,7 +334,7 @@ impl TransitionSystem {
             let any_fired = g.iter().any(|&i| runs[i].as_ref().is_some_and(|r| r.fired));
             for &i in &g {
                 let r = runs[i].take().expect("a variant is merged once");
-                if any_fired && r.kept && !r.fired {
+                if any_fired && !r.fired && r.never.is_some() {
                     let action = &self.actions[i];
                     verdicts.push(Diag {
                         entities: action

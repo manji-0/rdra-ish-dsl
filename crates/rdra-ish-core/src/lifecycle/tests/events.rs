@@ -224,6 +224,45 @@ holds(Never, Item.status == w)
     );
 }
 
+/// The second event comes four steps after the first, so a cap that stops the cone between
+/// them leaves its variant undecided rather than never run.
+#[test]
+fn a_variant_a_capped_cone_never_reached_is_no_info() {
+    let src = r#"
+entity Item "品" { id: Int @pk  status: Enum(x, a, b, c, d, z, w) @default(x) }
+usecase Make "作る"
+usecase Ping "知らせる"
+usecase Walk "進める"
+usecase Park "寄せる"
+usecase Handle "処理"
+event Ev1 "知らせ"
+event Ev2 "寄せ"
+creates(Make, Item)
+transitions(Ping, Item.status, x -> z)
+raises(Ping, Ev1)
+transitions(Walk, Item.status, x -> a)
+transitions(Walk, Item.status, a -> b)
+transitions(Walk, Item.status, b -> c)
+transitions(Walk, Item.status, c -> d)
+transitions(Park, Item.status, d -> z)
+raises(Park, Ev2)
+transitions(Handle, Item.status, z -> w)
+triggers(Ev1, Handle)
+triggers(Ev2, Handle)
+"#;
+    let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
+    let targets = ts.targets();
+    for (states, complete) in [(6, false), (Caps::DEFAULT_STATES, true)] {
+        let x = ts.explore_targets(&targets, Caps::new(Caps::DEFAULT_PATTERNS, states));
+        assert_eq!(x.cone_of(targets[0]).run.complete, complete);
+        let names: Vec<String> = x.verdicts().iter().map(|d| d.diag.name(&[])).collect();
+        assert!(
+            !names.iter().any(|n| n.starts_with("TriggerNeverRuns")),
+            "{states}: {names:?}"
+        );
+    }
+}
+
 /// The event's raisers bind no entity in common, so no row can carry its mark: the handler
 /// runs free and the model says so.
 #[test]
