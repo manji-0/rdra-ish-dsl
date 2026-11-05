@@ -204,6 +204,35 @@ property P0
   leads_to(E1.status == s1, E1.status == s1)
 "#;
 
+/// A case closes once none of its claims is open, and a claim is paid once its case is
+/// flagged (#112): in the case's cone the claims read the case's flag and existence, which
+/// only rise, so they stay a sub-lifecycle with those two vars as its inputs.
+const FLAGGED_CASE: &str = r#"
+entity Case "事案" { id: Int @pk  status: Enum(open, closed) @default(open)  flag: Bool @default(false) }
+entity Claim "請求" { id: Int @pk  status: Enum(open, paid) @default(open) }
+relate(Claim, Case, N:1)
+usecase OpenCase "受付"
+usecase File "請求"
+usecase Flag "注記"
+usecase Pay "支払"
+usecase Close "終了"
+creates(OpenCase, Case)
+creates(File, Claim)
+sets(Flag, Case.flag == true)
+transitions(Pay, Claim.status, open -> paid).when(Flagged)
+condition Flagged "事案に注記がある"
+holds(Flagged, Case.flag == true)
+transitions(Close, Case.status, open -> closed).when(NonePending)
+condition NonePending "未処理の請求がない"
+holds(NonePending, Case.status == open).none(Claim.status == open)
+"#;
+
+/// The same model with the flag cleared by a use case, so it no longer only rises.
+const UNFLAGGED_CASE: &str = r#"
+usecase Unflag "注記解除"
+sets(Unflag, Case.flag == false)
+"#;
+
 fn entity_target(ts: &TransitionSystem, id: &str) -> Target {
     ts.targets()
         .into_iter()
@@ -509,7 +538,7 @@ fn an_identity_quotient_leaves_the_cone_unreduced() {
     let model = model_from(IDENTITY_QUOTIENT);
     let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
     let (sys, seeds) = ts.cone_system(&ts.property_cone(0), [ts.property_seed(0)]);
-    let s = sys.split(&seeds).s;
+    let s = sys.split_with(&seeds, false).s;
     assert_eq!(
         s.len(),
         7,
@@ -530,4 +559,50 @@ fn an_identity_quotient_leaves_the_cone_unreduced() {
     assert_eq!(cone.states.len(), 5176);
     assert_eq!(cone.states, plain.cone_of(e1).run.states);
     assert_eq!(diag_names(&plain), diag_names(&reduced));
+}
+
+/// An S action that reads T vars which only rise stays in the sub-lifecycle, with those vars
+/// as its inputs (#112); one that reads a var some action lowers joins T, and with it the
+/// entity it writes. Without inputs every reader of T joins T.
+#[test]
+fn a_sub_lifecycle_keeps_a_reader_of_monotone_vars_and_loses_a_reader_of_cyclic_ones() {
+    let split_of = |src: &str, inputs: bool| {
+        let model = model_from(src);
+        let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        let case = entity_target(&ts, "Case");
+        let (sys, seeds) = ts.cone_system(&ts.target_cone(case), [ts.target_seed(case)]);
+        let split = sys.split_with(&seeds, inputs);
+        let names =
+            |vars: &VarSet| -> Vec<String> { vars.iter().map(|v| sys.var_name(*v)).collect() };
+        let actions: Vec<String> = split
+            .s_actions
+            .iter()
+            .map(|a| sys.actions()[a.index()].name.clone())
+            .collect();
+        (names(&split.s), names(&split.inputs), actions)
+    };
+    let (s, inputs, actions) = split_of(FLAGGED_CASE, true);
+    assert_eq!(
+        s,
+        ["Claim._exists", "status", "Claim._owner_Case"],
+        "the claims are the sub-lifecycle"
+    );
+    assert_eq!(
+        inputs,
+        ["Case._exists", "flag"],
+        "the case's existence and flag are its inputs"
+    );
+    assert_eq!(
+        actions,
+        ["Pay", "File"],
+        "the claims' steps read the inputs"
+    );
+    let (s, inputs, _) = split_of(&format!("{FLAGGED_CASE}{UNFLAGGED_CASE}"), true);
+    assert!(
+        s.is_empty(),
+        "a cleared flag is no input, so Pay joins T: {s:?}"
+    );
+    assert!(inputs.is_empty(), "{inputs:?}");
+    let (s, _, _) = split_of(FLAGGED_CASE, false);
+    assert!(s.is_empty(), "without inputs File and Pay join T: {s:?}");
 }
