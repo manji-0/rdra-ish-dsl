@@ -2705,7 +2705,7 @@ The forms below were removed before 1.0, without a deprecated stage.
 
 A rule names the entities it ranges over first. `forbidden`, `required` and `exclusive`
 whose first argument is a condition, and `invariant()` with no entity, were removed in 1.0.0:
-the same rule over one entity was named `CrossForbidden_<E>_<n>` or `CrossInv_<E>_<n>` in 1.x (now `MultiForbidden_<E>_<n>` and `MultiInv_<E>_<n>`) when
+the same rule over one entity was named `CrossForbidden_<E>_<n>` or `CrossInv_<E>_<n>` when
 its entity was left out and `Forbidden_<E>_<n>` or `Inv_<E>_<n>` when it was written, and
 `required` and `exclusive` without their entity recorded nothing. The load error gives the
 line with the entities its conditions name in front, those of each `.when(...)` before those
