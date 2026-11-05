@@ -39,7 +39,7 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
    and rules that need two instances (quantifiers, `.along` over several rows, 1:1 keys).
 4. With `tlc` or `tlc2` on `PATH` (`nix develop` provides it in the repository), run
    `rdra-ish verify <file>`. `--backend tlc` is the default.
-5. Report each failure by the name after its severity (`error[CrossForbidden_Order_0]`,
+5. Report each failure by the name after its severity (`error[MultiForbidden_Order_0]`,
    `error[Deadlock_Order_status_paid]`, `error[NeverShipped]`) and its model-term
    counterexample, together with the `bounds:` line the result holds under. Paste the
    `bounds:` line (with its BFS state cap), `tlc_result:` and the last line exactly as

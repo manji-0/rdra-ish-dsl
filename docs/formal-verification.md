@@ -148,7 +148,7 @@ stays as it was.
 | Comparison proposition driven by `drives(UC, E.col op rhs, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |
 | `col in (a, b)` / `col not in (a, b)` | `E_col[b0] \in {"a", "b"}` / `E_col[b0] \notin {"a", "b"}`, the same disjunction of equalities that `states` evaluates. A nullable Int value `present` keeps the `\/` form. |
 | `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |
-| Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `CrossForbidden_Order_0`). Each ranges over the present instances. |
+| Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `MultiForbidden_Order_0`). Each ranges over the present instances. |
 | `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
 | `col: T @check(expr)` | `INVARIANT Check_<Entity>_<column>_<n>` over the present instances. A nullable operand is guarded: `qty: Int @null @check(qty >= 1)` prints `(E_qty[b0] = -1) \/ (E_qty[b0] # -1 /\ E_qty[b0] >= 1)`. |
 | `relate(Child, Parent, 1:1)` | `INVARIANT Unique_<Child>_<role>` (role defaults to the parent id): `\A b0, b1 \in <Child>_Ids`, two present children are the same or have different owners. An unlinked optional child owns nothing. |
@@ -616,7 +616,7 @@ The rules for each flag and for deferral are in
   | food-permit-ops entity `PermitApplication` | 2,094,157 | 2,094,157 | none | Every entity in the cone (the application, its inspection, the permit) reads the application, and the renewal guard `失効後の更新はできない` reads the renewed permit (#73). No side is independent of the target's, so nothing reduces. |
   | insurance-claim-ops entity `Payment` | 814,191 | over 9,000,000 | 63,823 / 443 | S is the accident case with its investigation and settlement, which the guard of `CompleteClaim` reads. T is the claim and the payment: the claim's rules read its columns (`period`, `grade_explained`, `fraud_suspected`, `reason_explained`, `late_interest_due`), and the payment reads the claim. |
   | insurance-claim-ops entity `Claim` | 754,247 | over 9,000,000 | 63,823 / 443 | As `Payment`, with `senior_approved` and `completed_on` in place of the payment's columns. |
-  | insurance-claim-ops invariant `CrossForbidden_Payment_3` (also `AfterAssert_PayClaim_0`, a separate cone of the same size) | 707,071 | over 9,000,000 | 63,823 / 443 | As `Payment`, without the payment's status. |
+  | insurance-claim-ops invariant `MultiForbidden_Payment_3` (also `AfterAssert_PayClaim_0`, a separate cone of the same size) | 707,071 | over 9,000,000 | 63,823 / 443 | As `Payment`, without the payment's status. |
   | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (two cones, with the claim's other rules) | 573,751 | over 9,000,000 | 63,823 / 443 | As `Claim`, with fewer of the claim's columns (no `completed_on` or `late_interest_due`). |
   | patent-ops entity `PatentApplication` (compared at 2 instances since the cap of 300,000) | 293,833 | 2,167,411 | 73 / 73 | The filing guard `DraftsApproved` reads the drafting order and `FileApplication` moves the order to `filed`, so the order joins the application in T. S is the disclosure, its inventor and the firm; S is reduced inside, so its 73 states are already a quotient, and `obs` tells them all apart. |
   | patent-ops entity `Patent` and invariant `Forbidden_Patent_4` (two cones; compared at 2 instances since the cap of 300,000) | 202,569 | 1,494,339 | 73 / 73 | As `PatentApplication`, with the patent's columns in T beside fewer of the application's. |
@@ -671,8 +671,8 @@ The rules for each flag and for deferral are in
   nix develop -c python3 -I scripts/reduction-diff.py --timeout 120 \
     run target/release/rdra-ish --seeds 0:500
   ```
-- User-facing state diagnostics for multi-entity rules say **multi-entity**. The
-  `Cross*` prefix in some constraint names is historical.
+- User-facing state diagnostics and constraint names (`MultiForbidden_*`, `MultiInv_*`) for
+  multi-entity rules say **multi**/**multi-entity**.
 
 ## Known verification gaps
 
@@ -713,7 +713,7 @@ gaps.
   - `samples/food-permit-ops`: entity `PermitApplication`, 2,094,157 states. Every entity in
     the cone reads the application, so no side is independent and nothing reduces.
   - `samples/insurance-claim-ops`: entities `Claim` and `Payment`, invariants
-    `Forbidden_Claim_0`, `Forbidden_Claim_4`, and `CrossForbidden_Payment_3`, and the
+    `Forbidden_Claim_0`, `Forbidden_Claim_4`, and `MultiForbidden_Payment_3`, and the
     after-assert of `PayClaim`. The settlement guard of `CompleteClaim` joins the case's
     lifecycle to the claim's; reduced by it (63,823 states in 443 classes) they reach 573,751
     to 814,191 states, unreduced over 9,000,000.
@@ -897,7 +897,7 @@ Name         = [A-Za-z0-9_]+
 - `fail` needs at least one name. The names must equal the set of names of the run's
   errors, not just be part of it. Every lifecycle error prints as `error[<Name>]: ...`, and
   the script reads the name from there and from TLC's `violated:` line. A name is the
-  invariant or `after` property name (`CrossForbidden_Order_0`,
+  invariant or `after` property name (`MultiForbidden_Order_0`,
   `AfterAssert_DeliverOrder_0`), the temporal property's name (`NeverShipped`; TLC's
   temporal line names none, so it comes from `error[<Name>]:` only),
   `Witness_<Entity>_<column>_<value>` for a state with no

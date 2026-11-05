@@ -73,7 +73,7 @@ These names in `export --kind tla` and `verify` output are stable, so a script o
 written by hand can name them:
 
 - Invariants: `Forbidden_<E>_<n>`, `Inv_<E>_<n>`, `Required_<E>_<n>`, `Exclusive_<E>_<n>`,
-  `CrossForbidden_<E>_<n>`, `CrossInv_<E>_<n>`, `Quantifier_<E>_<n>`, `Check_<E>_<column>_<n>`,
+  `MultiForbidden_<E>_<n>`, `MultiInv_<E>_<n>`, `Quantifier_<E>_<n>`, `Check_<E>_<column>_<n>`,
   `Unique_<Child>_<role>`, `MinCard_<Child>_<role>`, and `TypeOK`.
 - Properties: `AfterAssert_<UC>_<n>`, each temporal property under its declared name, and
   `Fair_<P>`.

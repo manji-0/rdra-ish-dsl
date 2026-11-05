@@ -104,7 +104,7 @@ expectations"). The table repeats each header; "ok" means the command passes.
 | `samples/int_stock.rdra` | ok | `tlc=ok` | Int arithmetic invariant / property |
 | `samples/now_coupon.rdra` | fail `Forbidden_Coupon_0` | `tlc=counterexample` | `now` and `Tick`; no action pins `expired_at` |
 | `samples/cross_order_payment.rdra` | ok | `tlc=ok` | Multi-instance + `.along` (Pay is one atomic action; Cancel deletes the pending Payment) |
-| `samples/cross_order_payment_split.rdra` | fail `CrossForbidden_Order_0` | `tlc=counterexample` | Pay through two APIs is two actions in `invokes` order, the capture first, so Cancel runs between them |
+| `samples/cross_order_payment_split.rdra` | fail `MultiForbidden_Order_0` | `tlc=counterexample` | Pay through two APIs is two actions in `invokes` order, the capture first, so Cancel runs between them |
 | `samples/split_run_order.rdra` | ok | `tlc=ok` | OpenSettlement through two APIs is one run: the settlement is created once, under the claim the first step moved, and `.fair(OpenSettlement, ..)` finishes a started run |
 | `samples/quantifier_none.rdra` | fail `Quantifier_Cert_0` | `tlc=counterexample` | `invariant(...).when(...).none(...)` (Revoke while an Assign stays active) |
 | `samples/quantifier_guard.rdra` | ok | `tlc=ok` | `holds(..).none(..)` guard on Revoke; the `.none(...)` rule holds |

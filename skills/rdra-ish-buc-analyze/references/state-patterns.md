@@ -91,7 +91,7 @@ warning[Runs_Refund]: use case Refund can never run: each of its guards holds in
 ```
 
 A broken rule prints as `error[<rule name>]` (`Forbidden_Order_0`, `Inv_Order_0`,
-`CrossForbidden_Order_0`, `Quantifier_Cert_0`, `Unique_*`, `MinCard_*`, `Check_*`,
+`MultiForbidden_Order_0`, `Quantifier_Cert_0`, `Unique_*`, `MinCard_*`, `Check_*`,
 `AfterAssert_<UC>_<n>`) with the rule's site and a shortest counterexample: one line
 per use case step with its bound instances (`Place [Order#1, Payment#1]`) and site, and
 under it the values that step changed.

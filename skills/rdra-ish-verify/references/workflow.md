@@ -70,11 +70,11 @@ bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
-Cone_CrossForbidden_Order_0 [CrossForbidden_Order_0]: counterexample (31 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
 tlc_result: counterexample
 Error: TLC verification failed
 ...
-error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
+error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: samples/cross_order_payment_split.rdra:44:1
   counterexample (3 steps, from TLC):
     1. Place [Order#1, Payment#1]                            samples/cross_order_payment_split.rdra:17:1
@@ -84,7 +84,7 @@ error[CrossForbidden_Order_0]: invariant CrossForbidden_Order_0 is violated: mul
          Payment#1.status: pending -> captured               samples/cross_order_payment_split.rdra:39:1
     3. Cancel [Order#1]                                      samples/cross_order_payment_split.rdra:19:1
          Order#1.status: pending -> cancelled                samples/cross_order_payment_split.rdra:38:1
-violated: Error: Invariant CrossForbidden_Order_0 is violated.
+violated: Error: Invariant MultiForbidden_Order_0 is violated.
 ...
 ```
 

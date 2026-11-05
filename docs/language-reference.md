@@ -2299,7 +2299,7 @@ combination of the participating entities' present instances.
 Use `Entity.column` when a condition points at a column. The leading entity arguments
 declare the scope, and every rule names them. A rule of one entity without `.along(...)` is
 that entity's rule (`Forbidden_Order_0`); a rule of several, or one with `.along(...)`, is a
-cross-entity rule (`CrossForbidden_Order_0`).
+cross-entity rule (`MultiForbidden_Order_0`).
 
 ```
 forbidden(Order, Payment,
@@ -2705,7 +2705,7 @@ The forms below were removed before 1.0, without a deprecated stage.
 
 A rule names the entities it ranges over first. `forbidden`, `required` and `exclusive`
 whose first argument is a condition, and `invariant()` with no entity, were removed in 1.0.0:
-the same rule over one entity was named `CrossForbidden_<E>_<n>` or `CrossInv_<E>_<n>` when
+the same rule over one entity was named `CrossForbidden_<E>_<n>` or `CrossInv_<E>_<n>` in 1.x (now `MultiForbidden_<E>_<n>` and `MultiInv_<E>_<n>`) when
 its entity was left out and `Forbidden_<E>_<n>` or `Inv_<E>_<n>` when it was written, and
 `required` and `exclusive` without their entity recorded nothing. The load error gives the
 line with the entities its conditions name in front, those of each `.when(...)` before those

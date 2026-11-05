@@ -179,12 +179,10 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
       entities are connected by a declared `relate` path (`.role(role)` when two keys join
       a pair)
     - Review each broken rule `check` reports: `error[<rule name>]` (such as
-      `CrossForbidden_Order_0`) with the rule's site and a shortest counterexample of use
+      `MultiForbidden_Order_0`) with the rule's site and a shortest counterexample of use
       case steps. An `UnbindableScope` error means an `.along(...)` path that no `relate`
       binds. For temporal `property` and rules that need two instances, also run
       `rdra-ish verify <src-dir>/` (skill `rdra-ish-verify`) when TLC is available.
-      Constraint names may still say `Cross*` even though surface syntax is multi-entity
-      `forbidden` / `invariant`.
 
 15. **Check imports**
     - Every referenced symbol has a corresponding `import`

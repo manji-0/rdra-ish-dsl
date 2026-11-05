@@ -125,8 +125,7 @@ invariant(Order, Payment)
 - A `holds` guard reads an entity two hops from the use case's row through
   `.along(A, B, C)`, with `.role(role)` after it per hop. A compared entity that no key joins
   to the use case's rows is `UnjoinedGuardRead` (warning): any row of it satisfies the guard.
-- Diagnostic ids may still say `Cross*` even though surface syntax is
-  multi-entity `forbidden` / `invariant`.
+- A multi-entity `forbidden` / `invariant` is named `MultiForbidden_<E>_<n>` / `MultiInv_<E>_<n>`.
 
 ## Effects That Feed Axes
 

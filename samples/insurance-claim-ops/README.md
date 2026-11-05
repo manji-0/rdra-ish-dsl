@@ -166,11 +166,11 @@ in 224 classes. The cones at 2 instances, reduced, from `lifecycle_measure -- 20
 |---|---:|
 | `Payment` (`支払期限を過ぎた支払には遅延利息を付ける`) | 814,191 |
 | `Claim` | 754,247 |
-| `CrossForbidden_Payment_3`, the after-assert of `PayClaim` | 707,071 |
-| the claim's rules (`Forbidden_Claim_0`, `Forbidden_Claim_1`, `Forbidden_Claim_4`, `Inv_Claim_0`, `CrossForbidden_Claim_0`, `Quantifier_Claim_0`, `Unique_Payment_Claim`), `ClaimEventuallyDecided` | 573,751 |
+| `MultiForbidden_Payment_3`, the after-assert of `PayClaim` | 707,071 |
+| the claim's rules (`Forbidden_Claim_0`, `Forbidden_Claim_1`, `Forbidden_Claim_4`, `Inv_Claim_0`, `MultiForbidden_Claim_0`, `Quantifier_Claim_0`, `Unique_Payment_Claim`), `ClaimEventuallyDecided` | 573,751 |
 | `ClaimCase`, `Investigation`, `Settlement` (8 rules, `Unique_Investigation_ClaimCase`, `Unique_Settlement_ClaimCase`; nothing reduces) | 63,823 |
 | `Subrogation`, `SubrogationEnds` | 372 |
-| `CrossForbidden_Subrogation_7`, `Unique_Subrogation_Claim`, the after-assert of `StartSubrogation` | 255 |
+| `MultiForbidden_Subrogation_7`, `Unique_Subrogation_Claim`, the after-assert of `StartSubrogation` | 255 |
 | `Complaint`, `RepairEstimate`, `JibaisekiSurvey` | 483, 441, 189 |
 
 The six cones over 300,000 states (`Claim`, `Payment`, and the claim's and the payment's rules)
