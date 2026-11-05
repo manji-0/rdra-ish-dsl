@@ -31,6 +31,8 @@ flowchart LR
   end
   buc__BucClaim -->|請求の取下げ| buc__BucPayment
   %% derived buc__BucClaim -> buc__BucPayment via event__EvClaimWithdrawn
+  buc__BucClaim -->|請求権の時効消滅| buc__BucPayment
+  %% derived buc__BucClaim -> buc__BucPayment via event__EvClaimTimeBarred
   buc__BucIntake -->|初期対応の完了| buc__BucClaim
   %% derived buc__BucIntake -> buc__BucClaim via event__EvInitialResponded
   buc__BucPayment -->|不払いの通知| buc__BucComplaint

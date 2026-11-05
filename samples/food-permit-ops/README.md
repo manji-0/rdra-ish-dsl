@@ -73,9 +73,9 @@ numbers), the comment says the modeling is the model's assumption.
   move the disposition and raise an event that starts `RevokePermit` or `SuspendBusiness` on the
   permit; `GrantPermit` raises the event that starts `RegisterPermit`; `RenewPermit` the one that
   starts `ExtendPermitTerm`. Written as one use case that moves both, each pair put the other
-  entity's columns into the cone and `verify` stopped at its state cap (see below). Events impose
-  no order (#30), so `check` also lets the ledger move without the decision; no rule reads the
-  status of both.
+  entity's columns into the cone and `verify` stopped at its state cap (see below). A use case an
+  event starts runs only after the event (#112), so the ledger moves only after its decision; no
+  rule reads the status of both.
 - **The permit is registered under its application, one per application.**
   `relate(BusinessPermit, PermitApplication, 1:1)`, and `RegisterPermit` runs only on a new
   application that has no permit yet (`holds(NoPermitYet, PermitApplication.kind ==
@@ -116,7 +116,7 @@ Each figure is a cone size at the 2 instances of `verify`, from
   states and that of `Disposition` 23,156 with one permit per application (#71); before the
   guard that enforces it read the permit's status as well as its link, which took
   `Disposition` to 248,032.
-- **The renewal guard leaves the application's view just under the cap.** The guard
+- **The renewal guard took the application's view to just under the cap.** The guard
   `失効後の更新はできない` (#73) adds the permit's existence and status and the `renews` link to
   the cones that hold the application. The cone is exact and column-level (#71), so the 31
   states the permit's two variables reach at 2 instances interleave with every state of the
@@ -132,17 +132,21 @@ Each figure is a cone size at the 2 instances of `verify`, from
   | `Disposition` | 23,156 | 231,493 |
   | `BusinessPermit` | 8,023 | 7,813 |
 
-  The view of `PermitApplication` is a quarter of the `verify` cap of 8,388,608 states, so
-  `verify` decides every check: `tlc_result: ok`, no deadlock, every use case runs, in 18 s and
-  700 MB locally. A change that grows the application's cone further takes the view past the
-  cap; measure it first. Before #73 the guard could not be written: the only link between the
+  The table is the 1.2.0 measurement. Since the event order of #112 the reduction moves the
+  inspection's and the permit's side out of the application's view, which is 52,597 states
+  reduced (`RDRA_REDUCED_ONLY=1 lifecycle_measure -- 9000000 verify`), while the permit's view
+  holds the raisers of the events that move the permit and is 4,648,771 states reduced,
+  about half the `verify` cap of 8,388,608. `verify` decides every check: `tlc_result: ok`, no
+  deadlock, every use case runs, in 36 s and 1.6 GB locally. A change that grows the permit's
+  cone further takes the view past the cap; measure it first. Before #73 the guard could not be written: the only link between the
   two entities was the registration key, which no renewal has, and a second key made the join
   ambiguous with no way to name one (the first key won silently in a condition).
 - **The decision and the ledger are joined by events.** In the first draft the decision of a 取消
   or 停止 moved the disposition and the permit in one use case, and the renewal wrote the permit too.
   The cones of `PermitApplication`, `Inspection`, and `BusinessPermit` each passed 3,000,000 states,
-  and `verify` left seven stuck-state findings undecided at its cap. With the event between them, `check` also lets the ledger record a 取消
-  or 停止 that no decision made (#30). No rule reads both entities.
+  and `verify` left seven stuck-state findings undecided at its cap. With the event between them,
+  the ledger records a 取消 or 停止 only after the decision that made it (#112). No rule reads
+  both entities.
 - **A business with no permit is not modeled.** The 無許可営業 rules read `BusinessPermit.operating`,
   so they cover a business that keeps operating after its permit ends, not one that never applied.
 - **The 欠格事由 are not state.** 法55条2項ただし書 allows a refusal within 2 years of a revocation; the

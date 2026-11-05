@@ -103,6 +103,7 @@ flowchart LR
     field__SurveyStatusField["調査の状態"]:::field
     field__VictimConsentField["被害者の同意"]:::field
     event__EvClaimPaid>"保険金の支払"]:::event
+    event__EvClaimTimeBarred>"請求権の時効消滅"]:::event
     event__EvClaimWithdrawn>"請求の取下げ"]:::event
     event__EvDenialNotified>"不払いの通知"]:::event
     event__EvDuplicateAccidentFound>"他社での事故受付の判明"]:::event
@@ -233,6 +234,7 @@ flowchart LR
   event__EvClaimPaid -.-> buc__BucSubrogation
   event__EvClaimPaid -.-> usecase__CloseCase
   event__EvClaimPaid -.-> usecase__StartSubrogation
+  event__EvClaimTimeBarred -.-> usecase__CloseCase
   event__EvClaimWithdrawn -.-> usecase__CloseCase
   event__EvDenialNotified -.-> usecase__CloseCase
   event__EvDenialNotified -.-> usecase__FileComplaint

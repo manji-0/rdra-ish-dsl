@@ -29,6 +29,7 @@ flowchart LR
     %% desc usecase__WithdrawClaim: 請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。
     screen__ClaimFormScreen["請求書類の提出画面"]:::screen
     screen__ClaimScreen["保険金請求画面"]:::screen
+    event__EvClaimTimeBarred>"請求権の時効消滅"]:::event
     event__EvClaimWithdrawn>"請求の取下げ"]:::event
     event__EvInitialResponded>"初期対応の完了"]:::event
   end
@@ -78,6 +79,7 @@ flowchart LR
   usecase__SubmitClaim -.->|transitions Claim.status guided->submitted| state__Claim_status_submitted
   usecase__SubmitClaim -.->|updates| entity__Claim
   %% derived usecase__SubmitClaim -> entity__Claim via api__ClaimSubmitApi
+  usecase__TimeBarClaim -.-> event__EvClaimTimeBarred
   usecase__TimeBarClaim -.->|transitions Claim.period not_started->ended| state__Claim_period_ended
   usecase__TimeBarClaim -.->|transitions Claim.status guided->time_barred| state__Claim_status_time_barred
   usecase__TimeBarClaim -.->|transitions Claim.status submitted->time_barred| state__Claim_status_time_barred

@@ -42,6 +42,7 @@ flowchart LR
     screen__DecisionScreen["支払査定画面"]:::screen
     screen__PaymentScreen["支払画面"]:::screen
     event__EvClaimPaid>"保険金の支払"]:::event
+    event__EvClaimTimeBarred>"請求権の時効消滅"]:::event
     event__EvClaimWithdrawn>"請求の取下げ"]:::event
     event__EvDenialNotified>"不払いの通知"]:::event
     event__EvDuplicateAccidentFound>"他社での事故受付の判明"]:::event
@@ -98,6 +99,7 @@ flowchart LR
   condition__SettlementSigned -.->|when| usecase__CompleteClaim
   %% derived condition__SettlementSigned -> usecase__CompleteClaim via transitions Claim.status submitted->completed
   event__EvClaimPaid -.-> usecase__CloseCase
+  event__EvClaimTimeBarred -.-> usecase__CloseCase
   event__EvClaimWithdrawn -.-> usecase__CloseCase
   event__EvDenialNotified -.-> usecase__CloseCase
   event__EvDuplicateAccidentFound -.-> usecase__FlagSuspectedFraud

@@ -88,8 +88,8 @@ permission, and no timer starts it.
   `Claim.period` the payment period. A case can have several claims (each 被害者 of an 対人賠償 case).
   The decision states sit on the claim, not on the case: a decision reads only the claim's
   columns, so the claim's cone stays small (below). The case closes on the events the claim
-  raises (`EvClaimPaid`, `EvDenialNotified`, `EvClaimWithdrawn`), which impose no order (#30),
-  so `check` also lets a case close while its claim is open; no rule reads both.
+  raises (`EvClaimPaid`, `EvDenialNotified`, `EvClaimWithdrawn`, `EvClaimTimeBarred`), and only
+  after one of them (#112); no rule reads both.
 - **Periods are timers, not states.** `PaymentDeadline` starts `MarkPaymentOverdue`, which moves
   the period to 期限経過 and starts the late interest; `ClaimLimitation` starts `TimeBarClaim`;
   `SubrogationLimitation` starts `LapseSubrogation`. A timer has no parameter, so one timer
@@ -119,7 +119,10 @@ permission, and no timer starts it.
 - **An OR is two guarded arms.** A case is assessed when the survey is reported and either the
   coverage is first-party or the liability is decided. `AssessDamage` declares the arm
   `investigating -> assessed` twice, once under `FirstPartyCoverage` and once under
-  `LiabilityDetermined`. The fault still decides the recovery from the other party, so
+  `LiabilityDetermined`. A use case that an event starts runs only after that event (#112), so
+  the path with no settlement has an event of its own: `ReportSurvey` raises `EvSurveyReported`,
+  which starts `AssessDamage` beside the two settlement events.
+  The fault still decides the recovery from the other party, so
   `CloseCase` needs it decided; `DetermineFault` runs until the case is assessed.
 - **A use case that moves two columns lists an arm for each state of both.** `WithdrawClaim` and
   `TimeBarClaim` move the period from `not_started` to `ended` as well, or they would not run on a
@@ -154,27 +157,36 @@ not.
 
 ## Verification
 
-`check` reports no warning. `verify --deny-undecided` at 2 instances passes with `tlc_result: ok`
-in about 60 s locally (1.3 GB). The settlement guard on `CompleteClaim` joins the claim's cone
-to the case's, and `verify` explores each cone reduced by its independent sub-lifecycle (#74;
+`check` reports no warning. `verify --deny-undecided` at 2 instances decides every check and
+prints `tlc_result: ok`, with one error, `Deadlock_ClaimCase_status_assessed` (see
+[Known verification gaps](#known-verification-gaps)), which the `// expect verify` header
+names; it takes about 180 s locally (2.1 GB for `rdra-ish`, 5.9 GB with TLC's JVMs). The
+settlement guard on `CompleteClaim` joins the claim's cone to the case's, and `verify` explores
+each cone reduced by its independent sub-lifecycle (#74;
 [formal-verification.md](../../docs/formal-verification.md#reduction-by-an-independent-sub-lifecycle)):
 in the claim's cones the case, its investigation and its settlement are the sub-lifecycle,
-63,823 states in 443 classes, and in the subrogation's the claim's whole cone is, 573,751 states
-in 224 classes. The cones at 2 instances, reduced, from `lifecycle_measure -- 20000000 verify`:
+extended with the claim's events that close the case (#112), 255,292 states in 2,428 classes;
+in the case's view the claim and the payment are, read through two bits per case, 93,904
+states in 4,368 classes; and in the subrogation's and the complaint's the claim's whole cone
+is, 633,787 states in 224 and 145 classes. The cones at 2 instances, reduced, from
+`RDRA_REDUCED_ONLY=1 lifecycle_measure -- 9000000 verify`:
 
 | Cone (targets) | States |
 |---|---:|
-| `Payment` (`支払期限を過ぎた支払には遅延利息を付ける`) | 814,191 |
-| `Claim` | 754,247 |
-| `MultiForbidden_Payment_3`, the after-assert of `PayClaim` | 707,071 |
-| the claim's rules (`Forbidden_Claim_0`, `Forbidden_Claim_1`, `Forbidden_Claim_4`, `Inv_Claim_0`, `MultiForbidden_Claim_0`, `Quantifier_Claim_0`, `Unique_Payment_Claim`), `ClaimEventuallyDecided` | 573,751 |
-| `ClaimCase`, `Investigation`, `Settlement` (8 rules, `Unique_Investigation_ClaimCase`, `Unique_Settlement_ClaimCase`; nothing reduces) | 63,823 |
+| `ClaimCase` | 4,580,087 |
+| `Payment` (`支払期限を過ぎた支払には遅延利息を付ける`) | 903,987 |
+| `Claim` | 836,427 |
+| `MultiForbidden_Payment_3`, the after-assert of `PayClaim` | 783,427 |
+| the claim's rules (`Forbidden_Claim_0`, `Forbidden_Claim_1`, `Forbidden_Claim_4`, `Inv_Claim_0`, `MultiForbidden_Claim_0`, `Quantifier_Claim_0`, `Unique_Payment_Claim`), `ClaimEventuallyDecided` | 633,787 |
+| `Investigation`, `Settlement` and the case's 8 rules (`Unique_Investigation_ClaimCase`, `Unique_Settlement_ClaimCase`; nothing reduces) | 63,823 |
+| `Complaint` | 39,205 |
 | `Subrogation`, `SubrogationEnds` | 372 |
 | `MultiForbidden_Subrogation_7`, `Unique_Subrogation_Claim`, the after-assert of `StartSubrogation` | 255 |
-| `Complaint`, `RepairEstimate`, `JibaisekiSurvey` | 483, 441, 189 |
+| `RepairEstimate`, `JibaisekiSurvey` | 441, 189 |
 
-The six cones over 300,000 states (`Claim`, `Payment`, and the claim's and the payment's rules)
-are compared with TLC at 1 instance only by `engine_equivalence` (`VERIFY_FALLBACK`).
+The seven cones over 300,000 states (`ClaimCase`, `Claim`, `Payment`, and the claim's and the
+payment's rules) are compared with TLC at 1 instance only by `engine_equivalence`
+(`VERIFY_FALLBACK`).
 
 ## Known verification gaps
 
@@ -193,8 +205,23 @@ are compared with TLC at 1 instance only by `engine_equivalence` (`VERIFY_FALLBA
   the reduction separates only 2,658 sub-lifecycle states. So nothing checks that a 90-day
   extension ends at 90 days; the model checks only that a claim paid after its deadline
   carries the late interest.
-- **The case closes without reading its claims.** `CloseCase` runs on the claim's events, which
-  give no order (#30).
+- **The case closes without reading its claims.** `CloseCase` runs on the claim's events, after
+  one of them (#112). A time-barred claim raises `EvClaimTimeBarred` for the same reason: without
+  it, a case whose claim lapsed stayed 損害確定 forever.
+- **A case that never gets a claim never closes.** At 2 instances `verify` reports
+  `Deadlock_ClaimCase_status_assessed`, and the `// expect verify` header names it: the trace
+  opens two cases, assesses the second, and files both claims, the bound's two `Claim` slots,
+  under the first, so the second case has no claim whose event could close it. It is a verdict
+  of the bounded model, not of the domain: a case with no claim is closed by hand, which the
+  model does not have. A case that reads its claims to be assessed or closed would remove it,
+  but each shape measured takes a cone past the 16 GB `verify` budget at 2 instances: a
+  `.has(Claim)` guard on `AssessDamage` (killed at 25 minutes and 14.5 GB, with two more
+  deadlocks at 調査中 and 示談交渉中 from the same starvation), a `.none(Claim)` guard on
+  `SendClaimForms` (16 GB at 25 minutes), and the forms moving the case to a status of their
+  own so that a case without a claim waits on a slot (the case's cone absorbs the claim's;
+  16.4 GB at 11 minutes). A larger `--instance-count` does not remove it: the bound is the same
+  for every entity, and at any count every claim slot can be filed under the first case, which
+  leaves another case without a claim the same way.
 - **A double payment is stopped by the lifecycle, not by the guard.** `Unique_Payment_Claim`
   checks it at 2 instances; the guard `.none(Payment)` on `PayClaim` is redundant (see Soak
   findings).
@@ -312,7 +339,7 @@ What the model could say but `verify` could not check, and what it could not say
 - **(M) The decision states are on the claim, not on the case.** The task's sketch put
   支払決定・不払決定・支払済・求償中 on the case. With the decision reading the case, the claim's cone
   would join the case's (see the first finding); the case closes on the claim's events instead,
-  which give no order (#30).
+  after one of them (#112).
 
 `scripts/gen-clinic-ops-docs.py target/debug/rdra-ish insurance-claim-ops` generates
 `design-doc.md` and `prd.md` from the model, in the same layout as the other ops samples.

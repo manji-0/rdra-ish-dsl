@@ -1,3 +1,5 @@
+// expect check: ok
+// expect verify: tlc=ok fail Deadlock_ClaimCase_status_assessed
 module buc.claim
 
 import shared.actors
@@ -133,6 +135,7 @@ invokes(TimeBarClaim, ClaimApi)
 transitions(TimeBarClaim, Claim.status, guided -> time_barred)
 transitions(TimeBarClaim, Claim.status, submitted -> time_barred)
 transitions(TimeBarClaim, Claim.period, not_started -> ended)
+raises(TimeBarClaim, EvClaimTimeBarred)
 triggers(ClaimLimitation, TimeBarClaim)
 
 // Access constraints

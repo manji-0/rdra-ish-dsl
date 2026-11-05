@@ -274,6 +274,7 @@ flowchart LR
   actor__ClaimHandler --> screen__InvestigationScreen
   api__CaseApi -->|U| entity__ClaimCase
   api__InvestigationApi -->|U| entity__Investigation
+  api__InvestigationApi -.->|損害調査の報告| api__CaseApi
   api__InvestigationCreateApi -->|C| entity__Investigation
   api__InvestigationCreateApi -->|U| entity__ClaimCase
   screen__CaseScreen -->|損害の確定| api__CaseApi
@@ -365,16 +366,18 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:ReportSurvey model=samples/insurance-claim-ops
 %% kinds: actor screen api entity
-%% omitted: buc step medium permission
+%% omitted: buc step medium permission event
 sequenceDiagram
   actor actor__Adjuster as アジャスター
   participant screen__InvestigationScreen as 損害調査画面
   participant api__InvestigationApi as 損害調査 API
   participant entity__Investigation as 損害調査
+  participant api__CaseApi as 事故案件 API
   actor__Adjuster ->> screen__InvestigationScreen: 損害調査の報告
   screen__InvestigationScreen ->> api__InvestigationApi: 損害調査 API
   alt Investigation.status == 調査中
     api__InvestigationApi ->> entity__Investigation: update status 調査中 -> 調査報告済
+    api__InvestigationApi -) api__CaseApi: 損害調査の報告
     api__InvestigationApi -->> screen__InvestigationScreen: done
   else guard fails
     api__InvestigationApi -->> screen__InvestigationScreen: rejected
@@ -422,6 +425,7 @@ sequenceDiagram
   participant usecase__AgreeSettlement as 示談の成立
   participant usecase__DeclineSettlementService as 示談代行を行わない
   participant usecase__EndNegotiationUnresolved as 示談交渉の終了（不調）
+  participant usecase__ReportSurvey as 損害調査の報告
   participant screen__CaseScreen as 事故案件画面
   participant api__CaseApi as 事故案件 API
   participant entity__ClaimCase as 事故案件（担保種目ごと）
@@ -429,6 +433,7 @@ sequenceDiagram
   usecase__AgreeSettlement ->> api__CaseApi: 示談の成立
   usecase__DeclineSettlementService ->> api__CaseApi: 示談代行の終了（不調・不実施）
   usecase__EndNegotiationUnresolved ->> api__CaseApi: 示談代行の終了（不調・不実施）
+  usecase__ReportSurvey ->> api__CaseApi: 損害調査の報告
   screen__CaseScreen ->> api__CaseApi: 事故案件 API
   alt 損害調査の報告がある: Investigation.status == 調査報告済 and ClaimCase.status in (調査中, 示談交渉中)
     api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 損害確定 [車両・人身傷害の事故である], status 調査中 -> 損害確定 [賠償責任の有無を判断している], status 示談交渉中 -> 損害確定 [示談が成立したか、示談代行を終えた]
@@ -1100,14 +1105,16 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:TimeBarClaim model=samples/insurance-claim-ops
 %% kinds: timer api entity
-%% omitted: buc step
+%% omitted: buc step event
 sequenceDiagram
   participant timer__ClaimLimitation as 保険金請求権の時効（請求権が発生した時の翌日から3年）
   participant api__ClaimApi as 保険金請求 API
   participant entity__Claim as 保険金請求
+  participant api__CaseApi as 事故案件 API
   timer__ClaimLimitation ->> api__ClaimApi: 保険金請求権の時効（請求権が発生した時の翌日から3年）
   alt Claim.status in (請求の案内済, 請求書類の提出) and Claim.period == 未起算
     api__ClaimApi ->> entity__Claim: update status 請求の案内済 -> 時効消滅, status 請求書類の提出 -> 時効消滅, period 未起算 -> 期限の管理を終了
+    api__ClaimApi -) api__CaseApi: 請求権の時効消滅
     api__ClaimApi -->> timer__ClaimLimitation: done
   else guard fails
     api__ClaimApi -->> timer__ClaimLimitation: rejected
@@ -1442,11 +1449,13 @@ sequenceDiagram
 sequenceDiagram
   participant usecase__NotifyDenial as 不払いの通知
   participant usecase__PayClaim as 保険金の支払
+  participant usecase__TimeBarClaim as 請求権の時効による消滅
   participant usecase__WithdrawClaim as 請求の取下げ
   participant api__CaseApi as 事故案件 API
   participant entity__ClaimCase as 事故案件（担保種目ごと）
   usecase__NotifyDenial ->> api__CaseApi: 不払いの通知
   usecase__PayClaim ->> api__CaseApi: 保険金の支払
+  usecase__TimeBarClaim ->> api__CaseApi: 請求権の時効消滅
   usecase__WithdrawClaim ->> api__CaseApi: 請求の取下げ
   alt 賠償責任の有無を判断している: ClaimCase.liability in (賠償責任あり, 過失ゼロ（賠償責任なし）) and ClaimCase.status == 損害確定
     api__CaseApi ->> entity__ClaimCase: update status 損害確定 -> 完了
@@ -2514,23 +2523,23 @@ erDiagram
 
 | kind | label | entities | rule | applies_to | site |
 | --- | --- | --- | --- | --- | --- |
-| condition | 請求の案内をした段階である | Claim | Claim.status == 請求の案内済 | ConfirmClaimIntent | samples/insurance-claim-ops/buc/buc_claim.rdra:92 |
-| condition | 等級の変動を説明して請求の意思を確かめた | Claim | Claim.grade_explained == true | SubmitClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:101 |
-| condition | 車両・人身傷害の事故の請求である | ClaimCase | ClaimCase.coverage in (車両, 人身傷害) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:113 |
-| condition | 示談が成立している | Settlement | (Settlement.status == 示談成立).along(Claim, ClaimCase, Settlement) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:116 |
-| forbidden | 賠償の請求は示談書がそろってから完了する | Claim\|Settlement | Claim.status == 請求完了 AND Settlement.status != 示談成立 |  | samples/insurance-claim-ops/buc/buc_claim.rdra:219 |
-| forbidden | 等級の変動を説明してから請求の意思を確かめる | Claim | Claim.grade_explained == false AND Claim.status not in (請求の案内済, 取下げ, 時効消滅) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:221 |
-| forbidden | 請求完了から支払・通知までは支払期限を管理する | Claim | Claim.status in (請求完了, 支払決定, 不払決定) AND Claim.period in (未起算, 期限の管理を終了) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:223 |
+| condition | 請求の案内をした段階である | Claim | Claim.status == 請求の案内済 | ConfirmClaimIntent | samples/insurance-claim-ops/buc/buc_claim.rdra:94 |
+| condition | 等級の変動を説明して請求の意思を確かめた | Claim | Claim.grade_explained == true | SubmitClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:103 |
+| condition | 車両・人身傷害の事故の請求である | ClaimCase | ClaimCase.coverage in (車両, 人身傷害) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:115 |
+| condition | 示談が成立している | Settlement | (Settlement.status == 示談成立).along(Claim, ClaimCase, Settlement) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:118 |
+| forbidden | 賠償の請求は示談書がそろってから完了する | Claim\|Settlement | Claim.status == 請求完了 AND Settlement.status != 示談成立 |  | samples/insurance-claim-ops/buc/buc_claim.rdra:222 |
+| forbidden | 等級の変動を説明してから請求の意思を確かめる | Claim | Claim.grade_explained == false AND Claim.status not in (請求の案内済, 取下げ, 時効消滅) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:224 |
+| forbidden | 請求完了から支払・通知までは支払期限を管理する | Claim | Claim.status in (請求完了, 支払決定, 不払決定) AND Claim.period in (未起算, 期限の管理を終了) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:226 |
 | condition | 苦情を受け付けて解決していない | Complaint | Complaint.status == 苦情受付 | GuideToAdr | samples/insurance-claim-ops/buc/buc_complaint.rdra:97 |
 | condition | 特別調停案ではない和解案である | Complaint | Complaint.proposal == 和解案 | RejectProposal | samples/insurance-claim-ops/buc/buc_complaint.rdra:139 |
 | forbidden | 特別調停案は会社が受諾する | Complaint | Complaint.proposal == 特別調停案 AND Complaint.status == 和解案を受諾しない |  | samples/insurance-claim-ops/buc/buc_complaint.rdra:230 |
-| condition | 事故案件を調査しているか、損害を確定した | ClaimCase | ClaimCase.status in (調査中, 示談交渉中, 損害確定) | DetermineFault | samples/insurance-claim-ops/buc/buc_investigation.rdra:87 |
-| condition | 損害調査の報告がある | Investigation | Investigation.status == 調査報告済 | AssessDamage | samples/insurance-claim-ops/buc/buc_investigation.rdra:103 |
-| condition | 車両・人身傷害の事故である | ClaimCase | ClaimCase.coverage in (車両, 人身傷害) | AssessDamage | samples/insurance-claim-ops/buc/buc_investigation.rdra:107 |
-| condition | 賠償責任の有無を判断している | ClaimCase | ClaimCase.liability in (賠償責任あり, 過失ゼロ（賠償責任なし）) | AssessDamage\|CloseCase | samples/insurance-claim-ops/buc/buc_investigation.rdra:110 |
-| condition | 示談が成立したか、示談代行を終えた | Settlement | Settlement.status in (示談成立, 不調（調停・訴訟へ）, 示談代行を行わない) | AssessDamage | samples/insurance-claim-ops/buc/buc_investigation.rdra:114 |
-| forbidden | 損害調査の報告の前に損害を確定しない | ClaimCase\|Investigation | ClaimCase.status in (損害確定, 完了) AND Investigation.status != 調査報告済 |  | samples/insurance-claim-ops/buc/buc_investigation.rdra:185 |
-| forbidden | 賠償の事故は賠償責任を判断してから損害を確定する | ClaimCase | ClaimCase.liability == 未確定 AND ClaimCase.status in (損害確定, 完了) AND ClaimCase.coverage in (対人賠償, 対物賠償) |  | samples/insurance-claim-ops/buc/buc_investigation.rdra:187 |
+| condition | 事故案件を調査しているか、損害を確定した | ClaimCase | ClaimCase.status in (調査中, 示談交渉中, 損害確定) | DetermineFault | samples/insurance-claim-ops/buc/buc_investigation.rdra:88 |
+| condition | 損害調査の報告がある | Investigation | Investigation.status == 調査報告済 | AssessDamage | samples/insurance-claim-ops/buc/buc_investigation.rdra:107 |
+| condition | 車両・人身傷害の事故である | ClaimCase | ClaimCase.coverage in (車両, 人身傷害) | AssessDamage | samples/insurance-claim-ops/buc/buc_investigation.rdra:111 |
+| condition | 賠償責任の有無を判断している | ClaimCase | ClaimCase.liability in (賠償責任あり, 過失ゼロ（賠償責任なし）) | AssessDamage\|CloseCase | samples/insurance-claim-ops/buc/buc_investigation.rdra:114 |
+| condition | 示談が成立したか、示談代行を終えた | Settlement | Settlement.status in (示談成立, 不調（調停・訴訟へ）, 示談代行を行わない) | AssessDamage | samples/insurance-claim-ops/buc/buc_investigation.rdra:118 |
+| forbidden | 損害調査の報告の前に損害を確定しない | ClaimCase\|Investigation | ClaimCase.status in (損害確定, 完了) AND Investigation.status != 調査報告済 |  | samples/insurance-claim-ops/buc/buc_investigation.rdra:189 |
+| forbidden | 賠償の事故は賠償責任を判断してから損害を確定する | ClaimCase | ClaimCase.liability == 未確定 AND ClaimCase.status in (損害確定, 完了) AND ClaimCase.coverage in (対人賠償, 対物賠償) |  | samples/insurance-claim-ops/buc/buc_investigation.rdra:191 |
 | condition | 対人賠償・人身傷害の事故である | ClaimCase | ClaimCase.coverage in (対人賠償, 人身傷害) | SendJibaisekiSurvey | samples/insurance-claim-ops/buc/buc_jibaiseki.rdra:55 |
 | forbidden | 自賠責の損害調査は人身の事故だけ | JibaisekiSurvey\|ClaimCase | ClaimCase.coverage in (対物賠償, 車両) |  | samples/insurance-claim-ops/buc/buc_jibaiseki.rdra:112 |
 | condition | 請求完了の後、支払・不払を決める前である | Claim | Claim.status == 請求完了 | ExtendPaymentPeriod | samples/insurance-claim-ops/buc/buc_payment.rdra:109 |
@@ -2540,11 +2549,11 @@ erDiagram
 | condition | 不払いを決めた | Claim | Claim.status == 不払決定 | ExplainDenialReason | samples/insurance-claim-ops/buc/buc_payment.rdra:149 |
 | condition | 不払いの理由を説明した | Claim | Claim.reason_explained == true | NotifyDenial | samples/insurance-claim-ops/buc/buc_payment.rdra:161 |
 | condition | 支払済みの案件は再度支払わない | Claim | (Claim.status == 支払決定).none(Payment) | PayClaim | samples/insurance-claim-ops/buc/buc_payment.rdra:178 |
-| forbidden | 不正請求の疑いがある請求は上位の決裁者が決める | Claim | Claim.fraud_suspected == true AND Claim.senior_approved == false AND Claim.status in (支払決定, 不払決定, 支払済, 不払通知済) |  | samples/insurance-claim-ops/buc/buc_payment.rdra:324 |
-| invariant | 不払いは理由を説明してから通知する | Claim | when Claim.status == 不払通知済 then Claim.reason_explained == true |  | samples/insurance-claim-ops/buc/buc_payment.rdra:326 |
-| quantifier | 支払済みの請求には支払の記録がある | Claim\|Payment | when Claim.status == 支払済 then has Payment |  | samples/insurance-claim-ops/buc/buc_payment.rdra:328 |
-| forbidden | 支払期限を過ぎた支払には遅延利息を付ける | Payment\|Claim | Claim.late_interest_due == true AND Payment.late_interest == false |  | samples/insurance-claim-ops/buc/buc_payment.rdra:330 |
-| after | 支払ったら支払期限の管理を終える | Claim | Claim.status == 支払済 AND Claim.period == 期限の管理を終了 | PayClaim | samples/insurance-claim-ops/buc/buc_payment.rdra:332 |
+| forbidden | 不正請求の疑いがある請求は上位の決裁者が決める | Claim | Claim.fraud_suspected == true AND Claim.senior_approved == false AND Claim.status in (支払決定, 不払決定, 支払済, 不払通知済) |  | samples/insurance-claim-ops/buc/buc_payment.rdra:326 |
+| invariant | 不払いは理由を説明してから通知する | Claim | when Claim.status == 不払通知済 then Claim.reason_explained == true |  | samples/insurance-claim-ops/buc/buc_payment.rdra:328 |
+| quantifier | 支払済みの請求には支払の記録がある | Claim\|Payment | when Claim.status == 支払済 then has Payment |  | samples/insurance-claim-ops/buc/buc_payment.rdra:330 |
+| forbidden | 支払期限を過ぎた支払には遅延利息を付ける | Payment\|Claim | Claim.late_interest_due == true AND Payment.late_interest == false |  | samples/insurance-claim-ops/buc/buc_payment.rdra:332 |
+| after | 支払ったら支払期限の管理を終える | Claim | Claim.status == 支払済 AND Claim.period == 期限の管理を終了 | PayClaim | samples/insurance-claim-ops/buc/buc_payment.rdra:334 |
 | condition | 車両・対物賠償の事故である | ClaimCase | ClaimCase.coverage in (車両, 対物賠償) | SubmitRepairEstimate | samples/insurance-claim-ops/buc/buc_repair.rdra:62 |
 | condition | 修理費を協定した | RepairEstimate | RepairEstimate.status == 修理費の協定 | ApproveRepairStart | samples/insurance-claim-ops/buc/buc_repair.rdra:75 |
 | condition | 修理着工を承認した | RepairEstimate | RepairEstimate.approved == true | StartRepair | samples/insurance-claim-ops/buc/buc_repair.rdra:83 |
@@ -2690,6 +2699,11 @@ flowchart LR
   buc__BucSubrogation["求償（請求権代位）"]:::buc
   %% desc buc__BucSubrogation: 保険会社は保険金を払うと、払った額と被保険者の債権の額のいずれか少ない額を限度に、被保険者が相手方に持つ損害賠償請求権を当然に取得する（請求権代位）。被保険者の残りの債権が優先する。保険会社は相手方（とその保険会社）に求償し、回収するか断念する。相手方への請求権は、損害と加害者を知った時から3年（人身損害は5年）で時効にかかる。
   event__EvClaimPaid -.-> buc__BucSubrogation
+  event__EvClaimTimeBarred>"請求権の時効消滅"]:::event
+  usecase__TimeBarClaim("請求権の時効による消滅"):::usecase
+  %% desc usecase__TimeBarClaim: 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。
+  usecase__TimeBarClaim -.-> event__EvClaimTimeBarred
+  event__EvClaimTimeBarred -.-> usecase__CloseCase
   event__EvClaimWithdrawn>"請求の取下げ"]:::event
   usecase__WithdrawClaim("請求の取下げ"):::usecase
   %% desc usecase__WithdrawClaim: 請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。
@@ -2746,9 +2760,12 @@ flowchart LR
   %% desc usecase__EndNegotiationUnresolved: 示談がまとまらず、調停または訴訟に移る。調停・訴訟の中身は対象外。
   usecase__EndNegotiationUnresolved -.-> event__EvSettlementEnded
   event__EvSettlementEnded -.-> usecase__AssessDamage
+  event__EvSurveyReported>"損害調査の報告"]:::event
+  usecase__ReportSurvey("損害調査の報告"):::usecase
+  %% desc usecase__ReportSurvey: アジャスターが調査の結果を報告する。法的・医学的・工学的な判断を要する事案は専門家の見解を添える。
+  usecase__ReportSurvey -.-> event__EvSurveyReported
+  event__EvSurveyReported -.-> usecase__AssessDamage
   timer__ClaimLimitation(("保険金請求権の時効（請求権が発生した時の翌日から3年）")):::timer
-  usecase__TimeBarClaim("請求権の時効による消滅"):::usecase
-  %% desc usecase__TimeBarClaim: 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。
   timer__ClaimLimitation -.-> usecase__TimeBarClaim
   timer__PaymentDeadline(("支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）")):::timer
   usecase__MarkPaymentOverdue("支払期限の経過"):::usecase
@@ -2808,6 +2825,8 @@ flowchart LR
   end
   buc__BucClaim -->|請求の取下げ| buc__BucPayment
   %% derived buc__BucClaim -> buc__BucPayment via event__EvClaimWithdrawn
+  buc__BucClaim -->|請求権の時効消滅| buc__BucPayment
+  %% derived buc__BucClaim -> buc__BucPayment via event__EvClaimTimeBarred
   buc__BucIntake -->|初期対応の完了| buc__BucClaim
   %% derived buc__BucIntake -> buc__BucClaim via event__EvInitialResponded
   buc__BucPayment -->|不払いの通知| buc__BucComplaint

@@ -55,6 +55,11 @@ flowchart LR
   buc__BucSubrogation["求償（請求権代位）"]:::buc
   %% desc buc__BucSubrogation: 保険会社は保険金を払うと、払った額と被保険者の債権の額のいずれか少ない額を限度に、被保険者が相手方に持つ損害賠償請求権を当然に取得する（請求権代位）。被保険者の残りの債権が優先する。保険会社は相手方（とその保険会社）に求償し、回収するか断念する。相手方への請求権は、損害と加害者を知った時から3年（人身損害は5年）で時効にかかる。
   event__EvClaimPaid -.-> buc__BucSubrogation
+  event__EvClaimTimeBarred>"請求権の時効消滅"]:::event
+  usecase__TimeBarClaim("請求権の時効による消滅"):::usecase
+  %% desc usecase__TimeBarClaim: 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。
+  usecase__TimeBarClaim -.-> event__EvClaimTimeBarred
+  event__EvClaimTimeBarred -.-> usecase__CloseCase
   event__EvClaimWithdrawn>"請求の取下げ"]:::event
   usecase__WithdrawClaim("請求の取下げ"):::usecase
   %% desc usecase__WithdrawClaim: 請求者が請求を取り下げる。担当者は理由・日付・方法・確認先を記録する。
@@ -111,9 +116,12 @@ flowchart LR
   %% desc usecase__EndNegotiationUnresolved: 示談がまとまらず、調停または訴訟に移る。調停・訴訟の中身は対象外。
   usecase__EndNegotiationUnresolved -.-> event__EvSettlementEnded
   event__EvSettlementEnded -.-> usecase__AssessDamage
+  event__EvSurveyReported>"損害調査の報告"]:::event
+  usecase__ReportSurvey("損害調査の報告"):::usecase
+  %% desc usecase__ReportSurvey: アジャスターが調査の結果を報告する。法的・医学的・工学的な判断を要する事案は専門家の見解を添える。
+  usecase__ReportSurvey -.-> event__EvSurveyReported
+  event__EvSurveyReported -.-> usecase__AssessDamage
   timer__ClaimLimitation(("保険金請求権の時効（請求権が発生した時の翌日から3年）")):::timer
-  usecase__TimeBarClaim("請求権の時効による消滅"):::usecase
-  %% desc usecase__TimeBarClaim: 請求が完了しないまま、請求権が発生した時の翌日から3年が過ぎ、請求権が時効で消える。
   timer__ClaimLimitation -.-> usecase__TimeBarClaim
   timer__PaymentDeadline(("支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）")):::timer
   usecase__MarkPaymentOverdue("支払期限の経過"):::usecase

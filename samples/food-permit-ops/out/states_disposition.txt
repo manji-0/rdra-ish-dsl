@@ -63,4 +63,6 @@ Entity: Disposition (不利益処分)
   suspension         explanation  finalized  true          ended        no       yes       BucDisposition/DecideSuspension, BucDisposition/EndPublication, BucDisposition/FinalizeDisposition, BucDisposition/NotifyOpinionProcedure, BucDisposition/ProposeDisposition, BucDisposition/PublishViolation, BucDisposition/ReceiveExplanation
 
   reachable: 57 / bound: 432
+  diagnostics:
+    [info][UnjoinedTrigger_Disposition_EvViolationFound_ProposeDisposition] triggers(EvViolationFound, ProposeDisposition): ProposeDisposition binds no row of SiteVisit, the entity EvViolationFound is raised on, and no key joins its rows to one, so any SiteVisit the event was raised on lets ProposeDisposition run
 

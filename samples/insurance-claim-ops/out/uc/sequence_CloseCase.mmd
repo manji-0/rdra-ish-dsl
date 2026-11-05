@@ -4,11 +4,13 @@
 sequenceDiagram
   participant usecase__NotifyDenial as 不払いの通知
   participant usecase__PayClaim as 保険金の支払
+  participant usecase__TimeBarClaim as 請求権の時効による消滅
   participant usecase__WithdrawClaim as 請求の取下げ
   participant api__CaseApi as 事故案件 API
   participant entity__ClaimCase as 事故案件（担保種目ごと）
   usecase__NotifyDenial ->> api__CaseApi: 不払いの通知
   usecase__PayClaim ->> api__CaseApi: 保険金の支払
+  usecase__TimeBarClaim ->> api__CaseApi: 請求権の時効消滅
   usecase__WithdrawClaim ->> api__CaseApi: 請求の取下げ
   alt 賠償責任の有無を判断している: ClaimCase.liability in (賠償責任あり, 過失ゼロ（賠償責任なし）) and ClaimCase.status == 損害確定
     api__CaseApi ->> entity__ClaimCase: update status 損害確定 -> 完了

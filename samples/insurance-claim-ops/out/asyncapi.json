@@ -86,6 +86,14 @@
         }
       }
     },
+    "EvClaimTimeBarred": {
+      "address": "EvClaimTimeBarred",
+      "messages": {
+        "EvClaimTimeBarred": {
+          "$ref": "#/components/messages/EvClaimTimeBarred"
+        }
+      }
+    },
     "EvClaimWithdrawn": {
       "address": "EvClaimWithdrawn",
       "messages": {
@@ -167,6 +175,14 @@
       "messages": {
         "EvSettlementEnded": {
           "$ref": "#/components/messages/EvSettlementEnded"
+        }
+      }
+    },
+    "EvSurveyReported": {
+      "address": "EvSurveyReported",
+      "messages": {
+        "EvSurveyReported": {
+          "$ref": "#/components/messages/EvSurveyReported"
         }
       }
     }
@@ -338,6 +354,29 @@
         "x-rdra-ish-triggers-usecases": [
           "CloseCase",
           "StartSubrogation"
+        ]
+      },
+      "EvClaimTimeBarred": {
+        "name": "EvClaimTimeBarred",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClaimTimeBarred",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "請求権の時効消滅",
+        "x-rdra-ish-raised-by-usecases": [
+          "TimeBarClaim"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "assessed",
+            "to": "closed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "CloseCase"
         ]
       },
       "EvClaimWithdrawn": {
@@ -545,6 +584,37 @@
         "x-rdra-ish-triggers-usecases": [
           "AssessDamage"
         ]
+      },
+      "EvSurveyReported": {
+        "name": "EvSurveyReported",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvSurveyReported",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "損害調査の報告",
+        "x-rdra-ish-raised-by-usecases": [
+          "ReportSurvey"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "investigating",
+            "to": "assessed"
+          },
+          {
+            "from": "investigating",
+            "to": "assessed"
+          },
+          {
+            "from": "negotiating",
+            "to": "assessed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "AssessDamage"
+        ]
       }
     }
   },
@@ -667,6 +737,27 @@
       "x-rdra-ish-triggers-usecases": [
         "CloseCase",
         "StartSubrogation"
+      ]
+    },
+    "consumeEvClaimTimeBarred": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClaimTimeBarred"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimTimeBarred/messages/EvClaimTimeBarred"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "assessed",
+          "to": "closed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "CloseCase"
       ]
     },
     "consumeEvClaimWithdrawn": {
@@ -848,6 +939,35 @@
         "AssessDamage"
       ]
     },
+    "consumeEvSurveyReported": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvSurveyReported"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSurveyReported/messages/EvSurveyReported"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "investigating",
+          "to": "assessed"
+        },
+        {
+          "from": "investigating",
+          "to": "assessed"
+        },
+        {
+          "from": "negotiating",
+          "to": "assessed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "AssessDamage"
+      ]
+    },
     "publishEvAccidentQueried": {
       "action": "send",
       "channel": {
@@ -903,6 +1023,20 @@
       ],
       "x-rdra-ish-raised-by-usecases": [
         "PayClaim"
+      ]
+    },
+    "publishEvClaimTimeBarred": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvClaimTimeBarred"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClaimTimeBarred/messages/EvClaimTimeBarred"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "TimeBarClaim"
       ]
     },
     "publishEvClaimWithdrawn": {
@@ -988,6 +1122,20 @@
       "x-rdra-ish-raised-by-usecases": [
         "DeclineSettlementService",
         "EndNegotiationUnresolved"
+      ]
+    },
+    "publishEvSurveyReported": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvSurveyReported"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSurveyReported/messages/EvSurveyReported"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ReportSurvey"
       ]
     }
   }

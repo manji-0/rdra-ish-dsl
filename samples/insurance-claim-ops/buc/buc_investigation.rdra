@@ -75,6 +75,7 @@ transitions(ConductSurvey, Investigation.status, requested -> surveying)
 displays(ReportSurvey, InvestigationScreen)
 invokes(ReportSurvey, InvestigationApi)
 transitions(ReportSurvey, Investigation.status, surveying -> reported)
+raises(ReportSurvey, EvSurveyReported)
 
 displays(DetermineFault, CaseScreen)
 invokes(DetermineFault, CaseApi)
@@ -90,12 +91,15 @@ applies_to(CaseInvestigating, DetermineFault)
 // A case is assessed once the survey is reported. A liability case also needs the fault decided,
 // which the other coverages do not: the arm `investigating -> assessed` is declared twice, once
 // under each guard, and is enabled when either holds. A negotiated case is assessed after the
-// settlement ends, as the event from the settlement says.
+// settlement ends, as the event from the settlement says. A triggered use case runs only after
+// one of its events (2.0), so the path with no settlement starts on the survey's own event,
+// `EvSurveyReported`; the guards still decide which arm it takes.
 displays(AssessDamage, CaseScreen)
 invokes(AssessDamage, CaseApi)
 transitions(AssessDamage, ClaimCase.status, investigating -> assessed).when(FirstPartyCoverage)
 transitions(AssessDamage, ClaimCase.status, investigating -> assessed).when(LiabilityDetermined)
 transitions(AssessDamage, ClaimCase.status, negotiating -> assessed).when(SettlementConcluded)
+triggers(EvSurveyReported, AssessDamage)
 triggers(EvSettlementAgreed, AssessDamage)
 triggers(EvSettlementEnded, AssessDamage)
 

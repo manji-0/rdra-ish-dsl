@@ -191,14 +191,16 @@ transitions(MarkPaymentOverdue, Claim.period, extended -> overdue)
 sets(MarkPaymentOverdue, Claim.late_interest_due == true)
 triggers(PaymentDeadline, MarkPaymentOverdue)
 
-// Started by the events from the claim, no performer. Events give no order (#30), so the guard
-// states only what the case itself needs.
+// Started by the events from the claim, no performer. The case closes only after one of them
+// (2.0), including a claim that lapsed by its limitation, so a time-barred claim does not
+// leave its case assessed forever. The guard states only what the case itself needs.
 invokes(CloseCase, CaseApi)
 transitions(CloseCase, ClaimCase.status, assessed -> closed)
 applies_to(LiabilityDetermined, CloseCase)
 triggers(EvClaimPaid, CloseCase)
 triggers(EvDenialNotified, CloseCase)
 triggers(EvClaimWithdrawn, CloseCase)
+triggers(EvClaimTimeBarred, CloseCase)
 
 // Access constraints
 requires_permission(ExtendPaymentPeriod, CaseHandle)

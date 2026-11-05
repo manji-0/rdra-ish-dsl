@@ -24,6 +24,7 @@ flowchart LR
     screen__InvestigationScreen["損害調査画面"]:::screen
     event__EvSettlementAgreed>"示談の成立"]:::event
     event__EvSettlementEnded>"示談代行の終了（不調・不実施）"]:::event
+    event__EvSurveyReported>"損害調査の報告"]:::event
   end
   subgraph layer_system["システム"]
     entity__ClaimCase[("事故案件（担保種目ごと）")]:::entity
@@ -59,6 +60,7 @@ flowchart LR
   %% derived condition__SettlementConcluded -> usecase__AssessDamage via transitions ClaimCase.status negotiating->assessed
   event__EvSettlementAgreed -.-> usecase__AssessDamage
   event__EvSettlementEnded -.-> usecase__AssessDamage
+  event__EvSurveyReported -.-> usecase__AssessDamage
   usecase__AssessDamage -.-> screen__CaseScreen
   usecase__AssessDamage -.->|transitions ClaimCase.status investigating->assessed| state__ClaimCase_status_assessed
   usecase__AssessDamage -.->|transitions ClaimCase.status negotiating->assessed| state__ClaimCase_status_assessed
@@ -74,6 +76,7 @@ flowchart LR
   usecase__DetermineFault -.->|updates| entity__ClaimCase
   %% derived usecase__DetermineFault -> entity__ClaimCase via api__CaseApi
   usecase__ReportSurvey -.-> screen__InvestigationScreen
+  usecase__ReportSurvey -.-> event__EvSurveyReported
   usecase__ReportSurvey -.->|transitions Investigation.status surveying->reported| state__Investigation_reported
   usecase__ReportSurvey -.->|updates| entity__Investigation
   %% derived usecase__ReportSurvey -> entity__Investigation via api__InvestigationApi

@@ -16,6 +16,7 @@ flowchart LR
   actor__ClaimHandler --> screen__InvestigationScreen
   api__CaseApi -->|U| entity__ClaimCase
   api__InvestigationApi -->|U| entity__Investigation
+  api__InvestigationApi -.->|損害調査の報告| api__CaseApi
   api__InvestigationCreateApi -->|C| entity__Investigation
   api__InvestigationCreateApi -->|U| entity__ClaimCase
   screen__CaseScreen -->|損害の確定| api__CaseApi
