@@ -1964,6 +1964,55 @@ applies_to(GateOpen, Go)
 forbidden(Job, status == running).label("作業は始まらない")
 "#;
 
+/// A violation whose path runs through the sub-lifecycle the job's cone reduces (#109): the
+/// job starts at an open gate, and the gate opens only after `Unlatch` and the key's
+/// `Unlock`, steps the reduced cone folds into the class move of `Swing`.
+const GATE_BEHIND_A_KEY: &str = r#"
+entity Card "札" { id: Int @pk  status: Enum(blank, issued) @default(blank) }
+entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
+usecase Issue "札を出す"
+transitions(Issue, Card.status, blank -> issued)
+condition CardIssued "札が出ている"
+holds(CardIssued, Card.status == issued)
+applies_to(CardIssued, Unlock)
+entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut)  latch: Bool @default(false) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Gate, Key, N:1)
+relate(Job, Gate, N:1)
+usecase Unlock "解錠"
+usecase Crack "少し開ける"
+usecase Unlatch "掛け金を外す"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+transitions(Unlock, Key.status, locked -> unlocked)
+transitions(Crack, Gate.status, shut -> half)
+sets(Unlatch, Gate.latch == true)
+transitions(Swing, Gate.status, half -> open)
+condition Unlatched "掛け金が外れている"
+holds(Unlatched, Gate.latch == true)
+applies_to(Unlatched, Swing)
+condition KeyOpen "鍵が開いている"
+holds(KeyOpen, Key.status == unlocked)
+applies_to(KeyOpen, Swing)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+forbidden(Job, status == running).label("作業は始まらない")
+"#;
+
+#[test]
+fn bfs_and_tlc_agree_on_a_violation_through_the_sub_lifecycle() {
+    if let Some(violated) = check_fixture("gate_behind_a_key", GATE_BEHIND_A_KEY) {
+        assert_eq!(
+            violated.into_iter().collect::<Vec<_>>(),
+            ["Forbidden_Job_0"]
+        );
+    }
+}
+
 #[test]
 fn bfs_and_tlc_agree_on_two_actions_of_one_name() {
     for (name, src, expected) in [
