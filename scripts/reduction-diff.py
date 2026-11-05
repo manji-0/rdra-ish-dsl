@@ -238,6 +238,17 @@ def gen(seed):
         else:
             f = f"always(E{i}.status != {a})"
         out.append(f"property P{p}\n  {f}")
+    # Events (#112): a raiser on one side of a relation and a handler on the other, so the
+    # handler reads the raiser's mark across the split. Drawn from a second generator, so
+    # every seed keeps the model it had before events.
+    re_ = random.Random(seed * 7919 + 1)
+    for k in range(re_.choice([0, 1, 1, 2]) if n >= 2 else 0):
+        j = re_.randrange(1, n)
+        i = parent[j]
+        src, dst = (j, i) if re_.random() < 0.6 else (i, j)
+        raiser = re_.choice(arms[src])
+        handler = re_.choice(arms[dst] + ([creates[dst]] if dst == j else []))
+        out.append(f'event Ev{k} "ev{k}"\nraises({raiser}, Ev{k})\ntriggers(Ev{k}, {handler})')
     return "\n".join(out) + "\n", instances
 
 
