@@ -253,9 +253,10 @@ It also emits these `info` rows:
   with an empty label. It is not shown in the editor.
 - `triggered-usecase-unguarded` marks a use case that only an event or a timer starts (no
   `performs` names it), that writes something, and that no condition guards and no
-  `transitions` gives a from-state. The order of `raises` and `triggers` adds no guard, so
-  `check` and `verify` run it in every reachable state, before the event too. The hint is to
-  add the state the event follows as a `holds` body applied to the use case, or as a
+  `transitions` gives a from-state. The event orders the use case after its raise, but the
+  record of the raise is a latch, so once the event was raised on a row `check` and `verify`
+  run the use case there in every state its guards allow, as often as they allow. The hint
+  is to add the state the event follows as a `holds` body applied to the use case, or as a
   `transitions` arm.
 - `condition-applied-without-body` marks a condition with no `holds` body and no `combines`
   that `applies_to` a use case or an API. It guards nothing and links no variation or state

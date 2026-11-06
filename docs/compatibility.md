@@ -139,7 +139,11 @@ Every result holds within the bounds its `bounds:` line prints: the instances pe
 the Int range, and the state caps of `check` and of the `verify` BFS. A release may change
 a default bound or cap. That is not a breaking change, and the changelog records it. A
 result that changes for a model within the same printed bounds is a breaking change,
-unless it fixes a bug that the changelog names.
+unless it fixes a bug that the changelog names. 2.0.0 is such a change: for a model with
+`raises` and `triggers` between use cases, `check` and `verify` order the triggered use
+case after its event within the same bounds, so a verdict can move while the `bounds:` line
+stays as it was. The `### Breaking` entry for #112 in the [changelog](../CHANGELOG.md)
+names which verdicts move and how to migrate.
 
 To keep a result reproducible across releases, pass the bounds a command takes as flags
 instead of relying on the defaults: `--instance-count`, `--int-range-max`, and

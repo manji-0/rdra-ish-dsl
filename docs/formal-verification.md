@@ -140,6 +140,9 @@ stays as it was.
 | `relate` N:1, 1:N, 1:1 | `<Child>_owner_<Parent>`, a function from child ids to parent ids. An `.optional()` relate adds `0` for an unlinked child. |
 | Use case | One operator `<UC>(p0, ...)` per transaction group of `UsecaseTx::groups()` (`<UC>_1`, `<UC>_2`, ... when the writes form several groups). `Next` is the disjunction of `\E` over the parameters. |
 | A use case split into k groups | A run mark `<E>_run_<UC>`, a function from the ids of each entity a step before the last writes to `{"none", "1", .., "k-1"}`. `<UC>_1` takes a row at `"none"` and sets `"1"`; `<UC>_i` binds a parameter per earlier row with `<E>_run_<UC>[p] = "i-1"` in place of a presence test, and sets `"i"`, or `"none"` at the last step (see [Runs of a split use case](./state-derivation.md#runs)). |
+| A tracked event `Ev` with mark entity `E` | A raised mark `<E>_raised_<Ev>`, a function from `<E>_Ids` to `BOOLEAN`, `FALSE` in `Init` and never `FALSE` again (see [Triggers](./state-derivation.md#triggers)). The last step of a raiser, on each parameter `p` it has on `E`, assigns `<E>_raised_<Ev>' = [<E>_raised_<Ev> EXCEPT ![p] = TRUE]`; the first step of a triggered use case conjoins `<E>_raised_<Ev>[p] = TRUE` on each parameter that is the raiser's row. |
+| A `Triggered` parameter | One more `\E p \in <E>_Ids` on the triggered operator with `<E>_exists[p] = "present"` and the mark conjunct, and, when the one direct key joins it to one of the operator's rows, `<Child>_owner_<Parent>[c] = p` (or `= c`). A cone that leaves the mark out prints the operator without the conjunct and without the parameter, and the var is not in the module. |
+| A use case several tracked events trigger | One operator per variant, `<UC>_by_<Ev>`, each in `Next`; `AfterAssert_<UC>_<n>` ranges over every variant's last step. |
 | `creates` | `FirstAbsent(<E>_exists, p)` and `<E>_exists' = ... "present"`. A deleted slot is never reused. |
 | `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. |
 | `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
@@ -337,9 +340,9 @@ pass ends with a `state models (BFS on N entity cones): ...` summary line. The c
 states of the reduced cone (see
 [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)); the
 sub-lifecycle it explores to reduce a cone has the same cap, and a cone whose sub-lifecycle
-passes it runs unreduced. On clinic-ops the whole `verify` takes about 40 s and 1.4 GB (it
+passes it runs unreduced. On clinic-ops the whole `verify` takes about 17 s and 0.5 GB (it
 took 2.5 minutes and 3.7 GB before the reduction); its largest cone is `EligibilityCheck`
-(1,784,808 states at 2 instances, which nothing reduces), while `Charge`, past the cap
+(905,528 states at 2 instances, which nothing reduces), while `Charge`, past the cap
 unreduced, is 38,533 states reduced and `Prescription` (4,266,635 unreduced) is 1,690. On
 patent-ops the `OfficeAction` cone (over 8,388,608 states unreduced, 1,341,707 reduced) is under
 the cap too, so `verify` decides all four of its stuck-state checks (see the sample's README).
@@ -459,7 +462,50 @@ The cone's vars split into a target side T and the rest S:
   inside, the quotient is the identity and would reduce nothing, so the cone stays unreduced
   (#101): it keeps all its checks, its module has no `S_class`, and a property's
   counterexample needs no `_Full` run. A nested reduction still counts: an S whose own
-  reduction shrank it is reduced, even when its classes are its states.
+  reduction shrank it is reduced, even when its classes are its states. An identity inner
+  reduction does not count (`Reduction::shrinks`), and a split whose S is wholly in `obs` is
+  not explored, since its quotient is the identity whatever the inputs do.
+- Since #112 an S action may read T vars that only rise, its *inputs*. A var is monotone
+  when the cone's writes, taken as edges between its values, form no cycle
+  (`TransitionSystem::monotone_vars`): a create and a delete move an existence forward, a
+  delete resets the entity's columns and owners (which makes them cyclic), an assignment or
+  a choice starts from the base value in the creating action and from any value elsewhere, a
+  transition is its arms, and the clock ticks up. A raised mark, an existence, an owner key,
+  and a status whose arms all point forward are monotone. The rule is checked on the cone,
+  so a model that adds a backward arm loses the reduction and nothing else. The quotient is
+  then computed on S *extended* with its inputs (`restrict_to` of S and the inputs, without
+  the havoc of a `Triggered` parameter): the S actions are silent, and every T action that
+  writes an input is a *rise*, kept with the guards it has on S and the inputs. The
+  partition is stuttering-stable under the silent steps and strongly stable under the
+  rises, so two states of a class rise into the same class. The reduced cone looks a rise up
+  in a table, per class and new input bytes (`Reduction::rises`), whenever a T step changes
+  the inputs, and the lift replays the same rise on the extended run.
+- A read of T through a handler's `Triggered` row, or through a quantifier over a T entity
+  linked to an S row, is *folded* into one Boolean per slot of its key, so the extended
+  system sees a bit where it would see every input's history. The param fold
+  (`FoldKey::Param`) folds the guards an S action has on T params that only key its row:
+  the bit at slot `c` holds when the guards hold for some binding of the other T params,
+  each on a present row. The node fold (`FoldKey::Linked`) folds a guard of an action with
+  no T param that reads T only through a quantifier whose body is T atoms beside the link
+  `owner[p] = row`: the bit is keyed by the linked row, and the guard reads `owner[p] = q ∧
+  bit[q]` where the quantifier stood. The variants of one handler whose folds agree share a
+  bit. A bit starts where the cone's initial states put it, or stays a raw input when they
+  disagree. In the extended system each bit has a free rise and a free fall, so the quotient
+  stays correct even when a fold is not monotone.
+- The tables a reduced cone hands TLC are bounded. `Reduction::tla_cells` counts one cell per
+  class for each observed var and each S action, plus one per rise, and a reduction past
+  `TLA_CELL_BUDGET` (200,000 cells) is not used: the split without inputs is tried, and the
+  cone stays unreduced when that fails too. Measured with TLC's 1 GB heap, a cone of 2,428
+  classes prints 72,840 cells and runs, the insurance-claim-ops `ClaimCase` view's 4,368
+  classes print 104,832 at a peak of 912 MB, and a random model's 24,000 classes printed
+  326,400 and ran out of heap.
+
+With inputs, the module prints each bit group as an operator `In_<g>(c)` over the T vars, the
+`Rise` table (one cell per class, `:>` and `@@` from `TLC`, so such a module `EXTENDS TLC`),
+and, in every action that writes an input, the conjunct `S_class' = IF inputs' = inputs THEN
+S_class ELSE Rise[S_class][inputs']`, staged as one `LET` per input group after the
+`UNCHANGED` that binds the primed inputs. The decoder reads an input from the module's own
+var, not from the representative.
 
 **Proof obligation.** Let C be the cone and R the reduced cone. The relation
 `(t, s) ~ (t, rep(class(s)))` between their states is a divergence-blind stuttering
@@ -477,6 +523,13 @@ bisimulation that preserves T and `obs`:
    of which but the last is related to `(t, rep)`.
 4. An initial state `(t0, s0)` of C is related to the initial state `(t0, rep(class(s0)))`
    of R, and R has no other initial state.
+5. With inputs, the class of `s` is read at the inputs of `t`. A T step that leaves the
+   inputs alone is matched as in 2. A T step that changes them is a rise of the extended
+   system from `(s, inp(t))`; strong stability under the rises gives the representative a
+   rise into the same class, which `Rise` takes. A fold is sound by the same argument with
+   the bit in place of the vars it folds, since the folded guard is a function of them and
+   the key. The monotone rule is not used here: it bounds the input histories, which keeps
+   the extended system finite and small.
 
 A divergence-blind stuttering bisimulation preserves every formula of CTL\* without the next
 operator, and the reduced cone's findings are such formulas over T and `obs`: a state is
@@ -608,24 +661,30 @@ The rules for each flag and for deferral are in
   cone and of its sub-lifecycle). "Sub-lifecycle" is the S side's states and classes; T is
   what the reduction cannot move out of the target's side.
 
-  | Cone (first target that reads it) | Reduced | Unreduced | Sub-lifecycle | Why it is this large |
+  | Cone (first target that reads it) | Reduced | Unreduced (1.2.0) | Sub-lifecycle | Why it is this large |
   |---|---:|---:|---:|---|
-  | clinic-ops entity `EligibilityCheck` | 1,784,808 | 1,784,808 | 36 / 36 | `CheckInPatient` checks the appointment in and creates the check (#80), so the appointment, the patient account and the check share T. S is the existence of the account balance, the location, the policy, the provider, its schedule and the room. `obs` tells every one of its 36 states apart, so the reduction removes no state. |
+  | clinic-ops entity `EligibilityCheck` | 905,528 | 1,784,808 | none | `CheckInPatient` checks the appointment in and creates the check (#80), so the appointment, the patient account and the check share T. Nothing reduces. The event order of #112 took it from 1,784,808 to 905,528 states, since a handler no longer runs before its event (inferred from the unchanged split). |
   | patent-ops entity `OfficeAction` | 1,341,707 | over 9,000,000 | 14,953 / 185 | T is the office action alone. S is the application with its drafting order, disclosure, inventor and firm. The guards `UnderExamination` and `ExaminationOver` read the application's status, and the office action is owned by it, so 185 classes stay apart. The size is the office action's lifecycle at 2 instances times those classes. |
   | patent-ops invariant `Forbidden_OfficeAction_3` (also `Exclusive_OfficeAction_0`) | 1,341,707 | over 9,000,000 | 14,953 / 185 | The vars of `OfficeAction`'s cone; a cone of its own because it keeps the invariants' checks. |
-  | food-permit-ops entity `PermitApplication` | 2,094,157 | 2,094,157 | none | Every entity in the cone (the application, its inspection, the permit) reads the application, and the renewal guard `失効後の更新はできない` reads the renewed permit (#73). No side is independent of the target's, so nothing reduces. |
-  | insurance-claim-ops entity `Payment` | 814,191 | over 9,000,000 | 63,823 / 443 | S is the accident case with its investigation and settlement, which the guard of `CompleteClaim` reads. T is the claim and the payment: the claim's rules read its columns (`period`, `grade_explained`, `fraud_suspected`, `reason_explained`, `late_interest_due`), and the payment reads the claim. |
-  | insurance-claim-ops entity `Claim` | 754,247 | over 9,000,000 | 63,823 / 443 | As `Payment`, with `senior_approved` and `completed_on` in place of the payment's columns. |
-  | insurance-claim-ops invariant `MultiForbidden_Payment_3` (also `AfterAssert_PayClaim_0`, a separate cone of the same size) | 707,071 | over 9,000,000 | 63,823 / 443 | As `Payment`, without the payment's status. |
-  | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (two cones, with the claim's other rules) | 573,751 | over 9,000,000 | 63,823 / 443 | As `Claim`, with fewer of the claim's columns (no `completed_on` or `late_interest_due`). |
+  | food-permit-ops entity `BusinessPermit` | 4,648,771 | 7,813 | 52,444 / 444 | Since #112 the permit's handlers read the marks the disposition's and the renewal's raisers set, which pulls those raisers into the permit's cone. They are the sub-lifecycle, extended with the marks as inputs. |
+  | insurance-claim-ops entity `ClaimCase` | 4,580,087 | 63,823 | 93,904 / 4,368 | Since #112 `CloseCase` and `AssessDamage` run on the claim's and the settlement's events, so the claim and the payment join the case's cone. They are the sub-lifecycle, read through two bits per case (a node fold of `CompleteClaim`'s settlement guard and the handlers' param fold). |
+  | insurance-claim-ops entity `Payment` | 903,987 | over 9,000,000 | 255,292 / 2,428 | S is the accident case with its investigation and settlement, which the guard of `CompleteClaim` reads, extended with the claim's events that close the case. T is the claim and the payment: the claim's rules read its columns (`period`, `grade_explained`, `fraud_suspected`, `reason_explained`, `late_interest_due`), and the payment reads the claim. |
+  | insurance-claim-ops entity `Claim` | 836,427 | over 9,000,000 | 255,292 / 2,428 | As `Payment`, with `senior_approved` and `completed_on` in place of the payment's columns. |
+  | insurance-claim-ops invariant `MultiForbidden_Payment_3` (also `AfterAssert_PayClaim_0`, a separate cone of the same size) | 783,427 | over 9,000,000 | 255,292 / 2,428 | As `Payment`, without the payment's status. |
+  | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (two cones, with the claim's other rules) | 633,787 | over 9,000,000 | 255,292 / 2,428 | As `Claim`, with fewer of the claim's columns (no `completed_on` or `late_interest_due`). |
   | patent-ops entity `PatentApplication` (compared at 2 instances since the cap of 300,000) | 293,833 | 2,167,411 | 73 / 73 | The filing guard `DraftsApproved` reads the drafting order and `FileApplication` moves the order to `filed`, so the order joins the application in T. S is the disclosure, its inventor and the firm; S is reduced inside, so its 73 states are already a quotient, and `obs` tells them all apart. |
   | patent-ops entity `Patent` and invariant `Forbidden_Patent_4` (two cones; compared at 2 instances since the cap of 300,000) | 202,569 | 1,494,339 | 73 / 73 | As `PatentApplication`, with the patent's columns in T beside fewer of the application's. |
-  | food-permit-ops entity `Inspection` and invariants `Inv_PermitApplication_1` and `Inv_PermitApplication_2` (three cones; compared at 2 instances since the cap of 300,000) | 232,885 | 232,885 | none | As `PermitApplication`, without the application's `business_type` (and `reason_shown`, except in `Inv_PermitApplication_1`). |
+  | food-permit-ops entity `PermitApplication` (off the list since #112) | 52,597 | 2,094,157 | 348 / 228 | The order lets the inspection's and the permit's side reduce against the application's; 1.2.0 listed this cone. |
 
-  Raising the cap from 200,000 to 300,000 took the cones of the last three rows, six in all,
-  off the list. The test went from 194 s to 239 and 243 s locally (18 cores, 8 workers; one
-  run before, two after), and every verdict stayed the same. The next cone, 573,751 states,
-  would need TLC to dump a state graph twice that size for each of the six
+  The Reduced and Sub-lifecycle columns are measured on the #112 build with
+  `RDRA_REDUCED_ONLY=1 lifecycle_measure -- 9000000 verify <sample>`; the Unreduced column is
+  the 1.2.0 measurement, before the event order, and is not measured again.
+
+  Raising the cap from 200,000 to 300,000 took six cones off the list: the patent-ops
+  `PatentApplication`, `Patent` and `Forbidden_Patent_4` cones above and three food-permit-ops
+  `Inspection` cones of 232,885 states, which #112 reduces to 5,885. The test went from
+  194 s to 239 and 243 s locally (18 cores, 8 workers; one run before, two after), and every
+  verdict stayed the same. The smallest listed cone, 633,787 states, would need TLC to dump a state graph twice that size for each of the
   insurance-claim-ops cones.
 
   The insurance-claim-ops cones hold the settlement guard of `CompleteClaim` (see the
@@ -682,41 +741,56 @@ The rules for each flag and for deferral are in
 <!-- derived-from ../samples/insurance-claim-ops/README.md#known-verification-gaps -->
 <!-- constrained-by ./language-reference.md#triggers-and-event-driven-buc-chaining -->
 A passing `check` or `verify` says nothing about what it does not explore. This section
-names each gap that 1.0 keeps, how to see it in a run, and what you can do about it. The
+names each gap that 2.0 keeps, how to see it in a run, and what you can do about it. The
 [compatibility contract](./compatibility.md#bounds) promises results only within these
 gaps.
 
-- **Events and timers impose no order.** A use case that an event or a timer triggers can
-  run whenever its required states and guards hold, also before the use case that raises
-  the event. This over-approximation is the 1.0 semantics (#30): a check never misses a
-  violation the event order could produce, but it can report a run the event order
-  prevents. See it: a counterexample in which the triggered use case runs first, as in
-  [`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining).
-  What you can do: state what the event order guarantees as a `condition` guard on the
-  triggered use case.
+- **The order is by row and the mark counts no events.** A use case that a use case's
+  event triggers runs only after a raise on its rows (#112), but the record of the raise is
+  a latch: after the first raise the handler runs as often as its states and guards allow,
+  a second raise queues nothing, and a raiser never waits for its handler. The order ties
+  the handler to the raiser's row only through a parameter that is that row or its parent
+  through the raiser's key; a handler that binds the entity otherwise runs on any raised
+  row (`UnjoinedTrigger`), and raisers with no entity in common order nothing
+  (`UnanchoredTrigger`). Timers and the events of external systems are free. In a cone of
+  an invariant, an assert, or a property that does not hold every raiser by its own writes,
+  the handler's mark is left out and it runs unordered there, as in 1.x
+  ([Raised marks](./state-derivation.md#exploration-by-cone-of-influence)): an OK is sound,
+  and a finding can be a run the order prevents. See it: the two infos on the `triggers`
+  line, and the `note:` row of a counterexample, `runs <UC> without <Ev> having been
+  raised`, which names each step that ran without its event. What you can do: a handler
+  that must run once per event takes a from-state the raiser sets and the handler leaves,
+  as a `transitions` arm; a rule that must be checked with the order reads something the
+  raiser writes, which pulls the raiser into its cone. [`triggers` and event-driven BUC
+  chaining](./language-reference.md#triggers-and-event-driven-buc-chaining) has the rules
+  from the model's side.
 - **Some cones are compared with TLC at 1 instance only.** `engine_equivalence` checks that
   BFS and TLC agree on the states, edges, findings, and verdicts of every cone, unreduced
   and reduced. A cone whose BFS, reduced as `verify` explores it, passes the test's cap of
   300,000 states at 2 instances is compared at 1 instance only. `VERIFY_FALLBACK` in
-  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 10 cones today (19 before the
-  reduction of #74, 16 after the patent-ops filing guard, and 10 since the cap went from
-  200,000 to 300,000). The table under
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 11 cones today (19 before the
+  reduction of #74, 16 after the patent-ops filing guard, 10 since the cap went from 200,000
+  to 300,000, and 11 since the event order of #112). The table under
   [Approximations and limitations](#approximations-and-limitations) gives each cone's size
   and what keeps it large:
-  - `samples/clinic-ops`: entity `EligibilityCheck`, 1,784,808 states, which nothing
-    reduces: its sub-lifecycle has as many classes as states.
+  - `samples/clinic-ops`: entity `EligibilityCheck`, 905,528 states, which nothing
+    reduces.
   - `samples/patent-ops`: entity `OfficeAction` and invariant `Forbidden_OfficeAction_3`
     (with `Exclusive_OfficeAction_0`). The guards that read the application put it, with
     the drafting order and the disclosure that the filing's guard adds, into the cone: over
     9,000,000 states, 1,341,707 reduced to the office action times 185 classes of the
     application's side.
-  - `samples/food-permit-ops`: entity `PermitApplication`, 2,094,157 states. Every entity in
-    the cone reads the application, so no side is independent and nothing reduces.
-  - `samples/insurance-claim-ops`: entities `Claim` and `Payment`, invariants
+  - `samples/food-permit-ops`: entity `BusinessPermit`, 4,648,771 states reduced: the
+    permit's side times 444 classes of the disposition's and the application's, which the
+    permit reads through the events that start `RevokePermit`, `SuspendBusiness` and
+    `ExtendPermitTerm` (#112).
+  - `samples/insurance-claim-ops`: entities `Claim`, `ClaimCase` and `Payment`, invariants
     `Forbidden_Claim_0`, `Forbidden_Claim_4`, and `MultiForbidden_Payment_3`, and the
     after-assert of `PayClaim`. The settlement guard of `CompleteClaim` joins the case's
-    lifecycle to the claim's; reduced by it (63,823 states in 443 classes) they reach 573,751
-    to 814,191 states, unreduced over 9,000,000.
+    lifecycle to the claim's; reduced by it (255,292 states in 2,428 classes, with the
+    claim's events as input bits) they reach 633,787 to 903,987 states. The `ClaimCase`
+    view is reduced the other way, by the claim's and the payment's side under the case's
+    two bits (93,904 states in 4,368 classes), to 4,580,087.
 
   `verify` still checks these cones at 2 instances: TLC runs on each, and BFS runs on each
   entity cone. Only the agreement of the two engines is tested at 1 instance. This is
@@ -729,7 +803,7 @@ gaps.
   `PaymentExtension` entity the Claim cone passes 20,000,000 states and `verify` passes 6 GB;
   with the reason and `due_on` on `Claim`, the Claim view passes 20,000,000 states with one
   reason (126 s) and is unfinished after 7 minutes and 5.8 GB with five. Without the deadline
-  the Claim cone is 754,247 states reduced. See it:
+  the Claim cone is 836,427 states reduced. See it:
   [Known verification gaps](../samples/insurance-claim-ops/README.md#known-verification-gaps).
   What you can do: keep the reason out of the checked rules, as the sample does.
 - **The `verify` BFS stops at 8,388,608 states per cone.** The BFS pass that finds missing
@@ -738,11 +812,11 @@ gaps.
   findings. TLC still checks its invariants. The cap counts the states of the cone reduced
   by its independent sub-lifecycle (see
   [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)).
-  Every sample cone is under the cap at 2 instances (the largest, `PermitApplication` of
-  food-permit-ops, has 2,094,157 states; `Charge` of clinic-ops, over 8,388,608 unreduced,
-  has 38,533), so `verify --deny-undecided` passes on all of them; the price is clinic-ops's
-  40 s and 1.4 GB. See it: each undecided finding under `not checked:` on stdout and the
-  `warning:` on stderr that counts them (`--deny-undecided` fails the run instead). What
+  Every sample cone is under the cap at 2 instances (the largest, `BusinessPermit` of
+  food-permit-ops, has 4,648,771 states reduced; `Charge` of clinic-ops, over 8,388,608
+  unreduced, has 38,533), so `verify --deny-undecided` decides every check on all of them;
+  the price is insurance-claim-ops's 180 s and 2.1 GB. See it: each undecided finding under
+  `not checked:` on stdout and the `warning:` on stderr that counts them (`--deny-undecided` fails the run instead). What
   you can do: rely on `check` at 1 instance for those findings, or shrink the cone, for
   example by removing a guard that pulls another entity's columns in. The whole-model
   temporal run below keeps its own cap of 2,097,152 distinct states.
@@ -791,16 +865,16 @@ gaps.
   guard adds the permit's existence, its status and the `renews` link to the application's
   cone: at 2 instances the view of `PermitApplication` grows from 127,165 to 2,094,157
   states, a quarter of the cap of 8,388,608, and the views of `Inspection` and `Disposition`
-  from 14,197 and 23,156 to about 232,000 each. `verify` decides every check (18 s locally).
-  The interleaving of the permit's 31 reachable states with the application's is inherent to
-  an exact cone, and the reduction of #74 leaves the application's and the inspection's cones
-  as they are, since every entity in them reads the application; it takes the disposition's
-  view to 13,230 states. At 1 instance a renewal needs a second application slot,
+  from 14,197 and 23,156 to about 232,000 each, unreduced. Since #112 the reduction takes
+  the application's view to 52,597 states, the inspection's to 5,885 and the disposition's to
+  138,246, while the permit's view, which now holds the raisers of the events that move the
+  permit, is 4,648,771 states reduced, about half the cap. `verify` decides every check
+  (36 s and 1.6 GB locally). At 1 instance a renewal needs a second application slot,
   so `check` warns that `ApplyRenewal` and `RenewPermit` never run. The sample also joins a
   disposition's decision to the permit's ledger by an event. Its temporal property, that a
   valid permit without a 食品衛生責任者 ends with one appointed, is checked on its cone. See it:
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
-  you can do: a change that grows the application's cone further takes the view past the cap;
+  you can do: a change that grows the permit's cone further takes the view past the cap;
   measure it with `lifecycle_measure` first.
 - **insurance-claim-ops checks its settlement guard reduced.** A liability claim is completed
   with the 示談書, and the claim and the settlement are both children of the accident case. The
@@ -808,12 +882,13 @@ gaps.
   (`holds(..).along(Claim, ClaimCase, Settlement)`), and the rule `賠償の請求は示談書がそろってから完了する`
   says the same on the claim's rows. Both join the claim's cone to the case's. Without the
   reduction of #74 the views of `Claim`, `Payment`, and `Subrogation` passed 3,000,000 states at
-  2 instances and TLC had not finished after 20 minutes. Reduced, the claim's cone is 754,247
-  states, and `verify --deny-undecided` decides every check in about 60 s. The claim's cones
-  are in `VERIFY_FALLBACK`: `engine_equivalence` compares them with TLC at 1 instance only.
+  2 instances and TLC had not finished after 20 minutes. Reduced, the claim's cone is 836,427
+  states, and `verify --deny-undecided` decides every check in about 180 s, with the one
+  deadlock the sample's header names. The claim's cones and the case's view are in
+  `VERIFY_FALLBACK`: `engine_equivalence` compares them with TLC at 1 instance only.
   See it: [Verification](../samples/insurance-claim-ops/README.md#verification). What you can
-  do: a change that grows the case's cone (63,823 states, which nothing reduces) grows every
-  claim cone with it; measure it with `lifecycle_measure` first.
+  do: a change that grows the case's side (255,292 states in 2,428 classes with the claim's
+  events) grows every claim cone with it; measure it with `lifecycle_measure` first.
 - **`--buc` leaves findings undecided.** `--buc` builds the system without the use cases
   outside the selected BUCs, and those could reach, enable, or unblock a state. A missing
   witness, a use case that never runs, a deadlock, an arm never taken, and a value never
@@ -850,6 +925,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `quantifier_none.rdra` | fail, fail | `invariant(...).when(...).none(...)` (Revoke while Assign stays active) |
 | `quantifier_guard.rdra` | pass, pass | `holds(..).none(..)` on Revoke makes the `.none(...)` rule of `quantifier_none` hold |
 | `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
+| `event_order.rdra` | pass, pass | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after ExecuteCertIssue raised the event on the order (#30, #112), so the `after(IssueCert).assert` on the order's status holds with no guard |
 | `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `temporal_fair.rdra` | pass, fail | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
 | `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |

@@ -144,8 +144,11 @@ The transition system follows these rules:
    causes, across all entities, applied in one step.
 3. A transition names the use case that causes it, as the 遷移UC column of the RDRA
    state sheet does. An event raised by an external system or by another use case
-   triggers use cases. It does not move a state by itself, and the order in which a
-   model triggers use cases adds no guard of its own.
+   triggers use cases. It does not move a state by itself. An event a use case raises
+   orders the use cases it triggers: the raiser's last step records the event on its
+   rows, and a triggered use case runs only on a row that carries the record, so it never
+   runs before the raise. The record is never cleared, so it counts no events. A timer
+   and an event an external system raises order nothing.
 4. `creates` sets the initial values of a new instance, with `@default` filling the
    rest. The state that a creation sets is a start state, as a transition with no
    source state is in the RDRA state sheet. A transition may also enter that state. A
@@ -337,7 +340,8 @@ These questions were decided on 2026-10-29, during phase 6:
   in `cross_order_payment`, Cancel left the Payment of a cancelled Order pending forever,
   so Cancel now deletes it.
 
-The maintainer decided this question on 2026-11-01, for 1.0 (#51):
+The maintainer decided this question on 2026-11-01, for 1.0 (#51). The 2026-11-06 entry
+below supersedes it; it stays as the record of the 1.x semantics:
 
 - Events and timers impose no order on the use cases they trigger (#30). `states`,
   `check`, and `verify` keep the over-approximation: a triggered use case runs whenever its
@@ -348,6 +352,21 @@ The maintainer decided this question on 2026-11-01, for 1.0 (#51):
   [the language reference](./language-reference.md#triggers-and-event-driven-buc-chaining)
   shows. Changing this after 1.0 needs a major release
   ([compatibility](./compatibility.md)).
+
+The maintainer decided this question on 2026-11-06, for 2.0 (#112):
+
+- A use case that a use case's event triggers runs only after a raise on its rows. The
+  raiser's last step sets a latched mark `<E>._raised_<Ev>` on its rows of the entities the
+  raisers share, and the triggered use case's first step reads it on its own row, its parent
+  through the raiser's key, or an extra `Triggered` row joined by the one key between the
+  entities. Nothing clears the mark, so a second raise queues nothing and the handler runs
+  as often as its states allow after the first raise; a timer and an event an external
+  system raises stay free; a use case that also starts on its own states where with a
+  second event, since `triggers` has no opt-out. A cone that does not hold every raiser
+  leaves the mark out and runs the handler unordered there, which is sound for an OK.
+  [docs/design/event-order.md](./design/event-order.md) records the decisions and the
+  measurements; rule 3 above states the semantics. This supersedes the 2026-11-01 entry
+  above, and the release is 2.0.0 ([compatibility](./compatibility.md)).
 
 ## Sources
 

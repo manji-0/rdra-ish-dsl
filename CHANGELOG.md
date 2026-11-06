@@ -15,6 +15,59 @@
 
   To migrate, replace the two prefixes in the `// expect` headers and in a hand-written
   `.cfg` or script that names a rule. A model needs no change.
+- A use case that a use case's event triggers runs only after its event (#112). `raises(UC, Ev)`
+  and `triggers(Ev, UC2)` order the two: the last step of each raiser sets a latched mark
+  `<E>._raised_<Ev>` (`<E>_raised_<Ev>` in TLA+) on its rows of the entities the raisers
+  share, and the first step of `UC2` runs only on a row that carries it, as its own row, its
+  parent through the raiser's key, or an extra `Triggered` row joined by the one direct key
+  between the entities. Nothing clears the mark, so after the first raise the handler runs as
+  often as its states allow, and a raiser never waits for a handler. A timer and an event an
+  external system raises stay free. The rules are in `docs/state-derivation.md`, "Triggers",
+  and the design in `docs/design/event-order.md`. The `bounds:` line is unchanged, so this
+  changes verdicts within the same bounds, which `docs/compatibility.md` names as breaking:
+  - A handler whose event never comes on its rows is a new `Deadlock` of the row that
+    waited for it, with `guard: event <Ev> was raised on the bound row (triggers)` among
+    what blocks it, or `Runs_<UC>` when the event's effect contradicts the handler's guard.
+  - A use case several events trigger has one action per event, `<UC>_by_<Ev>`, which
+    traces and the TLA+ module name; `check` and `verify` judge the variants as one use case
+    (`Runs_<UC>`, `Arm_<UC>_<from>_<to>` under the use case's name), and
+    `after(UC).assert` is checked after each variant. An assert atom on the entity a
+    handler binds only through a `Triggered` row now reads that row, the row of the run,
+    where before it read every present row of the entity (`UnboundAfterRead`), so the
+    assertion's rows change.
+  - Three new infos: `UnanchoredTrigger_<E>_<Ev>_<UC>` (the raisers bind no entity in common,
+    so the trigger stays free), `UnjoinedTrigger_<E>_<Ev>_<UC>` (no key joins the handler's rows
+    to a raised row, so any raised row lets it run), and `TriggerNeverRuns_<E>_<UC>_<Ev>` (one
+    variant never fires while another does, on a cone that ran to the end). A variant that
+    did not fire only on cones that stopped at the cap is `whether <UC>_by_<Ev> can run is
+    not decided` under `not checked:`, which `--deny-undecided` fails.
+  - The info `triggered-usecase-unguarded` now says that the use case runs in every state
+    after its start, as often as it is enabled, where it said that it ran before the event.
+  - A cone of an invariant, an assert, or a property that does not hold every raiser leaves
+    the mark out and runs the handler unordered there, as 1.x did; its counterexample then
+    carries `note: ... runs <UC> without <Ev> having been raised`. An entity view keeps
+    its own use cases' marks, so a deadlock or `Runs_` of the entity is judged with the order.
+
+  The #30 model, `samples/formal-verification/event_order.rdra`, now passes `check` and
+  `verify` without a guard: its `after(IssueCert).assert` holds because `IssueCert` runs only
+  on the executed order. To migrate, a guard that only restated the order (the state the
+  raise left the row in) may be removed; the samples keep theirs, since they document the
+  precondition the handler relies on. A use case that in the domain also starts without the
+  event needs a second event raised where it starts, since `triggers` has no opt-out:
+  insurance-claim-ops' `ReportSurvey` now raises `EvSurveyReported`, which triggers
+  `AssessDamage` beside the two settlement events. insurance-claim-ops' `verify` at 2
+  instances now reports `Deadlock_ClaimCase_status_assessed`, which its `// expect verify`
+  header names: both claim slots can be filed under one case, so the other case has no claim
+  whose event closes it (the sample's README, Known verification gaps).
+
+### Changed
+
+- `verify` reduces more cones (#112): a sub-lifecycle may read target-side vars that only
+  rise, as inputs whose reads fold into one bit per row where they can, and a reduced cone
+  whose TLA+ tables would pass 200,000 cells falls back to the split without inputs, or to
+  the unreduced cone (`docs/formal-verification.md`, "Reduction by an independent
+  sub-lifecycle"). State counts change, and a cone that stopped at the cap may now decide
+  its findings; a decided verdict stays as it was.
 
 ## v1.2.0 - 2026-11-05
 

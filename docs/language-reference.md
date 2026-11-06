@@ -475,7 +475,10 @@ triggers(IntakeExpiryCheck, ExpireIntakeForms)
 ```
 
 A timer triggers only use cases and BUCs, never an external system. A use case that a
-timer triggers and that belongs to no BUC is reported like an event-triggered one. A
+timer triggers and that belongs to no BUC is reported like an event-triggered one. A timer
+is a free trigger: its use case runs whenever `now` and its guards allow, with no record
+of the timer having fired, and a use case that a timer starts beside an event is free too
+([Triggers](./state-derivation.md#triggers)). A
 `step` may anchor the timer with `covers(Step, Timer)`. A timer sits in the
 external-environment layer of the RDRA diagram, and the event diagram draws it
 with its `triggers` edges.
@@ -728,14 +731,15 @@ is emitted otherwise. Use `diagram --kind event` to visualise the full
 `raises -> Event -> triggers` chain, and `diagram --kind state` for the transitions the
 triggered use cases drive.
 
-The order of `raises` and `triggers` between use cases adds no guard to state derivation:
-a use case is limited only by the states it requires and by the guards of its linked
-conditions. `states`, `check`, and `verify` therefore let a triggered use case run before
-the use case that raises its event. This over-approximates the flow, so a check never
-misses a violation the event order could produce, but it can report a run that the event
-order prevents. In the model below, `check` reports `AfterAssert_IssueCert_0` with the trace
-RequestCert, IssueCert, although in the real flow IssueCert runs only after
-ExecuteCertIssue raises `EvOrderExecuted`.
+The order of `raises` and `triggers` between use cases orders them in state derivation: a
+use case that an event triggers runs only after a use case that raises the event ran, on
+the rows it ran on. The last step of each raiser records the event on its rows, and the
+first step of the triggered use case runs only on a row that carries the record, its own
+row of that entity, its parent through the raiser's key, or an extra row of the entity
+joined to its own by the one key between them ([Triggers](./state-derivation.md#triggers)
+has the rules). In the model below, IssueCert runs only after ExecuteCertIssue raised
+`EvOrderExecuted` on the order, so the assertion holds: `check` and
+`verify --instance-count 2` pass.
 
 ```rdra
 transitions(ExecuteCertIssue, CertificateOrder.status, requested -> executed)
@@ -746,15 +750,18 @@ relate(ClientCertificate, CertificateOrder, N:1)
 after(IssueCert).assert(CertificateOrder.status == executed)
 ```
 
-This is the 1.0 semantics, and it holds for a `timer` as for an event: neither orders the
-use cases it triggers (#30). Tracking the unhandled events as state would make the order
-exact, but it would change the reachable states and the `check` verdict of every model
-that uses `triggers`. [Known verification gaps](./formal-verification.md#known-verification-gaps)
-lists this gap with the others.
+The record is a latch: once the event was raised on a row, the triggered use case runs
+there as often as its states and guards allow, and a second raise changes nothing. A use
+case several events trigger runs after any of them; `check` and `verify` judge it as one
+use case, and a trace names the step that ran after `Ev` as `<UC>_by_<Ev>`. A raiser never
+waits for the use cases its event triggers. Whether two use cases are ordered, and how the
+triggered one's rows are tied to the raiser's, is a fact of the model that `check` reports
+as the infos `UnanchoredTrigger` and `UnjoinedTrigger`; [Known verification
+gaps](./formal-verification.md#known-verification-gaps) names what the order leaves open.
 
-When a rule depends on the event order, state what the order guarantees as a `condition`
-guard on the triggered use case. Here the event is raised only once the order is
-`executed`, so IssueCert needs an executed order:
+A guard that only restates the order is no longer needed. A guard that documents a
+precondition the handler relies on is still worth writing. Here the event is raised only
+once the order is `executed`, and IssueCert needs an executed order:
 
 ```rdra
 condition OrderExecuted "実行済みの依頼にだけ証明書を作る"
@@ -762,9 +769,28 @@ holds(OrderExecuted, CertificateOrder.status == executed)
 applies_to(OrderExecuted, IssueCert)
 ```
 
-With the guard, `check` and `verify --instance-count 2` pass. The guard also documents the
-precondition the event handler relies on, so it stays true if the use case is later started
-some other way.
+The guard says what IssueCert needs of the order, not when it runs, so it stays true if the
+use case is later started some other way, and a reviewer reads the precondition on the use
+case instead of inferring it from the raiser.
+
+#### A use case that also starts on its own
+
+A use case that a tracked event triggers runs only after that event, whatever actor
+performs it; `triggers` has no opt-out. When the use case in the domain also starts
+without the event, the model states where it starts: a second event, raised by the use
+case that marks that point, with a second `triggers` to the use case. In
+[insurance-claim-ops](../samples/insurance-claim-ops/README.md), `AssessDamage` follows
+either settlement decision and also a survey report that leads to no settlement, so
+`ReportSurvey` raises `EvSurveyReported`, which triggers `AssessDamage` beside the two
+settlement events:
+
+```rdra
+raises(ReportSurvey, EvSurveyReported)
+triggers(EvSurveyReported, AssessDamage)
+```
+
+Dropping the use-case edge (`triggers(Ev, Buc)` alone) keeps the event diagram and frees
+the use case; that is a model change a reviewer sees, not a modifier that hides one.
 
 `outbox(event::E)` declares that a raised event is intentionally published outside the
 local model boundary, such as a domain event sent to an outbox, external subscriber, or
@@ -790,7 +816,10 @@ triggers(EvLabResultReceived, ReceiveLabResult)
 triggers(EvAppointmentScheduled, MessagingGateway)   // outbound: the event is delivered to it
 ```
 
-An event delivered to an external system counts as consumed, so the raised-but-unconsumed
+An event an external system raises is a free trigger: it may arrive at any time, so the
+use case it triggers runs whenever its states and guards allow, with no record of the
+event, as a timer's use case does ([Triggers](./state-derivation.md#triggers)). An event
+delivered to an external system counts as consumed, so the raised-but-unconsumed
 warning stays quiet. `export --kind asyncapi` lists the raising systems as the channel's
 `x-publisher` and the receiving ones as `x-subscriber`. The event diagram draws the
 systems and a `triggers` edge from the event to each. `lint` `rdra-extsystem-no-buc` names an external system that no

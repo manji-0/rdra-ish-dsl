@@ -37,6 +37,7 @@ holds one value per slot.
 | A comparison proposition (`stock < selling`) | `false`, `true` | `drives(UC, E.col op rhs, bool)` drives the comparison |
 | An owner (a `relate` foreign key) | the parent's slot, or `null` for an optional relate | The entity is the child of an N:1, 1:N, or 1:1 `relate` |
 | A run mark `<E>._run_<UC>` | `none`, `1`, .., `k-1` | A use case split into k transaction groups writes the entity in a group before its last (see [Runs of a split use case](#runs)) |
+| A raised mark `<E>._raised_<Ev>` | `false`, `true` | Every use case that raises `Ev` has an action, some use case with an action is triggered by it, and `E` is a mark entity of the event (see [Triggers](#triggers)) |
 | `now` | `0..5` | Something compares a column to `now` |
 
 A `@derived` column is never a variable. A construct that reads a Bool `@derived` column
@@ -129,6 +130,64 @@ two cases would never be explored; a mark on one anchor entity only would leave 
 rows of the run unbound, so a later step could act on a row no earlier step touched.
 Marking every row a step bound costs no more states than the rows in flight and keeps
 the business reading: the settlement is created under the case step 1 moved.
+
+<a id="triggers"></a>**Triggers.** `raises(UC, Ev)` and `triggers(Ev, UC2)` order the two
+use cases: `UC2` runs only after `UC` ran, on the rows `UC` ran on. An event is *tracked*
+when every `raises` of it names a use case that has an action. An event with no `raises`,
+raised by an external system, or raised by a use case that writes nothing is *free*, and so
+is a timer. A use case that only free triggers, or nothing, start runs whenever its required
+states and guards hold, as in 1.x; a use case that a free trigger starts beside a tracked
+event is free too, with no mark guard. `performs(Actor, UC)` adds no trigger and frees
+nothing.
+
+For each tracked event `Ev` that triggers a use case with an action, the entities that the
+last step of every raiser binds, in the first raiser's parameter order, are the event's
+candidates; the candidates some triggered use case reads are its *mark entities*, and each
+such `E` gets a raised mark per slot, `<E>._raised_<Ev>`: `false` at the start, `true` once a
+raiser ran on the row, and never `false` again. The last step of each raiser sets it on every
+parameter it has on `E`, a `Parent` or `Earlier` one included, and has no guard for it, so a
+raiser never waits for a handler. When the raisers bind no entity in common, the event is
+free and `UnanchoredTrigger` (info) says so on each `triggers` line.
+
+The first step of a triggered use case reads the mark through the parameter that is the
+raiser's row, as the guard `<E>._raised_<Ev>[p] = true` (`GuardWhy::Raised`, printed as
+`event <Ev> was raised on the bound row (triggers)`). A parameter `p` on a mark entity `E`
+corresponds to the raiser's row when it is the step's only parameter on `E` and either is
+its row of `E` (a role other than `Parent`) or is a `Parent` through a key that some raiser's
+last step also binds `E` through. The step reads the mark on every corresponding parameter.
+A parameter that does not correspond gets no guard: two parameters on `E`
+(`relate(Transfer, Account).role(src)` and `.role(dst)`) say nothing about which one the
+event was about, and a parent through a key the raiser never binds is a different row, so
+requiring the mark on each would hide a run the order allows. With no corresponding
+parameter the step binds one extra `Triggered` parameter, a present row of the first
+candidate entity that one direct key links to a row the step writes or reads as a parent,
+with that key's owner guard ([Joins](#joins)); with no such key it is any raised row, and
+`UnjoinedTrigger` (info) says so on the `triggers` line, as `UnjoinedGuardRead` says any
+present row satisfies a guard. A `Triggered` parameter prints as `needs: an existing <E> its
+event was raised on`. The later steps of a split use case carry nothing new, since they
+continue the run by its run marks.
+
+A use case that several tracked events trigger has one copy of its first step per event,
+`<UC>_by_<Ev>`, each with that event's guards; a use case one tracked event triggers keeps
+its name. The variants are one use case to every finding: `Runs_<UC>` and
+`Arm_<UC>_<from>_<to>` are reported once, under the use case's name, and only when no
+variant runs or takes the arm, and a variant that never runs while another does is
+`TriggerNeverRuns` (info) naming its event. `after(UC).assert` is checked after the last step
+of each variant, so once per run. Deadlocks, witnesses, and `NeverRuns` are decided as
+before: a row whose only way out is a triggered use case that waits for its mark is stuck,
+with the mark guard among what blocks it, and a use case whose mark never holds is
+`NeverRuns` with that guard, which is what a self-triggering use case and an event cycle
+with no free entry get. A set mark is never a finding by itself.
+
+The mark counts no events. Two raises on a row are one mark, and a triggered use case that
+ran once can run again without a new raise, as it could before. The order is "not before
+the first raise on these rows", nothing more, whatever actor performs the use case. A use
+case that in the domain also starts without the event states where it starts with a second
+event, raised at that point and triggering it ([A use case that also starts on its
+own](./language-reference.md#a-use-case-that-also-starts-on-its-own)); `triggers` has no
+opt-out. The mark is not an axis of `states`, a delete does not reset it, and it costs one
+Bool per slot of each mark entity, only in a cone that reads it
+([Exploration by cone of influence](#exploration-by-cone-of-influence)).
 
 An action takes one parameter per entity it writes. A `creates` takes the lowest
 `absent` slot. An `updates` or `deletes` takes any `present` slot. The
@@ -240,7 +299,10 @@ the owner of one key. `SemanticModel::join_key` picks it: the one key between th
 entities, or among several the one a `.role(role)` names. Several keys with no selector naming
 one is `AmbiguousOwnerLink` (an error), and the two are left unlinked (see
 [language-reference.md](./language-reference.md#which-key-a-join-follows)). The builder never
-picks a key itself, so the explorer and the TLA+ printer read the same owner.
+picks a key itself, so the explorer and the TLA+ printer read the same owner. A `Triggered`
+parameter ([Triggers](#triggers)) is linked by the one direct key between its entity and a
+row of the step; `triggers` takes no `.role`, so with several keys, or none, the parameter is
+unjoined (`UnjoinedTrigger`, an info) rather than an error.
 
 **Conditions as guards.** `applies_to(Condition, UseCase)` with a `holds` body, or
 `applies_to(Condition, Api)` for each use case that invokes the API, guards the use
@@ -295,10 +357,13 @@ case's action:
   trace link.
 - A body applied to a use case that writes nothing is `UnbindableCondition`.
 
-The order of `raises` and `triggers` between use cases adds no guard, so a triggered use
-case can run before the use case that raises its event. A rule that depends on the event
-order needs the precondition the order guarantees as a `condition` guard on the triggered
-use case ([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
+The order of `raises` and `triggers` between use cases is a guard of its own: the first
+step of a triggered use case reads the raised mark of its event ([Triggers](#triggers)), so
+it never runs before the use case that raises the event. A condition guard that only
+restates the order (the state the raise left the row in) is no longer needed; one that is
+kept documents the precondition the handler relies on, and it stays true if the use case is
+later started some other way
+([`triggers` and event-driven BUC chaining](./language-reference.md#triggers-and-event-driven-buc-chaining)).
 
 **Copies.** `sets(UC, E.col == F.src)` reads the row of `F` that a condition atom on `F`
 would read, with one restriction: the row must be bound to the step, never an independent
@@ -398,6 +463,20 @@ cone of influence:
   `crates/rdra-ish-core/src/lifecycle/tests/cone.rs` checks equality on `ec-site`,
   `personal-info`, and the formal-verification samples, and the superset where a cone
   frees slots.
+- **Raised marks.** A raised mark ([Triggers](#triggers)) belongs to its entity. A cone
+  reads it exactly only when every action that writes it, the last step of each raiser, is
+  in the cone by its own writes, or when the reader is an action the cone keeps (an entity
+  view keeps every action with a written parameter on the entity). Otherwise the mark stays
+  out of the cone: the handler's guard on it is dropped, a `Triggered` parameter goes with
+  its existence and link guards, and the handler runs unordered there. A mark only ever
+  rises, so the cone reaches a superset of the states, as a cone that frees slots does: an
+  OK of an invariant, an assert, or a property on such a cone is sound, and a finding there
+  can be a run the order prevents, as every finding was in 1.x. Its trace then carries a
+  `note:` row, `runs <UC> without <Ev> having been raised`, naming each step that ran
+  without its event. A witness, a deadlock, or a `NeverRuns` of the view's entity is judged
+  with the order, since the view keeps its own use cases' marks. The `bounds:` line is
+  unchanged. The exact cone of a handler pulls each raiser's reads in, along a chain of
+  events, so a view grows where an event joins two lifecycles that 1.x explored apart.
 - **Shared.** Targets with the same cone are explored once.
 - **Reduced in `verify`.** `verify` explores each cone reduced by its independent
   sub-lifecycle, the entities of the cone that its targets' actions never write, quotiented
@@ -510,7 +589,7 @@ states of the cone for each check that `moves` makes, one check at a time:
   the instance bound`, and no guard prints: a guard that fails only in the states where a
   slot is still free does not block the action.
 - **Guards.** Each guard (a `transitions` from-state, an `applies_to` condition, a relate
-  link, the clock) that holds under no binding of any reachable state prints as `guard:`
+  link, a raised mark, the clock) that holds under no binding of any reachable state prints as `guard:`
   with its site. A guard that holds somewhere is left out. A condition guard of a split use case that reads
   an entity only a later group creates ends in `read before the transaction that creates
   <Entity> (GuardReadsLaterStep)`.
@@ -748,6 +827,9 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
 | `GuardReadsLaterStep { condition, usecase, entity, step, apis }` | `GuardReadsLaterStep_<E>_<condition>_<usecase>` | warning | A `holds` body applied to a split use case compares an entity that only a later transaction group creates. The guard is read before the first group, when the run has no row of the entity yet, so it reads rows that are not the run's, and often never holds. The message names `applies_to(Cond, Api)` for each API of that group that creates the entity. The `guard:` row of the first group's `Runs_` warning says the same. |
 | `UnboundAfterRead { anchor, entity }` | `UnboundAfterRead_<E>_<anchor>` | warning | An `after(UC).assert` atom reads an entity that no step of the use case's run binds, so every present row of it must satisfy the atom. Write the entity in the use case to read the run's row. |
+| `UnanchoredTrigger { event, usecase, raisers, site }` | `UnanchoredTrigger_<E>_<event>_<usecase>` | info | The use cases that raise the event bind no entity in common, so the event has no row to be raised on: the use case it triggers runs as if the event were free (see [Triggers](#triggers)). Reported on the `triggers` line. |
+| `UnjoinedTrigger { event, usecase, entity, site }` | `UnjoinedTrigger_<E>_<event>_<usecase>` | info | The triggered use case binds no row of the entity the event is raised on, and no key joins its rows to one, so any row the event was raised on lets it run: its `Triggered` parameter is unjoined. Reported on the `triggers` line. |
+| `TriggerNeverRuns { usecase, event, site }` | `TriggerNeverRuns_<E>_<usecase>_<event>` | info | A use case that several tracked events trigger never runs after this event, while it runs after another: the variant `<usecase>_by_<event>` carries no edge on a cone that ran to the end. `Runs_<usecase>` is not raised, since the use case runs. A variant that did not fire only on cones that stopped at the cap is not decided (`whether <usecase>_by_<event> can run`). |
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |
 | `UnresolvedPropertyAtom { property, column }` | `UnresolvedPropertyAtom_<E>_<property>_<column>` | error | A `property` atom names a column that no single entity owns. |

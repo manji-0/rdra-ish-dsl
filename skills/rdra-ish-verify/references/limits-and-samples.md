@@ -10,10 +10,17 @@
 - **`.along`**: each adjacent pair needs a `relate` that binds it; the invariant joins
   them with `Child_owner_Parent` equalities. Without a `relate` the rule is
   `UnbindableScope`, an error.
-- **Event order**: `raises` and `triggers` add no guard, so a triggered use case can run
-  before the use case that raises its event. A check never misses a violation the event
-  order allows, but it can report a run the order prevents. Put what the order guarantees
-  on the triggered use case as a `condition` guard (`holds(..)` + `applies_to(.., UC)`).
+- **Event order**: `raises(UC, Ev)` and `triggers(Ev, UC2)` order the two. The last step of
+  the raiser sets a latched mark `<E>_raised_<Ev>` on its rows, and the first step of `UC2`
+  runs only on a row that carries it (its own row, its parent through the raiser's key, or
+  an extra `Triggered` row joined by the one key between the entities). The mark is never
+  cleared, so after the first raise `UC2` runs as often as its guards allow; a timer or an
+  event an external system raises orders nothing. A use case several events trigger has one
+  operator per event, `<UC>_by_<Ev>`, judged as one use case. A cone that does not hold
+  every raiser leaves the mark out, so an invariant or property there can still report a
+  run the order prevents; the trace then says `runs <UC> without <Ev> having been raised`.
+  A guard that only restates the order is not needed; keep one that documents the
+  precondition the handler relies on.
 - **Quantifiers**: `\A` / `\E` over `Entity_Ids`. A `relate` links the related instance
   through its owner; otherwise the related side is independent.
 - **Atomic use case**: one use case is one atomic action per transaction group it
