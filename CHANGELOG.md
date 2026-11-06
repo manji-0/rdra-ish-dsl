@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## v2.0.0 - 2026-11-06
+
+Upgrading from v1.2.0 needs no change to a model's syntax: every model that loads on 1.2.0
+loads on 2.0.0. Two changes break what a script or a model's results rely on. The rule names
+`CrossForbidden_<E>_<n>` and `CrossInv_<E>_<n>` are `MultiForbidden_<E>_<n>` and
+`MultiInv_<E>_<n>` (#111): replace the prefixes in `// expect` headers and hand-written
+`.cfg` files. A use case triggered by an event runs only after the event (#112): on a model
+with `raises` and `triggers` between use cases, a false counterexample that ran the handler
+first goes away, and a handler whose event never comes is a new deadlock or `Runs_` finding.
+A use case that also starts without its event needs a second event raised where it starts.
+Each entry below names what moves and how to migrate.
 
 ### Breaking
 
