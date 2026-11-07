@@ -5,7 +5,9 @@
 <!-- derived-from ../state-derivation.md -->
 <!-- derived-from ../language-reference.md#data-layer -->
 
-Status: proposal, for the maintainer to decide. Nothing here is implemented.
+Status: accepted in scope on 2026-11-07 ([vision.md](../vision.md#decisions)); nothing is
+implemented yet. The generated code is not covered by [compatibility](../compatibility.md).
+Three questions remain [open](#open-questions-for-the-maintainer).
 
 The model already states the shape of the domain: the values an actor chooses
 (`variation`), the records the system keeps (`entity`), the keys between them (`relate`),
@@ -73,8 +75,15 @@ Non-goals:
 - A file layout. rdra-ish does not decide where code goes in a project.
 
 This widens what rdra-ish produces from review and verification artifacts to code a
-build depends on. That is a scope decision the maintainer records in
-[vision.md](../vision.md#decisions) before phase 1 lands.
+build depends on. The maintainer decided on 2026-11-07 that this is in scope
+([vision.md](../vision.md#decisions)).
+
+The generated code is not covered by [compatibility](../compatibility.md). Its names,
+its shape, the obligation list, and the JSON form may change in any release, and the
+header of every output says so. An agent therefore treats the output as a starting point
+to finish, not as an interface to depend on across rdra-ish upgrades. After an upgrade,
+it generates again and compares the new output with the old. Phase 1 adds the entry to
+the "What is not covered" list of the compatibility page.
 
 ## The mapping
 
@@ -407,8 +416,9 @@ used twice. In Go, the marks are structs with the step as a typed constant.
 The output is one stream, in this order. Each part is marked by a comment line, so an
 agent can split it into files wherever the project wants:
 
-1. **Header.** The model path, the bounds and the result of the `check` the generator
-   ran, and a note that `verify` checks at larger bounds.
+1. **Header.** The model path, the rdra-ish version, the bounds and the result of the
+   `check` the generator ran, a note that `verify` checks at larger bounds, and a note
+   that the output is not covered by compatibility.
 2. **Obligations.** A numbered list of what the verification assumed but the types cannot
    enforce, each naming the invariant or rule it protects and the source site. For
    example: O1 `Unique_Settlement_Claim`, a unique key on `settlement.claim_id`; O2 one run
@@ -492,7 +502,9 @@ sample. For this generator:
    a present value with no `present:<type>` prints the column's declared type instead of
    `unknown`. Independent of the rest, and small.
 1. **Data types.** Variations, entities as records, id newtypes, keys, `@null`, DTOs,
-   scalars, in three languages, with the compile check. No lifecycle read.
+   scalars, in three languages, with the compile check. No lifecycle read. The `codegen`
+   subcommand lands here, and the generated code joins the "What is not covered" list of
+   [compatibility](../compatibility.md).
 2. **State sums.** One variant per state, declared refinement, tagged JSON in all three,
    and the candidate-rule listing in `next`.
 3. **Transition functions and the agent contract** for use cases of one transaction
@@ -507,17 +519,14 @@ sample. For this generator:
 
 ## Open questions for the maintainer
 
-1. **Scope.** Does rdra-ish print code a build depends on? If yes, the decision goes into
-   [vision.md](../vision.md#decisions).
-2. **Default refinement.** Declared (recommended: sound regardless of bounds, and it
+1. **Default refinement.** Declared (recommended: sound regardless of bounds, and it
    pushes the modeler to state rules) or reachable (tighter, but bounded, and it
    codifies gaps such as ec-site's `delivered_at`).
-3. **Rust encoding.** An enum of per-state structs with consuming transitions
+2. **Rust encoding.** An enum of per-state structs with consuming transitions
    (recommended), or a typestate `Order<S>` with marker types. Typestate makes a
    transition a method but turns "an order in any state" into a trait object or an enum
    anyway.
-4. **Go nullables.** `*T` (recommended: what `encoding/json` reads) or a generic
+3. **Go nullables.** `*T` (recommended: what `encoding/json` reads) or a generic
    `Option[T]`.
-5. **Stability.** Are the generated names covered by [compatibility](../compatibility.md)?
-   Recommended: not until one minor release after phase 3, and then the type, variant,
-   and function names, but not the formatting.
+Decided on 2026-11-07: the generator is in scope, and its output is not covered by
+compatibility (see [Goals and non-goals](#goals-and-non-goals)).
