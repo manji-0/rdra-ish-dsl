@@ -6,9 +6,9 @@
 <!-- derived-from ../language-reference.md#data-layer -->
 
 Status: accepted in scope on 2026-11-07 as an experimental extra
-([vision.md](../vision.md#decisions)); nothing is implemented yet. Neither the `codegen`
-subcommand nor its output is covered by [compatibility](../compatibility.md).
-Three questions remain [open](#open-questions-for-the-maintainer).
+([vision.md](../vision.md#decisions)). Neither the `codegen` subcommand nor its output is
+covered by [compatibility](../compatibility.md). Phases 0 and 1 have landed (see
+[Phases](#phases)), and every question is [decided](#decisions).
 
 The model already states the shape of the domain: the values an actor chooses
 (`variation`), the records the system keeps (`entity`), the keys between them (`relate`),
@@ -101,14 +101,20 @@ subcommand and its output to the "What is not covered" list of the compatibility
 | `@null` column | `T \| null` | `Option<T>` | `*T` |
 | `Int`, `String`, `Bool` | `number`, `string`, `boolean` | `i64`, `String`, `bool` | `int64`, `string`, `bool` |
 | `Money`, `Decimal`, `Date`, `DateTime` | names from a scalars module | same | same |
-| `@derived(expr)` | a function `orderTotalWithTax(o)` printed from the typed expression, not a stored field | a method | a method |
-| `@check(expr)` | a check in the smart constructor `parseOrder` | `TryFrom` | `func NewOrder(..) (Order, error)` |
+| `@derived(expr)` | a field with the expression in its doc, and an obligation to compute it; later a function printed from the typed expression | same | same |
+| `@check(expr)` | an obligation naming `Check_<E>_<col>_<n>`; later a check in the smart constructor `parseOrder` | `TryFrom` | `func NewOrder(..) (Order, error)` |
 | `dto` | a record | a struct | a struct |
 
 The scalars module holds the four types whose representation a project picks (a decimal
-library, a time library). The generator prints a default (`string` aliases in TypeScript,
-newtypes over `String` in Rust and Go) and a flag, `--scalars <module path>`, makes the
-generated file import the project's own instead.
+library, a time library). The generator prints a default (branded `string` in TypeScript, a
+newtype over `String` in Rust, a named `string` in Go), which the agent replaces. A later
+flag, `--scalars <module path>`, makes the generated file import the project's own instead.
+
+Phase 1 prints a `@check` and a `@derived` as obligations, not as code. The comparison
+semantics of a check (how `null` and `present` compare) is the lifecycle's, and code that
+evaluates it differently would claim a check it does not make. The conformance tests of
+phase 3 print the evaluator together with the test that compares it with the lifecycle's
+verdicts.
 
 ### State sums
 
@@ -462,10 +468,10 @@ rules ────────► refinements ──┘                         
   generated names that collide (an entity `OrderPaid` beside the variant `OrderPaid`) are
   a generator error naming both declarations.
 - The CLI adds a subcommand, `rdra-ish codegen <inputs> --lang ts|rust|go`, that prints
-  the stream to stdout, as `states --format typescript` does. `-o <file>` is optional.
-  `--format json` prints the intermediate form and the obligations. `--part
-  types|core|scaffold|tests` limits the stream. `--buc` scopes it as `typescript-states`
-  does, and `--scalars` and, for Go, `--package` are available. `export --kind
+  the stream to stdout, as `states --format typescript` does. `-o <file>` is optional, and
+  for Go `--package` names the package. Both have landed. Later phases add these: `--format json` prints the intermediate form and the obligations. `--part
+  types|core|scaffold|tests` limits the stream, `--buc` scopes it as `typescript-states`
+  does, and `--scalars` names the scalars module. `export --kind
   typescript-states` stays as it is: its kind name is covered by
   [compatibility](../compatibility.md).
 - The generator runs the same `check` first and refuses when it fails, because the code
@@ -483,10 +489,10 @@ rules ────────► refinements ──┘                         
 The project's rule is that every output is checked against the one semantics, on every
 sample. For this generator:
 
-- **It compiles.** CI runs `tsc --strict --noEmit`, `cargo check`, and `go vet` with the
-  exhaustiveness linter on the output of every `samples.txt` root, scaffold and tests
-  included. The flake already has
-  Node and Rust; it gains Go.
+- **It compiles.** `crates/rdra-ish-cli/tests/codegen_builds.rs` runs `tsc --strict`,
+  `rustc -D warnings`, and `go vet` on the output of every `samples.txt` root (landed for
+  the data layer). Later phases add the exhaustiveness linter and the scaffold and tests.
+  The dev shell provides TypeScript and Go, and under `CI` a missing compiler fails the test.
 - **It agrees with the transition system.** A test in the style of `engine_equivalence`
   runs the generated TypeScript (Node is in the flake) on every edge BFS explores at
   1 instance: it concretizes the pre-state, calls the function, abstracts the result, and
@@ -501,10 +507,10 @@ sample. For this generator:
 
 ## Phases
 
-0. **Fix `typescript-states`.** An Int axis prints the column's type, not a literal, and
+0. **Fix `typescript-states`.** Landed. An Int axis prints the column's type, not a literal, and
    a present value with no `present:<type>` prints the column's declared type instead of
    `unknown`. Independent of the rest, and small.
-1. **Data types.** Variations, entities as records, id newtypes, keys, `@null`, DTOs,
+1. **Data types.** Landed. Variations, entities as records, id newtypes, keys, `@null`, DTOs,
    scalars, in three languages, with the compile check. No lifecycle read. The `codegen`
    subcommand lands here, labelled experimental in `--help` and the CLI reference, and it
    joins the "What is not covered" list of [compatibility](../compatibility.md) with its
@@ -521,17 +527,19 @@ sample. For this generator:
 5. **The rest of the action vocabulary:** `.has` / `.none`, `now`, triggered handlers,
    and links.
 
-## Open questions for the maintainer
+## Decisions
 
-1. **Default refinement.** Declared (recommended: sound regardless of bounds, and it
-   pushes the modeler to state rules) or reachable (tighter, but bounded, and it
-   codifies gaps such as ec-site's `delivered_at`).
-2. **Rust encoding.** An enum of per-state structs with consuming transitions
-   (recommended), or a typestate `Order<S>` with marker types. Typestate makes a
-   transition a method but turns "an order in any state" into a trait object or an enum
-   anyway.
-3. **Go nullables.** `*T` (recommended: what `encoding/json` reads) or a generic
-   `Option[T]`.
-Decided on 2026-11-07: the generator is in scope as an experimental extra, and neither
-the subcommand nor its output is covered by compatibility (see
-[Goals and non-goals](#goals-and-non-goals)).
+The maintainer decided these on 2026-11-07:
+
+1. **Scope and stability.** The generator is in scope as an experimental extra. Neither
+   the subcommand nor its output is covered by compatibility (see
+   [Goals and non-goals](#goals-and-non-goals)).
+2. **Use cases split into transactions.** One function per step, linked by stored run
+   marks ([the decision](#split)).
+3. **Default refinement.** Declared refinement. It is sound regardless of the bounds, and
+   it pushes the modeler to state rules. Reachable refinement stays opt-in, after the
+   measurement [State sums](#state-sums) names.
+4. **Rust encoding.** An enum of per-state structs, with transitions that consume their
+   source. Typestate (`Order<S>`) was not chosen: "an order in any state" would still
+   need an enum or a trait object.
+5. **Go nullables.** `*T`, which `encoding/json` reads as it is.

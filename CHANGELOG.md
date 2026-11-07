@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `rdra-ish codegen <inputs> --lang ts|rust|go` (experimental, outside the compatibility
+  contract) prints the model's data layer as one compilation unit for an agent to finish:
+  value sets, id types, entity and DTO records whose key columns take the parent's id type,
+  and the numbered obligations `check` and `verify` assume of the data
+  ([CLI reference](./docs/cli-reference.md#codegen-experimental),
+  [design](./docs/design/algebraic-codegen.md)). Every sample's output builds under
+  `tsc --strict`, `rustc -D warnings`, and `go vet` (`tests/codegen_builds.rs`); the dev
+  shell gains TypeScript and Go.
+
+### Fixed
+
+- `export --kind typescript-states` and `states --format typescript` type an Int axis as
+  `number`, not as the bounded values the check explored (`stock: 1`), and a present value
+  of a column with no `present:<type>` by the column's declared type, not `unknown`. Patterns
+  that then print the same object print it once.
+
 ## v2.0.0 - 2026-11-06
 
 Upgrading from v1.2.0 needs no change to a model's syntax: every model that loads on 1.2.0

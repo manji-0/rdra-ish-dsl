@@ -1,6 +1,7 @@
 //! rdra-emit: RDRA output emitters (Mermaid, CSV, and the contract exports).
 
 pub mod asyncapi;
+pub mod codegen;
 pub mod csv;
 pub mod dbml;
 mod diagram_common;

@@ -291,6 +291,22 @@ pub(crate) enum Commands {
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
     },
+    /// [experimental] Print the model's domain types as TypeScript, Rust, or Go code for an
+    /// agent to finish. Outside the compatibility contract: may change or go away in any
+    /// release
+    Codegen {
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        /// Language: ts, rust, or go
+        #[arg(long)]
+        lang: CodegenLang,
+        /// Write to this file instead of stdout
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Go package name (--lang go only)
+        #[arg(long, default_value = "domain")]
+        package: String,
+    },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {
         #[arg(required = true)]
@@ -432,6 +448,14 @@ pub(crate) enum StatesFormat {
     Json,
     #[value(name = "typescript", alias = "type-script")]
     TypeScript,
+}
+
+#[derive(ValueEnum, Clone, Copy)]
+pub(crate) enum CodegenLang {
+    #[value(name = "ts", alias = "typescript")]
+    Ts,
+    Rust,
+    Go,
 }
 
 #[derive(ValueEnum, Clone)]

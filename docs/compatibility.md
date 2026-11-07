@@ -131,6 +131,9 @@ minor release.
 - **Performance and state counts.** Run time, memory, and the number of states a run
   explores or prints.
 - **Diagram layout.** Where a renderer places the nodes, as above.
+- **`codegen`.** The subcommand is an experimental extra: its name, its flags, its exit
+  status, and the code it prints (names, shapes, the obligation list) may change or go away
+  in any release.
 
 ## Bounds
 

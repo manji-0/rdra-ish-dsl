@@ -1274,6 +1274,41 @@ carries a `witness`: a shortest path to the first state that holds it, as `start
 
 ---
 
+## `codegen` (experimental)
+
+Print the model's domain types as TypeScript, Rust, or Go code for an agent to finish.
+This subcommand is an experimental extra: neither it, its flags, its exit status, nor the
+code it prints is covered by [compatibility](./compatibility.md), and any release may
+change or remove them. [The design](./design/algebraic-codegen.md) describes where it is
+going.
+
+```
+rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>]
+```
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
+| `--lang` | `ts` \| `rust` \| `go` | — (required) | Language. `typescript` is an alias of `ts`. |
+| `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
+| `--package` | string | `domain` | The Go package name (`--lang go` only). |
+
+The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
+It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
+the data and no type enforces, each with the invariant that checks it (`Unique_*`,
+`MinCard_*`, `Check_*`) and its source site. Then come the scalars a project may replace
+(`Money`, `Decimal`, `Date`, `DateTime`), an id type per entity with a one-column primary
+key, each variation and inline `Enum` as a value set, and each entity and DTO as a record. A
+key column takes its parent's id type, and a `@null` column is `T | null`, `Option<T>`, or
+`*T`.
+
+It prints the data layer only so far. It reads no reachability result, so it runs on a
+model whose lifecycle has errors, with the note `export --kind dbml` prints, and it refuses
+a model with model errors. Two declarations that generate one type name, such as an entity
+`OrderStatus` beside the inline `Enum` of `Order.status`, are an error naming both.
+
+---
+
 ## See Also
 
 - [language-reference.md](./language-reference.md) — the DSL syntax.
