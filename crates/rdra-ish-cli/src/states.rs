@@ -53,7 +53,7 @@ pub fn run_states(
             format_location(&program, site.span.as_ref()?)
         })?,
         StatesFormat::TypeScript => {
-            emit_typescript_state_unions(&entity_state_variants(&model, &report.views))
+            emit_typescript_state_unions(&model, &entity_state_variants(&model, &report.views))
         }
     };
     print!("{}", output);
