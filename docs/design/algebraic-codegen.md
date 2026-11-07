@@ -12,9 +12,13 @@ The model already states the shape of the domain: the values an actor chooses
 the states a record moves through (`transitions`), what each use case reads, requires, and
 writes, and which combinations must never occur (rules). That is exactly what an
 algebraic domain model in code states: product types, sum types, newtypes, and total
-functions between them. This note proposes an export that prints those types and
-functions for TypeScript, Rust, and Go from the one model, so the code and the reviewed
-model cannot drift apart.
+functions between them.
+
+**Purpose.** rdra-ish prints a domain model in TypeScript, Rust, or Go that an agent
+finishes later. The output must be consistent, conform to what `check` and `verify`
+verified, and build as printed. Finishing the code (persistence, the values the model
+leaves abstract, wiring) is the agent's job, not rdra-ish's. Writing files is a means, not
+a goal: the output is one stream the agent reads and places.
 
 ## What exists today
 
@@ -38,16 +42,23 @@ The first two are bugs in the existing export and can be fixed on their own (see
 
 Goals:
 
-- One export per language prints the **data types** (variations, entities, keys, DTOs),
-  the **state sums** (one variant per state of an entity's state model), and the
-  **transition functions** (one per use case), from the same intermediate form, so the
-  three languages agree by construction.
-- A generated function does exactly what the model says the use case does: it requires
-  the source states and the condition guards, writes the effects, and returns the raised
-  events. Values the model leaves abstract (`present`, a chosen variation value, a choice
-  among arms) are the caller's input. The business computation stays in hand-written code
-  that calls the generated core.
-- Generated code compiles without a runtime library from rdra-ish.
+- **It builds.** The output for each language is one self-contained compilation unit (a TS
+  module, a Rust module, a Go file) that compiles under strict settings as printed, with
+  no runtime library from rdra-ish. Every place the agent must fill in compiles too
+  (`throw new Error("TODO: ..")`, `todo!("..")`, `panic("TODO: ..")`).
+- **It is consistent.** The **data types** (variations, entities, keys, DTOs), the
+  **state sums** (one variant per state of an entity's state model), and the **transition
+  functions** (one per action of the transition system) come from one intermediate form,
+  so the three languages and every part of one output agree.
+- **It conforms to the verification.** A generated function allows exactly what `verify`
+  explored for the use case: the source states and guards it requires, the effects it
+  writes, the events it raises, and, for a use case split into transactions, the order and
+  the boundaries of its steps ([Use cases split into transactions](#split)). What the
+  model verified but a type cannot enforce is printed as a numbered **obligation** that
+  names the `verify` invariant it protects ([The agent contract](#agent-contract)).
+- **The agent can finish it.** Values the model leaves abstract (`present`, a chosen
+  variation value, a choice among arms) are the caller's input. Business computation,
+  persistence, and transport are stubs the agent fills in.
 
 Non-goals:
 
@@ -56,8 +67,10 @@ Non-goals:
 - HTTP clients and servers. OpenAPI generators (`openapi-typescript`, `progenitor`,
   `oapi-codegen`) already read `export --kind openapi`; this export prints the DTO types
   only, so a handler can be typed by them.
-- Round trip. The output is generated only. There are no protected regions; a project
-  wraps or imports the generated module and never edits it.
+- Round trip. rdra-ish does not read code back. After generation the agent owns the code;
+  it stays conformant through the agent contract and the generated conformance tests, not
+  through protected regions.
+- A file layout. rdra-ish does not decide where code goes in a project.
 
 This widens what rdra-ish produces from review and verification artifacts to code a
 build depends on. That is a scope decision the maintainer records in
@@ -81,7 +94,7 @@ build depends on. That is a scope decision the maintainer records in
 | `dto` | a record | a struct | a struct |
 
 The scalars module holds the four types whose representation a project picks (a decimal
-library, a time library). The export prints a default (`string` aliases in TypeScript,
+library, a time library). The generator prints a default (`string` aliases in TypeScript,
 newtypes over `String` in Rust and Go) and a flag, `--scalars <module path>`, makes the
 generated file import the project's own instead.
 
@@ -161,6 +174,10 @@ system keeps only the columns some check reads.
 
 The function body is fully generated. Every effect of a use case is either a constant the
 model names or a value the caller passes, so no hand-written code goes inside it.
+
+A function is printed per **action**, not per use case. A use case of one transaction
+group is one action and one function. A use case split into k groups is k actions and k
+functions; [Use cases split into transactions](#split) decides how they connect.
 
 ### One example in three languages
 
@@ -246,6 +263,173 @@ func UnmarshalOrder(data []byte) (Order, error) { /* reads "status", then the va
 The JSON form is the same in all three: the record's columns with the tag column inline,
 the row shape DBML and JSON Schema describe.
 
+<a id="split"></a>
+## Use cases split into transactions
+
+### What verify assumed
+
+`tx.rs` splits a use case whose writes span several transaction groups: the writes of each
+invoked API in `invokes` order, then the FK-connected direct writes, then each isolated
+write ([vision.md](../vision.md), rule 6; [Runs of a split use case](../state-derivation.md#runs)).
+The use case becomes the actions `<UC>_1` .. `<UC>_k`, and `verify` explored them under
+these rules:
+
+1. The steps are separate transactions. Any other action can run between two of them,
+   including a run of the same use case on other rows.
+2. A run is the rows its steps bound. Each row a step before the last writes carries a run
+   mark `<E>._run_<UC>`. Step 1 takes only rows without a mark. Step i > 1 takes the rows
+   marked `i-1` and reads them **as they are now**, not as step 1 left them.
+3. A row is in at most one run of a use case at a time.
+4. A step whose guard fails when its turn comes waits. The run is never abandoned, and
+   nothing is compensated. A row no step can move shows up as a deadlock or a use case
+   that never runs.
+5. A condition applied to the use case guards step 1. A condition applied to an API
+   guards that API's step. A `.when` on an arm or a `chooses` value guards the step that
+   writes its column.
+6. An event the use case raises is raised by the last step. A triggered use case's first
+   step reads the event's mark, so with several tracked events the first step has one
+   copy per event (`<UC>_by_<Ev>`).
+7. `after(UC).assert` holds after the last step, on the run's rows. A row deleted during
+   the run still finishes it, because the mark, not the existence, matches it.
+
+The samples have three split use cases, and each of them depends on one of these rules:
+
+| Sample | Steps | What it depends on |
+|---|---|---|
+| `cross_order_payment_split` | `Pay_1` captures the Payment (CapturePaymentApi), `Pay_2` pays the Order (PayOrderApi) | Rule 1. `Cancel` runs between the steps, and `check` fails with `MultiForbidden_Order_0`. That is the defect the sample exists to show. |
+| `split_run_order`, insurance-claim-ops `OpenSettlement` | step 1 moves the claim to `negotiating`, step 2 creates the Settlement under that claim | Rules 2 and 3. The sample's comment records the bug (#80) seen without them: a second settlement under a claim that had one, which breaks `Unique_Settlement_Claim`. |
+| clinic-ops `CheckInPatient` | step 1 checks the Appointment in and updates the PatientAccount (CheckInPatientApi), step 2 creates the EligibilityCheck (OnlineEligibilityApi) | Rule 6. `EvAppointmentCheckedIn` is raised after step 2, once the EligibilityCheck exists. |
+
+### Options
+
+- **A. One function for the whole use case.** The function computes every step from one
+  snapshot, and the caller commits it once or step by step.
+- **B. One function per step, linked by a token in memory.** Step 1 returns the ids of its
+  rows, and step 2 takes them. Nothing is stored between steps.
+- **C. One function per step, linked by stored run marks.** Each step takes and returns
+  the marks of the rows it binds, as the model does. The agent stores a mark with its row,
+  in the transaction of the step.
+
+### The cases
+
+| Case | A | B | C |
+|---|---|---|---|
+| Another use case moves a later step's row between the steps (`Cancel` in `cross_order_payment_split`) | Computed from a stale snapshot, step 2 writes `paid` over `cancelled`, a move that no `transitions` has. Committing A as one transaction across two APIs is not what the model says. | Correct, if step 2 reloads the row | `pay2` reads the order as it is now. Its guard `pending` fails and it returns `Blocked`, which is the run the model explored. |
+| A second run of the use case on the same row (`OpenSettlement` twice on one claim) | Not excluded | Not excluded. Two runs both reach step 2 and create two settlements, the #80 bug. | Excluded. Step 1 needs the row to have no mark, and the mark is unique per row. |
+| The process stops between the steps | The run is lost or half committed | The token is lost, and the claim stays at `negotiating` with no settlement. The model has no such state for an unfinished run. | The marks are stored, so the run resumes at the step the mark names. |
+| A step's guard fails when its turn comes | No notion of a turn | The caller has no record of a pending run to retry | `Blocked` leaves the marks as they were. The obligation is to retry, never to abandon (rule 4). |
+| A split use case raises an event (`CheckInPatient`) | The event can leave before step 2 commits | Correct | Only the last step's result carries the event. |
+| A triggered split use case | One function per event | Correct | The first step takes the event value, one function per `<UC>_by_<Ev>`. The later steps are shared. |
+| A condition on the use case, an API, or an arm | Every guard is read on the snapshot | Correct by placement | Each guard is on the step rule 5 names. |
+| A row deleted before a later step | Not representable | The row is gone, and so is the run | The later step takes `E \| Deleted<EId>`, as the mark still matches. |
+| `after(UC).assert` | Checked on the snapshot | Checked after the last step | Checked on the run's rows after the last step. |
+| Runs of two different use cases on one row | Not excluded | Not excluded | Allowed: there is one mark per use case and row, as in the model. |
+| A split the modeler did not intend (two APIs over one store, an isolated write) | Tempting, and it would make the code more atomic than the model | Same as above | The code keeps the split. The fix belongs in the model: put the writes under one API, run `check` and `verify` again, and generate again. The use case is then one action and one function. |
+
+### Decision: C, one function per step, linked by stored run marks
+
+A is wrong when the steps commit separately, and only the model can say they don't. It
+also hides the boundary that `verify` checked interleavings across. B is right only while
+the process stays up and nobody starts a second run: it gives up rules 2 to 4, and the
+#80 bug in the samples is exactly that. C is the model's own semantics written as code, so
+each case above behaves in code as it did in `verify`. The decision has these parts:
+
+- **One function per action.** The name comes from the action's name (`Pay_1` gives
+  `pay1`, `pay_1`, `Pay1`), so the collisions the transition system already resolves
+  (`Pay_1_2` next to a use case `Pay_1`) are resolved once.
+- **A run mark is a generated record, not a column of the entity.** For each entity a step
+  before the last writes there is `<UC>RunMark { <entity>_id, step }`, so the entity types
+  keep the shape DBML and JSON Schema describe. The obligations say that a mark is unique
+  per row (rule 3) and is committed in the same transaction as the writes of the step that
+  sets, advances, or clears it.
+- **Step 1 takes `null` for each mark**, so the caller has to look the mark up. It
+  returns the marks at `1`.
+- **Step i > 1 takes the current rows and their marks** typed at `i-1`. If a row does not
+  match its mark, or the step's own rows do not match through the key, that is a
+  programming error and the function throws or panics. If a guard fails, the function
+  returns `Blocked` with the guard's text and site, and the marks are unchanged. The last
+  step returns the marks cleared, the raised events, and the result of the `after`
+  check.
+- **Nothing is compensated.** No generated function undoes a step. If the business needs a
+  way out of a stuck run, it is a use case in the model, which is verified like any other.
+- **The scaffold has one service stub per use case** with an entry point per step and a
+  `resume<UC>` stub that reads the stored marks and calls the next step. These are the
+  places the agent fills in.
+
+TypeScript for `cross_order_payment_split` (it compiles under `tsc --strict`, and the two
+wrong calls at the end are type errors):
+
+```ts
+/** Run mark of Pay on a Payment row (`Payment._run_Pay`). Unique per row (obligation O2). */
+export type PayRunMark = { usecase: "Pay"; payment_id: PaymentId; step: 1 };
+export type Blocked = { blocked: true; guard: string; site: string };
+
+/** Pay_1, transaction 1 of 2 of Pay (CapturePaymentApi). */
+export function pay1(payment: PaymentPending, mark: null):
+    { payment: PaymentCaptured; marks: { payment: PayRunMark } } {
+  void mark;
+  return {
+    payment: { ...payment, status: "captured" },
+    marks: { payment: { usecase: "Pay", payment_id: payment.id, step: 1 } },
+  };
+}
+
+/** Pay_2, transaction 2 of 2 of Pay (PayOrderApi). Reads the rows as they are now. */
+export function pay2(
+  earlier: { payment: Payment | Deleted<PaymentId>; mark: PayRunMark },
+  order: Order,
+): { order: OrderPaid; marks: { payment: null } } | Blocked {
+  if ("id" in earlier.payment && earlier.payment.id !== earlier.mark.payment_id) {
+    throw new Error("rdra-ish: the Payment row is not the row of this run");
+  }
+  if ("id" in earlier.payment && earlier.payment.order_id !== order.id) {
+    throw new Error("rdra-ish: the Order is not the Payment's order");
+  }
+  if (order.status !== "pending") {
+    return { blocked: true, guard: "Order.status == pending",
+             site: "cross_order_payment_split.rdra:37:1" };
+  }
+  return { order: { ...order, status: "paid" }, marks: { payment: null } };
+}
+
+// @ts-expect-error step 2 cannot run without the mark step 1 returned
+pay2({ payment: captured }, cancelledOrder);
+// @ts-expect-error step 1 cannot run on a captured payment
+pay1(captured, null);
+```
+
+In Rust, a step takes its marks by value and returns the next ones, so a mark cannot be
+used twice. In Go, the marks are structs with the step as a typed constant.
+
+<a id="agent-contract"></a>
+## The agent contract
+
+The output is one stream, in this order. Each part is marked by a comment line, so an
+agent can split it into files wherever the project wants:
+
+1. **Header.** The model path, the bounds and the result of the `check` the generator
+   ran, and a note that `verify` checks at larger bounds.
+2. **Obligations.** A numbered list of what the verification assumed but the types cannot
+   enforce, each naming the invariant or rule it protects and the source site. For
+   example: O1 `Unique_Settlement_Claim`, a unique key on `settlement.claim_id`; O2 one run
+   mark per row and use case, committed with its step; O3 retry a `Blocked` step and never
+   abandon its run; O4 publish raised events only after the last step commits; O5 load
+   every related row a `.none` guard reads; O6 `MinCard_*`; O7 call the generated
+   validator of each multi-entity rule before commit.
+3. **Core.** Data types, state sums, transition functions, rule validators. Regenerating
+   from the model replaces it. The agent does not change its signatures or bodies; when
+   the core is wrong, the model is wrong.
+4. **Scaffold.** One service stub per use case: load the rows, call the core, persist the
+   rows and the marks, publish the events. Every body is a TODO that compiles. The agent
+   owns the scaffold.
+5. **Conformance tests.** Each `forbidden`, `invariant`, `@check`, and `after(UC).assert`
+   as a property for `fast-check`, `proptest`, or `rapid`, run against the core and,
+   through the scaffold's ports, against the finished services. When an agent edit breaks
+   one, the code has left what was verified.
+
+`--format json` prints the same intermediate form and obligations as data, for an agent
+that wants to generate in another language or check its work against the list.
+
 ## Architecture
 
 ```
@@ -263,11 +447,18 @@ rules ────────► refinements ──┘                         
 - Naming is decided in the IR: types PascalCase, Rust fields as written, Go fields
   exported with a `json` tag naming the column, keywords escaped (`r#type`, `Type_`). Two
   generated names that collide (an entity `OrderPaid` beside the variant `OrderPaid`) are
-  an export error naming both declarations.
-- The CLI adds `export --kind ts-domain | rust-domain | go-domain` with `-o` as the output
-  path, `--buc` scoping as `typescript-states` has, `--scalars`, and for Go `--package`.
-  `typescript-states` stays as it is: its kind name is covered by
+  a generator error naming both declarations.
+- The CLI adds a subcommand, `rdra-ish codegen <inputs> --lang ts|rust|go`, that prints
+  the stream to stdout, as `states --format typescript` does. `-o <file>` is optional.
+  `--format json` prints the intermediate form and the obligations. `--part
+  types|core|scaffold|tests` limits the stream. `--buc` scopes it as `typescript-states`
+  does, and `--scalars` and, for Go, `--package` are available. `export --kind
+  typescript-states` stays as it is: its kind name is covered by
   [compatibility](../compatibility.md).
+- The generator runs the same `check` first and refuses when it fails, because the code
+  would then encode a model that was not verified. `cross_order_payment_split` is refused
+  this way. `--allow-failing` prints anyway and lists each failing invariant as an
+  obligation the code does not meet.
 - The lifecycle gate (`crates/rdra-ish-cli/src/lifecycle_gate.rs`) classifies the
   outputs by what they read. Data types read no reachability and write with the note, as
   DBML does. State sums and functions refuse when the lifecycle has errors. Under
@@ -277,10 +468,11 @@ rules ────────► refinements ──┘                         
 ## How we know it is right
 
 The project's rule is that every output is checked against the one semantics, on every
-sample. For this export:
+sample. For this generator:
 
-- **It compiles.** CI runs `tsc --noEmit`, `cargo check`, and `go vet` with the
-  exhaustiveness linter on the output of every `samples.txt` root. The flake already has
+- **It compiles.** CI runs `tsc --strict --noEmit`, `cargo check`, and `go vet` with the
+  exhaustiveness linter on the output of every `samples.txt` root, scaffold and tests
+  included. The flake already has
   Node and Rust; it gains Go.
 - **It agrees with the transition system.** A test in the style of `engine_equivalence`
   runs the generated TypeScript (Node is in the flake) on every edge BFS explores at
@@ -288,6 +480,9 @@ sample. For this export:
   compares it with the BFS successor, and it checks that a guard the generated function
   rejects is a guard BFS has. Rust and Go print the same IR, so per-printer snapshot tests
   suffice for them.
+- **The split runs agree.** On the three split samples, the test also runs interleavings
+  of steps and other actions, and checks that `Blocked` is returned exactly where BFS has
+  no successor for the step.
 - **The keys agree.** `key_facts` (`crates/rdra-ish-cli/tests/key_facts.rs`) gains the
   generated key fields as one more consumer of the `ForeignKey` fact set.
 
@@ -300,15 +495,15 @@ sample. For this export:
    scalars, in three languages, with the compile check. No lifecycle read.
 2. **State sums.** One variant per state, declared refinement, tagged JSON in all three,
    and the candidate-rule listing in `next`.
-3. **Transition functions** for use cases of one transaction group: source narrowing,
-   `holds` guards without quantifiers, effects, choices, raised events, and the
-   equivalence test.
-4. **The rest of the action vocabulary:** `.has` / `.none`, `now`, triggered handlers,
-   links, and use cases split into transaction groups.
-5. **Rules as test oracles (optional).** Print each `forbidden`, `invariant`, `@check`,
-   and `after(UC).assert` as a property for `fast-check`, `proptest`, or `rapid`, so a
-   hand-written service that calls the generated core can be tested against the rules
-   the model verified.
+3. **Transition functions and the agent contract** for use cases of one transaction
+   group: source narrowing, `holds` guards without quantifiers, effects, choices, raised
+   events, the obligations, the scaffold, the conformance tests, and the equivalence
+   test. The conformance tests come here, not later, because they are what keeps an
+   agent's edits within what was verified.
+4. **Use cases split into transactions**, as [decided](#split): step functions, run
+   marks, `Blocked`, `resume<UC>`, and the interleaving test on the three split samples.
+5. **The rest of the action vocabulary:** `.has` / `.none`, `now`, triggered handlers,
+   and links.
 
 ## Open questions for the maintainer
 
@@ -323,9 +518,6 @@ sample. For this export:
    anyway.
 4. **Go nullables.** `*T` (recommended: what `encoding/json` reads) or a generic
    `Option[T]`.
-5. **A split use case.** One function per transaction group, linked by a run token the
-   first returns and the next takes (recommended: the atomicity boundary stays visible),
-   or one function that hides the steps.
-6. **Stability.** Are the generated names covered by [compatibility](../compatibility.md)?
+5. **Stability.** Are the generated names covered by [compatibility](../compatibility.md)?
    Recommended: not until one minor release after phase 3, and then the type, variant,
    and function names, but not the formatting.
