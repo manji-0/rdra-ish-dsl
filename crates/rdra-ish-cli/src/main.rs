@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 mod cli;
+mod codegen_cmd;
 mod csv_cmd;
 mod diagram;
 mod export;
@@ -199,6 +200,13 @@ fn main() -> Result<()> {
             buc,
             format,
         } => next::run_next(&inputs, &buc, format)?,
+
+        Commands::Codegen {
+            inputs,
+            lang,
+            out,
+            package,
+        } => codegen_cmd::run_codegen(&inputs, lang, out.as_deref(), &package)?,
 
         Commands::Files { inputs } => {
             let files = collect_rdra_files(&inputs, None)?;

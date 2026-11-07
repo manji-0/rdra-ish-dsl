@@ -79,6 +79,10 @@
             # VS Code extension (editors/vscode)
             pkgs.nodejs
 
+            # Compile checks of `rdra-ish codegen` output (tests/codegen_builds.rs)
+            pkgs.typescript
+            pkgs.go
+
             pkgs.pre-commit
           ]
           # GNU time for scripts/verify-samples.sh (macOS has BSD /usr/bin/time).
