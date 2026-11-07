@@ -50,7 +50,9 @@ is that choice.
 | Lifecycle | rdra-ish | Effects, guards, constraints, properties per use case | Within the stated bounds, no reachable state breaks a constraint, and every declared state is reachable |
 
 Physical database design is out of scope. DBML is the last data output, and the DSL
-gets no DDL emitter. Unbounded proof (TLAPS, inductive invariants) is also out of
+gets no DDL emitter. Domain code is in scope: `rdra-ish codegen` prints the data types, state
+sums, and transition functions of the model in TypeScript, Rust, or Go, for an agent to
+finish ([design](./design/algebraic-codegen.md)). Unbounded proof (TLAPS, inductive invariants) is also out of
 scope. Verification means bounded model checking with TLC, and the bounds are part of
 every result.
 
@@ -367,6 +369,18 @@ The maintainer decided this question on 2026-11-06, for 2.0 (#112):
   [docs/design/event-order.md](./design/event-order.md) records the decisions and the
   measurements; rule 3 above states the semantics. This supersedes the 2026-11-01 entry
   above, and the release is 2.0.0 ([compatibility](./compatibility.md)).
+
+The maintainer decided these questions on 2026-11-07:
+
+- rdra-ish prints domain code that a build depends on. The output is buildable
+  TypeScript, Rust, or Go that conforms to what `check` and `verify` verified, and an
+  agent finishes it. A use case split into transactions is one function per step, linked
+  by stored run marks. [docs/design/algebraic-codegen.md](./design/algebraic-codegen.md)
+  records the design and the cases behind that choice.
+- The generated code is not covered by [compatibility](./compatibility.md): its type,
+  variant, field, and function names, its shape, the obligation list, and its JSON form
+  may change in any release. A model that a release keeps verifying the same way may
+  generate different code.
 
 ## Sources
 
