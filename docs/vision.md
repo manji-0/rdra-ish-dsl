@@ -377,10 +377,11 @@ The maintainer decided these questions on 2026-11-07:
   agent finishes it. A use case split into transactions is one function per step, linked
   by stored run marks. [docs/design/algebraic-codegen.md](./design/algebraic-codegen.md)
   records the design and the cases behind that choice.
-- The generated code is not covered by [compatibility](./compatibility.md): its type,
-  variant, field, and function names, its shape, the obligation list, and its JSON form
-  may change in any release. A model that a release keeps verifying the same way may
-  generate different code.
+- Code generation is an experimental extra, and none of it is covered by
+  [compatibility](./compatibility.md): not the `codegen` subcommand, its flags, or its exit
+  status, and not the generated code (its type, variant, field, and function names, its
+  shape, the obligation list, and its JSON form). Any release may change or remove them. A
+  model that a release keeps verifying the same way may generate different code.
 
 ## Sources
 

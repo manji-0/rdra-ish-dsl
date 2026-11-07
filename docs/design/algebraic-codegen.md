@@ -5,8 +5,9 @@
 <!-- derived-from ../state-derivation.md -->
 <!-- derived-from ../language-reference.md#data-layer -->
 
-Status: accepted in scope on 2026-11-07 ([vision.md](../vision.md#decisions)); nothing is
-implemented yet. The generated code is not covered by [compatibility](../compatibility.md).
+Status: accepted in scope on 2026-11-07 as an experimental extra
+([vision.md](../vision.md#decisions)); nothing is implemented yet. Neither the `codegen`
+subcommand nor its output is covered by [compatibility](../compatibility.md).
 Three questions remain [open](#open-questions-for-the-maintainer).
 
 The model already states the shape of the domain: the values an actor chooses
@@ -78,12 +79,14 @@ This widens what rdra-ish produces from review and verification artifacts to cod
 build depends on. The maintainer decided on 2026-11-07 that this is in scope
 ([vision.md](../vision.md#decisions)).
 
-The generated code is not covered by [compatibility](../compatibility.md). Its names,
-its shape, the obligation list, and the JSON form may change in any release, and the
-header of every output says so. An agent therefore treats the output as a starting point
+Code generation is an experimental extra, outside [compatibility](../compatibility.md).
+The `codegen` subcommand, its flags, and its exit status may change or go away in any
+release. So may the generated code: its names, its shape, the obligation list, and the
+JSON form. `rdra-ish --help` and the CLI reference label the subcommand experimental, and
+the header of every output says so. An agent therefore treats the output as a starting point
 to finish, not as an interface to depend on across rdra-ish upgrades. After an upgrade,
-it generates again and compares the new output with the old. Phase 1 adds the entry to
-the "What is not covered" list of the compatibility page.
+it generates again and compares the new output with the old. Phase 1 adds the
+subcommand and its output to the "What is not covered" list of the compatibility page.
 
 ## The mapping
 
@@ -503,8 +506,9 @@ sample. For this generator:
    `unknown`. Independent of the rest, and small.
 1. **Data types.** Variations, entities as records, id newtypes, keys, `@null`, DTOs,
    scalars, in three languages, with the compile check. No lifecycle read. The `codegen`
-   subcommand lands here, and the generated code joins the "What is not covered" list of
-   [compatibility](../compatibility.md).
+   subcommand lands here, labelled experimental in `--help` and the CLI reference, and it
+   joins the "What is not covered" list of [compatibility](../compatibility.md) with its
+   flags and its output.
 2. **State sums.** One variant per state, declared refinement, tagged JSON in all three,
    and the candidate-rule listing in `next`.
 3. **Transition functions and the agent contract** for use cases of one transaction
@@ -528,5 +532,6 @@ sample. For this generator:
    anyway.
 3. **Go nullables.** `*T` (recommended: what `encoding/json` reads) or a generic
    `Option[T]`.
-Decided on 2026-11-07: the generator is in scope, and its output is not covered by
-compatibility (see [Goals and non-goals](#goals-and-non-goals)).
+Decided on 2026-11-07: the generator is in scope as an experimental extra, and neither
+the subcommand nor its output is covered by compatibility (see
+[Goals and non-goals](#goals-and-non-goals)).
