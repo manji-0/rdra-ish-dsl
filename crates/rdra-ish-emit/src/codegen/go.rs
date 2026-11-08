@@ -182,6 +182,9 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     }
     print_functions(domain, &mut out);
     print_validators(domain, &mut out);
+    print_rows(domain, &mut out);
+    print_dispatchers(domain, &mut out);
+    print_helpers(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -296,9 +299,6 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         "type Rejected struct {\n\tCondition string\n\tLabel     string\n\tSite      string\n}\n\n",
     );
     out.push_str("// Error names the condition.\nfunc (r *Rejected) Error() string {\n\treturn \"rejected by the condition \" + r.Condition + \": \" + r.Label\n}\n\n");
-    out.push_str("func ptrTo[T any](v T) *T { return &v }\n\n");
-    out.push_str("// mustPresent reads a value the verified model keeps present; nil means the rows broke a rule.\n");
-    out.push_str("func mustPresent[T any](p *T, message string) T {\n\tif p == nil {\n\t\tpanic(message)\n\t}\n\treturn *p\n}\n\n");
     for f in &domain.fns {
         out.push_str(&format!("// {} is what {} returns.\n", f.result, f.name));
         out.push_str(&format!("type {} struct {{\n", f.result));
@@ -540,4 +540,209 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
 /// The condition under which `e` fails, folded so that a negated comparison reads plainly.
 fn fails(e: &super::ir::Expr) -> super::ir::Expr {
     super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
+}
+
+// ── Rows and dispatch ────────────────────────────────────────────────────────
+
+pub(super) fn print_helpers(domain: &DomainModel, out: &mut String) {
+    if domain.fns.is_empty() && domain.sums.is_empty() {
+        return;
+    }
+    out.push_str("// ── Helpers ──\n\n");
+    out.push_str("func ptrTo[T any](v T) *T { return &v }\n\n");
+    out.push_str("// mustPresent reads a value the verified model keeps present; nil means the rows broke a rule.\n");
+    out.push_str("func mustPresent[T any](p *T, message string) T {\n\tif p == nil {\n\t\tpanic(message)\n\t}\n\treturn *p\n}\n\n");
+}
+
+pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
+    if domain.sums.is_empty() {
+        return;
+    }
+    out.push_str("// ── Rows: the flat shape a store or the wire holds ──\n\n");
+    out.push_str("// InvalidRow reports a row that breaks what the type of its state requires.\n");
+    out.push_str(
+        "type InvalidRow struct {\n\tEntity string\n\tColumn string\n\tReason string\n}\n\n",
+    );
+    out.push_str("// Error names the entity, the column, and the reason.\nfunc (e *InvalidRow) Error() string {\n\treturn e.Entity + \".\" + e.Column + \": \" + e.Reason\n}\n\n");
+    for sum in &domain.sums {
+        let FieldType::Enum(tag_enum) = &sum.tag.ty else {
+            continue;
+        };
+        out.push_str(&doc(
+            &sum.row,
+            &[format!(
+                "holds every column of {} as the data layer declares it.",
+                sum.entity
+            )],
+            "",
+        ));
+        out.push_str(&format!("type {} struct {{\n", sum.row));
+        for f in &sum.row_fields {
+            let ty = field_type(&f.ty);
+            let ty = if f.nullable { format!("*{ty}") } else { ty };
+            out.push_str(&format!(
+                "\t{} {ty} `json:{}`\n",
+                f.pascal,
+                string_literal(&f.wire)
+            ));
+        }
+        out.push_str("}\n\n");
+        let invalid = |column: &str, reason: String| {
+            format!(
+                "&InvalidRow{{Entity: {}, Column: {}, Reason: {}}}",
+                string_literal(&sum.entity),
+                string_literal(column),
+                string_literal(&reason)
+            )
+        };
+        out.push_str(&format!(
+            "// {0}FromRow returns the state of a row, or why the row fits none.\nfunc {0}FromRow(row {1}) ({0}, error) {{\n\tswitch row.{2} {{\n",
+            sum.name, sum.row, sum.tag.pascal
+        ));
+        for v in &sum.variants {
+            out.push_str(&format!("\tcase {tag_enum}{}:\n", v.value.ident));
+            for f in &v.always_null {
+                out.push_str(&format!(
+                    "\t\tif row.{} != nil {{\n\t\t\treturn nil, {}\n\t\t}}\n",
+                    f.pascal,
+                    invalid(&f.wire, format!("null in the state {}", v.value.wire))
+                ));
+            }
+            let mut inits = Vec::new();
+            for f in &v.fields {
+                let declared = sum.row_fields.iter().find(|r| r.wire == f.wire);
+                if declared.is_some_and(|d| d.nullable) && !f.nullable {
+                    out.push_str(&format!(
+                        "\t\tif row.{} == nil {{\n\t\t\treturn nil, {}\n\t\t}}\n",
+                        f.pascal,
+                        invalid(&f.wire, format!("present in the state {}", v.value.wire))
+                    ));
+                    inits.push(format!("{0}: *row.{0}", f.pascal));
+                } else {
+                    inits.push(format!("{0}: row.{0}", f.pascal));
+                }
+            }
+            out.push_str(&format!(
+                "\t\treturn {}{{{}}}, nil\n",
+                v.name,
+                inits.join(", ")
+            ));
+        }
+        out.push_str(&format!(
+            "\t}}\n\treturn nil, {}\n}}\n\n",
+            invalid(&sum.tag.wire, format!("not a value of {tag_enum}"))
+        ));
+        let uses_state = sum.variants.iter().any(|v| !v.fields.is_empty());
+        out.push_str(&format!(
+            "// {0}ToRow returns the flat row of a state.\nfunc {0}ToRow(state {0}) {1} {{\n\tswitch {2}state.(type) {{\n",
+            sum.name,
+            sum.row,
+            if uses_state { "v := " } else { "" }
+        ));
+        for v in &sum.variants {
+            let mut inits = Vec::new();
+            for f in &sum.row_fields {
+                if f.wire == sum.tag.wire {
+                    inits.push(format!("{}: {tag_enum}{}", f.pascal, v.value.ident));
+                } else if v.always_null.iter().any(|n| n.wire == f.wire) {
+                    inits.push(format!("{}: nil", f.pascal));
+                } else if let Some(vf) = v.fields.iter().find(|x| x.wire == f.wire) {
+                    if f.nullable && !vf.nullable {
+                        inits.push(format!("{0}: ptrTo(v.{0})", f.pascal));
+                    } else {
+                        inits.push(format!("{0}: v.{0}", f.pascal));
+                    }
+                }
+            }
+            out.push_str(&format!(
+                "\tcase {}:\n\t\treturn {}{{{}}}\n",
+                v.name,
+                sum.row,
+                inits.join(", ")
+            ));
+        }
+        out.push_str(&format!(
+            "\t}}\n\tpanic({})\n}}\n\n",
+            string_literal(&format!(
+                "rdra-ish: a state of {} this package does not declare",
+                sum.name
+            ))
+        ));
+    }
+}
+
+pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
+    if domain.dispatchers.is_empty() {
+        return;
+    }
+    out.push_str("// ── Dispatch: run a use case from whatever states its rows are in ──\n\n");
+    out.push_str("// NotEnabled reports rows in states the use case does not run from.\n");
+    out.push_str("type NotEnabled struct {\n\tUseCase string\n}\n\n");
+    out.push_str("// Error names the use case.\nfunc (e *NotEnabled) Error() string {\n\treturn \"the use case \" + e.UseCase + \" does not run from these states\"\n}\n\n");
+    for d in &domain.dispatchers {
+        out.push_str(&format!(
+            "// {} is what {} returns when the use case runs: one case is set.\ntype {} struct {{\n",
+            d.outcome, d.name, d.outcome
+        ));
+        for c in &d.cases {
+            out.push_str(&format!("\t{} *{}\n", c.case, c.result));
+        }
+        out.push_str("}\n\n");
+        let mut params: Vec<String> = d
+            .rows
+            .iter()
+            .map(|(n, ty)| format!("{} {ty}", local(n)))
+            .collect();
+        for i in &d.inputs {
+            let ty = field_type(&i.ty);
+            let ty = if i.nullable { format!("*{ty}") } else { ty };
+            params.push(format!("{} {ty}", local(&i.name)));
+        }
+        out.push_str(&format!(
+            "// {} runs {} from whatever states its rows are in: the transition function of those states, or NotEnabled.\nfunc {}({}) ({}, error) {{\n",
+            d.name,
+            d.usecase,
+            d.name,
+            params.join(", "),
+            d.outcome
+        ));
+        for c in &d.cases {
+            let mut depth = 1;
+            for (s, (n, _)) in c.states.iter().zip(&d.rows) {
+                if let Some((ty, _, _)) = s {
+                    out.push_str(&format!(
+                        "{}if {1}, ok := {1}.({ty}); ok {{\n",
+                        "\t".repeat(depth),
+                        local(n)
+                    ));
+                    depth += 1;
+                }
+            }
+            let mut args: Vec<String> = d.rows.iter().map(|(n, _)| local(n)).collect();
+            args.extend(c.inputs.iter().map(|i| local(&d.inputs[*i].name)));
+            let ind = "\t".repeat(depth);
+            if c.rejects {
+                out.push_str(&format!(
+                    "{ind}r, err := {}({})\n{ind}if err != nil {{\n{ind}\treturn {}{{}}, err\n{ind}}}\n",
+                    c.function,
+                    args.join(", "),
+                    d.outcome
+                ));
+            } else {
+                out.push_str(&format!("{ind}r := {}({})\n", c.function, args.join(", ")));
+            }
+            out.push_str(&format!(
+                "{ind}return {}{{{}: &r}}, nil\n",
+                d.outcome, c.case
+            ));
+            for k in (1..depth).rev() {
+                out.push_str(&format!("{}}}\n", "\t".repeat(k)));
+            }
+        }
+        out.push_str(&format!(
+            "\treturn {}{{}}, &NotEnabled{{UseCase: {}}}\n}}\n\n",
+            d.outcome,
+            string_literal(&d.usecase)
+        ));
+    }
 }

@@ -181,7 +181,17 @@ pub fn build(
         names.claim(scalar.name().to_string(), "the prelude".to_string())?;
     }
     // Names a language reserves where the printers write them unqualified.
-    for reserved in ["Self", "Some", "None", "Ok", "Err", "Rejected"] {
+    for reserved in [
+        "Self",
+        "Some",
+        "None",
+        "Ok",
+        "Err",
+        "Rejected",
+        "NotEnabled",
+        "Refused",
+        "InvalidRow",
+    ] {
         names.claim(reserved.to_string(), "a reserved word".to_string())?;
     }
 
@@ -338,6 +348,11 @@ fn sum_decl(
     names: &mut Names,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<SumDecl, CodegenError> {
+    let row_fields = fields.clone();
+    let row = names.claim(
+        format!("{name}Row"),
+        format!("the row type of {}", entity.id),
+    )?;
     let (tag_field, rest): (Vec<Field>, Vec<Field>) =
         fields.into_iter().partition(|f| f.wire == tag);
     let tag_field = tag_field
@@ -392,6 +407,8 @@ fn sum_decl(
         doc,
         tag: tag_field,
         variants,
+        row,
+        row_fields,
     })
 }
 

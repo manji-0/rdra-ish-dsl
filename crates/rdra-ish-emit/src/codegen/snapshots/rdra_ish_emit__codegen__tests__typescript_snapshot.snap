@@ -271,3 +271,115 @@ export function orderRuleViolations(row: Order): string[] {
       return orderCancelledRuleViolations(row);
   }
 }
+
+// ── Rows: the flat shape a store or the wire holds ──
+
+/** A row that breaks what the type of its state requires. */
+export interface InvalidRow {
+  readonly invalid: string;
+  readonly column: string;
+  readonly reason: string;
+}
+
+/** Every column of Order as the data layer declares it. */
+export interface OrderRow {
+  id: OrderId;
+  total: Money;
+  status: OrderStatus;
+  paid_at: DateTime | null;
+  method: PaymentMethod;
+  delivered_at: DateTime | null;
+  type: string | null;
+  customer_id: CustomerId;
+}
+
+/** The state of a Order row, or why the row fits none. */
+export function orderFromRow(row: OrderRow): Order | InvalidRow {
+  switch (row.status) {
+    case "pending": {
+      if (row.paid_at !== null) {
+        return { invalid: "Order", column: "paid_at", reason: "null in the state pending" };
+      }
+      return {
+        status: "pending",
+        id: row.id,
+        total: row.total,
+        method: row.method,
+        delivered_at: row.delivered_at,
+        type: row.type,
+        customer_id: row.customer_id,
+        paid_at: null,
+      };
+    }
+    case "paid": {
+      if (row.paid_at === null) {
+        return { invalid: "Order", column: "paid_at", reason: "present in the state paid" };
+      }
+      return {
+        status: "paid",
+        id: row.id,
+        total: row.total,
+        paid_at: row.paid_at,
+        method: row.method,
+        delivered_at: row.delivered_at,
+        type: row.type,
+        customer_id: row.customer_id,
+      };
+    }
+    case "cancelled": {
+      return {
+        status: "cancelled",
+        id: row.id,
+        total: row.total,
+        paid_at: row.paid_at,
+        method: row.method,
+        delivered_at: row.delivered_at,
+        type: row.type,
+        customer_id: row.customer_id,
+      };
+    }
+  }
+}
+
+/** The flat row of a Order. */
+export function orderToRow(state: Order): OrderRow {
+  return {
+    id: state.id,
+    total: state.total,
+    status: state.status,
+    paid_at: state.paid_at,
+    method: state.method,
+    delivered_at: state.delivered_at,
+    type: state.type,
+    customer_id: state.customer_id,
+  };
+}
+
+// ── Dispatch: run a use case from whatever states its rows are in ──
+
+/** The rows are in states the use case does not run from. */
+export interface NotEnabled {
+  readonly notEnabled: string;
+}
+
+/** What runPay returns when the use case runs. */
+export type PayOutcome = PayResult;
+
+/** Runs Pay from whatever states its rows are in: the transition function of those states, or NotEnabled. */
+export function runPay(order: Order, orderPaidAt: DateTime): PayOutcome | NotEnabled {
+  if (order.status === "pending") {
+    return pay(order, orderPaidAt);
+  }
+  return { notEnabled: "Pay" };
+}
+
+/** What runCancelOrder returns when the use case runs. */
+export type CancelOrderOutcome = CancelOrderResult;
+
+/** Runs CancelOrder from whatever states its rows are in: the transition function of those states, or NotEnabled. */
+export function runCancelOrder(order: Order): CancelOrderOutcome | NotEnabled {
+  if (order.status === "pending") {
+    return cancelOrder(order);
+  }
+  return { notEnabled: "CancelOrder" };
+}

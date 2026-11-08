@@ -347,3 +347,101 @@ impl Order {
         }
     }
 }
+
+// ── Rows: the flat shape a store or the wire holds ──
+
+/// A row that breaks what the type of its state requires.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InvalidRow {
+    pub entity: &'static str,
+    pub column: &'static str,
+    pub reason: &'static str,
+}
+
+/// Every column of Order as the data layer declares it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderRow {
+    pub id: OrderId,
+    pub total: Money,
+    pub status: OrderStatus,
+    pub paid_at: ::core::option::Option<DateTime>,
+    pub method: PaymentMethod,
+    pub delivered_at: ::core::option::Option<DateTime>,
+    pub r#type: ::core::option::Option<::std::string::String>,
+    pub customer_id: CustomerId,
+}
+
+impl Order {
+    /// The state of a row, or why the row fits none.
+    pub fn from_row(row: OrderRow) -> ::core::result::Result<Self, InvalidRow> {
+        match row.status {
+            OrderStatus::Pending => {
+                if row.paid_at.is_some() {
+                    return ::core::result::Result::Err(InvalidRow { entity: "Order", column: "paid_at", reason: "null in the state pending" });
+                }
+                ::core::result::Result::Ok(Self::Pending(OrderPending { id: row.id, total: row.total, method: row.method, delivered_at: row.delivered_at, r#type: row.r#type, customer_id: row.customer_id }))
+            }
+            OrderStatus::Paid => {
+                let ::core::option::Option::Some(present_paid_at) = row.paid_at else {
+                    return ::core::result::Result::Err(InvalidRow { entity: "Order", column: "paid_at", reason: "present in the state paid" });
+                };
+                ::core::result::Result::Ok(Self::Paid(OrderPaid { id: row.id, total: row.total, paid_at: present_paid_at, method: row.method, delivered_at: row.delivered_at, r#type: row.r#type, customer_id: row.customer_id }))
+            }
+            OrderStatus::Cancelled => {
+                ::core::result::Result::Ok(Self::Cancelled(OrderCancelled { id: row.id, total: row.total, paid_at: row.paid_at, method: row.method, delivered_at: row.delivered_at, r#type: row.r#type, customer_id: row.customer_id }))
+            }
+        }
+    }
+
+    /// The flat row of this state.
+    pub fn into_row(self) -> OrderRow {
+        match self {
+            Self::Pending(state) => OrderRow { id: state.id, total: state.total, status: OrderStatus::Pending, paid_at: None, method: state.method, delivered_at: state.delivered_at, r#type: state.r#type, customer_id: state.customer_id },
+            Self::Paid(state) => OrderRow { id: state.id, total: state.total, status: OrderStatus::Paid, paid_at: Some(state.paid_at), method: state.method, delivered_at: state.delivered_at, r#type: state.r#type, customer_id: state.customer_id },
+            Self::Cancelled(state) => OrderRow { id: state.id, total: state.total, status: OrderStatus::Cancelled, paid_at: state.paid_at, method: state.method, delivered_at: state.delivered_at, r#type: state.r#type, customer_id: state.customer_id },
+        }
+    }
+}
+
+// ── Dispatch: run a use case from whatever states its rows are in ──
+
+/// The rows are in states the use case does not run from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotEnabled {
+    pub usecase: &'static str,
+}
+
+/// Why a use case did not run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Refused {
+    Rejected(Rejected),
+    NotEnabled(NotEnabled),
+}
+
+/// What `run_pay` returns when the use case runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PayOutcome {
+    Ran(PayResult),
+}
+
+/// Runs Pay from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
+pub fn run_pay(order: Order, order_paid_at: DateTime) -> ::core::result::Result<PayOutcome, Refused> {
+    match (order,) {
+        (Order::Pending(order),) => ::core::result::Result::Ok(PayOutcome::Ran(pay(order, order_paid_at))),
+        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "Pay" })),
+    }
+}
+
+/// What `run_cancel_order` returns when the use case runs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CancelOrderOutcome {
+    Ran(CancelOrderResult),
+}
+
+/// Runs CancelOrder from whatever states its rows are in: the transition function of those states, or `NotEnabled`.
+pub fn run_cancel_order(order: Order) -> ::core::result::Result<CancelOrderOutcome, Refused> {
+    match (order,) {
+        (Order::Pending(order),) => ::core::result::Result::Ok(CancelOrderOutcome::Ran(cancel_order(order))),
+        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled { usecase: "CancelOrder" })),
+    }
+}

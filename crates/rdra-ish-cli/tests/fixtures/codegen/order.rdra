@@ -1,0 +1,28 @@
+// Fixture of tests/codegen_behaviour.rs: the drivers beside it run the generated code.
+variation Method "M" { card cash }
+entity Customer "C" { id: Int @pk }
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid, cancelled) @default(pending)
+  paid_at: DateTime @null
+  method: Method
+  qty: Int @default("1")
+  note: String
+}
+relate(Order, Customer, N:1)
+usecase Place "P"
+usecase Pay "Pay"
+usecase Cancel "C"
+event EvPaid "paid"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.paid_at == present)
+sets(Pay, Order.qty == 2)
+transitions(Cancel, Order.status, (pending, paid) -> cancelled)
+raises(Pay, EvPaid)
+condition Big "big"
+holds(Big, Order.qty >= 2)
+applies_to(Big, Cancel)
+forbidden(Order, qty > 4)
+invariant(Order).when(status == paid).then(paid_at == present)
+forbidden(Order, status == pending, paid_at == present)
