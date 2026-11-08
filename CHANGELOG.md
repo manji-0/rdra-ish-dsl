@@ -43,6 +43,9 @@
 - `codegen` prints the use cases events trigger: an event carries the id of each row its raise
   marks, and a triggered use case takes the event and checks that its row is the event's.
   `tests/codegen_equivalence.rs` checks that each raise marks the row the event names.
+- `codegen` prints a choice among arms as one function per target state, guarded by the
+  `.when` conditions of its arm, with the target as a dispatcher argument, and a second
+  lifecycle column as a branch on its value.
   `tests/codegen_equivalence.rs` now covers the steps, the marks they leave, and every key
   a function sets.
 

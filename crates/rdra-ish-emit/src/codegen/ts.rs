@@ -440,6 +440,29 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                             Assigned::ParentId { row: r, field, .. } => {
                                 format!("{}.{}", row(*r), property(&field.wire))
                             }
+                            Assigned::Switch {
+                                row: r,
+                                field,
+                                arms,
+                                ..
+                            } => {
+                                let read = format!("{}.{}", row(*r), property(&field.wire));
+                                let mut v = format!(
+                                    "unreachable({})",
+                                    string_literal(&format!(
+                                        "rdra-ish: {} is in no state {} moves it from",
+                                        field.wire, f.usecase
+                                    ))
+                                );
+                                for (from, to) in arms.iter().rev() {
+                                    v = format!(
+                                        "{read} === {} ? {} : {v}",
+                                        string_literal(&from.wire),
+                                        string_literal(&to.wire)
+                                    );
+                                }
+                                format!("({v})")
+                            }
                             Assigned::EventId { field, .. } => format!(
                                 "{}.{}",
                                 super::camel(&super::type_ident(
@@ -780,6 +803,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             };
             params.push(format!("{}: {ty}", var(&i.name)));
         }
+        for (n, ty) in &d.choices {
+            params.push(format!("{}: {ty}", var(n)));
+        }
         let ret = if d.rejects {
             format!("{} | Rejected | NotEnabled", d.outcome)
         } else {
@@ -804,6 +830,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                         string_literal(&value.wire)
                     ))
                 })
+                .chain(c.choice.iter().map(|(i, v)| {
+                    format!("{} === {}", var(&d.choices[*i].0), string_literal(&v.wire))
+                }))
                 .collect();
             let mut args: Vec<String> = d.rows.iter().map(|(n, _)| var(n)).collect();
             args.extend(d.marks.iter().map(|(n, _)| var(n)));

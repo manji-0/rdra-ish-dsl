@@ -217,7 +217,25 @@ fn functions_agree_with_the_transition_system() {
                     state: pre,
                     rows: row_slots(first),
                 };
-                let fns = matching(&domain.fns, &action.name, &before);
+                let mut fns = matching(&domain.fns, &action.name, &before);
+                // Several arms from one state: the function whose target BFS took.
+                if fns.len() > 1 {
+                    fns.retain(|f| {
+                        f.outputs.iter().all(|o| match &o.kind {
+                            OutKind::Row {
+                                tag: Some((column, value)),
+                                ..
+                            } => {
+                                let e = action.params[o.param].entity;
+                                let slot = usize::from(params[o.param]);
+                                column_var(ts, &ts.entity(e).id, column)
+                                    .and_then(|v| enum_name(ts, v, post.get(ts, v, slot)))
+                                    .is_some_and(|n| n == value.wire)
+                            }
+                            _ => true,
+                        })
+                    });
+                }
                 let [f] = fns.as_slice() else {
                     failures.push(format!(
                         "{sample}: {} from {:?} matches {} functions",
@@ -363,6 +381,15 @@ fn functions_agree_with_the_transition_system() {
                                         Lit::Int(n) => ts.var(var).domain.number(got) == Some(*n),
                                     },
                                     Assigned::Null => got == Value::NULL,
+                                    Assigned::Switch { arms, .. } => {
+                                        let from = at(&target.wire, pre)
+                                            .and_then(|(v, x)| enum_name(ts, v, x));
+                                        let to = arms
+                                            .iter()
+                                            .find(|(f, _)| Some(&f.wire) == from.as_ref())
+                                            .map(|(_, t)| t.wire.clone());
+                                        to.is_some() && to == enum_name(ts, var, got)
+                                    }
                                     Assigned::From { adapt, .. } => match adapt {
                                         Adapt::AbsentNull => got == Value::NULL,
                                         _ => at(&target.wire, pre).map(|(_, x)| x) == Some(got),

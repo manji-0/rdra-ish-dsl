@@ -507,6 +507,37 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 field,
                                 wrap: w,
                             } => wrap(format!("{}.{}.clone()", row(*r), ident(&field.wire)), *w),
+                            Assigned::Switch {
+                                row: r,
+                                field,
+                                enum_ty,
+                                arms,
+                            } => {
+                                let mut v = format!("match {}.{} {{ ", row(*r), ident(&field.wire));
+                                for (from, to) in arms {
+                                    v.push_str(&format!(
+                                        "{enum_ty}::{} => {enum_ty}::{}, ",
+                                        variant_ident(&from.ident),
+                                        variant_ident(&to.ident)
+                                    ));
+                                }
+                                let all = domain
+                                    .enums
+                                    .iter()
+                                    .find(|e| e.name == *enum_ty)
+                                    .map_or(0, |e| e.values.len());
+                                if arms.len() < all {
+                                    v.push_str(&format!(
+                                        "_ => unreachable!({}), ",
+                                        string_literal(&format!(
+                                            "rdra-ish: {} is in no state {} moves it from",
+                                            field.wire, f.usecase
+                                        ))
+                                    ));
+                                }
+                                v.push('}');
+                                v
+                            }
                             Assigned::EventId { field, wrap: w, .. } => wrap(
                                 format!(
                                     "{}.{}.clone()",
@@ -819,6 +850,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             };
             params.push(format!("{}: {ty}", ident(&i.name)));
         }
+        for (n, ty) in &d.choices {
+            params.push(format!("{}: {ty}", ident(n)));
+        }
         out.push_str(&format!(
             "pub fn {}({}) -> ::core::result::Result<{}, Refused> {{\n",
             snake(&d.name),
@@ -854,7 +888,23 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                     d.outcome, c.case
                 )
             };
-            out.push_str(&format!("        ({},) => {body},\n", pats.join(", ")));
+            let guard: Vec<String> = c
+                .choice
+                .iter()
+                .map(|(i, v)| {
+                    let (n, ty) = &d.choices[*i];
+                    format!("{} == {ty}::{}", ident(n), variant_ident(&v.ident))
+                })
+                .collect();
+            let guard = if guard.is_empty() {
+                String::new()
+            } else {
+                format!(" if {}", guard.join(" && "))
+            };
+            out.push_str(&format!(
+                "        ({},){guard} => {body},\n",
+                pats.join(", ")
+            ));
         }
         // A catch-all arm only where the cases leave some combination of states out.
         let combos: usize = d
@@ -873,7 +923,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                 }
             })
             .product();
-        if d.cases.len() < combos {
+        // A guarded arm never counts as covering its states.
+        let guarded = d.cases.iter().any(|c| !c.choice.is_empty());
+        if guarded || d.cases.len() < combos {
             out.push_str(&format!(
                 "        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled {{ usecase: {} }})),\n",
                 string_literal(&d.usecase)

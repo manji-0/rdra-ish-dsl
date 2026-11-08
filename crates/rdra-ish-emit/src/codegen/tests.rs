@@ -375,3 +375,71 @@ creates(Dispatch, Shipment)
         ));
     }
 }
+
+/// A choice among arms from one state is one function per target, each guarded by its
+/// arm's `.when`; a second lifecycle column is a branch on its value.
+#[test]
+fn choices_whens_and_second_columns() {
+    let src = r#"
+entity Case "C" {
+  id: Int @pk
+  status: Enum(open, granted, refused) @default(open)
+  publication: Enum(hidden, shown) @default(hidden)
+  urgent: Bool @default(false)
+}
+usecase Open "Open"
+usecase Decide "Decide"
+usecase Publish "Publish"
+creates(Open, Case)
+condition Urgent "urgent"
+holds(Urgent, Case.urgent == true)
+transitions(Decide, Case.status, open -> granted).when(Urgent)
+transitions(Decide, Case.status, open -> refused)
+transitions(Publish, Case.publication, hidden -> shown)
+"#;
+    let model = model_from(src);
+    let domain = build(&model, true, &|_| None).unwrap();
+    let names: Vec<&str> = domain.fns.iter().map(|f| f.name.as_str()).collect();
+    assert!(names.contains(&"DecideToGranted"), "{names:?}");
+    assert!(names.contains(&"DecideToRefused"), "{names:?}");
+    let granted = domain
+        .fns
+        .iter()
+        .find(|f| f.name == "DecideToGranted")
+        .unwrap();
+    assert_eq!(granted.conditions.len(), 1);
+    assert_eq!(granted.conditions[0].id, "Urgent");
+    let refused = domain
+        .fns
+        .iter()
+        .find(|f| f.name == "DecideToRefused")
+        .unwrap();
+    assert!(refused.conditions.is_empty());
+    let run = domain
+        .dispatchers
+        .iter()
+        .find(|d| d.name == "RunDecide")
+        .unwrap();
+    assert_eq!(run.choices.len(), 1, "the dispatcher takes the target");
+
+    let publish: Vec<_> = domain
+        .fns
+        .iter()
+        .filter(|f| f.action == "Publish")
+        .collect();
+    assert!(!publish.is_empty(), "{:?}", domain.skipped);
+    for f in publish {
+        let ir::OutKind::Row { fields, .. } = &f.outputs[0].kind else {
+            panic!("Publish writes a row");
+        };
+        let column = fields
+            .iter()
+            .find(|(t, _)| t.wire == "publication")
+            .unwrap();
+        assert!(
+            matches!(column.1, ir::Assigned::Switch { .. }),
+            "{column:?}"
+        );
+        assert!(f.conditions.iter().any(|c| c.id == "TransitionFrom"));
+    }
+}

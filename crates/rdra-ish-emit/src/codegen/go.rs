@@ -484,6 +484,32 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                             Assigned::MarkId { mark, wrap: w } => {
                                 wrap(format!("{}.Id", local(&f.marks_in[*mark].name)), *w)
                             }
+                            Assigned::Switch {
+                                row: r,
+                                field,
+                                enum_ty,
+                                arms,
+                            } => {
+                                let mut v = format!(
+                                    "func() {enum_ty} {{\n\t\t\t\tswitch {}.{} {{\n",
+                                    row(*r),
+                                    field.pascal
+                                );
+                                for (from, to) in arms {
+                                    v.push_str(&format!(
+                                        "\t\t\t\tcase {enum_ty}{}:\n\t\t\t\t\treturn {enum_ty}{}\n",
+                                        from.ident, to.ident
+                                    ));
+                                }
+                                v.push_str(&format!(
+                                    "\t\t\t\t}}\n\t\t\t\tpanic({})\n\t\t\t}}()",
+                                    string_literal(&format!(
+                                        "rdra-ish: {} is in no state {} moves it from",
+                                        field.wire, f.usecase
+                                    ))
+                                ));
+                                v
+                            }
                             Assigned::EventId { field, wrap: w, .. } => wrap(
                                 format!(
                                     "{}.{}",
@@ -804,6 +830,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             let ty = if i.nullable { format!("*{ty}") } else { ty };
             params.push(format!("{} {ty}", local(&i.name)));
         }
+        for (n, ty) in &d.choices {
+            params.push(format!("{} {ty}", local(n)));
+        }
         out.push_str(&format!(
             "// {} runs {} from whatever states its rows are in: the transition function of those states, or NotEnabled.\nfunc {}({}) ({}, error) {{\n",
             d.name,
@@ -823,6 +852,16 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                     ));
                     depth += 1;
                 }
+            }
+            for (i, v) in &c.choice {
+                let (n, ty) = &d.choices[*i];
+                out.push_str(&format!(
+                    "{}if {} == {ty}{} {{\n",
+                    "\t".repeat(depth),
+                    local(n),
+                    v.ident
+                ));
+                depth += 1;
             }
             let mut args: Vec<String> = d.rows.iter().map(|(n, _)| local(n)).collect();
             args.extend(d.marks.iter().map(|(n, _)| local(n)));

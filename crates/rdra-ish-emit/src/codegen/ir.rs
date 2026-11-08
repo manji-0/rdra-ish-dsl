@@ -194,6 +194,8 @@ pub struct FnDecl {
     pub raises: Vec<RaisedEvent>,
     /// For a use case an event triggers: the event it runs on.
     pub event_in: Option<EventIn>,
+    /// The arms chosen among several from one state: `(row, tag enum, target)`.
+    pub chosen: Vec<(usize, String, EnumValue)>,
     /// The result record's type name.
     pub result: String,
     /// For a step of a use case split into transactions: `(step, steps)`.
@@ -416,6 +418,13 @@ pub enum Assigned {
         wrap: bool,
     },
     /// The id of the row a mark argument names (a row an earlier step wrote).
+    /// A second lifecycle column: the `to` of the arm whose `from` the row holds.
+    Switch {
+        row: usize,
+        field: Field,
+        enum_ty: String,
+        arms: Vec<(EnumValue, EnumValue)>,
+    },
     /// The id of the row the event argument was raised on; `param` is the action param.
     EventId {
         field: String,
@@ -524,6 +533,8 @@ pub struct DispatchDecl {
     pub rows: Vec<(String, String)>,
     /// `(name, type)` per run mark argument, after the rows.
     pub marks: Vec<(String, String)>,
+    /// `(name, tag enum)` per choice argument: the state the actor picks, after the inputs.
+    pub choices: Vec<(String, String)>,
     /// Every input any of the functions takes, by name.
     pub inputs: Vec<FnInput>,
     pub cases: Vec<DispatchCase>,
@@ -542,4 +553,6 @@ pub struct DispatchCase {
     pub states: Vec<Option<(String, String, EnumValue)>>,
     /// The indices into the dispatcher's inputs the function takes, in its order.
     pub inputs: Vec<usize>,
+    /// The target state a choice argument must name: `(index into choices, target)`.
+    pub choice: Vec<(usize, EnumValue)>,
 }
