@@ -37,6 +37,11 @@
 - `codegen` lists candidate rules in its header: a nullable column every reachable row of
   a state holds present or null with no rule saying so, as the rule that would narrow the
   type, and a column null in every reachable state as one no use case writes.
+- `codegen` prints a use case split into transactions as one function per step, linked by
+  run marks: a step returns the mark of each row it leaves for the next step, and the next
+  step takes it as an argument. The header lists what storing the marks requires.
+  `tests/codegen_equivalence.rs` now covers the steps, the marks they leave, and every key
+  a function sets.
 
 ### Fixed
 

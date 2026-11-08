@@ -556,8 +556,18 @@ sample. For this generator:
    events, the obligations, the scaffold, the conformance tests, and the equivalence
    test. The conformance tests come here, not later, because they are what keeps an
    agent's edits within what was verified.
-4. **Use cases split into transactions**, as [decided](#split): step functions, run
-   marks, `Blocked`, `resume<UC>`, and the interleaving test on the three split samples.
+4. **Use cases split into transactions.** Landed, as [decided](#split), with three
+   deviations. Step 1 takes no `null` per mark: whether a row holds a mark is in the store,
+   not in a value the caller can pass, so it is an obligation, beside "one mark per row"
+   and "never abandon a run". A later step does not take the earlier rows themselves, only
+   their marks: in the samples a later step reads an earlier row only for its key, which the
+   mark carries, and a row deleted between the steps then needs no `Deleted` type. A step
+   that does not run returns `NotEnabled` or `Rejected`, which for a later step means
+   "retry", not a new `Blocked` type, and `resume<UC>` is left to the code that reads the
+   stored marks. `codegen_equivalence.rs` checks every step BFS runs, the mark each step
+   leaves in the run var, and every key a function sets against the owner var; the
+   interleavings are BFS's own, since it explores every action between two steps. A
+   condition of a later step that reads an earlier row's columns is not printed yet.
 5. **The rest of the action vocabulary:** `.has` / `.none`, `now`, triggered handlers,
    and links.
 

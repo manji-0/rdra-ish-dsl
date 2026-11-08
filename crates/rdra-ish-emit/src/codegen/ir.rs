@@ -163,6 +163,7 @@ pub struct DomainModel {
     pub skipped: Vec<Skipped>,
     pub validators: Vec<ValidatorDecl>,
     pub dispatchers: Vec<DispatchDecl>,
+    pub marks: Vec<MarkDecl>,
     /// Rules the reachable states agree with and the model does not state.
     pub candidates: Vec<String>,
     pub obligations: Vec<Obligation>,
@@ -193,6 +194,56 @@ pub struct FnDecl {
     pub raises: Vec<String>,
     /// The result record's type name.
     pub result: String,
+    /// For a step of a use case split into transactions: `(step, steps)`.
+    pub step: Option<(u8, u8)>,
+    /// The run marks of earlier steps the step continues, one per row they bound.
+    pub marks_in: Vec<MarkIn>,
+    /// The run marks the step leaves on its rows for the next step.
+    pub marks_out: Vec<MarkOut>,
+}
+
+/// A run mark: the id of a row step `step` of a split use case wrote, which the next step
+/// takes (docs/design/algebraic-codegen.md, "Use cases split into transactions").
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MarkDecl {
+    /// `<UseCase><Entity>Mark<step>`.
+    pub name: String,
+    pub usecase: String,
+    pub entity: String,
+    pub step: u8,
+    /// The entity's id type.
+    pub id_ty: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct MarkIn {
+    /// snake_case.
+    pub name: String,
+    pub ty: String,
+    /// The action param (an `Earlier` row) it stands for.
+    pub param: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct MarkOut {
+    /// The result field, snake_case.
+    pub name: String,
+    pub ty: String,
+    pub param: usize,
+    /// The step it leaves the row at.
+    pub step: u8,
+    pub source: MarkSource,
+}
+
+/// Where a mark's id comes from.
+#[derive(Clone, Debug)]
+pub enum MarkSource {
+    /// The id field of a row argument.
+    Row { row: usize, field: Field },
+    /// The id input of a created row.
+    Input(usize),
+    /// The id of a mark argument, advanced to this step.
+    Mark(usize),
 }
 
 /// A row the function reads: a row it writes, or a parent it links a child to.
@@ -355,6 +406,11 @@ pub enum Assigned {
         field: Field,
         wrap: bool,
     },
+    /// The id of the row a mark argument names (a row an earlier step wrote).
+    MarkId {
+        mark: usize,
+        wrap: bool,
+    },
     Null,
 }
 
@@ -426,6 +482,8 @@ pub struct DispatchDecl {
     pub outcome: String,
     /// `(name, entity type)` per row, in the transition functions' order.
     pub rows: Vec<(String, String)>,
+    /// `(name, type)` per run mark argument, after the rows.
+    pub marks: Vec<(String, String)>,
     /// Every input any of the functions takes, by name.
     pub inputs: Vec<FnInput>,
     pub cases: Vec<DispatchCase>,

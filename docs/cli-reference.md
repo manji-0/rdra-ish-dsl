@@ -1326,7 +1326,15 @@ is checked first: when it does not hold, the function returns `Rejected` (TypeSc
 `Err(Rejected)` (Rust), or a `*Rejected` error (Go). A row that breaks a rule the verified
 model keeps (a column the target state keeps null that has a value, a column it keeps
 present that is null) or a parent that is not the child's makes the function throw or
-panic. A use case whose vocabulary is not printed yet (split into transactions, triggered
+panic. A use case split into transactions gets one function per step (`openSettlement1`,
+`openSettlement2`), linked by **run marks**: a step that leaves a row for the next one
+returns a mark, `OpenSettlementClaimMark1 { id }`, and the next step takes it as an argument,
+so it cannot be called without the step before it. A later step reads an earlier step's row
+only through its mark (a child it creates under that row takes the mark's id), and the last
+step returns the use case's events. The header's obligations say what the code that stores
+the marks keeps: one mark of a use case per row, stored in the step's transaction; step 1
+only on a row with none; and a run never abandoned, its step retried when it returns
+`NotEnabled` or `Rejected`. A use case whose vocabulary is not printed yet (triggered
 by an event, `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
 `.when`, a copy, `links`) gets no function. The header lists it with the reason, and the
 code that finishes the output writes it.
