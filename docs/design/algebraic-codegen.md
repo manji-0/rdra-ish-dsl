@@ -7,7 +7,7 @@
 
 Status: accepted in scope on 2026-11-07 as an experimental extra
 ([vision.md](../vision.md#decisions)). Neither the `codegen` subcommand nor its output is
-covered by [compatibility](../compatibility.md). Phases 0 to 2 have landed (see
+covered by [compatibility](../compatibility.md). Phases 0 to 2 and the functions of phase 3 have landed (see
 [Phases](#phases)), and every question is [decided](#decisions).
 
 The model already states the shape of the domain: the values an actor chooses
@@ -521,7 +521,21 @@ sample. For this generator:
    always sound for a type, and a value with no witness is already a `check` finding. The
    tagged JSON of the Rust and Go variants and the candidate-rule listing in `next` move
    to phase 3, with the scaffold that reads and writes rows.
-3. **Transition functions and the agent contract** for use cases of one transaction
+3. **Transition functions and the agent contract.** The functions have landed; the
+   scaffold, the rule-oracle tests, the tagged JSON, and the candidate-rule listing have
+   not. What landed differs from the plan in four ways. A use case gets one function per
+   combination of the source states of its rows, not one function over a union of sources:
+   each function's types are then concrete in all three languages, and Rust and Go need no
+   per-use-case input enums. A use case using vocabulary not printed yet gets no function
+   and a line in the header, so the output stays buildable and says what it leaves out (on
+   the samples: 436 functions, 67 use cases listed). A row that breaks a rule the verified
+   model keeps makes the function throw or panic instead of returning a value of a type the
+   rule rules out. And the equivalence test is in Rust over the IR, not in Node over the
+   printed TypeScript: `crates/rdra-ish-cli/tests/codegen_equivalence.rs` checks every move
+   BFS makes on the samples `check` passes against the functions, and that a function over
+   one row allows no move BFS lacks. It found one bug before landing: a created row that a
+   transition of the same use case moves started at its start state. The printers print the
+   IR the test reads, and `codegen_builds.rs` compiles them. The plan was, for use cases of one transaction
    group: source narrowing, `holds` guards without quantifiers, effects, choices, raised
    events, the obligations, the scaffold, the conformance tests, and the equivalence
    test. The conformance tests come here, not later, because they are what keeps an

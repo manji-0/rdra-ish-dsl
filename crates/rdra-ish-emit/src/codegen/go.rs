@@ -175,6 +175,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             ));
         }
     }
+    print_functions(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -226,4 +227,278 @@ fn doc(name: &str, lines: &[String], indent: &str) -> String {
         }
     }
     out
+}
+
+// ── Use cases ────────────────────────────────────────────────────────────────
+
+/// A Go identifier for a local name: camelCase, with a keyword given a trailing `_`.
+fn local(snake_name: &str) -> String {
+    const KEYWORDS: [&str; 25] = [
+        "break",
+        "case",
+        "chan",
+        "const",
+        "continue",
+        "default",
+        "defer",
+        "else",
+        "fallthrough",
+        "for",
+        "func",
+        "go",
+        "goto",
+        "if",
+        "import",
+        "interface",
+        "map",
+        "package",
+        "range",
+        "return",
+        "select",
+        "struct",
+        "switch",
+        "type",
+        "var",
+    ];
+    let name = super::camel(&super::type_ident(snake_name));
+    if KEYWORDS.contains(&name.as_str()) {
+        format!("{name}_")
+    } else {
+        name
+    }
+}
+
+pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
+    use super::ir::{Adapt, ArgCheck, Assigned, OutKind};
+    if !domain.events.is_empty() {
+        out.push_str("// ── Events ──\n\n");
+    }
+    for event in &domain.events {
+        out.push_str(&doc(
+            &event.name,
+            &[format!("is the event {}.", one_line(&event.doc.join(" ")))],
+            "",
+        ));
+        out.push_str(&format!("type {} struct{{}}\n\n", event.name));
+    }
+    if domain.fns.is_empty() {
+        return;
+    }
+    out.push_str("// ── Use cases ──\n\n");
+    out.push_str("// Rejected reports a condition of a use case that did not hold: the use case does not run.\n");
+    out.push_str(
+        "type Rejected struct {\n\tCondition string\n\tLabel     string\n\tSite      string\n}\n\n",
+    );
+    out.push_str("// Error names the condition.\nfunc (r *Rejected) Error() string {\n\treturn \"rejected by the condition \" + r.Condition + \": \" + r.Label\n}\n\n");
+    out.push_str("func ptrTo[T any](v T) *T { return &v }\n\n");
+    out.push_str("// mustPresent reads a value the verified model keeps present; nil means the rows broke a rule.\n");
+    out.push_str("func mustPresent[T any](p *T, message string) T {\n\tif p == nil {\n\t\tpanic(message)\n\t}\n\treturn *p\n}\n\n");
+    for f in &domain.fns {
+        out.push_str(&format!("// {} is what {} returns.\n", f.result, f.name));
+        out.push_str(&format!("type {} struct {{\n", f.result));
+        for o in &f.outputs {
+            match &o.kind {
+                OutKind::Row { ty, .. } => {
+                    out.push_str(&format!("\t{} {ty}\n", super::type_ident(&o.name)))
+                }
+                OutKind::Deleted {
+                    id: Some((ty, _)), ..
+                } => out.push_str(&format!("\t{} {ty}\n", super::type_ident(&o.name))),
+                OutKind::Deleted { id: None, .. } => {}
+            }
+        }
+        for event in &f.raises {
+            out.push_str(&format!("\t{event} {event}\n"));
+        }
+        out.push_str("}\n\n");
+
+        let mut lines = vec![format!("runs {}", one_line(&f.doc.join(" ")))];
+        for c in &f.conditions {
+            lines.push(format!(
+                "Requires the condition {} ({}){}.",
+                c.id,
+                one_line(&c.label),
+                c.site
+                    .as_ref()
+                    .map(|s| format!(" at {s}"))
+                    .unwrap_or_default()
+            ));
+        }
+        out.push_str(&doc(&f.name, &lines, ""));
+        let row = |r: usize| local(&f.rows[r].name);
+        let input = |i: usize| local(&f.inputs[i].name);
+        let mut params: Vec<String> = f
+            .rows
+            .iter()
+            .map(|r| format!("{} {}", local(&r.name), r.ty))
+            .collect();
+        for i in &f.inputs {
+            let ty = field_type(&i.ty);
+            let ty = if i.nullable { format!("*{ty}") } else { ty };
+            params.push(format!("{} {ty}", local(&i.name)));
+        }
+        let ret = if f.conditions.is_empty() {
+            f.result.clone()
+        } else {
+            format!("({}, error)", f.result)
+        };
+        out.push_str(&format!(
+            "func {}({}) {ret} {{\n",
+            f.name,
+            params.join(", ")
+        ));
+        for check in &f.checks {
+            match check {
+                ArgCheck::Link {
+                    child,
+                    child_field,
+                    parent,
+                    parent_field,
+                    message,
+                } => {
+                    out.push_str(&format!(
+                        "\tif {}.{} != {}.{} {{\n\t\tpanic({})\n\t}}\n",
+                        row(*child),
+                        child_field.pascal,
+                        row(*parent),
+                        parent_field.pascal,
+                        string_literal(message)
+                    ));
+                }
+                ArgCheck::MustBeNull {
+                    row: r,
+                    field,
+                    message,
+                } => {
+                    out.push_str(&format!(
+                        "\tif {}.{} != nil {{\n\t\tpanic({})\n\t}}\n",
+                        row(*r),
+                        field.pascal,
+                        string_literal(message)
+                    ));
+                }
+            }
+        }
+        for c in &f.conditions {
+            out.push_str(&format!(
+                "\tif !({}) {{\n\t\treturn {}{{}}, &Rejected{{Condition: {}, Label: {}, Site: {}}}\n\t}}\n",
+                expr(&c.expr, &row),
+                f.result,
+                string_literal(&c.id),
+                string_literal(&c.label),
+                string_literal(c.site.as_deref().unwrap_or(""))
+            ));
+        }
+        let mut body = format!("{}{{\n", f.result);
+        for o in &f.outputs {
+            match &o.kind {
+                OutKind::Row { ty, fields, .. } => {
+                    body.push_str(&format!("\t\t{}: {ty}{{\n", super::type_ident(&o.name)));
+                    for (target, assigned) in fields {
+                        let wrap = |v: String, w: bool| if w { format!("ptrTo({v})") } else { v };
+                        let v = match assigned {
+                            Assigned::From {
+                                row: r,
+                                field,
+                                adapt,
+                            } => {
+                                let read = format!("{}.{}", row(*r), field.pascal);
+                                match adapt {
+                                    Adapt::Same => read,
+                                    Adapt::Wrap => format!("ptrTo({read})"),
+                                    Adapt::Unwrap(message) => {
+                                        format!("mustPresent({read}, {})", string_literal(message))
+                                    }
+                                    Adapt::AbsentNull => "nil".to_string(),
+                                }
+                            }
+                            Assigned::Lit { lit, wrap: w } => wrap(lit_go(lit, &target.ty), *w),
+                            Assigned::Input { input: i, wrap: w } => wrap(input(*i), *w),
+                            Assigned::ParentId {
+                                row: r,
+                                field,
+                                wrap: w,
+                            } => wrap(format!("{}.{}", row(*r), field.pascal), *w),
+                            Assigned::Null => "nil".to_string(),
+                        };
+                        body.push_str(&format!("\t\t\t{}: {v},\n", target.pascal));
+                    }
+                    body.push_str("\t\t},\n");
+                }
+                OutKind::Deleted {
+                    row: r,
+                    id: Some((_, field)),
+                } => {
+                    body.push_str(&format!(
+                        "\t\t{}: {}.{},\n",
+                        super::type_ident(&o.name),
+                        row(*r),
+                        field.pascal
+                    ));
+                }
+                OutKind::Deleted { id: None, .. } => {}
+            }
+        }
+        for event in &f.raises {
+            body.push_str(&format!("\t\t{event}: {event}{{}},\n"));
+        }
+        body.push_str("\t}");
+        if f.conditions.is_empty() {
+            out.push_str(&format!("\treturn {body}\n}}\n\n"));
+        } else {
+            out.push_str(&format!("\treturn {body}, nil\n}}\n\n"));
+        }
+    }
+}
+
+fn lit_go(lit: &super::ir::Lit, ty: &FieldType) -> String {
+    match lit {
+        super::ir::Lit::Enum { ty, value } => format!("{ty}{}", value.ident),
+        super::ir::Lit::Bool(b) => b.to_string(),
+        super::ir::Lit::Int(n) => match ty {
+            FieldType::Scalar(Scalar::Int) => format!("int64({n})"),
+            _ => n.to_string(),
+        },
+    }
+}
+
+fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
+    use super::ir::Expr;
+    match e {
+        Expr::True => "true".to_string(),
+        Expr::False => "false".to_string(),
+        Expr::Not(inner) => format!("!({})", expr(inner, row)),
+        Expr::And(items) => items
+            .iter()
+            .map(|i| format!("({})", expr(i, row)))
+            .collect::<Vec<_>>()
+            .join(" && "),
+        Expr::Or(items) => items
+            .iter()
+            .map(|i| format!("({})", expr(i, row)))
+            .collect::<Vec<_>>()
+            .join(" || "),
+        Expr::IsNull { row: r, field } => format!("{}.{} == nil", row(*r), field.pascal),
+        Expr::EnumEq {
+            row: r,
+            field,
+            enum_ty,
+            value,
+        } => {
+            format!("{}.{} == {enum_ty}{}", row(*r), field.pascal, value.ident)
+        }
+        Expr::BoolEq {
+            row: r,
+            field,
+            value,
+        } => format!("{}.{} == {value}", row(*r), field.pascal),
+        Expr::IntCmp {
+            row: r,
+            field,
+            op,
+            value,
+        } => {
+            format!("{}.{} {} {value}", row(*r), field.pascal, op.symbol())
+        }
+    }
 }

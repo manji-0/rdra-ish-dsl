@@ -1314,9 +1314,26 @@ present in `v`, `forbidden(E, status == v, x == present)` makes it null there, a
 Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
 field: the variant is the tag, and writing it to a row is the code's job.
 
-Since the state types rest on rules, `codegen` runs `check` first, at its bounds, and
+Each use case of one transaction gets **transition functions**, read from the transition
+system `check` and `verify` explore. A use case gets one function per combination of the
+source states of its rows (`cancelFromPending`, `cancelFromPaid`), so every argument and
+result type is concrete: a call from another state does not compile. The function takes the
+rows it reads, then an input for each value the model leaves open (a column `sets` makes
+`present`, a variation the actor chooses, a column of a created row that no var holds). It
+returns a `<Name>Result` record with the rows it writes or creates, the id of each row it
+deletes, and a value of each event the use case raises. A condition applied to the use case
+is checked first: when it does not hold, the function returns `Rejected` (TypeScript), an
+`Err(Rejected)` (Rust), or a `*Rejected` error (Go). A row that breaks a rule the verified
+model keeps (a column the target state keeps null that has a value, a column it keeps
+present that is null) or a parent that is not the child's makes the function throw or
+panic. A use case whose vocabulary is not printed yet (split into transactions, triggered
+by an event, `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
+`.when`, a copy, `links`) gets no function. The header lists it with the reason, and the
+code that finishes the output writes it.
+
+Since the state types and functions rest on rules, `codegen` runs `check` first, at its bounds, and
 prints them in the header. It refuses a model `check` rejects (exit 1, with the errors on
-stderr) unless `--allow-failing` is given. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
+stderr) unless `--allow-failing` is given; the output then has no transition functions. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
 `OrderStatus` beside the inline `Enum` of `Order.status`, are an error naming both.
 
 ---

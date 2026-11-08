@@ -58,7 +58,7 @@ pub enum FieldType {
     Id(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EnumValue {
     /// The value as the model and the wire spell it.
     pub wire: String,
@@ -82,7 +82,7 @@ pub struct IdDecl {
     pub repr: Scalar,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field {
     /// The column name, as the model and the wire spell it.
     pub wire: String,
@@ -152,5 +152,230 @@ pub struct DomainModel {
     pub ids: Vec<IdDecl>,
     pub records: Vec<RecordDecl>,
     pub sums: Vec<SumDecl>,
+    pub events: Vec<EventDecl>,
+    pub fns: Vec<FnDecl>,
+    pub skipped: Vec<Skipped>,
     pub obligations: Vec<Obligation>,
+}
+
+// ── Transition functions ─────────────────────────────────────────────────────
+
+/// One function per action and per combination of the source states of its rows: every
+/// type in it is concrete, so the three languages print it alike.
+#[derive(Clone, Debug)]
+pub struct FnDecl {
+    /// PascalCase; the printers derive `camelCase` and `snake_case` from it.
+    pub name: String,
+    /// The use case it runs, and its source site.
+    pub usecase: String,
+    /// The transition system's action it prints.
+    pub action: String,
+    pub doc: Vec<String>,
+    pub rows: Vec<RowParam>,
+    pub inputs: Vec<FnInput>,
+    /// Checks of the caller's arguments: a failure is a programming error, not a business
+    /// outcome, and the function throws or panics.
+    pub checks: Vec<ArgCheck>,
+    /// The use case's condition guards: a failure returns `Rejected`.
+    pub conditions: Vec<CondGuard>,
+    pub outputs: Vec<RowOut>,
+    /// The event types the use case raises.
+    pub raises: Vec<String>,
+    /// The result record's type name.
+    pub result: String,
+}
+
+/// A row the function reads: a row it writes, or a parent it links a child to.
+#[derive(Clone, Debug)]
+pub struct RowParam {
+    /// snake_case.
+    pub name: String,
+    /// The action param this row binds.
+    pub param: usize,
+    /// For a state type: the tag column and the source state.
+    pub state: Option<(String, String)>,
+    pub entity: String,
+    /// The record or state type.
+    pub ty: String,
+    /// The type's fields, as it declares them.
+    pub fields: Vec<Field>,
+    /// The type's columns that are null in this state (absent from the Rust and Go struct).
+    pub always_null: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct FnInput {
+    /// snake_case.
+    pub name: String,
+    pub ty: FieldType,
+    pub nullable: bool,
+    pub doc: String,
+}
+
+#[derive(Clone, Debug)]
+pub enum ArgCheck {
+    /// The child row's key names the parent row.
+    Link {
+        child: usize,
+        child_field: Field,
+        parent: usize,
+        parent_field: Field,
+        message: String,
+    },
+    /// The verified model keeps this column null here; a value means the rows broke a rule.
+    MustBeNull {
+        row: usize,
+        field: Field,
+        message: String,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct CondGuard {
+    /// The condition's id.
+    pub id: String,
+    pub label: String,
+    pub expr: Expr,
+    pub site: Option<String>,
+}
+
+/// A condition body read on the function's rows. Atoms whose value the source state fixes
+/// are folded to `True` or `False` when built.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Expr {
+    True,
+    False,
+    Not(Box<Expr>),
+    And(Vec<Expr>),
+    Or(Vec<Expr>),
+    /// A nullable field of a row is null.
+    IsNull {
+        row: usize,
+        field: Field,
+    },
+    EnumEq {
+        row: usize,
+        field: Field,
+        enum_ty: String,
+        value: EnumValue,
+    },
+    BoolEq {
+        row: usize,
+        field: Field,
+        value: bool,
+    },
+    IntCmp {
+        row: usize,
+        field: Field,
+        op: CmpOp,
+        value: i64,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CmpOp {
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl CmpOp {
+    pub fn symbol(self) -> &'static str {
+        match self {
+            CmpOp::Eq => "==",
+            CmpOp::Ne => "!=",
+            CmpOp::Lt => "<",
+            CmpOp::Le => "<=",
+            CmpOp::Gt => ">",
+            CmpOp::Ge => ">=",
+        }
+    }
+}
+
+/// A row the function returns.
+#[derive(Clone, Debug)]
+pub struct RowOut {
+    /// The result field, snake_case.
+    pub name: String,
+    /// The action param this row is.
+    pub param: usize,
+    pub kind: OutKind,
+}
+
+#[derive(Clone, Debug)]
+pub enum OutKind {
+    /// A written or created row: its type, its tag (for a state type), and every field.
+    Row {
+        ty: String,
+        tag: Option<(String, EnumValue)>,
+        fields: Vec<(Field, Assigned)>,
+        /// The type's columns that are null in this state.
+        always_null: Vec<String>,
+    },
+    /// A deleted row: the result names its id, when its entity has an id type.
+    Deleted {
+        row: usize,
+        id: Option<(String, Field)>,
+    },
+}
+
+/// What a field of an output row holds.
+#[derive(Clone, Debug)]
+pub enum Assigned {
+    /// The source row's field. `adapt` turns its nullability into the target's.
+    From {
+        row: usize,
+        field: Field,
+        adapt: Adapt,
+    },
+    Lit {
+        lit: Lit,
+        wrap: bool,
+    },
+    Input {
+        input: usize,
+        wrap: bool,
+    },
+    /// The id of a parent row.
+    ParentId {
+        row: usize,
+        field: Field,
+        wrap: bool,
+    },
+    Null,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Adapt {
+    Same,
+    /// Non-null into a nullable target.
+    Wrap,
+    /// Nullable into a non-null target: the verified model keeps it present here.
+    Unwrap(String),
+    /// The source state holds no such field (always null): the target is nullable.
+    AbsentNull,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Lit {
+    Enum { ty: String, value: EnumValue },
+    Bool(bool),
+    Int(i64),
+}
+
+/// An event type a use case raises.
+#[derive(Clone, Debug)]
+pub struct EventDecl {
+    pub name: String,
+    pub doc: Vec<String>,
+}
+
+/// A use case the generator printed no function for, and why.
+#[derive(Clone, Debug)]
+pub struct Skipped {
+    pub action: String,
+    pub reason: String,
 }

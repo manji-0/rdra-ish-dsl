@@ -179,3 +179,114 @@ forbidden(Ticket, status == open, note == present)
     let found = refinements(&model);
     assert!(found.is_empty(), "{found:?}");
 }
+
+const FN_SRC: &str = r#"
+entity Customer "C" { id: Int @pk }
+entity Order "O" {
+  id: Int @pk
+  status: Enum(requested, pending, paid, cancelled) @default(requested)
+  paid_at: DateTime @null
+  qty: Int @default("1")
+}
+relate(Order, Customer, N:1)
+usecase Place "Place"
+usecase Pay "Pay"
+usecase Cancel "Cancel"
+creates(Place, Order)
+transitions(Place, Order.status, requested -> pending)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.paid_at == present)
+transitions(Cancel, Order.status, (pending, paid) -> cancelled)
+condition Small "small"
+holds(Small, Order.qty <= 2)
+applies_to(Small, Cancel)
+invariant(Order).when(status == paid).then(paid_at == present)
+forbidden(Order, status == pending, paid_at == present)
+"#;
+
+fn functions_of(src: &str) -> DomainModel {
+    let model = model_from(src);
+    build(&model, true, &|_| None).unwrap()
+}
+
+/// A created row that a transition of the same use case moves ends where the arm from its
+/// start state goes, and takes its key from the parent it is created under.
+#[test]
+fn a_created_row_takes_the_arm_from_its_start_state() {
+    let domain = functions_of(FN_SRC);
+    let place = domain.fns.iter().find(|f| f.name == "Place").unwrap();
+    let ir::OutKind::Row {
+        ty, tag, fields, ..
+    } = &place.outputs[0].kind
+    else {
+        panic!("Place writes a row");
+    };
+    assert_eq!(ty, "OrderPending");
+    assert_eq!(tag.as_ref().unwrap().1.wire, "pending");
+    let key = fields
+        .iter()
+        .find(|(f, _)| f.wire == "customer_id")
+        .unwrap();
+    assert!(matches!(key.1, ir::Assigned::ParentId { .. }), "{key:?}");
+    let qty = fields.iter().find(|(f, _)| f.wire == "qty").unwrap();
+    assert!(
+        matches!(
+            &qty.1,
+            ir::Assigned::Lit {
+                lit: ir::Lit::Int(1),
+                ..
+            }
+        ),
+        "{qty:?}"
+    );
+}
+
+/// One function per source state, a condition as a `Rejected` guard, and a value the model
+/// leaves open as an input.
+#[test]
+fn one_function_per_source_state() {
+    let domain = functions_of(FN_SRC);
+    let names: Vec<&str> = domain.fns.iter().map(|f| f.name.as_str()).collect();
+    assert!(names.contains(&"CancelFromPending"), "{names:?}");
+    assert!(names.contains(&"CancelFromPaid"), "{names:?}");
+    let from_paid = domain
+        .fns
+        .iter()
+        .find(|f| f.name == "CancelFromPaid")
+        .unwrap();
+    assert_eq!(from_paid.rows[0].ty, "OrderPaid");
+    assert_eq!(from_paid.conditions.len(), 1);
+    assert_eq!(from_paid.conditions[0].id, "Small");
+    // paid keeps paid_at present; cancelled leaves it nullable, so it is wrapped.
+    let ir::OutKind::Row { fields, .. } = &from_paid.outputs[0].kind else {
+        panic!("Cancel writes a row");
+    };
+    let paid_at = fields.iter().find(|(f, _)| f.wire == "paid_at").unwrap();
+    assert!(
+        matches!(
+            &paid_at.1,
+            ir::Assigned::From {
+                adapt: ir::Adapt::Wrap,
+                ..
+            }
+        ),
+        "{paid_at:?}"
+    );
+    let pay = domain.fns.iter().find(|f| f.name == "Pay").unwrap();
+    assert_eq!(pay.inputs.len(), 1, "paid_at is the caller's value");
+    assert!(domain.skipped.is_empty(), "{:?}", domain.skipped);
+}
+
+/// A combination the verified rules rule out gets no function: Cancel from a paid row would
+/// leave a cancelled row with a payment time, which a rule forbids.
+#[test]
+fn a_combination_a_rule_rules_out_gets_no_function() {
+    let src = FN_SRC.replace(
+        "forbidden(Order, status == pending, paid_at == present)",
+        "forbidden(Order, status == pending, paid_at == present)\nforbidden(Order, status == cancelled, paid_at == present)",
+    );
+    let domain = functions_of(&src);
+    let names: Vec<&str> = domain.fns.iter().map(|f| f.name.as_str()).collect();
+    assert!(names.contains(&"CancelFromPending"), "{names:?}");
+    assert!(!names.contains(&"CancelFromPaid"), "{names:?}");
+}
