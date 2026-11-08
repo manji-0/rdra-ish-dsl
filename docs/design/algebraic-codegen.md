@@ -522,8 +522,9 @@ sample. For this generator:
    tagged JSON of the Rust and Go variants and the candidate-rule listing in `next` move
    to phase 3, with the scaffold that reads and writes rows.
 3. **Transition functions and the agent contract.** The functions, the rule checks, the
-   row types, and the dispatchers have landed; the candidate-rule listing in `next` has
-   not. The scaffold landed as two pure pieces instead of service stubs with persistence
+   row types, the dispatchers, and the candidate rules have landed. The candidate
+   rules are in the `codegen` header, not in `next`: `next`'s JSON is covered by
+   compatibility and `codegen` is not, and the agent reads the header. The scaffold landed as two pure pieces instead of service stubs with persistence
    ports: a flat row type per state type with checked conversions both ways, and a
    dispatcher per use case over the entity types. A store's or a framework's ports differ
    per project, so the agent writes the service around them; what it cannot get wrong (which
