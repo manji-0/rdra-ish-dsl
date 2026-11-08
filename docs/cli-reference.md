@@ -1283,7 +1283,7 @@ change or remove them. [The design](./design/algebraic-codegen.md) describes whe
 going.
 
 ```
-rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>]
+rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>] [--allow-failing]
 ```
 
 | Option | Type | Default | Description |
@@ -1292,6 +1292,7 @@ rdra-ish codegen <INPUTS...> --lang <LANG> [-o <FILE>] [--package <NAME>]
 | `--lang` | `ts` \| `rust` \| `go` | — (required) | Language. `typescript` is an alias of `ts`. |
 | `-o`, `--out` | path | — (stdout) | Write to this file instead of stdout. |
 | `--package` | string | `domain` | The Go package name (`--lang go` only). |
+| `--allow-failing` | flag | off | Generate even when `check` reports errors. The state types then narrow no column, and each error is listed as an obligation the model does not meet. |
 
 The output is one compilation unit: a TypeScript module, a Rust module file, or a Go file.
 It opens with a header and the numbered **obligations**: what `check` and `verify` assume of
@@ -1302,9 +1303,20 @@ key, each variation and inline `Enum` as a value set, and each entity and DTO as
 key column takes its parent's id type, and a `@null` column is `T | null`, `Option<T>`, or
 `*T`.
 
-It prints the data layer only so far. It reads no reachability result, so it runs on a
-model whose lifecycle has errors, with the note `export --kind dbml` prints, and it refuses
-a model with model errors. Two declarations that generate one type name, such as an entity
+An entity with a lifecycle column is a **state type**: one variant per value of its tag
+column (the column `typescript-states` tags by), and the entity's type is their union, a
+TypeScript union of interfaces, a Rust enum of structs with a `status()` method, or a Go
+interface that only the generated variants implement. A variant narrows a nullable column
+only where a rule says so: `invariant(E).when(status == v).then(x == present)` makes `x`
+present in `v`, `forbidden(E, status == v, x == present)` makes it null there, and
+`required(E, x == present)` makes it present in every state. A rule with another atom or a
+`.when(Cond)` narrows nothing. A null column is `null` in TypeScript and left out of the
+Rust and Go structs, with a doc line naming the rule. The Rust and Go variants hold no tag
+field: the variant is the tag, and writing it to a row is the code's job.
+
+Since the state types rest on rules, `codegen` runs `check` first, at its bounds, and
+prints them in the header. It refuses a model `check` rejects (exit 1, with the errors on
+stderr) unless `--allow-failing` is given. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
 `OrderStatus` beside the inline `Enum` of `Order.status`, are an error naming both.
 
 ---

@@ -7,8 +7,12 @@ expression: "generated(Lang::Rust)"
 // generate different names or shapes from the same model. Generate again after an
 // upgrade and compare.
 //
-// The types below are the model's data layer. The code that finishes this output
-// must keep every obligation listed: `check` and `verify` assume them.
+// The types below are the model's data layer and its states. The code that finishes
+// this output must keep every obligation listed: `check` and `verify` assume them.
+//
+// `check` passed. A state type narrows a column only where a rule says so, and
+// `check` verified those rules within these bounds: 1 instance per entity, Int 0..5.
+// Run `rdra-ish verify` to check them at larger bounds.
 //
 // Obligations:
 // O1 no two Customer rows share email.
@@ -122,20 +126,6 @@ pub struct Customer {
     pub email: ::std::string::String,
 }
 
-/// Order
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Order {
-    /// Primary key.
-    pub id: OrderId,
-    pub total: Money,
-    /// Default: pending.
-    pub status: OrderStatus,
-    pub method: PaymentMethod,
-    pub delivered_at: ::core::option::Option<DateTime>,
-    pub r#type: ::core::option::Option<::std::string::String>,
-    pub customer_id: CustomerId,
-}
-
 /// Order Line
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OrderLine {
@@ -152,4 +142,84 @@ pub struct OrderLine {
 pub struct CreateOrderRequest {
     pub customer_id: i64,
     pub note: ::core::option::Option<::std::string::String>,
+}
+
+// ── Entities with states ──
+
+/// Order in the state `pending` of status.
+/// `paid_at`: Null in this state by a rule.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderPending {
+    /// Primary key.
+    pub id: OrderId,
+    pub total: Money,
+    pub method: PaymentMethod,
+    pub delivered_at: ::core::option::Option<DateTime>,
+    pub r#type: ::core::option::Option<::std::string::String>,
+    pub customer_id: CustomerId,
+}
+
+/// Order in the state `paid` of status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderPaid {
+    /// Primary key.
+    pub id: OrderId,
+    pub total: Money,
+    /// Present in this state by a rule.
+    pub paid_at: DateTime,
+    pub method: PaymentMethod,
+    pub delivered_at: ::core::option::Option<DateTime>,
+    pub r#type: ::core::option::Option<::std::string::String>,
+    pub customer_id: CustomerId,
+}
+
+/// Order in the state `cancelled` of status.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OrderCancelled {
+    /// Primary key.
+    pub id: OrderId,
+    pub total: Money,
+    pub paid_at: ::core::option::Option<DateTime>,
+    pub method: PaymentMethod,
+    pub delivered_at: ::core::option::Option<DateTime>,
+    pub r#type: ::core::option::Option<::std::string::String>,
+    pub customer_id: CustomerId,
+}
+
+/// Order
+/// One of its states, told apart by `status`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Order {
+    Pending(OrderPending),
+    Paid(OrderPaid),
+    Cancelled(OrderCancelled),
+}
+
+impl Order {
+    /// The state's `status`.
+    pub fn status(&self) -> OrderStatus {
+        match self {
+            Self::Pending(_) => OrderStatus::Pending,
+            Self::Paid(_) => OrderStatus::Paid,
+            Self::Cancelled(_) => OrderStatus::Cancelled,
+        }
+    }
+}
+
+impl ::core::convert::From<OrderPending> for Order {
+    fn from(state: OrderPending) -> Self {
+        Self::Pending(state)
+    }
+}
+
+impl ::core::convert::From<OrderPaid> for Order {
+    fn from(state: OrderPaid) -> Self {
+        Self::Paid(state)
+    }
+}
+
+impl ::core::convert::From<OrderCancelled> for Order {
+    fn from(state: OrderCancelled) -> Self {
+        Self::Cancelled(state)
+    }
 }

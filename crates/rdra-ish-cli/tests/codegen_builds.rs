@@ -33,16 +33,28 @@ fn available(tool: &str) -> bool {
     found
 }
 
-/// The codegen output of `sample` in `lang`, written to `dir/file`.
+fn codegen(sample: &str, lang: &str, path: &Path, extra: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(repo())
+        .args(["codegen", sample, "--lang", lang])
+        .args(extra)
+        .arg("-o")
+        .arg(path)
+        .output()
+        .expect("runs rdra-ish")
+}
+
+/// The codegen output of `sample` in `lang`, written to `dir/file`. A sample `check`
+/// rejects is refused, and generated again with `--allow-failing`.
 fn generate(sample: &str, lang: &str, dir: &Path, file: &str) -> PathBuf {
     std::fs::create_dir_all(dir).unwrap();
     let path = dir.join(file);
-    let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .current_dir(repo())
-        .args(["codegen", sample, "--lang", lang, "-o"])
-        .arg(&path)
-        .output()
-        .expect("runs rdra-ish");
+    let mut output = codegen(sample, lang, &path, &[]);
+    if !output.status.success()
+        && String::from_utf8_lossy(&output.stderr).contains("refusing to generate code")
+    {
+        output = codegen(sample, lang, &path, &["--allow-failing"]);
+    }
     assert!(
         output.status.success(),
         "{sample} --lang {lang}: {}",
@@ -129,4 +141,29 @@ fn go_builds() {
             &format!("go vet on the codegen of {sample}"),
         );
     }
+}
+
+/// A model `check` rejects is refused unless `--allow-failing`, which lists its errors as
+/// unmet obligations and narrows no state type.
+#[test]
+fn a_failing_model_is_refused_unless_allowed() {
+    let sample = "samples/formal-verification/cross_order_payment_split.rdra";
+    let dir = scratch("refuse", sample);
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("domain.ts");
+    let refused = codegen(sample, "ts", &path, &[]);
+    assert_eq!(refused.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(stderr.contains("MultiForbidden_Order_0"), "{stderr}");
+    assert!(!path.exists(), "nothing is written when refused");
+
+    let allowed = codegen(sample, "ts", &path, &["--allow-failing"]);
+    assert!(
+        allowed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&allowed.stderr)
+    );
+    let code = std::fs::read_to_string(&path).unwrap();
+    assert!(code.contains("NOT MET by the model"), "{code}");
+    assert!(code.contains("MultiForbidden_Order_0"), "{code}");
 }

@@ -119,10 +119,38 @@ pub struct Obligation {
     pub site: Option<String>,
 }
 
+/// An entity with a lifecycle column: one variant per value of its tag column.
+#[derive(Clone, Debug)]
+pub struct SumDecl {
+    /// The entity's type name: the union of the variants.
+    pub name: String,
+    pub entity: String,
+    pub doc: Vec<String>,
+    /// The tag column: a field whose type is the column's enum.
+    pub tag: Field,
+    pub variants: Vec<VariantDecl>,
+}
+
+/// One state of a [`SumDecl`].
+#[derive(Clone, Debug)]
+pub struct VariantDecl {
+    /// `<Entity><Value>`.
+    pub name: String,
+    /// The tag value of this state.
+    pub value: EnumValue,
+    pub doc: Vec<String>,
+    /// Every column but the tag and the ones always null here. A nullable column a rule
+    /// keeps present here is not nullable.
+    pub fields: Vec<Field>,
+    /// The nullable columns a rule keeps null in this state: no value to hold.
+    pub always_null: Vec<Field>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct DomainModel {
     pub enums: Vec<EnumDecl>,
     pub ids: Vec<IdDecl>,
     pub records: Vec<RecordDecl>,
+    pub sums: Vec<SumDecl>,
     pub obligations: Vec<Obligation>,
 }

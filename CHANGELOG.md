@@ -12,6 +12,11 @@
   [design](./docs/design/algebraic-codegen.md)). Every sample's output builds under
   `tsc --strict`, `rustc -D warnings`, and `go vet` (`tests/codegen_builds.rs`); the dev
   shell gains TypeScript and Go.
+- `codegen` prints an entity with a lifecycle column as a state type: one variant per value
+  of its tag column, the union in TypeScript, an enum of structs in Rust, a sealed interface
+  in Go. A variant narrows a nullable column only where an `invariant`, `forbidden`, or
+  `required` rule on that state says so. `codegen` runs `check` first and refuses a model it
+  rejects, unless `--allow-failing`.
 
 ### Fixed
 
