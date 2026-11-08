@@ -184,6 +184,28 @@ pub(super) fn add_functions(
             site: None,
         });
     }
+    // A list a `.has` / `.none` ranges over must hold every present row of its entity.
+    let mut lists: Vec<String> = fns
+        .iter()
+        .flat_map(|f| f.inputs.iter())
+        .filter_map(|i| match &i.ty {
+            FieldType::Rows(ty) => Some(ty.clone()),
+            _ => None,
+        })
+        .collect();
+    lists.sort();
+    lists.dedup();
+    for ty in lists {
+        let id = format!("O{}", domain.obligations.len() + 1);
+        domain.obligations.push(super::ir::Obligation {
+            id,
+            invariant: None,
+            text: format!(
+                "a function input of {ty} rows holds every present row of the entity, read in the function's transaction: a `.has` / `.none` condition reads them all."
+            ),
+            site: None,
+        });
+    }
     for m in &marks {
         names.claim(
             m.name.clone(),
@@ -1057,7 +1079,22 @@ fn function(
         }
     }
 
-    // Guards.
+    // Guards. A `.has` / `.none` ranges over a list of related rows, an input.
+    let row_type = |entity: &str| -> Option<(String, Vec<Field>)> {
+        match declared.get(&type_ident(entity))? {
+            Declared::Record(r) => Some((r.name.clone(), r.fields.clone())),
+            Declared::Sum(s) => Some((s.row.clone(), s.row_fields.clone())),
+        }
+    };
+    let mut quant = Quant {
+        model,
+        row_type: &row_type,
+        base: 0,
+        n_rows: rows.len(),
+        elems: Vec::new(),
+        stack: Vec::new(),
+        lists: Vec::new(),
+    };
     let mut conditions = Vec::new();
     for guard in &action.guards {
         match guard.why {
@@ -1077,7 +1114,10 @@ fn function(
                     }
                     _ => None,
                 };
-                let e = simplify(expr(ts, &guard.pred, &rows, &bind).map_err(Skip::Action)?);
+                let e = simplify(
+                    expr(ts, &guard.pred, &rows, &bind, &mut Some(&mut quant))
+                        .map_err(Skip::Action)?,
+                );
                 match e {
                     Expr::True => {}
                     Expr::False => return Err(Skip::Combination),
@@ -1102,7 +1142,9 @@ fn function(
                     }
                     _ => None,
                 };
-                let e = simplify(expr(ts, &pred, &rows, &bind).map_err(Skip::Action)?);
+                let e = simplify(
+                    expr(ts, &pred, &rows, &bind, &mut Some(&mut quant)).map_err(Skip::Action)?,
+                );
                 match e {
                     Expr::True => {}
                     Expr::False => return Err(Skip::Combination),
@@ -1195,7 +1237,8 @@ fn function(
                     }
                     _ => None,
                 };
-                let expr = expr(ts, &guard.pred, &rows, &bind).map_err(Skip::Action)?;
+                let expr = expr(ts, &guard.pred, &rows, &bind, &mut Some(&mut quant))
+                    .map_err(Skip::Action)?;
                 let expr = simplify(expr);
                 match expr {
                     Expr::True => {}
@@ -1215,6 +1258,22 @@ fn function(
         }
     }
 
+    // The lists the quantifiers range over are inputs: every row of the entity, which the
+    // function filters by key.
+    let mut list_input: Vec<usize> = Vec::new();
+    for (name, ty) in &quant.lists {
+        let entity = ty.trim_end_matches("Row");
+        list_input.push(input_index(
+            &mut inputs,
+            name.clone(),
+            FieldType::Rows(ty.clone()),
+            format!("Every present {entity} row: the function keeps those its keys link."),
+        ));
+    }
+    for c in &mut conditions {
+        remap_lists(&mut c.expr, &list_input);
+    }
+    let elems = quant.elems;
     let doc = vec![format!(
         "One run of the use case, from the states of the arguments' types. It requires what `{usecase}` requires and writes what it writes; the values the model leaves open are the inputs."
     )];
@@ -1337,6 +1396,7 @@ fn function(
         action: action.name.clone(),
         step: steps,
         chosen: Vec::new(),
+        elems,
         marks_in,
         marks_out,
         doc,
@@ -1450,31 +1510,115 @@ fn declared_id(
 /// Where a slot reference of a predicate points: a row, and its state when it has one.
 pub(super) type Bind<'a, 'd> = &'a dyn Fn(At) -> Option<(usize, Option<&'d VariantDecl>)>;
 
-/// A predicate on the rows `bind` names.
+/// The flat row type and fields of an entity, by its id.
+pub(super) type RowTypeOf<'a> = &'a dyn Fn(&str) -> Option<(String, Vec<Field>)>;
+
+/// What a quantifier (`.has` / `.none`) needs: the rows it binds and the lists they come from.
+pub(super) struct Quant<'a> {
+    pub model: &'a SemanticModel,
+    /// The flat row type and fields of an entity.
+    pub row_type: RowTypeOf<'a>,
+    /// The `Bound` index of the first quantifier's row.
+    pub base: usize,
+    /// The function's rows: a quantifier's row is numbered after them.
+    pub n_rows: usize,
+    pub elems: Vec<RowParam>,
+    /// The row each enclosing quantifier binds, outermost first.
+    pub stack: Vec<usize>,
+    /// `(input name, row type)` per list a quantifier ranges over.
+    pub lists: Vec<(String, String)>,
+}
+
+/// A predicate on the rows `bind` names. `quant` lets it range over related rows.
 pub(super) fn expr(
     ts: &TransitionSystem,
     pred: &Pred,
     rows: &[RowParam],
     bind: Bind<'_, '_>,
+    quant: &mut Option<&mut Quant<'_>>,
 ) -> Result<Expr, String> {
-    let rec = |p: &Pred| expr(ts, p, rows, bind);
     Ok(match pred {
         Pred::True => Expr::True,
         Pred::False => Expr::False,
-        Pred::Not(p) => Expr::Not(Box::new(rec(p)?)),
-        Pred::And(ps) => Expr::And(ps.iter().map(rec).collect::<Result<_, _>>()?),
-        Pred::Or(ps) => Expr::Or(ps.iter().map(rec).collect::<Result<_, _>>()?),
-        Pred::In(term, values) => Expr::Or(
-            values
-                .iter()
-                .map(|v| atom(ts, term, TsCmp::Eq, v, rows, bind))
-                .collect::<Result<_, _>>()?,
-        ),
-        Pred::Cmp(a, op, b) => atom(ts, a, *op, b, rows, bind)?,
-        Pred::Forall { .. } | Pred::Exists { .. } => {
-            return Err("a condition over related rows, `.has` or `.none` (phase 5)".into())
+        Pred::Not(p) => Expr::Not(Box::new(expr(ts, p, rows, bind, quant)?)),
+        Pred::And(ps) => {
+            let mut out = Vec::new();
+            for p in ps {
+                out.push(expr(ts, p, rows, bind, quant)?);
+            }
+            Expr::And(out)
+        }
+        Pred::Or(ps) => {
+            let mut out = Vec::new();
+            for p in ps {
+                out.push(expr(ts, p, rows, bind, quant)?);
+            }
+            Expr::Or(out)
+        }
+        Pred::In(term, values) => {
+            let mut out = Vec::new();
+            for v in values {
+                out.push(atom(ts, term, TsCmp::Eq, v, rows, bind, quant)?);
+            }
+            Expr::Or(out)
+        }
+        Pred::Cmp(a, op, b) => atom(ts, a, *op, b, rows, bind, quant)?,
+        Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
+            let Some(q) = quant.as_deref_mut() else {
+                return Err("a condition over related rows, `.has` or `.none` (phase 5)".into());
+            };
+            let id = ts.entity(*entity).id.clone();
+            let (ty, fields) = (q.row_type)(&id)
+                .ok_or_else(|| format!("related rows of {id}, which has no generated type"))?;
+            let list = format!("{}_rows", super::actions::snake(&id));
+            let input = match q.lists.iter().position(|(n, _)| *n == list) {
+                Some(i) => i,
+                None => {
+                    q.lists.push((list, ty.clone()));
+                    q.lists.len() - 1
+                }
+            };
+            let k = q.elems.len();
+            q.elems.push(RowParam {
+                name: format!("{}_{k}", super::actions::snake(&id)),
+                param: usize::MAX,
+                state: None,
+                entity: id,
+                ty,
+                fields,
+                always_null: Vec::new(),
+            });
+            let elem = q.n_rows + k;
+            q.stack.push(elem);
+            let inner = expr(ts, body, rows, bind, quant);
+            if let Some(q) = quant.as_deref_mut() {
+                q.stack.pop();
+            }
+            let body = Box::new(inner?);
+            match pred {
+                Pred::Exists { .. } => Expr::Exists { input, elem, body },
+                _ => Expr::Forall { input, elem, body },
+            }
         }
     })
+}
+
+/// The row `at` names: a function row by `bind`, or the row of an enclosing quantifier.
+fn resolve<'d>(
+    at: At,
+    rows: &[RowParam],
+    bind: Bind<'_, 'd>,
+    quant: &Option<&mut Quant<'_>>,
+) -> Option<(usize, Option<&'d VariantDecl>, RowParam)> {
+    if let (At::Bound(k), Some(q)) = (at, quant.as_deref()) {
+        let k = usize::from(k);
+        if k >= q.base {
+            let elem = *q.stack.get(k - q.base)?;
+            return Some((elem, None, q.elems[elem - q.n_rows].clone()));
+        }
+    }
+    let (r, state) = bind(at)?;
+    Some((r, state, rows.get(r)?.clone()))
 }
 
 fn atom(
@@ -1484,16 +1628,47 @@ fn atom(
     rhs: &Term,
     rows: &[RowParam],
     bind: Bind<'_, '_>,
+    quant: &mut Option<&mut Quant<'_>>,
 ) -> Result<Expr, String> {
     let unsupported = || "a condition atom this phase does not print".to_string();
+    // A key between two rows: the child's key names the parent.
+    let key = match (lhs, op, rhs) {
+        (Term::Slot { var, at }, TsCmp::Eq, Term::Index(parent))
+        | (Term::Index(parent), TsCmp::Eq, Term::Slot { var, at }) => match &ts.var(*var).kind {
+            VarKind::Owner { fk, .. } => Some((*fk, *at, *parent)),
+            _ => None,
+        },
+        _ => None,
+    };
+    if let Some((fk, child_at, parent_at)) = key {
+        let q = quant.as_deref().ok_or_else(unsupported)?;
+        let fk = q.model.foreign_key(fk);
+        let [(child_col, parent_col)] = fk.columns.as_slice() else {
+            return Err("a key over several columns".into());
+        };
+        let quant_ref: &Option<&mut Quant<'_>> = quant;
+        let (c, _, crow) = resolve(child_at, rows, bind, quant_ref).ok_or_else(unsupported)?;
+        let (p, _, prow) = resolve(parent_at, rows, bind, quant_ref).ok_or_else(unsupported)?;
+        let child_field = crow.fields.iter().find(|f| f.wire == *child_col);
+        let parent_field = prow.fields.iter().find(|f| f.wire == *parent_col);
+        let (Some(child_field), Some(parent_field)) = (child_field, parent_field) else {
+            return Err("a key on a column with no field".into());
+        };
+        return Ok(Expr::KeyEq {
+            child: c,
+            child_field: child_field.clone(),
+            parent: p,
+            parent_field: parent_field.clone(),
+        });
+    }
     let Term::Slot { var, at } = lhs else {
         return Err(unsupported());
     };
     let VarKind::Column { column, .. } = &ts.var(*var).kind else {
         return Err("a condition on a comparison proposition (phase 5)".into());
     };
-    let (r, state) = bind(*at).ok_or_else(unsupported)?;
-    let row = &rows[r];
+    let quant_ref: &Option<&mut Quant<'_>> = quant;
+    let (r, state, row) = resolve(*at, rows, bind, quant_ref).ok_or_else(unsupported)?;
     let domain = &ts.var(*var).domain;
     let negate = |e: Expr| match op {
         TsCmp::Eq => Ok(e),
@@ -1518,6 +1693,9 @@ fn atom(
             let FieldType::Enum(enum_ty) = &field.ty else {
                 return Err(unsupported());
             };
+            if field.nullable {
+                return Err("a comparison on a nullable enum column".into());
+            }
             negate(Expr::EnumEq {
                 row: r,
                 field: field.clone(),
@@ -1535,6 +1713,9 @@ fn atom(
                 .iter()
                 .find(|f| f.wire == *column)
                 .ok_or_else(unsupported)?;
+            if field.nullable {
+                return Err("a comparison on a nullable Bool column".into());
+            }
             negate(Expr::BoolEq {
                 row: r,
                 field: field.clone(),
@@ -1594,6 +1775,22 @@ fn atom(
 /// Folds the constant parts of an expression.
 pub(super) fn simplify(e: Expr) -> Expr {
     match e {
+        Expr::Exists { input, elem, body } => match simplify(*body) {
+            Expr::False => Expr::False,
+            body => Expr::Exists {
+                input,
+                elem,
+                body: Box::new(body),
+            },
+        },
+        Expr::Forall { input, elem, body } => match simplify(*body) {
+            Expr::True => Expr::True,
+            body => Expr::Forall {
+                input,
+                elem,
+                body: Box::new(body),
+            },
+        },
         Expr::Not(inner) => match simplify(*inner) {
             Expr::True => Expr::False,
             Expr::False => Expr::True,
@@ -1922,5 +2119,18 @@ fn reads_only_created(pred: &Pred, action: &Action) -> bool {
         Pred::Not(p) => reads_only_created(p, action),
         Pred::And(ps) | Pred::Or(ps) => ps.iter().all(|p| reads_only_created(p, action)),
         Pred::Forall { .. } | Pred::Exists { .. } => false,
+    }
+}
+
+/// Points each quantifier at the input its list became.
+fn remap_lists(e: &mut Expr, to: &[usize]) {
+    match e {
+        Expr::Not(x) => remap_lists(x, to),
+        Expr::And(xs) | Expr::Or(xs) => xs.iter_mut().for_each(|x| remap_lists(x, to)),
+        Expr::Exists { input, body, .. } | Expr::Forall { input, body, .. } => {
+            *input = to[*input];
+            remap_lists(body, to);
+        }
+        _ => {}
     }
 }

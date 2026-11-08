@@ -195,6 +195,7 @@ fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
+        FieldType::Rows(name) => format!("[]{name}"),
     }
 }
 
@@ -357,7 +358,11 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             ));
         }
         out.push_str(&doc(&f.name, &lines, ""));
-        let row = |r: usize| local(&f.rows[r].name);
+        let row = |r: usize| match f.rows.get(r) {
+            Some(x) => local(&x.name),
+            None => local(&f.elems[r - f.rows.len()].name),
+        };
+        let input_var = |i: usize| local(&f.inputs[i].name);
         let input = |i: usize| local(&f.inputs[i].name);
         let mut params: Vec<String> = f
             .rows
@@ -444,7 +449,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             out.push_str(&format!(
                 "\tif !({}) {{\n\t\treturn {}{{}}, &Rejected{{Condition: {}, Label: {}, Site: {}}}\n\t}}\n",
-                expr(&c.expr, &row),
+                expr(&c.expr, &row, &input_var),
                 f.result,
                 string_literal(&c.id),
                 string_literal(&c.label),
@@ -597,20 +602,26 @@ fn lit_go(lit: &super::ir::Lit, ty: &FieldType) -> String {
     }
 }
 
-fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
+fn expr(
+    e: &super::ir::Expr,
+    row: &dyn Fn(usize) -> String,
+    input: &dyn Fn(usize) -> String,
+) -> String {
     use super::ir::Expr;
     match e {
         Expr::True => "true".to_string(),
         Expr::False => "false".to_string(),
-        Expr::Not(inner) => format!("!({})", expr(inner, row)),
+        Expr::Not(inner) => format!("!({})", expr(inner, row, input)),
+        Expr::And(items) if items.is_empty() => "true".to_string(),
+        Expr::Or(items) if items.is_empty() => "false".to_string(),
         Expr::And(items) => items
             .iter()
-            .map(|i| format!("({})", expr(i, row)))
+            .map(|i| format!("({})", expr(i, row, input)))
             .collect::<Vec<_>>()
             .join(" && "),
         Expr::Or(items) => items
             .iter()
-            .map(|i| format!("({})", expr(i, row)))
+            .map(|i| format!("({})", expr(i, row, input)))
             .collect::<Vec<_>>()
             .join(" || "),
         Expr::IsNull { row: r, field } => format!("{}.{} == nil", row(*r), field.pascal),
@@ -635,6 +646,32 @@ fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
         } => {
             format!("{}.{} {} {value}", row(*r), field.pascal, op.symbol())
         }
+        Expr::KeyEq {
+            child,
+            child_field,
+            parent,
+            parent_field,
+        } => {
+            let c = format!("{}.{}", row(*child), child_field.pascal);
+            let p = format!("{}.{}", row(*parent), parent_field.pascal);
+            if child_field.nullable {
+                format!("({c} != nil && *{c} == {p})")
+            } else {
+                format!("{c} == {p}")
+            }
+        }
+        Expr::Exists { input: i, elem, body } => format!(
+            "func() bool {{ for _, {} := range {} {{ if {} {{ return true }} }}; return false }}()",
+            row(*elem),
+            input(*i),
+            expr(body, row, input)
+        ),
+        Expr::Forall { input: i, elem, body } => format!(
+            "func() bool {{ for _, {} := range {} {{ if !({}) {{ return false }} }}; return true }}()",
+            row(*elem),
+            input(*i),
+            expr(body, row, input)
+        ),
     }
 }
 
@@ -658,7 +695,7 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
             out.push_str(&format!(
                 "\t// {}\n\tif {} {{\n\t\tout = append(out, {})\n\t}}\n",
                 one_line(&rule.text),
-                expr(&fails(&rule.expr), &row),
+                expr(&fails(&rule.expr), &row, &|_| String::new()),
                 string_literal(&rule.name)
             ));
         }

@@ -579,8 +579,13 @@ sample. For this generator:
    dispatcher takes the choice. A `.when` on an arm folds into a condition of that function:
    its guard reads the successor's tag, which the function's target fixes. A second
    lifecycle column is a branch on its value, its `from` states a `TransitionFrom`
-   condition. Still to come: `.has` / `.none`, a `.when` on a chosen value, copies, and
-   `now`.
+   condition. A `.has` / `.none` ranges over a list of the related
+   entity's rows, an input the caller fills with every present row, and the function keeps
+   those the key links; an obligation in the header says the list must be complete.
+   That leaves 11 use cases on the samples: a `.when` on a chosen value (2), a choice on a
+   second lifecycle column (1), copies (2), a condition on what a use case creates (2),
+   comparison propositions and other assignments (3), and a link between two rows of an
+   earlier step (1).
 
 ## Decisions
 

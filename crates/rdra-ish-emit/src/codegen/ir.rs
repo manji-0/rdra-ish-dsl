@@ -56,6 +56,9 @@ pub enum FieldType {
     Enum(String),
     /// A generated id type, by its type name.
     Id(String),
+    /// A list of rows of a record or row type: the rows a `.has` / `.none` ranges over.
+    /// Only a function input has it.
+    Rows(String),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -194,6 +197,9 @@ pub struct FnDecl {
     pub raises: Vec<RaisedEvent>,
     /// For a use case an event triggers: the event it runs on.
     pub event_in: Option<EventIn>,
+    /// The rows a quantifier binds, numbered after `rows`: row `rows.len() + k` of an
+    /// `Expr` is `elems[k]`.
+    pub elems: Vec<RowParam>,
     /// The arms chosen among several from one state: `(row, tag enum, target)`.
     pub chosen: Vec<(usize, String, EnumValue)>,
     /// The result record's type name.
@@ -341,6 +347,25 @@ pub enum Expr {
         field: Field,
         op: CmpOp,
         value: i64,
+    },
+    /// The child row's key names the parent row.
+    KeyEq {
+        child: usize,
+        child_field: Field,
+        parent: usize,
+        parent_field: Field,
+    },
+    /// Some row of the input list `input`, bound as row `elem`, makes `body` hold.
+    Exists {
+        input: usize,
+        elem: usize,
+        body: Box<Expr>,
+    },
+    /// Every row of the input list `input`, bound as row `elem`, makes `body` hold.
+    Forall {
+        input: usize,
+        elem: usize,
+        body: Box<Expr>,
     },
 }
 

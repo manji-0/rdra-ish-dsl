@@ -46,6 +46,8 @@
 - `codegen` prints a choice among arms as one function per target state, guarded by the
   `.when` conditions of its arm, with the target as a dispatcher argument, and a second
   lifecycle column as a branch on its value.
+- `codegen` prints a `.has` / `.none` condition over a list of the related entity's rows,
+  an input, filtered by key; the conformance test evaluates it over every present row.
   `tests/codegen_equivalence.rs` now covers the steps, the marks they leave, and every key
   a function sets.
 

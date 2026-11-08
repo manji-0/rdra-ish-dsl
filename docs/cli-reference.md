@@ -1343,7 +1343,10 @@ several are a **choice**: each target is a function of its own (`decideFilingToD
 guarded by the `.when` conditions of its arm, and the dispatcher takes the chosen state as an
 argument (`decision_to`). A **second lifecycle column** is a branch on its value: the field
 takes the `to` of the arm its `from` matches, and a row in no `from` state is `Rejected` by
-`TransitionFrom`. A use case whose vocabulary is not printed yet ( `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
+`TransitionFrom`. A condition that ends in `.has(..)` or `.none(..)` ranges over a **list of
+related rows**, an input in the related entity's flat row type (`terminalCertAssignmentRows`):
+the caller passes every present row of that entity, and the function keeps those the key
+links. A use case whose vocabulary is not printed yet ( `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
 `.when`, a copy, `links`) gets no function. The header lists it with the reason, and the
 code that finishes the output writes it.
 
