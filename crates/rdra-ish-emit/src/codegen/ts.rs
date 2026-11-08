@@ -131,6 +131,8 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     }
     print_functions(domain, &mut out);
     print_validators(domain, &mut out);
+    print_rows(domain, &mut out);
+    print_dispatchers(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -524,4 +526,188 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
 /// The condition under which `e` fails, folded so that a negated comparison reads plainly.
 fn fails(e: &super::ir::Expr) -> super::ir::Expr {
     super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
+}
+
+// ── Rows and dispatch ────────────────────────────────────────────────────────
+
+pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
+    if domain.sums.is_empty() {
+        return;
+    }
+    out.push_str("// ── Rows: the flat shape a store or the wire holds ──\n\n");
+    out.push_str("/** A row that breaks what the type of its state requires. */\n");
+    out.push_str("export interface InvalidRow {\n  readonly invalid: string;\n  readonly column: string;\n  readonly reason: string;\n}\n\n");
+    for sum in &domain.sums {
+        out.push_str(&doc(
+            &[format!(
+                "Every column of {} as the data layer declares it.",
+                sum.entity
+            )],
+            "",
+        ));
+        out.push_str(&format!("export interface {} {{\n", sum.row));
+        for field in &sum.row_fields {
+            let ty = field_type(&field.ty);
+            let ty = if field.nullable {
+                format!("{ty} | null")
+            } else {
+                ty
+            };
+            out.push_str(&format!("  {}: {ty};\n", property(&field.wire)));
+        }
+        out.push_str("}\n\n");
+        out.push_str(&doc(
+            &[format!(
+                "The state of a {} row, or why the row fits none.",
+                sum.entity
+            )],
+            "",
+        ));
+        out.push_str(&format!(
+            "export function {}FromRow(row: {}): {} | InvalidRow {{\n  switch (row.{}) {{\n",
+            super::camel(&sum.name),
+            sum.row,
+            sum.name,
+            property(&sum.tag.wire)
+        ));
+        for v in &sum.variants {
+            out.push_str(&format!("    case {}: {{\n", string_literal(&v.value.wire)));
+            for f in &v.fields {
+                let declared = sum.row_fields.iter().find(|r| r.wire == f.wire);
+                if declared.is_some_and(|d| d.nullable) && !f.nullable {
+                    out.push_str(&format!(
+                        "      if (row.{0} === null) {{\n        return {{ invalid: {1}, column: {2}, reason: {3} }};\n      }}\n",
+                        property(&f.wire),
+                        string_literal(&sum.entity),
+                        string_literal(&f.wire),
+                        string_literal(&format!("present in the state {}", v.value.wire))
+                    ));
+                }
+            }
+            for f in &v.always_null {
+                out.push_str(&format!(
+                    "      if (row.{0} !== null) {{\n        return {{ invalid: {1}, column: {2}, reason: {3} }};\n      }}\n",
+                    property(&f.wire),
+                    string_literal(&sum.entity),
+                    string_literal(&f.wire),
+                    string_literal(&format!("null in the state {}", v.value.wire))
+                ));
+            }
+            out.push_str("      return {\n");
+            out.push_str(&format!(
+                "        {}: {},\n",
+                property(&sum.tag.wire),
+                string_literal(&v.value.wire)
+            ));
+            for f in &v.fields {
+                out.push_str(&format!("        {0}: row.{0},\n", property(&f.wire)));
+            }
+            for f in &v.always_null {
+                out.push_str(&format!("        {}: null,\n", property(&f.wire)));
+            }
+            out.push_str("      };\n    }\n");
+        }
+        out.push_str("  }\n}\n\n");
+        out.push_str(&doc(&[format!("The flat row of a {}.", sum.entity)], ""));
+        out.push_str(&format!(
+            "export function {}ToRow(state: {}): {} {{\n  return {{\n",
+            super::camel(&sum.name),
+            sum.name,
+            sum.row
+        ));
+        for f in &sum.row_fields {
+            out.push_str(&format!("    {0}: state.{0},\n", property(&f.wire)));
+        }
+        out.push_str("  };\n}\n\n");
+    }
+}
+
+pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
+    if domain.dispatchers.is_empty() {
+        return;
+    }
+    out.push_str("// ── Dispatch: run a use case from whatever states its rows are in ──\n\n");
+    out.push_str("/** The rows are in states the use case does not run from. */\n");
+    out.push_str("export interface NotEnabled {\n  readonly notEnabled: string;\n}\n\n");
+    for d in &domain.dispatchers {
+        out.push_str(&doc(
+            &[format!(
+                "What {} returns when the use case runs.",
+                super::camel(&d.name)
+            )],
+            "",
+        ));
+        out.push_str(&format!(
+            "export type {} = {};\n\n",
+            d.outcome,
+            d.cases
+                .iter()
+                .map(|c| c.result.clone())
+                .collect::<Vec<_>>()
+                .join(" | ")
+        ));
+        out.push_str(&doc(
+            &[format!(
+                "Runs {} from whatever states its rows are in: the transition function of those states, or NotEnabled.",
+                d.usecase
+            )],
+            "",
+        ));
+        let var = |name: &str| super::camel(&super::type_ident(name));
+        let mut params: Vec<String> = d
+            .rows
+            .iter()
+            .map(|(n, ty)| format!("{}: {ty}", var(n)))
+            .collect();
+        for i in &d.inputs {
+            let ty = field_type(&i.ty);
+            let ty = if i.nullable {
+                format!("{ty} | null")
+            } else {
+                ty
+            };
+            params.push(format!("{}: {ty}", var(&i.name)));
+        }
+        let ret = if d.rejects {
+            format!("{} | Rejected | NotEnabled", d.outcome)
+        } else {
+            format!("{} | NotEnabled", d.outcome)
+        };
+        out.push_str(&format!(
+            "export function {}({}): {ret} {{\n",
+            super::camel(&d.name),
+            params.join(", ")
+        ));
+        for c in &d.cases {
+            let tests: Vec<String> = c
+                .states
+                .iter()
+                .zip(&d.rows)
+                .filter_map(|(s, (n, _))| {
+                    let (_, tag, value) = s.as_ref()?;
+                    Some(format!(
+                        "{}.{} === {}",
+                        var(n),
+                        property(tag),
+                        string_literal(&value.wire)
+                    ))
+                })
+                .collect();
+            let mut args: Vec<String> = d.rows.iter().map(|(n, _)| var(n)).collect();
+            args.extend(c.inputs.iter().map(|i| var(&d.inputs[*i].name)));
+            let call = format!("{}({})", super::camel(&c.function), args.join(", "));
+            if tests.is_empty() {
+                out.push_str(&format!("  return {call};\n"));
+            } else {
+                out.push_str(&format!(
+                    "  if ({}) {{\n    return {call};\n  }}\n",
+                    tests.join(" && ")
+                ));
+            }
+        }
+        out.push_str(&format!(
+            "  return {{ notEnabled: {} }};\n}}\n\n",
+            string_literal(&d.usecase)
+        ));
+    }
 }

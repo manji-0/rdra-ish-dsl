@@ -29,6 +29,11 @@
   from the invariants `check` and `verify` check. A rule over several rows stays an
   obligation. `tests/codegen_equivalence.rs` checks that no row of a state BFS reaches
   fails its check.
+- `codegen` prints a flat row type per state type with conversions both ways (a row its
+  state rules out is an `InvalidRow` naming the column), and a dispatcher per use case that
+  runs the transition function of the rows' states or reports `NotEnabled`.
+  `tests/codegen_behaviour.rs` runs the printed TypeScript, Rust, and Go on a fixture model
+  and checks the conversions, the dispatch, `Rejected`, and the rule checks.
 
 ### Fixed
 

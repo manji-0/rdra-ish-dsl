@@ -1338,6 +1338,19 @@ breaks, and an empty list when it keeps them all. A state type's union dispatche
 tag. A rule its state type already guarantees is left out. A rule over several rows (a
 multi-entity rule, a quantifier, `Unique_*`, `MinCard_*`) is listed as an obligation instead.
 
+Each state type also has a **row type**, `<Entity>Row`, with every column as the data layer
+declares it: the flat shape a store or the wire holds, with the same column names (and, in
+Go, `json` tags). `orderFromRow(row)` / `Order::from_row(row)` / `OrderFromRow(row)` returns
+the state of a row, or `InvalidRow` naming the column whose value its state rules out;
+`orderToRow` / `into_row` / `OrderToRow` returns the flat row of a state.
+
+Each use case whose functions take a state type gets a **dispatcher**, `runCancel` /
+`run_cancel` / `RunCancel`, over the entity types: it calls the transition function of the
+rows' states and returns its result as a `CancelOutcome` case, or `NotEnabled` when the use
+case does not run from those states (in Rust, `Refused::NotEnabled`, beside
+`Refused::Rejected`). The code that finishes the output loads rows, converts them, calls the
+dispatcher, and stores the rows it returns.
+
 Since the state types, functions, and rule checks rest on rules, `codegen` runs `check` first, at its bounds, and
 prints them in the header. It refuses a model `check` rejects (exit 1, with the errors on
 stderr) unless `--allow-failing` is given; the output then has no transition functions and

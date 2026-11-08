@@ -131,6 +131,10 @@ pub struct SumDecl {
     /// The tag column: a field whose type is the column's enum.
     pub tag: Field,
     pub variants: Vec<VariantDecl>,
+    /// The flat row type `<Entity>Row`: every column as the data layer declares it, the
+    /// shape a store or the wire holds.
+    pub row: String,
+    pub row_fields: Vec<Field>,
 }
 
 /// One state of a [`SumDecl`].
@@ -158,6 +162,7 @@ pub struct DomainModel {
     pub fns: Vec<FnDecl>,
     pub skipped: Vec<Skipped>,
     pub validators: Vec<ValidatorDecl>,
+    pub dispatchers: Vec<DispatchDecl>,
     pub obligations: Vec<Obligation>,
 }
 
@@ -404,4 +409,37 @@ pub struct RuleCheck {
     pub name: String,
     pub text: String,
     pub expr: Expr,
+}
+
+// ── Dispatch ─────────────────────────────────────────────────────────────────
+
+/// One function per use case over its rows' entity types: it picks the transition function
+/// of the rows' states, or reports that the use case does not run from them.
+#[derive(Clone, Debug)]
+pub struct DispatchDecl {
+    /// `Run<Action>`.
+    pub name: String,
+    pub usecase: String,
+    /// The outcome type: one case per transition function.
+    pub outcome: String,
+    /// `(name, entity type)` per row, in the transition functions' order.
+    pub rows: Vec<(String, String)>,
+    /// Every input any of the functions takes, by name.
+    pub inputs: Vec<FnInput>,
+    pub cases: Vec<DispatchCase>,
+    /// Whether some case can be rejected by a condition.
+    pub rejects: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct DispatchCase {
+    /// The transition function, its result type, and the outcome case (PascalCase).
+    pub function: String,
+    pub result: String,
+    pub case: String,
+    pub rejects: bool,
+    /// Per row: `None` for a record, or the state's (type, tag column, value).
+    pub states: Vec<Option<(String, String, EnumValue)>>,
+    /// The indices into the dispatcher's inputs the function takes, in its order.
+    pub inputs: Vec<usize>,
 }

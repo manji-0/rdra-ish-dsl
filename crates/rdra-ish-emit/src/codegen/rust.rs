@@ -185,6 +185,8 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     }
     print_functions(domain, &mut out);
     print_validators(domain, &mut out);
+    print_rows(domain, &mut out);
+    print_dispatchers(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -537,4 +539,217 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
 /// The condition under which `e` fails, folded so that a negated comparison reads plainly.
 fn fails(e: &super::ir::Expr) -> super::ir::Expr {
     super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
+}
+
+// ── Rows and dispatch ────────────────────────────────────────────────────────
+
+pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
+    if domain.sums.is_empty() {
+        return;
+    }
+    out.push_str("// ── Rows: the flat shape a store or the wire holds ──\n\n");
+    out.push_str("/// A row that breaks what the type of its state requires.\n");
+    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+    out.push_str("pub struct InvalidRow {\n    pub entity: &'static str,\n    pub column: &'static str,\n    pub reason: &'static str,\n}\n\n");
+    for sum in &domain.sums {
+        let FieldType::Enum(tag_enum) = &sum.tag.ty else {
+            continue;
+        };
+        out.push_str(&format!(
+            "/// Every column of {} as the data layer declares it.\n",
+            sum.entity
+        ));
+        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+        out.push_str(&format!("pub struct {} {{\n", sum.row));
+        for f in &sum.row_fields {
+            let ty = field_type(&f.ty);
+            let ty = if f.nullable {
+                format!("{OPTION}<{ty}>")
+            } else {
+                ty
+            };
+            out.push_str(&format!("    pub {}: {ty},\n", ident(&f.wire)));
+        }
+        out.push_str("}\n\n");
+        out.push_str(&format!("impl {} {{\n", sum.name));
+        out.push_str("    /// The state of a row, or why the row fits none.\n");
+        out.push_str(&format!(
+            "    pub fn from_row(row: {}) -> ::core::result::Result<Self, InvalidRow> {{\n        match row.{} {{\n",
+            sum.row,
+            ident(&sum.tag.wire)
+        ));
+        for v in &sum.variants {
+            let vi = variant_ident(&v.value.ident);
+            out.push_str(&format!("            {tag_enum}::{vi} => {{\n"));
+            let invalid = |column: &str, reason: String| {
+                format!(
+                    "InvalidRow {{ entity: {}, column: {}, reason: {} }}",
+                    string_literal(&sum.entity),
+                    string_literal(column),
+                    string_literal(&reason)
+                )
+            };
+            for f in &v.always_null {
+                out.push_str(&format!(
+                    "                if row.{}.is_some() {{\n                    return ::core::result::Result::Err({});\n                }}\n",
+                    ident(&f.wire),
+                    invalid(&f.wire, format!("null in the state {}", v.value.wire))
+                ));
+            }
+            let mut inits = Vec::new();
+            for f in &v.fields {
+                let declared = sum.row_fields.iter().find(|r| r.wire == f.wire);
+                if declared.is_some_and(|d| d.nullable) && !f.nullable {
+                    let local = format!("present_{}", f.wire);
+                    out.push_str(&format!(
+                        "                let ::core::option::Option::Some({local}) = row.{} else {{\n                    return ::core::result::Result::Err({});\n                }};\n",
+                        ident(&f.wire),
+                        invalid(&f.wire, format!("present in the state {}", v.value.wire))
+                    ));
+                    inits.push(format!("{}: {local}", ident(&f.wire)));
+                } else {
+                    inits.push(format!("{0}: row.{0}", ident(&f.wire)));
+                }
+            }
+            out.push_str(&format!(
+                "                ::core::result::Result::Ok(Self::{vi}({} {{ {} }}))\n            }}\n",
+                v.name,
+                inits.join(", ")
+            ));
+        }
+        out.push_str("        }\n    }\n\n");
+        out.push_str("    /// The flat row of this state.\n");
+        out.push_str(&format!(
+            "    pub fn into_row(self) -> {} {{\n        match self {{\n",
+            sum.row
+        ));
+        for v in &sum.variants {
+            let vi = variant_ident(&v.value.ident);
+            let mut inits = Vec::new();
+            for f in &sum.row_fields {
+                let name = ident(&f.wire);
+                if f.wire == sum.tag.wire {
+                    inits.push(format!("{name}: {tag_enum}::{vi}"));
+                } else if v.always_null.iter().any(|n| n.wire == f.wire) {
+                    inits.push(format!("{name}: None"));
+                } else if let Some(vf) = v.fields.iter().find(|x| x.wire == f.wire) {
+                    if f.nullable && !vf.nullable {
+                        inits.push(format!("{name}: Some(state.{name})"));
+                    } else {
+                        inits.push(format!("{name}: state.{name}"));
+                    }
+                }
+            }
+            out.push_str(&format!(
+                "            Self::{vi}(state) => {} {{ {} }},\n",
+                sum.row,
+                inits.join(", ")
+            ));
+        }
+        out.push_str("        }\n    }\n}\n\n");
+    }
+}
+
+pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
+    use super::actions::snake;
+    if domain.dispatchers.is_empty() {
+        return;
+    }
+    out.push_str("// ── Dispatch: run a use case from whatever states its rows are in ──\n\n");
+    out.push_str("/// The rows are in states the use case does not run from.\n");
+    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+    out.push_str("pub struct NotEnabled {\n    pub usecase: &'static str,\n}\n\n");
+    out.push_str("/// Why a use case did not run.\n");
+    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+    out.push_str("pub enum Refused {\n    Rejected(Rejected),\n    NotEnabled(NotEnabled),\n}\n\n");
+    for d in &domain.dispatchers {
+        out.push_str(&format!(
+            "/// What `{}` returns when the use case runs.\n",
+            snake(&d.name)
+        ));
+        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+        out.push_str(&format!("pub enum {} {{\n", d.outcome));
+        for c in &d.cases {
+            out.push_str(&format!("    {}({}),\n", c.case, c.result));
+        }
+        out.push_str("}\n\n");
+        out.push_str(&format!(
+            "/// Runs {} from whatever states its rows are in: the transition function of those states, or `NotEnabled`.\n",
+            d.usecase
+        ));
+        let mut params: Vec<String> = d
+            .rows
+            .iter()
+            .map(|(n, ty)| format!("{}: {ty}", ident(n)))
+            .collect();
+        for i in &d.inputs {
+            let ty = field_type(&i.ty);
+            let ty = if i.nullable {
+                format!("{OPTION}<{ty}>")
+            } else {
+                ty
+            };
+            params.push(format!("{}: {ty}", ident(&i.name)));
+        }
+        out.push_str(&format!(
+            "pub fn {}({}) -> ::core::result::Result<{}, Refused> {{\n",
+            snake(&d.name),
+            params.join(", "),
+            d.outcome
+        ));
+        let scrutinee: Vec<String> = d.rows.iter().map(|(n, _)| ident(n)).collect();
+        out.push_str(&format!("    match ({},) {{\n", scrutinee.join(", ")));
+        for c in &d.cases {
+            let pats: Vec<String> = c
+                .states
+                .iter()
+                .zip(&d.rows)
+                .map(|(s, (n, ty))| match s {
+                    Some((_, _, value)) => {
+                        format!("{ty}::{}({})", variant_ident(&value.ident), ident(n))
+                    }
+                    None => ident(n),
+                })
+                .collect();
+            let mut args: Vec<String> = d.rows.iter().map(|(n, _)| ident(n)).collect();
+            args.extend(c.inputs.iter().map(|i| ident(&d.inputs[*i].name)));
+            let call = format!("{}({})", snake(&c.function), args.join(", "));
+            let body = if c.rejects {
+                format!(
+                    "{call}.map({}::{}).map_err(Refused::Rejected)",
+                    d.outcome, c.case
+                )
+            } else {
+                format!(
+                    "::core::result::Result::Ok({}::{}({call}))",
+                    d.outcome, c.case
+                )
+            };
+            out.push_str(&format!("        ({},) => {body},\n", pats.join(", ")));
+        }
+        // A catch-all arm only where the cases leave some combination of states out.
+        let combos: usize = d
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(r, (_, ty))| {
+                if d.cases.iter().any(|c| c.states[r].is_some()) {
+                    domain
+                        .sums
+                        .iter()
+                        .find(|s| s.name == *ty)
+                        .map_or(1, |s| s.variants.len())
+                } else {
+                    1
+                }
+            })
+            .product();
+        if d.cases.len() < combos {
+            out.push_str(&format!(
+                "        _ => ::core::result::Result::Err(Refused::NotEnabled(NotEnabled {{ usecase: {} }})),\n",
+                string_literal(&d.usecase)
+            ));
+        }
+        out.push_str("    }\n}\n\n");
+    }
 }

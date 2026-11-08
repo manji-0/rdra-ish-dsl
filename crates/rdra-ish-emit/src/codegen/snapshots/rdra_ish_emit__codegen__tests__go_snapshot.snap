@@ -204,16 +204,6 @@ func (r *Rejected) Error() string {
 	return "rejected by the condition " + r.Condition + ": " + r.Label
 }
 
-func ptrTo[T any](v T) *T { return &v }
-
-// mustPresent reads a value the verified model keeps present; nil means the rows broke a rule.
-func mustPresent[T any](p *T, message string) T {
-	if p == nil {
-		panic(message)
-	}
-	return *p
-}
-
 // PayResult is what Pay returns.
 type PayResult struct {
 	Order OrderPaid
@@ -303,4 +293,114 @@ func (row OrderPaid) RuleViolations() []string {
 func (row OrderCancelled) RuleViolations() []string {
 	var out []string
 	return out
+}
+
+// ── Rows: the flat shape a store or the wire holds ──
+
+// InvalidRow reports a row that breaks what the type of its state requires.
+type InvalidRow struct {
+	Entity string
+	Column string
+	Reason string
+}
+
+// Error names the entity, the column, and the reason.
+func (e *InvalidRow) Error() string {
+	return e.Entity + "." + e.Column + ": " + e.Reason
+}
+
+// OrderRow holds every column of Order as the data layer declares it.
+type OrderRow struct {
+	Id OrderId `json:"id"`
+	Total Money `json:"total"`
+	Status OrderStatus `json:"status"`
+	PaidAt *DateTime `json:"paid_at"`
+	Method PaymentMethod `json:"method"`
+	DeliveredAt *DateTime `json:"delivered_at"`
+	Type *string `json:"type"`
+	CustomerId CustomerId `json:"customer_id"`
+}
+
+// OrderFromRow returns the state of a row, or why the row fits none.
+func OrderFromRow(row OrderRow) (Order, error) {
+	switch row.Status {
+	case OrderStatusPending:
+		if row.PaidAt != nil {
+			return nil, &InvalidRow{Entity: "Order", Column: "paid_at", Reason: "null in the state pending"}
+		}
+		return OrderPending{Id: row.Id, Total: row.Total, Method: row.Method, DeliveredAt: row.DeliveredAt, Type: row.Type, CustomerId: row.CustomerId}, nil
+	case OrderStatusPaid:
+		if row.PaidAt == nil {
+			return nil, &InvalidRow{Entity: "Order", Column: "paid_at", Reason: "present in the state paid"}
+		}
+		return OrderPaid{Id: row.Id, Total: row.Total, PaidAt: *row.PaidAt, Method: row.Method, DeliveredAt: row.DeliveredAt, Type: row.Type, CustomerId: row.CustomerId}, nil
+	case OrderStatusCancelled:
+		return OrderCancelled{Id: row.Id, Total: row.Total, PaidAt: row.PaidAt, Method: row.Method, DeliveredAt: row.DeliveredAt, Type: row.Type, CustomerId: row.CustomerId}, nil
+	}
+	return nil, &InvalidRow{Entity: "Order", Column: "status", Reason: "not a value of OrderStatus"}
+}
+
+// OrderToRow returns the flat row of a state.
+func OrderToRow(state Order) OrderRow {
+	switch v := state.(type) {
+	case OrderPending:
+		return OrderRow{Id: v.Id, Total: v.Total, Status: OrderStatusPending, PaidAt: nil, Method: v.Method, DeliveredAt: v.DeliveredAt, Type: v.Type, CustomerId: v.CustomerId}
+	case OrderPaid:
+		return OrderRow{Id: v.Id, Total: v.Total, Status: OrderStatusPaid, PaidAt: ptrTo(v.PaidAt), Method: v.Method, DeliveredAt: v.DeliveredAt, Type: v.Type, CustomerId: v.CustomerId}
+	case OrderCancelled:
+		return OrderRow{Id: v.Id, Total: v.Total, Status: OrderStatusCancelled, PaidAt: v.PaidAt, Method: v.Method, DeliveredAt: v.DeliveredAt, Type: v.Type, CustomerId: v.CustomerId}
+	}
+	panic("rdra-ish: a state of Order this package does not declare")
+}
+
+// ── Dispatch: run a use case from whatever states its rows are in ──
+
+// NotEnabled reports rows in states the use case does not run from.
+type NotEnabled struct {
+	UseCase string
+}
+
+// Error names the use case.
+func (e *NotEnabled) Error() string {
+	return "the use case " + e.UseCase + " does not run from these states"
+}
+
+// PayOutcome is what RunPay returns when the use case runs: one case is set.
+type PayOutcome struct {
+	Ran *PayResult
+}
+
+// RunPay runs Pay from whatever states its rows are in: the transition function of those states, or NotEnabled.
+func RunPay(order Order, orderPaidAt DateTime) (PayOutcome, error) {
+	if order, ok := order.(OrderPending); ok {
+		r := Pay(order, orderPaidAt)
+		return PayOutcome{Ran: &r}, nil
+	}
+	return PayOutcome{}, &NotEnabled{UseCase: "Pay"}
+}
+
+// CancelOrderOutcome is what RunCancelOrder returns when the use case runs: one case is set.
+type CancelOrderOutcome struct {
+	Ran *CancelOrderResult
+}
+
+// RunCancelOrder runs CancelOrder from whatever states its rows are in: the transition function of those states, or NotEnabled.
+func RunCancelOrder(order Order) (CancelOrderOutcome, error) {
+	if order, ok := order.(OrderPending); ok {
+		r := CancelOrder(order)
+		return CancelOrderOutcome{Ran: &r}, nil
+	}
+	return CancelOrderOutcome{}, &NotEnabled{UseCase: "CancelOrder"}
+}
+
+// ── Helpers ──
+
+func ptrTo[T any](v T) *T { return &v }
+
+// mustPresent reads a value the verified model keeps present; nil means the rows broke a rule.
+func mustPresent[T any](p *T, message string) T {
+	if p == nil {
+		panic(message)
+	}
+	return *p
 }

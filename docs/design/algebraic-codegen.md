@@ -521,8 +521,17 @@ sample. For this generator:
    always sound for a type, and a value with no witness is already a `check` finding. The
    tagged JSON of the Rust and Go variants and the candidate-rule listing in `next` move
    to phase 3, with the scaffold that reads and writes rows.
-3. **Transition functions and the agent contract.** The functions and the rule checks
-   have landed; the scaffold, the tagged JSON, and the candidate-rule listing have not.
+3. **Transition functions and the agent contract.** The functions, the rule checks, the
+   row types, and the dispatchers have landed; the candidate-rule listing in `next` has
+   not. The scaffold landed as two pure pieces instead of service stubs with persistence
+   ports: a flat row type per state type with checked conversions both ways, and a
+   dispatcher per use case over the entity types. A store's or a framework's ports differ
+   per project, so the agent writes the service around them; what it cannot get wrong (which
+   function runs from which states, which rows a state rules out) is generated. The tagged
+   JSON is the row type: its columns, with the tag inline, are the JSON shape in all three
+   languages (Go with `json` tags); the Rust output adds no serde dependency, so the agent
+   derives it. `tests/codegen_behaviour.rs` runs the printed code of a fixture in each
+   language.
    The rule oracles landed as rule checks in the generated code, not as property tests for
    `fast-check`, `proptest`, or `rapid`: the output then needs no test library to build,
    and the agent writes the tests that call them. A check is read from the invariant
