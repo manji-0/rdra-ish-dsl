@@ -163,6 +163,8 @@ pub struct DomainModel {
     pub skipped: Vec<Skipped>,
     pub validators: Vec<ValidatorDecl>,
     pub dispatchers: Vec<DispatchDecl>,
+    /// Rules the reachable states agree with and the model does not state.
+    pub candidates: Vec<String>,
     pub obligations: Vec<Obligation>,
 }
 

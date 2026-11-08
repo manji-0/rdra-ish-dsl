@@ -192,3 +192,76 @@ pub(super) fn tag_column<'m>(
         _ => None,
     }
 }
+
+/// Refinements the reachable states show and no rule states: for each state type, a
+/// nullable column every reachable row of that state holds present (or null). Each is
+/// printed as the rule that would narrow the type; the modeler decides whether it is a rule
+/// of the business or an accident of the model.
+pub(super) fn candidates(model: &SemanticModel, sums: &[super::ir::SumDecl]) -> Vec<String> {
+    use rdra_ish_core::lifecycle::{derive_states, AbstractValue, Caps, Scope};
+    let report = derive_states(model, &Scope::ALL, Caps::STATES);
+    let mut out = Vec::new();
+    for view in report.views.iter().filter(|v| !v.truncated) {
+        let Some(sum) = sums.iter().find(|s| s.entity == view.entity_id) else {
+            continue;
+        };
+        let tag = &sum.tag.wire;
+        let mut found: Vec<(String, String, AbstractValue)> = Vec::new();
+        let mut reached = 0usize;
+        for variant in &sum.variants {
+            let patterns: Vec<_> = view
+                .patterns
+                .iter()
+                .filter(|p| {
+                    matches!(p.pattern.values.get(tag),
+                        Some(AbstractValue::Enum(v)) if v.eq_ignore_ascii_case(&variant.value.wire))
+                })
+                .collect();
+            if patterns.is_empty() {
+                continue;
+            }
+            reached += 1;
+            for field in variant.fields.iter().filter(|f| f.nullable) {
+                let values: Vec<_> = patterns
+                    .iter()
+                    .map(|p| p.pattern.values.get(&field.wire))
+                    .collect();
+                let all = |want: &AbstractValue| values.iter().all(|v| *v == Some(want));
+                for want in [AbstractValue::Present, AbstractValue::Null] {
+                    if all(&want) {
+                        found.push((variant.value.wire.clone(), field.wire.clone(), want));
+                    }
+                }
+            }
+        }
+        // A column null in every reached state is one no use case writes: a gap, not a rule.
+        let entity = &sum.entity;
+        let mut never: Vec<String> = Vec::new();
+        for (_, column, _) in &found {
+            let nulls = found
+                .iter()
+                .filter(|(_, c, v)| c == column && *v == AbstractValue::Null)
+                .count();
+            if reached > 1 && nulls == reached && !never.contains(column) {
+                never.push(column.clone());
+            }
+        }
+        for column in &never {
+            out.push(format!(
+                "{entity}.{column} is null in every reachable state: no use case writes it (a gap, or a column to drop)"
+            ));
+        }
+        for (state, column, value) in &found {
+            if never.contains(column) {
+                continue;
+            }
+            out.push(match value {
+                AbstractValue::Present => {
+                    format!("invariant({entity}).when({tag} == {state}).then({column} == present)")
+                }
+                _ => format!("forbidden({entity}, {tag} == {state}, {column} == present)"),
+            });
+        }
+    }
+    out
+}

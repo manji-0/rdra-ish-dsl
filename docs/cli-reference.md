@@ -1351,6 +1351,13 @@ case does not run from those states (in Rust, `Refused::NotEnabled`, beside
 `Refused::Rejected`). The code that finishes the output loads rows, converts them, calls the
 dispatcher, and stores the rows it returns.
 
+The header also lists **candidate rules**: a nullable column that every reachable row of a
+state holds present (or null) with no rule saying so, printed as the `invariant` or
+`forbidden` that would narrow the state type. A column null in every reachable state is
+listed once, as a column no use case writes. The modeler decides whether a candidate is a
+rule of the business (state it, and the type narrows) or an accident of the model (a gap).
+The list reads the states `check` reaches at its bounds.
+
 Since the state types, functions, and rule checks rest on rules, `codegen` runs `check` first, at its bounds, and
 prints them in the header. It refuses a model `check` rejects (exit 1, with the errors on
 stderr) unless `--allow-failing` is given; the output then has no transition functions and

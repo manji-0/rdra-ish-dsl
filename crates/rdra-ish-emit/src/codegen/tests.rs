@@ -290,3 +290,39 @@ fn a_combination_a_rule_rules_out_gets_no_function() {
     assert!(names.contains(&"CancelFromPending"), "{names:?}");
     assert!(!names.contains(&"CancelFromPaid"), "{names:?}");
 }
+
+/// A refinement every reachable row agrees with and no rule states is a candidate rule; a
+/// column no use case writes is reported as one, not once per state.
+#[test]
+fn reachable_refinements_no_rule_states_are_candidates() {
+    let src = r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid) @default(pending)
+  paid_at: DateTime @null
+  note: String @null
+}
+usecase Place "Place"
+usecase Pay "Pay"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Pay, Order.paid_at == present)
+"#;
+    let model = model_from(src);
+    let domain = build(&model, true, &|_| None).unwrap();
+    let c = &domain.candidates;
+    assert!(
+        c.contains(&"invariant(Order).when(status == paid).then(paid_at == present)".to_string()),
+        "{c:?}"
+    );
+    assert!(
+        c.contains(&"forbidden(Order, status == pending, paid_at == present)".to_string()),
+        "{c:?}"
+    );
+    assert!(
+        c.iter()
+            .any(|x| x.starts_with("Order.note is null in every reachable state")),
+        "{c:?}"
+    );
+    assert!(!c.iter().any(|x| x.contains("note ==")), "{c:?}");
+}

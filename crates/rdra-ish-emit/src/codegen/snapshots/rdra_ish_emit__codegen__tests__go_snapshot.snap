@@ -23,6 +23,12 @@ expression: "generated(Lang::Go)"
 // O4 OrderLine.order_id names a present Order.
 // O5 [MinCard_OrderLine_Order] every present Order has at least one OrderLine through OrderLine.order_id.
 // O6 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
+//
+// Candidate rules: every reachable row of the state agrees, and no rule says so. A rule
+// the business holds narrows the state type; one that is an accident of the model is a gap:
+// - Order.delivered_at is null in every reachable state: no use case writes it (a gap, or a column to drop)
+// - Order.type is null in every reachable state: no use case writes it (a gap, or a column to drop)
+// - forbidden(Order, status == cancelled, paid_at == present)
 package domain
 
 // ── Scalars: replace with the project's own types if it has them ──

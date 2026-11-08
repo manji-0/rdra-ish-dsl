@@ -136,6 +136,20 @@ fn header_lines(options: &Options) -> Vec<String> {
 /// The obligations as comment lines, each wrapped under its id.
 fn obligation_lines(domain: &DomainModel) -> Vec<String> {
     let mut lines = obligations_only(domain);
+    if !domain.candidates.is_empty() {
+        lines.push(String::new());
+        lines.push(
+            "Candidate rules: every reachable row of the state agrees, and no rule says so. A rule"
+                .to_string(),
+        );
+        lines.push(
+            "the business holds narrows the state type; one that is an accident of the model is a gap:"
+                .to_string(),
+        );
+        for c in &domain.candidates {
+            lines.push(format!("- {c}"));
+        }
+    }
     if !domain.skipped.is_empty() {
         lines.push(String::new());
         lines.push(
@@ -316,6 +330,7 @@ pub fn build(
         );
         actions::add_functions(model, &built.ts, &mut domain, &mut names, site)?;
         validators::add_validators(&built.ts, &mut domain, &mut names, site)?;
+        domain.candidates = states::candidates(model, &domain.sums);
     }
 
     // Go declares `<Enum>Values` and one `<Enum><Value>` constant per value in the package
