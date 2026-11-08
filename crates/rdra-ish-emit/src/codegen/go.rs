@@ -117,6 +117,64 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             out.push_str("}\n\n");
         }
     }
+    if !domain.sums.is_empty() {
+        out.push_str("// ── Entities with states ──\n\n");
+    }
+    for sum in &domain.sums {
+        let FieldType::Enum(tag_enum) = &sum.tag.ty else {
+            unreachable!("a tag column is an enum");
+        };
+        let marker = format!("is{}", sum.name);
+        let names: Vec<&str> = sum.variants.iter().map(|v| v.name.as_str()).collect();
+        out.push_str(&doc(
+            &sum.name,
+            &[
+                format!("is {}", one_line(&sum.doc.join(" "))),
+                format!(
+                    "It is one of {}, told apart by {}(). Only this package declares its states.",
+                    names.join(", "),
+                    sum.tag.pascal
+                ),
+            ],
+            "",
+        ));
+        out.push_str(&format!(
+            "type {} interface {{\n\t{marker}()\n\t// {1} is the state's {2}.\n\t{1}() {tag_enum}\n}}\n\n",
+            sum.name, sum.tag.pascal, sum.tag.wire
+        ));
+        for variant in &sum.variants {
+            let mut lines = vec![format!("is {}", one_line(&variant.doc.join(" ")))];
+            for field in &variant.always_null {
+                lines.push(format!(
+                    "{}: {}",
+                    field.wire,
+                    field.doc.last().cloned().unwrap_or_default()
+                ));
+            }
+            out.push_str(&doc(&variant.name, &lines, ""));
+            out.push_str(&format!("type {} struct {{\n", variant.name));
+            for field in &variant.fields {
+                for line in &field.doc {
+                    out.push_str(&comment(&one_line(line), "\t"));
+                }
+                let ty = field_type(&field.ty);
+                let ty = if field.nullable { format!("*{ty}") } else { ty };
+                out.push_str(&format!(
+                    "\t{} {ty} `json:{}`\n",
+                    field.pascal,
+                    string_literal(&field.wire)
+                ));
+            }
+            out.push_str("}\n\n");
+            out.push_str(&format!("func ({}) {marker}() {{}}\n\n", variant.name));
+            out.push_str(&format!(
+                "// {method} returns {tag_enum}{value}.\nfunc ({name}) {method}() {tag_enum} {{ return {tag_enum}{value} }}\n\n",
+                name = variant.name,
+                method = sum.tag.pascal,
+                value = variant.value.ident,
+            ));
+        }
+    }
     while out.ends_with("\n\n") {
         out.pop();
     }

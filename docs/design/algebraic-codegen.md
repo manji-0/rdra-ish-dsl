@@ -7,7 +7,7 @@
 
 Status: accepted in scope on 2026-11-07 as an experimental extra
 ([vision.md](../vision.md#decisions)). Neither the `codegen` subcommand nor its output is
-covered by [compatibility](../compatibility.md). Phases 0 and 1 have landed (see
+covered by [compatibility](../compatibility.md). Phases 0 to 2 have landed (see
 [Phases](#phases)), and every question is [decided](#decisions).
 
 The model already states the shape of the domain: the values an actor chooses
@@ -515,8 +515,12 @@ sample. For this generator:
    subcommand lands here, labelled experimental in `--help` and the CLI reference, and it
    joins the "What is not covered" list of [compatibility](../compatibility.md) with its
    flags and its output.
-2. **State sums.** One variant per state, declared refinement, tagged JSON in all three,
-   and the candidate-rule listing in `next`.
+2. **State sums.** Landed: one variant per state, declared refinement, and the `check`
+   gate with `--allow-failing`. Two deviations from the plan above. A variant is printed
+   per declared value of the tag column, not per state of the state model: a superset is
+   always sound for a type, and a value with no witness is already a `check` finding. The
+   tagged JSON of the Rust and Go variants and the candidate-rule listing in `next` move
+   to phase 3, with the scaffold that reads and writes rows.
 3. **Transition functions and the agent contract** for use cases of one transaction
    group: source narrowing, `holds` guards without quantifiers, effects, choices, raised
    events, the obligations, the scaffold, the conformance tests, and the equivalence

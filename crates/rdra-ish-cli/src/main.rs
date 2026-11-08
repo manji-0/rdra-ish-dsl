@@ -206,7 +206,8 @@ fn main() -> Result<()> {
             lang,
             out,
             package,
-        } => codegen_cmd::run_codegen(&inputs, lang, out.as_deref(), &package)?,
+            allow_failing,
+        } => codegen_cmd::run_codegen(&inputs, lang, out.as_deref(), &package, allow_failing)?,
 
         Commands::Files { inputs } => {
             let files = collect_rdra_files(&inputs, None)?;

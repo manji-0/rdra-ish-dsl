@@ -88,6 +88,47 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             out.push_str("}\n\n");
         }
     }
+    if !domain.sums.is_empty() {
+        out.push_str("// ── Entities with states ──\n\n");
+    }
+    for sum in &domain.sums {
+        for variant in &sum.variants {
+            out.push_str(&doc(&variant.doc, ""));
+            out.push_str(&format!("export interface {} {{\n", variant.name));
+            out.push_str(&format!(
+                "  {}: {};\n",
+                property(&sum.tag.wire),
+                string_literal(&variant.value.wire)
+            ));
+            for field in &variant.fields {
+                out.push_str(&doc(&field.doc, "  "));
+                let ty = field_type(&field.ty);
+                let ty = if field.nullable {
+                    format!("{ty} | null")
+                } else {
+                    ty
+                };
+                out.push_str(&format!("  {}: {ty};\n", property(&field.wire)));
+            }
+            for field in &variant.always_null {
+                out.push_str(&doc(&field.doc, "  "));
+                out.push_str(&format!("  {}: null;\n", property(&field.wire)));
+            }
+            out.push_str("}\n\n");
+        }
+        let mut lines = sum.doc.clone();
+        lines.push(format!(
+            "One of its states, told apart by `{}`.",
+            sum.tag.wire
+        ));
+        out.push_str(&doc(&lines, ""));
+        out.push_str(&format!("export type {} =\n", sum.name));
+        for (i, variant) in sum.variants.iter().enumerate() {
+            let bar = if i == 0 { "  " } else { "  | " };
+            out.push_str(&format!("{bar}{}\n", variant.name));
+        }
+        out.push_str(";\n\n");
+    }
     while out.ends_with("\n\n") {
         out.pop();
     }

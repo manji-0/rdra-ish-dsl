@@ -9,8 +9,12 @@ expression: "generated(Lang::Go)"
 // generate different names or shapes from the same model. Generate again after an
 // upgrade and compare.
 //
-// The types below are the model's data layer. The code that finishes this output
-// must keep every obligation listed: `check` and `verify` assume them.
+// The types below are the model's data layer and its states. The code that finishes
+// this output must keep every obligation listed: `check` and `verify` assume them.
+//
+// `check` passed. A state type narrows a column only where a rule says so, and
+// `check` verified those rules within these bounds: 1 instance per entity, Int 0..5.
+// Run `rdra-ish verify` to check them at larger bounds.
 //
 // Obligations:
 // O1 no two Customer rows share email.
@@ -105,19 +109,6 @@ type Customer struct {
 	Email string `json:"email"`
 }
 
-// Order is Order
-type Order struct {
-	// Primary key.
-	Id OrderId `json:"id"`
-	Total Money `json:"total"`
-	// Default: pending.
-	Status OrderStatus `json:"status"`
-	Method PaymentMethod `json:"method"`
-	DeliveredAt *DateTime `json:"delivered_at"`
-	Type *string `json:"type"`
-	CustomerId CustomerId `json:"customer_id"`
-}
-
 // OrderLine is Order Line
 type OrderLine struct {
 	// Primary key.
@@ -133,3 +124,65 @@ type CreateOrderRequest struct {
 	CustomerId int64 `json:"customer_id"`
 	Note *string `json:"note"`
 }
+
+// ── Entities with states ──
+
+// Order is Order
+// It is one of OrderPending, OrderPaid, OrderCancelled, told apart by Status(). Only this package declares its states.
+type Order interface {
+	isOrder()
+	// Status is the state's status.
+	Status() OrderStatus
+}
+
+// OrderPending is Order in the state `pending` of status.
+// paid_at: Null in this state by a rule.
+type OrderPending struct {
+	// Primary key.
+	Id OrderId `json:"id"`
+	Total Money `json:"total"`
+	Method PaymentMethod `json:"method"`
+	DeliveredAt *DateTime `json:"delivered_at"`
+	Type *string `json:"type"`
+	CustomerId CustomerId `json:"customer_id"`
+}
+
+func (OrderPending) isOrder() {}
+
+// Status returns OrderStatusPending.
+func (OrderPending) Status() OrderStatus { return OrderStatusPending }
+
+// OrderPaid is Order in the state `paid` of status.
+type OrderPaid struct {
+	// Primary key.
+	Id OrderId `json:"id"`
+	Total Money `json:"total"`
+	// Present in this state by a rule.
+	PaidAt DateTime `json:"paid_at"`
+	Method PaymentMethod `json:"method"`
+	DeliveredAt *DateTime `json:"delivered_at"`
+	Type *string `json:"type"`
+	CustomerId CustomerId `json:"customer_id"`
+}
+
+func (OrderPaid) isOrder() {}
+
+// Status returns OrderStatusPaid.
+func (OrderPaid) Status() OrderStatus { return OrderStatusPaid }
+
+// OrderCancelled is Order in the state `cancelled` of status.
+type OrderCancelled struct {
+	// Primary key.
+	Id OrderId `json:"id"`
+	Total Money `json:"total"`
+	PaidAt *DateTime `json:"paid_at"`
+	Method PaymentMethod `json:"method"`
+	DeliveredAt *DateTime `json:"delivered_at"`
+	Type *string `json:"type"`
+	CustomerId CustomerId `json:"customer_id"`
+}
+
+func (OrderCancelled) isOrder() {}
+
+// Status returns OrderStatusCancelled.
+func (OrderCancelled) Status() OrderStatus { return OrderStatusCancelled }

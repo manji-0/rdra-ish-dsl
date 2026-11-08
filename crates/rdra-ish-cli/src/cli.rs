@@ -306,6 +306,10 @@ pub(crate) enum Commands {
         /// Go package name (--lang go only)
         #[arg(long, default_value = "domain")]
         package: String,
+        /// Generate even when `check` reports errors: the state types then narrow no column,
+        /// and each error is listed as an obligation the model does not meet
+        #[arg(long)]
+        allow_failing: bool,
     },
     /// Derive reachable state patterns per entity (aggregated across BUCs)
     States {

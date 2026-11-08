@@ -7,8 +7,12 @@ expression: "generated(Lang::TypeScript)"
 // generate different names or shapes from the same model. Generate again after an
 // upgrade and compare.
 //
-// The types below are the model's data layer. The code that finishes this output
-// must keep every obligation listed: `check` and `verify` assume them.
+// The types below are the model's data layer and its states. The code that finishes
+// this output must keep every obligation listed: `check` and `verify` assume them.
+//
+// `check` passed. A state type narrows a column only where a rule says so, and
+// `check` verified those rules within these bounds: 1 instance per entity, Int 0..5.
+// Run `rdra-ish verify` to check them at larger bounds.
 //
 // Obligations:
 // O1 no two Customer rows share email.
@@ -68,19 +72,6 @@ export interface Customer {
   email: string;
 }
 
-/** Order */
-export interface Order {
-  /** Primary key. */
-  id: OrderId;
-  total: Money;
-  /** Default: pending. */
-  status: OrderStatus;
-  method: PaymentMethod;
-  delivered_at: DateTime | null;
-  type: string | null;
-  customer_id: CustomerId;
-}
-
 /** Order Line */
 export interface OrderLine {
   /** Primary key. */
@@ -96,3 +87,56 @@ export interface CreateOrderRequest {
   customer_id: number;
   note: string | null;
 }
+
+// ── Entities with states ──
+
+/** Order in the state `pending` of status. */
+export interface OrderPending {
+  status: "pending";
+  /** Primary key. */
+  id: OrderId;
+  total: Money;
+  method: PaymentMethod;
+  delivered_at: DateTime | null;
+  type: string | null;
+  customer_id: CustomerId;
+  /** Null in this state by a rule. */
+  paid_at: null;
+}
+
+/** Order in the state `paid` of status. */
+export interface OrderPaid {
+  status: "paid";
+  /** Primary key. */
+  id: OrderId;
+  total: Money;
+  /** Present in this state by a rule. */
+  paid_at: DateTime;
+  method: PaymentMethod;
+  delivered_at: DateTime | null;
+  type: string | null;
+  customer_id: CustomerId;
+}
+
+/** Order in the state `cancelled` of status. */
+export interface OrderCancelled {
+  status: "cancelled";
+  /** Primary key. */
+  id: OrderId;
+  total: Money;
+  paid_at: DateTime | null;
+  method: PaymentMethod;
+  delivered_at: DateTime | null;
+  type: string | null;
+  customer_id: CustomerId;
+}
+
+/**
+ * Order
+ * One of its states, told apart by `status`.
+ */
+export type Order =
+  OrderPending
+  | OrderPaid
+  | OrderCancelled
+;

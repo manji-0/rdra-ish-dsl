@@ -116,6 +116,73 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             out.push_str("}\n\n");
         }
     }
+    if !domain.sums.is_empty() {
+        out.push_str("// ── Entities with states ──\n\n");
+    }
+    for sum in &domain.sums {
+        let FieldType::Enum(tag_enum) = &sum.tag.ty else {
+            unreachable!("a tag column is an enum");
+        };
+        for variant in &sum.variants {
+            let mut lines = variant.doc.clone();
+            for field in &variant.always_null {
+                lines.push(format!(
+                    "`{}`: {}",
+                    field.wire,
+                    field.doc.last().cloned().unwrap_or_default()
+                ));
+            }
+            out.push_str(&doc(&lines, ""));
+            out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+            out.push_str(&format!("pub struct {} {{\n", variant.name));
+            for field in &variant.fields {
+                out.push_str(&doc(&field.doc, "    "));
+                let ty = field_type(&field.ty);
+                let ty = if field.nullable {
+                    format!("{OPTION}<{ty}>")
+                } else {
+                    ty
+                };
+                out.push_str(&format!("    pub {}: {ty},\n", ident(&field.wire)));
+            }
+            out.push_str("}\n\n");
+        }
+        let mut lines = sum.doc.clone();
+        lines.push(format!(
+            "One of its states, told apart by `{}`.",
+            sum.tag.wire
+        ));
+        out.push_str(&doc(&lines, ""));
+        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+        out.push_str(&format!("pub enum {} {{\n", sum.name));
+        for variant in &sum.variants {
+            out.push_str(&format!(
+                "    {}({}),\n",
+                variant_ident(&variant.value.ident),
+                variant.name
+            ));
+        }
+        out.push_str("}\n\n");
+        out.push_str(&format!("impl {} {{\n", sum.name));
+        out.push_str(&format!("    /// The state's `{}`.\n", sum.tag.wire));
+        out.push_str(&format!(
+            "    pub fn {}(&self) -> {tag_enum} {{\n        match self {{\n",
+            ident(&sum.tag.wire)
+        ));
+        for variant in &sum.variants {
+            let v = variant_ident(&variant.value.ident);
+            out.push_str(&format!("            Self::{v}(_) => {tag_enum}::{v},\n"));
+        }
+        out.push_str("        }\n    }\n}\n\n");
+        for variant in &sum.variants {
+            out.push_str(&format!(
+                "impl ::core::convert::From<{0}> for {1} {{\n    fn from(state: {0}) -> Self {{\n        Self::{2}(state)\n    }}\n}}\n\n",
+                variant.name,
+                sum.name,
+                variant_ident(&variant.value.ident)
+            ));
+        }
+    }
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -173,4 +240,13 @@ fn doc(lines: &[String], indent: &str) -> String {
         .filter(|l| !l.is_empty())
         .map(|l| format!("{indent}/// {l}\n"))
         .collect()
+}
+
+/// An enum variant: `Self` is the one PascalCase word Rust does not take.
+fn variant_ident(name: &str) -> String {
+    if name == "Self" {
+        "Self_".to_string()
+    } else {
+        name.to_string()
+    }
 }
