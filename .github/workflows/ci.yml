@@ -27,8 +27,10 @@ jobs:
         # The comparisons with TLC run in release in engine-equivalence, and the domain-sample
         # reduction in formal-verify; in debug they take most of this step. `--skip` matches a
         # part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is skipped too.
+        # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
+        # may not skip a language here; portability.yml runs without them and skips.
         run: >-
-          cargo test --all --
+          RDRA_REQUIRE_CODEGEN_TOOLS=1 cargo test --all --
           --skip bfs_and_tlc_
           --skip tlc_alone_
           --skip a_property_cone_decides_what_the_whole_model_decides

@@ -1,7 +1,7 @@
 //! `rdra-ish codegen` output builds as printed: on every `samples.txt` root, the TypeScript
 //! output passes `tsc --strict`, the Rust output compiles as a library, and the Go output
-//! passes `go vet`. A compiler missing from PATH skips its language, except under CI, where
-//! the dev shell provides all three and a missing one fails.
+//! passes `go vet`. A compiler missing from PATH skips its language, except under
+//! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell that provides all three.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -25,8 +25,8 @@ fn available(tool: &str) -> bool {
         || Command::new(tool).arg("version").output().is_ok();
     if !found {
         assert!(
-            std::env::var_os("CI").is_none(),
-            "{tool} is not on PATH; the dev shell provides it"
+            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
+            "{tool} is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it; the dev shell provides it"
         );
         eprintln!("skipping: {tool} is not on PATH");
     }
