@@ -1338,8 +1338,12 @@ only on a row with none; and a run never abandoned, its step retried when it ret
 raise marks (`EvOrderExecuted { certificate_order_id }`), as the event order of `check` and
 `verify` records it. A use case the event triggers takes the event as an argument, after any
 run marks, and checks that the row it runs on is the event's row; a row it reads only through
-the event (`Triggered`) is an argument in its flat row type. A use case whose vocabulary is
-not printed yet ( `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
+the event (`Triggered`) is an argument in its flat row type. Arms that leave one state for
+several are a **choice**: each target is a function of its own (`decideFilingToDecidedFile`),
+guarded by the `.when` conditions of its arm, and the dispatcher takes the chosen state as an
+argument (`decision_to`). A **second lifecycle column** is a branch on its value: the field
+takes the `to` of the arm its `from` matches, and a row in no `from` state is `Rejected` by
+`TransitionFrom`. A use case whose vocabulary is not printed yet ( `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
 `.when`, a copy, `links`) gets no function. The header lists it with the reason, and the
 code that finishes the output writes it.
 

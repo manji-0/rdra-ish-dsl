@@ -573,8 +573,14 @@ sample. For this generator:
    triggered use case takes the event as an argument and checks its row against it, so it
    cannot run without the event, as the 2.0 event order requires. A row the use case reads
    only through the event is an argument in its flat row type. A link between two rows of
-   an earlier step is not printed (the marks carry ids, not keys). Still to come: `.has` /
-   `.none`, a second lifecycle column, a choice among arms, `.when`, copies, and `now`.
+   an earlier step is not printed (the marks carry ids, not keys). A choice among arms is
+   one function per target state, not a choice argument as planned: the target fixes the
+   result's state type, so a function per target keeps every type concrete, and the
+   dispatcher takes the choice. A `.when` on an arm folds into a condition of that function:
+   its guard reads the successor's tag, which the function's target fixes. A second
+   lifecycle column is a branch on its value, its `from` states a `TransitionFrom`
+   condition. Still to come: `.has` / `.none`, a `.when` on a chosen value, copies, and
+   `now`.
 
 ## Decisions
 
