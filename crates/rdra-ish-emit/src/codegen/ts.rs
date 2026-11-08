@@ -214,6 +214,25 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     if domain.fns.is_empty() {
         return;
     }
+    if !domain.marks.is_empty() {
+        out.push_str("// ── Run marks of use cases split into transactions ──\n\n");
+    }
+    for m in &domain.marks {
+        out.push_str(&doc(
+            &[format!(
+                "The mark step {} of {} leaves on a {} row: the next step takes it. Store it with the row.",
+                m.step, m.usecase, m.entity
+            )],
+            "",
+        ));
+        out.push_str(&format!(
+            "export interface {} {{\n  readonly usecase: {};\n  readonly step: {};\n  readonly id: {};\n}}\n\n",
+            m.name,
+            string_literal(&m.usecase),
+            m.step,
+            m.id_ty
+        ));
+    }
     out.push_str("// ── Use cases ──\n\n");
     out.push_str("/** A condition of the use case did not hold: the use case does not run. */\n");
     out.push_str("export interface Rejected {\n  readonly rejected: string;\n  readonly label: string;\n  readonly site: string | null;\n}\n\n");
@@ -240,6 +259,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for m in &f.marks_out {
+            out.push_str(&format!("  {}: {};\n", property(&m.name), m.ty));
         }
         for event in &f.raises {
             out.push_str(&format!(
@@ -268,6 +290,13 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             .iter()
             .map(|r| format!("{}: {}", super::camel(&super::type_ident(&r.name)), r.ty))
             .collect();
+        for m in &f.marks_in {
+            params.push(format!(
+                "{}: {}",
+                super::camel(&super::type_ident(&m.name)),
+                m.ty
+            ));
+        }
         for input in &f.inputs {
             let ty = field_type(&input.ty);
             let ty = if input.nullable {
@@ -375,6 +404,10 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                             Assigned::ParentId { row: r, field, .. } => {
                                 format!("{}.{}", row(*r), property(&field.wire))
                             }
+                            Assigned::MarkId { mark, .. } => format!(
+                                "{}.id",
+                                super::camel(&super::type_ident(&f.marks_in[*mark].name))
+                            ),
                             Assigned::Null => "null".to_string(),
                         };
                         out.push_str(&format!("      {}: {v},\n", property(&target.wire)));
@@ -397,6 +430,24 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for m in &f.marks_out {
+            let id = match &m.source {
+                super::ir::MarkSource::Row { row: r, field } => {
+                    format!("{}.{}", row(*r), property(&field.wire))
+                }
+                super::ir::MarkSource::Input(i) => input(*i),
+                super::ir::MarkSource::Mark(k) => format!(
+                    "{}.id",
+                    super::camel(&super::type_ident(&f.marks_in[*k].name))
+                ),
+            };
+            out.push_str(&format!(
+                "    {}: {{ usecase: {}, step: {}, id: {id} }},\n",
+                property(&m.name),
+                string_literal(&f.usecase),
+                m.step
+            ));
         }
         for event in &f.raises {
             out.push_str(&format!(
@@ -659,6 +710,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             .iter()
             .map(|(n, ty)| format!("{}: {ty}", var(n)))
             .collect();
+        for (n, ty) in &d.marks {
+            params.push(format!("{}: {ty}", var(n)));
+        }
         for i in &d.inputs {
             let ty = field_type(&i.ty);
             let ty = if i.nullable {
@@ -694,6 +748,7 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                 })
                 .collect();
             let mut args: Vec<String> = d.rows.iter().map(|(n, _)| var(n)).collect();
+            args.extend(d.marks.iter().map(|(n, _)| var(n)));
             args.extend(c.inputs.iter().map(|i| var(&d.inputs[*i].name)));
             let call = format!("{}({})", super::camel(&c.function), args.join(", "));
             if tests.is_empty() {

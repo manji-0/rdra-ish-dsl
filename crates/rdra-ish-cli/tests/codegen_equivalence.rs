@@ -10,6 +10,8 @@
 //!   every reached state, on every present row in the function's source state whose
 //!   conditions and checks hold, the system has a move of that action on that row.
 //!
+//! - **Keys and run marks.** A key the function sets from a parent or a run mark names, in
+//!   the successor, the slot BFS bound; a mark the step leaves holds the step in the run var.
 //! - **Rule checks.** No row of a reached state breaks a rule of its type's validator.
 //!
 //! The printers print this IR, and `codegen_builds.rs` compiles what they print.
@@ -18,8 +20,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use rdra_ish_core::lifecycle::{
-    ActionOrigin, Bounds, Caps, Domain, ParamRole, Scope, State, TransitionSystem, Value, VarId,
-    VarKind,
+    ActionOrigin, Bounds, Caps, Domain, GuardWhy, ParamRole, Scope, State, TransitionSystem, Value,
+    VarId, VarKind,
 };
 use rdra_ish_core::load_project;
 use rdra_ish_emit::codegen::build;
@@ -166,6 +168,7 @@ fn functions_agree_with_the_transition_system() {
     let mut checked_moves = 0usize;
     let mut checked_rows = 0usize;
     let mut checked_rules = 0usize;
+    let mut checked_keys = 0usize;
     let mut failures: Vec<String> = Vec::new();
     for sample in samples() {
         if !check_passes(&sample) {
@@ -181,12 +184,7 @@ fn functions_agree_with_the_transition_system() {
             for edge in run.edges() {
                 let (act, params) = run.step(edge);
                 let action = &ts.actions()[act.index()];
-                let ActionOrigin::UseCase {
-                    step: None,
-                    trigger: None,
-                    ..
-                } = action.origin
-                else {
+                let ActionOrigin::UseCase { trigger: None, .. } = action.origin else {
                     continue;
                 };
                 if domain.skipped.iter().any(|s| s.action == action.name) {
@@ -242,6 +240,25 @@ fn functions_agree_with_the_transition_system() {
                         f.name
                     ));
                 }
+                // The marks the step leaves: the run var of each row holds the step.
+                for mark in &f.marks_out {
+                    let e = action.params[mark.param].entity;
+                    let slot = usize::from(params[mark.param]);
+                    let run = ts.var_ids().find(|v| {
+                        matches!(&ts.var(*v).kind, VarKind::Run { entity, usecase }
+                            if *entity == e && *usecase == f.usecase)
+                    });
+                    let got = run.map(|v| post.get(ts, v, slot));
+                    if got != Some(Value(mark.step)) {
+                        failures.push(format!(
+                            "{sample}: {} leaves the mark of {} at {:?}, the function at step {}",
+                            f.name,
+                            ts.entity(e).id,
+                            got,
+                            mark.step
+                        ));
+                    }
+                }
                 for out in &f.outputs {
                     let e = action.params[out.param].entity;
                     let entity = ts.entity(e).id.clone();
@@ -271,6 +288,41 @@ fn functions_agree_with_the_transition_system() {
                                 }
                             }
                             for (target, assigned) in fields {
+                                let owner_is = |q: usize| {
+                                    let key = ts.var_ids().find(|v| match &ts.var(*v).kind {
+                                        VarKind::Owner { child, fk, .. } => {
+                                            *child == e
+                                                && model
+                                                    .foreign_key(*fk)
+                                                    .columns
+                                                    .iter()
+                                                    .any(|(c, _)| *c == target.wire)
+                                        }
+                                        _ => false,
+                                    });
+                                    match key {
+                                        None => true,
+                                        Some(v) => {
+                                            ts.var(v).domain.slot(post.get(ts, v, slot))
+                                                == Some(params[q])
+                                        }
+                                    }
+                                };
+                                let key_parent = match assigned {
+                                    Assigned::ParentId { row: r, .. } => Some(f.rows[*r].param),
+                                    Assigned::MarkId { mark, .. } => Some(f.marks_in[*mark].param),
+                                    _ => None,
+                                };
+                                if let Some(q) = key_parent {
+                                    checked_keys += 1;
+                                    if !owner_is(q) {
+                                        failures.push(format!(
+                                            "{sample}: {} links {entity}.{} to another row than BFS",
+                                            f.name, target.wire
+                                        ));
+                                    }
+                                    continue;
+                                }
                                 let Some((var, got)) = at(&target.wire, post) else {
                                     continue;
                                 };
@@ -292,7 +344,7 @@ fn functions_agree_with_the_transition_system() {
                                         Domain::Nullable => got == Value::PRESENT,
                                         _ => true,
                                     },
-                                    Assigned::ParentId { .. } => true,
+                                    Assigned::ParentId { .. } | Assigned::MarkId { .. } => true,
                                 };
                                 if !ok {
                                     failures.push(format!(
@@ -366,9 +418,15 @@ fn functions_agree_with_the_transition_system() {
                 else {
                     continue;
                 };
+                // A step with a run guard is excluded: "no mark yet" is an obligation of
+                // the code that stores the marks, not something the function checks.
                 if action.params.len() != 1
                     || action.params[0].role != ParamRole::Existing
                     || f.rows.len() != 1
+                    || action
+                        .guards
+                        .iter()
+                        .any(|g| matches!(g.why, GuardWhy::Run { .. }))
                 {
                     continue;
                 }
@@ -426,7 +484,8 @@ fn functions_agree_with_the_transition_system() {
         checked_rules > 1000,
         "checked only {checked_rules} rule checks"
     );
+    assert!(checked_keys > 100, "checked only {checked_keys} keys");
     eprintln!(
-        "checked {checked_moves} moves, {checked_rows} rows, and {checked_rules} rule checks"
+        "checked {checked_moves} moves, {checked_rows} rows, {checked_rules} rule checks, and {checked_keys} keys"
     );
 }

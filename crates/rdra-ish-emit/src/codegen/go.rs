@@ -293,6 +293,15 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     if domain.fns.is_empty() {
         return;
     }
+    if !domain.marks.is_empty() {
+        out.push_str("// ── Run marks of use cases split into transactions ──\n\n");
+    }
+    for m in &domain.marks {
+        out.push_str(&format!(
+            "// {} is the mark step {} of {} leaves on a {} row: the next step takes it. Store it with the row.\ntype {} struct {{\n\tId {}\n}}\n\n",
+            m.name, m.step, m.usecase, m.entity, m.name, m.id_ty
+        ));
+    }
     out.push_str("// ── Use cases ──\n\n");
     out.push_str("// Rejected reports a condition of a use case that did not hold: the use case does not run.\n");
     out.push_str(
@@ -312,6 +321,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 } => out.push_str(&format!("\t{} {ty}\n", super::type_ident(&o.name))),
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for m in &f.marks_out {
+            out.push_str(&format!("\t{} {}\n", super::type_ident(&m.name), m.ty));
         }
         for event in &f.raises {
             out.push_str(&format!("\t{event} {event}\n"));
@@ -338,6 +350,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             .iter()
             .map(|r| format!("{} {}", local(&r.name), r.ty))
             .collect();
+        for m in &f.marks_in {
+            params.push(format!("{} {}", local(&m.name), m.ty));
+        }
         for i in &f.inputs {
             let ty = field_type(&i.ty);
             let ty = if i.nullable { format!("*{ty}") } else { ty };
@@ -425,6 +440,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 field,
                                 wrap: w,
                             } => wrap(format!("{}.{}", row(*r), field.pascal), *w),
+                            Assigned::MarkId { mark, wrap: w } => {
+                                wrap(format!("{}.Id", local(&f.marks_in[*mark].name)), *w)
+                            }
                             Assigned::Null => "nil".to_string(),
                         };
                         body.push_str(&format!("\t\t\t{}: {v},\n", target.pascal));
@@ -444,6 +462,20 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for m in &f.marks_out {
+            let id = match &m.source {
+                super::ir::MarkSource::Row { row: r, field } => {
+                    format!("{}.{}", row(*r), field.pascal)
+                }
+                super::ir::MarkSource::Input(i) => input(*i),
+                super::ir::MarkSource::Mark(k) => format!("{}.Id", local(&f.marks_in[*k].name)),
+            };
+            body.push_str(&format!(
+                "\t\t{}: {}{{Id: {id}}},\n",
+                super::type_ident(&m.name),
+                m.ty
+            ));
         }
         for event in &f.raises {
             body.push_str(&format!("\t\t{event}: {event}{{}},\n"));
@@ -693,6 +725,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             .iter()
             .map(|(n, ty)| format!("{} {ty}", local(n)))
             .collect();
+        for (n, ty) in &d.marks {
+            params.push(format!("{} {ty}", local(n)));
+        }
         for i in &d.inputs {
             let ty = field_type(&i.ty);
             let ty = if i.nullable { format!("*{ty}") } else { ty };
@@ -719,6 +754,7 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                 }
             }
             let mut args: Vec<String> = d.rows.iter().map(|(n, _)| local(n)).collect();
+            args.extend(d.marks.iter().map(|(n, _)| local(n)));
             args.extend(c.inputs.iter().map(|i| local(&d.inputs[*i].name)));
             let ind = "\t".repeat(depth);
             if c.rejects {

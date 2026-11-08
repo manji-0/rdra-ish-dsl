@@ -62,6 +62,18 @@ pub(super) fn add_functions(
     let mut events: BTreeMap<String, EventDecl> = BTreeMap::new();
     let mut fns = Vec::new();
     let mut skipped = Vec::new();
+    let mut marks: Vec<super::ir::MarkDecl> = Vec::new();
+    // The number of steps of each split use case.
+    let mut steps_of: BTreeMap<String, u8> = BTreeMap::new();
+    for action in ts.actions() {
+        if let ActionOrigin::UseCase {
+            uc, step: Some(i), ..
+        } = &action.origin
+        {
+            let n = steps_of.entry(model.use_cases[*uc].id.clone()).or_insert(0);
+            *n = (*n).max(*i);
+        }
+    }
     {
         let declared = declared_types(domain);
         for action in ts.actions() {
@@ -71,21 +83,24 @@ pub(super) fn add_functions(
             else {
                 continue;
             };
+            let steps = step.map(|i| (i, steps_of[&model.use_cases[*uc].id]));
+            // A split use case raises its events at its last step.
             let raises: Vec<String> = flows
                 .iter()
                 .filter(|f| f.raised_by.contains(&Raiser::UseCase(*uc)))
+                .filter(|_| steps.is_none_or(|(i, k)| i == k))
                 .map(|f| model.events[f.event].id.clone())
                 .collect();
-            let reason = if step.is_some() {
-                Some("split into transactions (phase 4)".to_string())
-            } else if trigger.is_some() {
+            let reason = if trigger.is_some() {
                 Some("triggered by several events (phase 5)".to_string())
             } else {
                 None
             };
             let built = match reason {
                 Some(reason) => Err(reason),
-                None => functions(model, ts, action, &declared, &raises, site),
+                None => functions(
+                    model, ts, action, &declared, &raises, steps, &mut marks, site,
+                ),
             };
             match built {
                 Ok(list) if list.is_empty() => skipped.push(Skipped {
@@ -126,6 +141,36 @@ pub(super) fn add_functions(
         names.claim(d.outcome.clone(), format!("the outcome of {}", d.name))?;
     }
     domain.dispatchers = dispatchers;
+    // The run marks, and what a split use case asks of the code that stores them.
+    marks.sort_by(|a, b| a.name.cmp(&b.name));
+    marks.dedup();
+    let mut split: Vec<String> = marks.iter().map(|m| m.usecase.clone()).collect();
+    split.sort();
+    split.dedup();
+    for uc in &split {
+        let names: Vec<&str> = marks
+            .iter()
+            .filter(|m| &m.usecase == uc)
+            .map(|m| m.name.as_str())
+            .collect();
+        let id = format!("O{}", domain.obligations.len() + 1);
+        domain.obligations.push(super::ir::Obligation {
+            id,
+            invariant: None,
+            text: format!(
+                "{uc} runs as separate transactions linked by run marks ({}): store each mark with its row in the transaction of the step that returns it; keep at most one mark of {uc} per row and start step 1 only on a row with none; never abandon a run, but retry a step that returns NotEnabled or Rejected until it runs.",
+                names.join(", ")
+            ),
+            site: None,
+        });
+    }
+    for m in &marks {
+        names.claim(
+            m.name.clone(),
+            format!("the run mark of {} at step {}", m.usecase, m.step),
+        )?;
+    }
+    domain.marks = marks;
     domain.events = events.into_values().collect();
     domain.fns = fns;
     domain.skipped = skipped;
@@ -146,12 +191,15 @@ fn declared_types(domain: &DomainModel) -> BTreeMap<String, Declared<'_>> {
 }
 
 /// The functions of one action, or why it gets none.
+#[allow(clippy::too_many_arguments)]
 fn functions(
     model: &SemanticModel,
     ts: &TransitionSystem,
     action: &Action,
     declared: &BTreeMap<String, Declared<'_>>,
     raises: &[String],
+    steps: Option<(u8, u8)>,
+    marks: &mut Vec<super::ir::MarkDecl>,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<Vec<FnDecl>, String> {
     let entity_key = |e: EntId| ts.entity(e).key;
@@ -165,9 +213,12 @@ fn functions(
     // Which params are rows of the function, by role.
     for param in &action.params {
         match param.role {
-            ParamRole::New | ParamRole::Existing | ParamRole::Parent { .. } => {}
-            ParamRole::Earlier { .. } | ParamRole::Triggered => {
-                return Err("reads a row of an earlier step or an event (phase 4, 5)".into())
+            ParamRole::New
+            | ParamRole::Existing
+            | ParamRole::Parent { .. }
+            | ParamRole::Earlier { .. } => {}
+            ParamRole::Triggered => {
+                return Err("reads the row an event was raised on (phase 5)".into())
             }
         }
     }
@@ -182,7 +233,7 @@ fn functions(
             GuardWhy::ArmCondition { .. } => {
                 return Err("a `.when` on an arm or a chosen value (phase 5)".into())
             }
-            GuardWhy::Run { .. } => return Err("split into transactions (phase 4)".into()),
+            GuardWhy::Run { .. } => {}
             GuardWhy::Condition { .. } => {
                 return Err(
                     "a condition on what the use case creates or a later step writes (phase 5)"
@@ -245,6 +296,13 @@ fn functions(
     for (p, param) in action.params.iter().enumerate() {
         let declared = type_of(param.entity)?;
         let list = match (param.role, declared) {
+            // A row of an earlier step: the step reads it through its run mark only.
+            (ParamRole::Earlier { .. }, _) => vec![Source {
+                ty: String::new(),
+                fields: Vec::new(),
+                always_null: Vec::new(),
+                variant: None,
+            }],
             (ParamRole::New, Declared::Record(r)) => vec![record_source(r)],
             (ParamRole::New, Declared::Sum(_)) => vec![Source {
                 ty: String::new(),
@@ -308,6 +366,8 @@ fn functions(
             site,
             &name,
             &usecase.id,
+            steps,
+            marks,
         ) {
             Ok(mut f) => {
                 f.doc
@@ -392,6 +452,8 @@ fn function(
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
     name: &str,
     usecase: &str,
+    steps: Option<(u8, u8)>,
+    marks: &mut Vec<super::ir::MarkDecl>,
 ) -> Result<FnDecl, Skip> {
     let unsupported = |why: &str| Skip::Action(why.to_string());
     let entity_id = |p: usize| {
@@ -414,8 +476,45 @@ fn function(
         taken.push(n.clone());
         n
     };
+    // The id type and id field of an entity, which a run mark holds.
+    let id_of = |entity: &str| -> Option<(String, Field)> {
+        let fields = match declared.get(&type_ident(entity))? {
+            Declared::Record(r) => &r.fields,
+            Declared::Sum(s) => &s.row_fields,
+        };
+        let want = format!("{}Id", type_ident(entity));
+        fields
+            .iter()
+            .find(|f| f.ty == FieldType::Id(want.clone()))
+            .map(|f| (want.clone(), f.clone()))
+    };
+    let mark_ty =
+        |entity: &str, step: u8| format!("{}{}Mark{step}", type_ident(usecase), type_ident(entity));
+    let mut marks_in: Vec<super::ir::MarkIn> = Vec::new();
+    let mut mark_of: BTreeMap<usize, usize> = BTreeMap::new();
     for (p, param) in action.params.iter().enumerate() {
-        if param.role == ParamRole::New {
+        if let ParamRole::Earlier { step } = param.role {
+            let entity = entity_id(p);
+            let (id_ty, _) = id_of(&entity)
+                .ok_or_else(|| unsupported("a run mark on an entity with no one-column key"))?;
+            let ty = mark_ty(&entity, step);
+            marks.push(super::ir::MarkDecl {
+                name: ty.clone(),
+                usecase: usecase.to_string(),
+                entity: entity.clone(),
+                step,
+                id_ty,
+            });
+            mark_of.insert(p, marks_in.len());
+            marks_in.push(super::ir::MarkIn {
+                name: fresh(format!("{}_mark", snake(&entity)), &mut taken),
+                ty,
+                param: p,
+            });
+        }
+    }
+    for (p, param) in action.params.iter().enumerate() {
+        if matches!(param.role, ParamRole::New | ParamRole::Earlier { .. }) {
             continue;
         }
         let base = match param.role {
@@ -444,6 +543,8 @@ fn function(
     let mut writes: BTreeMap<(usize, String), Write> = BTreeMap::new();
     let mut created: Vec<usize> = Vec::new();
     let mut deleted: Vec<usize> = Vec::new();
+    // The run mark each param is left at: `(param, step)`, step 0 for none.
+    let mut runs: Vec<(usize, u8)> = Vec::new();
     for effect in &action.effects {
         match effect {
             Effect::Create { param } => created.push(usize::from(*param)),
@@ -469,7 +570,8 @@ fn function(
                             Write::Parent(usize::from(*q), parent_col.clone()),
                         );
                     }
-                    (VarKind::Raised { .. } | VarKind::Run { .. }, _) => {}
+                    (VarKind::Run { .. }, Rhs::Lit(v)) => runs.push((p, v.0)),
+                    (VarKind::Raised { .. }, _) => {}
                     (VarKind::Prop { .. }, _) => {
                         return Err(unsupported("drives a comparison proposition (phase 5)"))
                     }
@@ -500,7 +602,10 @@ fn function(
     let mut outputs: Vec<RowOut> = Vec::new();
 
     for (p, param) in action.params.iter().enumerate() {
-        if matches!(param.role, ParamRole::Parent { .. }) {
+        if matches!(
+            param.role,
+            ParamRole::Parent { .. } | ParamRole::Earlier { .. }
+        ) {
             continue;
         }
         let entity = entity_id(p);
@@ -588,6 +693,10 @@ fn function(
                         wrap: target.nullable,
                     }
                 }
+                Some(Write::Parent(q, _)) if mark_of.contains_key(q) => Assigned::MarkId {
+                    mark: mark_of[q],
+                    wrap: target.nullable,
+                },
                 Some(Write::Parent(q, parent_col)) if !row_of.contains_key(q) => {
                     // The parent is created in the same run: its id is the caller's input,
                     // shared with the created parent row.
@@ -727,7 +836,9 @@ fn function(
     let mut conditions = Vec::new();
     for guard in &action.guards {
         match guard.why {
-            GuardWhy::TransitionFrom => {}
+            // The run mark: step 1 needs none (an obligation), a later step takes the mark of
+            // the step before as an argument.
+            GuardWhy::TransitionFrom | GuardWhy::Run { .. } => {}
             GuardWhy::Owner => {
                 let Pred::Cmp(
                     Term::Slot {
@@ -806,10 +917,69 @@ fn function(
     let doc = vec![format!(
         "One run of the use case, from the states of the arguments' types. It requires what `{usecase}` requires and writes what it writes; the values the model leaves open are the inputs."
     )];
+    // The marks the step leaves for the next one.
+    let mut marks_out: Vec<super::ir::MarkOut> = Vec::new();
+    for (p, step) in runs {
+        if step == 0 {
+            continue; // the run ends on this row: its mark is consumed
+        }
+        let entity = entity_id(p);
+        let (id_ty, id_field) = id_of(&entity)
+            .ok_or_else(|| unsupported("a run mark on an entity with no one-column key"))?;
+        let source = if let Some(m) = mark_of.get(&p) {
+            super::ir::MarkSource::Mark(*m)
+        } else if let Some(r) = row_of.get(&p) {
+            super::ir::MarkSource::Row {
+                row: *r,
+                field: id_field.clone(),
+            }
+        } else {
+            let name = format!("{}_{}", snake(&entity), id_field.wire);
+            let i = inputs
+                .iter()
+                .position(|x| x.name == name)
+                .ok_or_else(|| unsupported("a run mark on a created row with no id input"))?;
+            super::ir::MarkSource::Input(i)
+        };
+        let ty = mark_ty(&entity, step);
+        marks.push(super::ir::MarkDecl {
+            name: ty.clone(),
+            usecase: usecase.to_string(),
+            entity: entity.clone(),
+            step,
+            id_ty,
+        });
+        marks_out.push(super::ir::MarkOut {
+            name: format!("{}_mark", snake(&entity)),
+            ty,
+            param: p,
+            step,
+            source,
+        });
+    }
+    let mut doc = doc;
+    if let Some((i, k)) = steps {
+        doc.push(format!(
+            "Transaction {i} of {k} of {usecase}: a separate transaction. {}{}",
+            if i > 1 {
+                "It continues the run its mark arguments name, on the rows as they are now. "
+            } else {
+                "Call it only on rows that hold no mark of this use case. "
+            },
+            if i < k {
+                "Store the marks it returns with their rows, in the same transaction."
+            } else {
+                "It ends the run: delete the marks it took, in the same transaction."
+            }
+        ));
+    }
     Ok(FnDecl {
         name: name.to_string(),
         usecase: usecase.to_string(),
         action: action.name.clone(),
+        step: steps,
+        marks_in,
+        marks_out,
         doc,
         rows,
         inputs,
@@ -1195,7 +1365,13 @@ fn dispatchers(fns: &[FnDecl], domain: &DomainModel) -> Vec<DispatchDecl> {
                 inputs: taken,
             });
         }
+        let marks: Vec<(String, String)> = first
+            .marks_in
+            .iter()
+            .map(|m| (m.name.clone(), m.ty.clone()))
+            .collect();
         out.push(DispatchDecl {
+            marks,
             name: format!("Run{pascal}"),
             usecase: first.usecase.clone(),
             outcome: format!("{pascal}Outcome"),

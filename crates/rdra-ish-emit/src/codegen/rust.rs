@@ -271,6 +271,20 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     if domain.fns.is_empty() {
         return;
     }
+    if !domain.marks.is_empty() {
+        out.push_str("// ── Run marks of use cases split into transactions ──\n\n");
+    }
+    for m in &domain.marks {
+        out.push_str(&format!(
+            "/// The mark step {} of {} leaves on a {} row: the next step takes it. Store it with the row.\n",
+            m.step, m.usecase, m.entity
+        ));
+        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+        out.push_str(&format!(
+            "pub struct {} {{\n    pub id: {},\n}}\n\n",
+            m.name, m.id_ty
+        ));
+    }
     out.push_str("// ── Use cases ──\n\n");
     out.push_str("/// A condition of the use case did not hold: the use case does not run.\n");
     out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
@@ -289,6 +303,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 } => out.push_str(&format!("    pub {}: {ty},\n", ident(&o.name))),
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for m in &f.marks_out {
+            out.push_str(&format!("    pub {}: {},\n", ident(&m.name), m.ty));
         }
         for event in &f.raises {
             out.push_str(&format!("    pub {}: {event},\n", ident(&snake(event))));
@@ -315,6 +332,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             .iter()
             .map(|r| format!("{}: {}", ident(&r.name), r.ty))
             .collect();
+        for m in &f.marks_in {
+            params.push(format!("{}: {}", ident(&m.name), m.ty));
+        }
         for i in &f.inputs {
             let ty = field_type(&i.ty);
             let ty = if i.nullable {
@@ -375,6 +395,22 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 c.site.as_ref().map_or("None".to_string(), |s| format!("Some({})", string_literal(s)))
             ));
         }
+        // The marks first: the result below moves the rows' fields.
+        for m in &f.marks_out {
+            let id = match &m.source {
+                super::ir::MarkSource::Row { row: r, field } => {
+                    format!("{}.{}.clone()", row(*r), ident(&field.wire))
+                }
+                super::ir::MarkSource::Input(i) => format!("{}.clone()", input(*i)),
+                super::ir::MarkSource::Mark(k) => {
+                    format!("{}.id.clone()", ident(&f.marks_in[*k].name))
+                }
+            };
+            out.push_str(&format!(
+                "    let out_{} = {} {{ id: {id} }};\n",
+                m.name, m.ty
+            ));
+        }
         let mut body = format!("{} {{\n", f.result);
         for o in &f.outputs {
             match &o.kind {
@@ -405,6 +441,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 field,
                                 wrap: w,
                             } => wrap(format!("{}.{}.clone()", row(*r), ident(&field.wire)), *w),
+                            Assigned::MarkId { mark, wrap: w } => {
+                                wrap(format!("{}.id.clone()", ident(&f.marks_in[*mark].name)), *w)
+                            }
                             Assigned::Null => "None".to_string(),
                         };
                         body.push_str(&format!("            {}: {v},\n", ident(&target.wire)));
@@ -424,6 +463,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 }
                 OutKind::Deleted { id: None, .. } => {}
             }
+        }
+        for m in &f.marks_out {
+            body.push_str(&format!("        {}: out_{},\n", ident(&m.name), m.name));
         }
         for event in &f.raises {
             body.push_str(&format!("        {}: {event},\n", ident(&snake(event))));
@@ -682,6 +724,9 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
             .iter()
             .map(|(n, ty)| format!("{}: {ty}", ident(n)))
             .collect();
+        for (n, ty) in &d.marks {
+            params.push(format!("{}: {ty}", ident(n)));
+        }
         for i in &d.inputs {
             let ty = field_type(&i.ty);
             let ty = if i.nullable {
@@ -712,6 +757,7 @@ pub(super) fn print_dispatchers(domain: &DomainModel, out: &mut String) {
                 })
                 .collect();
             let mut args: Vec<String> = d.rows.iter().map(|(n, _)| ident(n)).collect();
+            args.extend(d.marks.iter().map(|(n, _)| ident(n)));
             args.extend(c.inputs.iter().map(|i| ident(&d.inputs[*i].name)));
             let call = format!("{}({})", snake(&c.function), args.join(", "));
             let body = if c.rejects {
