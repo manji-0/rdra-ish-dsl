@@ -10,6 +10,8 @@
 //!   every reached state, on every present row in the function's source state whose
 //!   conditions and checks hold, the system has a move of that action on that row.
 //!
+//! - **Rule checks.** No row of a reached state breaks a rule of its type's validator.
+//!
 //! The printers print this IR, and `codegen_builds.rs` compiles what they print.
 
 use std::path::{Path, PathBuf};
@@ -163,6 +165,7 @@ fn matching<'f>(fns: &'f [FnDecl], action: &str, rows: &Rows<'_>) -> Vec<&'f FnD
 fn functions_agree_with_the_transition_system() {
     let mut checked_moves = 0usize;
     let mut checked_rows = 0usize;
+    let mut checked_rules = 0usize;
     let mut failures: Vec<String> = Vec::new();
     for sample in samples() {
         if !check_passes(&sample) {
@@ -313,6 +316,44 @@ fn functions_agree_with_the_transition_system() {
                 }
             }
 
+            // Rule checks: no row of a reached state breaks a rule of its type's validator,
+            // since `check` passed and so no reachable state breaks a rule.
+            for v in &domain.validators {
+                let Some(e) = ts.entity_ids().find(|e| ts.entity(*e).id == v.entity) else {
+                    continue;
+                };
+                for state in &run.states {
+                    for slot in 0..ts.bounds.slots() {
+                        if !state.is_present(ts, e, slot) {
+                            continue;
+                        }
+                        let rows = Rows {
+                            ts,
+                            state,
+                            rows: vec![(v.entity.clone(), slot)],
+                        };
+                        if let Some((tag, value)) = &v.row.state {
+                            let holds = rows
+                                .get(0, tag)
+                                .and_then(|(var, x)| enum_name(ts, var, x))
+                                .is_some_and(|name| name == *value);
+                            if !holds {
+                                continue;
+                            }
+                        }
+                        checked_rules += v.rules.len();
+                        for rule in &v.rules {
+                            if rows.eval(&rule.expr) == Some(false) {
+                                failures.push(format!(
+                                    "{sample}: {} reports {} on a row of a reached state",
+                                    v.ty, rule.name
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+
             // Converse: a function over one existing row allows no move BFS lacks.
             if !run.complete {
                 continue;
@@ -381,5 +422,11 @@ fn functions_agree_with_the_transition_system() {
         failures.join("\n")
     );
     assert!(checked_moves > 1000, "checked only {checked_moves} moves");
-    eprintln!("checked {checked_moves} moves and {checked_rows} rows");
+    assert!(
+        checked_rules > 1000,
+        "checked only {checked_rules} rule checks"
+    );
+    eprintln!(
+        "checked {checked_moves} moves, {checked_rows} rows, and {checked_rules} rule checks"
+    );
 }

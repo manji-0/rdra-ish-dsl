@@ -770,8 +770,14 @@ fn function(
                 });
             }
             GuardWhy::Condition { cond, .. } => {
-                let expr =
-                    expr(ts, &guard.pred, &row_of, &rows, picked, action).map_err(Skip::Action)?;
+                let bind = |at: At| match at {
+                    At::Param(p) => {
+                        let p = usize::from(p);
+                        Some((*row_of.get(&p)?, picked[p].variant))
+                    }
+                    _ => None,
+                };
+                let expr = expr(ts, &guard.pred, &rows, &bind).map_err(Skip::Action)?;
                 let expr = simplify(expr);
                 match expr {
                     Expr::True => {}
@@ -903,16 +909,17 @@ fn declared_id(
     })
 }
 
-/// A condition body on the function's rows.
-fn expr(
+/// Where a slot reference of a predicate points: a row, and its state when it has one.
+pub(super) type Bind<'a, 'd> = &'a dyn Fn(At) -> Option<(usize, Option<&'d VariantDecl>)>;
+
+/// A predicate on the rows `bind` names.
+pub(super) fn expr(
     ts: &TransitionSystem,
     pred: &Pred,
-    row_of: &BTreeMap<usize, usize>,
     rows: &[RowParam],
-    picked: &[&Source<'_>],
-    action: &Action,
+    bind: Bind<'_, '_>,
 ) -> Result<Expr, String> {
-    let rec = |p: &Pred| expr(ts, p, row_of, rows, picked, action);
+    let rec = |p: &Pred| expr(ts, p, rows, bind);
     Ok(match pred {
         Pred::True => Expr::True,
         Pred::False => Expr::False,
@@ -922,40 +929,32 @@ fn expr(
         Pred::In(term, values) => Expr::Or(
             values
                 .iter()
-                .map(|v| atom(ts, term, TsCmp::Eq, v, row_of, rows, picked, action))
+                .map(|v| atom(ts, term, TsCmp::Eq, v, rows, bind))
                 .collect::<Result<_, _>>()?,
         ),
-        Pred::Cmp(a, op, b) => atom(ts, a, *op, b, row_of, rows, picked, action)?,
+        Pred::Cmp(a, op, b) => atom(ts, a, *op, b, rows, bind)?,
         Pred::Forall { .. } | Pred::Exists { .. } => {
             return Err("a condition over related rows, `.has` or `.none` (phase 5)".into())
         }
     })
 }
 
-#[allow(clippy::too_many_arguments)]
 fn atom(
     ts: &TransitionSystem,
     lhs: &Term,
     op: TsCmp,
     rhs: &Term,
-    row_of: &BTreeMap<usize, usize>,
     rows: &[RowParam],
-    picked: &[&Source<'_>],
-    action: &Action,
+    bind: Bind<'_, '_>,
 ) -> Result<Expr, String> {
     let unsupported = || "a condition atom this phase does not print".to_string();
-    let Term::Slot {
-        var,
-        at: At::Param(p),
-    } = lhs
-    else {
+    let Term::Slot { var, at } = lhs else {
         return Err(unsupported());
     };
-    let p = usize::from(*p);
     let VarKind::Column { column, .. } = &ts.var(*var).kind else {
         return Err("a condition on a comparison proposition (phase 5)".into());
     };
-    let r = *row_of.get(&p).ok_or_else(unsupported)?;
+    let (r, state) = bind(*at).ok_or_else(unsupported)?;
     let row = &rows[r];
     let domain = &ts.var(*var).domain;
     let negate = |e: Expr| match op {
@@ -963,12 +962,11 @@ fn atom(
         TsCmp::Ne => Ok(Expr::Not(Box::new(e))),
         _ => Err(unsupported()),
     };
-    let _ = action;
     match (domain, rhs) {
         (Domain::Enum(values), Term::Lit(v)) => {
             let wire = values.get(usize::from(v.0)).ok_or_else(unsupported)?;
             // The tag of a state type is fixed by the source state.
-            if let Some(variant) = picked[p].variant {
+            if let Some(variant) = state {
                 if !row.fields.iter().any(|f| f.wire == *column) {
                     let holds = variant.value.wire == *wire;
                     return negate(if holds { Expr::True } else { Expr::False });
@@ -1056,7 +1054,7 @@ fn atom(
 }
 
 /// Folds the constant parts of an expression.
-fn simplify(e: Expr) -> Expr {
+pub(super) fn simplify(e: Expr) -> Expr {
     match e {
         Expr::Not(inner) => match simplify(*inner) {
             Expr::True => Expr::False,

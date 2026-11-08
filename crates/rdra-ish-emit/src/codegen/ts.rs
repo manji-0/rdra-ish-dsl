@@ -130,6 +130,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
         out.push_str(";\n\n");
     }
     print_functions(domain, &mut out);
+    print_validators(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -462,4 +463,65 @@ fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
             format!("{}.{} {op} {value}", row(*r), property(&field.wire))
         }
     }
+}
+
+// ── Rule checks ──────────────────────────────────────────────────────────────
+
+pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
+    if domain.validators.is_empty() {
+        return;
+    }
+    out.push_str("// ── Rule checks ──\n\n");
+    let row = |_: usize| "row".to_string();
+    for v in &domain.validators {
+        out.push_str(&doc(
+            &[format!(
+                "The rules a {} row breaks, by the names `check` reports: empty when it keeps them all.",
+                v.ty
+            )],
+            "",
+        ));
+        out.push_str(&format!(
+            "export function {}RuleViolations(row: {}): string[] {{\n  const out: string[] = [];\n",
+            super::camel(&v.ty),
+            v.ty
+        ));
+        for rule in &v.rules {
+            out.push_str(&format!(
+                "  if ({}) {{\n    out.push({}); // {}\n  }}\n",
+                expr(&fails(&rule.expr), &row),
+                string_literal(&rule.name),
+                one_line(&rule.text)
+            ));
+        }
+        out.push_str("  return out;\n}\n\n");
+    }
+    for sum in &domain.sums {
+        out.push_str(&doc(
+            &[format!(
+                "The rules a {} row breaks, by its state: empty when it keeps them all.",
+                sum.name
+            )],
+            "",
+        ));
+        out.push_str(&format!(
+            "export function {}RuleViolations(row: {}): string[] {{\n  switch (row.{}) {{\n",
+            super::camel(&sum.name),
+            sum.name,
+            property(&sum.tag.wire)
+        ));
+        for variant in &sum.variants {
+            out.push_str(&format!(
+                "    case {}:\n      return {}RuleViolations(row);\n",
+                string_literal(&variant.value.wire),
+                super::camel(&variant.name)
+            ));
+        }
+        out.push_str("  }\n}\n\n");
+    }
+}
+
+/// The condition under which `e` fails, folded so that a negated comparison reads plainly.
+fn fails(e: &super::ir::Expr) -> super::ir::Expr {
+    super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
 }

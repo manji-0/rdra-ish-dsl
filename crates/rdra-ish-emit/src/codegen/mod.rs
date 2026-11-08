@@ -13,6 +13,7 @@ pub mod ir;
 mod rust;
 mod states;
 mod ts;
+mod validators;
 
 use std::collections::BTreeMap;
 
@@ -257,6 +258,7 @@ pub fn build(
             }
             None => domain.records.push(RecordDecl {
                 name,
+                id: entity.id.clone(),
                 kind: RecordKind::Entity,
                 doc,
                 fields,
@@ -285,13 +287,17 @@ pub fn build(
         }
         domain.records.push(RecordDecl {
             name,
+            id: dto.id.clone(),
             kind: RecordKind::Dto,
             doc: doc_of(&dto.label, dto.description.as_deref()),
             fields: distinct_fields(fields),
         });
     }
 
-    // Transition functions rest on the verified system: only a model `check` passed gets them.
+    domain.obligations = obligations(model, site);
+
+    // Transition functions and rule checks rest on the verified system: only a model `check`
+    // passed gets them.
     if refine {
         let built = rdra_ish_core::lifecycle::TransitionSystem::build(
             model,
@@ -299,6 +305,7 @@ pub fn build(
             &rdra_ish_core::lifecycle::Scope::ALL,
         );
         actions::add_functions(model, &built.ts, &mut domain, &mut names, site)?;
+        validators::add_validators(&built.ts, &mut domain, &mut names, site)?;
     }
 
     // Go declares `<Enum>Values` and one `<Enum><Value>` constant per value in the package
@@ -315,7 +322,6 @@ pub fn build(
             )?;
         }
     }
-    domain.obligations = obligations(model, site);
     Ok(domain)
 }
 

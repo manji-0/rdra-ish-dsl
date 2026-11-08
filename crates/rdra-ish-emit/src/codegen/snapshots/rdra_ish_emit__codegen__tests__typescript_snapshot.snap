@@ -20,6 +20,7 @@ expression: "generated(Lang::TypeScript)"
 // O3 [Check_Order_total_0] every Order row satisfies total >= 0 (@check on total).
 // O4 OrderLine.order_id names a present Order.
 // O5 [MinCard_OrderLine_Order] every present Order has at least one OrderLine through OrderLine.order_id.
+// O6 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
 
 // ── Scalars: replace with the project's own types if it has them ──
 
@@ -225,4 +226,48 @@ export function place(parentCustomer: Customer, orderId: OrderId, orderMethod: P
       paid_at: null,
     },
   };
+}
+
+// ── Rule checks ──
+
+/** The rules a Customer row breaks, by the names `check` reports: empty when it keeps them all. */
+export function customerRuleViolations(row: Customer): string[] {
+  const out: string[] = [];
+  return out;
+}
+
+/** The rules a OrderLine row breaks, by the names `check` reports: empty when it keeps them all. */
+export function orderLineRuleViolations(row: OrderLine): string[] {
+  const out: string[] = [];
+  return out;
+}
+
+/** The rules a OrderPending row breaks, by the names `check` reports: empty when it keeps them all. */
+export function orderPendingRuleViolations(row: OrderPending): string[] {
+  const out: string[] = [];
+  return out;
+}
+
+/** The rules a OrderPaid row breaks, by the names `check` reports: empty when it keeps them all. */
+export function orderPaidRuleViolations(row: OrderPaid): string[] {
+  const out: string[] = [];
+  return out;
+}
+
+/** The rules a OrderCancelled row breaks, by the names `check` reports: empty when it keeps them all. */
+export function orderCancelledRuleViolations(row: OrderCancelled): string[] {
+  const out: string[] = [];
+  return out;
+}
+
+/** The rules a Order row breaks, by its state: empty when it keeps them all. */
+export function orderRuleViolations(row: Order): string[] {
+  switch (row.status) {
+    case "pending":
+      return orderPendingRuleViolations(row);
+    case "paid":
+      return orderPaidRuleViolations(row);
+    case "cancelled":
+      return orderCancelledRuleViolations(row);
+  }
 }

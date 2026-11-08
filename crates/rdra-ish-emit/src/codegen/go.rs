@@ -138,8 +138,13 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             ],
             "",
         ));
+        let rules = if domain.validators.is_empty() {
+            ""
+        } else {
+            "\t// RuleViolations returns the rules the row breaks in its state.\n\tRuleViolations() []string\n"
+        };
         out.push_str(&format!(
-            "type {} interface {{\n\t{marker}()\n\t// {1} is the state's {2}.\n\t{1}() {tag_enum}\n}}\n\n",
+            "type {} interface {{\n\t{marker}()\n\t// {1} is the state's {2}.\n\t{1}() {tag_enum}\n{rules}}}\n\n",
             sum.name, sum.tag.pascal, sum.tag.wire
         ));
         for variant in &sum.variants {
@@ -176,6 +181,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
         }
     }
     print_functions(domain, &mut out);
+    print_validators(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -501,4 +507,37 @@ fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
             format!("{}.{} {} {value}", row(*r), field.pascal, op.symbol())
         }
     }
+}
+
+// ── Rule checks ──────────────────────────────────────────────────────────────
+
+pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
+    if domain.validators.is_empty() {
+        return;
+    }
+    out.push_str("// ── Rule checks ──\n\n");
+    let row = |_: usize| "row".to_string();
+    for v in &domain.validators {
+        out.push_str(
+            "// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.\n",
+        );
+        out.push_str(&format!(
+            "func (row {}) RuleViolations() []string {{\n\tvar out []string\n",
+            v.ty
+        ));
+        for rule in &v.rules {
+            out.push_str(&format!(
+                "\t// {}\n\tif {} {{\n\t\tout = append(out, {})\n\t}}\n",
+                one_line(&rule.text),
+                expr(&fails(&rule.expr), &row),
+                string_literal(&rule.name)
+            ));
+        }
+        out.push_str("\treturn out\n}\n\n");
+    }
+}
+
+/// The condition under which `e` fails, folded so that a negated comparison reads plainly.
+fn fails(e: &super::ir::Expr) -> super::ir::Expr {
+    super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
 }
