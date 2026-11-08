@@ -40,6 +40,9 @@
 - `codegen` prints a use case split into transactions as one function per step, linked by
   run marks: a step returns the mark of each row it leaves for the next step, and the next
   step takes it as an argument. The header lists what storing the marks requires.
+- `codegen` prints the use cases events trigger: an event carries the id of each row its raise
+  marks, and a triggered use case takes the event and checks that its row is the event's.
+  `tests/codegen_equivalence.rs` checks that each raise marks the row the event names.
   `tests/codegen_equivalence.rs` now covers the steps, the marks they leave, and every key
   a function sets.
 
