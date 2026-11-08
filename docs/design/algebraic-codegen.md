@@ -521,9 +521,15 @@ sample. For this generator:
    always sound for a type, and a value with no witness is already a `check` finding. The
    tagged JSON of the Rust and Go variants and the candidate-rule listing in `next` move
    to phase 3, with the scaffold that reads and writes rows.
-3. **Transition functions and the agent contract.** The functions have landed; the
-   scaffold, the rule-oracle tests, the tagged JSON, and the candidate-rule listing have
-   not. What landed differs from the plan in four ways. A use case gets one function per
+3. **Transition functions and the agent contract.** The functions and the rule checks
+   have landed; the scaffold, the tagged JSON, and the candidate-rule listing have not.
+   The rule oracles landed as rule checks in the generated code, not as property tests for
+   `fast-check`, `proptest`, or `rapid`: the output then needs no test library to build,
+   and the agent writes the tests that call them. A check is read from the invariant
+   `check` and `verify` check, per state type, so a rule the state type guarantees drops
+   out; `codegen_equivalence.rs` checks that no row of a reached state fails one. It does
+   not yet check the converse, that a row breaking a rule fails its check, since a model
+   `check` passes reaches no such row. What landed differs from the plan in four ways. A use case gets one function per
    combination of the source states of its rows, not one function over a union of sources:
    each function's types are then concrete in all three languages, and Rust and Go need no
    per-use-case input enums. A use case using vocabulary not printed yet gets no function

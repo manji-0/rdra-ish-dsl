@@ -20,6 +20,7 @@ expression: "generated(Lang::Rust)"
 // O3 [Check_Order_total_0] every Order row satisfies total >= 0 (@check on total).
 // O4 OrderLine.order_id names a present Order.
 // O5 [MinCard_OrderLine_Order] every present Order has at least one OrderLine through OrderLine.order_id.
+// O6 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
 
 #![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]
 
@@ -296,5 +297,53 @@ pub fn place(parent_customer: Customer, order_id: OrderId, order_method: Payment
             r#type: None,
             customer_id: parent_customer.id.clone(),
         },
+    }
+}
+
+// ── Rule checks ──
+
+impl Customer {
+    /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
+    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
+        ::std::vec::Vec::new()
+    }
+}
+
+impl OrderLine {
+    /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
+    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
+        ::std::vec::Vec::new()
+    }
+}
+
+impl OrderPending {
+    /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
+    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
+        ::std::vec::Vec::new()
+    }
+}
+
+impl OrderPaid {
+    /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
+    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
+        ::std::vec::Vec::new()
+    }
+}
+
+impl OrderCancelled {
+    /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.
+    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
+        ::std::vec::Vec::new()
+    }
+}
+
+impl Order {
+    /// The rules this row breaks, by its state: empty when it keeps them all.
+    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {
+        match self {
+            Self::Pending(state) => state.rule_violations(),
+            Self::Paid(state) => state.rule_violations(),
+            Self::Cancelled(state) => state.rule_violations(),
+        }
     }
 }

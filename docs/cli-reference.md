@@ -1331,9 +1331,17 @@ by an event, `now`, `.has` / `.none`, a second lifecycle column, a choice among 
 `.when`, a copy, `links`) gets no function. The header lists it with the reason, and the
 code that finishes the output writes it.
 
-Since the state types and functions rest on rules, `codegen` runs `check` first, at its bounds, and
+Each record and state type gets a **rule check**: `orderPaidRuleViolations(row)` in
+TypeScript, `rule_violations(&self)` in Rust, `RuleViolations()` in Go, which returns the names
+`check` reports (`Forbidden_Order_0`, `Check_Order_qty_0`) of the entity-local rules the row
+breaks, and an empty list when it keeps them all. A state type's union dispatches on its
+tag. A rule its state type already guarantees is left out. A rule over several rows (a
+multi-entity rule, a quantifier, `Unique_*`, `MinCard_*`) is listed as an obligation instead.
+
+Since the state types, functions, and rule checks rest on rules, `codegen` runs `check` first, at its bounds, and
 prints them in the header. It refuses a model `check` rejects (exit 1, with the errors on
-stderr) unless `--allow-failing` is given; the output then has no transition functions. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
+stderr) unless `--allow-failing` is given; the output then has no transition functions and
+no rule checks. It refuses a model with model errors. Two declarations that generate one type name, such as an entity
 `OrderStatus` beside the inline `Enum` of `Order.status`, are an error naming both.
 
 ---

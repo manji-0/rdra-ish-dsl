@@ -102,6 +102,8 @@ pub enum RecordKind {
 #[derive(Clone, Debug)]
 pub struct RecordDecl {
     pub name: String,
+    /// The entity or DTO id.
+    pub id: String,
     pub kind: RecordKind,
     pub doc: Vec<String>,
     pub fields: Vec<Field>,
@@ -155,6 +157,7 @@ pub struct DomainModel {
     pub events: Vec<EventDecl>,
     pub fns: Vec<FnDecl>,
     pub skipped: Vec<Skipped>,
+    pub validators: Vec<ValidatorDecl>,
     pub obligations: Vec<Obligation>,
 }
 
@@ -378,4 +381,27 @@ pub struct EventDecl {
 pub struct Skipped {
     pub action: String,
     pub reason: String,
+}
+
+// ── Rule validators ──────────────────────────────────────────────────────────
+
+/// The entity-local rules of one record or state type, as checks on one row.
+#[derive(Clone, Debug)]
+pub struct ValidatorDecl {
+    /// The record or state type it validates.
+    pub ty: String,
+    /// The entity id.
+    pub entity: String,
+    /// The row, as `Expr` reads it (row 0).
+    pub row: RowParam,
+    pub rules: Vec<RuleCheck>,
+}
+
+/// One rule: the row keeps it when `expr` holds.
+#[derive(Clone, Debug)]
+pub struct RuleCheck {
+    /// The invariant's name, as `check` and `verify` report it.
+    pub name: String,
+    pub text: String,
+    pub expr: Expr,
 }

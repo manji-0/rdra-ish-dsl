@@ -22,6 +22,7 @@ expression: "generated(Lang::Go)"
 // O3 [Check_Order_total_0] every Order row satisfies total >= 0 (@check on total).
 // O4 OrderLine.order_id names a present Order.
 // O5 [MinCard_OrderLine_Order] every present Order has at least one OrderLine through OrderLine.order_id.
+// O6 [Check_Order_total_0] holds in every state (total >= 0); no one-row check prints it.
 package domain
 
 // ── Scalars: replace with the project's own types if it has them ──
@@ -133,6 +134,8 @@ type Order interface {
 	isOrder()
 	// Status is the state's status.
 	Status() OrderStatus
+	// RuleViolations returns the rules the row breaks in its state.
+	RuleViolations() []string
 }
 
 // OrderPending is Order in the state `pending` of status.
@@ -268,4 +271,36 @@ func Place(parentCustomer Customer, orderId OrderId, orderMethod PaymentMethod) 
 			CustomerId: parentCustomer.Id,
 		},
 	}
+}
+
+// ── Rule checks ──
+
+// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
+func (row Customer) RuleViolations() []string {
+	var out []string
+	return out
+}
+
+// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
+func (row OrderLine) RuleViolations() []string {
+	var out []string
+	return out
+}
+
+// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
+func (row OrderPending) RuleViolations() []string {
+	var out []string
+	return out
+}
+
+// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
+func (row OrderPaid) RuleViolations() []string {
+	var out []string
+	return out
+}
+
+// RuleViolations returns the rules row breaks, by the names `check` reports: empty when it keeps them all.
+func (row OrderCancelled) RuleViolations() []string {
+	var out []string
+	return out
 }

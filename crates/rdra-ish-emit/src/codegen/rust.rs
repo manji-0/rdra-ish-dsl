@@ -184,6 +184,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
         }
     }
     print_functions(domain, &mut out);
+    print_validators(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -486,4 +487,54 @@ fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
             format!("{}.{} {} {value}", row(*r), ident(&field.wire), op.symbol())
         }
     }
+}
+
+// ── Rule checks ──────────────────────────────────────────────────────────────
+
+pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
+    if domain.validators.is_empty() {
+        return;
+    }
+    out.push_str("// ── Rule checks ──\n\n");
+    let row = |_: usize| "self".to_string();
+    for v in &domain.validators {
+        out.push_str(&format!("impl {} {{\n", v.ty));
+        out.push_str(
+            "    /// The rules this row breaks, by the names `check` reports: empty when it keeps them all.\n",
+        );
+        out.push_str("    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {\n");
+        if v.rules.is_empty() {
+            out.push_str("        ::std::vec::Vec::new()\n    }\n}\n\n");
+            continue;
+        }
+        out.push_str("        let mut out = ::std::vec::Vec::new();\n");
+        for rule in &v.rules {
+            out.push_str(&format!(
+                "        // {}\n        if {} {{\n            out.push({});\n        }}\n",
+                one_line(&rule.text),
+                expr(&fails(&rule.expr), &row),
+                string_literal(&rule.name)
+            ));
+        }
+        out.push_str("        out\n    }\n}\n\n");
+    }
+    for sum in &domain.sums {
+        out.push_str(&format!("impl {} {{\n", sum.name));
+        out.push_str(
+            "    /// The rules this row breaks, by its state: empty when it keeps them all.\n",
+        );
+        out.push_str("    pub fn rule_violations(&self) -> ::std::vec::Vec<&'static str> {\n        match self {\n");
+        for variant in &sum.variants {
+            out.push_str(&format!(
+                "            Self::{}(state) => state.rule_violations(),\n",
+                variant_ident(&variant.value.ident)
+            ));
+        }
+        out.push_str("        }\n    }\n}\n\n");
+    }
+}
+
+/// The condition under which `e` fails, folded so that a negated comparison reads plainly.
+fn fails(e: &super::ir::Expr) -> super::ir::Expr {
+    super::actions::simplify(super::ir::Expr::Not(Box::new(e.clone())))
 }

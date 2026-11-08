@@ -24,6 +24,11 @@
   cannot print yet is listed in the header with the reason. `tests/codegen_equivalence.rs`
   checks every move BFS makes on the samples against the functions, and that a function
   over one row allows no move BFS lacks.
+- `codegen` prints a rule check per record and state type: the names of the entity-local
+  rules (`forbidden`, `invariant`, `required`, `exclusive`, `@check`) a row breaks, read
+  from the invariants `check` and `verify` check. A rule over several rows stays an
+  obligation. `tests/codegen_equivalence.rs` checks that no row of a state BFS reaches
+  fails its check.
 
 ### Fixed
 
