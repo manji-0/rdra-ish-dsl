@@ -492,7 +492,7 @@ sample. For this generator:
 - **It compiles.** `crates/rdra-ish-cli/tests/codegen_builds.rs` runs `tsc --strict`,
   `rustc -D warnings`, and `go vet` on the output of every `samples.txt` root (landed for
   the data layer). Later phases add the exhaustiveness linter and the scaffold and tests.
-  The dev shell provides TypeScript and Go, and under `CI` a missing compiler fails the test.
+  The dev shell provides TypeScript and Go, and `RDRA_REQUIRE_CODEGEN_TOOLS=1` (set by `ci.yml`) makes a missing compiler fail the test instead of skipping it.
 - **It agrees with the transition system.** A test in the style of `engine_equivalence`
   runs the generated TypeScript (Node is in the flake) on every edge BFS explores at
   1 instance: it concretizes the pre-state, calls the function, abstracts the result, and

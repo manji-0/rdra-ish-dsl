@@ -2,7 +2,8 @@
 //! `tests/fixtures/codegen/order.rdra`, a driver per language converts rows to states and
 //! back, refuses a row that breaks its state's refinement, dispatches the use cases by state
 //! (`NotEnabled`, `Rejected`, the writes, the raised event), and runs the rule checks. A
-//! compiler or runtime missing from PATH skips its language, except under CI.
+//! compiler or runtime missing from PATH skips its language, except under
+//! `RDRA_REQUIRE_CODEGEN_TOOLS=1`, which CI sets in the dev shell.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,8 +16,8 @@ fn available(tool: &str, arg: &str) -> bool {
     let found = Command::new(tool).arg(arg).output().is_ok();
     if !found {
         assert!(
-            std::env::var_os("CI").is_none(),
-            "{tool} is not on PATH; the dev shell provides it"
+            std::env::var("RDRA_REQUIRE_CODEGEN_TOOLS").as_deref() != Ok("1"),
+            "{tool} is not on PATH, and RDRA_REQUIRE_CODEGEN_TOOLS=1 requires it; the dev shell provides it"
         );
         eprintln!("skipping: {tool} is not on PATH");
     }
@@ -65,11 +66,12 @@ fn rust_behaves() {
     run(
         Command::new(rustc)
             .args(["--edition", "2021", "-D", "warnings", "-o"])
-            .arg(dir.join("driver"))
+            .arg(dir.join(format!("driver{}", std::env::consts::EXE_SUFFIX)))
             .arg(dir.join("driver.rs")),
         "rustc on the driver",
     );
-    let out = run(&mut Command::new(dir.join("driver")), "the Rust driver");
+    let driver = dir.join(format!("driver{}", std::env::consts::EXE_SUFFIX));
+    let out = run(&mut Command::new(driver), "the Rust driver");
     assert_eq!(out.trim(), "ok");
 }
 
