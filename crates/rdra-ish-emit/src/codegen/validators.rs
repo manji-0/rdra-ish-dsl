@@ -87,7 +87,7 @@ pub(super) fn add_validators(
                 At::Bound(0) => Some((0, variant.as_ref())),
                 _ => None,
             };
-            match expr(ts, &inv.body, std::slice::from_ref(row), &bind) {
+            match expr(ts, &inv.body, std::slice::from_ref(row), &bind, &mut None) {
                 Ok(e) => per_type.push((i, simplify(e))),
                 Err(_) => {
                     failed = true;

@@ -143,6 +143,7 @@ fn field_type(ty: &FieldType) -> String {
     match ty {
         FieldType::Scalar(s) => scalar(*s).to_string(),
         FieldType::Enum(name) | FieldType::Id(name) => name.clone(),
+        FieldType::Rows(name) => format!("readonly {name}[]"),
     }
 }
 
@@ -336,7 +337,11 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             super::camel(&f.name),
             params.join(", ")
         ));
-        let row = |r: usize| super::camel(&super::type_ident(&f.rows[r].name));
+        let row = |r: usize| match f.rows.get(r) {
+            Some(x) => super::camel(&super::type_ident(&x.name)),
+            None => super::camel(&super::type_ident(&f.elems[r - f.rows.len()].name)),
+        };
+        let input_var = |i: usize| super::camel(&super::type_ident(&f.inputs[i].name));
         let input = |i: usize| super::camel(&super::type_ident(&f.inputs[i].name));
         for check in &f.checks {
             match check {
@@ -392,7 +397,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             out.push_str(&format!(
                 "  if (!({})) {{\n    return {{ rejected: {}, label: {}, site: {} }};\n  }}\n",
-                expr(&c.expr, &row),
+                expr(&c.expr, &row, &input_var),
                 string_literal(&c.id),
                 string_literal(&c.label),
                 c.site
@@ -548,20 +553,26 @@ fn lit_ts(lit: &super::ir::Lit) -> String {
     }
 }
 
-fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
+fn expr(
+    e: &super::ir::Expr,
+    row: &dyn Fn(usize) -> String,
+    input: &dyn Fn(usize) -> String,
+) -> String {
     use super::ir::{CmpOp, Expr};
     match e {
         Expr::True => "true".to_string(),
         Expr::False => "false".to_string(),
-        Expr::Not(inner) => format!("!({})", expr(inner, row)),
+        Expr::Not(inner) => format!("!({})", expr(inner, row, input)),
+        Expr::And(items) if items.is_empty() => "true".to_string(),
+        Expr::Or(items) if items.is_empty() => "false".to_string(),
         Expr::And(items) => items
             .iter()
-            .map(|i| format!("({})", expr(i, row)))
+            .map(|i| format!("({})", expr(i, row, input)))
             .collect::<Vec<_>>()
             .join(" && "),
         Expr::Or(items) => items
             .iter()
-            .map(|i| format!("({})", expr(i, row)))
+            .map(|i| format!("({})", expr(i, row, input)))
             .collect::<Vec<_>>()
             .join(" || "),
         Expr::IsNull { row: r, field } => format!("{}.{} === null", row(*r), property(&field.wire)),
@@ -596,6 +607,38 @@ fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
             };
             format!("{}.{} {op} {value}", row(*r), property(&field.wire))
         }
+        Expr::KeyEq {
+            child,
+            child_field,
+            parent,
+            parent_field,
+        } => format!(
+            "{}.{} === {}.{}",
+            row(*child),
+            property(&child_field.wire),
+            row(*parent),
+            property(&parent_field.wire)
+        ),
+        Expr::Exists {
+            input: i,
+            elem,
+            body,
+        } => format!(
+            "{}.some(({}) => {})",
+            input(*i),
+            row(*elem),
+            expr(body, row, input)
+        ),
+        Expr::Forall {
+            input: i,
+            elem,
+            body,
+        } => format!(
+            "{}.every(({}) => {})",
+            input(*i),
+            row(*elem),
+            expr(body, row, input)
+        ),
     }
 }
 
@@ -623,7 +666,7 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
         for rule in &v.rules {
             out.push_str(&format!(
                 "  if ({}) {{\n    out.push({}); // {}\n  }}\n",
-                expr(&fails(&rule.expr), &row),
+                expr(&fails(&rule.expr), &row, &|_| String::new()),
                 string_literal(&rule.name),
                 one_line(&rule.text)
             ));

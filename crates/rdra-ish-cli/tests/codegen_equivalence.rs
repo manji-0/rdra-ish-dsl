@@ -13,6 +13,8 @@
 //! - **Events.** A raise marks, in the successor, the row whose id the event carries.
 //! - **Keys and run marks.** A key the function sets from a parent or a run mark names, in
 //!   the successor, the slot BFS bound; a mark the step leaves holds the step in the run var.
+//! - **Related rows.** A `.has` / `.none` condition ranges over every present row of the
+//!   entity, and a key between two rows holds when the child's owner var names the parent.
 //! - **Rule checks.** No row of a reached state breaks a rule of its type's validator.
 //!
 //! The printers print this IR, and `codegen_builds.rs` compiles what they print.
@@ -74,16 +76,69 @@ fn enum_name(ts: &TransitionSystem, var: VarId, value: Value) -> Option<String> 
 /// The value of a row's column, by the row's slot; `None` when the system does not track it.
 struct Rows<'a> {
     ts: &'a TransitionSystem,
+    model: &'a rdra_ish_core::SemanticModel,
     state: &'a State,
     /// `(entity id, slot)` per row of the function.
     rows: Vec<(String, usize)>,
+    /// The entity of each row a quantifier binds, numbered after `rows`.
+    elems: Vec<String>,
+    /// The slot each quantifier's row is at while its body is evaluated.
+    env: std::cell::RefCell<Vec<usize>>,
 }
 
 impl Rows<'_> {
+    fn new<'a>(
+        ts: &'a TransitionSystem,
+        model: &'a rdra_ish_core::SemanticModel,
+        state: &'a State,
+        rows: Vec<(String, usize)>,
+        elems: Vec<String>,
+    ) -> Rows<'a> {
+        let n = elems.len();
+        Rows {
+            ts,
+            model,
+            state,
+            rows,
+            elems,
+            env: std::cell::RefCell::new(vec![0; n]),
+        }
+    }
+
+    fn at(&self, row: usize) -> (String, usize) {
+        match self.rows.get(row) {
+            Some(r) => r.clone(),
+            None => {
+                let k = row - self.rows.len();
+                (self.elems[k].clone(), self.env.borrow()[k])
+            }
+        }
+    }
+
     fn get(&self, row: usize, column: &str) -> Option<(VarId, Value)> {
-        let (entity, slot) = &self.rows[row];
-        let var = column_var(self.ts, entity, column)?;
-        Some((var, self.state.get(self.ts, var, *slot)))
+        let (entity, slot) = self.at(row);
+        let var = column_var(self.ts, &entity, column)?;
+        Some((var, self.state.get(self.ts, var, slot)))
+    }
+
+    /// `body` on every present row of the entity a quantifier's row `elem` ranges over, as
+    /// the condition reads it; `None` when the body reads a column the system does not track.
+    fn over(&self, elem: usize, body: &Expr) -> Option<Vec<bool>> {
+        let k = elem - self.rows.len();
+        let entity = self.elems[k].clone();
+        let e = self
+            .ts
+            .entity_ids()
+            .find(|e| self.ts.entity(*e).id == entity)?;
+        let mut out = Vec::new();
+        for slot in 0..self.ts.bounds.slots() {
+            if !self.state.is_present(self.ts, e, slot) {
+                continue;
+            }
+            self.env.borrow_mut()[k] = slot;
+            out.push(self.eval(body)?);
+        }
+        Some(out)
     }
 
     /// `None` when the expression reads a column the system does not track.
@@ -116,6 +171,38 @@ impl Rows<'_> {
             Expr::BoolEq { row, field, value } => {
                 (self.get(*row, &field.wire)?.1 == Value::TRUE) == *value
             }
+            Expr::KeyEq {
+                child,
+                child_field,
+                parent,
+                ..
+            } => {
+                let (centity, cslot) = self.at(*child);
+                let (_, pslot) = self.at(*parent);
+                let e = self
+                    .ts
+                    .entity_ids()
+                    .find(|e| self.ts.entity(*e).id == centity)?;
+                let owner = self.ts.var_ids().find(|v| match &self.ts.var(*v).kind {
+                    VarKind::Owner { child, fk, .. } => {
+                        *child == e
+                            && self
+                                .model
+                                .foreign_key(*fk)
+                                .columns
+                                .iter()
+                                .any(|(c, _)| *c == child_field.wire)
+                    }
+                    _ => false,
+                })?;
+                self.ts
+                    .var(owner)
+                    .domain
+                    .slot(self.state.get(self.ts, owner, cslot))
+                    == Some(u8::try_from(pslot).ok()?)
+            }
+            Expr::Exists { elem, body, .. } => self.over(*elem, body)?.iter().any(|v| *v),
+            Expr::Forall { elem, body, .. } => self.over(*elem, body)?.iter().all(|v| *v),
             Expr::IntCmp {
                 row,
                 field,
@@ -212,11 +299,7 @@ fn functions_agree_with_the_transition_system() {
                     ));
                     continue;
                 };
-                let before = Rows {
-                    ts,
-                    state: pre,
-                    rows: row_slots(first),
-                };
+                let before = Rows::new(ts, &model, pre, row_slots(first), Vec::new());
                 let mut fns = matching(&domain.fns, &action.name, &before);
                 // Several arms from one state: the function whose target BFS took.
                 if fns.len() > 1 {
@@ -246,6 +329,14 @@ fn functions_agree_with_the_transition_system() {
                     continue;
                 };
                 checked_moves += 1;
+                // The function's own rows, with the rows its quantifiers bind.
+                let before = Rows::new(
+                    ts,
+                    &model,
+                    pre,
+                    row_slots(f),
+                    f.elems.iter().map(|e| e.entity.clone()).collect(),
+                );
                 for c in &f.conditions {
                     if before.eval(&c.expr) == Some(false) {
                         failures.push(format!(
@@ -435,11 +526,13 @@ fn functions_agree_with_the_transition_system() {
                         if !state.is_present(ts, e, slot) {
                             continue;
                         }
-                        let rows = Rows {
+                        let rows = Rows::new(
                             ts,
+                            &model,
                             state,
-                            rows: vec![(v.entity.clone(), slot)],
-                        };
+                            vec![(v.entity.clone(), slot)],
+                            Vec::new(),
+                        );
                         if let Some((tag, value)) = &v.row.state {
                             let holds = rows
                                 .get(0, tag)
@@ -493,11 +586,13 @@ fn functions_agree_with_the_transition_system() {
                         if !state.is_present(ts, e, slot) {
                             continue;
                         }
-                        let rows = Rows {
+                        let rows = Rows::new(
                             ts,
+                            &model,
                             state,
-                            rows: vec![(entity.clone(), slot)],
-                        };
+                            vec![(entity.clone(), slot)],
+                            f.elems.iter().map(|e| e.entity.clone()).collect(),
+                        );
                         if matching(std::slice::from_ref(f), &f.action, &rows).is_empty() {
                             continue;
                         }

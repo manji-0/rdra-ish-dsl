@@ -443,3 +443,46 @@ transitions(Publish, Case.publication, hidden -> shown)
         assert!(f.conditions.iter().any(|c| c.id == "TransitionFrom"));
     }
 }
+
+/// A `.none` condition ranges over a list of the related entity's rows, an input, and keeps
+/// those the key links.
+#[test]
+fn a_none_condition_ranges_over_a_list_of_related_rows() {
+    let src = r#"
+entity Cert "Cert" {
+  id: Int @pk
+  status: Enum(active, revoked) @default(active)
+}
+entity Assignment "A" {
+  id: Int @pk
+  status: Enum(active, ended) @default(active)
+}
+relate(Assignment, Cert, N:1)
+usecase Issue "Issue"
+usecase Assign "Assign"
+usecase End "End"
+usecase Revoke "Revoke"
+creates(Issue, Cert)
+creates(Assign, Assignment)
+transitions(End, Assignment.status, active -> ended)
+transitions(Revoke, Cert.status, active -> revoked)
+condition NoActive "no active assignment"
+holds(NoActive, Cert.status == active).none(Assignment.status == active)
+applies_to(NoActive, Revoke)
+"#;
+    let model = model_from(src);
+    let domain = build(&model, true, &|_| None).unwrap();
+    let revoke = domain.fns.iter().find(|f| f.action == "Revoke").unwrap();
+    let list = revoke
+        .inputs
+        .iter()
+        .position(|i| i.ty == ir::FieldType::Rows("AssignmentRow".to_string()))
+        .expect("the related rows are an input");
+    assert_eq!(revoke.elems.len(), 1);
+    let ir::Expr::Forall { input, body, .. } = &revoke.conditions[0].expr else {
+        panic!("`.none` is a Forall: {:?}", revoke.conditions[0].expr);
+    };
+    assert_eq!(*input, list);
+    let text = format!("{body:?}");
+    assert!(text.contains("KeyEq"), "{text}");
+}
