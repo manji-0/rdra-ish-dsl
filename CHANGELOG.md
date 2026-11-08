@@ -34,6 +34,9 @@
   runs the transition function of the rows' states or reports `NotEnabled`.
   `tests/codegen_behaviour.rs` runs the printed TypeScript, Rust, and Go on a fixture model
   and checks the conversions, the dispatch, `Rejected`, and the rule checks.
+- `codegen` lists candidate rules in its header: a nullable column every reachable row of
+  a state holds present or null with no rule saying so, as the rule that would narrow the
+  type, and a column null in every reachable state as one no use case writes.
 
 ### Fixed
 
