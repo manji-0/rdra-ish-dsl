@@ -186,3 +186,86 @@ func (OrderCancelled) isOrder() {}
 
 // Status returns OrderStatusCancelled.
 func (OrderCancelled) Status() OrderStatus { return OrderStatusCancelled }
+
+// ── Use cases ──
+
+// Rejected reports a condition of a use case that did not hold: the use case does not run.
+type Rejected struct {
+	Condition string
+	Label     string
+	Site      string
+}
+
+// Error names the condition.
+func (r *Rejected) Error() string {
+	return "rejected by the condition " + r.Condition + ": " + r.Label
+}
+
+func ptrTo[T any](v T) *T { return &v }
+
+// mustPresent reads a value the verified model keeps present; nil means the rows broke a rule.
+func mustPresent[T any](p *T, message string) T {
+	if p == nil {
+		panic(message)
+	}
+	return *p
+}
+
+// PayResult is what Pay returns.
+type PayResult struct {
+	Order OrderPaid
+}
+
+// Pay runs Pay (Pay). One run of the use case, from the states of the arguments' types. It requires what `Pay` requires and writes what it writes; the values the model leaves open are the inputs.
+func Pay(order OrderPending, orderPaidAt DateTime) PayResult {
+	return PayResult{
+		Order: OrderPaid{
+			Id: order.Id,
+			Total: order.Total,
+			PaidAt: orderPaidAt,
+			Method: order.Method,
+			DeliveredAt: order.DeliveredAt,
+			Type: order.Type,
+			CustomerId: order.CustomerId,
+		},
+	}
+}
+
+// CancelOrderResult is what CancelOrder returns.
+type CancelOrderResult struct {
+	Order OrderCancelled
+}
+
+// CancelOrder runs Cancel (CancelOrder). One run of the use case, from the states of the arguments' types. It requires what `CancelOrder` requires and writes what it writes; the values the model leaves open are the inputs.
+func CancelOrder(order OrderPending) CancelOrderResult {
+	return CancelOrderResult{
+		Order: OrderCancelled{
+			Id: order.Id,
+			Total: order.Total,
+			PaidAt: nil,
+			Method: order.Method,
+			DeliveredAt: order.DeliveredAt,
+			Type: order.Type,
+			CustomerId: order.CustomerId,
+		},
+	}
+}
+
+// PlaceResult is what Place returns.
+type PlaceResult struct {
+	Order OrderPending
+}
+
+// Place runs Place (Place). One run of the use case, from the states of the arguments' types. It requires what `Place` requires and writes what it writes; the values the model leaves open are the inputs.
+func Place(parentCustomer Customer, orderId OrderId, orderMethod PaymentMethod) PlaceResult {
+	return PlaceResult{
+		Order: OrderPending{
+			Id: orderId,
+			Total: 0,
+			Method: orderMethod,
+			DeliveredAt: nil,
+			Type: nil,
+			CustomerId: parentCustomer.Id,
+		},
+	}
+}

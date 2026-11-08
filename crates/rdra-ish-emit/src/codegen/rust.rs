@@ -16,7 +16,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
     for line in obligation_lines(domain) {
         out.push_str(&comment(&line));
     }
-    out.push_str("\n#![allow(dead_code, non_camel_case_types, non_snake_case, clippy::all)]\n\n");
+    out.push_str("\n#![allow(dead_code, unused_variables, non_camel_case_types, non_snake_case, clippy::all)]\n\n");
 
     out.push_str("// ── Scalars: replace with the project's own types if it has them ──\n\n");
     for scalar in Scalar::PRELUDE {
@@ -183,6 +183,7 @@ pub(super) fn print(domain: &DomainModel, options: &Options) -> String {
             ));
         }
     }
+    print_functions(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
     }
@@ -248,5 +249,241 @@ fn variant_ident(name: &str) -> String {
         "Self_".to_string()
     } else {
         name.to_string()
+    }
+}
+
+// ── Use cases ────────────────────────────────────────────────────────────────
+
+pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
+    use super::actions::snake;
+    use super::ir::{Adapt, ArgCheck, Assigned, OutKind};
+    if !domain.events.is_empty() {
+        out.push_str("// ── Events ──\n\n");
+    }
+    for event in &domain.events {
+        out.push_str(&doc(&event.doc, ""));
+        out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+        out.push_str(&format!("pub struct {};\n\n", event.name));
+    }
+    if domain.fns.is_empty() {
+        return;
+    }
+    out.push_str("// ── Use cases ──\n\n");
+    out.push_str("/// A condition of the use case did not hold: the use case does not run.\n");
+    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+    out.push_str("pub struct Rejected {\n    pub condition: &'static str,\n    pub label: &'static str,\n    pub site: ::core::option::Option<&'static str>,\n}\n\n");
+    for f in &domain.fns {
+        out.push_str(&format!("/// What `{}` returns.\n", snake(&f.name)));
+        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+        out.push_str(&format!("pub struct {} {{\n", f.result));
+        for o in &f.outputs {
+            match &o.kind {
+                OutKind::Row { ty, .. } => {
+                    out.push_str(&format!("    pub {}: {ty},\n", ident(&o.name)))
+                }
+                OutKind::Deleted {
+                    id: Some((ty, _)), ..
+                } => out.push_str(&format!("    pub {}: {ty},\n", ident(&o.name))),
+                OutKind::Deleted { id: None, .. } => {}
+            }
+        }
+        for event in &f.raises {
+            out.push_str(&format!("    pub {}: {event},\n", ident(&snake(event))));
+        }
+        out.push_str("}\n\n");
+
+        let mut lines = f.doc.clone();
+        for c in &f.conditions {
+            lines.push(format!(
+                "Requires the condition {} ({}){}.",
+                c.id,
+                one_line(&c.label),
+                c.site
+                    .as_ref()
+                    .map(|s| format!(" at {s}"))
+                    .unwrap_or_default()
+            ));
+        }
+        out.push_str(&doc(&lines, ""));
+        let row = |r: usize| ident(&f.rows[r].name);
+        let input = |i: usize| ident(&f.inputs[i].name);
+        let mut params: Vec<String> = f
+            .rows
+            .iter()
+            .map(|r| format!("{}: {}", ident(&r.name), r.ty))
+            .collect();
+        for i in &f.inputs {
+            let ty = field_type(&i.ty);
+            let ty = if i.nullable {
+                format!("{OPTION}<{ty}>")
+            } else {
+                ty
+            };
+            params.push(format!("{}: {ty}", ident(&i.name)));
+        }
+        let ret = if f.conditions.is_empty() {
+            f.result.clone()
+        } else {
+            format!("::core::result::Result<{}, Rejected>", f.result)
+        };
+        out.push_str(&format!(
+            "pub fn {}({}) -> {ret} {{\n",
+            snake(&f.name),
+            params.join(", ")
+        ));
+        for check in &f.checks {
+            match check {
+                ArgCheck::Link {
+                    child,
+                    child_field,
+                    parent,
+                    parent_field,
+                    message,
+                } => {
+                    out.push_str(&format!(
+                        "    if {}.{} != {}.{} {{\n        panic!({});\n    }}\n",
+                        row(*child),
+                        ident(&child_field.wire),
+                        row(*parent),
+                        ident(&parent_field.wire),
+                        string_literal(message)
+                    ));
+                }
+                ArgCheck::MustBeNull {
+                    row: r,
+                    field,
+                    message,
+                } => {
+                    out.push_str(&format!(
+                        "    if {}.{}.is_some() {{\n        panic!({});\n    }}\n",
+                        row(*r),
+                        ident(&field.wire),
+                        string_literal(message)
+                    ));
+                }
+            }
+        }
+        for c in &f.conditions {
+            out.push_str(&format!(
+                "    if !({}) {{\n        return ::core::result::Result::Err(Rejected {{ condition: {}, label: {}, site: {} }});\n    }}\n",
+                expr(&c.expr, &row),
+                string_literal(&c.id),
+                string_literal(&c.label),
+                c.site.as_ref().map_or("None".to_string(), |s| format!("Some({})", string_literal(s)))
+            ));
+        }
+        let mut body = format!("{} {{\n", f.result);
+        for o in &f.outputs {
+            match &o.kind {
+                OutKind::Row { ty, fields, .. } => {
+                    body.push_str(&format!("        {}: {ty} {{\n", ident(&o.name)));
+                    for (target, assigned) in fields {
+                        let wrap = |v: String, w: bool| if w { format!("Some({v})") } else { v };
+                        let v = match assigned {
+                            Assigned::From {
+                                row: r,
+                                field,
+                                adapt,
+                            } => {
+                                let read = format!("{}.{}", row(*r), ident(&field.wire));
+                                match adapt {
+                                    Adapt::Same => read,
+                                    Adapt::Wrap => format!("Some({read})"),
+                                    Adapt::Unwrap(message) => {
+                                        format!("{read}.expect({})", string_literal(message))
+                                    }
+                                    Adapt::AbsentNull => "None".to_string(),
+                                }
+                            }
+                            Assigned::Lit { lit, wrap: w } => wrap(lit_rust(lit), *w),
+                            Assigned::Input { input: i, wrap: w } => wrap(input(*i), *w),
+                            Assigned::ParentId {
+                                row: r,
+                                field,
+                                wrap: w,
+                            } => wrap(format!("{}.{}.clone()", row(*r), ident(&field.wire)), *w),
+                            Assigned::Null => "None".to_string(),
+                        };
+                        body.push_str(&format!("            {}: {v},\n", ident(&target.wire)));
+                    }
+                    body.push_str("        },\n");
+                }
+                OutKind::Deleted {
+                    row: r,
+                    id: Some((_, field)),
+                } => {
+                    body.push_str(&format!(
+                        "        {}: {}.{},\n",
+                        ident(&o.name),
+                        row(*r),
+                        ident(&field.wire)
+                    ));
+                }
+                OutKind::Deleted { id: None, .. } => {}
+            }
+        }
+        for event in &f.raises {
+            body.push_str(&format!("        {}: {event},\n", ident(&snake(event))));
+        }
+        body.push_str("    }");
+        if f.conditions.is_empty() {
+            out.push_str(&format!("    {body}\n}}\n\n"));
+        } else {
+            out.push_str(&format!("    ::core::result::Result::Ok({body})\n}}\n\n"));
+        }
+    }
+}
+
+fn lit_rust(lit: &super::ir::Lit) -> String {
+    match lit {
+        super::ir::Lit::Enum { ty, value } => format!("{ty}::{}", variant_ident(&value.ident)),
+        super::ir::Lit::Bool(b) => b.to_string(),
+        super::ir::Lit::Int(n) => n.to_string(),
+    }
+}
+
+fn expr(e: &super::ir::Expr, row: &dyn Fn(usize) -> String) -> String {
+    use super::ir::Expr;
+    match e {
+        Expr::True => "true".to_string(),
+        Expr::False => "false".to_string(),
+        Expr::Not(inner) => format!("!({})", expr(inner, row)),
+        Expr::And(items) => items
+            .iter()
+            .map(|i| format!("({})", expr(i, row)))
+            .collect::<Vec<_>>()
+            .join(" && "),
+        Expr::Or(items) => items
+            .iter()
+            .map(|i| format!("({})", expr(i, row)))
+            .collect::<Vec<_>>()
+            .join(" || "),
+        Expr::IsNull { row: r, field } => format!("{}.{}.is_none()", row(*r), ident(&field.wire)),
+        Expr::EnumEq {
+            row: r,
+            field,
+            enum_ty,
+            value,
+        } => format!(
+            "{}.{} == {enum_ty}::{}",
+            row(*r),
+            ident(&field.wire),
+            variant_ident(&value.ident)
+        ),
+        Expr::BoolEq {
+            row: r,
+            field,
+            value,
+        } => {
+            format!("{}.{} == {value}", row(*r), ident(&field.wire))
+        }
+        Expr::IntCmp {
+            row: r,
+            field,
+            op,
+            value,
+        } => {
+            format!("{}.{} {} {value}", row(*r), ident(&field.wire), op.symbol())
+        }
     }
 }

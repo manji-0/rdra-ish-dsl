@@ -140,3 +140,89 @@ export type Order =
   | OrderPaid
   | OrderCancelled
 ;
+
+// ── Use cases ──
+
+/** A condition of the use case did not hold: the use case does not run. */
+export interface Rejected {
+  readonly rejected: string;
+  readonly label: string;
+  readonly site: string | null;
+}
+
+/** A state the verified model does not reach: the arguments break a rule. */
+function unreachable(message: string): never {
+  throw new Error(message);
+}
+
+/** What pay returns. */
+export interface PayResult {
+  order: OrderPaid;
+}
+
+/**
+ * Pay (Pay).
+ * One run of the use case, from the states of the arguments' types. It requires what `Pay` requires and writes what it writes; the values the model leaves open are the inputs.
+ */
+export function pay(order: OrderPending, orderPaidAt: DateTime): PayResult {
+  return {
+    order: {
+      status: "paid",
+      id: order.id,
+      total: order.total,
+      paid_at: orderPaidAt,
+      method: order.method,
+      delivered_at: order.delivered_at,
+      type: order.type,
+      customer_id: order.customer_id,
+    },
+  };
+}
+
+/** What cancelOrder returns. */
+export interface CancelOrderResult {
+  order: OrderCancelled;
+}
+
+/**
+ * Cancel (CancelOrder).
+ * One run of the use case, from the states of the arguments' types. It requires what `CancelOrder` requires and writes what it writes; the values the model leaves open are the inputs.
+ */
+export function cancelOrder(order: OrderPending): CancelOrderResult {
+  return {
+    order: {
+      status: "cancelled",
+      id: order.id,
+      total: order.total,
+      paid_at: null,
+      method: order.method,
+      delivered_at: order.delivered_at,
+      type: order.type,
+      customer_id: order.customer_id,
+    },
+  };
+}
+
+/** What place returns. */
+export interface PlaceResult {
+  order: OrderPending;
+}
+
+/**
+ * Place (Place).
+ * One run of the use case, from the states of the arguments' types. It requires what `Place` requires and writes what it writes; the values the model leaves open are the inputs.
+ */
+export function place(parentCustomer: Customer, orderId: OrderId, orderMethod: PaymentMethod): PlaceResult {
+  return {
+    order: {
+      status: "pending",
+      id: orderId,
+      total: 0,
+      method: orderMethod,
+      delivered_at: null,
+      type: null,
+      customer_id: parentCustomer.id,
+      paid_at: null,
+    },
+  };
+}

@@ -7,6 +7,7 @@
 //! parent's id type, a sum per entity with a lifecycle column, and the obligations the data
 //! layer's invariants put on the code.
 
+mod actions;
 mod go;
 pub mod ir;
 mod rust;
@@ -133,6 +134,21 @@ fn header_lines(options: &Options) -> Vec<String> {
 
 /// The obligations as comment lines, each wrapped under its id.
 fn obligation_lines(domain: &DomainModel) -> Vec<String> {
+    let mut lines = obligations_only(domain);
+    if !domain.skipped.is_empty() {
+        lines.push(String::new());
+        lines.push(
+            "Use cases with no function yet (the code that finishes this output writes them):"
+                .to_string(),
+        );
+        for s in &domain.skipped {
+            lines.push(format!("- {}: {}", s.action, s.reason));
+        }
+    }
+    lines
+}
+
+fn obligations_only(domain: &DomainModel) -> Vec<String> {
     if domain.obligations.is_empty() {
         return vec!["Obligations: none.".to_string()];
     }
@@ -163,7 +179,10 @@ pub fn build(
     for scalar in Scalar::PRELUDE {
         names.claim(scalar.name().to_string(), "the prelude".to_string())?;
     }
-    names.claim("Self".to_string(), "a reserved word".to_string())?;
+    // Names a language reserves where the printers write them unqualified.
+    for reserved in ["Self", "Some", "None", "Ok", "Err", "Rejected"] {
+        names.claim(reserved.to_string(), "a reserved word".to_string())?;
+    }
 
     for (_, variation) in &model.variations {
         let name = names.claim(
@@ -270,6 +289,16 @@ pub fn build(
             doc: doc_of(&dto.label, dto.description.as_deref()),
             fields: distinct_fields(fields),
         });
+    }
+
+    // Transition functions rest on the verified system: only a model `check` passed gets them.
+    if refine {
+        let built = rdra_ish_core::lifecycle::TransitionSystem::build(
+            model,
+            rdra_ish_core::lifecycle::Bounds::STATES,
+            &rdra_ish_core::lifecycle::Scope::ALL,
+        );
+        actions::add_functions(model, &built.ts, &mut domain, &mut names, site)?;
     }
 
     // Go declares `<Enum>Values` and one `<Enum><Value>` constant per value in the package
@@ -709,3 +738,12 @@ pub(crate) fn one_line(text: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+
+/// camelCase of a PascalCase name.
+pub(crate) fn camel(pascal: &str) -> String {
+    let mut chars = pascal.chars();
+    match chars.next() {
+        Some(c) => c.to_lowercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}

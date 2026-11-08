@@ -17,6 +17,13 @@
   in Go. A variant narrows a nullable column only where an `invariant`, `forbidden`, or
   `required` rule on that state says so. `codegen` runs `check` first and refuses a model it
   rejects, unless `--allow-failing`.
+- `codegen` prints a transition function per use case of one transaction and per
+  combination of the source states of its rows, from the transition system `check` and
+  `verify` explore: source states as argument types, conditions as `Rejected`, effects
+  written by the body, open values as inputs, raised events in the result. A use case it
+  cannot print yet is listed in the header with the reason. `tests/codegen_equivalence.rs`
+  checks every move BFS makes on the samples against the functions, and that a function
+  over one row allows no move BFS lacks.
 
 ### Fixed
 
