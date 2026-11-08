@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## v2.1.0 - 2026-11-08
+
+Upgrading from v2.0.0 needs no change: no model, command, or verdict changes. The release
+adds `rdra-ish codegen`, an experimental subcommand that prints a model as TypeScript, Rust,
+or Go domain code for an agent to finish: data and state types, a transition function per
+use case read from the transition system `check` and `verify` explore, rule checks, row
+conversions, and dispatchers, with the obligations the verification assumes in its header.
+The subcommand and its output are outside the [compatibility](./docs/compatibility.md)
+contract. It also fixes the types `typescript-states` prints for Int and present columns.
 
 ### Added
 
@@ -40,6 +48,8 @@
 - `codegen` prints a use case split into transactions as one function per step, linked by
   run marks: a step returns the mark of each row it leaves for the next step, and the next
   step takes it as an argument. The header lists what storing the marks requires.
+  `tests/codegen_equivalence.rs` now covers the steps, the marks they leave, and every key
+  a function sets.
 - `codegen` prints the use cases events trigger: an event carries the id of each row its raise
   marks, and a triggered use case takes the event and checks that its row is the event's.
   `tests/codegen_equivalence.rs` checks that each raise marks the row the event names.
@@ -48,8 +58,6 @@
   lifecycle column as a branch on its value.
 - `codegen` prints a `.has` / `.none` condition over a list of the related entity's rows,
   an input, filtered by key; the conformance test evaluates it over every present row.
-  `tests/codegen_equivalence.rs` now covers the steps, the marks they leave, and every key
-  a function sets.
 
 ### Fixed
 
