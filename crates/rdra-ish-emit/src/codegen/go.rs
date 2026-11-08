@@ -288,7 +288,21 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             &[format!("is the event {}.", one_line(&event.doc.join(" ")))],
             "",
         ));
-        out.push_str(&format!("type {} struct{{}}\n\n", event.name));
+        if event.fields.is_empty() {
+            out.push_str(&format!("type {} struct{{}}\n\n", event.name));
+        } else {
+            out.push_str(&format!("type {} struct {{\n", event.name));
+            for field in &event.fields {
+                out.push_str(&format!(
+                    "\t// {} is the {} row the event was raised on.\n\t{} {}\n",
+                    super::type_ident(&field.name),
+                    field.entity,
+                    super::type_ident(&field.name),
+                    field.id_ty
+                ));
+            }
+            out.push_str("}\n\n");
+        }
     }
     if domain.fns.is_empty() {
         return;
@@ -326,7 +340,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             out.push_str(&format!("\t{} {}\n", super::type_ident(&m.name), m.ty));
         }
         for event in &f.raises {
-            out.push_str(&format!("\t{event} {event}\n"));
+            out.push_str(&format!("\t{0} {0}\n", event.ty));
         }
         out.push_str("}\n\n");
 
@@ -353,6 +367,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for m in &f.marks_in {
             params.push(format!("{} {}", local(&m.name), m.ty));
         }
+        if let Some(ev) = &f.event_in {
+            params.push(format!("{} {}", local(&ev.name), ev.ty));
+        }
         for i in &f.inputs {
             let ty = field_type(&i.ty);
             let ty = if i.nullable { format!("*{ty}") } else { ty };
@@ -377,12 +394,36 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                     parent_field,
                     message,
                 } => {
+                    let (c, p) = (
+                        format!("{}.{}", row(*child), child_field.pascal),
+                        format!("{}.{}", row(*parent), parent_field.pascal),
+                    );
+                    let differs = if child_field.nullable {
+                        format!("{c} == nil || *{c} != {p}")
+                    } else {
+                        format!("{c} != {p}")
+                    };
+                    out.push_str(&format!(
+                        "\tif {differs} {{\n\t\tpanic({})\n\t}}\n",
+                        string_literal(message)
+                    ));
+                }
+                ArgCheck::EventRow {
+                    row: r,
+                    field,
+                    event_field,
+                    message,
+                } => {
+                    let ev = f
+                        .event_in
+                        .as_ref()
+                        .expect("an event row check has an event");
                     out.push_str(&format!(
                         "\tif {}.{} != {}.{} {{\n\t\tpanic({})\n\t}}\n",
-                        row(*child),
-                        child_field.pascal,
-                        row(*parent),
-                        parent_field.pascal,
+                        row(*r),
+                        field.pascal,
+                        local(&ev.name),
+                        super::type_ident(event_field),
                         string_literal(message)
                     ));
                 }
@@ -443,6 +484,19 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                             Assigned::MarkId { mark, wrap: w } => {
                                 wrap(format!("{}.Id", local(&f.marks_in[*mark].name)), *w)
                             }
+                            Assigned::EventId { field, wrap: w, .. } => wrap(
+                                format!(
+                                    "{}.{}",
+                                    local(
+                                        &f.event_in
+                                            .as_ref()
+                                            .expect("an event id has an event")
+                                            .name
+                                    ),
+                                    super::type_ident(field)
+                                ),
+                                *w,
+                            ),
                             Assigned::Null => "nil".to_string(),
                         };
                         body.push_str(&format!("\t\t\t{}: {v},\n", target.pascal));
@@ -478,7 +532,24 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             ));
         }
         for event in &f.raises {
-            body.push_str(&format!("\t\t{event}: {event}{{}},\n"));
+            let mut parts = Vec::new();
+            for (field, source) in &event.ids {
+                let id = match source {
+                    super::ir::MarkSource::Row { row: r, field } => {
+                        format!("{}.{}", row(*r), field.pascal)
+                    }
+                    super::ir::MarkSource::Input(i) => input(*i),
+                    super::ir::MarkSource::Mark(k) => {
+                        format!("{}.Id", local(&f.marks_in[*k].name))
+                    }
+                };
+                parts.push(format!("{}: {id}", super::type_ident(&field.name)));
+            }
+            body.push_str(&format!(
+                "\t\t{0}: {0}{{{1}}},\n",
+                event.ty,
+                parts.join(", ")
+            ));
         }
         body.push_str("\t}");
         if f.conditions.is_empty() {

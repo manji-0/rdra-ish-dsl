@@ -265,8 +265,22 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     }
     for event in &domain.events {
         out.push_str(&doc(&event.doc, ""));
-        out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
-        out.push_str(&format!("pub struct {};\n\n", event.name));
+        if event.fields.is_empty() {
+            out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+            out.push_str(&format!("pub struct {};\n\n", event.name));
+        } else {
+            out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+            out.push_str(&format!("pub struct {} {{\n", event.name));
+            for field in &event.fields {
+                out.push_str(&format!(
+                    "    /// The {} row the event was raised on.\n    pub {}: {},\n",
+                    field.entity,
+                    ident(&field.name),
+                    field.id_ty
+                ));
+            }
+            out.push_str("}\n\n");
+        }
     }
     if domain.fns.is_empty() {
         return;
@@ -308,7 +322,11 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             out.push_str(&format!("    pub {}: {},\n", ident(&m.name), m.ty));
         }
         for event in &f.raises {
-            out.push_str(&format!("    pub {}: {event},\n", ident(&snake(event))));
+            out.push_str(&format!(
+                "    pub {}: {},\n",
+                ident(&snake(&event.ty)),
+                event.ty
+            ));
         }
         out.push_str("}\n\n");
 
@@ -334,6 +352,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             .collect();
         for m in &f.marks_in {
             params.push(format!("{}: {}", ident(&m.name), m.ty));
+        }
+        if let Some(ev) = &f.event_in {
+            params.push(format!("{}: {}", ident(&ev.name), ev.ty));
         }
         for i in &f.inputs {
             let ty = field_type(&i.ty);
@@ -363,12 +384,36 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                     parent_field,
                     message,
                 } => {
+                    let (c, p) = (
+                        format!("{}.{}", row(*child), ident(&child_field.wire)),
+                        format!("{}.{}", row(*parent), ident(&parent_field.wire)),
+                    );
+                    let differs = if child_field.nullable {
+                        format!("{c}.as_ref() != ::core::option::Option::Some(&{p})")
+                    } else {
+                        format!("{c} != {p}")
+                    };
+                    out.push_str(&format!(
+                        "    if {differs} {{\n        panic!({});\n    }}\n",
+                        string_literal(message)
+                    ));
+                }
+                ArgCheck::EventRow {
+                    row: r,
+                    field,
+                    event_field,
+                    message,
+                } => {
+                    let ev = f
+                        .event_in
+                        .as_ref()
+                        .expect("an event row check has an event");
                     out.push_str(&format!(
                         "    if {}.{} != {}.{} {{\n        panic!({});\n    }}\n",
-                        row(*child),
-                        ident(&child_field.wire),
-                        row(*parent),
-                        ident(&parent_field.wire),
+                        row(*r),
+                        ident(&field.wire),
+                        ident(&ev.name),
+                        ident(event_field),
                         string_literal(message)
                     ));
                 }
@@ -411,6 +456,27 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 m.name, m.ty
             ));
         }
+        for event in &f.raises {
+            let mut parts = Vec::new();
+            for (field, source) in &event.ids {
+                let id = match source {
+                    super::ir::MarkSource::Row { row: r, field } => {
+                        format!("{}.{}.clone()", row(*r), ident(&field.wire))
+                    }
+                    super::ir::MarkSource::Input(i) => format!("{}.clone()", input(*i)),
+                    super::ir::MarkSource::Mark(k) => {
+                        format!("{}.id.clone()", ident(&f.marks_in[*k].name))
+                    }
+                };
+                parts.push(format!("{}: {id}", ident(&field.name)));
+            }
+            let value = if parts.is_empty() {
+                event.ty.clone()
+            } else {
+                format!("{} {{ {} }}", event.ty, parts.join(", "))
+            };
+            out.push_str(&format!("    let out_{} = {value};\n", snake(&event.ty)));
+        }
         let mut body = format!("{} {{\n", f.result);
         for o in &f.outputs {
             match &o.kind {
@@ -441,6 +507,19 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                                 field,
                                 wrap: w,
                             } => wrap(format!("{}.{}.clone()", row(*r), ident(&field.wire)), *w),
+                            Assigned::EventId { field, wrap: w, .. } => wrap(
+                                format!(
+                                    "{}.{}.clone()",
+                                    ident(
+                                        &f.event_in
+                                            .as_ref()
+                                            .expect("an event id has an event")
+                                            .name
+                                    ),
+                                    ident(field)
+                                ),
+                                *w,
+                            ),
                             Assigned::MarkId { mark, wrap: w } => {
                                 wrap(format!("{}.id.clone()", ident(&f.marks_in[*mark].name)), *w)
                             }
@@ -468,7 +547,11 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             body.push_str(&format!("        {}: out_{},\n", ident(&m.name), m.name));
         }
         for event in &f.raises {
-            body.push_str(&format!("        {}: {event},\n", ident(&snake(event))));
+            body.push_str(&format!(
+                "        {}: out_{},\n",
+                ident(&snake(&event.ty)),
+                snake(&event.ty)
+            ));
         }
         body.push_str("    }");
         if f.conditions.is_empty() {

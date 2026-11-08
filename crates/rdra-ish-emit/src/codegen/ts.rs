@@ -207,9 +207,18 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
     for event in &domain.events {
         out.push_str(&doc(&event.doc, ""));
         out.push_str(&format!(
-            "export interface {0} {{\n  readonly event: \"{0}\";\n}}\n\n",
+            "export interface {0} {{\n  readonly event: \"{0}\";\n",
             event.name
         ));
+        for field in &event.fields {
+            out.push_str(&format!(
+                "  /** The {} row the event was raised on. */\n  readonly {}: {};\n",
+                field.entity,
+                property(&field.name),
+                field.id_ty
+            ));
+        }
+        out.push_str("}\n\n");
     }
     if domain.fns.is_empty() {
         return;
@@ -265,8 +274,9 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         }
         for event in &f.raises {
             out.push_str(&format!(
-                "  {}: {event};\n",
-                property(&super::actions::snake(event))
+                "  {}: {};\n",
+                property(&super::actions::snake(&event.ty)),
+                event.ty
             ));
         }
         out.push_str("}\n\n");
@@ -295,6 +305,13 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                 "{}: {}",
                 super::camel(&super::type_ident(&m.name)),
                 m.ty
+            ));
+        }
+        if let Some(ev) = &f.event_in {
+            params.push(format!(
+                "{}: {}",
+                super::camel(&super::type_ident(&ev.name)),
+                ev.ty
             ));
         }
         for input in &f.inputs {
@@ -336,6 +353,25 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                         property(&child_field.wire),
                         row(*parent),
                         property(&parent_field.wire),
+                        string_literal(message)
+                    ));
+                }
+                ArgCheck::EventRow {
+                    row: r,
+                    field,
+                    event_field,
+                    message,
+                } => {
+                    let ev = f
+                        .event_in
+                        .as_ref()
+                        .expect("an event row check has an event");
+                    out.push_str(&format!(
+                        "  if ({}.{} !== {}.{}) {{\n    throw new Error({});\n  }}\n",
+                        row(*r),
+                        property(&field.wire),
+                        super::camel(&super::type_ident(&ev.name)),
+                        property(event_field),
                         string_literal(message)
                     ));
                 }
@@ -404,6 +440,13 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
                             Assigned::ParentId { row: r, field, .. } => {
                                 format!("{}.{}", row(*r), property(&field.wire))
                             }
+                            Assigned::EventId { field, .. } => format!(
+                                "{}.{}",
+                                super::camel(&super::type_ident(
+                                    &f.event_in.as_ref().expect("an event id has an event").name
+                                )),
+                                property(field)
+                            ),
                             Assigned::MarkId { mark, .. } => format!(
                                 "{}.id",
                                 super::camel(&super::type_ident(&f.marks_in[*mark].name))
@@ -450,9 +493,24 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             ));
         }
         for event in &f.raises {
+            let mut parts = vec![format!("event: \"{}\"", event.ty)];
+            for (field, source) in &event.ids {
+                let id = match source {
+                    super::ir::MarkSource::Row { row: r, field } => {
+                        format!("{}.{}", row(*r), property(&field.wire))
+                    }
+                    super::ir::MarkSource::Input(i) => input(*i),
+                    super::ir::MarkSource::Mark(k) => format!(
+                        "{}.id",
+                        super::camel(&super::type_ident(&f.marks_in[*k].name))
+                    ),
+                };
+                parts.push(format!("{}: {id}", property(&field.name)));
+            }
             out.push_str(&format!(
-                "    {}: {{ event: \"{event}\" }},\n",
-                property(&super::actions::snake(event))
+                "    {}: {{ {} }},\n",
+                property(&super::actions::snake(&event.ty)),
+                parts.join(", ")
             ));
         }
         out.push_str("  };\n}\n\n");

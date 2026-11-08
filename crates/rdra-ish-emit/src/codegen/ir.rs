@@ -191,7 +191,9 @@ pub struct FnDecl {
     pub conditions: Vec<CondGuard>,
     pub outputs: Vec<RowOut>,
     /// The event types the use case raises.
-    pub raises: Vec<String>,
+    pub raises: Vec<RaisedEvent>,
+    /// For a use case an event triggers: the event it runs on.
+    pub event_in: Option<EventIn>,
     /// The result record's type name.
     pub result: String,
     /// For a step of a use case split into transactions: `(step, steps)`.
@@ -281,6 +283,13 @@ pub enum ArgCheck {
         child_field: Field,
         parent: usize,
         parent_field: Field,
+        message: String,
+    },
+    /// The row is the one the event argument was raised on.
+    EventRow {
+        row: usize,
+        field: Field,
+        event_field: String,
         message: String,
     },
     /// The verified model keeps this column null here; a value means the rows broke a rule.
@@ -407,6 +416,12 @@ pub enum Assigned {
         wrap: bool,
     },
     /// The id of the row a mark argument names (a row an earlier step wrote).
+    /// The id of the row the event argument was raised on; `param` is the action param.
+    EventId {
+        field: String,
+        param: usize,
+        wrap: bool,
+    },
     MarkId {
         mark: usize,
         wrap: bool,
@@ -437,6 +452,31 @@ pub enum Lit {
 pub struct EventDecl {
     pub name: String,
     pub doc: Vec<String>,
+    /// The ids of the rows the raise marks: a use case the event triggers runs only on them.
+    pub fields: Vec<EventField>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EventField {
+    pub entity: String,
+    /// snake_case: `<entity>_id`.
+    pub name: String,
+    pub id_ty: String,
+}
+
+/// An event a function raises, with where each id of its payload comes from.
+#[derive(Clone, Debug)]
+pub struct RaisedEvent {
+    pub ty: String,
+    pub ids: Vec<(EventField, MarkSource)>,
+}
+
+/// The event a triggered use case's function takes.
+#[derive(Clone, Debug)]
+pub struct EventIn {
+    /// snake_case.
+    pub name: String,
+    pub ty: String,
 }
 
 /// A use case the generator printed no function for, and why.

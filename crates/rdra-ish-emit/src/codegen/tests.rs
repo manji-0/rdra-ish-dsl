@@ -326,3 +326,52 @@ sets(Pay, Order.paid_at == present)
     );
     assert!(!c.iter().any(|x| x.contains("note ==")), "{c:?}");
 }
+
+/// A raise carries the id of the row it marks; the use case the event triggers takes the
+/// event and checks that its row is the event's row.
+#[test]
+fn an_event_carries_its_row_and_its_handler_takes_it() {
+    let src = r#"
+entity Order "O" {
+  id: Int @pk
+  status: Enum(open, shipped) @default(open)
+}
+entity Shipment "S" { id: Int @pk }
+relate(Shipment, Order, N:1)
+usecase Place "Place"
+usecase Ship "Ship"
+usecase Dispatch "Dispatch"
+event EvShipped "shipped"
+creates(Place, Order)
+transitions(Ship, Order.status, open -> shipped)
+raises(Ship, EvShipped)
+triggers(EvShipped, Dispatch)
+creates(Dispatch, Shipment)
+"#;
+    let model = model_from(src);
+    let domain = build(&model, true, &|_| None).unwrap();
+    let event = domain
+        .events
+        .iter()
+        .find(|e| e.name == "EvShipped")
+        .unwrap();
+    assert_eq!(event.fields.len(), 1, "{:?}", event.fields);
+    assert_eq!(event.fields[0].name, "order_id");
+    let ship = domain.fns.iter().find(|f| f.action == "Ship").unwrap();
+    assert!(matches!(
+        ship.raises[0].ids[0].1,
+        ir::MarkSource::Row { .. }
+    ));
+    let dispatch: Vec<_> = domain
+        .fns
+        .iter()
+        .filter(|f| f.action == "Dispatch")
+        .collect();
+    assert!(!dispatch.is_empty(), "{:?}", domain.skipped);
+    for f in dispatch {
+        assert_eq!(f.event_in.as_ref().unwrap().ty, "EvShipped");
+        assert!(f.checks.iter().any(
+            |c| matches!(c, ir::ArgCheck::EventRow { event_field, .. } if event_field == "order_id")
+        ));
+    }
+}

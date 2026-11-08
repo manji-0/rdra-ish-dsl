@@ -91,11 +91,8 @@ pub(super) fn add_functions(
                 .filter(|_| steps.is_none_or(|(i, k)| i == k))
                 .map(|f| model.events[f.event].id.clone())
                 .collect();
-            let reason = if trigger.is_some() {
-                Some("triggered by several events (phase 5)".to_string())
-            } else {
-                None
-            };
+            let _ = trigger;
+            let reason: Option<String> = None;
             let built = match reason {
                 Some(reason) => Err(reason),
                 None => functions(
@@ -109,6 +106,7 @@ pub(super) fn add_functions(
                 }),
                 Ok(list) => {
                     for event in &raises {
+                        let fields = event_fields(model, ts, &declared, event);
                         events.entry(event.clone()).or_insert_with(|| EventDecl {
                             name: type_ident(event),
                             doc: model
@@ -117,7 +115,29 @@ pub(super) fn add_functions(
                                 .find(|e| &e.id == event)
                                 .map(|e| vec![e.label.clone()])
                                 .unwrap_or_default(),
+                            fields,
                         });
+                    }
+                    for f in &list {
+                        if let Some(ev) = &f.event_in {
+                            let id = model
+                                .events
+                                .values()
+                                .find(|e| type_ident(&e.id) == ev.ty)
+                                .map(|e| e.id.clone())
+                                .unwrap_or_default();
+                            let fields = event_fields(model, ts, &declared, &id);
+                            events.entry(id.clone()).or_insert_with(|| EventDecl {
+                                name: ev.ty.clone(),
+                                doc: model
+                                    .events
+                                    .values()
+                                    .find(|e| e.id == id)
+                                    .map(|e| vec![e.label.clone()])
+                                    .unwrap_or_default(),
+                                fields,
+                            });
+                        }
                     }
                     fns.extend(list);
                 }
@@ -217,16 +237,14 @@ fn functions(
             | ParamRole::Existing
             | ParamRole::Parent { .. }
             | ParamRole::Earlier { .. } => {}
-            ParamRole::Triggered => {
-                return Err("reads the row an event was raised on (phase 5)".into())
-            }
+            ParamRole::Triggered => {}
         }
     }
     for guard in &action.guards {
         match guard.why {
             GuardWhy::TransitionFrom | GuardWhy::Owner => {}
             GuardWhy::Condition { later: None, .. } if !guard.reads_successor() => {}
-            GuardWhy::Raised { .. } => return Err("triggered by an event (phase 5)".into()),
+            GuardWhy::Raised { .. } => {}
             GuardWhy::Clock => return Err("reads `now` (phase 5)".into()),
             GuardWhy::Link => return Err("links, relinks, or unlinks a row (phase 5)".into()),
             GuardWhy::Copy => return Err("copies a value from another row (phase 5)".into()),
@@ -300,6 +318,13 @@ fn functions(
             (ParamRole::Earlier { .. }, _) => vec![Source {
                 ty: String::new(),
                 fields: Vec::new(),
+                always_null: Vec::new(),
+                variant: None,
+            }],
+            // The row an event was raised on: read only, in any state, as its flat row.
+            (ParamRole::Triggered, Declared::Sum(sum)) => vec![Source {
+                ty: sum.row.clone(),
+                fields: sum.row_fields.clone(),
                 always_null: Vec::new(),
                 variant: None,
             }],
@@ -513,12 +538,53 @@ fn function(
             });
         }
     }
+    // The event a triggered use case runs on: the `Raised` guard names it and its row.
+    let mut event_in: Option<super::ir::EventIn> = None;
+    let mut raised_on: Vec<(usize, String)> = Vec::new();
+    for guard in &action.guards {
+        let GuardWhy::Raised { event } = guard.why else {
+            continue;
+        };
+        let Pred::Cmp(
+            Term::Slot {
+                at: At::Param(p), ..
+            },
+            TsCmp::Eq,
+            _,
+        ) = &guard.pred
+        else {
+            return Err(unsupported("an event guard this phase does not print"));
+        };
+        let id = model.events[event].id.clone();
+        if event_in.as_ref().is_some_and(|e| e.ty != type_ident(&id)) {
+            return Err(unsupported("a step that two events order"));
+        }
+        let name = fresh(snake(&id), &mut taken);
+        event_in.get_or_insert(super::ir::EventIn {
+            name,
+            ty: type_ident(&id),
+        });
+        let entity = entity_id(usize::from(*p));
+        if id_of(&entity).is_none() {
+            return Err(unsupported(
+                "an event raised on an entity with no one-column key",
+            ));
+        }
+        raised_on.push((usize::from(*p), format!("{}_id", snake(&entity))));
+    }
+    let event_field_of = |p: usize| {
+        raised_on
+            .iter()
+            .find(|(q, _)| *q == p)
+            .map(|(_, f)| f.clone())
+    };
     for (p, param) in action.params.iter().enumerate() {
         if matches!(param.role, ParamRole::New | ParamRole::Earlier { .. }) {
             continue;
         }
         let base = match param.role {
             ParamRole::Parent { .. } => format!("parent_{}", snake(&entity_id(p))),
+            ParamRole::Triggered => format!("raised_{}", snake(&entity_id(p))),
             _ => snake(&entity_id(p)),
         };
         row_of.insert(p, rows.len());
@@ -545,6 +611,8 @@ fn function(
     let mut deleted: Vec<usize> = Vec::new();
     // The run mark each param is left at: `(param, step)`, step 0 for none.
     let mut runs: Vec<(usize, u8)> = Vec::new();
+    // The rows each raise marks: `(event id, param)`.
+    let mut raised_at: Vec<(String, usize)> = Vec::new();
     for effect in &action.effects {
         match effect {
             Effect::Create { param } => created.push(usize::from(*param)),
@@ -571,6 +639,9 @@ fn function(
                         );
                     }
                     (VarKind::Run { .. }, Rhs::Lit(v)) => runs.push((p, v.0)),
+                    (VarKind::Raised { event, .. }, Rhs::Lit(v)) if *v == Value::TRUE => {
+                        raised_at.push((event.clone(), p));
+                    }
                     (VarKind::Raised { .. }, _) => {}
                     (VarKind::Prop { .. }, _) => {
                         return Err(unsupported("drives a comparison proposition (phase 5)"))
@@ -602,9 +673,10 @@ fn function(
     let mut outputs: Vec<RowOut> = Vec::new();
 
     for (p, param) in action.params.iter().enumerate() {
+        // A parent, an earlier step's row, and the row an event was raised on are read only.
         if matches!(
             param.role,
-            ParamRole::Parent { .. } | ParamRole::Earlier { .. }
+            ParamRole::Parent { .. } | ParamRole::Earlier { .. } | ParamRole::Triggered
         ) {
             continue;
         }
@@ -690,6 +762,15 @@ fn function(
                     });
                     Assigned::Input {
                         input: inputs.len() - 1,
+                        wrap: target.nullable,
+                    }
+                }
+                Some(Write::Parent(q, _))
+                    if event_field_of(*q).is_some() && !row_of.contains_key(q) =>
+                {
+                    Assigned::EventId {
+                        field: event_field_of(*q).expect("checked"),
+                        param: *q,
                         wrap: target.nullable,
                     }
                 }
@@ -838,7 +919,8 @@ fn function(
         match guard.why {
             // The run mark: step 1 needs none (an obligation), a later step takes the mark of
             // the step before as an argument.
-            GuardWhy::TransitionFrom | GuardWhy::Run { .. } => {}
+            // The event: the handler takes it as an argument (`event_in`).
+            GuardWhy::TransitionFrom | GuardWhy::Run { .. } | GuardWhy::Raised { .. } => {}
             GuardWhy::Owner => {
                 let Pred::Cmp(
                     Term::Slot {
@@ -859,6 +941,29 @@ fn function(
                     return Err(unsupported("a key over several columns"));
                 };
                 let (c, q) = (usize::from(*c), usize::from(*q));
+                // A child of the row the event was raised on: its key is the event's id.
+                if let (Some(&cr), Some(event_field)) = (row_of.get(&c), event_field_of(q)) {
+                    if !row_of.contains_key(&q) {
+                        let Some(child_field) = rows[cr]
+                            .fields
+                            .iter()
+                            .find(|f| f.wire == *child_col)
+                            .cloned()
+                        else {
+                            return Err(unsupported("a link guard on a column with no field"));
+                        };
+                        checks.push(ArgCheck::EventRow {
+                            row: cr,
+                            field: child_field,
+                            event_field,
+                            message: format!(
+                                "rdra-ish: the {} row is not a child of the row the event was raised on",
+                                rows[cr].entity
+                            ),
+                        });
+                        continue;
+                    }
+                }
                 let (Some(&cr), Some(&qr)) = (row_of.get(&c), row_of.get(&q)) else {
                     return Err(unsupported("a link guard on a created row"));
                 };
@@ -917,6 +1022,63 @@ fn function(
     let doc = vec![format!(
         "One run of the use case, from the states of the arguments' types. It requires what `{usecase}` requires and writes what it writes; the values the model leaves open are the inputs."
     )];
+    // A row the event was raised on is the event's row.
+    for (p, event_field) in &raised_on {
+        if let Some(&r) = row_of.get(p) {
+            let (_, id_field) = id_of(&rows[r].entity).ok_or_else(|| {
+                unsupported("an event raised on an entity with no one-column key")
+            })?;
+            checks.push(ArgCheck::EventRow {
+                row: r,
+                field: id_field,
+                event_field: event_field.clone(),
+                message: format!(
+                    "rdra-ish: the {} row is not the row the event was raised on",
+                    rows[r].entity
+                ),
+            });
+        }
+    }
+
+    // The events the use case raises, with the ids of the rows each raise marks.
+    let mut raised: Vec<super::ir::RaisedEvent> = Vec::new();
+    for event in raises {
+        let mut ids = Vec::new();
+        for field in event_fields(model, ts, declared, event) {
+            let at = raised_at
+                .iter()
+                .find(|(e, p)| e == event && entity_id(*p) == field.entity)
+                .map(|(_, p)| *p);
+            let Some(p) = at else {
+                return Err(unsupported("raises an event without marking its row"));
+            };
+            let (_, id_field) = id_of(&field.entity).ok_or_else(|| {
+                unsupported("an event raised on an entity with no one-column key")
+            })?;
+            let source = if let Some(m) = mark_of.get(&p) {
+                super::ir::MarkSource::Mark(*m)
+            } else if let Some(r) = row_of.get(&p) {
+                super::ir::MarkSource::Row {
+                    row: *r,
+                    field: id_field.clone(),
+                }
+            } else if action.params[p].role == ParamRole::New {
+                let name = format!("{}_{}", snake(&field.entity), id_field.wire);
+                let i = inputs.iter().position(|x| x.name == name).ok_or_else(|| {
+                    unsupported("an event raised on a created row with no id input")
+                })?;
+                super::ir::MarkSource::Input(i)
+            } else {
+                return Err(unsupported("raises an event on the row of another event"));
+            };
+            ids.push((field, source));
+        }
+        raised.push(super::ir::RaisedEvent {
+            ty: type_ident(event),
+            ids,
+        });
+    }
+
     // The marks the step leaves for the next one.
     let mut marks_out: Vec<super::ir::MarkOut> = Vec::new();
     for (p, step) in runs {
@@ -986,7 +1148,8 @@ fn function(
         checks,
         conditions,
         outputs,
-        raises: raises.iter().map(|e| type_ident(e)).collect(),
+        raises: raised,
+        event_in,
         result: format!("{name}Result"),
     })
 }
@@ -1365,11 +1528,15 @@ fn dispatchers(fns: &[FnDecl], domain: &DomainModel) -> Vec<DispatchDecl> {
                 inputs: taken,
             });
         }
-        let marks: Vec<(String, String)> = first
+        // The arguments after the rows: the run marks, then the event.
+        let mut marks: Vec<(String, String)> = first
             .marks_in
             .iter()
             .map(|m| (m.name.clone(), m.ty.clone()))
             .collect();
+        if let Some(ev) = &first.event_in {
+            marks.push((ev.name.clone(), ev.ty.clone()));
+        }
         out.push(DispatchDecl {
             marks,
             name: format!("Run{pascal}"),
@@ -1381,5 +1548,45 @@ fn dispatchers(fns: &[FnDecl], domain: &DomainModel) -> Vec<DispatchDecl> {
             cases,
         });
     }
+    out
+}
+
+/// The payload of an event: the id of each row its raise marks, by the system's `Raised`
+/// vars. An event no use case raise orders anything by has none.
+fn event_fields(
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+    declared: &BTreeMap<String, Declared<'_>>,
+    event: &str,
+) -> Vec<super::ir::EventField> {
+    let _ = model;
+    let mut out: Vec<super::ir::EventField> = Vec::new();
+    for v in ts.var_ids() {
+        let VarKind::Raised { entity, event: ev } = &ts.var(v).kind else {
+            continue;
+        };
+        if ev != event {
+            continue;
+        }
+        let id = ts.entity(*entity).id.clone();
+        let fields = match declared.get(&type_ident(&id)) {
+            Some(Declared::Record(r)) => &r.fields,
+            Some(Declared::Sum(s)) => &s.row_fields,
+            None => continue,
+        };
+        let want = format!("{}Id", type_ident(&id));
+        if !fields.iter().any(|f| f.ty == FieldType::Id(want.clone())) {
+            continue;
+        }
+        let field = super::ir::EventField {
+            name: format!("{}_id", snake(&id)),
+            entity: id,
+            id_ty: want,
+        };
+        if !out.contains(&field) {
+            out.push(field);
+        }
+    }
+    out.sort_by(|a, b| a.name.cmp(&b.name));
     out
 }

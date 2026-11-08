@@ -10,6 +10,7 @@
 //!   every reached state, on every present row in the function's source state whose
 //!   conditions and checks hold, the system has a move of that action on that row.
 //!
+//! - **Events.** A raise marks, in the successor, the row whose id the event carries.
 //! - **Keys and run marks.** A key the function sets from a parent or a run mark names, in
 //!   the successor, the slot BFS bound; a mark the step leaves holds the step in the run var.
 //! - **Rule checks.** No row of a reached state breaks a rule of its type's validator.
@@ -142,7 +143,7 @@ impl Rows<'_> {
                 .get(*row, &field.wire)
                 .is_none_or(|(_, v)| v == Value::NULL),
             // A link is the binding BFS chose; the owner var is not a column.
-            ArgCheck::Link { .. } => true,
+            ArgCheck::Link { .. } | ArgCheck::EventRow { .. } => true,
         })
     }
 }
@@ -169,6 +170,7 @@ fn functions_agree_with_the_transition_system() {
     let mut checked_rows = 0usize;
     let mut checked_rules = 0usize;
     let mut checked_keys = 0usize;
+    let mut checked_events = 0usize;
     let mut failures: Vec<String> = Vec::new();
     for sample in samples() {
         if !check_passes(&sample) {
@@ -184,7 +186,7 @@ fn functions_agree_with_the_transition_system() {
             for edge in run.edges() {
                 let (act, params) = run.step(edge);
                 let action = &ts.actions()[act.index()];
-                let ActionOrigin::UseCase { trigger: None, .. } = action.origin else {
+                let ActionOrigin::UseCase { .. } = action.origin else {
                     continue;
                 };
                 if domain.skipped.iter().any(|s| s.action == action.name) {
@@ -239,6 +241,30 @@ fn functions_agree_with_the_transition_system() {
                         "{sample}: BFS runs {} where its function's argument checks fail",
                         f.name
                     ));
+                }
+                // The rows an event is raised on: the raised var of each holds true.
+                for event in &f.raises {
+                    for (field, _) in &event.ids {
+                        let Some(e) = ts.entity_ids().find(|e| ts.entity(*e).id == field.entity)
+                        else {
+                            continue;
+                        };
+                        let raised = ts.var_ids().find(|v| {
+                            matches!(&ts.var(*v).kind, VarKind::Raised { entity, event: ev }
+                                if *entity == e && type_name(ev) == event.ty)
+                        });
+                        let Some(p) = action.params.iter().position(|q| q.entity == e) else {
+                            continue;
+                        };
+                        checked_events += 1;
+                        let slot = usize::from(params[p]);
+                        if raised.map(|v| post.get(ts, v, slot)) != Some(Value::TRUE) {
+                            failures.push(format!(
+                                "{sample}: {} raises {} on {} but BFS marks no row",
+                                f.name, event.ty, field.entity
+                            ));
+                        }
+                    }
                 }
                 // The marks the step leaves: the run var of each row holds the step.
                 for mark in &f.marks_out {
@@ -311,6 +337,7 @@ fn functions_agree_with_the_transition_system() {
                                 let key_parent = match assigned {
                                     Assigned::ParentId { row: r, .. } => Some(f.rows[*r].param),
                                     Assigned::MarkId { mark, .. } => Some(f.marks_in[*mark].param),
+                                    Assigned::EventId { param, .. } => Some(*param),
                                     _ => None,
                                 };
                                 if let Some(q) = key_parent {
@@ -344,7 +371,9 @@ fn functions_agree_with_the_transition_system() {
                                         Domain::Nullable => got == Value::PRESENT,
                                         _ => true,
                                     },
-                                    Assigned::ParentId { .. } | Assigned::MarkId { .. } => true,
+                                    Assigned::ParentId { .. }
+                                    | Assigned::MarkId { .. }
+                                    | Assigned::EventId { .. } => true,
                                 };
                                 if !ok {
                                     failures.push(format!(
@@ -485,7 +514,30 @@ fn functions_agree_with_the_transition_system() {
         "checked only {checked_rules} rule checks"
     );
     assert!(checked_keys > 100, "checked only {checked_keys} keys");
-    eprintln!(
-        "checked {checked_moves} moves, {checked_rows} rows, {checked_rules} rule checks, and {checked_keys} keys"
+    assert!(
+        checked_events > 100,
+        "checked only {checked_events} raised events"
     );
+    eprintln!(
+        "checked {checked_moves} moves, {checked_rows} rows, {checked_rules} rule checks, {checked_keys} keys, and {checked_events} raised events"
+    );
+}
+
+/// The type name codegen gives an id: PascalCase, `_` and `-` splitting words.
+fn type_name(id: &str) -> String {
+    let mut out = String::new();
+    let mut upper = true;
+    for ch in id.chars() {
+        if ch == '_' || ch == '-' || ch == ' ' {
+            upper = true;
+            continue;
+        }
+        if upper {
+            out.extend(ch.to_uppercase());
+            upper = false;
+        } else {
+            out.push(ch);
+        }
+    }
+    out
 }

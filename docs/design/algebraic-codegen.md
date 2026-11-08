@@ -568,8 +568,13 @@ sample. For this generator:
    leaves in the run var, and every key a function sets against the owner var; the
    interleavings are BFS's own, since it explores every action between two steps. A
    condition of a later step that reads an earlier row's columns is not printed yet.
-5. **The rest of the action vocabulary:** `.has` / `.none`, `now`, triggered handlers,
-   and links.
+5. **The rest of the action vocabulary.** Triggered use cases have landed: an event
+   carries the id of each row its raise marks (the `Raised` vars of the event order), and a
+   triggered use case takes the event as an argument and checks its row against it, so it
+   cannot run without the event, as the 2.0 event order requires. A row the use case reads
+   only through the event is an argument in its flat row type. A link between two rows of
+   an earlier step is not printed (the marks carry ids, not keys). Still to come: `.has` /
+   `.none`, a second lifecycle column, a choice among arms, `.when`, copies, and `now`.
 
 ## Decisions
 

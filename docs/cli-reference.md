@@ -1334,8 +1334,12 @@ only through its mark (a child it creates under that row takes the mark's id), a
 step returns the use case's events. The header's obligations say what the code that stores
 the marks keeps: one mark of a use case per row, stored in the step's transaction; step 1
 only on a row with none; and a run never abandoned, its step retried when it returns
-`NotEnabled` or `Rejected`. A use case whose vocabulary is not printed yet (triggered
-by an event, `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
+`NotEnabled` or `Rejected`. An **event** a use case raises carries the id of each row the
+raise marks (`EvOrderExecuted { certificate_order_id }`), as the event order of `check` and
+`verify` records it. A use case the event triggers takes the event as an argument, after any
+run marks, and checks that the row it runs on is the event's row; a row it reads only through
+the event (`Triggered`) is an argument in its flat row type. A use case whose vocabulary is
+not printed yet ( `now`, `.has` / `.none`, a second lifecycle column, a choice among arms, a
 `.when`, a copy, `links`) gets no function. The header lists it with the reason, and the
 code that finishes the output writes it.
 
