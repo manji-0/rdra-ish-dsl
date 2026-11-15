@@ -72,6 +72,53 @@ impl BoundsLine {
         };
         format!("OK: no errors{scoped} within {}", Within(self.bounds))
     }
+
+    /// The final line of a run with an error: `FAIL: 3 errors, 5 warnings within ...`, with
+    /// `in the selected scope` when a scope is set.
+    pub fn fail(&self, errors: usize, warnings: usize) -> String {
+        let scoped = if self.scope.is_some() {
+            " in the selected scope,"
+        } else {
+            ""
+        };
+        format!(
+            "FAIL: {}{scoped} within {}",
+            FindingTally { errors, warnings },
+            Within(self.bounds)
+        )
+    }
+}
+
+/// `3 errors, 1 warning`: what a failed run ends with.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct FindingTally {
+    pub errors: usize,
+    pub warnings: usize,
+}
+
+impl FindingTally {
+    /// Counts an error or a warning; an info finding is neither.
+    pub fn count(&mut self, severity: Severity) {
+        match severity {
+            Severity::Error => self.errors += 1,
+            Severity::Warning => self.warnings += 1,
+            Severity::Info => {}
+        }
+    }
+}
+
+impl fmt::Display for FindingTally {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let plural = |n: usize| if n == 1 { "" } else { "s" };
+        write!(
+            f,
+            "{} error{}, {} warning{}",
+            self.errors,
+            plural(self.errors),
+            self.warnings,
+            plural(self.warnings)
+        )
+    }
 }
 
 struct Within(Bounds);

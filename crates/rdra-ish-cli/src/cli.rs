@@ -148,7 +148,7 @@ pub(crate) enum ListFormat {
 }
 
 #[derive(Parser)]
-#[command(name = "rdra-ish", about = "RDRA DSL compiler")]
+#[command(name = "rdra-ish", about = "RDRA DSL compiler", version)]
 pub(crate) struct Cli {
     #[command(subcommand)]
     pub(crate) command: Commands,
@@ -356,6 +356,10 @@ pub(crate) enum Commands {
         /// temporal property past `--temporal-budget`) as an error (exit 1)
         #[arg(long)]
         deny_undecided: bool,
+        /// Run TLC as `java -cp <path> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` /
+        /// `tlc2` launcher on PATH; `RDRA_TLC_JAR` sets it when the flag is absent
+        #[arg(long, value_name = "PATH")]
+        tlc_jar: Option<PathBuf>,
         #[command(flatten)]
         scope: ScopeArgs,
     },

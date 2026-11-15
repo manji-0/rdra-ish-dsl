@@ -26,7 +26,6 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
-use crate::cli::VerifyBackend;
 use crate::export::{checked_system, tla_bounds, Modules};
 use crate::list_output::{render_violation, Finding, TraceSource};
 use crate::property_cone::{ConeRun, PropertyCone, Verdict};
@@ -39,8 +38,6 @@ use crate::tlc_replay::{explain_property, explain_violation};
 /// `--temporal-budget` bounds only the time.
 const WHOLE_MODEL_STATE_CAP: u64 = 1 << 21;
 
-/// `bounds` is `(--instance-count, --int-range-max)`; `budget` is `--temporal-budget`, the
-/// wall time a whole-model property run gets.
 /// What `verify` spends on a check it may not finish, and whether one it leaves undecided
 /// fails the run.
 pub struct Budget {
@@ -48,20 +45,6 @@ pub struct Budget {
     pub temporal: Duration,
     /// `--deny-undecided`: an undecided finding is an error, not a warning.
     pub deny_undecided: bool,
-}
-
-pub fn run_verify(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-    backend: VerifyBackend,
-    out: Option<PathBuf>,
-    bounds: (u32, u32),
-    scope: &Scope,
-    budget: Budget,
-) -> Result<()> {
-    match backend {
-        VerifyBackend::Tlc => run_tlc(program, model, out, bounds, scope, budget),
-    }
 }
 
 /// A printed module and its cfg.
@@ -306,7 +289,7 @@ fn whole_job(ts: &TransitionSystem, names: &TlaNames, module: &str, i: usize) ->
 /// is would otherwise go unreported. The reruns' violations and logs join the first run's.
 /// A property cone run that finds a counterexample is followed by the `_WF` run when the
 /// verdict asks for it (`property_cone`).
-fn run_job(tlc: &Path, dir: &Path, modules: &Modules, job: &Job, workers: &str) -> Result<Ran> {
+fn run_job(tlc: &Tlc, dir: &Path, modules: &Modules, job: &Job, workers: &str) -> Result<Ran> {
     let cfg = format!("{}.cfg", job.module);
     let safety = matches!(job.kind, JobKind::Cone(_));
     let mut ran = run_cfg(tlc, dir, &job.module, job.heap(), &cfg, workers, safety)?;
@@ -385,13 +368,13 @@ fn run_job(tlc: &Path, dir: &Path, modules: &Modules, job: &Job, workers: &str) 
     Ok(ran)
 }
 
-fn tlc_command(tlc: &Path, dir: &Path, module: &str, heap: Heap, workers: &str) -> Result<Command> {
+fn tlc_command(tlc: &Tlc, dir: &Path, module: &str, heap: Heap, workers: &str) -> Result<Command> {
     let meta = dir.join(format!("{module}.states"));
     // TLC unpacks its standard modules into java.io.tmpdir; parallel runs must not share it.
     let tmp = dir.join(format!("{module}.tmp"));
     fs::create_dir_all(&tmp).with_context(|| format!("failed to create {}", tmp.display()))?;
     let (key, value) = tlc_env(heap, &tmp);
-    let mut command = Command::new(tlc);
+    let mut command = tlc.command();
     command
         .env(key, value)
         .args(["-workers", workers, "-metadir"])
@@ -409,7 +392,7 @@ fn clean_up(dir: &Path, module: &str) {
 /// reports more than one check, each with its own trace (see `run_job`). A property run
 /// keeps TLC's default and stops at its first violation.
 fn run_cfg(
-    tlc: &Path,
+    tlc: &Tlc,
     dir: &Path,
     module: &str,
     heap: Heap,
@@ -457,7 +440,7 @@ fn undecided_hint(capped: bool) -> &'static str {
 /// A whole-model property run under a budget: TLC's progress lines (about one a minute) print
 /// as they come, and the run is killed past `budget` or past `WHOLE_MODEL_STATE_CAP` distinct states,
 /// and left undecided unless TLC had already printed its verdict.
-fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration) -> Result<Ran> {
+fn run_whole(tlc: &Tlc, dir: &Path, job: &Job, workers: &str, budget: Duration) -> Result<Ran> {
     let tla = format!("{}.tla", job.module);
     let cfg = format!("{}.cfg", job.module);
     let mut child = tlc_command(tlc, dir, &job.module, job.heap(), workers)?
@@ -556,7 +539,7 @@ fn run_whole(tlc: &Path, dir: &Path, job: &Job, workers: &str, budget: Duration)
 }
 
 /// Runs the cone jobs, up to 8 at once with one TLC worker each.
-fn run_cones(tlc: &Path, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<Vec<Ran>> {
+fn run_cones(tlc: &Tlc, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<Vec<Ran>> {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     run_some(jobs, cores.min(8), "1", |job, workers| {
         run_job(tlc, dir, modules, job, workers)
@@ -565,7 +548,7 @@ fn run_cones(tlc: &Path, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<
 
 /// Runs the whole-model property jobs, up to 2 at once (each takes the temporal heap) sharing
 /// the cores.
-fn run_wholes(tlc: &Path, dir: &Path, jobs: &[Job], budget: Duration) -> Result<Vec<Ran>> {
+fn run_wholes(tlc: &Tlc, dir: &Path, jobs: &[Job], budget: Duration) -> Result<Vec<Ran>> {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let at_once = jobs.len().clamp(1, 2);
     let workers = (cores / at_once).max(1).to_string();
@@ -660,7 +643,9 @@ fn model_traces(
         .collect()
 }
 
-fn run_tlc(
+/// Runs `verify --backend tlc`. `bounds` is `(--instance-count, --int-range-max)`; `tlc_jar`
+/// is `--tlc-jar`.
+pub fn run_tlc(
     program: &ResolvedProgram,
     model: &SemanticModel,
     out: Option<PathBuf>,
@@ -670,6 +655,7 @@ fn run_tlc(
         temporal: budget,
         deny_undecided,
     }: Budget,
+    tlc_jar: Option<PathBuf>,
 ) -> Result<()> {
     let bounds = tla_bounds(instance_count, int_range_max)?;
     let built = checked_system(model, bounds, scope)?;
@@ -725,14 +711,14 @@ fn run_tlc(
         println!("tlc_result: ok");
         return end.finish(&line, &[]);
     }
-    let tlc = find_tlc()?;
+    let tlc = Tlc::find(tlc_jar)?;
     let mut ran = run_cones(&tlc, &dir, &modules, &jobs)?;
     for (job, r) in jobs.iter().zip(&ran) {
         println!("{}", r.line(&job.module, &job.checks));
     }
 
     run_undecided_wholes(
-        (tlc.as_path(), dir.as_path()),
+        (&tlc, dir.as_path()),
         (&ts, &names),
         &whole_modules,
         budget,
@@ -847,7 +833,7 @@ fn write_specs_and_index(
 /// Runs the properties the cones leave undecided on the whole model, under the budget, and
 /// appends their jobs and results.
 fn run_undecided_wholes(
-    (tlc, dir): (&Path, &Path),
+    (tlc, dir): (&Tlc, &Path),
     (ts, names): (&TransitionSystem, &TlaNames),
     whole_modules: &[String],
     budget: Duration,
@@ -1068,17 +1054,66 @@ impl End {
     }
 }
 
-fn find_tlc() -> Result<PathBuf> {
-    for candidate in ["tlc", "tlc2"] {
-        if let Ok(path) = which(candidate) {
-            return Ok(path);
+/// How `verify` starts TLC: a `tlc` / `tlc2` launcher on PATH, or `java -cp <jar> tlc2.TLC`
+/// when `--tlc-jar` or `RDRA_TLC_JAR` names `tla2tools.jar`.
+pub(crate) enum Tlc {
+    Launcher(PathBuf),
+    Jar(PathBuf),
+}
+
+/// The env variable that names `tla2tools.jar` when `--tlc-jar` is not given.
+pub(crate) const TLC_JAR_ENV: &str = "RDRA_TLC_JAR";
+
+impl Tlc {
+    /// `--tlc-jar` first, then `RDRA_TLC_JAR`, then `tlc` and `tlc2` on PATH.
+    fn find(jar: Option<PathBuf>) -> Result<Tlc> {
+        let jar = jar.or_else(|| {
+            std::env::var_os(TLC_JAR_ENV)
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+        });
+        if let Some(jar) = jar {
+            if !jar.is_file() {
+                bail!(
+                    "tla2tools.jar not found at {} (from --tlc-jar or {TLC_JAR_ENV})",
+                    jar.display()
+                );
+            }
+            return Ok(Tlc::Jar(jar));
+        }
+        for candidate in ["tlc", "tlc2"] {
+            if let Ok(path) = which(candidate) {
+                return Ok(Tlc::Launcher(path));
+            }
+        }
+        bail!(
+            "TLC not found on PATH (tried `tlc`, `tlc2`)\n\
+             Get it one of these ways:\n  \
+             - Nix: `nix shell nixpkgs#tlaplus` (add `--extra-experimental-features 'nix-command flakes'` \
+             if flakes are off), then run verify in that shell\n  \
+             - Download tla2tools.jar from https://github.com/tlaplus/tlaplus/releases and pass \
+             `--tlc-jar <path>` or set {TLC_JAR_ENV}=<path> (needs `java` on PATH)\n\
+             Or use `rdra-ish export --kind tla` to generate the spec without running TLC."
+        );
+    }
+
+    fn command(&self) -> Command {
+        match self {
+            Tlc::Launcher(path) => Command::new(path),
+            Tlc::Jar(jar) => {
+                let mut command = Command::new("java");
+                command.arg("-cp").arg(jar).arg("tlc2.TLC");
+                command
+            }
         }
     }
-    bail!(
-        "TLC not found on PATH (tried `tlc`, `tlc2`)\n\
-         Install the TLA+ tools and ensure `tlc` is available, or use \
-         `rdra-ish export --kind tla` to generate the spec without running TLC."
-    );
+
+    fn display(&self) -> String {
+        match self {
+            Tlc::Launcher(path) => path.display().to_string(),
+            Tlc::Jar(jar) => format!("java -cp {} tlc2.TLC", jar.display()),
+        }
+    }
 }
 
 fn which(cmd: &str) -> Result<PathBuf> {
