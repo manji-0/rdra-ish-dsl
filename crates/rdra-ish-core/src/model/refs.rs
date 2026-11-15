@@ -485,6 +485,8 @@ pub struct ModelColumn {
     pub derived_expr: Option<DerivedExpr>,
     /// For an inline `Enum`, `value_labels[i]` is the optional label of its `i`-th value.
     pub value_labels: Vec<Option<std::string::String>>,
+    /// `@end(..)`: values a row may stay at for good, so staying there is no deadlock.
+    pub end_values: Vec<std::string::String>,
 }
 
 impl ModelColumn {

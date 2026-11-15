@@ -242,6 +242,22 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
     let at_tenant = just(Token::AtTenant).to(Annotation::Tenant);
     let at_derived = expr_annotation(Token::AtDerived, "@derived", Annotation::Derived);
 
+    // @end(a, b): at least one value
+    let at_end = just(Token::AtEnd)
+        .ignore_then(just(Token::LParen))
+        .ignore_then(ident().separated_by(just(Token::Comma)).allow_trailing())
+        .then_ignore(just(Token::RParen))
+        .try_map(|values: Vec<String>, span| {
+            if values.is_empty() {
+                Err(Simple::custom(
+                    span,
+                    "`@end` takes at least one value: `@end(value)`",
+                ))
+            } else {
+                Ok(Annotation::End(values))
+            }
+        });
+
     choice((
         at_pk,
         at_unique,
@@ -254,6 +270,7 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
         at_history,
         at_tenant,
         at_derived,
+        at_end,
     ))
 }
 

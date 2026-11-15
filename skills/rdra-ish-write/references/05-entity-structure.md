@@ -34,7 +34,7 @@ Also ask:
 1. Replace coarse entity shells with columns and stable annotations.
 2. Use `@pk`, `@pk(a, b)`, `@unique`, `@unique(a, b)`, `@index`,
    `@index(a, b)`, `@check(expr)`, `@null`, `@default(v)`, `@label("...")`,
-   `@soft_delete`, `@history`, `@tenant`, and `@derived(expr)` where they
+   `@soft_delete`, `@history`, `@tenant`, `@derived(expr)`, and `@end(v)` where they
    reflect real constraints. Write `@check` and `@derived` unquoted: `@check(total >= 0)`,
    `@derived(total - discount)`. `@check` becomes the invariant
    `Check_<Entity>_<column>_<n>` that `check` and `verify` test, so a created row must

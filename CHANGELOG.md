@@ -9,6 +9,22 @@
   line: `FAIL: 1 error, 0 warnings within 1 instance per entity, Int 0..5`, or
   `FAIL: <E> errors, <W> warnings; the model did not load, so nothing was explored` when a
   load error stops it ([CLI reference](./docs/cli-reference.md#check)).
+- `@end(v, ...)` on an `Enum` or variation column declares states a row may stay at for good,
+  such as a stock row waiting at `free`. Staying at one is no `Deadlock`, and the state
+  diagram draws it as an end state. An unknown value is `UnknownEndValue`, `@end` on a
+  column without values is `EndOnNonEnumColumn`, and `lint` `end-redundant` warns on a
+  value no `transitions` arm leaves ([language reference](./docs/language-reference.md#column-annotations)).
+- `check` warns `UnjoinedWrite_<UseCase>_<A>_<B>` when a use case writes two entities that a
+  key path relates only through entities it does not write, such as `Account` and `Store`
+  through `Device`: one run may write rows of different `Device` rows, which `check` at one
+  instance cannot show. The warning names the `updates(UseCase, Between)` that joins them;
+  `.apart()` on `creates`, `updates`, or `deletes` marks a write meant as a row of its own
+  ([language reference](./docs/language-reference.md#chain-methods)).
+- `lint` `multi-rule-unscoped` warns on a `forbidden` or `invariant` over several entities
+  with no `.along(...)` when keys relate them: it holds over every combination of rows, and
+  `check` at one instance sees one only. The hint names the `.along(...)` of the shortest key
+  path. `.global()` marks a rule meant for every combination; with `.along(...)` it is
+  `GlobalWithAlong` ([language reference](./docs/language-reference.md#chain-methods)).
 - `verify --tlc-jar <path>` and `RDRA_TLC_JAR` run TLC as `java -cp <path> tlc2.TLC` from
   `tla2tools.jar`. The error for a missing TLC lists the ways to get it, and the CLI
   reference has a [Getting TLC](./docs/cli-reference.md#getting-tlc) section.

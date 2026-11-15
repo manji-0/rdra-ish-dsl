@@ -210,6 +210,7 @@ fn generate_key_columns(
             is_tenant_scope: false,
             derived_expr: None,
             value_labels: Vec::new(),
+            end_values: Vec::new(),
         });
     }
     Some(

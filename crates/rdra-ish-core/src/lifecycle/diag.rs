@@ -308,6 +308,17 @@ pub enum StateDiag {
         fix: String,
         site: Site,
     },
+    /// A use case writes rows of `a` and `b` that no row it writes or binds joins, though a
+    /// key path through `path` relates them, so one run may write an `a` and a `b` that belong
+    /// to different rows of the entities between.
+    UnjoinedWrite {
+        usecase: String,
+        a: String,
+        b: String,
+        /// The entities of the shortest key path from `a` to `b`, ends included.
+        path: Vec<String>,
+        site: Site,
+    },
     /// A property atom names a column no single entity owns.
     UnresolvedPropertyAtom {
         property: String,
@@ -511,6 +522,9 @@ impl StateDiag {
             StateDiag::UnjoinedGuardRead {
                 condition, usecase, ..
             } => with("UnjoinedGuardRead", &[condition, usecase]),
+            StateDiag::UnjoinedWrite { usecase, a, b, .. } => {
+                format!("UnjoinedWrite_{usecase}_{a}_{b}")
+            }
             StateDiag::UnboundAfterRead { anchor, .. } => with("UnboundAfterRead", &[anchor]),
             StateDiag::UnanchoredTrigger { event, usecase, .. } => {
                 with("UnanchoredTrigger", &[event, usecase])
@@ -581,6 +595,7 @@ impl StateDiag {
             | StateDiag::ArmNeverTaken { .. }
             | StateDiag::ValueNeverChosen { .. }
             | StateDiag::UnjoinedGuardRead { .. }
+            | StateDiag::UnjoinedWrite { .. }
             | StateDiag::UnboundAfterRead { .. }
             | StateDiag::GuardReadsLaterStep { .. }
             | StateDiag::DrivenComparisonColumnWritten { .. } => Severity::Warning,
@@ -945,6 +960,22 @@ impl fmt::Display for StateDiag {
                 f,
                 "holds({condition}, ...) on {usecase} reads {entity}, which no key joins to a row {usecase} binds, so any {entity} row satisfies it; {fix}"
             ),
+            StateDiag::UnjoinedWrite {
+                usecase, a, b, path, ..
+            } => {
+                let between = &path[1..path.len() - 1];
+                let writes: Vec<String> = between
+                    .iter()
+                    .map(|e| format!("`updates({usecase}, {e})`"))
+                    .collect();
+                write!(
+                    f,
+                    "{usecase} writes {a} and {b}, and no row it writes joins them, so one run may write {a} and {b} rows that belong to different {} rows; write {} in {usecase} ({}) to write joined rows, or mark a write meant as a row of its own with `.apart()`",
+                    between.join(" and "),
+                    between.join(" and "),
+                    writes.join(", ")
+                )
+            }
             StateDiag::UnboundAfterRead { anchor, entity, .. } => write!(
                 f,
                 "after({anchor}) reads {entity}, which no step of {anchor} binds, so every present {entity} row must satisfy it; write {entity} in {anchor} to read the run's row"

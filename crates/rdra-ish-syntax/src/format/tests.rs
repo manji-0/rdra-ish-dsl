@@ -347,3 +347,11 @@ invariant(Order).when(status == paid).then(total > 0)
         "formatted output should parse: {errors:?}"
     );
 }
+
+#[test]
+fn keeps_an_end_annotation() {
+    assert_formats_to(
+        "entity E \"E\" {\n  status: Enum(free, used) @end( free,used )\n}\n",
+        "entity E \"E\" {\n  status: Enum(free, used) @end(free, used)\n}\n",
+    );
+}

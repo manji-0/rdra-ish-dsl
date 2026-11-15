@@ -502,3 +502,86 @@ precedes(B, A)
     assert!(cycles.iter().any(|i| i.subject_id == "A"));
     assert!(cycles.iter().any(|i| i.subject_id == "B"));
 }
+
+#[test]
+fn end_redundant_flags_an_end_value_no_transition_leaves() {
+    let model = model_from(
+        r#"
+usecase Allocate "Allocate"
+entity Cert "Cert" {
+  id: Int @pk
+  status: Enum(free, used) @default(free) @end(free, used)
+}
+transitions(Allocate, Cert.status, free -> used)
+"#,
+    );
+    let flagged: Vec<String> = collect_findings(&model)
+        .into_iter()
+        .filter(|issue| issue.rule == "end-redundant")
+        .map(|issue| issue.message)
+        .collect();
+    assert_eq!(
+        flagged,
+        ["@end(used) on Cert.status: no transition leaves used, so it is an end state without @end"]
+    );
+}
+
+const ASSIGNED: &str = r#"
+usecase Allocate "Allocate"
+entity Account "Account" {
+  id: Int @pk
+  status: Enum(registered, allocated) @default(registered)
+}
+entity Assignment "Assignment" {
+  id: Int @pk
+}
+entity Cert "Cert" {
+  id: Int @pk
+  status: Enum(free, used) @default(free)
+}
+relate(Assignment, Account, 1:1)
+relate(Assignment, Cert, 1:1)
+transitions(Allocate, Account.status, registered -> allocated)
+transitions(Allocate, Cert.status, free -> used)
+"#;
+
+fn unscoped(rule: &str) -> Vec<(String, String)> {
+    let model = model_from(&format!("{ASSIGNED}{rule}\n"));
+    collect_findings(&model)
+        .into_iter()
+        .filter(|issue| issue.rule == "multi-rule-unscoped")
+        .map(|issue| (issue.message, issue.hint))
+        .collect()
+}
+
+#[test]
+fn multi_rule_unscoped_names_the_along_the_keys_give() {
+    assert_eq!(
+        unscoped("forbidden(Account, Cert, Account.status == registered, Cert.status == used)"),
+        [(
+            "forbidden on Account, Cert has no `.along(...)`, so it holds over every combination of their rows, related or not; `check` at one instance per entity sees one combination only".to_string(),
+            "add `.along(Account, Assignment, Cert)` to hold it over related rows only, or `.global()` if every combination is meant".to_string()
+        )]
+    );
+    let invariant = unscoped(
+        "invariant(Account, Cert).when(Cert.status == used).then(Account.status == allocated)",
+    );
+    assert_eq!(invariant.len(), 1, "{invariant:?}");
+    assert!(invariant[0].0.starts_with("invariant on "), "{invariant:?}");
+}
+
+#[test]
+fn multi_rule_unscoped_skips_an_along_a_global_and_unrelated_entities() {
+    let along = "forbidden(Account, Cert, Account.status == registered, Cert.status == used).along(Account, Assignment, Cert)";
+    assert!(unscoped(along).is_empty());
+    let global =
+        "forbidden(Account, Cert, Account.status == registered, Cert.status == used).global()";
+    assert!(unscoped(global).is_empty());
+    let unrelated = ASSIGNED.replace("relate(Assignment, Cert, 1:1)\n", "");
+    let model = model_from(&format!(
+        "{unrelated}forbidden(Account, Cert, Account.status == registered, Cert.status == used)\n"
+    ));
+    assert!(!collect_findings(&model)
+        .iter()
+        .any(|issue| issue.rule == "multi-rule-unscoped"));
+}

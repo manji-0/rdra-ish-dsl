@@ -526,6 +526,7 @@ impl Extended {
                 base: Value::FALSE,
                 start: Start::Base,
                 site: Site::bare(ModelRef::Synthesized),
+                ends: Vec::new(),
             });
             var
         };

@@ -299,3 +299,71 @@ entity Line "明細" {
         .any(|c| c.name == "line_no" && c.is_pk));
     assert!(entity.columns.iter().any(|c| c.name == "qty" && !c.is_pk));
 }
+
+fn end_values_of(src: &str) -> (Vec<String>, Vec<String>) {
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "parse errors: {parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect();
+    let ends = model
+        .entities
+        .iter()
+        .flat_map(|(_, e)| e.columns.iter())
+        .flat_map(|c| c.end_values.clone())
+        .collect();
+    (ends, errors)
+}
+
+#[test]
+fn end_names_values_of_an_enum_or_variation_column() {
+    let (ends, errors) = end_values_of(
+        "entity E \"E\" {\n  status: Enum(free, used) @end(free, free)\n  kind: K @end(b)\n}\nvariation K \"K\" {\n  a\n  b\n}\n",
+    );
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(ends, ["free", "b"]);
+}
+
+#[test]
+fn end_rejects_an_unknown_value_and_a_column_without_states() {
+    let (_, errors) = end_values_of("entity E \"E\" {\n  status: Enum(free, used) @end(gone)\n}\n");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0]
+            .starts_with("`@end(gone)` on column 'status' of 'E': 'gone' is not one of its values"),
+        "{errors:?}"
+    );
+    assert!(
+        errors[0].contains("declared values are: free, used"),
+        "{errors:?}"
+    );
+
+    let (_, errors) = end_values_of("entity E \"E\" {\n  n: Int @end(free)\n}\n");
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].contains("only an `Enum` or variation column"),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn global_and_along_on_one_rule_is_an_error() {
+    let src = r#"
+entity A "A" { id: Int @pk  s: Enum(x, y) }
+entity B "B" { id: Int @pk  t: Enum(x, y) }
+relate(B, A, N:1)
+forbidden(A, B, A.s == x, B.t == y).along(A, B).global()
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (_, diags) = build_model(&ast);
+    let errors: Vec<_> = diags.iter().filter(|d| !d.is_warning).collect();
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        matches!(errors[0].error, RdraError::GlobalWithAlong { .. }),
+        "{errors:?}"
+    );
+}

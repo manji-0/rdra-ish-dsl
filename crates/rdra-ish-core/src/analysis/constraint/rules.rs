@@ -51,6 +51,7 @@ pub(crate) fn process_forbidden(
             label,
             site: Some(ctx.locate(pred.span.clone())),
             scope: scope.clone(),
+            global: global_chain(pred, &scope_semantics, ctx, diags),
             scope_semantics,
             conditions,
         });
@@ -144,6 +145,7 @@ pub(crate) fn process_invariant(
         label,
         site: Some(ctx.locate(pred.span.clone())),
         scope: scope.clone(),
+        global: global_chain(pred, &scope_semantics, ctx, diags),
         scope_semantics,
         guards,
         requireds,
@@ -153,4 +155,28 @@ pub(crate) fn process_invariant(
     model
         .typed_predicates
         .push(TypedPredicate::CrossInvariant { scope });
+}
+
+/// Whether the rule says `.global()`. With `.along(...)` too it is `GlobalWithAlong`: the
+/// path already limits the rule to related rows.
+fn global_chain(
+    pred: &PredicateCall,
+    scope: &CrossConstraintScope,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    let Some(global) = pred.chain.iter().find(|cc| cc.name == "global") else {
+        return false;
+    };
+    if matches!(scope, CrossConstraintScope::RelationPath { .. }) {
+        push_error(
+            ctx,
+            diags,
+            global.span.clone(),
+            RdraError::GlobalWithAlong {
+                pred: pred.name.clone(),
+            },
+        );
+    }
+    true
 }

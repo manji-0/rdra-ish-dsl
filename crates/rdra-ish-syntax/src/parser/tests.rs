@@ -1281,3 +1281,17 @@ fn lex_errors_are_reported() {
         "unknown characters must not be silently dropped"
     );
 }
+
+#[test]
+fn end_takes_one_or_more_values() {
+    let ast = parse_ok("entity E \"E\" { status: Enum(free, used) @end(free, used) }\n");
+    let Item::Instance(inst) = &ast.items[0] else {
+        panic!("expected instance");
+    };
+    assert_eq!(
+        inst.columns[0].annotations,
+        [Annotation::End(vec!["free".into(), "used".into()])]
+    );
+    let (_, errors) = parse("entity E \"E\" { status: Enum(free, used) @end() }\n");
+    assert!(!errors.is_empty());
+}

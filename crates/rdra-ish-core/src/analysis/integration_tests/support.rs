@@ -38,6 +38,7 @@ pub(super) fn model_column(name: &str, col_type: ColumnType) -> ModelColumn {
         is_tenant_scope: false,
         derived_expr: None,
         value_labels: Vec::new(),
+        end_values: Vec::new(),
     }
 }
 

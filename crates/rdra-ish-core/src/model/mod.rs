@@ -316,6 +316,9 @@ pub struct SemanticModel {
     pub typed_predicates: Vec<TypedPredicate>,
     /// Events intentionally published outside the local model boundary.
     pub outbox_events: HashSet<EventKey>,
+    /// `creates/updates/deletes(UseCase, Entity).apart()`: the use case writes a row of the
+    /// entity that need not be joined to the other rows it writes.
+    pub apart_writes: Vec<(UseCaseKey, EntityKey)>,
     pub state_transitions: Vec<StateTransition>,
     pub column_effects: Vec<ColumnEffect>,
     /// `links(UseCase, Child, Parent)`: an existing child linked to an existing parent.

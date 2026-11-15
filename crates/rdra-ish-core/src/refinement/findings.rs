@@ -44,6 +44,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
+        | StateDiag::UnjoinedWrite { .. }
         | StateDiag::UnboundAfterRead { .. }
         | StateDiag::UnanchoredTrigger { .. }
         | StateDiag::UnjoinedTrigger { .. }

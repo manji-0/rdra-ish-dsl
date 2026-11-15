@@ -239,3 +239,80 @@ applies_to(Packed, Ship)
         .collect();
     assert_eq!(names, ["Deadlock_Order_status_paid"]);
 }
+
+/// `@end(paid)` declares that an Order may stay paid, so the sample's deadlock is gone and
+/// paid no longer carries a deadlock check; the other states keep theirs.
+#[test]
+fn an_end_value_is_no_deadlock() {
+    let src = std::fs::read_to_string(repo_root().join(DEADLOCK))
+        .expect("sample readable")
+        .replace(
+            "status: Enum(pending, paid, shipped) @default(pending)",
+            "status: Enum(pending, paid, shipped) @default(pending) @end(paid)",
+        );
+    let model = model_from(&src);
+    let d = derive(&model);
+    assert!(deadlocks(&d.diags).is_empty(), "{:?}", deadlocks(&d.diags));
+
+    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
+    let order = built
+        .ts
+        .entity_ids()
+        .find(|&e| built.ts.entity(e).id == "Order")
+        .expect("Order");
+    let checks: Vec<(String, Option<String>)> = built
+        .ts
+        .state_model_states(order)
+        .into_iter()
+        .map(|s| (built.ts.value_text(s.var, s.value), s.deadlock))
+        .collect();
+    assert_eq!(
+        checks,
+        [
+            (
+                "pending".to_string(),
+                Some("Deadlock_Order_status_pending".to_string())
+            ),
+            ("paid".to_string(), None),
+            ("shipped".to_string(), None),
+        ]
+    );
+}
+
+/// The `Cert` stock of issue #116: free waits for an Account to take it, and every Account
+/// may be deleted first, so free is a state to stay at by design.
+#[test]
+fn a_stock_row_may_wait_at_a_declared_end() {
+    let src = |cert: &str| {
+        format!(
+            r#"
+entity Account "Account" {{
+  id: Int @pk
+  status: Enum(registered, allocated, deleted) @default(registered)
+}}
+entity Cert "Cert" {{
+  id: Int @pk
+  {cert}
+}}
+usecase Create "Create"
+usecase Allocate "Allocate"
+usecase Delete "Delete"
+creates(Create, Account)
+updates(Allocate, Account)
+updates(Allocate, Cert)
+transitions(Allocate, Account.status, registered -> allocated)
+transitions(Allocate, Cert.status, free -> used)
+updates(Delete, Account)
+transitions(Delete, Account.status, (registered, allocated) -> deleted)
+"#
+        )
+    };
+    let stuck = derive_src(&src("status: Enum(free, used) @default(free)"));
+    let names: Vec<String> = deadlocks(&stuck.diags)
+        .iter()
+        .map(|d| d.name(&[]))
+        .collect();
+    assert_eq!(names, ["Deadlock_Cert_status_free"]);
+    let declared = derive_src(&src("status: Enum(free, used) @default(free) @end(free)"));
+    assert!(deadlocks(&declared.diags).is_empty());
+}

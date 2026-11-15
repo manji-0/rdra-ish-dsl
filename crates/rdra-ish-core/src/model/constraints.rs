@@ -140,6 +140,8 @@ pub enum CrossConstraintScope {
 pub struct CrossForbiddenConstraint {
     pub scope: Vec<EntityKey>,
     pub scope_semantics: CrossConstraintScope,
+    /// `.global()`: the rule is meant for every combination of rows, though keys relate them.
+    pub global: bool,
     pub conditions: Vec<CrossEntityCondition>,
 
     /// Source site of the predicate/declaration that produced this fact.
@@ -154,6 +156,8 @@ pub struct CrossForbiddenConstraint {
 pub struct CrossEntityInvariant {
     pub scope: Vec<EntityKey>,
     pub scope_semantics: CrossConstraintScope,
+    /// `.global()`: the rule is meant for every combination of rows, though keys relate them.
+    pub global: bool,
     pub guards: Vec<CrossEntityCondition>,
     pub requireds: Vec<CrossEntityCondition>,
 

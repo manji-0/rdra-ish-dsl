@@ -257,6 +257,20 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error("`{pred}` has both `.global()` and `.along(...)`\n  hint: `.along(...)` limits the rule to related rows and `.global()` says it is meant for every combination; keep one")]
+    GlobalWithAlong { pred: String },
+
+    #[error("`@end` on column '{col}' of '{entity}': only an `Enum` or variation column has states to end at\n  hint: delete `@end`, or type the column as `Enum(...)`")]
+    EndOnNonEnumColumn { entity: String, col: String },
+
+    #[error("`@end({value})` on column '{col}' of '{entity}': '{value}' is not one of its values\n  hint: declared values are: {allowed}")]
+    UnknownEndValue {
+        entity: String,
+        col: String,
+        value: String,
+        allowed: String,
+    },
+
     #[error("column '{col}' of '{entity}' is typed by '{name}', which names no variation\n  hint: declare `variation {name} \"Label\" {{ value ... }}` and import it, or use an inline `Enum(...)`")]
     UnknownColumnType {
         entity: String,

@@ -140,6 +140,7 @@ impl<'m> Builder<'m> {
             base,
             start: Start::Base,
             site,
+            ends: Vec::new(),
         });
         id
     }

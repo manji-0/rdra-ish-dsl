@@ -222,6 +222,13 @@ fn one_of_each() -> Vec<StateDiag> {
             created: true,
             site: site(),
         },
+        StateDiag::UnjoinedWrite {
+            usecase: "Register".into(),
+            a: "Account".into(),
+            b: "Store".into(),
+            path: vec!["Account".into(), "Device".into(), "Store".into()],
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -256,6 +263,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::DerivedColumnRead { .. }
             | StateDiag::UnresolvedPropertyAtom { .. }
             | StateDiag::UnjoinedGuardRead { .. }
+            | StateDiag::UnjoinedWrite { .. }
             | StateDiag::UnboundAfterRead { .. }
             | StateDiag::UnanchoredTrigger { .. }
             | StateDiag::UnjoinedTrigger { .. }

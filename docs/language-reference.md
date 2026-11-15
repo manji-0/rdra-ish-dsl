@@ -263,13 +263,14 @@ only the methods below, and any other name is an `unknown chain method` error
 | `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
 | `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
-| `forbidden` | `.along(...)`, `.role(...)`, `.label("...")` |
-| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")` |
+| `forbidden` | `.along(...)`, `.role(...)`, `.label("...")`, `.global()` |
+| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()` |
 | `required`, `exclusive` | `.label("...")` |
 | `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
 | `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`); `.when(Condition)`, at most once, on a literal value: the condition's `holds` body guards this value |
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
+| `creates`, `updates`, `deletes` | `.apart()`, on a use case's write: the row need not be joined to the other rows the use case writes, so it draws no `UnjoinedWrite` |
 | every other predicate (including `combines`) | none |
 
 ---
@@ -1151,6 +1152,7 @@ is optional/nullable in the payload.
 | `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
 | `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
 | `@tenant` | Marks the column as the tenant-scope discriminator. |
+| `@end(v, ...)` | Declares states of an `Enum` or variation column that a row may stay at for good, such as a stock row waiting at `free` to be used. Staying at one is no `Deadlock`, even when a `transitions` arm leaves it, and the state diagram draws it as an end state. A value the column does not declare is `UnknownEndValue`; `@end` on a column with no values is `EndOnNonEnumColumn`. `lint` `end-redundant` warns on a value that no `transitions` arm leaves, which is an end state without `@end`. See [Deadlocks](./state-derivation.md#deadlocks). |
 | `@derived(expr)` | Derives the column from the entity's own columns: a condition for a Bool column (`@derived(qty >= 3)`), or one `+`, `-`, or `*` over a column or an integer for an Int, Money, or Decimal column (`@derived(total - discount)`). A non-numeric operand is `ArithTypeMismatch`, and an expression that cannot derive the column's type is `DerivedTypeMismatch`. A derived column takes no `@check`, `@default`, `@pk`, or `@unique` (`DerivedColumnAnnotation`), and a `sets` on it is `DerivedColumnWritten`. |
 
 Composite `@pk(...)`, `@unique(...)`, and `@index(...)` annotations are written on
@@ -1439,6 +1441,11 @@ applies_to(NoOpenLoan, Withdraw)
   binds is the `UnjoinedGuardRead` warning: the guard holds when any row of it anywhere
   satisfies the body. The warning names the entity, the use case, and the fix: the `.along`
   that the shortest key path gives, or writing the entity in the use case.
+- A use case that writes two entities related only through an entity it does not write, such
+  as `Account` and `Store` through `Device`, is the `UnjoinedWrite` warning: one run may update
+  an `Account` and a `Store` of different `Device` rows. Write the entity between
+  (`updates(Register, Device)`) to join the rows, or mark a write meant as a row of its own with
+  `.apart()`: `updates(Register, Store).apart()`.
 
 ```rdra
 // A claim and a settlement are both children of the accident case. The claim is completed
@@ -1620,6 +1627,7 @@ per pair, the common case, never writes it.
 | `AmbiguousOwnerLink` | Several keys join two entities a statement joins, and no `.role(role)` names one. The lifecycle reports it for a guard, a quantifier, a copy, and a parent and child one use case writes (it depends on the use case a guard is on); the analysis for `.along`. |
 | `UnknownOwnerRole` | `.role(role)` names no key on the `.along` path, no key of the quantified entity, no key of an entity the `holds` body compares, or no key between a copy's target and source. |
 | `UnjoinedGuardRead` | A `holds` body compares an entity that no key joins to a row the guarded use case binds, so any row of it satisfies the guard (a warning). |
+| `UnjoinedWrite` | A use case writes two entities that a key path relates only through entities it does not write or bind, so one run may write rows that belong to different rows of the entities between (a warning). `check` at one instance cannot show the difference; `verify` at two can. The fix writes the entities between (`updates(UseCase, Between)`), or `.apart()` on a write meant as a row of its own. |
 | `RoleWithoutJoin` | `.role(...)` on a `forbidden` or `invariant` follows no `.along`, `.has` or `.none`, or `.role(...)` on a `sets` that copies nothing. |
 | `QuantifierAlongShape` | The `.along` of an `invariant` with `.has` or `.none` does not run from the anchor to the counted entity, each entity once. The hint writes the shortest key path between the two. |
 
@@ -2368,6 +2376,12 @@ that the scope does not name, such as `J` or the middle of
 ends: the rule counts a pair of scope instances when some instances of the middle entities
 connect them. An unlinked
 owner (an `.optional()` relate not yet linked) is not linked for `.along`.
+
+At one instance per entity `check` sees one pair only, so a rule without `.along` that is
+broader than meant passes `check` and fails `verify`. When keys relate the entities,
+`lint` `multi-rule-unscoped` warns and names the `.along(...)` the shortest key path gives.
+Write `.global()` on a rule meant for every combination to say so; `.global()` with
+`.along(...)` is `GlobalWithAlong`, an error.
 
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific
 use-case boundary instead of against every reachable state. The tool checks the predicate

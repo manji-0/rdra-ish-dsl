@@ -990,3 +990,43 @@ fn test_state_whole_model_is_an_index() {
     assert!(!out.contains("-->"), "{out}");
     assert!(!out.contains("class "), "{out}");
 }
+
+/// An `@end` state with a transition out is still an end state: drawn `--> [*]`, classed
+/// `stateend`, and the legend names `@end`.
+#[test]
+fn state_diagram_draws_a_declared_end_with_a_way_out_as_an_end() {
+    let src = r#"
+entity Cert "Cert" {
+  id: Int @pk
+  status: Enum(free, used) @default(free) @end(free)
+}
+usecase Allocate "Allocate"
+transitions(Allocate, Cert.status, free -> used)
+"#;
+    let model = model_from(src);
+    let result = StateMermaidEmitter
+        .emit(&model, &all_entities(&model), &Explored::default())
+        .unwrap();
+    assert!(
+        result.contains("    state__Cert_free --> [*]\n"),
+        "{result}"
+    );
+    assert!(
+        result.contains("  class state__Cert_free stateend\n"),
+        "{result}"
+    );
+    assert!(
+        result.contains("stateend = no transition out, or declared by @end\n"),
+        "{result}"
+    );
+
+    let plain = model_from(&src.replace(" @end(free)", ""));
+    let result = StateMermaidEmitter
+        .emit(&plain, &all_entities(&plain), &Explored::default())
+        .unwrap();
+    assert!(!result.contains("state__Cert_free --> [*]"), "{result}");
+    assert!(
+        result.contains("stateend = no transition out\n"),
+        "{result}"
+    );
+}

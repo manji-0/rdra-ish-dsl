@@ -458,6 +458,7 @@ fn ast_column_to_model(
             ColType::Enum(vs) => vs.iter().map(|v| v.label.clone()).collect(),
             _ => Vec::new(),
         },
+        end_values: Vec::new(),
     };
     for ann in &col.annotations {
         match ann {
@@ -507,6 +508,44 @@ fn ast_column_to_model(
             Annotation::SoftDelete => mc.is_soft_delete = true,
             Annotation::History => mc.is_history = true,
             Annotation::Tenant => mc.is_tenant_scope = true,
+            Annotation::End(values) => {
+                let allowed = match &mc.col_type {
+                    ColumnType::Enum(declared) => Some(declared.clone()),
+                    ColumnType::Variation(key) => {
+                        model.variations.get(*key).map(|v| v.values.clone())
+                    }
+                    _ => None,
+                };
+                let Some(allowed) = allowed else {
+                    push_error(
+                        ctx,
+                        diags,
+                        col.span.clone(),
+                        RdraError::EndOnNonEnumColumn {
+                            entity: inst.id.clone(),
+                            col: col.name.clone(),
+                        },
+                    );
+                    continue;
+                };
+                for value in values {
+                    if !allowed.contains(value) {
+                        push_error(
+                            ctx,
+                            diags,
+                            col.span.clone(),
+                            RdraError::UnknownEndValue {
+                                entity: inst.id.clone(),
+                                col: col.name.clone(),
+                                value: value.clone(),
+                                allowed: allowed.join(", "),
+                            },
+                        );
+                    } else if !mc.end_values.contains(value) {
+                        mc.end_values.push(value.clone());
+                    }
+                }
+            }
         }
     }
     mc
