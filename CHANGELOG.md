@@ -25,6 +25,12 @@
   `check` at one instance sees one only. The hint names the `.along(...)` of the shortest key
   path. `.global()` marks a rule meant for every combination; with `.along(...)` it is
   `GlobalWithAlong` ([language reference](./docs/language-reference.md#chain-methods)).
+- `check`, `states`, and `verify` take `--without-usecase <UC>`, `--without-buc <BUC>`, and
+  `--actor <Actor>`, which assume the other use cases never run and leave them out. Unlike
+  `--buc`, the run still decides deadlocks, witnesses, and use cases that never run, so a
+  state one actor cannot leave by their own use cases is an error even when another
+  actor's use case leaves every state. The `scope:` line lists the use cases left out
+  ([CLI reference](./docs/cli-reference.md#partial-runs)).
 - `verify --tlc-jar <path>` and `RDRA_TLC_JAR` run TLC as `java -cp <path> tlc2.TLC` from
   `tla2tools.jar`. The error for a missing TLC lists the ways to get it, and the CLI
   reference has a [Getting TLC](./docs/cli-reference.md#getting-tlc) section.

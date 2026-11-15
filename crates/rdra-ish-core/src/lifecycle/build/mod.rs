@@ -88,7 +88,7 @@ impl<'m> Builder<'m> {
             .active_ucs
             .iter()
             .copied()
-            .filter(|uc| !self.uc_actions.contains_key(uc))
+            .filter(|uc| !self.uc_actions.contains_key(uc) && !scope.without.contains(uc))
             .collect();
         inactive.sort_by(|a, b| model.use_cases[*a].id.cmp(&model.use_cases[*b].id));
         let diags = self

@@ -894,7 +894,10 @@ gaps.
   witness, a use case that never runs, a deadlock, an arm never taken, and a value never
   chosen are therefore listed under `not checked:` and never reported as an error or a
   warning. See it: the `not checked:` lines of a `--buc` run. What you can do: run without
-  `--buc`, or use `--entity`, whose cones are exact and whose findings are decided.
+  `--buc`, or use `--entity`, whose cones are exact and whose findings are decided. To ask
+  whether one actor can finish on their own, use `--actor`, `--without-buc`, or
+  `--without-usecase`: they assume the other use cases never run and decide the findings
+  under that assumption ([Partial runs](./cli-reference.md#partial-runs)).
 
 ## Workflow
 

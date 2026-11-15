@@ -101,3 +101,148 @@ fn an_unknown_id_is_an_error() {
     let err = Scope::parse(&model, &["Nope".to_string()], &[]).unwrap_err();
     assert_eq!(err.to_string(), "unknown buc `Nope`");
 }
+
+/// Issue #115: an operator's `Delete` leaves every state, which hides that a staff member
+/// whose key no longer matches cannot leave `pending` by their own use cases.
+const SELF_SERVICE: &str = r#"
+actor Staff "Staff"
+actor Ops "Ops"
+entity Account "Account" {
+  id: Int @pk
+  status: Enum(pending, active, deleted) @default(pending)
+}
+entity Browser "Browser" {
+  id: Int @pk
+  key_ok: Bool @default(true)
+}
+relate(Account, Browser, N:1)
+buc BucSelf "Self-service"
+buc BucOps "Ops"
+usecase Create "Create"
+usecase Activate "Activate"
+usecase LoseKey "Lose key"
+usecase Delete "Delete"
+contains(BucSelf, Create)
+contains(BucSelf, Activate)
+contains(BucSelf, LoseKey)
+contains(BucOps, Delete)
+performs(Staff, BucSelf)
+performs(Ops, BucOps)
+creates(Create, Account)
+updates(Activate, Account)
+condition KeyOk "key matches"
+holds(KeyOk, Browser.key_ok == true).along(Account, Browser)
+applies_to(KeyOk, Activate)
+transitions(Activate, Account.status, pending -> active)
+updates(LoseKey, Browser)
+sets(LoseKey, Browser.key_ok == false)
+updates(Delete, Account)
+transitions(Delete, Account.status, (pending, active) -> deleted)
+"#;
+
+fn without(model: &SemanticModel, w: crate::lifecycle::Without) -> Scope {
+    Scope::parse(model, &[], &[])
+        .unwrap()
+        .without(model, &w)
+        .unwrap()
+}
+
+fn deadlock_names(model: &SemanticModel, scope: &Scope) -> Vec<String> {
+    let report = super::super::derive_states(model, scope, Caps::STATES);
+    report
+        .diags
+        .iter()
+        .filter(|d| matches!(d.diag, StateDiag::Deadlock { .. }))
+        .map(|d| d.diag.name(&[]))
+        .collect()
+}
+
+#[test]
+fn leaving_out_use_cases_decides_the_deadlocks_they_hid() {
+    let model = model_from(SELF_SERVICE);
+    assert!(deadlock_names(&model, &Scope::ALL).is_empty());
+    let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let (ucs, bucs, actors) = (ids(&["Delete"]), ids(&["BucOps"]), ids(&["Staff"]));
+    for w in [
+        crate::lifecycle::Without {
+            usecases: &ucs,
+            ..Default::default()
+        },
+        crate::lifecycle::Without {
+            bucs: &bucs,
+            ..Default::default()
+        },
+        crate::lifecycle::Without {
+            actors: &actors,
+            ..Default::default()
+        },
+    ] {
+        let scope = without(&model, w);
+        let left_out: Vec<&str> = scope
+            .without
+            .iter()
+            .map(|k| model.use_cases[*k].id.as_str())
+            .collect();
+        assert_eq!(left_out, ["Delete"]);
+        assert_eq!(
+            deadlock_names(&model, &scope),
+            ["Deadlock_Account_status_pending"]
+        );
+        let built = TransitionSystem::build(&model, Bounds::STATES, &scope);
+        assert!(built.selection.inactive.is_empty());
+        let line = scope.line(&model, &built.selection).unwrap();
+        assert!(
+            line.ends_with("(1 use case assumed not to run: Delete)"),
+            "{line}"
+        );
+    }
+}
+
+/// A use case two BUCs reach stays when only one of them is left out, and a use case no
+/// actor performs stays under `--actor`.
+#[test]
+fn a_shared_or_unperformed_use_case_stays() {
+    let src = format!("{SELF_SERVICE}contains(BucOps, Activate)\nusecase Sweep \"Sweep\"\nupdates(Sweep, Browser)\nsets(Sweep, Browser.key_ok == true)\n");
+    let model = model_from(&src);
+    let ids = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let (bucs, actors) = (ids(&["BucOps"]), ids(&["Ops"]));
+    let by_buc = without(
+        &model,
+        crate::lifecycle::Without {
+            bucs: &bucs,
+            ..Default::default()
+        },
+    );
+    let names = |s: &Scope| -> Vec<String> {
+        s.without
+            .iter()
+            .map(|k| model.use_cases[*k].id.clone())
+            .collect()
+    };
+    assert_eq!(names(&by_buc), ["Delete"]);
+    let by_actor = without(
+        &model,
+        crate::lifecycle::Without {
+            actors: &actors,
+            ..Default::default()
+        },
+    );
+    assert_eq!(names(&by_actor), ["Create", "LoseKey"]);
+}
+
+#[test]
+fn an_unknown_left_out_id_is_an_error() {
+    let model = model_from(SELF_SERVICE);
+    let ids = vec!["Nope".to_string()];
+    let err = Scope::ALL
+        .clone()
+        .without(
+            &model,
+            &crate::lifecycle::Without {
+                actors: &ids,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+    assert_eq!(err.to_string(), "unknown actor `Nope`");
+}
