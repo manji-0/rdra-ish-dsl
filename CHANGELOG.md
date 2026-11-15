@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `rdra-ish --version` prints the version.
+- A failed `check` ends with a summary line on stdout, as a clean run ends with its `OK:`
+  line: `FAIL: 1 error, 0 warnings within 1 instance per entity, Int 0..5`, or
+  `FAIL: <E> errors, <W> warnings; the model did not load, so nothing was explored` when a
+  load error stops it ([CLI reference](./docs/cli-reference.md#check)).
+- `verify --tlc-jar <path>` and `RDRA_TLC_JAR` run TLC as `java -cp <path> tlc2.TLC` from
+  `tla2tools.jar`. The error for a missing TLC lists the ways to get it, and the CLI
+  reference has a [Getting TLC](./docs/cli-reference.md#getting-tlc) section.
+
 ## v2.1.0 - 2026-11-08
 
 Upgrading from v2.0.0 needs no change: no model, command, or verdict changes. The release

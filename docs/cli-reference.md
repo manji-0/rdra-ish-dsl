@@ -8,6 +8,8 @@ state-pattern derivations.
 rdra-ish <SUBCOMMAND> <INPUTS...> [OPTIONS]
 ```
 
+`rdra-ish --version` prints the version, such as `rdra-ish 2.1.0`.
+
 `<INPUTS...>` is one or more files and/or directories. Directories are searched
 recursively for `.rdra` files. At least one input is required. When loading, the tool
 merges all reachable `.rdra` files into a single semantic model and resolves imports
@@ -63,7 +65,7 @@ Prints each diagnostic to stderr. If any error (non-warning) is present, exits w
 status `1` before running secondary consistency checks. Otherwise it reports unresolved
 model warnings and state-pattern findings. State diagnostics share severity with
 `states`: Error-severity findings print as `error:` and cause exit `1`; only a clean
-run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`), or `OK: no errors in the selected scope, within <bounds>` under `--buc` or `--entity` (see [Partial runs](#partial-runs)). When the model has temporal `property` declarations,
+run prints `OK: no errors within <bounds>` (for example `OK: no errors within 1 instance per entity, Int 0..5`), or `OK: no errors in the selected scope, within <bounds>` under `--buc` or `--entity` (see [Partial runs](#partial-runs)). A failed run ends with a summary line on stdout instead: `FAIL: <E> errors, <W> warnings within <bounds>` (for example `FAIL: 1 error, 0 warnings within 1 instance per entity, Int 0..5`), with `in the selected scope,` under a scope, or `FAIL: <E> errors, <W> warnings; the model did not load, so nothing was explored` when a load error stops the run before exploration. Info findings are not counted. When the model has temporal `property` declarations,
 `check` prints a trailing `note:` that those were not model-checked (use
 `verify --backend tlc`).
 
@@ -1037,17 +1039,18 @@ Export a TLA+ specification and run TLC formal verification. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--buc <ID>]... [--entity <ID>]...
+rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--tlc-jar <PATH>] [--buc <ID>]... [--entity <ID>]...
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`. |
+| `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`, or `tla2tools.jar` named by `--tlc-jar` (see [Getting TLC](#getting-tlc)). |
 | `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per temporal property with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to`, `cones.txt` listing each module TLC may run and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` for a run by hand and a `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and, unless TLC already printed its verdict, the property is `not decided`, which warns and does not fail the run. |
+| `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | Run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a state, deadlock, or use case a BFS cone left at its state cap. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Check only the entity's view and the invariants and after-asserts that read it, with one TLC job per selected cone. See [Partial runs](#partial-runs). |
@@ -1146,9 +1149,23 @@ with its `State N: Stuttering` or `Back to state K: <action>` line. An example i
 | Environment variable | Effect |
 |---|---|
 | `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and each temporal property run `2g`. |
+| `RDRA_TLC_JAR` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
 | `JAVA_TOOL_OPTIONS` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`), so a `-Xmx` here wins. |
 
 A run that runs out of memory is a `tool_error` whose message names both variables.
+
+#### Getting TLC
+
+`verify` looks for TLC in this order: `--tlc-jar`, `RDRA_TLC_JAR`, then `tlc` and `tlc2` on
+`PATH`. Homebrew has no formula that puts `tlc` on `PATH` (the `tla+-toolbox` cask is the
+GUI). Use one of these:
+
+- Nix: run `nix shell nixpkgs#tlaplus`, then run `verify` in that shell. If flakes are not
+  enabled, add `--extra-experimental-features 'nix-command flakes'`. In this repository,
+  `nix develop` provides `tlc`.
+- The jar: download `tla2tools.jar` from the
+  [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
+  `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
 
 ---
 

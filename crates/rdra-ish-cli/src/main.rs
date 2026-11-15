@@ -26,14 +26,14 @@ use list_output::{
     format_lint_issues, format_rules, format_transitions, list_elements, state_findings,
 };
 use load::{deny_deprecated, eprint_diagnostic, reject_model_errors};
-use rdra_ish_core::lifecycle::{Caps, Scope, Severity};
+use rdra_ish_core::lifecycle::{Caps, FindingTally, Scope, Severity};
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
 use states::run_states;
 use std::fs;
 use std::path::{Path, PathBuf};
-use verify::run_verify;
+use verify::run_tlc;
 
 fn is_strict_access_gap(error: &RdraError) -> bool {
     matches!(
@@ -70,15 +70,19 @@ fn main() -> Result<()> {
                 deny_deprecated(&mut diags);
             }
 
-            let mut has_error = false;
+            let mut tally = FindingTally::default();
             for diag in &diags {
                 eprint_diagnostic(&program, diag);
-                if !diag.is_warning {
-                    has_error = true;
-                }
+                tally.count(if diag.is_warning {
+                    Severity::Warning
+                } else {
+                    Severity::Error
+                });
             }
 
-            if has_error {
+            if tally.errors > 0 {
+                // The model did not load, so no state was explored and no bound applies.
+                println!("FAIL: {tally}; the model did not load, so nothing was explored");
                 std::process::exit(1);
             }
 
@@ -91,16 +95,18 @@ fn main() -> Result<()> {
                 let as_error = strict && is_strict_access_gap(&diag.error);
                 if as_error {
                     eprintln!("error: {}", diag.error);
-                    has_error = true;
                 } else {
                     eprintln!("warning: {}", diag.error);
                 }
+                tally.count(if as_error {
+                    Severity::Error
+                } else {
+                    Severity::Warning
+                });
             }
 
             for finding in lifecycle.findings {
-                if finding.severity == Severity::Error {
-                    has_error = true;
-                }
+                tally.count(finding.severity);
                 eprintln!("{finding}");
             }
             if let Some(block) = lifecycle.not_checked {
@@ -114,7 +120,8 @@ fn main() -> Result<()> {
                 );
             }
 
-            if has_error {
+            if tally.errors > 0 {
+                println!("{}", lifecycle.bounds.fail(tally.errors, tally.warnings));
                 std::process::exit(1);
             }
 
@@ -345,6 +352,7 @@ fn main() -> Result<()> {
             int_range_max,
             temporal_budget,
             deny_undecided,
+            tlc_jar,
             scope,
         } => {
             let Project {
@@ -355,10 +363,10 @@ fn main() -> Result<()> {
             } = load_project(&inputs, None)?;
             reject_model_errors(&program, &diags)?;
             let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
-            run_verify(
+            let cli::VerifyBackend::Tlc = backend;
+            run_tlc(
                 &program,
                 &model,
-                backend,
                 out,
                 (instance_count, int_range_max),
                 &scope,
@@ -366,6 +374,7 @@ fn main() -> Result<()> {
                     temporal: std::time::Duration::from_secs(temporal_budget),
                     deny_undecided,
                 },
+                tlc_jar,
             )?;
         }
     }

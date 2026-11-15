@@ -22,8 +22,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    diagnostic prints as `error: path:line:col: ...` or `warning: ...`; a lifecycle
    finding carries its stable name, `error[<Name>]: ...` or `warning[<Name>]: ...`. The
    first line, `bounds:`, names the bounds every lifecycle verdict holds under, and a
-   clean run ends with `OK: no errors within 1 instance per entity, Int 0..5`. Paste
-   the `bounds:` line and the last line exactly as printed; do not paraphrase them.
+   clean run ends with `OK: no errors within 1 instance per entity, Int 0..5`, and a
+   failed run with `FAIL: <E> errors, <W> warnings within ...`. Paste the `bounds:` line
+   and the last line exactly as printed; do not paraphrase them.
 
 2. **Run `rdra-ish lint <src-dir>/ --format table`** for review readiness.
    Treat orphan nodes, unused elements, ownership drift, flow coverage gaps,

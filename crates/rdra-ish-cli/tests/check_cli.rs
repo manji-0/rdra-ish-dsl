@@ -910,3 +910,51 @@ fn check_rejects_bounds_verify_rejects() {
         assert!(stderr.contains(message), "{flag} {value}: {stderr}");
     }
 }
+
+/// A failed `check` ends with one summary line, as a clean run ends with its `OK:` line.
+#[test]
+fn a_failed_check_ends_with_a_fail_line_that_counts_the_findings() {
+    let check = run(&[
+        "check",
+        "samples/formal-verification/cross_order_payment_split.rdra",
+    ]);
+    assert_eq!(check.status.code(), Some(1));
+    assert_eq!(
+        String::from_utf8_lossy(&check.stdout),
+        "FAIL: 1 error, 0 warnings within 1 instance per entity, Int 0..5\n"
+    );
+
+    let (code, stdout, stderr) = run_on_source(
+        "fail-two",
+        TWO_CASES_ONE_HANDLER,
+        &["check", "--instance-count", "2", "--int-range-max", "3"],
+    );
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stdout.ends_with(" within 2 instances per entity, Int 0..3\n")
+            && stdout.starts_with("FAIL: "),
+        "{stdout}"
+    );
+}
+
+/// A model that does not load explores nothing, and its FAIL line says so.
+#[test]
+fn a_check_that_does_not_load_says_nothing_was_explored() {
+    let (code, stdout, _) = run_on_source("fail-load", "module m\nentity E \"E\" {\n", &["check"]);
+    assert_eq!(code, Some(1));
+    assert!(
+        stdout.starts_with("FAIL: ")
+            && stdout.ends_with("; the model did not load, so nothing was explored\n"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn version_prints_the_package_version() {
+    let output = run(&["--version"]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!("rdra-ish {}\n", env!("CARGO_PKG_VERSION"))
+    );
+}

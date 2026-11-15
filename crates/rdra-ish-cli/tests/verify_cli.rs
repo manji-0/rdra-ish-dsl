@@ -870,3 +870,26 @@ property Job_status "never running"
     );
     assert!(stderr.contains("Job_status_2[1] = "), "{stderr}");
 }
+
+/// `--tlc-jar` names the jar TLC runs from, so a missing jar is an error that names it,
+/// with or without `tlc` on PATH.
+#[test]
+fn a_missing_tlc_jar_is_named_in_the_error() {
+    let tmp = scratch("missing_tlc_jar");
+    let jar = tmp.join("absent.jar");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[
+            "samples/formal-verification/check_met.rdra",
+            "--tlc-jar",
+            jar.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(&format!("tla2tools.jar not found at {}", jar.display())),
+        "{stderr}"
+    );
+}

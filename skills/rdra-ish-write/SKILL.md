@@ -48,7 +48,8 @@ validation, then advance one level.
 3. Ask only for information required by that step, unless the codebase already answers it.
 4. Edit the smallest set of `.rdra` files needed for the step.
 5. Run the validation commands from the step file. `check` prints a `bounds:` line first
-   and ends with `OK: no errors within 1 instance per entity, Int 0..5` on success.
+   and ends with `OK: no errors within 1 instance per entity, Int 0..5` on success, or
+   `FAIL: <E> errors, <W> warnings within ...` on failure.
 6. Stop when the step's achievement conditions are met, or report the remaining open items.
    In the report, paste the `bounds:` line and the last line of `check` exactly as
    printed, in a code block. Do not paraphrase them as "OK" or "no errors".
