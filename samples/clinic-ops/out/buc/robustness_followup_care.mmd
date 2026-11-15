@@ -16,8 +16,8 @@ flowchart LR
   entity__Appointment[("予約・受診")]:::entity
   entity__CarePlan[("ケアプラン")]:::entity
   entity__Encounter[("診療記録")]:::entity
+  entity__FollowUpMessage[("フォローアップ連絡")]:::entity
   entity__Notification[("通知")]:::entity
-  entity__PatientMessage[("患者連絡")]:::entity
   entity__ProviderSchedule[("診療枠")]:::entity
   actor__CareCoordinator --> screen__CarePlanScreen
   actor__CareCoordinator --> screen__FollowUpScheduleScreen
@@ -28,7 +28,7 @@ flowchart LR
   api__FollowUpScheduleApi -->|U| entity__ProviderSchedule
   api__FollowUpScheduleApi -.->|予約確定| extsystem__MessagingGateway
   api__NotifyPatientResultApi -->|C| entity__Notification
-  api__SendFollowUpMessageApi -->|C| entity__PatientMessage
+  api__SendFollowUpMessageApi -->|C| entity__FollowUpMessage
   screen__CarePlanScreen -->|ケアプランの作成| api__CreateCarePlanApi
   screen__CarePlanScreen -->|ケアプランの終了| usecase__CloseCarePlan
   screen__CarePlanScreen -->|患者応答の確認| usecase__ReviewPatientResponse
@@ -37,7 +37,7 @@ flowchart LR
   screen__PatientMessageScreen -->|検査結果の患者通知| api__NotifyPatientResultApi
   usecase__CloseCarePlan -->|U| entity__CarePlan
   usecase__ReviewPatientResponse -->|U| entity__CarePlan
-  usecase__ReviewPatientResponse -->|U| entity__PatientMessage
+  usecase__ReviewPatientResponse -->|U| entity__FollowUpMessage
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

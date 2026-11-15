@@ -22,6 +22,7 @@ erDiagram
     Int provider_id FK
     Int cliniclocation_id FK
     Int room_id FK
+    Int providerschedule_id FK
   }
   AuditEvent {
     Int id PK
@@ -111,6 +112,14 @@ erDiagram
     Int patientaccount_id FK
     Int provider_id FK
   }
+  FollowUpMessage {
+    Int id PK
+    MessageChannel channel
+    Enum status
+    DateTime sent_at
+    DateTime read_at
+    Int careplan_id FK
+  }
   InsurancePolicy {
     Int id PK
     String payer_name
@@ -162,7 +171,6 @@ erDiagram
     MessageChannel channel
     Enum status
     DateTime sent_at
-    DateTime read_at
     Int patientaccount_id FK
   }
   PatientProfile {
@@ -183,6 +191,7 @@ erDiagram
     DateTime processed_at
     String gateway_ref
     Int appointment_id FK
+    Int accountbalance_id FK
   }
   Prescription {
     Int id PK
@@ -241,6 +250,7 @@ erDiagram
   }
   ProviderSchedule }o--|| Provider : ""
   ProviderSchedule }o--|| ClinicLocation : ""
+  Appointment }o--|| ProviderSchedule : ""
   Appointment }o--|| PatientAccount : ""
   Appointment }o--|| Provider : ""
   Appointment }o--|| ClinicLocation : ""
@@ -259,11 +269,13 @@ erDiagram
   ClaimStatement }o--|| PatientAccount : ""
   ClaimStatement }o--|| InsurancePolicy : ""
   PaymentTransaction }o--|| Appointment : ""
+  PaymentTransaction }o--|| AccountBalance : ""
   AccountBalance ||--|| PatientAccount : ""
   ReferralLetter }o--|| PatientAccount : ""
   CarePlan }o--|| Encounter : ""
   CarePlan }o--|| PatientAccount : ""
   PatientMessage }o--|| PatientAccount : ""
+  FollowUpMessage }o--|| CarePlan : ""
   Notification }o--|| PatientAccount : ""
   AuditEvent }o--|| PatientAccount : ""
   PatientProfile ||--|| PatientAccount : ""

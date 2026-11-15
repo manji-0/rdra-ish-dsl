@@ -32,8 +32,8 @@ flowchart LR
     entity__Appointment[("予約・受診")]:::entity
     entity__CarePlan[("ケアプラン")]:::entity
     entity__Encounter[("診療記録")]:::entity
+    entity__FollowUpMessage[("フォローアップ連絡")]:::entity
     entity__Notification[("通知")]:::entity
-    entity__PatientMessage[("患者連絡")]:::entity
     entity__ProviderSchedule[("診療枠")]:::entity
     state__Appointment_requested((("仮押さえ"))):::state
     state__Appointment_scheduled((("予約済"))):::state
@@ -64,7 +64,7 @@ flowchart LR
   usecase__ReviewPatientResponse -.-> screen__CarePlanScreen
   usecase__ReviewPatientResponse -.->|transitions CarePlan.status open->monitoring| state__CarePlan_monitoring
   usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
-  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ReviewPatientResponse -.->|updates| entity__FollowUpMessage
   usecase__ScheduleFollowUpVisit -.->|creates| entity__Appointment
   %% derived usecase__ScheduleFollowUpVisit -> entity__Appointment via api__FollowUpScheduleApi
   usecase__ScheduleFollowUpVisit -.-> screen__FollowUpScheduleScreen
@@ -72,8 +72,8 @@ flowchart LR
   usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status requested->scheduled| state__Appointment_scheduled
   usecase__ScheduleFollowUpVisit -.->|updates| entity__ProviderSchedule
   %% derived usecase__ScheduleFollowUpVisit -> entity__ProviderSchedule via api__FollowUpScheduleApi
-  usecase__SendFollowUpMessage -.->|creates| entity__PatientMessage
-  %% derived usecase__SendFollowUpMessage -> entity__PatientMessage via api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|creates| entity__FollowUpMessage
+  %% derived usecase__SendFollowUpMessage -> entity__FollowUpMessage via api__SendFollowUpMessageApi
   usecase__SendFollowUpMessage -.-> screen__PatientMessageScreen
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
