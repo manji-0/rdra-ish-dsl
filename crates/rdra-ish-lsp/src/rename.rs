@@ -351,7 +351,9 @@ performs(Staff, Book)
                 ENTITY_TGT,
                 "usecase U \"u\"\nafter(U).assert(Tgt.status == x)",
             ),
-            ("exposes", "append" | "upsert" | "caller") => return None,
+            ("exposes", "append" | "upsert" | "caller")
+            | ("creates" | "updates" | "deletes", "apart")
+            | ("forbidden" | "invariant", "global") => return None,
             ("navigates", "via") => (USECASE_TGT, "navigates(S1, S2).via(Tgt)"),
             ("transitions", "when") => (
                 CONDITION_TGT,

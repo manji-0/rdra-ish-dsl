@@ -61,7 +61,8 @@ Also ask:
 6. Add `forbidden(...)` or `invariant(...)` when a rule mentions columns
    from more than one entity; qualify columns as `Entity.column`.
 7. Add `.along(...)` when the intended semantics is relation-scoped rather than global
-   cross-product; keep it off rules that truly forbid global co-existence. A rule that a
+   cross-product; keep it off rules that truly forbid global co-existence, and write
+   `.global()` on those so `lint` `multi-rule-unscoped` does not ask for an `.along`. A rule that a
    row agrees with its parent (`forbidden(Permit, Application, Permit.kind !=
    Application.kind).along(Permit, Application)`) holds only when the use case that
    creates the row copies the value (`sets(Register, Permit.kind == Application.kind)`);

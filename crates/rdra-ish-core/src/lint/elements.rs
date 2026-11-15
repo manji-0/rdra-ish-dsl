@@ -111,3 +111,84 @@ pub(super) fn lint_rule_labels(model: &SemanticModel, issues: &mut Vec<LintIssue
         issues.push(issue);
     }
 }
+
+/// A `forbidden` or `invariant` over several entities with no `.along(...)` holds over every
+/// combination of their rows. When keys relate the entities, the rule is often meant only
+/// for related rows, and `check` at one instance per entity cannot tell the difference.
+pub(super) fn lint_unscoped_multi_rules(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    use crate::model::CrossConstraintScope;
+    let forbidden = model.cross_forbidden_constraints.iter().map(|c| {
+        (
+            "forbidden",
+            &c.scope,
+            &c.scope_semantics,
+            c.global,
+            c.site.clone(),
+        )
+    });
+    let invariants = model.cross_entity_invariants.iter().map(|c| {
+        (
+            "invariant",
+            &c.scope,
+            &c.scope_semantics,
+            c.global,
+            c.site.clone(),
+        )
+    });
+    for (kind, scope, semantics, global, site) in forbidden.chain(invariants) {
+        if global || scope.len() < 2 || !matches!(semantics, CrossConstraintScope::GlobalProduct) {
+            continue;
+        }
+        let Some(path) = along_path(model, scope) else {
+            continue;
+        };
+        let ids: Vec<&str> = scope
+            .iter()
+            .map(|e| model.entities[*e].id.as_str())
+            .collect();
+        let along: Vec<&str> = path
+            .iter()
+            .map(|e| model.entities[*e].id.as_str())
+            .collect();
+        let mut issue = LintIssue::new(
+            LintSeverity::Warning,
+            "multi-rule-unscoped",
+            kind,
+            ids.join("|"),
+            format!(
+                "{kind} on {} has no `.along(...)`, so it holds over every combination of their rows, related or not; `check` at one instance per entity sees one combination only",
+                ids.join(", ")
+            ),
+            format!(
+                "add `.along({})` to hold it over related rows only, or `.global()` if every combination is meant",
+                along.join(", ")
+            ),
+        );
+        if let Some(site) = site {
+            issue = issue.with_location(site);
+        }
+        issues.push(issue);
+    }
+}
+
+/// A key path that visits every entity of `scope` once, from the first, in the order the
+/// shortest paths between neighbours give; `None` when keys do not relate them all.
+fn along_path(
+    model: &SemanticModel,
+    scope: &[crate::model::EntityKey],
+) -> Option<Vec<crate::model::EntityKey>> {
+    let mut path = vec![scope[0]];
+    for &next in &scope[1..] {
+        if path.contains(&next) {
+            continue;
+        }
+        let hop = model.key_path(&path[path.len() - 1..], next)?;
+        for e in hop.into_iter().skip(1) {
+            if path.contains(&e) {
+                return None;
+            }
+            path.push(e);
+        }
+    }
+    Some(path)
+}

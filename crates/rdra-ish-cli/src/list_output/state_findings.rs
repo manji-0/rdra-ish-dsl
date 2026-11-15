@@ -845,6 +845,7 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
         | StateDiag::PropertyViolated { .. }
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
+        | StateDiag::UnjoinedWrite { .. }
         | StateDiag::UnboundAfterRead { .. }
         | StateDiag::UnanchoredTrigger { .. }
         | StateDiag::UnjoinedTrigger { .. }

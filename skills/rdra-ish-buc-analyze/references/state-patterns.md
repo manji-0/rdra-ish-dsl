@@ -101,13 +101,13 @@ under it the values that step changed.
 | Signal | Interpretation | Next action |
 |---|---|---|
 | `error[Witness_<E>_<col>_<v>]` | No sequence of use cases reaches that state | Add the `creates`, `transitions` arm, or condition that enters it, or drop the state |
-| `error[Deadlock_<E>_<col>_<v>]` | An instance reaches a state that has a way out, and nothing ever moves it off | Read `leaves` and the `guard:` lines: fix the guard, or add the missing use case |
+| `error[Deadlock_<E>_<col>_<v>]` | An instance reaches a state that has a way out, and nothing ever moves it off | Read `leaves` and the `guard:` lines: fix the guard, or add the missing use case. If staying there is correct (a stock row waiting to be used), declare it with `@end(<v>)` on the column |
 | `warning[Deadlock_...]: deadlock at the bound` | The way out needs a free slot of an entity it creates | The instance bound, not the model; check with `verify` at two instances |
 | `warning[Runs_<UC>]` | The use case never runs; `needs:` or `guard:` lines say why | Fix the guard or the missing instance, or remove the use case |
 | `error[<rule name>]` with a counterexample | A reachable state breaks the rule | Follow the steps: add the missing `sets` or transition, or fix the rule |
 | Enum/Bool/nullable column never appears in axes | No modeled lifecycle effect | Add `sets`, `transitions`, or accept that it is not stateful |
 | Enum variants reported unreachable that an actor simply chooses (payment method, channel) | The column is an attribute, not a lifecycle | Type it by a `variation`; `lint` `enum-attribute` finds these |
-| Unexpected terminal pattern | Missing exit use case | Add a transition or effect, or mark the end state as intentional |
+| Unexpected terminal pattern | Missing exit use case | Add a transition or effect, or mark the end state as intentional with `@end(<v>)` on the column |
 | Too many combinations | Effects are too broad | Make `sets` more precise or add rules |
 | `PatternCapReached` / `StateCapReached` error | The exploration stopped at a cap, so no rule verdict is sound | Raise `--max-patterns` or `--max-states` on `check` or `states`, or narrow with `--entity` or `--buc`. The `StateCapReached` message names the columns the cone varies in and the use cases that reached the most states; a column of another entity there came in through a guard |
 | `not checked:` block | A scope or a cap left targets or findings undecided | Report them as not checked, never as passed |

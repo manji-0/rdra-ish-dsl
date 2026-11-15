@@ -193,6 +193,15 @@ impl Builder<'_> {
         if variation && birth == Birth::PreExisting {
             self.ts.vars[var.index()].start = Start::Any;
         }
+        if let Domain::Enum(values) = &self.ts.vars[var.index()].domain {
+            let ends = col
+                .end_values
+                .iter()
+                .filter_map(|v| variant_index(values, v))
+                .map(Value)
+                .collect();
+            self.ts.vars[var.index()].ends = ends;
+        }
         self.col_var.insert((e, col.name.clone()), var);
         Some(var)
     }

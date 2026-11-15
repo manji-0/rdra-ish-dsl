@@ -83,7 +83,10 @@ Also ask:
    hops away, such as the settlement of the case a claim belongs to, needs the path:
    `holds(SettlementSigned, Settlement.status == agreed).along(Claim, ClaimCase,
    Settlement)`. Without it the guard reads any settlement, and `check` warns
-   `UnjoinedGuardRead` with the `.along(...)` to add.
+   `UnjoinedGuardRead` with the `.along(...)` to add. A use case that writes two entities
+   joined only through a third it does not write, such as `Account` and `Store` through
+   `Device`, draws `UnjoinedWrite`: also write the entity between
+   (`updates(Register, Device)`), or mark a write meant as a row of its own with `.apart()`.
 8. Add `sets(UseCase, Entity.col == val)` for enum, nullable, boolean, Int, and Date
    effects not explained by transitions (`chooses` and `sets` on one column in one use
    case are an error). To let the row pick the value, write one line per value with
@@ -262,7 +265,9 @@ rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
 - `error[Witness_<E>_<col>_<value>]`: no sequence of use cases reaches that state.
 - `error[Deadlock_<E>_<col>_<value>]`: an instance can reach that state, which is not
   an end state, and nothing ever moves it off (a guard that never opens, or a missing
-  use case). A deadlock that only a free instance slot would clear is a warning.
+  use case). A deadlock that only a free instance slot would clear is a warning. When
+  staying there is correct, such as a stock row waiting at `free` to be used, declare it
+  on the column: `status: Enum(free, used) @default(free) @end(free)`.
 - `warning[Runs_<UseCase>]`: the use case never runs, with the guard or instance that
   blocks it.
 

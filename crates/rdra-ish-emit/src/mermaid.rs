@@ -540,6 +540,8 @@ impl StatesEmitter for StateMermaidEmitter {
                 kinds.push(kind);
             }
         };
+        // Some drawn `@end` state has a transition out, so the legend names `@end`.
+        let mut declared_end_leaves = false;
         for sm in &models {
             let mark = |set: &BTreeSet<(String, String, String)>, v: &str| {
                 set.contains(&(
@@ -635,11 +637,19 @@ impl StatesEmitter for StateMermaidEmitter {
                     body.push_str(&format!("    {from} --> {to} : {label}\n"));
                 }
             }
-            // An end state has no transition to another state.
+            // An end state has no transition to another state, or `@end` declares it one.
+            let declared_ends = model.entities[sm.entity]
+                .columns
+                .iter()
+                .find(|c| c.name == sm.column)
+                .map_or(&[][..], |c| c.end_values.as_slice());
             for variant in &drawn {
-                let leaves = arms
+                let declared = declared_ends.iter().any(|v| v == variant);
+                let moves_on = arms
                     .iter()
                     .any(|(from, to, ..)| from == variant && to != variant);
+                declared_end_leaves |= declared && moves_on;
+                let leaves = moves_on && !declared;
                 let Some(id) = state_id(variant) else {
                     continue;
                 };
@@ -717,10 +727,10 @@ impl StatesEmitter for StateMermaidEmitter {
                 set_only.join(" ")
             )
         };
-        let legend = if index {
-            ""
-        } else {
-            "%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out\n"
+        let legend = match (index, declared_end_leaves) {
+            (true, _) => "",
+            (false, false) => "%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out\n",
+            (false, true) => "%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out, or declared by @end\n",
         };
         let defs: String = [
             (

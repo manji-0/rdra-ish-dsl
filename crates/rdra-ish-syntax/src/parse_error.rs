@@ -59,6 +59,7 @@ impl fmt::Display for Token {
             Token::AtHistory => "@history",
             Token::AtTenant => "@tenant",
             Token::AtDerived => "@derived",
+            Token::AtEnd => "@end",
             Token::Now => "now",
             Token::LBrace => "{",
             Token::RBrace => "}",

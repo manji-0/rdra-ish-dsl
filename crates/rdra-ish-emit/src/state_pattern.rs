@@ -218,6 +218,7 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
         | StateDiag::PropertyViolated { .. }
         | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
+        | StateDiag::UnjoinedWrite { .. }
         | StateDiag::UnboundAfterRead { .. }
         | StateDiag::UnanchoredTrigger { .. }
         | StateDiag::UnjoinedTrigger { .. }

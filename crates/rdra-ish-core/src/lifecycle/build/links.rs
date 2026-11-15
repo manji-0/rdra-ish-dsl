@@ -5,10 +5,10 @@ use crate::analysis::{applied_bodies, AppliedBody};
 use crate::lifecycle::build::preds;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    At, CmpOp, Domain, Effect, Guard, GuardWhy, ModelRef, ParamRole, Pred, Rhs, Site, Term, Value,
-    VarKind,
+    Action, At, CmpOp, Domain, Effect, Guard, GuardWhy, ModelRef, ParamRole, Pred, Rhs, Site, Term,
+    Value, VarId, VarKind,
 };
-use crate::model::{CrossConstraintScope, FkId, Join, LinkKind, SetValue, UseCaseKey};
+use crate::model::{CrossConstraintScope, EntityKey, FkId, Join, LinkKind, SetValue, UseCaseKey};
 
 impl<'m> Builder<'m> {
     /// R-bind: a created child belongs to its parent, a present one unless the relate is
@@ -309,5 +309,154 @@ impl<'m> Builder<'m> {
             }
         };
         self.diag(vec![child], diag);
+    }
+}
+
+impl Builder<'_> {
+    /// `UnjoinedWrite` for each pair of rows a step of `uc` writes or binds that no owner
+    /// guard or assignment of the step joins, directly or through other rows of it, while a
+    /// key path through entities the step does not bind relates them: one run may then write
+    /// rows of the two entities that belong to different rows of the entities between. A
+    /// pair with a direct key is left to the owner binding, and a write marked `.apart()` is
+    /// meant to be a row of its own.
+    pub(super) fn unjoined_writes(&mut self, uc: UseCaseKey, actions: &[Action]) {
+        let model = self.model;
+        let apart: Vec<EntityKey> = model
+            .apart_writes
+            .iter()
+            .filter(|(u, _)| *u == uc)
+            .map(|(_, e)| *e)
+            .collect();
+        let keys: std::collections::HashMap<_, EntityKey> =
+            self.ent_of.iter().map(|(k, e)| (*e, *k)).collect();
+        let entity_key = |e| keys[&e];
+        let mut reported: Vec<(EntityKey, EntityKey)> = Vec::new();
+        let mut found = Vec::new();
+        for action in actions {
+            let n = action.params.len();
+            let mut root: Vec<usize> = (0..n).collect();
+            fn find(root: &mut [usize], i: usize) -> usize {
+                let mut at = i;
+                while root[at] != at {
+                    root[at] = root[root[at]];
+                    at = root[at];
+                }
+                at
+            }
+            let mut union = |a: u8, b: u8| {
+                let (ra, rb) = (find(&mut root, a.into()), find(&mut root, b.into()));
+                root[ra] = rb;
+            };
+            let is_owner =
+                |var: VarId| matches!(self.ts.vars[var.index()].kind, VarKind::Owner { .. });
+            for effect in &action.effects {
+                if let Effect::Assign {
+                    var,
+                    param,
+                    rhs: Rhs::Param(p),
+                    ..
+                } = effect
+                {
+                    if is_owner(*var) {
+                        union(*param, *p);
+                    }
+                }
+            }
+            let mut joins = Vec::new();
+            for guard in &action.guards {
+                owner_joins(&guard.pred, &is_owner, &mut joins);
+            }
+            for (a, b) in joins {
+                union(a, b);
+            }
+            let mut components: Vec<(usize, Vec<EntityKey>)> = Vec::new();
+            for (i, p) in action.params.iter().enumerate() {
+                let ek = entity_key(p.entity);
+                if p.role.is_written() && apart.contains(&ek) {
+                    continue;
+                }
+                let r = find(&mut root, i);
+                match components.iter_mut().find(|(c, _)| *c == r) {
+                    Some((_, ents)) if !ents.contains(&ek) => ents.push(ek),
+                    Some(_) => {}
+                    None => components.push((r, vec![ek])),
+                }
+            }
+            let bound: Vec<EntityKey> = components.iter().flat_map(|(_, e)| e.clone()).collect();
+            for i in 0..components.len() {
+                for j in i + 1..components.len() {
+                    let path = components[j]
+                        .1
+                        .iter()
+                        .filter_map(|&to| model.key_path(&components[i].1, to))
+                        .min_by_key(Vec::len);
+                    // A path of two is a direct key, left to the owner binding; one of one is
+                    // two rows of the same entity.
+                    let Some(path) = path.filter(|p| p.len() > 2) else {
+                        continue;
+                    };
+                    let (a, b) = (path[0], path[path.len() - 1]);
+                    let between = &path[1..path.len() - 1];
+                    if between.iter().any(|e| bound.contains(e)) {
+                        continue;
+                    }
+                    let pair = if model.entities[a].id <= model.entities[b].id {
+                        (a, b)
+                    } else {
+                        (b, a)
+                    };
+                    if reported.contains(&pair) {
+                        continue;
+                    }
+                    reported.push(pair);
+                    let path = if pair.0 == a {
+                        path.clone()
+                    } else {
+                        path.iter().rev().copied().collect()
+                    };
+                    found.push((
+                        vec![pair.0],
+                        StateDiag::UnjoinedWrite {
+                            usecase: model.use_cases[uc].id.clone(),
+                            a: model.entities[pair.0].id.clone(),
+                            b: model.entities[pair.1].id.clone(),
+                            path: path.iter().map(|e| model.entities[*e].id.clone()).collect(),
+                            site: action.site.clone(),
+                        },
+                    ));
+                }
+            }
+        }
+        for (entities, diag) in found {
+            self.diag(entities, diag);
+        }
+    }
+}
+
+/// The param pairs an owner comparison `owner(c) = index(p)` joins, under conjunctions only.
+fn owner_joins(pred: &Pred, is_owner: &impl Fn(VarId) -> bool, out: &mut Vec<(u8, u8)>) {
+    match pred {
+        Pred::And(preds) => {
+            for p in preds {
+                owner_joins(p, is_owner, out);
+            }
+        }
+        Pred::Cmp(
+            Term::Slot {
+                var,
+                at: At::Param(c),
+            },
+            CmpOp::Eq,
+            Term::Index(At::Param(p)),
+        )
+        | Pred::Cmp(
+            Term::Index(At::Param(p)),
+            CmpOp::Eq,
+            Term::Slot {
+                var,
+                at: At::Param(c),
+            },
+        ) if is_owner(*var) => out.push((*c, *p)),
+        _ => {}
     }
 }

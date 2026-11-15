@@ -61,6 +61,7 @@ impl<'m> Builder<'m> {
             let written_apis: HashSet<ApiKey> = utx.writes().filter_map(|w| w.via_api).collect();
             self.run_mark_vars(uc, &entities);
             self.later_step_reads(uc, &groups, &written_apis);
+            let first_action = self.ts.actions.len();
             for (g, writes) in groups.iter().enumerate() {
                 let step = (entities.len() > 1).then(|| u8::try_from(g + 1).expect("few groups"));
                 let name = match step {
@@ -77,6 +78,8 @@ impl<'m> Builder<'m> {
                     .push(crate::lifecycle::types::ActId::at(self.ts.actions.len()));
                 self.ts.actions.push(action);
             }
+            let built = self.ts.actions[first_action..].to_vec();
+            self.unjoined_writes(uc, &built);
         }
         self.event_marks();
         if let Some(tick) = self.tick() {

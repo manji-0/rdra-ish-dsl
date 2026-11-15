@@ -167,6 +167,8 @@ pub enum Annotation {
     Tenant,
     /// `@derived(expr)`
     Derived(ColumnExpr),
+    /// `@end(a, b)`: values of a lifecycle `Enum` column a row may stay at for good.
+    End(Vec<std::string::String>),
 }
 
 // ── Column definition ────────────────────────────────────────────────────────

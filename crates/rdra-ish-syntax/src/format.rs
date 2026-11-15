@@ -645,6 +645,7 @@ fn format_annotation(annotation: &Annotation) -> String {
         Annotation::History => "@history".to_string(),
         Annotation::Tenant => "@tenant".to_string(),
         Annotation::Derived(expr) => format!("@derived({})", format_column_expr(expr)),
+        Annotation::End(values) => format!("@end({})", values.join(", ")),
     }
 }
 

@@ -163,6 +163,17 @@ pub(crate) fn process_predicate(
         _ => process_relation_predicate(model, pred, &resolved, ctx, diags),
     }
 
+    // `.apart()` on a use case's write: its row need not be joined to the other rows it writes.
+    if matches!(pred.name.as_str(), "creates" | "updates" | "deletes")
+        && pred.chain.iter().any(|cc| cc.name == "apart")
+    {
+        if let [Some(NodeRef::UseCase(uc)), Some(NodeRef::Entity(ek))] = resolved.as_slice() {
+            if !model.apart_writes.contains(&(*uc, *ek)) {
+                model.apart_writes.push((*uc, *ek));
+            }
+        }
+    }
+
     if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
     {
         model.typed_predicates.push(typed);

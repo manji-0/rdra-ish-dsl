@@ -119,3 +119,40 @@ pub(super) fn lint_unwritten_field_columns(model: &SemanticModel, issues: &mut V
         );
     }
 }
+
+/// An `@end` value no `transitions` arm leaves and no `chooses` can move off is an end state
+/// already, so the declaration changes nothing.
+pub(super) fn lint_redundant_end_values(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for (ek, entity) in &model.entities {
+        for column in &entity.columns {
+            let chosen = model
+                .column_choices
+                .iter()
+                .any(|c| c.entity == ek && c.column == column.name);
+            if chosen {
+                continue;
+            }
+            for value in &column.end_values {
+                let leaves = model.state_transitions.iter().any(|t| {
+                    t.entity == ek && t.column == column.name && t.from == *value && t.to != *value
+                });
+                if leaves {
+                    continue;
+                }
+                push_element_lint(
+                    model,
+                    issues,
+                    "entity",
+                    "entity-column",
+                    &entity.id,
+                    "end-redundant",
+                    format!(
+                        "@end({value}) on {}.{}: no transition leaves {value}, so it is an end state without @end",
+                        entity.id, column.name
+                    ),
+                    "delete it from @end: @end is for a state a transition can leave but a row may also stay at for good",
+                );
+            }
+        }
+    }
+}

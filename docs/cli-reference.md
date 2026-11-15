@@ -155,7 +155,7 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 
 ### Partial runs
 
-`check`, `states`, and `verify` take the same two flags. Each id is checked against the
+`check`, `states`, and `verify` take the same flags. Each id is checked against the
 model, and an unknown one is an error.
 
 - `--buc <id>` keeps only the use cases reachable from the BUC, when the system is built.
@@ -169,6 +169,16 @@ model, and an unknown one is an error.
   two or more get one line that counts them and names the first three (`whether 39 use cases
   (A, B, C, ...) can run is not decided: ...`), and the `findings not decided` count still
   includes each.
+- `--without-usecase <id>`, `--without-buc <id>`, and `--actor <id>` assume that some use
+  cases never run and leave them out of the system. `--without-usecase` names one use
+  case; `--without-buc` names the use cases the BUC reaches that no other BUC reaches;
+  `--actor` keeps the use cases the actor performs and those no actor performs (started by
+  an event or a timer, or with no `performs`), and leaves out every other one. Unlike
+  `--buc`, the run decides witnesses, deadlocks, and use cases that never run under that
+  assumption, so a deadlock that another actor's use case hides is an error here. For
+  example, `check --actor Staff` finds the state a staff member cannot leave by their own
+  use cases, though an operator's deletion leaves every state. The `scope:` line names the
+  use cases left out.
 
 A build error whose entities no selected cone reads is **deferred**. It is listed under
 `not checked:` and does not fail the run. A build error that alters a use case (a guard
@@ -188,7 +198,8 @@ OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
 ```
 
 The `scope:` line follows the `bounds:` line and names each flag; for `--buc` it counts the
-use cases outside the BUCs. The `not checked:` block lists the targets the scope leaves
+use cases outside the BUCs, and for `--without-usecase`, `--without-buc`, and `--actor` it
+lists the use cases assumed not to run. The `not checked:` block lists the targets the scope leaves
 out, the deferred build errors, and each finding a scope or a cap left undecided. A whole
 run prints it only when a cap left something undecided. `verify` under a scope also lists
 the temporal properties: a scoped run checks none.

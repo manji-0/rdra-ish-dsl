@@ -91,6 +91,8 @@ pub struct VarDecl {
     pub base: Value,
     pub start: Start,
     pub site: Site,
+    /// `@end(..)` values of a column: a slot may stay at one for good.
+    pub ends: Vec<Value>,
 }
 
 /// The value a var holds in the initial states.

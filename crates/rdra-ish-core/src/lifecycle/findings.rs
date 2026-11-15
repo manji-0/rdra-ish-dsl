@@ -208,7 +208,7 @@ impl TransitionSystem {
             .into_iter()
             .map(|(var, value)| {
                 let column = self.var_name(var);
-                let open = Self::has_way_on(&self.exits(e, var, value));
+                let open = self.may_deadlock(e, var, value);
                 ModelState {
                     var,
                     value,
@@ -225,6 +225,22 @@ impl TransitionSystem {
     /// an end state.
     fn has_way_on(exits: &[ExitArm]) -> bool {
         exits.iter().any(|x| x.to.is_some())
+    }
+
+    /// Whether `value` has a way on and `@end` does not declare it an end state.
+    fn may_deadlock(&self, e: EntId, var: VarId, value: Value) -> bool {
+        !self.var(var).ends.contains(&value) && Self::has_way_on(&self.exits(e, var, value))
+    }
+
+    /// Each `@end` value of `e`'s state model columns with no way out to another state: the
+    /// declaration changes nothing there, as `@end(..)` names a state that is already an end.
+    pub fn redundant_end_values(&self, e: EntId) -> Vec<(VarId, Value)> {
+        self.state_model_values(e)
+            .into_iter()
+            .filter(|&(var, value)| {
+                self.var(var).ends.contains(&value) && !Self::has_way_on(&self.exits(e, var, value))
+            })
+            .collect()
     }
 
     /// Witnesses of `e`'s state models on `g`, a graph of this system.
@@ -320,6 +336,7 @@ impl TransitionSystem {
     fn deadlocks(&self, e: EntId, targets: &[(VarId, Value)], g: &Graph) -> Vec<ValueProgress> {
         let open: Vec<(VarId, Value, Vec<ExitArm>)> = targets
             .iter()
+            .filter(|&&(var, value)| !self.var(var).ends.contains(&value))
             .map(|&(var, value)| (var, value, self.exits(e, var, value)))
             .filter(|(_, _, exits)| Self::has_way_on(exits))
             .collect();

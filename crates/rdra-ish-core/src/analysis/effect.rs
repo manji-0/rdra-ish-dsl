@@ -303,6 +303,7 @@ mod tests {
             is_tenant_scope: false,
             derived_expr: None,
             value_labels: Vec::new(),
+            end_values: Vec::new(),
         }
     }
 

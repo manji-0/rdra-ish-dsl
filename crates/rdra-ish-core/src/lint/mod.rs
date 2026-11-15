@@ -13,11 +13,16 @@ use crate::model::{NodeRef, SemanticModel};
 use crate::rdra_rules::{owned_by_registry, rdra_findings};
 use crate::refinement::{assess, Assessment, Depth, StageId};
 
-use self::columns::{lint_column_names, lint_enum_attributes, lint_unwritten_field_columns};
+use self::columns::{
+    lint_column_names, lint_enum_attributes, lint_redundant_end_values,
+    lint_unwritten_field_columns,
+};
 use self::conditions::{
     lint_bodiless_guards, lint_condition_anchors, lint_int_comparisons, lint_unguarded_triggered,
 };
-use self::elements::{lint_goals, lint_rule_labels, lint_screen_transitions};
+use self::elements::{
+    lint_goals, lint_rule_labels, lint_screen_transitions, lint_unscoped_multi_rules,
+};
 use self::naming::{is_upper_camelish_id, lint_node_refs};
 use self::score::{coverage_score_issue, relation_degree, stage_readiness_issue};
 use self::structure::{lint_flow_cycles, lint_structural_coverage};
@@ -259,12 +264,14 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_flow_cycles(model, &mut findings);
     lint_column_names(model, &mut findings);
     lint_enum_attributes(model, &mut findings);
+    lint_redundant_end_values(model, &mut findings);
     lint_unwritten_field_columns(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
     lint_bodiless_guards(model, &mut findings);
     lint_int_comparisons(model, &mut findings);
     lint_unguarded_triggered(model, &mut findings);
     lint_rule_labels(model, &mut findings);
+    lint_unscoped_multi_rules(model, &mut findings);
     lint_goals(model, &mut findings);
     lint_screen_transitions(model, &mut findings);
     findings.extend(rdra_findings(model));
