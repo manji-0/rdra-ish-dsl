@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Scope, Site};
+use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Site};
 use rdra_ish_core::{entity_state_variants, format_location};
 use rdra_ish_emit::{
     state_pattern::{render_csv, render_json, render_table},
@@ -29,7 +29,7 @@ pub fn run_states(
         ..
     } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
-    let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
+    let scope = scope.resolve(&model)?;
 
     // Exit on structured severity (not string scan) so csv / typescript also fail-closed.
     let (report, ts) = derive_states_built(&model, &scope, bounds, caps);

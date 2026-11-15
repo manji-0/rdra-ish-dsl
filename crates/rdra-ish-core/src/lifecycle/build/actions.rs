@@ -39,6 +39,7 @@ impl<'m> Builder<'m> {
             if in_scope
                 .as_ref()
                 .is_some_and(|r| !r.contains(&NodeRef::UseCase(uc)))
+                || scope.without.contains(&uc)
             {
                 continue;
             }

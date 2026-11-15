@@ -26,7 +26,7 @@ use list_output::{
     format_lint_issues, format_rules, format_transitions, list_elements, state_findings,
 };
 use load::{deny_deprecated, eprint_diagnostic, reject_model_errors};
-use rdra_ish_core::lifecycle::{Caps, FindingTally, Scope, Severity};
+use rdra_ish_core::lifecycle::{Caps, FindingTally, Severity};
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use rdra_ish_emit::View;
@@ -86,7 +86,7 @@ fn main() -> Result<()> {
                 std::process::exit(1);
             }
 
-            let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
+            let scope = scope.resolve(&model)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
             let caps = Caps::new(max_patterns, max_states);
             let lifecycle = state_findings(&program, &model, &scope, bounds.bounds()?, caps);
@@ -362,7 +362,7 @@ fn main() -> Result<()> {
                 ..
             } = load_project(&inputs, None)?;
             reject_model_errors(&program, &diags)?;
-            let scope = Scope::parse(&model, &scope.buc, &scope.entity)?;
+            let scope = scope.resolve(&model)?;
             let cli::VerifyBackend::Tlc = backend;
             run_tlc(
                 &program,

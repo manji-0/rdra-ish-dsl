@@ -40,7 +40,7 @@ pub use findings::{
 pub use lasso::{LassoReplay, Loop};
 pub use reduce::{ClassMove, Fold, FoldKey, Reduction, Step};
 pub use restrict::Component;
-pub use select::{NotChecked, Scope, Selection, UnknownId};
+pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
 pub use states::{derive_states, derive_states_built, BoundsLine, FindingTally, StatesReport};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};

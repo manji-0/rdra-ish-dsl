@@ -958,3 +958,67 @@ fn version_prints_the_package_version() {
         format!("rdra-ish {}\n", env!("CARGO_PKG_VERSION"))
     );
 }
+
+const SELF_SERVICE: &str = r#"
+actor Staff "Staff"
+actor Ops "Ops"
+entity Account "Account" {
+  id: Int @pk
+  status: Enum(pending, active, deleted) @default(pending)
+}
+entity Browser "Browser" {
+  id: Int @pk
+  key_ok: Bool @default(true)
+}
+relate(Account, Browser, N:1)
+buc BucSelf "Self-service"
+buc BucOps "Ops"
+usecase Create "Create"
+usecase Activate "Activate"
+usecase LoseKey "Lose key"
+usecase Delete "Delete"
+contains(BucSelf, Create)
+contains(BucSelf, Activate)
+contains(BucSelf, LoseKey)
+contains(BucOps, Delete)
+performs(Staff, BucSelf)
+performs(Ops, BucOps)
+creates(Create, Account)
+updates(Activate, Account)
+condition KeyOk "key matches"
+holds(KeyOk, Browser.key_ok == true).along(Account, Browser)
+applies_to(KeyOk, Activate)
+transitions(Activate, Account.status, pending -> active)
+updates(LoseKey, Browser)
+sets(LoseKey, Browser.key_ok == false)
+updates(Delete, Account)
+transitions(Delete, Account.status, (pending, active) -> deleted)
+"#;
+
+/// `--actor` leaves the other actors' use cases out and still decides deadlocks, where
+/// `--buc` leaves them undecided (#115).
+#[test]
+fn actor_scope_decides_the_deadlock_another_actor_hides() {
+    let (code, stdout, stderr) = run_on_source("self-whole", SELF_SERVICE, &["check"]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.starts_with("OK: "), "{stdout}");
+
+    let (code, stdout, stderr) =
+        run_on_source("self-actor", SELF_SERVICE, &["check", "--actor", "Staff"]);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("\nscope: --actor Staff (1 use case assumed not to run: Delete)\n"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("error[Deadlock_Account_status_pending]"),
+        "{stderr}"
+    );
+    assert_eq!(
+        stdout,
+        "FAIL: 1 error, 1 warning in the selected scope, within 1 instance per entity, Int 0..5\n"
+    );
+
+    let (_, _, stderr) = run_on_source("self-buc", SELF_SERVICE, &["check", "--buc", "BucSelf"]);
+    assert!(!stderr.contains("error[Deadlock"), "{stderr}");
+}

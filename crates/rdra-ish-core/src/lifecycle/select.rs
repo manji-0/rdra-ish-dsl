@@ -18,6 +18,19 @@ pub struct Scope {
     pub bucs: Vec<String>,
     /// The run answers these entities' views and the invariants and asserts that read them.
     pub entities: Vec<EntityKey>,
+    /// Use cases assumed never to run: the system leaves them out, and unlike `bucs` the run
+    /// still decides witnesses, deadlocks, and use cases that never run under that assumption.
+    pub without: Vec<UseCaseKey>,
+    /// The flags that chose `without`, as written, for the `scope:` line.
+    pub without_flags: Vec<String>,
+}
+
+/// The use cases `--without-usecase`, `--without-buc`, and `--actor` assume never run.
+#[derive(Clone, Debug, Default)]
+pub struct Without<'a> {
+    pub usecases: &'a [String],
+    pub bucs: &'a [String],
+    pub actors: &'a [String],
 }
 
 /// An id `--buc` or `--entity` names that the model does not declare.
@@ -39,6 +52,8 @@ impl Scope {
     pub const ALL: Scope = Scope {
         bucs: Vec::new(),
         entities: Vec::new(),
+        without: Vec::new(),
+        without_flags: Vec::new(),
     };
 
     pub fn parse(
@@ -69,19 +84,88 @@ impl Scope {
         Ok(Scope {
             bucs: bucs.to_vec(),
             entities: keys,
+            without: Vec::new(),
+            without_flags: Vec::new(),
         })
+    }
+
+    /// Leaves out the use cases `without` names: each `--without-usecase`; each use case a
+    /// `--without-buc` reaches that no other BUC reaches; and, under `--actor`, each use case
+    /// some actor performs and none of the named actors does.
+    pub fn without(mut self, model: &SemanticModel, without: &Without) -> Result<Self, UnknownId> {
+        let unknown = |kind, id: &String| UnknownId {
+            kind,
+            id: id.clone(),
+        };
+        let uc_key = |id: &String| {
+            model
+                .use_cases
+                .iter()
+                .find(|(_, u)| u.id == *id)
+                .map(|(k, _)| k)
+                .ok_or_else(|| unknown("use case", id))
+        };
+        let mut out: Vec<UseCaseKey> = Vec::new();
+        for id in without.usecases {
+            out.push(uc_key(id)?);
+            self.without_flags.push(format!("--without-usecase {id}"));
+        }
+        if !without.bucs.is_empty() {
+            for id in without.bucs {
+                if !model.bucs.values().any(|b| b.id == *id) {
+                    return Err(unknown("buc", id));
+                }
+                self.without_flags.push(format!("--without-buc {id}"));
+            }
+            let others: Vec<String> = model
+                .bucs
+                .values()
+                .map(|b| b.id.clone())
+                .filter(|id| !without.bucs.contains(id))
+                .collect();
+            let gone = crate::resolver::reachable_from_bucs(model, without.bucs);
+            let kept = crate::resolver::reachable_from_bucs(model, &others);
+            for (uc, _) in &model.use_cases {
+                let node = crate::model::NodeRef::UseCase(uc);
+                if gone.contains(&node) && !kept.contains(&node) {
+                    out.push(uc);
+                }
+            }
+        }
+        if !without.actors.is_empty() {
+            let mut keys = Vec::new();
+            for id in without.actors {
+                let (key, _) = model
+                    .actors
+                    .iter()
+                    .find(|(_, a)| a.id == *id)
+                    .ok_or_else(|| unknown("actor", id))?;
+                keys.push(key);
+                self.without_flags.push(format!("--actor {id}"));
+            }
+            for (uc, _) in &model.use_cases {
+                let performers = crate::access::actors_for_usecase(model, uc);
+                if !performers.is_empty() && !performers.iter().any(|a| keys.contains(a)) {
+                    out.push(uc);
+                }
+            }
+        }
+        out.sort_by(|a, b| model.use_cases[*a].id.cmp(&model.use_cases[*b].id));
+        out.dedup();
+        self.without = out;
+        Ok(self)
     }
 
     /// `--buc` alone, for callers whose ids an emitter view already carries.
     pub fn from_bucs(bucs: &[String]) -> Self {
         Scope {
             bucs: bucs.to_vec(),
-            entities: Vec::new(),
+            ..Scope::ALL
         }
     }
 
     pub fn is_whole(&self) -> bool {
-        self.bucs.is_empty() && self.entities.is_empty()
+        self.bucs.is_empty() && self.entities.is_empty() && self.without_flags.is_empty()
     }
 
     /// The `scope:` line: each flag with what it leaves out. `None` for a whole run.
@@ -109,6 +193,19 @@ impl Scope {
                 .map(|k| model.entities[*k].id.as_str())
                 .collect();
             parts.push(format!("--entity {}", ids.join(" --entity ")));
+        }
+        if !self.without_flags.is_empty() {
+            let ids: Vec<&str> = self
+                .without
+                .iter()
+                .map(|k| model.use_cases[*k].id.as_str())
+                .collect();
+            let assumed = match ids.len() {
+                0 => "no use case left out".to_string(),
+                1 => format!("1 use case assumed not to run: {}", ids[0]),
+                n => format!("{n} use cases assumed not to run: {}", ids.join(", ")),
+            };
+            parts.push(format!("{} ({assumed})", self.without_flags.join(", ")));
         }
         Some(format!("scope: {}", parts.join(", ")))
     }

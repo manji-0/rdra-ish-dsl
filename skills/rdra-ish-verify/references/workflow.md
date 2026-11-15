@@ -47,6 +47,11 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   use cases reachable from `B`, so witnesses, deadlocks, and use cases that never run are
   not decided. Both list what they skip under `not checked:`, skip temporal properties,
   and end with `OK: no errors in the selected scope, within ...`.
+- To check what one actor can reach by their own use cases, when another actor's use case
+  (an operator's deletion, say) leaves every state and hides a deadlock, run
+  `check --actor <A>`, `--without-buc <B>`, or `--without-usecase <UC>`. These assume the
+  other use cases never run, decide deadlocks, witnesses, and use cases that never run
+  under that assumption, and name the use cases left out on the `scope:` line.
 - When TLC runs out of heap the result is `tool_error`: set `RDRA_TLC_HEAP=4g` (default
   `1g` per cone, `2g` per temporal property run), or put `-Xmx` in `JAVA_TOOL_OPTIONS`,
   which wins.

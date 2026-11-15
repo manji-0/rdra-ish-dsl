@@ -394,6 +394,35 @@ pub(crate) struct ScopeArgs {
     /// id); repeatable. Build errors on entities no checked cone reads are deferred.
     #[arg(long)]
     pub(crate) entity: Vec<String>,
+    /// Assume this use case never runs and leave it out (by id); repeatable. Unlike `--buc`,
+    /// witnesses, deadlocks, and use cases that never run are still decided
+    #[arg(long, value_name = "USECASE")]
+    pub(crate) without_usecase: Vec<String>,
+    /// Assume the use cases this BUC reaches, and no other BUC does, never run (by id);
+    /// repeatable
+    #[arg(long, value_name = "BUC")]
+    pub(crate) without_buc: Vec<String>,
+    /// Keep only the use cases this actor performs and those no actor performs (by id);
+    /// repeatable. Every other use case is assumed never to run
+    #[arg(long, value_name = "ACTOR")]
+    pub(crate) actor: Vec<String>,
+}
+
+impl ScopeArgs {
+    /// The scope these flags name, each id checked against the model.
+    pub(crate) fn resolve(
+        &self,
+        model: &rdra_ish_core::SemanticModel,
+    ) -> Result<rdra_ish_core::lifecycle::Scope, rdra_ish_core::lifecycle::UnknownId> {
+        rdra_ish_core::lifecycle::Scope::parse(model, &self.buc, &self.entity)?.without(
+            model,
+            &rdra_ish_core::lifecycle::Without {
+                usecases: &self.without_usecase,
+                bucs: &self.without_buc,
+                actors: &self.actor,
+            },
+        )
+    }
 }
 
 #[derive(ValueEnum, Clone)]
