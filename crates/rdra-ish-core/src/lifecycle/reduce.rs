@@ -314,6 +314,17 @@ impl Reduction {
             })
             .collect()
     }
+
+    /// Whether a class move's `params` bind the cone action `act` as it is: the extended
+    /// sub-lifecycle kept its params and did not fold it.
+    fn in_cone_params(&self, ts: &TransitionSystem, act: ActId, params: &[u8]) -> bool {
+        !self.variants.contains_key(&act) && ts.actions[act.index()].params.len() == params.len()
+    }
+
+    /// Whether cone action `a2` realizes the extended sub-lifecycle's step of `act`.
+    fn stands_for(&self, act: ActId, a2: ActId) -> bool {
+        a2 == act || self.variants.get(&act).is_some_and(|v| v.contains(&a2))
+    }
 }
 
 /// The classes of S, with the initial states' and the moves' classes.
@@ -455,6 +466,8 @@ struct Extended {
     /// The bit groups, in the cone's ids.
     bits: Vec<Vec<Fold>>,
     variants: HashMap<ActId, Vec<ActId>>,
+    /// Per cone action, its param index to `system`'s, when the restriction dropped one.
+    params: Vec<Option<Vec<Option<u8>>>>,
 }
 
 impl Extended {
@@ -717,6 +730,22 @@ impl Extended {
             inputs_local,
             bits,
             variants,
+            params: map.params,
+        }
+    }
+
+    /// A step's params in the cone's numbering: each param of cone action `act` takes the
+    /// slot of the param it became in `system`. A param the restriction dropped (a T param
+    /// whose guards fold into a bit) takes slot 0, as the extended sub-lifecycle binds a
+    /// fold's key to any slot; params a fold added past the cone's are left out.
+    fn cone_params(&self, cone: &TransitionSystem, act: ActId, params: &[u8]) -> Box<[u8]> {
+        let n = cone.actions[act.index()].params.len();
+        match &self.params[act.index()] {
+            None => params[..n.min(params.len())].into(),
+            Some(index) => index
+                .iter()
+                .map(|j| j.map_or(0, |j| params[usize::from(j)]))
+                .collect(),
         }
     }
 
@@ -772,7 +801,7 @@ impl Quotient {
     /// nothing (#101). An unobserved S is one class, held at an initial S state, with no
     /// moves: nothing on T reads it, so no path through it is told from staying put, whatever
     /// its inputs do.
-    fn of(ext: &Extended, caps: Caps) -> Option<Self> {
+    fn of(ext: &Extended, cone: &TransitionSystem, caps: Caps) -> Option<Self> {
         let raw = &ext.system;
         if ext.obs_local.is_empty() {
             let initial = raw.initial_states();
@@ -862,8 +891,10 @@ impl Quotient {
                 continue;
             }
             let act = ext.acts[act.index()].expect("a silent step is an S action of the cone");
-            if seen.insert((class[x], act, params.into(), class[y])) {
-                moves[class[x] as usize].push((act, params.into(), class[y]));
+            // The BFS of the cone reads a class move's params by the cone action's params.
+            let params = ext.cone_params(cone, act, params);
+            if seen.insert((class[x], act, params.clone(), class[y])) {
+                moves[class[x] as usize].push((act, params, class[y]));
             }
         }
         Some(Quotient {
@@ -1565,7 +1596,7 @@ impl TransitionSystem {
             return Err(false);
         }
         let ext = Extended::of(self, &split);
-        let Some(quotient) = Quotient::of(&ext, caps) else {
+        let Some(quotient) = Quotient::of(&ext, self, caps) else {
             return Err(false);
         };
         let Quotient {
@@ -1867,13 +1898,13 @@ impl TransitionSystem {
                             // A folded or merged action binds its T params in the cone:
                             // the cone's step is the variant that leads to the same state.
                             let first = ext.acts[a.index()].expect("an S step is the cone's");
-                            let step = match r.variants.get(&first) {
-                                None => (first, p, next.clone()),
-                                Some(variants) => self
-                                    .plain_moves(&cur)
+                            let step = if r.in_cone_params(self, first, &p) {
+                                (first, p, next.clone())
+                            } else {
+                                self.plain_moves(&cur)
                                     .into_iter()
-                                    .find(|(a2, _, n2)| variants.contains(a2) && *n2 == next)
-                                    .expect("a folded step is a step of the cone"),
+                                    .find(|(a2, _, n2)| r.stands_for(first, *a2) && *n2 == next)
+                                    .expect("a folded step is a step of the cone")
                             };
                             group.push(step);
                             cur = next;

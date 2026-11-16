@@ -880,3 +880,32 @@ fn a_quantifier_over_t_folds_into_a_bit_keyed_by_the_linked_row() {
         "the reduced cone is smaller"
     );
 }
+
+/// A class move's params are the extended sub-lifecycle's, which drops a folded action's T
+/// params. In clinic-ops, `ReviewPatientResponse` updates a `CarePlan` (S) and its
+/// `FollowUpMessage` (T) on the cone of `Unique_FollowUpMessage_CarePlan`: the BFS takes the
+/// cone's step into the same class, so it binds both rows, decides what the plain cone
+/// decides, and its traces lift to real paths.
+#[test]
+fn a_class_move_of_a_folded_action_binds_the_cones_params() {
+    let model = load("samples/clinic-ops");
+    let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
+    let target = ts
+        .targets()
+        .into_iter()
+        .find(|t| {
+            matches!(t, Target::Invariant(i) if ts.invariants()[*i].name == "Unique_FollowUpMessage_CarePlan")
+        })
+        .expect("the 1:1 key's invariant");
+    let caps = Caps::STATES;
+    let plain = ts.explore_targets(&[target], caps);
+    let reduced = ts.explore_targets_reduced(&[target], caps);
+    let cone = reduced.cone_of(target);
+    assert!(cone.run.system.reduction().is_some(), "the cone reduces");
+    assert_eq!(diag_names(&plain), diag_names(&reduced));
+    let unreduced = ts.restrict_to(&cone.cone.vars, &cone.cone.keep);
+    for at in 0..cone.run.states.len() as u32 {
+        let (start, steps) = lifted_path(&cone.run, at);
+        assert_real_path(&unreduced, &start, &steps);
+    }
+}

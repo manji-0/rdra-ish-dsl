@@ -35,6 +35,14 @@
   `tla2tools.jar`. The error for a missing TLC lists the ways to get it, and the CLI
   reference has a [Getting TLC](./docs/cli-reference.md#getting-tlc) section.
 
+### Fixed
+
+- The BFS of a reduced cone no longer panics (`index out of bounds` in `explore/bfs.rs`)
+  on a class move of an S action whose T params the extended sub-lifecycle dropped, such
+  as a use case that updates a row of the sub-lifecycle and a related row outside it. A
+  class move now carries its params in the cone action's numbering, and a lifted trace
+  takes the cone's step for such an action.
+
 ## v2.1.0 - 2026-11-08
 
 Upgrading from v2.0.0 needs no change: no model, command, or verdict changes. The release
