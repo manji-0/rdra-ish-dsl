@@ -2968,7 +2968,7 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=robustness scope=buc:BucFollowupCare model=samples/clinic-ops
 %% kinds: actor extsystem screen api usecase entity
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 flowchart LR
   actor__CareCoordinator(["患者支援・地域連携担当"]):::actor
   extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
@@ -3038,7 +3038,7 @@ flowchart LR
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | ケアプランの作成<br>`CreateCarePlan` | 署名イベントからのケアプラン作成。 | `CarePlanScreen` | `CreateCarePlanApi` | （なし） |
-| 患者への連絡<br>`SendFollowUpMessage` | 患者連絡。 | `PatientMessageScreen` | `SendFollowUpMessageApi` | （なし） |
+| 患者への連絡<br>`SendFollowUpMessage` | 患者連絡。 | `PatientMessageScreen` | `SendFollowUpMessageApi` | 作成済みでまだ連絡していないケアプラン |
 | 患者応答の確認<br>`ReviewPatientResponse` | 患者応答の確認。 | `CarePlanScreen` | `ReviewPatientResponse` | （なし） |
 | 再診の予約<br>`ScheduleFollowUpVisit` | 再診予約。 | `FollowUpScheduleScreen` | `FollowUpScheduleApi` | （なし） |
 | ケアプランの終了<br>`CloseCarePlan` | ケアプラン終了。 | `CarePlanScreen` | `CloseCarePlan` | （なし） |
@@ -3072,7 +3072,7 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:SendFollowUpMessage model=samples/clinic-ops
 %% kinds: actor screen api entity
-%% omitted: buc step medium permission
+%% omitted: buc step medium permission condition
 sequenceDiagram
   actor actor__CareCoordinator as 患者支援・地域連携担当
   participant screen__PatientMessageScreen as 患者連絡画面
@@ -3080,8 +3080,12 @@ sequenceDiagram
   participant entity__FollowUpMessage as フォローアップ連絡
   actor__CareCoordinator ->> screen__PatientMessageScreen: 患者への連絡
   screen__PatientMessageScreen ->> api__SendFollowUpMessageApi: 患者連絡 API
-  api__SendFollowUpMessageApi ->> entity__FollowUpMessage: create status=sent, sent_at=set
-  api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: done
+  alt 作成済みでまだ連絡していないケアプラン: (CarePlan.status == 作成済).none(FollowUpMessage)
+    api__SendFollowUpMessageApi ->> entity__FollowUpMessage: create status=sent, sent_at=set
+    api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: done
+  else guard fails
+    api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: rejected
+  end
 ```
 
 </details>
@@ -4121,7 +4125,7 @@ erDiagram
   CarePlan }o--|| Encounter : ""
   CarePlan }o--|| PatientAccount : ""
   PatientMessage }o--|| PatientAccount : ""
-  FollowUpMessage }o--|| CarePlan : ""
+  FollowUpMessage ||--|| CarePlan : ""
   Notification }o--|| PatientAccount : ""
   AuditEvent }o--|| PatientAccount : ""
   PatientProfile ||--|| PatientAccount : ""
@@ -4227,7 +4231,7 @@ erDiagram
 | FollowUpMessage | フォローアップ連絡 | status | Enum | false | false | false | false |  | false |  |  | false | sent |  | false | false | false |  |
 | FollowUpMessage | フォローアップ連絡 | sent_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | FollowUpMessage | フォローアップ連絡 | read_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
-| FollowUpMessage | フォローアップ連絡 | careplan_id | Int | false | false | false | true | CarePlan | false |  |  | false |  |  | false | false | false |  |
+| FollowUpMessage | フォローアップ連絡 | careplan_id | Int | false | true | false | true | CarePlan | false |  |  | false |  |  | false | false | false |  |
 | InsurancePolicy | 保険資格 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | InsurancePolicy | 保険資格 | payer_name | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | InsurancePolicy | 保険資格 | payer_no | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
@@ -4335,6 +4339,7 @@ erDiagram
 | --- | --- | --- | --- | --- | --- |
 | condition | 署名済みの診療記録のコストだけ登録する | Encounter | (Encounter.status in (署名済, 修正済)).along(Charge, Encounter) | CreateCharge | samples/clinic-ops/buc/buc_billing_claims.rdra:106 |
 | condition | 振替・分割の対象外（負担割合の相違・公費） |  |  | RecordClaimReturn | samples/clinic-ops/buc/buc_billing_claims.rdra:184 |
+| condition | 作成済みでまだ連絡していないケアプラン | CarePlan | (CarePlan.status == 作成済).none(FollowUpMessage) | SendFollowUpMessage | samples/clinic-ops/buc/buc_followup_care.rdra:60 |
 | condition | 医師が確定したオーダ | ClinicalOrder | ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済 | CollectSpecimen | samples/clinic-ops/buc/buc_orders_results.rdra:111 |
 | condition | 予約済みの患者 | Appointment | (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment) | BatchVerifyEligibility | samples/clinic-ops/buc/buc_visit_checkin.rdra:106 |
 | condition | 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする |  |  | CalculateVisitBill | samples/clinic-ops/buc/buc_visit_payment.rdra:73 |

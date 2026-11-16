@@ -86,7 +86,7 @@ flowchart LR
   entity__Encounter ---|N:1| entity__PatientAccount
   entity__Encounter ---|N:1| entity__Provider
   entity__Encounter -.-> statemodel__Encounter_status
-  entity__FollowUpMessage ---|N:1| entity__CarePlan
+  entity__FollowUpMessage ---|1:1| entity__CarePlan
   entity__FollowUpMessage -.->|variation channel| variation__MessageChannel
   entity__InsurancePolicy ---|N:1| entity__PatientAccount
   entity__InsurancePolicy -.->|variation burden_ratio| variation__BurdenRatio

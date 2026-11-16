@@ -56,6 +56,9 @@ invokes(SendFollowUpMessage, SendFollowUpMessageApi)
 creates(SendFollowUpMessageApi, FollowUpMessage)
 sets(SendFollowUpMessage, FollowUpMessage.status == sent)
 sets(SendFollowUpMessage, FollowUpMessage.sent_at == present)
+condition AwaitingFollowUp "作成済みでまだ連絡していないケアプラン"
+holds(AwaitingFollowUp, CarePlan.status == open).none(FollowUpMessage)
+applies_to(AwaitingFollowUp, SendFollowUpMessage)
 
 displays(ReviewPatientResponse, CarePlanScreen)
 updates(ReviewPatientResponse, CarePlan)

@@ -970,6 +970,7 @@ flowchart TD
 | --- | --- | --- | --- | --- | --- |
 | condition | 署名済みの診療記録のコストだけ登録する | Encounter | (Encounter.status in (署名済, 修正済)).along(Charge, Encounter) | CreateCharge | samples/clinic-ops/buc/buc_billing_claims.rdra:106 |
 | condition | 振替・分割の対象外（負担割合の相違・公費） |  |  | RecordClaimReturn | samples/clinic-ops/buc/buc_billing_claims.rdra:184 |
+| condition | 作成済みでまだ連絡していないケアプラン | CarePlan | (CarePlan.status == 作成済).none(FollowUpMessage) | SendFollowUpMessage | samples/clinic-ops/buc/buc_followup_care.rdra:60 |
 | condition | 医師が確定したオーダ | ClinicalOrder | ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済 | CollectSpecimen | samples/clinic-ops/buc/buc_orders_results.rdra:111 |
 | condition | 予約済みの患者 | Appointment | (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment) | BatchVerifyEligibility | samples/clinic-ops/buc/buc_visit_checkin.rdra:106 |
 | condition | 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする |  |  | CalculateVisitBill | samples/clinic-ops/buc/buc_visit_payment.rdra:73 |

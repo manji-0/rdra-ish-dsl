@@ -1,6 +1,6 @@
 %% rdra-ish diagram=usecase scope=buc:BucFollowupCare model=samples/clinic-ops
 %% layers: value=システム価値 boundary=システム境界 system=システム
-%% kinds: actor extsystem usecase screen event entity state
+%% kinds: actor extsystem usecase screen event entity state condition
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
@@ -40,6 +40,7 @@ flowchart LR
     state__CarePlan_closed((("終了"))):::state
     state__CarePlan_monitoring((("経過観察中"))):::state
     state__CarePlan_open((("作成済"))):::state
+    condition__AwaitingFollowUp{"作成済みでまだ連絡していないケアプラン"}:::condition
   end
   actor__CareCoordinator -.-> usecase__CloseCarePlan
   actor__CareCoordinator -.-> usecase__CreateCarePlan
@@ -47,6 +48,7 @@ flowchart LR
   actor__CareCoordinator -.-> usecase__ReviewPatientResponse
   actor__CareCoordinator -.-> usecase__ScheduleFollowUpVisit
   actor__CareCoordinator -.-> usecase__SendFollowUpMessage
+  condition__AwaitingFollowUp -.->|applies_to| usecase__SendFollowUpMessage
   event__EvAppointmentScheduled -.-> extsystem__MessagingGateway
   event__EvClinicalOrderReviewed -.-> usecase__NotifyPatientResult
   event__EvEncounterSigned -.-> usecase__CreateCarePlan
@@ -82,3 +84,4 @@ flowchart LR
   classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
   classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -330,6 +330,7 @@ flowchart LR
     variation__LimitCategory[\"限度額適用区分"\]:::variation
     variation__PayerChange[\"資格変更の種類"\]:::variation
     variation__ReferralCategory[\"紹介の有無"\]:::variation
+    condition__AwaitingFollowUp{"作成済みでまだ連絡していないケアプラン"}:::condition
     condition__ChargeOfSignedEncounter{"署名済みの診療記録のコストだけ登録する"}:::condition
     condition__CopayCappedAtLimit{"窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}:::condition
     condition__TransferNotPossible{"振替・分割の対象外（負担割合の相違・公費）"}:::condition
@@ -474,6 +475,9 @@ flowchart LR
   buc__BucVisitPayment --> usecase__RefundPayment
   buc__BucVisitPayment --> usecase__SettleAtKiosk
   buc__BucVisitPayment --> usecase__SettleAtWindow
+  condition__AwaitingFollowUp -.->|applies_to| usecase__SendFollowUpMessage
+  condition__AwaitingFollowUp -.-> entity__CarePlan
+  %% derived condition__AwaitingFollowUp -> entity__CarePlan from holds
   condition__ChargeOfSignedEncounter -.->|applies_to| usecase__CreateCharge
   condition__ChargeOfSignedEncounter -.-> entity__Encounter
   %% derived condition__ChargeOfSignedEncounter -> entity__Encounter from holds
@@ -504,7 +508,7 @@ flowchart LR
   entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
   entity__Encounter ---|1:1| entity__Appointment
   entity__Encounter ---|N:1| entity__PatientAccount
-  entity__FollowUpMessage ---|N:1| entity__CarePlan
+  entity__FollowUpMessage ---|1:1| entity__CarePlan
   entity__InsurancePolicy ---|N:1| entity__PatientAccount
   entity__IntakePacket ---|N:1| entity__PatientAccount
   entity__Notification ---|N:1| entity__PatientAccount

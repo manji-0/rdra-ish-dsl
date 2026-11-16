@@ -2,6 +2,8 @@
 %% kinds: condition statemodel variation value usecase
 %% omitted: (none)
 flowchart LR
+  condition__AwaitingFollowUp{"作成済みでまだ連絡していないケアプラン"}:::condition
+  %% holds condition__AwaitingFollowUp: (CarePlan.status == 作成済).none(FollowUpMessage)
   condition__BookedPatient{"予約済みの患者"}:::condition
   %% holds condition__BookedPatient: (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment)
   condition__ChargeOfSignedEncounter{"署名済みの診療記録のコストだけ登録する"}:::condition
@@ -13,6 +15,7 @@ flowchart LR
   condition__UnreferredFirstVisit{"紹介状なしの初診で、除外に当たらない"}:::condition
   %% holds condition__UnreferredFirstVisit: Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診
   statemodel__Appointment_status[["Appointment.status"]]:::statemodel
+  statemodel__CarePlan_status[["CarePlan.status"]]:::statemodel
   statemodel__ClaimStatement_status[["ClaimStatement.status"]]:::statemodel
   statemodel__ClinicalOrder_status[["ClinicalOrder.status"]]:::statemodel
   statemodel__Encounter_status[["Encounter.status"]]:::statemodel
@@ -86,6 +89,11 @@ flowchart LR
   %% desc usecase__CreateCharge: 署名時のカルテ由来コスト情報の登録（システム起動）。
   usecase__RecordClaimReturn("返戻レセプトの取込"):::usecase
   %% desc usecase__RecordClaimReturn: 返戻レセプトの取込（3か月以内）。
+  usecase__SendFollowUpMessage("患者への連絡"):::usecase
+  %% desc usecase__SendFollowUpMessage: 患者連絡。
+  condition__AwaitingFollowUp -.->|applies_to| usecase__SendFollowUpMessage
+  condition__AwaitingFollowUp -.-> statemodel__CarePlan_status
+  %% derived condition__AwaitingFollowUp -> statemodel__CarePlan_status from holds
   condition__BookedPatient -.->|applies_to| usecase__BatchVerifyEligibility
   condition__BookedPatient -.-> statemodel__Appointment_status
   %% derived condition__BookedPatient -> statemodel__Appointment_status from holds

@@ -411,7 +411,7 @@ relate(AccountBalance, PatientAccount, 1:1)
 relate(CarePlan, PatientAccount, N:1)
 relate(CarePlan, Encounter, N:1)
 relate(PatientMessage, PatientAccount, N:1)
-relate(FollowUpMessage, CarePlan, N:1)
+relate(FollowUpMessage, CarePlan, 1:1)
 relate(Notification, PatientAccount, N:1)
 relate(AuditEvent, PatientAccount, N:1)
 

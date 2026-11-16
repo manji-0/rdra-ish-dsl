@@ -1,7 +1,7 @@
 | entity | column | from | to | usecase | guards | actors | site |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Appointment | status | 仮押さえ (requested) | 予約済 (scheduled) | 予約の確定 (BookAppointment) |  | 医事課 受付担当 | samples/clinic-ops/buc/buc_appointment_scheduling.rdra:82 |
-| Appointment | status | 仮押さえ (requested) | 予約済 (scheduled) | 再診の予約 (ScheduleFollowUpVisit) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:72 |
+| Appointment | status | 仮押さえ (requested) | 予約済 (scheduled) | 再診の予約 (ScheduleFollowUpVisit) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:75 |
 | Appointment | status | 予約済 (scheduled) | 予約済 (scheduled) | 予約の変更 (RescheduleAppointment) |  | 医事課 受付担当 | samples/clinic-ops/buc/buc_appointment_scheduling.rdra:93 |
 | Appointment | status | 予約済 (scheduled) | 受付済 (checked_in) | 受付（初診・再診） (CheckInPatient) |  | 医事課 受付担当 | samples/clinic-ops/buc/buc_visit_checkin.rdra:97 |
 | Appointment | status | 予約済 (scheduled) | 取消 (cancelled) | 予約の取消 (CancelAppointment) |  | 医事課 受付担当 | samples/clinic-ops/buc/buc_appointment_scheduling.rdra:104 |
@@ -13,8 +13,8 @@
 | Appointment | status | 会計待ち (awaiting_pay) | 精算済 (settled) | 自動精算機での精算 (SettleAtKiosk) |  |  | samples/clinic-ops/buc/buc_visit_payment.rdra:110 |
 | Appointment | status | 会計待ち (awaiting_pay) | 精算済 (settled) | 会計窓口での精算 (SettleAtWindow) |  | 医事課 会計担当 | samples/clinic-ops/buc/buc_visit_payment.rdra:104 |
 | Appointment | status | 精算済 (settled) | 完了 (completed) | 領収証・明細書の交付 (IssueReceipt) |  | 医事課 会計担当 | samples/clinic-ops/buc/buc_visit_payment.rdra:123 |
-| CarePlan | status | 作成済 (open) | 経過観察中 (monitoring) | 患者応答の確認 (ReviewPatientResponse) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:63 |
-| CarePlan | status | 経過観察中 (monitoring) | 終了 (closed) | ケアプランの終了 (CloseCarePlan) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:76 |
+| CarePlan | status | 作成済 (open) | 経過観察中 (monitoring) | 患者応答の確認 (ReviewPatientResponse) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:66 |
+| CarePlan | status | 経過観察中 (monitoring) | 終了 (closed) | ケアプランの終了 (CloseCarePlan) |  | 患者支援・地域連携担当 | samples/clinic-ops/buc/buc_followup_care.rdra:79 |
 | ClaimStatement | status | 作成中 (drafting) | 院内点検中 (inspecting) | レセプトの院内点検 (InspectClaimStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:124 |
 | ClaimStatement | status | 院内点検中 (inspecting) | 保留 (on_hold) | レセプトの保留（月遅れ） (HoldClaimStatement) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:129 |
 | ClaimStatement | status | 院内点検中 (inspecting) | 請求済 (submitted) | レセプト請求 (SubmitClaimStatements) |  | 医事課 レセプト担当 | samples/clinic-ops/buc/buc_billing_claims.rdra:141 |
