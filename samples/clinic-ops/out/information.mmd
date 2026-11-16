@@ -14,6 +14,7 @@ flowchart LR
   entity__Diagnosis[("診断")]:::entity
   entity__EligibilityCheck[("資格確認")]:::entity
   entity__Encounter[("診療記録")]:::entity
+  entity__FollowUpMessage[("フォローアップ連絡")]:::entity
   entity__InsurancePolicy[("保険資格")]:::entity
   entity__IntakePacket[("問診票")]:::entity
   entity__LabResult[("検査結果")]:::entity
@@ -56,6 +57,7 @@ flowchart LR
   entity__Appointment ---|N:1| entity__ClinicLocation
   entity__Appointment ---|N:1| entity__PatientAccount
   entity__Appointment ---|N:1| entity__Provider
+  entity__Appointment ---|N:1| entity__ProviderSchedule
   entity__Appointment ---|N:1| entity__Room
   entity__Appointment -.-> statemodel__Appointment_status
   entity__Appointment -.->|variation referral| variation__ReferralCategory
@@ -84,6 +86,8 @@ flowchart LR
   entity__Encounter ---|N:1| entity__PatientAccount
   entity__Encounter ---|N:1| entity__Provider
   entity__Encounter -.-> statemodel__Encounter_status
+  entity__FollowUpMessage ---|1:1| entity__CarePlan
+  entity__FollowUpMessage -.->|variation channel| variation__MessageChannel
   entity__InsurancePolicy ---|N:1| entity__PatientAccount
   entity__InsurancePolicy -.->|variation burden_ratio| variation__BurdenRatio
   entity__InsurancePolicy -.->|variation limit_category| variation__LimitCategory
@@ -95,6 +99,7 @@ flowchart LR
   entity__PatientMessage ---|N:1| entity__PatientAccount
   entity__PatientMessage -.->|variation channel| variation__MessageChannel
   entity__PatientProfile ---|1:1| entity__PatientAccount
+  entity__PaymentTransaction ---|N:1| entity__AccountBalance
   entity__PaymentTransaction ---|N:1| entity__Appointment
   entity__PaymentTransaction -.-> statemodel__PaymentTransaction_status
   entity__PaymentTransaction -.->|variation method| variation__PaymentMethod

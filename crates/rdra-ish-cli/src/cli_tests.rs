@@ -941,6 +941,7 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
     assert_eq!(
         rows,
         vec![
+            "AwaitingFollowUp,作成済みでまだ連絡していないケアプラン,(CarePlan.status == 作成済).none(FollowUpMessage),,CarePlan.status,SendFollowUpMessage",
             "BookedPatient,予約済みの患者,\"(Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment)\",,Appointment.status,BatchVerifyEligibility",
             "ChargeOfSignedEncounter,署名済みの診療記録のコストだけ登録する,\"(Encounter.status in (署名済, 修正済)).along(Charge, Encounter)\",,Encounter.status,CreateCharge",
             "CopayCappedAtLimit,窓口負担は負担割合で計算し、限度額情報があれば限度額までとする,,BurdenRatio|LimitCategory,Appointment.status,CalculateVisitBill",

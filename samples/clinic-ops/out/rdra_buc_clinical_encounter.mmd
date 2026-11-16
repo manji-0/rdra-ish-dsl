@@ -279,6 +279,7 @@ flowchart LR
     entity__Diagnosis[("診断")]:::entity
     entity__EligibilityCheck[("資格確認")]:::entity
     entity__Encounter[("診療記録")]:::entity
+    entity__FollowUpMessage[("フォローアップ連絡")]:::entity
     entity__InsurancePolicy[("保険資格")]:::entity
     entity__IntakePacket[("問診票")]:::entity
     entity__Notification[("通知")]:::entity
@@ -329,6 +330,7 @@ flowchart LR
     variation__LimitCategory[\"限度額適用区分"\]:::variation
     variation__PayerChange[\"資格変更の種類"\]:::variation
     variation__ReferralCategory[\"紹介の有無"\]:::variation
+    condition__AwaitingFollowUp{"作成済みでまだ連絡していないケアプラン"}:::condition
     condition__ChargeOfSignedEncounter{"署名済みの診療記録のコストだけ登録する"}:::condition
     condition__CopayCappedAtLimit{"窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"}:::condition
     condition__TransferNotPossible{"振替・分割の対象外（負担割合の相違・公費）"}:::condition
@@ -403,7 +405,7 @@ flowchart LR
   api__SelectedFeeApi -.->|reads| entity__Encounter
   api__SelectedFeeApi -.->|reads| entity__SelectedTreatmentFeeSetting
   api__SelectedFeeApi -.-> permission__BillCalculate
-  api__SendFollowUpMessageApi -.->|creates| entity__PatientMessage
+  api__SendFollowUpMessageApi -.->|creates| entity__FollowUpMessage
   api__SendFollowUpMessageApi -.-> permission__PatientMessageSend
   api__SettlementApi -.->|creates| entity__PaymentTransaction
   api__SettlementApi -.-> permission__PaymentCollect
@@ -473,6 +475,9 @@ flowchart LR
   buc__BucVisitPayment --> usecase__RefundPayment
   buc__BucVisitPayment --> usecase__SettleAtKiosk
   buc__BucVisitPayment --> usecase__SettleAtWindow
+  condition__AwaitingFollowUp -.->|applies_to| usecase__SendFollowUpMessage
+  condition__AwaitingFollowUp -.-> entity__CarePlan
+  %% derived condition__AwaitingFollowUp -> entity__CarePlan from holds
   condition__ChargeOfSignedEncounter -.->|applies_to| usecase__CreateCharge
   condition__ChargeOfSignedEncounter -.-> entity__Encounter
   %% derived condition__ChargeOfSignedEncounter -> entity__Encounter from holds
@@ -490,6 +495,7 @@ flowchart LR
   %% derived condition__UnreferredFirstVisit -> variation__ReferralCategory from holds
   entity__AccountBalance ---|1:1| entity__PatientAccount
   entity__Appointment ---|N:1| entity__PatientAccount
+  entity__Appointment ---|N:1| entity__ProviderSchedule
   entity__Appointment ---|N:1| entity__Room
   entity__CarePlan ---|N:1| entity__Encounter
   entity__CarePlan ---|N:1| entity__PatientAccount
@@ -502,11 +508,13 @@ flowchart LR
   entity__EligibilityCheck ---|N:1| entity__InsurancePolicy
   entity__Encounter ---|1:1| entity__Appointment
   entity__Encounter ---|N:1| entity__PatientAccount
+  entity__FollowUpMessage ---|1:1| entity__CarePlan
   entity__InsurancePolicy ---|N:1| entity__PatientAccount
   entity__IntakePacket ---|N:1| entity__PatientAccount
   entity__Notification ---|N:1| entity__PatientAccount
   entity__PatientMessage ---|N:1| entity__PatientAccount
   entity__PatientProfile ---|1:1| entity__PatientAccount
+  entity__PaymentTransaction ---|N:1| entity__AccountBalance
   entity__PaymentTransaction ---|N:1| entity__Appointment
   entity__ReferralLetter ---|N:1| entity__PatientAccount
   entity__VitalSign ---|N:1| entity__Encounter
@@ -866,7 +874,7 @@ flowchart LR
   usecase__ReviewPatientResponse -.-> permission__FollowUpManage
   usecase__ReviewPatientResponse -.->|transitions CarePlan.status open->monitoring| state__CarePlan_monitoring
   usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
-  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ReviewPatientResponse -.->|updates| entity__FollowUpMessage
   usecase__ScheduleFollowUpVisit -.-> screen__FollowUpScheduleScreen
   usecase__ScheduleFollowUpVisit -.-> api__FollowUpScheduleApi
   usecase__ScheduleFollowUpVisit -.-> event__EvAppointmentScheduled

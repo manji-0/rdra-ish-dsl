@@ -1,6 +1,6 @@
 %% rdra-ish diagram=usecase scope=buc:BucFollowupCare model=samples/clinic-ops
 %% layers: value=システム価値 boundary=システム境界 system=システム
-%% kinds: actor extsystem usecase screen event entity state
+%% kinds: actor extsystem usecase screen event entity state condition
 %% omitted: buc step medium permission api
 flowchart LR
   subgraph layer_value["システム価値"]
@@ -32,14 +32,15 @@ flowchart LR
     entity__Appointment[("予約・受診")]:::entity
     entity__CarePlan[("ケアプラン")]:::entity
     entity__Encounter[("診療記録")]:::entity
+    entity__FollowUpMessage[("フォローアップ連絡")]:::entity
     entity__Notification[("通知")]:::entity
-    entity__PatientMessage[("患者連絡")]:::entity
     entity__ProviderSchedule[("診療枠")]:::entity
     state__Appointment_requested((("仮押さえ"))):::state
     state__Appointment_scheduled((("予約済"))):::state
     state__CarePlan_closed((("終了"))):::state
     state__CarePlan_monitoring((("経過観察中"))):::state
     state__CarePlan_open((("作成済"))):::state
+    condition__AwaitingFollowUp{"作成済みでまだ連絡していないケアプラン"}:::condition
   end
   actor__CareCoordinator -.-> usecase__CloseCarePlan
   actor__CareCoordinator -.-> usecase__CreateCarePlan
@@ -47,6 +48,7 @@ flowchart LR
   actor__CareCoordinator -.-> usecase__ReviewPatientResponse
   actor__CareCoordinator -.-> usecase__ScheduleFollowUpVisit
   actor__CareCoordinator -.-> usecase__SendFollowUpMessage
+  condition__AwaitingFollowUp -.->|applies_to| usecase__SendFollowUpMessage
   event__EvAppointmentScheduled -.-> extsystem__MessagingGateway
   event__EvClinicalOrderReviewed -.-> usecase__NotifyPatientResult
   event__EvEncounterSigned -.-> usecase__CreateCarePlan
@@ -64,7 +66,7 @@ flowchart LR
   usecase__ReviewPatientResponse -.-> screen__CarePlanScreen
   usecase__ReviewPatientResponse -.->|transitions CarePlan.status open->monitoring| state__CarePlan_monitoring
   usecase__ReviewPatientResponse -.->|updates| entity__CarePlan
-  usecase__ReviewPatientResponse -.->|updates| entity__PatientMessage
+  usecase__ReviewPatientResponse -.->|updates| entity__FollowUpMessage
   usecase__ScheduleFollowUpVisit -.->|creates| entity__Appointment
   %% derived usecase__ScheduleFollowUpVisit -> entity__Appointment via api__FollowUpScheduleApi
   usecase__ScheduleFollowUpVisit -.-> screen__FollowUpScheduleScreen
@@ -72,8 +74,8 @@ flowchart LR
   usecase__ScheduleFollowUpVisit -.->|transitions Appointment.status requested->scheduled| state__Appointment_scheduled
   usecase__ScheduleFollowUpVisit -.->|updates| entity__ProviderSchedule
   %% derived usecase__ScheduleFollowUpVisit -> entity__ProviderSchedule via api__FollowUpScheduleApi
-  usecase__SendFollowUpMessage -.->|creates| entity__PatientMessage
-  %% derived usecase__SendFollowUpMessage -> entity__PatientMessage via api__SendFollowUpMessageApi
+  usecase__SendFollowUpMessage -.->|creates| entity__FollowUpMessage
+  %% derived usecase__SendFollowUpMessage -> entity__FollowUpMessage via api__SendFollowUpMessageApi
   usecase__SendFollowUpMessage -.-> screen__PatientMessageScreen
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
@@ -82,3 +84,4 @@ flowchart LR
   classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
   classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

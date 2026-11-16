@@ -341,7 +341,17 @@ entity CarePlan "ケアプラン" {
 }
 
 // Drafts and send failures are not modelled (no primary source).
+// A one-way notice; a reply the clinic reviews is a FollowUpMessage.
 entity PatientMessage "患者連絡" {
+  id: Int @pk
+  channel: MessageChannel @default(portal)
+  status: Enum(sent "送信済") @default(sent)
+  sent_at: DateTime @null
+}
+
+// A care coordinator's follow-up under one care plan, and the patient's reply to it. Notices
+// (critical results, appointments, intake) are one-way PatientMessage rows instead.
+entity FollowUpMessage "フォローアップ連絡" {
   id: Int @pk
   channel: MessageChannel @default(portal)
   status: Enum(sent "送信済", read "既読") @default(sent)
@@ -378,6 +388,8 @@ relate(Appointment, PatientAccount, N:1)
 relate(Appointment, Provider, N:1)
 relate(Appointment, ClinicLocation, N:1)
 relate(Appointment, Room, N:1)
+// An appointment takes a slot of the provider's schedule.
+relate(Appointment, ProviderSchedule, N:1)
 relate(Encounter, Appointment, 1:1)
 relate(Encounter, PatientAccount, N:1)
 relate(Encounter, Provider, N:1)
@@ -392,11 +404,14 @@ relate(Charge, ClaimStatement, N:1).optional()
 relate(ClaimStatement, PatientAccount, N:1)
 relate(ClaimStatement, InsurancePolicy, N:1)
 relate(PaymentTransaction, Appointment, N:1)
+// A payment posts to the balance of the patient who pays it.
+relate(PaymentTransaction, AccountBalance, N:1)
 relate(ReferralLetter, PatientAccount, N:1)
 relate(AccountBalance, PatientAccount, 1:1)
 relate(CarePlan, PatientAccount, N:1)
 relate(CarePlan, Encounter, N:1)
 relate(PatientMessage, PatientAccount, N:1)
+relate(FollowUpMessage, CarePlan, 1:1)
 relate(Notification, PatientAccount, N:1)
 relate(AuditEvent, PatientAccount, N:1)
 

@@ -577,13 +577,13 @@ sequenceDiagram
   actor actor__ReceptionClerk as 医事課 受付担当
   participant screen__AppointmentScreen as 予約画面
   participant api__ReserveAppointmentApi as 予約仮押さえ API
-  participant entity__Appointment as 予約・受診
   participant entity__ProviderSchedule as 診療枠
+  participant entity__Appointment as 予約・受診
   actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の仮押さえ
   screen__AppointmentScreen ->> api__ReserveAppointmentApi: 予約仮押さえ API
   Note over api__ReserveAppointmentApi: transaction (API atomic boundary)
-  api__ReserveAppointmentApi ->> entity__Appointment: create
   api__ReserveAppointmentApi ->> entity__ProviderSchedule: update
+  api__ReserveAppointmentApi ->> entity__Appointment: create
   api__ReserveAppointmentApi -->> screen__AppointmentScreen: done
 ```
 
@@ -599,8 +599,8 @@ sequenceDiagram
   actor actor__ReceptionClerk as 医事課 受付担当
   participant screen__AppointmentScreen as 予約画面
   participant api__BookAppointmentApi as 予約確定 API
-  participant entity__Appointment as 予約・受診
   participant entity__ProviderSchedule as 診療枠
+  participant entity__Appointment as 予約・受診
   participant api__AppointmentNoticeApi as 予約通知 API
   participant extsystem__MessagingGateway as 患者通知サービス
   participant api__IntakeMessagingApi as 問診票送付 API
@@ -608,8 +608,8 @@ sequenceDiagram
   screen__AppointmentScreen ->> api__BookAppointmentApi: 予約確定 API
   alt Appointment.status == 仮押さえ
     Note over api__BookAppointmentApi: transaction (API atomic boundary)
-    api__BookAppointmentApi ->> entity__Appointment: update status 仮押さえ -> 予約済
     api__BookAppointmentApi ->> entity__ProviderSchedule: update
+    api__BookAppointmentApi ->> entity__Appointment: update status 仮押さえ -> 予約済
     api__BookAppointmentApi -) api__AppointmentNoticeApi: 予約確定
     api__BookAppointmentApi -) extsystem__MessagingGateway: 予約確定
     api__BookAppointmentApi -) api__IntakeMessagingApi: 予約確定
@@ -631,16 +631,16 @@ sequenceDiagram
   actor actor__ReceptionClerk as 医事課 受付担当
   participant screen__AppointmentScreen as 予約画面
   participant api__RescheduleAppointmentApi as 予約変更 API
-  participant entity__Appointment as 予約・受診
   participant entity__ProviderSchedule as 診療枠
+  participant entity__Appointment as 予約・受診
   participant api__AppointmentNoticeApi as 予約通知 API
   participant extsystem__MessagingGateway as 患者通知サービス
   actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の変更
   screen__AppointmentScreen ->> api__RescheduleAppointmentApi: 予約変更 API
   alt Appointment.status == 予約済
     Note over api__RescheduleAppointmentApi: transaction (API atomic boundary)
-    api__RescheduleAppointmentApi ->> entity__Appointment: update status 予約済 -> 予約済
     api__RescheduleAppointmentApi ->> entity__ProviderSchedule: update
+    api__RescheduleAppointmentApi ->> entity__Appointment: update status 予約済 -> 予約済
     api__RescheduleAppointmentApi -) api__AppointmentNoticeApi: 予約変更
     api__RescheduleAppointmentApi -) extsystem__MessagingGateway: 予約変更
     api__RescheduleAppointmentApi -->> screen__AppointmentScreen: done
@@ -661,16 +661,16 @@ sequenceDiagram
   actor actor__ReceptionClerk as 医事課 受付担当
   participant screen__AppointmentScreen as 予約画面
   participant api__CancelAppointmentApi as 予約取消 API
-  participant entity__Appointment as 予約・受診
   participant entity__ProviderSchedule as 診療枠
+  participant entity__Appointment as 予約・受診
   participant api__AppointmentNoticeApi as 予約通知 API
   participant extsystem__MessagingGateway as 患者通知サービス
   actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の取消
   screen__AppointmentScreen ->> api__CancelAppointmentApi: 予約取消 API
   alt Appointment.status == 予約済
     Note over api__CancelAppointmentApi: transaction (API atomic boundary)
-    api__CancelAppointmentApi ->> entity__Appointment: update status 予約済 -> 取消, cancel_reason=set
     api__CancelAppointmentApi ->> entity__ProviderSchedule: update
+    api__CancelAppointmentApi ->> entity__Appointment: update status 予約済 -> 取消, cancel_reason=set
     api__CancelAppointmentApi -) api__AppointmentNoticeApi: 予約取消
     api__CancelAppointmentApi -) extsystem__MessagingGateway: 予約取消
     api__CancelAppointmentApi -->> screen__AppointmentScreen: done
@@ -2968,7 +2968,7 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=robustness scope=buc:BucFollowupCare model=samples/clinic-ops
 %% kinds: actor extsystem screen api usecase entity
-%% omitted: buc step medium permission event
+%% omitted: buc step medium permission event condition
 flowchart LR
   actor__CareCoordinator(["患者支援・地域連携担当"]):::actor
   extsystem__MessagingGateway[["患者通知サービス"]]:::extsystem
@@ -2984,8 +2984,8 @@ flowchart LR
   entity__Appointment[("予約・受診")]:::entity
   entity__CarePlan[("ケアプラン")]:::entity
   entity__Encounter[("診療記録")]:::entity
+  entity__FollowUpMessage[("フォローアップ連絡")]:::entity
   entity__Notification[("通知")]:::entity
-  entity__PatientMessage[("患者連絡")]:::entity
   entity__ProviderSchedule[("診療枠")]:::entity
   actor__CareCoordinator --> screen__CarePlanScreen
   actor__CareCoordinator --> screen__FollowUpScheduleScreen
@@ -2996,7 +2996,7 @@ flowchart LR
   api__FollowUpScheduleApi -->|U| entity__ProviderSchedule
   api__FollowUpScheduleApi -.->|予約確定| extsystem__MessagingGateway
   api__NotifyPatientResultApi -->|C| entity__Notification
-  api__SendFollowUpMessageApi -->|C| entity__PatientMessage
+  api__SendFollowUpMessageApi -->|C| entity__FollowUpMessage
   screen__CarePlanScreen -->|ケアプランの作成| api__CreateCarePlanApi
   screen__CarePlanScreen -->|ケアプランの終了| usecase__CloseCarePlan
   screen__CarePlanScreen -->|患者応答の確認| usecase__ReviewPatientResponse
@@ -3005,7 +3005,7 @@ flowchart LR
   screen__PatientMessageScreen -->|検査結果の患者通知| api__NotifyPatientResultApi
   usecase__CloseCarePlan -->|U| entity__CarePlan
   usecase__ReviewPatientResponse -->|U| entity__CarePlan
-  usecase__ReviewPatientResponse -->|U| entity__PatientMessage
+  usecase__ReviewPatientResponse -->|U| entity__FollowUpMessage
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
   classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
@@ -3038,7 +3038,7 @@ flowchart LR
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | ケアプランの作成<br>`CreateCarePlan` | 署名イベントからのケアプラン作成。 | `CarePlanScreen` | `CreateCarePlanApi` | （なし） |
-| 患者への連絡<br>`SendFollowUpMessage` | 患者連絡。 | `PatientMessageScreen` | `SendFollowUpMessageApi` | （なし） |
+| 患者への連絡<br>`SendFollowUpMessage` | 患者連絡。 | `PatientMessageScreen` | `SendFollowUpMessageApi` | 作成済みでまだ連絡していないケアプラン |
 | 患者応答の確認<br>`ReviewPatientResponse` | 患者応答の確認。 | `CarePlanScreen` | `ReviewPatientResponse` | （なし） |
 | 再診の予約<br>`ScheduleFollowUpVisit` | 再診予約。 | `FollowUpScheduleScreen` | `FollowUpScheduleApi` | （なし） |
 | ケアプランの終了<br>`CloseCarePlan` | ケアプラン終了。 | `CarePlanScreen` | `CloseCarePlan` | （なし） |
@@ -3072,16 +3072,20 @@ sequenceDiagram
 ```mermaid
 %% rdra-ish diagram=sequence scope=usecase:SendFollowUpMessage model=samples/clinic-ops
 %% kinds: actor screen api entity
-%% omitted: buc step medium permission
+%% omitted: buc step medium permission condition
 sequenceDiagram
   actor actor__CareCoordinator as 患者支援・地域連携担当
   participant screen__PatientMessageScreen as 患者連絡画面
   participant api__SendFollowUpMessageApi as 患者連絡 API
-  participant entity__PatientMessage as 患者連絡
+  participant entity__FollowUpMessage as フォローアップ連絡
   actor__CareCoordinator ->> screen__PatientMessageScreen: 患者への連絡
   screen__PatientMessageScreen ->> api__SendFollowUpMessageApi: 患者連絡 API
-  api__SendFollowUpMessageApi ->> entity__PatientMessage: create status=sent, sent_at=set
-  api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: done
+  alt 作成済みでまだ連絡していないケアプラン: (CarePlan.status == 作成済).none(FollowUpMessage)
+    api__SendFollowUpMessageApi ->> entity__FollowUpMessage: create status=sent, sent_at=set
+    api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: done
+  else guard fails
+    api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: rejected
+  end
 ```
 
 </details>
@@ -3097,13 +3101,13 @@ sequenceDiagram
   participant screen__CarePlanScreen as ケアプラン画面
   participant usecase__ReviewPatientResponse as 患者応答の確認
   participant entity__CarePlan as ケアプラン
-  participant entity__PatientMessage as 患者連絡
+  participant entity__FollowUpMessage as フォローアップ連絡
   actor__CareCoordinator ->> screen__CarePlanScreen: 患者応答の確認
   screen__CarePlanScreen ->> usecase__ReviewPatientResponse: 患者応答の確認
   alt CarePlan.status == 作成済
     Note over usecase__ReviewPatientResponse: transaction (inferred from FK)
     usecase__ReviewPatientResponse ->> entity__CarePlan: update status 作成済 -> 経過観察中
-    usecase__ReviewPatientResponse ->> entity__PatientMessage: update status=read, read_at=set
+    usecase__ReviewPatientResponse ->> entity__FollowUpMessage: update status=read, read_at=set
     usecase__ReviewPatientResponse -->> screen__CarePlanScreen: done
   else guard fails
     usecase__ReviewPatientResponse -->> screen__CarePlanScreen: rejected
@@ -3122,8 +3126,8 @@ sequenceDiagram
   actor actor__CareCoordinator as 患者支援・地域連携担当
   participant screen__FollowUpScheduleScreen as 再診予約画面
   participant api__FollowUpScheduleApi as 再診予約 API
-  participant entity__Appointment as 予約・受診
   participant entity__ProviderSchedule as 診療枠
+  participant entity__Appointment as 予約・受診
   participant api__AppointmentNoticeApi as 予約通知 API
   participant extsystem__MessagingGateway as 患者通知サービス
   participant api__IntakeMessagingApi as 問診票送付 API
@@ -3131,8 +3135,8 @@ sequenceDiagram
   screen__FollowUpScheduleScreen ->> api__FollowUpScheduleApi: 再診予約 API
   alt Appointment.status == 仮押さえ
     Note over api__FollowUpScheduleApi: transaction (API atomic boundary)
-    api__FollowUpScheduleApi ->> entity__Appointment: create status 仮押さえ -> 予約済
     api__FollowUpScheduleApi ->> entity__ProviderSchedule: update
+    api__FollowUpScheduleApi ->> entity__Appointment: create status 仮押さえ -> 予約済
     api__FollowUpScheduleApi -) api__AppointmentNoticeApi: 予約確定
     api__FollowUpScheduleApi -) extsystem__MessagingGateway: 予約確定
     api__FollowUpScheduleApi -) api__IntakeMessagingApi: 予約確定
@@ -3478,9 +3482,6 @@ Entity: Appointment (予約・受診)
   reachable: 40 / bound: 320
   diagnostics:
     [info][DefaultOnVariationIgnored_Appointment_referral] referral is typed by a variation, so states, check and verify start it at any value of the variation, and @default(revisit) does not pick its start; to start a created row at revisit, write sets(UseCase, Entity.referral == revisit) in the use case that creates it
-    [warn][UnjoinedWrite_BookAppointment_Appointment_ProviderSchedule] BookAppointment writes Appointment and ProviderSchedule, and no row it writes joins them, so one run may write Appointment and ProviderSchedule rows that belong to different Provider rows; write Provider in BookAppointment (`updates(BookAppointment, Provider)`) to write joined rows, or mark a write meant as a row of its own with `.apart()`
-    [warn][UnjoinedWrite_RescheduleAppointment_Appointment_ProviderSchedule] RescheduleAppointment writes Appointment and ProviderSchedule, and no row it writes joins them, so one run may write Appointment and ProviderSchedule rows that belong to different Provider rows; write Provider in RescheduleAppointment (`updates(RescheduleAppointment, Provider)`) to write joined rows, or mark a write meant as a row of its own with `.apart()`
-    [warn][UnjoinedWrite_CancelAppointment_Appointment_ProviderSchedule] CancelAppointment writes Appointment and ProviderSchedule, and no row it writes joins them, so one run may write Appointment and ProviderSchedule rows that belong to different Provider rows; write Provider in CancelAppointment (`updates(CancelAppointment, Provider)`) to write joined rows, or mark a write meant as a row of its own with `.apart()`
 ```
 
 </details>
@@ -3871,6 +3872,7 @@ erDiagram
     Int provider_id FK
     Int cliniclocation_id FK
     Int room_id FK
+    Int providerschedule_id FK
   }
   AuditEvent {
     Int id PK
@@ -3960,6 +3962,14 @@ erDiagram
     Int patientaccount_id FK
     Int provider_id FK
   }
+  FollowUpMessage {
+    Int id PK
+    MessageChannel channel
+    Enum status
+    DateTime sent_at
+    DateTime read_at
+    Int careplan_id FK
+  }
   InsurancePolicy {
     Int id PK
     String payer_name
@@ -4011,7 +4021,6 @@ erDiagram
     MessageChannel channel
     Enum status
     DateTime sent_at
-    DateTime read_at
     Int patientaccount_id FK
   }
   PatientProfile {
@@ -4032,6 +4041,7 @@ erDiagram
     DateTime processed_at
     String gateway_ref
     Int appointment_id FK
+    Int accountbalance_id FK
   }
   Prescription {
     Int id PK
@@ -4090,6 +4100,7 @@ erDiagram
   }
   ProviderSchedule }o--|| Provider : ""
   ProviderSchedule }o--|| ClinicLocation : ""
+  Appointment }o--|| ProviderSchedule : ""
   Appointment }o--|| PatientAccount : ""
   Appointment }o--|| Provider : ""
   Appointment }o--|| ClinicLocation : ""
@@ -4108,11 +4119,13 @@ erDiagram
   ClaimStatement }o--|| PatientAccount : ""
   ClaimStatement }o--|| InsurancePolicy : ""
   PaymentTransaction }o--|| Appointment : ""
+  PaymentTransaction }o--|| AccountBalance : ""
   AccountBalance ||--|| PatientAccount : ""
   ReferralLetter }o--|| PatientAccount : ""
   CarePlan }o--|| Encounter : ""
   CarePlan }o--|| PatientAccount : ""
   PatientMessage }o--|| PatientAccount : ""
+  FollowUpMessage ||--|| CarePlan : ""
   Notification }o--|| PatientAccount : ""
   AuditEvent }o--|| PatientAccount : ""
   PatientProfile ||--|| PatientAccount : ""
@@ -4144,6 +4157,7 @@ erDiagram
 | Appointment | 予約・受診 | provider_id | Int | false | false | false | true | Provider | false |  |  | false |  |  | false | false | false |  |
 | Appointment | 予約・受診 | cliniclocation_id | Int | false | false | false | true | ClinicLocation | false |  |  | false |  |  | false | false | false |  |
 | Appointment | 予約・受診 | room_id | Int | false | false | false | true | Room | false |  |  | false |  |  | false | false | false |  |
+| Appointment | 予約・受診 | providerschedule_id | Int | false | false | false | true | ProviderSchedule | false |  |  | false |  |  | false | false | false |  |
 | AuditEvent | 監査ログ | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | AuditEvent | 監査ログ | action | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | AuditEvent | 監査ログ | actor_id | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
@@ -4212,6 +4226,12 @@ erDiagram
 | Encounter | 診療記録 | appointment_id | Int | false | true | false | true | Appointment | false |  |  | false |  |  | false | false | false |  |
 | Encounter | 診療記録 | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
 | Encounter | 診療記録 | provider_id | Int | false | false | false | true | Provider | false |  |  | false |  |  | false | false | false |  |
+| FollowUpMessage | フォローアップ連絡 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
+| FollowUpMessage | フォローアップ連絡 | channel | MessageChannel | false | false | false | false |  | false |  |  | false | portal |  | false | false | false |  |
+| FollowUpMessage | フォローアップ連絡 | status | Enum | false | false | false | false |  | false |  |  | false | sent |  | false | false | false |  |
+| FollowUpMessage | フォローアップ連絡 | sent_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
+| FollowUpMessage | フォローアップ連絡 | read_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
+| FollowUpMessage | フォローアップ連絡 | careplan_id | Int | false | true | false | true | CarePlan | false |  |  | false |  |  | false | false | false |  |
 | InsurancePolicy | 保険資格 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | InsurancePolicy | 保険資格 | payer_name | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | InsurancePolicy | 保険資格 | payer_no | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
@@ -4250,7 +4270,6 @@ erDiagram
 | PatientMessage | 患者連絡 | channel | MessageChannel | false | false | false | false |  | false |  |  | false | portal |  | false | false | false |  |
 | PatientMessage | 患者連絡 | status | Enum | false | false | false | false |  | false |  |  | false | sent |  | false | false | false |  |
 | PatientMessage | 患者連絡 | sent_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
-| PatientMessage | 患者連絡 | read_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PatientMessage | 患者連絡 | patientaccount_id | Int | false | false | false | true | PatientAccount | false |  |  | false |  |  | false | false | false |  |
 | PatientProfile | 患者基本情報 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | PatientProfile | 患者基本情報 | legal_name | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
@@ -4267,6 +4286,7 @@ erDiagram
 | PaymentTransaction | 精算 | processed_at | DateTime | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PaymentTransaction | 精算 | gateway_ref | String | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
 | PaymentTransaction | 精算 | appointment_id | Int | false | false | false | true | Appointment | false |  |  | false |  |  | false | false | false |  |
+| PaymentTransaction | 精算 | accountbalance_id | Int | false | false | false | true | AccountBalance | false |  |  | false |  |  | false | false | false |  |
 | Prescription | 処方箋 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Prescription | 処方箋 | directions | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Prescription | 処方箋 | status | Enum | false | false | false | false |  | false |  |  | false | drafted |  | false | false | false |  |
@@ -4319,18 +4339,19 @@ erDiagram
 | --- | --- | --- | --- | --- | --- |
 | condition | 署名済みの診療記録のコストだけ登録する | Encounter | (Encounter.status in (署名済, 修正済)).along(Charge, Encounter) | CreateCharge | samples/clinic-ops/buc/buc_billing_claims.rdra:106 |
 | condition | 振替・分割の対象外（負担割合の相違・公費） |  |  | RecordClaimReturn | samples/clinic-ops/buc/buc_billing_claims.rdra:184 |
+| condition | 作成済みでまだ連絡していないケアプラン | CarePlan | (CarePlan.status == 作成済).none(FollowUpMessage) | SendFollowUpMessage | samples/clinic-ops/buc/buc_followup_care.rdra:60 |
 | condition | 医師が確定したオーダ | ClinicalOrder | ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済 | CollectSpecimen | samples/clinic-ops/buc/buc_orders_results.rdra:111 |
 | condition | 予約済みの患者 | Appointment | (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment) | BatchVerifyEligibility | samples/clinic-ops/buc/buc_visit_checkin.rdra:106 |
 | condition | 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする |  |  | CalculateVisitBill | samples/clinic-ops/buc/buc_visit_payment.rdra:73 |
 | condition | 紹介状なしの初診で、除外に当たらない | Charge\|Appointment | Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診 | ApplySelectedTreatmentFee | samples/clinic-ops/buc/buc_visit_payment.rdra:92 |
-| invariant | 受付済の予約には受付時刻が記録されている | Appointment | when Appointment.status == 受付済 then Appointment.checked_in_at == present |  | samples/clinic-ops/shared/entities.rdra:430 |
-| invariant | 完了した予約には完了時刻が記録されている | Appointment | when Appointment.status == 完了 then Appointment.completed_at == present |  | samples/clinic-ops/shared/entities.rdra:432 |
-| invariant | 署名済の診療記録には署名時刻が記録されている | Encounter | when Encounter.status == 署名済 then Encounter.signed_at == present |  | samples/clinic-ops/shared/entities.rdra:434 |
-| invariant | 結果が出たオーダには結果日時が記録されている | ClinicalOrder | when ClinicalOrder.status == 結果受信 then ClinicalOrder.resulted_at == present |  | samples/clinic-ops/shared/entities.rdra:436 |
-| invariant | 発行済の処方箋には送信日時が記録されている | Prescription | when Prescription.status == 院外処方箋発行済 then Prescription.sent_at == present |  | samples/clinic-ops/shared/entities.rdra:438 |
-| invariant | 支払済のレセプトには支払日時が記録されている | ClaimStatement | when ClaimStatement.status == 支払済 then ClaimStatement.paid_at == present |  | samples/clinic-ops/shared/entities.rdra:440 |
-| forbidden | 訂正した返戻は、再請求の前に返戻理由を消す | ClaimStatement | ClaimStatement.status == 支払済 AND ClaimStatement.return_reason == present |  | samples/clinic-ops/shared/entities.rdra:442 |
-| forbidden | 医師事務作業補助者が入力したオーダは、医師が確定してから検体を採取する | ClinicalOrder | ClinicalOrder.status == 採取済 AND ClinicalOrder.physician_confirmed == false |  | samples/clinic-ops/shared/entities.rdra:445 |
+| invariant | 受付済の予約には受付時刻が記録されている | Appointment | when Appointment.status == 受付済 then Appointment.checked_in_at == present |  | samples/clinic-ops/shared/entities.rdra:445 |
+| invariant | 完了した予約には完了時刻が記録されている | Appointment | when Appointment.status == 完了 then Appointment.completed_at == present |  | samples/clinic-ops/shared/entities.rdra:447 |
+| invariant | 署名済の診療記録には署名時刻が記録されている | Encounter | when Encounter.status == 署名済 then Encounter.signed_at == present |  | samples/clinic-ops/shared/entities.rdra:449 |
+| invariant | 結果が出たオーダには結果日時が記録されている | ClinicalOrder | when ClinicalOrder.status == 結果受信 then ClinicalOrder.resulted_at == present |  | samples/clinic-ops/shared/entities.rdra:451 |
+| invariant | 発行済の処方箋には送信日時が記録されている | Prescription | when Prescription.status == 院外処方箋発行済 then Prescription.sent_at == present |  | samples/clinic-ops/shared/entities.rdra:453 |
+| invariant | 支払済のレセプトには支払日時が記録されている | ClaimStatement | when ClaimStatement.status == 支払済 then ClaimStatement.paid_at == present |  | samples/clinic-ops/shared/entities.rdra:455 |
+| forbidden | 訂正した返戻は、再請求の前に返戻理由を消す | ClaimStatement | ClaimStatement.status == 支払済 AND ClaimStatement.return_reason == present |  | samples/clinic-ops/shared/entities.rdra:457 |
+| forbidden | 医師事務作業補助者が入力したオーダは、医師が確定してから検体を採取する | ClinicalOrder | ClinicalOrder.status == 採取済 AND ClinicalOrder.physician_confirmed == false |  | samples/clinic-ops/shared/entities.rdra:460 |
 
 ## 6. CRUD と権限
 
@@ -4338,67 +4359,67 @@ erDiagram
 
 `csv --kind api-matrix --format markdown` の出力である。1 つの API が多くのエンティティを書き換えていないか、参照の API と書き込みの API が混ざっていないかを見る。
 
-| Api | AccountBalance | Appointment | AuditEvent | CarePlan | Charge | ClaimStatement | ClinicLocation | ClinicalOrder | ConsentRecord | Diagnosis | EligibilityCheck | Encounter | InsurancePolicy | IntakePacket | LabResult | Medication | Notification | PatientAccount | PatientMessage | PatientProfile | PaymentTransaction | Prescription | Provider | ProviderSchedule | ReferralLetter | Room | SelectedTreatmentFeeSetting | VitalSign |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| AmendEncounterApi |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| AppointmentNoticeApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  | C |  |  |  |  |  |  |  |  |  |
-| AssignRoomApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |
-| AuditApi |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |
-| BalanceApi | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |
-| BlockScheduleSlotApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
-| BookAppointmentApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
-| CalculateVisitBillApi |  | U |  |  | R |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| CancelAppointmentApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
-| CheckInPatientApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |
-| ClaimEditApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| ClaimResultApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| CollectSpecimenApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| CompleteConsultationApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |
-| ConfirmDispenseApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
-| ConfirmOrderApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| ConsentApi |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| CreateCarePlanApi |  |  |  | C |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| CreateChargeApi |  |  |  |  | C |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| CriticalNoticeApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  | C |  |  |  |  |  |  |  |  |  |
-| DispensingApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
-| DocumentAssessmentApi |  |  |  |  |  |  |  |  |  | C |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| DraftPrescriptionApi |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |
-| EligibilityApi |  |  |  |  |  |  |  |  |  |  | C |  | RU |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| EligibilityResultApi |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| FollowUpScheduleApi |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
-| GenerateClaimApi |  |  |  |  | R | C |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| IntakeMessagingApi |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  | C |  |  |  |  |  |  |  |  |  |
-| IssuePrescriptionApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
-| IssueReferralLetterApi |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |
-| ManageProviderScheduleApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U | CU |  |  |  |  |
-| MedicationCatalogApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |
-| NotifyPatientResultApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |
-| OnlineEligibilityApi |  |  |  |  |  |  |  |  |  |  | C |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| OpenEncounterApi |  | U |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| OrderEntryApi |  |  |  |  |  |  |  | C |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| PaymentPostApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| PerformedProcedureApi |  |  |  |  | C |  |  | R |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| PrepareEncounterApi |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |
-| PrescriptionInquiryApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
-| ProxyOrderApi |  |  |  |  |  |  |  | C |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| ReceiptApi |  | U |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |
-| ReceiveLabResultApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| RecordVitalsApi |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |
-| ReferralLetterApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |
-| RegisterPatientApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  | C |  |  |  |  |  |  |  |  |
-| RescheduleAppointmentApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
-| ReserveAppointmentApi |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
-| ResultReviewApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| RoomAdminApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | CU |  |  |
-| SearchAvailabilityApi |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R | R |  |  |  |  |
-| SearchPatientApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  | R |  |  |  |  |  |  |  |  |
-| SelectedFeeApi |  |  |  |  | C |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |
-| SendFollowUpMessageApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |
-| SettlementApi | U | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |
-| SignEncounterApi |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| SubmitClaimApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
-| UpdateDemographicsApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |
-| VerifyArrivalApi |  | R |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |
+| Api | AccountBalance | Appointment | AuditEvent | CarePlan | Charge | ClaimStatement | ClinicLocation | ClinicalOrder | ConsentRecord | Diagnosis | EligibilityCheck | Encounter | FollowUpMessage | InsurancePolicy | IntakePacket | LabResult | Medication | Notification | PatientAccount | PatientMessage | PatientProfile | PaymentTransaction | Prescription | Provider | ProviderSchedule | ReferralLetter | Room | SelectedTreatmentFeeSetting | VitalSign |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AmendEncounterApi |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| AppointmentNoticeApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  | C |  |  |  |  |  |  |  |  |  |
+| AssignRoomApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |
+| AuditApi |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |
+| BalanceApi | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |
+| BlockScheduleSlotApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
+| BookAppointmentApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
+| CalculateVisitBillApi |  | U |  |  | R |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| CancelAppointmentApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
+| CheckInPatientApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |
+| ClaimEditApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| ClaimResultApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| CollectSpecimenApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| CompleteConsultationApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |
+| ConfirmDispenseApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
+| ConfirmOrderApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| ConsentApi |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| CreateCarePlanApi |  |  |  | C |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| CreateChargeApi |  |  |  |  | C |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| CriticalNoticeApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  | C |  |  |  |  |  |  |  |  |  |
+| DispensingApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
+| DocumentAssessmentApi |  |  |  |  |  |  |  |  |  | C |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| DraftPrescriptionApi |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |
+| EligibilityApi |  |  |  |  |  |  |  |  |  |  | C |  |  | RU |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| EligibilityResultApi |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| FollowUpScheduleApi |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
+| GenerateClaimApi |  |  |  |  | R | C |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| IntakeMessagingApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  | C |  |  |  |  |  |  |  |  |  |
+| IssuePrescriptionApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
+| IssueReferralLetterApi |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |
+| ManageProviderScheduleApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U | CU |  |  |  |  |
+| MedicationCatalogApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |
+| NotifyPatientResultApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |
+| OnlineEligibilityApi |  |  |  |  |  |  |  |  |  |  | C |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| OpenEncounterApi |  | U |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| OrderEntryApi |  |  |  |  |  |  |  | C |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| PaymentPostApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| PerformedProcedureApi |  |  |  |  | C |  |  | R |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| PrepareEncounterApi |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |
+| PrescriptionInquiryApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |
+| ProxyOrderApi |  |  |  |  |  |  |  | C |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| ReceiptApi |  | U |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  |  |  |  |
+| ReceiveLabResultApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| RecordVitalsApi |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |
+| ReferralLetterApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |
+| RegisterPatientApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  | C |  |  |  |  |  |  |  |  |
+| RescheduleAppointmentApi |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
+| ReserveAppointmentApi |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |
+| ResultReviewApi |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| RoomAdminApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | CU |  |  |
+| SearchAvailabilityApi |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R | R |  |  |  |  |
+| SearchPatientApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  | R |  |  |  |  |  |  |  |  |
+| SelectedFeeApi |  |  |  |  | C |  |  |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | R |  |
+| SendFollowUpMessageApi |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SettlementApi | U | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | C |  |  |  |  |  |  |  |
+| SignEncounterApi |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| SubmitClaimApi |  |  |  |  |  | U |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| UpdateDemographicsApi |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | U |  |  |  |  |  |  |  |  |
+| VerifyArrivalApi |  | R |  |  |  |  |  |  |  |  |  |  |  | R |  |  |  |  | R |  |  |  |  |  |  |  |  |  |  |
 
 ### actor の権限割当
 
