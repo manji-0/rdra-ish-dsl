@@ -992,14 +992,15 @@ it prints no rows to stdout. Without `-o`, `rdra-ish csv src/ --kind matrix` wri
 Export machine-readable or review artifacts from the model.
 
 ```
-rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>]
+rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--dialect <DIALECT>] [--instance-count <N>] [--int-range-max <N>]
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
-| `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` emits a textual ER review artifact from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
-| `-o`, `--out` | path | `out` | Output file path. For every kind except `tla`, a path with an extension is used as is. Otherwise the kind's suffix is appended to the path: `-o out` (the default) writes `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`, `out.json-schema.json`, `out.entity-states.ts` (`typescript-states`), or `out.er.mmd`, and `-o foo` writes `foo.openapi.json`. For `--kind tla`, a path ending in `.tla` is the TLA+ file, uses its file stem as the module name, and gets a sibling `.cfg` (`-o m.tla` writes `m.tla` and `m.cfg`). Any other path is a directory (created if missing) that receives `RdraSpec.tla` and `RdraSpec.cfg`: `-o out` (the default) writes `out/RdraSpec.tla`. A path with a non-`.tla` extension writes them into its parent directory. Beside the pair, `tla` writes `StateModel_<E>.tla`, `StateModel_<E>.cfg`, and `StateModel_<E>_witnesses.cfg` for each entity cone with a state model, which check its deadlocks and witnesses with TLC ([formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)). |
+| `--kind` | `openapi` \| `asyncapi` \| `dbml` \| `sql` \| `json-schema` \| `typescript-states` \| `mermaid-er` \| `tla` | `openapi` | Export kind. `openapi` emits an OpenAPI 3.0 JSON document from API `method`/`path` metadata and DTO `request` / `response` / `error_response` relations. `asyncapi` emits an AsyncAPI 3.1 event catalog from `event`, `raises`, `triggers`, `transitions`, and `outbox`. `dbml` emits a DBML schema from logical `entity` declarations, indexes, unique constraints, generated FK columns, and `relate` options. `sql` emits SQL DDL from the same model, with `CHECK` constraints from the entity-local rules (see [SQL export](#sql-export)). `json-schema` emits JSON Schema Draft 2020-12 definitions for DTO and Entity structures. `mermaid-er` emits a textual ER review artifact from the same logical data model projection used by `diagram --kind er`. `tla` emits a TLA+ module plus TLC config from entity lifecycles and state constraints (see [formal-verification.md](./formal-verification.md)). |
+| `-o`, `--out` | path | `out` | Output file path. For every kind except `tla`, a path with an extension is used as is. Otherwise the kind's suffix is appended to the path: `-o out` (the default) writes `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`, `out.schema.sql`, `out.json-schema.json`, `out.entity-states.ts` (`typescript-states`), or `out.er.mmd`, and `-o foo` writes `foo.openapi.json`. For `--kind tla`, a path ending in `.tla` is the TLA+ file, uses its file stem as the module name, and gets a sibling `.cfg` (`-o m.tla` writes `m.tla` and `m.cfg`). Any other path is a directory (created if missing) that receives `RdraSpec.tla` and `RdraSpec.cfg`: `-o out` (the default) writes `out/RdraSpec.tla`. A path with a non-`.tla` extension writes them into its parent directory. Beside the pair, `tla` writes `StateModel_<E>.tla`, `StateModel_<E>.cfg`, and `StateModel_<E>_witnesses.cfg` for each entity cone with a state model, which check its deadlocks and witnesses with TLC ([formal-verification.md](./formal-verification.md#state-models-with-tlc-alone)). |
+| `--dialect` | `postgres` \| `sqlite` | `postgres` | SQL only: the dialect `--kind sql` writes. |
 | `--instance-count` | unsigned integer | `2` | TLA+ only: multi-instance `InstanceCount` (`1..=255`). Value `1` is accepted with a warning (singleton ids cannot distinguish multi-entity instances). |
 | `--int-range-max` | unsigned integer | `5` | TLA+ only: upper bound for `IntRange == 0..N` (`1..=255`; `0` is rejected). |
 
@@ -1027,6 +1028,52 @@ foreign-key references. Every `relate` key prints as a `Ref`: a `1:1` key as `-`
 `[unique]` column, a composite key as `Ref: Stock.(bin_site, bin_shelf) >
 Bin.(site, shelf)`. DBML does not have native equivalents for every review annotation, so `@check`,
 `@soft_delete`, `@history`, `@tenant`, and `@derived` are preserved as column notes.
+
+#### SQL export
+
+`export --kind sql` writes one script that creates the logical data model in an empty
+database: `CREATE TABLE` per `entity`, in id order, then the indexes, then (PostgreSQL) the
+foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
+
+| Model | PostgreSQL | SQLite |
+|---|---|---|
+| `Int` | `INTEGER` | `INTEGER` |
+| `String` | `TEXT` | `TEXT` |
+| `Money`, `Decimal` | `NUMERIC` | `NUMERIC` |
+| `DateTime` | `TIMESTAMPTZ` | `TEXT` (ISO 8601) |
+| `Date` | `DATE` | `TEXT` (ISO 8601) |
+| `Bool` | `BOOLEAN` | `BOOLEAN` |
+| `Enum(...)` | `CREATE TYPE "<Entity>_<column>" AS ENUM (...)` | `TEXT` with `CHECK ("<col>" IN (...))`, named `<Entity>_<column>_values` |
+| variation `V` | `CREATE TYPE "V" AS ENUM (...)` | the same as an `Enum` |
+
+- **Keys.** `@pk` / `@pk(a, b)` is the `PRIMARY KEY`. `@unique`, `@unique(a, b)`, a junction
+  pair, and a 1:1 key are `UNIQUE`. Each `relate` key is a `FOREIGN KEY` named
+  `<Child>_<columns>_fkey` with its `.on_delete` / `.on_update` action. PostgreSQL adds it
+  with `ALTER TABLE` after every table exists; SQLite declares it in the table.
+- **Columns.** A column without `@null` is `NOT NULL`. `@default(v)` is `DEFAULT v`. A
+  `@derived` column is `GENERATED ALWAYS AS (...)` (`STORED` in PostgreSQL, `VIRTUAL` in
+  SQLite); a logical one keeps SQL's three-valued logic, as its value does in the model.
+  `@label`, `@soft_delete`, `@history`, `@tenant`, and `@derived` stay as a comment on the
+  column.
+- **Indexes.** `@index` / `@index(a, b)` is `CREATE INDEX "<Entity>_<columns>_idx"`. Each
+  foreign key gets one too, unless the primary key, a unique set, or an `@index` already
+  starts with its columns.
+- **Rules.** Each entity-local rule is a `CHECK` constraint named as `check` and `verify`
+  name it: `@check` (`Check_<E>_<column>_<n>`), `forbidden(E, ...)` (`Forbidden_<E>_<n>`),
+  `invariant(E).when(...).then(...)` (`Inv_<E>_<n>`), `required` (`Required_<E>_<n>`), and
+  `exclusive` (`Exclusive_<E>_<n>`, at most one condition holds). A rule reads a null
+  operand as false, except `!=` (see [Null](./language-reference.md#null)), while SQL reads
+  it as unknown, which a `CHECK` accepts; so each comparison on a nullable column spells out
+  its null case: `qty: Int @null @check(qty >= 1)` is
+  `CHECK (("qty" IS NOT NULL AND "qty" >= 1))`, and a row with a null `qty` is rejected.
+- **What the schema does not enforce.** A rule over several entities (`MultiForbidden_*`,
+  `MultiInv_*`), a `.has` / `.none` (`Quantifier_*`), a minimum cardinality (`MinCard_*`), a
+  rule with a `.when(Condition)` guard, and a rule that reads `now` have no `CHECK` form. The
+  script ends with a comment that lists each by name, with the reason and the rule, as an
+  obligation of the application or a trigger.
+
+Types are a fixed mapping for now; lengths, precision, and time zones are
+[#124](https://github.com/manji-0/rdra-ish-dsl/issues/124).
 
 For JSON Schema export, DTOs and Entities are emitted under `$defs` as
 `Dto.<id>` and `Entity.<id>` so cross-kind ids cannot collide. Standard structural

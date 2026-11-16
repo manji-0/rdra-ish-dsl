@@ -11,6 +11,7 @@ machine-readable exports.
 | `openapi` | OpenAPI 3.0 JSON | API method/path and DTO request/response/error links |
 | `asyncapi` | AsyncAPI 3.1 JSON | events, `raises`/`triggers`, and the external systems that publish or receive them |
 | `dbml` | DBML schema text | logical entities, variations, and `relate` keys |
+| `sql` | SQL DDL (`--dialect postgres` or `sqlite`) | logical entities and `relate` keys; entity-local rules become named `CHECK` constraints |
 | `json-schema` | JSON Schema | DTOs and entities under `$defs` |
 | `tla` | TLA+ `.tla` + `.cfg` | the lifecycle transition system, for reading or a TLC run by hand |
 

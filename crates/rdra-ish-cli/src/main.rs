@@ -238,6 +238,7 @@ fn main() -> Result<()> {
             out,
             instance_count,
             int_range_max,
+            dialect,
         } => {
             let Project {
                 program,
@@ -248,7 +249,7 @@ fn main() -> Result<()> {
             reject_model_errors(&program, &diags)?;
             // An artifact gates by what its emitter reads. The TLA+ export gates after
             // `tla_bundle`, whose build errors stop it first.
-            let artifact = match export_output(&kind) {
+            let artifact = match export_output(&kind, dialect) {
                 Export::Artifact(output, ext) => Some((output.gate(&program, &model)?, ext)),
                 Export::Tla => None,
             };

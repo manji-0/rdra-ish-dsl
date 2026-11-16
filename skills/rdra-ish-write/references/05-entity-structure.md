@@ -120,6 +120,7 @@ rdra-ish csv src/ --kind api-matrix
 rdra-ish csv src/ --kind business-inputs
 rdra-ish csv src/ --kind actor-permission-audit
 rdra-ish export src/ --kind dbml --out out/schema.dbml
+rdra-ish export src/ --kind sql --dialect postgres --out out/schema.sql
 rdra-ish export src/ --kind json-schema --out out/json-schema.json
 ```
 

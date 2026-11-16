@@ -14,11 +14,12 @@ use rdra_ish_emit::{
     json_schema::JsonSchemaEmitter,
     mermaid::ErMermaidEmitter,
     openapi::OpenApiJsonEmitter,
+    sql::SqlEmitter,
     tla::{self, PrintMode, TlaBundle},
     typescript::TypeScriptStateUnionEmitter,
 };
 
-use crate::cli::ExportKind;
+use crate::cli::{ExportKind, SqlDialect};
 use crate::lifecycle_gate::Output;
 use crate::list_output::Finding;
 
@@ -29,7 +30,7 @@ pub enum Export {
     Tla,
 }
 
-pub fn export_output(kind: &ExportKind) -> Export {
+pub fn export_output(kind: &ExportKind, dialect: SqlDialect) -> Export {
     match kind {
         ExportKind::Openapi => {
             Export::Artifact(Output::declared(OpenApiJsonEmitter), "openapi.json")
@@ -38,6 +39,12 @@ pub fn export_output(kind: &ExportKind) -> Export {
             Export::Artifact(Output::declared(AsyncApiJsonEmitter), "asyncapi.json")
         }
         ExportKind::Dbml => Export::Artifact(Output::declared(DbmlEmitter), "schema.dbml"),
+        ExportKind::Sql => Export::Artifact(
+            Output::declared(SqlEmitter {
+                dialect: dialect.dialect(),
+            }),
+            "schema.sql",
+        ),
         ExportKind::JsonSchema => {
             Export::Artifact(Output::declared(JsonSchemaEmitter), "json-schema.json")
         }

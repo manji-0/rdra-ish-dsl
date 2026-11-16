@@ -96,6 +96,7 @@ const EXPECTED: &[(&str, &[(&str, Gate)])] = &[
             ("openapi", Note),
             ("asyncapi", Note),
             ("dbml", Note),
+            ("sql", Note),
             ("json-schema", Note),
             ("type-script-states", Stop),
             ("mermaid-er", Note),
