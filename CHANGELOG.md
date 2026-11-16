@@ -1,6 +1,15 @@
 # Changelog
 
-## Unreleased
+## v2.2.0 - 2026-11-16
+
+Upgrading from v2.1.0 needs no change: a model that passed `check` and `verify` still
+passes with the same errors. The release adds `@end(...)` for states a row may stay at,
+two checks that one instance per entity cannot show (the `UnjoinedWrite` warning and the
+`multi-rule-unscoped` lint, each with a way to say the broad form is meant), runs that
+leave out the use cases of other actors or BUCs and still decide deadlocks, a `FAIL:`
+line at the end of a failed `check`, `--version`, and `verify --tlc-jar`. A model may now
+draw the new warnings; they do not change the exit status. It also fixes a panic in the
+BFS of a reduced cone.
 
 ### Added
 
@@ -34,6 +43,13 @@
 - `verify --tlc-jar <path>` and `RDRA_TLC_JAR` run TLC as `java -cp <path> tlc2.TLC` from
   `tla2tools.jar`. The error for a missing TLC lists the ways to get it, and the CLI
   reference has a [Getting TLC](./docs/cli-reference.md#getting-tlc) section.
+
+### Changed
+
+- The clinic-ops sample joins the rows its use cases write: an appointment takes a slot of
+  a `ProviderSchedule`, a payment posts to an `AccountBalance`, and a new `FollowUpMessage`
+  (one per care plan, sent while it is open) carries the follow-up the care coordinator
+  reviews. `PatientMessage` keeps the one-way notices.
 
 ### Fixed
 
