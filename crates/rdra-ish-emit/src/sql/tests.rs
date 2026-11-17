@@ -208,3 +208,49 @@ fn sqlite_leaves_identity_to_the_rowid_and_uuid_to_the_application() {
     );
     assert!(out.contains("  \"email\" VARCHAR(255) NOT NULL,"), "{out}");
 }
+
+const SCHEMA_NAMES: &str = r#"
+entity Product "Product" table "products" {
+  id: Int @pk
+  sku: String(32) @unique
+  code: String @unique
+  tenant_id: Int @tenant
+  name: String @unique(tenant_id, name)
+  version: Int @version
+  deleted_at: DateTime @null @soft_delete
+}
+entity Line "Line" table "order_lines" { id: Int @pk }
+entity Note "Note" { id: Int @pk }
+relate(Line, Product, N:1).references(sku)
+relate(Note, Product, 1:1)
+"#;
+
+/// On an entity with a soft-delete marker a declared unique set holds among live rows; a
+/// set a foreign key references stays a full constraint.
+#[test]
+fn soft_deleted_entities_keep_declared_uniques_among_live_rows() {
+    let out = sql(SCHEMA_NAMES, Dialect::Postgres);
+    for line in [
+        "CREATE UNIQUE INDEX \"products_code_live_key\" ON \"products\" (\"code\") WHERE \"deleted_at\" IS NULL;",
+        "CREATE UNIQUE INDEX \"products_tenant_id_name_live_key\" ON \"products\" (\"tenant_id\", \"name\") WHERE \"deleted_at\" IS NULL;",
+        "  UNIQUE (\"sku\")",
+    ] {
+        assert!(out.contains(line), "missing {line}\n{out}");
+    }
+    assert!(!out.contains("\"products_sku_live_key\""), "{out}");
+    assert!(!out.contains("  UNIQUE (\"code\")"), "{out}");
+}
+
+#[test]
+fn physical_names_references_and_version_reach_the_schema() {
+    let out = sql(SCHEMA_NAMES, Dialect::Postgres);
+    for line in [
+        "CREATE TABLE \"products\" (",
+        "CREATE TABLE \"order_lines\" (",
+        "  \"product_sku\" VARCHAR(32) NOT NULL,",
+        "ALTER TABLE \"order_lines\" ADD CONSTRAINT \"order_lines_product_sku_fkey\" FOREIGN KEY (\"product_sku\") REFERENCES \"products\" (\"sku\");",
+        "  \"version\" INTEGER NOT NULL DEFAULT 1 /* version: each update checks it and adds 1 */,",
+    ] {
+        assert!(out.contains(line), "missing {line}\n{out}");
+    }
+}

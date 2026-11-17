@@ -282,8 +282,10 @@ pub(crate) fn register_instance(
                 primary_key,
                 unique_constraints,
                 indexes,
+                table: inst.table.clone(),
             });
             apply_primary_key_flags(&mut model.entities[k]);
+            report_version_columns(inst, &model.entities[k], ctx, diags);
             NodeRef::Entity(k)
         }
         Kind::Api => {
@@ -463,6 +465,7 @@ fn ast_column_to_model(
         generated: None,
         default_fn: None,
         on_update: None,
+        is_version: false,
     };
     for ann in &col.annotations {
         match ann {
@@ -546,6 +549,23 @@ fn ast_column_to_model(
                     ),
                 }
             }
+            Annotation::Version => {
+                if mc.col_type == ColumnType::Int {
+                    mc.is_version = true;
+                } else {
+                    push_error(
+                        ctx,
+                        diags,
+                        col.span.clone(),
+                        RdraError::InvalidColumnFunction {
+                            entity: inst.id.clone(),
+                            col: col.name.clone(),
+                            written: "@version".to_string(),
+                            reason: "needs an `Int` column".to_string(),
+                        },
+                    );
+                }
+            }
             Annotation::Generated(how) => {
                 let generated = match (how.as_str(), &mc.col_type) {
                     ("identity", ColumnType::Int) => Ok(IdGeneration::Identity),
@@ -625,6 +645,37 @@ fn ast_column_to_model(
         ),
     }
     mc
+}
+
+/// One `@version` column per entity: an update checks and advances one version.
+fn report_version_columns(
+    inst: &InstanceDecl,
+    entity: &Entity,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let versions: Vec<&ModelColumn> = entity.columns.iter().filter(|c| c.is_version).collect();
+    if let [_, second, ..] = versions.as_slice() {
+        let span = inst
+            .columns
+            .iter()
+            .find(|c| c.name == second.name)
+            .map_or(inst.span.clone(), |c| c.span.clone());
+        push_error(
+            ctx,
+            diags,
+            span,
+            RdraError::InvalidColumnFunction {
+                entity: inst.id.clone(),
+                col: second.name.clone(),
+                written: "@version".to_string(),
+                reason: format!(
+                    "is the second on the entity, after '{}'; keep one",
+                    versions[0].name
+                ),
+            },
+        );
+    }
 }
 
 /// `now()` on a `Date` / `DateTime` column, `uuid()` on a `String` column.

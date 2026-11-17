@@ -257,6 +257,9 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error("`.references({columns})` names columns of '{parent}' that are neither its primary key nor one of its unique sets\n  hint: mark them `@unique` (or `@unique(a, b)`) on '{parent}', or drop `.references` to refer to its primary key")]
+    ReferencesNotUnique { parent: String, columns: String },
+
     #[error(
         "column '{col}' of '{entity}': `{written}` is not a type this column takes\n  hint: {hint}"
     )]

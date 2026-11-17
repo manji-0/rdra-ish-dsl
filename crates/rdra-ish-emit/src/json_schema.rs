@@ -191,6 +191,9 @@ fn insert_type_detail(obj: &mut Map<String, Value>, column: &ModelColumn) {
     if let Some(f) = column.on_update {
         obj.insert("x-rdra-ish-on-update".to_string(), json!(f.as_str()));
     }
+    if column.is_version {
+        obj.insert("x-rdra-ish-version".to_string(), json!(true));
+    }
 }
 
 fn insert_column_extensions(
@@ -216,7 +219,11 @@ fn insert_column_extensions(
         );
         // Only a composite key needs the pairing, and only a named key the role, so a
         // single-column key under the default role prints as it always has.
-        if fk.columns.len() > 1 {
+        // and a `.references` to a column other than the parent's key names it too.
+        let parent_pk = &model.entities[fk.parent].primary_key;
+        let to_pk =
+            matches!(fk.columns.as_slice(), [(_, p)] if parent_pk.as_slice() == [p.clone()]);
+        if fk.columns.len() > 1 || !to_pk {
             if let Some((_, parent_column)) = fk.columns.iter().find(|(c, _)| *c == column.name) {
                 obj.insert(
                     "x-rdra-ish-fk-target-column".to_string(),

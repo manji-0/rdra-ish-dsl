@@ -91,6 +91,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
         nfr: NfrMetadata::default(),
         field: FieldMetadata::default(),
         usecase: UseCaseMetadata::default(),
+        table: None,
         bare_values: Vec::new(),
         columns: vec![Column {
             name: "id".to_string(),
@@ -431,5 +432,56 @@ fn a_type_argument_or_function_the_column_cannot_take_is_an_error() {
         let (_, errors) = column_of(&format!("entity E \"E\" {{\n  {col}\n}}\n"), "x");
         assert_eq!(errors.len(), 1, "{col}: {errors:?}");
         assert!(errors[0].contains(want), "{col}: {errors:?}");
+    }
+}
+
+fn model_errors(src: &str) -> (SemanticModel, Vec<String>) {
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect();
+    (model, errors)
+}
+
+#[test]
+fn references_needs_a_unique_set_of_the_parent() {
+    let src = |sku: &str| {
+        format!("entity P \"P\" {{\n  id: Int @pk\n  {sku}\n}}\nentity C \"C\" {{ id: Int @pk }}\nrelate(C, P, N:1).references(sku)\n")
+    };
+    let (model, errors) = model_errors(&src("sku: String @unique"));
+    assert!(errors.is_empty(), "{errors:?}");
+    let fk = model.foreign_keys().next().unwrap().1;
+    assert_eq!(fk.columns, [("p_sku".to_string(), "sku".to_string())]);
+    let (_, errors) = model_errors(&src("sku: String"));
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(
+        errors[0].starts_with("`.references(sku)` names columns of 'P'"),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn table_names_the_entity_and_version_is_one_int_column() {
+    let (model, errors) =
+        model_errors("entity E \"E\" table \"es\" {\n  id: Int @pk\n  v: Int @version\n}\n");
+    assert!(errors.is_empty(), "{errors:?}");
+    let e = model.entities.values().next().unwrap();
+    assert_eq!(e.table_name(), "es");
+    assert!(e.columns.iter().any(|c| c.name == "v" && c.is_version));
+    for (cols, want) in [
+        ("v: String @version", "needs an `Int` column"),
+        (
+            "v: Int @version\n  w: Int @version",
+            "is the second on the entity, after 'v'",
+        ),
+    ] {
+        let (_, errors) =
+            model_errors(&format!("entity E \"E\" {{\n  id: Int @pk\n  {cols}\n}}\n"));
+        assert_eq!(errors.len(), 1, "{cols}: {errors:?}");
+        assert!(errors[0].contains(want), "{cols}: {errors:?}");
     }
 }

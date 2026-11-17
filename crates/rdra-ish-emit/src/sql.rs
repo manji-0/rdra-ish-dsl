@@ -16,7 +16,7 @@ use rdra_ish_core::lifecycle::{Bounds, InvKind, Invariant, ModelRef, Scope, Tran
 use rdra_ish_core::model::{
     ArithExpr, ArithOperand, CheckExpr, CmpOpModel, CmpRhs, ColumnType, ComparisonProp, DefaultFn,
     DerivedExpr, EffectValue, Entity, EntityKey, ForeignKey, IdGeneration, ModelColumn, RefAction,
-    RuleRef, SemanticModel,
+    RuleRef, SemanticModel, UniqueSource,
 };
 use rdra_ish_syntax::ast::ArithOp;
 
@@ -209,14 +209,16 @@ impl<'m> Script<'m> {
             lines.push(format!("PRIMARY KEY ({})", idents(&entity.primary_key)));
         }
         for unique in self.unique_sets(key, entity) {
-            lines.push(format!("UNIQUE ({})", idents(&unique)));
+            if self.live_predicate(key, entity, &unique).is_none() {
+                lines.push(format!("UNIQUE ({})", idents(&unique)));
+            }
         }
         if self.dialect == Dialect::Sqlite {
             for column in &entity.columns {
                 if let Some(values) = self.enum_values(column) {
                     lines.push(format!(
                         "CONSTRAINT {} CHECK ({} IN ({}))",
-                        ident(&format!("{}_{}_values", entity.id, column.name)),
+                        ident(&format!("{}_{}_values", entity.table_name(), column.name)),
                         ident(&column.name),
                         values
                             .iter()
@@ -240,7 +242,7 @@ impl<'m> Script<'m> {
         if !note.is_empty() {
             out.push_str(&format!("-- {note}\n"));
         }
-        out.push_str(&format!("CREATE TABLE {} (\n", ident(&entity.id)));
+        out.push_str(&format!("CREATE TABLE {} (\n", ident(entity.table_name())));
         out.push_str(
             &lines
                 .iter()
@@ -293,6 +295,15 @@ impl<'m> Script<'m> {
     /// clause; and, when the dialect has no clause for it, what the application does.
     fn computed(&self, column: &ModelColumn) -> (Option<String>, Option<String>) {
         let pg = self.dialect == Dialect::Postgres;
+        if column.is_version {
+            // Optimistic locking: `UPDATE ... SET v = v + 1 WHERE id = ? AND v = ?`.
+            let note = "version: each update checks it and adds 1".to_string();
+            let clause = column
+                .default_val
+                .is_none()
+                .then(|| "DEFAULT 1".to_string());
+            return (clause, Some(note));
+        }
         let mut note = column
             .on_update
             .map(|f| format!("on update: {} (trigger or application)", f.as_str()));
@@ -370,7 +381,23 @@ impl<'m> Script<'m> {
         if !entity.primary_key.is_empty() {
             covered.push(entity.primary_key.clone());
         }
-        covered.extend(self.unique_sets(key, entity));
+        let mut live = Vec::new();
+        for unique in self.unique_sets(key, entity) {
+            match self.live_predicate(key, entity, &unique) {
+                // A partial index does not hold every row, so it covers no foreign key.
+                Some(pred) => live.push(format!(
+                    "CREATE UNIQUE INDEX {} ON {} ({}) WHERE {pred};",
+                    ident(&format!(
+                        "{}_{}_live_key",
+                        entity.table_name(),
+                        unique.join("_")
+                    )),
+                    ident(entity.table_name()),
+                    idents(&unique)
+                )),
+                None => covered.push(unique),
+            }
+        }
         let mut wanted: Vec<Vec<String>> = Vec::new();
         for columns in &entity.indexes {
             if !wanted.contains(columns) {
@@ -385,17 +412,54 @@ impl<'m> Script<'m> {
                 wanted.push(columns);
             }
         }
-        wanted
-            .into_iter()
-            .map(|columns| {
-                format!(
-                    "CREATE INDEX {} ON {} ({});",
-                    ident(&format!("{}_{}_idx", entity.id, columns.join("_"))),
-                    ident(&entity.id),
-                    idents(&columns)
+        live.extend(wanted.into_iter().map(|columns| {
+            format!(
+                "CREATE INDEX {} ON {} ({});",
+                ident(&format!(
+                    "{}_{}_idx",
+                    entity.table_name(),
+                    columns.join("_")
+                )),
+                ident(entity.table_name()),
+                idents(&columns)
+            )
+        }));
+        live
+    }
+
+    /// On an entity with a `@soft_delete` column, a declared unique set holds among the rows
+    /// not deleted: the condition a partial unique index keeps them by. `None` for a key a
+    /// relate makes (1:1, junction) or one a foreign key references, which hold over every
+    /// row, and on an entity without the marker.
+    fn live_predicate(&self, key: EntityKey, entity: &Entity, set: &[String]) -> Option<String> {
+        let marker = entity.columns.iter().find(|c| c.is_soft_delete)?;
+        let made_by_relate =
+            self.model.foreign_keys().any(|(_, fk)| {
+                fk.child == key && fk.unique() && same_set(&fk_child_columns(fk), set)
+            }) || self
+                .model
+                .unique_keys(key)
+                .iter()
+                .any(|u| same_set(&u.columns, set) && u.source != UniqueSource::Declared);
+        let referenced = self.model.foreign_keys().any(|(_, fk)| {
+            fk.parent == key
+                && same_set(
+                    &fk.columns
+                        .iter()
+                        .map(|(_, p)| p.clone())
+                        .collect::<Vec<_>>(),
+                    set,
                 )
-            })
-            .collect()
+        });
+        if made_by_relate || referenced {
+            return None;
+        }
+        let col = ident(&marker.name);
+        match marker.col_type {
+            ColumnType::Bool => Some(format!("{col} = FALSE")),
+            _ if marker.is_nullable => Some(format!("{col} IS NULL")),
+            _ => None,
+        }
     }
 
     // ── Foreign keys ────────────────────────────────────────────────────────
@@ -414,9 +478,13 @@ impl<'m> Script<'m> {
         let parent_cols: Vec<String> = fk.columns.iter().map(|(_, p)| p.clone()).collect();
         let mut clause = format!(
             "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {} ({})",
-            ident(&format!("{}_{}_fkey", entity.id, child_cols.join("_"))),
+            ident(&format!(
+                "{}_{}_fkey",
+                entity.table_name(),
+                child_cols.join("_")
+            )),
             idents(&child_cols),
-            ident(&parent.id),
+            ident(parent.table_name()),
             idents(&parent_cols)
         );
         if let Some(action) = fk.on_delete {
@@ -431,7 +499,7 @@ impl<'m> Script<'m> {
     fn alter_foreign_key(&self, entity: &Entity, fk: &ForeignKey) -> String {
         format!(
             "ALTER TABLE {} ADD {};",
-            ident(&entity.id),
+            ident(entity.table_name()),
             self.foreign_key_clause(entity, fk)
         )
     }
@@ -819,6 +887,10 @@ fn inv_text(inv: &Invariant) -> String {
             role,
         } => format!("{child} -> {parent} ({role})"),
     }
+}
+
+fn fk_child_columns(fk: &ForeignKey) -> Vec<String> {
+    fk.columns.iter().map(|(c, _)| c.clone()).collect()
 }
 
 fn join_notes(note: Option<String>, more: String) -> String {

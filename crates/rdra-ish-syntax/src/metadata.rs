@@ -79,6 +79,7 @@ pub(crate) enum Slot {
     Guard,
     Alternative,
     Error,
+    Table,
 }
 
 /// Each clause keyword, the keyword `fmt` writes for it, and where its value goes.
@@ -134,6 +135,7 @@ pub(crate) const CLAUSES: &[(&str, &str, Slot)] = &[
     ("error_condition", "error", Slot::Error),
     ("business_error", "error", Slot::Error),
     ("error", "error", Slot::Error),
+    ("table", "table", Slot::Table),
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -224,6 +226,7 @@ pub(crate) struct Metadata {
     pub nfr: NfrMetadata,
     pub field: FieldMetadata,
     pub usecase: UseCaseMetadata,
+    pub table: Option<String>,
     /// `(keyword fmt writes, value)` for each value written without quotes.
     pub bare_values: Vec<(String, String)>,
 }
@@ -283,6 +286,7 @@ impl Metadata {
                 Slot::Guard => m.usecase.guards.push(v),
                 Slot::Alternative => m.usecase.alternatives.push(v),
                 Slot::Error => m.usecase.errors.push(v),
+                Slot::Table => m.table = Some(v),
             }
         }
         m
@@ -310,6 +314,7 @@ mod tests {
             | Retention | Privacy => "nfr",
             Access | Required(_) | FieldSource => "field",
             Precondition | Postcondition | Guard | Alternative | Error => "usecase",
+            Table => "entity",
         }
     }
 

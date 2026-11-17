@@ -82,6 +82,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                table: None,
                 bare_values: [],
                 columns: [],
                 variation_values: [],
@@ -145,6 +146,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                table: None,
                 bare_values: [],
                 columns: [],
                 variation_values: [],
@@ -208,6 +210,7 @@ Ast {
                     alternatives: [],
                     errors: [],
                 },
+                table: None,
                 bare_values: [],
                 columns: [
                     Column {

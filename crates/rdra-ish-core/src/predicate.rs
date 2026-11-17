@@ -101,7 +101,15 @@ pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
 pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
     match pred {
         "belongs" => &["by"],
-        "relate" => &["via", "role", "key", "optional", "on_delete", "on_update"],
+        "relate" => &[
+            "via",
+            "role",
+            "key",
+            "references",
+            "optional",
+            "on_delete",
+            "on_update",
+        ],
         "forbidden" => &["when", "along", "role", "label", "global"],
         "invariant" => &[
             "when", "then", "has", "none", "along", "role", "label", "global",

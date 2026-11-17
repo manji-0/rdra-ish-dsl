@@ -83,7 +83,7 @@ fn dbml_enums(model: &SemanticModel) -> Vec<String> {
 fn dbml_table(model: &SemanticModel, key: EntityKey, entity: &Entity) -> String {
     let mut lines = vec![format!(
         "Table {} [{}] {{",
-        dbml_ident(&entity.id),
+        dbml_ident(entity.table_name()),
         dbml_settings(&table_settings(entity))
     )];
     for column in &entity.columns {
@@ -188,6 +188,9 @@ fn column_note(column: &ModelColumn) -> String {
     if let Some(f) = column.on_update {
         notes.push(format!("on update: {}", f.as_str()));
     }
+    if column.is_version {
+        notes.push("version: each update checks it and adds 1".to_string());
+    }
     notes.join("; ")
 }
 
@@ -290,9 +293,9 @@ fn dbml_refs(model: &SemanticModel) -> Vec<String> {
             let relation = if fk.unique() { "-" } else { ">" };
             refs.push(format!(
                 "Ref: {}.{} {relation} {}.{}{}",
-                dbml_ident(&entity.id),
+                dbml_ident(entity.table_name()),
                 ref_columns(fk.columns.iter().map(|(child, _)| child)),
-                dbml_ident(&target.id),
+                dbml_ident(target.table_name()),
                 ref_columns(fk.columns.iter().map(|(_, parent)| parent)),
                 settings
             ));

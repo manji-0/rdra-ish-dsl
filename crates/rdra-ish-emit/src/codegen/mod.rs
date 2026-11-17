@@ -442,9 +442,10 @@ fn column_type(
             return Ok(FieldType::Id(id.clone()));
         }
     }
-    // A one-column key to a parent with an id type.
+    // A one-column key to a parent's id (not a `.references` to another unique column).
     if let Some((_, fk)) = model.column_fk(key, &column.name) {
-        if fk.columns.len() == 1 {
+        let parent_pk = &model.entities[fk.parent].primary_key;
+        if matches!(fk.columns.as_slice(), [(_, p)] if parent_pk.as_slice() == [p.clone()]) {
             if let Some(id) = id_of.get(&fk.parent) {
                 return Ok(FieldType::Id(id.clone()));
             }

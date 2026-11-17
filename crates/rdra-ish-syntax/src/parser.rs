@@ -269,6 +269,7 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
     let at_history = just(Token::AtHistory).to(Annotation::History);
     let at_tenant = just(Token::AtTenant).to(Annotation::Tenant);
     let at_derived = expr_annotation(Token::AtDerived, "@derived", Annotation::Derived);
+    let at_version = just(Token::AtVersion).to(Annotation::Version);
 
     // @end(a, b): at least one value
     let at_end = just(Token::AtEnd)
@@ -301,6 +302,7 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
         at_end,
         at_generated,
         at_on_update,
+        at_version,
     ))
 }
 
@@ -515,6 +517,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                     nfr: metadata.nfr,
                     field: metadata.field,
                     usecase: metadata.usecase,
+                    table: metadata.table,
                     bare_values: metadata.bare_values,
                     columns,
                     variation_values,

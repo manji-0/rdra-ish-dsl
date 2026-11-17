@@ -262,7 +262,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `navigates` | `.via(UseCase)`, at most once |
 | `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
 | `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
-| `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)` |
+| `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)`, `.references(...)` |
 | `forbidden` | `.along(...)`, `.role(...)`, `.label("...")`, `.global()` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()` |
 | `required`, `exclusive` | `.label("...")` |
@@ -1121,6 +1121,18 @@ Each field has the form `name: Type [annotations...]`. For entities these fields
 are database columns. For DTOs they are contract fields; `@null` means the field
 is optional/nullable in the payload.
 
+An entity's table takes the entity id as its name. A `table` clause names it instead:
+
+```
+entity OrderLine "Order line"
+  table "order_lines" {
+  id: Int @pk
+}
+```
+
+The SQL and DBML exports name the table, its foreign keys, and its indexes after it; every
+other output, and every rule name, keeps the entity id.
+
 #### Column types
 
 | Type | Description |
@@ -1158,7 +1170,8 @@ argument other than `tz` and `local` is `InvalidTypeArgs`.
 | `@label("...")` | Overrides the column's display label. |
 | `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
 | `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
-| `@tenant` | Marks the column as the tenant-scope discriminator. |
+| `@tenant` | Marks the column as the tenant-scope discriminator. A key unique within a tenant is a composite unique set with it: `code: String @unique(tenant_id, code)`. |
+| `@version` | Marks an `Int` column as the optimistic-lock version: each update checks the value it read and adds 1. The SQL export starts it at `DEFAULT 1` unless the column has a `@default`. Another type is `InvalidColumnFunction`; a second `@version` on the entity, or one on a `@derived` column, is an error. |
 | `@default(now())` / `@default(uuid())` | A default the database computes: the current date or time on a `Date` or `DateTime` column, a random UUID on a `String` column. The lifecycle reads a `@null` column with one as present when its row is created. Another column type is `InvalidColumnFunction`. |
 | `@on_update(now())` | Each update of the row writes the current date or time, on a `Date` or `DateTime` column. The SQL export leaves it to a trigger or the application and says so on the column. |
 | `@generated(identity \| uuid \| ulid)` | How a key's value is made: `identity` (an `Int` the database numbers), `uuid` (a `String` with a random UUID), `ulid` (a `String` the application fills with a ULID). A foreign key column copies its parent column's type and detail. The wrong column type or another value is `InvalidColumnFunction`. |
@@ -1186,7 +1199,8 @@ Both exports print every key from the same fact, so they agree on it. DBML print
 `Ref` per key at its first column, with the composite form `Ref: Stock.(bin_site,
 bin_shelf) > Bin.(site, shelf)`. JSON Schema marks each key column with
 `x-rdra-ish-foreign-key` and `x-rdra-ish-fk-target`, adds `x-rdra-ish-fk-target-column`
-to the columns of a composite key, `x-rdra-ish-fk-role` to a key with an explicit
+to the columns of a composite key and of a key `.references(...)` points at a non-key
+column, `x-rdra-ish-version` to a `@version` column, `x-rdra-ish-fk-role` to a key with an explicit
 `.role`, and `x-rdra-ish-fk-min-children: 1` to the child column of a key whose card has
 a minimum of 1. The Mermaid ER diagram draws that child end as one-or-more.
 DBML and the entity CSVs have no notation for a minimum.
@@ -1552,6 +1566,13 @@ Two chain methods shape the key:
   its uniqueness. They are the key in every output, and in the lifecycle they are the
   owner, not a state column.
 
+A third names the parent columns the key refers to:
+
+- `.references(sku)` makes the key refer to the parent's `sku` instead of its primary key:
+  the child gets `product_sku`, typed as `sku`. The named columns must be a unique set of
+  the parent: its `@pk`, a `@unique(...)`, or one `@unique` column, else
+  `ReferencesNotUnique`. `.key(...)` then adopts one column per referenced column.
+
 | Diagnostic | When |
 |---|---|
 | `DuplicateRelateRole` | Two keys of one child have the same role. |
@@ -1561,6 +1582,7 @@ Two chain methods shape the key:
 | `KeyColumnShared` | An adopted column already holds another relate's key. |
 | `KeyOptionOnManyToMany` | `.role` or `.key` on `relate(A, B, N:M)`. An N:M holds no key of its own, so write the junction's keys as two `N:1` relates instead. |
 | `UnknownRefAction` | `.on_delete(...)` or `.on_update(...)` names an unknown action. |
+| `ReferencesNotUnique` | `.references(...)` names parent columns that are not its primary key or a unique set. |
 
 #### Which key a join follows
 
