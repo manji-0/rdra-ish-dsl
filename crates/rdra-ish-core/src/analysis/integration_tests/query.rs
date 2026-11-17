@@ -115,3 +115,65 @@ fn index_suggestions_skip_what_an_index_already_serves() {
     );
     assert!(model.index_suggestions()[2].mixes_directions());
 }
+
+const MAPPED: &str = r#"
+dto OrderView "Order view" {
+  order_id: Int
+  customer_id: Int
+  total: Money
+  note: String
+}
+response(A, OrderView)
+"#;
+
+/// A DTO field maps to a column, a generated key column included, and a read by an API
+/// selects the columns its response fields map, in field order.
+#[test]
+fn a_read_by_an_api_selects_what_its_response_fields_map() {
+    let (model, errors) = build(&format!(
+        "{MAPPED}maps_field(OrderView.total, Order.amount)\nmaps_field(OrderView.order_id, Order.id)\nmaps_field(OrderView.customer_id, Order.customer_id)\nreads(A, Order).by(status)\nreads(U, Order).by(status)"
+    ));
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(model.dto_mappings.len(), 3);
+    let selected: Vec<(String, String)> = model.queries[0]
+        .selected(&model)
+        .into_iter()
+        .map(|s| (s.column, s.field))
+        .collect();
+    assert_eq!(
+        selected,
+        [
+            ("id".to_string(), "order_id".to_string()),
+            ("customer_id".to_string(), "customer_id".to_string()),
+            ("amount".to_string(), "total".to_string()),
+        ]
+    );
+    assert!(model.queries[1].selected(&model).is_empty());
+}
+
+#[test]
+fn a_dto_mapping_names_a_field_and_a_column_that_exist_once() {
+    for (mapping, want) in [
+        (
+            "maps_field(OrderView.nope, Order.id)",
+            "has no column 'nope'",
+        ),
+        (
+            "maps_field(OrderView.total, Order.nope)",
+            "has no column 'nope'",
+        ),
+        (
+            "maps_field(OrderView.total, Order.amount)\nmaps_field(OrderView.total, Order.id)",
+            "'OrderView.total' already maps to a column",
+        ),
+        (
+            "maps_field(Order.total, Order.amount)",
+            "expected field or dto",
+        ),
+    ] {
+        let (model, errors) = build(&format!("{MAPPED}{mapping}"));
+        assert_eq!(errors.len(), 1, "{mapping}: {errors:?}");
+        assert!(errors[0].contains(want), "{mapping}: {errors:?}");
+        assert!(model.dto_mappings.len() <= 1, "{mapping}");
+    }
+}

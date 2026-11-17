@@ -1,7 +1,9 @@
-//! `reads(Source, Entity).by(...).order(...).page(...)`: query shapes, read after the
-//! foreign keys exist so a key column (`customer_id`) can be filtered on.
+//! `reads(Source, Entity).by(...).order(...).page(...)` query shapes and
+//! `maps_field(Dto.field, Entity.column)`, read after the foreign keys exist so they can
+//! name a key column (`customer_id`).
 
 use crate::analysis::arg_resolve::resolve_arg;
+use crate::analysis::predicate_process::{is_dto_mapping, process_dto_maps_predicate};
 use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
@@ -18,10 +20,14 @@ pub(super) fn resolve_queries(
         let Item::Predicate(pred) = item else {
             continue;
         };
+        let ctx = DiagCtxt::new(*source_id);
+        if is_dto_mapping(pred) {
+            process_dto_maps_predicate(model, pred, ctx, diags);
+            continue;
+        }
         if pred.name != "reads" || pred.chain.is_empty() {
             continue;
         }
-        let ctx = DiagCtxt::new(*source_id);
         // The predicate pass already reported what does not resolve.
         let mut quiet = Vec::new();
         let resolved: Vec<Option<NodeRef>> = pred

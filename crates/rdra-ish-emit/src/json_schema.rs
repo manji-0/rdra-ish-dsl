@@ -16,21 +16,26 @@ fn json_schema_document(model: &SemanticModel) -> Value {
 
     let mut dtos: Vec<_> = model.dtos.iter().collect();
     dtos.sort_by_key(|(_, dto)| dto.id.as_str());
-    for (_, dto) in dtos {
-        defs.insert(
-            format!("Dto.{}", dto.id),
-            object_schema(
-                model,
-                None,
-                "dto",
-                &dto.id,
-                &dto.label,
-                dto.description.as_deref(),
-                &dto.fields,
-                &[],
-                &[],
-            ),
+    for (dto_key, dto) in dtos {
+        let mut schema = object_schema(
+            model,
+            None,
+            "dto",
+            &dto.id,
+            &dto.label,
+            dto.description.as_deref(),
+            &dto.fields,
+            &[],
+            &[],
         );
+        // `maps_field(Dto.field, Entity.column)`: the column the field carries.
+        for m in model.dto_mappings.iter().filter(|m| m.dto == dto_key) {
+            if let Some(field) = schema["properties"].get_mut(&m.field) {
+                field["x-rdra-ish-maps-to"] =
+                    json!(format!("{}.{}", model.entities[m.entity].id, m.column));
+            }
+        }
+        defs.insert(format!("Dto.{}", dto.id), schema);
     }
 
     let mut entities: Vec<_> = model.entities.iter().collect();
@@ -451,5 +456,18 @@ relate(Stock, Address, N:1).role(bill_to)
         assert!(props["bill_to_id"]
             .get("x-rdra-ish-fk-target-column")
             .is_none());
+    }
+
+    #[test]
+    fn a_mapped_dto_field_names_its_column() {
+        let (ast, errors) = rdra_ish_syntax::parse(
+            "entity Order \"Order\" {\n  id: Int @pk\n}\ndto OrderView \"V\" {\n  order_id: Int\n  note: String\n}\nmaps_field(OrderView.order_id, Order.id)\n",
+        );
+        assert!(errors.is_empty(), "{errors:?}");
+        let (model, _) = rdra_ish_core::build_model(&ast);
+        let doc = json_schema_document(&model);
+        let props = &doc["$defs"]["Dto.OrderView"]["properties"];
+        assert_eq!(props["order_id"]["x-rdra-ish-maps-to"], "Order.id");
+        assert!(props["note"].get("x-rdra-ish-maps-to").is_none());
     }
 }

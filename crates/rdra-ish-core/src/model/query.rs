@@ -1,6 +1,6 @@
 //! Query shapes declared on `reads(UseCase | Api, Entity)` and the indexes they want.
 
-use super::{EntityKey, NodeRef, SemanticModel};
+use super::{EntityKey, NodeRef, RelKind, SemanticModel};
 
 /// `reads(Source, Entity).by(...).order(...).page(...)` with an optional `.count()` or
 /// `.sum(column)`: what a read filters on, how it sorts, and how it pages.
@@ -49,7 +49,45 @@ pub struct IndexSuggestion {
     pub queries: Vec<usize>,
 }
 
+/// A column a read selects, and the response field that carries it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Selected {
+    pub column: String,
+    pub field: String,
+}
+
 impl Query {
+    /// The columns a read by an API selects: each field of its `response` DTOs that a
+    /// `maps_field(Dto.field, Entity.column)` maps to a column of the entity read, in field
+    /// order. Empty when the reader is a use case or no field maps, which selects every column.
+    pub fn selected(&self, model: &SemanticModel) -> Vec<Selected> {
+        let mut out: Vec<Selected> = Vec::new();
+        for rel in &model.relations {
+            if rel.kind != RelKind::Response || rel.from != self.source {
+                continue;
+            }
+            let NodeRef::Dto(dto) = rel.to else {
+                continue;
+            };
+            for field in &model.dtos[dto].fields {
+                let mapped = model
+                    .dto_mappings
+                    .iter()
+                    .find(|m| m.dto == dto && m.field == field.name && m.entity == self.entity);
+                if let Some(m) = mapped {
+                    let s = Selected {
+                        column: m.column.clone(),
+                        field: field.name.clone(),
+                    };
+                    if !out.contains(&s) {
+                        out.push(s);
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// The index this query wants: the tenant column, the `.by` columns, then the sort, and
     /// for cursor paging the primary key columns the sort does not name, so the key is
     /// unique. Empty when the query neither filters nor sorts.

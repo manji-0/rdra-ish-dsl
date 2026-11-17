@@ -23,6 +23,7 @@ use self::rules::process_forbidden_predicate;
 use self::rules::process_invariant_predicate;
 use self::rules::process_required_predicate;
 use self::structure::process_coordinates_predicate;
+pub(crate) use self::structure::process_dto_maps_predicate;
 use self::structure::process_exposes_predicate;
 use self::structure::process_maps_field_predicate;
 use self::structure::process_outbox_predicate;
@@ -95,6 +96,12 @@ pub(crate) fn process_predicate(
 
     if let Some(err) = arity_error(pred, &sig) {
         push_error(ctx, diags, pred.span.clone(), err);
+        return;
+    }
+
+    // `maps_field(Dto.field, Entity.column)` waits for the generated key columns:
+    // `analysis::query` reads it after the foreign keys exist.
+    if is_dto_mapping(pred) {
         return;
     }
 
@@ -178,4 +185,11 @@ pub(crate) fn process_predicate(
     {
         model.typed_predicates.push(typed);
     }
+}
+
+/// `maps_field(Dto.field, Entity.column)`: a screen field is one name, a DTO field two.
+pub(crate) fn is_dto_mapping(pred: &PredicateCall) -> bool {
+    pred.name == "maps_field"
+        && matches!(pred.args.first(), Some(PredicateArg::Ref(q))
+            if q.kind_qualifier.is_none() && q.parts.len() == 2)
 }
