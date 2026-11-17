@@ -55,6 +55,7 @@ fn kind_tag_labels_each_node_ref_kind() {
         columns: vec![Column {
             name: "id".to_string(),
             col_type: ColType::Int,
+            type_args: Vec::new(),
             annotations: vec![Annotation::Pk],
             span: 0..0,
         }],

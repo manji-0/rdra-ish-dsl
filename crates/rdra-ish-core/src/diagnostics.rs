@@ -257,6 +257,24 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error(
+        "column '{col}' of '{entity}': `{written}` is not a type this column takes\n  hint: {hint}"
+    )]
+    InvalidTypeArgs {
+        entity: String,
+        col: String,
+        written: String,
+        hint: String,
+    },
+
+    #[error("column '{col}' of '{entity}': `{written}` {reason}")]
+    InvalidColumnFunction {
+        entity: String,
+        col: String,
+        written: String,
+        reason: String,
+    },
+
     #[error("`{pred}` has both `.global()` and `.along(...)`\n  hint: `.along(...)` limits the rule to related rows and `.global()` says it is meant for every combination; keep one")]
     GlobalWithAlong { pred: String },
 

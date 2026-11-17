@@ -4,6 +4,15 @@
 
 ### Added
 
+- Column types take arguments for what the schema stores: `String(255)`, `Decimal(10, 2)`,
+  `Money(12, 2)`, `DateTime(tz)` / `DateTime(local)`. `@generated(identity | uuid | ulid)`
+  says how a key's value is made, `@default(now())` / `@default(uuid())` a default the
+  database computes, and `@on_update(now())` the value each update writes. The SQL, DBML,
+  and JSON Schema exports print them; `check` and `verify` do not read them, except that a
+  `@null` column with a computed default starts present. A foreign key column copies its
+  parent's detail. Wrong arguments are `InvalidTypeArgs`, a function on the wrong column
+  `InvalidColumnFunction` ([language reference](./docs/language-reference.md#column-types)).
+
 - `export --kind sql [--dialect postgres|sqlite]` writes SQL DDL from the logical data model:
   tables, primary and unique keys, foreign keys with their actions, an index per `@index` and
   per foreign key, Enum and variation types, `@default`, and `@derived` as a generated

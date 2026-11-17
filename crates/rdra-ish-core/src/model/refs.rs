@@ -487,6 +487,64 @@ pub struct ModelColumn {
     pub value_labels: Vec<Option<std::string::String>>,
     /// `@end(..)`: values a row may stay at for good, so staying there is no deadlock.
     pub end_values: Vec<std::string::String>,
+    /// `String(255)`, `Decimal(10, 2)`, `DateTime(tz)`: what the schema stores. The lifecycle
+    /// does not read it.
+    pub detail: TypeDetail,
+    /// `@generated(..)`: how a key's value is made.
+    pub generated: Option<IdGeneration>,
+    /// `@default(now())` / `@default(uuid())`: a default the database computes.
+    pub default_fn: Option<DefaultFn>,
+    /// `@on_update(now())`: the value each update of the row writes.
+    pub on_update: Option<DefaultFn>,
+}
+
+/// The storage detail a column type's arguments give.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TypeDetail {
+    /// `String(n)`: at most `n` characters.
+    pub length: Option<u32>,
+    /// `Decimal(p, s)` / `Money(p, s)`: `p` digits, `s` of them after the point.
+    pub precision: Option<u32>,
+    pub scale: Option<u32>,
+    /// `DateTime(tz)` is `Some(true)`, `DateTime(local)` is `Some(false)`.
+    pub time_zone: Option<bool>,
+}
+
+/// `@generated(..)`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdGeneration {
+    /// The database numbers the rows.
+    Identity,
+    /// A random UUID.
+    Uuid,
+    /// A ULID, which the application makes.
+    Ulid,
+}
+
+impl IdGeneration {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            IdGeneration::Identity => "identity",
+            IdGeneration::Uuid => "uuid",
+            IdGeneration::Ulid => "ulid",
+        }
+    }
+}
+
+/// A function a default or an update calls: `now()` or `uuid()`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DefaultFn {
+    Now,
+    Uuid,
+}
+
+impl DefaultFn {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DefaultFn::Now => "now()",
+            DefaultFn::Uuid => "uuid()",
+        }
+    }
 }
 
 impl ModelColumn {

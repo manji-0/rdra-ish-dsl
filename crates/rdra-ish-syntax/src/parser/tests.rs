@@ -1295,3 +1295,28 @@ fn end_takes_one_or_more_values() {
     let (_, errors) = parse("entity E \"E\" { status: Enum(free, used) @end() }\n");
     assert!(!errors.is_empty());
 }
+
+#[test]
+fn a_column_type_takes_arguments_and_columns_take_computed_defaults() {
+    let ast = parse_ok(
+        "entity E \"E\" {\n  id: String @pk @generated(uuid)\n  name: String(255)\n  total: Decimal(10, 2)\n  at: DateTime(tz) @default(now()) @on_update(now())\n}\n",
+    );
+    let Item::Instance(inst) = &ast.items[0] else {
+        panic!("expected instance");
+    };
+    let cols = &inst.columns;
+    assert_eq!(cols[0].annotations[1], Annotation::Generated("uuid".into()));
+    assert_eq!(cols[1].type_args, [TypeArg::Int("255".into())]);
+    assert_eq!(
+        cols[2].type_args,
+        [TypeArg::Int("10".into()), TypeArg::Int("2".into())]
+    );
+    assert_eq!(cols[3].type_args, [TypeArg::Ident("tz".into())]);
+    assert_eq!(
+        cols[3].annotations,
+        [
+            Annotation::DefaultCall("now".into()),
+            Annotation::OnUpdate("now".into())
+        ]
+    );
+}

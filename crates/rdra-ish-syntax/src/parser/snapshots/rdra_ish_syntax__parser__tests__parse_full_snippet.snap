@@ -1,5 +1,5 @@
 ---
-source: crates/rdra-ish-syntax/src/parser.rs
+source: crates/rdra-ish-syntax/src/parser/tests.rs
 expression: ast
 ---
 Ast {
@@ -213,6 +213,7 @@ Ast {
                     Column {
                         name: "id",
                         col_type: Int,
+                        type_args: [],
                         annotations: [
                             Pk,
                         ],
@@ -221,12 +222,14 @@ Ast {
                     Column {
                         name: "total",
                         col_type: Money,
+                        type_args: [],
                         annotations: [],
                         span: 166..178,
                     },
                     Column {
                         name: "ordered_at",
                         col_type: DateTime,
+                        type_args: [],
                         annotations: [],
                         span: 181..201,
                     },

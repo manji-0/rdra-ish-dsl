@@ -122,6 +122,10 @@ pub enum Token {
     AtDerived,
     #[token("@end")]
     AtEnd,
+    #[token("@generated")]
+    AtGenerated,
+    #[token("@on_update")]
+    AtOnUpdate,
 
     // ── Comparison / temporal ────────────────────────────────────────
     /// Built-in temporal reference for comparison expressions (e.g. `expired_at < now`)

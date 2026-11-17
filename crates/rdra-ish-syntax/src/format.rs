@@ -596,6 +596,16 @@ fn format_usecase_metadata(instance: &InstanceDecl) -> Vec<String> {
 
 fn format_column(column: &Column) -> String {
     let mut out = format!("{}: {}", column.name, format_col_type(&column.col_type));
+    if !column.type_args.is_empty() {
+        let args: Vec<&str> = column
+            .type_args
+            .iter()
+            .map(|a| match a {
+                TypeArg::Int(s) | TypeArg::Ident(s) => s.as_str(),
+            })
+            .collect();
+        out.push_str(&format!("({})", args.join(", ")));
+    }
     for annotation in &column.annotations {
         out.push(' ');
         out.push_str(&format_annotation(annotation));
@@ -646,6 +656,9 @@ fn format_annotation(annotation: &Annotation) -> String {
         Annotation::Tenant => "@tenant".to_string(),
         Annotation::Derived(expr) => format!("@derived({})", format_column_expr(expr)),
         Annotation::End(values) => format!("@end({})", values.join(", ")),
+        Annotation::DefaultCall(f) => format!("@default({f}())"),
+        Annotation::Generated(how) => format!("@generated({how})"),
+        Annotation::OnUpdate(f) => format!("@on_update({f}())"),
     }
 }
 

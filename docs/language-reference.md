@@ -1126,14 +1126,21 @@ is optional/nullable in the payload.
 | Type | Description |
 |---|---|
 | `Int` | Integer. |
-| `String` | Text. |
-| `Money` | Monetary amount. |
-| `DateTime` | Date and time. |
+| `String` | Text. `String(n)` holds at most `n` characters. |
+| `Money` | Monetary amount. `Money(p, s)` stores `p` digits, `s` of them after the point (`Money(12)` is `Money(12, 0)`). |
+| `DateTime` | Date and time. `DateTime(tz)` stores the time zone; `DateTime(local)` does not. |
 | `Date` | Date. |
 | `Bool` | Boolean. A boolean column is a **state axis** (see [state-derivation.md](./state-derivation.md)). |
-| `Decimal` | Decimal number. |
+| `Decimal` | Decimal number. `Decimal(p, s)` stores `p` digits, `s` of them after the point. |
 | `Enum(a, b, c)` | Inline value set. An Enum column is a **state axis** and can be linked to a state machine. Use it for a lifecycle column or a value that use cases set. Each value may carry a label, as a variation value does: `Enum(pending "受付前", paid "支払済")`. Diagrams draw a state by its label, and the `states` table lists the labels under its axes. `lint` `enum-attribute` warns on an inline Enum that no `transitions` and no `sets` moves, because an actor chooses its value: type it by a variation. |
 | `<VariationId>` | A [variation](#variations) in type position, such as `method: PaymentMethod`. The column holds one of the variation's values. It is an **attribute**: not a state axis, never a lifecycle column. An id that names no variation is `UnknownColumnType`. |
+
+A type's arguments say what the schema stores: `export --kind sql`, `dbml`, and `json-schema`
+print them (`VARCHAR(255)`, `NUMERIC(10, 2)`, `TIMESTAMP`, `maxLength`). `check`, `states`,
+and `verify` do not read them: an `Int` or `Decimal` column compared in a rule ranges over
+`0..--int-range-max` whatever its precision. Another type with arguments, a length or a
+precision that is not a positive number, a scale above the precision, or a `DateTime`
+argument other than `tz` and `local` is `InvalidTypeArgs`.
 
 #### Column annotations
 
@@ -1152,6 +1159,9 @@ is optional/nullable in the payload.
 | `@soft_delete` | Marks the column as the soft-delete marker, such as `deleted_at` or `is_deleted`. |
 | `@history` | Marks the column as part of history/versioning, such as `valid_from`, `valid_to`, or `version`. |
 | `@tenant` | Marks the column as the tenant-scope discriminator. |
+| `@default(now())` / `@default(uuid())` | A default the database computes: the current date or time on a `Date` or `DateTime` column, a random UUID on a `String` column. The lifecycle reads a `@null` column with one as present when its row is created. Another column type is `InvalidColumnFunction`. |
+| `@on_update(now())` | Each update of the row writes the current date or time, on a `Date` or `DateTime` column. The SQL export leaves it to a trigger or the application and says so on the column. |
+| `@generated(identity \| uuid \| ulid)` | How a key's value is made: `identity` (an `Int` the database numbers), `uuid` (a `String` with a random UUID), `ulid` (a `String` the application fills with a ULID). A foreign key column copies its parent column's type and detail. The wrong column type or another value is `InvalidColumnFunction`. |
 | `@end(v, ...)` | Declares states of an `Enum` or variation column that a row may stay at for good, such as a stock row waiting at `free` to be used. Staying at one is no `Deadlock`, even when a `transitions` arm leaves it, and the state diagram draws it as an end state. A value the column does not declare is `UnknownEndValue`; `@end` on a column with no values is `EndOnNonEnumColumn`. `lint` `end-redundant` warns on a value that no `transitions` arm leaves, which is an end state without `@end`. See [Deadlocks](./state-derivation.md#deadlocks). |
 | `@derived(expr)` | Derives the column from the entity's own columns: a condition for a Bool column (`@derived(qty >= 3)`), or one `+`, `-`, or `*` over a column or an integer for an Int, Money, or Decimal column (`@derived(total - discount)`). A non-numeric operand is `ArithTypeMismatch`, and an expression that cannot derive the column's type is `DerivedTypeMismatch`. A derived column takes no `@check`, `@default`, `@pk`, or `@unique` (`DerivedColumnAnnotation`), and a `sets` on it is `DerivedColumnWritten`. |
 

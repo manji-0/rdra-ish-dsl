@@ -459,6 +459,10 @@ fn ast_column_to_model(
             _ => Vec::new(),
         },
         end_values: Vec::new(),
+        detail: TypeDetail::default(),
+        generated: None,
+        default_fn: None,
+        on_update: None,
     };
     for ann in &col.annotations {
         match ann {
@@ -508,6 +512,64 @@ fn ast_column_to_model(
             Annotation::SoftDelete => mc.is_soft_delete = true,
             Annotation::History => mc.is_history = true,
             Annotation::Tenant => mc.is_tenant_scope = true,
+            Annotation::DefaultCall(f) => {
+                let written = format!("@default({f}())");
+                match column_function(f, &mc.col_type) {
+                    Ok(func) => mc.default_fn = Some(func),
+                    Err(reason) => push_error(
+                        ctx,
+                        diags,
+                        col.span.clone(),
+                        RdraError::InvalidColumnFunction {
+                            entity: inst.id.clone(),
+                            col: col.name.clone(),
+                            written,
+                            reason,
+                        },
+                    ),
+                }
+            }
+            Annotation::OnUpdate(f) => {
+                let written = format!("@on_update({f}())");
+                match column_function(f, &mc.col_type) {
+                    Ok(DefaultFn::Now) => mc.on_update = Some(DefaultFn::Now),
+                    Ok(DefaultFn::Uuid) | Err(_) => push_error(
+                        ctx,
+                        diags,
+                        col.span.clone(),
+                        RdraError::InvalidColumnFunction {
+                            entity: inst.id.clone(),
+                            col: col.name.clone(),
+                            written,
+                            reason: "takes `now()` on a `Date` or `DateTime` column".to_string(),
+                        },
+                    ),
+                }
+            }
+            Annotation::Generated(how) => {
+                let generated = match (how.as_str(), &mc.col_type) {
+                    ("identity", ColumnType::Int) => Ok(IdGeneration::Identity),
+                    ("uuid", ColumnType::String) => Ok(IdGeneration::Uuid),
+                    ("ulid", ColumnType::String) => Ok(IdGeneration::Ulid),
+                    ("identity", _) => Err("needs an `Int` column"),
+                    ("uuid" | "ulid", _) => Err("needs a `String` column"),
+                    _ => Err("is not one of `identity`, `uuid`, `ulid`"),
+                };
+                match generated {
+                    Ok(g) => mc.generated = Some(g),
+                    Err(reason) => push_error(
+                        ctx,
+                        diags,
+                        col.span.clone(),
+                        RdraError::InvalidColumnFunction {
+                            entity: inst.id.clone(),
+                            col: col.name.clone(),
+                            written: format!("@generated({how})"),
+                            reason: reason.to_string(),
+                        },
+                    ),
+                }
+            }
             Annotation::End(values) => {
                 let allowed = match &mc.col_type {
                     ColumnType::Enum(declared) => Some(declared.clone()),
@@ -548,7 +610,106 @@ fn ast_column_to_model(
             }
         }
     }
+    match type_detail(&mc.col_type, &col.type_args) {
+        Ok(detail) => mc.detail = detail,
+        Err(hint) => push_error(
+            ctx,
+            diags,
+            col.span.clone(),
+            RdraError::InvalidTypeArgs {
+                entity: inst.id.clone(),
+                col: col.name.clone(),
+                written: written_type(col),
+                hint,
+            },
+        ),
+    }
     mc
+}
+
+/// `now()` on a `Date` / `DateTime` column, `uuid()` on a `String` column.
+fn column_function(f: &str, col_type: &ColumnType) -> Result<DefaultFn, String> {
+    match (f, col_type) {
+        ("now", ColumnType::Date | ColumnType::DateTime) => Ok(DefaultFn::Now),
+        ("uuid", ColumnType::String) => Ok(DefaultFn::Uuid),
+        ("now", _) => Err("takes a `Date` or `DateTime` column".to_string()),
+        ("uuid", _) => Err("takes a `String` column".to_string()),
+        _ => Err("calls no known function; write `now()` or `uuid()`".to_string()),
+    }
+}
+
+/// The detail a column type's arguments give: `String(n)`, `Decimal(p[, s])`,
+/// `Money(p[, s])`, `DateTime(tz | local)`. Any other type takes none.
+fn type_detail(col_type: &ColumnType, args: &[TypeArg]) -> Result<TypeDetail, String> {
+    let int = |a: &TypeArg| match a {
+        TypeArg::Int(s) => s.parse::<u32>().ok().filter(|n| *n > 0),
+        TypeArg::Ident(_) => None,
+    };
+    let mut detail = TypeDetail::default();
+    match (col_type, args) {
+        (_, []) => {}
+        (ColumnType::String, [n]) => {
+            detail.length =
+                Some(int(n).ok_or("`String(n)` takes a positive length, such as `String(255)`")?);
+        }
+        (ColumnType::Decimal | ColumnType::Money, [p, rest @ ..]) if rest.len() <= 1 => {
+            let precision = int(p)
+                .ok_or("`Decimal(p, s)` takes a positive precision, such as `Decimal(10, 2)`")?;
+            let scale = match rest {
+                [s] => match s {
+                    TypeArg::Int(v) => v.parse::<u32>().ok(),
+                    TypeArg::Ident(_) => None,
+                }
+                .filter(|s| *s <= precision)
+                .ok_or("the scale is a number of digits no larger than the precision")?,
+                _ => 0,
+            };
+            detail.precision = Some(precision);
+            detail.scale = Some(scale);
+        }
+        (ColumnType::DateTime, [TypeArg::Ident(z)]) if z == "tz" || z == "local" => {
+            detail.time_zone = Some(z == "tz");
+        }
+        (ColumnType::DateTime, _) => {
+            return Err("`DateTime` takes `tz` or `local`: `DateTime(tz)`".to_string())
+        }
+        (ColumnType::String, _) => {
+            return Err("`String` takes one length: `String(255)`".to_string())
+        }
+        (ColumnType::Decimal | ColumnType::Money, _) => {
+            return Err(
+                "`Decimal` and `Money` take a precision and a scale: `Decimal(10, 2)`".to_string(),
+            )
+        }
+        _ => {
+            return Err(
+                "only `String`, `Decimal`, `Money`, and `DateTime` take arguments".to_string(),
+            )
+        }
+    }
+    Ok(detail)
+}
+
+fn written_type(col: &Column) -> String {
+    let args: Vec<&str> = col
+        .type_args
+        .iter()
+        .map(|a| match a {
+            TypeArg::Int(s) | TypeArg::Ident(s) => s.as_str(),
+        })
+        .collect();
+    let ty = match &col.col_type {
+        ColType::Int => "Int",
+        ColType::String => "String",
+        ColType::Money => "Money",
+        ColType::DateTime => "DateTime",
+        ColType::Date => "Date",
+        ColType::Bool => "Bool",
+        ColType::Decimal => "Decimal",
+        ColType::Enum(_) => "Enum",
+        ColType::Named(name) => name.as_str(),
+    };
+    format!("{ty}({})", args.join(", "))
 }
 
 /// Apply composite PK membership onto column flags after entity assembly.

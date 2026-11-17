@@ -1,5 +1,5 @@
 ---
-source: crates/rdra-ish-syntax/src/parser.rs
+source: crates/rdra-ish-syntax/src/parser/tests.rs
 expression: ast
 ---
 Ast {
@@ -66,6 +66,7 @@ Ast {
                     Column {
                         name: "id",
                         col_type: Int,
+                        type_args: [],
                         annotations: [
                             Pk,
                         ],
@@ -74,6 +75,7 @@ Ast {
                     Column {
                         name: "sku",
                         col_type: String,
+                        type_args: [],
                         annotations: [
                             Unique,
                             Index,
@@ -83,6 +85,7 @@ Ast {
                     Column {
                         name: "name",
                         col_type: String,
+                        type_args: [],
                         annotations: [
                             Label(
                                 "商品名",
@@ -93,6 +96,7 @@ Ast {
                     Column {
                         name: "price",
                         col_type: Decimal,
+                        type_args: [],
                         annotations: [
                             Check(
                                 Logical(
@@ -116,6 +120,7 @@ Ast {
                     Column {
                         name: "store_id",
                         col_type: Int,
+                        type_args: [],
                         annotations: [
                             IndexComposite(
                                 [
@@ -146,6 +151,7 @@ Ast {
                                 },
                             ],
                         ),
+                        type_args: [],
                         annotations: [
                             Default {
                                 value: "active",
@@ -157,6 +163,7 @@ Ast {
                     Column {
                         name: "note",
                         col_type: String,
+                        type_args: [],
                         annotations: [
                             Null,
                         ],
@@ -165,6 +172,7 @@ Ast {
                     Column {
                         name: "tenant_id",
                         col_type: Int,
+                        type_args: [],
                         annotations: [
                             Tenant,
                         ],
@@ -173,6 +181,7 @@ Ast {
                     Column {
                         name: "deleted_at",
                         col_type: DateTime,
+                        type_args: [],
                         annotations: [
                             Null,
                             SoftDelete,
@@ -182,6 +191,7 @@ Ast {
                     Column {
                         name: "valid_from",
                         col_type: DateTime,
+                        type_args: [],
                         annotations: [
                             History,
                         ],
@@ -190,6 +200,7 @@ Ast {
                     Column {
                         name: "display_price",
                         col_type: Money,
+                        type_args: [],
                         annotations: [
                             Derived(
                                 Arith(
