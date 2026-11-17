@@ -4,6 +4,12 @@
 
 ### Added
 
+- `maps_field(Dto.field, Entity.column)` maps a DTO field to the column it carries, a
+  generated key column included (`DuplicateFieldMapping` for a second mapping of one
+  field). JSON Schema marks the field `x-rdra-ish-maps-to`, and the SQL export selects the
+  mapped columns for a read by an API, under the response field names
+  ([language reference](./docs/language-reference.md#mapping-dto-fields-to-columns)).
+
 - Query shapes on `reads`: `.by(columns)`, `.order(column.desc, ...)`, `.page(cursor | offset)`,
   `.count()`, and `.sum(column)` say how a read finds its rows (`InvalidQueryShape` when they
   do not fit). `lint` `query-index-missing` warns at a read no key or `@index` serves and

@@ -70,8 +70,20 @@ impl Script<'_> {
         if query.page == Some(Page::Cursor) {
             conds.push(keyset(&order, &mut param));
         }
+        let selected = query.selected(self.model);
         let what = match &query.aggregate {
-            None => "*".to_string(),
+            None if selected.is_empty() => "*".to_string(),
+            None => selected
+                .iter()
+                .map(|s| {
+                    if s.column == s.field {
+                        ident(&s.column)
+                    } else {
+                        format!("{} AS {}", ident(&s.column), ident(&s.field))
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(", "),
             Some(Aggregate::Count) => "count(*)".to_string(),
             Some(Aggregate::Sum(c)) => format!("sum({})", ident(c)),
         };

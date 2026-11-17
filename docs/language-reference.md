@@ -205,7 +205,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `displays` | `(UseCase, Screen)` | The use case displays the screen. |
 | `shows` | `(Screen, Entity)` | The screen shows information from the entity. |
 | `navigates` | `(Screen, Screen)` | The user moves from the first screen to the second. `.via(UseCase)` names the use case whose operation causes the move. `diagram --kind screen` draws it. See [Screen transitions](#screen-transitions). |
-| `maps_field` | `(Field, Entity.column)` | Maps a screen field to a specific Entity column. The entity and the column must exist. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters. |
+| `maps_field` | `(Field \| Dto.field, Entity.column)` | Maps a screen field, or a DTO field, to a specific Entity column. The entity and the column must exist. Use with `contains(Screen, Field)` when screen-item level input/output mapping matters; see [Mapping DTO fields to columns](#mapping-dto-fields-to-columns) for the DTO form. |
 | `raises` | `(UseCase \| ExtSystem, Event)` | The use case or external system raises the event, which `triggers` hands to downstream use cases or BUCs. An external system raising an event is the inbound direction. |
 | `triggers` | `(Event \| Timer, UseCase \| Buc \| ExtSystem)` | The event or timer triggers a concrete use case or starts a BUC boundary. An event triggering an external system delivers the event to it (outbound). A timer cannot trigger an external system: the legal pairs are `Event` to any of the three and `Timer` to `UseCase` or `Buc`. |
 | `outbox` | `(Event)` | Marks a raised event as intentionally published outside the local model, suppressing the raised-but-unconsumed warning. |
@@ -1064,6 +1064,25 @@ catalog: events become AsyncAPI channels/messages, `raises` and `outbox` become
 Protocol, server, and exact event payload schemas are intentionally not inferred
 until the DSL has explicit vocabulary for them.
 
+#### Mapping DTO fields to columns
+
+`maps_field(Dto.field, Entity.column)` says which column a DTO field carries:
+
+```
+maps_field(OrderResponse.order_id, Order.id)
+maps_field(OrderResponse.customer_id, Order.customer_id)
+```
+
+The column may be a key column a `relate` generates. A DTO field maps to one column; a
+second `maps_field` for it is `DuplicateFieldMapping`, and a field or column that does not
+exist is `UnknownColumn`. The field and column types are not compared.
+
+`export --kind json-schema` marks each mapped field with `x-rdra-ish-maps-to:
+"Order.id"`. A read by an API with a [query shape](#query-shapes) selects the columns its
+`response` DTO fields map, in field order, each under its field name:
+`SELECT "id" AS "order_id", "customer_id" FROM "Order" ...`. A read by a use case, or one
+whose response maps no column of the entity, selects every column.
+
 ### Access constraints
 
 Actor permissions are declared with `permission` and attached to actors with
@@ -1727,6 +1746,9 @@ which `@index` cannot declare, so the hint points at the index `export --kind sq
 |---|---|
 | `InvalidQueryShape` | A method takes the wrong arguments, appears twice, or does not fit the others: `.page(cursor)` without `.order`, `.count()` or `.sum` with `.order` or `.page`, `.sum` on a column that is not a number. |
 | `UnknownColumn` | `.by`, `.order`, or `.sum` names a column the entity does not have. |
+
+A read by an API selects the columns its response DTO fields map
+([Mapping DTO fields to columns](#mapping-dto-fields-to-columns)).
 
 ---
 

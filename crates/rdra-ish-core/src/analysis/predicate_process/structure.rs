@@ -20,61 +20,9 @@ pub(super) fn process_maps_field_predicate(
         return;
     };
     let field = *field;
-    let Some(arg) = pred.args.get(1) else {
+    let Some((entity, column)) = mapped_column(model, pred, ctx, diags) else {
         return;
     };
-    // `Entity.column`: every part but the last names the entity.
-    let (qref, column, path) = match arg {
-        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() > 1 => {
-            let (column, path) = qref.parts.split_last().expect("more than one part");
-            (qref, column.clone(), path)
-        }
-        other => {
-            let err = RdraError::TypeMismatch {
-                pred: pred.name.clone(),
-                id: predicate_arg_display(other),
-                actual: "argument".to_string(),
-                expected: "Entity.column".to_string(),
-            };
-            push_error(ctx, diags, arg_span(other), err);
-            return;
-        }
-    };
-    let qualifier = PredicateArg::Ref(QRef {
-        kind_qualifier: None,
-        parts: path.to_vec(),
-        span: qref.span.clone(),
-    });
-    let entity = match resolve_arg(model, &qualifier, ctx, diags) {
-        Some(NodeRef::Entity(entity)) => entity,
-        Some(other) => {
-            let err = RdraError::TypeMismatch {
-                pred: pred.name.clone(),
-                id: path.join("."),
-                actual: other.kind_tag().to_string(),
-                expected: "entity".to_string(),
-            };
-            push_error(ctx, diags, qref.span.clone(), err);
-            return;
-        }
-        None => return,
-    };
-    if !model.entities[entity]
-        .columns
-        .iter()
-        .any(|col| col.name == column)
-    {
-        push_error(
-            ctx,
-            diags,
-            qref.span.clone(),
-            RdraError::UnknownColumn {
-                entity: model.entities[entity].id.clone(),
-                col: column,
-            },
-        );
-        return;
-    }
 
     model.field_mappings.push(FieldMapping {
         field,
@@ -93,6 +41,77 @@ pub(super) fn process_maps_field_predicate(
         kind: RelKind::MapsField,
         options: RelationOptions::default(),
         via: None,
+    });
+}
+
+/// `maps_field(Dto.field, Entity.column)`: the DTO field carries the column's value.
+pub(crate) fn process_dto_maps_predicate(
+    model: &mut SemanticModel,
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let Some(PredicateArg::Ref(qref)) = pred.args.first() else {
+        return;
+    };
+    let [dto_id, field] = qref.parts.as_slice() else {
+        return;
+    };
+    let head = PredicateArg::Ref(QRef {
+        kind_qualifier: None,
+        parts: vec![dto_id.clone()],
+        span: qref.span.clone(),
+    });
+    let dto = match resolve_arg(model, &head, ctx, diags) {
+        Some(NodeRef::Dto(dto)) => dto,
+        Some(other) => {
+            let err = RdraError::TypeMismatch {
+                pred: pred.name.clone(),
+                id: dto_id.clone(),
+                actual: other.kind_tag().to_string(),
+                expected: "field or dto".to_string(),
+            };
+            push_error(ctx, diags, qref.span.clone(), err);
+            return;
+        }
+        None => return,
+    };
+    if !model.dtos[dto].fields.iter().any(|f| &f.name == field) {
+        push_error(
+            ctx,
+            diags,
+            qref.span.clone(),
+            RdraError::UnknownColumn {
+                entity: dto_id.clone(),
+                col: field.clone(),
+            },
+        );
+        return;
+    }
+    let Some((entity, column)) = mapped_column(model, pred, ctx, diags) else {
+        return;
+    };
+    if model
+        .dto_mappings
+        .iter()
+        .any(|m| m.dto == dto && &m.field == field)
+    {
+        push_error(
+            ctx,
+            diags,
+            pred.span.clone(),
+            RdraError::DuplicateFieldMapping {
+                dto: dto_id.clone(),
+                field: field.clone(),
+            },
+        );
+        return;
+    }
+    model.dto_mappings.push(DtoMapping {
+        dto,
+        field: field.clone(),
+        entity,
+        column,
     });
 }
 
@@ -191,4 +210,67 @@ pub(super) fn process_outbox_predicate(model: &mut SemanticModel, resolved: &[Op
     if let Some(Some(NodeRef::Event(event))) = resolved.first() {
         model.outbox_events.insert(*event);
     }
+}
+
+/// The `Entity.column` second argument of `maps_field`, checked against the entity.
+fn mapped_column(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<(EntityKey, String)> {
+    let arg = pred.args.get(1)?;
+    // `Entity.column`: every part but the last names the entity.
+    let (qref, column, path) = match arg {
+        PredicateArg::Ref(qref) if qref.kind_qualifier.is_none() && qref.parts.len() > 1 => {
+            let (column, path) = qref.parts.split_last().expect("more than one part");
+            (qref, column.clone(), path)
+        }
+        other => {
+            let err = RdraError::TypeMismatch {
+                pred: pred.name.clone(),
+                id: predicate_arg_display(other),
+                actual: "argument".to_string(),
+                expected: "Entity.column".to_string(),
+            };
+            push_error(ctx, diags, arg_span(other), err);
+            return None;
+        }
+    };
+    let qualifier = PredicateArg::Ref(QRef {
+        kind_qualifier: None,
+        parts: path.to_vec(),
+        span: qref.span.clone(),
+    });
+    let entity = match resolve_arg(model, &qualifier, ctx, diags) {
+        Some(NodeRef::Entity(entity)) => entity,
+        Some(other) => {
+            let err = RdraError::TypeMismatch {
+                pred: pred.name.clone(),
+                id: path.join("."),
+                actual: other.kind_tag().to_string(),
+                expected: "entity".to_string(),
+            };
+            push_error(ctx, diags, qref.span.clone(), err);
+            return None;
+        }
+        None => return None,
+    };
+    if !model.entities[entity]
+        .columns
+        .iter()
+        .any(|col| col.name == column)
+    {
+        push_error(
+            ctx,
+            diags,
+            qref.span.clone(),
+            RdraError::UnknownColumn {
+                entity: model.entities[entity].id.clone(),
+                col: column,
+            },
+        );
+        return None;
+    }
+    Some((entity, column))
 }

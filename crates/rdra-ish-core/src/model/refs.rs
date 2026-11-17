@@ -182,6 +182,15 @@ pub struct FieldMapping {
     pub column: std::string::String,
 }
 
+/// `maps_field(Dto.field, Entity.column)`: a DTO field that carries a column's value.
+#[derive(Debug, Clone)]
+pub struct DtoMapping {
+    pub dto: DtoKey,
+    pub field: std::string::String,
+    pub entity: EntityKey,
+    pub column: std::string::String,
+}
+
 /// usecase / api が entity を操作する際の起点。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EntityTouchpoint {

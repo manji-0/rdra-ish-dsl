@@ -1089,7 +1089,8 @@ foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
   live rows only on an entity with `@soft_delete`, then `ORDER BY` and the page. A cursor
   page continues after the last row: `("created_at", "id") < ($2, $3)` for a sort one way,
   one disjunct per key for a sort that mixes directions. The first page passes a key before
-  every row. `.count()` and `.sum(column)` select `count(*)` and `sum("column")`.
+  every row. `.count()` and `.sum(column)` select `count(*)` and `sum("column")`. A read by an API
+  selects the columns its response DTO fields map, else `*`.
 - **What the schema does not enforce.** A rule over several entities (`MultiForbidden_*`,
   `MultiInv_*`), a `.has` / `.none` (`Quantifier_*`), a minimum cardinality (`MinCard_*`), a
   rule with a `.when(Condition)` guard, and a rule that reads `now` have no `CHECK` form. The

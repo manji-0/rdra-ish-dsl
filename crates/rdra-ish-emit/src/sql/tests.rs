@@ -287,3 +287,32 @@ fn declared_reads_become_suggested_indexes_and_selects() {
     }
     assert!(!sql(SHOP, Dialect::Postgres).contains("Reads the model declares"));
 }
+
+/// A read by an API selects the columns its response fields map, under the field names.
+#[test]
+fn a_read_by_an_api_selects_its_mapped_response_fields() {
+    let out = sql(
+        r#"
+entity Order "Order" {
+  id: Int @pk
+  total: Money
+}
+dto OrderView "Order view" {
+  order_id: Int
+  total: Money
+}
+api GetOrder "Get order"
+response(GetOrder, OrderView)
+maps_field(OrderView.order_id, Order.id)
+maps_field(OrderView.total, Order.total)
+reads(GetOrder, Order).by(id)
+"#,
+        Dialect::Postgres,
+    );
+    assert!(
+        out.contains(
+            "--   SELECT \"id\" AS \"order_id\", \"total\" FROM \"Order\" WHERE \"id\" = $1;"
+        ),
+        "{out}"
+    );
+}

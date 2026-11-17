@@ -314,6 +314,8 @@ pub struct SemanticModel {
     pub boundary_coordinations: Vec<BoundaryCoordination>,
     pub business_mapping_contexts: Vec<BusinessMappingContext>,
     pub field_mappings: Vec<FieldMapping>,
+    /// `maps_field(Dto.field, Entity.column)`, in source order.
+    pub dto_mappings: Vec<DtoMapping>,
     /// 解析済み述語の型付き表現。
     pub typed_predicates: Vec<TypedPredicate>,
     /// Events intentionally published outside the local model boundary.

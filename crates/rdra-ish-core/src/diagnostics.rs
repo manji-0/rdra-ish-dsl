@@ -257,6 +257,9 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error("'{dto}.{field}' already maps to a column\n  hint: a DTO field carries one column; delete the second `maps_field`")]
+    DuplicateFieldMapping { dto: String, field: String },
+
     #[error("{detail}\n  hint: write `reads(Source, Entity).by(column, ...).order(column.desc, ...).page(cursor | offset)`, or end it with `.count()` / `.sum(column)`")]
     InvalidQueryShape { detail: String },
 

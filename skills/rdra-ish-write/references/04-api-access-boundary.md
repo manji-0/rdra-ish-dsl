@@ -33,7 +33,8 @@ Also ask:
 2. Introduce `api` plus `invokes(UseCase, Api)` when backend mediation or atomic
    consistency matters.
 3. Put method/path/idempotency/sync-async/auth metadata on the `api`, and connect
-   payloads with `request`, `response`, and `error_response`.
+   payloads with `request`, `response`, and `error_response`. Map a response field to
+   the column it carries with `maps_field(PlaceOrderResponse.order_id, Order.id)`.
 4. Move CRUD from the use case to the API when the API owns the entity operation.
 5. Use `contains(System, Api)` to group each API into the internal system that owns it.
 6. Add `requires_permission` and `requires_medium` to UC/API nodes.
