@@ -34,8 +34,10 @@ Also ask:
 1. Replace coarse entity shells with columns and stable annotations.
 2. Use `@pk`, `@pk(a, b)`, `@unique`, `@unique(a, b)`, `@index`,
    `@index(a, b)`, `@check(expr)`, `@null`, `@default(v)`, `@label("...")`,
-   `@soft_delete`, `@history`, `@tenant`, `@derived(expr)`, and `@end(v)` where they
-   reflect real constraints. Write `@check` and `@derived` unquoted: `@check(total >= 0)`,
+   `@soft_delete`, `@history`, `@tenant`, `@derived(expr)`, `@end(v)`, `@generated(identity)`,
+   `@default(now())`, and `@on_update(now())` where they
+   reflect real constraints. Give a type the storage detail the schema needs:
+   `String(255)`, `Decimal(10, 2)`, `DateTime(tz)`. Write `@check` and `@derived` unquoted: `@check(total >= 0)`,
    `@derived(total - discount)`. `@check` becomes the invariant
    `Check_<Entity>_<column>_<n>` that `check` and `verify` test, so a created row must
    satisfy it from the start (give the column a `@default` or a creating `sets`). A

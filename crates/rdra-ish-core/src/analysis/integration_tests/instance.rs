@@ -95,6 +95,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
         columns: vec![Column {
             name: "id".to_string(),
             col_type: ColType::Int,
+            type_args: Vec::new(),
             annotations: vec![Annotation::Pk],
             span: 0..0,
         }],
@@ -366,4 +367,69 @@ forbidden(A, B, A.s == x, B.t == y).along(A, B).global()
         matches!(errors[0].error, RdraError::GlobalWithAlong { .. }),
         "{errors:?}"
     );
+}
+
+fn column_of(src: &str, name: &str) -> (Option<ModelColumn>, Vec<String>) {
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect();
+    let col = model
+        .entities
+        .iter()
+        .flat_map(|(_, e)| e.columns.iter())
+        .find(|c| c.name == name)
+        .cloned();
+    (col, errors)
+}
+
+#[test]
+fn type_arguments_set_the_column_detail() {
+    let src = "entity E \"E\" {\n  id: String @pk @generated(uuid)\n  name: String(255)\n  total: Decimal(10, 2)\n  fee: Money(12)\n  at: DateTime(local) @default(now()) @on_update(now())\n}\nentity C \"C\" { id: Int @pk }\nrelate(C, E, N:1)\n";
+    let (name, errors) = column_of(src, "name");
+    assert!(errors.is_empty(), "{errors:?}");
+    assert_eq!(name.unwrap().detail.length, Some(255));
+    let total = column_of(src, "total").0.unwrap().detail;
+    assert_eq!((total.precision, total.scale), (Some(10), Some(2)));
+    let fee = column_of(src, "fee").0.unwrap().detail;
+    assert_eq!((fee.precision, fee.scale), (Some(12), Some(0)));
+    let at = column_of(src, "at").0.unwrap();
+    assert_eq!(at.detail.time_zone, Some(false));
+    assert_eq!(at.default_fn, Some(DefaultFn::Now));
+    assert_eq!(at.on_update, Some(DefaultFn::Now));
+    assert_eq!(
+        column_of(src, "id").0.unwrap().generated,
+        Some(IdGeneration::Uuid)
+    );
+}
+
+#[test]
+fn a_type_argument_or_function_the_column_cannot_take_is_an_error() {
+    for (col, want) in [
+        (
+            "x: Int(4)",
+            "only `String`, `Decimal`, `Money`, and `DateTime` take arguments",
+        ),
+        ("x: String(0)", "positive length"),
+        ("x: Decimal(2, 3)", "no larger than the precision"),
+        ("x: DateTime(utc)", "`DateTime` takes `tz` or `local`"),
+        (
+            "x: Int @default(now())",
+            "takes a `Date` or `DateTime` column",
+        ),
+        ("x: String @on_update(uuid())", "takes `now()`"),
+        (
+            "x: String @pk @generated(identity)",
+            "needs an `Int` column",
+        ),
+        ("x: Int @pk @generated(serial)", "is not one of"),
+    ] {
+        let (_, errors) = column_of(&format!("entity E \"E\" {{\n  {col}\n}}\n"), "x");
+        assert_eq!(errors.len(), 1, "{col}: {errors:?}");
+        assert!(errors[0].contains(want), "{col}: {errors:?}");
+    }
 }

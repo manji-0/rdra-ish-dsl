@@ -158,7 +158,9 @@ impl Builder<'_> {
                 (domain, base, false)
             }
             _ if col.is_nullable => {
-                let present = col.default_val.as_deref().is_some_and(|d| d != "null");
+                // `@default(now())` / `@default(uuid())` fills the column at creation.
+                let present = col.default_val.as_deref().is_some_and(|d| d != "null")
+                    || col.default_fn.is_some();
                 (
                     Domain::Nullable,
                     if present { Value::PRESENT } else { Value::NULL },

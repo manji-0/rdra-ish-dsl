@@ -169,6 +169,19 @@ pub enum Annotation {
     Derived(ColumnExpr),
     /// `@end(a, b)`: values of a lifecycle `Enum` column a row may stay at for good.
     End(Vec<std::string::String>),
+    /// `@default(now())` / `@default(uuid())`: a default the database computes, by function.
+    DefaultCall(std::string::String),
+    /// `@generated(identity | uuid | ulid)`: how a key's value is made.
+    Generated(std::string::String),
+    /// `@on_update(now())`: the value a row's update writes, by function.
+    OnUpdate(std::string::String),
+}
+
+/// An argument of a column type: `255` in `String(255)`, `tz` in `DateTime(tz)`.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TypeArg {
+    Int(std::string::String),
+    Ident(std::string::String),
 }
 
 // ── Column definition ────────────────────────────────────────────────────────
@@ -177,6 +190,8 @@ pub enum Annotation {
 pub struct Column {
     pub name: std::string::String,
     pub col_type: ColType,
+    /// `(255)` in `String(255)`, `(10, 2)` in `Decimal(10, 2)`; empty without parentheses.
+    pub type_args: Vec<TypeArg>,
     pub annotations: Vec<Annotation>,
     pub span: Span,
 }

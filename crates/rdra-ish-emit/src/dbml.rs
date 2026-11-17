@@ -144,7 +144,12 @@ fn column_settings(entity: &Entity, column: &ModelColumn) -> Vec<String> {
     if !column.is_nullable {
         settings.push("not null".to_string());
     }
-    if let Some(default) = &column.default_val {
+    if column.generated == Some(rdra_ish_core::model::IdGeneration::Identity) {
+        settings.push("increment".to_string());
+    }
+    if let Some(f) = column.default_fn {
+        settings.push(format!("default: `{}`", f.as_str()));
+    } else if let Some(default) = &column.default_val {
         settings.push(format!("default: `{}`", default.replace('`', "'")));
     }
     let note = column_note(column);
@@ -176,15 +181,33 @@ fn column_note(column: &ModelColumn) -> String {
     if let Some(expr) = &column.derived_expr {
         notes.push(format!("derived: {}", expr.display()));
     }
+    match column.generated {
+        Some(rdra_ish_core::model::IdGeneration::Identity) | None => {}
+        Some(how) => notes.push(format!("generated: {}", how.as_str())),
+    }
+    if let Some(f) = column.on_update {
+        notes.push(format!("on update: {}", f.as_str()));
+    }
     notes.join("; ")
 }
 
 fn dbml_type(model: &SemanticModel, entity: &Entity, column: &ModelColumn) -> String {
+    let detail = column.detail;
     match &column.col_type {
         ColumnType::Int => "int".to_string(),
-        ColumnType::String => "varchar".to_string(),
-        ColumnType::Money | ColumnType::Decimal => "decimal".to_string(),
-        ColumnType::DateTime => "datetime".to_string(),
+        ColumnType::String => match detail.length {
+            Some(n) => format!("varchar({n})"),
+            None => "varchar".to_string(),
+        },
+        ColumnType::Money | ColumnType::Decimal => match (detail.precision, detail.scale) {
+            (Some(p), Some(s)) => format!("decimal({p},{s})"),
+            _ => "decimal".to_string(),
+        },
+        ColumnType::DateTime => match detail.time_zone {
+            Some(true) => "timestamptz".to_string(),
+            Some(false) => "timestamp".to_string(),
+            None => "datetime".to_string(),
+        },
         ColumnType::Date => "date".to_string(),
         ColumnType::Bool => "boolean".to_string(),
         ColumnType::Enum(_) => dbml_ident(&enum_type_name(entity, column)),

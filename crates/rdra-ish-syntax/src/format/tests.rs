@@ -355,3 +355,11 @@ fn keeps_an_end_annotation() {
         "entity E \"E\" {\n  status: Enum(free, used) @end(free, used)\n}\n",
     );
 }
+
+#[test]
+fn keeps_type_arguments_and_computed_defaults() {
+    assert_formats_to(
+        "entity E \"E\" {\n  id: Int @pk @generated( identity )\n  name: String( 255 )\n  at: DateTime(tz) @default(now( )) @on_update( now() )\n}\n",
+        "entity E \"E\" {\n  id: Int @pk @generated(identity)\n  name: String(255)\n  at: DateTime(tz) @default(now()) @on_update(now())\n}\n",
+    );
+}

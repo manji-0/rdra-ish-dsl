@@ -39,6 +39,10 @@ pub(super) fn model_column(name: &str, col_type: ColumnType) -> ModelColumn {
         derived_expr: None,
         value_labels: Vec::new(),
         end_values: Vec::new(),
+        detail: TypeDetail::default(),
+        generated: None,
+        default_fn: None,
+        on_update: None,
     }
 }
 
@@ -86,6 +90,7 @@ pub(super) fn simple_entity_model(ids: &[&str]) -> SemanticModel {
                 Column {
                     name: "id".to_string(),
                     col_type: ColType::Int,
+                    type_args: Vec::new(),
                     annotations: vec![Annotation::Pk],
                     span: 0..0,
                 },
@@ -99,12 +104,14 @@ pub(super) fn simple_entity_model(ids: &[&str]) -> SemanticModel {
                             })
                             .to_vec(),
                     ),
+                    type_args: Vec::new(),
                     annotations: Vec::new(),
                     span: 0..0,
                 },
                 Column {
                     name: "amount".to_string(),
                     col_type: ColType::Decimal,
+                    type_args: Vec::new(),
                     annotations: Vec::new(),
                     span: 0..0,
                 },

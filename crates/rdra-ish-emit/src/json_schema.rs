@@ -159,9 +159,38 @@ fn column_schema(model: &SemanticModel, fk: Option<&ForeignKey>, column: &ModelC
             );
         }
         insert_column_extensions(model, obj, fk, column);
+        insert_type_detail(obj, column);
     }
 
     schema
+}
+
+/// `String(n)` as `maxLength`; precision, time zone, and what the database computes as
+/// extensions.
+fn insert_type_detail(obj: &mut Map<String, Value>, column: &ModelColumn) {
+    let detail = column.detail;
+    if let Some(n) = detail.length {
+        obj.insert("maxLength".to_string(), json!(n));
+    }
+    if let (Some(p), Some(s)) = (detail.precision, detail.scale) {
+        obj.insert("x-rdra-ish-precision".to_string(), json!(p));
+        obj.insert("x-rdra-ish-scale".to_string(), json!(s));
+    }
+    if let Some(tz) = detail.time_zone {
+        obj.insert("x-rdra-ish-time-zone".to_string(), json!(tz));
+    }
+    if let Some(how) = column.generated {
+        obj.insert("x-rdra-ish-generated".to_string(), json!(how.as_str()));
+        if how != rdra_ish_core::model::IdGeneration::Identity {
+            obj.insert("format".to_string(), json!(how.as_str()));
+        }
+    }
+    if let Some(f) = column.default_fn {
+        obj.insert("x-rdra-ish-default".to_string(), json!(f.as_str()));
+    }
+    if let Some(f) = column.on_update {
+        obj.insert("x-rdra-ish-on-update".to_string(), json!(f.as_str()));
+    }
 }
 
 fn insert_column_extensions(

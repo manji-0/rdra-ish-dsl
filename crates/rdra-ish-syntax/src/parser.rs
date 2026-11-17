@@ -219,16 +219,44 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
     // @null
     let at_null = just(Token::AtNull).to(Annotation::Null);
 
-    // @default(value)
+    // `now()` / `uuid()`: a function the database calls.
+    let call = || {
+        ident()
+            .or(just(Token::Now).to("now".to_string()))
+            .then_ignore(just(Token::LParen))
+            .then_ignore(just(Token::RParen))
+    };
+
+    // @default(value) or @default(now())
     let at_default = just(Token::AtDefault)
         .ignore_then(just(Token::LParen))
         .ignore_then(
-            string_lit()
-                .map(|value| (value, true))
-                .or(ann_value().map(|value| (value, false))),
+            call()
+                .map(Annotation::DefaultCall)
+                .or(string_lit().map(|value| Annotation::Default {
+                    value,
+                    quoted: true,
+                }))
+                .or(ann_value().map(|value| Annotation::Default {
+                    value,
+                    quoted: false,
+                })),
         )
+        .then_ignore(just(Token::RParen));
+
+    // @generated(identity)
+    let at_generated = just(Token::AtGenerated)
+        .ignore_then(just(Token::LParen))
+        .ignore_then(ident())
         .then_ignore(just(Token::RParen))
-        .map(|(value, quoted)| Annotation::Default { value, quoted });
+        .map(Annotation::Generated);
+
+    // @on_update(now())
+    let at_on_update = just(Token::AtOnUpdate)
+        .ignore_then(just(Token::LParen))
+        .ignore_then(call())
+        .then_ignore(just(Token::RParen))
+        .map(Annotation::OnUpdate);
 
     // @label("...")
     let at_label = just(Token::AtLabel)
@@ -271,6 +299,8 @@ fn annotation() -> impl Parser<Token, Annotation, Error = Simple<Token>> + Clone
         at_tenant,
         at_derived,
         at_end,
+        at_generated,
+        at_on_update,
     ))
 }
 
@@ -364,16 +394,26 @@ fn variation_value() -> impl Parser<Token, VariationValue, Error = Simple<Token>
 
 /// `name: Type @ann1 @ann2 ...`
 fn column() -> impl Parser<Token, Column, Error = Simple<Token>> + Clone {
+    let type_arg = select! { Token::IntLit(s) => TypeArg::Int(s) }.or(ident().map(TypeArg::Ident));
+    let type_args = just(Token::LParen)
+        .ignore_then(type_arg.separated_by(just(Token::Comma)))
+        .then_ignore(just(Token::RParen))
+        .or_not()
+        .map(Option::unwrap_or_default);
     column_name()
         .then_ignore(just(Token::Colon))
         .then(col_type())
+        .then(type_args)
         .then(annotation().repeated())
-        .map_with_span(|((name, col_type), annotations), span| Column {
-            name,
-            col_type,
-            annotations,
-            span,
-        })
+        .map_with_span(
+            |(((name, col_type), type_args), annotations), span| Column {
+                name,
+                col_type,
+                type_args,
+                annotations,
+                span,
+            },
+        )
 }
 
 // ── Instance declaration ──────────────────────────────────────────────────────

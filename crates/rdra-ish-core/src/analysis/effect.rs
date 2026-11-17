@@ -304,6 +304,10 @@ mod tests {
             derived_expr: None,
             value_labels: Vec::new(),
             end_values: Vec::new(),
+            detail: crate::model::TypeDetail::default(),
+            generated: None,
+            default_fn: None,
+            on_update: None,
         }
     }
 
