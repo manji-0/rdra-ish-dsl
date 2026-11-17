@@ -197,3 +197,41 @@ except sqlite3.IntegrityError:
     let out = python(script, &ddl);
     assert_eq!(out, "reused\nduplicate rejected\n");
 }
+
+/// Each suggested index and each `SELECT` the reads become runs in SQLite as written, and a
+/// keyset page over a sort that mixes directions continues where the previous page ended.
+#[test]
+fn suggested_indexes_and_reads_run_in_sqlite() {
+    if !have_python() {
+        return;
+    }
+    let dir = scratch("sql_reads");
+    let model = dir.join("reads.rdra");
+    std::fs::write(
+        &model,
+        "entity Order \"Order\" {\n  id: Int @pk\n  status: Enum(open, paid)\n  amount: Int\n}\nusecase U \"u\"\nreads(U, Order).by(status).order(amount, id.desc).page(cursor)\nreads(U, Order).by(status).count()\n",
+    )
+    .unwrap();
+    let ddl = dir.join("reads.sql");
+    export_sqlite(&model, &ddl);
+    let script = r#"
+import re, sqlite3, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+con = sqlite3.connect(":memory:")
+con.executescript(text)
+for line in text.splitlines():
+    if line.startswith("-- CREATE INDEX"):
+        con.execute(line[3:].split(" -- ")[0])
+selects = [l[5:] for l in text.splitlines() if l.startswith("--   SELECT")]
+rows = [(1, "open", 5), (2, "open", 5), (3, "open", 7), (4, "paid", 1), (5, "open", 9)]
+con.executemany('INSERT INTO "Order" (id, status, amount) VALUES (?, ?, ?)', rows)
+page = selects[0]
+first = con.execute(page, {"1": "open", "2": -1, "3": 0, "4": 2}).fetchall()
+last = first[-1]
+second = con.execute(page, {"1": "open", "2": last[2], "3": last[0], "4": 2}).fetchall()
+print([r[0] for r in first], [r[0] for r in second])
+print(con.execute(selects[1], {"1": "open"}).fetchone()[0])
+"#;
+    let out = python(script, &ddl);
+    assert_eq!(out, "[2, 1] [3, 5]\n4\n");
+}

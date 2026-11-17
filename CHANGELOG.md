@@ -4,6 +4,14 @@
 
 ### Added
 
+- Query shapes on `reads`: `.by(columns)`, `.order(column.desc, ...)`, `.page(cursor | offset)`,
+  `.count()`, and `.sum(column)` say how a read finds its rows (`InvalidQueryShape` when they
+  do not fit). `lint` `query-index-missing` warns at a read no key or `@index` serves and
+  names the index it wants, with the `@tenant` column first and the primary key closing a
+  cursor page. `export --kind sql` writes those indexes and each read's `SELECT`, keyset
+  page included, as comments
+  ([language reference](./docs/language-reference.md#query-shapes)).
+
 - Schema details for the SQL export: `relate(...).references(sku)` points a key at a parent
   unique set other than the primary key (`ReferencesNotUnique` otherwise); an entity's
   `table "order_lines"` clause names its table in SQL and DBML; `@version` marks an `Int`

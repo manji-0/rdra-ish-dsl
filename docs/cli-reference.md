@@ -1082,6 +1082,14 @@ foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
   it as unknown, which a `CHECK` accepts; so each comparison on a nullable column spells out
   its null case: `qty: Int @null @check(qty >= 1)` is
   `CHECK (("qty" IS NOT NULL AND "qty" >= 1))`, and a row with a null `qty` is rejected.
+- **Reads.** When `reads` declare [query shapes](./language-reference.md#query-shapes), the
+  script ends with them as comments. First the indexes they want and no key or `@index`
+  gives, as `-- CREATE INDEX ... ; -- <readers>`. Then each read as the `SELECT` it runs:
+  the tenant and `.by` columns compared to parameters (`$1` in PostgreSQL, `?1` in SQLite),
+  live rows only on an entity with `@soft_delete`, then `ORDER BY` and the page. A cursor
+  page continues after the last row: `("created_at", "id") < ($2, $3)` for a sort one way,
+  one disjunct per key for a sort that mixes directions. The first page passes a key before
+  every row. `.count()` and `.sum(column)` select `count(*)` and `sum("column")`.
 - **What the schema does not enforce.** A rule over several entities (`MultiForbidden_*`,
   `MultiInv_*`), a `.has` / `.none` (`Quantifier_*`), a minimum cardinality (`MinCard_*`), a
   rule with a `.when(Condition)` guard, and a rule that reads `now` have no `CHECK` form. The

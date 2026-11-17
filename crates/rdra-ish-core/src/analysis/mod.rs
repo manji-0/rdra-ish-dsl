@@ -15,6 +15,7 @@ mod metadata;
 mod predicate_process;
 mod property;
 mod qref_util;
+mod query;
 
 pub use condition::{
     applied_bodies, chosen_variation, condition_body_display, condition_edges, guard_labels,
@@ -76,6 +77,7 @@ pub fn build_model_items_with_scopes(
     condition::check_choices(&model, &mut diags);
     resolve_foreign_keys(&mut model, &mut diags);
     fk::resolve_links(&mut model, &mut diags);
+    query::resolve_queries(&mut model, items, &mut diags);
     effect::reject_key_copies(&model, &mut diags);
     constraint::check_quantifier_paths(&mut model, &mut diags);
     resolve_along_links(&mut model, &mut diags);

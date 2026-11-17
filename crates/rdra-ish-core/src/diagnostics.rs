@@ -257,6 +257,9 @@ pub enum RdraError {
         allowed: String,
     },
 
+    #[error("{detail}\n  hint: write `reads(Source, Entity).by(column, ...).order(column.desc, ...).page(cursor | offset)`, or end it with `.count()` / `.sum(column)`")]
+    InvalidQueryShape { detail: String },
+
     #[error("`.references({columns})` names columns of '{parent}' that are neither its primary key nor one of its unique sets\n  hint: mark them `@unique` (or `@unique(a, b)`) on '{parent}', or drop `.references` to refer to its primary key")]
     ReferencesNotUnique { parent: String, columns: String },
 

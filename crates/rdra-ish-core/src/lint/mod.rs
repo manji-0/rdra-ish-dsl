@@ -14,7 +14,7 @@ use crate::rdra_rules::{owned_by_registry, rdra_findings};
 use crate::refinement::{assess, Assessment, Depth, StageId};
 
 use self::columns::{
-    lint_column_names, lint_enum_attributes, lint_redundant_end_values,
+    lint_column_names, lint_enum_attributes, lint_query_indexes, lint_redundant_end_values,
     lint_unwritten_field_columns,
 };
 use self::conditions::{
@@ -265,6 +265,7 @@ fn collect_findings(model: &SemanticModel) -> Vec<LintIssue> {
     lint_column_names(model, &mut findings);
     lint_enum_attributes(model, &mut findings);
     lint_redundant_end_values(model, &mut findings);
+    lint_query_indexes(model, &mut findings);
     lint_unwritten_field_columns(model, &mut findings);
     lint_condition_anchors(model, &mut findings);
     lint_bodiless_guards(model, &mut findings);

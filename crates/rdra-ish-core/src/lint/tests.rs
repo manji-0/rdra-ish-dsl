@@ -585,3 +585,28 @@ fn multi_rule_unscoped_skips_an_along_a_global_and_unrelated_entities() {
         .iter()
         .any(|issue| issue.rule == "multi-rule-unscoped"));
 }
+
+#[test]
+fn a_read_no_index_serves_is_a_query_index_missing_warning() {
+    let model = model_from(
+        "entity Order \"Order\" {\n  id: Int @pk\n  status: Enum(open, paid)\n  created_at: DateTime\n}\nusecase U \"u\"\nreads(U, Order).by(status).order(created_at.desc)\nreads(U, Order).by(status)\n",
+    );
+    let issues: Vec<_> = lint_issues(&model, &[])
+        .into_iter()
+        .filter(|i| i.rule == "query-index-missing")
+        .collect();
+    assert_eq!(issues.len(), 1, "{issues:?}");
+    assert_eq!(issues[0].severity, LintSeverity::Warning);
+    assert!(
+        issues[0]
+            .message
+            .contains("it wants (status, created_at DESC)"),
+        "{}",
+        issues[0].message
+    );
+    assert_eq!(
+        issues[0].hint,
+        "declare `@index(status, created_at)` on Order"
+    );
+    assert!(issues[0].location.is_some());
+}

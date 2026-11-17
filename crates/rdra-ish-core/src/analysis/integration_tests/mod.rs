@@ -14,5 +14,6 @@ mod membership;
 mod nodes;
 mod predicate;
 mod publication;
+mod query;
 mod rule_audit;
 mod variation;
