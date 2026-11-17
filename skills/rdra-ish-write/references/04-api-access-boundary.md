@@ -34,7 +34,10 @@ Also ask:
    consistency matters.
 3. Put method/path/idempotency/sync-async/auth metadata on the `api`, and connect
    payloads with `request`, `response`, and `error_response`. Map a response field to
-   the column it carries with `maps_field(PlaceOrderResponse.order_id, Order.id)`.
+   the column it carries with `maps_field(PlaceOrderResponse.order_id, Order.id)`; a key
+   column `relate` generates counts, and a second mapping of one field is
+   `DuplicateFieldMapping`. JSON Schema marks a mapped field `x-rdra-ish-maps-to`, and a
+   read by the API with a query shape selects the mapped columns under the field names.
 4. Move CRUD from the use case to the API when the API owns the entity operation.
 5. Use `contains(System, Api)` to group each API into the internal system that owns it.
 6. Add `requires_permission` and `requires_medium` to UC/API nodes.
@@ -47,14 +50,22 @@ Also ask:
 ## Minimal Pattern
 
 ```rdra
-api OrderApi "Order API" method POST path "/orders" idempotency idempotent mode sync auth bearer
+api OrderApi "Order API"
+  method POST
+  path "/orders"
+  idempotency idempotent
+  mode sync
+  auth bearer
+
 dto PlaceOrderRequest "Place Order Request" {
   order_id: Int
 }
+
 dto PlaceOrderResponse "Place Order Response" {
   order_id: Int
   status: String
 }
+
 system OrderSystem "Order System"
 permission OrderWrite "Order Write"
 medium CustomerDevice "Customer Device"
@@ -89,6 +100,7 @@ Also run:
 rdra-ish check src/ --strict   # permission gaps become errors
 rdra-ish csv src/ --kind permission-callables
 rdra-ish csv src/ --kind business-inputs
+rdra-ish export src/ --kind json-schema --out out/json-schema.json
 rdra-ish export src/ --kind openapi --out out/openapi.json
 ```
 

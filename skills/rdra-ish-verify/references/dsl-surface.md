@@ -10,6 +10,7 @@ entity Order "Order" {
   id: Int @pk
   status: Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
 }
+
 entity Item "Item" {
   id: Int @pk
   stock: Int @default(3)
@@ -23,7 +24,7 @@ property StockOk
   always(Item.stock >= Item.selling)
 
 property EventuallyTerminal
-  eventually(Order.status == delivered or Order.status == cancelled)
+  eventually((Order.status == delivered) or (Order.status == cancelled))
 
 usecase CapturePay "Pay"
 usecase ShipOrder "Ship"
@@ -82,13 +83,16 @@ entity Cert "Certificate" {
   id: Int @pk
   status: Enum(active, revoked) @default(active)
 }
+
 entity Assign "Assignment" {
   id: Int @pk
   status: Enum(active, ended) @default(active)
 }
+
 relate(Assign, Cert, N:1)
 
 invariant(Cert).when(status == revoked).none(Assign.status == active)
+
 // equivalent: invariant(Cert, Assign).when(Cert.status == revoked).none(Assign.status == active)
 ```
 
@@ -100,20 +104,17 @@ is about several related rows (`samples/quantifier_none.rdra`).
 ## Multi-entity Rules
 
 ```rdra
-forbidden(Order, Payment,
-  Order.status == cancelled,
-  Payment.status == captured)
-  .along(Order, Payment)
+forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)
 
-invariant(Order, Payment)
-  .along(Order, Payment)
-  .when(Order.status == paid)
-  .then(Payment.status == captured)
+invariant(Order, Payment).along(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
 ```
 
 - Qualify columns as `Entity.column`.
 - Add `.along(...)` only for relation-scoped linked-instance intent. Each adjacent pair
   needs a `relate` (it supplies `Child_owner_Parent`), else `UnbindableScope`.
+- A rule over every combination of rows says `.global()`; with neither `.along` nor
+  `.global()`, `lint` `multi-rule-unscoped` warns and names the `.along(...)` the shortest
+  key path gives. `.global()` with `.along` is `GlobalWithAlong`, an error.
 - Two relates between the same pair of entities (distinct `.role`s, or one each way) need
   `.role(role)` on every join of the pair: `.along(Order, Address).role(ship_to)`,
   `.none(Address).role(bill_to)`, `holds(C, Address.status == open).role(ship_to)`, and a copy's
@@ -135,7 +136,7 @@ invariant(Order, Payment)
 ```rdra
 transitions(SubmitOrder, Order.status, draft -> submitted)
 sets(Restock, Item.stock == 3)
-drives(ReserveStock, Inventory.stock < selling, true)  // drives the comparison as a Bool
+drives(ReserveStock, Inventory.stock < selling, true) // drives the comparison as a Bool
 ```
 
 Several `transitions` of one use case from one state are the actor's choice: one run takes
@@ -160,6 +161,7 @@ entity Disclosure "届出" {
   status: Enum(searched, file, secret) @default(searched)
   acquired: Bool @default(false)
 }
+
 usecase Submit "届出"
 usecase Acquire "承継"
 usecase Decide "判断"
@@ -193,11 +195,13 @@ variation Scope "補正の範囲" {
   limited "限定"
   free "限定なし"
 }
+
 entity Notice "通知" {
   id: Int @pk
   status: Enum(open, drafted) @default(open)
   scope: Scope
 }
+
 usecase Receive "受領"
 usecase Draft "応答案の作成"
 creates(Receive, Notice)
@@ -218,12 +222,14 @@ variation Scope "補正の範囲" {
   limited "限定"
   free "限定なし"
 }
+
 entity Notice "通知" {
   id: Int @pk
   status: Enum(open, drafted) @default(open)
   final: Bool @default(false)
   scope: Scope
 }
+
 usecase Receive "受領"
 usecase Draft "応答案の作成"
 usecase Reopen "最後の通知"

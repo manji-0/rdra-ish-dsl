@@ -16,6 +16,7 @@
 | `invariant(...).when(...).none/has(...)` | `check`, or `verify` for two related rows | Quantifiers over present instances |
 | Multi-entity `forbidden` / `invariant` + `.along` | `check` for one instance, `verify` for two | Both join instances through the `relate` owners |
 | 1:1 key (`Unique_*`) | `verify` | Two children of one parent need two instances; at one it holds vacuously |
+| A use case that writes two entities joined only through a third (`UnjoinedWrite_*` warning) | `verify` | One instance has one row between, so only two show rows of different parents |
 | Child-side minimum (`MinCard_*`), `@check` (`Check_*`) | `check` or `verify` | One instance already shows a parent without a child, or a bad value |
 
 ## Same System, Different Bounds

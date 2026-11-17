@@ -34,6 +34,10 @@ rdra-ish csv src/ --kind actor-permission-audit
   writes of an invoked API form one atomic group, direct writes group by FK
   connectivity, and a write with no FK link runs alone (`SeparateTxInferred`). Consider
   modeling such a consistency boundary through an API.
+- `UnjoinedWrite_<UC>_<A>_<B>` warns when a use case writes two entities that a key path
+  relates only through entities it does not write: one run may write rows that belong to
+  different parents. Write the entity between, or mark a write meant as a row of its own
+  with `.apart()`.
 
 ## Reading Business Inputs and the API Matrix
 

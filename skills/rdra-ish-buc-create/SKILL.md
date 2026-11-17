@@ -191,7 +191,8 @@ sets (a payment method, a channel) is not a state: type that column by a `variat
 - New timer/medium/permission → shared vocabulary when reused across BUCs
 - New cross-entity rule → `shared/rules.rdra` or the shared file nearest the
   involved entities; qualify columns as `Entity.column`, and add `.along(...)` only
-  when the rule is scoped to instances linked by a declared `relate` path
+  when the rule is scoped to instances linked by a declared `relate` path; write
+  `.global()` on a rule meant for every combination (`lint` `multi-rule-unscoped`)
 - New BUC-local API/screen/event → keep it in `buc/buc_<name>.rdra`
 - If shared files are already split, mirror paths and modules, e.g.
   `shared/entities/order.rdra` → `module shared.entities.order`
@@ -227,10 +228,13 @@ For staged work, also run the command that matches the current abstraction:
   (`Witness_*`), stuck instances (`Deadlock_*`), and use cases that never run
   (`Runs_*`). `rdra-ish states src/ --entity <EntityId>` shows one entity's reachable
   patterns. `--buc <BucId>` drops the other BUCs' use cases, so it leaves those three
-  findings undecided under `not checked:`.
+  findings undecided under `not checked:`. `--actor <ActorId>`, `--without-buc <BucId>`,
+  and `--without-usecase <UcId>` instead assume the left-out use cases never run and
+  still decide all three.
 - Two instances and temporal properties: `rdra-ish verify src/` (skill `rdra-ish-verify`)
 - Contract/data exports: run the relevant form, for example
   `rdra-ish export src/ --kind openapi --out out/openapi.json`,
   `rdra-ish export src/ --kind asyncapi --out out/asyncapi.json`,
-  `rdra-ish export src/ --kind dbml --out out/schema.dbml`, or
+  `rdra-ish export src/ --kind dbml --out out/schema.dbml`,
+  `rdra-ish export src/ --kind sql --dialect postgres --out out/schema.sql`, or
   `rdra-ish export src/ --kind json-schema --out out/json-schema.json`.

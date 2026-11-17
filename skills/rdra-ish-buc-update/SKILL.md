@@ -58,7 +58,7 @@ introduces.
 | New external system traffic | shared `extsystem`, then `raises(ExtSystem, Event)` or `triggers(Event, ExtSystem)` |
 | New permission or medium constraint | shared `permission` / `medium` vocabulary, then `has_permission`, `requires_permission`, or `requires_medium` in the owning BUC file |
 | New event-started BUC | target BUC file, then `triggers(Event, Buc)`; add `triggers(Event, EntryUC)` only after the entry UC is known |
-| New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use multi-entity `forbidden` / `invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent; use `invariant(...).when(...).none/has(...)`, `property`, and `after.assert` when quantifiers or temporal/postcondition checks matter |
+| New entity rule | shared rules file or shared entity area; use `forbidden`, `invariant`, `required`, or `exclusive` for single-entity state facts; use multi-entity `forbidden` / `invariant` with `Entity.column` conditions for multi-entity rules, and add `.along(...)` only for relation-scoped linked-instance intent (`.global()` for every combination); use `invariant(...).when(...).none/has(...)`, `property`, and `after.assert` when quantifiers or temporal/postcondition checks matter |
 | Cross-system entity relation handling | BUC file that owns the coordinating use case |
 | Remove a use case | Remove its `contains`, `performs`, CRUD, `displays`, `raises`, `transitions`, and `sets`; check no other BUC uses it |
 
@@ -134,6 +134,7 @@ entity Shipment "Shipment" {
   id: Int @pk
   status: Enum(packing, shipped) @default(packing)
 }
+
 relate(Shipment, Order, N:1)
 ```
 
@@ -146,14 +147,21 @@ add CRUD predicates in the BUC file for the use cases that touch it.
 transitions(ShipOrder, Shipment.status, packing -> shipped)
 ```
 
-The use case that moves the state is the second argument. A new state is a new Enum
+The use case that moves the state is the first argument. A new state is a new Enum
 variant; it needs an arm into it, or `check` reports `Witness_Shipment_status_<value>`.
 
 **Adding or changing API/system boundaries:**
 
 ```rdra
 system OrderSystem "Order System"
-api ChangeAddressApi "Change Address API" method PATCH path "/orders/{id}" idempotency idempotent mode sync auth bearer
+
+api ChangeAddressApi "Change Address API"
+  method PATCH
+  path "/orders/{id}"
+  idempotency idempotent
+  mode sync
+  auth bearer
+
 dto ChangeAddressRequest "Change Address Request" {
   address: String
 }
@@ -185,8 +193,7 @@ maps_field(AddressField, Order.address)
 ```rdra
 medium StoreTerminal "Store Terminal"
 
-belongs(BucOrder, Commerce)
-  .by(StoreTerminal)
+belongs(BucOrder, Commerce).by(StoreTerminal)
 ```
 
 **Adding access constraints:**
@@ -213,6 +220,7 @@ gap into an error.
 
 ```rdra
 quality Performance "Performance"
+
 nfr ChangeAddressLatency "Change address latency"
   metric p95_latency_ms
   target "<=300"
@@ -250,16 +258,14 @@ boundaries.
 **Adding cross-entity rules:**
 
 ```rdra
-forbidden(Order, Shipment,
-  Order.status == cancelled,
-  Shipment.status == shipped)
-  .along(Order, Shipment)
+forbidden(Order, Shipment, Order.status == cancelled, Shipment.status == shipped).along(Order, Shipment)
 ```
 
 Multi-entity rules qualify every column as `Entity.column`. Use `.along(...)` only when
 the rule is about instances linked by a declared `relate` path; without a `relate` that
 binds each adjacent pair the rule is `UnbindableScope`. Without `.along`, the rule holds
-for every pair of instances. `check` tests it at one instance per entity; run
+for every pair of instances; say so with `.global()`, or `lint` `multi-rule-unscoped`
+warns and names the `.along(...)` the shortest key path gives. `check` tests it at one instance per entity; run
 `rdra-ish verify src/` to test it at two.
 
 **Removing a use case:**
@@ -296,6 +302,9 @@ for every pair of instances. `check` tests it at one instance per entity; run
   case handles the consistency, and that use case invokes APIs on both system sides
 - Every cross-entity rule qualifies columns as `Entity.column`, and every `.along(...)`
   names a declared `relate` path
+- A new or changed use case that writes two entities related only through a third also
+  writes the one between, or `check` warns `UnjoinedWrite_<UC>_<A>_<B>`; mark a write
+  meant as a row of its own with `.apart()`
 - The diff does not jump more than one abstraction level unless the user supplied the
   missing information explicitly
 - New shared files follow path/module correspondence, e.g.

@@ -38,13 +38,14 @@ Also ask:
 module shared.biz
 
 business Commerce "Commerce"
+
 requirement ReqOrder "Order processing must be reliable"
   priority "high"
   source "sales-ops"
   stakeholder "Order Desk"
   owner "Product"
-  status "proposed"
   acceptance_criteria "Order can be submitted and audited."
+  status "proposed"
 ```
 
 A metadata value is a quoted string for free text, or a bare word or number

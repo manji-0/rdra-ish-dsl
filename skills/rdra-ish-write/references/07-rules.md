@@ -62,7 +62,8 @@ Also ask:
    from more than one entity; qualify columns as `Entity.column`.
 7. Add `.along(...)` when the intended semantics is relation-scoped rather than global
    cross-product; keep it off rules that truly forbid global co-existence, and write
-   `.global()` on those so `lint` `multi-rule-unscoped` does not ask for an `.along`. A rule that a
+   `.global()` on those so `lint` `multi-rule-unscoped` does not ask for an `.along`
+   (`.global()` with `.along` is `GlobalWithAlong`). A rule that a
    row agrees with its parent (`forbidden(Permit, Application, Permit.kind !=
    Application.kind).along(Permit, Application)`) holds only when the use case that
    creates the row copies the value (`sets(Register, Permit.kind == Application.kind)`);
@@ -104,17 +105,20 @@ entity Order "Order" {
   paid_at: DateTime @null
   cancelled_at: DateTime @null
 }
+
 entity Payment "Payment" {
   id: Int @pk
   status: Enum(pending, captured) @default(pending)
   amount: Money
 }
+
 entity Stock "Stock" {
   id: Int @pk
   stock: Int
   selling: Int
   reorder: Bool @default(false)
 }
+
 relate(Payment, Order, N:1)
 usecase SellOut "Sell Out"
 
@@ -124,10 +128,7 @@ forbidden(Order, status not in (paid, cancelled), paid_at == present)
 exclusive(Order, cancelled_at == present, paid_at == present)
 
 // 2. Local obligations
-invariant(Order)
-  .when(status == submitted)
-  .then(submitted_at == present)
-  .label("A submitted order records when it was submitted")
+invariant(Order).when(status == submitted).then(submitted_at == present).label("A submitted order records when it was submitted")
 required(Order, total >= 0)
 
 // 3. Comparisons, cross-entity rules, quantifiers, postconditions, properties
@@ -135,19 +136,11 @@ drives(SellOut, Stock.stock < selling, true)
 sets(SellOut, Stock.reorder == true)
 condition BelowFloor "The stock is below its selling floor"
 holds(BelowFloor, Stock.stock < Stock.selling)
-invariant(Stock)
-  .when(BelowFloor)
-  .then(reorder == true)
-  .label("Stock below its floor is flagged for reorder")
+invariant(Stock).when(BelowFloor).then(reorder == true).label("Stock below its floor is flagged for reorder")
 
-forbidden(Order, Payment,
-  Order.status == cancelled,
-  Payment.amount > Order.total)
+forbidden(Order, Payment, Order.status == cancelled, Payment.amount > Order.total)
 
-invariant(Order, Payment)
-  .along(Order, Payment)
-  .when(Order.status == paid)
-  .then(Payment.status == captured)
+invariant(Order, Payment).along(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
 
 invariant(Order).when(status == cancelled).none(Payment.status == captured)
 
@@ -211,6 +204,12 @@ error[Inv_Order_0]: invariant Inv_Order_0 is violated: invariant violated: when 
   `verify` (skill `rdra-ish-verify`); `check` runs one instance per entity and does not
   evaluate properties.
 - Required lifecycle effects have corresponding `sets` or transitions.
+- `lint` reports no `multi-rule-unscoped`: each multi-entity rule has its `.along(...)` or
+  `.global()`.
+- `export --kind sql` turns each entity-local rule into a `CHECK` constraint under the
+  same name; a multi-entity rule, a `.has` / `.none`, a minimum cardinality, a rule guarded
+  by `.when(Condition)`, and a rule that reads `now` close the script as obligations of the
+  application.
 - `NoWitness`, `Deadlock`, `NeverRuns`, `UnwrittenConstrainedVar`, and `NoCreationPath`
   findings are reviewed instead of ignored.
 - A comparison reads the Int values of its columns. Move them with `sets(UC, E.col == N)`,

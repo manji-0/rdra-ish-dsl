@@ -29,6 +29,7 @@ change. Do not invent lifecycle detail during early BUC skeleton work.
 ```sh
 rdra-ish check src/
 rdra-ish check src/ --entity <EntityId>
+rdra-ish check src/ --actor <ActorId>
 rdra-ish states src/
 rdra-ish states src/ --entity <EntityId>
 rdra-ish states src/ --format csv
@@ -40,7 +41,10 @@ rdra-ish diagram src/ --kind event --format mermaid
 `--entity` derives only the named entity's view and the rules that read it, each on
 its exact cone, so its findings are decided. `--buc` drops the use cases outside the
 BUC; whatever they could reach or unblock is then listed under `not checked:` instead
-of reported.
+of reported. `--actor <ActorId>`, `--without-buc <BucId>`, and `--without-usecase <UcId>`
+assume the use cases they leave out never run and still decide witnesses, deadlocks, and
+use cases that never run: `--actor Staff` finds a state a staff member cannot leave by
+their own use cases.
 
 ## Reading Table Output
 
@@ -113,6 +117,9 @@ under it the values that step changed.
 | `not checked:` block | A scope or a cap left targets or findings undecided | Report them as not checked, never as passed |
 | `UnbindableScope` | `.along(...)` names entities that no `relate` binds | Error. Declare the `relate`, or drop `.along` for a rule over every pair |
 | `AmbiguousOwnerLink` | Two keys join a pair that a `.along`, a `.has/.none`, a `holds` body, or a copy joins | Error. Name one with `.role(role)` after that call |
+| `warning[UnjoinedWrite_<UC>_<A>_<B>]` | The use case writes two entities a key path relates only through entities it does not write, so one run may write rows of different parents | Write the entity between, or mark a write meant as a row of its own with `.apart()`; `verify` at two instances shows the difference |
+| `lint` `multi-rule-unscoped` | A multi-entity rule with neither `.along` nor `.global()` | Add the `.along(...)` the finding names, or `.global()` for a rule over every combination |
+| `lint` `end-redundant` | An `@end` value no `transitions` arm leaves | Delete it from `@end`: it is an end state already |
 | `UnbindableCondition` | A condition body is applied to a use case that writes nothing | Error. Apply it to a use case that writes, or drop the body |
 | `UnboundCopySource` | A `sets(UC, E.col == F.src)` copies from an `F` the step binds to no one row | Error. Relate `E` to `F` as its parent, or copy in the use case that writes `F` |
 | `ContradictoryDrivenComparison` | A use case drives a comparison one way while its own Int `sets` make it the other | Error. Fix the `sets` or drop the `drives` |
@@ -134,7 +141,7 @@ model has:
   entities with more than one linked row, and 1:1 keys (`Unique_*`)
 
 ```sh
-rdra-ish verify src/ --backend tlc   # requires tlc on PATH
+rdra-ish verify src/ --backend tlc   # requires tlc on PATH, or --tlc-jar <tla2tools.jar>
 ```
 
 ## How To Fix
