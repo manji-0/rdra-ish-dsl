@@ -140,6 +140,9 @@ pub struct RelationOptions {
     pub role: Option<String>,
     /// Author columns of the child that hold the key, in parent key order. Empty generates them.
     pub key: Vec<String>,
+    /// `.references(a, b)`: the parent's unique columns the key refers to. Empty is the
+    /// parent's primary key.
+    pub references: Vec<String>,
     pub optional: bool,
     /// Children per parent at least: `One` for `1..*` / `1..1` on the child side.
     pub children_min: super::foreign_key::Min,
@@ -496,6 +499,8 @@ pub struct ModelColumn {
     pub default_fn: Option<DefaultFn>,
     /// `@on_update(now())`: the value each update of the row writes.
     pub on_update: Option<DefaultFn>,
+    /// `@version`: the row's version, which each update checks and advances.
+    pub is_version: bool,
 }
 
 /// The storage detail a column type's arguments give.

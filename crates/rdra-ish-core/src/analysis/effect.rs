@@ -308,6 +308,7 @@ mod tests {
             generated: None,
             default_fn: None,
             on_update: None,
+            is_version: false,
         }
     }
 

@@ -164,3 +164,36 @@ for name, sql in rows.items():
         );
     }
 }
+
+/// A unique set on a soft-deleted entity holds among live rows: a deleted row frees its
+/// value, and two live rows still conflict.
+#[test]
+fn a_live_unique_index_frees_the_value_of_a_deleted_row() {
+    if !have_python() {
+        return;
+    }
+    let dir = scratch("sql_live_unique");
+    let model = dir.join("live.rdra");
+    std::fs::write(
+        &model,
+        "entity Account \"Account\" {\n  id: Int @pk\n  email: String @unique\n  deleted_at: DateTime @null @soft_delete\n}\n",
+    )
+    .unwrap();
+    let ddl = dir.join("live.sql");
+    export_sqlite(&model, &ddl);
+    let script = r#"
+import sqlite3, sys
+con = sqlite3.connect(":memory:")
+con.executescript(open(sys.argv[1], encoding="utf-8").read())
+con.execute("INSERT INTO Account (id, email, deleted_at) VALUES (1, 'a@x', '2026-01-01')")
+con.execute("INSERT INTO Account (id, email) VALUES (2, 'a@x')")
+print("reused")
+try:
+    con.execute("INSERT INTO Account (id, email) VALUES (3, 'a@x')")
+    print("duplicate stored")
+except sqlite3.IntegrityError:
+    print("duplicate rejected")
+"#;
+    let out = python(script, &ddl);
+    assert_eq!(out, "reused\nduplicate rejected\n");
+}

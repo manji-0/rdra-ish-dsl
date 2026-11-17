@@ -126,6 +126,8 @@ pub enum Token {
     AtGenerated,
     #[token("@on_update")]
     AtOnUpdate,
+    #[token("@version")]
+    AtVersion,
 
     // ── Comparison / temporal ────────────────────────────────────────
     /// Built-in temporal reference for comparison expressions (e.g. `expired_at < now`)

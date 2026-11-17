@@ -309,6 +309,9 @@ fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
     metadata.extend(format_nfr_metadata(instance));
     metadata.extend(format_field_metadata(instance));
     metadata.extend(format_usecase_metadata(instance));
+    if let Some(table) = &instance.table {
+        metadata.push(format!("  table {}", meta_value(instance, "table", table)));
+    }
 
     let body: Vec<(String, usize)> = if !instance.columns.is_empty() {
         instance
@@ -659,6 +662,7 @@ fn format_annotation(annotation: &Annotation) -> String {
         Annotation::DefaultCall(f) => format!("@default({f}())"),
         Annotation::Generated(how) => format!("@generated({how})"),
         Annotation::OnUpdate(f) => format!("@on_update({f}())"),
+        Annotation::Version => "@version".to_string(),
     }
 }
 

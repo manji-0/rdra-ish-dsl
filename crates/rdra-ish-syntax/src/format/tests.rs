@@ -363,3 +363,11 @@ fn keeps_type_arguments_and_computed_defaults() {
         "entity E \"E\" {\n  id: Int @pk @generated(identity)\n  name: String(255)\n  at: DateTime(tz) @default(now()) @on_update(now())\n}\n",
     );
 }
+
+#[test]
+fn keeps_a_table_name_and_a_version_column() {
+    assert_formats_to(
+        "entity E \"E\" table   \"es\" {\n  v: Int  @version\n}\n",
+        "entity E \"E\"\n  table \"es\" {\n  v: Int @version\n}\n",
+    );
+}

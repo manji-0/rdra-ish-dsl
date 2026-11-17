@@ -177,6 +177,15 @@ pub struct Entity {
     pub primary_key: Vec<std::string::String>,
     pub unique_constraints: Vec<Vec<std::string::String>>,
     pub indexes: Vec<Vec<std::string::String>>,
+    /// `table "orders"`: the physical table name; `None` is the entity id.
+    pub table: Option<std::string::String>,
+}
+
+impl Entity {
+    /// The name a schema gives the entity's table.
+    pub fn table_name(&self) -> &str {
+        self.table.as_deref().unwrap_or(&self.id)
+    }
 }
 
 /// One value of one lifecycle column: a node `transitions` derives, never declared.

@@ -4,6 +4,14 @@
 
 ### Added
 
+- Schema details for the SQL export: `relate(...).references(sku)` points a key at a parent
+  unique set other than the primary key (`ReferencesNotUnique` otherwise); an entity's
+  `table "order_lines"` clause names its table in SQL and DBML; `@version` marks an `Int`
+  optimistic-lock column. On an entity with a `@soft_delete` column, the SQL export makes
+  each declared unique set a partial unique index over live rows
+  ([language reference](./docs/language-reference.md#relate-and-fk-generation),
+  [CLI reference](./docs/cli-reference.md#sql-export)).
+
 - Column types take arguments for what the schema stores: `String(255)`, `Decimal(10, 2)`,
   `Money(12, 2)`, `DateTime(tz)` / `DateTime(local)`. `@generated(identity | uuid | ulid)`
   says how a key's value is made, `@default(now())` / `@default(uuid())` a default the

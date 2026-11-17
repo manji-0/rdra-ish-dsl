@@ -175,6 +175,8 @@ pub enum Annotation {
     Generated(std::string::String),
     /// `@on_update(now())`: the value a row's update writes, by function.
     OnUpdate(std::string::String),
+    /// `@version`: the row's version for optimistic locking.
+    Version,
 }
 
 /// An argument of a column type: `255` in `String(255)`, `tz` in `DateTime(tz)`.
@@ -280,6 +282,8 @@ pub struct InstanceDecl {
     pub field: FieldMetadata,
     /// Non-empty only for `usecase` declarations.
     pub usecase: UseCaseMetadata,
+    /// `table "orders"`: an entity's physical table name.
+    pub table: Option<std::string::String>,
     /// `(clause keyword, value)` for each metadata value (and the description) written as a
     /// bare token rather than a quoted string, so `fmt` writes it back the same way.
     pub bare_values: Vec<(std::string::String, std::string::String)>,

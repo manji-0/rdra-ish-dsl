@@ -27,6 +27,10 @@ pub(crate) fn relation_options(
                 options.key = cc.args.iter().filter_map(arg_as_str).collect();
                 continue;
             }
+            "references" => {
+                options.references = cc.args.iter().filter_map(arg_as_str).collect();
+                continue;
+            }
             "optional" => {
                 options.optional = true;
                 continue;
@@ -141,8 +145,22 @@ fn key_columns(
 ) -> Option<Vec<(String, String)>> {
     let fk = &model.foreign_keys[index];
     let parent = &model.entities[fk.parent];
-    let pk: Option<Vec<(String, ColumnType)>> = parent
-        .primary_key
+    let referenced = &model.relations[fk.relation].options.references;
+    if !referenced.is_empty() && !is_unique_set(parent, referenced) {
+        let err = RdraError::ReferencesNotUnique {
+            parent: parent.id.clone(),
+            columns: referenced.join(", "),
+        };
+        let child = model.entities[fk.child].id.clone();
+        push_entity_error(model, diags, &child, err);
+        return None;
+    }
+    let target = if referenced.is_empty() {
+        &parent.primary_key
+    } else {
+        referenced
+    };
+    let pk: Option<Vec<(String, ColumnType)>> = target
         .iter()
         .map(|name| {
             let column = parent.columns.iter().find(|c| c.name == *name)?;
@@ -228,6 +246,7 @@ fn generate_key_columns(
             generated: None,
             default_fn: None,
             on_update: None,
+            is_version: false,
         });
     }
     Some(
@@ -678,4 +697,14 @@ pub fn ambiguous_owner_link(
         roles: roles.join(", "),
         first: roles[0].to_string(),
     }
+}
+
+/// Whether `columns` is the primary key of `entity`, one of its `@unique(..)` sets, or one
+/// `@unique` column: a key a foreign key may refer to.
+fn is_unique_set(entity: &Entity, columns: &[String]) -> bool {
+    let same =
+        |set: &[String]| set.len() == columns.len() && set.iter().all(|c| columns.contains(c));
+    same(&entity.primary_key)
+        || entity.unique_constraints.iter().any(|set| same(set))
+        || matches!(columns, [one] if entity.columns.iter().any(|c| c.name == *one && c.is_unique))
 }

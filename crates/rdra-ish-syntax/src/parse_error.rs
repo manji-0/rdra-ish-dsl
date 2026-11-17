@@ -62,6 +62,7 @@ impl fmt::Display for Token {
             Token::AtEnd => "@end",
             Token::AtGenerated => "@generated",
             Token::AtOnUpdate => "@on_update",
+            Token::AtVersion => "@version",
             Token::Now => "now",
             Token::LBrace => "{",
             Token::RBrace => "}",

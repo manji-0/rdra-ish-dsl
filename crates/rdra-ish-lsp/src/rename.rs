@@ -283,7 +283,7 @@ performs(Staff, Book)
         let sample = match (pred, method) {
             ("belongs", "by") => (MEDIUM_TGT, "belongs(B, Z).by(Tgt)"),
             ("relate", "via") => (ENTITY_TGT, "relate(A, B, N:M).via(Tgt)"),
-            ("relate", "role" | "key" | "optional" | "on_delete" | "on_update") => return None,
+            ("relate", "role" | "key" | "references" | "optional" | "on_delete" | "on_update") => return None,
             ("forbidden", "along") => (
                 ENTITY_TGT,
                 "forbidden(A).along(A, Tgt).when(Tgt.status == x)",
