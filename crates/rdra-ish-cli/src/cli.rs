@@ -279,7 +279,7 @@ pub(crate) enum Commands {
     Export {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Export kind: openapi, asyncapi, dbml, json-schema, typescript-states, mermaid-er, or tla
+        /// Export kind: openapi, asyncapi, dbml, sql, json-schema, typescript-states, mermaid-er, or tla
         #[arg(long, default_value = "openapi", value_parser = WithRemoved::<ExportKind>::new(REMOVED_EXPORT_KINDS))]
         kind: ExportKind,
         #[arg(short, long, default_value = "out")]
@@ -290,6 +290,9 @@ pub(crate) enum Commands {
         /// TLA+ `IntRange == 0..N` upper bound (export --kind tla / verify only)
         #[arg(long, default_value_t = 5)]
         int_range_max: u32,
+        /// SQL dialect (export --kind sql only)
+        #[arg(long, default_value = "postgres")]
+        dialect: SqlDialect,
     },
     /// [experimental] Print the model's domain types as TypeScript, Rust, or Go code for an
     /// agent to finish. Outside the compatibility contract: may change or go away in any
@@ -500,12 +503,29 @@ pub(crate) enum ExportKind {
     Openapi,
     Asyncapi,
     Dbml,
+    /// SQL DDL: tables, keys, indexes, and CHECK constraints from entity-local rules
+    Sql,
     JsonSchema,
     #[value(alias = "typescript-states")]
     TypeScriptStates,
     MermaidEr,
     /// TLA+ / TLC specification (writes companion `.cfg` next to `.tla`)
     Tla,
+}
+
+#[derive(ValueEnum, Clone, Copy)]
+pub(crate) enum SqlDialect {
+    Postgres,
+    Sqlite,
+}
+
+impl SqlDialect {
+    pub(crate) fn dialect(self) -> rdra_ish_emit::sql::Dialect {
+        match self {
+            SqlDialect::Postgres => rdra_ish_emit::sql::Dialect::Postgres,
+            SqlDialect::Sqlite => rdra_ish_emit::sql::Dialect::Sqlite,
+        }
+    }
 }
 
 #[derive(ValueEnum, Clone)]
@@ -726,6 +746,25 @@ mod tests {
             "export",
             "sample.rdra",
             "--kind",
+            "sql",
+            "--dialect",
+            "sqlite",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Commands::Export { kind, dialect, .. } => {
+                assert!(matches!(kind, ExportKind::Sql));
+                assert!(matches!(dialect, SqlDialect::Sqlite));
+            }
+            _ => panic!("expected export command"),
+        }
+
+        let cli = Cli::try_parse_from([
+            "rdra-ish",
+            "export",
+            "sample.rdra",
+            "--kind",
             "asyncapi",
             "--out",
             "events.json",
@@ -761,6 +800,7 @@ mod tests {
                 out,
                 instance_count,
                 int_range_max,
+                ..
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(matches!(kind, ExportKind::JsonSchema));

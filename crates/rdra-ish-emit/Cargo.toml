@@ -9,10 +9,10 @@ description.workspace = true
 
 [dependencies]
 rdra-ish-core  = { path = "../rdra-ish-core" }
+rdra-ish-syntax  = { path = "../rdra-ish-syntax" }
 csv        = { workspace = true }
 thiserror  = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 insta        = { workspace = true }
-rdra-ish-syntax  = { path = "../rdra-ish-syntax" }

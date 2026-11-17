@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `export --kind sql [--dialect postgres|sqlite]` writes SQL DDL from the logical data model:
+  tables, primary and unique keys, foreign keys with their actions, an index per `@index` and
+  per foreign key, Enum and variation types, `@default`, and `@derived` as a generated
+  column. Every entity-local rule (`@check`, `forbidden`, `invariant`, `required`,
+  `exclusive`) is a `CHECK` constraint named as `check` names it, written so that a null
+  operand means what it means in the model. Rules the schema cannot enforce close the script
+  as a comment, by name ([CLI reference](./docs/cli-reference.md#sql-export)).
+
 ## v2.2.0 - 2026-11-16
 
 Upgrading from v2.1.0 needs no change: a model that passed `check` and `verify` still

@@ -6,7 +6,7 @@ layer is consistent with the layer that motivates it.
 
 You write the model as code in a small DSL. The CLI type-checks it, finds gaps between
 layers, and projects the same model into diagrams, review CSVs, state tables, and
-exports such as OpenAPI, DBML, and TLA+.
+exports such as OpenAPI, DBML, SQL DDL, and TLA+.
 
 ## What is RDRA?
 
@@ -36,7 +36,7 @@ same way, and every kind in the language names the check or output that reviews 
 | `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, robustness, sequence, UC複合図, business flow, screen transitions, information, conditions, state, events, ER, and the whole RDRA graph |
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
-| `export`, `verify` | OpenAPI, DBML, JSON Schema, AsyncAPI, and TLA+ with TLC |
+| `export`, `verify` | OpenAPI, DBML, SQL DDL, JSON Schema, AsyncAPI, and TLA+ with TLC |
 
 ## Recommended Modeling Loop
 

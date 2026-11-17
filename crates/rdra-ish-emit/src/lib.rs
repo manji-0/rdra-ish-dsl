@@ -9,6 +9,7 @@ pub mod json_schema;
 pub mod markdown;
 pub mod mermaid;
 pub mod openapi;
+pub mod sql;
 pub mod state_pattern;
 pub mod tla;
 pub mod typescript;
