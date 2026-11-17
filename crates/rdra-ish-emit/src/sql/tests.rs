@@ -254,3 +254,36 @@ fn physical_names_references_and_version_reach_the_schema() {
         assert!(out.contains(line), "missing {line}\n{out}");
     }
 }
+
+const READS: &str = r#"
+entity Order "Order" table "orders" {
+  id: Int @pk
+  status: Enum(open, paid)
+  amount: Money
+  created_at: DateTime
+  deleted_at: DateTime @null @soft_delete
+}
+usecase ListOrders "List orders"
+usecase CountOrders "Count orders"
+reads(ListOrders, Order).by(status).order(created_at.desc).page(cursor)
+reads(ListOrders, Order).order(amount, created_at.desc).page(offset)
+reads(CountOrders, Order).by(status).count()
+"#;
+
+/// The indexes the reads want close the script as comments, then each read as a `SELECT`
+/// over live rows, its keyset continuing after the last row of the previous page.
+#[test]
+fn declared_reads_become_suggested_indexes_and_selects() {
+    let out = sql(READS, Dialect::Postgres);
+    for line in [
+        "-- CREATE INDEX \"orders_status_created_at_id_idx\" ON \"orders\" (\"status\", \"created_at\" DESC, \"id\" DESC); -- ListOrders, CountOrders",
+        "-- CREATE INDEX \"orders_amount_created_at_idx\" ON \"orders\" (\"amount\", \"created_at\" DESC); -- ListOrders",
+        "-- ListOrders reads Order:",
+        "--   SELECT * FROM \"orders\" WHERE \"status\" = $1 AND \"deleted_at\" IS NULL AND (\"created_at\", \"id\") < ($2, $3) ORDER BY \"created_at\" DESC, \"id\" DESC LIMIT $4;",
+        "--   SELECT * FROM \"orders\" WHERE \"deleted_at\" IS NULL ORDER BY \"amount\", \"created_at\" DESC LIMIT $1 OFFSET $2;",
+        "--   SELECT count(*) FROM \"orders\" WHERE \"status\" = $1 AND \"deleted_at\" IS NULL;",
+    ] {
+        assert!(out.contains(line), "missing {line}\n{out}");
+    }
+    assert!(!sql(SHOP, Dialect::Postgres).contains("Reads the model declares"));
+}

@@ -3,7 +3,7 @@
 use crate::model::{ColumnType, SemanticModel};
 
 use super::naming::is_snake_caseish;
-use super::{push_element_lint, LintIssue};
+use super::{push_element_lint, LintIssue, LintSeverity};
 
 pub(super) fn lint_column_names(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     for (_, entity) in &model.entities {
@@ -154,5 +154,57 @@ pub(super) fn lint_redundant_end_values(model: &SemanticModel, issues: &mut Vec<
                 );
             }
         }
+    }
+}
+
+/// A declared query shape that no key or `@index` serves: the index it wants, as the
+/// `@index(...)` that declares it. One finding per index, at the first read it serves.
+pub(super) fn lint_query_indexes(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
+    for suggestion in model.index_suggestions() {
+        let entity = &model.entities[suggestion.entity];
+        let columns: Vec<String> = suggestion
+            .columns
+            .iter()
+            .map(|k| k.column.clone())
+            .collect();
+        let readers: Vec<&str> = suggestion
+            .queries
+            .iter()
+            .filter_map(|&i| model.node_id(&model.queries[i].source))
+            .collect();
+        let shown: Vec<String> = suggestion
+            .columns
+            .iter()
+            .map(|k| {
+                if k.desc {
+                    format!("{} DESC", k.column)
+                } else {
+                    k.column.clone()
+                }
+            })
+            .collect();
+        let mixed = suggestion.mixes_directions();
+        let hint = if mixed {
+            "take the suggested index from `export --kind sql`: `@index` has no sort direction, and this sort mixes them".to_string()
+        } else {
+            format!("declare `@index({})` on {}", columns.join(", "), entity.id)
+        };
+        let mut issue = LintIssue::new(
+            LintSeverity::Warning,
+            "query-index-missing",
+            "entity",
+            &entity.id,
+            format!(
+                "no index of {} serves the read by {}: it wants ({}), so its rows are found by a full scan",
+                entity.id,
+                readers.join(", "),
+                shown.join(", ")
+            ),
+            hint,
+        );
+        if let Some(site) = model.queries[suggestion.queries[0]].site.clone() {
+            issue = issue.with_location(site);
+        }
+        issues.push(issue);
     }
 }

@@ -124,6 +124,7 @@ impl<'m> Script<'m> {
                 }
             }
         }
+        out.push_str(&self.reads_section());
         obligations.extend(self.model_obligations());
         if !obligations.is_empty() {
             out.push_str(
@@ -454,12 +455,7 @@ impl<'m> Script<'m> {
         if made_by_relate || referenced {
             return None;
         }
-        let col = ident(&marker.name);
-        match marker.col_type {
-            ColumnType::Bool => Some(format!("{col} = FALSE")),
-            _ if marker.is_nullable => Some(format!("{col} IS NULL")),
-            _ => None,
-        }
+        live_condition(marker)
     }
 
     // ── Foreign keys ────────────────────────────────────────────────────────
@@ -955,6 +951,16 @@ fn ref_action(action: RefAction) -> String {
     action.as_str().replace('_', " ").to_ascii_uppercase()
 }
 
+/// The condition a row not soft-deleted meets: the marker is null, or `FALSE` for a `Bool`.
+fn live_condition(marker: &ModelColumn) -> Option<String> {
+    let col = ident(&marker.name);
+    match marker.col_type {
+        ColumnType::Bool => Some(format!("{col} = FALSE")),
+        _ if marker.is_nullable => Some(format!("{col} IS NULL")),
+        _ => None,
+    }
+}
+
 fn same_set(a: &[String], b: &[String]) -> bool {
     let a: BTreeSet<&String> = a.iter().collect();
     let b: BTreeSet<&String> = b.iter().collect();
@@ -976,6 +982,8 @@ fn idents(names: &[String]) -> String {
 fn string(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
+
+mod reads;
 
 #[cfg(test)]
 mod tests;

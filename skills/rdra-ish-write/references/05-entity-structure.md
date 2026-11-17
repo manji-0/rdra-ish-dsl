@@ -64,7 +64,10 @@ Also ask:
    `.key(col)` to adopt a column the child already declares. Do not hand-write
    a column that `relate` generates: it is `FkConflict` unless you adopt it with `.key`.
 5. Re-check API CRUD after entity refinement; APIs should still operate the right
-   aggregate or consistency boundary.
+   aggregate or consistency boundary. When a list or search screen reads many rows, say
+   how: `reads(ListOrders, Order).by(customer_id, status).order(created_at.desc).page(cursor)`,
+   or `.count()` / `.sum(total)` for a total. `lint` `query-index-missing` then names the
+   `@index(...)` the read wants.
 6. Add `owns(System, Entity)` only when intended ownership must be visible before
    complete API CRUD exists; otherwise derive ownership from API operations.
 7. If a relation crosses two derived system entity sets, add or review

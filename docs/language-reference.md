@@ -198,7 +198,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `holds` | `(Condition, comparison, ...)` | The condition's body: a comma list of comparisons, an implicit conjunction, each on a qualified column such as `Payment.method == insurance`. At most one per condition. |
 | `qualifies` | `(Nfr \| Constraint, Quality)` | The non-functional requirement or constraint belongs to the given quality category. |
 | `constrains` | `(Constraint, UseCase \| Api \| System \| Entity \| Dto)` | The constraint applies to the target model element. Use this for audit/logging/retention/privacy rules that constrain system behavior or data handling. |
-| `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. |
+| `reads` | `(UseCase \| Api, Entity)` | The use case or API reads the entity. Chain methods say how it finds the rows (see [Query shapes](#query-shapes)). |
 | `creates` | `(UseCase \| Api, Entity)` | The use case or API creates the entity. Seeds the initial state pattern. |
 | `updates` | `(UseCase \| Api, Entity)` | The use case or API updates the entity. Produces a transition operation in state derivation. |
 | `deletes` | `(UseCase \| Api, Entity)` | The use case or API deletes the entity. Marks the source pattern terminal. It removes one row; the children of a key with `.on_delete(cascade)` stay (info `DeleteLeavesChildren`), so a use case that removes them `deletes` the child too. |
@@ -270,6 +270,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`); `.when(Condition)`, at most once, on a literal value: the condition's `holds` body guards this value |
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
+| `reads` | `.by(...)`, `.order(...)`, `.page(...)`, `.count()`, `.sum(...)`, each at most once: the [query shape](#query-shapes) |
 | `creates`, `updates`, `deletes` | `.apart()`, on a use case's write: the row need not be joined to the other rows the use case writes, so it draws no `UnjoinedWrite` |
 | every other predicate (including `combines`) | none |
 
@@ -1691,6 +1692,41 @@ parent is `.optional()`.
 | `MinCardOutOfRange` | The low end is not 0 or 1, or the high end is not 1 or `*` (`2..*:1`). |
 | `MinCardOnParentSide` | A range sits on the parent side (`N:0..1`). Write that side as `1` and add `.optional()` when a child may have no parent. |
 | `MinCardOnManyToMany` | A range makes the card an N:M, which holds no key of its own (`N:1..*`, `1..*:M`). Give the junction's keys the range instead. |
+
+### Query shapes
+
+A `reads` can say how its rows are found: which columns it compares, how it sorts, and how
+it pages. `lint` then names the index each read wants, and `export --kind sql` writes the
+index and the `SELECT` (see [SQL export](./cli-reference.md#sql-export)).
+
+```rdra
+reads(ListOrders, Order).by(customer_id, status).order(created_at.desc).page(cursor)
+reads(OrderTotals, Order).by(customer_id).sum(total)
+```
+
+| Method | Meaning |
+|---|---|
+| `.by(a, b)` | The read compares each column to a value. A column the entity declares, or a key column a `relate` generates (`customer_id`). |
+| `.order(a, b.desc)` | The sort, first key first. `column.desc` sorts descending; `column` or `column.asc` ascending. |
+| `.page(cursor)` | Keyset paging: each page continues after the sort key of the last row, so it needs `.order(...)`. |
+| `.page(offset)` | `LIMIT` and `OFFSET`. |
+| `.count()`, `.sum(column)` | The read returns one row: the number of rows, or the sum of an `Int`, `Money`, or `Decimal` column. It takes no `.order` or `.page`. |
+
+The index a read wants is, in order: the entity's `@tenant` column, the `.by` columns, the
+sort, and for `.page(cursor)` the primary key columns the sort does not name, so the key of
+the last row is unique. An index serves a read when its leading columns are the equality
+columns in any order and the next ones the sort, in its direction or all reversed. The
+primary key, each unique set, each `@index`, and each foreign key count; a read one of them
+serves wants nothing, and so does a read the index of a longer read serves.
+
+`lint` `query-index-missing` warns at a read no index serves and names the `@index(...)` that
+declares the one it wants. A sort that mixes directions needs an index with the same mix,
+which `@index` cannot declare, so the hint points at the index `export --kind sql` writes.
+
+| Diagnostic | When |
+|---|---|
+| `InvalidQueryShape` | A method takes the wrong arguments, appears twice, or does not fit the others: `.page(cursor)` without `.order`, `.count()` or `.sum` with `.order` or `.page`, `.sum` on a column that is not a number. |
+| `UnknownColumn` | `.by`, `.order`, or `.sum` names a column the entity does not have. |
 
 ---
 

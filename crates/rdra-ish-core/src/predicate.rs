@@ -123,6 +123,7 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
         "navigates" => &["via"],
         "transitions" | "chooses" => &["when"],
         "creates" | "updates" | "deletes" => &["apart"],
+        "reads" => &["by", "order", "page", "count", "sum"],
         _ => &[],
     }
 }
