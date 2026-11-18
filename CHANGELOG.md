@@ -11,8 +11,8 @@ unique indexes on soft-deleted entities. A `reads` can declare how it finds its 
 gives `lint` `query-index-missing` and the indexes and `SELECT`s the SQL export writes, and
 `maps_field` now maps a DTO field to a column. `fmt` keeps an unquoted `@default(0)` as
 written, the skills now match the language, the TLA+ export is about a third the size on a
-large model with the same checks, and the SQL and DBML exports carry rule labels and, in
-DBML, the rules.
+large model with the same checks, the SQL and DBML exports carry rule labels and, in DBML,
+the rules, and `verify` explores its cones on several cores.
 
 ### Added
 
@@ -56,6 +56,13 @@ DBML, the rules.
   as a comment, by name ([CLI reference](./docs/cli-reference.md#sql-export)).
 
 ### Changed
+
+- `verify` is faster on a large model, with the same result. Most of its time was the
+  exploration `rdra-ish` does itself before any TLC run, on one core: the cones are now
+  explored side by side (`RDRA_JOBS` sets how many, the machine's cores up to 8 by
+  default), and an action's parameter choices are walked without allocating each one.
+  clinic-ops goes from 73 s to 28 s on 4 cores; a model one large cone dominates gains
+  about 15%. `check` and `states` explore the same way.
 
 - The SQL and DBML exports say more of what the model says. In SQL, `col in (a, b)` is
   `IN ('a', 'b')` instead of a chain of `OR`, a rule's `.label` is a comment above its

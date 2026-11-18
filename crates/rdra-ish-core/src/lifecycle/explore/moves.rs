@@ -112,6 +112,88 @@ impl TransitionSystem {
         out
     }
 
+    /// The `bindings` of `action` in `state` whose pre-guards hold, in `bindings` order. It
+    /// walks the choices in one buffer and keeps a binding only once its guards hold, so a
+    /// state where the action cannot run costs no allocation per binding.
+    pub(super) fn enabled_bindings(&self, action: &Action, state: &State) -> Vec<Box<[u8]>> {
+        let slots = self.bounds.slots();
+        // Per param: its candidate slots, lowest first.
+        let mut choices: Vec<(usize, [u8; 16])> = Vec::with_capacity(action.params.len());
+        if slots > 16 {
+            return self
+                .bindings(action, state)
+                .into_iter()
+                .filter(|params| self.pre_guards_hold(action, state, params))
+                .map(Vec::into_boxed_slice)
+                .collect();
+        }
+        for p in &action.params {
+            let exists = self.entity(p.entity).exists;
+            let mut list = [0u8; 16];
+            let mut n = 0;
+            match p.role {
+                ParamRole::New => {
+                    if let Some(s) =
+                        (0..slots).find(|&s| state.get(self, exists, s) == Value::ABSENT)
+                    {
+                        list[0] = s as u8;
+                        n = 1;
+                    }
+                }
+                ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
+                    for s in 0..slots {
+                        if state.get(self, exists, s) == Value::PRESENT {
+                            list[n] = s as u8;
+                            n += 1;
+                        }
+                    }
+                }
+                ParamRole::Earlier { .. } => {
+                    for (s, cell) in list.iter_mut().enumerate().take(slots) {
+                        *cell = s as u8;
+                    }
+                    n = slots;
+                }
+            }
+            if n == 0 {
+                return Vec::new();
+            }
+            choices.push((n, list));
+        }
+        let mut out = Vec::new();
+        let mut at = vec![0usize; choices.len()];
+        let mut params: Vec<u8> = choices.iter().map(|(_, list)| list[0]).collect();
+        loop {
+            if self.pre_guards_hold(action, state, &params) {
+                out.push(params.clone().into_boxed_slice());
+            }
+            // The last param varies fastest, as `bindings` lists them.
+            let mut i = choices.len();
+            loop {
+                if i == 0 {
+                    return out;
+                }
+                i -= 1;
+                at[i] += 1;
+                if at[i] < choices[i].0 {
+                    params[i] = choices[i].1[at[i]];
+                    break;
+                }
+                at[i] = 0;
+                params[i] = choices[i].1[0];
+            }
+        }
+    }
+
+    pub(super) fn pre_guards_hold(&self, action: &Action, state: &State, params: &[u8]) -> bool {
+        let mut env = Env::new(params);
+        action
+            .guards
+            .iter()
+            .filter(|g| !g.reads_successor())
+            .all(|g| self.eval(&g.pred, state, &mut env))
+    }
+
     pub(super) fn successors(&self, action: &Action, params: &[u8], s: &State) -> Vec<State> {
         let slot = |p: u8| usize::from(params[usize::from(p)]);
         let mut next = s.clone();
@@ -198,18 +280,9 @@ impl TransitionSystem {
             .iter()
             .enumerate()
             .flat_map(move |(ai, action)| {
-                self.bindings(action, s)
+                self.enabled_bindings(action, s)
                     .into_iter()
-                    .filter(move |params| {
-                        let mut env = Env::new(params);
-                        action
-                            .guards
-                            .iter()
-                            .filter(|g| !g.reads_successor())
-                            .all(|g| self.eval(&g.pred, s, &mut env))
-                    })
                     .flat_map(move |params| {
-                        let params: Box<[u8]> = params.into();
                         self.successors(action, &params, s)
                             .into_iter()
                             .filter(|next| {

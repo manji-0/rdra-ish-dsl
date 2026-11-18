@@ -1237,6 +1237,7 @@ with its `State N: Stuttering` or `Back to state K: <action>` line. An example i
 |---|---|
 | `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and each temporal property run `2g`. |
 | `RDRA_TLC_JAR` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
+| `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once, before any TLC run. Without it, the machine's cores, at most 8. Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another. The result does not depend on it. |
 | `JAVA_TOOL_OPTIONS` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`), so a `-Xmx` here wins. |
 
 A run that runs out of memory is a `tool_error` whose message names both variables.

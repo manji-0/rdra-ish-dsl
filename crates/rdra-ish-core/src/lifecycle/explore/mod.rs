@@ -229,3 +229,6 @@ impl TransitionSystem {
         run
     }
 }
+
+#[cfg(test)]
+mod tests;
