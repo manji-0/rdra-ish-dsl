@@ -225,14 +225,17 @@ variation Kind "Kind" {
   food "Food"
   drink "Drink"
 }
+
 entity Application "Application" {
   id: Int @pk
   kind: Kind
 }
+
 entity Permit "Permit" {
   id: Int @pk
   kind: Kind
 }
+
 relate(Permit, Application, N:1)
 
 usecase Apply "Apply"
@@ -267,7 +270,9 @@ rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
   an end state, and nothing ever moves it off (a guard that never opens, or a missing
   use case). A deadlock that only a free instance slot would clear is a warning. When
   staying there is correct, such as a stock row waiting at `free` to be used, declare it
-  on the column: `status: Enum(free, used) @default(free) @end(free)`.
+  on the column: `status: Enum(free, used) @default(free) @end(free)`. `lint`
+  `end-redundant` flags an `@end` value that no `transitions` arm leaves, which is an end
+  state already.
 - `warning[Runs_<UseCase>]`: the use case never runs, with the guard or instance that
   blocks it.
 

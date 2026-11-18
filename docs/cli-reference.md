@@ -8,7 +8,7 @@ state-pattern derivations.
 rdra-ish <SUBCOMMAND> <INPUTS...> [OPTIONS]
 ```
 
-`rdra-ish --version` prints the version, such as `rdra-ish 2.2.0`.
+`rdra-ish --version` prints the version, such as `rdra-ish 2.3.0`.
 
 `<INPUTS...>` is one or more files and/or directories. Directories are searched
 recursively for `.rdra` files. At least one input is required. When loading, the tool

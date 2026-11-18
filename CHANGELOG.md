@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## v2.3.0 - 2026-11-18
+
+Upgrading from v2.2.0 needs no change: a model that passed `check` and `verify` still
+passes with the same findings, and every new form is opt-in. The release adds
+`export --kind sql` for PostgreSQL and SQLite, with entity-local rules as named `CHECK`
+constraints, and the data-model detail a schema needs: column type arguments, generated
+keys and computed defaults, `.references(...)`, `table` names, `@version`, and partial
+unique indexes on soft-deleted entities. A `reads` can declare how it finds its rows, which
+gives `lint` `query-index-missing` and the indexes and `SELECT`s the SQL export writes, and
+`maps_field` now maps a DTO field to a column. `fmt` keeps an unquoted `@default(0)` as
+written, and the skills now match the language.
 
 ### Added
 
@@ -42,6 +52,21 @@
   `exclusive`) is a `CHECK` constraint named as `check` names it, written so that a null
   operand means what it means in the model. Rules the schema cannot enforce close the script
   as a comment, by name ([CLI reference](./docs/cli-reference.md#sql-export)).
+
+### Changed
+
+- The skills match the current language: the predicate tables of `rdra-ish-write` and
+  `rdra-ish-review` drop the removed `sets(UC, Entity, col == v)`, `drives(UC, Entity, ...)`,
+  and top-level `when(...)` forms, and list `.references`, `.global()`, the query shape on
+  `reads`, `.apart()`, and the DTO form of `maps_field`. The skills cover the SQL export,
+  the new annotations, `UnjoinedWrite`, `multi-rule-unscoped`, `end-redundant`, and
+  `check --actor` / `--without-buc` / `--without-usecase`, and every `rdra` block is written
+  as `fmt` prints it. `scripts/check-skill-snippets.py` now runs `fmt --check` on each block.
+
+### Fixed
+
+- `fmt` kept a `@default` value as written only when it was an identifier: `@default(0)`
+  became `@default("0")`. It now keeps a bare value bare and a quoted one quoted.
 
 ## v2.2.0 - 2026-11-16
 

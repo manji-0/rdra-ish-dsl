@@ -123,7 +123,9 @@ A state no reachable state holds (`error[Witness_<E>_<col>_<value>]`) or an inst
 can never leave a state with a way out (`error[Deadlock_<E>_<col>_<value>]`) fails the
 run even when TLC passes: `tlc_result: ok`, no `OK:` line, exit 1. A use case that never
 runs (`warning[Runs_<action>]`) and a deadlock that only a free instance slot would
-clear (`deadlock at the bound`) are warnings:
+clear (`deadlock at the bound`) are warnings. When staying at a state is correct, such as
+a stock row waiting at `free` to be used, declare it with `@end(free)` on the column
+instead of adding a transition out:
 
 ```text
 $ rdra-ish verify samples/deadlock.rdra

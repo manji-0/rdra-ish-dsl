@@ -11,7 +11,9 @@ Every Markdown file under the skills dir is read, and five things are checked:
   the first error, so a fragment (a block with one of those) is parsed and type-checked
   only, while a self-contained block also gets its lifecycle findings checked. The
   fences of one file that declare a `module`, and the fences that import one of those
-  modules, are checked together as one model.
+  modules, are checked together as one model. Each block is also run through
+  `rdra-ish fmt --check`: the skills tell an agent to format before handoff, so their
+  examples are written the way `fmt` writes them.
 - Expected failures. A `<!-- expect-error -->` or `<!-- expect-error: TEXT -->` line right
   before a fence inverts it: the block must print an error (one containing TEXT).
 - Untagged DSL. A bare ``` fence whose first line reads as DSL fails: tag it ```rdra.
@@ -199,9 +201,12 @@ class Checker:
                     if not any(expect in e for e in hard):
                         wanted = f"an error containing {expect!r}" if expect else "an error"
                         self.fail(where, f"expected {wanted}, got {hard or 'none'}")
-                elif hard:
+                else:
                     for e in hard:
                         self.fail(where, e)
+                    fmt = subprocess.run([self.binary, "fmt", "--check", files[i]], capture_output=True, text=True)
+                    if fmt.returncode != 0:
+                        self.fail(where, "not formatted: write the block as `rdra-ish fmt` prints it")
 
     def check_transcript(self, path, where, command, expected):
         self.counts["transcripts"] += 1

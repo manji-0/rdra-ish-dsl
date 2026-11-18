@@ -650,8 +650,13 @@ fn format_annotation(annotation: &Annotation) -> String {
         Annotation::IndexComposite(columns) => format!("@index({})", columns.join(", ")),
         Annotation::Check(expr) => format!("@check({})", format_column_expr(expr)),
         Annotation::Null => "@null".to_string(),
-        Annotation::Default { value, .. } => {
-            format!("@default({})", format_metadata_value(value))
+        // As written: `@default(0)` stays bare, `@default("0")` stays quoted.
+        Annotation::Default { value, quoted } => {
+            if *quoted {
+                format!("@default({})", quote_string(value))
+            } else {
+                format!("@default({value})")
+            }
         }
         Annotation::Label(value) => format!("@label({})", quote_string(value)),
         Annotation::SoftDelete => "@soft_delete".to_string(),
@@ -780,29 +785,12 @@ fn meta_value(instance: &InstanceDecl, keyword: &str, value: &str) -> String {
     }
 }
 
-fn format_metadata_value(value: &str) -> String {
-    if is_identish(value) {
-        value.to_string()
-    } else {
-        quote_string(value)
-    }
-}
-
 fn quote_string(value: &str) -> String {
     format!("\"{}\"", value.replace('"', "'"))
 }
 
 fn bool_cell(value: bool) -> String {
     if value { "true" } else { "false" }.to_string()
-}
-
-fn is_identish(value: &str) -> bool {
-    let mut chars = value.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    (first.is_ascii_alphabetic() || first == '_')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 #[cfg(test)]

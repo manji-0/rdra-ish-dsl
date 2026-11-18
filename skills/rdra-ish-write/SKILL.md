@@ -124,8 +124,13 @@ step ReviewCart "Review Cart"
 usecase PlaceOrder "Place Order"
 screen CheckoutScreen "Checkout"
 field OrderIdField "Order ID"
-api PlaceOrderApi "Place Order API" method POST path "/orders"
+
+api PlaceOrderApi "Place Order API"
+  method POST
+  path "/orders"
+
 dto PlaceOrderRequest "Place Order Request"
+
 entity Order "Order" {
   id: Int @pk
   status: Enum(draft, submitted) @default(draft)
@@ -160,12 +165,12 @@ kinds fail to parse, with a hint naming the replacement.
 | `precedes/branches/excepts/repeats` | `(Step, Step)` | business flow order, alternatives, exceptions, loops |
 | `covers` | `(Step, UseCase\|Api\|Event\|Timer)` | business step covers model behavior |
 | `belongs` | `(Buc, Business)` | BUC ownership, optionally chained with `.by(Medium\|"text")` |
-| `reads/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation |
+| `reads/creates/updates/deletes` | `(UseCase\|Api, Entity)` | data touchpoint or API operation; `reads` may chain a query shape `.by(cols).order(col.desc).page(cursor\|offset)` or `.count()`/`.sum(col)`; a use case's `creates/updates/deletes` may chain `.apart()` |
 | `displays` | `(UseCase, Screen)` | UI path |
 | `shows` | `(Screen, Entity)` | screen data exposure |
 | `navigates` | `(Screen, Screen)` | screen transition, optionally `.via(UseCase)` for the operation that causes it |
 | `invokes` | `(UseCase, Api)` | UC delegates to an API boundary |
-| `maps_field` | `(Field, Entity.column)` | screen field to logical data mapping |
+| `maps_field` | `(Field\|Dto.field, Entity.column)` | screen field or DTO field to the column it carries |
 | `request/response/error_response` | `(Api, Dto)` | API payload contract |
 | `coordinates` | `(UseCase, Entity, Entity)` | UC coordinates cross-system consistency |
 | `compensates` | `(UseCase, UseCase)` | the first use case compensates the second |
@@ -174,15 +179,15 @@ kinds fail to parse, with a hint naming the replacement.
 | `triggers` | `(Event\|Timer, UseCase\|Buc\|ExtSystem)` | an event or timer starts a use case or a BUC; an event delivered to an external system is outbound (a timer never triggers one) |
 | `outbox` | `(Event)` | the event is published outside the model, so it needs no local consumer |
 | `transitions` | `(UseCase, Entity.col, from -> to)` | the use case moves the Enum column from -> to |
-| `sets` | `(UseCase, Entity, col == val)` | explicit column effect |
-| `drives` | `(UseCase, Entity, col op rhs, true\|false)` | comparison proposition effect |
+| `sets` | `(UseCase, Entity.col == val)` | explicit column effect |
+| `drives` | `(UseCase, Entity.col op rhs, true\|false)` | comparison proposition effect |
 | `forbidden` | `(Entity, col == val\|col op rhs, ...)` | forbidden reachable state combination |
 | `invariant` | `(Entity).when(...).then(...)` | required co-occurrence inside one entity |
 | `required` | `(Entity, col == val\|col op rhs, ...)` | always-required state facts |
 | `exclusive` | `(Entity, col == val\|col op rhs, ...)` | mutually exclusive state facts |
-| `forbidden` (multi-entity) | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)[.role(role)]]` | forbidden combination across entities |
-| `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.role(role)]]` | required co-occurrence across entities |
-| `when` | `(...).none/has(...)` | to-many quantifier (prefer `Entity.col`) |
+| `forbidden` (multi-entity) | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)[.role(role)] \| .global()]` | forbidden combination across entities; `.global()` for every combination, else `lint` `multi-rule-unscoped` |
+| `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.role(role)] \| .global()]` | required co-occurrence across entities |
+| `invariant` (quantifier) | `(Entity).when(...).none/has(...)` | to-many quantifier over related rows (prefer `Entity.col`) |
 | `property` | `Name ["label"] always\|eventually\|leads_to(...)` | temporal path property, checked by `verify` only |
 | `after` | `(UseCase).assert(...)` | predicate on the state each run of the use case leaves, read after its last step |
 | `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation and generated key; see below |
@@ -199,7 +204,8 @@ kinds fail to parse, with a hint naming the replacement.
 child (`order_id`); `1:N` puts it on the right entity, and `1:1` on the left, marked
 unique. `N:M` needs `.via(Junction)`. The child side may be a range: `1..*:1` says every
 parent has a child. Chain `.optional()`, `.on_delete(..)`, `.on_update(..)`,
-`.role(x)` (name the key), or `.key(cols)` (adopt declared columns).
+`.role(x)` (name the key), `.key(cols)` (adopt declared columns), or `.references(cols)`
+(refer to a parent unique set instead of its primary key).
 
 #### Imports
 

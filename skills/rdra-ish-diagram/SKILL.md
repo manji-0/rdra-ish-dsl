@@ -37,7 +37,7 @@ Pick the one kind that answers the question, then load only its reference.
 | Where are the transaction and API-boundary problems? | `check` | `references/access-and-apis.md` |
 | Are rules broken, or states unreached or stuck? | `check`, then `states` | `references/lifecycle-and-events.md` |
 | Do temporal or two-instance rules hold? | `verify` (skill `rdra-ish-verify`) | `references/lifecycle-and-events.md` |
-| What contract can reviewers or other tools consume? | `export --kind openapi`, `asyncapi`, `dbml`, or `json-schema` | `references/formats-and-output.md` |
+| What contract can reviewers or other tools consume? | `export --kind openapi`, `asyncapi`, `dbml`, `sql`, or `json-schema` | `references/formats-and-output.md` |
 
 Every kind takes `--buc <BucId>` (repeatable) to draw the part of the model those BUCs
 reach. Prefer it before a whole-model diagram.

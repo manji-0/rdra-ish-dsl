@@ -371,3 +371,11 @@ fn keeps_a_table_name_and_a_version_column() {
         "entity E \"E\"\n  table \"es\" {\n  v: Int @version\n}\n",
     );
 }
+
+#[test]
+fn keeps_a_default_bare_or_quoted_as_written() {
+    assert_formats_to(
+        "entity E \"E\" {\n  n: Int @default(0)\n  m: Money @default(\"3\")\n  s: Enum(a, b) @default(a)\n}\n",
+        "entity E \"E\" {\n  n: Int @default(0)\n  m: Money @default(\"3\")\n  s: Enum(a, b) @default(a)\n}\n",
+    );
+}

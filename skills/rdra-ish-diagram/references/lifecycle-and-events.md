@@ -56,7 +56,7 @@ rdra-ish verify src/ --backend tlc -o out/
   the two edges read as one step: `請求の取下げ (Claim.status と同時)`.
 - `[*] -->` start edges come from the states a creating use case sets, or the start of a
   pre-existing entity. `--> [*]` marks an end state: one with no transition to another
-  state.
+  state, or one the column's `@end(...)` declares.
 - `--buc <BucId>` draws each state model one of the BUC's use cases moves, whole.
 - The diagram draws the transitions, not reachability: run `check` to learn whether
   each state is reached (`Witness_*`) and left (`Deadlock_*`).
@@ -71,7 +71,7 @@ rdra-ish verify src/ --backend tlc -o out/
 - A `class` line colours a state by the lifecycle check: `stateunreachable` (a value no
   reachable state holds, drawn with no arrow), `statedeadlock` (an instance cannot leave
   it, although it has a way out; the finding is `Deadlock_<Entity>_<column>_<value>`),
-  `stateend` (no transition out). The `%% legend:` line says so. A deadlock still draws
+  `stateend` (no transition out, or declared by `@end`). The `%% legend:` line says so. A deadlock still draws
   the diagram; `check` reports it as an error.
 - `list --kind transition` is the table behind the arrows: one row per transition with
   `entity, column, from, to, usecase, guards, actors, site`. `from` and `to` read

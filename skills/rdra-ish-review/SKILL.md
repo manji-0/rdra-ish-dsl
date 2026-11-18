@@ -31,7 +31,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    incomplete API method/path contracts, unmapped screen fields, naming findings, and
    the `rdra-*` rules (an actor, external system, entity, condition, variation, or timer
    that no BUC reaches, or a transitioning use case outside every BUC) as staged review
-   signals.
+   signals. Also read `multi-rule-unscoped` (a multi-entity rule with neither `.along` nor
+   `.global()`), `end-redundant` (an `@end` value no arm leaves), and
+   `query-index-missing` (a declared read shape no key or `@index` serves).
 
 3. **Check file layout**
    - Small models start with `shared/actors.rdra`, `shared/biz.rdra`,
@@ -127,13 +129,21 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
     - Index/unique/check/FK optionality/on-delete/on-update/soft-delete/history/tenant
       annotations reflect real reviewable constraints; each `@check` is the invariant
       `Check_<Entity>_<column>_<n>`
+    - Storage detail is deliberate where the schema needs it: type arguments
+      (`String(255)`, `Decimal(10, 2)`, `DateTime(tz)`), `@generated(...)`,
+      `@default(now())`, `@on_update(now())`, `@version`, and a `table "..."` name.
+      A key to a non-primary unique set uses `.references(...)`
+      (`ReferencesNotUnique` otherwise)
+    - Each list or search read declares its shape (`reads(...).by(...).order(...)`), and
+      `query-index-missing` findings are resolved or accepted
     - A column whose value an actor chooses is typed by a `variation`, not an inline `Enum`
 
 11. **Check screen fields and non-functional constraints**
     - Every `field` is contained by a `screen`; actor-entered fields should use
       `source actor`, system-derived fields should use `source system`
     - `maps_field(Field, Entity.column)` should reference a real column unless the
-      unmapped field is intentionally external or derived
+      unmapped field is intentionally external or derived; a response DTO field maps
+      the same way, `maps_field(Dto.field, Entity.column)`
     - `nfr`, `quality`, and `constraint` elements should be scoped with `applies_to`,
       `qualifies`, or `constrains`, especially for performance, availability, SLO,
       audit/logging, retention, and privacy
@@ -156,6 +166,12 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
         that blocks it
       - `warning[UnreachableEnumVariant_...]`: a declared variant that is no state of the
         state model and that nothing reaches
+      - `warning[UnjoinedWrite_<UC>_<A>_<B>]`: the use case writes two entities that a key
+        path relates only through entities it does not write, so one run may write rows of
+        different parents; write the entity between, or mark a write meant as a row of
+        its own with `.apart()`
+    - A deadlock where staying is correct (a stock row waiting at `free`) is declared
+      with `@end(value)` on the column, not worked around with a dummy transition
     - Prefer `triggers(Event, Buc)` when the event starts a downstream BUC boundary.
       Add `triggers(Event, UseCase)` as the concrete entry refinement when the entry UC is known
     - When `triggers(Event, UseCase)` is used, verify the triggered UC is `contains`-ed in
@@ -178,7 +194,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
     - Multi-entity conditions qualify columns as `Entity.column`
     - Relation-scoped rules use `.along(EntityA, EntityB, ...)` only when the listed
       entities are connected by a declared `relate` path (`.role(role)` when two keys join
-      a pair)
+      a pair); a rule meant for every combination says `.global()`, and one with neither
+      draws `lint` `multi-rule-unscoped`
     - Review each broken rule `check` reports: `error[<rule name>]` (such as
       `MultiForbidden_Order_0`) with the rule's site and a shortest counterexample of use
       case steps. An `UnbindableScope` error means an `.along(...)` path that no `relate`
@@ -193,7 +210,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
     - OpenAPI: `rdra-ish export <src-dir>/ --kind openapi --out /tmp/openapi.json`
       when API method/path and DTOs changed
     - AsyncAPI: export when events or event-started BUCs changed
-    - DBML/JSON Schema: run the corresponding export when data model or DTO shape changed
+    - DBML/JSON Schema/SQL: run the corresponding export when data model or DTO shape
+      changed (`--kind sql --dialect postgres|sqlite` for DDL with rule `CHECK`s)
     - Formal verification: `rdra-ish verify <src-dir>/` (skill `rdra-ish-verify`) when
       Int/`now`, multi-entity rules, quantifiers, `property`, or `after.assert` are part
       of the change
@@ -243,7 +261,7 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | predicate | arg1 | arg2 | arg3 |
 |-----------|------|------|------|
 | `performs` | Actor | UseCase / Buc / Step | — |
-| `reads/creates/updates/deletes` | UseCase / Api | Entity | — |
+| `reads/creates/updates/deletes` | UseCase / Api | Entity | `reads`: query shape `.by` / `.order` / `.page` / `.count` / `.sum`; a use case's write: `.apart()` |
 | `displays` | UseCase | Screen | — |
 | `shows` | Screen | Entity | — |
 | `navigates` | Screen | Screen (`.via(UseCase)` optional) | — |
@@ -258,7 +276,7 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `motivates` | Requirement | Buc | — |
 | `achieves` | Requirement | Goal | — |
 | `request` / `response` / `error_response` | Api | Dto | — |
-| `maps_field` | Field | Entity.column | — |
+| `maps_field` | Field / Dto.field | Entity.column | — |
 | `precedes` / `branches` / `excepts` / `repeats` | Step | Step | — |
 | `covers` | Step | UseCase / Api / Event / Timer | — |
 | `compensates` | UseCase | UseCase | — |
@@ -271,16 +289,16 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `has_permission` | Actor | Permission | — |
 | `requires_permission` | UseCase / Api | Permission | — |
 | `requires_medium` | UseCase / Api | Medium | — |
-| `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, child side may be a range such as `1..*`); `N:M` requires `.via(Junction)`; chain `.optional()`, `.role(x)`, `.key(cols)` |
+| `relate` | Entity | Entity | cardinality (`1:1` / `1:N` / `N:1` / `N:M`, child side may be a range such as `1..*`); `N:M` requires `.via(Junction)`; chain `.optional()`, `.on_delete(..)`, `.on_update(..)`, `.role(x)`, `.key(cols)`, `.references(cols)` |
 | `transitions` | UseCase | Entity.col | from -> to |
-| `sets` | UseCase | Entity | `col == val` |
-| `drives` | UseCase | Entity | comparison + `true` / `false` |
+| `sets` | UseCase | `Entity.col == val` | — |
+| `drives` | UseCase | `Entity.col op rhs` | `true` / `false` |
 | `forbidden` | Entity | condition(s) | — |
 | `invariant` | Entity | `.when(...)` / `.then(...)` chains | — |
 | `required` | Entity | condition(s) | — |
 | `exclusive` | Entity | condition(s) | — |
-| `forbidden` (multi-entity) | Entity... | cross-entity condition(s) | optional `.along(...)` / `.role(role)` |
-| `invariant` (multi-entity) | Entity... | `.when(...)` / `.then(...)` chains | optional `.along(...)` / `.role(role)` |
-| `when` | conditions... | `.none` / `.has` conditions | — |
+| `forbidden` (multi-entity) | Entity... | cross-entity condition(s) | `.along(...)` / `.role(role)`, or `.global()` for every combination |
+| `invariant` (multi-entity) | Entity... | `.when(...)` / `.then(...)` chains | `.along(...)` / `.role(role)`, or `.global()` for every combination |
+| `invariant` (quantifier) | Entity | `.when(...)` conditions | `.none(...)` / `.has(...)` over related rows |
 | `property` | Name | optional label | `always` / `eventually` / `leads_to` |
 | `after` | UseCase | `.assert(...)` | — |
