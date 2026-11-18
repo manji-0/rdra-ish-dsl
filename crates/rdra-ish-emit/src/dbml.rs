@@ -1,3 +1,4 @@
+use crate::sql::{Dialect, Rule, Script};
 use crate::{EmitError, Emitter, View};
 use rdra_ish_core::model::{ColumnType, Entity, EntityKey, ModelColumn, RefAction, SemanticModel};
 
@@ -18,13 +19,23 @@ fn dbml_document(model: &SemanticModel) -> String {
         out.push_str("\n\n");
     }
 
+    // The rules as the SQL export names them; the dialect changes only their SQL text.
+    let script = Script::new(model, Dialect::Postgres);
+    let over_rows = script.model_obligations();
     let mut entities: Vec<_> = model.entities.iter().collect();
     entities.sort_by_key(|(_, entity)| entity.id.as_str());
     for (index, (key, entity)) in entities.iter().enumerate() {
         if index > 0 {
             out.push('\n');
         }
-        out.push_str(&dbml_table(model, *key, entity));
+        let mut rules = script.entity_rules(*key, entity);
+        rules.extend(
+            over_rows
+                .iter()
+                .filter(|r| r.entity.as_deref() == Some(entity.id.as_str()))
+                .cloned(),
+        );
+        out.push_str(&dbml_table(model, *key, entity, &rules));
         out.push('\n');
     }
 
@@ -80,12 +91,22 @@ fn dbml_enums(model: &SemanticModel) -> Vec<String> {
     defs
 }
 
-fn dbml_table(model: &SemanticModel, key: EntityKey, entity: &Entity) -> String {
-    let mut lines = vec![format!(
-        "Table {} [{}] {{",
-        dbml_ident(entity.table_name()),
-        dbml_settings(&table_settings(entity))
-    )];
+/// A table with rules carries them in its `Note`, under the label its header would hold:
+/// DBML has no check constraint every reader parses, and a rule over several rows has no
+/// constraint form at all.
+fn dbml_table(model: &SemanticModel, key: EntityKey, entity: &Entity, rules: &[Rule]) -> String {
+    let settings = match rules {
+        [] => table_settings(entity),
+        _ => Vec::new(),
+    };
+    let mut lines = vec![match settings.as_slice() {
+        [] => format!("Table {} {{", dbml_ident(entity.table_name())),
+        _ => format!(
+            "Table {} [{}] {{",
+            dbml_ident(entity.table_name()),
+            dbml_settings(&settings)
+        ),
+    }];
     for column in &entity.columns {
         lines.push(format!("  {}", dbml_column(model, entity, column)));
     }
@@ -98,8 +119,52 @@ fn dbml_table(model: &SemanticModel, key: EntityKey, entity: &Entity) -> String 
         }
         lines.push("  }".to_string());
     }
+    if !rules.is_empty() {
+        lines.push(String::new());
+        lines.push("  Note: '''".to_string());
+        let label = table_label(entity);
+        if !label.is_empty() {
+            lines.push(format!("  {}", note_text(&label)));
+            lines.push(String::new());
+        }
+        lines.push("  Rules:".to_string());
+        for rule in rules {
+            let scope = match rule.why {
+                "" => String::new(),
+                why => format!(" ({why})"),
+            };
+            lines.push(format!(
+                "  - {}{scope}: {}",
+                rule.name,
+                note_text(&rule.described())
+            ));
+        }
+        lines.push("  '''".to_string());
+    }
     lines.push("}".to_string());
     lines.join("\n")
+}
+
+/// The entity's label and description, on one line.
+fn table_label(entity: &Entity) -> String {
+    let mut note = entity.label.clone();
+    if let Some(description) = &entity.description {
+        if !description.trim().is_empty() {
+            note.push_str(": ");
+            note.push_str(description.trim());
+        }
+    }
+    note.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Text inside a `'''` note: one line, with `\` and a closing `'''` escaped.
+fn note_text(value: &str) -> String {
+    value
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace('\\', "\\\\")
+        .replace("'''", "\\'''")
 }
 
 fn table_settings(entity: &Entity) -> Vec<String> {
@@ -475,5 +540,33 @@ entity Refund "Refund" {
         );
         assert!(dbml.contains("method PaymentMethod [not null]"), "{dbml}");
         assert!(!dbml.contains("Payment_method"), "{dbml}");
+    }
+
+    /// A table with rules lists them in its note, under its label, by the names `check`
+    /// gives them; a rule over several rows goes to the first entity it binds.
+    #[test]
+    fn a_table_note_lists_its_rules() {
+        let out = dbml_document(&model_from(
+            r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, paid) @default(open)
+}
+entity Payment "Payment" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+relate(Payment, Order, N:1)
+forbidden(Order, status == paid).label("never 'paid'")
+forbidden(Order, Payment, Order.status == open, Payment.status == captured).along(Order, Payment)
+"#,
+        ));
+        assert!(
+            out.contains(
+                "Table Order {\n  id int [pk, not null]\n  status Order_status [not null, default: `open`]\n\n  Note: \'\'\'\n  Order\n\n  Rules:\n  - Forbidden_Order_0: \"never 'paid'\": status == paid\n  - MultiForbidden_Order_0 (several entities): Order, Payment: "
+            ),
+            "{out}"
+        );
+        assert!(out.contains("Table Payment [note: 'Payment'] {"), "{out}");
     }
 }

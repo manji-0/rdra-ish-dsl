@@ -1082,6 +1082,8 @@ foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
   it as unknown, which a `CHECK` accepts; so each comparison on a nullable column spells out
   its null case: `qty: Int @null @check(qty >= 1)` is
   `CHECK (("qty" IS NOT NULL AND "qty" >= 1))`, and a row with a null `qty` is rejected.
+  `col in (a, b)` is `"col" IN ('a', 'b')` and `not in` is `NOT IN`, with the same null
+  case. A rule's `.label("...")` is a comment on the line above its `CHECK`.
 - **Reads.** When `reads` declare [query shapes](./language-reference.md#query-shapes), the
   script ends with them as comments. First the indexes they want and no key or `@index`
   gives, as `-- CREATE INDEX ... ; -- <readers>`. Then each read as the `SELECT` it runs:
@@ -1094,8 +1096,12 @@ foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
 - **What the schema does not enforce.** A rule over several entities (`MultiForbidden_*`,
   `MultiInv_*`), a `.has` / `.none` (`Quantifier_*`), a minimum cardinality (`MinCard_*`), a
   rule with a `.when(Condition)` guard, and a rule that reads `now` have no `CHECK` form. The
-  script ends with a comment that lists each by name, with the reason and the rule, as an
-  obligation of the application or a trigger.
+  script ends with a comment that lists each by name, with the reason, its label when it
+  has one, and the rule, as an obligation of the application or a trigger.
+- **Layout.** Comments head the parts of the script: `-- Types` (PostgreSQL), `-- Tables`,
+  and `-- Foreign keys` (PostgreSQL). A variation's label and its values' labels are a
+  comment above its type, `-- PaymentMethod (Payment method): cash = Cash, card`; SQLite,
+  which has no enum type, lists those comments under `-- Value sets`.
 
 
 For JSON Schema export, DTOs and Entities are emitted under `$defs` as
