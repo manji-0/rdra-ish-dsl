@@ -202,21 +202,20 @@ impl TransitionSystem {
             groups[at].1.push(target);
             answered.push((target, at));
         }
-        let cones: Vec<ConeRun> = groups
-            .into_iter()
-            .map(|(cone, shared)| {
-                let system = if reduce {
-                    let seeds = shared.iter().map(|t| self.target_seed(*t));
-                    self.reduced_cone(&cone, seeds, caps)
-                } else {
-                    self.restrict_to(&cone.vars, &cone.keep)
-                };
-                ConeRun {
-                    cone,
-                    run: system.run(caps),
-                }
-            })
-            .collect();
+        // Each cone is explored on its own system, so the cones run side by side; the runs
+        // come back in cone order, and each is what it is alone.
+        let cones: Vec<ConeRun> = in_parallel(groups, |(cone, shared)| {
+            let system = if reduce {
+                let seeds = shared.iter().map(|t| self.target_seed(*t));
+                self.reduced_cone(&cone, seeds, caps)
+            } else {
+                self.restrict_to(&cone.vars, &cone.keep)
+            };
+            ConeRun {
+                cone,
+                run: system.run(caps),
+            }
+        });
         let mut out = TargetExploration {
             cones: Vec::new(),
             targets: Vec::new(),
@@ -772,4 +771,45 @@ impl TargetExploration {
         out.sort_by(|a, b| a.entity_id.cmp(&b.entity_id));
         out
     }
+}
+
+/// `f` of each item, in item order, on up to `RDRA_JOBS` threads (the machine's cores, at
+/// most 8, when unset). One thread, or one item, runs on the caller's.
+fn in_parallel<T: Send, R: Send>(items: Vec<T>, f: impl Fn(T) -> R + Sync) -> Vec<R> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+    let threads = std::env::var("RDRA_JOBS")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().min(8)))
+        .min(items.len());
+    if threads <= 1 {
+        return items.into_iter().map(f).collect();
+    }
+    let slots: Vec<Mutex<Option<T>>> = items.into_iter().map(|t| Mutex::new(Some(t))).collect();
+    let results: Vec<Mutex<Option<R>>> = slots.iter().map(|_| Mutex::new(None)).collect();
+    let next = AtomicUsize::new(0);
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                let Some(slot) = slots.get(i) else { break };
+                let item = slot
+                    .lock()
+                    .expect("an item slot")
+                    .take()
+                    .expect("taken once");
+                *results[i].lock().expect("a result slot") = Some(f(item));
+            });
+        }
+    });
+    results
+        .into_iter()
+        .map(|r| {
+            r.into_inner()
+                .expect("a result slot")
+                .expect("every item ran")
+        })
+        .collect()
 }
