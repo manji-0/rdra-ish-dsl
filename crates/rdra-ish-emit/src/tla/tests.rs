@@ -1063,3 +1063,59 @@ property Witness_Order_status_paid "paid stays reachable"
         ]
     );
 }
+
+const TWO_ENTITIES: &str = r#"
+entity Shop "Shop" {
+  id: Int @pk
+  vars: Bool @default(false)
+  open: Bool @default(true)
+}
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, paid, held, done) @default(pending)
+}
+entity Tag "Tag" { id: Int @pk }
+relate(Order, Shop, N:1)
+usecase Place "Place"
+usecase Pay "Pay"
+usecase Close "Close"
+usecase Route "Route"
+creates(Place, Order)
+transitions(Pay, Order.status, (pending, held) -> paid)
+transitions(Route, Order.status, pending -> held)
+transitions(Route, Order.status, paid -> done)
+updates(Close, Shop)
+sets(Close, Shop.open == false)
+"#;
+
+/// An entity with two or more vars has a tuple of them, which `vars` and each action's
+/// `UNCHANGED` name; a one-var entity is listed by its var, and a column `vars` keeps the
+/// name the tuple would take.
+#[test]
+fn an_action_names_an_untouched_entity_by_its_tuple() {
+    let tla = print(&system(TWO_ENTITIES), PrintMode::Check, "M").tla;
+    for line in [
+        "VARIABLES\n  Order_exists, Order_status, Order_owner_Shop,\n  Shop_exists, Shop_vars, Shop_open,\n  Tag_exists\n",
+        "Shop_vars_2 == <<Shop_exists, Shop_vars, Shop_open>>\n",
+        "Order_vars == <<Order_exists, Order_status, Order_owner_Shop>>\n",
+        "vars == <<Order_vars, Shop_vars_2, Tag_exists>>\n",
+        "  /\\ Shop_open' = [Shop_open EXCEPT ![p0] = FALSE]\n  /\\ UNCHANGED <<Order_vars, Shop_exists, Shop_vars, Tag_exists>>\n",
+    ] {
+        assert!(tla.contains(line), "missing {line}\n{tla}");
+    }
+}
+
+/// Arms that all move to one state write it, since the guard holds the column at a source;
+/// arms with a target per source keep the `CASE`. A comment names each param's entity.
+#[test]
+fn arms_to_one_state_write_it_and_params_are_named() {
+    let tla = print(&system(TWO_ENTITIES), PrintMode::Check, "M").tla;
+    for line in [
+        "\\* p0: Order\nPay(p0) ==\n",
+        "  /\\ (Order_status[p0] = \"pending\") \\/ (Order_status[p0] = \"held\")\n  /\\ Order_status' = [Order_status EXCEPT ![p0] = \"paid\"]\n",
+        "  /\\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = \"pending\" -> \"held\" [] Order_status[p0] = \"paid\" -> \"done\" [] OTHER -> Order_status[p0]]\n",
+        "\\* p0: Order (new), p1: Shop (read)\nPlace(p0, p1) ==\n",
+    ] {
+        assert!(tla.contains(line), "missing {line}\n{tla}");
+    }
+}

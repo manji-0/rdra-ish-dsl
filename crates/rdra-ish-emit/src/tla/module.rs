@@ -4,11 +4,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rdra_ish_core::lifecycle::{
-    ActId, Action, ActionOrigin, Birth, Effect, EntId, FoldKey, Ltl, ParamRole, Pred, Rhs, Start,
-    TransitionSystem, Value, VarId, VarKind,
+    ActId, Action, ActionOrigin, At, Birth, CmpOp, Effect, EntId, FoldKey, Ltl, ParamRole, Pred,
+    Rhs, Start, Term, TransitionSystem, Value, VarId, VarKind,
 };
 use rdra_ish_core::model::UseCaseKey;
 
+use super::names::owner_entity;
 use super::pred::Ctx;
 use super::{domain_set, render_value, TlaNames};
 
@@ -64,9 +65,7 @@ pub(super) fn render(
         );
         return out;
     }
-    let all = names.state_vars(ts);
-    out.push_str(&format!("VARIABLES {}\n\n", all.join(", ")));
-    out.push_str(&format!("vars == <<{}>>\n\n", all.join(", ")));
+    variables(ts, names, &mut out);
     reduction(ts, names, &mut out);
     type_ok(ts, names, &mut out);
     init(ts, names, &mut out);
@@ -78,19 +77,6 @@ pub(super) fn render(
     state_checks(ts, names, &mut out);
     out.push_str("====\n");
     out
-}
-
-/// The entity whose slots index a per-instance var.
-fn owner_entity(kind: &VarKind) -> Option<EntId> {
-    match kind {
-        VarKind::Exists(e)
-        | VarKind::Column { entity: e, .. }
-        | VarKind::Prop { entity: e, .. }
-        | VarKind::Run { entity: e, .. }
-        | VarKind::Raised { entity: e, .. } => Some(*e),
-        VarKind::Owner { child, .. } => Some(*child),
-        VarKind::Now => None,
-    }
 }
 
 /// Whether the var is one the class var of a reduced cone stands for.
@@ -428,6 +414,105 @@ fn init(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     out.push('\n');
 }
 
+/// The module's state vars in declaration order, each entity's together at its first: an
+/// entity's vars, then `now` and the class var of a reduced cone on their own.
+fn var_groups(ts: &TransitionSystem) -> Vec<(Option<EntId>, Vec<VarId>)> {
+    let mut groups: Vec<(Option<EntId>, Vec<VarId>)> = Vec::new();
+    for v in ts.var_ids().filter(|v| !in_s(ts, *v)) {
+        let e = owner_entity(&ts.var(v).kind);
+        match groups.iter_mut().find(|(g, _)| e.is_some() && *g == e) {
+            Some((_, vars)) => vars.push(v),
+            None => groups.push((e, vec![v])),
+        }
+    }
+    groups
+}
+
+/// `VARIABLES`, a line per entity; `<E>_vars` for each entity with two or more vars; and
+/// `vars`, which names an entity's vars by their tuple.
+fn variables(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
+    let groups = var_groups(ts);
+    let mut lines: Vec<String> = groups
+        .iter()
+        .map(|(_, vars)| {
+            let list: Vec<&str> = vars.iter().map(|v| names.var(*v)).collect();
+            list.join(", ")
+        })
+        .collect();
+    lines.extend(names.class().map(str::to_string));
+    match lines.as_slice() {
+        [one] => out.push_str(&format!("VARIABLES {one}\n\n")),
+        many => out.push_str(&format!("VARIABLES\n  {}\n\n", many.join(",\n  "))),
+    }
+    let mut defined = false;
+    for (e, vars) in &groups {
+        if let Some(group) = e.and_then(|e| names.group(e)) {
+            let list: Vec<&str> = vars.iter().map(|v| names.var(*v)).collect();
+            out.push_str(&format!("{group} == <<{}>>\n", list.join(", ")));
+            defined = true;
+        }
+    }
+    if defined {
+        out.push('\n');
+    }
+    let all = tuple_items(ts, names, |_| true, true);
+    out.push_str(&format!("vars == <<{}>>\n\n", all.join(", ")));
+}
+
+/// The state vars `keep` holds, an entity's by `<E>_vars` when it holds them all, and the
+/// class var of a reduced cone when `class` is set.
+fn tuple_items(
+    ts: &TransitionSystem,
+    names: &TlaNames,
+    keep: impl Fn(VarId) -> bool,
+    class: bool,
+) -> Vec<String> {
+    let mut items = Vec::new();
+    for (e, vars) in var_groups(ts) {
+        match e.and_then(|e| names.group(e)) {
+            Some(group) if vars.iter().all(|v| keep(*v)) => items.push(group.to_string()),
+            _ => items.extend(
+                vars.iter()
+                    .filter(|v| keep(**v))
+                    .map(|v| names.var(*v).to_string()),
+            ),
+        }
+    }
+    if class {
+        items.extend(names.class().map(str::to_string));
+    }
+    items
+}
+
+/// `UNCHANGED x` or `UNCHANGED <<x, y>>` over `items`; `None` when there are none.
+fn unchanged(items: &[String]) -> Option<String> {
+    match items {
+        [] => None,
+        [one] => Some(format!("UNCHANGED {one}")),
+        many => Some(format!("UNCHANGED <<{}>>", many.join(", "))),
+    }
+}
+
+/// `\* p0: Order (new), p1: Customer (read)`: what each param of the action ranges over.
+fn param_legend(ts: &TransitionSystem, a: &Action) -> String {
+    let parts: Vec<String> = a
+        .params
+        .iter()
+        .enumerate()
+        .map(|(p, param)| {
+            let entity = &ts.entity(param.entity).id;
+            match param.role {
+                ParamRole::New => format!("p{p}: {entity} (new)"),
+                ParamRole::Existing => format!("p{p}: {entity}"),
+                ParamRole::Parent { .. } => format!("p{p}: {entity} (read)"),
+                ParamRole::Earlier { step } => format!("p{p}: {entity} (of step {step})"),
+                ParamRole::Triggered => format!("p{p}: {entity} (of the event)"),
+            }
+        })
+        .collect();
+    format!("\\* {}\n", parts.join(", "))
+}
+
 fn signature(ts: &TransitionSystem, names: &TlaNames, id: ActId, a: &Action) -> String {
     if a.params.is_empty() || is_class_move(ts, id) {
         return names.action(id).to_string();
@@ -462,19 +547,12 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
     if is_class_move(ts, id) {
         let class = names.class().expect("a reduced cone names its class var");
         let table = names.succ_table(id);
-        let unchanged: Vec<&str> = ts
-            .var_ids()
-            .filter(|v| !in_s(ts, *v))
-            .map(|v| names.var(v))
-            .collect();
         out.push_str(&format!(
             "{} ==\n  /\\ {class}' \\in {table}[{class}]\n",
             names.action(id)
         ));
-        match unchanged.as_slice() {
-            [] => {}
-            [one] => out.push_str(&format!("  /\\ UNCHANGED {one}\n")),
-            many => out.push_str(&format!("  /\\ UNCHANGED <<{}>>\n", many.join(", "))),
+        if let Some(rest) = unchanged(&tuple_items(ts, names, |_| true, false)) {
+            out.push_str(&format!("  /\\ {rest}\n"));
         }
         out.push('\n');
         return;
@@ -510,17 +588,12 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
     let rises = ts
         .reduction()
         .is_some_and(|r| !r.bits().is_empty() || r.inputs().iter().any(|v| written.contains(v)));
-    let unchanged: Vec<&str> = ts
-        .var_ids()
-        .filter(|v| !written.contains(v) && !in_s(ts, *v))
-        .map(|v| names.var(v))
-        .chain(names.class().filter(|_| !rises))
-        .collect();
-    match unchanged.as_slice() {
-        [] => {}
-        [one] => conj.push(format!("UNCHANGED {one}")),
-        many => conj.push(format!("UNCHANGED <<{}>>", many.join(", "))),
-    }
+    conj.extend(unchanged(&tuple_items(
+        ts,
+        names,
+        |v| !written.contains(&v),
+        !rises,
+    )));
     conj.extend(post.into_iter().map(guard));
     // The rise reads every input primed, so it comes after the UNCHANGED that binds them,
     // and after the guards on the successor: TLC evaluates the conjuncts in order, and the
@@ -528,6 +601,9 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, out: &mut String) 
     if rises {
         let class = names.class().expect("a reduced cone names its class var");
         conj.push(format!("{class}' = {}", rise_expr(ts, names)));
+    }
+    if !a.params.is_empty() {
+        out.push_str(&param_legend(ts, a));
     }
     out.push_str(&format!("{} ==\n", signature(ts, names, id, a)));
     for c in conj {
@@ -590,6 +666,17 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
                     }
                 }
                 let choice = by_from.iter().any(|(_, tos)| tos.len() > 1);
+                // The `TransitionFrom` guard holds the column at one of the sources, so when
+                // every arm moves to one state the step writes that state.
+                let one_target = arms.iter().all(|(_, t)| *t == arms[0].1);
+                if !choice && one_target && from_guarded(a, *var, *param, arms) {
+                    let to = render_value(d, arms[0].1);
+                    let slot = post.entry(*var).or_default();
+                    if !matches!(slot.get(param), Some(Post::Choose(_) | Post::ChooseIn(_))) {
+                        slot.insert(*param, Post::Expr(to));
+                    }
+                    continue;
+                }
                 let render = |tos: &[Value]| {
                     let tos: Vec<String> = tos.iter().map(|t| render_value(d, *t)).collect();
                     match choice {
@@ -687,6 +774,26 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
         out.push("now' = now + 1".to_string());
     }
     (out, written)
+}
+
+/// Whether a guard of the action holds `var` of param `param` at a source state of `arms`
+/// on the pre-state: the guard `transitions` adds, which a restriction may drop.
+fn from_guarded(a: &Action, var: VarId, param: u8, arms: &[(Value, Value)]) -> bool {
+    let is_source = |p: &Pred| match p {
+        Pred::Cmp(
+            Term::Slot {
+                var: v,
+                at: At::Param(q),
+            },
+            CmpOp::Eq,
+            Term::Lit(from),
+        ) => *v == var && *q == param && arms.iter().any(|(f, _)| f == from),
+        _ => false,
+    };
+    a.guards.iter().any(|g| match &g.pred {
+        Pred::Or(parts) => !parts.is_empty() && parts.iter().all(is_source),
+        single => is_source(single),
+    })
 }
 
 fn next(ts: &TransitionSystem, names: &TlaNames, wf_next: bool, out: &mut String) {

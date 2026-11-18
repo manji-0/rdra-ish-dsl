@@ -17,7 +17,9 @@ FirstAbsent(ex, i) == ex[i] = "absent" /\ \A j \in DOMAIN ex : j < i => ex[j] # 
 
 VARIABLES Order_exists, Order_status, Order_shipped_at
 
-vars == <<Order_exists, Order_status, Order_shipped_at>>
+Order_vars == <<Order_exists, Order_status, Order_shipped_at>>
+
+vars == <<Order_vars>>
 
 TypeOK ==
   /\ Order_exists \in [Order_Ids -> {"absent", "present", "deleted"}]
@@ -29,26 +31,30 @@ Init ==
   /\ Order_status = [i \in Order_Ids |-> "pending"]
   /\ Order_shipped_at = [i \in Order_Ids |-> "null"]
 
+\* p0: Order
 Pay(p0) ==
   /\ Order_exists[p0] = "present"
   /\ Order_status[p0] = "pending"
-  /\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = "pending" -> "paid" [] OTHER -> Order_status[p0]]
+  /\ Order_status' = [Order_status EXCEPT ![p0] = "paid"]
   /\ UNCHANGED <<Order_exists, Order_shipped_at>>
 
+\* p0: Order
 Ship(p0) ==
   /\ Order_exists[p0] = "present"
   /\ Order_status[p0] = "paid"
-  /\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = "paid" -> "shipped" [] OTHER -> Order_status[p0]]
+  /\ Order_status' = [Order_status EXCEPT ![p0] = "shipped"]
   /\ Order_shipped_at' = [Order_shipped_at EXCEPT ![p0] = "present"]
   /\ UNCHANGED Order_exists
 
+\* p0: Order
 Refund(p0) ==
   /\ Order_exists[p0] = "present"
   /\ Order_status[p0] = "shipped"
   /\ Order_status[p0] = "pending"
-  /\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = "shipped" -> "refunded" [] OTHER -> Order_status[p0]]
+  /\ Order_status' = [Order_status EXCEPT ![p0] = "refunded"]
   /\ UNCHANGED <<Order_exists, Order_shipped_at>>
 
+\* p0: Order (new)
 Place(p0) ==
   /\ FirstAbsent(Order_exists, p0)
   /\ Order_exists' = [Order_exists EXCEPT ![p0] = "present"]

@@ -221,7 +221,8 @@ multiply: each combination of one value per choice is a successor. The guards re
 pre-state, so they hold or fail for every arm together, and `after(UC).assert` is checked
 on every successor. In the TLA+ export a choice of transitions is
 `\E v \in (CASE col = a -> {b, c} [] ... [] OTHER -> {col}) : col' = [col EXCEPT ![p] = v]`;
-a column whose arms leave each state for one target keeps the deterministic `CASE`. An
+a column whose arms all move to one state writes that state, and one whose arms leave each
+state for its own target keeps the deterministic `CASE`. An
 unguarded `sets` is never a choice: two values for one column in one use case are
 `ConflictingEffects`. Guarded `sets` lines of one column are a choice, as listed `chooses`
 values are.
