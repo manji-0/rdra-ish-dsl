@@ -149,8 +149,8 @@ impl TransitionSystem {
                     }
                 }
                 ParamRole::Earlier { .. } => {
-                    for s in 0..slots {
-                        list[s] = s as u8;
+                    for (s, cell) in list.iter_mut().enumerate().take(slots) {
+                        *cell = s as u8;
                     }
                     n = slots;
                 }
@@ -185,7 +185,7 @@ impl TransitionSystem {
         }
     }
 
-    fn pre_guards_hold(&self, action: &Action, state: &State, params: &[u8]) -> bool {
+    pub(super) fn pre_guards_hold(&self, action: &Action, state: &State, params: &[u8]) -> bool {
         let mut env = Env::new(params);
         action
             .guards
