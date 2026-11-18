@@ -1,16 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Changed
-
-- The TLA+ export is shorter to read; what it checks is unchanged. An action's `UNCHANGED`
-  names an entity it leaves alone by the tuple `<E>_vars` instead of listing its variables
-  (the clinic-ops module goes from 419 KB to 147 KB), `VARIABLES` has a line per entity, a
-  `transitions` whose arms all move to one state writes `col' = [col EXCEPT ![p] = "to"]`
-  in place of a `CASE` with an unreachable `OTHER` arm, and a comment before each action
-  says what its parameters range over (`\* p0: Order (new), p1: Customer (read)`).
-
 ## v2.3.0 - 2026-11-18
 
 Upgrading from v2.2.0 needs no change: a model that passed `check` and `verify` still
@@ -21,7 +10,8 @@ keys and computed defaults, `.references(...)`, `table` names, `@version`, and p
 unique indexes on soft-deleted entities. A `reads` can declare how it finds its rows, which
 gives `lint` `query-index-missing` and the indexes and `SELECT`s the SQL export writes, and
 `maps_field` now maps a DTO field to a column. `fmt` keeps an unquoted `@default(0)` as
-written, and the skills now match the language.
+written, the skills now match the language, and the TLA+ export is about a third the size
+on a large model, with the same checks.
 
 ### Added
 
@@ -65,6 +55,13 @@ written, and the skills now match the language.
   as a comment, by name ([CLI reference](./docs/cli-reference.md#sql-export)).
 
 ### Changed
+
+- The TLA+ export is shorter to read; what it checks is unchanged. An action's `UNCHANGED`
+  names an entity it leaves alone by the tuple `<E>_vars` instead of listing its variables
+  (the clinic-ops module goes from 419 KB to 147 KB), `VARIABLES` has a line per entity, a
+  `transitions` whose arms all move to one state writes `col' = [col EXCEPT ![p] = "to"]`
+  in place of a `CASE` with an unreachable `OTHER` arm, and a comment before each action
+  says what its parameters range over (`\* p0: Order (new), p1: Customer (read)`).
 
 - The skills match the current language: the predicate tables of `rdra-ish-write` and
   `rdra-ish-review` drop the removed `sets(UC, Entity, col == v)`, `drives(UC, Entity, ...)`,
