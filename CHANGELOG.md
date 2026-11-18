@@ -10,8 +10,9 @@ keys and computed defaults, `.references(...)`, `table` names, `@version`, and p
 unique indexes on soft-deleted entities. A `reads` can declare how it finds its rows, which
 gives `lint` `query-index-missing` and the indexes and `SELECT`s the SQL export writes, and
 `maps_field` now maps a DTO field to a column. `fmt` keeps an unquoted `@default(0)` as
-written, the skills now match the language, and the TLA+ export is about a third the size
-on a large model, with the same checks.
+written, the skills now match the language, the TLA+ export is about a third the size on a
+large model with the same checks, and the SQL and DBML exports carry rule labels and, in
+DBML, the rules.
 
 ### Added
 
@@ -55,6 +56,13 @@ on a large model, with the same checks.
   as a comment, by name ([CLI reference](./docs/cli-reference.md#sql-export)).
 
 ### Changed
+
+- The SQL and DBML exports say more of what the model says. In SQL, `col in (a, b)` is
+  `IN ('a', 'b')` instead of a chain of `OR`, a rule's `.label` is a comment above its
+  `CHECK` and beside the rule in the list of what the schema does not enforce (which showed
+  the label in place of the rule), a variation's label and its values' labels are a comment
+  above its type, and comments head the types, the tables, and the foreign keys. In DBML,
+  a table lists its rules in its `Note`, by the names `check` gives them; they were absent.
 
 - The TLA+ export is shorter to read; what it checks is unchanged. An action's `UNCHANGED`
   names an entity it leaves alone by the tuple `<E>_vars` instead of listing its variables

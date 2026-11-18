@@ -51,29 +51,48 @@ impl Emitter for SqlEmitter {
 }
 
 /// A rule the script enforces as a `CHECK`, or lists as an obligation.
-struct Rule {
-    name: String,
+#[derive(Clone)]
+pub(crate) struct Rule {
+    pub(crate) name: String,
+    /// The rule's `.label("...")`.
+    pub(crate) label: Option<String>,
     /// `CHECK (...)` body; `None` when the schema cannot enforce the rule.
     check: Option<String>,
     /// Why the schema cannot enforce it.
-    why: &'static str,
-    text: String,
+    pub(crate) why: &'static str,
+    /// The rule as the model writes it.
+    pub(crate) text: String,
+    /// The first entity a rule over several rows binds; `None` for an entity-local rule.
+    pub(crate) entity: Option<String>,
 }
 
-struct Script<'m> {
+impl Rule {
+    /// `"label": text`, or the text alone for a rule without a label.
+    pub(crate) fn described(&self) -> String {
+        match &self.label {
+            Some(label) => format!("\"{}\": {}", one_line(label), self.text),
+            None => self.text.clone(),
+        }
+    }
+}
+
+pub(crate) struct Script<'m> {
     model: &'m SemanticModel,
     dialect: Dialect,
     /// The system `check` builds, for the rule names it prints.
     invariants: Vec<Invariant>,
+    /// The system's entity ids, by `EntId`.
+    entity_ids: Vec<String>,
 }
 
 impl<'m> Script<'m> {
-    fn new(model: &'m SemanticModel, dialect: Dialect) -> Self {
+    pub(crate) fn new(model: &'m SemanticModel, dialect: Dialect) -> Self {
         let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL).ts;
         Script {
             model,
             dialect,
             invariants: ts.invariants().to_vec(),
+            entity_ids: ts.entities().iter().map(|e| e.id.clone()).collect(),
         }
     }
 
@@ -89,11 +108,21 @@ impl<'m> Script<'m> {
              -- CHECK constraints carry the names check and verify report.\n\n",
             self.dialect.as_str()
         );
-        if self.dialect == Dialect::Postgres {
-            for ty in self.enum_types() {
+        let types = self.enum_types();
+        if !types.is_empty() {
+            out.push_str(match self.dialect {
+                Dialect::Postgres => "-- Types\n\n",
+                Dialect::Sqlite => {
+                    "-- Value sets: SQLite has no enum type, so each column checks its values.\n\n"
+                }
+            });
+            for ty in types {
                 out.push_str(&ty);
                 out.push_str("\n\n");
             }
+        }
+        if !self.model.entities.is_empty() {
+            out.push_str("-- Tables\n\n");
         }
         let mut obligations = Vec::new();
         for (key, entity) in self.entities() {
@@ -118,6 +147,7 @@ impl<'m> Script<'m> {
                 })
                 .collect();
             if !fks.is_empty() {
+                out.push_str("-- Foreign keys\n\n");
                 for fk in fks {
                     out.push_str(&fk);
                     out.push('\n');
@@ -131,7 +161,12 @@ impl<'m> Script<'m> {
                 "\n-- Not enforced by this schema: the application or a trigger keeps these rules.\n",
             );
             for rule in obligations {
-                out.push_str(&format!("-- {} ({}): {}\n", rule.name, rule.why, rule.text));
+                out.push_str(&format!(
+                    "-- {} ({}): {}\n",
+                    rule.name,
+                    rule.why,
+                    rule.described()
+                ));
             }
         }
         while out.ends_with("\n\n") {
@@ -142,19 +177,30 @@ impl<'m> Script<'m> {
 
     // ── Types ───────────────────────────────────────────────────────────────
 
+    /// PostgreSQL: a `CREATE TYPE` per inline Enum column and per variation, a variation's
+    /// under a comment with its label and its values' labels. SQLite: that comment alone
+    /// per variation, since its columns check their values.
     fn enum_types(&self) -> Vec<String> {
         let mut types = Vec::new();
-        for (_, entity) in self.entities() {
-            for column in &entity.columns {
-                if let ColumnType::Enum(values) = &column.col_type {
-                    types.push(create_enum(&enum_type_name(entity, column), values));
+        if self.dialect == Dialect::Postgres {
+            for (_, entity) in self.entities() {
+                for column in &entity.columns {
+                    if let ColumnType::Enum(values) = &column.col_type {
+                        types.push(create_enum(&enum_type_name(entity, column), values));
+                    }
                 }
             }
         }
         let mut variations: Vec<_> = self.model.variations.values().collect();
         variations.sort_by_key(|v| v.id.as_str());
         for variation in variations {
-            types.push(create_enum(&variation.id, &variation.values));
+            let note = variation_note(variation);
+            types.push(match self.dialect {
+                Dialect::Postgres => {
+                    format!("{note}\n{}", create_enum(&variation.id, &variation.values))
+                }
+                Dialect::Sqlite => note,
+            });
         }
         types
     }
@@ -235,7 +281,11 @@ impl<'m> Script<'m> {
         }
         for rule in rules {
             if let Some(check) = &rule.check {
-                lines.push(format!("CONSTRAINT {} CHECK ({check})", ident(&rule.name)));
+                let constraint = format!("CONSTRAINT {} CHECK ({check})", ident(&rule.name));
+                lines.push(match &rule.label {
+                    Some(label) => format!("-- {}\n  {constraint}", one_line(label)),
+                    None => constraint,
+                });
             }
         }
         let mut out = String::new();
@@ -503,18 +553,21 @@ impl<'m> Script<'m> {
     // ── Rules ───────────────────────────────────────────────────────────────
 
     /// The name `check` gives the invariant built from `fact`, or `fallback`.
-    fn rule_name(&self, fact: &ModelRef, fallback: String) -> String {
+    /// The name `check` gives the rule declared at `fact`, and its label.
+    fn rule_name(&self, fact: &ModelRef, fallback: String) -> (String, Option<String>) {
         self.invariants
             .iter()
             .find(|inv| inv.site.fact == *fact)
-            .map_or(fallback, |inv| inv.name.clone())
+            .map_or((fallback, None), |inv| {
+                (inv.name.clone(), inv.label.clone())
+            })
     }
 
     fn guarded(&self, rule: RuleRef) -> bool {
         self.model.rule_guards.iter().any(|g| g.rule == rule)
     }
 
-    fn entity_rules(&self, key: EntityKey, entity: &Entity) -> Vec<Rule> {
+    pub(crate) fn entity_rules(&self, key: EntityKey, entity: &Entity) -> Vec<Rule> {
         let model = self.model;
         let mut rules = Vec::new();
         for column in &entity.columns {
@@ -529,8 +582,8 @@ impl<'m> Script<'m> {
                 .collect();
             for (i, check) in column.check_constraints.iter().enumerate() {
                 let name = names.get(i).map_or_else(
-                    || format!("Check_{}_{}_{i}", entity.id, column.name),
-                    |inv| inv.name.clone(),
+                    || (format!("Check_{}_{}_{i}", entity.id, column.name), None),
+                    |inv| (inv.name.clone(), inv.label.clone()),
                 );
                 rules.push(self.rule(
                     name,
@@ -615,7 +668,13 @@ impl<'m> Script<'m> {
         rules
     }
 
-    fn rule(&self, name: String, check: Option<String>, text: String, guarded: bool) -> Rule {
+    fn rule(
+        &self,
+        (name, label): (String, Option<String>),
+        check: Option<String>,
+        text: String,
+        guarded: bool,
+    ) -> Rule {
         let (check, why) = match (check, guarded) {
             (_, true) => (None, "guarded by a condition"),
             (None, false) => (None, "reads now"),
@@ -623,14 +682,16 @@ impl<'m> Script<'m> {
         };
         Rule {
             name,
+            label,
             check,
             why,
             text,
+            entity: None,
         }
     }
 
     /// The rules over several rows, by the names `check` gives them.
-    fn model_obligations(&self) -> Vec<Rule> {
+    pub(crate) fn model_obligations(&self) -> Vec<Rule> {
         self.invariants
             .iter()
             .filter_map(|inv| {
@@ -640,11 +701,17 @@ impl<'m> Script<'m> {
                     InvKind::MinCard => "minimum cardinality",
                     _ => return None,
                 };
+                let ts_entity = inv
+                    .binders
+                    .first()
+                    .map(|e| self.entity_ids[e.index()].clone());
                 Some(Rule {
                     name: inv.name.clone(),
+                    label: inv.label.clone(),
                     check: None,
                     why,
-                    text: inv.label.clone().unwrap_or_else(|| inv_text(inv)),
+                    text: inv_text(inv),
+                    entity: ts_entity,
                 })
             })
             .collect()
@@ -703,6 +770,27 @@ impl<'m> Script<'m> {
         let lhs_null = self.nullable(entity, lhs);
         Some(match rhs {
             CmpRhs::Now => return None,
+            // A list of plain values is `IN (...)`; a null `col` is in no list and outside
+            // every one, as `==` and `!=` read it.
+            CmpRhs::Values(values)
+                if values.iter().all(|v| {
+                    !matches!(
+                        v.normalize(),
+                        EffectValue::Null | EffectValue::Present | EffectValue::TypedPresent(_)
+                    )
+                }) =>
+            {
+                let list: Vec<String> = values.iter().map(literal).collect();
+                let list = list.join(", ");
+                match (op, lhs_null) {
+                    (CmpOpModel::NotIn, false) => format!("{col} NOT IN ({list})"),
+                    (CmpOpModel::NotIn, true) => {
+                        format!("({col} IS NULL OR {col} NOT IN ({list}))")
+                    }
+                    (_, false) => format!("{col} IN ({list})"),
+                    (_, true) => format!("({col} IS NOT NULL AND {col} IN ({list}))"),
+                }
+            }
             CmpRhs::Values(values) => {
                 let (each, join) = match op {
                     CmpOpModel::NotIn => (CmpOpModel::Ne, " AND "),
@@ -929,6 +1017,30 @@ fn table_note(entity: &Entity) -> String {
         }
     }
     note.replace('\n', " ")
+}
+
+/// One line: a label or description may hold a line break, which would end a `--` comment.
+fn one_line(text: &str) -> String {
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// `-- PaymentMethod (支払方法): cash = 現金, card`: a variation's label and its values'.
+fn variation_note(variation: &rdra_ish_core::model::Variation) -> String {
+    let values: Vec<String> = variation
+        .values
+        .iter()
+        .zip(&variation.labels)
+        .map(|(value, label)| match label {
+            Some(label) => format!("{value} = {}", one_line(label)),
+            None => value.clone(),
+        })
+        .collect();
+    format!(
+        "-- {} ({}): {}",
+        variation.id,
+        one_line(&variation.label),
+        values.join(", ")
+    )
 }
 
 fn create_enum(name: &str, values: &[String]) -> String {

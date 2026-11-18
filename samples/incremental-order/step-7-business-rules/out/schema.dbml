@@ -10,13 +10,21 @@ Table Organization [note: 'Organization'] {
   name varchar [not null]
 }
 
-Table Store [note: 'Store'] {
+Table Store {
   id int [pk, not null]
   code varchar [unique, not null]
   name varchar [not null]
   restock_status Store_restock_status [not null, default: `normal`]
   next_restock_date datetime
   organization_id int [not null]
+
+  Note: '''
+  Store
+
+  Rules:
+  - Forbidden_Store_0: restock_status == blocked, next_restock_date == present
+  - Inv_Store_0: when restock_status == scheduled then next_restock_date == present
+  '''
 }
 
 Ref: Store.organization_id > Organization.id

@@ -10,7 +10,7 @@ machine-readable exports.
 | `mermaid` | `.mmd` text | None |
 | `openapi` | OpenAPI 3.0 JSON | API method/path and DTO request/response/error links |
 | `asyncapi` | AsyncAPI 3.1 JSON | events, `raises`/`triggers`, and the external systems that publish or receive them |
-| `dbml` | DBML schema text | logical entities, variations, and `relate` keys |
+| `dbml` | DBML schema text | logical entities, variations, and `relate` keys; a table's `Note` lists its rules by the names `check` gives them |
 | `sql` | SQL DDL (`--dialect postgres` or `sqlite`) | logical entities and `relate` keys; entity-local rules become named `CHECK` constraints; `reads` query shapes add suggested indexes and `SELECT`s as comments |
 | `json-schema` | JSON Schema | DTOs and entities under `$defs`; a mapped DTO field carries `x-rdra-ish-maps-to` |
 | `typescript-states` | TypeScript `.entity-states.ts` | entity lifecycles; refused while `check` reports a lifecycle error |

@@ -316,3 +316,47 @@ reads(GetOrder, Order).by(id)
         "{out}"
     );
 }
+
+const LABELLED: &str = r#"
+variation Channel "Sales channel" {
+  web "Web shop"
+  store
+}
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(open, paid, shipped, done) @default(open)
+  channel: Channel
+  note: Enum(a, b, c) @null
+}
+entity Payment "Payment" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+relate(Payment, Order, N:1)
+forbidden(Order, status in (shipped, done), note not in (a, b)).label("a shipped order has a note")
+forbidden(Order, Payment, Order.status == open, Payment.status == captured).along(Order, Payment).label("no capture while open")
+"#;
+
+/// A list is `IN (...)`, with the null case of a nullable column spelled out; a labelled
+/// rule carries its label, on one line, above its `CHECK` and beside its text in the
+/// obligations; a variation's labels sit above its type.
+#[test]
+fn lists_labels_and_sections_read_as_the_model_writes_them() {
+    let out = sql(LABELLED, Dialect::Postgres);
+    for line in [
+        "-- Types\n\n",
+        "-- Channel (Sales channel): web = Web shop, store\nCREATE TYPE \"Channel\" AS ENUM ('web', 'store');",
+        "-- Tables\n\n",
+        "  -- a shipped order has a note\n  CONSTRAINT \"Forbidden_Order_0\" CHECK (NOT (\"status\" IN ('shipped', 'done') AND (\"note\" IS NULL OR \"note\" NOT IN ('a', 'b'))))",
+        "-- Foreign keys\n\n",
+        "-- MultiForbidden_Order_0 (several entities): \"no capture while open\": Order, Payment: ",
+    ] {
+        assert!(out.contains(line), "missing {line}\n{out}");
+    }
+    let sqlite = sql(LABELLED, Dialect::Sqlite);
+    assert!(
+        sqlite.contains("-- Channel (Sales channel): web = Web shop, store\n\n-- Tables\n"),
+        "{sqlite}"
+    );
+    assert!(!sqlite.contains("-- Foreign keys"), "{sqlite}");
+}

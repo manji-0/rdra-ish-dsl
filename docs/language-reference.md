@@ -1210,7 +1210,9 @@ compares `status` with its value `open` and `closed_at` with `present`. DBML not
 `rdra-ish export --kind dbml` projects logical `entity` declarations to DBML tables,
 including indexes, composite unique constraints, generated FK columns, and `relate`
 delete/update options. Metadata without a native DBML equivalent is preserved as
-notes so the review signal is not lost.
+notes so the review signal is not lost. A table with rules lists them in its `Note`, under
+the entity's label: each rule by the name `check` gives it, with its label and its text, a
+rule over several entities on the first entity it names.
 `rdra-ish export --kind json-schema` also emits Entity schemas under `$defs` using
 `Entity.<id>` names, with RDRA-specific data-modeling metadata preserved as
 `x-rdra-ish-*` extensions.
