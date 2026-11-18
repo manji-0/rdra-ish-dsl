@@ -17,7 +17,9 @@ FirstAbsent(ex, i) == ex[i] = "absent" /\ \A j \in DOMAIN ex : j < i => ex[j] # 
 
 VARIABLES Order_exists, Order_status, Order_delivered_at
 
-vars == <<Order_exists, Order_status, Order_delivered_at>>
+Order_vars == <<Order_exists, Order_status, Order_delivered_at>>
+
+vars == <<Order_vars>>
 
 TypeOK ==
   /\ Order_exists \in [Order_Ids -> {"absent", "present", "deleted"}]
@@ -29,31 +31,36 @@ Init ==
   /\ Order_status = [i \in Order_Ids |-> "pending"]
   /\ Order_delivered_at = [i \in Order_Ids |-> "null"]
 
+\* p0: Order
 CapturePay(p0) ==
   /\ Order_exists[p0] = "present"
   /\ Order_status[p0] = "pending"
-  /\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = "pending" -> "paid" [] OTHER -> Order_status[p0]]
+  /\ Order_status' = [Order_status EXCEPT ![p0] = "paid"]
   /\ UNCHANGED <<Order_exists, Order_delivered_at>>
 
+\* p0: Order
 ShipOrder(p0) ==
   /\ Order_exists[p0] = "present"
   /\ Order_status[p0] = "paid"
-  /\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = "paid" -> "shipped" [] OTHER -> Order_status[p0]]
+  /\ Order_status' = [Order_status EXCEPT ![p0] = "shipped"]
   /\ UNCHANGED <<Order_exists, Order_delivered_at>>
 
+\* p0: Order
 DeliverOrder(p0) ==
   /\ Order_exists[p0] = "present"
   /\ Order_status[p0] = "shipped"
-  /\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = "shipped" -> "delivered" [] OTHER -> Order_status[p0]]
+  /\ Order_status' = [Order_status EXCEPT ![p0] = "delivered"]
   /\ Order_delivered_at' = [Order_delivered_at EXCEPT ![p0] = "present"]
   /\ UNCHANGED Order_exists
 
+\* p0: Order
 CancelOrder(p0) ==
   /\ Order_exists[p0] = "present"
   /\ Order_status[p0] = "pending"
-  /\ Order_status' = [Order_status EXCEPT ![p0] = CASE Order_status[p0] = "pending" -> "cancelled" [] OTHER -> Order_status[p0]]
+  /\ Order_status' = [Order_status EXCEPT ![p0] = "cancelled"]
   /\ UNCHANGED <<Order_exists, Order_delivered_at>>
 
+\* p0: Order (new)
 PlaceOrder(p0) ==
   /\ FirstAbsent(Order_exists, p0)
   /\ Order_exists' = [Order_exists EXCEPT ![p0] = "present"]

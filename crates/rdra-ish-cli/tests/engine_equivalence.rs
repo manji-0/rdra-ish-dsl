@@ -1845,10 +1845,26 @@ fn tla_names_cover_every_slot() {
                 })
                 .sum();
             assert_eq!(keys.len(), width, "{sample}: a slot has no key");
-            let line = format!("VARIABLES {}\n", names.vars().join(", "));
+            // The declaration, a line per entity, up to the blank line that ends it.
+            let declared: Vec<&str> = bundle
+                .tla
+                .split_once("\nVARIABLES")
+                .and_then(|(_, rest)| rest.split_once("\n\n"))
+                .map(|(block, _)| {
+                    block
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|name| !name.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default();
+            let mut listed: Vec<&str> = names.vars().iter().map(String::as_str).collect();
+            let mut declared_sorted = declared.clone();
+            listed.sort_unstable();
+            declared_sorted.sort_unstable();
             assert!(
-                ts.vars().is_empty() || bundle.tla.contains(&line),
-                "{sample}: VARIABLES line does not list the names"
+                ts.vars().is_empty() || declared_sorted == listed,
+                "{sample}: VARIABLES does not list the names"
             );
             let run = ts.clone().run(Caps::new(usize::MAX, 1));
             let canon = names.canon(&run.system, &run.states[0]);

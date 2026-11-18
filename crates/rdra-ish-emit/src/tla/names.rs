@@ -46,6 +46,22 @@ pub struct TlaNames {
     /// The state-model checks `print_state_models` prints, by state; empty in every other
     /// module.
     states: Vec<StateCheck>,
+    /// `<E>_vars` per entity with two or more state vars: the tuple of them, which `vars`
+    /// and an action's `UNCHANGED` name in their place.
+    groups: Vec<Option<String>>,
+}
+
+/// The entity whose slots index a per-instance var.
+pub(super) fn owner_entity(kind: &VarKind) -> Option<EntId> {
+    match kind {
+        VarKind::Exists(e)
+        | VarKind::Column { entity: e, .. }
+        | VarKind::Prop { entity: e, .. }
+        | VarKind::Run { entity: e, .. }
+        | VarKind::Raised { entity: e, .. } => Some(*e),
+        VarKind::Owner { child, .. } => Some(*child),
+        VarKind::Now => None,
+    }
 }
 
 /// One state of an entity's state model, and the invariants that check it: `witness` is
@@ -215,6 +231,23 @@ impl TlaNames {
                 deadlock: s.deadlock.map(|d| taken.claim(&d)),
             })
             .collect();
+        // Claimed last of all, so a column `vars` keeps `<E>_vars` and the group takes the
+        // suffix.
+        let mut members = vec![0usize; ts.entities().len()];
+        for v in ts.var_ids() {
+            if ts.reduction().is_some_and(|r| r.is_s_var(v)) {
+                continue;
+            }
+            if let Some(e) = owner_entity(&ts.var(v).kind) {
+                members[e.index()] += 1;
+            }
+        }
+        let groups = ts
+            .entities()
+            .iter()
+            .zip(members)
+            .map(|(e, n)| (n >= 2).then(|| taken.claim(&format!("{}_vars", e.id))))
+            .collect();
         TlaNames {
             vars,
             ids,
@@ -228,7 +261,13 @@ impl TlaNames {
             succ,
             rise,
             states,
+            groups,
         }
+    }
+
+    /// `<E>_vars`: the tuple of the entity's state vars, when it has two or more.
+    pub fn group(&self, e: EntId) -> Option<&str> {
+        self.groups[e.index()].as_deref()
     }
 
     /// `Rise`: the table of class moves a T step's inputs make, in a reduced cone whose S

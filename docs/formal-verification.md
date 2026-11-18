@@ -145,7 +145,7 @@ stays as it was.
 | A use case several tracked events trigger | One operator per variant, `<UC>_by_<Ev>`, each in `Next`; `AfterAssert_<UC>_<n>` ranges over every variant's last step. |
 | `creates` | `FirstAbsent(<E>_exists, p)` and `<E>_exists' = ... "present"`. A deleted slot is never reused. |
 | `deletes` | `<E>_exists'` becomes `"deleted"`, columns and owners return to the base value. |
-| `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a`. `UNCHANGED` lists every variable the action does not assign. |
+| `sets`, `transitions(UC, E.col, a -> b)` | Primed assignments. A transition guards `col = a` and writes `b`; arms to several targets write through a `CASE` on the source. `UNCHANGED` lists every variable the action does not assign, an entity the action leaves alone by its tuple `<E>_vars`. |
 | Variation column of a created instance | `\E v0 \in {values} : col' = ...`, so TLC explores every value. `@default` does not pin it. |
 | `applies_to(Condition, UseCase \| Api)` with a `holds` body | A guard conjunct on the use case's operator. A condition on a created instance is evaluated on the primed variable, after the assignments and the `UNCHANGED` that bind every primed variable it reads. |
 | Comparison proposition driven by `drives(UC, E.col op rhs, bool)` | A Boolean variable. An undriven comparison is TLC arithmetic on the Int columns. |

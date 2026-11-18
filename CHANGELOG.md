@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The TLA+ export is shorter to read; what it checks is unchanged. An action's `UNCHANGED`
+  names an entity it leaves alone by the tuple `<E>_vars` instead of listing its variables
+  (the clinic-ops module goes from 419 KB to 147 KB), `VARIABLES` has a line per entity, a
+  `transitions` whose arms all move to one state writes `col' = [col EXCEPT ![p] = "to"]`
+  in place of a `CASE` with an unreachable `OTHER` arm, and a comment before each action
+  says what its parameters range over (`\* p0: Order (new), p1: Customer (read)`).
+
 ## v2.3.0 - 2026-11-18
 
 Upgrading from v2.2.0 needs no change: a model that passed `check` and `verify` still

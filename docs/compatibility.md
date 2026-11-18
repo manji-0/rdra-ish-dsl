@@ -78,7 +78,8 @@ written by hand can name them:
 - Properties: `AfterAssert_<UC>_<n>`, each temporal property under its declared name, and
   `Fair_<P>`.
 - Variables and constants: `<E>_exists`, `<E>_<col>`, `<Child>_owner_<Parent>`, `now`,
-  `InstanceCount`, and `IntRange`.
+  `InstanceCount`, and `IntRange`. `<E>_vars` is the tuple of an entity's variables, for an
+  entity with two or more; it is claimed last, so a column `vars` keeps `<E>_vars`.
 - State-model specs of `export`: the modules `StateModel_<E>` with their cfgs
   `StateModel_<E>.cfg` and `StateModel_<E>_witnesses.cfg`, and their invariants
   `Deadlock_<E>_<col>_<s>` and `Witness_<E>_<col>_<s>`, which have the names of the

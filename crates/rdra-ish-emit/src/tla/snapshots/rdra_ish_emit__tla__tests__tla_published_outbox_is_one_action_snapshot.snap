@@ -17,7 +17,9 @@ FirstAbsent(ex, i) == ex[i] = "absent" /\ \A j \in DOMAIN ex : j < i => ex[j] # 
 
 VARIABLES Session_exists, Session_status
 
-vars == <<Session_exists, Session_status>>
+Session_vars == <<Session_exists, Session_status>>
+
+vars == <<Session_vars>>
 
 TypeOK ==
   /\ Session_exists \in [Session_Ids -> {"absent", "present", "deleted"}]
@@ -27,6 +29,7 @@ Init ==
   /\ Session_exists = [i \in Session_Ids |-> "absent"]
   /\ Session_status = [i \in Session_Ids |-> "active"]
 
+\* p0: Session (new)
 Login(p0) ==
   /\ FirstAbsent(Session_exists, p0)
   /\ Session_exists' = [Session_exists EXCEPT ![p0] = "present"]
