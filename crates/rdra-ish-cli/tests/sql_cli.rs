@@ -55,7 +55,8 @@ fn export_sqlite(input: &Path, out: &Path) {
     );
 }
 
-/// Runs `script` (Python) with the DDL file as `sys.argv[1]`; returns its stdout.
+/// Runs `script` (Python) with the DDL file as `sys.argv[1]`; returns its stdout, with
+/// Windows line ends read as `\n` so a test compares the same text on every OS.
 fn python(script: &str, ddl: &Path) -> String {
     let mut child = Command::new("python3")
         .arg("-I")
@@ -79,7 +80,7 @@ fn python(script: &str, ddl: &Path) -> String {
         ddl.display(),
         String::from_utf8_lossy(&output.stderr)
     );
-    String::from_utf8_lossy(&output.stdout).into_owned()
+    String::from_utf8_lossy(&output.stdout).replace("\r\n", "\n")
 }
 
 #[test]
