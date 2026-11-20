@@ -23,12 +23,13 @@ Pick the one kind that answers the question, then load only its reference.
 | How do the businesses and their BUCs connect, and who takes part in each BUC? | `business` (the flow), or `business --buc <BucId>`; `list --kind buc-roles --format markdown` (the table) | `references/context-requirement-business.md` |
 | What does each use case show, read, write, raise, and move, and who performs it? | `usecase --buc <BucId>` or `usecase --usecase <UcId>` | `references/usecase-and-flow.md` |
 | Which screen reaches which API or use case, and which entities does each touch (the main structural view)? | `robustness --buc <BucId>` or `robustness --usecase <UcId>` | `references/usecase-and-flow.md` |
-| In what order does one use case run: guards, writes, events? | `sequence --usecase <UcId>` (exactly one) | `references/usecase-and-flow.md` |
+| What does one actor do? Which use cases touch one entity? | `usecase --actor <ActorId>` or `usecase --entity <EntityId>` (also `robustness`) | `references/usecase-and-flow.md` |
+| In what order does one use case run: guards, writes, events? And a whole BUC, use case after use case? | `sequence --usecase <UcId>` (exactly one), or `sequence --buc <BucId>` | `references/usecase-and-flow.md` |
 | In what order are a BUC's steps carried out, and which use cases carry each? | `flow --buc <BucId>` | `references/usecase-and-flow.md` |
 | Which screen leads to which, by which operation, and where is no transition written yet? | `screen` or `screen --buc <BucId>`; `lint` (`screen-no-transition`) | `references/usecase-and-flow.md` |
 | How do the entities relate, and which hold a state model or a variation? | `information` | `references/information-and-data.md` |
 | Which conditions select business rules, and what values do the variations take? | `condition` | `references/information-and-data.md` |
-| What columns, keys, and cardinalities does the data have? | `er` | `references/information-and-data.md` |
+| What columns, keys, and cardinalities does the data have? And around one entity? | `er`, or `er --entity <EntityId>` for it and the entities it relates to (also `information`) | `references/information-and-data.md` |
 | What states exist, and which use case moves each? | `state --entity <EntityId>` (the unscoped one is an index); `list --kind transition --format markdown` (the table, with guards and actors) | `references/lifecycle-and-events.md` |
 | Which events, timers, and external systems start other work? | `event` | `references/lifecycle-and-events.md` |
 | Everything at once, or a relation no other kind draws (permissions, media, DTOs, API paths) | `rdra`, narrowed with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
@@ -40,7 +41,13 @@ Pick the one kind that answers the question, then load only its reference.
 | What contract can reviewers or other tools consume? | `export --kind openapi`, `asyncapi`, `dbml`, `sql`, or `json-schema` | `references/formats-and-output.md` |
 
 Every kind takes `--buc <BucId>` (repeatable) to draw the part of the model those BUCs
-reach. Prefer it before a whole-model diagram.
+reach. Prefer it before a whole-model diagram: on a large model the whole `rdra` and
+`usecase` diagrams pass Mermaid's default limits (50,000 characters, 500 edges) and do not
+render, and `diagram` warns on stderr when one does. `diagram --all -o <dir>` writes the
+review set in one run: the whole-model kinds that stay small, each BUC's `usecase`,
+`robustness`, `flow`, and `sequence`, and each entity's `state`. Add `--title` (and
+`--legend` on a flowchart) when the rendered image is handed to someone without the text:
+a renderer drops the `%%` header.
 
 ### What Each Kind Carries
 

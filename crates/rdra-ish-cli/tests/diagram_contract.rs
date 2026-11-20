@@ -1099,7 +1099,7 @@ fn every_robustness_diagram_of_every_sample_keeps_the_contract_and_the_grammar()
 fn parse_sequence(text: &str, scope: &str) -> Result<Vec<String>, String> {
     let mut lines = text.lines();
     let header = lines.next().ok_or("empty")?;
-    let want = format!("%% rdra-ish diagram=sequence scope=usecase:{scope} model=");
+    let want = format!("%% rdra-ish diagram=sequence scope={scope} model=");
     if !header.starts_with(&want) {
         return Err(format!("header: {header}"));
     }
@@ -1126,7 +1126,8 @@ fn parse_sequence(text: &str, scope: &str) -> Result<Vec<String>, String> {
             let (kind, _) = id.split_once("__").ok_or(format!("id: {line}"))?;
             drawn_kinds.insert(kind.to_string());
             participants.push(id.to_string());
-        } else if trimmed.starts_with("alt ") || trimmed == "else guard fails" || trimmed == "end" {
+        } else if trimmed.starts_with("alt ") || trimmed.starts_with("else ") || trimmed == "end" {
+            // A guard's `alt` / `else guard fails`, or one arm per target of a choice.
         } else if let Some(rest) = trimmed.strip_prefix("Note over ") {
             let (id, _) = rest.split_once(": ").ok_or(format!("note: {line}"))?;
             if !participants.iter().any(|p| p == id) {
@@ -1171,7 +1172,7 @@ fn every_sequence_diagram_of_every_sample_keeps_the_contract() {
                 &["--usecase", &usecase],
                 &dir.join("out"),
             );
-            let participants = parse_sequence(&text, &usecase)
+            let participants = parse_sequence(&text, &format!("usecase:{usecase}"))
                 .unwrap_or_else(|why| panic!("{root} {usecase}: {why}\n{text}"));
             for id in &participants {
                 assert!(
@@ -1204,8 +1205,54 @@ fn a_sequence_diagram_needs_exactly_one_use_case() {
     assert!(String::from_utf8_lossy(&none.stderr).contains("exactly one --usecase"));
     let two = run(&["--usecase", &usecases[0], "--usecase", &usecases[1]]);
     assert!(!two.status.success());
-    let buc = run(&["--buc", &buc_ids(root)[0]]);
-    assert!(!buc.status.success());
+}
+
+/// `sequence --buc` plays the BUC's use cases one after another, each under a numbered note,
+/// in one diagram that keeps the sequence grammar and draws only nodes the rdra diagram has.
+#[test]
+fn a_sequence_diagram_of_a_buc_plays_its_use_cases_in_one_diagram() {
+    let dir = scratch("diagram_contract_sequence_buc");
+    let mut played = 0;
+    for root in roots() {
+        let rdra = parse_flowchart("rdra", &diagram(&root, "rdra", None, &dir.join("r"))).unwrap();
+        for buc in buc_ids(&root).into_iter().take(2) {
+            let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+                .current_dir(repo())
+                .args(["diagram", &root, "--kind", "sequence", "--buc", &buc])
+                .output()
+                .unwrap();
+            // A BUC without use cases has no sequence to draw.
+            if !output.status.success() {
+                continue;
+            }
+            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            let participants = parse_sequence(&text, &format!("buc:{buc}"))
+                .unwrap_or_else(|why| panic!("{root} {buc}: {why}\n{text}"));
+            for id in &participants {
+                assert!(
+                    rdra.nodes.contains_key(id),
+                    "{root} {buc}: {id} not in rdra"
+                );
+            }
+            let notes: Vec<&str> = text
+                .lines()
+                .filter_map(|l| l.trim().strip_prefix("Note over "))
+                .filter_map(|l| l.split_once(": ").map(|(_, said)| said))
+                .filter(|said| {
+                    said.split_once(". ")
+                        .is_some_and(|(n, _)| n.parse::<u32>().is_ok())
+                })
+                .collect();
+            for (i, note) in notes.iter().enumerate() {
+                assert!(
+                    note.starts_with(&format!("{}. ", i + 1)),
+                    "{root} {buc}: {notes:?}"
+                );
+            }
+            played += notes.len();
+        }
+    }
+    assert!(played > 10, "only {played} use cases played");
 }
 
 #[test]

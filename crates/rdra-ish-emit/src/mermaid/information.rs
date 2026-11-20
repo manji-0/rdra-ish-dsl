@@ -24,7 +24,9 @@ impl Emitter for InformationMermaidEmitter {
         // The entities `diagram --kind er` draws for the same scope.
         let reachable = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
+            Scope::Whole | Scope::UseCases(_) => {
+                super::entity_neighbourhood(model, &view.state.entities)
+            }
         };
         let visible = |nr: &NodeRef| reachable.as_ref().is_none_or(|set| set.contains(nr));
         let mut entities: Vec<_> = model

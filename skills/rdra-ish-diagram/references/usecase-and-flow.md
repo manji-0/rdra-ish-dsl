@@ -10,12 +10,16 @@ of its use cases, and the business flow of its steps.
 rdra-ish diagram src/ --kind robustness --buc <BucId> --format mermaid
 rdra-ish diagram src/ --kind robustness --usecase <UcId> --format mermaid
 
-# シーケンス図 — one use case in order; needs exactly one --usecase
+# シーケンス図 — one use case in order (exactly one --usecase), or a BUC's use cases one after another
 rdra-ish diagram src/ --kind sequence --usecase <UcId> --format mermaid
+rdra-ish diagram src/ --kind sequence --buc <BucId> --format mermaid
 
 # UC複合図 — the use cases of one BUC, or the named use cases
 rdra-ish diagram src/ --kind usecase --buc <BucId> --format mermaid
 rdra-ish diagram src/ --kind usecase --usecase <UcId> --format mermaid
+# ...or by who performs them, or by the entity they read or write
+rdra-ish diagram src/ --kind usecase --actor <ActorId> --format mermaid
+rdra-ish diagram src/ --kind usecase --entity <EntityId> --format mermaid
 
 # 業務フロー — the flows of one BUC
 rdra-ish diagram src/ --kind flow --buc <BucId> --format mermaid

@@ -12,9 +12,19 @@ gives `lint` `query-index-missing` and the indexes and `SELECT`s the SQL export 
 `maps_field` now maps a DTO field to a column. `fmt` keeps an unquoted `@default(0)` as
 written, the skills now match the language, the TLA+ export is about a third the size on a
 large model with the same checks, the SQL and DBML exports carry rule labels and, in DBML,
-the rules, and `verify` explores its cones on several cores.
+the rules, `verify` explores its cones on several cores, and `diagram` can be scoped by
+actor or entity and written as a set.
 
 ### Added
+
+- `diagram` narrows and writes by use: `--actor` draws the use cases an actor performs and
+  `--entity` the ones that touch an entity (`usecase`, `robustness`); `--entity` on `er` and
+  `information` draws the entity and the ones it relates to; `sequence --buc` plays a BUC's
+  use cases in order in one diagram; `--all -o <dir>` writes the review set, one file per
+  diagram; and `--title` and `--legend` put on the rendered image what the `%%` header says
+  to a reader of the text. A diagram past Mermaid's default limits (50,000 characters, 500
+  edges) now draws a warning that names how to narrow it, and one with nothing to draw a
+  note ([CLI reference](./docs/cli-reference.md#diagram)).
 
 - `maps_field(Dto.field, Entity.column)` maps a DTO field to the column it carries, a
   generated key column included (`DuplicateFieldMapping` for a second mapping of one

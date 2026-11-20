@@ -531,7 +531,8 @@ files. With multiple input files, each output block is prefixed by a `// <path>`
 Generate one RDRA diagram as Mermaid text (`.mmd`).
 
 ```
-rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--node-kind <KIND>]... [--edge-kind <KIND>]... [-o <OUT>]
+rdra-ish diagram <INPUTS...> [--kind <KIND>] [--format <FORMAT>] [--buc <ID>]... [--usecase <ID>]... [--entity <ID>]... [--actor <ID>]... [--node-kind <KIND>]... [--edge-kind <KIND>]... [--title] [--legend] [-o <OUT>]
+rdra-ish diagram <INPUTS...> --all [--title] [--legend] -o <DIR>
 ```
 
 The `.mmd` is written for a reader that redraws it, a person or a tool such as an AI that
@@ -574,11 +575,37 @@ which it colours; every other kind draws declared facts and writes with one stde
 | `--kind` | one of the [kinds](#kinds) | `rdra` | The diagram kind. |
 | `--format` | `mermaid` | `mermaid` | Output format. Mermaid text (`.mmd`) is the only one; to get an image, render the `.mmd` with `mmdc` or any Mermaid-aware tool, or hand it to a tool that redraws it. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Draw the part of the model the named BUCs reach, the union over every id. Applies to every kind; the [kinds](#kinds) table says what each one keeps. An unknown id is an error. |
-| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase`, `robustness`, and `sequence`, and not together with `--buc`; an unknown id is an error. `sequence` needs exactly one. |
-| `--entity <id>` | string (repeatable) | — (whole model) | Draw only the named entities' state models, every lifecycle column, whole; the `omitted:` and `set-only:` header lines name only those entities' columns. Applies to `state`, and not together with `--buc`; an unknown entity, or one with no state model, is an error. |
+| `--usecase <id>` | string (repeatable) | — (whole model) | Draw only the named use cases. Applies to `usecase`, `robustness`, and `sequence`; an unknown id is an error. `sequence` needs exactly one, or `--buc` for a BUC's use cases in order. One of `--buc`, `--usecase`, `--entity`, and `--actor` at a time. |
+| `--entity <id>` | string (repeatable) | — (whole model) | Draw by entity; an unknown entity is an error. `state`: the named entities' state models, every lifecycle column, whole; the `omitted:` and `set-only:` header lines name only those entities' columns, and an entity with no state model is an error. `er` and `information`: the named entities and the ones a `relate` joins them to. `usecase` and `robustness`: the use cases that read or write them, an invoked API's operations included. |
+| `--actor <id>` | string (repeatable) | — (whole model) | Draw the use cases the named actors perform, directly or through a BUC. Applies to `usecase` and `robustness`; an unknown actor, or one that performs no use case, is an error. |
 | `--node-kind <kind>` | string (repeatable) | — (all nodes) | Draw only these node kinds. Applies to `rdra`. Examples: `actor`, `buc`, `flow`, `step`, `usecase`, `api`, `entity`, `field`. Alias: `--kind-filter`. |
 | `--edge-kind <kind>` | string (repeatable) | — (all edges) | Draw only these relation kinds. Applies to `rdra`. Examples: `contains`, `invokes`, `reads`, `creates`, `maps-field`, `owns`, `relate`. Alias: `--edge-filter`. |
-| `-o`, `--out` | path | — (stdout) | Output file path. Without it the Mermaid text goes to stdout and no file is written, as `list`, `states`, and `next` print theirs. With it, the extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). |
+| `--all` | flag | off | Write the [review set](#the-review-set) under `--out`, a directory. Not together with a scope, `--node-kind`, or `--edge-kind`; `--kind` is not read. |
+| `--title` | flag | off | Open the text with a Mermaid title (`---`, `title: "UC複合図: Order"`, `---`): the diagram's RDRA name and the labels of what it is scoped to. A renderer shows it, and drops the `%%` header that says the same. |
+| `--legend` | flag | off | Add a `凡例` subgraph to a `flowchart` diagram, one node per node kind in its colour, before the `classDef` lines. The other diagram types have no node classes and stay as they are. |
+| `-o`, `--out` | path | — (stdout) | Output file path. Without it the Mermaid text goes to stdout and no file is written, as `list`, `states`, and `next` print theirs. With it, the extension is always `.mmd`: a path without one gets it added (`-o out` writes `out.mmd`), and an existing one is replaced (`-o x.foo` writes `x.mmd`; `x.mmd` stays; `-o d.tar.gz` writes `d.tar.mmd`). With `--all`, the directory the files go to. |
+
+#### The review set
+
+`--all -o <dir>` writes one file per diagram:
+
+- `<kind>.mmd` for the kinds that stay readable on a whole model: `context`, `requirement`,
+  `business`, `information`, `condition`, `er`, `screen`, `event`, and `state` (its index).
+- `<kind>__<BucId>.mmd` for each BUC: `usecase`, `robustness`, `flow`, and `sequence`.
+- `state__<EntityId>.mmd` for each entity with a state model.
+
+A diagram with nothing to draw is left out, and the last line counts them:
+`wrote 58 diagrams to docs/diagrams (1 with nothing to draw left out)`. A model whose
+lifecycle has errors gets no `state` diagrams, with a note; the rest are written.
+
+#### What `diagram` says on stderr
+
+- `warning: this diagram has 73725 characters and 475 edges; Mermaid's defaults stop at
+  50000 characters (maxTextSize) and 500 edges (maxEdges), so it does not render as is.`
+  The text is written all the same. The warning names the options that narrow that kind;
+  the alternative is to raise both limits in the renderer's config.
+- `note: nothing to draw: the model declares nothing --kind flow draws in this scope`. The
+  text is the header alone, with `%% kinds: (none)`.
 
 Notes:
 
@@ -723,7 +750,10 @@ Every kind but `state` and `er` is a `flowchart`, written so that every fact it 
 be read back from the text. The `rdra` diagram shows each part:
 
 - For `--kind sequence`, the file is a Mermaid `sequenceDiagram` of one use case, so
-  `--usecase` must name exactly one. The header, `%% kinds:` line, and ids (`<kind>__<DSL id>`,
+  `--usecase` must name exactly one. With `--buc` it plays the BUC's use cases one after
+  another in the same diagram, each under a note that numbers and names it
+  (`Note over screen__Cart: 2. Place order`), in the order the model first places them
+  (`contains`, or a step's `covers`), a use case after the ones whose events trigger it. The header, `%% kinds:` line, and ids (`<kind>__<DSL id>`,
   as `participant actor__Clerk as Clerk`) are those of the other kinds, and every
   participant id is a node of `rdra`. Participants appear in this order, only those that
   take part: the actors that perform the use case (an event- or timer-triggered one has only
