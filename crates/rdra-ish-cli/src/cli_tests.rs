@@ -971,6 +971,10 @@ fn usecase_scope_errors_say_what_to_pass() {
         buc: buc.iter().map(|id| id.to_string()).collect(),
         usecase: usecase.iter().map(|id| id.to_string()).collect(),
         entity: Vec::new(),
+        all: false,
+        actor: Vec::new(),
+        title: false,
+        legend: false,
         node_kind: Vec::new(),
         edge_kind: Vec::new(),
         out: Some(out.clone()),
@@ -982,15 +986,15 @@ fn usecase_scope_errors_say_what_to_pass() {
         ),
         (
             request(DiagramKind::Usecase, &["BucPayment"], &["Capture"]),
-            "--usecase and --buc cannot be combined; pass one of them",
+            "--buc and --usecase cannot be combined; pass one of them",
         ),
         (
             request(DiagramKind::Sequence, &[], &[]),
-            "--kind sequence needs exactly one --usecase <id>",
+            "--kind sequence needs exactly one --usecase <id>, or --buc <id> for the use cases of a BUC in order",
         ),
         (
             request(DiagramKind::Sequence, &[], &["Capture", "Refund"]),
-            "--kind sequence needs exactly one --usecase <id>",
+            "--kind sequence needs exactly one --usecase <id>, or --buc <id> for the use cases of a BUC in order",
         ),
         (
             request(DiagramKind::Usecase, &[], &["NoSuchUc"]),
@@ -1013,18 +1017,22 @@ fn entity_scope_errors_say_what_to_pass() {
         buc: buc.iter().map(|id| id.to_string()).collect(),
         usecase: Vec::new(),
         entity: entity.iter().map(|id| id.to_string()).collect(),
+        all: false,
+        actor: Vec::new(),
+        title: false,
+        legend: false,
         node_kind: Vec::new(),
         edge_kind: Vec::new(),
         out: Some(out.clone()),
     };
     for (request, message) in [
         (
-            request(DiagramKind::Er, &[], &["Order"]),
-            "--entity applies only to --kind state",
+            request(DiagramKind::Flow, &[], &["Order"]),
+            "--entity applies only to --kind state (its state models), er and information (it and the entities it relates to), and usecase and robustness (the use cases that touch it)",
         ),
         (
             request(DiagramKind::State, &["BucPayment"], &["Order"]),
-            "--entity and --buc cannot be combined; pass one of them",
+            "--buc and --entity cannot be combined; pass one of them",
         ),
         (
             request(DiagramKind::State, &[], &["NoSuchEntity"]),
@@ -1051,6 +1059,10 @@ fn a_deadlocked_model_still_draws_its_state_diagram_with_the_deadlock_coloured()
         buc: Vec::new(),
         usecase: Vec::new(),
         entity: vec!["Order".to_string()],
+        all: false,
+        actor: Vec::new(),
+        title: false,
+        legend: false,
         node_kind: Vec::new(),
         edge_kind: Vec::new(),
         out: Some(out.clone()),

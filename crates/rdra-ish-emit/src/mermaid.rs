@@ -784,7 +784,7 @@ impl Emitter for ErMermaidEmitter {
         // BUCフィルタ
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
+            Scope::Whole | Scope::UseCases(_) => entity_neighbourhood(model, &view.state.entities),
         };
 
         let is_visible = |nr: &NodeRef| -> bool {
@@ -898,3 +898,49 @@ impl Emitter for EventMermaidEmitter {
 
 #[cfg(test)]
 mod tests;
+
+/// The named entities and every entity one `relate` away from one of them: what `--entity`
+/// draws of the data model. `None` when no entity is named.
+pub(crate) fn entity_neighbourhood(
+    model: &SemanticModel,
+    ids: &[String],
+) -> Option<HashSet<NodeRef>> {
+    if ids.is_empty() {
+        return None;
+    }
+    let mut set: HashSet<NodeRef> = model
+        .entities
+        .iter()
+        .filter(|(_, e)| ids.contains(&e.id))
+        .map(|(key, _)| NodeRef::Entity(key))
+        .collect();
+    let named = set.clone();
+    for (_, fk) in model.foreign_keys() {
+        let (child, parent) = (NodeRef::Entity(fk.child), NodeRef::Entity(fk.parent));
+        if named.contains(&child) {
+            set.insert(parent.clone());
+        }
+        if named.contains(&parent) {
+            set.insert(child);
+        }
+    }
+    // An N:M joins its two ends through the junction, which a key reaches; the ends reach
+    // each other by the relate itself.
+    for rel in &model.relations {
+        if matches!(
+            rel.kind,
+            RelKind::RelateOneToOne
+                | RelKind::RelateOneToMany
+                | RelKind::RelateManyToOne
+                | RelKind::RelateManyToMany
+        ) {
+            if named.contains(&rel.from) {
+                set.insert(rel.to.clone());
+            }
+            if named.contains(&rel.to) {
+                set.insert(rel.from.clone());
+            }
+        }
+    }
+    Some(set)
+}

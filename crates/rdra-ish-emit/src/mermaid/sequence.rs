@@ -294,239 +294,314 @@ fn raisers_of(model: &SemanticModel, event: &NodeRef) -> Vec<NodeRef> {
     raisers
 }
 
+/// One use case's messages, appended to `script`, with its participants: who starts it, its
+/// screen and controls, the guards, the reads and writes, and the events it raises. Returns
+/// the participant the use case enters at.
+fn play(
+    model: &SemanticModel,
+    usecase_key: UseCaseKey,
+    participants: &mut Participants,
+    script: &mut Script,
+) -> Option<NodeRef> {
+    let usecase = NodeRef::UseCase(usecase_key);
+    let controls = controls_of(model, std::slice::from_ref(&usecase))
+        .into_iter()
+        .next()
+        .map(|(_, own)| own)
+        .unwrap_or_default();
+    let first = controls.first();
+    let uc_label = label(model, &usecase);
+    let reaching = |rel_to: &NodeRef| {
+        model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Triggers && rel.to == *rel_to)
+            .map(|rel| rel.from.clone())
+            .collect::<Vec<_>>()
+    };
+
+    // Who starts the use case: its performers, or what triggers it.
+    let triggered = triggered_use_cases(model).contains(&usecase_key);
+    let performers: Vec<NodeRef> = actors_for_usecase(model, usecase_key)
+        .into_iter()
+        .map(NodeRef::Actor)
+        .collect();
+    let triggers = if triggered {
+        reaching(&usecase)
+    } else {
+        Vec::new()
+    };
+    let mut starters: Vec<(NodeRef, NodeRef)> = Vec::new();
+    for trigger in &triggers {
+        match trigger {
+            NodeRef::Event(_) => starters.extend(
+                raisers_of(model, trigger)
+                    .into_iter()
+                    .map(|raiser| (raiser, trigger.clone())),
+            ),
+            _ => starters.push((trigger.clone(), trigger.clone())),
+        }
+    }
+    starters.sort_by_key(|(from, _)| contract_id(model, from));
+    starters.dedup();
+
+    let screen = model
+        .relations
+        .iter()
+        .find(|rel| rel.kind == RelKind::Displays && rel.from == usecase)
+        .map(|rel| rel.to.clone());
+
+    for node in performers
+        .iter()
+        .chain(starters.iter().map(|(from, _)| from))
+    {
+        participants.add(0, node);
+    }
+    if let Some(screen) = &screen {
+        participants.add(1, screen);
+    }
+    for control in &controls {
+        participants.add(2, control);
+    }
+
+    let entry = screen.as_ref().or(first);
+    if let Some(entry) = entry {
+        for actor in &performers {
+            script.send(actor, "->>", entry, &uc_label);
+        }
+    }
+    if let Some(control) = first {
+        for (from, event) in &starters {
+            script.send(from, "->>", control, &label(model, event));
+        }
+    }
+    if let (Some(screen), Some(control)) = (&screen, first) {
+        let call = if *control == usecase {
+            uc_label.clone()
+        } else {
+            label(model, control)
+        };
+        script.send(screen, "->>", control, &call);
+    }
+
+    // Whoever receives the reply: the screen, else the first starter.
+    let caller = screen
+        .clone()
+        .or_else(|| performers.first().cloned())
+        .or_else(|| starters.first().map(|(from, _)| from.clone()));
+
+    let guard_texts = guards(model, usecase_key);
+    let guarded = !guard_texts.is_empty();
+    if guarded {
+        script.push(format!("alt {}", guard_texts.join(" and ")));
+        script.depth += 1;
+    }
+
+    if let Some(screen) = &screen {
+        for control in controls.iter().skip(1) {
+            script.send(screen, "->>", control, &label(model, control));
+        }
+    }
+
+    let transactions = infer_usecase_transactions(model)
+        .into_iter()
+        .find(|tx| tx.usecase == usecase_key);
+    for control in &controls {
+        let own_api = match control {
+            NodeRef::Api(key) => Some(*key),
+            _ => None,
+        };
+        let mut read: Vec<&NodeRef> = Vec::new();
+        for rel in &model.relations {
+            if rel.kind == RelKind::Reads
+                && rel.from == *control
+                && matches!(rel.to, NodeRef::Entity(_))
+                && !read.contains(&&rel.to)
+            {
+                read.push(&rel.to);
+            }
+        }
+        for entity in read {
+            participants.add(3, entity);
+            script.send(control, "->>", entity, "read");
+        }
+        let groups = transactions.iter().flat_map(|tx| tx.groups());
+        for group in groups.filter(|g| {
+            g.ordered_writes
+                .first()
+                .is_some_and(|write| write.via_api == own_api)
+        }) {
+            if let Some(frame) = group.kind.frame_label() {
+                script.note(control, frame);
+            }
+            for write in &group.ordered_writes {
+                let entity = NodeRef::Entity(write.entity);
+                participants.add(3, &entity);
+                let message = write_label(model, usecase_key, write.entity, write.kind.label());
+                script.send(control, "->>", &entity, &message);
+                for (column, from, tos) in choices(model, usecase_key, write.entity) {
+                    let shown = |v: &str| model.value_display(write.entity, &column, v).to_string();
+                    for (i, (to, guard)) in tos.iter().enumerate() {
+                        let keyword = if i == 0 { "alt" } else { "else" };
+                        if i > 0 {
+                            script.depth -= 1;
+                        }
+                        script.push(format!(
+                            "{keyword} {}",
+                            text(&format!(
+                                "{column} {} -> {}{guard}",
+                                shown(&from),
+                                shown(to)
+                            ))
+                        ));
+                        script.depth += 1;
+                        script.send(
+                            control,
+                            "->>",
+                            &entity,
+                            &text(&format!("{column} = {}", shown(to))),
+                        );
+                    }
+                    script.depth -= 1;
+                    script.push("end".to_string());
+                }
+            }
+        }
+    }
+
+    // The events the use case raises, and the controls and systems they reach.
+    if let Some(control) = first {
+        for raise in model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Raises && rel.from == usecase)
+        {
+            let event = label(model, &raise.to);
+            let targets: Vec<NodeRef> = model
+                .relations
+                .iter()
+                .filter(|rel| rel.kind == RelKind::Triggers && rel.from == raise.to)
+                .filter_map(|rel| match &rel.to {
+                    target @ NodeRef::UseCase(_) => {
+                        controls_of(model, std::slice::from_ref(target))
+                            .into_iter()
+                            .next()
+                            .and_then(|(_, own)| own.into_iter().next())
+                    }
+                    target @ NodeRef::ExtSystem(_) => Some(target.clone()),
+                    _ => None,
+                })
+                .collect();
+            if targets.is_empty() {
+                script.note(control, &format!("raises {event}"));
+            }
+            for target in &targets {
+                participants.add(4, target);
+                script.send(control, "-)", target, &event);
+            }
+        }
+    }
+
+    if let (Some(control), Some(caller)) = (first, &caller) {
+        script.send(control, "-->>", caller, "done");
+    }
+    if guarded {
+        script.depth -= 1;
+        script.push("else guard fails".to_string());
+        script.depth += 1;
+        match (first, &caller) {
+            (Some(control), Some(caller)) => script.send(control, "-->>", caller, "rejected"),
+            (Some(control), None) => script.note(control, "rejected"),
+            _ => {}
+        }
+        script.depth -= 1;
+        script.push("end".to_string());
+    }
+
+    entry.cloned().or(caller)
+}
+
+/// The use cases a sequence diagram draws, in the order it plays them: one named use case,
+/// or the use cases of the named BUCs in the order the model first places them (`contains`
+/// or a step's `covers`), each after the use cases whose events trigger it.
+fn played(model: &SemanticModel, scope: &Scope) -> Vec<UseCaseKey> {
+    let scoped = scoped_use_cases(model, scope);
+    if !matches!(scope, Scope::Bucs(_)) {
+        return scoped;
+    }
+    let placed = |key: UseCaseKey| {
+        let node = NodeRef::UseCase(key);
+        model
+            .relations
+            .iter()
+            .position(|rel| {
+                matches!(rel.kind, RelKind::Contains | RelKind::Covers) && rel.to == node
+            })
+            .unwrap_or(usize::MAX)
+    };
+    let mut rest = scoped;
+    rest.sort_by_key(|key| (placed(*key), model.use_cases[*key].id.clone()));
+    // The use cases of the scope whose raised events trigger `key`.
+    let starters = |key: UseCaseKey| -> Vec<UseCaseKey> {
+        let node = NodeRef::UseCase(key);
+        model
+            .relations
+            .iter()
+            .filter(|rel| rel.kind == RelKind::Triggers && rel.to == node)
+            .flat_map(|rel| raisers_of(model, &rel.from))
+            .filter_map(|raiser| match raiser {
+                NodeRef::UseCase(k) if k != key => Some(k),
+                _ => None,
+            })
+            .collect()
+    };
+    let mut order: Vec<UseCaseKey> = Vec::new();
+    while !rest.is_empty() {
+        // The first use case none of whose starters is still to come; a cycle plays in
+        // placement order.
+        let at = rest
+            .iter()
+            .position(|key| !starters(*key).iter().any(|s| rest.contains(s)))
+            .unwrap_or(0);
+        order.push(rest.remove(at));
+    }
+    order
+}
+
 impl Emitter for SequenceMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let usecases = match &view.scope {
-            Scope::UseCases(_) => scoped_use_cases(model, &view.scope),
-            _ => Vec::new(),
+            Scope::UseCases(_) | Scope::Bucs(_) => played(model, &view.scope),
+            Scope::Whole => Vec::new(),
         };
-        let [usecase_key] = usecases[..] else {
+        let one = matches!(view.scope, Scope::UseCases(_));
+        if usecases.is_empty() || (one && usecases.len() != 1) {
             return Err(EmitError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                "a sequence diagram draws exactly one use case",
+                "a sequence diagram draws one use case, or the use cases of a BUC",
             )));
-        };
-        let usecase = NodeRef::UseCase(usecase_key);
-        let controls = controls_of(model, std::slice::from_ref(&usecase))
-            .into_iter()
-            .next()
-            .map(|(_, own)| own)
-            .unwrap_or_default();
-        let first = controls.first();
-        let uc_label = label(model, &usecase);
-        let reaching = |rel_to: &NodeRef| {
-            model
-                .relations
-                .iter()
-                .filter(|rel| rel.kind == RelKind::Triggers && rel.to == *rel_to)
-                .map(|rel| rel.from.clone())
-                .collect::<Vec<_>>()
-        };
-
-        // Who starts the use case: its performers, or what triggers it.
-        let triggered = triggered_use_cases(model).contains(&usecase_key);
-        let performers: Vec<NodeRef> = actors_for_usecase(model, usecase_key)
-            .into_iter()
-            .map(NodeRef::Actor)
-            .collect();
-        let triggers = if triggered {
-            reaching(&usecase)
-        } else {
-            Vec::new()
-        };
-        let mut starters: Vec<(NodeRef, NodeRef)> = Vec::new();
-        for trigger in &triggers {
-            match trigger {
-                NodeRef::Event(_) => starters.extend(
-                    raisers_of(model, trigger)
-                        .into_iter()
-                        .map(|raiser| (raiser, trigger.clone())),
-                ),
-                _ => starters.push((trigger.clone(), trigger.clone())),
-            }
         }
-        starters.sort_by_key(|(from, _)| contract_id(model, from));
-        starters.dedup();
-
-        let screen = model
-            .relations
-            .iter()
-            .find(|rel| rel.kind == RelKind::Displays && rel.from == usecase)
-            .map(|rel| rel.to.clone());
-
         let mut participants = Participants::default();
-        for node in performers
-            .iter()
-            .chain(starters.iter().map(|(from, _)| from))
-        {
-            participants.add(0, node);
-        }
-        if let Some(screen) = &screen {
-            participants.add(1, screen);
-        }
-        for control in &controls {
-            participants.add(2, control);
-        }
-
         let mut script = Script {
             model,
             lines: Vec::new(),
             depth: 0,
         };
-        let entry = screen.as_ref().or(first);
-        if let Some(entry) = entry {
-            for actor in &performers {
-                script.send(actor, "->>", entry, &uc_label);
-            }
-        }
-        if let Some(control) = first {
-            for (from, event) in &starters {
-                script.send(from, "->>", control, &label(model, event));
-            }
-        }
-        if let (Some(screen), Some(control)) = (&screen, first) {
-            let call = if *control == usecase {
-                uc_label.clone()
-            } else {
-                label(model, control)
-            };
-            script.send(screen, "->>", control, &call);
-        }
-
-        // Whoever receives the reply: the screen, else the first starter.
-        let caller = screen
-            .clone()
-            .or_else(|| performers.first().cloned())
-            .or_else(|| starters.first().map(|(from, _)| from.clone()));
-
-        let guard_texts = guards(model, usecase_key);
-        let guarded = !guard_texts.is_empty();
-        if guarded {
-            script.push(format!("alt {}", guard_texts.join(" and ")));
-            script.depth += 1;
-        }
-
-        if let Some(screen) = &screen {
-            for control in controls.iter().skip(1) {
-                script.send(screen, "->>", control, &label(model, control));
-            }
-        }
-
-        let transactions = infer_usecase_transactions(model)
-            .into_iter()
-            .find(|tx| tx.usecase == usecase_key);
-        for control in &controls {
-            let own_api = match control {
-                NodeRef::Api(key) => Some(*key),
-                _ => None,
-            };
-            let mut read: Vec<&NodeRef> = Vec::new();
-            for rel in &model.relations {
-                if rel.kind == RelKind::Reads
-                    && rel.from == *control
-                    && matches!(rel.to, NodeRef::Entity(_))
-                    && !read.contains(&&rel.to)
-                {
-                    read.push(&rel.to);
-                }
-            }
-            for entity in read {
-                participants.add(3, entity);
-                script.send(control, "->>", entity, "read");
-            }
-            let groups = transactions.iter().flat_map(|tx| tx.groups());
-            for group in groups.filter(|g| {
-                g.ordered_writes
-                    .first()
-                    .is_some_and(|write| write.via_api == own_api)
-            }) {
-                if let Some(frame) = group.kind.frame_label() {
-                    script.note(control, frame);
-                }
-                for write in &group.ordered_writes {
-                    let entity = NodeRef::Entity(write.entity);
-                    participants.add(3, &entity);
-                    let message = write_label(model, usecase_key, write.entity, write.kind.label());
-                    script.send(control, "->>", &entity, &message);
-                    for (column, from, tos) in choices(model, usecase_key, write.entity) {
-                        let shown =
-                            |v: &str| model.value_display(write.entity, &column, v).to_string();
-                        for (i, (to, guard)) in tos.iter().enumerate() {
-                            let keyword = if i == 0 { "alt" } else { "else" };
-                            if i > 0 {
-                                script.depth -= 1;
-                            }
-                            script.push(format!(
-                                "{keyword} {}",
-                                text(&format!(
-                                    "{column} {} -> {}{guard}",
-                                    shown(&from),
-                                    shown(to)
-                                ))
-                            ));
-                            script.depth += 1;
-                            script.send(
-                                control,
-                                "->>",
-                                &entity,
-                                &text(&format!("{column} = {}", shown(to))),
-                            );
-                        }
-                        script.depth -= 1;
-                        script.push("end".to_string());
-                    }
+        for (n, usecase_key) in usecases.iter().enumerate() {
+            // Several use cases: each opens with a note that numbers and names it.
+            let opened = script.lines.len();
+            let entry = play(model, *usecase_key, &mut participants, &mut script);
+            if !one {
+                let name = label(model, &NodeRef::UseCase(*usecase_key));
+                if let Some(entry) = entry {
+                    let id = contract_id(model, &entry).unwrap_or_default();
+                    script
+                        .lines
+                        .insert(opened, format!("  Note over {id}: {}. {name}", n + 1));
                 }
             }
         }
-
-        // The events the use case raises, and the controls and systems they reach.
-        if let Some(control) = first {
-            for raise in model
-                .relations
-                .iter()
-                .filter(|rel| rel.kind == RelKind::Raises && rel.from == usecase)
-            {
-                let event = label(model, &raise.to);
-                let targets: Vec<NodeRef> = model
-                    .relations
-                    .iter()
-                    .filter(|rel| rel.kind == RelKind::Triggers && rel.from == raise.to)
-                    .filter_map(|rel| match &rel.to {
-                        target @ NodeRef::UseCase(_) => {
-                            controls_of(model, std::slice::from_ref(target))
-                                .into_iter()
-                                .next()
-                                .and_then(|(_, own)| own.into_iter().next())
-                        }
-                        target @ NodeRef::ExtSystem(_) => Some(target.clone()),
-                        _ => None,
-                    })
-                    .collect();
-                if targets.is_empty() {
-                    script.note(control, &format!("raises {event}"));
-                }
-                for target in &targets {
-                    participants.add(4, target);
-                    script.send(control, "-)", target, &event);
-                }
-            }
-        }
-
-        if let (Some(control), Some(caller)) = (first, &caller) {
-            script.send(control, "-->>", caller, "done");
-        }
-        if guarded {
-            script.depth -= 1;
-            script.push("else guard fails".to_string());
-            script.depth += 1;
-            match (first, &caller) {
-                (Some(control), Some(caller)) => script.send(control, "-->>", caller, "rejected"),
-                (Some(control), None) => script.note(control, "rejected"),
-                _ => {}
-            }
-            script.depth -= 1;
-            script.push("end".to_string());
-        }
+        let scoped: HashSet<NodeRef> = usecases.iter().map(|k| NodeRef::UseCase(*k)).collect();
 
         let nodes = participants.ordered();
         let mut body = String::new();
@@ -559,7 +634,7 @@ impl Emitter for SequenceMermaidEmitter {
             diagram: "sequence",
             view,
             layers: None,
-            omitted: omitted_linked_kinds(model, |node| *node == usecase, &drawn, &kinds),
+            omitted: omitted_linked_kinds(model, |node| scoped.contains(node), &drawn, &kinds),
             kinds,
         };
         Ok(format!("{}sequenceDiagram\n{body}", header.render()))
@@ -844,5 +919,50 @@ holds(NotFinal, Notice.final == false)
         let two = View::usecases(vec!["Pay".to_string(), "Split".to_string()]);
         assert!(SequenceMermaidEmitter.emit(&model, &two).is_err());
         assert!(SequenceMermaidEmitter.emit(&model, &View::whole()).is_err());
+    }
+
+    /// A BUC's use cases play in the order the model places them, a use case after the one
+    /// whose event triggers it, each under a numbered note.
+    #[test]
+    fn a_buc_plays_its_use_cases_in_order_after_their_triggers() {
+        let model = model_from(
+            r#"
+actor Clerk "Clerk"
+buc BucShip "Ship"
+usecase Notify "Notify"
+usecase Pack "Pack"
+usecase Bill "Bill"
+entity Parcel "Parcel" { id: Int @pk }
+event Packed "Packed"
+contains(BucShip, Notify)
+contains(BucShip, Pack)
+contains(BucShip, Bill)
+performs(Clerk, BucShip)
+creates(Pack, Parcel)
+reads(Notify, Parcel)
+reads(Bill, Parcel)
+raises(Pack, Packed)
+triggers(Packed, Notify)
+"#,
+        );
+        let text = SequenceMermaidEmitter
+            .emit(&model, &View::bucs(vec!["BucShip".to_string()]))
+            .unwrap();
+        let notes: Vec<&str> = text
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("Note over "))
+            .filter_map(|l| l.split_once(": ").map(|(_, said)| said))
+            .collect();
+        assert_eq!(notes, ["1. Pack", "2. Notify", "3. Bill"], "{text}");
+        assert!(
+            text.starts_with("%% rdra-ish diagram=sequence scope=buc:BucShip"),
+            "{text}"
+        );
+        // Each participant is declared once, though all three use cases read the parcel.
+        assert_eq!(
+            text.matches("participant entity__Parcel ").count(),
+            1,
+            "{text}"
+        );
     }
 }

@@ -183,10 +183,17 @@ pub(crate) enum Commands {
     Diagram {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, context, requirement, business, usecase, robustness, sequence, flow, information,
-        /// condition, er, state, or event
+        /// Diagram kind: rdra, context, requirement, business, usecase, robustness, sequence, flow, screen,
+        /// information, condition, er, state, or event
         #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
         kind: DiagramKind,
+        /// Write the review set under --out, a directory: the whole-model context, requirement,
+        /// business, information, condition, er, screen, event, and state index diagrams, each
+        /// BUC's usecase, robustness, flow, and sequence diagrams, and each entity's state
+        /// models, as `<kind>.mmd` and `<kind>__<id>.mmd`. A diagram with nothing to draw is
+        /// left out. Not together with --kind or a scope.
+        #[arg(long)]
+        all: bool,
         /// Output format: mermaid, the only one (prints Mermaid text)
         #[arg(long, default_value = "mermaid", value_parser = WithRemoved::<OutputFormat>::new(REMOVED_FORMATS))]
         format: OutputFormat,
@@ -195,14 +202,20 @@ pub(crate) enum Commands {
         /// Applies to all diagram kinds.
         #[arg(long)]
         buc: Vec<String>,
-        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase, robustness, and sequence (which needs exactly one), and not
-        /// together with --buc.
+        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase, robustness, and
+        /// sequence (which takes exactly one, or --buc for a BUC's use cases in order). One of
+        /// --buc, --usecase, --entity, and --actor at a time.
         #[arg(long)]
         usecase: Vec<String>,
-        /// Draw only these entities' state models (by id), every lifecycle column; repeatable.
-        /// Applies to --kind state, and not together with --buc.
+        /// Draw by entity (by id); repeatable. --kind state: these entities' state models, every
+        /// lifecycle column. --kind er and information: these entities and the ones a `relate`
+        /// joins them to. --kind usecase and robustness: the use cases that read or write them.
         #[arg(long)]
         entity: Vec<String>,
+        /// Draw the use cases these actors perform (by id); repeatable. Applies to --kind usecase
+        /// and robustness.
+        #[arg(long)]
+        actor: Vec<String>,
         /// Filter graph diagrams to one or more node kinds; repeatable.
         /// Applies to --kind rdra.
         #[arg(long = "node-kind", alias = "kind-filter")]
@@ -211,8 +224,15 @@ pub(crate) enum Commands {
         /// Applies to --kind rdra.
         #[arg(long = "edge-kind", alias = "edge-filter")]
         edge_kind: Vec<String>,
+        /// Open the text with a Mermaid `title`: the diagram's name and what it is scoped to. A
+        /// renderer shows it; the `%%` header, which says the same, it drops.
+        #[arg(long)]
+        title: bool,
+        /// Add a `凡例` box to a flowchart diagram: one node per node kind, in its colour.
+        #[arg(long)]
+        legend: bool,
         /// Write the Mermaid text to this file (`.mmd` is always the extension). Without it,
-        /// the text goes to stdout.
+        /// the text goes to stdout. With --all, the directory the files go to.
         #[arg(short, long)]
         out: Option<PathBuf>,
     },
@@ -469,7 +489,10 @@ pub(crate) enum DiagramKind {
     /// バリエーション・条件: each condition with the variations and state models it combines
     /// and what it applies to, and each variation with its values
     Condition,
+    /// ER図: the entities with their columns, keys, and the cardinality of each `relate`
     Er,
+    /// 状態モデル: each state model with its states and the use case of each transition;
+    /// without --entity or --buc, an index of the state models
     State,
     /// System-to-system event links: UC / ExtSystem --raises--> Event --triggers--> UC / BUC /
     /// ExtSystem, and Timer --triggers--> UC / BUC
@@ -585,6 +608,7 @@ mod tests {
                 node_kind,
                 edge_kind,
                 out,
+                ..
             } => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(usecase.is_empty());

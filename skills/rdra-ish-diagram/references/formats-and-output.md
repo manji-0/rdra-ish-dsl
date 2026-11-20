@@ -37,6 +37,9 @@ rdra-ish diagram src/ --kind rdra --format mermaid --out docs/rdra
 # Focused graph views
 rdra-ish diagram src/ --kind rdra --format mermaid --node-kind api --node-kind dto --edge-kind request
 
+# The review set, one file per diagram, with a title on each rendered image
+rdra-ish diagram src/ --all --title --out docs/diagrams
+
 # Contract exports
 rdra-ish export src/ --kind openapi --out out/openapi.json
 rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
