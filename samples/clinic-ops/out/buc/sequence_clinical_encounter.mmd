@@ -1,0 +1,94 @@
+%% rdra-ish diagram=sequence scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant usecase__CheckInPatient as 受付（初診・再診）
+  actor actor__Clinician as 医師
+  participant screen__EncounterWorkspaceScreen as 診療記録画面
+  participant screen__VitalsScreen as バイタル入力画面
+  participant screen__DiagnosisScreen as 診断入力画面
+  participant screen__ReferralLetterScreen as 診療情報提供書画面
+  participant api__OpenEncounterApi as 診療記録作成 API
+  participant api__RecordVitalsApi as バイタル記録 API
+  participant api__DocumentAssessmentApi as 診察記録 API
+  participant api__SignEncounterApi as 署名 API
+  participant api__AmendEncounterApi as 記録修正 API
+  participant api__IssueReferralLetterApi as 診療情報提供書 API
+  participant api__CompleteConsultationApi as 診察終了 API
+  participant entity__Appointment as 予約・受診
+  participant entity__Encounter as 診療記録
+  participant entity__VitalSign as バイタル
+  participant entity__Diagnosis as 診断
+  participant entity__ReferralLetter as 紹介状・診療情報提供書
+  participant entity__Room as 診察室
+  participant api__CreateChargeApi as コスト登録 API
+  participant api__CreateCarePlanApi as ケアプラン作成 API
+  Note over screen__EncounterWorkspaceScreen: 1. 診療記録を開く
+  actor__Nurse ->> screen__EncounterWorkspaceScreen: 診療記録を開く
+  usecase__CheckInPatient ->> api__OpenEncounterApi: 受付完了
+  screen__EncounterWorkspaceScreen ->> api__OpenEncounterApi: 診療記録作成 API
+  alt Appointment.status == 受付済
+    Note over api__OpenEncounterApi: transaction (API atomic boundary)
+    api__OpenEncounterApi ->> entity__Appointment: update status 受付済 -> 診察中
+    api__OpenEncounterApi ->> entity__Encounter: create
+    api__OpenEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__OpenEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end
+  Note over screen__VitalsScreen: 2. バイタルの記録
+  actor__Nurse ->> screen__VitalsScreen: バイタルの記録
+  screen__VitalsScreen ->> api__RecordVitalsApi: バイタル記録 API
+  Note over api__RecordVitalsApi: transaction (API atomic boundary)
+  api__RecordVitalsApi ->> entity__Encounter: update
+  api__RecordVitalsApi ->> entity__VitalSign: create
+  api__RecordVitalsApi -->> screen__VitalsScreen: done
+  Note over screen__DiagnosisScreen: 3. 診察・診断の記録
+  actor__Clinician ->> screen__DiagnosisScreen: 診察・診断の記録
+  screen__DiagnosisScreen ->> api__DocumentAssessmentApi: 診察記録 API
+  alt Encounter.status == 記録中
+    Note over api__DocumentAssessmentApi: transaction (API atomic boundary)
+    api__DocumentAssessmentApi ->> entity__Encounter: update status 記録中 -> 記載済
+    api__DocumentAssessmentApi ->> entity__Diagnosis: create
+    api__DocumentAssessmentApi -->> screen__DiagnosisScreen: done
+  else guard fails
+    api__DocumentAssessmentApi -->> screen__DiagnosisScreen: rejected
+  end
+  Note over screen__EncounterWorkspaceScreen: 4. 診療記録の署名
+  actor__Clinician ->> screen__EncounterWorkspaceScreen: 診療記録の署名
+  screen__EncounterWorkspaceScreen ->> api__SignEncounterApi: 署名 API
+  alt Encounter.status == 記載済
+    api__SignEncounterApi ->> entity__Encounter: update status 記載済 -> 署名済, signed_at=set
+    api__SignEncounterApi -) api__CreateChargeApi: 診療記録の署名
+    api__SignEncounterApi -) api__CreateCarePlanApi: 診療記録の署名
+    api__SignEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__SignEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end
+  Note over screen__EncounterWorkspaceScreen: 5. 署名済み記録の修正
+  actor__Clinician ->> screen__EncounterWorkspaceScreen: 署名済み記録の修正
+  screen__EncounterWorkspaceScreen ->> api__AmendEncounterApi: 記録修正 API
+  alt Encounter.status == 署名済
+    api__AmendEncounterApi ->> entity__Encounter: update status 署名済 -> 修正済
+    api__AmendEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__AmendEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end
+  Note over screen__ReferralLetterScreen: 6. 診療情報提供書の作成・送信
+  actor__Clinician ->> screen__ReferralLetterScreen: 診療情報提供書の作成・送信
+  screen__ReferralLetterScreen ->> api__IssueReferralLetterApi: 診療情報提供書 API
+  api__IssueReferralLetterApi ->> entity__Encounter: read
+  api__IssueReferralLetterApi ->> entity__ReferralLetter: create direction=outbound
+  api__IssueReferralLetterApi -->> screen__ReferralLetterScreen: done
+  Note over screen__EncounterWorkspaceScreen: 7. 診察終了
+  actor__Clinician ->> screen__EncounterWorkspaceScreen: 診察終了
+  screen__EncounterWorkspaceScreen ->> api__CompleteConsultationApi: 診察終了 API
+  alt Appointment.status == 診察中
+    Note over api__CompleteConsultationApi: transaction (API atomic boundary)
+    api__CompleteConsultationApi ->> entity__Room: update occupancy_status=cleaning
+    api__CompleteConsultationApi ->> entity__Appointment: update status 診察中 -> 計算待ち
+    Note over api__CompleteConsultationApi: raises 診察終了
+    api__CompleteConsultationApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__CompleteConsultationApi -->> screen__EncounterWorkspaceScreen: rejected
+  end

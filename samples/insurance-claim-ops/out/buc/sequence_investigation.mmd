@@ -1,0 +1,74 @@
+%% rdra-ish diagram=sequence scope=buc:BucInvestigation model=samples/insurance-claim-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  actor actor__Adjuster as アジャスター
+  participant usecase__AgreeSettlement as 示談の成立
+  participant usecase__DeclineSettlementService as 示談代行を行わない
+  participant usecase__EndNegotiationUnresolved as 示談交渉の終了（不調）
+  participant usecase__ReportSurvey as 損害調査の報告
+  participant screen__InvestigationScreen as 損害調査画面
+  participant screen__CaseScreen as 事故案件画面
+  participant api__InvestigationCreateApi as 損害調査依頼 API
+  participant api__InvestigationApi as 損害調査 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant entity__Investigation as 損害調査
+  participant api__CaseApi as 事故案件 API
+  Note over screen__InvestigationScreen: 1. 損害調査の依頼
+  actor__ClaimHandler ->> screen__InvestigationScreen: 損害調査の依頼
+  screen__InvestigationScreen ->> api__InvestigationCreateApi: 損害調査依頼 API
+  alt ClaimCase.status == 初期対応済
+    Note over api__InvestigationCreateApi: transaction (API atomic boundary)
+    api__InvestigationCreateApi ->> entity__ClaimCase: update status 初期対応済 -> 調査中
+    api__InvestigationCreateApi ->> entity__Investigation: create
+    api__InvestigationCreateApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationCreateApi -->> screen__InvestigationScreen: rejected
+  end
+  Note over screen__InvestigationScreen: 2. 損害調査の実施
+  actor__Adjuster ->> screen__InvestigationScreen: 損害調査の実施
+  screen__InvestigationScreen ->> api__InvestigationApi: 損害調査 API
+  alt Investigation.status == 調査依頼
+    api__InvestigationApi ->> entity__Investigation: update status 調査依頼 -> 調査中
+    api__InvestigationApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationApi -->> screen__InvestigationScreen: rejected
+  end
+  Note over screen__InvestigationScreen: 3. 損害調査の報告
+  actor__Adjuster ->> screen__InvestigationScreen: 損害調査の報告
+  screen__InvestigationScreen ->> api__InvestigationApi: 損害調査 API
+  alt Investigation.status == 調査中
+    api__InvestigationApi ->> entity__Investigation: update status 調査中 -> 調査報告済
+    api__InvestigationApi -) api__CaseApi: 損害調査の報告
+    api__InvestigationApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationApi -->> screen__InvestigationScreen: rejected
+  end
+  Note over screen__CaseScreen: 4. 過失割合と賠償責任の判断
+  actor__ClaimHandler ->> screen__CaseScreen: 過失割合と賠償責任の判断
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt 事故案件を調査しているか、損害を確定した: ClaimCase.status in (調査中, 示談交渉中, 損害確定) and ClaimCase.liability == 未確定
+    api__CaseApi ->> entity__ClaimCase: update
+    alt liability 未確定 -> 賠償責任あり
+      api__CaseApi ->> entity__ClaimCase: liability = 賠償責任あり
+    else liability 未確定 -> 過失ゼロ（賠償責任なし）
+      api__CaseApi ->> entity__ClaimCase: liability = 過失ゼロ（賠償責任なし）
+    end
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end
+  Note over screen__CaseScreen: 5. 損害の確定
+  actor__ClaimHandler ->> screen__CaseScreen: 損害の確定
+  usecase__AgreeSettlement ->> api__CaseApi: 示談の成立
+  usecase__DeclineSettlementService ->> api__CaseApi: 示談代行の終了（不調・不実施）
+  usecase__EndNegotiationUnresolved ->> api__CaseApi: 示談代行の終了（不調・不実施）
+  usecase__ReportSurvey ->> api__CaseApi: 損害調査の報告
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt 損害調査の報告がある: Investigation.status == 調査報告済 and ClaimCase.status in (調査中, 示談交渉中)
+    api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 損害確定 [車両・人身傷害の事故である], status 調査中 -> 損害確定 [賠償責任の有無を判断している], status 示談交渉中 -> 損害確定 [示談が成立したか、示談代行を終えた]
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end

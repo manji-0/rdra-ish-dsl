@@ -1,0 +1,108 @@
+%% rdra-ish diagram=sequence scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  actor actor__Patient as 患者
+  participant usecase__BookAppointment as 予約の確定
+  participant usecase__ScheduleFollowUpVisit as 再診の予約
+  participant timer__IntakeExpiryCheck as 問診票の期限切れ確認（毎晩）
+  participant screen__PatientSearchScreen as 患者検索画面
+  participant screen__PatientProfileScreen as 患者基本情報画面
+  participant screen__InsuranceScreen as 保険資格登録画面
+  participant screen__ConsentScreen as 同意取得画面
+  participant screen__IntakePortalScreen as 問診票ポータル画面
+  participant api__SearchPatientApi as 患者検索 API
+  participant api__RegisterPatientApi as 新患登録 API
+  participant api__UpdateDemographicsApi as 患者属性変更 API
+  participant api__EligibilityApi as 保険資格登録 API
+  participant api__ConsentApi as 同意 API
+  participant api__IntakeMessagingApi as 問診票送付 API
+  participant usecase__CompleteIntakeForms as 問診票の回答
+  participant usecase__ExpireIntakeForms as 問診票の期限切れ
+  participant usecase__MergeDuplicatePatient as 重複患者の統合
+  participant usecase__ArchivePatient as 患者のアーカイブ
+  participant entity__PatientAccount as 患者登録
+  participant entity__PatientProfile as 患者基本情報
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__EligibilityCheck as 資格確認
+  participant entity__ConsentRecord as 同意記録
+  participant entity__IntakePacket as 問診票
+  participant entity__PatientMessage as 患者連絡
+  Note over screen__PatientSearchScreen: 1. 患者の検索
+  actor__ReceptionClerk ->> screen__PatientSearchScreen: 患者の検索
+  screen__PatientSearchScreen ->> api__SearchPatientApi: 患者検索 API
+  api__SearchPatientApi ->> entity__PatientAccount: read
+  api__SearchPatientApi ->> entity__PatientProfile: read
+  api__SearchPatientApi -->> screen__PatientSearchScreen: done
+  Note over screen__PatientProfileScreen: 2. 新患登録
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 新患登録
+  screen__PatientProfileScreen ->> api__RegisterPatientApi: 新患登録 API
+  Note over api__RegisterPatientApi: transaction (API atomic boundary)
+  api__RegisterPatientApi ->> entity__PatientAccount: create
+  api__RegisterPatientApi ->> entity__PatientProfile: create
+  api__RegisterPatientApi -->> screen__PatientProfileScreen: done
+  Note over screen__PatientProfileScreen: 3. 患者属性の変更
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 患者属性の変更
+  screen__PatientProfileScreen ->> api__UpdateDemographicsApi: 患者属性変更 API
+  api__UpdateDemographicsApi ->> entity__PatientProfile: update
+  api__UpdateDemographicsApi -->> screen__PatientProfileScreen: done
+  Note over screen__InsuranceScreen: 4. 保険資格・限度額情報の登録（新患登録）
+  actor__ReceptionClerk ->> screen__InsuranceScreen: 保険資格・限度額情報の登録（新患登録）
+  screen__InsuranceScreen ->> api__EligibilityApi: 保険資格登録 API
+  api__EligibilityApi ->> entity__InsurancePolicy: read
+  Note over api__EligibilityApi: transaction (API atomic boundary)
+  api__EligibilityApi ->> entity__InsurancePolicy: update verification_status=verified, verified_at=set, limit_category=obtained
+  api__EligibilityApi ->> entity__EligibilityCheck: create result=valid, reference_no=set
+  api__EligibilityApi -->> screen__InsuranceScreen: done
+  Note over screen__ConsentScreen: 5. 同意の取得
+  actor__Patient ->> screen__ConsentScreen: 同意の取得
+  screen__ConsentScreen ->> api__ConsentApi: 同意 API
+  api__ConsentApi ->> entity__ConsentRecord: create signed_at=set, revoked=false
+  api__ConsentApi -->> screen__ConsentScreen: done
+  Note over screen__IntakePortalScreen: 6. 問診票の送付
+  actor__ReceptionClerk ->> screen__IntakePortalScreen: 問診票の送付
+  usecase__BookAppointment ->> api__IntakeMessagingApi: 予約確定
+  usecase__ScheduleFollowUpVisit ->> api__IntakeMessagingApi: 予約確定
+  screen__IntakePortalScreen ->> api__IntakeMessagingApi: 問診票送付 API
+  Note over api__IntakeMessagingApi: transaction (API atomic boundary)
+  api__IntakeMessagingApi ->> entity__IntakePacket: create sent_at=set
+  api__IntakeMessagingApi ->> entity__PatientMessage: create status=sent, sent_at=set
+  api__IntakeMessagingApi -->> screen__IntakePortalScreen: done
+  Note over screen__IntakePortalScreen: 7. 問診票の回答
+  actor__Patient ->> screen__IntakePortalScreen: 問診票の回答
+  screen__IntakePortalScreen ->> usecase__CompleteIntakeForms: 問診票の回答
+  alt IntakePacket.status == 送付済
+    usecase__CompleteIntakeForms ->> entity__IntakePacket: update status 送付済 -> 回答済, completed_at=set
+    usecase__CompleteIntakeForms -->> screen__IntakePortalScreen: done
+  else guard fails
+    usecase__CompleteIntakeForms -->> screen__IntakePortalScreen: rejected
+  end
+  Note over screen__IntakePortalScreen: 8. 問診票の期限切れ
+  actor__ReceptionClerk ->> screen__IntakePortalScreen: 問診票の期限切れ
+  timer__IntakeExpiryCheck ->> usecase__ExpireIntakeForms: 問診票の期限切れ確認（毎晩）
+  screen__IntakePortalScreen ->> usecase__ExpireIntakeForms: 問診票の期限切れ
+  alt IntakePacket.status == 送付済
+    usecase__ExpireIntakeForms ->> entity__IntakePacket: update status 送付済 -> 期限切れ
+    usecase__ExpireIntakeForms -->> screen__IntakePortalScreen: done
+  else guard fails
+    usecase__ExpireIntakeForms -->> screen__IntakePortalScreen: rejected
+  end
+  Note over screen__PatientProfileScreen: 9. 重複患者の統合
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 重複患者の統合
+  screen__PatientProfileScreen ->> usecase__MergeDuplicatePatient: 重複患者の統合
+  alt PatientAccount.status == 有効
+    usecase__MergeDuplicatePatient ->> entity__PatientAccount: update status 有効 -> 統合済
+    usecase__MergeDuplicatePatient -->> screen__PatientProfileScreen: done
+  else guard fails
+    usecase__MergeDuplicatePatient -->> screen__PatientProfileScreen: rejected
+  end
+  Note over screen__PatientProfileScreen: 10. 患者のアーカイブ
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 患者のアーカイブ
+  screen__PatientProfileScreen ->> usecase__ArchivePatient: 患者のアーカイブ
+  alt PatientAccount.status == 有効
+    usecase__ArchivePatient ->> entity__PatientAccount: update status 有効 -> アーカイブ済, archived_at=set
+    usecase__ArchivePatient -->> screen__PatientProfileScreen: done
+  else guard fails
+    usecase__ArchivePatient -->> screen__PatientProfileScreen: rejected
+  end

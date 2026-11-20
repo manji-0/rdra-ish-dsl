@@ -1,0 +1,109 @@
+%% rdra-ish diagram=sequence scope=buc:BucFilingFormality model=samples/patent-ops
+%% kinds: actor usecase timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant usecase__ApproveDraft as 出願書類の承認
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__FormalityAmendmentDeadline as 手続補正書の提出期限（指令書の発送日から2月）
+  participant timer__PublicationCheck as 出願公開の確認（出願から1年6月）
+  participant timer__PriorityClaimDeadline as 国内優先権の主張期限（先の出願から1年）
+  participant timer__PriorityBaseDeadline as 先の出願の取下げ擬制（先の出願から1年4月）
+  participant screen__FilingScreen as 出願画面
+  participant screen__ApplicationDocketScreen as 出願案件・期限管理画面
+  participant api__FilingApi as 出願 API
+  participant usecase__RecordFilingReceipt as 出願番号・出願日の記録
+  participant api__FormalityApi as 方式補正 API
+  participant api__ApplicationDocketApi as 出願案件 API
+  participant api__PriorityClaimApi as 国内優先権 API
+  participant api__PriorityBaseApi as 先の出願の取下げ擬制 API
+  participant entity__FeeSchedule as 料金表
+  participant entity__DraftingOrder as 出願依頼
+  participant entity__PatentApplication as 特許出願
+  participant entity__PriorityClaim as 国内優先権の主張
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant api__RewardApi as 相当の利益 API
+  Note over screen__FilingScreen: 1. 電子出願
+  actor__PatentAttorney ->> screen__FilingScreen: 電子出願
+  usecase__ApproveDraft ->> api__FilingApi: 出願書類の承認
+  screen__FilingScreen ->> api__FilingApi: 出願 API
+  alt 出願書類が承認されている: DraftingOrder.status == 出願承認済
+    api__FilingApi ->> entity__FeeSchedule: read
+    Note over api__FilingApi: transaction (API atomic boundary)
+    api__FilingApi ->> entity__DraftingOrder: update status 出願承認済 -> 出願済
+    api__FilingApi ->> entity__PatentApplication: create
+    api__FilingApi -) extsystem__Jpo: 特許願の提出
+    api__FilingApi -) api__RewardApi: 特許願の提出
+    api__FilingApi -->> screen__FilingScreen: done
+  else guard fails
+    api__FilingApi -->> screen__FilingScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 2. 出願番号・出願日の記録
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願番号・出願日の記録
+  extsystem__Jpo ->> usecase__RecordFilingReceipt: 受領書（出願番号）
+  screen__ApplicationDocketScreen ->> usecase__RecordFilingReceipt: 出願番号・出願日の記録
+  usecase__RecordFilingReceipt ->> entity__PatentApplication: read
+  usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: done
+  Note over screen__ApplicationDocketScreen: 3. 手続補正指令書の受領
+  actor__PatentAttorney ->> screen__ApplicationDocketScreen: 手続補正指令書の受領
+  extsystem__Jpo ->> api__FormalityApi: 手続補正指令書（方式）
+  screen__ApplicationDocketScreen ->> api__FormalityApi: 方式補正 API
+  alt PatentApplication.status == 出願済（方式審査）
+    api__FormalityApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 手続補正指令への対応中
+    api__FormalityApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__FormalityApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 4. 手続補正書の提出
+  actor__PatentAttorney ->> screen__ApplicationDocketScreen: 手続補正書の提出
+  timer__FormalityAmendmentDeadline ->> api__FormalityApi: 手続補正書の提出期限（指令書の発送日から2月）
+  screen__ApplicationDocketScreen ->> api__FormalityApi: 方式補正 API
+  alt PatentApplication.status == 手続補正指令への対応中
+    api__FormalityApi ->> entity__PatentApplication: update status 手続補正指令への対応中 -> 出願済（方式審査）
+    api__FormalityApi -) extsystem__Jpo: 手続補正書の提出
+    api__FormalityApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__FormalityApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 5. 出願の却下の記録
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願の却下の記録
+  extsystem__Jpo ->> api__ApplicationDocketApi: 却下処分
+  screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
+  alt PatentApplication.status == 手続補正指令への対応中
+    api__ApplicationDocketApi ->> entity__PatentApplication: update status 手続補正指令への対応中 -> 却下
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 6. 出願公開の記録
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願公開の記録
+  extsystem__Jpo ->> api__ApplicationDocketApi: 出願公開
+  timer__PublicationCheck ->> api__ApplicationDocketApi: 出願公開の確認（出願から1年6月）
+  screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
+  alt 出願が係属している: PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済)
+    api__ApplicationDocketApi ->> entity__PatentApplication: update published_at=set
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__FilingScreen: 7. 国内優先権の主張
+  actor__PatentAttorney ->> screen__FilingScreen: 国内優先権の主張
+  timer__PriorityClaimDeadline ->> api__PriorityClaimApi: 国内優先権の主張期限（先の出願から1年）
+  screen__FilingScreen ->> api__PriorityClaimApi: 国内優先権 API
+  alt 先の出願が係属し、査定を受けていない: PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）)
+    Note over api__PriorityClaimApi: transaction (API atomic boundary)
+    api__PriorityClaimApi ->> entity__PatentApplication: update priority_base=true
+    api__PriorityClaimApi ->> entity__PriorityClaim: create
+    api__PriorityClaimApi -) extsystem__Jpo: 国内優先権を主張した出願
+    api__PriorityClaimApi -->> screen__FilingScreen: done
+  else guard fails
+    api__PriorityClaimApi -->> screen__FilingScreen: rejected
+  end
+  Note over api__PriorityBaseApi: 8. 先の出願の取下げ擬制
+  timer__PriorityBaseDeadline ->> api__PriorityBaseApi: 先の出願の取下げ擬制（先の出願から1年4月）
+  alt 国内優先権の基礎とされ、まだ係属している出願である: PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) and PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
+    api__PriorityBaseApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（国内優先権の基礎）, status 審査請求済（審査中） -> 取下げ擬制（国内優先権の基礎）
+    api__PriorityBaseApi -->> timer__PriorityBaseDeadline: done
+  else guard fails
+    api__PriorityBaseApi -->> timer__PriorityBaseDeadline: rejected
+  end

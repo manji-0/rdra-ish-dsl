@@ -8,7 +8,7 @@
 この文書は実装するエンジニア向けである。構造、処理、仕様の順に読む。
 
 1. BUC ごとのロバストネス図で、画面・制御・エンティティの構造をつかむ。
-2. UC ごとのシーケンス図で、ガードと書き込みの順序をつかむ。
+2. BUC のシーケンス図で UC が進む順をつかみ、UC ごとのシーケンス図でガードと書き込みの順序をつかむ。
 3. 状態モデル、データモデル、規則、CRUD と権限で仕様を確かめる。
 
 要求と成功指標は [PRD](prd.md) にある。
@@ -114,7 +114,7 @@ flowchart LR
 
 ## 2. BUC ごとの構造と処理
 
-各節は BUC の説明、ロバストネス図、画面遷移図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
+各節は BUC の説明、ロバストネス図、画面遷移図、BUC のシーケンス図、UC の表、UC ごとのシーケンス図の順に並ぶ。BUC のシーケンス図（`diagram --kind sequence --buc <Buc>`）は BUC の UC を、モデルが並べる順に、イベントで起動される UC はそれを起動する UC の後に、1 つの図に続けて描く。各 UC の始まりには番号と UC 名の注記が付く。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
 
 ### 2.1 新患登録・患者情報管理
 
@@ -206,6 +206,119 @@ flowchart LR
   screen__PatientSearchScreen -.->|業務上の順番| screen__PatientProfileScreen
   %% derived screen__PatientSearchScreen -> screen__PatientProfileScreen via flow__OnboardingFlow,flow__PatientMaintenanceFlow,step__ArchiveStep,step__DemographicsStep,step__MaintainSearchStep,step__MergeStep,step__NewPatientSearchStep,step__RegisterStep
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucPatientOnboarding model=samples/clinic-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  actor actor__Patient as 患者
+  participant usecase__BookAppointment as 予約の確定
+  participant usecase__ScheduleFollowUpVisit as 再診の予約
+  participant timer__IntakeExpiryCheck as 問診票の期限切れ確認（毎晩）
+  participant screen__PatientSearchScreen as 患者検索画面
+  participant screen__PatientProfileScreen as 患者基本情報画面
+  participant screen__InsuranceScreen as 保険資格登録画面
+  participant screen__ConsentScreen as 同意取得画面
+  participant screen__IntakePortalScreen as 問診票ポータル画面
+  participant api__SearchPatientApi as 患者検索 API
+  participant api__RegisterPatientApi as 新患登録 API
+  participant api__UpdateDemographicsApi as 患者属性変更 API
+  participant api__EligibilityApi as 保険資格登録 API
+  participant api__ConsentApi as 同意 API
+  participant api__IntakeMessagingApi as 問診票送付 API
+  participant usecase__CompleteIntakeForms as 問診票の回答
+  participant usecase__ExpireIntakeForms as 問診票の期限切れ
+  participant usecase__MergeDuplicatePatient as 重複患者の統合
+  participant usecase__ArchivePatient as 患者のアーカイブ
+  participant entity__PatientAccount as 患者登録
+  participant entity__PatientProfile as 患者基本情報
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__EligibilityCheck as 資格確認
+  participant entity__ConsentRecord as 同意記録
+  participant entity__IntakePacket as 問診票
+  participant entity__PatientMessage as 患者連絡
+  Note over screen__PatientSearchScreen: 1. 患者の検索
+  actor__ReceptionClerk ->> screen__PatientSearchScreen: 患者の検索
+  screen__PatientSearchScreen ->> api__SearchPatientApi: 患者検索 API
+  api__SearchPatientApi ->> entity__PatientAccount: read
+  api__SearchPatientApi ->> entity__PatientProfile: read
+  api__SearchPatientApi -->> screen__PatientSearchScreen: done
+  Note over screen__PatientProfileScreen: 2. 新患登録
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 新患登録
+  screen__PatientProfileScreen ->> api__RegisterPatientApi: 新患登録 API
+  Note over api__RegisterPatientApi: transaction (API atomic boundary)
+  api__RegisterPatientApi ->> entity__PatientAccount: create
+  api__RegisterPatientApi ->> entity__PatientProfile: create
+  api__RegisterPatientApi -->> screen__PatientProfileScreen: done
+  Note over screen__PatientProfileScreen: 3. 患者属性の変更
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 患者属性の変更
+  screen__PatientProfileScreen ->> api__UpdateDemographicsApi: 患者属性変更 API
+  api__UpdateDemographicsApi ->> entity__PatientProfile: update
+  api__UpdateDemographicsApi -->> screen__PatientProfileScreen: done
+  Note over screen__InsuranceScreen: 4. 保険資格・限度額情報の登録（新患登録）
+  actor__ReceptionClerk ->> screen__InsuranceScreen: 保険資格・限度額情報の登録（新患登録）
+  screen__InsuranceScreen ->> api__EligibilityApi: 保険資格登録 API
+  api__EligibilityApi ->> entity__InsurancePolicy: read
+  Note over api__EligibilityApi: transaction (API atomic boundary)
+  api__EligibilityApi ->> entity__InsurancePolicy: update verification_status=verified, verified_at=set, limit_category=obtained
+  api__EligibilityApi ->> entity__EligibilityCheck: create result=valid, reference_no=set
+  api__EligibilityApi -->> screen__InsuranceScreen: done
+  Note over screen__ConsentScreen: 5. 同意の取得
+  actor__Patient ->> screen__ConsentScreen: 同意の取得
+  screen__ConsentScreen ->> api__ConsentApi: 同意 API
+  api__ConsentApi ->> entity__ConsentRecord: create signed_at=set, revoked=false
+  api__ConsentApi -->> screen__ConsentScreen: done
+  Note over screen__IntakePortalScreen: 6. 問診票の送付
+  actor__ReceptionClerk ->> screen__IntakePortalScreen: 問診票の送付
+  usecase__BookAppointment ->> api__IntakeMessagingApi: 予約確定
+  usecase__ScheduleFollowUpVisit ->> api__IntakeMessagingApi: 予約確定
+  screen__IntakePortalScreen ->> api__IntakeMessagingApi: 問診票送付 API
+  Note over api__IntakeMessagingApi: transaction (API atomic boundary)
+  api__IntakeMessagingApi ->> entity__IntakePacket: create sent_at=set
+  api__IntakeMessagingApi ->> entity__PatientMessage: create status=sent, sent_at=set
+  api__IntakeMessagingApi -->> screen__IntakePortalScreen: done
+  Note over screen__IntakePortalScreen: 7. 問診票の回答
+  actor__Patient ->> screen__IntakePortalScreen: 問診票の回答
+  screen__IntakePortalScreen ->> usecase__CompleteIntakeForms: 問診票の回答
+  alt IntakePacket.status == 送付済
+    usecase__CompleteIntakeForms ->> entity__IntakePacket: update status 送付済 -> 回答済, completed_at=set
+    usecase__CompleteIntakeForms -->> screen__IntakePortalScreen: done
+  else guard fails
+    usecase__CompleteIntakeForms -->> screen__IntakePortalScreen: rejected
+  end
+  Note over screen__IntakePortalScreen: 8. 問診票の期限切れ
+  actor__ReceptionClerk ->> screen__IntakePortalScreen: 問診票の期限切れ
+  timer__IntakeExpiryCheck ->> usecase__ExpireIntakeForms: 問診票の期限切れ確認（毎晩）
+  screen__IntakePortalScreen ->> usecase__ExpireIntakeForms: 問診票の期限切れ
+  alt IntakePacket.status == 送付済
+    usecase__ExpireIntakeForms ->> entity__IntakePacket: update status 送付済 -> 期限切れ
+    usecase__ExpireIntakeForms -->> screen__IntakePortalScreen: done
+  else guard fails
+    usecase__ExpireIntakeForms -->> screen__IntakePortalScreen: rejected
+  end
+  Note over screen__PatientProfileScreen: 9. 重複患者の統合
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 重複患者の統合
+  screen__PatientProfileScreen ->> usecase__MergeDuplicatePatient: 重複患者の統合
+  alt PatientAccount.status == 有効
+    usecase__MergeDuplicatePatient ->> entity__PatientAccount: update status 有効 -> 統合済
+    usecase__MergeDuplicatePatient -->> screen__PatientProfileScreen: done
+  else guard fails
+    usecase__MergeDuplicatePatient -->> screen__PatientProfileScreen: rejected
+  end
+  Note over screen__PatientProfileScreen: 10. 患者のアーカイブ
+  actor__ReceptionClerk ->> screen__PatientProfileScreen: 患者のアーカイブ
+  screen__PatientProfileScreen ->> usecase__ArchivePatient: 患者のアーカイブ
+  alt PatientAccount.status == 有効
+    usecase__ArchivePatient ->> entity__PatientAccount: update status 有効 -> アーカイブ済, archived_at=set
+    usecase__ArchivePatient -->> screen__PatientProfileScreen: done
+  else guard fails
+    usecase__ArchivePatient -->> screen__PatientProfileScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -532,6 +645,116 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% kinds: actor timer usecase screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Patient as 患者
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant timer__NoShowSweep as 未来院の確認（毎晩）
+  participant usecase__BookAppointment as 予約の確定
+  participant usecase__CancelAppointment as 予約の取消
+  participant usecase__RescheduleAppointment as 予約の変更
+  participant usecase__ScheduleFollowUpVisit as 再診の予約
+  participant screen__ScheduleSearchScreen as 空き枠検索画面
+  participant screen__AppointmentScreen as 予約画面
+  participant screen__AppointmentNoticeScreen as 予約通知画面
+  participant api__SearchAvailabilityApi as 空き枠検索 API
+  participant api__ReserveAppointmentApi as 予約仮押さえ API
+  participant api__BookAppointmentApi as 予約確定 API
+  participant api__RescheduleAppointmentApi as 予約変更 API
+  participant api__CancelAppointmentApi as 予約取消 API
+  participant usecase__MarkNoShow as 未来院の処理
+  participant entity__ProviderSchedule as 診療枠
+  participant entity__Provider as 医師マスタ
+  participant entity__ClinicLocation as 施設
+  participant entity__Appointment as 予約・受診
+  participant entity__Notification as 通知
+  participant entity__PatientMessage as 患者連絡
+  participant api__AppointmentNoticeApi as 予約通知 API
+  participant extsystem__MessagingGateway as 患者通知サービス
+  participant api__IntakeMessagingApi as 問診票送付 API
+  Note over screen__ScheduleSearchScreen: 1. 空き枠の検索
+  actor__Patient ->> screen__ScheduleSearchScreen: 空き枠の検索
+  actor__ReceptionClerk ->> screen__ScheduleSearchScreen: 空き枠の検索
+  screen__ScheduleSearchScreen ->> api__SearchAvailabilityApi: 空き枠検索 API
+  api__SearchAvailabilityApi ->> entity__ProviderSchedule: read
+  api__SearchAvailabilityApi ->> entity__Provider: read
+  api__SearchAvailabilityApi ->> entity__ClinicLocation: read
+  api__SearchAvailabilityApi -->> screen__ScheduleSearchScreen: done
+  Note over screen__AppointmentScreen: 2. 予約の仮押さえ
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の仮押さえ
+  screen__AppointmentScreen ->> api__ReserveAppointmentApi: 予約仮押さえ API
+  Note over api__ReserveAppointmentApi: transaction (API atomic boundary)
+  api__ReserveAppointmentApi ->> entity__ProviderSchedule: update
+  api__ReserveAppointmentApi ->> entity__Appointment: create
+  api__ReserveAppointmentApi -->> screen__AppointmentScreen: done
+  Note over screen__AppointmentScreen: 3. 予約の確定
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の確定
+  screen__AppointmentScreen ->> api__BookAppointmentApi: 予約確定 API
+  alt Appointment.status == 仮押さえ
+    Note over api__BookAppointmentApi: transaction (API atomic boundary)
+    api__BookAppointmentApi ->> entity__ProviderSchedule: update
+    api__BookAppointmentApi ->> entity__Appointment: update status 仮押さえ -> 予約済
+    api__BookAppointmentApi -) api__AppointmentNoticeApi: 予約確定
+    api__BookAppointmentApi -) extsystem__MessagingGateway: 予約確定
+    api__BookAppointmentApi -) api__IntakeMessagingApi: 予約確定
+    api__BookAppointmentApi -->> screen__AppointmentScreen: done
+  else guard fails
+    api__BookAppointmentApi -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentScreen: 4. 予約の変更
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の変更
+  screen__AppointmentScreen ->> api__RescheduleAppointmentApi: 予約変更 API
+  alt Appointment.status == 予約済
+    Note over api__RescheduleAppointmentApi: transaction (API atomic boundary)
+    api__RescheduleAppointmentApi ->> entity__ProviderSchedule: update
+    api__RescheduleAppointmentApi ->> entity__Appointment: update status 予約済 -> 予約済
+    api__RescheduleAppointmentApi -) api__AppointmentNoticeApi: 予約変更
+    api__RescheduleAppointmentApi -) extsystem__MessagingGateway: 予約変更
+    api__RescheduleAppointmentApi -->> screen__AppointmentScreen: done
+  else guard fails
+    api__RescheduleAppointmentApi -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentScreen: 5. 予約の取消
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の取消
+  screen__AppointmentScreen ->> api__CancelAppointmentApi: 予約取消 API
+  alt Appointment.status == 予約済
+    Note over api__CancelAppointmentApi: transaction (API atomic boundary)
+    api__CancelAppointmentApi ->> entity__ProviderSchedule: update
+    api__CancelAppointmentApi ->> entity__Appointment: update status 予約済 -> 取消, cancel_reason=set
+    api__CancelAppointmentApi -) api__AppointmentNoticeApi: 予約取消
+    api__CancelAppointmentApi -) extsystem__MessagingGateway: 予約取消
+    api__CancelAppointmentApi -->> screen__AppointmentScreen: done
+  else guard fails
+    api__CancelAppointmentApi -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentScreen: 6. 未来院の処理
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 未来院の処理
+  timer__NoShowSweep ->> usecase__MarkNoShow: 未来院の確認（毎晩）
+  screen__AppointmentScreen ->> usecase__MarkNoShow: 未来院の処理
+  alt Appointment.status == 予約済
+    usecase__MarkNoShow ->> entity__Appointment: update status 予約済 -> 未来院
+    usecase__MarkNoShow -->> screen__AppointmentScreen: done
+  else guard fails
+    usecase__MarkNoShow -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentNoticeScreen: 7. 予約の通知
+  actor__ReceptionClerk ->> screen__AppointmentNoticeScreen: 予約の通知
+  usecase__BookAppointment ->> api__AppointmentNoticeApi: 予約確定
+  usecase__CancelAppointment ->> api__AppointmentNoticeApi: 予約取消
+  usecase__RescheduleAppointment ->> api__AppointmentNoticeApi: 予約変更
+  usecase__ScheduleFollowUpVisit ->> api__AppointmentNoticeApi: 予約確定
+  screen__AppointmentNoticeScreen ->> api__AppointmentNoticeApi: 予約通知 API
+  Note over api__AppointmentNoticeApi: transaction (API atomic boundary)
+  api__AppointmentNoticeApi ->> entity__Notification: create delivered_at=set
+  api__AppointmentNoticeApi ->> entity__PatientMessage: create status=sent, sent_at=set
+  api__AppointmentNoticeApi -->> screen__AppointmentNoticeScreen: done
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 空き枠の検索<br>`SearchAvailability` | 予約枠を検索する。参照だけの API。 | `ScheduleSearchScreen` | `SearchAvailabilityApi` | （なし） |
@@ -832,6 +1055,151 @@ flowchart LR
   %% via screen__CheckInScreen -> screen__RoomBoardScreen usecase__AssignRoom
   %% via screen__EligibilityScreen -> screen__ReferralScreen usecase__ReceiveReferralLetter
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% kinds: actor timer usecase screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant timer__EligibilityBatchInquiry as 予約患者の資格の一括照会（来院前）
+  actor actor__Nurse as 看護師
+  participant usecase__CheckInPatient as 受付（初診・再診）
+  participant screen__CheckInScreen as 受付画面
+  participant screen__EligibilityScreen as 資格確認画面
+  participant screen__ReferralScreen as 紹介状受付画面
+  participant screen__RoomBoardScreen as 診察室ボード画面
+  participant api__VerifyArrivalApi as 到着確認 API
+  participant api__CheckInPatientApi as 受付 API
+  participant api__OnlineEligibilityApi as オンライン資格確認 API
+  participant api__EligibilityResultApi as 資格確認結果 API
+  participant api__ReferralLetterApi as 紹介状 API
+  participant api__AssignRoomApi as 診察室案内 API
+  participant entity__Appointment as 予約・受診
+  participant entity__PatientAccount as 患者登録
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__EligibilityCheck as 資格確認
+  participant entity__ReferralLetter as 紹介状・診療情報提供書
+  participant entity__Room as 診察室
+  participant entity__PatientProfile as 患者基本情報
+  participant api__OpenEncounterApi as 診療記録作成 API
+  participant extsystem__OnlineEligibilitySystem as オンライン資格確認等システム
+  participant api__PrepareEncounterApi as 診療準備 API
+  Note over screen__CheckInScreen: 1. 予約票・診察券の確認
+  actor__ReceptionClerk ->> screen__CheckInScreen: 予約票・診察券の確認
+  screen__CheckInScreen ->> api__VerifyArrivalApi: 到着確認 API
+  api__VerifyArrivalApi ->> entity__Appointment: read
+  api__VerifyArrivalApi ->> entity__PatientAccount: read
+  api__VerifyArrivalApi ->> entity__InsurancePolicy: read
+  api__VerifyArrivalApi -->> screen__CheckInScreen: done
+  Note over screen__CheckInScreen: 2. 受付（初診・再診）
+  actor__ReceptionClerk ->> screen__CheckInScreen: 受付（初診・再診）
+  screen__CheckInScreen ->> api__CheckInPatientApi: 受付 API
+  alt Appointment.status == 予約済
+    screen__CheckInScreen ->> api__OnlineEligibilityApi: オンライン資格確認 API
+    Note over api__CheckInPatientApi: transaction (API atomic boundary)
+    api__CheckInPatientApi ->> entity__PatientAccount: update
+    api__CheckInPatientApi ->> entity__Appointment: update status 予約済 -> 受付済, checked_in_at=set
+    api__OnlineEligibilityApi ->> entity__InsurancePolicy: read
+    api__OnlineEligibilityApi ->> entity__EligibilityCheck: create
+    api__CheckInPatientApi -) api__OpenEncounterApi: 受付完了
+    api__CheckInPatientApi -) extsystem__OnlineEligibilitySystem: 受付完了
+    api__CheckInPatientApi -) api__PrepareEncounterApi: 受付完了
+    api__CheckInPatientApi -->> screen__CheckInScreen: done
+  else guard fails
+    api__CheckInPatientApi -->> screen__CheckInScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 3. 資格の一括照会
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 資格の一括照会
+  timer__EligibilityBatchInquiry ->> api__OnlineEligibilityApi: 予約患者の資格の一括照会（来院前）
+  screen__EligibilityScreen ->> api__OnlineEligibilityApi: オンライン資格確認 API
+  alt 予約済みの患者: (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment)
+    api__OnlineEligibilityApi ->> entity__InsurancePolicy: read
+    api__OnlineEligibilityApi ->> entity__EligibilityCheck: create
+    api__OnlineEligibilityApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__OnlineEligibilityApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 4. 資格確認結果（有効）の取込
+  extsystem__OnlineEligibilitySystem ->> api__EligibilityResultApi: 資格確認結果
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 有効, reference_no=set
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 5. 資格確認結果（無効）の取込
+  extsystem__OnlineEligibilitySystem ->> api__EligibilityResultApi: 資格確認結果
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 無効
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 6. 資格確認結果（該当資格なし）の取込
+  extsystem__OnlineEligibilitySystem ->> api__EligibilityResultApi: 資格確認結果
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 該当資格なし
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 7. 資格の再確認
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 資格の再確認
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result in (無効, 該当資格なし)
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 無効 -> 照会中, result 該当資格なし -> 照会中
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 8. 被保険者資格申立書の受領
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 被保険者資格申立書の受領
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 申立書で確認
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 9. システム障害時モードでの資格確認
+  actor__ReceptionClerk ->> screen__EligibilityScreen: システム障害時モードでの資格確認
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 有効
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__ReferralScreen: 10. 紹介状受付処理
+  actor__ReceptionClerk ->> screen__ReferralScreen: 紹介状受付処理
+  screen__ReferralScreen ->> api__ReferralLetterApi: 紹介状 API
+  api__ReferralLetterApi ->> entity__ReferralLetter: create direction=inbound, received_at=set
+  api__ReferralLetterApi -->> screen__ReferralScreen: done
+  Note over screen__RoomBoardScreen: 11. 診察室への案内
+  actor__Nurse ->> screen__RoomBoardScreen: 診察室への案内
+  screen__RoomBoardScreen ->> api__AssignRoomApi: 診察室案内 API
+  alt Appointment.status == 受付済
+    Note over api__AssignRoomApi: transaction (API atomic boundary)
+    api__AssignRoomApi ->> entity__Room: update occupancy_status=occupied
+    api__AssignRoomApi ->> entity__Appointment: update status 受付済 -> 受付済
+    api__AssignRoomApi -->> screen__RoomBoardScreen: done
+  else guard fails
+    api__AssignRoomApi -->> screen__RoomBoardScreen: rejected
+  end
+  Note over screen__CheckInScreen: 12. 診療の準備
+  actor__Nurse ->> screen__CheckInScreen: 診療の準備
+  usecase__CheckInPatient ->> api__PrepareEncounterApi: 受付完了
+  screen__CheckInScreen ->> api__PrepareEncounterApi: 診療準備 API
+  api__PrepareEncounterApi ->> entity__Appointment: read
+  api__PrepareEncounterApi ->> entity__PatientProfile: read
+  api__PrepareEncounterApi -->> screen__CheckInScreen: done
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -1225,6 +1593,105 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucClinicalEncounter model=samples/clinic-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Nurse as 看護師
+  participant usecase__CheckInPatient as 受付（初診・再診）
+  actor actor__Clinician as 医師
+  participant screen__EncounterWorkspaceScreen as 診療記録画面
+  participant screen__VitalsScreen as バイタル入力画面
+  participant screen__DiagnosisScreen as 診断入力画面
+  participant screen__ReferralLetterScreen as 診療情報提供書画面
+  participant api__OpenEncounterApi as 診療記録作成 API
+  participant api__RecordVitalsApi as バイタル記録 API
+  participant api__DocumentAssessmentApi as 診察記録 API
+  participant api__SignEncounterApi as 署名 API
+  participant api__AmendEncounterApi as 記録修正 API
+  participant api__IssueReferralLetterApi as 診療情報提供書 API
+  participant api__CompleteConsultationApi as 診察終了 API
+  participant entity__Appointment as 予約・受診
+  participant entity__Encounter as 診療記録
+  participant entity__VitalSign as バイタル
+  participant entity__Diagnosis as 診断
+  participant entity__ReferralLetter as 紹介状・診療情報提供書
+  participant entity__Room as 診察室
+  participant api__CreateChargeApi as コスト登録 API
+  participant api__CreateCarePlanApi as ケアプラン作成 API
+  Note over screen__EncounterWorkspaceScreen: 1. 診療記録を開く
+  actor__Nurse ->> screen__EncounterWorkspaceScreen: 診療記録を開く
+  usecase__CheckInPatient ->> api__OpenEncounterApi: 受付完了
+  screen__EncounterWorkspaceScreen ->> api__OpenEncounterApi: 診療記録作成 API
+  alt Appointment.status == 受付済
+    Note over api__OpenEncounterApi: transaction (API atomic boundary)
+    api__OpenEncounterApi ->> entity__Appointment: update status 受付済 -> 診察中
+    api__OpenEncounterApi ->> entity__Encounter: create
+    api__OpenEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__OpenEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end
+  Note over screen__VitalsScreen: 2. バイタルの記録
+  actor__Nurse ->> screen__VitalsScreen: バイタルの記録
+  screen__VitalsScreen ->> api__RecordVitalsApi: バイタル記録 API
+  Note over api__RecordVitalsApi: transaction (API atomic boundary)
+  api__RecordVitalsApi ->> entity__Encounter: update
+  api__RecordVitalsApi ->> entity__VitalSign: create
+  api__RecordVitalsApi -->> screen__VitalsScreen: done
+  Note over screen__DiagnosisScreen: 3. 診察・診断の記録
+  actor__Clinician ->> screen__DiagnosisScreen: 診察・診断の記録
+  screen__DiagnosisScreen ->> api__DocumentAssessmentApi: 診察記録 API
+  alt Encounter.status == 記録中
+    Note over api__DocumentAssessmentApi: transaction (API atomic boundary)
+    api__DocumentAssessmentApi ->> entity__Encounter: update status 記録中 -> 記載済
+    api__DocumentAssessmentApi ->> entity__Diagnosis: create
+    api__DocumentAssessmentApi -->> screen__DiagnosisScreen: done
+  else guard fails
+    api__DocumentAssessmentApi -->> screen__DiagnosisScreen: rejected
+  end
+  Note over screen__EncounterWorkspaceScreen: 4. 診療記録の署名
+  actor__Clinician ->> screen__EncounterWorkspaceScreen: 診療記録の署名
+  screen__EncounterWorkspaceScreen ->> api__SignEncounterApi: 署名 API
+  alt Encounter.status == 記載済
+    api__SignEncounterApi ->> entity__Encounter: update status 記載済 -> 署名済, signed_at=set
+    api__SignEncounterApi -) api__CreateChargeApi: 診療記録の署名
+    api__SignEncounterApi -) api__CreateCarePlanApi: 診療記録の署名
+    api__SignEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__SignEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end
+  Note over screen__EncounterWorkspaceScreen: 5. 署名済み記録の修正
+  actor__Clinician ->> screen__EncounterWorkspaceScreen: 署名済み記録の修正
+  screen__EncounterWorkspaceScreen ->> api__AmendEncounterApi: 記録修正 API
+  alt Encounter.status == 署名済
+    api__AmendEncounterApi ->> entity__Encounter: update status 署名済 -> 修正済
+    api__AmendEncounterApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__AmendEncounterApi -->> screen__EncounterWorkspaceScreen: rejected
+  end
+  Note over screen__ReferralLetterScreen: 6. 診療情報提供書の作成・送信
+  actor__Clinician ->> screen__ReferralLetterScreen: 診療情報提供書の作成・送信
+  screen__ReferralLetterScreen ->> api__IssueReferralLetterApi: 診療情報提供書 API
+  api__IssueReferralLetterApi ->> entity__Encounter: read
+  api__IssueReferralLetterApi ->> entity__ReferralLetter: create direction=outbound
+  api__IssueReferralLetterApi -->> screen__ReferralLetterScreen: done
+  Note over screen__EncounterWorkspaceScreen: 7. 診察終了
+  actor__Clinician ->> screen__EncounterWorkspaceScreen: 診察終了
+  screen__EncounterWorkspaceScreen ->> api__CompleteConsultationApi: 診察終了 API
+  alt Appointment.status == 診察中
+    Note over api__CompleteConsultationApi: transaction (API atomic boundary)
+    api__CompleteConsultationApi ->> entity__Room: update occupancy_status=cleaning
+    api__CompleteConsultationApi ->> entity__Appointment: update status 診察中 -> 計算待ち
+    Note over api__CompleteConsultationApi: raises 診察終了
+    api__CompleteConsultationApi -->> screen__EncounterWorkspaceScreen: done
+  else guard fails
+    api__CompleteConsultationApi -->> screen__EncounterWorkspaceScreen: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 診療記録を開く<br>`OpenEncounter` | 受付済の予約から診療記録を開く。 | `EncounterWorkspaceScreen` | `OpenEncounterApi` | （なし） |
@@ -1502,6 +1969,126 @@ flowchart LR
   screen__SpecimenScreen -.->|業務上の順番| screen__ResultReviewScreen
   %% derived screen__SpecimenScreen -> screen__ResultReviewScreen via flow__LabOrderFlow,step__CostStep,step__LabResultStep
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucOrdersResults model=samples/clinic-ops
+%% kinds: actor extsystem usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__Clinician as 医師
+  actor actor__MedicalClerk as 医師事務作業補助者
+  actor actor__Nurse as 看護師
+  participant extsystem__OutsourcedLabSystem as 外注検査システム
+  participant usecase__ReviewLabResult as 検査結果の確認
+  participant screen__OrderEntryScreen as オーダ入力画面
+  participant screen__SpecimenScreen as 採血画面
+  participant screen__ResultReviewScreen as 検査結果確認画面
+  participant screen__CriticalNoticeScreen as 重要結果通知画面
+  participant api__OrderEntryApi as オーダ登録 API
+  participant api__ProxyOrderApi as 代行入力 API
+  participant api__ConfirmOrderApi as オーダ確定 API
+  participant usecase__PrintSpecimenLabel as 採血管ラベル発行・貼付
+  participant api__CollectSpecimenApi as 採血 API
+  participant api__PerformedProcedureApi as 実施登録 API
+  participant api__ReceiveLabResultApi as 検査結果受信 API
+  participant api__ResultReviewApi as 検査結果確認 API
+  participant usecase__CancelClinicalOrder as オーダの取消
+  participant entity__Encounter as 診療記録
+  participant entity__ClinicalOrder as 検査オーダ
+  participant entity__Charge as コスト（診療行為）
+  participant entity__LabResult as 検査結果
+  participant entity__Notification as 通知
+  participant entity__PatientMessage as 患者連絡
+  participant api__NotifyPatientResultApi as 検査結果通知 API
+  participant api__CriticalNoticeApi as 重要結果通知 API
+  Note over screen__OrderEntryScreen: 1. 検体検査オーダの登録
+  actor__Clinician ->> screen__OrderEntryScreen: 検体検査オーダの登録
+  screen__OrderEntryScreen ->> api__OrderEntryApi: オーダ登録 API
+  api__OrderEntryApi ->> entity__Encounter: read
+  api__OrderEntryApi ->> entity__ClinicalOrder: create physician_confirmed=true
+  api__OrderEntryApi -->> screen__OrderEntryScreen: done
+  Note over screen__OrderEntryScreen: 2. 検体検査オーダの代行入力
+  actor__MedicalClerk ->> screen__OrderEntryScreen: 検体検査オーダの代行入力
+  actor__Nurse ->> screen__OrderEntryScreen: 検体検査オーダの代行入力
+  screen__OrderEntryScreen ->> api__ProxyOrderApi: 代行入力 API
+  api__ProxyOrderApi ->> entity__Encounter: read
+  api__ProxyOrderApi ->> entity__ClinicalOrder: create physician_confirmed=false
+  api__ProxyOrderApi -->> screen__OrderEntryScreen: done
+  Note over screen__OrderEntryScreen: 3. 代行入力オーダの確定
+  actor__Clinician ->> screen__OrderEntryScreen: 代行入力オーダの確定
+  screen__OrderEntryScreen ->> api__ConfirmOrderApi: オーダ確定 API
+  alt ClinicalOrder.status == オーダ済
+    api__ConfirmOrderApi ->> entity__ClinicalOrder: update status オーダ済 -> オーダ済, physician_confirmed=true
+    api__ConfirmOrderApi -->> screen__OrderEntryScreen: done
+  else guard fails
+    api__ConfirmOrderApi -->> screen__OrderEntryScreen: rejected
+  end
+  Note over screen__SpecimenScreen: 4. 採血管ラベル発行・貼付
+  actor__Nurse ->> screen__SpecimenScreen: 採血管ラベル発行・貼付
+  screen__SpecimenScreen ->> usecase__PrintSpecimenLabel: 採血管ラベル発行・貼付
+  usecase__PrintSpecimenLabel ->> entity__ClinicalOrder: read
+  usecase__PrintSpecimenLabel -->> screen__SpecimenScreen: done
+  Note over screen__SpecimenScreen: 5. 採血
+  actor__Nurse ->> screen__SpecimenScreen: 採血
+  screen__SpecimenScreen ->> api__CollectSpecimenApi: 採血 API
+  alt 医師が確定したオーダ: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済
+    api__CollectSpecimenApi ->> entity__ClinicalOrder: update status オーダ済 -> 採取済, collected_at=set
+    api__CollectSpecimenApi -->> screen__SpecimenScreen: done
+  else guard fails
+    api__CollectSpecimenApi -->> screen__SpecimenScreen: rejected
+  end
+  Note over screen__SpecimenScreen: 6. 実施内容（コスト）の登録
+  actor__Nurse ->> screen__SpecimenScreen: 実施内容（コスト）の登録
+  screen__SpecimenScreen ->> api__PerformedProcedureApi: 実施登録 API
+  api__PerformedProcedureApi ->> entity__ClinicalOrder: read
+  api__PerformedProcedureApi ->> entity__Encounter: read
+  api__PerformedProcedureApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=performed
+  api__PerformedProcedureApi -->> screen__SpecimenScreen: done
+  Note over screen__ResultReviewScreen: 7. 検査結果の受信
+  actor__Nurse ->> screen__ResultReviewScreen: 検査結果の受信
+  extsystem__OutsourcedLabSystem ->> api__ReceiveLabResultApi: 検査結果の受信
+  screen__ResultReviewScreen ->> api__ReceiveLabResultApi: 検査結果受信 API
+  alt ClinicalOrder.status == 採取済
+    Note over api__ReceiveLabResultApi: transaction (API atomic boundary)
+    api__ReceiveLabResultApi ->> entity__ClinicalOrder: update status 採取済 -> 結果受信, resulted_at=set
+    api__ReceiveLabResultApi ->> entity__LabResult: create received_at=set
+    api__ReceiveLabResultApi -->> screen__ResultReviewScreen: done
+  else guard fails
+    api__ReceiveLabResultApi -->> screen__ResultReviewScreen: rejected
+  end
+  Note over screen__ResultReviewScreen: 8. 検査結果の確認
+  actor__Clinician ->> screen__ResultReviewScreen: 検査結果の確認
+  screen__ResultReviewScreen ->> api__ResultReviewApi: 検査結果確認 API
+  alt ClinicalOrder.status == 結果受信
+    Note over api__ResultReviewApi: transaction (API atomic boundary)
+    api__ResultReviewApi ->> entity__ClinicalOrder: update status 結果受信 -> 結果確認済
+    api__ResultReviewApi ->> entity__LabResult: update reviewed_at=set
+    api__ResultReviewApi -) api__NotifyPatientResultApi: 検査結果の確認
+    api__ResultReviewApi -) api__CriticalNoticeApi: 検査結果の確認
+    api__ResultReviewApi -->> screen__ResultReviewScreen: done
+  else guard fails
+    api__ResultReviewApi -->> screen__ResultReviewScreen: rejected
+  end
+  Note over screen__CriticalNoticeScreen: 9. 重要結果（パニック値）の通知
+  actor__Clinician ->> screen__CriticalNoticeScreen: 重要結果（パニック値）の通知
+  usecase__ReviewLabResult ->> api__CriticalNoticeApi: 検査結果の確認
+  screen__CriticalNoticeScreen ->> api__CriticalNoticeApi: 重要結果通知 API
+  Note over api__CriticalNoticeApi: transaction (API atomic boundary)
+  api__CriticalNoticeApi ->> entity__Notification: create delivered_at=set
+  api__CriticalNoticeApi ->> entity__PatientMessage: create status=sent, sent_at=set
+  api__CriticalNoticeApi -->> screen__CriticalNoticeScreen: done
+  Note over screen__OrderEntryScreen: 10. オーダの取消
+  actor__Clinician ->> screen__OrderEntryScreen: オーダの取消
+  screen__OrderEntryScreen ->> usecase__CancelClinicalOrder: オーダの取消
+  alt ClinicalOrder.status == オーダ済
+    usecase__CancelClinicalOrder ->> entity__ClinicalOrder: update status オーダ済 -> 取消
+    usecase__CancelClinicalOrder -->> screen__OrderEntryScreen: done
+  else guard fails
+    usecase__CancelClinicalOrder -->> screen__OrderEntryScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -1818,6 +2405,152 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% kinds: actor extsystem timer screen api usecase entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Clinician as 医師
+  actor actor__Pharmacist as 薬剤師
+  participant extsystem__InsurancePharmacy as 保険薬局
+  participant timer__PrescriptionUsePeriodCheck as 処方箋の使用期間切れ確認
+  participant screen__MedicationSearchScreen as 薬剤検索画面
+  participant screen__PrescriptionScreen as 処方画面
+  participant screen__DispensingScreen as 調剤・監査画面
+  participant screen__PharmacyStatusScreen as 電子処方箋の状況画面
+  participant api__MedicationCatalogApi as 薬剤マスタ API
+  participant api__DraftPrescriptionApi as 処方オーダ API
+  participant api__IssuePrescriptionApi as 処方箋発行 API
+  participant api__DispensingApi as 院内調剤 API
+  participant api__PrescriptionInquiryApi as 疑義照会 API
+  participant api__ConfirmDispenseApi as 調剤結果 API
+  participant usecase__CancelPrescription as 処方の取消
+  participant entity__Medication as 薬剤
+  participant entity__Encounter as 診療記録
+  participant entity__Prescription as 処方箋
+  participant extsystem__EPrescriptionService as 電子処方箋管理サービス
+  Note over screen__MedicationSearchScreen: 1. 薬剤の検索
+  actor__Clinician ->> screen__MedicationSearchScreen: 薬剤の検索
+  screen__MedicationSearchScreen ->> api__MedicationCatalogApi: 薬剤マスタ API
+  api__MedicationCatalogApi ->> entity__Medication: read
+  api__MedicationCatalogApi -->> screen__MedicationSearchScreen: done
+  Note over screen__PrescriptionScreen: 2. 処方オーダの登録
+  actor__Clinician ->> screen__PrescriptionScreen: 処方オーダの登録
+  screen__PrescriptionScreen ->> api__DraftPrescriptionApi: 処方オーダ API
+  api__DraftPrescriptionApi ->> entity__Encounter: read
+  api__DraftPrescriptionApi ->> entity__Prescription: create
+  api__DraftPrescriptionApi -->> screen__PrescriptionScreen: done
+  Note over screen__PrescriptionScreen: 3. リフィル処方箋の処方オーダ
+  actor__Clinician ->> screen__PrescriptionScreen: リフィル処方箋の処方オーダ
+  screen__PrescriptionScreen ->> api__DraftPrescriptionApi: 処方オーダ API
+  api__DraftPrescriptionApi ->> entity__Encounter: read
+  api__DraftPrescriptionApi ->> entity__Prescription: create refill_limit=set
+  api__DraftPrescriptionApi -->> screen__PrescriptionScreen: done
+  Note over screen__PrescriptionScreen: 4. 院外処方箋の発行
+  actor__Clinician ->> screen__PrescriptionScreen: 院外処方箋の発行
+  screen__PrescriptionScreen ->> api__IssuePrescriptionApi: 処方箋発行 API
+  alt Prescription.status == 処方入力中
+    api__IssuePrescriptionApi ->> entity__Prescription: update status 処方入力中 -> 院外処方箋発行済, sent_at=set
+    api__IssuePrescriptionApi -) extsystem__EPrescriptionService: 電子処方箋の登録
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 5. 院内処方用引換券の交付
+  actor__Clinician ->> screen__PrescriptionScreen: 院内処方用引換券の交付
+  screen__PrescriptionScreen ->> api__IssuePrescriptionApi: 処方箋発行 API
+  alt Prescription.status == 処方入力中
+    api__IssuePrescriptionApi ->> entity__Prescription: update status 処方入力中 -> 引換券交付済
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__DispensingScreen: 6. 調剤・監査
+  actor__Pharmacist ->> screen__DispensingScreen: 調剤・監査
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 引換券交付済
+    api__DispensingApi ->> entity__Prescription: update status 引換券交付済 -> 調剤・監査済
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__DispensingScreen: 7. 服薬指導
+  actor__Pharmacist ->> screen__DispensingScreen: 服薬指導
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 調剤・監査済
+    api__DispensingApi ->> entity__Prescription: update status 調剤・監査済 -> 服薬指導済
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__DispensingScreen: 8. 薬剤交付
+  actor__Pharmacist ->> screen__DispensingScreen: 薬剤交付
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 服薬指導済
+    api__DispensingApi ->> entity__Prescription: update status 服薬指導済 -> 交付済, dispensed_at=set
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__DispensingScreen: 9. 疑義照会
+  actor__Pharmacist ->> screen__DispensingScreen: 疑義照会
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 引換券交付済
+    api__DispensingApi ->> entity__Prescription: update status 引換券交付済 -> 疑義照会中
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 10. 疑義照会への回答
+  actor__Clinician ->> screen__PrescriptionScreen: 疑義照会への回答
+  screen__PrescriptionScreen ->> api__PrescriptionInquiryApi: 疑義照会 API
+  alt Prescription.status == 疑義照会中
+    api__PrescriptionInquiryApi ->> entity__Prescription: update status 疑義照会中 -> 引換券交付済
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 11. 保険薬局からの疑義照会への回答
+  actor__Clinician ->> screen__PrescriptionScreen: 保険薬局からの疑義照会への回答
+  extsystem__InsurancePharmacy ->> api__PrescriptionInquiryApi: 保険薬局からの疑義照会
+  screen__PrescriptionScreen ->> api__PrescriptionInquiryApi: 疑義照会 API
+  alt Prescription.status == 院外処方箋発行済
+    api__PrescriptionInquiryApi ->> entity__Prescription: update status 院外処方箋発行済 -> 院外処方箋発行済
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__PharmacyStatusScreen: 12. 保険薬局での調剤結果の受信
+  extsystem__EPrescriptionService ->> api__ConfirmDispenseApi: 保険薬局での調剤完了
+  screen__PharmacyStatusScreen ->> api__ConfirmDispenseApi: 調剤結果 API
+  alt Prescription.status == 院外処方箋発行済
+    api__ConfirmDispenseApi ->> entity__Prescription: update status 院外処方箋発行済 -> 交付済, dispensed_at=set
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: done
+  else guard fails
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: rejected
+  end
+  Note over screen__PharmacyStatusScreen: 13. 処方箋の使用期間切れ
+  timer__PrescriptionUsePeriodCheck ->> api__ConfirmDispenseApi: 処方箋の使用期間切れ確認
+  screen__PharmacyStatusScreen ->> api__ConfirmDispenseApi: 調剤結果 API
+  alt Prescription.status == 院外処方箋発行済
+    api__ConfirmDispenseApi ->> entity__Prescription: update status 院外処方箋発行済 -> 使用期間切れ
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: done
+  else guard fails
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 14. 処方の取消
+  actor__Clinician ->> screen__PrescriptionScreen: 処方の取消
+  screen__PrescriptionScreen ->> usecase__CancelPrescription: 処方の取消
+  alt Prescription.status == 処方入力中
+    usecase__CancelPrescription ->> entity__Prescription: update status 処方入力中 -> 取消
+    usecase__CancelPrescription -->> screen__PrescriptionScreen: done
+  else guard fails
+    usecase__CancelPrescription -->> screen__PrescriptionScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -2232,6 +2965,110 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucVisitPayment model=samples/clinic-ops
+%% kinds: actor usecase screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__AccountsClerk as 医事課 会計担当
+  participant usecase__CalculateVisitBill as 会計計算入力
+  participant screen__BillCalculationScreen as 会計計算画面
+  participant screen__PaymentWindowScreen as 会計窓口画面
+  participant screen__KioskScreen as 自動精算機画面
+  participant api__CalculateVisitBillApi as 会計計算 API
+  participant api__SelectedFeeApi as 選定療養費 API
+  participant api__SettlementApi as 精算 API
+  participant api__ReceiptApi as 領収証 API
+  participant usecase__RefundPayment as 還付・追加徴収
+  participant entity__Charge as コスト（診療行為）
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__Appointment as 予約・受診
+  participant entity__SelectedTreatmentFeeSetting as 選定療養費の設定
+  participant entity__Encounter as 診療記録
+  participant entity__AccountBalance as 未収金残高
+  participant entity__PaymentTransaction as 精算
+  participant usecase__CallPatientForPayment as 会計の呼出
+  participant extsystem__PaymentGateway as 自動精算機・クレジット決済
+  Note over screen__BillCalculationScreen: 1. 会計計算入力
+  actor__AccountsClerk ->> screen__BillCalculationScreen: 会計計算入力
+  screen__BillCalculationScreen ->> api__CalculateVisitBillApi: 会計計算 API
+  alt Appointment.status == 計算待ち
+    api__CalculateVisitBillApi ->> entity__Charge: read
+    api__CalculateVisitBillApi ->> entity__InsurancePolicy: read
+    api__CalculateVisitBillApi ->> entity__Appointment: update status 計算待ち -> 会計待ち
+    api__CalculateVisitBillApi -) usecase__CallPatientForPayment: 会計計算完了
+    api__CalculateVisitBillApi -) extsystem__PaymentGateway: 会計計算完了
+    api__CalculateVisitBillApi -->> screen__BillCalculationScreen: done
+  else guard fails
+    api__CalculateVisitBillApi -->> screen__BillCalculationScreen: rejected
+  end
+  Note over screen__BillCalculationScreen: 2. 選定療養費の算定
+  actor__AccountsClerk ->> screen__BillCalculationScreen: 選定療養費の算定
+  screen__BillCalculationScreen ->> api__SelectedFeeApi: 選定療養費 API
+  alt 紹介状なしの初診で、除外に当たらない: Charge.kind == 選定療養（自費）, Appointment.referral == 紹介状なし初診
+    api__SelectedFeeApi ->> entity__SelectedTreatmentFeeSetting: read
+    api__SelectedFeeApi ->> entity__Encounter: read
+    api__SelectedFeeApi ->> entity__Charge: create status=posted, posted_at=set, origin=selectedfee
+    api__SelectedFeeApi -->> screen__BillCalculationScreen: done
+  else guard fails
+    api__SelectedFeeApi -->> screen__BillCalculationScreen: rejected
+  end
+  Note over screen__PaymentWindowScreen: 3. 会計の呼出
+  actor__AccountsClerk ->> screen__PaymentWindowScreen: 会計の呼出
+  usecase__CalculateVisitBill ->> usecase__CallPatientForPayment: 会計計算完了
+  screen__PaymentWindowScreen ->> usecase__CallPatientForPayment: 会計の呼出
+  usecase__CallPatientForPayment ->> entity__Appointment: read
+  usecase__CallPatientForPayment -->> screen__PaymentWindowScreen: done
+  Note over screen__PaymentWindowScreen: 4. 会計窓口での精算
+  actor__AccountsClerk ->> screen__PaymentWindowScreen: 会計窓口での精算
+  screen__PaymentWindowScreen ->> api__SettlementApi: 精算 API
+  alt Appointment.status == 会計待ち
+    Note over api__SettlementApi: transaction (API atomic boundary)
+    api__SettlementApi ->> entity__AccountBalance: update
+    api__SettlementApi ->> entity__Appointment: update status 会計待ち -> 精算済
+    api__SettlementApi ->> entity__PaymentTransaction: create status=posted, processed_at=set
+    api__SettlementApi -->> screen__PaymentWindowScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__PaymentWindowScreen: rejected
+  end
+  Note over screen__KioskScreen: 5. 自動精算機での精算
+  extsystem__PaymentGateway ->> api__SettlementApi: 自動精算機での精算完了
+  screen__KioskScreen ->> api__SettlementApi: 精算 API
+  alt Appointment.status == 会計待ち
+    Note over api__SettlementApi: transaction (API atomic boundary)
+    api__SettlementApi ->> entity__AccountBalance: update
+    api__SettlementApi ->> entity__Appointment: update status 会計待ち -> 精算済
+    api__SettlementApi ->> entity__PaymentTransaction: create status=posted, processed_at=set, gateway_ref=set
+    api__SettlementApi -->> screen__KioskScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__KioskScreen: rejected
+  end
+  Note over screen__PaymentWindowScreen: 6. 領収証・明細書の交付
+  actor__AccountsClerk ->> screen__PaymentWindowScreen: 領収証・明細書の交付
+  screen__PaymentWindowScreen ->> api__ReceiptApi: 領収証 API
+  alt Appointment.status == 精算済
+    api__ReceiptApi ->> entity__PaymentTransaction: read
+    api__ReceiptApi ->> entity__Charge: read
+    api__ReceiptApi ->> entity__Appointment: update status 精算済 -> 完了, completed_at=set
+    api__ReceiptApi -->> screen__PaymentWindowScreen: done
+  else guard fails
+    api__ReceiptApi -->> screen__PaymentWindowScreen: rejected
+  end
+  Note over screen__PaymentWindowScreen: 7. 還付・追加徴収
+  actor__AccountsClerk ->> screen__PaymentWindowScreen: 還付・追加徴収
+  screen__PaymentWindowScreen ->> usecase__RefundPayment: 還付・追加徴収
+  alt PaymentTransaction.status == 収納済
+    Note over usecase__RefundPayment: transaction (inferred from FK)
+    usecase__RefundPayment ->> entity__AccountBalance: update
+    usecase__RefundPayment ->> entity__PaymentTransaction: update status 収納済 -> 還付済
+    usecase__RefundPayment -->> screen__PaymentWindowScreen: done
+  else guard fails
+    usecase__RefundPayment -->> screen__PaymentWindowScreen: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 会計計算入力<br>`CalculateVisitBill` | 会計計算入力で予約を会計待ちにする。 | `BillCalculationScreen` | `CalculateVisitBillApi` | 窓口負担は負担割合で計算し、限度額情報があれば限度額までとする |
@@ -2534,6 +3371,194 @@ flowchart LR
   screen__ClaimScreen -.->|業務上の順番| screen__PaymentPostingScreen
   %% derived screen__ClaimScreen -> screen__PaymentPostingScreen via flow__ClaimCycleFlow,step__AssessStep,step__PaidStep,step__ReviewStep
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucBillingClaims model=samples/clinic-ops
+%% kinds: usecase actor timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  participant usecase__SignEncounter as 診療記録の署名
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant timer__MonthlyClaimCreation as 前月分レセプトの作成（月初）
+  participant timer__MonthlyClaimDeadline as 前月分レセプトの請求（毎月5日～10日）
+  participant timer__ErrorResendWindow as エラー分レセプトの再送（毎月11日・12日）
+  participant timer__ReturnDownloadCheck as 返戻レセプトの取得（3か月以内）
+  participant timer__ReceivablesMonthlyReview as 未収金管理台帳の作成（毎月）
+  participant screen__ChargeWorklistScreen as コスト一覧画面
+  participant screen__ClaimScreen as レセプト画面
+  participant screen__PaymentPostingScreen as 入金画面
+  participant screen__BalanceScreen as 未収金画面
+  participant api__CreateChargeApi as コスト登録 API
+  participant api__GenerateClaimApi as レセプト作成 API
+  participant api__ClaimEditApi as レセプト点検・訂正 API
+  participant api__SubmitClaimApi as オンライン請求 API
+  participant api__ClaimResultApi as 審査結果 API
+  participant usecase__ReviewClaimTransfer as 資格の振替・分割の確認
+  participant api__PaymentPostApi as 入金 API
+  participant api__BalanceApi as 未収金 API
+  participant usecase__VoidCharge as コストの取消
+  participant entity__Encounter as 診療記録
+  participant entity__Charge as コスト（診療行為）
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__ClaimStatement as レセプト
+  participant entity__PaymentTransaction as 精算
+  participant entity__AccountBalance as 未収金残高
+  participant extsystem__ClaimsReviewOrganization as 審査支払機関（支払基金・国保連）
+  Note over screen__ChargeWorklistScreen: 1. コスト情報の登録
+  usecase__SignEncounter ->> api__CreateChargeApi: 診療記録の署名
+  screen__ChargeWorklistScreen ->> api__CreateChargeApi: コスト登録 API
+  alt 署名済みの診療記録のコストだけ登録する: (Encounter.status in (署名済, 修正済)).along(Charge, Encounter)
+    api__CreateChargeApi ->> entity__Encounter: read
+    api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: done
+  else guard fails
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: rejected
+  end
+  Note over screen__ClaimScreen: 2. レセプト作成
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプト作成
+  timer__MonthlyClaimCreation ->> api__GenerateClaimApi: 前月分レセプトの作成（月初）
+  screen__ClaimScreen ->> api__GenerateClaimApi: レセプト作成 API
+  api__GenerateClaimApi ->> entity__Charge: read
+  api__GenerateClaimApi ->> entity__InsurancePolicy: read
+  api__GenerateClaimApi ->> entity__ClaimStatement: create
+  api__GenerateClaimApi -->> screen__ClaimScreen: done
+  Note over screen__ClaimScreen: 3. レセプトの院内点検
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプトの院内点検
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 作成中
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 作成中 -> 院内点検中
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 4. レセプトの保留（月遅れ）
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプトの保留（月遅れ）
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 院内点検中
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 院内点検中 -> 保留
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 5. 保留レセプトの再提出準備
+  actor__ClaimsClerk ->> screen__ClaimScreen: 保留レセプトの再提出準備
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 保留
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 保留 -> 院内点検中
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 6. レセプト請求
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプト請求
+  timer__MonthlyClaimDeadline ->> api__SubmitClaimApi: 前月分レセプトの請求（毎月5日～10日）
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 院内点検中
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 院内点検中 -> 請求済, submitted_at=set
+    api__SubmitClaimApi -) extsystem__ClaimsReviewOrganization: レセプト請求
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 7. 受付不能・要確認の確認
+  actor__ClaimsClerk ->> screen__ClaimScreen: 受付不能・要確認の確認
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: 受付不能・要確認
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 請求済
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 請求済 -> 受付不能・要確認
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 8. エラー分レセプトの再送
+  actor__ClaimsClerk ->> screen__ClaimScreen: エラー分レセプトの再送
+  timer__ErrorResendWindow ->> api__SubmitClaimApi: エラー分レセプトの再送（毎月11日・12日）
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 受付不能・要確認
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 受付不能・要確認 -> 請求済
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 9. レセプト受付（審査へ）
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: レセプト受付
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 請求済
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 請求済 -> 審査中
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 10. 資格の振替・分割の確認
+  actor__ClaimsClerk ->> screen__ClaimScreen: 資格の振替・分割の確認
+  extsystem__ClaimsReviewOrganization ->> usecase__ReviewClaimTransfer: 資格の振替・分割
+  screen__ClaimScreen ->> usecase__ReviewClaimTransfer: 資格の振替・分割の確認
+  usecase__ReviewClaimTransfer ->> entity__ClaimStatement: read
+  usecase__ReviewClaimTransfer -->> screen__ClaimScreen: done
+  Note over screen__ClaimScreen: 11. 返戻レセプトの取込
+  actor__ClaimsClerk ->> screen__ClaimScreen: 返戻レセプトの取込
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: 返戻
+  timer__ReturnDownloadCheck ->> api__ClaimResultApi: 返戻レセプトの取得（3か月以内）
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 審査中
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 審査中 -> 返戻, return_reason=set
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 12. 返戻レセプトの訂正（再請求）
+  actor__ClaimsClerk ->> screen__ClaimScreen: 返戻レセプトの訂正（再請求）
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 返戻
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 返戻 -> 院内点検中, return_reason=null
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 13. 査定の取込
+  actor__ClaimsClerk ->> screen__ClaimScreen: 査定の取込
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: 査定
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 審査中
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 審査中 -> 査定
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 14. 再審査請求
+  actor__ClaimsClerk ->> screen__ClaimScreen: 再審査請求
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 査定
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 査定 -> 再審査請求中
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__PaymentPostingScreen: 15. 診療報酬の入金
+  actor__ClaimsClerk ->> screen__PaymentPostingScreen: 診療報酬の入金
+  extsystem__ClaimsReviewOrganization ->> api__PaymentPostApi: 診療報酬の支払
+  screen__PaymentPostingScreen ->> api__PaymentPostApi: 入金 API
+  alt ClaimStatement.status in (審査中, 査定, 再審査請求中)
+    api__PaymentPostApi ->> entity__ClaimStatement: update status 審査中 -> 支払済, status 査定 -> 支払済, status 再審査請求中 -> 支払済, paid_at=set
+    api__PaymentPostApi -->> screen__PaymentPostingScreen: done
+  else guard fails
+    api__PaymentPostApi -->> screen__PaymentPostingScreen: rejected
+  end
+  Note over screen__BalanceScreen: 16. 未収金管理台帳の作成
+  actor__ClaimsClerk ->> screen__BalanceScreen: 未収金管理台帳の作成
+  timer__ReceivablesMonthlyReview ->> api__BalanceApi: 未収金管理台帳の作成（毎月）
+  screen__BalanceScreen ->> api__BalanceApi: 未収金 API
+  api__BalanceApi ->> entity__PaymentTransaction: read
+  api__BalanceApi ->> entity__AccountBalance: update is_closed=true, closed_at=set
+  api__BalanceApi -->> screen__BalanceScreen: done
+  Note over screen__ChargeWorklistScreen: 17. コストの取消
+  actor__ClaimsClerk ->> screen__ChargeWorklistScreen: コストの取消
+  screen__ChargeWorklistScreen ->> usecase__VoidCharge: コストの取消
+  usecase__VoidCharge ->> entity__Charge: update status=voided
+  usecase__VoidCharge -->> screen__ChargeWorklistScreen: done
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -3035,6 +4060,92 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucFollowupCare model=samples/clinic-ops
+%% kinds: actor usecase screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__CareCoordinator as 患者支援・地域連携担当
+  participant usecase__SignEncounter as 診療記録の署名
+  participant usecase__ReviewLabResult as 検査結果の確認
+  participant screen__CarePlanScreen as ケアプラン画面
+  participant screen__PatientMessageScreen as 患者連絡画面
+  participant screen__FollowUpScheduleScreen as 再診予約画面
+  participant api__CreateCarePlanApi as ケアプラン作成 API
+  participant api__SendFollowUpMessageApi as 患者連絡 API
+  participant usecase__ReviewPatientResponse as 患者応答の確認
+  participant api__FollowUpScheduleApi as 再診予約 API
+  participant usecase__CloseCarePlan as ケアプランの終了
+  participant api__NotifyPatientResultApi as 検査結果通知 API
+  participant entity__Encounter as 診療記録
+  participant entity__CarePlan as ケアプラン
+  participant entity__FollowUpMessage as フォローアップ連絡
+  participant entity__ProviderSchedule as 診療枠
+  participant entity__Appointment as 予約・受診
+  participant entity__Notification as 通知
+  participant api__AppointmentNoticeApi as 予約通知 API
+  participant extsystem__MessagingGateway as 患者通知サービス
+  participant api__IntakeMessagingApi as 問診票送付 API
+  Note over screen__CarePlanScreen: 1. ケアプランの作成
+  actor__CareCoordinator ->> screen__CarePlanScreen: ケアプランの作成
+  usecase__SignEncounter ->> api__CreateCarePlanApi: 診療記録の署名
+  screen__CarePlanScreen ->> api__CreateCarePlanApi: ケアプラン作成 API
+  api__CreateCarePlanApi ->> entity__Encounter: read
+  api__CreateCarePlanApi ->> entity__CarePlan: create
+  api__CreateCarePlanApi -->> screen__CarePlanScreen: done
+  Note over screen__PatientMessageScreen: 2. 患者への連絡
+  actor__CareCoordinator ->> screen__PatientMessageScreen: 患者への連絡
+  screen__PatientMessageScreen ->> api__SendFollowUpMessageApi: 患者連絡 API
+  alt 作成済みでまだ連絡していないケアプラン: (CarePlan.status == 作成済).none(FollowUpMessage)
+    api__SendFollowUpMessageApi ->> entity__FollowUpMessage: create status=sent, sent_at=set
+    api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: done
+  else guard fails
+    api__SendFollowUpMessageApi -->> screen__PatientMessageScreen: rejected
+  end
+  Note over screen__CarePlanScreen: 3. 患者応答の確認
+  actor__CareCoordinator ->> screen__CarePlanScreen: 患者応答の確認
+  screen__CarePlanScreen ->> usecase__ReviewPatientResponse: 患者応答の確認
+  alt CarePlan.status == 作成済
+    Note over usecase__ReviewPatientResponse: transaction (inferred from FK)
+    usecase__ReviewPatientResponse ->> entity__CarePlan: update status 作成済 -> 経過観察中
+    usecase__ReviewPatientResponse ->> entity__FollowUpMessage: update status=read, read_at=set
+    usecase__ReviewPatientResponse -->> screen__CarePlanScreen: done
+  else guard fails
+    usecase__ReviewPatientResponse -->> screen__CarePlanScreen: rejected
+  end
+  Note over screen__FollowUpScheduleScreen: 4. 再診の予約
+  actor__CareCoordinator ->> screen__FollowUpScheduleScreen: 再診の予約
+  screen__FollowUpScheduleScreen ->> api__FollowUpScheduleApi: 再診予約 API
+  alt Appointment.status == 仮押さえ
+    Note over api__FollowUpScheduleApi: transaction (API atomic boundary)
+    api__FollowUpScheduleApi ->> entity__ProviderSchedule: update
+    api__FollowUpScheduleApi ->> entity__Appointment: create status 仮押さえ -> 予約済
+    api__FollowUpScheduleApi -) api__AppointmentNoticeApi: 予約確定
+    api__FollowUpScheduleApi -) extsystem__MessagingGateway: 予約確定
+    api__FollowUpScheduleApi -) api__IntakeMessagingApi: 予約確定
+    api__FollowUpScheduleApi -->> screen__FollowUpScheduleScreen: done
+  else guard fails
+    api__FollowUpScheduleApi -->> screen__FollowUpScheduleScreen: rejected
+  end
+  Note over screen__CarePlanScreen: 5. ケアプランの終了
+  actor__CareCoordinator ->> screen__CarePlanScreen: ケアプランの終了
+  screen__CarePlanScreen ->> usecase__CloseCarePlan: ケアプランの終了
+  alt CarePlan.status == 経過観察中
+    usecase__CloseCarePlan ->> entity__CarePlan: update status 経過観察中 -> 終了, closed_at=set
+    usecase__CloseCarePlan -->> screen__CarePlanScreen: done
+  else guard fails
+    usecase__CloseCarePlan -->> screen__CarePlanScreen: rejected
+  end
+  Note over screen__PatientMessageScreen: 6. 検査結果の患者通知
+  actor__CareCoordinator ->> screen__PatientMessageScreen: 検査結果の患者通知
+  usecase__ReviewLabResult ->> api__NotifyPatientResultApi: 検査結果の確認
+  screen__PatientMessageScreen ->> api__NotifyPatientResultApi: 検査結果通知 API
+  api__NotifyPatientResultApi ->> entity__Notification: create delivered_at=set
+  api__NotifyPatientResultApi -->> screen__PatientMessageScreen: done
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | ケアプランの作成<br>`CreateCarePlan` | 署名イベントからのケアプラン作成。 | `CarePlanScreen` | `CreateCarePlanApi` | （なし） |
@@ -3238,6 +4349,63 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucStaffAdministration model=samples/clinic-ops
+%% kinds: actor screen api usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__ScheduleAdminScreen as 診療枠管理画面
+  participant screen__RoomAdminScreen as 診察室管理画面
+  participant screen__AuditReviewScreen as 監査ログ画面
+  participant api__ManageProviderScheduleApi as 診療枠管理 API
+  participant api__BlockScheduleSlotApi as 診療枠停止 API
+  participant api__RoomAdminApi as 診察室管理 API
+  participant usecase__ReleaseRoom as 診察室の解放
+  participant api__AuditApi as 監査 API
+  participant usecase__ResolveAuditFinding as 監査指摘の解決
+  participant entity__Provider as 医師マスタ
+  participant entity__ProviderSchedule as 診療枠
+  participant entity__Room as 診察室
+  participant entity__AuditEvent as 監査ログ
+  participant entity__PatientAccount as 患者登録
+  Note over screen__ScheduleAdminScreen: 1. 診療枠の管理
+  actor__ClinicAdmin ->> screen__ScheduleAdminScreen: 診療枠の管理
+  screen__ScheduleAdminScreen ->> api__ManageProviderScheduleApi: 診療枠管理 API
+  Note over api__ManageProviderScheduleApi: transaction (API atomic boundary)
+  api__ManageProviderScheduleApi ->> entity__Provider: update
+  api__ManageProviderScheduleApi ->> entity__ProviderSchedule: create
+  api__ManageProviderScheduleApi -->> screen__ScheduleAdminScreen: done
+  Note over screen__ScheduleAdminScreen: 2. 診療枠の停止
+  actor__ClinicAdmin ->> screen__ScheduleAdminScreen: 診療枠の停止
+  screen__ScheduleAdminScreen ->> api__BlockScheduleSlotApi: 診療枠停止 API
+  api__BlockScheduleSlotApi ->> entity__ProviderSchedule: update blocked=true
+  api__BlockScheduleSlotApi -->> screen__ScheduleAdminScreen: done
+  Note over screen__RoomAdminScreen: 3. 診察室の設定
+  actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の設定
+  screen__RoomAdminScreen ->> api__RoomAdminApi: 診察室管理 API
+  api__RoomAdminApi ->> entity__Room: create occupancy_status=available
+  api__RoomAdminApi -->> screen__RoomAdminScreen: done
+  Note over screen__RoomAdminScreen: 4. 診察室の解放
+  actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の解放
+  screen__RoomAdminScreen ->> usecase__ReleaseRoom: 診察室の解放
+  usecase__ReleaseRoom ->> entity__Room: update occupancy_status=available
+  usecase__ReleaseRoom -->> screen__RoomAdminScreen: done
+  Note over screen__AuditReviewScreen: 5. 監査ログの確認
+  actor__ClinicAdmin ->> screen__AuditReviewScreen: 監査ログの確認
+  screen__AuditReviewScreen ->> api__AuditApi: 監査 API
+  api__AuditApi ->> entity__AuditEvent: read
+  api__AuditApi ->> entity__PatientAccount: read
+  api__AuditApi -->> screen__AuditReviewScreen: done
+  Note over screen__AuditReviewScreen: 6. 監査指摘の解決
+  actor__ClinicAdmin ->> screen__AuditReviewScreen: 監査指摘の解決
+  screen__AuditReviewScreen ->> usecase__ResolveAuditFinding: 監査指摘の解決
+  usecase__ResolveAuditFinding ->> entity__AuditEvent: update is_resolved=true
+  usecase__ResolveAuditFinding -->> screen__AuditReviewScreen: done
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |

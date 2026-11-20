@@ -240,20 +240,24 @@ A document follows its reader, and the outputs split between two readers.
 
 | Reader | Question | Outputs |
 |---|---|---|
-| Product manager | Why build it, for whom, and what counts as done? | `list --kind goal`, `list --kind actor`, `list --kind buc-roles`, `list --kind requirement` (with its `goals` and `bucs`), `diagram --kind requirement` (the goal, requirement, and BUC tree with the out-of-scope requirements), `diagram --kind context`, `diagram --kind business`, `diagram --kind flow --buc`, `list --kind rule`, `list --kind nfr` |
-| Engineer | What does each use case touch, in what order, under which rules? | `diagram --kind robustness --buc`, `diagram --kind screen --buc`, `diagram --kind sequence --usecase`, `diagram --kind state --entity` and `states`, `diagram --kind er`, `list --kind entity`, `list --kind rule`, `csv --kind api-matrix`, `list --kind actor-permission-audit`, `diagram --kind event`, `export --kind asyncapi` |
+| Product manager | Why build it, for whom, and what counts as done? | `list --kind goal`, `list --kind actor`, `list --kind buc-roles`, `list --kind requirement` (with its `goals` and `bucs`), `diagram --kind requirement` (the goal, requirement, and BUC tree with the out-of-scope requirements), `diagram --kind context`, `diagram --kind business`, `diagram --kind flow --buc`, `diagram --kind usecase --actor` (what one role does), `list --kind rule`, `list --kind nfr` |
+| Engineer | What does each use case touch, in what order, under which rules? | `diagram --kind robustness --buc`, `diagram --kind screen --buc`, `diagram --kind sequence --buc` (the BUC's use cases in order) and `--usecase`, `diagram --kind state --entity` and `states`, `diagram --kind er` (or `er --entity` around one aggregate), `list --kind entity`, `list --kind rule`, `csv --kind api-matrix`, `list --kind actor-permission-audit`, `diagram --kind event`, `export --kind asyncapi` |
 
 An engineer reads in three steps:
 
 1. The robustness diagram of a BUC gives the structure: the screens, the controls they
    call, and the entities each control reads and writes.
-2. The sequence diagram of a use case gives the processing: the guards, then each write
-   in order, then the events it raises.
+2. The sequence diagram of the BUC gives its processing, use case after use case; the
+   sequence diagram of one use case gives the guards, then each write in order, then the
+   events it raises.
 3. The state tables, the data model, and the rules give the specification each write must
    keep.
 
 The UC複合図 and the whole RDRA diagram stay available for an RDRA review, but neither
-reader starts from them. `samples/clinic-ops/design-doc.md`
+reader starts from them. Every diagram a document embeds is scoped (by BUC, entity, use
+case, or actor) and stays under Mermaid's default limits, which `diagram` warns about. The
+skill `rdra-ish-diagram` (`references/documents.md`) gives the section-by-section base
+structure of both documents; a project's own document instructions take precedence. `samples/clinic-ops/design-doc.md`
 and `samples/clinic-ops/prd.md` follow these two orders.
 
 ## Modeling Heuristics

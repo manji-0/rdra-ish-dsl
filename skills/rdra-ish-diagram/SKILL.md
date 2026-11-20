@@ -1,6 +1,6 @@
 ---
 name: rdra-ish-diagram
-description: Choose the RDRA 3.0 diagram (or CSV or export view) that answers a review question about an RDRA-ish model, generate it as Mermaid, and read or redraw it from its header, ids, and comment lines
+description: Choose the RDRA 3.0 diagram (or CSV or export view) that answers a review question about an RDRA-ish model, generate it as Mermaid, and read or redraw it from its header, ids, and comment lines; and lay out the diagrams and tables of a PRD or design document written from the model
 license: MIT
 ---
 
@@ -34,6 +34,7 @@ Pick the one kind that answers the question, then load only its reference.
 | Which events, timers, and external systems start other work? | `event` | `references/lifecycle-and-events.md` |
 | Everything at once, or a relation no other kind draws (permissions, media, DTOs, API paths) | `rdra`, narrowed with `--node-kind` / `--edge-kind` | `references/rdra-graph.md` |
 | How do I read a header, an id, or a `%%` line, or redraw a diagram? | any | `references/reading-diagrams.md` |
+| Which diagrams go into a PRD or a design document, in which section? | the base structure, unless the user has their own document instructions or skill | `references/documents.md` |
 | Which actor inputs which fields, or which APIs sit in each system? | `csv --kind business-inputs` or `csv --kind api-matrix` | `references/access-and-apis.md` |
 | Where are the transaction and API-boundary problems? | `check` | `references/access-and-apis.md` |
 | Are rules broken, or states unreached or stuck? | `check`, then `states` | `references/lifecycle-and-events.md` |
@@ -105,3 +106,5 @@ The others draw declared facts and print one note.
 - `references/rdra-graph.md` — `rdra`, the whole graph, and its filters.
 - `references/access-and-apis.md` — API boundaries and the access CSV views.
 - `references/formats-and-output.md` — Mermaid output, rendering, and contract exports.
+- `references/documents.md` — the base PRD and design document structure, and the rules for
+  embedding diagrams; the user's own document instructions take precedence.

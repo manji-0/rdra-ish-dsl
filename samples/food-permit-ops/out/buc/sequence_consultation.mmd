@@ -1,0 +1,37 @@
+%% rdra-ish diagram=sequence scope=buc:BucConsultation model=samples/food-permit-ops
+%% kinds: actor screen api usecase entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__ConsultationScreen as 事前相談記録画面
+  participant api__ConsultationApi as 事前相談 API
+  participant usecase__ReviewFloorPlan as 図面の確認と施設基準の説明
+  participant api__ClassificationApi as 営業の種類の判定 API
+  participant entity__Consultation as 事前相談
+  Note over screen__ConsultationScreen: 1. 事前相談の申込み
+  actor__BusinessOperator ->> screen__ConsultationScreen: 事前相談の申込み
+  screen__ConsultationScreen ->> api__ConsultationApi: 事前相談 API
+  api__ConsultationApi ->> entity__Consultation: create
+  api__ConsultationApi -->> screen__ConsultationScreen: done
+  Note over screen__ConsultationScreen: 2. 図面の確認と施設基準の説明
+  actor__FoodSanitationInspector ->> screen__ConsultationScreen: 図面の確認と施設基準の説明
+  screen__ConsultationScreen ->> usecase__ReviewFloorPlan: 図面の確認と施設基準の説明
+  usecase__ReviewFloorPlan ->> entity__Consultation: read
+  usecase__ReviewFloorPlan -->> screen__ConsultationScreen: done
+  Note over screen__ConsultationScreen: 3. 営業の種類の判定
+  actor__FoodSanitationInspector ->> screen__ConsultationScreen: 営業の種類の判定
+  screen__ConsultationScreen ->> api__ClassificationApi: 営業の種類の判定 API
+  alt Consultation.status == 相談中
+    api__ClassificationApi ->> entity__Consultation: update
+    alt status 相談中 -> 許可が必要 [許可業種（施行令35条）である]
+      api__ClassificationApi ->> entity__Consultation: status = 許可が必要
+    else status 相談中 -> 届出が必要 [届出業種である]
+      api__ClassificationApi ->> entity__Consultation: status = 届出が必要
+    else status 相談中 -> 許可・届出とも不要 [届出も要らない営業（施行令35条の2）である]
+      api__ClassificationApi ->> entity__Consultation: status = 許可・届出とも不要
+    end
+    api__ClassificationApi -->> screen__ConsultationScreen: done
+  else guard fails
+    api__ClassificationApi -->> screen__ConsultationScreen: rejected
+  end

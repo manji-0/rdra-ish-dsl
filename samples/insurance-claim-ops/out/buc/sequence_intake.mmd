@@ -1,0 +1,44 @@
+%% rdra-ish diagram=sequence scope=buc:BucIntake model=samples/insurance-claim-ops
+%% kinds: actor screen api usecase entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimReceptionist as 事故受付担当
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Agent as 代理店
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__AccidentReportScreen as 事故受付画面
+  participant screen__CaseScreen as 事故案件画面
+  participant api__CaseCreateApi as 事故受付 API
+  participant api__CaseApi as 事故案件 API
+  participant usecase__QueryAccidentExchange as 事故受付の有無の照会
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant api__ClaimCreateApi as 請求案内 API
+  participant extsystem__AccidentInfoExchange as 自動車事故情報交換システム（損保協会の共同利用制度）
+  Note over screen__AccidentReportScreen: 1. 事故の通知（保険会社へ）
+  actor__ClaimReceptionist ->> screen__AccidentReportScreen: 事故の通知（保険会社へ）
+  actor__PolicyHolder ->> screen__AccidentReportScreen: 事故の通知（保険会社へ）
+  screen__AccidentReportScreen ->> api__CaseCreateApi: 事故受付 API
+  api__CaseCreateApi ->> entity__ClaimCase: create
+  api__CaseCreateApi -->> screen__AccidentReportScreen: done
+  Note over screen__AccidentReportScreen: 2. 事故の通知（代理店経由）
+  actor__Agent ->> screen__AccidentReportScreen: 事故の通知（代理店経由）
+  actor__ClaimReceptionist ->> screen__AccidentReportScreen: 事故の通知（代理店経由）
+  screen__AccidentReportScreen ->> api__CaseCreateApi: 事故受付 API
+  api__CaseCreateApi ->> entity__ClaimCase: create
+  api__CaseCreateApi -->> screen__AccidentReportScreen: done
+  Note over screen__CaseScreen: 3. 初期対応（担当者の案内と手続の説明）
+  actor__ClaimHandler ->> screen__CaseScreen: 初期対応（担当者の案内と手続の説明）
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt ClaimCase.status == 事故受付
+    api__CaseApi ->> entity__ClaimCase: update status 事故受付 -> 初期対応済
+    api__CaseApi -) api__ClaimCreateApi: 初期対応の完了
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end
+  Note over screen__CaseScreen: 4. 事故受付の有無の照会
+  actor__ClaimHandler ->> screen__CaseScreen: 事故受付の有無の照会
+  screen__CaseScreen ->> usecase__QueryAccidentExchange: 事故受付の有無の照会
+  usecase__QueryAccidentExchange ->> entity__ClaimCase: read
+  usecase__QueryAccidentExchange -) extsystem__AccidentInfoExchange: 事故受付の有無の照会
+  usecase__QueryAccidentExchange -->> screen__CaseScreen: done

@@ -1,0 +1,81 @@
+%% rdra-ish diagram=sequence scope=buc:BucSettlement model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant screen__SettlementScreen as 示談画面
+  participant api__CaseApi as 事故案件 API
+  participant api__SettlementCreateApi as 示談代行開始 API
+  participant api__SettlementApi as 示談 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant entity__Settlement as 示談（示談代行）
+  Note over screen__SettlementScreen: 1. 示談代行の開始
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談代行の開始
+  screen__SettlementScreen ->> api__CaseApi: 事故案件 API
+  alt 対人・対物賠償の事故で、被保険者に賠償責任がある: ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり and ClaimCase.status == 調査中
+    screen__SettlementScreen ->> api__SettlementCreateApi: 示談代行開始 API
+    api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 示談交渉中
+    api__SettlementCreateApi ->> entity__Settlement: create
+    api__CaseApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__CaseApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 2. 被保険者の同意
+  actor__PolicyHolder ->> screen__SettlementScreen: 被保険者の同意
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt 示談代行の同意を確かめている: Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update insured_consent=true
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 3. 被害者の同意
+  actor__Victim ->> screen__SettlementScreen: 被害者の同意
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt 示談代行の同意を確かめている: Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update victim_consent=true
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 4. 示談交渉の開始
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談交渉の開始
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt 被保険者と被害者がともに同意している: Settlement.insured_consent == true, Settlement.victim_consent == true and Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update status 同意の確認中 -> 示談交渉中
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 5. 示談代行を行わない
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談代行を行わない
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update status 同意の確認中 -> 示談代行を行わない
+    api__SettlementApi -) api__CaseApi: 示談代行の終了（不調・不実施）
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 6. 示談の成立
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談の成立
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt Settlement.status == 示談交渉中
+    api__SettlementApi ->> entity__Settlement: update status 示談交渉中 -> 示談成立
+    api__SettlementApi -) api__CaseApi: 示談の成立
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 7. 示談交渉の終了（不調）
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談交渉の終了（不調）
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt Settlement.status == 示談交渉中
+    api__SettlementApi ->> entity__Settlement: update status 示談交渉中 -> 不調（調停・訴訟へ）
+    api__SettlementApi -) api__CaseApi: 示談代行の終了（不調・不実施）
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end

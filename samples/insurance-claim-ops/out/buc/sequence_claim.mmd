@@ -1,0 +1,69 @@
+%% rdra-ish diagram=sequence scope=buc:BucClaim model=samples/insurance-claim-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant usecase__RespondInitially as 初期対応（担当者の案内と手続の説明）
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant timer__ClaimLimitation as 保険金請求権の時効（請求権が発生した時の翌日から3年）
+  participant screen__ClaimScreen as 保険金請求画面
+  participant screen__ClaimFormScreen as 請求書類の提出画面
+  participant api__ClaimCreateApi as 請求案内 API
+  participant api__ClaimApi as 保険金請求 API
+  participant api__ClaimSubmitApi as 請求書類提出 API
+  participant entity__Claim as 保険金請求
+  participant api__CaseApi as 事故案件 API
+  Note over screen__ClaimScreen: 1. 請求書類の案内と送付
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求書類の案内と送付
+  usecase__RespondInitially ->> api__ClaimCreateApi: 初期対応の完了
+  screen__ClaimScreen ->> api__ClaimCreateApi: 請求案内 API
+  api__ClaimCreateApi ->> entity__Claim: create
+  api__ClaimCreateApi -->> screen__ClaimScreen: done
+  Note over screen__ClaimScreen: 2. 等級の変動の説明と請求意思の確認
+  actor__ClaimHandler ->> screen__ClaimScreen: 等級の変動の説明と請求意思の確認
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt 請求の案内をした段階である: Claim.status == 請求の案内済
+    api__ClaimApi ->> entity__Claim: update grade_explained=true
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimFormScreen: 3. 請求書類の提出
+  actor__PolicyHolder ->> screen__ClaimFormScreen: 請求書類の提出
+  actor__Victim ->> screen__ClaimFormScreen: 請求書類の提出
+  screen__ClaimFormScreen ->> api__ClaimSubmitApi: 請求書類提出 API
+  alt 等級の変動を説明して請求の意思を確かめた: Claim.grade_explained == true and Claim.status == 請求の案内済
+    api__ClaimSubmitApi ->> entity__Claim: update status 請求の案内済 -> 請求書類の提出
+    api__ClaimSubmitApi -->> screen__ClaimFormScreen: done
+  else guard fails
+    api__ClaimSubmitApi -->> screen__ClaimFormScreen: rejected
+  end
+  Note over screen__ClaimScreen: 4. 請求完了の確認
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求完了の確認
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status == 請求書類の提出 and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求書類の提出 -> 請求完了 [車両・人身傷害の事故の請求である], status 請求書類の提出 -> 請求完了 [示談が成立している], period 未起算 -> 30日の期間中, completed_on=set
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 5. 請求の取下げ
+  actor__PolicyHolder ->> screen__ClaimScreen: 請求の取下げ
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status in (請求の案内済, 請求書類の提出, 請求完了) and Claim.period in (未起算, 30日の期間中, 延長期間中, 期限経過)
+    api__ClaimApi ->> entity__Claim: update status 請求の案内済 -> 取下げ, status 請求書類の提出 -> 取下げ, status 請求完了 -> 取下げ, period 未起算 -> 期限の管理を終了, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__ClaimApi -) api__CaseApi: 請求の取下げ
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over api__ClaimApi: 6. 請求権の時効による消滅
+  timer__ClaimLimitation ->> api__ClaimApi: 保険金請求権の時効（請求権が発生した時の翌日から3年）
+  alt Claim.status in (請求の案内済, 請求書類の提出) and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求の案内済 -> 時効消滅, status 請求書類の提出 -> 時効消滅, period 未起算 -> 期限の管理を終了
+    api__ClaimApi -) api__CaseApi: 請求権の時効消滅
+    api__ClaimApi -->> timer__ClaimLimitation: done
+  else guard fails
+    api__ClaimApi -->> timer__ClaimLimitation: rejected
+  end

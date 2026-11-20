@@ -1,0 +1,170 @@
+%% rdra-ish diagram=sequence scope=buc:BucOfficeAction model=samples/patent-ops
+%% kinds: actor extsystem timer screen api usecase entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__ResponseDeadline as 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  participant timer__LateExtensionDeadline as 期間経過後の延長請求の期限（応答期間の経過から2か月）
+  participant timer__AppealDeadline as 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  participant screen__OfficeActionScreen as 中間処理画面
+  participant screen__ResponseDraftScreen as 応答案画面
+  participant screen__DecisionScreen as 査定画面
+  participant api__OfficeActionIntakeApi as 拒絶理由通知の受付 API
+  participant usecase__InstructResponse as 応答方針の指示
+  participant api__OfficeActionApi as 中間処理 API
+  participant usecase__ExpireResponseTerm as 応答期間の経過
+  participant usecase__LapseResponse as 応答なしでの期間満了
+  participant api__ResponseFilingApi as 応答提出 API
+  participant api__DecisionApi as 査定 API
+  participant api__AppealApi as 審判請求 API
+  participant usecase__CloseOfficeActionDocket as 中間処理案件の終了
+  participant api__DivisionalApi as 分割出願 API
+  participant entity__PatentApplication as 特許出願
+  participant entity__OfficeAction as 拒絶理由通知
+  participant entity__DivisionalFiling as 分割出願
+  Note over screen__OfficeActionScreen: 1. 拒絶理由通知の受領
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 拒絶理由通知の受領
+  extsystem__Jpo ->> api__OfficeActionIntakeApi: 拒絶理由通知書
+  screen__OfficeActionScreen ->> api__OfficeActionIntakeApi: 拒絶理由通知の受付 API
+  alt 出願が審査中である: PatentApplication.status == 審査請求済（審査中）
+    api__OfficeActionIntakeApi ->> entity__PatentApplication: read
+    api__OfficeActionIntakeApi ->> entity__OfficeAction: create kind=first
+    api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 2. 応答方針の指示
+  actor__IpStaff ->> screen__OfficeActionScreen: 応答方針の指示
+  screen__OfficeActionScreen ->> usecase__InstructResponse: 応答方針の指示
+  usecase__InstructResponse ->> entity__OfficeAction: read
+  usecase__InstructResponse ->> entity__PatentApplication: read
+  usecase__InstructResponse -->> screen__OfficeActionScreen: done
+  Note over screen__ResponseDraftScreen: 3. 意見書・補正書案の作成
+  actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書案の作成
+  screen__ResponseDraftScreen ->> api__OfficeActionApi: 中間処理 API
+  alt OfficeAction.status == 応答期間中
+    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment in (限定のない補正 [最初の拒絶理由通知である], 意見書のみ、または削除・減縮・誤記の訂正・釈明に限る補正)
+    api__OfficeActionApi -->> screen__ResponseDraftScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__ResponseDraftScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 4. 応答期間の延長請求
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 応答期間の延長請求
+  screen__OfficeActionScreen ->> api__OfficeActionApi: 中間処理 API
+  alt 応答期間内で、まだ延長していない: OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false
+    api__OfficeActionApi ->> entity__OfficeAction: update extended=true
+    api__OfficeActionApi -) extsystem__Jpo: 期間延長請求書の提出
+    api__OfficeActionApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over usecase__ExpireResponseTerm: 5. 応答期間の経過
+  timer__ResponseDeadline ->> usecase__ExpireResponseTerm: 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  alt OfficeAction.status in (応答期間中, 応答案作成済)
+    usecase__ExpireResponseTerm ->> entity__OfficeAction: update status 応答期間中 -> 期間経過（延長請求可）, status 応答案作成済 -> 期間経過（延長請求可）
+    usecase__ExpireResponseTerm -->> timer__ResponseDeadline: done
+  else guard fails
+    usecase__ExpireResponseTerm -->> timer__ResponseDeadline: rejected
+  end
+  Note over screen__OfficeActionScreen: 6. 期間経過後の延長請求
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 期間経過後の延長請求
+  screen__OfficeActionScreen ->> api__OfficeActionApi: 中間処理 API
+  alt 期間内に延長していない: OfficeAction.extended == false and OfficeAction.status == 期間経過（延長請求可）
+    api__OfficeActionApi ->> entity__OfficeAction: update status 期間経過（延長請求可） -> 応答期間中, late_extended=true
+    api__OfficeActionApi -) extsystem__Jpo: 期間延長請求書の提出
+    api__OfficeActionApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over usecase__LapseResponse: 7. 応答なしでの期間満了
+  timer__LateExtensionDeadline ->> usecase__LapseResponse: 期間経過後の延長請求の期限（応答期間の経過から2か月）
+  alt OfficeAction.status == 期間経過（延長請求可）
+    usecase__LapseResponse ->> entity__OfficeAction: update status 期間経過（延長請求可） -> 応答なしで期間満了
+    usecase__LapseResponse -->> timer__LateExtensionDeadline: done
+  else guard fails
+    usecase__LapseResponse -->> timer__LateExtensionDeadline: rejected
+  end
+  Note over screen__ResponseDraftScreen: 8. 意見書・補正書の提出
+  actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書の提出
+  timer__ResponseDeadline ->> api__ResponseFilingApi: 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  screen__ResponseDraftScreen ->> api__ResponseFilingApi: 応答提出 API
+  alt OfficeAction.status == 応答案作成済
+    api__ResponseFilingApi ->> entity__OfficeAction: update status 応答案作成済 -> 応答済
+    api__ResponseFilingApi -) extsystem__Jpo: 意見書・手続補正書の提出
+    api__ResponseFilingApi -->> screen__ResponseDraftScreen: done
+  else guard fails
+    api__ResponseFilingApi -->> screen__ResponseDraftScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 9. 最後の拒絶理由通知の受領
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 最後の拒絶理由通知の受領
+  extsystem__Jpo ->> api__ResponseFilingApi: 最後の拒絶理由通知書
+  screen__OfficeActionScreen ->> api__ResponseFilingApi: 応答提出 API
+  alt OfficeAction.status == 応答済
+    api__ResponseFilingApi ->> entity__OfficeAction: update status 応答済 -> 応答期間中, kind=final, extended=false, late_extended=false, amendment=limited
+    api__ResponseFilingApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__ResponseFilingApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 10. 特許査定の受領
+  actor__IpStaff ->> screen__DecisionScreen: 特許査定の受領
+  extsystem__Jpo ->> api__DecisionApi: 特許査定の謄本
+  screen__DecisionScreen ->> api__DecisionApi: 査定 API
+  alt PatentApplication.status == 審査請求済（審査中）
+    api__DecisionApi ->> entity__PatentApplication: update status 審査請求済（審査中） -> 特許査定
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 11. 拒絶査定の受領
+  actor__IpStaff ->> screen__DecisionScreen: 拒絶査定の受領
+  extsystem__Jpo ->> api__DecisionApi: 拒絶査定の謄本
+  screen__DecisionScreen ->> api__DecisionApi: 査定 API
+  alt PatentApplication.status == 審査請求済（審査中）
+    api__DecisionApi ->> entity__PatentApplication: update status 審査請求済（審査中） -> 拒絶査定
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 12. 拒絶査定不服審判の請求
+  actor__PatentAttorney ->> screen__DecisionScreen: 拒絶査定不服審判の請求
+  timer__AppealDeadline ->> api__AppealApi: 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  screen__DecisionScreen ->> api__AppealApi: 審判請求 API
+  alt PatentApplication.status == 拒絶査定
+    api__AppealApi ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定不服審判を請求
+    api__AppealApi -) extsystem__Jpo: 拒絶査定不服審判の請求
+    api__AppealApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__AppealApi -->> screen__DecisionScreen: rejected
+  end
+  Note over api__DecisionApi: 13. 拒絶査定の確定
+  timer__AppealDeadline ->> api__DecisionApi: 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  alt PatentApplication.status == 拒絶査定
+    api__DecisionApi ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定の確定
+    api__DecisionApi -->> timer__AppealDeadline: done
+  else guard fails
+    api__DecisionApi -->> timer__AppealDeadline: rejected
+  end
+  Note over screen__OfficeActionScreen: 14. 中間処理案件の終了
+  actor__IpStaff ->> screen__OfficeActionScreen: 中間処理案件の終了
+  extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 特許査定の謄本
+  extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 拒絶査定の謄本
+  screen__OfficeActionScreen ->> usecase__CloseOfficeActionDocket: 中間処理案件の終了
+  alt 出願の審査が終わっている: PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) and OfficeAction.status == 応答済
+    usecase__CloseOfficeActionDocket ->> entity__PatentApplication: read
+    usecase__CloseOfficeActionDocket ->> entity__OfficeAction: update status 応答済 -> 案件終了
+    usecase__CloseOfficeActionDocket -->> screen__OfficeActionScreen: done
+  else guard fails
+    usecase__CloseOfficeActionDocket -->> screen__OfficeActionScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 15. 分割出願
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 分割出願
+  screen__OfficeActionScreen ->> api__DivisionalApi: 分割出願 API
+  alt 分割できる時期である: PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定)
+    api__DivisionalApi ->> entity__DivisionalFiling: create
+    api__DivisionalApi -) extsystem__Jpo: 分割出願
+    api__DivisionalApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__DivisionalApi -->> screen__OfficeActionScreen: rejected
+  end

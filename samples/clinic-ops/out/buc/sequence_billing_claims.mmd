@@ -1,0 +1,183 @@
+%% rdra-ish diagram=sequence scope=buc:BucBillingClaims model=samples/clinic-ops
+%% kinds: usecase actor timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  participant usecase__SignEncounter as 診療記録の署名
+  actor actor__ClaimsClerk as 医事課 レセプト担当
+  participant timer__MonthlyClaimCreation as 前月分レセプトの作成（月初）
+  participant timer__MonthlyClaimDeadline as 前月分レセプトの請求（毎月5日～10日）
+  participant timer__ErrorResendWindow as エラー分レセプトの再送（毎月11日・12日）
+  participant timer__ReturnDownloadCheck as 返戻レセプトの取得（3か月以内）
+  participant timer__ReceivablesMonthlyReview as 未収金管理台帳の作成（毎月）
+  participant screen__ChargeWorklistScreen as コスト一覧画面
+  participant screen__ClaimScreen as レセプト画面
+  participant screen__PaymentPostingScreen as 入金画面
+  participant screen__BalanceScreen as 未収金画面
+  participant api__CreateChargeApi as コスト登録 API
+  participant api__GenerateClaimApi as レセプト作成 API
+  participant api__ClaimEditApi as レセプト点検・訂正 API
+  participant api__SubmitClaimApi as オンライン請求 API
+  participant api__ClaimResultApi as 審査結果 API
+  participant usecase__ReviewClaimTransfer as 資格の振替・分割の確認
+  participant api__PaymentPostApi as 入金 API
+  participant api__BalanceApi as 未収金 API
+  participant usecase__VoidCharge as コストの取消
+  participant entity__Encounter as 診療記録
+  participant entity__Charge as コスト（診療行為）
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__ClaimStatement as レセプト
+  participant entity__PaymentTransaction as 精算
+  participant entity__AccountBalance as 未収金残高
+  participant extsystem__ClaimsReviewOrganization as 審査支払機関（支払基金・国保連）
+  Note over screen__ChargeWorklistScreen: 1. コスト情報の登録
+  usecase__SignEncounter ->> api__CreateChargeApi: 診療記録の署名
+  screen__ChargeWorklistScreen ->> api__CreateChargeApi: コスト登録 API
+  alt 署名済みの診療記録のコストだけ登録する: (Encounter.status in (署名済, 修正済)).along(Charge, Encounter)
+    api__CreateChargeApi ->> entity__Encounter: read
+    api__CreateChargeApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=chart
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: done
+  else guard fails
+    api__CreateChargeApi -->> screen__ChargeWorklistScreen: rejected
+  end
+  Note over screen__ClaimScreen: 2. レセプト作成
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプト作成
+  timer__MonthlyClaimCreation ->> api__GenerateClaimApi: 前月分レセプトの作成（月初）
+  screen__ClaimScreen ->> api__GenerateClaimApi: レセプト作成 API
+  api__GenerateClaimApi ->> entity__Charge: read
+  api__GenerateClaimApi ->> entity__InsurancePolicy: read
+  api__GenerateClaimApi ->> entity__ClaimStatement: create
+  api__GenerateClaimApi -->> screen__ClaimScreen: done
+  Note over screen__ClaimScreen: 3. レセプトの院内点検
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプトの院内点検
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 作成中
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 作成中 -> 院内点検中
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 4. レセプトの保留（月遅れ）
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプトの保留（月遅れ）
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 院内点検中
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 院内点検中 -> 保留
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 5. 保留レセプトの再提出準備
+  actor__ClaimsClerk ->> screen__ClaimScreen: 保留レセプトの再提出準備
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 保留
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 保留 -> 院内点検中
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 6. レセプト請求
+  actor__ClaimsClerk ->> screen__ClaimScreen: レセプト請求
+  timer__MonthlyClaimDeadline ->> api__SubmitClaimApi: 前月分レセプトの請求（毎月5日～10日）
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 院内点検中
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 院内点検中 -> 請求済, submitted_at=set
+    api__SubmitClaimApi -) extsystem__ClaimsReviewOrganization: レセプト請求
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 7. 受付不能・要確認の確認
+  actor__ClaimsClerk ->> screen__ClaimScreen: 受付不能・要確認の確認
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: 受付不能・要確認
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 請求済
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 請求済 -> 受付不能・要確認
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 8. エラー分レセプトの再送
+  actor__ClaimsClerk ->> screen__ClaimScreen: エラー分レセプトの再送
+  timer__ErrorResendWindow ->> api__SubmitClaimApi: エラー分レセプトの再送（毎月11日・12日）
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 受付不能・要確認
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 受付不能・要確認 -> 請求済
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 9. レセプト受付（審査へ）
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: レセプト受付
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 請求済
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 請求済 -> 審査中
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 10. 資格の振替・分割の確認
+  actor__ClaimsClerk ->> screen__ClaimScreen: 資格の振替・分割の確認
+  extsystem__ClaimsReviewOrganization ->> usecase__ReviewClaimTransfer: 資格の振替・分割
+  screen__ClaimScreen ->> usecase__ReviewClaimTransfer: 資格の振替・分割の確認
+  usecase__ReviewClaimTransfer ->> entity__ClaimStatement: read
+  usecase__ReviewClaimTransfer -->> screen__ClaimScreen: done
+  Note over screen__ClaimScreen: 11. 返戻レセプトの取込
+  actor__ClaimsClerk ->> screen__ClaimScreen: 返戻レセプトの取込
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: 返戻
+  timer__ReturnDownloadCheck ->> api__ClaimResultApi: 返戻レセプトの取得（3か月以内）
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 審査中
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 審査中 -> 返戻, return_reason=set
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 12. 返戻レセプトの訂正（再請求）
+  actor__ClaimsClerk ->> screen__ClaimScreen: 返戻レセプトの訂正（再請求）
+  screen__ClaimScreen ->> api__ClaimEditApi: レセプト点検・訂正 API
+  alt ClaimStatement.status == 返戻
+    api__ClaimEditApi ->> entity__ClaimStatement: update status 返戻 -> 院内点検中, return_reason=null
+    api__ClaimEditApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimEditApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 13. 査定の取込
+  actor__ClaimsClerk ->> screen__ClaimScreen: 査定の取込
+  extsystem__ClaimsReviewOrganization ->> api__ClaimResultApi: 査定
+  screen__ClaimScreen ->> api__ClaimResultApi: 審査結果 API
+  alt ClaimStatement.status == 審査中
+    api__ClaimResultApi ->> entity__ClaimStatement: update status 審査中 -> 査定
+    api__ClaimResultApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimResultApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 14. 再審査請求
+  actor__ClaimsClerk ->> screen__ClaimScreen: 再審査請求
+  screen__ClaimScreen ->> api__SubmitClaimApi: オンライン請求 API
+  alt ClaimStatement.status == 査定
+    api__SubmitClaimApi ->> entity__ClaimStatement: update status 査定 -> 再審査請求中
+    api__SubmitClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__SubmitClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__PaymentPostingScreen: 15. 診療報酬の入金
+  actor__ClaimsClerk ->> screen__PaymentPostingScreen: 診療報酬の入金
+  extsystem__ClaimsReviewOrganization ->> api__PaymentPostApi: 診療報酬の支払
+  screen__PaymentPostingScreen ->> api__PaymentPostApi: 入金 API
+  alt ClaimStatement.status in (審査中, 査定, 再審査請求中)
+    api__PaymentPostApi ->> entity__ClaimStatement: update status 審査中 -> 支払済, status 査定 -> 支払済, status 再審査請求中 -> 支払済, paid_at=set
+    api__PaymentPostApi -->> screen__PaymentPostingScreen: done
+  else guard fails
+    api__PaymentPostApi -->> screen__PaymentPostingScreen: rejected
+  end
+  Note over screen__BalanceScreen: 16. 未収金管理台帳の作成
+  actor__ClaimsClerk ->> screen__BalanceScreen: 未収金管理台帳の作成
+  timer__ReceivablesMonthlyReview ->> api__BalanceApi: 未収金管理台帳の作成（毎月）
+  screen__BalanceScreen ->> api__BalanceApi: 未収金 API
+  api__BalanceApi ->> entity__PaymentTransaction: read
+  api__BalanceApi ->> entity__AccountBalance: update is_closed=true, closed_at=set
+  api__BalanceApi -->> screen__BalanceScreen: done
+  Note over screen__ChargeWorklistScreen: 17. コストの取消
+  actor__ClaimsClerk ->> screen__ChargeWorklistScreen: コストの取消
+  screen__ChargeWorklistScreen ->> usecase__VoidCharge: コストの取消
+  usecase__VoidCharge ->> entity__Charge: update status=voided
+  usecase__VoidCharge -->> screen__ChargeWorklistScreen: done

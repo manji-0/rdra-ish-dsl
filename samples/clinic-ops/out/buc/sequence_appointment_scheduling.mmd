@@ -1,0 +1,105 @@
+%% rdra-ish diagram=sequence scope=buc:BucAppointmentScheduling model=samples/clinic-ops
+%% kinds: actor timer usecase screen api entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Patient as 患者
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant timer__NoShowSweep as 未来院の確認（毎晩）
+  participant usecase__BookAppointment as 予約の確定
+  participant usecase__CancelAppointment as 予約の取消
+  participant usecase__RescheduleAppointment as 予約の変更
+  participant usecase__ScheduleFollowUpVisit as 再診の予約
+  participant screen__ScheduleSearchScreen as 空き枠検索画面
+  participant screen__AppointmentScreen as 予約画面
+  participant screen__AppointmentNoticeScreen as 予約通知画面
+  participant api__SearchAvailabilityApi as 空き枠検索 API
+  participant api__ReserveAppointmentApi as 予約仮押さえ API
+  participant api__BookAppointmentApi as 予約確定 API
+  participant api__RescheduleAppointmentApi as 予約変更 API
+  participant api__CancelAppointmentApi as 予約取消 API
+  participant usecase__MarkNoShow as 未来院の処理
+  participant entity__ProviderSchedule as 診療枠
+  participant entity__Provider as 医師マスタ
+  participant entity__ClinicLocation as 施設
+  participant entity__Appointment as 予約・受診
+  participant entity__Notification as 通知
+  participant entity__PatientMessage as 患者連絡
+  participant api__AppointmentNoticeApi as 予約通知 API
+  participant extsystem__MessagingGateway as 患者通知サービス
+  participant api__IntakeMessagingApi as 問診票送付 API
+  Note over screen__ScheduleSearchScreen: 1. 空き枠の検索
+  actor__Patient ->> screen__ScheduleSearchScreen: 空き枠の検索
+  actor__ReceptionClerk ->> screen__ScheduleSearchScreen: 空き枠の検索
+  screen__ScheduleSearchScreen ->> api__SearchAvailabilityApi: 空き枠検索 API
+  api__SearchAvailabilityApi ->> entity__ProviderSchedule: read
+  api__SearchAvailabilityApi ->> entity__Provider: read
+  api__SearchAvailabilityApi ->> entity__ClinicLocation: read
+  api__SearchAvailabilityApi -->> screen__ScheduleSearchScreen: done
+  Note over screen__AppointmentScreen: 2. 予約の仮押さえ
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の仮押さえ
+  screen__AppointmentScreen ->> api__ReserveAppointmentApi: 予約仮押さえ API
+  Note over api__ReserveAppointmentApi: transaction (API atomic boundary)
+  api__ReserveAppointmentApi ->> entity__ProviderSchedule: update
+  api__ReserveAppointmentApi ->> entity__Appointment: create
+  api__ReserveAppointmentApi -->> screen__AppointmentScreen: done
+  Note over screen__AppointmentScreen: 3. 予約の確定
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の確定
+  screen__AppointmentScreen ->> api__BookAppointmentApi: 予約確定 API
+  alt Appointment.status == 仮押さえ
+    Note over api__BookAppointmentApi: transaction (API atomic boundary)
+    api__BookAppointmentApi ->> entity__ProviderSchedule: update
+    api__BookAppointmentApi ->> entity__Appointment: update status 仮押さえ -> 予約済
+    api__BookAppointmentApi -) api__AppointmentNoticeApi: 予約確定
+    api__BookAppointmentApi -) extsystem__MessagingGateway: 予約確定
+    api__BookAppointmentApi -) api__IntakeMessagingApi: 予約確定
+    api__BookAppointmentApi -->> screen__AppointmentScreen: done
+  else guard fails
+    api__BookAppointmentApi -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentScreen: 4. 予約の変更
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の変更
+  screen__AppointmentScreen ->> api__RescheduleAppointmentApi: 予約変更 API
+  alt Appointment.status == 予約済
+    Note over api__RescheduleAppointmentApi: transaction (API atomic boundary)
+    api__RescheduleAppointmentApi ->> entity__ProviderSchedule: update
+    api__RescheduleAppointmentApi ->> entity__Appointment: update status 予約済 -> 予約済
+    api__RescheduleAppointmentApi -) api__AppointmentNoticeApi: 予約変更
+    api__RescheduleAppointmentApi -) extsystem__MessagingGateway: 予約変更
+    api__RescheduleAppointmentApi -->> screen__AppointmentScreen: done
+  else guard fails
+    api__RescheduleAppointmentApi -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentScreen: 5. 予約の取消
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 予約の取消
+  screen__AppointmentScreen ->> api__CancelAppointmentApi: 予約取消 API
+  alt Appointment.status == 予約済
+    Note over api__CancelAppointmentApi: transaction (API atomic boundary)
+    api__CancelAppointmentApi ->> entity__ProviderSchedule: update
+    api__CancelAppointmentApi ->> entity__Appointment: update status 予約済 -> 取消, cancel_reason=set
+    api__CancelAppointmentApi -) api__AppointmentNoticeApi: 予約取消
+    api__CancelAppointmentApi -) extsystem__MessagingGateway: 予約取消
+    api__CancelAppointmentApi -->> screen__AppointmentScreen: done
+  else guard fails
+    api__CancelAppointmentApi -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentScreen: 6. 未来院の処理
+  actor__ReceptionClerk ->> screen__AppointmentScreen: 未来院の処理
+  timer__NoShowSweep ->> usecase__MarkNoShow: 未来院の確認（毎晩）
+  screen__AppointmentScreen ->> usecase__MarkNoShow: 未来院の処理
+  alt Appointment.status == 予約済
+    usecase__MarkNoShow ->> entity__Appointment: update status 予約済 -> 未来院
+    usecase__MarkNoShow -->> screen__AppointmentScreen: done
+  else guard fails
+    usecase__MarkNoShow -->> screen__AppointmentScreen: rejected
+  end
+  Note over screen__AppointmentNoticeScreen: 7. 予約の通知
+  actor__ReceptionClerk ->> screen__AppointmentNoticeScreen: 予約の通知
+  usecase__BookAppointment ->> api__AppointmentNoticeApi: 予約確定
+  usecase__CancelAppointment ->> api__AppointmentNoticeApi: 予約取消
+  usecase__RescheduleAppointment ->> api__AppointmentNoticeApi: 予約変更
+  usecase__ScheduleFollowUpVisit ->> api__AppointmentNoticeApi: 予約確定
+  screen__AppointmentNoticeScreen ->> api__AppointmentNoticeApi: 予約通知 API
+  Note over api__AppointmentNoticeApi: transaction (API atomic boundary)
+  api__AppointmentNoticeApi ->> entity__Notification: create delivered_at=set
+  api__AppointmentNoticeApi ->> entity__PatientMessage: create status=sent, sent_at=set
+  api__AppointmentNoticeApi -->> screen__AppointmentNoticeScreen: done

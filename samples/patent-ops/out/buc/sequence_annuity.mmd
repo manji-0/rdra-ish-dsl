@@ -1,0 +1,115 @@
+%% rdra-ish diagram=sequence scope=buc:BucAnnuity model=samples/patent-ops
+%% kinds: actor timer screen usecase api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__MaintenanceReview as 権利維持要否の調査（登録後3年目・6年目）
+  participant timer__AnnuityDueDate as 第4年以後の特許料の納付期限（前年以前）
+  participant timer__LatePaymentDeadline as 追納期限（納付期限の経過から6月）
+  participant timer__TermExpiry as 存続期間の満了（出願から20年）
+  participant screen__MaintenanceReviewScreen as 権利維持要否画面
+  participant screen__AnnuityScreen as 年金管理画面
+  participant usecase__ReviewMaintenance as 権利維持要否の調査
+  participant api__MaintenanceApi as 権利維持 API
+  participant api__AnnuityApi as 年金 API
+  participant entity__Patent as 特許権
+  participant entity__InventionDisclosure as 発明届出
+  participant entity__FeeSchedule as 料金表
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  Note over screen__MaintenanceReviewScreen: 1. 権利維持要否の調査
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 権利維持要否の調査
+  timer__MaintenanceReview ->> usecase__ReviewMaintenance: 権利維持要否の調査（登録後3年目・6年目）
+  screen__MaintenanceReviewScreen ->> usecase__ReviewMaintenance: 権利維持要否の調査
+  usecase__ReviewMaintenance ->> entity__Patent: read
+  usecase__ReviewMaintenance ->> entity__InventionDisclosure: read
+  usecase__ReviewMaintenance -->> screen__MaintenanceReviewScreen: done
+  Note over screen__MaintenanceReviewScreen: 2. 権利を維持しない決定
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 権利を維持しない決定
+  screen__MaintenanceReviewScreen ->> api__MaintenanceApi: 権利維持 API
+  alt 特許権が存続している: Patent.status == 存続中
+    api__MaintenanceApi ->> entity__Patent: update maintain=false
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: done
+  else guard fails
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: rejected
+  end
+  Note over screen__AnnuityScreen: 3. 年金の納付
+  actor__IpStaff ->> screen__AnnuityScreen: 年金の納付
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt 存続中で、維持すると決めた権利の次の年が未納: Patent.status == 存続中, Patent.maintain == true, Patent.next_year_paid == false
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update next_year_paid=true, last_payment=regular, surcharge=null
+    api__AnnuityApi -) extsystem__Jpo: 特許料の納付
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end
+  Note over api__AnnuityApi: 4. 納付年度の更新
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
+  alt 存続中で、次の年が納付済: Patent.status == 存続中, Patent.next_year_paid == true
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update next_year_paid=false
+    api__AnnuityApi -->> timer__AnnuityDueDate: done
+  else guard fails
+    api__AnnuityApi -->> timer__AnnuityDueDate: rejected
+  end
+  Note over api__AnnuityApi: 5. 納付期限の経過
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
+  alt 次の年が未納: Patent.next_year_paid == false and Patent.status == 存続中
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 存続中 -> 追納期間中
+    api__AnnuityApi -->> timer__AnnuityDueDate: done
+  else guard fails
+    api__AnnuityApi -->> timer__AnnuityDueDate: rejected
+  end
+  Note over screen__AnnuityScreen: 6. 追納
+  actor__IpStaff ->> screen__AnnuityScreen: 追納
+  timer__LatePaymentDeadline ->> api__AnnuityApi: 追納期限（納付期限の経過から6月）
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt 維持すると決めた権利である: Patent.maintain == true and Patent.status == 追納期間中
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 追納期間中 -> 存続中, last_payment=late, surcharge=set
+    api__AnnuityApi -) extsystem__Jpo: 特許料の納付
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end
+  Note over api__AnnuityApi: 7. 追納期間の経過による消滅
+  timer__LatePaymentDeadline ->> api__AnnuityApi: 追納期限（納付期限の経過から6月）
+  alt Patent.status == 追納期間中
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 追納期間中 -> 消滅（特許料の不納）
+    api__AnnuityApi -->> timer__LatePaymentDeadline: done
+  else guard fails
+    api__AnnuityApi -->> timer__LatePaymentDeadline: rejected
+  end
+  Note over screen__AnnuityScreen: 8. 特許権の回復
+  actor__IpStaff ->> screen__AnnuityScreen: 特許権の回復
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt Patent.status == 消滅（特許料の不納）
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 消滅（特許料の不納） -> 存続中, last_payment=late, surcharge=set
+    api__AnnuityApi -) extsystem__Jpo: 回復の手続
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end
+  Note over screen__MaintenanceReviewScreen: 9. 特許権の放棄
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 特許権の放棄
+  screen__MaintenanceReviewScreen ->> api__MaintenanceApi: 権利維持 API
+  alt Patent.status == 存続中
+    api__MaintenanceApi ->> entity__Patent: update status 存続中 -> 放棄
+    api__MaintenanceApi -) extsystem__Jpo: 取下書・放棄書の提出
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: done
+  else guard fails
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: rejected
+  end
+  Note over api__AnnuityApi: 10. 存続期間の満了
+  timer__TermExpiry ->> api__AnnuityApi: 存続期間の満了（出願から20年）
+  alt Patent.status in (存続中, 追納期間中)
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 存続中 -> 存続期間満了, status 追納期間中 -> 存続期間満了
+    api__AnnuityApi -->> timer__TermExpiry: done
+  else guard fails
+    api__AnnuityApi -->> timer__TermExpiry: rejected
+  end

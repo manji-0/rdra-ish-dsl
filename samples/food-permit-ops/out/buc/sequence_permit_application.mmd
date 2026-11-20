@@ -1,0 +1,73 @@
+%% rdra-ish diagram=sequence scope=buc:BucPermitApplication model=samples/food-permit-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  participant screen__ApplicationScreen as 許可申請受付画面
+  participant screen__ApplicationReviewScreen as 申請審査画面
+  participant api__ApplicationIntakeApi as 許可申請受付 API
+  participant api__FeePaymentApi as 手数料納付 API
+  participant api__ApplicationReviewApi as 申請審査 API
+  participant api__ApplicationAmendApi as 申請の補正・取下げ API
+  participant entity__PermitApplication as 営業許可申請
+  participant entity__FeeSchedule as 手数料表
+  Note over screen__ApplicationScreen: 1. 許可申請書の提出（窓口）
+  actor__BusinessOperator ->> screen__ApplicationScreen: 許可申請書の提出（窓口）
+  screen__ApplicationScreen ->> api__ApplicationIntakeApi: 許可申請受付 API
+  api__ApplicationIntakeApi ->> entity__PermitApplication: create channel=counter, kind=new
+  api__ApplicationIntakeApi -->> screen__ApplicationScreen: done
+  Note over screen__ApplicationScreen: 2. 電子申請の受付
+  actor__PermitClerk ->> screen__ApplicationScreen: 電子申請の受付
+  extsystem__FoodSanitationSystem ->> api__ApplicationIntakeApi: 電子申請の提出（整理番号 LIC）
+  screen__ApplicationScreen ->> api__ApplicationIntakeApi: 許可申請受付 API
+  api__ApplicationIntakeApi ->> entity__PermitApplication: create channel=online, kind=new
+  api__ApplicationIntakeApi -->> screen__ApplicationScreen: done
+  Note over screen__ApplicationScreen: 3. 許可申請手数料の納付
+  actor__BusinessOperator ->> screen__ApplicationScreen: 許可申請手数料の納付
+  screen__ApplicationScreen ->> api__FeePaymentApi: 手数料納付 API
+  alt 申請が確認待か差戻し中である: PermitApplication.status in (申請内容確認待, 差戻し・補正中)
+    api__FeePaymentApi ->> entity__FeeSchedule: read
+    api__FeePaymentApi ->> entity__PermitApplication: update fee_paid=true
+    api__FeePaymentApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__FeePaymentApi -->> screen__ApplicationScreen: rejected
+  end
+  Note over screen__ApplicationReviewScreen: 4. 申請内容の確認と受理
+  actor__PermitClerk ->> screen__ApplicationReviewScreen: 申請内容の確認と受理
+  screen__ApplicationReviewScreen ->> api__ApplicationReviewApi: 申請審査 API
+  alt 手数料が納められている: PermitApplication.fee_paid == true and PermitApplication.status == 申請内容確認待
+    api__ApplicationReviewApi ->> entity__PermitApplication: update status 申請内容確認待 -> 検査待
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: done
+  else guard fails
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: rejected
+  end
+  Note over screen__ApplicationReviewScreen: 5. 差戻し（補正の求め）
+  actor__PermitClerk ->> screen__ApplicationReviewScreen: 差戻し（補正の求め）
+  screen__ApplicationReviewScreen ->> api__ApplicationReviewApi: 申請審査 API
+  alt PermitApplication.status in (申請内容確認待, 検査待)
+    api__ApplicationReviewApi ->> entity__PermitApplication: update status 申請内容確認待 -> 差戻し・補正中, status 検査待 -> 差戻し・補正中
+    api__ApplicationReviewApi -) extsystem__FoodSanitationSystem: 申請の差戻し
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: done
+  else guard fails
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: rejected
+  end
+  Note over screen__ApplicationScreen: 6. 補正した申請の再提出
+  actor__BusinessOperator ->> screen__ApplicationScreen: 補正した申請の再提出
+  screen__ApplicationScreen ->> api__ApplicationAmendApi: 申請の補正・取下げ API
+  alt PermitApplication.status == 差戻し・補正中
+    api__ApplicationAmendApi ->> entity__PermitApplication: update status 差戻し・補正中 -> 申請内容確認待
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: rejected
+  end
+  Note over screen__ApplicationScreen: 7. 申請の取下げ
+  actor__BusinessOperator ->> screen__ApplicationScreen: 申請の取下げ
+  screen__ApplicationScreen ->> api__ApplicationAmendApi: 申請の補正・取下げ API
+  alt PermitApplication.status in (差戻し・補正中, 申請内容確認待, 検査待)
+    api__ApplicationAmendApi ->> entity__PermitApplication: update status 差戻し・補正中 -> 取下げ, status 申請内容確認待 -> 取下げ [窓口（紙）で出した申請である], status 検査待 -> 取下げ [窓口（紙）で出した申請である]
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: rejected
+  end

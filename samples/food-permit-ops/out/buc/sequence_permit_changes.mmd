@@ -1,0 +1,67 @@
+%% rdra-ish diagram=sequence scope=buc:BucPermitChanges model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__PermitNoticeScreen as 許可後の届出画面
+  participant api__ChangeNoticeApi as 変更届 API
+  participant api__ChangeReviewApi as 変更届確認 API
+  participant api__SuccessionApi as 地位承継届 API
+  participant api__SuccessionReviewApi as 地位承継届受理 API
+  participant api__ClosureApi as 廃業届 API
+  participant entity__BusinessPermit as 営業許可
+  participant entity__ChangeNotice as 変更届
+  participant entity__SuccessionNotice as 地位承継届
+  Note over screen__PermitNoticeScreen: 1. 変更届の提出
+  actor__BusinessOperator ->> screen__PermitNoticeScreen: 変更届の提出
+  screen__PermitNoticeScreen ->> api__ChangeNoticeApi: 変更届 API
+  alt 許可が終わっていない（有効か停止中）: BusinessPermit.status in (有効, 営業停止中)
+    api__ChangeNoticeApi ->> entity__BusinessPermit: read
+    api__ChangeNoticeApi ->> entity__ChangeNotice: create
+    api__ChangeNoticeApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__ChangeNoticeApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 2. 変更届の確認
+  actor__PermitClerk ->> screen__PermitNoticeScreen: 変更届の確認
+  screen__PermitNoticeScreen ->> api__ChangeReviewApi: 変更届確認 API
+  alt ChangeNotice.status == 受付
+    api__ChangeReviewApi ->> entity__ChangeNotice: update
+    alt status 受付 -> 受理
+      api__ChangeReviewApi ->> entity__ChangeNotice: status = 受理
+    else status 受付 -> 新規申請が必要
+      api__ChangeReviewApi ->> entity__ChangeNotice: status = 新規申請が必要
+    end
+    api__ChangeReviewApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__ChangeReviewApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 3. 地位承継届の提出
+  actor__BusinessOperator ->> screen__PermitNoticeScreen: 地位承継届の提出
+  screen__PermitNoticeScreen ->> api__SuccessionApi: 地位承継届 API
+  alt 許可が終わっていない（有効か停止中）: BusinessPermit.status in (有効, 営業停止中)
+    api__SuccessionApi ->> entity__BusinessPermit: read
+    api__SuccessionApi ->> entity__SuccessionNotice: create
+    api__SuccessionApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__SuccessionApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 4. 地位承継届の受理
+  actor__PermitClerk ->> screen__PermitNoticeScreen: 地位承継届の受理
+  screen__PermitNoticeScreen ->> api__SuccessionReviewApi: 地位承継届受理 API
+  alt SuccessionNotice.status == 受付
+    api__SuccessionReviewApi ->> entity__SuccessionNotice: update status 受付 -> 受理
+    api__SuccessionReviewApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__SuccessionReviewApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 5. 廃業届の提出
+  actor__BusinessOperator ->> screen__PermitNoticeScreen: 廃業届の提出
+  screen__PermitNoticeScreen ->> api__ClosureApi: 廃業届 API
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__ClosureApi ->> entity__BusinessPermit: update status 有効 -> 廃業, status 営業停止中 -> 廃業, operating=false, certificate_issued=false
+    api__ClosureApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__ClosureApi -->> screen__PermitNoticeScreen: rejected
+  end
