@@ -1,0 +1,56 @@
+%% rdra-ish diagram=sequence scope=buc:BucFilingDecision model=samples/patent-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  actor actor__ReviewCommittee as 発明審査委員会
+  participant usecase__DecideFiling as 出願可否の決定
+  participant screen__PriorArtSearchScreen as 先行技術調査画面
+  participant screen__FilingDecisionScreen as 出願審議画面
+  participant api__PriorArtSearchApi as 先行技術調査 API
+  participant api__FilingDecisionApi as 出願可否 API
+  participant entity__InventionDisclosure as 発明届出
+  participant api__DraftingOrderApi as 出願依頼 API
+  participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
+  Note over screen__PriorArtSearchScreen: 1. 先行技術調査の依頼
+  actor__IpStaff ->> screen__PriorArtSearchScreen: 先行技術調査の依頼
+  screen__PriorArtSearchScreen ->> api__PriorArtSearchApi: 先行技術調査 API
+  alt InventionDisclosure.status == 受付済
+    api__PriorArtSearchApi ->> entity__InventionDisclosure: update status 受付済 -> 先行技術調査中
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: done
+  else guard fails
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: rejected
+  end
+  Note over screen__PriorArtSearchScreen: 2. 先行技術調査の結果の登録
+  actor__IpStaff ->> screen__PriorArtSearchScreen: 先行技術調査の結果の登録
+  screen__PriorArtSearchScreen ->> api__PriorArtSearchApi: 先行技術調査 API
+  alt InventionDisclosure.status == 先行技術調査中
+    api__PriorArtSearchApi ->> entity__InventionDisclosure: update status 先行技術調査中 -> 調査済
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: done
+  else guard fails
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: rejected
+  end
+  Note over screen__FilingDecisionScreen: 3. 出願可否の決定
+  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 出願可否の決定
+  screen__FilingDecisionScreen ->> api__FilingDecisionApi: 出願可否 API
+  alt InventionDisclosure.status == 調査済
+    api__FilingDecisionApi ->> entity__InventionDisclosure: update
+    alt status 調査済 -> 出願決定 [会社が特許を受ける権利を取得している]
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願決定
+    else status 調査済 -> ノウハウとして秘匿
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = ノウハウとして秘匿
+    else status 調査済 -> 出願しない
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願しない
+    end
+    api__FilingDecisionApi -) api__DraftingOrderApi: 出願の決定
+    api__FilingDecisionApi -) usecase__NotifyInventorOfDecision: 出願の決定
+    api__FilingDecisionApi -->> screen__FilingDecisionScreen: done
+  else guard fails
+    api__FilingDecisionApi -->> screen__FilingDecisionScreen: rejected
+  end
+  Note over screen__FilingDecisionScreen: 4. 決定の発明者への通知
+  actor__IpStaff ->> screen__FilingDecisionScreen: 決定の発明者への通知
+  usecase__DecideFiling ->> usecase__NotifyInventorOfDecision: 出願の決定
+  screen__FilingDecisionScreen ->> usecase__NotifyInventorOfDecision: 決定の発明者への通知
+  usecase__NotifyInventorOfDecision ->> entity__InventionDisclosure: read
+  usecase__NotifyInventorOfDecision -->> screen__FilingDecisionScreen: done

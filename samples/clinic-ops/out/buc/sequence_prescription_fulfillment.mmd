@@ -1,0 +1,141 @@
+%% rdra-ish diagram=sequence scope=buc:BucPrescriptionFulfillment model=samples/clinic-ops
+%% kinds: actor extsystem timer screen api usecase entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__Clinician as 医師
+  actor actor__Pharmacist as 薬剤師
+  participant extsystem__InsurancePharmacy as 保険薬局
+  participant timer__PrescriptionUsePeriodCheck as 処方箋の使用期間切れ確認
+  participant screen__MedicationSearchScreen as 薬剤検索画面
+  participant screen__PrescriptionScreen as 処方画面
+  participant screen__DispensingScreen as 調剤・監査画面
+  participant screen__PharmacyStatusScreen as 電子処方箋の状況画面
+  participant api__MedicationCatalogApi as 薬剤マスタ API
+  participant api__DraftPrescriptionApi as 処方オーダ API
+  participant api__IssuePrescriptionApi as 処方箋発行 API
+  participant api__DispensingApi as 院内調剤 API
+  participant api__PrescriptionInquiryApi as 疑義照会 API
+  participant api__ConfirmDispenseApi as 調剤結果 API
+  participant usecase__CancelPrescription as 処方の取消
+  participant entity__Medication as 薬剤
+  participant entity__Encounter as 診療記録
+  participant entity__Prescription as 処方箋
+  participant extsystem__EPrescriptionService as 電子処方箋管理サービス
+  Note over screen__MedicationSearchScreen: 1. 薬剤の検索
+  actor__Clinician ->> screen__MedicationSearchScreen: 薬剤の検索
+  screen__MedicationSearchScreen ->> api__MedicationCatalogApi: 薬剤マスタ API
+  api__MedicationCatalogApi ->> entity__Medication: read
+  api__MedicationCatalogApi -->> screen__MedicationSearchScreen: done
+  Note over screen__PrescriptionScreen: 2. 処方オーダの登録
+  actor__Clinician ->> screen__PrescriptionScreen: 処方オーダの登録
+  screen__PrescriptionScreen ->> api__DraftPrescriptionApi: 処方オーダ API
+  api__DraftPrescriptionApi ->> entity__Encounter: read
+  api__DraftPrescriptionApi ->> entity__Prescription: create
+  api__DraftPrescriptionApi -->> screen__PrescriptionScreen: done
+  Note over screen__PrescriptionScreen: 3. リフィル処方箋の処方オーダ
+  actor__Clinician ->> screen__PrescriptionScreen: リフィル処方箋の処方オーダ
+  screen__PrescriptionScreen ->> api__DraftPrescriptionApi: 処方オーダ API
+  api__DraftPrescriptionApi ->> entity__Encounter: read
+  api__DraftPrescriptionApi ->> entity__Prescription: create refill_limit=set
+  api__DraftPrescriptionApi -->> screen__PrescriptionScreen: done
+  Note over screen__PrescriptionScreen: 4. 院外処方箋の発行
+  actor__Clinician ->> screen__PrescriptionScreen: 院外処方箋の発行
+  screen__PrescriptionScreen ->> api__IssuePrescriptionApi: 処方箋発行 API
+  alt Prescription.status == 処方入力中
+    api__IssuePrescriptionApi ->> entity__Prescription: update status 処方入力中 -> 院外処方箋発行済, sent_at=set
+    api__IssuePrescriptionApi -) extsystem__EPrescriptionService: 電子処方箋の登録
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 5. 院内処方用引換券の交付
+  actor__Clinician ->> screen__PrescriptionScreen: 院内処方用引換券の交付
+  screen__PrescriptionScreen ->> api__IssuePrescriptionApi: 処方箋発行 API
+  alt Prescription.status == 処方入力中
+    api__IssuePrescriptionApi ->> entity__Prescription: update status 処方入力中 -> 引換券交付済
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__IssuePrescriptionApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__DispensingScreen: 6. 調剤・監査
+  actor__Pharmacist ->> screen__DispensingScreen: 調剤・監査
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 引換券交付済
+    api__DispensingApi ->> entity__Prescription: update status 引換券交付済 -> 調剤・監査済
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__DispensingScreen: 7. 服薬指導
+  actor__Pharmacist ->> screen__DispensingScreen: 服薬指導
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 調剤・監査済
+    api__DispensingApi ->> entity__Prescription: update status 調剤・監査済 -> 服薬指導済
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__DispensingScreen: 8. 薬剤交付
+  actor__Pharmacist ->> screen__DispensingScreen: 薬剤交付
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 服薬指導済
+    api__DispensingApi ->> entity__Prescription: update status 服薬指導済 -> 交付済, dispensed_at=set
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__DispensingScreen: 9. 疑義照会
+  actor__Pharmacist ->> screen__DispensingScreen: 疑義照会
+  screen__DispensingScreen ->> api__DispensingApi: 院内調剤 API
+  alt Prescription.status == 引換券交付済
+    api__DispensingApi ->> entity__Prescription: update status 引換券交付済 -> 疑義照会中
+    api__DispensingApi -->> screen__DispensingScreen: done
+  else guard fails
+    api__DispensingApi -->> screen__DispensingScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 10. 疑義照会への回答
+  actor__Clinician ->> screen__PrescriptionScreen: 疑義照会への回答
+  screen__PrescriptionScreen ->> api__PrescriptionInquiryApi: 疑義照会 API
+  alt Prescription.status == 疑義照会中
+    api__PrescriptionInquiryApi ->> entity__Prescription: update status 疑義照会中 -> 引換券交付済
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 11. 保険薬局からの疑義照会への回答
+  actor__Clinician ->> screen__PrescriptionScreen: 保険薬局からの疑義照会への回答
+  extsystem__InsurancePharmacy ->> api__PrescriptionInquiryApi: 保険薬局からの疑義照会
+  screen__PrescriptionScreen ->> api__PrescriptionInquiryApi: 疑義照会 API
+  alt Prescription.status == 院外処方箋発行済
+    api__PrescriptionInquiryApi ->> entity__Prescription: update status 院外処方箋発行済 -> 院外処方箋発行済
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: done
+  else guard fails
+    api__PrescriptionInquiryApi -->> screen__PrescriptionScreen: rejected
+  end
+  Note over screen__PharmacyStatusScreen: 12. 保険薬局での調剤結果の受信
+  extsystem__EPrescriptionService ->> api__ConfirmDispenseApi: 保険薬局での調剤完了
+  screen__PharmacyStatusScreen ->> api__ConfirmDispenseApi: 調剤結果 API
+  alt Prescription.status == 院外処方箋発行済
+    api__ConfirmDispenseApi ->> entity__Prescription: update status 院外処方箋発行済 -> 交付済, dispensed_at=set
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: done
+  else guard fails
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: rejected
+  end
+  Note over screen__PharmacyStatusScreen: 13. 処方箋の使用期間切れ
+  timer__PrescriptionUsePeriodCheck ->> api__ConfirmDispenseApi: 処方箋の使用期間切れ確認
+  screen__PharmacyStatusScreen ->> api__ConfirmDispenseApi: 調剤結果 API
+  alt Prescription.status == 院外処方箋発行済
+    api__ConfirmDispenseApi ->> entity__Prescription: update status 院外処方箋発行済 -> 使用期間切れ
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: done
+  else guard fails
+    api__ConfirmDispenseApi -->> screen__PharmacyStatusScreen: rejected
+  end
+  Note over screen__PrescriptionScreen: 14. 処方の取消
+  actor__Clinician ->> screen__PrescriptionScreen: 処方の取消
+  screen__PrescriptionScreen ->> usecase__CancelPrescription: 処方の取消
+  alt Prescription.status == 処方入力中
+    usecase__CancelPrescription ->> entity__Prescription: update status 処方入力中 -> 取消
+    usecase__CancelPrescription -->> screen__PrescriptionScreen: done
+  else guard fails
+    usecase__CancelPrescription -->> screen__PrescriptionScreen: rejected
+  end

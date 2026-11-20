@@ -1,0 +1,56 @@
+%% rdra-ish diagram=sequence scope=buc:BucRepair model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__RepairShop as 修理工場
+  actor actor__Adjuster as アジャスター
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__RepairScreen as 修理見積画面
+  participant api__RepairEstimateCreateApi as 修理見積提出 API
+  participant api__RepairEstimateApi as 修理見積 API
+  participant entity__RepairEstimate as 修理見積
+  Note over screen__RepairScreen: 1. 修理見積の提出
+  actor__RepairShop ->> screen__RepairScreen: 修理見積の提出
+  screen__RepairScreen ->> api__RepairEstimateCreateApi: 修理見積提出 API
+  alt 車両・対物賠償の事故である: ClaimCase.coverage in (車両, 対物賠償)
+    api__RepairEstimateCreateApi ->> entity__RepairEstimate: create
+    api__RepairEstimateCreateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateCreateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 2. 修理費の協定
+  actor__Adjuster ->> screen__RepairScreen: 修理費の協定
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt RepairEstimate.status == 見積提出
+    api__RepairEstimateApi ->> entity__RepairEstimate: update status 見積提出 -> 修理費の協定
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 3. 修理着工の承認
+  actor__ClaimHandler ->> screen__RepairScreen: 修理着工の承認
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt 修理費を協定した: RepairEstimate.status == 修理費の協定
+    api__RepairEstimateApi ->> entity__RepairEstimate: update approved=true
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 4. 修理の着工
+  actor__RepairShop ->> screen__RepairScreen: 修理の着工
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt 修理着工を承認した: RepairEstimate.approved == true and RepairEstimate.status == 修理費の協定
+    api__RepairEstimateApi ->> entity__RepairEstimate: update status 修理費の協定 -> 修理中
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 5. 修理の完了
+  actor__RepairShop ->> screen__RepairScreen: 修理の完了
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt RepairEstimate.status == 修理中
+    api__RepairEstimateApi ->> entity__RepairEstimate: update status 修理中 -> 修理完了
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end

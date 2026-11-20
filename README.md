@@ -33,10 +33,32 @@ same way, and every kind in the language names the check or output that reviews 
 |---|---|
 | `check`, `lint` | Type errors, unresolved references, and gaps between layers |
 | `next` | The refinement stage of each BUC, the gaps that block the next stage, and its questions |
-| `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, robustness, sequence, UC複合図, business flow, screen transitions, information, conditions, state, events, ER, and the whole RDRA graph |
+| `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, robustness, sequence, UC複合図, business flow, screen transitions, information, conditions, state, events, ER, and the whole RDRA graph. Each can be scoped to a BUC, a use case, an actor, or an entity, so it embeds in a PRD or a design document; `--all` writes the set in one run |
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
 | `export`, `verify` | OpenAPI, DBML, SQL DDL, JSON Schema, AsyncAPI, and TLA+ with TLC |
+
+## Documents from the Model
+
+The diagrams and tables are made to go into the documents a team reads: a PRD for the
+product side (system context, requirements, business flow, each BUC's steps, acceptance
+rules) and a design document for the engineers (each BUC's robustness, screen, and
+sequence diagrams, state models, the data model, rules, CRUD, and permissions). Each
+embedded diagram is generated, scoped, and small enough to render, and its `%%` header
+says how to regenerate it.
+
+```sh
+# Every per-BUC and per-entity diagram of the model, one .mmd each, ready to embed
+rdra-ish diagram samples/clinic-ops --all --out docs/diagrams
+# Tables for the same documents
+rdra-ish list samples/clinic-ops --kind rule --format markdown
+```
+
+[PRD and Design Document Guide](./skills/rdra-ish-diagram/references/documents.md) gives
+the base structure, section by section: which diagram or table goes where, and the rules
+for embedding them. It is a base: a project's own document template or writing
+instructions come first. [`samples/clinic-ops/prd.md`](./samples/clinic-ops/prd.md) and
+[`design-doc.md`](./samples/clinic-ops/design-doc.md) are generated in that structure.
 
 ## Recommended Modeling Loop
 
@@ -76,6 +98,8 @@ rdra-ish next samples/ec-site
 rdra-ish diagram samples/ec-site --kind context --format mermaid
 rdra-ish diagram samples/ec-site --kind usecase --format mermaid --buc BucOrder
 rdra-ish diagram samples/clinic-ops --kind flow --format mermaid --buc BucVisitCheckIn
+rdra-ish diagram samples/clinic-ops --kind sequence --buc BucVisitCheckIn
+rdra-ish diagram samples/clinic-ops --kind usecase --actor ReceptionClerk
 
 # 3) Export coverage/access views (-o out writes out.matrix.csv, out.actor-permission-audit.csv)
 rdra-ish csv samples/clinic-ops --kind matrix
@@ -113,6 +137,8 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - [Formal Verification (TLA+/TLC)](./docs/formal-verification.md)
 - [Compatibility](./docs/compatibility.md) — what each release from 1.0.0 keeps stable
 - [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
+- [PRD and Design Document Guide](./skills/rdra-ish-diagram/references/documents.md) — which
+  diagrams and tables go into each section
 - [Changelog](./CHANGELOG.md)
 - Agent skills: [`skills/README.md`](./skills/README.md)
 

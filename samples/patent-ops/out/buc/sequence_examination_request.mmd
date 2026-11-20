@@ -1,0 +1,74 @@
+%% rdra-ish diagram=sequence scope=buc:BucExaminationRequest model=samples/patent-ops
+%% kinds: actor timer screen usecase api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__ExamRequestReview as 審査請求要否の検討（審査請求期限の前）
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant timer__ExamRequestDeadline as 審査請求期限（出願から3年）
+  participant screen__ExaminationRequestScreen as 審査請求画面
+  participant usecase__DecideExaminationRequest as 審査請求要否の判断
+  participant api__ExaminationRequestApi as 審査請求 API
+  participant api__ApplicationDocketApi as 出願案件 API
+  participant api__WithdrawalApi as 取下げ・放棄 API
+  participant entity__PatentApplication as 特許出願
+  participant entity__FeeSchedule as 料金表
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  Note over screen__ExaminationRequestScreen: 1. 審査請求要否の判断
+  actor__IpStaff ->> screen__ExaminationRequestScreen: 審査請求要否の判断
+  timer__ExamRequestReview ->> usecase__DecideExaminationRequest: 審査請求要否の検討（審査請求期限の前）
+  screen__ExaminationRequestScreen ->> usecase__DecideExaminationRequest: 審査請求要否の判断
+  usecase__DecideExaminationRequest ->> entity__PatentApplication: read
+  usecase__DecideExaminationRequest -->> screen__ExaminationRequestScreen: done
+  Note over screen__ExaminationRequestScreen: 2. 出願審査の請求
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 出願審査の請求
+  timer__ExamRequestDeadline ->> api__ExaminationRequestApi: 審査請求期限（出願から3年）
+  screen__ExaminationRequestScreen ->> api__ExaminationRequestApi: 審査請求 API
+  alt PatentApplication.status == 出願済（方式審査）
+    api__ExaminationRequestApi ->> entity__FeeSchedule: read
+    api__ExaminationRequestApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 審査請求済（審査中）, exam_requested_at=set
+    api__ExaminationRequestApi -) extsystem__Jpo: 出願審査請求書の提出
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: rejected
+  end
+  Note over screen__ExaminationRequestScreen: 3. 早期審査の申出
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 早期審査の申出
+  screen__ExaminationRequestScreen ->> api__ExaminationRequestApi: 審査請求 API
+  alt 審査請求をした出願である: PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present
+    api__ExaminationRequestApi ->> entity__FeeSchedule: read
+    api__ExaminationRequestApi ->> entity__PatentApplication: update accelerated=true
+    api__ExaminationRequestApi -) extsystem__Jpo: 早期審査に関する事情説明書の提出
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: rejected
+  end
+  Note over api__ApplicationDocketApi: 4. 審査請求期間の経過
+  timer__ExamRequestDeadline ->> api__ApplicationDocketApi: 審査請求期限（出願から3年）
+  alt PatentApplication.status == 出願済（方式審査）
+    api__ApplicationDocketApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（審査請求なし）
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: done
+  else guard fails
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: rejected
+  end
+  Note over screen__ExaminationRequestScreen: 5. 審査請求の回復
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 審査請求の回復
+  screen__ExaminationRequestScreen ->> api__ExaminationRequestApi: 審査請求 API
+  alt PatentApplication.status == 取下げ擬制（審査請求なし）
+    api__ExaminationRequestApi ->> entity__FeeSchedule: read
+    api__ExaminationRequestApi ->> entity__PatentApplication: update status 取下げ擬制（審査請求なし） -> 審査請求済（審査中）, exam_requested_at=set
+    api__ExaminationRequestApi -) extsystem__Jpo: 回復の手続
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: rejected
+  end
+  Note over screen__ExaminationRequestScreen: 6. 出願の取下げ・放棄
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 出願の取下げ・放棄
+  screen__ExaminationRequestScreen ->> api__WithdrawalApi: 取下げ・放棄 API
+  alt PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
+    api__WithdrawalApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ・放棄, status 審査請求済（審査中） -> 取下げ・放棄
+    api__WithdrawalApi -) extsystem__Jpo: 取下書・放棄書の提出
+    api__WithdrawalApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__WithdrawalApi -->> screen__ExaminationRequestScreen: rejected
+  end

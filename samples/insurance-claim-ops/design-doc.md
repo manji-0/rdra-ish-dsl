@@ -8,7 +8,7 @@
 この文書は実装するエンジニア向けである。構造、処理、仕様の順に読む。
 
 1. BUC ごとのロバストネス図で、画面・制御・エンティティの構造をつかむ。
-2. UC ごとのシーケンス図で、ガードと書き込みの順序をつかむ。
+2. BUC のシーケンス図で UC が進む順をつかみ、UC ごとのシーケンス図でガードと書き込みの順序をつかむ。
 3. 状態モデル、データモデル、規則、CRUD と権限で仕様を確かめる。
 
 要求と成功指標は [PRD](prd.md) にある。
@@ -98,7 +98,7 @@ flowchart LR
 
 ## 2. BUC ごとの構造と処理
 
-各節は BUC の説明、ロバストネス図、画面遷移図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
+各節は BUC の説明、ロバストネス図、画面遷移図、BUC のシーケンス図、UC の表、UC ごとのシーケンス図の順に並ぶ。BUC のシーケンス図（`diagram --kind sequence --buc <Buc>`）は BUC の UC を、モデルが並べる順に、イベントで起動される UC はそれを起動する UC の後に、1 つの図に続けて描く。各 UC の始まりには番号と UC 名の注記が付く。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
 
 ### 2.1 事故受付と初期対応
 
@@ -154,6 +154,55 @@ flowchart LR
   %% via screen__AccidentReportScreen -> screen__CaseScreen usecase__RelayAccidentReport
   %% via screen__AccidentReportScreen -> screen__CaseScreen usecase__ReportAccident
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucIntake model=samples/insurance-claim-ops
+%% kinds: actor screen api usecase entity extsystem
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__ClaimReceptionist as 事故受付担当
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Agent as 代理店
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__AccidentReportScreen as 事故受付画面
+  participant screen__CaseScreen as 事故案件画面
+  participant api__CaseCreateApi as 事故受付 API
+  participant api__CaseApi as 事故案件 API
+  participant usecase__QueryAccidentExchange as 事故受付の有無の照会
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant api__ClaimCreateApi as 請求案内 API
+  participant extsystem__AccidentInfoExchange as 自動車事故情報交換システム（損保協会の共同利用制度）
+  Note over screen__AccidentReportScreen: 1. 事故の通知（保険会社へ）
+  actor__ClaimReceptionist ->> screen__AccidentReportScreen: 事故の通知（保険会社へ）
+  actor__PolicyHolder ->> screen__AccidentReportScreen: 事故の通知（保険会社へ）
+  screen__AccidentReportScreen ->> api__CaseCreateApi: 事故受付 API
+  api__CaseCreateApi ->> entity__ClaimCase: create
+  api__CaseCreateApi -->> screen__AccidentReportScreen: done
+  Note over screen__AccidentReportScreen: 2. 事故の通知（代理店経由）
+  actor__Agent ->> screen__AccidentReportScreen: 事故の通知（代理店経由）
+  actor__ClaimReceptionist ->> screen__AccidentReportScreen: 事故の通知（代理店経由）
+  screen__AccidentReportScreen ->> api__CaseCreateApi: 事故受付 API
+  api__CaseCreateApi ->> entity__ClaimCase: create
+  api__CaseCreateApi -->> screen__AccidentReportScreen: done
+  Note over screen__CaseScreen: 3. 初期対応（担当者の案内と手続の説明）
+  actor__ClaimHandler ->> screen__CaseScreen: 初期対応（担当者の案内と手続の説明）
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt ClaimCase.status == 事故受付
+    api__CaseApi ->> entity__ClaimCase: update status 事故受付 -> 初期対応済
+    api__CaseApi -) api__ClaimCreateApi: 初期対応の完了
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end
+  Note over screen__CaseScreen: 4. 事故受付の有無の照会
+  actor__ClaimHandler ->> screen__CaseScreen: 事故受付の有無の照会
+  screen__CaseScreen ->> usecase__QueryAccidentExchange: 事故受付の有無の照会
+  usecase__QueryAccidentExchange ->> entity__ClaimCase: read
+  usecase__QueryAccidentExchange -) extsystem__AccidentInfoExchange: 事故受付の有無の照会
+  usecase__QueryAccidentExchange -->> screen__CaseScreen: done
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -302,6 +351,85 @@ flowchart LR
   %% via screen__CaseScreen -> screen__InvestigationScreen usecase__RequestInvestigation
   %% via screen__InvestigationScreen -> screen__CaseScreen usecase__ReportSurvey
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucInvestigation model=samples/insurance-claim-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  actor actor__Adjuster as アジャスター
+  participant usecase__AgreeSettlement as 示談の成立
+  participant usecase__DeclineSettlementService as 示談代行を行わない
+  participant usecase__EndNegotiationUnresolved as 示談交渉の終了（不調）
+  participant usecase__ReportSurvey as 損害調査の報告
+  participant screen__InvestigationScreen as 損害調査画面
+  participant screen__CaseScreen as 事故案件画面
+  participant api__InvestigationCreateApi as 損害調査依頼 API
+  participant api__InvestigationApi as 損害調査 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant entity__Investigation as 損害調査
+  participant api__CaseApi as 事故案件 API
+  Note over screen__InvestigationScreen: 1. 損害調査の依頼
+  actor__ClaimHandler ->> screen__InvestigationScreen: 損害調査の依頼
+  screen__InvestigationScreen ->> api__InvestigationCreateApi: 損害調査依頼 API
+  alt ClaimCase.status == 初期対応済
+    Note over api__InvestigationCreateApi: transaction (API atomic boundary)
+    api__InvestigationCreateApi ->> entity__ClaimCase: update status 初期対応済 -> 調査中
+    api__InvestigationCreateApi ->> entity__Investigation: create
+    api__InvestigationCreateApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationCreateApi -->> screen__InvestigationScreen: rejected
+  end
+  Note over screen__InvestigationScreen: 2. 損害調査の実施
+  actor__Adjuster ->> screen__InvestigationScreen: 損害調査の実施
+  screen__InvestigationScreen ->> api__InvestigationApi: 損害調査 API
+  alt Investigation.status == 調査依頼
+    api__InvestigationApi ->> entity__Investigation: update status 調査依頼 -> 調査中
+    api__InvestigationApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationApi -->> screen__InvestigationScreen: rejected
+  end
+  Note over screen__InvestigationScreen: 3. 損害調査の報告
+  actor__Adjuster ->> screen__InvestigationScreen: 損害調査の報告
+  screen__InvestigationScreen ->> api__InvestigationApi: 損害調査 API
+  alt Investigation.status == 調査中
+    api__InvestigationApi ->> entity__Investigation: update status 調査中 -> 調査報告済
+    api__InvestigationApi -) api__CaseApi: 損害調査の報告
+    api__InvestigationApi -->> screen__InvestigationScreen: done
+  else guard fails
+    api__InvestigationApi -->> screen__InvestigationScreen: rejected
+  end
+  Note over screen__CaseScreen: 4. 過失割合と賠償責任の判断
+  actor__ClaimHandler ->> screen__CaseScreen: 過失割合と賠償責任の判断
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt 事故案件を調査しているか、損害を確定した: ClaimCase.status in (調査中, 示談交渉中, 損害確定) and ClaimCase.liability == 未確定
+    api__CaseApi ->> entity__ClaimCase: update
+    alt liability 未確定 -> 賠償責任あり
+      api__CaseApi ->> entity__ClaimCase: liability = 賠償責任あり
+    else liability 未確定 -> 過失ゼロ（賠償責任なし）
+      api__CaseApi ->> entity__ClaimCase: liability = 過失ゼロ（賠償責任なし）
+    end
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end
+  Note over screen__CaseScreen: 5. 損害の確定
+  actor__ClaimHandler ->> screen__CaseScreen: 損害の確定
+  usecase__AgreeSettlement ->> api__CaseApi: 示談の成立
+  usecase__DeclineSettlementService ->> api__CaseApi: 示談代行の終了（不調・不実施）
+  usecase__EndNegotiationUnresolved ->> api__CaseApi: 示談代行の終了（不調・不実施）
+  usecase__ReportSurvey ->> api__CaseApi: 損害調査の報告
+  screen__CaseScreen ->> api__CaseApi: 事故案件 API
+  alt 損害調査の報告がある: Investigation.status == 調査報告済 and ClaimCase.status in (調査中, 示談交渉中)
+    api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 損害確定 [車両・人身傷害の事故である], status 調査中 -> 損害確定 [賠償責任の有無を判断している], status 示談交渉中 -> 損害確定 [示談が成立したか、示談代行を終えた]
+    api__CaseApi -->> screen__CaseScreen: done
+  else guard fails
+    api__CaseApi -->> screen__CaseScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -477,6 +605,67 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucRepair model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__RepairShop as 修理工場
+  actor actor__Adjuster as アジャスター
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__RepairScreen as 修理見積画面
+  participant api__RepairEstimateCreateApi as 修理見積提出 API
+  participant api__RepairEstimateApi as 修理見積 API
+  participant entity__RepairEstimate as 修理見積
+  Note over screen__RepairScreen: 1. 修理見積の提出
+  actor__RepairShop ->> screen__RepairScreen: 修理見積の提出
+  screen__RepairScreen ->> api__RepairEstimateCreateApi: 修理見積提出 API
+  alt 車両・対物賠償の事故である: ClaimCase.coverage in (車両, 対物賠償)
+    api__RepairEstimateCreateApi ->> entity__RepairEstimate: create
+    api__RepairEstimateCreateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateCreateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 2. 修理費の協定
+  actor__Adjuster ->> screen__RepairScreen: 修理費の協定
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt RepairEstimate.status == 見積提出
+    api__RepairEstimateApi ->> entity__RepairEstimate: update status 見積提出 -> 修理費の協定
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 3. 修理着工の承認
+  actor__ClaimHandler ->> screen__RepairScreen: 修理着工の承認
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt 修理費を協定した: RepairEstimate.status == 修理費の協定
+    api__RepairEstimateApi ->> entity__RepairEstimate: update approved=true
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 4. 修理の着工
+  actor__RepairShop ->> screen__RepairScreen: 修理の着工
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt 修理着工を承認した: RepairEstimate.approved == true and RepairEstimate.status == 修理費の協定
+    api__RepairEstimateApi ->> entity__RepairEstimate: update status 修理費の協定 -> 修理中
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end
+  Note over screen__RepairScreen: 5. 修理の完了
+  actor__RepairShop ->> screen__RepairScreen: 修理の完了
+  screen__RepairScreen ->> api__RepairEstimateApi: 修理見積 API
+  alt RepairEstimate.status == 修理中
+    api__RepairEstimateApi ->> entity__RepairEstimate: update status 修理中 -> 修理完了
+    api__RepairEstimateApi -->> screen__RepairScreen: done
+  else guard fails
+    api__RepairEstimateApi -->> screen__RepairScreen: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 修理見積の提出<br>`SubmitRepairEstimate` | 修理工場が損害車両の修理見積書と写真を保険会社に出す。 | `RepairScreen` | `RepairEstimateCreateApi` | 車両・対物賠償の事故である |
@@ -636,6 +825,92 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucSettlement model=samples/insurance-claim-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant screen__SettlementScreen as 示談画面
+  participant api__CaseApi as 事故案件 API
+  participant api__SettlementCreateApi as 示談代行開始 API
+  participant api__SettlementApi as 示談 API
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant entity__Settlement as 示談（示談代行）
+  Note over screen__SettlementScreen: 1. 示談代行の開始
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談代行の開始
+  screen__SettlementScreen ->> api__CaseApi: 事故案件 API
+  alt 対人・対物賠償の事故で、被保険者に賠償責任がある: ClaimCase.coverage in (対人賠償, 対物賠償), ClaimCase.liability == 賠償責任あり and ClaimCase.status == 調査中
+    screen__SettlementScreen ->> api__SettlementCreateApi: 示談代行開始 API
+    api__CaseApi ->> entity__ClaimCase: update status 調査中 -> 示談交渉中
+    api__SettlementCreateApi ->> entity__Settlement: create
+    api__CaseApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__CaseApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 2. 被保険者の同意
+  actor__PolicyHolder ->> screen__SettlementScreen: 被保険者の同意
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt 示談代行の同意を確かめている: Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update insured_consent=true
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 3. 被害者の同意
+  actor__Victim ->> screen__SettlementScreen: 被害者の同意
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt 示談代行の同意を確かめている: Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update victim_consent=true
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 4. 示談交渉の開始
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談交渉の開始
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt 被保険者と被害者がともに同意している: Settlement.insured_consent == true, Settlement.victim_consent == true and Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update status 同意の確認中 -> 示談交渉中
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 5. 示談代行を行わない
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談代行を行わない
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt Settlement.status == 同意の確認中
+    api__SettlementApi ->> entity__Settlement: update status 同意の確認中 -> 示談代行を行わない
+    api__SettlementApi -) api__CaseApi: 示談代行の終了（不調・不実施）
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 6. 示談の成立
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談の成立
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt Settlement.status == 示談交渉中
+    api__SettlementApi ->> entity__Settlement: update status 示談交渉中 -> 示談成立
+    api__SettlementApi -) api__CaseApi: 示談の成立
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
+  Note over screen__SettlementScreen: 7. 示談交渉の終了（不調）
+  actor__ClaimHandler ->> screen__SettlementScreen: 示談交渉の終了（不調）
+  screen__SettlementScreen ->> api__SettlementApi: 示談 API
+  alt Settlement.status == 示談交渉中
+    api__SettlementApi ->> entity__Settlement: update status 示談交渉中 -> 不調（調停・訴訟へ）
+    api__SettlementApi -) api__CaseApi: 示談代行の終了（不調・不実施）
+    api__SettlementApi -->> screen__SettlementScreen: done
+  else guard fails
+    api__SettlementApi -->> screen__SettlementScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -848,6 +1123,47 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucJibaiseki model=samples/insurance-claim-ops
+%% kinds: actor screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant screen__JibaisekiScreen as 自賠責損害調査画面
+  participant api__JibaisekiSurveyCreateApi as 自賠責損害調査依頼 API
+  participant api__JibaisekiSurveyApi as 自賠責損害調査 API
+  participant entity__JibaisekiSurvey as 自賠責損害調査
+  participant extsystem__Giroj as 損害保険料率算出機構（自賠責損害調査事務所）
+  Note over screen__JibaisekiScreen: 1. 自賠責損害調査の依頼
+  actor__ClaimHandler ->> screen__JibaisekiScreen: 自賠責損害調査の依頼
+  screen__JibaisekiScreen ->> api__JibaisekiSurveyCreateApi: 自賠責損害調査依頼 API
+  alt 対人賠償・人身傷害の事故である: ClaimCase.coverage in (対人賠償, 人身傷害)
+    api__JibaisekiSurveyCreateApi ->> entity__JibaisekiSurvey: create
+    api__JibaisekiSurveyCreateApi -) extsystem__Giroj: 自賠責損害調査の依頼
+    api__JibaisekiSurveyCreateApi -->> screen__JibaisekiScreen: done
+  else guard fails
+    api__JibaisekiSurveyCreateApi -->> screen__JibaisekiScreen: rejected
+  end
+  Note over api__JibaisekiSurveyApi: 2. 上部機関・審査会での審査の記録
+  extsystem__Giroj ->> api__JibaisekiSurveyApi: 上部機関・審査会での審査
+  alt JibaisekiSurvey.status == 調査事務所へ送付
+    api__JibaisekiSurveyApi ->> entity__JibaisekiSurvey: update status 調査事務所へ送付 -> 地区本部・本部・審査会で審査中
+    api__JibaisekiSurveyApi -->> extsystem__Giroj: done
+  else guard fails
+    api__JibaisekiSurveyApi -->> extsystem__Giroj: rejected
+  end
+  Note over api__JibaisekiSurveyApi: 3. 自賠責損害調査の結果の受領
+  extsystem__Giroj ->> api__JibaisekiSurveyApi: 自賠責損害調査の結果の報告
+  alt JibaisekiSurvey.status in (調査事務所へ送付, 地区本部・本部・審査会で審査中)
+    api__JibaisekiSurveyApi ->> entity__JibaisekiSurvey: update status 調査事務所へ送付 -> 調査結果の報告受領, status 地区本部・本部・審査会で審査中 -> 調査結果の報告受領
+    api__JibaisekiSurveyApi -->> extsystem__Giroj: done
+  else guard fails
+    api__JibaisekiSurveyApi -->> extsystem__Giroj: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 自賠責損害調査の依頼<br>`SendJibaisekiSurvey` | 一括払いに同意を得た人身の事故について、自賠責の請求書類を確かめて損保料率機構の自賠責損害調査事務所に送る。 | `JibaisekiScreen` | `JibaisekiSurveyCreateApi` | 対人賠償・人身傷害の事故である |
@@ -972,6 +1288,80 @@ flowchart LR
   screen__ClaimFormScreen -->|請求書類の提出| screen__ClaimScreen
   %% via screen__ClaimFormScreen -> screen__ClaimScreen usecase__SubmitClaim
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucClaim model=samples/insurance-claim-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant usecase__RespondInitially as 初期対応（担当者の案内と手続の説明）
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant timer__ClaimLimitation as 保険金請求権の時効（請求権が発生した時の翌日から3年）
+  participant screen__ClaimScreen as 保険金請求画面
+  participant screen__ClaimFormScreen as 請求書類の提出画面
+  participant api__ClaimCreateApi as 請求案内 API
+  participant api__ClaimApi as 保険金請求 API
+  participant api__ClaimSubmitApi as 請求書類提出 API
+  participant entity__Claim as 保険金請求
+  participant api__CaseApi as 事故案件 API
+  Note over screen__ClaimScreen: 1. 請求書類の案内と送付
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求書類の案内と送付
+  usecase__RespondInitially ->> api__ClaimCreateApi: 初期対応の完了
+  screen__ClaimScreen ->> api__ClaimCreateApi: 請求案内 API
+  api__ClaimCreateApi ->> entity__Claim: create
+  api__ClaimCreateApi -->> screen__ClaimScreen: done
+  Note over screen__ClaimScreen: 2. 等級の変動の説明と請求意思の確認
+  actor__ClaimHandler ->> screen__ClaimScreen: 等級の変動の説明と請求意思の確認
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt 請求の案内をした段階である: Claim.status == 請求の案内済
+    api__ClaimApi ->> entity__Claim: update grade_explained=true
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimFormScreen: 3. 請求書類の提出
+  actor__PolicyHolder ->> screen__ClaimFormScreen: 請求書類の提出
+  actor__Victim ->> screen__ClaimFormScreen: 請求書類の提出
+  screen__ClaimFormScreen ->> api__ClaimSubmitApi: 請求書類提出 API
+  alt 等級の変動を説明して請求の意思を確かめた: Claim.grade_explained == true and Claim.status == 請求の案内済
+    api__ClaimSubmitApi ->> entity__Claim: update status 請求の案内済 -> 請求書類の提出
+    api__ClaimSubmitApi -->> screen__ClaimFormScreen: done
+  else guard fails
+    api__ClaimSubmitApi -->> screen__ClaimFormScreen: rejected
+  end
+  Note over screen__ClaimScreen: 4. 請求完了の確認
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求完了の確認
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status == 請求書類の提出 and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求書類の提出 -> 請求完了 [車両・人身傷害の事故の請求である], status 請求書類の提出 -> 請求完了 [示談が成立している], period 未起算 -> 30日の期間中, completed_on=set
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 5. 請求の取下げ
+  actor__PolicyHolder ->> screen__ClaimScreen: 請求の取下げ
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status in (請求の案内済, 請求書類の提出, 請求完了) and Claim.period in (未起算, 30日の期間中, 延長期間中, 期限経過)
+    api__ClaimApi ->> entity__Claim: update status 請求の案内済 -> 取下げ, status 請求書類の提出 -> 取下げ, status 請求完了 -> 取下げ, period 未起算 -> 期限の管理を終了, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__ClaimApi -) api__CaseApi: 請求の取下げ
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over api__ClaimApi: 6. 請求権の時効による消滅
+  timer__ClaimLimitation ->> api__ClaimApi: 保険金請求権の時効（請求権が発生した時の翌日から3年）
+  alt Claim.status in (請求の案内済, 請求書類の提出) and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求の案内済 -> 時効消滅, status 請求書類の提出 -> 時効消滅, period 未起算 -> 期限の管理を終了
+    api__ClaimApi -) api__CaseApi: 請求権の時効消滅
+    api__ClaimApi -->> timer__ClaimLimitation: done
+  else guard fails
+    api__ClaimApi -->> timer__ClaimLimitation: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -1197,6 +1587,154 @@ flowchart LR
   %% via screen__DecisionScreen -> screen__PaymentScreen usecase__DecideClaim
   %% via screen__DecisionScreen -> screen__PaymentScreen usecase__DecideSuspectedClaim
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucPayment model=samples/insurance-claim-ops
+%% kinds: actor extsystem timer usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant extsystem__AccidentInfoExchange as 自動車事故情報交換システム（損保協会の共同利用制度）
+  actor actor__PaymentApprover as 支払決裁者
+  actor actor__SeniorApprover as 上位決裁者（不正請求対応）
+  participant timer__PaymentDeadline as 支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）
+  participant usecase__NotifyDenial as 不払いの通知
+  participant usecase__PayClaim as 保険金の支払
+  participant usecase__TimeBarClaim as 請求権の時効による消滅
+  participant usecase__WithdrawClaim as 請求の取下げ
+  participant screen__ClaimScreen as 保険金請求画面
+  participant screen__DecisionScreen as 支払査定画面
+  participant screen__PaymentScreen as 支払画面
+  participant api__ClaimApi as 保険金請求 API
+  participant api__DecisionApi as 支払査定 API
+  participant api__PaymentCreateApi as 保険金支払 API
+  participant api__PaymentApi as 支払完了連絡 API
+  participant entity__Claim as 保険金請求
+  participant entity__Payment as 保険金の支払
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant api__ComplaintCreateApi as 苦情受付 API
+  participant api__CaseApi as 事故案件 API
+  participant api__SubrogationCreateApi as 求償開始 API
+  Note over screen__ClaimScreen: 1. 請求完了の確認
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求完了の確認
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status == 請求書類の提出 and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求書類の提出 -> 請求完了 [車両・人身傷害の事故の請求である], status 請求書類の提出 -> 請求完了 [示談が成立している], period 未起算 -> 30日の期間中, completed_on=set
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 2. 支払期限の延長と通知
+  actor__ClaimHandler ->> screen__ClaimScreen: 支払期限の延長と通知
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt 請求完了の後、支払・不払を決める前である: Claim.status == 請求完了 and Claim.period == 30日の期間中
+    api__ClaimApi ->> entity__Claim: update period 30日の期間中 -> 延長期間中, extension in (災害救助法の被災地域での調査（60日）, 医療機関・専門機関の診断・鑑定の照会（90日）, 後遺障害の診断・認定審査の照会（120日）, 警察・検察・消防等の捜査・調査結果の照会（180日）, 日本国外での調査（180日）)
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__DecisionScreen: 3. 不正請求の疑いの登録
+  actor__ClaimHandler ->> screen__DecisionScreen: 不正請求の疑いの登録
+  extsystem__AccidentInfoExchange ->> api__DecisionApi: 他社での事故受付の判明
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 請求書類の提出から決裁の前である: Claim.status in (請求書類の提出, 請求完了)
+    api__DecisionApi ->> entity__Claim: update fraud_suspected=true
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 4. 支払・不払の決裁
+  actor__PaymentApprover ->> screen__DecisionScreen: 支払・不払の決裁
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不正請求の疑いがない: Claim.fraud_suspected == false and Claim.status == 請求完了
+    api__DecisionApi ->> entity__Claim: update
+    alt status 請求完了 -> 支払決定
+      api__DecisionApi ->> entity__Claim: status = 支払決定
+    else status 請求完了 -> 不払決定
+      api__DecisionApi ->> entity__Claim: status = 不払決定
+    end
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 5. 疑義事案の支払・不払の決裁
+  actor__SeniorApprover ->> screen__DecisionScreen: 疑義事案の支払・不払の決裁
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不正請求の疑いがある: Claim.fraud_suspected == true and Claim.status == 請求完了
+    api__DecisionApi ->> entity__Claim: update senior_approved=true
+    alt status 請求完了 -> 支払決定
+      api__DecisionApi ->> entity__Claim: status = 支払決定
+    else status 請求完了 -> 不払決定
+      api__DecisionApi ->> entity__Claim: status = 不払決定
+    end
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 6. 不払いの理由の説明
+  actor__ClaimHandler ->> screen__DecisionScreen: 不払いの理由の説明
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不払いを決めた: Claim.status == 不払決定
+    api__DecisionApi ->> entity__Claim: update reason_explained=true
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 7. 不払いの通知
+  actor__ClaimHandler ->> screen__DecisionScreen: 不払いの通知
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不払いの理由を説明した: Claim.reason_explained == true and Claim.status == 不払決定 and Claim.period in (30日の期間中, 延長期間中, 期限経過)
+    api__DecisionApi ->> entity__Claim: update status 不払決定 -> 不払通知済, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__DecisionApi -) api__ComplaintCreateApi: 不払いの通知
+    api__DecisionApi -) api__CaseApi: 不払いの通知
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__PaymentScreen: 8. 保険金の支払
+  actor__ClaimHandler ->> screen__PaymentScreen: 保険金の支払
+  screen__PaymentScreen ->> api__PaymentCreateApi: 保険金支払 API
+  alt 支払済みの案件は再度支払わない: (Claim.status == 支払決定).none(Payment) and Claim.period in (30日の期間中, 延長期間中, 期限経過)
+    Note over api__PaymentCreateApi: transaction (API atomic boundary)
+    api__PaymentCreateApi ->> entity__Claim: update status 支払決定 -> 支払済, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__PaymentCreateApi ->> entity__Payment: create late_interest=Claim.late_interest_due
+    api__PaymentCreateApi -) api__CaseApi: 保険金の支払
+    api__PaymentCreateApi -) api__SubrogationCreateApi: 保険金の支払
+    api__PaymentCreateApi -->> screen__PaymentScreen: done
+  else guard fails
+    api__PaymentCreateApi -->> screen__PaymentScreen: rejected
+  end
+  Note over screen__PaymentScreen: 9. 支払完了の連絡
+  actor__ClaimHandler ->> screen__PaymentScreen: 支払完了の連絡
+  screen__PaymentScreen ->> api__PaymentApi: 支払完了連絡 API
+  alt Payment.status == 支払手続
+    api__PaymentApi ->> entity__Payment: update status 支払手続 -> 支払完了の連絡済
+    api__PaymentApi -->> screen__PaymentScreen: done
+  else guard fails
+    api__PaymentApi -->> screen__PaymentScreen: rejected
+  end
+  Note over api__ClaimApi: 10. 支払期限の経過
+  timer__PaymentDeadline ->> api__ClaimApi: 支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）
+  alt Claim.period in (30日の期間中, 延長期間中)
+    api__ClaimApi ->> entity__Claim: update period 30日の期間中 -> 期限経過, period 延長期間中 -> 期限経過, late_interest_due=true
+    api__ClaimApi -->> timer__PaymentDeadline: done
+  else guard fails
+    api__ClaimApi -->> timer__PaymentDeadline: rejected
+  end
+  Note over api__CaseApi: 11. 事故案件の完了
+  usecase__NotifyDenial ->> api__CaseApi: 不払いの通知
+  usecase__PayClaim ->> api__CaseApi: 保険金の支払
+  usecase__TimeBarClaim ->> api__CaseApi: 請求権の時効消滅
+  usecase__WithdrawClaim ->> api__CaseApi: 請求の取下げ
+  alt 賠償責任の有無を判断している: ClaimCase.liability in (賠償責任あり, 過失ゼロ（賠償責任なし）) and ClaimCase.status == 損害確定
+    api__CaseApi ->> entity__ClaimCase: update status 損害確定 -> 完了
+    api__CaseApi -->> usecase__NotifyDenial: done
+  else guard fails
+    api__CaseApi -->> usecase__NotifyDenial: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -1496,6 +2034,58 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucSubrogation model=samples/insurance-claim-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant usecase__PayClaim as 保険金の支払
+  participant timer__SubrogationLimitation as 求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）
+  participant screen__SubrogationScreen as 求償画面
+  participant api__SubrogationCreateApi as 求償開始 API
+  participant api__SubrogationApi as 求償 API
+  participant entity__Subrogation as 求償（請求権代位）
+  Note over screen__SubrogationScreen: 1. 求償の開始
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の開始
+  usecase__PayClaim ->> api__SubrogationCreateApi: 保険金の支払
+  screen__SubrogationScreen ->> api__SubrogationCreateApi: 求償開始 API
+  alt 保険金を支払った請求で、まだ求償していない: (Claim.status == 支払済).none(Subrogation)
+    api__SubrogationCreateApi ->> entity__Subrogation: create
+    api__SubrogationCreateApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationCreateApi -->> screen__SubrogationScreen: rejected
+  end
+  Note over screen__SubrogationScreen: 2. 求償の回収
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の回収
+  screen__SubrogationScreen ->> api__SubrogationApi: 求償 API
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 回収
+    api__SubrogationApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationApi -->> screen__SubrogationScreen: rejected
+  end
+  Note over screen__SubrogationScreen: 3. 求償の断念
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の断念
+  screen__SubrogationScreen ->> api__SubrogationApi: 求償 API
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 回収の断念
+    api__SubrogationApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationApi -->> screen__SubrogationScreen: rejected
+  end
+  Note over api__SubrogationApi: 4. 求償する債権の時効
+  timer__SubrogationLimitation ->> api__SubrogationApi: 求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 時効消滅
+    api__SubrogationApi -->> timer__SubrogationLimitation: done
+  else guard fails
+    api__SubrogationApi -->> timer__SubrogationLimitation: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 求償の開始<br>`StartSubrogation` | 保険金を払った請求について、被保険者から移った損害賠償請求権の額（払った額と被保険者の債権のいずれか少ない額）を確かめ、相手方への求償を始める。 | `SubrogationScreen` | `SubrogationCreateApi` | 保険金を支払った請求で、まだ求償していない |
@@ -1636,6 +2226,112 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucComplaint model=samples/insurance-claim-ops
+%% kinds: actor usecase extsystem screen api entity
+%% omitted: nfr buc step medium permission event condition
+sequenceDiagram
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant usecase__NotifyDenial as 不払いの通知
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant extsystem__SonpoAdrCenter as そんぽADRセンター（日本損害保険協会）
+  actor actor__SeniorApprover as 上位決裁者（不正請求対応）
+  participant screen__ComplaintScreen as 苦情・ADR 画面
+  participant api__ComplaintCreateApi as 苦情受付 API
+  participant api__ComplaintApi as 苦情・ADR API
+  participant entity__Complaint as 苦情・紛争
+  Note over screen__ComplaintScreen: 1. 苦情の申出
+  actor__PolicyHolder ->> screen__ComplaintScreen: 苦情の申出
+  actor__Victim ->> screen__ComplaintScreen: 苦情の申出
+  usecase__NotifyDenial ->> api__ComplaintCreateApi: 不払いの通知
+  screen__ComplaintScreen ->> api__ComplaintCreateApi: 苦情受付 API
+  api__ComplaintCreateApi ->> entity__Complaint: create
+  api__ComplaintCreateApi -->> screen__ComplaintScreen: done
+  Note over screen__ComplaintScreen: 2. 苦情の解決
+  actor__ClaimHandler ->> screen__ComplaintScreen: 苦情の解決
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt Complaint.status == 苦情受付
+    api__ComplaintApi ->> entity__Complaint: update status 苦情受付 -> 解決
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over screen__ComplaintScreen: 3. 相談機関の案内
+  actor__ClaimHandler ->> screen__ComplaintScreen: 相談機関の案内
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt 苦情を受け付けて解決していない: Complaint.status == 苦情受付
+    api__ComplaintApi ->> entity__Complaint: update adr_guided=true
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over api__ComplaintApi: 4. ADR 苦情の受付
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: ADR 苦情の通知
+  alt Complaint.status == 苦情受付
+    api__ComplaintApi ->> entity__Complaint: update status 苦情受付 -> ADR 苦情解決手続中
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end
+  Note over screen__ComplaintScreen: 5. ADR 苦情への対応
+  actor__ClaimHandler ->> screen__ComplaintScreen: ADR 苦情への対応
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt Complaint.status == ADR 苦情解決手続中
+    api__ComplaintApi ->> entity__Complaint: update status ADR 苦情解決手続中 -> 解決
+    api__ComplaintApi -) extsystem__SonpoAdrCenter: ADR 苦情への回答
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over api__ComplaintApi: 6. 紛争解決手続の申立ての受付
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: 紛争解決手続の申立て
+  alt Complaint.status in (苦情受付, ADR 苦情解決手続中)
+    api__ComplaintApi ->> entity__Complaint: update status 苦情受付 -> ADR 紛争解決手続中, status ADR 苦情解決手続中 -> ADR 紛争解決手続中
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end
+  Note over api__ComplaintApi: 7. 和解案の受領
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: 和解案の提示
+  alt Complaint.status == ADR 紛争解決手続中
+    api__ComplaintApi ->> entity__Complaint: update status ADR 紛争解決手続中 -> 和解案の提示, proposal in (和解案, 特別調停案)
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end
+  Note over screen__ComplaintScreen: 8. 和解案の受諾
+  actor__SeniorApprover ->> screen__ComplaintScreen: 和解案の受諾
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt Complaint.status == 和解案の提示
+    api__ComplaintApi ->> entity__Complaint: update status 和解案の提示 -> 和解成立
+    api__ComplaintApi -) extsystem__SonpoAdrCenter: 和解案への回答
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over screen__ComplaintScreen: 9. 和解案を受諾しない
+  actor__SeniorApprover ->> screen__ComplaintScreen: 和解案を受諾しない
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt 特別調停案ではない和解案である: Complaint.proposal == 和解案 and Complaint.status == 和解案の提示
+    api__ComplaintApi ->> entity__Complaint: update status 和解案の提示 -> 和解案を受諾しない
+    api__ComplaintApi -) extsystem__SonpoAdrCenter: 和解案への回答
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over api__ComplaintApi: 10. 紛争解決手続の終了
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: 紛争解決手続の終了
+  alt Complaint.status in (ADR 紛争解決手続中, 和解案の提示)
+    api__ComplaintApi ->> entity__Complaint: update status ADR 紛争解決手続中 -> 手続終了（不調）, status 和解案の提示 -> 手続終了（不調）
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |

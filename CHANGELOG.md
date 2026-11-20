@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Skill `rdra-ish-diagram` says how to lay out a PRD and a design document from the model
+  (`references/documents.md`): which diagrams and tables go into each section, in which
+  order, and the rules for embedding them (generate, stay under Mermaid's limits, tables as
+  tables, `--title` for images). It is the base structure: the user's own document
+  instructions or skill take precedence. The reader table of
+  `docs/rdra-ish-interpretation.md` names the new `diagram` scopes, and the README says
+  the diagrams are made for a PRD or a design document and links the guide.
+- The sample design documents open each BUC section's processing with the BUC's sequence
+  diagram (`diagram --kind sequence --buc`), before the per-use-case ones.
+
 ## v2.3.0 - 2026-11-18
 
 Upgrading from v2.2.0 needs no change: a model that passed `check` and `verify` still

@@ -1,0 +1,143 @@
+%% rdra-ish diagram=sequence scope=buc:BucPayment model=samples/insurance-claim-ops
+%% kinds: actor extsystem timer usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant extsystem__AccidentInfoExchange as 自動車事故情報交換システム（損保協会の共同利用制度）
+  actor actor__PaymentApprover as 支払決裁者
+  actor actor__SeniorApprover as 上位決裁者（不正請求対応）
+  participant timer__PaymentDeadline as 支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）
+  participant usecase__NotifyDenial as 不払いの通知
+  participant usecase__PayClaim as 保険金の支払
+  participant usecase__TimeBarClaim as 請求権の時効による消滅
+  participant usecase__WithdrawClaim as 請求の取下げ
+  participant screen__ClaimScreen as 保険金請求画面
+  participant screen__DecisionScreen as 支払査定画面
+  participant screen__PaymentScreen as 支払画面
+  participant api__ClaimApi as 保険金請求 API
+  participant api__DecisionApi as 支払査定 API
+  participant api__PaymentCreateApi as 保険金支払 API
+  participant api__PaymentApi as 支払完了連絡 API
+  participant entity__Claim as 保険金請求
+  participant entity__Payment as 保険金の支払
+  participant entity__ClaimCase as 事故案件（担保種目ごと）
+  participant api__ComplaintCreateApi as 苦情受付 API
+  participant api__CaseApi as 事故案件 API
+  participant api__SubrogationCreateApi as 求償開始 API
+  Note over screen__ClaimScreen: 1. 請求完了の確認
+  actor__ClaimHandler ->> screen__ClaimScreen: 請求完了の確認
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt Claim.status == 請求書類の提出 and Claim.period == 未起算
+    api__ClaimApi ->> entity__Claim: update status 請求書類の提出 -> 請求完了 [車両・人身傷害の事故の請求である], status 請求書類の提出 -> 請求完了 [示談が成立している], period 未起算 -> 30日の期間中, completed_on=set
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__ClaimScreen: 2. 支払期限の延長と通知
+  actor__ClaimHandler ->> screen__ClaimScreen: 支払期限の延長と通知
+  screen__ClaimScreen ->> api__ClaimApi: 保険金請求 API
+  alt 請求完了の後、支払・不払を決める前である: Claim.status == 請求完了 and Claim.period == 30日の期間中
+    api__ClaimApi ->> entity__Claim: update period 30日の期間中 -> 延長期間中, extension in (災害救助法の被災地域での調査（60日）, 医療機関・専門機関の診断・鑑定の照会（90日）, 後遺障害の診断・認定審査の照会（120日）, 警察・検察・消防等の捜査・調査結果の照会（180日）, 日本国外での調査（180日）)
+    api__ClaimApi -->> screen__ClaimScreen: done
+  else guard fails
+    api__ClaimApi -->> screen__ClaimScreen: rejected
+  end
+  Note over screen__DecisionScreen: 3. 不正請求の疑いの登録
+  actor__ClaimHandler ->> screen__DecisionScreen: 不正請求の疑いの登録
+  extsystem__AccidentInfoExchange ->> api__DecisionApi: 他社での事故受付の判明
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 請求書類の提出から決裁の前である: Claim.status in (請求書類の提出, 請求完了)
+    api__DecisionApi ->> entity__Claim: update fraud_suspected=true
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 4. 支払・不払の決裁
+  actor__PaymentApprover ->> screen__DecisionScreen: 支払・不払の決裁
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不正請求の疑いがない: Claim.fraud_suspected == false and Claim.status == 請求完了
+    api__DecisionApi ->> entity__Claim: update
+    alt status 請求完了 -> 支払決定
+      api__DecisionApi ->> entity__Claim: status = 支払決定
+    else status 請求完了 -> 不払決定
+      api__DecisionApi ->> entity__Claim: status = 不払決定
+    end
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 5. 疑義事案の支払・不払の決裁
+  actor__SeniorApprover ->> screen__DecisionScreen: 疑義事案の支払・不払の決裁
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不正請求の疑いがある: Claim.fraud_suspected == true and Claim.status == 請求完了
+    api__DecisionApi ->> entity__Claim: update senior_approved=true
+    alt status 請求完了 -> 支払決定
+      api__DecisionApi ->> entity__Claim: status = 支払決定
+    else status 請求完了 -> 不払決定
+      api__DecisionApi ->> entity__Claim: status = 不払決定
+    end
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 6. 不払いの理由の説明
+  actor__ClaimHandler ->> screen__DecisionScreen: 不払いの理由の説明
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不払いを決めた: Claim.status == 不払決定
+    api__DecisionApi ->> entity__Claim: update reason_explained=true
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 7. 不払いの通知
+  actor__ClaimHandler ->> screen__DecisionScreen: 不払いの通知
+  screen__DecisionScreen ->> api__DecisionApi: 支払査定 API
+  alt 不払いの理由を説明した: Claim.reason_explained == true and Claim.status == 不払決定 and Claim.period in (30日の期間中, 延長期間中, 期限経過)
+    api__DecisionApi ->> entity__Claim: update status 不払決定 -> 不払通知済, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__DecisionApi -) api__ComplaintCreateApi: 不払いの通知
+    api__DecisionApi -) api__CaseApi: 不払いの通知
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__PaymentScreen: 8. 保険金の支払
+  actor__ClaimHandler ->> screen__PaymentScreen: 保険金の支払
+  screen__PaymentScreen ->> api__PaymentCreateApi: 保険金支払 API
+  alt 支払済みの案件は再度支払わない: (Claim.status == 支払決定).none(Payment) and Claim.period in (30日の期間中, 延長期間中, 期限経過)
+    Note over api__PaymentCreateApi: transaction (API atomic boundary)
+    api__PaymentCreateApi ->> entity__Claim: update status 支払決定 -> 支払済, period 30日の期間中 -> 期限の管理を終了, period 延長期間中 -> 期限の管理を終了, period 期限経過 -> 期限の管理を終了
+    api__PaymentCreateApi ->> entity__Payment: create late_interest=Claim.late_interest_due
+    api__PaymentCreateApi -) api__CaseApi: 保険金の支払
+    api__PaymentCreateApi -) api__SubrogationCreateApi: 保険金の支払
+    api__PaymentCreateApi -->> screen__PaymentScreen: done
+  else guard fails
+    api__PaymentCreateApi -->> screen__PaymentScreen: rejected
+  end
+  Note over screen__PaymentScreen: 9. 支払完了の連絡
+  actor__ClaimHandler ->> screen__PaymentScreen: 支払完了の連絡
+  screen__PaymentScreen ->> api__PaymentApi: 支払完了連絡 API
+  alt Payment.status == 支払手続
+    api__PaymentApi ->> entity__Payment: update status 支払手続 -> 支払完了の連絡済
+    api__PaymentApi -->> screen__PaymentScreen: done
+  else guard fails
+    api__PaymentApi -->> screen__PaymentScreen: rejected
+  end
+  Note over api__ClaimApi: 10. 支払期限の経過
+  timer__PaymentDeadline ->> api__ClaimApi: 支払期限の到来（請求完了日を含めて30日、延長時は事由により60・90・120・180日）
+  alt Claim.period in (30日の期間中, 延長期間中)
+    api__ClaimApi ->> entity__Claim: update period 30日の期間中 -> 期限経過, period 延長期間中 -> 期限経過, late_interest_due=true
+    api__ClaimApi -->> timer__PaymentDeadline: done
+  else guard fails
+    api__ClaimApi -->> timer__PaymentDeadline: rejected
+  end
+  Note over api__CaseApi: 11. 事故案件の完了
+  usecase__NotifyDenial ->> api__CaseApi: 不払いの通知
+  usecase__PayClaim ->> api__CaseApi: 保険金の支払
+  usecase__TimeBarClaim ->> api__CaseApi: 請求権の時効消滅
+  usecase__WithdrawClaim ->> api__CaseApi: 請求の取下げ
+  alt 賠償責任の有無を判断している: ClaimCase.liability in (賠償責任あり, 過失ゼロ（賠償責任なし）) and ClaimCase.status == 損害確定
+    api__CaseApi ->> entity__ClaimCase: update status 損害確定 -> 完了
+    api__CaseApi -->> usecase__NotifyDenial: done
+  else guard fails
+    api__CaseApi -->> usecase__NotifyDenial: rejected
+  end

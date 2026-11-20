@@ -1,0 +1,60 @@
+%% rdra-ish diagram=sequence scope=buc:BucMonitoring model=samples/food-permit-ops
+%% kinds: actor timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant timer__AnnualPlanning as 翌年度の監視指導計画の策定（毎年度）
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__MonitoringPlanScreen as 監視指導計画画面
+  participant screen__SiteVisitScreen as 立入検査画面
+  participant api__MonitoringPlanApi as 監視指導計画 API
+  participant api__MonitoringPlanPublishApi as 監視指導計画公表 API
+  participant api__SiteVisitApi as 立入検査予定 API
+  participant api__SiteVisitResultApi as 立入検査結果 API
+  participant entity__MonitoringPlan as 監視指導計画
+  participant entity__SiteVisit as 立入検査
+  participant api__DispositionDraftApi as 処分起案 API
+  Note over screen__MonitoringPlanScreen: 1. 監視指導計画の策定
+  actor__PermitClerk ->> screen__MonitoringPlanScreen: 監視指導計画の策定
+  timer__AnnualPlanning ->> api__MonitoringPlanApi: 翌年度の監視指導計画の策定（毎年度）
+  screen__MonitoringPlanScreen ->> api__MonitoringPlanApi: 監視指導計画 API
+  api__MonitoringPlanApi ->> entity__MonitoringPlan: create
+  api__MonitoringPlanApi -->> screen__MonitoringPlanScreen: done
+  Note over screen__MonitoringPlanScreen: 2. 監視指導計画の公表
+  actor__PermitClerk ->> screen__MonitoringPlanScreen: 監視指導計画の公表
+  screen__MonitoringPlanScreen ->> api__MonitoringPlanPublishApi: 監視指導計画公表 API
+  alt MonitoringPlan.status == 策定中
+    api__MonitoringPlanPublishApi ->> entity__MonitoringPlan: update status 策定中 -> 公表済
+    api__MonitoringPlanPublishApi -->> screen__MonitoringPlanScreen: done
+  else guard fails
+    api__MonitoringPlanPublishApi -->> screen__MonitoringPlanScreen: rejected
+  end
+  Note over screen__SiteVisitScreen: 3. 立入検査の予定
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 立入検査の予定
+  screen__SiteVisitScreen ->> api__SiteVisitApi: 立入検査予定 API
+  alt 監視指導計画が公表されている: MonitoringPlan.status == 公表済
+    api__SiteVisitApi ->> entity__MonitoringPlan: read
+    api__SiteVisitApi ->> entity__SiteVisit: create
+    api__SiteVisitApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitApi -->> screen__SiteVisitScreen: rejected
+  end
+  Note over screen__SiteVisitScreen: 4. 違反なしの記録
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 違反なしの記録
+  screen__SiteVisitScreen ->> api__SiteVisitResultApi: 立入検査結果 API
+  alt SiteVisit.status == 予定
+    api__SiteVisitResultApi ->> entity__SiteVisit: update status 予定 -> 違反なし
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: rejected
+  end
+  Note over screen__SiteVisitScreen: 5. 違反の記録
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 違反の記録
+  screen__SiteVisitScreen ->> api__SiteVisitResultApi: 立入検査結果 API
+  alt SiteVisit.status == 予定
+    api__SiteVisitResultApi ->> entity__SiteVisit: update status 予定 -> 違反あり
+    api__SiteVisitResultApi -) api__DispositionDraftApi: 立入検査での違反の発見
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: rejected
+  end

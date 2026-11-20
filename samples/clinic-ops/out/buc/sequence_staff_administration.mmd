@@ -1,0 +1,52 @@
+%% rdra-ish diagram=sequence scope=buc:BucStaffAdministration model=samples/clinic-ops
+%% kinds: actor screen api usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__ClinicAdmin as 病院管理者
+  participant screen__ScheduleAdminScreen as 診療枠管理画面
+  participant screen__RoomAdminScreen as 診察室管理画面
+  participant screen__AuditReviewScreen as 監査ログ画面
+  participant api__ManageProviderScheduleApi as 診療枠管理 API
+  participant api__BlockScheduleSlotApi as 診療枠停止 API
+  participant api__RoomAdminApi as 診察室管理 API
+  participant usecase__ReleaseRoom as 診察室の解放
+  participant api__AuditApi as 監査 API
+  participant usecase__ResolveAuditFinding as 監査指摘の解決
+  participant entity__Provider as 医師マスタ
+  participant entity__ProviderSchedule as 診療枠
+  participant entity__Room as 診察室
+  participant entity__AuditEvent as 監査ログ
+  participant entity__PatientAccount as 患者登録
+  Note over screen__ScheduleAdminScreen: 1. 診療枠の管理
+  actor__ClinicAdmin ->> screen__ScheduleAdminScreen: 診療枠の管理
+  screen__ScheduleAdminScreen ->> api__ManageProviderScheduleApi: 診療枠管理 API
+  Note over api__ManageProviderScheduleApi: transaction (API atomic boundary)
+  api__ManageProviderScheduleApi ->> entity__Provider: update
+  api__ManageProviderScheduleApi ->> entity__ProviderSchedule: create
+  api__ManageProviderScheduleApi -->> screen__ScheduleAdminScreen: done
+  Note over screen__ScheduleAdminScreen: 2. 診療枠の停止
+  actor__ClinicAdmin ->> screen__ScheduleAdminScreen: 診療枠の停止
+  screen__ScheduleAdminScreen ->> api__BlockScheduleSlotApi: 診療枠停止 API
+  api__BlockScheduleSlotApi ->> entity__ProviderSchedule: update blocked=true
+  api__BlockScheduleSlotApi -->> screen__ScheduleAdminScreen: done
+  Note over screen__RoomAdminScreen: 3. 診察室の設定
+  actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の設定
+  screen__RoomAdminScreen ->> api__RoomAdminApi: 診察室管理 API
+  api__RoomAdminApi ->> entity__Room: create occupancy_status=available
+  api__RoomAdminApi -->> screen__RoomAdminScreen: done
+  Note over screen__RoomAdminScreen: 4. 診察室の解放
+  actor__ClinicAdmin ->> screen__RoomAdminScreen: 診察室の解放
+  screen__RoomAdminScreen ->> usecase__ReleaseRoom: 診察室の解放
+  usecase__ReleaseRoom ->> entity__Room: update occupancy_status=available
+  usecase__ReleaseRoom -->> screen__RoomAdminScreen: done
+  Note over screen__AuditReviewScreen: 5. 監査ログの確認
+  actor__ClinicAdmin ->> screen__AuditReviewScreen: 監査ログの確認
+  screen__AuditReviewScreen ->> api__AuditApi: 監査 API
+  api__AuditApi ->> entity__AuditEvent: read
+  api__AuditApi ->> entity__PatientAccount: read
+  api__AuditApi -->> screen__AuditReviewScreen: done
+  Note over screen__AuditReviewScreen: 6. 監査指摘の解決
+  actor__ClinicAdmin ->> screen__AuditReviewScreen: 監査指摘の解決
+  screen__AuditReviewScreen ->> usecase__ResolveAuditFinding: 監査指摘の解決
+  usecase__ResolveAuditFinding ->> entity__AuditEvent: update is_resolved=true
+  usecase__ResolveAuditFinding -->> screen__AuditReviewScreen: done

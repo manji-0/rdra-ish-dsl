@@ -1,0 +1,115 @@
+%% rdra-ish diagram=sequence scope=buc:BucOrdersResults model=samples/clinic-ops
+%% kinds: actor extsystem usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__Clinician as 医師
+  actor actor__MedicalClerk as 医師事務作業補助者
+  actor actor__Nurse as 看護師
+  participant extsystem__OutsourcedLabSystem as 外注検査システム
+  participant usecase__ReviewLabResult as 検査結果の確認
+  participant screen__OrderEntryScreen as オーダ入力画面
+  participant screen__SpecimenScreen as 採血画面
+  participant screen__ResultReviewScreen as 検査結果確認画面
+  participant screen__CriticalNoticeScreen as 重要結果通知画面
+  participant api__OrderEntryApi as オーダ登録 API
+  participant api__ProxyOrderApi as 代行入力 API
+  participant api__ConfirmOrderApi as オーダ確定 API
+  participant usecase__PrintSpecimenLabel as 採血管ラベル発行・貼付
+  participant api__CollectSpecimenApi as 採血 API
+  participant api__PerformedProcedureApi as 実施登録 API
+  participant api__ReceiveLabResultApi as 検査結果受信 API
+  participant api__ResultReviewApi as 検査結果確認 API
+  participant usecase__CancelClinicalOrder as オーダの取消
+  participant entity__Encounter as 診療記録
+  participant entity__ClinicalOrder as 検査オーダ
+  participant entity__Charge as コスト（診療行為）
+  participant entity__LabResult as 検査結果
+  participant entity__Notification as 通知
+  participant entity__PatientMessage as 患者連絡
+  participant api__NotifyPatientResultApi as 検査結果通知 API
+  participant api__CriticalNoticeApi as 重要結果通知 API
+  Note over screen__OrderEntryScreen: 1. 検体検査オーダの登録
+  actor__Clinician ->> screen__OrderEntryScreen: 検体検査オーダの登録
+  screen__OrderEntryScreen ->> api__OrderEntryApi: オーダ登録 API
+  api__OrderEntryApi ->> entity__Encounter: read
+  api__OrderEntryApi ->> entity__ClinicalOrder: create physician_confirmed=true
+  api__OrderEntryApi -->> screen__OrderEntryScreen: done
+  Note over screen__OrderEntryScreen: 2. 検体検査オーダの代行入力
+  actor__MedicalClerk ->> screen__OrderEntryScreen: 検体検査オーダの代行入力
+  actor__Nurse ->> screen__OrderEntryScreen: 検体検査オーダの代行入力
+  screen__OrderEntryScreen ->> api__ProxyOrderApi: 代行入力 API
+  api__ProxyOrderApi ->> entity__Encounter: read
+  api__ProxyOrderApi ->> entity__ClinicalOrder: create physician_confirmed=false
+  api__ProxyOrderApi -->> screen__OrderEntryScreen: done
+  Note over screen__OrderEntryScreen: 3. 代行入力オーダの確定
+  actor__Clinician ->> screen__OrderEntryScreen: 代行入力オーダの確定
+  screen__OrderEntryScreen ->> api__ConfirmOrderApi: オーダ確定 API
+  alt ClinicalOrder.status == オーダ済
+    api__ConfirmOrderApi ->> entity__ClinicalOrder: update status オーダ済 -> オーダ済, physician_confirmed=true
+    api__ConfirmOrderApi -->> screen__OrderEntryScreen: done
+  else guard fails
+    api__ConfirmOrderApi -->> screen__OrderEntryScreen: rejected
+  end
+  Note over screen__SpecimenScreen: 4. 採血管ラベル発行・貼付
+  actor__Nurse ->> screen__SpecimenScreen: 採血管ラベル発行・貼付
+  screen__SpecimenScreen ->> usecase__PrintSpecimenLabel: 採血管ラベル発行・貼付
+  usecase__PrintSpecimenLabel ->> entity__ClinicalOrder: read
+  usecase__PrintSpecimenLabel -->> screen__SpecimenScreen: done
+  Note over screen__SpecimenScreen: 5. 採血
+  actor__Nurse ->> screen__SpecimenScreen: 採血
+  screen__SpecimenScreen ->> api__CollectSpecimenApi: 採血 API
+  alt 医師が確定したオーダ: ClinicalOrder.physician_confirmed == true, ClinicalOrder.status == オーダ済
+    api__CollectSpecimenApi ->> entity__ClinicalOrder: update status オーダ済 -> 採取済, collected_at=set
+    api__CollectSpecimenApi -->> screen__SpecimenScreen: done
+  else guard fails
+    api__CollectSpecimenApi -->> screen__SpecimenScreen: rejected
+  end
+  Note over screen__SpecimenScreen: 6. 実施内容（コスト）の登録
+  actor__Nurse ->> screen__SpecimenScreen: 実施内容（コスト）の登録
+  screen__SpecimenScreen ->> api__PerformedProcedureApi: 実施登録 API
+  api__PerformedProcedureApi ->> entity__ClinicalOrder: read
+  api__PerformedProcedureApi ->> entity__Encounter: read
+  api__PerformedProcedureApi ->> entity__Charge: create status=posted, posted_at=set, kind=insured, origin=performed
+  api__PerformedProcedureApi -->> screen__SpecimenScreen: done
+  Note over screen__ResultReviewScreen: 7. 検査結果の受信
+  actor__Nurse ->> screen__ResultReviewScreen: 検査結果の受信
+  extsystem__OutsourcedLabSystem ->> api__ReceiveLabResultApi: 検査結果の受信
+  screen__ResultReviewScreen ->> api__ReceiveLabResultApi: 検査結果受信 API
+  alt ClinicalOrder.status == 採取済
+    Note over api__ReceiveLabResultApi: transaction (API atomic boundary)
+    api__ReceiveLabResultApi ->> entity__ClinicalOrder: update status 採取済 -> 結果受信, resulted_at=set
+    api__ReceiveLabResultApi ->> entity__LabResult: create received_at=set
+    api__ReceiveLabResultApi -->> screen__ResultReviewScreen: done
+  else guard fails
+    api__ReceiveLabResultApi -->> screen__ResultReviewScreen: rejected
+  end
+  Note over screen__ResultReviewScreen: 8. 検査結果の確認
+  actor__Clinician ->> screen__ResultReviewScreen: 検査結果の確認
+  screen__ResultReviewScreen ->> api__ResultReviewApi: 検査結果確認 API
+  alt ClinicalOrder.status == 結果受信
+    Note over api__ResultReviewApi: transaction (API atomic boundary)
+    api__ResultReviewApi ->> entity__ClinicalOrder: update status 結果受信 -> 結果確認済
+    api__ResultReviewApi ->> entity__LabResult: update reviewed_at=set
+    api__ResultReviewApi -) api__NotifyPatientResultApi: 検査結果の確認
+    api__ResultReviewApi -) api__CriticalNoticeApi: 検査結果の確認
+    api__ResultReviewApi -->> screen__ResultReviewScreen: done
+  else guard fails
+    api__ResultReviewApi -->> screen__ResultReviewScreen: rejected
+  end
+  Note over screen__CriticalNoticeScreen: 9. 重要結果（パニック値）の通知
+  actor__Clinician ->> screen__CriticalNoticeScreen: 重要結果（パニック値）の通知
+  usecase__ReviewLabResult ->> api__CriticalNoticeApi: 検査結果の確認
+  screen__CriticalNoticeScreen ->> api__CriticalNoticeApi: 重要結果通知 API
+  Note over api__CriticalNoticeApi: transaction (API atomic boundary)
+  api__CriticalNoticeApi ->> entity__Notification: create delivered_at=set
+  api__CriticalNoticeApi ->> entity__PatientMessage: create status=sent, sent_at=set
+  api__CriticalNoticeApi -->> screen__CriticalNoticeScreen: done
+  Note over screen__OrderEntryScreen: 10. オーダの取消
+  actor__Clinician ->> screen__OrderEntryScreen: オーダの取消
+  screen__OrderEntryScreen ->> usecase__CancelClinicalOrder: オーダの取消
+  alt ClinicalOrder.status == オーダ済
+    usecase__CancelClinicalOrder ->> entity__ClinicalOrder: update status オーダ済 -> 取消
+    usecase__CancelClinicalOrder -->> screen__OrderEntryScreen: done
+  else guard fails
+    usecase__CancelClinicalOrder -->> screen__OrderEntryScreen: rejected
+  end

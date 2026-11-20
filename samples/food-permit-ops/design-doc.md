@@ -8,7 +8,7 @@
 この文書は実装するエンジニア向けである。構造、処理、仕様の順に読む。
 
 1. BUC ごとのロバストネス図で、画面・制御・エンティティの構造をつかむ。
-2. UC ごとのシーケンス図で、ガードと書き込みの順序をつかむ。
+2. BUC のシーケンス図で UC が進む順をつかみ、UC ごとのシーケンス図でガードと書き込みの順序をつかむ。
 3. 状態モデル、データモデル、規則、CRUD と権限で仕様を確かめる。
 
 要求と成功指標は [PRD](prd.md) にある。
@@ -66,7 +66,7 @@ flowchart LR
 
 ## 2. BUC ごとの構造と処理
 
-各節は BUC の説明、ロバストネス図、画面遷移図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
+各節は BUC の説明、ロバストネス図、画面遷移図、BUC のシーケンス図、UC の表、UC ごとのシーケンス図の順に並ぶ。BUC のシーケンス図（`diagram --kind sequence --buc <Buc>`）は BUC の UC を、モデルが並べる順に、イベントで起動される UC はそれを起動する UC の後に、1 つの図に続けて描く。各 UC の始まりには番号と UC 名の注記が付く。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
 
 ### 2.1 事前相談と営業の種類の判定
 
@@ -97,6 +97,48 @@ flowchart LR
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucConsultation model=samples/food-permit-ops
+%% kinds: actor screen api usecase entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__ConsultationScreen as 事前相談記録画面
+  participant api__ConsultationApi as 事前相談 API
+  participant usecase__ReviewFloorPlan as 図面の確認と施設基準の説明
+  participant api__ClassificationApi as 営業の種類の判定 API
+  participant entity__Consultation as 事前相談
+  Note over screen__ConsultationScreen: 1. 事前相談の申込み
+  actor__BusinessOperator ->> screen__ConsultationScreen: 事前相談の申込み
+  screen__ConsultationScreen ->> api__ConsultationApi: 事前相談 API
+  api__ConsultationApi ->> entity__Consultation: create
+  api__ConsultationApi -->> screen__ConsultationScreen: done
+  Note over screen__ConsultationScreen: 2. 図面の確認と施設基準の説明
+  actor__FoodSanitationInspector ->> screen__ConsultationScreen: 図面の確認と施設基準の説明
+  screen__ConsultationScreen ->> usecase__ReviewFloorPlan: 図面の確認と施設基準の説明
+  usecase__ReviewFloorPlan ->> entity__Consultation: read
+  usecase__ReviewFloorPlan -->> screen__ConsultationScreen: done
+  Note over screen__ConsultationScreen: 3. 営業の種類の判定
+  actor__FoodSanitationInspector ->> screen__ConsultationScreen: 営業の種類の判定
+  screen__ConsultationScreen ->> api__ClassificationApi: 営業の種類の判定 API
+  alt Consultation.status == 相談中
+    api__ClassificationApi ->> entity__Consultation: update
+    alt status 相談中 -> 許可が必要 [許可業種（施行令35条）である]
+      api__ClassificationApi ->> entity__Consultation: status = 許可が必要
+    else status 相談中 -> 届出が必要 [届出業種である]
+      api__ClassificationApi ->> entity__Consultation: status = 届出が必要
+    else status 相談中 -> 許可・届出とも不要 [届出も要らない営業（施行令35条の2）である]
+      api__ClassificationApi ->> entity__Consultation: status = 許可・届出とも不要
+    end
+    api__ClassificationApi -->> screen__ConsultationScreen: done
+  else guard fails
+    api__ClassificationApi -->> screen__ConsultationScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -231,6 +273,84 @@ flowchart LR
   %% via screen__ApplicationReviewScreen -> screen__ApplicationScreen usecase__ReturnApplication
   %% via screen__ApplicationScreen -> screen__ApplicationReviewScreen usecase__ReviewApplication
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucPermitApplication model=samples/food-permit-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  participant screen__ApplicationScreen as 許可申請受付画面
+  participant screen__ApplicationReviewScreen as 申請審査画面
+  participant api__ApplicationIntakeApi as 許可申請受付 API
+  participant api__FeePaymentApi as 手数料納付 API
+  participant api__ApplicationReviewApi as 申請審査 API
+  participant api__ApplicationAmendApi as 申請の補正・取下げ API
+  participant entity__PermitApplication as 営業許可申請
+  participant entity__FeeSchedule as 手数料表
+  Note over screen__ApplicationScreen: 1. 許可申請書の提出（窓口）
+  actor__BusinessOperator ->> screen__ApplicationScreen: 許可申請書の提出（窓口）
+  screen__ApplicationScreen ->> api__ApplicationIntakeApi: 許可申請受付 API
+  api__ApplicationIntakeApi ->> entity__PermitApplication: create channel=counter, kind=new
+  api__ApplicationIntakeApi -->> screen__ApplicationScreen: done
+  Note over screen__ApplicationScreen: 2. 電子申請の受付
+  actor__PermitClerk ->> screen__ApplicationScreen: 電子申請の受付
+  extsystem__FoodSanitationSystem ->> api__ApplicationIntakeApi: 電子申請の提出（整理番号 LIC）
+  screen__ApplicationScreen ->> api__ApplicationIntakeApi: 許可申請受付 API
+  api__ApplicationIntakeApi ->> entity__PermitApplication: create channel=online, kind=new
+  api__ApplicationIntakeApi -->> screen__ApplicationScreen: done
+  Note over screen__ApplicationScreen: 3. 許可申請手数料の納付
+  actor__BusinessOperator ->> screen__ApplicationScreen: 許可申請手数料の納付
+  screen__ApplicationScreen ->> api__FeePaymentApi: 手数料納付 API
+  alt 申請が確認待か差戻し中である: PermitApplication.status in (申請内容確認待, 差戻し・補正中)
+    api__FeePaymentApi ->> entity__FeeSchedule: read
+    api__FeePaymentApi ->> entity__PermitApplication: update fee_paid=true
+    api__FeePaymentApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__FeePaymentApi -->> screen__ApplicationScreen: rejected
+  end
+  Note over screen__ApplicationReviewScreen: 4. 申請内容の確認と受理
+  actor__PermitClerk ->> screen__ApplicationReviewScreen: 申請内容の確認と受理
+  screen__ApplicationReviewScreen ->> api__ApplicationReviewApi: 申請審査 API
+  alt 手数料が納められている: PermitApplication.fee_paid == true and PermitApplication.status == 申請内容確認待
+    api__ApplicationReviewApi ->> entity__PermitApplication: update status 申請内容確認待 -> 検査待
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: done
+  else guard fails
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: rejected
+  end
+  Note over screen__ApplicationReviewScreen: 5. 差戻し（補正の求め）
+  actor__PermitClerk ->> screen__ApplicationReviewScreen: 差戻し（補正の求め）
+  screen__ApplicationReviewScreen ->> api__ApplicationReviewApi: 申請審査 API
+  alt PermitApplication.status in (申請内容確認待, 検査待)
+    api__ApplicationReviewApi ->> entity__PermitApplication: update status 申請内容確認待 -> 差戻し・補正中, status 検査待 -> 差戻し・補正中
+    api__ApplicationReviewApi -) extsystem__FoodSanitationSystem: 申請の差戻し
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: done
+  else guard fails
+    api__ApplicationReviewApi -->> screen__ApplicationReviewScreen: rejected
+  end
+  Note over screen__ApplicationScreen: 6. 補正した申請の再提出
+  actor__BusinessOperator ->> screen__ApplicationScreen: 補正した申請の再提出
+  screen__ApplicationScreen ->> api__ApplicationAmendApi: 申請の補正・取下げ API
+  alt PermitApplication.status == 差戻し・補正中
+    api__ApplicationAmendApi ->> entity__PermitApplication: update status 差戻し・補正中 -> 申請内容確認待
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: rejected
+  end
+  Note over screen__ApplicationScreen: 7. 申請の取下げ
+  actor__BusinessOperator ->> screen__ApplicationScreen: 申請の取下げ
+  screen__ApplicationScreen ->> api__ApplicationAmendApi: 申請の補正・取下げ API
+  alt PermitApplication.status in (差戻し・補正中, 申請内容確認待, 検査待)
+    api__ApplicationAmendApi ->> entity__PermitApplication: update status 差戻し・補正中 -> 取下げ, status 申請内容確認待 -> 取下げ [窓口（紙）で出した申請である], status 検査待 -> 取下げ [窓口（紙）で出した申請である]
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: done
+  else guard fails
+    api__ApplicationAmendApi -->> screen__ApplicationScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -479,6 +599,128 @@ flowchart LR
   %% via screen__DecisionScreen -> screen__PermitLedgerScreen usecase__GrantPermit
   %% via screen__InspectionScreen -> screen__DecisionScreen usecase__ConductInspection
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucInspectionDecision model=samples/food-permit-ops
+%% kinds: actor usecase screen api entity extsystem
+%% omitted: nfr buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant usecase__GrantPermit as 許可の決定
+  participant screen__InspectionScreen as 施設検査画面
+  participant screen__DecisionScreen as 許可決定画面
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__InspectionScheduleApi as 施設検査予定 API
+  participant api__InspectionApi as 施設検査 API
+  participant api__ReinspectionApi as 再検査申込み API
+  participant api__DecisionApi as 許可決定 API
+  participant api__PermitApi as 営業許可 API
+  participant api__OperatorPermitApi as 営業者の届出 API
+  participant entity__PermitApplication as 営業許可申請
+  participant entity__Inspection as 施設検査
+  participant entity__BusinessPermit as 営業許可
+  participant api__PermitRegistrationApi as 営業許可登録 API
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  Note over screen__InspectionScreen: 1. 施設検査の日程調整
+  actor__PermitClerk ->> screen__InspectionScreen: 施設検査の日程調整
+  screen__InspectionScreen ->> api__InspectionScheduleApi: 施設検査予定 API
+  alt 申請が検査待で、まだ検査の予定がない: (PermitApplication.status == 検査待).none(Inspection)
+    api__InspectionScheduleApi ->> entity__PermitApplication: read
+    api__InspectionScheduleApi ->> entity__Inspection: create
+    api__InspectionScheduleApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__InspectionScheduleApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__InspectionScreen: 2. 施設検査の実施
+  actor__FoodSanitationInspector ->> screen__InspectionScreen: 施設検査の実施
+  screen__InspectionScreen ->> api__InspectionApi: 施設検査 API
+  alt Inspection.status == 検査予定
+    api__InspectionApi ->> entity__Inspection: update
+    alt status 検査予定 -> 適合
+      api__InspectionApi ->> entity__Inspection: status = 適合
+    else status 検査予定 -> 不適合（改善の指示）
+      api__InspectionApi ->> entity__Inspection: status = 不適合（改善の指示）
+    end
+    api__InspectionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__InspectionApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__InspectionScreen: 3. 改善の報告と再検査の申込み
+  actor__BusinessOperator ->> screen__InspectionScreen: 改善の報告と再検査の申込み
+  screen__InspectionScreen ->> api__ReinspectionApi: 再検査申込み API
+  alt Inspection.status == 不適合（改善の指示）
+    api__ReinspectionApi ->> entity__Inspection: update status 不適合（改善の指示） -> 検査予定
+    api__ReinspectionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__ReinspectionApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 4. 許可の決定
+  actor__PermitAuthority ->> screen__DecisionScreen: 許可の決定
+  screen__DecisionScreen ->> api__DecisionApi: 許可決定 API
+  alt 施設検査で施設基準に適合した: Inspection.status == 適合 and 新規の申請である: PermitApplication.kind == 新規 and PermitApplication.status == 検査待
+    api__DecisionApi ->> entity__Inspection: read
+    api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 許可
+    api__DecisionApi -) api__PermitRegistrationApi: 営業許可の決定
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 5. 不許可の決定
+  actor__PermitAuthority ->> screen__DecisionScreen: 不許可の決定
+  screen__DecisionScreen ->> api__DecisionApi: 許可決定 API
+  alt PermitApplication.status in (検査待, 差戻し・補正中)
+    api__DecisionApi ->> entity__Inspection: read
+    api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 不許可, status 差戻し・補正中 -> 不許可, reason_shown=true
+    api__DecisionApi -) extsystem__FoodSanitationSystem: 申請の差戻し
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 6. 許可台帳への登録
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への登録
+  usecase__GrantPermit ->> api__PermitRegistrationApi: 営業許可の決定
+  screen__PermitLedgerScreen ->> api__PermitRegistrationApi: 営業許可登録 API
+  alt 新規の申請で、まだ許可が登録されていない: (PermitApplication.kind == 新規).none(BusinessPermit).role(PermitApplication)
+    api__PermitRegistrationApi ->> entity__PermitApplication: read
+    api__PermitRegistrationApi ->> entity__BusinessPermit: create business_type=PermitApplication.business_type
+    api__PermitRegistrationApi -) extsystem__FoodSanitationSystem: 許可の発行（発行済）
+    api__PermitRegistrationApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitRegistrationApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 7. 許可証の交付
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可証の交付
+  screen__PermitLedgerScreen ->> api__PermitApi: 営業許可 API
+  alt 許可が有効である: BusinessPermit.status == 有効
+    api__PermitApi ->> entity__BusinessPermit: update certificate_issued=true
+    api__PermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 8. 食品衛生責任者の選定の届出
+  actor__BusinessOperator ->> screen__PermitLedgerScreen: 食品衛生責任者の選定の届出
+  screen__PermitLedgerScreen ->> api__OperatorPermitApi: 営業者の届出 API
+  alt 許可が有効である: BusinessPermit.status == 有効
+    api__OperatorPermitApi ->> entity__BusinessPermit: update hygiene_manager_appointed=true
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 9. 営業の開始・再開
+  actor__BusinessOperator ->> screen__PermitLedgerScreen: 営業の開始・再開
+  screen__PermitLedgerScreen ->> api__OperatorPermitApi: 営業者の届出 API
+  alt 許可が有効で、許可証の交付を受けている: BusinessPermit.status == 有効, BusinessPermit.certificate_issued == true
+    api__OperatorPermitApi ->> entity__BusinessPermit: update operating=true
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__OperatorPermitApi -->> screen__PermitLedgerScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -801,6 +1043,107 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucRenewal model=samples/food-permit-ops
+%% kinds: actor timer usecase screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant timer__ExpiryNoticeDue as 満了通知の発送（有効期間満了の2か月前）
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant usecase__RenewPermit as 更新の許可の決定
+  participant timer__PermitTermEnd as 有効期間の満了（5年以上、自治体が定める）
+  participant screen__InspectionScreen as 施設検査画面
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant screen__RenewalScreen as 更新申請画面
+  participant api__InspectionScheduleApi as 施設検査予定 API
+  participant api__InspectionApi as 施設検査 API
+  participant api__PermitTermApi as 有効期間 API
+  participant usecase__SendExpiryNotice as 満了通知の発送
+  participant api__RenewalApi as 更新申請 API
+  participant api__DecisionApi as 許可決定 API
+  participant entity__PermitApplication as 営業許可申請
+  participant entity__Inspection as 施設検査
+  participant entity__BusinessPermit as 営業許可
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  Note over screen__InspectionScreen: 1. 施設検査の日程調整
+  actor__PermitClerk ->> screen__InspectionScreen: 施設検査の日程調整
+  screen__InspectionScreen ->> api__InspectionScheduleApi: 施設検査予定 API
+  alt 申請が検査待で、まだ検査の予定がない: (PermitApplication.status == 検査待).none(Inspection)
+    api__InspectionScheduleApi ->> entity__PermitApplication: read
+    api__InspectionScheduleApi ->> entity__Inspection: create
+    api__InspectionScheduleApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__InspectionScheduleApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__InspectionScreen: 2. 施設検査の実施
+  actor__FoodSanitationInspector ->> screen__InspectionScreen: 施設検査の実施
+  screen__InspectionScreen ->> api__InspectionApi: 施設検査 API
+  alt Inspection.status == 検査予定
+    api__InspectionApi ->> entity__Inspection: update
+    alt status 検査予定 -> 適合
+      api__InspectionApi ->> entity__Inspection: status = 適合
+    else status 検査予定 -> 不適合（改善の指示）
+      api__InspectionApi ->> entity__Inspection: status = 不適合（改善の指示）
+    end
+    api__InspectionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__InspectionApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 3. 満了通知の発送
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 満了通知の発送
+  timer__ExpiryNoticeDue ->> api__PermitTermApi: 満了通知の発送（有効期間満了の2か月前）
+  screen__PermitLedgerScreen ->> api__PermitTermApi: 有効期間 API
+  screen__PermitLedgerScreen ->> usecase__SendExpiryNotice: 満了通知の発送
+  api__PermitTermApi ->> entity__BusinessPermit: update
+  usecase__SendExpiryNotice ->> entity__BusinessPermit: read
+  api__PermitTermApi -->> screen__PermitLedgerScreen: done
+  Note over screen__RenewalScreen: 4. 継続（更新）の申請
+  actor__BusinessOperator ->> screen__RenewalScreen: 継続（更新）の申請
+  screen__RenewalScreen ->> api__RenewalApi: 更新申請 API
+  alt 失効後の更新はできない: (BusinessPermit.status == 有効).role(renews)
+    api__RenewalApi ->> entity__BusinessPermit: read
+    api__RenewalApi ->> entity__PermitApplication: create kind=renewal
+    api__RenewalApi -->> screen__RenewalScreen: done
+  else guard fails
+    api__RenewalApi -->> screen__RenewalScreen: rejected
+  end
+  Note over screen__InspectionScreen: 5. 更新の許可の決定
+  actor__PermitAuthority ->> screen__InspectionScreen: 更新の許可の決定
+  screen__InspectionScreen ->> api__DecisionApi: 許可決定 API
+  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and 失効後の更新はできない: (BusinessPermit.status == 有効).role(renews) and PermitApplication.status == 検査待
+    api__DecisionApi ->> entity__Inspection: read
+    api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 許可
+    api__DecisionApi -) api__PermitTermApi: 更新の許可
+    api__DecisionApi -) extsystem__FoodSanitationSystem: 更新の許可
+    api__DecisionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 6. 有効期間の更新
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 有効期間の更新
+  usecase__RenewPermit ->> api__PermitTermApi: 更新の許可
+  screen__PermitLedgerScreen ->> api__PermitTermApi: 有効期間 API
+  alt BusinessPermit.status == 有効
+    api__PermitTermApi ->> entity__BusinessPermit: update status 有効 -> 有効
+    api__PermitTermApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitTermApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over api__PermitTermApi: 7. 有効期間の満了による失効
+  timer__PermitTermEnd ->> api__PermitTermApi: 有効期間の満了（5年以上、自治体が定める）
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__PermitTermApi ->> entity__BusinessPermit: update status 有効 -> 失効（有効期間満了）, status 営業停止中 -> 失効（有効期間満了）, operating=false
+    api__PermitTermApi -->> timer__PermitTermEnd: done
+  else guard fails
+    api__PermitTermApi -->> timer__PermitTermEnd: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 満了通知の発送<br>`SendExpiryNotice` | 有効期間が満了する前に、許可営業者に満了の時期と更新の手続を知らせる。 | `PermitLedgerScreen` | `PermitTermApi` | （なし） |
@@ -973,6 +1316,78 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucPermitChanges model=samples/food-permit-ops
+%% kinds: actor screen api entity
+%% omitted: buc step medium permission condition
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant screen__PermitNoticeScreen as 許可後の届出画面
+  participant api__ChangeNoticeApi as 変更届 API
+  participant api__ChangeReviewApi as 変更届確認 API
+  participant api__SuccessionApi as 地位承継届 API
+  participant api__SuccessionReviewApi as 地位承継届受理 API
+  participant api__ClosureApi as 廃業届 API
+  participant entity__BusinessPermit as 営業許可
+  participant entity__ChangeNotice as 変更届
+  participant entity__SuccessionNotice as 地位承継届
+  Note over screen__PermitNoticeScreen: 1. 変更届の提出
+  actor__BusinessOperator ->> screen__PermitNoticeScreen: 変更届の提出
+  screen__PermitNoticeScreen ->> api__ChangeNoticeApi: 変更届 API
+  alt 許可が終わっていない（有効か停止中）: BusinessPermit.status in (有効, 営業停止中)
+    api__ChangeNoticeApi ->> entity__BusinessPermit: read
+    api__ChangeNoticeApi ->> entity__ChangeNotice: create
+    api__ChangeNoticeApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__ChangeNoticeApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 2. 変更届の確認
+  actor__PermitClerk ->> screen__PermitNoticeScreen: 変更届の確認
+  screen__PermitNoticeScreen ->> api__ChangeReviewApi: 変更届確認 API
+  alt ChangeNotice.status == 受付
+    api__ChangeReviewApi ->> entity__ChangeNotice: update
+    alt status 受付 -> 受理
+      api__ChangeReviewApi ->> entity__ChangeNotice: status = 受理
+    else status 受付 -> 新規申請が必要
+      api__ChangeReviewApi ->> entity__ChangeNotice: status = 新規申請が必要
+    end
+    api__ChangeReviewApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__ChangeReviewApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 3. 地位承継届の提出
+  actor__BusinessOperator ->> screen__PermitNoticeScreen: 地位承継届の提出
+  screen__PermitNoticeScreen ->> api__SuccessionApi: 地位承継届 API
+  alt 許可が終わっていない（有効か停止中）: BusinessPermit.status in (有効, 営業停止中)
+    api__SuccessionApi ->> entity__BusinessPermit: read
+    api__SuccessionApi ->> entity__SuccessionNotice: create
+    api__SuccessionApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__SuccessionApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 4. 地位承継届の受理
+  actor__PermitClerk ->> screen__PermitNoticeScreen: 地位承継届の受理
+  screen__PermitNoticeScreen ->> api__SuccessionReviewApi: 地位承継届受理 API
+  alt SuccessionNotice.status == 受付
+    api__SuccessionReviewApi ->> entity__SuccessionNotice: update status 受付 -> 受理
+    api__SuccessionReviewApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__SuccessionReviewApi -->> screen__PermitNoticeScreen: rejected
+  end
+  Note over screen__PermitNoticeScreen: 5. 廃業届の提出
+  actor__BusinessOperator ->> screen__PermitNoticeScreen: 廃業届の提出
+  screen__PermitNoticeScreen ->> api__ClosureApi: 廃業届 API
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__ClosureApi ->> entity__BusinessPermit: update status 有効 -> 廃業, status 営業停止中 -> 廃業, operating=false, certificate_issued=false
+    api__ClosureApi -->> screen__PermitNoticeScreen: done
+  else guard fails
+    api__ClosureApi -->> screen__PermitNoticeScreen: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 変更届の提出<br>`FileChangeNotice` | 許可営業者が、申請書の記載事項（営業者の氏名・住所、施設の名称、食品衛生責任者など）や設備の変更を届け出る。 | `PermitNoticeScreen` | `ChangeNoticeApi` | 許可が終わっていない（有効か停止中） |
@@ -1138,6 +1553,52 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucBusinessNotification model=samples/food-permit-ops
+%% kinds: actor extsystem screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  participant screen__NotificationScreen as 営業届画面
+  participant api__NotificationApi as 営業届 API
+  participant api__NotificationReviewApi as 営業届受付 API
+  participant entity__BusinessNotification as 営業届
+  Note over screen__NotificationScreen: 1. 営業届の提出（窓口）
+  actor__BusinessOperator ->> screen__NotificationScreen: 営業届の提出（窓口）
+  screen__NotificationScreen ->> api__NotificationApi: 営業届 API
+  api__NotificationApi ->> entity__BusinessNotification: create channel=counter
+  api__NotificationApi -->> screen__NotificationScreen: done
+  Note over screen__NotificationScreen: 2. 電子届出の受付
+  actor__PermitClerk ->> screen__NotificationScreen: 電子届出の受付
+  extsystem__FoodSanitationSystem ->> api__NotificationApi: 電子届出の提出（整理番号 NIF）
+  screen__NotificationScreen ->> api__NotificationApi: 営業届 API
+  api__NotificationApi ->> entity__BusinessNotification: create channel=online
+  api__NotificationApi -->> screen__NotificationScreen: done
+  Note over screen__NotificationScreen: 3. 営業届の受付
+  actor__PermitClerk ->> screen__NotificationScreen: 営業届の受付
+  screen__NotificationScreen ->> api__NotificationReviewApi: 営業届受付 API
+  alt BusinessNotification.status == 届出内容確認待
+    api__NotificationReviewApi ->> entity__BusinessNotification: update status 届出内容確認待 -> 受付済
+    api__NotificationReviewApi -) extsystem__FoodSanitationSystem: 届出の受付（受付済）
+    api__NotificationReviewApi -->> screen__NotificationScreen: done
+  else guard fails
+    api__NotificationReviewApi -->> screen__NotificationScreen: rejected
+  end
+  Note over screen__NotificationScreen: 4. 届出営業の廃業届
+  actor__BusinessOperator ->> screen__NotificationScreen: 届出営業の廃業届
+  screen__NotificationScreen ->> api__NotificationReviewApi: 営業届受付 API
+  alt BusinessNotification.status == 受付済
+    api__NotificationReviewApi ->> entity__BusinessNotification: update status 受付済 -> 廃業
+    api__NotificationReviewApi -->> screen__NotificationScreen: done
+  else guard fails
+    api__NotificationReviewApi -->> screen__NotificationScreen: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 営業届の提出（窓口）<br>`SubmitCounterNotification` | 営業者が営業を始める前に、保健所の窓口に営業届を出す。 | `NotificationScreen` | `NotificationApi` | （なし） |
@@ -1285,6 +1746,71 @@ flowchart LR
   screen__MonitoringPlanScreen -->|立入検査の予定| screen__SiteVisitScreen
   %% via screen__MonitoringPlanScreen -> screen__SiteVisitScreen usecase__ScheduleSiteVisit
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucMonitoring model=samples/food-permit-ops
+%% kinds: actor timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  participant timer__AnnualPlanning as 翌年度の監視指導計画の策定（毎年度）
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant screen__MonitoringPlanScreen as 監視指導計画画面
+  participant screen__SiteVisitScreen as 立入検査画面
+  participant api__MonitoringPlanApi as 監視指導計画 API
+  participant api__MonitoringPlanPublishApi as 監視指導計画公表 API
+  participant api__SiteVisitApi as 立入検査予定 API
+  participant api__SiteVisitResultApi as 立入検査結果 API
+  participant entity__MonitoringPlan as 監視指導計画
+  participant entity__SiteVisit as 立入検査
+  participant api__DispositionDraftApi as 処分起案 API
+  Note over screen__MonitoringPlanScreen: 1. 監視指導計画の策定
+  actor__PermitClerk ->> screen__MonitoringPlanScreen: 監視指導計画の策定
+  timer__AnnualPlanning ->> api__MonitoringPlanApi: 翌年度の監視指導計画の策定（毎年度）
+  screen__MonitoringPlanScreen ->> api__MonitoringPlanApi: 監視指導計画 API
+  api__MonitoringPlanApi ->> entity__MonitoringPlan: create
+  api__MonitoringPlanApi -->> screen__MonitoringPlanScreen: done
+  Note over screen__MonitoringPlanScreen: 2. 監視指導計画の公表
+  actor__PermitClerk ->> screen__MonitoringPlanScreen: 監視指導計画の公表
+  screen__MonitoringPlanScreen ->> api__MonitoringPlanPublishApi: 監視指導計画公表 API
+  alt MonitoringPlan.status == 策定中
+    api__MonitoringPlanPublishApi ->> entity__MonitoringPlan: update status 策定中 -> 公表済
+    api__MonitoringPlanPublishApi -->> screen__MonitoringPlanScreen: done
+  else guard fails
+    api__MonitoringPlanPublishApi -->> screen__MonitoringPlanScreen: rejected
+  end
+  Note over screen__SiteVisitScreen: 3. 立入検査の予定
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 立入検査の予定
+  screen__SiteVisitScreen ->> api__SiteVisitApi: 立入検査予定 API
+  alt 監視指導計画が公表されている: MonitoringPlan.status == 公表済
+    api__SiteVisitApi ->> entity__MonitoringPlan: read
+    api__SiteVisitApi ->> entity__SiteVisit: create
+    api__SiteVisitApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitApi -->> screen__SiteVisitScreen: rejected
+  end
+  Note over screen__SiteVisitScreen: 4. 違反なしの記録
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 違反なしの記録
+  screen__SiteVisitScreen ->> api__SiteVisitResultApi: 立入検査結果 API
+  alt SiteVisit.status == 予定
+    api__SiteVisitResultApi ->> entity__SiteVisit: update status 予定 -> 違反なし
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: rejected
+  end
+  Note over screen__SiteVisitScreen: 5. 違反の記録
+  actor__FoodSanitationInspector ->> screen__SiteVisitScreen: 違反の記録
+  screen__SiteVisitScreen ->> api__SiteVisitResultApi: 立入検査結果 API
+  alt SiteVisit.status == 予定
+    api__SiteVisitResultApi ->> entity__SiteVisit: update status 予定 -> 違反あり
+    api__SiteVisitResultApi -) api__DispositionDraftApi: 立入検査での違反の発見
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: done
+  else guard fails
+    api__SiteVisitResultApi -->> screen__SiteVisitScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -1489,6 +2015,166 @@ flowchart LR
   %% via screen__DispositionScreen -> screen__PermitLedgerScreen usecase__DecideSuspension
   %% via screen__OpinionProcedureScreen -> screen__DispositionScreen usecase__HoldHearing
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucDisposition model=samples/food-permit-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant usecase__RecordViolation as 違反の記録
+  actor actor__PermitClerk as 保健所 許可担当職員
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant usecase__DecideRevocation as 許可の取消の決定
+  participant usecase__DecideSuspension as 営業停止の決定
+  participant timer__SuspensionTermEnd as 営業停止期間の満了（処分で定めた期間）
+  participant timer__AppealPeriodEnd as 審査請求期間の経過（処分を知った日の翌日から3月）
+  participant usecase__OrderImprovement as 施設の整備改善命令
+  participant timer__PublicationPeriodEnd as 公表期間の経過（7日間以上）
+  participant screen__DispositionScreen as 不利益処分画面
+  participant screen__OpinionProcedureScreen as 聴聞・弁明画面
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__DispositionDraftApi as 処分起案 API
+  participant api__OpinionProcedureApi as 意見陳述 API
+  participant api__DispositionApi as 処分決定 API
+  participant entity__BusinessPermit as 営業許可
+  participant entity__Disposition as 不利益処分
+  participant api__PublicationApi as 公表 API
+  participant api__PermitApi as 営業許可 API
+  Note over screen__DispositionScreen: 1. 処分の起案
+  actor__FoodSanitationInspector ->> screen__DispositionScreen: 処分の起案
+  usecase__RecordViolation ->> api__DispositionDraftApi: 立入検査での違反の発見
+  screen__DispositionScreen ->> api__DispositionDraftApi: 処分起案 API
+  api__DispositionDraftApi ->> entity__BusinessPermit: read
+  api__DispositionDraftApi ->> entity__Disposition: create procedure in (聴聞, 弁明の機会の付与 [取消ではない処分である], 意見陳述の省略（行政手続法13条2項3号） [施設の整備改善命令である])
+  api__DispositionDraftApi -->> screen__DispositionScreen: done
+  Note over screen__OpinionProcedureScreen: 2. 聴聞・弁明の通知
+  actor__PermitClerk ->> screen__OpinionProcedureScreen: 聴聞・弁明の通知
+  screen__OpinionProcedureScreen ->> api__OpinionProcedureApi: 意見陳述 API
+  alt 意見陳述の手続を執る処分である: Disposition.procedure in (聴聞, 弁明の機会の付与) and Disposition.status == 処分案
+    api__OpinionProcedureApi ->> entity__Disposition: update status 処分案 -> 意見陳述の通知済
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: done
+  else guard fails
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: rejected
+  end
+  Note over screen__OpinionProcedureScreen: 3. 聴聞の実施
+  actor__PermitClerk ->> screen__OpinionProcedureScreen: 聴聞の実施
+  screen__OpinionProcedureScreen ->> api__OpinionProcedureApi: 意見陳述 API
+  alt 聴聞を執る処分である: Disposition.procedure == 聴聞 and Disposition.status == 意見陳述の通知済
+    api__OpinionProcedureApi ->> entity__Disposition: update status 意見陳述の通知済 -> 意見陳述の手続終了
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: done
+  else guard fails
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: rejected
+  end
+  Note over screen__OpinionProcedureScreen: 4. 弁明書の受理
+  actor__PermitClerk ->> screen__OpinionProcedureScreen: 弁明書の受理
+  screen__OpinionProcedureScreen ->> api__OpinionProcedureApi: 意見陳述 API
+  alt 弁明の機会を与える処分である: Disposition.procedure == 弁明の機会の付与 and Disposition.status == 意見陳述の通知済
+    api__OpinionProcedureApi ->> entity__Disposition: update status 意見陳述の通知済 -> 意見陳述の手続終了
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: done
+  else guard fails
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: rejected
+  end
+  Note over screen__DispositionScreen: 5. 許可の取消の決定
+  actor__PermitAuthority ->> screen__DispositionScreen: 許可の取消の決定
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 聴聞を執る処分である: Disposition.procedure == 聴聞 and 許可の取消である: Disposition.kind == 許可の取消 and Disposition.status == 意見陳述の手続終了
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -) api__PermitApi: 許可の取消の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over screen__DispositionScreen: 6. 営業停止の決定
+  actor__PermitAuthority ->> screen__DispositionScreen: 営業停止の決定
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 営業の停止である: Disposition.kind == 営業の停止 and Disposition.status == 意見陳述の手続終了
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -) api__PermitApi: 営業停止の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 7. 許可台帳への取消の記録
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への取消の記録
+  usecase__DecideRevocation ->> api__PermitApi: 許可の取消の決定
+  screen__PermitLedgerScreen ->> api__PermitApi: 営業許可 API
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__PermitApi ->> entity__BusinessPermit: update status 有効 -> 取消, status 営業停止中 -> 取消, operating=false
+    api__PermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 8. 許可台帳への営業停止の記録
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への営業停止の記録
+  usecase__DecideSuspension ->> api__PermitApi: 営業停止の決定
+  screen__PermitLedgerScreen ->> api__PermitApi: 営業許可 API
+  alt BusinessPermit.status == 有効
+    api__PermitApi ->> entity__BusinessPermit: update status 有効 -> 営業停止中, operating=false
+    api__PermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over screen__DispositionScreen: 9. 施設の整備改善命令
+  actor__PermitAuthority ->> screen__DispositionScreen: 施設の整備改善命令
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 施設の整備改善命令である: Disposition.kind == 施設の整備改善命令 and Disposition.status in (意見陳述の手続終了, 処分案)
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, status 処分案 -> 処分決定 [意見陳述を省く処分である], reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over screen__DispositionScreen: 10. 処分を見送る
+  actor__PermitAuthority ->> screen__DispositionScreen: 処分を見送る
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt Disposition.status == 意見陳述の手続終了 and Disposition.publication == 未公表
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分しない, publication 未公表 -> 公表対象外
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over api__PermitApi: 11. 営業停止期間の満了
+  timer__SuspensionTermEnd ->> api__PermitApi: 営業停止期間の満了（処分で定めた期間）
+  alt BusinessPermit.status == 営業停止中
+    api__PermitApi ->> entity__BusinessPermit: update status 営業停止中 -> 有効
+    api__PermitApi -->> timer__SuspensionTermEnd: done
+  else guard fails
+    api__PermitApi -->> timer__SuspensionTermEnd: rejected
+  end
+  Note over api__DispositionApi: 12. 審査請求期間の経過
+  timer__AppealPeriodEnd ->> api__DispositionApi: 審査請求期間の経過（処分を知った日の翌日から3月）
+  alt Disposition.status == 処分決定
+    api__DispositionApi ->> entity__Disposition: update status 処分決定 -> 確定（審査請求期間の経過）
+    api__DispositionApi -->> timer__AppealPeriodEnd: done
+  else guard fails
+    api__DispositionApi -->> timer__AppealPeriodEnd: rejected
+  end
+  Note over screen__DispositionScreen: 13. 違反の公表
+  actor__PermitClerk ->> screen__DispositionScreen: 違反の公表
+  usecase__DecideRevocation ->> api__PublicationApi: 不利益処分の決定
+  usecase__DecideSuspension ->> api__PublicationApi: 不利益処分の決定
+  usecase__OrderImprovement ->> api__PublicationApi: 不利益処分の決定
+  screen__DispositionScreen ->> api__PublicationApi: 公表 API
+  alt 処分が決定している: Disposition.status in (処分決定, 確定（審査請求期間の経過）) and Disposition.publication == 未公表
+    api__PublicationApi ->> entity__Disposition: update publication 未公表 -> 公表中
+    api__PublicationApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__PublicationApi -->> screen__DispositionScreen: rejected
+  end
+  Note over api__PublicationApi: 14. 公表の終了
+  timer__PublicationPeriodEnd ->> api__PublicationApi: 公表期間の経過（7日間以上）
+  alt Disposition.publication == 公表中
+    api__PublicationApi ->> entity__Disposition: update publication 公表中 -> 公表終了
+    api__PublicationApi -->> timer__PublicationPeriodEnd: done
+  else guard fails
+    api__PublicationApi -->> timer__PublicationPeriodEnd: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |

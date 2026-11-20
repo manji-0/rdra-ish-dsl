@@ -1,0 +1,155 @@
+%% rdra-ish diagram=sequence scope=buc:BucDisposition model=samples/food-permit-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant usecase__RecordViolation as 違反の記録
+  actor actor__PermitClerk as 保健所 許可担当職員
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant usecase__DecideRevocation as 許可の取消の決定
+  participant usecase__DecideSuspension as 営業停止の決定
+  participant timer__SuspensionTermEnd as 営業停止期間の満了（処分で定めた期間）
+  participant timer__AppealPeriodEnd as 審査請求期間の経過（処分を知った日の翌日から3月）
+  participant usecase__OrderImprovement as 施設の整備改善命令
+  participant timer__PublicationPeriodEnd as 公表期間の経過（7日間以上）
+  participant screen__DispositionScreen as 不利益処分画面
+  participant screen__OpinionProcedureScreen as 聴聞・弁明画面
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant api__DispositionDraftApi as 処分起案 API
+  participant api__OpinionProcedureApi as 意見陳述 API
+  participant api__DispositionApi as 処分決定 API
+  participant entity__BusinessPermit as 営業許可
+  participant entity__Disposition as 不利益処分
+  participant api__PublicationApi as 公表 API
+  participant api__PermitApi as 営業許可 API
+  Note over screen__DispositionScreen: 1. 処分の起案
+  actor__FoodSanitationInspector ->> screen__DispositionScreen: 処分の起案
+  usecase__RecordViolation ->> api__DispositionDraftApi: 立入検査での違反の発見
+  screen__DispositionScreen ->> api__DispositionDraftApi: 処分起案 API
+  api__DispositionDraftApi ->> entity__BusinessPermit: read
+  api__DispositionDraftApi ->> entity__Disposition: create procedure in (聴聞, 弁明の機会の付与 [取消ではない処分である], 意見陳述の省略（行政手続法13条2項3号） [施設の整備改善命令である])
+  api__DispositionDraftApi -->> screen__DispositionScreen: done
+  Note over screen__OpinionProcedureScreen: 2. 聴聞・弁明の通知
+  actor__PermitClerk ->> screen__OpinionProcedureScreen: 聴聞・弁明の通知
+  screen__OpinionProcedureScreen ->> api__OpinionProcedureApi: 意見陳述 API
+  alt 意見陳述の手続を執る処分である: Disposition.procedure in (聴聞, 弁明の機会の付与) and Disposition.status == 処分案
+    api__OpinionProcedureApi ->> entity__Disposition: update status 処分案 -> 意見陳述の通知済
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: done
+  else guard fails
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: rejected
+  end
+  Note over screen__OpinionProcedureScreen: 3. 聴聞の実施
+  actor__PermitClerk ->> screen__OpinionProcedureScreen: 聴聞の実施
+  screen__OpinionProcedureScreen ->> api__OpinionProcedureApi: 意見陳述 API
+  alt 聴聞を執る処分である: Disposition.procedure == 聴聞 and Disposition.status == 意見陳述の通知済
+    api__OpinionProcedureApi ->> entity__Disposition: update status 意見陳述の通知済 -> 意見陳述の手続終了
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: done
+  else guard fails
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: rejected
+  end
+  Note over screen__OpinionProcedureScreen: 4. 弁明書の受理
+  actor__PermitClerk ->> screen__OpinionProcedureScreen: 弁明書の受理
+  screen__OpinionProcedureScreen ->> api__OpinionProcedureApi: 意見陳述 API
+  alt 弁明の機会を与える処分である: Disposition.procedure == 弁明の機会の付与 and Disposition.status == 意見陳述の通知済
+    api__OpinionProcedureApi ->> entity__Disposition: update status 意見陳述の通知済 -> 意見陳述の手続終了
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: done
+  else guard fails
+    api__OpinionProcedureApi -->> screen__OpinionProcedureScreen: rejected
+  end
+  Note over screen__DispositionScreen: 5. 許可の取消の決定
+  actor__PermitAuthority ->> screen__DispositionScreen: 許可の取消の決定
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 聴聞を執る処分である: Disposition.procedure == 聴聞 and 許可の取消である: Disposition.kind == 許可の取消 and Disposition.status == 意見陳述の手続終了
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -) api__PermitApi: 許可の取消の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over screen__DispositionScreen: 6. 営業停止の決定
+  actor__PermitAuthority ->> screen__DispositionScreen: 営業停止の決定
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 営業の停止である: Disposition.kind == 営業の停止 and Disposition.status == 意見陳述の手続終了
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -) api__PermitApi: 営業停止の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 7. 許可台帳への取消の記録
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への取消の記録
+  usecase__DecideRevocation ->> api__PermitApi: 許可の取消の決定
+  screen__PermitLedgerScreen ->> api__PermitApi: 営業許可 API
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__PermitApi ->> entity__BusinessPermit: update status 有効 -> 取消, status 営業停止中 -> 取消, operating=false
+    api__PermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 8. 許可台帳への営業停止の記録
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 許可台帳への営業停止の記録
+  usecase__DecideSuspension ->> api__PermitApi: 営業停止の決定
+  screen__PermitLedgerScreen ->> api__PermitApi: 営業許可 API
+  alt BusinessPermit.status == 有効
+    api__PermitApi ->> entity__BusinessPermit: update status 有効 -> 営業停止中, operating=false
+    api__PermitApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over screen__DispositionScreen: 9. 施設の整備改善命令
+  actor__PermitAuthority ->> screen__DispositionScreen: 施設の整備改善命令
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt 施設の整備改善命令である: Disposition.kind == 施設の整備改善命令 and Disposition.status in (意見陳述の手続終了, 処分案)
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分決定, status 処分案 -> 処分決定 [意見陳述を省く処分である], reason_shown=true
+    api__DispositionApi -) api__PublicationApi: 不利益処分の決定
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over screen__DispositionScreen: 10. 処分を見送る
+  actor__PermitAuthority ->> screen__DispositionScreen: 処分を見送る
+  screen__DispositionScreen ->> api__DispositionApi: 処分決定 API
+  alt Disposition.status == 意見陳述の手続終了 and Disposition.publication == 未公表
+    api__DispositionApi ->> entity__Disposition: update status 意見陳述の手続終了 -> 処分しない, publication 未公表 -> 公表対象外
+    api__DispositionApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__DispositionApi -->> screen__DispositionScreen: rejected
+  end
+  Note over api__PermitApi: 11. 営業停止期間の満了
+  timer__SuspensionTermEnd ->> api__PermitApi: 営業停止期間の満了（処分で定めた期間）
+  alt BusinessPermit.status == 営業停止中
+    api__PermitApi ->> entity__BusinessPermit: update status 営業停止中 -> 有効
+    api__PermitApi -->> timer__SuspensionTermEnd: done
+  else guard fails
+    api__PermitApi -->> timer__SuspensionTermEnd: rejected
+  end
+  Note over api__DispositionApi: 12. 審査請求期間の経過
+  timer__AppealPeriodEnd ->> api__DispositionApi: 審査請求期間の経過（処分を知った日の翌日から3月）
+  alt Disposition.status == 処分決定
+    api__DispositionApi ->> entity__Disposition: update status 処分決定 -> 確定（審査請求期間の経過）
+    api__DispositionApi -->> timer__AppealPeriodEnd: done
+  else guard fails
+    api__DispositionApi -->> timer__AppealPeriodEnd: rejected
+  end
+  Note over screen__DispositionScreen: 13. 違反の公表
+  actor__PermitClerk ->> screen__DispositionScreen: 違反の公表
+  usecase__DecideRevocation ->> api__PublicationApi: 不利益処分の決定
+  usecase__DecideSuspension ->> api__PublicationApi: 不利益処分の決定
+  usecase__OrderImprovement ->> api__PublicationApi: 不利益処分の決定
+  screen__DispositionScreen ->> api__PublicationApi: 公表 API
+  alt 処分が決定している: Disposition.status in (処分決定, 確定（審査請求期間の経過）) and Disposition.publication == 未公表
+    api__PublicationApi ->> entity__Disposition: update publication 未公表 -> 公表中
+    api__PublicationApi -->> screen__DispositionScreen: done
+  else guard fails
+    api__PublicationApi -->> screen__DispositionScreen: rejected
+  end
+  Note over api__PublicationApi: 14. 公表の終了
+  timer__PublicationPeriodEnd ->> api__PublicationApi: 公表期間の経過（7日間以上）
+  alt Disposition.publication == 公表中
+    api__PublicationApi ->> entity__Disposition: update publication 公表中 -> 公表終了
+    api__PublicationApi -->> timer__PublicationPeriodEnd: done
+  else guard fails
+    api__PublicationApi -->> timer__PublicationPeriodEnd: rejected
+  end

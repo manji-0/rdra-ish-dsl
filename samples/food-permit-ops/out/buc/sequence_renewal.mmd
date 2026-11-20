@@ -1,0 +1,96 @@
+%% rdra-ish diagram=sequence scope=buc:BucRenewal model=samples/food-permit-ops
+%% kinds: actor timer usecase screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PermitClerk as 保健所 許可担当職員
+  actor actor__FoodSanitationInspector as 食品衛生監視員
+  participant timer__ExpiryNoticeDue as 満了通知の発送（有効期間満了の2か月前）
+  actor actor__BusinessOperator as 営業者
+  actor actor__PermitAuthority as 都道府県知事等（保健所設置市長・特別区長）
+  participant usecase__RenewPermit as 更新の許可の決定
+  participant timer__PermitTermEnd as 有効期間の満了（5年以上、自治体が定める）
+  participant screen__InspectionScreen as 施設検査画面
+  participant screen__PermitLedgerScreen as 許可台帳画面
+  participant screen__RenewalScreen as 更新申請画面
+  participant api__InspectionScheduleApi as 施設検査予定 API
+  participant api__InspectionApi as 施設検査 API
+  participant api__PermitTermApi as 有効期間 API
+  participant usecase__SendExpiryNotice as 満了通知の発送
+  participant api__RenewalApi as 更新申請 API
+  participant api__DecisionApi as 許可決定 API
+  participant entity__PermitApplication as 営業許可申請
+  participant entity__Inspection as 施設検査
+  participant entity__BusinessPermit as 営業許可
+  participant extsystem__FoodSanitationSystem as 食品衛生申請等システム（厚生労働省）
+  Note over screen__InspectionScreen: 1. 施設検査の日程調整
+  actor__PermitClerk ->> screen__InspectionScreen: 施設検査の日程調整
+  screen__InspectionScreen ->> api__InspectionScheduleApi: 施設検査予定 API
+  alt 申請が検査待で、まだ検査の予定がない: (PermitApplication.status == 検査待).none(Inspection)
+    api__InspectionScheduleApi ->> entity__PermitApplication: read
+    api__InspectionScheduleApi ->> entity__Inspection: create
+    api__InspectionScheduleApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__InspectionScheduleApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__InspectionScreen: 2. 施設検査の実施
+  actor__FoodSanitationInspector ->> screen__InspectionScreen: 施設検査の実施
+  screen__InspectionScreen ->> api__InspectionApi: 施設検査 API
+  alt Inspection.status == 検査予定
+    api__InspectionApi ->> entity__Inspection: update
+    alt status 検査予定 -> 適合
+      api__InspectionApi ->> entity__Inspection: status = 適合
+    else status 検査予定 -> 不適合（改善の指示）
+      api__InspectionApi ->> entity__Inspection: status = 不適合（改善の指示）
+    end
+    api__InspectionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__InspectionApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 3. 満了通知の発送
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 満了通知の発送
+  timer__ExpiryNoticeDue ->> api__PermitTermApi: 満了通知の発送（有効期間満了の2か月前）
+  screen__PermitLedgerScreen ->> api__PermitTermApi: 有効期間 API
+  screen__PermitLedgerScreen ->> usecase__SendExpiryNotice: 満了通知の発送
+  api__PermitTermApi ->> entity__BusinessPermit: update
+  usecase__SendExpiryNotice ->> entity__BusinessPermit: read
+  api__PermitTermApi -->> screen__PermitLedgerScreen: done
+  Note over screen__RenewalScreen: 4. 継続（更新）の申請
+  actor__BusinessOperator ->> screen__RenewalScreen: 継続（更新）の申請
+  screen__RenewalScreen ->> api__RenewalApi: 更新申請 API
+  alt 失効後の更新はできない: (BusinessPermit.status == 有効).role(renews)
+    api__RenewalApi ->> entity__BusinessPermit: read
+    api__RenewalApi ->> entity__PermitApplication: create kind=renewal
+    api__RenewalApi -->> screen__RenewalScreen: done
+  else guard fails
+    api__RenewalApi -->> screen__RenewalScreen: rejected
+  end
+  Note over screen__InspectionScreen: 5. 更新の許可の決定
+  actor__PermitAuthority ->> screen__InspectionScreen: 更新の許可の決定
+  screen__InspectionScreen ->> api__DecisionApi: 許可決定 API
+  alt 継続（更新）の申請である: PermitApplication.kind == 継続（更新） and 施設検査で施設基準に適合した: Inspection.status == 適合 and 失効後の更新はできない: (BusinessPermit.status == 有効).role(renews) and PermitApplication.status == 検査待
+    api__DecisionApi ->> entity__Inspection: read
+    api__DecisionApi ->> entity__PermitApplication: update status 検査待 -> 許可
+    api__DecisionApi -) api__PermitTermApi: 更新の許可
+    api__DecisionApi -) extsystem__FoodSanitationSystem: 更新の許可
+    api__DecisionApi -->> screen__InspectionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__InspectionScreen: rejected
+  end
+  Note over screen__PermitLedgerScreen: 6. 有効期間の更新
+  actor__PermitClerk ->> screen__PermitLedgerScreen: 有効期間の更新
+  usecase__RenewPermit ->> api__PermitTermApi: 更新の許可
+  screen__PermitLedgerScreen ->> api__PermitTermApi: 有効期間 API
+  alt BusinessPermit.status == 有効
+    api__PermitTermApi ->> entity__BusinessPermit: update status 有効 -> 有効
+    api__PermitTermApi -->> screen__PermitLedgerScreen: done
+  else guard fails
+    api__PermitTermApi -->> screen__PermitLedgerScreen: rejected
+  end
+  Note over api__PermitTermApi: 7. 有効期間の満了による失効
+  timer__PermitTermEnd ->> api__PermitTermApi: 有効期間の満了（5年以上、自治体が定める）
+  alt BusinessPermit.status in (有効, 営業停止中)
+    api__PermitTermApi ->> entity__BusinessPermit: update status 有効 -> 失効（有効期間満了）, status 営業停止中 -> 失効（有効期間満了）, operating=false
+    api__PermitTermApi -->> timer__PermitTermEnd: done
+  else guard fails
+    api__PermitTermApi -->> timer__PermitTermEnd: rejected
+  end

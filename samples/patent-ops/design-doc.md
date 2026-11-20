@@ -8,7 +8,7 @@
 この文書は実装するエンジニア向けである。構造、処理、仕様の順に読む。
 
 1. BUC ごとのロバストネス図で、画面・制御・エンティティの構造をつかむ。
-2. UC ごとのシーケンス図で、ガードと書き込みの順序をつかむ。
+2. BUC のシーケンス図で UC が進む順をつかみ、UC ごとのシーケンス図でガードと書き込みの順序をつかむ。
 3. 状態モデル、データモデル、規則、CRUD と権限で仕様を確かめる。
 
 要求と成功指標は [PRD](prd.md) にある。
@@ -66,7 +66,7 @@ flowchart LR
 
 ## 2. BUC ごとの構造と処理
 
-各節は BUC の説明、ロバストネス図、画面遷移図、UC の表、UC ごとのシーケンス図の順に並ぶ。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
+各節は BUC の説明、ロバストネス図、画面遷移図、BUC のシーケンス図、UC の表、UC ごとのシーケンス図の順に並ぶ。BUC のシーケンス図（`diagram --kind sequence --buc <Buc>`）は BUC の UC を、モデルが並べる順に、イベントで起動される UC はそれを起動する UC の後に、1 つの図に続けて描く。各 UC の始まりには番号と UC 名の注記が付く。ロバストネス図では actor が画面を使い、画面が制御（UC が呼ぶ API、API がなければ UC 自身）を呼び、制御がエンティティを読み書きする。画面遷移図（`diagram --kind screen --buc <Buc>`）の実線は `navigates` で宣言した遷移で、ラベルは遷移を起こす UC である。点線の「業務上の順番」は宣言がない所を業務フローから補ったもので、同じ担当者のレーンで続く手順が表示する画面の順を示し、実際の画面遷移ではない。遷移も業務上の順番もない BUC では画面遷移図を省く。表の「ガード」は UC に効く条件で、式は [5. 規則](#5-規則) にある。
 
 ### 2.1 発明届出と権利の取得
 
@@ -119,6 +119,78 @@ flowchart LR
   %% via screen__DisclosureFormScreen -> screen__DisclosureReviewScreen usecase__SubmitInventionDisclosure
   %% via screen__DisclosureReviewScreen -> screen__DisclosureFormScreen usecase__ReturnDisclosure
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucInventionDisclosure model=samples/patent-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__Inventor as 発明者
+  actor actor__IpStaff as 知的財産部 担当者
+  participant usecase__SubmitInventionDisclosure as 発明届出書の提出
+  participant screen__DisclosureFormScreen as 発明届出書画面
+  participant screen__DisclosureReviewScreen as 届出受付画面
+  participant api__SubmitDisclosureApi as 発明届出 API
+  participant api__ResubmitDisclosureApi as 届出書再提出 API
+  participant entity__Employee as 従業者
+  participant entity__InventionDisclosure as 発明届出
+  participant api__DisclosureReviewApi as 届出受付 API
+  Note over screen__DisclosureFormScreen: 1. 発明届出書の提出
+  actor__Inventor ->> screen__DisclosureFormScreen: 発明届出書の提出
+  screen__DisclosureFormScreen ->> api__SubmitDisclosureApi: 発明届出 API
+  api__SubmitDisclosureApi ->> entity__Employee: read
+  api__SubmitDisclosureApi ->> entity__InventionDisclosure: create
+  api__SubmitDisclosureApi -) api__DisclosureReviewApi: 発明届出の提出
+  api__SubmitDisclosureApi -->> screen__DisclosureFormScreen: done
+  Note over screen__DisclosureReviewScreen: 2. 届出の受付と付番
+  actor__IpStaff ->> screen__DisclosureReviewScreen: 届出の受付と付番
+  usecase__SubmitInventionDisclosure ->> api__DisclosureReviewApi: 発明届出の提出
+  screen__DisclosureReviewScreen ->> api__DisclosureReviewApi: 届出受付 API
+  alt InventionDisclosure.status == 受付待ち
+    api__DisclosureReviewApi ->> entity__InventionDisclosure: update status 受付待ち -> 受付済
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: done
+  else guard fails
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: rejected
+  end
+  Note over screen__DisclosureReviewScreen: 3. 届出書の差戻し
+  actor__IpStaff ->> screen__DisclosureReviewScreen: 届出書の差戻し
+  screen__DisclosureReviewScreen ->> api__DisclosureReviewApi: 届出受付 API
+  alt InventionDisclosure.status == 受付待ち
+    api__DisclosureReviewApi ->> entity__InventionDisclosure: update status 受付待ち -> 差戻し
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: done
+  else guard fails
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: rejected
+  end
+  Note over screen__DisclosureFormScreen: 4. 届出書の再提出
+  actor__Inventor ->> screen__DisclosureFormScreen: 届出書の再提出
+  screen__DisclosureFormScreen ->> api__ResubmitDisclosureApi: 届出書再提出 API
+  alt InventionDisclosure.status == 差戻し
+    api__ResubmitDisclosureApi ->> entity__InventionDisclosure: update status 差戻し -> 受付待ち
+    api__ResubmitDisclosureApi -->> screen__DisclosureFormScreen: done
+  else guard fails
+    api__ResubmitDisclosureApi -->> screen__DisclosureFormScreen: rejected
+  end
+  Note over screen__DisclosureReviewScreen: 5. 職務発明の判定
+  actor__IpStaff ->> screen__DisclosureReviewScreen: 職務発明の判定
+  screen__DisclosureReviewScreen ->> api__DisclosureReviewApi: 届出受付 API
+  alt 職務発明である: InventionDisclosure.category == 職務発明
+    api__DisclosureReviewApi ->> entity__InventionDisclosure: update right_acquired=true
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: done
+  else guard fails
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: rejected
+  end
+  Note over screen__DisclosureReviewScreen: 6. 特許を受ける権利の譲受け
+  actor__IpStaff ->> screen__DisclosureReviewScreen: 特許を受ける権利の譲受け
+  screen__DisclosureReviewScreen ->> api__DisclosureReviewApi: 届出受付 API
+  alt 職務発明に当たらない: InventionDisclosure.category == 職務発明に当たらない発明
+    api__DisclosureReviewApi ->> entity__InventionDisclosure: update right_acquired=true
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: done
+  else guard fails
+    api__DisclosureReviewApi -->> screen__DisclosureReviewScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -319,6 +391,67 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucFilingDecision model=samples/patent-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  actor actor__ReviewCommittee as 発明審査委員会
+  participant usecase__DecideFiling as 出願可否の決定
+  participant screen__PriorArtSearchScreen as 先行技術調査画面
+  participant screen__FilingDecisionScreen as 出願審議画面
+  participant api__PriorArtSearchApi as 先行技術調査 API
+  participant api__FilingDecisionApi as 出願可否 API
+  participant entity__InventionDisclosure as 発明届出
+  participant api__DraftingOrderApi as 出願依頼 API
+  participant usecase__NotifyInventorOfDecision as 決定の発明者への通知
+  Note over screen__PriorArtSearchScreen: 1. 先行技術調査の依頼
+  actor__IpStaff ->> screen__PriorArtSearchScreen: 先行技術調査の依頼
+  screen__PriorArtSearchScreen ->> api__PriorArtSearchApi: 先行技術調査 API
+  alt InventionDisclosure.status == 受付済
+    api__PriorArtSearchApi ->> entity__InventionDisclosure: update status 受付済 -> 先行技術調査中
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: done
+  else guard fails
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: rejected
+  end
+  Note over screen__PriorArtSearchScreen: 2. 先行技術調査の結果の登録
+  actor__IpStaff ->> screen__PriorArtSearchScreen: 先行技術調査の結果の登録
+  screen__PriorArtSearchScreen ->> api__PriorArtSearchApi: 先行技術調査 API
+  alt InventionDisclosure.status == 先行技術調査中
+    api__PriorArtSearchApi ->> entity__InventionDisclosure: update status 先行技術調査中 -> 調査済
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: done
+  else guard fails
+    api__PriorArtSearchApi -->> screen__PriorArtSearchScreen: rejected
+  end
+  Note over screen__FilingDecisionScreen: 3. 出願可否の決定
+  actor__ReviewCommittee ->> screen__FilingDecisionScreen: 出願可否の決定
+  screen__FilingDecisionScreen ->> api__FilingDecisionApi: 出願可否 API
+  alt InventionDisclosure.status == 調査済
+    api__FilingDecisionApi ->> entity__InventionDisclosure: update
+    alt status 調査済 -> 出願決定 [会社が特許を受ける権利を取得している]
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願決定
+    else status 調査済 -> ノウハウとして秘匿
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = ノウハウとして秘匿
+    else status 調査済 -> 出願しない
+      api__FilingDecisionApi ->> entity__InventionDisclosure: status = 出願しない
+    end
+    api__FilingDecisionApi -) api__DraftingOrderApi: 出願の決定
+    api__FilingDecisionApi -) usecase__NotifyInventorOfDecision: 出願の決定
+    api__FilingDecisionApi -->> screen__FilingDecisionScreen: done
+  else guard fails
+    api__FilingDecisionApi -->> screen__FilingDecisionScreen: rejected
+  end
+  Note over screen__FilingDecisionScreen: 4. 決定の発明者への通知
+  actor__IpStaff ->> screen__FilingDecisionScreen: 決定の発明者への通知
+  usecase__DecideFiling ->> usecase__NotifyInventorOfDecision: 出願の決定
+  screen__FilingDecisionScreen ->> usecase__NotifyInventorOfDecision: 決定の発明者への通知
+  usecase__NotifyInventorOfDecision ->> entity__InventionDisclosure: read
+  usecase__NotifyInventorOfDecision -->> screen__FilingDecisionScreen: done
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 先行技術調査の依頼<br>`RequestPriorArtSearch` | 受け付けた発明の先行技術調査を依頼し、届出を調査中にする。 | `PriorArtSearchScreen` | `PriorArtSearchApi` | （なし） |
@@ -477,6 +610,76 @@ flowchart LR
   screen__DraftingOrderScreen -->|特許事務所への出願依頼| screen__DraftReviewScreen
   %% via screen__DraftingOrderScreen -> screen__DraftReviewScreen usecase__RequestDrafting
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucApplicationDrafting model=samples/patent-ops
+%% kinds: actor usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant usecase__DecideFiling as 出願可否の決定
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  actor actor__Inventor as 発明者
+  participant screen__DraftingOrderScreen as 出願依頼画面
+  participant screen__DraftReviewScreen as 出願書類レビュー画面
+  participant api__DraftingOrderApi as 出願依頼 API
+  participant api__DraftReviewApi as 出願書類レビュー API
+  participant entity__InventionDisclosure as 発明届出
+  participant entity__PatentFirm as 特許事務所
+  participant entity__DraftingOrder as 出願依頼
+  participant api__FilingApi as 出願 API
+  Note over screen__DraftingOrderScreen: 1. 特許事務所への出願依頼
+  actor__IpStaff ->> screen__DraftingOrderScreen: 特許事務所への出願依頼
+  usecase__DecideFiling ->> api__DraftingOrderApi: 出願の決定
+  screen__DraftingOrderScreen ->> api__DraftingOrderApi: 出願依頼 API
+  alt 出願と決まった発明である: InventionDisclosure.status == 出願決定
+    api__DraftingOrderApi ->> entity__InventionDisclosure: read
+    api__DraftingOrderApi ->> entity__PatentFirm: read
+    api__DraftingOrderApi ->> entity__DraftingOrder: create
+    api__DraftingOrderApi -->> screen__DraftingOrderScreen: done
+  else guard fails
+    api__DraftingOrderApi -->> screen__DraftingOrderScreen: rejected
+  end
+  Note over screen__DraftReviewScreen: 2. 出願書類案の納品
+  actor__PatentAttorney ->> screen__DraftReviewScreen: 出願書類案の納品
+  screen__DraftReviewScreen ->> api__DraftReviewApi: 出願書類レビュー API
+  alt DraftingOrder.status in (依頼済, 修正依頼中)
+    api__DraftReviewApi ->> entity__DraftingOrder: update status 依頼済 -> 原稿受領, status 修正依頼中 -> 原稿受領
+    api__DraftReviewApi -->> screen__DraftReviewScreen: done
+  else guard fails
+    api__DraftReviewApi -->> screen__DraftReviewScreen: rejected
+  end
+  Note over screen__DraftReviewScreen: 3. 発明者による内容確認
+  actor__Inventor ->> screen__DraftReviewScreen: 発明者による内容確認
+  screen__DraftReviewScreen ->> api__DraftReviewApi: 出願書類レビュー API
+  alt 案が納品されている: DraftingOrder.status == 原稿受領
+    api__DraftReviewApi ->> entity__DraftingOrder: update inventor_checked=true
+    api__DraftReviewApi -->> screen__DraftReviewScreen: done
+  else guard fails
+    api__DraftReviewApi -->> screen__DraftReviewScreen: rejected
+  end
+  Note over screen__DraftReviewScreen: 4. 出願書類の修正依頼
+  actor__IpStaff ->> screen__DraftReviewScreen: 出願書類の修正依頼
+  screen__DraftReviewScreen ->> api__DraftReviewApi: 出願書類レビュー API
+  alt DraftingOrder.status == 原稿受領
+    api__DraftReviewApi ->> entity__DraftingOrder: update status 原稿受領 -> 修正依頼中, inventor_checked=false
+    api__DraftReviewApi -->> screen__DraftReviewScreen: done
+  else guard fails
+    api__DraftReviewApi -->> screen__DraftReviewScreen: rejected
+  end
+  Note over screen__DraftReviewScreen: 5. 出願書類の承認
+  actor__IpStaff ->> screen__DraftReviewScreen: 出願書類の承認
+  screen__DraftReviewScreen ->> api__DraftReviewApi: 出願書類レビュー API
+  alt 発明者が内容を確認している: DraftingOrder.inventor_checked == true and DraftingOrder.status == 原稿受領
+    api__DraftReviewApi ->> entity__DraftingOrder: update status 原稿受領 -> 出願承認済
+    api__DraftReviewApi -) api__FilingApi: 出願書類の承認
+    api__DraftReviewApi -->> screen__DraftReviewScreen: done
+  else guard fails
+    api__DraftReviewApi -->> screen__DraftReviewScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -689,6 +892,120 @@ flowchart LR
   screen__FilingScreen -->|電子出願| screen__ApplicationDocketScreen
   %% via screen__FilingScreen -> screen__ApplicationDocketScreen usecase__FileApplication
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucFilingFormality model=samples/patent-ops
+%% kinds: actor usecase timer screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant usecase__ApproveDraft as 出願書類の承認
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__FormalityAmendmentDeadline as 手続補正書の提出期限（指令書の発送日から2月）
+  participant timer__PublicationCheck as 出願公開の確認（出願から1年6月）
+  participant timer__PriorityClaimDeadline as 国内優先権の主張期限（先の出願から1年）
+  participant timer__PriorityBaseDeadline as 先の出願の取下げ擬制（先の出願から1年4月）
+  participant screen__FilingScreen as 出願画面
+  participant screen__ApplicationDocketScreen as 出願案件・期限管理画面
+  participant api__FilingApi as 出願 API
+  participant usecase__RecordFilingReceipt as 出願番号・出願日の記録
+  participant api__FormalityApi as 方式補正 API
+  participant api__ApplicationDocketApi as 出願案件 API
+  participant api__PriorityClaimApi as 国内優先権 API
+  participant api__PriorityBaseApi as 先の出願の取下げ擬制 API
+  participant entity__FeeSchedule as 料金表
+  participant entity__DraftingOrder as 出願依頼
+  participant entity__PatentApplication as 特許出願
+  participant entity__PriorityClaim as 国内優先権の主張
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant api__RewardApi as 相当の利益 API
+  Note over screen__FilingScreen: 1. 電子出願
+  actor__PatentAttorney ->> screen__FilingScreen: 電子出願
+  usecase__ApproveDraft ->> api__FilingApi: 出願書類の承認
+  screen__FilingScreen ->> api__FilingApi: 出願 API
+  alt 出願書類が承認されている: DraftingOrder.status == 出願承認済
+    api__FilingApi ->> entity__FeeSchedule: read
+    Note over api__FilingApi: transaction (API atomic boundary)
+    api__FilingApi ->> entity__DraftingOrder: update status 出願承認済 -> 出願済
+    api__FilingApi ->> entity__PatentApplication: create
+    api__FilingApi -) extsystem__Jpo: 特許願の提出
+    api__FilingApi -) api__RewardApi: 特許願の提出
+    api__FilingApi -->> screen__FilingScreen: done
+  else guard fails
+    api__FilingApi -->> screen__FilingScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 2. 出願番号・出願日の記録
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願番号・出願日の記録
+  extsystem__Jpo ->> usecase__RecordFilingReceipt: 受領書（出願番号）
+  screen__ApplicationDocketScreen ->> usecase__RecordFilingReceipt: 出願番号・出願日の記録
+  usecase__RecordFilingReceipt ->> entity__PatentApplication: read
+  usecase__RecordFilingReceipt -->> screen__ApplicationDocketScreen: done
+  Note over screen__ApplicationDocketScreen: 3. 手続補正指令書の受領
+  actor__PatentAttorney ->> screen__ApplicationDocketScreen: 手続補正指令書の受領
+  extsystem__Jpo ->> api__FormalityApi: 手続補正指令書（方式）
+  screen__ApplicationDocketScreen ->> api__FormalityApi: 方式補正 API
+  alt PatentApplication.status == 出願済（方式審査）
+    api__FormalityApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 手続補正指令への対応中
+    api__FormalityApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__FormalityApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 4. 手続補正書の提出
+  actor__PatentAttorney ->> screen__ApplicationDocketScreen: 手続補正書の提出
+  timer__FormalityAmendmentDeadline ->> api__FormalityApi: 手続補正書の提出期限（指令書の発送日から2月）
+  screen__ApplicationDocketScreen ->> api__FormalityApi: 方式補正 API
+  alt PatentApplication.status == 手続補正指令への対応中
+    api__FormalityApi ->> entity__PatentApplication: update status 手続補正指令への対応中 -> 出願済（方式審査）
+    api__FormalityApi -) extsystem__Jpo: 手続補正書の提出
+    api__FormalityApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__FormalityApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 5. 出願の却下の記録
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願の却下の記録
+  extsystem__Jpo ->> api__ApplicationDocketApi: 却下処分
+  screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
+  alt PatentApplication.status == 手続補正指令への対応中
+    api__ApplicationDocketApi ->> entity__PatentApplication: update status 手続補正指令への対応中 -> 却下
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__ApplicationDocketScreen: 6. 出願公開の記録
+  actor__IpStaff ->> screen__ApplicationDocketScreen: 出願公開の記録
+  extsystem__Jpo ->> api__ApplicationDocketApi: 出願公開
+  timer__PublicationCheck ->> api__ApplicationDocketApi: 出願公開の確認（出願から1年6月）
+  screen__ApplicationDocketScreen ->> api__ApplicationDocketApi: 出願案件 API
+  alt 出願が係属している: PatentApplication.status not in (却下, 取下げ・放棄, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 設定登録済)
+    api__ApplicationDocketApi ->> entity__PatentApplication: update published_at=set
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: done
+  else guard fails
+    api__ApplicationDocketApi -->> screen__ApplicationDocketScreen: rejected
+  end
+  Note over screen__FilingScreen: 7. 国内優先権の主張
+  actor__PatentAttorney ->> screen__FilingScreen: 国内優先権の主張
+  timer__PriorityClaimDeadline ->> api__PriorityClaimApi: 国内優先権の主張期限（先の出願から1年）
+  screen__FilingScreen ->> api__PriorityClaimApi: 国内優先権 API
+  alt 先の出願が係属し、査定を受けていない: PatentApplication.status in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）)
+    Note over api__PriorityClaimApi: transaction (API atomic boundary)
+    api__PriorityClaimApi ->> entity__PatentApplication: update priority_base=true
+    api__PriorityClaimApi ->> entity__PriorityClaim: create
+    api__PriorityClaimApi -) extsystem__Jpo: 国内優先権を主張した出願
+    api__PriorityClaimApi -->> screen__FilingScreen: done
+  else guard fails
+    api__PriorityClaimApi -->> screen__FilingScreen: rejected
+  end
+  Note over api__PriorityBaseApi: 8. 先の出願の取下げ擬制
+  timer__PriorityBaseDeadline ->> api__PriorityBaseApi: 先の出願の取下げ擬制（先の出願から1年4月）
+  alt 国内優先権の基礎とされ、まだ係属している出願である: PatentApplication.priority_base == true, PatentApplication.status not in (特許査定, 拒絶査定の確定, 設定登録済, 却下, 取下げ擬制（審査請求なし）, 取下げ擬制（国内優先権の基礎）, 取下げ・放棄) and PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
+    api__PriorityBaseApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（国内優先権の基礎）, status 審査請求済（審査中） -> 取下げ擬制（国内優先権の基礎）
+    api__PriorityBaseApi -->> timer__PriorityBaseDeadline: done
+  else guard fails
+    api__PriorityBaseApi -->> timer__PriorityBaseDeadline: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -961,6 +1278,85 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucExaminationRequest model=samples/patent-ops
+%% kinds: actor timer screen usecase api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__ExamRequestReview as 審査請求要否の検討（審査請求期限の前）
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant timer__ExamRequestDeadline as 審査請求期限（出願から3年）
+  participant screen__ExaminationRequestScreen as 審査請求画面
+  participant usecase__DecideExaminationRequest as 審査請求要否の判断
+  participant api__ExaminationRequestApi as 審査請求 API
+  participant api__ApplicationDocketApi as 出願案件 API
+  participant api__WithdrawalApi as 取下げ・放棄 API
+  participant entity__PatentApplication as 特許出願
+  participant entity__FeeSchedule as 料金表
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  Note over screen__ExaminationRequestScreen: 1. 審査請求要否の判断
+  actor__IpStaff ->> screen__ExaminationRequestScreen: 審査請求要否の判断
+  timer__ExamRequestReview ->> usecase__DecideExaminationRequest: 審査請求要否の検討（審査請求期限の前）
+  screen__ExaminationRequestScreen ->> usecase__DecideExaminationRequest: 審査請求要否の判断
+  usecase__DecideExaminationRequest ->> entity__PatentApplication: read
+  usecase__DecideExaminationRequest -->> screen__ExaminationRequestScreen: done
+  Note over screen__ExaminationRequestScreen: 2. 出願審査の請求
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 出願審査の請求
+  timer__ExamRequestDeadline ->> api__ExaminationRequestApi: 審査請求期限（出願から3年）
+  screen__ExaminationRequestScreen ->> api__ExaminationRequestApi: 審査請求 API
+  alt PatentApplication.status == 出願済（方式審査）
+    api__ExaminationRequestApi ->> entity__FeeSchedule: read
+    api__ExaminationRequestApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 審査請求済（審査中）, exam_requested_at=set
+    api__ExaminationRequestApi -) extsystem__Jpo: 出願審査請求書の提出
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: rejected
+  end
+  Note over screen__ExaminationRequestScreen: 3. 早期審査の申出
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 早期審査の申出
+  screen__ExaminationRequestScreen ->> api__ExaminationRequestApi: 審査請求 API
+  alt 審査請求をした出願である: PatentApplication.status == 審査請求済（審査中）, PatentApplication.exam_requested_at == present
+    api__ExaminationRequestApi ->> entity__FeeSchedule: read
+    api__ExaminationRequestApi ->> entity__PatentApplication: update accelerated=true
+    api__ExaminationRequestApi -) extsystem__Jpo: 早期審査に関する事情説明書の提出
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: rejected
+  end
+  Note over api__ApplicationDocketApi: 4. 審査請求期間の経過
+  timer__ExamRequestDeadline ->> api__ApplicationDocketApi: 審査請求期限（出願から3年）
+  alt PatentApplication.status == 出願済（方式審査）
+    api__ApplicationDocketApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ擬制（審査請求なし）
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: done
+  else guard fails
+    api__ApplicationDocketApi -->> timer__ExamRequestDeadline: rejected
+  end
+  Note over screen__ExaminationRequestScreen: 5. 審査請求の回復
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 審査請求の回復
+  screen__ExaminationRequestScreen ->> api__ExaminationRequestApi: 審査請求 API
+  alt PatentApplication.status == 取下げ擬制（審査請求なし）
+    api__ExaminationRequestApi ->> entity__FeeSchedule: read
+    api__ExaminationRequestApi ->> entity__PatentApplication: update status 取下げ擬制（審査請求なし） -> 審査請求済（審査中）, exam_requested_at=set
+    api__ExaminationRequestApi -) extsystem__Jpo: 回復の手続
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__ExaminationRequestApi -->> screen__ExaminationRequestScreen: rejected
+  end
+  Note over screen__ExaminationRequestScreen: 6. 出願の取下げ・放棄
+  actor__PatentAttorney ->> screen__ExaminationRequestScreen: 出願の取下げ・放棄
+  screen__ExaminationRequestScreen ->> api__WithdrawalApi: 取下げ・放棄 API
+  alt PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）)
+    api__WithdrawalApi ->> entity__PatentApplication: update status 出願済（方式審査） -> 取下げ・放棄, status 審査請求済（審査中） -> 取下げ・放棄
+    api__WithdrawalApi -) extsystem__Jpo: 取下書・放棄書の提出
+    api__WithdrawalApi -->> screen__ExaminationRequestScreen: done
+  else guard fails
+    api__WithdrawalApi -->> screen__ExaminationRequestScreen: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 審査請求要否の判断<br>`DecideExaminationRequest` | 期限の前に、審査請求をするかを決める（参照のみ）。 | `ExaminationRequestScreen` | `DecideExaminationRequest` | （なし） |
@@ -1222,6 +1618,181 @@ flowchart LR
   %% via screen__OfficeActionScreen -> screen__ResponseDraftScreen usecase__InstructResponse
   %% via screen__ResponseDraftScreen -> screen__OfficeActionScreen usecase__FileResponse
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucOfficeAction model=samples/patent-ops
+%% kinds: actor extsystem timer screen api usecase entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__PatentAttorney as 弁理士（特許事務所）
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__ResponseDeadline as 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  participant timer__LateExtensionDeadline as 期間経過後の延長請求の期限（応答期間の経過から2か月）
+  participant timer__AppealDeadline as 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  participant screen__OfficeActionScreen as 中間処理画面
+  participant screen__ResponseDraftScreen as 応答案画面
+  participant screen__DecisionScreen as 査定画面
+  participant api__OfficeActionIntakeApi as 拒絶理由通知の受付 API
+  participant usecase__InstructResponse as 応答方針の指示
+  participant api__OfficeActionApi as 中間処理 API
+  participant usecase__ExpireResponseTerm as 応答期間の経過
+  participant usecase__LapseResponse as 応答なしでの期間満了
+  participant api__ResponseFilingApi as 応答提出 API
+  participant api__DecisionApi as 査定 API
+  participant api__AppealApi as 審判請求 API
+  participant usecase__CloseOfficeActionDocket as 中間処理案件の終了
+  participant api__DivisionalApi as 分割出願 API
+  participant entity__PatentApplication as 特許出願
+  participant entity__OfficeAction as 拒絶理由通知
+  participant entity__DivisionalFiling as 分割出願
+  Note over screen__OfficeActionScreen: 1. 拒絶理由通知の受領
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 拒絶理由通知の受領
+  extsystem__Jpo ->> api__OfficeActionIntakeApi: 拒絶理由通知書
+  screen__OfficeActionScreen ->> api__OfficeActionIntakeApi: 拒絶理由通知の受付 API
+  alt 出願が審査中である: PatentApplication.status == 審査請求済（審査中）
+    api__OfficeActionIntakeApi ->> entity__PatentApplication: read
+    api__OfficeActionIntakeApi ->> entity__OfficeAction: create kind=first
+    api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionIntakeApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 2. 応答方針の指示
+  actor__IpStaff ->> screen__OfficeActionScreen: 応答方針の指示
+  screen__OfficeActionScreen ->> usecase__InstructResponse: 応答方針の指示
+  usecase__InstructResponse ->> entity__OfficeAction: read
+  usecase__InstructResponse ->> entity__PatentApplication: read
+  usecase__InstructResponse -->> screen__OfficeActionScreen: done
+  Note over screen__ResponseDraftScreen: 3. 意見書・補正書案の作成
+  actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書案の作成
+  screen__ResponseDraftScreen ->> api__OfficeActionApi: 中間処理 API
+  alt OfficeAction.status == 応答期間中
+    api__OfficeActionApi ->> entity__OfficeAction: update status 応答期間中 -> 応答案作成済, amendment in (限定のない補正 [最初の拒絶理由通知である], 意見書のみ、または削除・減縮・誤記の訂正・釈明に限る補正)
+    api__OfficeActionApi -->> screen__ResponseDraftScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__ResponseDraftScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 4. 応答期間の延長請求
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 応答期間の延長請求
+  screen__OfficeActionScreen ->> api__OfficeActionApi: 中間処理 API
+  alt 応答期間内で、まだ延長していない: OfficeAction.status == 応答期間中, OfficeAction.extended == false, OfficeAction.late_extended == false
+    api__OfficeActionApi ->> entity__OfficeAction: update extended=true
+    api__OfficeActionApi -) extsystem__Jpo: 期間延長請求書の提出
+    api__OfficeActionApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over usecase__ExpireResponseTerm: 5. 応答期間の経過
+  timer__ResponseDeadline ->> usecase__ExpireResponseTerm: 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  alt OfficeAction.status in (応答期間中, 応答案作成済)
+    usecase__ExpireResponseTerm ->> entity__OfficeAction: update status 応答期間中 -> 期間経過（延長請求可）, status 応答案作成済 -> 期間経過（延長請求可）
+    usecase__ExpireResponseTerm -->> timer__ResponseDeadline: done
+  else guard fails
+    usecase__ExpireResponseTerm -->> timer__ResponseDeadline: rejected
+  end
+  Note over screen__OfficeActionScreen: 6. 期間経過後の延長請求
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 期間経過後の延長請求
+  screen__OfficeActionScreen ->> api__OfficeActionApi: 中間処理 API
+  alt 期間内に延長していない: OfficeAction.extended == false and OfficeAction.status == 期間経過（延長請求可）
+    api__OfficeActionApi ->> entity__OfficeAction: update status 期間経過（延長請求可） -> 応答期間中, late_extended=true
+    api__OfficeActionApi -) extsystem__Jpo: 期間延長請求書の提出
+    api__OfficeActionApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__OfficeActionApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over usecase__LapseResponse: 7. 応答なしでの期間満了
+  timer__LateExtensionDeadline ->> usecase__LapseResponse: 期間経過後の延長請求の期限（応答期間の経過から2か月）
+  alt OfficeAction.status == 期間経過（延長請求可）
+    usecase__LapseResponse ->> entity__OfficeAction: update status 期間経過（延長請求可） -> 応答なしで期間満了
+    usecase__LapseResponse -->> timer__LateExtensionDeadline: done
+  else guard fails
+    usecase__LapseResponse -->> timer__LateExtensionDeadline: rejected
+  end
+  Note over screen__ResponseDraftScreen: 8. 意見書・補正書の提出
+  actor__PatentAttorney ->> screen__ResponseDraftScreen: 意見書・補正書の提出
+  timer__ResponseDeadline ->> api__ResponseFilingApi: 拒絶理由通知の応答期限（発送日から60日、延長で2か月）
+  screen__ResponseDraftScreen ->> api__ResponseFilingApi: 応答提出 API
+  alt OfficeAction.status == 応答案作成済
+    api__ResponseFilingApi ->> entity__OfficeAction: update status 応答案作成済 -> 応答済
+    api__ResponseFilingApi -) extsystem__Jpo: 意見書・手続補正書の提出
+    api__ResponseFilingApi -->> screen__ResponseDraftScreen: done
+  else guard fails
+    api__ResponseFilingApi -->> screen__ResponseDraftScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 9. 最後の拒絶理由通知の受領
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 最後の拒絶理由通知の受領
+  extsystem__Jpo ->> api__ResponseFilingApi: 最後の拒絶理由通知書
+  screen__OfficeActionScreen ->> api__ResponseFilingApi: 応答提出 API
+  alt OfficeAction.status == 応答済
+    api__ResponseFilingApi ->> entity__OfficeAction: update status 応答済 -> 応答期間中, kind=final, extended=false, late_extended=false, amendment=limited
+    api__ResponseFilingApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__ResponseFilingApi -->> screen__OfficeActionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 10. 特許査定の受領
+  actor__IpStaff ->> screen__DecisionScreen: 特許査定の受領
+  extsystem__Jpo ->> api__DecisionApi: 特許査定の謄本
+  screen__DecisionScreen ->> api__DecisionApi: 査定 API
+  alt PatentApplication.status == 審査請求済（審査中）
+    api__DecisionApi ->> entity__PatentApplication: update status 審査請求済（審査中） -> 特許査定
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 11. 拒絶査定の受領
+  actor__IpStaff ->> screen__DecisionScreen: 拒絶査定の受領
+  extsystem__Jpo ->> api__DecisionApi: 拒絶査定の謄本
+  screen__DecisionScreen ->> api__DecisionApi: 査定 API
+  alt PatentApplication.status == 審査請求済（審査中）
+    api__DecisionApi ->> entity__PatentApplication: update status 審査請求済（審査中） -> 拒絶査定
+    api__DecisionApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__DecisionApi -->> screen__DecisionScreen: rejected
+  end
+  Note over screen__DecisionScreen: 12. 拒絶査定不服審判の請求
+  actor__PatentAttorney ->> screen__DecisionScreen: 拒絶査定不服審判の請求
+  timer__AppealDeadline ->> api__AppealApi: 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  screen__DecisionScreen ->> api__AppealApi: 審判請求 API
+  alt PatentApplication.status == 拒絶査定
+    api__AppealApi ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定不服審判を請求
+    api__AppealApi -) extsystem__Jpo: 拒絶査定不服審判の請求
+    api__AppealApi -->> screen__DecisionScreen: done
+  else guard fails
+    api__AppealApi -->> screen__DecisionScreen: rejected
+  end
+  Note over api__DecisionApi: 13. 拒絶査定の確定
+  timer__AppealDeadline ->> api__DecisionApi: 拒絶査定不服審判の請求期限（謄本の送達から3月）
+  alt PatentApplication.status == 拒絶査定
+    api__DecisionApi ->> entity__PatentApplication: update status 拒絶査定 -> 拒絶査定の確定
+    api__DecisionApi -->> timer__AppealDeadline: done
+  else guard fails
+    api__DecisionApi -->> timer__AppealDeadline: rejected
+  end
+  Note over screen__OfficeActionScreen: 14. 中間処理案件の終了
+  actor__IpStaff ->> screen__OfficeActionScreen: 中間処理案件の終了
+  extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 特許査定の謄本
+  extsystem__Jpo ->> usecase__CloseOfficeActionDocket: 拒絶査定の謄本
+  screen__OfficeActionScreen ->> usecase__CloseOfficeActionDocket: 中間処理案件の終了
+  alt 出願の審査が終わっている: PatentApplication.status not in (出願済（方式審査）, 手続補正指令への対応中, 審査請求済（審査中）) and OfficeAction.status == 応答済
+    usecase__CloseOfficeActionDocket ->> entity__PatentApplication: read
+    usecase__CloseOfficeActionDocket ->> entity__OfficeAction: update status 応答済 -> 案件終了
+    usecase__CloseOfficeActionDocket -->> screen__OfficeActionScreen: done
+  else guard fails
+    usecase__CloseOfficeActionDocket -->> screen__OfficeActionScreen: rejected
+  end
+  Note over screen__OfficeActionScreen: 15. 分割出願
+  actor__PatentAttorney ->> screen__OfficeActionScreen: 分割出願
+  screen__OfficeActionScreen ->> api__DivisionalApi: 分割出願 API
+  alt 分割できる時期である: PatentApplication.status in (出願済（方式審査）, 審査請求済（審査中）, 特許査定, 拒絶査定)
+    api__DivisionalApi ->> entity__DivisionalFiling: create
+    api__DivisionalApi -) extsystem__Jpo: 分割出願
+    api__DivisionalApi -->> screen__OfficeActionScreen: done
+  else guard fails
+    api__DivisionalApi -->> screen__OfficeActionScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -1651,6 +2222,70 @@ flowchart LR
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
 ```
 
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucRegistration model=samples/patent-ops
+%% kinds: actor timer screen api usecase entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__FirstFeeDeadline as 第1〜3年分の特許料の納付期限（査定謄本の送達から30日）
+  participant screen__FeePaymentScreen as 特許料納付画面
+  participant api__FeePaymentApi as 特許料納付 API
+  participant api__RegistrationApi as 設定登録 API
+  participant usecase__RecordRegistrationDismissal as 特許料の不納による却下の記録
+  participant entity__FeeSchedule as 料金表
+  participant entity__PatentApplication as 特許出願
+  participant entity__Patent as 特許権
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  Note over screen__FeePaymentScreen: 1. 第1〜3年分の特許料の納付
+  actor__IpStaff ->> screen__FeePaymentScreen: 第1〜3年分の特許料の納付
+  timer__FirstFeeDeadline ->> api__FeePaymentApi: 第1〜3年分の特許料の納付期限（査定謄本の送達から30日）
+  screen__FeePaymentScreen ->> api__FeePaymentApi: 特許料納付 API
+  alt 特許査定を受けた出願である: PatentApplication.status == 特許査定
+    api__FeePaymentApi ->> entity__FeeSchedule: read
+    api__FeePaymentApi ->> entity__PatentApplication: update first_fees_paid=true
+    api__FeePaymentApi -) extsystem__Jpo: 特許料の納付
+    api__FeePaymentApi -->> screen__FeePaymentScreen: done
+  else guard fails
+    api__FeePaymentApi -->> screen__FeePaymentScreen: rejected
+  end
+  Note over screen__FeePaymentScreen: 2. 納付期間の延長請求
+  actor__IpStaff ->> screen__FeePaymentScreen: 納付期間の延長請求
+  screen__FeePaymentScreen ->> api__FeePaymentApi: 特許料納付 API
+  alt 特許査定を受けた出願である: PatentApplication.status == 特許査定 and 納付期間をまだ延長していない: PatentApplication.status == 特許査定, PatentApplication.fee_period_extended == false
+    api__FeePaymentApi ->> entity__FeeSchedule: read
+    api__FeePaymentApi ->> entity__PatentApplication: update fee_period_extended=true
+    api__FeePaymentApi -) extsystem__Jpo: 期間延長請求書の提出
+    api__FeePaymentApi -->> screen__FeePaymentScreen: done
+  else guard fails
+    api__FeePaymentApi -->> screen__FeePaymentScreen: rejected
+  end
+  Note over screen__FeePaymentScreen: 3. 設定登録の記録
+  actor__IpStaff ->> screen__FeePaymentScreen: 設定登録の記録
+  extsystem__Jpo ->> api__RegistrationApi: 設定登録
+  screen__FeePaymentScreen ->> api__RegistrationApi: 設定登録 API
+  alt 第1〜3年分の特許料を納付している: PatentApplication.first_fees_paid == true and PatentApplication.status == 特許査定
+    Note over api__RegistrationApi: transaction (API atomic boundary)
+    api__RegistrationApi ->> entity__PatentApplication: update status 特許査定 -> 設定登録済
+    api__RegistrationApi ->> entity__Patent: create next_year_paid=true
+    api__RegistrationApi -->> screen__FeePaymentScreen: done
+  else guard fails
+    api__RegistrationApi -->> screen__FeePaymentScreen: rejected
+  end
+  Note over screen__FeePaymentScreen: 4. 特許料の不納による却下の記録
+  actor__IpStaff ->> screen__FeePaymentScreen: 特許料の不納による却下の記録
+  extsystem__Jpo ->> usecase__RecordRegistrationDismissal: 特許料の不納による却下
+  screen__FeePaymentScreen ->> usecase__RecordRegistrationDismissal: 特許料の不納による却下の記録
+  alt 第1〜3年分の特許料を納付していない: PatentApplication.first_fees_paid == false and PatentApplication.status == 特許査定
+    usecase__RecordRegistrationDismissal ->> entity__PatentApplication: update status 特許査定 -> 却下
+    usecase__RecordRegistrationDismissal -->> screen__FeePaymentScreen: done
+  else guard fails
+    usecase__RecordRegistrationDismissal -->> screen__FeePaymentScreen: rejected
+  end
+```
+
 | UC | 説明 | 画面 | 制御 | ガード |
 |---|---|---|---|---|
 | 第1〜3年分の特許料の納付<br>`PayFirstAnnuities` | 特許査定の謄本の送達から30日以内に、第1〜3年分の特許料を一時に納付する。 | `FeePaymentScreen` | `FeePaymentApi` | 特許査定を受けた出願である |
@@ -1831,6 +2466,126 @@ flowchart LR
   screen__MaintenanceReviewScreen -->|権利維持要否の調査| screen__AnnuityScreen
   %% via screen__MaintenanceReviewScreen -> screen__AnnuityScreen usecase__ReviewMaintenance
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucAnnuity model=samples/patent-ops
+%% kinds: actor timer screen usecase api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant timer__MaintenanceReview as 権利維持要否の調査（登録後3年目・6年目）
+  participant timer__AnnuityDueDate as 第4年以後の特許料の納付期限（前年以前）
+  participant timer__LatePaymentDeadline as 追納期限（納付期限の経過から6月）
+  participant timer__TermExpiry as 存続期間の満了（出願から20年）
+  participant screen__MaintenanceReviewScreen as 権利維持要否画面
+  participant screen__AnnuityScreen as 年金管理画面
+  participant usecase__ReviewMaintenance as 権利維持要否の調査
+  participant api__MaintenanceApi as 権利維持 API
+  participant api__AnnuityApi as 年金 API
+  participant entity__Patent as 特許権
+  participant entity__InventionDisclosure as 発明届出
+  participant entity__FeeSchedule as 料金表
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  Note over screen__MaintenanceReviewScreen: 1. 権利維持要否の調査
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 権利維持要否の調査
+  timer__MaintenanceReview ->> usecase__ReviewMaintenance: 権利維持要否の調査（登録後3年目・6年目）
+  screen__MaintenanceReviewScreen ->> usecase__ReviewMaintenance: 権利維持要否の調査
+  usecase__ReviewMaintenance ->> entity__Patent: read
+  usecase__ReviewMaintenance ->> entity__InventionDisclosure: read
+  usecase__ReviewMaintenance -->> screen__MaintenanceReviewScreen: done
+  Note over screen__MaintenanceReviewScreen: 2. 権利を維持しない決定
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 権利を維持しない決定
+  screen__MaintenanceReviewScreen ->> api__MaintenanceApi: 権利維持 API
+  alt 特許権が存続している: Patent.status == 存続中
+    api__MaintenanceApi ->> entity__Patent: update maintain=false
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: done
+  else guard fails
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: rejected
+  end
+  Note over screen__AnnuityScreen: 3. 年金の納付
+  actor__IpStaff ->> screen__AnnuityScreen: 年金の納付
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt 存続中で、維持すると決めた権利の次の年が未納: Patent.status == 存続中, Patent.maintain == true, Patent.next_year_paid == false
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update next_year_paid=true, last_payment=regular, surcharge=null
+    api__AnnuityApi -) extsystem__Jpo: 特許料の納付
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end
+  Note over api__AnnuityApi: 4. 納付年度の更新
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
+  alt 存続中で、次の年が納付済: Patent.status == 存続中, Patent.next_year_paid == true
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update next_year_paid=false
+    api__AnnuityApi -->> timer__AnnuityDueDate: done
+  else guard fails
+    api__AnnuityApi -->> timer__AnnuityDueDate: rejected
+  end
+  Note over api__AnnuityApi: 5. 納付期限の経過
+  timer__AnnuityDueDate ->> api__AnnuityApi: 第4年以後の特許料の納付期限（前年以前）
+  alt 次の年が未納: Patent.next_year_paid == false and Patent.status == 存続中
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 存続中 -> 追納期間中
+    api__AnnuityApi -->> timer__AnnuityDueDate: done
+  else guard fails
+    api__AnnuityApi -->> timer__AnnuityDueDate: rejected
+  end
+  Note over screen__AnnuityScreen: 6. 追納
+  actor__IpStaff ->> screen__AnnuityScreen: 追納
+  timer__LatePaymentDeadline ->> api__AnnuityApi: 追納期限（納付期限の経過から6月）
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt 維持すると決めた権利である: Patent.maintain == true and Patent.status == 追納期間中
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 追納期間中 -> 存続中, last_payment=late, surcharge=set
+    api__AnnuityApi -) extsystem__Jpo: 特許料の納付
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end
+  Note over api__AnnuityApi: 7. 追納期間の経過による消滅
+  timer__LatePaymentDeadline ->> api__AnnuityApi: 追納期限（納付期限の経過から6月）
+  alt Patent.status == 追納期間中
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 追納期間中 -> 消滅（特許料の不納）
+    api__AnnuityApi -->> timer__LatePaymentDeadline: done
+  else guard fails
+    api__AnnuityApi -->> timer__LatePaymentDeadline: rejected
+  end
+  Note over screen__AnnuityScreen: 8. 特許権の回復
+  actor__IpStaff ->> screen__AnnuityScreen: 特許権の回復
+  screen__AnnuityScreen ->> api__AnnuityApi: 年金 API
+  alt Patent.status == 消滅（特許料の不納）
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 消滅（特許料の不納） -> 存続中, last_payment=late, surcharge=set
+    api__AnnuityApi -) extsystem__Jpo: 回復の手続
+    api__AnnuityApi -->> screen__AnnuityScreen: done
+  else guard fails
+    api__AnnuityApi -->> screen__AnnuityScreen: rejected
+  end
+  Note over screen__MaintenanceReviewScreen: 9. 特許権の放棄
+  actor__IpStaff ->> screen__MaintenanceReviewScreen: 特許権の放棄
+  screen__MaintenanceReviewScreen ->> api__MaintenanceApi: 権利維持 API
+  alt Patent.status == 存続中
+    api__MaintenanceApi ->> entity__Patent: update status 存続中 -> 放棄
+    api__MaintenanceApi -) extsystem__Jpo: 取下書・放棄書の提出
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: done
+  else guard fails
+    api__MaintenanceApi -->> screen__MaintenanceReviewScreen: rejected
+  end
+  Note over api__AnnuityApi: 10. 存続期間の満了
+  timer__TermExpiry ->> api__AnnuityApi: 存続期間の満了（出願から20年）
+  alt Patent.status in (存続中, 追納期間中)
+    api__AnnuityApi ->> entity__FeeSchedule: read
+    api__AnnuityApi ->> entity__Patent: update status 存続中 -> 存続期間満了, status 追納期間中 -> 存続期間満了
+    api__AnnuityApi -->> timer__TermExpiry: done
+  else guard fails
+    api__AnnuityApi -->> timer__TermExpiry: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |
@@ -2127,6 +2882,72 @@ flowchart LR
   classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
   classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
   classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+#### BUC のシーケンス図
+
+```mermaid
+%% rdra-ish diagram=sequence scope=buc:BucInventorReward model=samples/patent-ops
+%% kinds: actor extsystem usecase screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__IpStaff as 知的財産部 担当者
+  participant extsystem__Jpo as 特許庁（インターネット出願ソフト・オンライン発送）
+  participant usecase__FileApplication as 電子出願
+  actor actor__Inventor as 発明者
+  participant screen__RewardScreen as 相当の利益画面
+  participant api__RewardApi as 相当の利益 API
+  participant api__OpinionApi as 意見の申出 API
+  participant entity__InventionDisclosure as 発明届出
+  participant entity__InventorReward as 相当の利益
+  Note over screen__RewardScreen: 1. 相当の利益の決定
+  actor__IpStaff ->> screen__RewardScreen: 相当の利益の決定
+  extsystem__Jpo ->> api__RewardApi: 設定登録
+  usecase__FileApplication ->> api__RewardApi: 特許願の提出
+  screen__RewardScreen ->> api__RewardApi: 相当の利益 API
+  alt 職務発明である: InventionDisclosure.category == 職務発明
+    api__RewardApi ->> entity__InventionDisclosure: read
+    api__RewardApi ->> entity__InventorReward: create
+    api__RewardApi -->> screen__RewardScreen: done
+  else guard fails
+    api__RewardApi -->> screen__RewardScreen: rejected
+  end
+  Note over screen__RewardScreen: 2. 発明者への通知
+  actor__IpStaff ->> screen__RewardScreen: 発明者への通知
+  screen__RewardScreen ->> api__OpinionApi: 意見の申出 API
+  alt InventorReward.status == 決定
+    api__OpinionApi ->> entity__InventorReward: update status 決定 -> 通知済, notified_at=set
+    api__OpinionApi -->> screen__RewardScreen: done
+  else guard fails
+    api__OpinionApi -->> screen__RewardScreen: rejected
+  end
+  Note over screen__RewardScreen: 3. 発明者の意見の申出
+  actor__Inventor ->> screen__RewardScreen: 発明者の意見の申出
+  screen__RewardScreen ->> api__OpinionApi: 意見の申出 API
+  alt InventorReward.status == 通知済
+    api__OpinionApi ->> entity__InventorReward: update status 通知済 -> 意見の申出あり
+    api__OpinionApi -->> screen__RewardScreen: done
+  else guard fails
+    api__OpinionApi -->> screen__RewardScreen: rejected
+  end
+  Note over screen__RewardScreen: 4. 意見への回答
+  actor__IpStaff ->> screen__RewardScreen: 意見への回答
+  screen__RewardScreen ->> api__OpinionApi: 意見の申出 API
+  alt InventorReward.status == 意見の申出あり
+    api__OpinionApi ->> entity__InventorReward: update status 意見の申出あり -> 通知済
+    api__OpinionApi -->> screen__RewardScreen: done
+  else guard fails
+    api__OpinionApi -->> screen__RewardScreen: rejected
+  end
+  Note over screen__RewardScreen: 5. 相当の利益の支払
+  actor__IpStaff ->> screen__RewardScreen: 相当の利益の支払
+  screen__RewardScreen ->> api__OpinionApi: 意見の申出 API
+  alt InventorReward.status == 通知済
+    api__OpinionApi ->> entity__InventorReward: update status 通知済 -> 支払済
+    api__OpinionApi -->> screen__RewardScreen: done
+  else guard fails
+    api__OpinionApi -->> screen__RewardScreen: rejected
+  end
 ```
 
 | UC | 説明 | 画面 | 制御 | ガード |

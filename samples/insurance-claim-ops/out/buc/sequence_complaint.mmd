@@ -1,0 +1,101 @@
+%% rdra-ish diagram=sequence scope=buc:BucComplaint model=samples/insurance-claim-ops
+%% kinds: actor usecase extsystem screen api entity
+%% omitted: nfr buc step medium permission event condition
+sequenceDiagram
+  actor actor__PolicyHolder as 契約者・被保険者
+  actor actor__Victim as 被害者（損害賠償請求権者）
+  participant usecase__NotifyDenial as 不払いの通知
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant extsystem__SonpoAdrCenter as そんぽADRセンター（日本損害保険協会）
+  actor actor__SeniorApprover as 上位決裁者（不正請求対応）
+  participant screen__ComplaintScreen as 苦情・ADR 画面
+  participant api__ComplaintCreateApi as 苦情受付 API
+  participant api__ComplaintApi as 苦情・ADR API
+  participant entity__Complaint as 苦情・紛争
+  Note over screen__ComplaintScreen: 1. 苦情の申出
+  actor__PolicyHolder ->> screen__ComplaintScreen: 苦情の申出
+  actor__Victim ->> screen__ComplaintScreen: 苦情の申出
+  usecase__NotifyDenial ->> api__ComplaintCreateApi: 不払いの通知
+  screen__ComplaintScreen ->> api__ComplaintCreateApi: 苦情受付 API
+  api__ComplaintCreateApi ->> entity__Complaint: create
+  api__ComplaintCreateApi -->> screen__ComplaintScreen: done
+  Note over screen__ComplaintScreen: 2. 苦情の解決
+  actor__ClaimHandler ->> screen__ComplaintScreen: 苦情の解決
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt Complaint.status == 苦情受付
+    api__ComplaintApi ->> entity__Complaint: update status 苦情受付 -> 解決
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over screen__ComplaintScreen: 3. 相談機関の案内
+  actor__ClaimHandler ->> screen__ComplaintScreen: 相談機関の案内
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt 苦情を受け付けて解決していない: Complaint.status == 苦情受付
+    api__ComplaintApi ->> entity__Complaint: update adr_guided=true
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over api__ComplaintApi: 4. ADR 苦情の受付
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: ADR 苦情の通知
+  alt Complaint.status == 苦情受付
+    api__ComplaintApi ->> entity__Complaint: update status 苦情受付 -> ADR 苦情解決手続中
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end
+  Note over screen__ComplaintScreen: 5. ADR 苦情への対応
+  actor__ClaimHandler ->> screen__ComplaintScreen: ADR 苦情への対応
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt Complaint.status == ADR 苦情解決手続中
+    api__ComplaintApi ->> entity__Complaint: update status ADR 苦情解決手続中 -> 解決
+    api__ComplaintApi -) extsystem__SonpoAdrCenter: ADR 苦情への回答
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over api__ComplaintApi: 6. 紛争解決手続の申立ての受付
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: 紛争解決手続の申立て
+  alt Complaint.status in (苦情受付, ADR 苦情解決手続中)
+    api__ComplaintApi ->> entity__Complaint: update status 苦情受付 -> ADR 紛争解決手続中, status ADR 苦情解決手続中 -> ADR 紛争解決手続中
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end
+  Note over api__ComplaintApi: 7. 和解案の受領
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: 和解案の提示
+  alt Complaint.status == ADR 紛争解決手続中
+    api__ComplaintApi ->> entity__Complaint: update status ADR 紛争解決手続中 -> 和解案の提示, proposal in (和解案, 特別調停案)
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end
+  Note over screen__ComplaintScreen: 8. 和解案の受諾
+  actor__SeniorApprover ->> screen__ComplaintScreen: 和解案の受諾
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt Complaint.status == 和解案の提示
+    api__ComplaintApi ->> entity__Complaint: update status 和解案の提示 -> 和解成立
+    api__ComplaintApi -) extsystem__SonpoAdrCenter: 和解案への回答
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over screen__ComplaintScreen: 9. 和解案を受諾しない
+  actor__SeniorApprover ->> screen__ComplaintScreen: 和解案を受諾しない
+  screen__ComplaintScreen ->> api__ComplaintApi: 苦情・ADR API
+  alt 特別調停案ではない和解案である: Complaint.proposal == 和解案 and Complaint.status == 和解案の提示
+    api__ComplaintApi ->> entity__Complaint: update status 和解案の提示 -> 和解案を受諾しない
+    api__ComplaintApi -) extsystem__SonpoAdrCenter: 和解案への回答
+    api__ComplaintApi -->> screen__ComplaintScreen: done
+  else guard fails
+    api__ComplaintApi -->> screen__ComplaintScreen: rejected
+  end
+  Note over api__ComplaintApi: 10. 紛争解決手続の終了
+  extsystem__SonpoAdrCenter ->> api__ComplaintApi: 紛争解決手続の終了
+  alt Complaint.status in (ADR 紛争解決手続中, 和解案の提示)
+    api__ComplaintApi ->> entity__Complaint: update status ADR 紛争解決手続中 -> 手続終了（不調）, status 和解案の提示 -> 手続終了（不調）
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: done
+  else guard fails
+    api__ComplaintApi -->> extsystem__SonpoAdrCenter: rejected
+  end

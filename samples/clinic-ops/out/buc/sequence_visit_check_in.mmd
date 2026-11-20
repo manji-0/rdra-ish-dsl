@@ -1,0 +1,140 @@
+%% rdra-ish diagram=sequence scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% kinds: actor timer usecase screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ReceptionClerk as 医事課 受付担当
+  participant timer__EligibilityBatchInquiry as 予約患者の資格の一括照会（来院前）
+  actor actor__Nurse as 看護師
+  participant usecase__CheckInPatient as 受付（初診・再診）
+  participant screen__CheckInScreen as 受付画面
+  participant screen__EligibilityScreen as 資格確認画面
+  participant screen__ReferralScreen as 紹介状受付画面
+  participant screen__RoomBoardScreen as 診察室ボード画面
+  participant api__VerifyArrivalApi as 到着確認 API
+  participant api__CheckInPatientApi as 受付 API
+  participant api__OnlineEligibilityApi as オンライン資格確認 API
+  participant api__EligibilityResultApi as 資格確認結果 API
+  participant api__ReferralLetterApi as 紹介状 API
+  participant api__AssignRoomApi as 診察室案内 API
+  participant entity__Appointment as 予約・受診
+  participant entity__PatientAccount as 患者登録
+  participant entity__InsurancePolicy as 保険資格
+  participant entity__EligibilityCheck as 資格確認
+  participant entity__ReferralLetter as 紹介状・診療情報提供書
+  participant entity__Room as 診察室
+  participant entity__PatientProfile as 患者基本情報
+  participant api__OpenEncounterApi as 診療記録作成 API
+  participant extsystem__OnlineEligibilitySystem as オンライン資格確認等システム
+  participant api__PrepareEncounterApi as 診療準備 API
+  Note over screen__CheckInScreen: 1. 予約票・診察券の確認
+  actor__ReceptionClerk ->> screen__CheckInScreen: 予約票・診察券の確認
+  screen__CheckInScreen ->> api__VerifyArrivalApi: 到着確認 API
+  api__VerifyArrivalApi ->> entity__Appointment: read
+  api__VerifyArrivalApi ->> entity__PatientAccount: read
+  api__VerifyArrivalApi ->> entity__InsurancePolicy: read
+  api__VerifyArrivalApi -->> screen__CheckInScreen: done
+  Note over screen__CheckInScreen: 2. 受付（初診・再診）
+  actor__ReceptionClerk ->> screen__CheckInScreen: 受付（初診・再診）
+  screen__CheckInScreen ->> api__CheckInPatientApi: 受付 API
+  alt Appointment.status == 予約済
+    screen__CheckInScreen ->> api__OnlineEligibilityApi: オンライン資格確認 API
+    Note over api__CheckInPatientApi: transaction (API atomic boundary)
+    api__CheckInPatientApi ->> entity__PatientAccount: update
+    api__CheckInPatientApi ->> entity__Appointment: update status 予約済 -> 受付済, checked_in_at=set
+    api__OnlineEligibilityApi ->> entity__InsurancePolicy: read
+    api__OnlineEligibilityApi ->> entity__EligibilityCheck: create
+    api__CheckInPatientApi -) api__OpenEncounterApi: 受付完了
+    api__CheckInPatientApi -) extsystem__OnlineEligibilitySystem: 受付完了
+    api__CheckInPatientApi -) api__PrepareEncounterApi: 受付完了
+    api__CheckInPatientApi -->> screen__CheckInScreen: done
+  else guard fails
+    api__CheckInPatientApi -->> screen__CheckInScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 3. 資格の一括照会
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 資格の一括照会
+  timer__EligibilityBatchInquiry ->> api__OnlineEligibilityApi: 予約患者の資格の一括照会（来院前）
+  screen__EligibilityScreen ->> api__OnlineEligibilityApi: オンライン資格確認 API
+  alt 予約済みの患者: (Appointment.status == 予約済).along(InsurancePolicy, PatientAccount, Appointment)
+    api__OnlineEligibilityApi ->> entity__InsurancePolicy: read
+    api__OnlineEligibilityApi ->> entity__EligibilityCheck: create
+    api__OnlineEligibilityApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__OnlineEligibilityApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 4. 資格確認結果（有効）の取込
+  extsystem__OnlineEligibilitySystem ->> api__EligibilityResultApi: 資格確認結果
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 有効, reference_no=set
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 5. 資格確認結果（無効）の取込
+  extsystem__OnlineEligibilitySystem ->> api__EligibilityResultApi: 資格確認結果
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 無効
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 6. 資格確認結果（該当資格なし）の取込
+  extsystem__OnlineEligibilitySystem ->> api__EligibilityResultApi: 資格確認結果
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 該当資格なし
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 7. 資格の再確認
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 資格の再確認
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result in (無効, 該当資格なし)
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 無効 -> 照会中, result 該当資格なし -> 照会中
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 8. 被保険者資格申立書の受領
+  actor__ReceptionClerk ->> screen__EligibilityScreen: 被保険者資格申立書の受領
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 申立書で確認
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__EligibilityScreen: 9. システム障害時モードでの資格確認
+  actor__ReceptionClerk ->> screen__EligibilityScreen: システム障害時モードでの資格確認
+  screen__EligibilityScreen ->> api__EligibilityResultApi: 資格確認結果 API
+  alt EligibilityCheck.result == 照会中
+    api__EligibilityResultApi ->> entity__EligibilityCheck: update result 照会中 -> 有効
+    api__EligibilityResultApi -->> screen__EligibilityScreen: done
+  else guard fails
+    api__EligibilityResultApi -->> screen__EligibilityScreen: rejected
+  end
+  Note over screen__ReferralScreen: 10. 紹介状受付処理
+  actor__ReceptionClerk ->> screen__ReferralScreen: 紹介状受付処理
+  screen__ReferralScreen ->> api__ReferralLetterApi: 紹介状 API
+  api__ReferralLetterApi ->> entity__ReferralLetter: create direction=inbound, received_at=set
+  api__ReferralLetterApi -->> screen__ReferralScreen: done
+  Note over screen__RoomBoardScreen: 11. 診察室への案内
+  actor__Nurse ->> screen__RoomBoardScreen: 診察室への案内
+  screen__RoomBoardScreen ->> api__AssignRoomApi: 診察室案内 API
+  alt Appointment.status == 受付済
+    Note over api__AssignRoomApi: transaction (API atomic boundary)
+    api__AssignRoomApi ->> entity__Room: update occupancy_status=occupied
+    api__AssignRoomApi ->> entity__Appointment: update status 受付済 -> 受付済
+    api__AssignRoomApi -->> screen__RoomBoardScreen: done
+  else guard fails
+    api__AssignRoomApi -->> screen__RoomBoardScreen: rejected
+  end
+  Note over screen__CheckInScreen: 12. 診療の準備
+  actor__Nurse ->> screen__CheckInScreen: 診療の準備
+  usecase__CheckInPatient ->> api__PrepareEncounterApi: 受付完了
+  screen__CheckInScreen ->> api__PrepareEncounterApi: 診療準備 API
+  api__PrepareEncounterApi ->> entity__Appointment: read
+  api__PrepareEncounterApi ->> entity__PatientProfile: read
+  api__PrepareEncounterApi -->> screen__CheckInScreen: done

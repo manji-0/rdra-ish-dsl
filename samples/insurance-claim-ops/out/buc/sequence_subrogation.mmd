@@ -1,0 +1,47 @@
+%% rdra-ish diagram=sequence scope=buc:BucSubrogation model=samples/insurance-claim-ops
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__ClaimHandler as 損害サービス担当者
+  participant usecase__PayClaim as 保険金の支払
+  participant timer__SubrogationLimitation as 求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）
+  participant screen__SubrogationScreen as 求償画面
+  participant api__SubrogationCreateApi as 求償開始 API
+  participant api__SubrogationApi as 求償 API
+  participant entity__Subrogation as 求償（請求権代位）
+  Note over screen__SubrogationScreen: 1. 求償の開始
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の開始
+  usecase__PayClaim ->> api__SubrogationCreateApi: 保険金の支払
+  screen__SubrogationScreen ->> api__SubrogationCreateApi: 求償開始 API
+  alt 保険金を支払った請求で、まだ求償していない: (Claim.status == 支払済).none(Subrogation)
+    api__SubrogationCreateApi ->> entity__Subrogation: create
+    api__SubrogationCreateApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationCreateApi -->> screen__SubrogationScreen: rejected
+  end
+  Note over screen__SubrogationScreen: 2. 求償の回収
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の回収
+  screen__SubrogationScreen ->> api__SubrogationApi: 求償 API
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 回収
+    api__SubrogationApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationApi -->> screen__SubrogationScreen: rejected
+  end
+  Note over screen__SubrogationScreen: 3. 求償の断念
+  actor__ClaimHandler ->> screen__SubrogationScreen: 求償の断念
+  screen__SubrogationScreen ->> api__SubrogationApi: 求償 API
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 回収の断念
+    api__SubrogationApi -->> screen__SubrogationScreen: done
+  else guard fails
+    api__SubrogationApi -->> screen__SubrogationScreen: rejected
+  end
+  Note over api__SubrogationApi: 4. 求償する債権の時効
+  timer__SubrogationLimitation ->> api__SubrogationApi: 求償する債権の時効（損害と加害者を知った時から3年、人身損害は5年）
+  alt Subrogation.status == 求償中
+    api__SubrogationApi ->> entity__Subrogation: update status 求償中 -> 時効消滅
+    api__SubrogationApi -->> timer__SubrogationLimitation: done
+  else guard fails
+    api__SubrogationApi -->> timer__SubrogationLimitation: rejected
+  end
