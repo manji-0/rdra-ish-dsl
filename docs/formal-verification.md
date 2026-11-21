@@ -672,6 +672,14 @@ Here the CTI is also a real run: `one_to_one_shared` links two Shipments to one 
 (each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. A rule that fails in an
 initial state is `unproved` too; the bounded engines report that violation.
 
+Some rules have no `CHECK` in the schema `export --kind sql` writes: a rule over several
+entities, a quantifier rule, a minimum cardinality, a rule that reads `now`, and a rule a
+`.when(Cond)` guards. The script lists them under `Not enforced by this schema`, because the
+application has to keep them. `--prove` marks each such rule with
+`[not enforced by the SQL schema: <why>]`, and adds a line that counts them:
+`proof: the SQL schema leaves <n> rules to the application: <a> proved, ...`. A proved one is
+an obligation the use cases already discharge, for any number of rows.
+
 `--prove` reads the state rules only. After-asserts and temporal properties are not tried.
 The result does not change the exit status unless `--deny-unproved` is given. Every rule of
 the domain samples proves except the insurance-claim-ops rule named above.

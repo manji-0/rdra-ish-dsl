@@ -197,7 +197,7 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
         "{stdout}"
     );
     assert!(
-        stdout.contains("proved: lemma 「no shipment yet」: Quantifier_Order_0\n"),
+        stdout.contains("proved: lemma 「no shipment yet」: Quantifier_Order_0 [not enforced by the SQL schema: related rows]\n"),
         "{stdout}"
     );
     assert!(
@@ -253,4 +253,32 @@ forbidden(Item, qty > 5)
         })
         .unwrap_or_else(|| panic!("no CTI line that writes qty\n{stdout}"));
     assert!(qty.trim().parse::<i64>().is_ok_and(|n| n > 5), "{qty}");
+}
+
+#[test]
+fn a_rule_the_sql_schema_leaves_to_the_application_says_so() {
+    if !have("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    // A forbidden over two entities has no CHECK; a 1:1 key is a UNIQUE constraint.
+    let out = verify(&["--prove", &sample("cross_order_payment")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(
+            "proved: MultiForbidden_Order_0 [not enforced by the SQL schema: several entities]\n"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            "proof: the SQL schema leaves 1 rules to the application: 1 proved, 0 unproved, 0 out of scope\n"
+        ),
+        "{stdout}"
+    );
+    let out = verify(&["--prove", &sample("one_to_one_shared")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        !stdout.contains("not enforced by the SQL schema"),
+        "{stdout}"
+    );
 }

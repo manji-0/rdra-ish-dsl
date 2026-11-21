@@ -29,7 +29,7 @@ use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 use crate::export::{checked_system, tla_bounds, Modules};
 use crate::list_output::{render_violation, Finding, TraceSource};
 use crate::property_cone::{ConeRun, PropertyCone, Verdict};
-use crate::prove::{run_proof, ProofTally};
+use crate::prove::{run_proof, Marks, ProofTally};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
@@ -709,8 +709,8 @@ pub fn run_tlc(
     let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
     let proof = match prove {
         Some(Prove { z3, deny_unproved }) => {
-            let lemmas = rdra_ish_core::lifecycle::prove::lemma_invariants(model, &ts);
-            Some(run_proof(&ts, &selection, &lemmas, z3, deny_unproved)?)
+            let marks = Marks::of(model, &ts);
+            Some(run_proof(&ts, &selection, &marks, z3, deny_unproved)?)
         }
         None => None,
     };

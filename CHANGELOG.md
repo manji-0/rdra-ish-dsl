@@ -4,6 +4,10 @@
 
 ### Added
 
+- `verify --prove` marks each rule the SQL export's schema does not enforce (the rules under
+  `Not enforced by this schema`) with `[not enforced by the SQL schema: <why>]`, and counts
+  how many of them the use cases are proved to keep (#141).
+
 - `verify --prove` also proves for any Int value and any time: Int columns and `now` have no
   top in the proof, `Tick` always runs, and a write of any value takes any number. A rule
   that held only because numbers stop at `--int-range-max` is now unproved, with a CTI
