@@ -1,25 +1,31 @@
 //! `list --kind screen|event|timer`: one id and label per node, sorted by id, in every format.
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 fn repo() -> PathBuf {
     dunce::canonicalize(Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).expect("repo root")
 }
 
-fn model_dir() -> PathBuf {
-    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("list_kinds");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(
-        dir.join("m.rdra"),
-        r#"
+/// Written once: the tests run in parallel and would otherwise truncate the file under a
+/// reader.
+fn model_dir() -> &'static Path {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    DIR.get_or_init(|| {
+        let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("list_kinds");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("m.rdra"),
+            r#"
 screen OrderScreen "Order"
 screen CartScreen "Cart"
 event OrderPlaced "Order placed"
 timer NightlyClose "Nightly close"
 "#,
-    )
-    .unwrap();
-    dir
+        )
+        .unwrap();
+        dir
+    })
 }
 
 fn list(kind: &str, format: &str) -> std::process::Output {
