@@ -19,7 +19,7 @@ transitions(Pay, Order.status, pending -> paid)
 fn violated(d: &Derived, kind: InvKind) -> bool {
     d.has(
         "Order",
-        |x| matches!(x, StateDiag::ConstraintViolated { kind: k, .. } if *k == kind),
+        |x| matches!(x, StateDiag::ConstraintViolated { text, .. } if text.kind() == kind),
     )
 }
 

@@ -6,7 +6,7 @@ use crate::lifecycle::InvKind;
 fn violated(d: &Derived, id: &str, kind: InvKind) -> bool {
     d.has(
         id,
-        |x| matches!(x, StateDiag::ConstraintViolated { kind: k, .. } if *k == kind),
+        |x| matches!(x, StateDiag::ConstraintViolated { text, .. } if text.kind() == kind),
     )
 }
 
@@ -485,7 +485,7 @@ invariant(Task).when(status == done).none(Task.status == open)
         matches!(
             x.diag,
             StateDiag::ConstraintViolated {
-                kind: InvKind::Quantifier,
+                text: crate::lifecycle::InvText::Quantifier { .. },
                 ..
             }
         )

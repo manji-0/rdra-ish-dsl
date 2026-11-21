@@ -598,7 +598,7 @@ impl<'m> Script<'m> {
             let names: Vec<&Invariant> = self
                 .invariants
                 .iter()
-                .filter(|inv| inv.kind == InvKind::Check && inv.site.fact == fact)
+                .filter(|inv| inv.text.kind() == InvKind::Check && inv.site.fact == fact)
                 .collect();
             for (i, check) in column.check_constraints.iter().enumerate() {
                 let name = names.get(i).map_or_else(
@@ -715,7 +715,7 @@ impl<'m> Script<'m> {
         self.invariants
             .iter()
             .filter_map(|inv| {
-                let why = match inv.kind {
+                let why = match inv.text.kind() {
                     InvKind::CrossForbidden | InvKind::CrossInvariant => "several entities",
                     InvKind::Quantifier => "related rows",
                     InvKind::MinCard => "minimum cardinality",
@@ -966,13 +966,16 @@ fn local_text(equalities: &[(String, EffectValue)], comparisons: &[ComparisonPro
 fn inv_text(inv: &Invariant) -> String {
     use rdra_ish_core::lifecycle::InvText;
     match &inv.text {
-        InvText::Conditions(c) => c.clone(),
-        InvText::WhenThen { guards, requireds } => format!("when {guards} then {requireds}"),
-        InvText::Cross {
+        InvText::Forbidden(c)
+        | InvText::Required(c)
+        | InvText::Exclusive(c)
+        | InvText::Check(c) => c.clone(),
+        InvText::Invariant { guards, requireds } => format!("when {guards} then {requireds}"),
+        InvText::CrossForbidden {
             entities,
             conditions,
         } => format!("{entities}: {conditions}"),
-        InvText::CrossWhenThen {
+        InvText::CrossInvariant {
             entities,
             guards,
             requireds,

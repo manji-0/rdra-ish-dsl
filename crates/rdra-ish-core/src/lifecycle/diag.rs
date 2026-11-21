@@ -4,7 +4,7 @@ use std::fmt;
 
 use super::lasso::Loop;
 use super::trace::{Inst, Trace};
-use super::types::{ActionOrigin, GuardWhy, InvKind, InvText, LtlKind, ParamRole, Site};
+use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ParamRole, Site};
 use crate::model::EntityKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -140,7 +140,6 @@ pub enum StateDiag {
     /// violation, with a shortest trace to it.
     ConstraintViolated {
         name: String,
-        kind: InvKind,
         text: InvText,
         /// The rule's `.label("...")`, when it has one.
         label: Option<String>,

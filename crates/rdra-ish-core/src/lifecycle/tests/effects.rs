@@ -293,7 +293,7 @@ invariant(Child).when(alive == true).has(Parent).label("every child has a parent
     assert!(d.has("Child", |x| matches!(
         x,
         StateDiag::ConstraintViolated {
-            kind: crate::lifecycle::InvKind::Quantifier,
+            text: crate::lifecycle::InvText::Quantifier { .. },
             ..
         }
     )));

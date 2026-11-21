@@ -4,7 +4,7 @@ use crate::lifecycle_gate::Output;
 use crate::list_output::{format_lint_issues, list_elements};
 use crate::state_findings::{state_diag_message, state_findings};
 use rdra_ish_core::lifecycle::{Bounds, Caps, Scope};
-use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Site, StateDiag, Trace};
+use rdra_ish_core::lifecycle::{InvText, ModelRef, Site, StateDiag, Trace};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_core::{load_project, Project};
 use rdra_ish_emit::View;
@@ -811,8 +811,7 @@ requires_permission(BookAppointment, ScheduleWrite)
 fn state_diag_message_formats_invariant_violation() {
     let message = state_diag_message(&StateDiag::ConstraintViolated {
         name: "Inv0".to_string(),
-        kind: InvKind::Invariant,
-        text: InvText::WhenThen {
+        text: InvText::Invariant {
             guards: "status=booked".to_string(),
             requireds: "booked_at=present".to_string(),
         },
@@ -832,8 +831,7 @@ fn state_diag_message_formats_invariant_violation() {
 fn state_diag_message_formats_cross_invariant_violation() {
     let message = state_diag_message(&StateDiag::ConstraintViolated {
         name: "Cross0".to_string(),
-        kind: InvKind::CrossInvariant,
-        text: InvText::CrossWhenThen {
+        text: InvText::CrossInvariant {
             entities: "Order, Payment".to_string(),
             guards: "Order.status=paid".to_string(),
             requireds: "Payment.status=captured".to_string(),
@@ -872,7 +870,6 @@ fn state_diag_message_formats_temporal_assertion_violation() {
 fn state_diag_message_formats_quantifier_violation() {
     let message = state_diag_message(&StateDiag::ConstraintViolated {
         name: "Quant0".to_string(),
-        kind: InvKind::Quantifier,
         text: InvText::Quantifier {
             anchor: "ClientCertificate".to_string(),
             related: "TerminalCertAssignment".to_string(),

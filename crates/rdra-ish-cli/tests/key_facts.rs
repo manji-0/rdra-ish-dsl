@@ -421,7 +421,7 @@ fn assert_checks(sample: &str, model: &SemanticModel) {
     let built: Vec<String> = ts
         .invariants()
         .iter()
-        .filter(|inv| inv.kind == InvKind::Check)
+        .filter(|inv| inv.text.kind() == InvKind::Check)
         .map(|inv| inv.name.clone())
         .collect();
     let declared: Vec<String> = model

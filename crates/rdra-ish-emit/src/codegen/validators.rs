@@ -68,7 +68,7 @@ pub(super) fn add_validators(
 
     let mut obligations: Vec<(String, String, Option<String>)> = Vec::new();
     for inv in ts.invariants() {
-        if matches!(inv.kind, InvKind::Unique | InvKind::MinCard) {
+        if matches!(inv.text.kind(), InvKind::Unique | InvKind::MinCard) {
             continue; // obligations of the data layer
         }
         let at = inv.site.span.as_ref().and_then(site);
@@ -155,13 +155,16 @@ fn push(domain: &mut DomainModel, invariant: Option<String>, text: String, site:
 
 fn text(t: &InvText) -> String {
     match t {
-        InvText::Conditions(c) => c.clone(),
-        InvText::WhenThen { guards, requireds } => format!("when {guards} then {requireds}"),
-        InvText::Cross {
+        InvText::Forbidden(c)
+        | InvText::Required(c)
+        | InvText::Exclusive(c)
+        | InvText::Check(c) => c.clone(),
+        InvText::Invariant { guards, requireds } => format!("when {guards} then {requireds}"),
+        InvText::CrossForbidden {
             entities,
             conditions,
         } => format!("{entities}: {conditions}"),
-        InvText::CrossWhenThen {
+        InvText::CrossInvariant {
             entities,
             guards,
             requireds,

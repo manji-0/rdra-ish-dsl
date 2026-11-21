@@ -33,7 +33,7 @@ fn violated(src: &str, kind: InvKind) -> bool {
     );
     d.has(
         "Order",
-        |x| matches!(x, StateDiag::ConstraintViolated { kind: k, .. } if *k == kind),
+        |x| matches!(x, StateDiag::ConstraintViolated { text, .. } if text.kind() == kind),
     )
 }
 

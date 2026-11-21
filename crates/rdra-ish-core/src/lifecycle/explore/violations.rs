@@ -15,7 +15,7 @@ impl TransitionSystem {
         let inv = &self.invariants[i];
         let binding = self.find_violation(&inv.binders, &inv.body, s, &[])?;
         let local = matches!(
-            inv.kind,
+            inv.text.kind(),
             InvKind::Forbidden
                 | InvKind::Invariant
                 | InvKind::Required
@@ -36,7 +36,6 @@ impl TransitionSystem {
             entities: inv.binders.iter().map(|e| self.entity(*e).key).collect(),
             diag: StateDiag::ConstraintViolated {
                 name: inv.name.clone(),
-                kind: inv.kind,
                 text: inv.text.clone(),
                 label: inv.label.clone(),
                 pattern_desc,

@@ -578,17 +578,17 @@ pub enum Pred {
 #[derive(Clone, Debug)]
 pub struct Invariant {
     pub name: String,
-    pub kind: InvKind,
     /// Universally bound entities, outermost first.
     pub binders: Vec<EntId>,
     pub body: Pred,
-    /// The constraint as the author wrote it, for diagnostics.
+    /// The constraint as the author wrote it, for diagnostics; its variant is the kind.
     pub text: InvText,
     /// The rule's `.label("...")`, which a violation names.
     pub label: Option<String>,
     pub site: Site,
 }
 
+/// The kind of an `InvText`, as a plain tag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InvKind {
     Forbidden,
@@ -606,23 +606,44 @@ pub enum InvKind {
     Check,
 }
 
-/// The parts of a constraint that a violation message names.
+impl InvText {
+    pub fn kind(&self) -> InvKind {
+        match self {
+            InvText::Forbidden(_) => InvKind::Forbidden,
+            InvText::Invariant { .. } => InvKind::Invariant,
+            InvText::Required(_) => InvKind::Required,
+            InvText::Exclusive(_) => InvKind::Exclusive,
+            InvText::CrossForbidden { .. } => InvKind::CrossForbidden,
+            InvText::CrossInvariant { .. } => InvKind::CrossInvariant,
+            InvText::Quantifier { .. } => InvKind::Quantifier,
+            InvText::Unique { .. } => InvKind::Unique,
+            InvText::MinCard { .. } => InvKind::MinCard,
+            InvText::Check(_) => InvKind::Check,
+        }
+    }
+}
+
+/// A constraint and the parts of it that a violation message names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InvText {
-    Conditions(String),
-    WhenThen {
+    Forbidden(String),
+    Invariant {
         guards: String,
         requireds: String,
     },
-    Cross {
+    Required(String),
+    Exclusive(String),
+    CrossForbidden {
         entities: String,
         conditions: String,
     },
-    CrossWhenThen {
+    CrossInvariant {
         entities: String,
         guards: String,
         requireds: String,
     },
+    /// A column's `@check(expr)`: no present slot makes the expression false.
+    Check(String),
     Quantifier {
         anchor: String,
         related: String,

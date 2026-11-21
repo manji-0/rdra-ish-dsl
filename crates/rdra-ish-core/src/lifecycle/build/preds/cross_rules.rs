@@ -5,7 +5,7 @@ use super::guards::{Chain, PathOwner};
 use super::{at_of, implies, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
-use crate::lifecycle::types::{At, InvKind, InvText, ModelRef, Pred, Site};
+use crate::lifecycle::types::{At, InvText, ModelRef, Pred, Site};
 use crate::model::{CrossConstraintScope, EntityKey, FkId, QuantifierKind, RelatedQuantifier};
 
 impl Builder<'_> {
@@ -113,14 +113,13 @@ impl Builder<'_> {
             };
             let conds = self.cross_all(&c.conditions, &binding, &site);
             let body = implies(link, Pred::Not(Box::new(conds)));
-            let text = InvText::Cross {
+            let text = InvText::CrossForbidden {
                 entities: entity_list(model, &c.scope),
                 conditions,
             };
             self.push_invariant(
                 "MultiForbidden",
                 i,
-                InvKind::CrossForbidden,
                 &binding,
                 body,
                 text,
@@ -141,21 +140,12 @@ impl Builder<'_> {
             let g = self.cross_all(&c.guards, &binding, &site);
             let r = self.cross_all(&c.requireds, &binding, &site);
             let body = implies(link, implies(g, r));
-            let text = InvText::CrossWhenThen {
+            let text = InvText::CrossInvariant {
                 entities: entity_list(model, &c.scope),
                 guards,
                 requireds,
             };
-            self.push_invariant(
-                "MultiInv",
-                i,
-                InvKind::CrossInvariant,
-                &binding,
-                body,
-                text,
-                c.label.clone(),
-                site,
-            );
+            self.push_invariant("MultiInv", i, &binding, body, text, c.label.clone(), site);
         }
     }
 
@@ -252,7 +242,6 @@ impl Builder<'_> {
             self.push_invariant(
                 "Quantifier",
                 i,
-                InvKind::Quantifier,
                 &anchor,
                 implies(guards, inner),
                 text,

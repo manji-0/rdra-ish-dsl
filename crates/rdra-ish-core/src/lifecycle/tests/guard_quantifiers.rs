@@ -2,7 +2,6 @@
 
 use super::conditions::{clinic, reaches_paid};
 use super::*;
-use crate::lifecycle::InvKind;
 
 /// The certificate model of issue 2: revoking needs no active assignment.
 fn certificates(revoke_guard: &str, extra: &str) -> String {
@@ -38,7 +37,7 @@ fn quantifier_violated(d: &Derived) -> bool {
         matches!(
             x,
             StateDiag::ConstraintViolated {
-                kind: InvKind::Quantifier,
+                text: crate::lifecycle::InvText::Quantifier { .. },
                 ..
             }
         )
@@ -92,7 +91,7 @@ fn a_none_guard_on_the_created_entity_quantifies_the_existing_rows() {
         matches!(
             d.diag,
             StateDiag::ConstraintViolated {
-                kind: InvKind::Quantifier,
+                text: crate::lifecycle::InvText::Quantifier { .. },
                 ..
             }
         )
@@ -106,7 +105,7 @@ fn a_none_guard_on_the_created_entity_quantifies_the_existing_rows() {
     assert!(without.diags.iter().any(|d| matches!(
         d.diag,
         StateDiag::ConstraintViolated {
-            kind: InvKind::Quantifier,
+            text: crate::lifecycle::InvText::Quantifier { .. },
             ..
         }
     )));

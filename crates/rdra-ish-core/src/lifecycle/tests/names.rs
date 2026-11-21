@@ -2,7 +2,7 @@
 
 use super::model_from;
 use crate::lifecycle::trace::{Inst, Trace};
-use crate::lifecycle::types::{ActionOrigin, InvKind, InvText, LtlKind, ModelRef, Site};
+use crate::lifecycle::types::{ActionOrigin, InvText, LtlKind, ModelRef, Site};
 use crate::lifecycle::{
     Blocked, Bounds, CapGrowth, Exit, Loop, Scope, StateDiag, TransitionSystem,
 };
@@ -46,8 +46,7 @@ fn one_of_each() -> Vec<StateDiag> {
         },
         StateDiag::ConstraintViolated {
             name: "Forbidden_Order_0".into(),
-            kind: InvKind::Forbidden,
-            text: InvText::Conditions("status=paid".into()),
+            text: InvText::Forbidden("status=paid".into()),
             label: None,
             pattern_desc: "status=paid".into(),
             site: site(),

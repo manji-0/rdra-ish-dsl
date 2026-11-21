@@ -1,9 +1,7 @@
 //! Relate bindings: mandatory owners need a present parent, optional owners may stay unlinked.
 
 use super::*;
-use crate::lifecycle::{
-    Action, At, CmpOp, Effect, GuardWhy, InvKind, ParamRole, Pred, Rhs, Term, Value,
-};
+use crate::lifecycle::{Action, At, CmpOp, Effect, GuardWhy, ParamRole, Pred, Rhs, Term, Value};
 
 /// clinic-ops' Charge/Claim shape: the claim's creator updates the charge it bills.
 fn billing(relate: &str) -> String {
@@ -92,7 +90,7 @@ fn an_unlinked_optional_owner_is_not_linked_for_along() {
         d.has("Charge", |x| matches!(
             x,
             StateDiag::ConstraintViolated {
-                kind: InvKind::CrossForbidden,
+                text: crate::lifecycle::InvText::CrossForbidden { .. },
                 ..
             }
         )),
@@ -138,7 +136,7 @@ fn cross_forbidden_violated(d: &Derived) -> bool {
         matches!(
             x,
             StateDiag::ConstraintViolated {
-                kind: InvKind::CrossForbidden,
+                text: crate::lifecycle::InvText::CrossForbidden { .. },
                 ..
             }
         )
@@ -332,7 +330,7 @@ fn a_pre_existing_child_of_a_created_parent_is_warned() {
 
 fn unique_violated(d: &Derived, child: &str) -> bool {
     d.diags.iter().any(|x| {
-        matches!(&x.diag, StateDiag::ConstraintViolated { name, kind: InvKind::Unique, .. }
+        matches!(&x.diag, StateDiag::ConstraintViolated { name, text: crate::lifecycle::InvText::Unique { .. }, .. }
             if *name == format!("Unique_{child}_Order"))
     })
 }
@@ -371,7 +369,7 @@ fn unlinked_children_share_no_parent_and_identity_starts_hold() {
 
 fn min_card_violated(d: &Derived) -> bool {
     d.diags.iter().any(|x| {
-        matches!(&x.diag, StateDiag::ConstraintViolated { name, kind: InvKind::MinCard, .. }
+        matches!(&x.diag, StateDiag::ConstraintViolated { name, text: crate::lifecycle::InvText::MinCard { .. }, .. }
             if name == "MinCard_OrderLine_Order")
     })
 }
@@ -401,7 +399,7 @@ fn a_parent_created_without_a_child_breaks_the_minimum_at_one_slot() {
     assert!(order.entity("Order").diagnostics.iter().any(|x| matches!(
         x,
         StateDiag::ConstraintViolated {
-            kind: InvKind::MinCard,
+            text: crate::lifecycle::InvText::MinCard { .. },
             ..
         }
     )));
@@ -626,7 +624,7 @@ fn a_links_on_a_one_to_one_key_leaves_uniqueness_to_the_rule() {
     let d = derive_scoped(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
     assert!(d.diags.iter().any(|x| matches!(
         &x.diag,
-        StateDiag::ConstraintViolated { name, kind: InvKind::Unique, .. } if name == "Unique_Case_Handler"
+        StateDiag::ConstraintViolated { name, text: crate::lifecycle::InvText::Unique { .. }, .. } if name == "Unique_Case_Handler"
     )));
 }
 
@@ -853,7 +851,7 @@ fn an_unlinks_on_a_min_card_key_leaves_the_minimum_to_the_rule() {
     assert!(
         d.diags.iter().any(|x| matches!(
             &x.diag,
-            StateDiag::ConstraintViolated { name, kind: InvKind::MinCard, .. } if name == "MinCard_Case_Handler"
+            StateDiag::ConstraintViolated { name, text: crate::lifecycle::InvText::MinCard { .. }, .. } if name == "MinCard_Case_Handler"
         )),
         "{:?}",
         d.diags

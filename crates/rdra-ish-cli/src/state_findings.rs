@@ -5,8 +5,8 @@ use std::fmt;
 
 use rdra_ish_core::lifecycle::{
     derive_states_built, label_prefix, ActionOrigin, Birth, Blocked, Bounds, BoundsLine, Caps,
-    Change, GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site,
-    StateDiag, StatesReport, Trace, TraceStep, TransitionSystem,
+    Change, GuardWhy, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag,
+    StatesReport, Trace, TraceStep, TransitionSystem,
 };
 use rdra_ish_core::model::{LinkKind, SetValue};
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
@@ -702,74 +702,58 @@ pub(crate) const READS_NO_LIFECYCLE: &str = "this output does not read the lifec
 pub(crate) const TLA_STATE_MODELS: &str = "the whole-model .cfg checks the rules only; the StateModel_* specs written beside it let TLC check the deadlocks and missing witnesses, but a deadlock pass there is no proof, and `rdra-ish verify` decides them";
 
 /// A constraint violation in the wording `check` has always used for its kind.
-fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> {
-    Some(match (kind, text) {
-        (InvKind::Forbidden, InvText::Conditions(c)) => {
+fn violation_message(text: &InvText, p: &str) -> String {
+    match text {
+        InvText::Forbidden(c) => {
             format!("forbidden state is reachable: {c} witnessed by {p}")
         }
-        (InvKind::Required, InvText::Conditions(c)) => {
+        InvText::Required(c) => {
             format!("required state is missing: {c} is not satisfied by {p}")
         }
-        (InvKind::Exclusive, InvText::Conditions(c)) => {
+        InvText::Exclusive(c) => {
             format!("exclusive state conditions co-occur: {c} witnessed by {p}")
         }
-        (InvKind::Invariant, InvText::WhenThen { guards, requireds }) => {
+        InvText::Invariant { guards, requireds } => {
             format!("invariant violated: when {guards} then {requireds} is broken by {p}")
         }
-        (InvKind::Check, InvText::Conditions(c)) => {
+        InvText::Check(c) => {
             format!("check constraint is false: {c} is broken by {p}")
         }
-        (
-            InvKind::CrossForbidden,
-            InvText::Cross {
+        InvText::CrossForbidden {
                 entities,
                 conditions,
-            },
-        ) => format!(
+} => format!(
             "multi-entity forbidden state is reachable across [{entities}]: {conditions} witnessed by {p}"
         ),
-        (
-            InvKind::CrossInvariant,
-            InvText::CrossWhenThen {
+        InvText::CrossInvariant {
                 entities,
                 guards,
                 requireds,
-            },
-        ) => format!(
+} => format!(
             "multi-entity invariant violated across [{entities}]: when {guards} then {requireds} is broken by {p}"
         ),
-        (
-            InvKind::Quantifier,
-            InvText::Quantifier {
+        InvText::Quantifier {
                 anchor,
                 related,
                 constraint,
-            },
-        ) => format!(
+} => format!(
             "to-many quantifier constraint is violated from '{anchor}' to '{related}': {constraint} witnessed by {p}"
         ),
-        (
-            InvKind::Unique,
-            InvText::Unique {
+        InvText::Unique {
                 child,
                 parent,
                 role,
-            },
-        ) => format!(
+} => format!(
             "1:1 key is shared: two '{child}' rows belong to one '{parent}' through '{role}', witnessed by {p}"
         ),
-        (
-            InvKind::MinCard,
-            InvText::MinCard {
+        InvText::MinCard {
                 child,
                 parent,
                 role,
-            },
-        ) => format!(
+} => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}', witnessed by {p}"
         ),
-        _ => return None,
-    })
+    }
 }
 
 pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
@@ -797,15 +781,15 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             "{diag}; raise --max-states, or narrow with --entity or --buc"
         ),
         StateDiag::ConstraintViolated {
-            kind,
             text,
             label,
             pattern_desc,
             ..
-        } => violation_message(kind, text, pattern_desc).map_or_else(
-            || diag.to_string(),
-            |message| format!("{}{message}", label_prefix(label)),
-        ),
+        } => format!(
+"{}{}",
+label_prefix(label),
+violation_message(text, pattern_desc)
+),
         StateDiag::AfterAssertViolated {
             anchor,
             requireds,
