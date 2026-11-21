@@ -124,12 +124,7 @@ pub(super) fn add_functions(
                     }
                     for f in &list {
                         if let Some(ev) = &f.event_in {
-                            let id = model
-                                .events
-                                .values()
-                                .find(|e| type_ident(&e.id) == ev.ty)
-                                .map(|e| e.id.clone())
-                                .unwrap_or_default();
+                            let id = ev.event.clone();
                             let fields = event_fields(ts, &declared, &id);
                             events.entry(id.clone()).or_insert_with(|| EventDecl {
                                 name: ev.ty.clone(),
@@ -219,15 +214,16 @@ pub(super) fn add_functions(
     Ok(())
 }
 
+/// The generated type of each entity, by entity id.
 fn declared_types(domain: &DomainModel) -> BTreeMap<String, Declared<'_>> {
     let mut out = BTreeMap::new();
     for record in &domain.records {
         if record.kind == super::ir::RecordKind::Entity {
-            out.insert(record.name.clone(), Declared::Record(record));
+            out.insert(record.id.clone(), Declared::Record(record));
         }
     }
     for sum in &domain.sums {
-        out.insert(sum.name.clone(), Declared::Sum(sum));
+        out.insert(sum.entity.clone(), Declared::Sum(sum));
     }
     out
 }
@@ -249,7 +245,7 @@ fn functions(
     let type_of = |e: EntId| -> Result<&Declared<'_>, String> {
         let id = &model.entities[entity_key(e)].id;
         declared
-            .get(&type_ident(id))
+            .get(id)
             .ok_or_else(|| format!("entity {id} has no generated type"))
     };
 
@@ -457,8 +453,7 @@ fn functions(
                         let Some(r) = f.rows.iter().position(|row| row.param == *p) else {
                             continue;
                         };
-                        let Some(Declared::Sum(sum)) = declared.get(&type_ident(&f.rows[r].entity))
-                        else {
+                        let Some(Declared::Sum(sum)) = declared.get(&f.rows[r].entity) else {
                             continue;
                         };
                         let FieldType::Enum(tag_enum) = &sum.tag.ty else {
@@ -554,15 +549,14 @@ fn event_fields(
             continue;
         }
         let id = ts.entity(*entity).id.clone();
-        let fields = match declared.get(&type_ident(&id)) {
+        let fields = match declared.get(&id) {
             Some(Declared::Record(r)) => &r.fields,
             Some(Declared::Sum(s)) => &s.row_fields,
             None => continue,
         };
-        let want = format!("{}Id", type_ident(&id));
-        if !fields.iter().any(|f| f.ty == FieldType::Id(want.clone())) {
+        let Some((want, _)) = declared_id(&id, fields) else {
             continue;
-        }
+        };
         let field = super::ir::EventField {
             name: format!("{}_id", snake(&id)),
             entity: id,

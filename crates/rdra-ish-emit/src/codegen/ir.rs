@@ -509,6 +509,8 @@ pub struct EventIn {
     /// snake_case.
     pub name: String,
     pub ty: String,
+    /// The event's id.
+    pub event: String,
 }
 
 /// A use case the generator printed no function for, and why.

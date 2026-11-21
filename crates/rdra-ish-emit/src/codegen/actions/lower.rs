@@ -41,15 +41,11 @@ pub(super) fn function(
     };
     // The id type and id field of an entity, which a run mark holds.
     let id_of = |entity: &str| -> Option<(String, Field)> {
-        let fields = match declared.get(&type_ident(entity))? {
+        let fields = match declared.get(entity)? {
             Declared::Record(r) => &r.fields,
             Declared::Sum(s) => &s.row_fields,
         };
-        let want = format!("{}Id", type_ident(entity));
-        fields
-            .iter()
-            .find(|f| f.ty == FieldType::Id(want.clone()))
-            .map(|f| (want.clone(), f.clone()))
+        declared_id(entity, fields)
     };
     let mark_ty =
         |entity: &str, step: u8| format!("{}{}Mark{step}", type_ident(usecase), type_ident(entity));
@@ -94,13 +90,14 @@ pub(super) fn function(
             return Err(unsupported("an event guard this phase does not print"));
         };
         let id = model.events[event].id.clone();
-        if event_in.as_ref().is_some_and(|e| e.ty != type_ident(&id)) {
+        if event_in.as_ref().is_some_and(|e| e.event != id) {
             return Err(unsupported("a step that two events order"));
         }
         let name = fresh(snake(&id), &mut taken);
         event_in.get_or_insert(crate::codegen::ir::EventIn {
             name,
             ty: type_ident(&id),
+            event: id.clone(),
         });
         let entity = entity_id(usize::from(*p));
         if id_of(&entity).is_none() {
@@ -130,7 +127,7 @@ pub(super) fn function(
             name: fresh(base, &mut taken),
             param: p,
             state: picked[p].variant.and_then(|v| {
-                let tag = match declared.get(&type_ident(&entity_id(p))) {
+                let tag = match declared.get(&entity_id(p)) {
                     Some(Declared::Sum(sum)) => sum.tag.wire.clone(),
                     _ => return None,
                 };
@@ -165,7 +162,7 @@ pub(super) fn function(
                 let VarKind::Column { column, .. } = &ts.var(*var).kind else {
                     return Err(unsupported("a transition of a var that is not a column"));
                 };
-                let is_tag = matches!(declared.get(&type_ident(&entity_id(p))),
+                let is_tag = matches!(declared.get(&entity_id(p)),
                     Some(Declared::Sum(sum)) if sum.tag.wire == *column);
                 if !is_tag {
                     let Domain::Enum(values) = &ts.var(*var).domain else {
@@ -256,7 +253,7 @@ pub(super) fn function(
         }
         // The target state and type.
         let (target_ty, tag, target_fields, target_null): (String, _, Vec<Field>, Vec<Field>) =
-            match declared.get(&type_ident(&entity)) {
+            match declared.get(&entity) {
                 Some(Declared::Sum(sum)) => {
                     let value = if param.role == ParamRole::New {
                         let start = match writes.get(&(p, sum.tag.wire.clone())) {
@@ -533,7 +530,7 @@ pub(super) fn function(
 
     // Guards. A `.has` / `.none` ranges over a list of related rows, an input.
     let row_type = |entity: &str| -> Option<(String, Vec<Field>)> {
-        match declared.get(&type_ident(entity))? {
+        match declared.get(entity)? {
             Declared::Record(r) => Some((r.name.clone(), r.fields.clone())),
             Declared::Sum(s) => Some((s.row.clone(), s.row_fields.clone())),
         }
