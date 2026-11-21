@@ -1,6 +1,6 @@
-use crate::analysis::{condition_body_display, condition_edges, ConditionEdge};
+use crate::analysis::{condition_body_display, condition_edges};
 use crate::diagnostics::RdraError;
-use crate::model::{NodeRef, RelKind, SemanticModel, TypedPredicate};
+use crate::model::{CombinesTarget, NodeRef, RelKind, SemanticModel};
 use rdra_ish_syntax::parse;
 
 fn build(src: &str) -> (SemanticModel, Vec<crate::Diagnostic>) {
@@ -51,8 +51,8 @@ fn combines_derives_variation_and_state_model_edges() {
     assert!(cond.body.is_none());
     let edges = condition_edges(&model, ck);
     assert_eq!(edges.len(), 2, "{edges:?}");
-    assert!(matches!(edges[0], ConditionEdge::Variation(_)));
-    assert!(matches!(&edges[1], ConditionEdge::StateModel { column, .. } if column == "status"));
+    assert!(matches!(edges[0], CombinesTarget::Variation(_)));
+    assert!(matches!(&edges[1], CombinesTarget::StateModel { column, .. } if column == "status"));
     let combines = model
         .relations
         .iter()
@@ -63,10 +63,6 @@ fn combines_derives_variation_and_state_model_edges() {
         .relations
         .iter()
         .any(|r| r.kind == RelKind::AppliesTo && r.from == NodeRef::Condition(ck)));
-    assert!(model
-        .typed_predicates
-        .iter()
-        .any(|p| matches!(p, TypedPredicate::AppliesTo { .. })));
 }
 
 #[test]
@@ -82,8 +78,8 @@ fn holds_stores_the_body_and_derives_the_same_edges() {
         Some("Payment.method == Insurance, Appointment.status == checkedin")
     );
     let edges = condition_edges(&model, ck);
-    assert!(matches!(edges[0], ConditionEdge::Variation(_)));
-    assert!(matches!(&edges[1], ConditionEdge::StateModel { column, .. } if column == "status"));
+    assert!(matches!(edges[0], CombinesTarget::Variation(_)));
+    assert!(matches!(&edges[1], CombinesTarget::StateModel { column, .. } if column == "status"));
 }
 
 #[test]
@@ -103,7 +99,7 @@ fn holds_takes_has_and_none_chains_over_related_rows() {
     );
     let edges = condition_edges(&model, ck);
     assert!(
-        matches!(edges.as_slice(), [ConditionEdge::StateModel { column, .. }] if column == "status"),
+        matches!(edges.as_slice(), [CombinesTarget::StateModel { column, .. }] if column == "status"),
         "the related lifecycle column is a state-model link: {edges:?}"
     );
     assert!(model.quantifier_constraints.is_empty());

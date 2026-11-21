@@ -143,11 +143,6 @@ pub(super) fn process_navigates_predicate(
         options: RelationOptions::default(),
         via: via.map(NodeRef::UseCase),
     });
-    model.typed_predicates.push(TypedPredicate::Navigates {
-        from: *from,
-        to: *to,
-        via,
-    });
 }
 
 /// Resolve `.via(Entity)` from the relate chain. Returns `(via, had_via_call)`.
@@ -318,7 +313,7 @@ pub(super) fn process_relate_predicate(
     }
 
     if kind == RelKind::RelateManyToMany && via.is_none() {
-        // L4: if `.via` was present but failed to resolve, keep that diagnostic only.
+        // If `.via` was present but failed to resolve, keep that diagnostic only.
         if had_via {
             return;
         }

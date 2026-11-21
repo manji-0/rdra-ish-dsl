@@ -18,17 +18,6 @@ use super::constraint::{
 use super::predicate_process::predicate_arg_display;
 use super::qref_util::qref_display;
 
-/// One link from a condition to the RDRA elements it combines.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConditionEdge {
-    Variation(VariationKey),
-    /// A lifecycle column of an entity (RDRA 状態モデル).
-    StateModel {
-        entity: EntityKey,
-        column: std::string::String,
-    },
-}
-
 fn body_columns(condition: &CrossEntityCondition) -> Vec<&QualifiedModelColumnRef> {
     match condition {
         CrossEntityCondition::Equals { column, .. } => vec![column],
@@ -49,9 +38,9 @@ fn body_columns(condition: &CrossEntityCondition) -> Vec<&QualifiedModelColumnRe
 /// `transitions` arm the condition guards with `.when`; the variation of each `chooses` value
 /// it guards yields `Variation`. Without a body, the `combines`
 /// declarations are the links.
-pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<ConditionEdge> {
-    let mut edges: Vec<ConditionEdge> = Vec::new();
-    let mut push = |edge: ConditionEdge| {
+pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<CombinesTarget> {
+    let mut edges: Vec<CombinesTarget> = Vec::new();
+    let mut push = |edge: CombinesTarget| {
         if !edges.contains(&edge) {
             edges.push(edge);
         }
@@ -69,10 +58,10 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
                     continue;
                 };
                 if let ColumnType::Variation(key) = &column.col_type {
-                    push(ConditionEdge::Variation(*key));
+                    push(CombinesTarget::Variation(*key));
                 }
                 if model.is_lifecycle_column(operand.entity, &operand.column) {
-                    push(ConditionEdge::StateModel {
+                    push(CombinesTarget::StateModel {
                         entity: operand.entity,
                         column: operand.column.clone(),
                     });
@@ -83,7 +72,7 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
                 .iter()
                 .filter(|t| t.guard == Some(ck))
             {
-                push(ConditionEdge::StateModel {
+                push(CombinesTarget::StateModel {
                     entity: st.entity,
                     column: st.column.clone(),
                 });
@@ -94,19 +83,13 @@ pub fn condition_edges(model: &SemanticModel, ck: ConditionKey) -> Vec<Condition
                 .filter(|c| c.values.iter().any(|v| v.guard == Some(ck)))
             {
                 if let Some(key) = chosen_variation(model, choice) {
-                    push(ConditionEdge::Variation(key));
+                    push(CombinesTarget::Variation(key));
                 }
             }
         }
         None => {
             for decl in model.combines.iter().filter(|d| d.condition == ck) {
-                push(match &decl.target {
-                    CombinesTarget::Variation(key) => ConditionEdge::Variation(*key),
-                    CombinesTarget::StateModel { entity, column } => ConditionEdge::StateModel {
-                        entity: *entity,
-                        column: column.clone(),
-                    },
-                });
+                push(decl.target.clone());
             }
         }
     }
@@ -443,9 +426,6 @@ pub(crate) fn process_combines_predicate(
         target: target.clone(),
         location: Some(ctx.locate(pred.span.clone())),
     });
-    model
-        .typed_predicates
-        .push(TypedPredicate::Combines { condition, target });
 }
 
 pub(crate) fn process_holds_predicate(
@@ -526,9 +506,6 @@ pub(crate) fn process_holds_predicate(
         along,
         site: Some(ctx.locate(pred.span.clone())),
     });
-    model
-        .typed_predicates
-        .push(TypedPredicate::Holds { condition });
 }
 
 /// After every predicate is processed: a use case that `chooses` a column does not also
@@ -627,8 +604,8 @@ pub(crate) fn derive_condition_links(model: &mut SemanticModel, diags: &mut Vec<
     for ck in keys {
         for edge in condition_edges(model, ck) {
             let to = match edge {
-                ConditionEdge::Variation(key) => NodeRef::Variation(key),
-                ConditionEdge::StateModel { entity, .. } => NodeRef::Entity(entity),
+                CombinesTarget::Variation(key) => NodeRef::Variation(key),
+                CombinesTarget::StateModel { entity, .. } => NodeRef::Entity(entity),
             };
             model.relations.push(Relation {
                 site: None,

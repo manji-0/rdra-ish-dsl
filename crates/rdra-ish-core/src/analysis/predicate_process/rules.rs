@@ -58,9 +58,6 @@ pub(super) fn process_forbidden_predicate(
         let rule = RuleRef::Forbidden(model.forbidden_constraints.len() - 1);
         push_rule_guards(model, rule, &when, ctx);
         mark_lemma(model, pred, rule);
-        model
-            .typed_predicates
-            .push(TypedPredicate::Forbidden { entity: entity_key });
     }
 }
 
@@ -103,9 +100,6 @@ pub(super) fn process_required_predicate(
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
         });
-        model
-            .typed_predicates
-            .push(TypedPredicate::Required { entity: entity_key });
     }
 }
 
@@ -147,9 +141,6 @@ pub(super) fn process_exclusive_predicate(
             conditions: conditions.equals,
             comparisons: conditions.comparisons,
         });
-        model
-            .typed_predicates
-            .push(TypedPredicate::Exclusive { entity: entity_key });
     }
 }
 
@@ -296,8 +287,5 @@ pub(super) fn process_invariant_predicate(
         let rule = RuleRef::Invariant(model.entity_invariants.len() - 1);
         push_rule_guards(model, rule, &when, ctx);
         mark_lemma(model, pred, rule);
-        model
-            .typed_predicates
-            .push(TypedPredicate::Invariant { entity: entity_key });
     }
 }

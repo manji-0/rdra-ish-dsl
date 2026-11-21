@@ -544,7 +544,7 @@ pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate:
         if enters {
             if let NodeRef::Condition(condition) = &rel.from {
                 for edge in crate::analysis::condition_edges(model, *condition) {
-                    if let crate::analysis::ConditionEdge::Variation(variation) = edge {
+                    if let crate::model::CombinesTarget::Variation(variation) = edge {
                         sources.push(NodeRef::Variation(variation));
                     }
                 }

@@ -169,13 +169,6 @@ pub(super) fn process_transitions_predicate(
             to: to.clone(),
             guard,
         });
-        model.typed_predicates.push(TypedPredicate::Transitions {
-            entity: entity_key,
-            column: column.clone(),
-            usecase: *usecase,
-            from,
-            to: to.clone(),
-        });
     }
 }
 
@@ -349,7 +342,6 @@ pub(super) fn process_chooses_predicate(
                     col: column,
                 },
             );
-            return;
         }
         Some(c) => c.values.extend(chosen),
         None => model.column_choices.push(crate::model::ColumnChoice {
@@ -360,11 +352,6 @@ pub(super) fn process_chooses_predicate(
             site,
         }),
     }
-    model.typed_predicates.push(TypedPredicate::Chooses {
-        origin: usecase,
-        entity,
-        column,
-    });
 }
 
 /// The condition of a `.when(Cond)` chain, at most one: `Ok(None)` without one, `Err` after

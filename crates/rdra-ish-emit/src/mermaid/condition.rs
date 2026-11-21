@@ -5,17 +5,15 @@
 use super::{buc_scope, declare, guard_edge, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
-use rdra_ish_core::analysis::{
-    chosen_variation, condition_body_display, condition_edges, ConditionEdge,
-};
-use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel, VariationKey};
+use rdra_ish_core::analysis::{chosen_variation, condition_body_display, condition_edges};
+use rdra_ish_core::model::{CombinesTarget, NodeRef, RelKind, SemanticModel, VariationKey};
 use std::collections::{BTreeMap, HashSet};
 
 pub struct ConditionMermaidEmitter;
 
 /// The node id and label of a state model, as `--kind state` and `--kind information` give them.
-fn state_model(model: &SemanticModel, edge: &ConditionEdge) -> Option<(String, String)> {
-    let ConditionEdge::StateModel { entity, column } = edge else {
+fn state_model(model: &SemanticModel, edge: &CombinesTarget) -> Option<(String, String)> {
+    let CombinesTarget::StateModel { entity, column } = edge else {
         return None;
     };
     let entity = &model.entities.get(*entity)?.id;
@@ -81,11 +79,11 @@ impl Emitter for ConditionMermaidEmitter {
                 .then(|| "from holds".to_string());
             for edge in condition_edges(model, *key) {
                 let to = match &edge {
-                    ConditionEdge::Variation(variation) => {
+                    CombinesTarget::Variation(variation) => {
                         variations.insert(*variation);
                         contract_id(model, &NodeRef::Variation(*variation))
                     }
-                    ConditionEdge::StateModel { .. } => {
+                    CombinesTarget::StateModel { .. } => {
                         state_model(model, &edge).map(|(to, label)| {
                             state_models.insert(to.clone(), label);
                             to
@@ -95,12 +93,12 @@ impl Emitter for ConditionMermaidEmitter {
                 // The state model of a `.when` arm is derived from the arm, the variation of a
                 // `.when` value from its `chooses`.
                 let from_when = match &edge {
-                    ConditionEdge::StateModel { entity, column } => {
+                    CombinesTarget::StateModel { entity, column } => {
                         model.state_transitions.iter().any(|t| {
                             t.guard == Some(*key) && t.entity == *entity && t.column == *column
                         })
                     }
-                    ConditionEdge::Variation(vk) => model.column_choices.iter().any(|c| {
+                    CombinesTarget::Variation(vk) => model.column_choices.iter().any(|c| {
                         c.values.iter().any(|v| v.guard == Some(*key))
                             && chosen_variation(model, c) == Some(*vk)
                     }),

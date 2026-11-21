@@ -180,11 +180,6 @@ pub(crate) fn process_predicate(
             }
         }
     }
-
-    if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
-    {
-        model.typed_predicates.push(typed);
-    }
 }
 
 /// `maps_field(Dto.field, Entity.column)`: a screen field is one name, a DTO field two.

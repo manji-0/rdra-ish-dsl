@@ -60,9 +60,6 @@ pub(crate) fn process_forbidden(
     let rule = RuleRef::CrossForbidden(model.cross_forbidden_constraints.len() - 1);
     push_rule_guards(model, rule, &when, ctx);
     mark_lemma(model, pred, rule);
-    model
-        .typed_predicates
-        .push(TypedPredicate::CrossForbidden { scope });
 }
 
 pub(crate) fn process_invariant(
@@ -157,9 +154,6 @@ pub(crate) fn process_invariant(
     let rule = RuleRef::CrossInvariant(model.cross_entity_invariants.len() - 1);
     push_rule_guards(model, rule, &when, ctx);
     mark_lemma(model, pred, rule);
-    model
-        .typed_predicates
-        .push(TypedPredicate::CrossInvariant { scope });
 }
 
 /// Whether the rule says `.global()`. With `.along(...)` too it is `GlobalWithAlong`: the

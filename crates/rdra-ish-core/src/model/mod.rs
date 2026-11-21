@@ -7,7 +7,6 @@ mod keys;
 mod query;
 mod refs;
 mod symbol;
-mod typed;
 
 pub use comparison::*;
 pub use constraints::*;
@@ -18,7 +17,6 @@ pub use keys::*;
 pub use query::*;
 pub use refs::*;
 pub use symbol::*;
-pub use typed::*;
 
 use slotmap::SlotMap;
 use std::collections::HashSet;
@@ -316,8 +314,6 @@ pub struct SemanticModel {
     pub field_mappings: Vec<FieldMapping>,
     /// `maps_field(Dto.field, Entity.column)`, in source order.
     pub dto_mappings: Vec<DtoMapping>,
-    /// 解析済み述語の型付き表現。
-    pub typed_predicates: Vec<TypedPredicate>,
     /// Events intentionally published outside the local model boundary.
     pub outbox_events: HashSet<EventKey>,
     /// `creates/updates/deletes(UseCase, Entity).apart()`: the use case writes a row of the
