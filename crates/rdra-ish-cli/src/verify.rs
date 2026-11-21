@@ -27,7 +27,7 @@ use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
 use crate::export::{checked_system, tla_bounds, tla_file, Modules};
-use crate::property_cone::{ConeRun, PropertyCone, Verdict};
+use crate::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict};
 use crate::prove::{run_proof, Marks, ProofTally};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{tlc_env, Heap};
@@ -112,24 +112,41 @@ struct ConeSystem {
     names: TlaNames,
 }
 
+/// What a run decides about its checks.
+enum Decision {
+    Decided(Outcome),
+    /// The property is not decided, and why. `capped`: the whole-model run stopped at the
+    /// state cap, not at the time budget.
+    Undecided {
+        why: String,
+        capped: bool,
+    },
+}
+
+impl Decision {
+    /// What the run adds to the verdict of the whole: an undecided property fails nothing.
+    fn outcome(&self) -> Outcome {
+        match self {
+            Decision::Decided(outcome) => *outcome,
+            Decision::Undecided { .. } => Outcome::Ok,
+        }
+    }
+}
+
 struct Ran {
-    outcome: Outcome,
+    decision: Decision,
     /// The run whose counterexample is explained: the last one of the job.
     run: TlcRun,
     log: String,
     /// What the run line says after the state count.
     notes: Vec<String>,
-    /// The property is not decided, and why.
-    undecided: Option<String>,
-    /// The whole-model run stopped at the state cap, not at the time budget.
-    capped: bool,
 }
 
 impl Ran {
     fn line(&self, module: &str, checks: &[String]) -> String {
-        let verdict = match self.undecided {
-            Some(_) => "not decided",
-            None => self.outcome.as_str(),
+        let verdict = match &self.decision {
+            Decision::Undecided { .. } => "not decided",
+            Decision::Decided(outcome) => outcome.as_str(),
         };
         let mut inside: Vec<String> = self
             .run
@@ -298,7 +315,7 @@ fn run_job(tlc: &Tlc, dir: &Path, modules: &Modules, job: &Job, workers: &str) -
     match &job.kind {
         JobKind::Cone(cs) => {
             let mut reruns = 0;
-            while ran.outcome == Outcome::Counterexample {
+            while ran.decision.outcome() == Outcome::Counterexample {
                 let found = ran.run.violated_names();
                 if found.len() >= job.checks.len() {
                     break;
@@ -319,17 +336,20 @@ fn run_job(tlc: &Tlc, dir: &Path, modules: &Modules, job: &Job, workers: &str) -
         }
         JobKind::PropertyCone(p) => {
             let (cone, wf) = (&p.cone, &p.wf);
-            let mut plain = ran.outcome;
+            let mut plain = ran.decision.outcome();
             // A counterexample on the reduced cone is real, but its lasso is read on the
             // unreduced cone, whose run gives the verdict from here on.
             if let (Outcome::Counterexample, Some(full)) = (plain, &p.full) {
                 let cfg = format!("{}.cfg", full.module);
                 let more = run_cfg(tlc, dir, &full.module, job.heap(), &cfg, workers, false)?;
-                ran.notes
-                    .push(format!("{}: {}", full.module, more.outcome.as_str()));
+                ran.notes.push(format!(
+                    "{}: {}",
+                    full.module,
+                    more.decision.outcome().as_str()
+                ));
                 ran.log.push_str(&more.log);
                 ran.run = more.run;
-                plain = match more.outcome {
+                plain = match more.decision.outcome() {
                     Outcome::Ok => {
                         ran.notes.push(
                             "the reduced cone finds a counterexample the cone does not (a tool bug)"
@@ -340,29 +360,33 @@ fn run_job(tlc: &Tlc, dir: &Path, modules: &Modules, job: &Job, workers: &str) -
                     other => other,
                 };
             }
-            let mut verdict = cone.verdict(plain, None);
-            if verdict == Verdict::NeedsWfNext {
-                let wf = wf
-                    .as_ref()
-                    .expect("an eventually or leads_to has a WF module");
-                let cfg = format!("{}.cfg", wf.module);
-                let more = run_cfg(tlc, dir, &wf.module, job.heap(), &cfg, workers, false)?;
-                verdict = cone.verdict(plain, Some(more.outcome));
-                ran.notes
-                    .push(format!("{}: {}", wf.module, more.outcome.as_str()));
-                ran.log.push_str(&more.log);
-                ran.run = more.run;
-            }
-            ran.outcome = match verdict {
-                Verdict::Ok => Outcome::Ok,
-                Verdict::Counterexample => Outcome::Counterexample,
-                Verdict::ToolError => Outcome::ToolError,
-                Verdict::Undecided(why) => {
-                    ran.undecided = Some(why.as_str().to_string());
-                    ran.notes.push(why.as_str().to_string());
-                    Outcome::Ok
+            let verdict = match cone.after_plain(plain) {
+                AfterPlain::Decided(verdict) => verdict,
+                AfterPlain::NeedsWfNext => {
+                    let wf = wf
+                        .as_ref()
+                        .expect("an eventually or leads_to has a WF module");
+                    let cfg = format!("{}.cfg", wf.module);
+                    let more = run_cfg(tlc, dir, &wf.module, job.heap(), &cfg, workers, false)?;
+                    let wf_outcome = more.decision.outcome();
+                    ran.notes
+                        .push(format!("{}: {}", wf.module, wf_outcome.as_str()));
+                    ran.log.push_str(&more.log);
+                    ran.run = more.run;
+                    cone.after_wf(plain, wf_outcome)
                 }
-                Verdict::NeedsWfNext => unreachable!("the WF run answers it"),
+            };
+            ran.decision = match verdict {
+                Verdict::Ok => Decision::Decided(Outcome::Ok),
+                Verdict::Counterexample => Decision::Decided(Outcome::Counterexample),
+                Verdict::ToolError => Decision::Decided(Outcome::ToolError),
+                Verdict::Undecided(why) => {
+                    ran.notes.push(why.as_str().to_string());
+                    Decision::Undecided {
+                        why: why.as_str().to_string(),
+                        capped: false,
+                    }
+                }
             };
         }
         JobKind::Whole(_) => {}
@@ -419,12 +443,10 @@ fn run_cfg(
     );
     let run = TlcRun::parse(&log);
     Ok(Ran {
-        outcome: run.outcome(output.status.success()),
+        decision: Decision::Decided(run.outcome(output.status.success())),
         run,
         log,
         notes: Vec::new(),
-        undecided: None,
-        capped: false,
     })
 }
 
@@ -525,18 +547,22 @@ fn run_whole(tlc: &Tlc, dir: &Path, job: &Job, workers: &str, budget: Duration) 
     let run = TlcRun::parse(&log);
     let exit_ok = status.is_some_and(|s| s.success());
     // A kill that lands after TLC printed its verdict stops nothing that decides.
-    let (outcome, stopped) = match (stopped, run.verdict()) {
-        (Some(_), Some(outcome)) => (outcome, None),
-        (Some(why), None) => (Outcome::Ok, Some(why)),
-        (None, _) => (run.outcome(exit_ok), None),
+    let (decision, notes) = match (stopped, run.verdict()) {
+        (Some(_), Some(outcome)) => (Decision::Decided(outcome), Vec::new()),
+        (Some(why), None) => (
+            Decision::Undecided {
+                why: why.clone(),
+                capped,
+            },
+            vec![why],
+        ),
+        (None, _) => (Decision::Decided(run.outcome(exit_ok)), Vec::new()),
     };
     Ok(Ran {
-        outcome,
+        decision,
         run,
         log,
-        notes: stopped.iter().cloned().collect(),
-        capped: capped && stopped.is_some(),
-        undecided: stopped,
+        notes,
     })
 }
 
@@ -738,7 +764,7 @@ pub fn run_tlc(
         println!("{}", r.line(&job.module, &job.checks));
     }
 
-    run_undecided_wholes(
+    let undecided = run_undecided_wholes(
         (&tlc, dir.as_path()),
         (&ts, &names),
         &whole_modules,
@@ -746,11 +772,16 @@ pub fn run_tlc(
         (&mut jobs, &mut ran),
         (&mut index, index_path.as_path()),
     )?;
-    let undecided: Vec<String> = undecided_lines(&jobs, &ran);
 
-    let outcome = if ran.iter().any(|r| r.outcome == Outcome::Counterexample) {
+    let outcome = if ran
+        .iter()
+        .any(|r| r.decision.outcome() == Outcome::Counterexample)
+    {
         Outcome::Counterexample
-    } else if ran.iter().any(|r| r.outcome == Outcome::ToolError) {
+    } else if ran
+        .iter()
+        .any(|r| r.decision.outcome() == Outcome::ToolError)
+    {
         Outcome::ToolError
     } else {
         Outcome::Ok
@@ -852,7 +883,8 @@ fn write_specs_and_index(
 }
 
 /// Runs the properties the cones leave undecided on the whole model, under the budget, and
-/// appends their jobs and results.
+/// appends their jobs and results. Returns the findings the whole-model runs leave undecided,
+/// one line each.
 fn run_undecided_wholes(
     (tlc, dir): (&Tlc, &Path),
     (ts, names): (&TransitionSystem, &TlaNames),
@@ -860,12 +892,12 @@ fn run_undecided_wholes(
     budget: Duration,
     (jobs, ran): (&mut Vec<Job>, &mut Vec<Ran>),
     (index, index_path): (&mut String, &Path),
-) -> Result<()> {
+) -> Result<Vec<String>> {
     // The properties the cones leave undecided run on the whole model, under the budget.
     let wholes: Vec<Job> = jobs
         .iter()
         .zip(&*ran)
-        .filter(|(_, r)| r.undecided.is_some())
+        .filter(|(_, r)| matches!(r.decision, Decision::Undecided { .. }))
         .filter_map(|(job, _)| match &job.kind {
             JobKind::PropertyCone(p) => {
                 Some(whole_job(ts, names, &whole_modules[p.index], p.index))
@@ -880,17 +912,16 @@ fn run_undecided_wholes(
     if !wholes.is_empty() {
         fs::write(index_path, &index)
             .with_context(|| format!("failed to write {}", index_path.display()))?;
-        for r in &mut *ran {
-            r.undecided = None;
-        }
         let more = run_wholes(tlc, dir, &wholes, budget)?;
         for (job, r) in wholes.iter().zip(&more) {
             println!("{}", r.line(&job.module, &job.checks));
         }
+        let undecided = undecided_lines(&wholes, &more);
         jobs.extend(wholes);
         ran.extend(more);
+        return Ok(undecided);
     }
-    Ok(())
+    Ok(Vec::new())
 }
 
 /// The findings the whole-model runs leave undecided, one line each.
@@ -898,7 +929,9 @@ fn undecided_lines(jobs: &[Job], ran: &[Ran]) -> Vec<String> {
     jobs.iter()
         .zip(ran)
         .filter_map(|(job, r)| {
-            let why = r.undecided.as_ref()?;
+            let Decision::Undecided { why, capped } = &r.decision else {
+                return None;
+            };
             let states = r
                 .run
                 .distinct_states
@@ -906,7 +939,7 @@ fn undecided_lines(jobs: &[Job], ran: &[Ran]) -> Vec<String> {
             Some(format!(
                 "  {}: the whole-model run {why}{states}; {}",
                 job.checks.join(", "),
-                undecided_hint(r.capped)
+                undecided_hint(*capped)
             ))
         })
         .collect()
@@ -925,14 +958,14 @@ fn fail(
     let failed: Vec<String> = jobs
         .iter()
         .zip(ran)
-        .filter(|(_, r)| r.outcome == outcome)
+        .filter(|(_, r)| r.decision.outcome() == outcome)
         .map(|(job, r)| {
             let mut body = format!(
                 "{} ({}):\n",
                 job.module,
                 dir.join(format!("{}.tla", job.module)).display()
             );
-            if r.outcome == Outcome::Counterexample {
+            if r.decision.outcome() == Outcome::Counterexample {
                 for block in model_traces(program, model, (ts, names), &job.kind, &r.run) {
                     body.push_str(&block);
                     body.push('\n');

@@ -34,7 +34,7 @@ use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use rdra_ish_cli::property_cone::{ConeRun, PropertyCone, Verdict, Why};
+use rdra_ish_cli::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict, Why};
 use rdra_ish_cli::tlc_env::{tlc_env, Heap};
 use rdra_ish_cli::tlc_output::{parse_dot, Outcome, TlcRun};
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
@@ -2791,17 +2791,19 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                 (first, run, log, names) = (again, r, l, full.names);
                 full_runs += 1;
             }
-            let mut verdict = cone.verdict(first, None);
-            if verdict == Verdict::NeedsWfNext {
-                let wf = cone.bundle(ConeRun::WfNext, "Cone");
-                assert!(
-                    wf.tla.contains("WF_vars(Next)"),
-                    "{label}: the WF cone run lacks WF_vars(Next)"
-                );
-                let (second, r, l) = run_property(&tlc, &dir.join("wf"), &wf);
-                verdict = cone.verdict(first, Some(second));
-                (run, log, names) = (r, l, wf.names);
-            }
+            let verdict = match cone.after_plain(first) {
+                AfterPlain::Decided(verdict) => verdict,
+                AfterPlain::NeedsWfNext => {
+                    let wf = cone.bundle(ConeRun::WfNext, "Cone");
+                    assert!(
+                        wf.tla.contains("WF_vars(Next)"),
+                        "{label}: the WF cone run lacks WF_vars(Next)"
+                    );
+                    let (second, r, l) = run_property(&tlc, &dir.join("wf"), &wf);
+                    (run, log, names) = (r, l, wf.names);
+                    cone.after_wf(first, second)
+                }
+            };
             let whole = tla::print(&ts, PrintMode::Property(i), "Cone");
             let (whole_outcome, _, whole_log) = run_property(&tlc, &dir.join("whole"), &whole);
             assert_ne!(
@@ -2828,7 +2830,7 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                     }
                 }
                 Verdict::Undecided(why) => undecided.push((property.as_str(), why)),
-                Verdict::NeedsWfNext | Verdict::ToolError => panic!("{label}: {verdict:?}\n{log}"),
+                Verdict::ToolError => panic!("{label}: {verdict:?}\n{log}"),
             }
             println!(
                 "{label}: cone {verdict:?} ({} states), whole {}",
