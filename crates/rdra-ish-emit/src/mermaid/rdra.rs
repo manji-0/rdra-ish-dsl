@@ -1,7 +1,7 @@
 //! The RDRA overview graph (`--kind rdra`).
 
 use super::{graph_edges, kinds_by_layer, render_edges, render_layered_nodes, GraphEdge};
-use crate::diagram_common::{class_defs, Header};
+use crate::diagram_common::{class_defs, Header, NodeScope};
 use crate::{
     collect_object_graph_nodes, object_graph_rel_label, view_node_visible, view_relation_visible,
     EmitError, Emitter, Scope, View,
@@ -26,7 +26,7 @@ fn edge_kind_token(kind: &RelKind) -> &'static str {
 impl Emitter for RdraMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         // A BUC scope also holds the states its use cases move between.
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
+        let reachable = match &view.scope {
             Scope::Bucs(buc_ids) => {
                 let mut set = rdra_ish_core::reachable_from_bucs(model, buc_ids);
                 let states: Vec<NodeRef> = model
@@ -40,11 +40,11 @@ impl Emitter for RdraMermaidEmitter {
                     .map(NodeRef::State)
                     .collect();
                 set.extend(states);
-                Some(set)
+                NodeScope::Only(set)
             }
-            Scope::Whole | Scope::UseCases(_) => None,
+            Scope::Whole | Scope::UseCases(_) => NodeScope::All,
         };
-        let in_scope = |nr: &NodeRef| reachable.as_ref().is_none_or(|set| set.contains(nr));
+        let in_scope = |nr: &NodeRef| reachable.contains(nr);
         let scoped_nodes = collect_object_graph_nodes(model, &in_scope);
         let visible_nodes: Vec<NodeRef> = scoped_nodes
             .iter()

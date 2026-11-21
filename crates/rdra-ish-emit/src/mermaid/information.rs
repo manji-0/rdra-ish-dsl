@@ -2,7 +2,9 @@
 //! diagram, each entity's state models, and the variations its columns take, without columns.
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
+use crate::diagram_common::{
+    class_defs, contract_id, desc_line, node_line, quote, Header, NodeScope,
+};
 use crate::{is_relate, object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{ColumnType, NodeRef, SemanticModel};
 use std::collections::{BTreeSet, HashSet};
@@ -13,12 +15,14 @@ impl Emitter for InformationMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         // The entities `diagram --kind er` draws for the same scope.
         let reachable = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+            Scope::Bucs(buc_ids) => {
+                NodeScope::Only(rdra_ish_core::reachable_from_bucs(model, buc_ids))
+            }
             Scope::Whole | Scope::UseCases(_) => {
                 super::entity_neighbourhood(model, &view.state.entities)
             }
         };
-        let visible = |nr: &NodeRef| reachable.as_ref().is_none_or(|set| set.contains(nr));
+        let visible = |nr: &NodeRef| reachable.contains(nr);
         let mut entities: Vec<_> = model
             .entities
             .iter()

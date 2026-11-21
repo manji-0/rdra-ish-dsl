@@ -1,8 +1,8 @@
 //! The event diagram (`--kind event`).
 
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, edge_line, node_line, quote, reachable_for_scope,
-    scoped_node_visible, Header,
+    class_defs, contract_id, desc_line, edge_line, node_line, quote, reachable_for_scope, Header,
+    NodeScope,
 };
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{
@@ -97,10 +97,10 @@ pub(super) fn render_event_flow(
     out: &mut String,
     declared: &mut Declared,
     model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
+    reachable: &NodeScope,
     flow: &EventFlow,
 ) {
-    if !scoped_node_visible(reachable, &NodeRef::Event(flow.event)) {
+    if !reachable.contains(&NodeRef::Event(flow.event)) {
         return;
     }
     let Some(event_id) = declare_flow_node(out, declared, model, FlowNode::Event(flow.event))
@@ -118,7 +118,7 @@ pub(super) fn render_event_flow(
         Raiser::ExtSystem(extsystem) => FlowNode::ExtSystem(extsystem),
     });
     for raiser in raisers {
-        if !scoped_node_visible(reachable, &raiser.node_ref()) {
+        if !reachable.contains(&raiser.node_ref()) {
             continue;
         }
         if let Some(raiser_id) = declare_flow_node(out, declared, model, raiser) {
@@ -141,7 +141,7 @@ pub(super) fn render_event_flow(
                 .map(FlowNode::ExtSystem),
         );
     for target in targets {
-        if !scoped_node_visible(reachable, &target.node_ref()) {
+        if !reachable.contains(&target.node_ref()) {
             continue;
         }
         if let Some(target_id) = declare_flow_node(out, declared, model, target) {
@@ -154,10 +154,10 @@ fn render_timer_flow(
     out: &mut String,
     declared: &mut Declared,
     model: &SemanticModel,
-    reachable: &Option<HashSet<NodeRef>>,
+    reachable: &NodeScope,
     flow: &TimerFlow,
 ) {
-    if !scoped_node_visible(reachable, &NodeRef::Timer(flow.timer)) {
+    if !reachable.contains(&NodeRef::Timer(flow.timer)) {
         return;
     }
     let Some(timer_id) = declare_flow_node(out, declared, model, FlowNode::Timer(flow.timer))
@@ -174,7 +174,7 @@ fn render_timer_flow(
                 .map(FlowNode::Buc),
         );
     for target in targets {
-        if !scoped_node_visible(reachable, &target.node_ref()) {
+        if !reachable.contains(&target.node_ref()) {
             continue;
         }
         if let Some(target_id) = declare_flow_node(out, declared, model, target) {

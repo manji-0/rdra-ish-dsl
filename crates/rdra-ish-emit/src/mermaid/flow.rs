@@ -3,7 +3,7 @@
 //! step covers. A step one actor performs sits in that actor's swimlane.
 
 use super::{declare, omitted_linked_kinds, rdra_arrow, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header};
+use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header, NodeScope};
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{HashMap, HashSet};
@@ -12,8 +12,8 @@ pub struct FlowMermaidEmitter;
 
 /// The flows of the scope, sorted by id: every one, or those the named BUCs contain.
 fn scoped_flows(model: &SemanticModel, scope: &Scope) -> Vec<NodeRef> {
-    let contained: Option<HashSet<NodeRef>> = match scope {
-        Scope::Bucs(ids) => Some(
+    let contained = match scope {
+        Scope::Bucs(ids) => NodeScope::Only(
             model
                 .relations
                 .iter()
@@ -27,10 +27,10 @@ fn scoped_flows(model: &SemanticModel, scope: &Scope) -> Vec<NodeRef> {
                 .map(|rel| rel.to.clone())
                 .collect(),
         ),
-        Scope::Whole | Scope::UseCases(_) => None,
+        Scope::Whole | Scope::UseCases(_) => NodeScope::All,
     };
     collect_object_graph_nodes(model, &|nr| {
-        matches!(nr, NodeRef::Flow(_)) && contained.as_ref().is_none_or(|set| set.contains(nr))
+        matches!(nr, NodeRef::Flow(_)) && contained.contains(nr)
     })
 }
 

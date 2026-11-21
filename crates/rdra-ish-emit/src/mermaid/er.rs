@@ -1,26 +1,22 @@
 //! The ER diagram (`--kind er`).
 
 use super::entity_neighbourhood;
-use crate::diagram_common::{col_type_str, Header};
+use crate::diagram_common::{col_type_str, Header, NodeScope};
 use crate::{is_relate, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, SemanticModel};
-use std::collections::HashSet;
 
 pub struct ErMermaidEmitter;
 
 impl Emitter for ErMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        let reachable: Option<HashSet<NodeRef>> = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+        let reachable = match &view.scope {
+            Scope::Bucs(buc_ids) => {
+                NodeScope::Only(rdra_ish_core::reachable_from_bucs(model, buc_ids))
+            }
             Scope::Whole | Scope::UseCases(_) => entity_neighbourhood(model, &view.state.entities),
         };
 
-        let is_visible = |nr: &NodeRef| -> bool {
-            match &reachable {
-                Some(set) => set.contains(nr),
-                None => true,
-            }
-        };
+        let is_visible = |nr: &NodeRef| reachable.contains(nr);
 
         let mut ents: Vec<_> = model.entities.iter().collect();
         ents.sort_by_key(|(_, e)| &e.id);

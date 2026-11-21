@@ -3,7 +3,9 @@
 //! its values.
 
 use super::{buc_scope, declare, guard_edge, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
+use crate::diagram_common::{
+    class_defs, contract_id, desc_line, node_line, quote, Header, NodeScope,
+};
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{chosen_variation, condition_body_display, condition_edges};
 use rdra_ish_core::model::{CombinesTarget, NodeRef, RelKind, SemanticModel, VariationKey};
@@ -50,13 +52,13 @@ fn render_variation(out: &mut String, model: &SemanticModel, key: VariationKey, 
 impl Emitter for ConditionMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let targets_in_scope = match &view.scope {
-            Scope::Bucs(ids) => Some(buc_scope(model, ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
+            Scope::Bucs(ids) => NodeScope::Only(buc_scope(model, ids)),
+            Scope::Whole | Scope::UseCases(_) => NodeScope::All,
         };
-        let visible = |nr: &NodeRef| targets_in_scope.as_ref().is_none_or(|set| set.contains(nr));
+        let visible = |nr: &NodeRef| targets_in_scope.contains(nr);
         let conditions = collect_object_graph_nodes(model, &|nr| {
             matches!(nr, NodeRef::Condition(_))
-                && (targets_in_scope.is_none()
+                && (targets_in_scope.is_all()
                     || model.relations.iter().any(|rel| {
                         matches!(rel.kind, RelKind::AppliesTo | RelKind::Guards)
                             && rel.from == *nr
@@ -139,7 +141,7 @@ impl Emitter for ConditionMermaidEmitter {
             }
         }
         // The whole model is the variation sheet: every variation, a condition's or not.
-        if targets_in_scope.is_none() {
+        if targets_in_scope.is_all() {
             variations.extend(model.variations.keys());
         }
 

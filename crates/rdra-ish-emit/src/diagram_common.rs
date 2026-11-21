@@ -50,20 +50,29 @@ pub(crate) fn col_type_str(model: &SemanticModel, ct: &ColumnType) -> String {
     }
 }
 
-pub(crate) fn reachable_for_scope(
-    model: &SemanticModel,
-    scope: &Scope,
-) -> Option<HashSet<NodeRef>> {
-    match scope {
-        Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
-        Scope::Whole | Scope::UseCases(_) => None,
+/// The nodes a diagram may draw: every one, or only those of a set.
+pub(crate) enum NodeScope {
+    All,
+    Only(HashSet<NodeRef>),
+}
+
+impl NodeScope {
+    pub(crate) fn contains(&self, node: &NodeRef) -> bool {
+        match self {
+            NodeScope::All => true,
+            NodeScope::Only(set) => set.contains(node),
+        }
+    }
+
+    pub(crate) fn is_all(&self) -> bool {
+        matches!(self, NodeScope::All)
     }
 }
 
-pub(crate) fn scoped_node_visible(reachable: &Option<HashSet<NodeRef>>, node: &NodeRef) -> bool {
-    match reachable {
-        Some(set) => set.contains(node),
-        None => true,
+pub(crate) fn reachable_for_scope(model: &SemanticModel, scope: &Scope) -> NodeScope {
+    match scope {
+        Scope::Bucs(buc_ids) => NodeScope::Only(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+        Scope::Whole | Scope::UseCases(_) => NodeScope::All,
     }
 }
 

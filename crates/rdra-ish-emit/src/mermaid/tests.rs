@@ -1,6 +1,7 @@
 use super::event::{declare_flow_node, render_event_flow, Declared, FlowNode};
 use super::*;
 use crate::diagram_common::model_from;
+use crate::diagram_common::NodeScope;
 use crate::{Emitter, Explored, StatesEmitter, View};
 use rdra_ish_core::build_model;
 use rdra_ish_syntax::parse;
@@ -821,8 +822,8 @@ transitions(ReviewClaim, Claim.status, open -> reviewed)
     let mut out = String::new();
     let mut declared = Declared::default();
 
-    render_event_flow(&mut out, &mut declared, &model, &None, &flow);
-    render_event_flow(&mut out, &mut declared, &model, &None, &flow);
+    render_event_flow(&mut out, &mut declared, &model, &NodeScope::All, &flow);
+    render_event_flow(&mut out, &mut declared, &model, &NodeScope::All, &flow);
 
     assert_eq!(
         out.matches("  event__EncounterSigned>\"Encounter Signed\"]:::event\n")
@@ -891,7 +892,7 @@ raises(SignEncounter, EncounterSigned)
     let flow = rdra_ish_core::collect_event_flows(&model).pop().unwrap();
     let mut out = String::new();
     let mut declared = Declared::default();
-    let reachable = Some(HashSet::new());
+    let reachable = NodeScope::Only(HashSet::new());
 
     render_event_flow(&mut out, &mut declared, &model, &reachable, &flow);
 

@@ -30,7 +30,7 @@ pub use sequence::SequenceMermaidEmitter;
 pub use state::StateMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
-use crate::diagram_common::{contract_id, desc_line, edge_line, node_line, quote};
+use crate::diagram_common::{contract_id, desc_line, edge_line, node_line, quote, NodeScope};
 use crate::{
     collect_object_graph_nodes, is_relate, object_graph_layer, object_graph_rel_label,
     ObjectGraphLayer, OBJECT_GRAPH_LAYERS,
@@ -403,13 +403,10 @@ fn graph_edges(model: &SemanticModel, visible: &HashSet<NodeRef>) -> Vec<(RelKin
 mod tests;
 
 /// The named entities and every entity one `relate` away from one of them: what `--entity`
-/// draws of the data model. `None` when no entity is named.
-pub(crate) fn entity_neighbourhood(
-    model: &SemanticModel,
-    ids: &[String],
-) -> Option<HashSet<NodeRef>> {
+/// draws of the data model. Every node when no entity is named.
+pub(crate) fn entity_neighbourhood(model: &SemanticModel, ids: &[String]) -> NodeScope {
     if ids.is_empty() {
-        return None;
+        return NodeScope::All;
     }
     let mut set: HashSet<NodeRef> = model
         .entities
@@ -439,5 +436,5 @@ pub(crate) fn entity_neighbourhood(
             }
         }
     }
-    Some(set)
+    NodeScope::Only(set)
 }
