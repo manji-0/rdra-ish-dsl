@@ -11,7 +11,7 @@
 use super::usecase::{is_crud, scoped_use_cases};
 use super::{kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, node_line, quote, Header};
-use crate::{node_kind_filter_name, object_graph_rel_label, EmitError, Emitter, View};
+use crate::{object_graph_rel_label, EmitError, Emitter, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{BTreeMap, HashSet};
 
@@ -204,18 +204,14 @@ impl Emitter for RobustnessMermaidEmitter {
                 "  ",
                 node_id,
                 &quote(model.node_label(node).unwrap_or_default()),
-                node_kind_filter_name(node),
+                node.kind_tag(),
             ));
         }
         render_edges(&mut body, "robustness", edges);
 
         let nodes: Vec<NodeRef> = drawn.into_iter().map(|(_, _, node)| node).collect();
         let mut kinds = kinds_by_layer(&nodes);
-        kinds.sort_by_key(|kind| {
-            nodes
-                .iter()
-                .position(|node| node_kind_filter_name(node) == *kind)
-        });
+        kinds.sort_by_key(|kind| nodes.iter().position(|node| node.kind_tag() == *kind));
         body.push_str(&class_defs(&kinds));
         let drawn: HashSet<NodeRef> = nodes.into_iter().collect();
         let header = Header {

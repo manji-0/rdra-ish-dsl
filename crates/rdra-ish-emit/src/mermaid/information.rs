@@ -3,21 +3,11 @@
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
-use crate::{object_graph_rel_label, EmitError, Emitter, Scope, View};
-use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel};
+use crate::{is_relate, object_graph_rel_label, EmitError, Emitter, Scope, View};
+use rdra_ish_core::model::{ColumnType, NodeRef, SemanticModel};
 use std::collections::{BTreeSet, HashSet};
 
 pub struct InformationMermaidEmitter;
-
-fn is_relate(kind: &RelKind) -> bool {
-    matches!(
-        kind,
-        RelKind::RelateOneToOne
-            | RelKind::RelateOneToMany
-            | RelKind::RelateManyToOne
-            | RelKind::RelateManyToMany
-    )
-}
 
 impl Emitter for InformationMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {

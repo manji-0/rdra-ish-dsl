@@ -4,7 +4,7 @@
 
 use super::{buc_scope, declare, guard_edge, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
-use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{
     chosen_variation, condition_body_display, condition_edges, ConditionEdge,
 };
@@ -186,7 +186,7 @@ impl Emitter for ConditionMermaidEmitter {
         let targets = collect_object_graph_nodes(model, &|nr| targets.contains(nr));
         for target in &targets {
             declare(&mut body, model, target, "  ");
-            let kind = node_kind_filter_name(target);
+            let kind = target.kind_tag();
             if !kinds.contains(&kind) {
                 kinds.push(kind);
             }

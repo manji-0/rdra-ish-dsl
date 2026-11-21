@@ -27,7 +27,7 @@ use crate::diagram_common::{
     quote, render_event_flows, Header,
 };
 use crate::{
-    collect_object_graph_nodes, node_kind_filter_name, object_graph_layer, object_graph_rel_label,
+    collect_object_graph_nodes, is_relate, object_graph_layer, object_graph_rel_label,
     view_node_visible, view_relation_visible, EmitError, Emitter, Explored, ObjectGraphLayer,
     OnDeadlock, Scope, StatesEmitter, View, OBJECT_GRAPH_LAYERS,
 };
@@ -75,12 +75,7 @@ fn render_layered_nodes(
             layer.label()
         ));
         for (nr, id, label) in nodes {
-            out.push_str(&node_line(
-                "    ",
-                &id,
-                &quote(label),
-                node_kind_filter_name(nr),
-            ));
+            out.push_str(&node_line("    ", &id, &quote(label), nr.kind_tag()));
             if let Some(desc) = desc_line(model, nr, &id) {
                 out.push_str(&format!("    {desc}\n"));
             }
@@ -95,7 +90,7 @@ fn declare(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str
     let (Some(id), Some(label)) = (contract_id(model, node), model.node_label(node)) else {
         return;
     };
-    let kind = node_kind_filter_name(node);
+    let kind = node.kind_tag();
     out.push_str(&node_line(indent, &id, &quote(label), kind));
     if let Some(desc) = desc_line(model, node, &id) {
         out.push_str(&format!("{indent}{desc}\n"));
@@ -266,7 +261,7 @@ fn kinds_by_layer(nodes: &[NodeRef]) -> Vec<&'static str> {
     let mut kinds = Vec::new();
     for layer in OBJECT_GRAPH_LAYERS {
         for node in nodes.iter().filter(|nr| object_graph_layer(nr) == layer) {
-            let kind = node_kind_filter_name(node);
+            let kind = node.kind_tag();
             if !kinds.contains(&kind) {
                 kinds.push(kind);
             }
@@ -781,7 +776,6 @@ pub struct ErMermaidEmitter;
 
 impl Emitter for ErMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
-        // BUCフィルタ
         let reachable: Option<HashSet<NodeRef>> = match &view.scope {
             Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
             Scope::Whole | Scope::UseCases(_) => entity_neighbourhood(model, &view.state.entities),
@@ -831,20 +825,11 @@ impl Emitter for ErMermaidEmitter {
             out.push_str("  }\n");
         }
 
-        // ER relations
         let mut er_rels: Vec<_> = model
             .relations
             .iter()
             .enumerate()
-            .filter(|(_, r)| {
-                matches!(
-                    r.kind,
-                    RelKind::RelateOneToOne
-                        | RelKind::RelateOneToMany
-                        | RelKind::RelateManyToOne
-                        | RelKind::RelateManyToMany
-                )
-            })
+            .filter(|(_, r)| is_relate(&r.kind))
             .collect();
         er_rels.sort_by_key(|(_, r)| format!("{:?}{:?}", r.from, r.to));
 
@@ -927,13 +912,7 @@ pub(crate) fn entity_neighbourhood(
     // An N:M joins its two ends through the junction, which a key reaches; the ends reach
     // each other by the relate itself.
     for rel in &model.relations {
-        if matches!(
-            rel.kind,
-            RelKind::RelateOneToOne
-                | RelKind::RelateOneToMany
-                | RelKind::RelateManyToOne
-                | RelKind::RelateManyToMany
-        ) {
+        if is_relate(&rel.kind) {
             if named.contains(&rel.from) {
                 set.insert(rel.to.clone());
             }

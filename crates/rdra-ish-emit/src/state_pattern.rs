@@ -304,7 +304,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
         out.push('\n');
 
         // ── テーブル ────────────────────────────────────────────────
-        // カラム幅の計算
         // Proposition 軸はプレフィックス抜きの axis_key を表示名として使う
         let axis_cols: Vec<String> = r
             .axes
@@ -336,7 +335,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             }
         }
 
-        // ヘッダ行
         let header_parts: Vec<String> = axis_cols
             .iter()
             .enumerate()
@@ -349,7 +347,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             .collect();
         out.push_str(&format!("  {}\n", header_parts.join("  ")));
 
-        // セパレータ
         let sep_parts: Vec<String> = col_widths
             .iter()
             .map(|&w| "\u{2500}".repeat(w))
@@ -361,7 +358,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             .collect();
         out.push_str(&format!("  {}\n", sep_parts.join("  ")));
 
-        // データ行
         for p in &r.patterns {
             let vals: Vec<String> = r
                 .axes
@@ -393,7 +389,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             out.push_str(&format!("  {}\n", vals.join("  ")));
         }
 
-        // フッタ
         out.push_str(&format!(
             "\n  reachable: {}{}/ bound: {}\n",
             r.patterns.len(),
@@ -401,7 +396,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             r.bound()
         ));
 
-        // 診断
         if !r.diagnostics.is_empty() {
             out.push_str("  diagnostics:\n");
             for d in &r.diagnostics {

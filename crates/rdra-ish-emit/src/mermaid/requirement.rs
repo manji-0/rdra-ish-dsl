@@ -6,7 +6,7 @@
 
 use super::{buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
-use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{Goal, NodeRef, RelKind, SemanticModel};
 use std::collections::HashSet;
 
@@ -52,7 +52,7 @@ fn declare_node(out: &mut String, model: &SemanticModel, node: &NodeRef, indent:
             text.push_str(&format!("<br/>{}", label_text(&measure)));
         }
     }
-    let kind = node_kind_filter_name(node);
+    let kind = node.kind_tag();
     out.push_str(&node_line(indent, &id, &text, kind));
     if let Some(desc) = desc_line(model, node, &id) {
         out.push_str(&format!("{indent}{desc}\n"));

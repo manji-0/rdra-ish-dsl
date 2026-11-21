@@ -4,7 +4,7 @@
 
 use super::{declare, omitted_linked_kinds, rdra_arrow, render_edges, GraphEdge};
 use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header};
-use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{HashMap, HashSet};
 
@@ -199,7 +199,7 @@ impl Emitter for FlowMermaidEmitter {
         let outside = collect_object_graph_nodes(model, &|nr| outside.contains(nr));
         for node in &outside {
             declare(&mut body, model, node, "  ");
-            add_kind(node_kind_filter_name(node));
+            add_kind(node.kind_tag());
         }
         render_edges(&mut body, "flow", edges);
         body.push_str(&class_defs(&kinds));
