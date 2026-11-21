@@ -1,9 +1,8 @@
 use crate::cli::{ExportKind, ListFormat, ListKind};
 use crate::export::{export_output, Export};
 use crate::lifecycle_gate::Output;
-use crate::list_output::{
-    format_lint_issues, list_elements, state_consistency_findings, state_diag_message,
-};
+use crate::list_output::{format_lint_issues, list_elements};
+use crate::state_findings::{state_consistency_findings, state_diag_message};
 use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Site, StateDiag, Trace};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_core::{load_project, Project};

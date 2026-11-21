@@ -16,7 +16,7 @@ use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::{EmitError, Emitter, Explored, OnDeadlock, StatesEmitter, View};
 
 use crate::cli::{CsvKind, ListKind};
-use crate::list_output::{
+use crate::state_findings::{
     note_state_errors, reject_state_errors, reject_state_errors_except_deadlock,
     READS_NO_LIFECYCLE, TLA_STATE_MODELS,
 };

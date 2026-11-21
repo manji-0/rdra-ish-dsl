@@ -9,7 +9,6 @@ mod buc_roles;
 mod elements;
 mod node_ref;
 mod render;
-mod state_findings;
 mod transitions;
 
 use access::{format_actor_permission_audit, format_business_inputs, format_permission_callables};
@@ -20,12 +19,6 @@ pub(crate) use elements::{
     format_requirements, format_rules, format_usecases,
 };
 use render::{format_rows, format_sorted_id_labels};
-#[cfg(test)]
-pub(crate) use state_findings::state_consistency_findings;
-pub(crate) use state_findings::{
-    note_state_errors, reject_state_errors, reject_state_errors_except_deadlock, render_violation,
-    state_diag_message, state_findings, Finding, TraceSource, READS_NO_LIFECYCLE, TLA_STATE_MODELS,
-};
 pub(crate) use transitions::format_transitions;
 
 macro_rules! list_id_label {

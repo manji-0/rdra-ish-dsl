@@ -24,8 +24,8 @@ use rdra_ish_emit::{
 
 use crate::cli::{ExportKind, SqlDialect};
 use crate::lifecycle_gate::{gate, Output, Reads};
-use crate::list_output::Finding;
 use crate::load::load_clean;
+use crate::state_findings::Finding;
 
 /// What an export kind writes: an artifact its emitter prints, or the TLA+ bundle, which is
 /// built from the transition system and is not an [`Emitter`].

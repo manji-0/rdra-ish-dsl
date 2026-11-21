@@ -12,6 +12,7 @@ mod load;
 mod next;
 pub mod property_cone;
 mod prove;
+mod state_findings;
 mod states;
 pub mod tlc_env;
 pub mod tlc_output;
@@ -23,13 +24,12 @@ use diagram::run_diagram;
 use export::run_export;
 use fmt_cmd::run_fmt;
 use lifecycle_gate::gate;
-use list_output::{
-    format_lint_issues, format_rules, format_transitions, list_elements, state_findings,
-};
+use list_output::{format_lint_issues, format_rules, format_transitions, list_elements};
 use load::{deny_deprecated, eprint_diagnostic, load_clean};
 use rdra_ish_core::lifecycle::{Caps, FindingTally, Severity};
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
+use state_findings::state_findings;
 use states::run_states;
 use verify::run_tlc;
 

@@ -11,8 +11,8 @@ use rdra_ish_emit::{
 };
 
 use crate::cli::{ScopeArgs, StatesFormat};
-use crate::list_output::{state_diag_message, Finding};
 use crate::load::load_clean;
+use crate::state_findings::{state_diag_message, Finding};
 
 pub fn run_states(
     inputs: &[PathBuf],

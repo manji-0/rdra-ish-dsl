@@ -27,9 +27,9 @@ use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
 use crate::export::{checked_system, tla_bounds, tla_file, Modules};
-use crate::list_output::{render_violation, Finding, TraceSource};
 use crate::property_cone::{ConeRun, PropertyCone, Verdict};
 use crate::prove::{run_proof, Marks, ProofTally};
+use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};

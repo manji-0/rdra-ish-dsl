@@ -9,8 +9,8 @@ use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, Severity};
 use rdra_ish_emit::codegen::{generate, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
-use crate::list_output::state_findings;
 use crate::load::load_clean;
+use crate::state_findings::state_findings;
 
 pub fn run_codegen(
     inputs: &[PathBuf],
