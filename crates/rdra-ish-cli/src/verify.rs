@@ -1115,7 +1115,7 @@ impl Tlc {
             return Ok(Tlc::Jar(jar));
         }
         for candidate in ["tlc", "tlc2"] {
-            if let Ok(path) = which(candidate) {
+            if let Some(path) = find_on_path(candidate) {
                 return Ok(Tlc::Launcher(path));
             }
         }
@@ -1149,19 +1149,16 @@ impl Tlc {
     }
 }
 
-fn which(cmd: &str) -> Result<PathBuf> {
-    let output = Command::new("which")
-        .arg(cmd)
-        .output()
-        .with_context(|| format!("failed to resolve `{cmd}` on PATH"))?;
-    if !output.status.success() {
-        bail!("`{cmd}` not found");
-    }
-    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    if path.is_empty() {
-        bail!("`{cmd}` not found");
-    }
-    Ok(PathBuf::from(path))
+/// The first `name` on PATH that is a file, also trying the platform's executable suffix.
+pub(crate) fn find_on_path(name: &str) -> Option<PathBuf> {
+    let paths = std::env::var_os("PATH")?;
+    let exe = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+    std::env::split_paths(&paths).find_map(|dir| {
+        [name, exe.as_str()]
+            .into_iter()
+            .map(|file| dir.join(file))
+            .find(|path| path.is_file())
+    })
 }
 
 #[cfg(test)]
