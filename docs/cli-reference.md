@@ -1117,8 +1117,8 @@ foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
 - **Reads.** The script ends with the model's reads as comments. First the indexes the
   lookups want and no key or `@index` gives, as `-- CREATE INDEX ... ; -- <readers>`: the
   `reads` [query shapes](./language-reference.md#query-shapes), each use case a timer
-  starts that finds rows by their state, and each `.has` / `.none` over an entity of
-  `rows` 1,000,000 or more. An entity under 10,000 `rows` adds `small table, <n> rows: a
+  starts that finds rows by their state, each `.has` / `.none` over an entity of
+  `rows` 1,000,000 or more, and each guard that compares an entity no written row joins. An entity under 10,000 `rows` adds `small table, <n> rows: a
   scan is cheap` to the line. Then, when `reads` declare shapes, each read as the `SELECT` it runs:
   the tenant and `.by` columns compared to parameters (`$1` in PostgreSQL, `?1` in SQLite),
   live rows only on an entity with `@soft_delete`, then `ORDER BY` and the page. A cursor

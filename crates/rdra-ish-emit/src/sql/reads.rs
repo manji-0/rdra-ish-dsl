@@ -13,7 +13,7 @@ impl Script<'_> {
         let mut out = String::new();
         if !suggestions.is_empty() {
             out.push_str(
-                "\n-- Indexes the reads want and no key or @index gives (lint: query-index-missing): the declared reads, a timer's use case finding rows by their state, a .has/.none over a large entity.\n",
+                "\n-- Indexes the reads want and no key or @index gives (lint: query-index-missing): the declared reads, a timer's use case finding rows by their state, a .has/.none over a large entity, a guard over an entity no written row joins.\n",
             );
             for s in suggestions {
                 let entity = &self.model.entities[s.entity];

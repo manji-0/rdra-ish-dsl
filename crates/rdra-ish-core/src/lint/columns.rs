@@ -186,6 +186,15 @@ pub(super) fn lint_query_indexes(model: &SemanticModel, issues: &mut Vec<LintIss
                     }
                 ),
                 Reader::Quantifier { on } => format!("the .has/.none of {on}"),
+                Reader::Guard { usecases, .. } => format!(
+                    "the guard {} on {}, which no row they write joins",
+                    model.reader_name(r),
+                    usecases
+                        .iter()
+                        .map(|uc| model.use_cases[*uc].id.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
             })
             .collect();
         let shown: Vec<String> = suggestion
@@ -204,6 +213,15 @@ pub(super) fn lint_query_indexes(model: &SemanticModel, issues: &mut Vec<LintIss
             "take the suggested index from `export --kind sql`: `@index` has no sort direction, and this sort mixes them".to_string()
         } else {
             format!("declare `@index({})` on {}", columns.join(", "), entity.id)
+        };
+        let hint = if suggestion
+            .readers
+            .iter()
+            .any(|r| matches!(r, Reader::Guard { .. }))
+        {
+            format!("{hint}; or, when the guard means a row related to the ones the use case writes, join it with `.along(...)`")
+        } else {
+            hint
         };
         let mut issue = LintIssue::new(
             LintSeverity::Warning,

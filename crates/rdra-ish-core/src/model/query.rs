@@ -1,6 +1,9 @@
 //! Query shapes declared on `reads(UseCase | Api, Entity)` and the indexes they want.
 
-use super::{CrossEntityCondition, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
+use super::{
+    ConditionKey, CrossConstraintScope, CrossEntityCondition, EntityKey, NodeRef, RelKind,
+    SemanticModel, UseCaseKey,
+};
 
 /// `reads(Source, Entity).by(...).order(...).page(...)` with an optional `.count()` or
 /// `.sum(column)`: what a read filters on, how it sorts, and how it pages.
@@ -60,6 +63,13 @@ pub enum Reader {
     /// A `.has(...)` / `.none(...)` that reads the rows of one parent that match its
     /// comparisons: on a guard (`holds`) or on a rule, by the name it is written under.
     Quantifier { on: String },
+    /// A `holds` body that compares an entity the guarded use cases neither write nor join
+    /// by a key to a row they write: the guard looks for any row that matches, across the
+    /// table.
+    Guard {
+        condition: ConditionKey,
+        usecases: Vec<UseCaseKey>,
+    },
 }
 
 /// An index that serves one or more readers, and that no key or `@index` already gives.
@@ -232,6 +242,7 @@ impl SemanticModel {
                 .to_string(),
             Reader::Batch { usecase, .. } => self.use_cases[*usecase].id.clone(),
             Reader::Quantifier { on } => on.clone(),
+            Reader::Guard { condition, .. } => self.conditions[*condition].id.clone(),
         }
     }
 
@@ -247,6 +258,10 @@ impl SemanticModel {
                 .find(|t| t.usecase == *usecase && t.column == *column)
                 .and_then(|t| t.site.clone()),
             Reader::Quantifier { .. } => None,
+            Reader::Guard { condition, .. } => self.conditions[*condition]
+                .body
+                .as_ref()
+                .and_then(|b| b.site.clone()),
         }
     }
 
@@ -315,6 +330,7 @@ impl SemanticModel {
                 key: None,
             });
         }
+        self.guard_wants(&mut wants);
         let mut quantified = Vec::new();
         for c in self.conditions.values() {
             if let Some(body) = &c.body {
@@ -359,6 +375,80 @@ impl SemanticModel {
             });
         }
         wants
+    }
+
+    /// The global reads of guards: a `holds` body without `.along` compares an entity the
+    /// use case neither writes nor joins by one key to a row it writes, so the guard looks
+    /// for any row at the compared values. It wants the tenant column and the columns the
+    /// body compares with `==`; one want per condition and entity, for every use case it
+    /// guards that way.
+    fn guard_wants(&self, wants: &mut Vec<Want>) {
+        let txs = crate::tx::infer_usecase_transactions(self);
+        let keys: Vec<(EntityKey, EntityKey)> = crate::tx::fk_edges(self).collect();
+        for b in crate::analysis::applied_bodies(self) {
+            if !matches!(b.body.along, CrossConstraintScope::GlobalProduct) {
+                continue;
+            }
+            let bound: Vec<EntityKey> = txs
+                .iter()
+                .filter(|t| t.usecase == b.usecase)
+                .flat_map(|t| t.writes().map(|w| w.entity))
+                .collect();
+            let joined = |ek: EntityKey| {
+                bound.contains(&ek)
+                    || keys.iter().any(|&(parent, child)| {
+                        (parent == ek && bound.contains(&child))
+                            || (child == ek && bound.contains(&parent))
+                    })
+            };
+            let mut read: Vec<EntityKey> = Vec::new();
+            for ek in b.body.conds.iter().filter_map(condition_entity) {
+                if !read.contains(&ek) {
+                    read.push(ek);
+                }
+            }
+            for ek in read.into_iter().filter(|ek| !joined(*ek)) {
+                let mut equal: Vec<String> = self.entities[ek]
+                    .columns
+                    .iter()
+                    .filter(|c| c.is_tenant_scope)
+                    .map(|c| c.name.clone())
+                    .collect();
+                let scoped = equal.len();
+                for cond in &b.body.conds {
+                    if let CrossEntityCondition::Equals { column, .. } = cond {
+                        if column.entity == ek && !equal.contains(&column.column) {
+                            equal.push(column.column.clone());
+                        }
+                    }
+                }
+                if equal.len() == scoped {
+                    continue;
+                }
+                let same = |w: &&mut Want| {
+                    w.entity == ek
+                        && matches!(&w.reader, Reader::Guard { condition, .. } if *condition == b.cond)
+                };
+                if let Some(w) = wants.iter_mut().find(same) {
+                    if let Reader::Guard { usecases, .. } = &mut w.reader {
+                        if !usecases.contains(&b.usecase) {
+                            usecases.push(b.usecase);
+                        }
+                    }
+                    continue;
+                }
+                wants.push(Want {
+                    reader: Reader::Guard {
+                        condition: b.cond,
+                        usecases: vec![b.usecase],
+                    },
+                    entity: ek,
+                    equal,
+                    order: Vec::new(),
+                    key: None,
+                });
+            }
+        }
     }
 
     /// The indexes the lookups want and the schema does not have: declared reads first, in
