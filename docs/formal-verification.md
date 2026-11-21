@@ -589,10 +589,12 @@ The rules for each flag and for deferral are in
 
 ## Proofs for any number of rows
 
-`verify --prove` is experimental. BFS and TLC check a model at a fixed number of instances,
-so a rule that holds at two can still break at three. `--prove` asks z3 whether each state
-rule holds for **any** number of rows, at the same Int range. It never finds a
-counterexample: the bounded engines do that, as before.
+`verify --prove` is experimental. BFS and TLC check a model at a fixed number of instances
+and an Int range with a top, so a rule that holds at two instances can still break at three,
+and one that holds while every number stays under 6 can break at 6. `--prove` asks z3
+whether each state rule holds for **any** number of rows and **any** non-negative Int value,
+at any time: `now` has no top. It never finds a counterexample: the bounded engines do that,
+as before.
 
 Each entity's rows become an uninterpreted sort, each column a function from rows to its
 domain, and each key a function from child rows to parent rows. Each use case's actions
@@ -602,8 +604,11 @@ formulas: every formula of the set holds in every initial state, and no step fro
 where all of them hold breaks one. Then no number of rows and no number of steps can break
 it.
 
-The step relation is the explorer's, with one widening: a creation may take any absent row,
-not only the lowest one. That adds steps and removes none, so a proof stays sound. A guard
+The step relation is the explorer's, with two widenings. A creation may take any absent row,
+not only the lowest one. Numbers have no top: an Int column and `now` range over every
+non-negative integer, `Tick` always runs, and a write of any value (`sets(.., col ==
+present)`, a copy) takes any number. Both add steps and remove none, so a proof stays sound
+at every bound. Enum columns keep their declared values. A guard
 or write the encoding cannot state is widened the same way (the guard is dropped, the write
 takes any value) and printed as a `note:` line. A rule the encoding cannot state is
 `out of scope`, never approximated.
@@ -639,7 +644,7 @@ fact the DSL cannot state. The one rule of the domain samples that stays unprove
 insurance-claim-ops' 「賠償の請求は示談書がそろってから完了する」, is such a case.
 
 ```
-proof (Z3 version 4.8.12 - 64 bit): 2 state rules, for any number of rows at the same value bounds
+proof (Z3 version 4.8.12 - 64 bit): 2 state rules, for any number of rows and any Int value
 proved: Forbidden_Order_0
 proved: Inv_Order_0
 lemma: an absent Order row holds base values
@@ -648,7 +653,7 @@ lemma: every present Order row is one of 5 reached patterns of (status, delivere
 lemma: a present Order row's (status, delivered_at) is one of {(pending, null), (paid, null), (shipped, null), (delivered, present), (cancelled, null)}
 proof: 2 proved, 0 unproved, 0 out of scope
 ...
-OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for any number of rows
+OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for any number of rows and any Int value
 ```
 
 A rule that is not proved prints a **counterexample to induction** (CTI): a step, the rows
