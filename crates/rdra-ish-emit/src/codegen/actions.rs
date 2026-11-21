@@ -15,7 +15,7 @@ use rdra_ish_core::lifecycle::{
     Rhs, Term, TransitionSystem, Value, VarId, VarKind,
 };
 use rdra_ish_core::location::LocatedSpan;
-use rdra_ish_core::model::Raiser;
+use rdra_ish_core::model::{Raiser, UseCaseKey};
 use rdra_ish_core::SemanticModel;
 
 use super::ir::{
@@ -77,10 +77,7 @@ pub(super) fn add_functions(
     {
         let declared = declared_types(domain);
         for action in ts.actions() {
-            let ActionOrigin::UseCase {
-                uc, step, trigger, ..
-            } = &action.origin
-            else {
+            let ActionOrigin::UseCase { uc, step, .. } = &action.origin else {
                 continue;
             };
             let steps = step.map(|i| (i, steps_of[&model.use_cases[*uc].id]));
@@ -91,22 +88,16 @@ pub(super) fn add_functions(
                 .filter(|_| steps.is_none_or(|(i, k)| i == k))
                 .map(|f| model.events[f.event].id.clone())
                 .collect();
-            let _ = trigger;
-            let reason: Option<String> = None;
-            let built = match reason {
-                Some(reason) => Err(reason),
-                None => functions(
-                    model, ts, action, &declared, &raises, steps, &mut marks, site,
-                ),
-            };
-            match built {
+            match functions(
+                model, ts, action, *uc, &declared, &raises, steps, &mut marks, site,
+            ) {
                 Ok(list) if list.is_empty() => skipped.push(Skipped {
                     action: action.name.clone(),
                     reason: "no source state the verified model runs it from".to_string(),
                 }),
                 Ok(list) => {
                     for event in &raises {
-                        let fields = event_fields(model, ts, &declared, event);
+                        let fields = event_fields(ts, &declared, event);
                         events.entry(event.clone()).or_insert_with(|| EventDecl {
                             name: type_ident(event),
                             doc: model
@@ -126,7 +117,7 @@ pub(super) fn add_functions(
                                 .find(|e| type_ident(&e.id) == ev.ty)
                                 .map(|e| e.id.clone())
                                 .unwrap_or_default();
-                            let fields = event_fields(model, ts, &declared, &id);
+                            let fields = event_fields(ts, &declared, &id);
                             events.entry(id.clone()).or_insert_with(|| EventDecl {
                                 name: ev.ty.clone(),
                                 doc: model
@@ -173,9 +164,7 @@ pub(super) fn add_functions(
             .filter(|m| &m.usecase == uc)
             .map(|m| m.name.as_str())
             .collect();
-        let id = format!("O{}", domain.obligations.len() + 1);
         domain.obligations.push(super::ir::Obligation {
-            id,
             invariant: None,
             text: format!(
                 "{uc} runs as separate transactions linked by run marks ({}): store each mark with its row in the transaction of the step that returns it; keep at most one mark of {uc} per row and start step 1 only on a row with none; never abandon a run, but retry a step that returns NotEnabled or Rejected until it runs.",
@@ -196,9 +185,7 @@ pub(super) fn add_functions(
     lists.sort();
     lists.dedup();
     for ty in lists {
-        let id = format!("O{}", domain.obligations.len() + 1);
         domain.obligations.push(super::ir::Obligation {
-            id,
             invariant: None,
             text: format!(
                 "a function input of {ty} rows holds every present row of the entity, read in the function's transaction: a `.has` / `.none` condition reads them all."
@@ -238,6 +225,7 @@ fn functions(
     model: &SemanticModel,
     ts: &TransitionSystem,
     action: &Action,
+    uc: UseCaseKey,
     declared: &BTreeMap<String, Declared<'_>>,
     raises: &[String],
     steps: Option<(u8, u8)>,
@@ -252,16 +240,6 @@ fn functions(
             .ok_or_else(|| format!("entity {id} has no generated type"))
     };
 
-    // Which params are rows of the function, by role.
-    for param in &action.params {
-        match param.role {
-            ParamRole::New
-            | ParamRole::Existing
-            | ParamRole::Parent { .. }
-            | ParamRole::Earlier { .. } => {}
-            ParamRole::Triggered => {}
-        }
-    }
     for guard in &action.guards {
         match guard.why {
             GuardWhy::TransitionFrom | GuardWhy::Owner => {}
@@ -378,10 +356,6 @@ fn functions(
         ));
     }
     let varies: Vec<bool> = sources.iter().map(|s| s.len() > 1).collect();
-    let uc = match &action.origin {
-        ActionOrigin::UseCase { uc, .. } => *uc,
-        ActionOrigin::Clock => unreachable!("only use case actions reach here"),
-    };
     let usecase = &model.use_cases[uc];
 
     let mut out = Vec::new();
@@ -735,7 +709,7 @@ fn function(
                 let p = usize::from(*param);
                 match (&ts.var(*var).kind, rhs) {
                     (VarKind::Column { column, .. }, Rhs::Lit(v)) => {
-                        let w = literal(&ts.var(*var).domain, *v, ts)
+                        let w = literal(&ts.var(*var).domain, *v)
                             .ok_or_else(|| unsupported("a value this phase does not print"))?;
                         writes.insert((p, column.clone()), w);
                     }
@@ -794,7 +768,7 @@ fn function(
         let entity = entity_id(p);
         if deleted.contains(&p) {
             let r = row_of[&p];
-            let id = declared_id(declared, &entity, &picked[p].fields);
+            let id = declared_id(&entity, &picked[p].fields);
             outputs.push(RowOut {
                 name: format!("deleted_{}", snake(&entity)),
                 param: p,
@@ -1299,7 +1273,7 @@ fn function(
     let mut raised: Vec<super::ir::RaisedEvent> = Vec::new();
     for event in raises {
         let mut ids = Vec::new();
-        for field in event_fields(model, ts, declared, event) {
+        for field in event_fields(ts, declared, event) {
             let at = raised_at
                 .iter()
                 .find(|(e, p)| e == event && entity_id(*p) == field.entity)
@@ -1425,7 +1399,7 @@ enum Write {
 }
 
 /// The write of a literal value of `domain`.
-fn literal(domain: &Domain, value: Value, ts: &TransitionSystem) -> Option<Write> {
+fn literal(domain: &Domain, value: Value) -> Option<Write> {
     Some(match domain {
         Domain::Enum(values) => {
             let wire = values.get(usize::from(value.0))?.clone();
@@ -1445,10 +1419,7 @@ fn literal(domain: &Domain, value: Value, ts: &TransitionSystem) -> Option<Write
             Some(n) => Write::Lit(Lit::Int(n)),
             None => Write::Null,
         },
-        Domain::Existence | Domain::Instance { .. } => {
-            let _ = ts;
-            return None;
-        }
+        Domain::Existence | Domain::Instance { .. } => return None,
     })
 }
 
@@ -1464,7 +1435,7 @@ fn start_literal(
         matches!(&ts.var(*v).kind, VarKind::Column { entity, column: c, .. } if *entity == e && c == column)
     })?;
     let decl = ts.var(var);
-    match literal(&decl.domain, decl.base, ts)? {
+    match literal(&decl.domain, decl.base)? {
         Write::Lit(Lit::Enum { value, .. }) => {
             let FieldType::Enum(ty) = &target.ty else {
                 return None;
@@ -1493,12 +1464,7 @@ fn start_value(ts: &TransitionSystem, e: EntId, tag: &str) -> Option<String> {
 }
 
 /// The id type and id field of an entity's type, when it has one.
-fn declared_id(
-    declared: &BTreeMap<String, Declared<'_>>,
-    entity: &str,
-    fields: &[Field],
-) -> Option<(String, Field)> {
-    let _ = declared.get(&type_ident(entity))?;
+fn declared_id(entity: &str, fields: &[Field]) -> Option<(String, Field)> {
     fields.iter().find_map(|f| match &f.ty {
         FieldType::Id(ty) if *ty == format!("{}Id", type_ident(entity)) => {
             Some((ty.clone(), f.clone()))
@@ -1570,7 +1536,7 @@ pub(super) fn expr(
             let id = ts.entity(*entity).id.clone();
             let (ty, fields) = (q.row_type)(&id)
                 .ok_or_else(|| format!("related rows of {id}, which has no generated type"))?;
-            let list = format!("{}_rows", super::actions::snake(&id));
+            let list = format!("{}_rows", snake(&id));
             let input = match q.lists.iter().position(|(n, _)| *n == list) {
                 Some(i) => i,
                 None => {
@@ -1580,7 +1546,7 @@ pub(super) fn expr(
             };
             let k = q.elems.len();
             q.elems.push(RowParam {
-                name: format!("{}_{k}", super::actions::snake(&id)),
+                name: format!("{}_{k}", snake(&id)),
                 param: usize::MAX,
                 state: None,
                 entity: id,
@@ -1965,12 +1931,10 @@ fn dispatchers(fns: &[FnDecl], domain: &DomainModel) -> Vec<DispatchDecl> {
 /// The payload of an event: the id of each row its raise marks, by the system's `Raised`
 /// vars. An event no use case raise orders anything by has none.
 fn event_fields(
-    model: &SemanticModel,
     ts: &TransitionSystem,
     declared: &BTreeMap<String, Declared<'_>>,
     event: &str,
 ) -> Vec<super::ir::EventField> {
-    let _ = model;
     let mut out: Vec<super::ir::EventField> = Vec::new();
     for v in ts.var_ids() {
         let VarKind::Raised { entity, event: ev } = &ts.var(v).kind else {

@@ -75,7 +75,7 @@ fn asyncapi_document(model: &SemanticModel) -> Value {
                 );
                 obj.insert(
                     "x-rdra-ish-transitions".to_string(),
-                    json!(transition_ids(model, &flow.transitions)),
+                    json!(transition_ids(&flow.transitions)),
                 );
             }
             operations.insert(format!("consume{message_key}"), operation);
@@ -127,7 +127,7 @@ fn event_message(model: &SemanticModel, flow: &rdra_ish_core::EventFlow) -> Valu
     );
     message.insert(
         "x-rdra-ish-transitions".to_string(),
-        json!(transition_ids(model, &flow.transitions)),
+        json!(transition_ids(&flow.transitions)),
     );
     if model.outbox_events.contains(&flow.event) {
         message.insert("x-rdra-ish-outbox".to_string(), json!(true));
@@ -179,7 +179,7 @@ fn buc_ids(model: &SemanticModel, keys: &[rdra_ish_core::model::BucKey]) -> Vec<
     ids
 }
 
-fn transition_ids(_model: &SemanticModel, transitions: &[StateTransition]) -> Vec<Value> {
+fn transition_ids(transitions: &[StateTransition]) -> Vec<Value> {
     let mut ids: Vec<_> = transitions
         .iter()
         .map(|st| {
