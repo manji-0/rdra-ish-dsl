@@ -1,6 +1,7 @@
 use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::{LocatedSpan, SourceId};
 use crate::model::SemanticModel;
+use crate::parallel::{in_parallel, jobs};
 use petgraph::algo::tarjan_scc;
 use petgraph::graph::{DiGraph, NodeIndex};
 use rdra_ish_syntax::{ast::*, format_parse_error, parse_with_deprecations, Parsed};
@@ -42,8 +43,10 @@ pub fn resolve_overlaid(
     let mut graph: DiGraph<SourceId, ()> = DiGraph::new();
     let mut node_indices: Vec<NodeIndex> = vec![];
 
-    // BFS: collect all reachable files.
-    let mut queue: VecDeque<PathBuf> = entry_paths.iter().cloned().collect();
+    // Breadth-first over imports, one depth at a time. The files of a depth parse in
+    // parallel; ids, diagnostics and the next depth follow the order a one-file-at-a-time
+    // walk of the same queue would give.
+    let mut frontier: Vec<PathBuf> = entry_paths.to_vec();
     let mut queued: HashSet<PathBuf> = HashSet::new();
     for p in entry_paths {
         if let Ok(c) = dunce::canonicalize(p) {
@@ -51,56 +54,50 @@ pub fn resolve_overlaid(
         }
     }
 
-    while let Some(path) = queue.pop_front() {
-        let canon = dunce::canonicalize(&path).unwrap_or_else(|_| path.clone());
-
-        if path_to_id.contains_key(&canon) {
-            continue;
-        }
-
-        let src = match read_source(&canon, overlays) {
-            Ok(text) => text,
-            Err(e) => {
-                diags.push(Diagnostic::error(RdraError::IoError {
-                    path: canon.display().to_string(),
-                    msg: e.to_string(),
-                }));
+    while !frontier.is_empty() {
+        let mut read: Vec<(PathBuf, String)> = Vec::new();
+        let mut taken: HashSet<PathBuf> = HashSet::new();
+        for path in frontier.drain(..) {
+            let canon = dunce::canonicalize(&path).unwrap_or_else(|_| path.clone());
+            if path_to_id.contains_key(&canon) || taken.contains(&canon) {
                 continue;
             }
-        };
-
-        let id: SourceId = sources.len();
-
-        let ast = take_parsed(parse_with_deprecations(&src), id, &canon, &mut diags);
-        let ni = graph.add_node(id);
-        path_to_id.insert(canon.clone(), id);
-        node_indices.push(ni);
-
-        // Collect imports before moving ast into sources.
-        let imports: Vec<ImportDecl> = ast
-            .items
-            .iter()
-            .filter_map(|item| {
-                if let Item::Import(imp) = item {
-                    Some(imp.clone())
-                } else {
-                    None
+            match read_source(&canon, overlays) {
+                Ok(text) => {
+                    taken.insert(canon.clone());
+                    read.push((canon, text));
                 }
-            })
-            .collect();
+                Err(e) => diags.push(Diagnostic::error(RdraError::IoError {
+                    path: canon.display().to_string(),
+                    msg: e.to_string(),
+                })),
+            }
+        }
 
-        sources.push((canon.clone(), src, ast));
+        let parsed = in_parallel(read, jobs(), |(canon, src)| {
+            let parsed = parse_with_deprecations(&src);
+            (canon, src, parsed)
+        });
+        for (canon, src, parsed) in parsed {
+            let id: SourceId = sources.len();
+            let ast = take_parsed(parsed, id, &canon, &mut diags);
+            node_indices.push(graph.add_node(id));
+            path_to_id.insert(canon.clone(), id);
 
-        // Enqueue unvisited dependencies. An import with no file at its path may name a
-        // module a loaded file declares; `build_import_scopes` reports it when none does.
-        for imp in &imports {
-            if let Some(dep_path) = resolve_import_path(&imp.path, include_paths) {
-                let dep_canon = dunce::canonicalize(&dep_path).unwrap_or(dep_path.clone());
-                if !queued.contains(&dep_canon) {
-                    queued.insert(dep_canon);
-                    queue.push_back(dep_path);
+            // An import with no file at its path may name a module a loaded file declares;
+            // `build_import_scopes` reports it when none does.
+            for item in &ast.items {
+                let Item::Import(imp) = item else {
+                    continue;
+                };
+                if let Some(dep_path) = resolve_import_path(&imp.path, include_paths) {
+                    let dep_canon = dunce::canonicalize(&dep_path).unwrap_or(dep_path.clone());
+                    if queued.insert(dep_canon) {
+                        frontier.push(dep_path);
+                    }
                 }
             }
+            sources.push((canon, src, ast));
         }
     }
 
@@ -570,8 +567,6 @@ pub fn reachable_from_bucs(
     }
     union
 }
-
-use std::collections::VecDeque;
 
 #[cfg(test)]
 mod tests;

@@ -12,6 +12,7 @@ pub mod import_scope;
 pub mod lifecycle;
 pub mod lint;
 pub mod location;
+mod parallel;
 pub mod model;
 pub mod predicate;
 pub mod project;
