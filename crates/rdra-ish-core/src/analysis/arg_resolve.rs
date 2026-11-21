@@ -306,8 +306,7 @@ fn resolve_qref(
         },
         parts => {
             let name = parts.last().unwrap();
-            let scope = model.import_scopes.scope_for(ctx.source_id);
-            if scope.unrestricted {
+            if model.import_scopes.is_unrestricted(ctx.source_id) {
                 vec![FlatBinding {
                     canonical_id: name.clone(),
                     module: None,
