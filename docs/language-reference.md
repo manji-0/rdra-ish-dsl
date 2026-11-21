@@ -263,8 +263,8 @@ only the methods below, and any other name is an `unknown chain method` error
 | `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
 | `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)`, `.references(...)` |
-| `forbidden` | `.along(...)`, `.role(...)`, `.label("...")`, `.global()` |
-| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()` |
+| `forbidden` | `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
+| `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
 | `required`, `exclusive` | `.label("...")` |
 | `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
 | `sets` | `.role(...)`, on a copy (`Entity.column == Source.column`); `.when(Condition)`, at most once, on a literal value: the condition's `holds` body guards this value |
@@ -2507,6 +2507,11 @@ broader than meant passes `check` and fails `verify`. When keys relate the entit
 `lint` `multi-rule-unscoped` warns and names the `.along(...)` the shortest key path gives.
 Write `.global()` on a rule meant for every combination to say so; `.global()` with
 `.along(...)` is `GlobalWithAlong`, an error.
+
+`.lemma()` on a `forbidden` or an `invariant` marks a fact written to help `verify --prove`
+prove the other rules for any number of rows. Every engine still checks it as a rule; only
+the proof's report lists it apart from the rules. See [Proofs for any number of
+rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific
 use-case boundary instead of against every reachable state. The tool checks the predicate

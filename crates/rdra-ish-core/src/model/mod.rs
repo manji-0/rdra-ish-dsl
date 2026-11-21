@@ -352,6 +352,9 @@ pub struct SemanticModel {
     /// `.when(Cond)` on a `forbidden` or an `invariant`, in source order. The body of each
     /// condition is spliced into its rule after every predicate is read.
     pub rule_guards: Vec<RuleGuard>,
+    /// The rules marked `.lemma()`: facts written to help `verify --prove`, which every engine
+    /// still checks.
+    pub lemma_rules: Vec<RuleRef>,
     /// `property Id "..." leads_to/always/eventually(...)` 時相プロパティ
     pub temporal_properties: Vec<TemporalProperty>,
     /// What `exposes` and `shares` publish to other models.

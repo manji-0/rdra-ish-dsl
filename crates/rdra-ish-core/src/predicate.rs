@@ -110,9 +110,9 @@ pub fn predicate_chain_methods(pred: &str) -> &'static [&'static str] {
             "on_delete",
             "on_update",
         ],
-        "forbidden" => &["when", "along", "role", "label", "global"],
+        "forbidden" => &["when", "along", "role", "label", "global", "lemma"],
         "invariant" => &[
-            "when", "then", "has", "none", "along", "role", "label", "global",
+            "when", "then", "has", "none", "along", "role", "label", "global", "lemma",
         ],
         "required" | "exclusive" => &["label"],
         "holds" => &["has", "none", "along", "role"],

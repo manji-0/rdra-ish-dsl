@@ -218,7 +218,8 @@ pub struct QuantifierConstraint {
     pub label: Option<std::string::String>,
 }
 
-/// Which rule a `.when(Cond)` belongs to: an index into the model's list of that kind.
+/// Which rule a `.when(Cond)` or a `.lemma()` belongs to: an index into the model's list of
+/// that kind.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuleRef {
     Forbidden(usize),

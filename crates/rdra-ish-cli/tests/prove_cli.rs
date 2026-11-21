@@ -154,3 +154,56 @@ fn deny_unproved_fails_a_run_that_tlc_passes() {
         "{stderr}"
     );
 }
+
+#[test]
+fn a_lemma_the_model_marks_is_reported_apart_from_the_rules() {
+    if !have("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_lemma");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Order "注文" {
+  id: Int @pk
+  status: Enum(placed, shipped) @default(placed)
+}
+
+entity Shipment "出荷" {
+  id: Int @pk
+}
+
+usecase Place "注文確定"
+usecase Ship "出荷"
+
+creates(Place, Order)
+creates(Ship, Shipment)
+updates(Ship, Order)
+transitions(Ship, Order.status, placed -> shipped)
+relate(Shipment, Order, 1:1)
+
+invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").lemma()
+"#,
+    )
+    .unwrap();
+    let out = verify(&["--prove", file.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("1 state rules and 1 of your lemmas,"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proved: lemma 「no shipment yet」: Quantifier_Order_0\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proof: 1 proved, 0 unproved, 0 out of scope\n"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("proof: your lemmas: 1 proved, 0 unproved, 0 out of scope\n"),
+        "{stdout}"
+    );
+}

@@ -708,7 +708,10 @@ pub fn run_tlc(
     }
     let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
     let proof = match prove {
-        Some(Prove { z3, deny_unproved }) => Some(run_proof(&ts, &selection, z3, deny_unproved)?),
+        Some(Prove { z3, deny_unproved }) => {
+            let lemmas = rdra_ish_core::lifecycle::prove::lemma_invariants(model, &ts);
+            Some(run_proof(&ts, &selection, &lemmas, z3, deny_unproved)?)
+        }
         None => None,
     };
     let end = End {

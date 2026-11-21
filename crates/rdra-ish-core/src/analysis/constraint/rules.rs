@@ -12,7 +12,9 @@ use super::cross::{
 };
 use super::entity_conditions::push_unique_entity;
 use super::entity_scope::resolve_entity_scope_arg;
-use super::guards::{forbidden_when_conditions, push_rule_guards, rule_label, when_condition_ref};
+use super::guards::{
+    forbidden_when_conditions, mark_lemma, push_rule_guards, rule_label, when_condition_ref,
+};
 use super::quantifier::resolve_related_quantifier;
 use super::{report_leading_by, selectors};
 
@@ -57,6 +59,7 @@ pub(crate) fn process_forbidden(
         });
     let rule = RuleRef::CrossForbidden(model.cross_forbidden_constraints.len() - 1);
     push_rule_guards(model, rule, &when, ctx);
+    mark_lemma(model, pred, rule);
     model
         .typed_predicates
         .push(TypedPredicate::CrossForbidden { scope });
@@ -119,6 +122,7 @@ pub(crate) fn process_invariant(
                     });
                 let rule = RuleRef::Quantifier(model.quantifier_constraints.len() - 1);
                 push_rule_guards(model, rule, &when, ctx);
+                mark_lemma(model, pred, rule);
             }
             _ => {}
         }
@@ -152,6 +156,7 @@ pub(crate) fn process_invariant(
     });
     let rule = RuleRef::CrossInvariant(model.cross_entity_invariants.len() - 1);
     push_rule_guards(model, rule, &when, ctx);
+    mark_lemma(model, pred, rule);
     model
         .typed_predicates
         .push(TypedPredicate::CrossInvariant { scope });

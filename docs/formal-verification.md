@@ -620,8 +620,23 @@ rules and lemmas that is inductive together (the Houdini algorithm):
   column), and the pairs of patterns two children of one parent take.
 
 A lemma is only a guess until it survives the same checks, so a capped exploration costs
-proofs, not soundness. The lemmas a proof kept print as `lemma:` lines; a rule you write
-from one is checked by every engine.
+proofs, not soundness. The lemmas a proof kept print as `lemma:` lines.
+
+When no mined lemma rules a CTI's state out, write the missing fact as a rule with
+`.lemma()`:
+
+```rdra
+invariant(Order).when(status == placed).none(Shipment).label("a placed order has no shipment yet").lemma()
+```
+
+A rule marked `.lemma()` is an ordinary rule to every engine: `check` and `verify` check it,
+so a wrong lemma fails with a trace before it can help a proof. In the proof it is one more
+candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
+`proof: your lemmas: ...` line counts it apart from the rules, so it never counts toward the
+`n of m rules` of the `OK:` line. A lemma reads only what a rule reads: a CTI that turns on a
+split use case's run mark (`_run_<UseCase>`) or an event mark (`_raised_<Event>`) needs a
+fact the DSL cannot state. The one rule of the domain samples that stays unproved,
+insurance-claim-ops' 「賠償の請求は示談書がそろってから完了する」, is such a case.
 
 ```
 proof (Z3 version 4.8.12 - 64 bit): 2 state rules, for any number of rows at the same value bounds
@@ -654,8 +669,9 @@ initial state is `unproved` too; the bounded engines report that violation.
 
 `--prove` reads the state rules only. After-asserts and temporal properties are not tried.
 The result does not change the exit status unless `--deny-unproved` is given. Every rule of
-the domain samples proves; `tests/proof_equivalence.rs` checks on every sample that no rule
-it proves has a BFS counterexample at one, two, or three instances.
+the domain samples proves except the insurance-claim-ops rule named above.
+`tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS
+counterexample at one, two, or three instances.
 
 ## Approximations and limitations
 
@@ -988,35 +1004,38 @@ do not `check` the whole directory; ids such as `Order` collide). In this repo,
 `samples/formal-verification/` and `samples/formal-verification-fail/` are
 symlinks to those skill-bundled files (CLI tests keep working after skill install).
 
-| Sample | `check` and TLC | Focus |
-|---|---|---|
-| `order.rdra` | pass, pass | Lifecycle invariants + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
-| `int_stock.rdra` | pass, pass | Int columns, arithmetic `forbidden`, Int temporal property |
-| `now_coupon.rdra` | fail, fail | `now` and `Tick`; the invariant finds `expired_at < now` |
-| `cross_order_payment.rdra` | pass, pass | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave; Cancel deletes the pending Payment) |
-| `cross_order_payment_split.rdra` | fail, fail | The same model with Pay through two APIs, the capture first: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2`; Cancel does not delete the Payment here |
-| `split_run_order.rdra` | pass, pass | OpenSettlement through a claim API and a settlement API: one run in `invokes` order, so the settlement is created once under the claim the first step moved (`Unique_Settlement_Claim`), and a started run finishes under `.fair(OpenSettlement, ..)` |
-| `quantifier_none.rdra` | fail, fail | `invariant(...).when(...).none(...)` (Revoke while Assign stays active) |
-| `quantifier_guard.rdra` | pass, pass | `holds(..).none(..)` on Revoke makes the `.none(...)` rule of `quantifier_none` hold |
-| `untriggered_sets.rdra` | fail, fail | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
-| `event_order.rdra` | pass, pass | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after ExecuteCertIssue raised the event on the order (#30, #112), so the `after(IssueCert).assert` on the order's status holds with no guard |
-| `after_assert_unmet.rdra` | fail, fail | `after(DeliverOrder).assert` without the `sets` that makes it true |
-| `temporal_fair.rdra` | pass, fail | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
-| `temporal_unmet.rdra` | pass, fail | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
-| `one_to_one_shared.rdra` | pass, fail | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
-| `none_any_child.rdra` | pass, pass | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
-| `none_any_child_bypassed.rdra` | pass, fail | The same model with Reissue, which creates an Invoice under a closed Order without the guard; `Unique_Invoice_Order` fails at two instances on the cone without `Invoice.status` |
-| `min_card_unmet.rdra` | fail, fail | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
-| `min_card_met.rdra` | pass, pass | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
-| `check_unmet.rdra` | fail, fail | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
-| `check_met.rdra` | pass, pass | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
-| `unwitnessed_state.rdra` | fail, pass | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
-| `deadlock.rdra` | fail, pass | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
-| `partial_scope.rdra` | fail, not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
-| `fail/order.rdra` | fail, fail | Intentionally unsafe (reachable invariant violation) |
+| Sample | `check` and TLC | `--prove` | Focus |
+|---|---|---|---|
+| `order.rdra` | pass, pass | 2 of 2 | Lifecycle invariants + `after.assert` + `leads_to` / `eventually` + `WF_vars` |
+| `int_stock.rdra` | pass, pass | 1 of 1 | Int columns, arithmetic `forbidden`, Int temporal property |
+| `now_coupon.rdra` | fail, fail | 0 of 1 | `now` and `Tick`; the invariant finds `expired_at < now` |
+| `cross_order_payment.rdra` | pass, pass | 1 of 1 | Multi-instance + `.along` (Pay is one atomic action, so Cancel cannot interleave; Cancel deletes the pending Payment) |
+| `cross_order_payment_split.rdra` | fail, fail | 0 of 1 | The same model with Pay through two APIs, the capture first: two transaction groups, so Cancel interleaves between `Pay_1` and `Pay_2`; Cancel does not delete the Payment here |
+| `split_run_order.rdra` | pass, pass | 2 of 2 | OpenSettlement through a claim API and a settlement API: one run in `invokes` order, so the settlement is created once under the claim the first step moved (`Unique_Settlement_Claim`), and a started run finishes under `.fair(OpenSettlement, ..)` |
+| `quantifier_none.rdra` | fail, fail | 0 of 1 | `invariant(...).when(...).none(...)` (Revoke while Assign stays active) |
+| `quantifier_guard.rdra` | pass, pass | 1 of 1 | `holds(..).none(..)` on Revoke makes the `.none(...)` rule of `quantifier_none` hold |
+| `untriggered_sets.rdra` | fail, fail | 0 of 1 | `sets` from a use case that drives no transition (Flag then Ship reaches the forbidden state) |
+| `event_order.rdra` | pass, pass | no state rule | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after ExecuteCertIssue raised the event on the order (#30, #112), so the `after(IssueCert).assert` on the order's status holds with no guard |
+| `after_assert_unmet.rdra` | fail, fail | no state rule | `after(DeliverOrder).assert` without the `sets` that makes it true |
+| `temporal_fair.rdra` | pass, fail | no state rule | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
+| `temporal_unmet.rdra` | pass, fail | no state rule | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
+| `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
+| `none_any_child.rdra` | pass, pass | 1 of 1 | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
+| `none_any_child_bypassed.rdra` | pass, fail | 0 of 1 | The same model with Reissue, which creates an Invoice under a closed Order without the guard; `Unique_Invoice_Order` fails at two instances on the cone without `Invoice.status` |
+| `min_card_unmet.rdra` | fail, fail | 0 of 1 | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
+| `min_card_met.rdra` | pass, pass | 1 of 1 | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
+| `check_unmet.rdra` | fail, fail | 0 of 1 | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
+| `check_met.rdra` | pass, pass | 2 of 2 | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
+| `unwitnessed_state.rdra` | fail, pass | 1 of 1 | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
+| `deadlock.rdra` | fail, pass | no state rule | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
+| `partial_scope.rdra` | fail, not run | not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
+| `fail/order.rdra` | fail, fail | 0 of 1 | Intentionally unsafe (reachable invariant violation) |
 
 BFS and TLC give the same verdict on every row at the same bounds. `check` runs at one
-instance per entity, where `Unique_*` holds vacuously.
+instance per entity, where `Unique_*` holds vacuously. The `--prove` column counts the state
+rules `verify --prove` proves for any number of rows. A rule that fails `check` or TLC is
+never proved, and `one_to_one_shared` and `none_any_child_bypassed`, which pass `check`, are
+unproved too.
 
 ### Sample expectations
 

@@ -4,8 +4,9 @@ description: >-
   Formal-verify RDRA-ish models with TLA+/TLC. Use when the user asks about
   export --kind tla, verify --backend tlc, temporal property / always /
   eventually / leads_to, after.assert, invariant(E).when().none/has, Int/Money/Decimal/now
-  arithmetic, multi-entity forbidden/invariant with .along, or whether TLC
-  should complement rdra-ish states.
+  arithmetic, multi-entity forbidden/invariant with .along, whether TLC
+  should complement rdra-ish states, or verify --prove (a rule for any number of
+  rows, a counterexample to induction, a .lemma()).
 license: MIT
 ---
 
@@ -25,6 +26,7 @@ after `npx skills add` / `gh skill install`. In the `rdra-ish-dsl` repository,
 | "states で足りる？ / TLA が必要？" | Compare `check` (one instance, no temporal properties) with `verify` (two instances, temporal) | `references/when-to-use.md` |
 | "property / after.assert / when / .along を書きたい" | Author the DSL surface correctly | `references/dsl-surface.md` |
 | "export / verify を回したい", "what does this output mean?" | Run check, then verify, and read the result | `references/workflow.md` |
+| "何行でも成り立つ？ / --prove / CTI / lemma" | Run `rdra-ish verify --prove`, read each `unproved:` CTI, and propose at most one `.lemma()` per CTI | `references/prove.md` |
 | "サンプルや制限は？" | Open a file under `samples/`; note the bounds and approximations | `references/limits-and-samples.md` |
 
 ### Default Workflow
@@ -88,6 +90,8 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla
 - `references/dsl-surface.md` — `property`, `after.assert`, quantifiers, `.along`
 - `references/workflow.md` — commands, output files, and how to read each finding
 - `references/limits-and-samples.md` — bounds, approximations, and the bundled samples
+- `references/prove.md` — `verify --prove`: proved / unproved lines, reading a CTI, and
+  writing a `.lemma()`
 - `samples/*.rdra` — standalone examples, each with its expected result in `// expect`
   lines
 - `samples/fail/order.rdra` — intentionally unsafe negative example

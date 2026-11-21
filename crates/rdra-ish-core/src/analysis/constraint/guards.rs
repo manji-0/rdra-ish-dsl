@@ -103,6 +103,13 @@ pub(crate) fn forbidden_when_conditions(
 }
 
 /// Records the `.when(Cond)` calls of a rule against the rule just pushed.
+/// Records the rule as a lemma when it says `.lemma()`.
+pub(crate) fn mark_lemma(model: &mut SemanticModel, pred: &PredicateCall, rule: RuleRef) {
+    if pred.chain.iter().any(|cc| cc.name == "lemma") {
+        model.lemma_rules.push(rule);
+    }
+}
+
 pub(crate) fn push_rule_guards(
     model: &mut SemanticModel,
     rule: RuleRef,
