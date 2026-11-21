@@ -79,6 +79,17 @@ uv tool install rdra-ish
 rdra-ish --help
 ```
 
+With Nix (flakes enabled), install `rdra-ish` and `rdra-ish-lsp` from this repository:
+
+```sh
+nix profile install github:manji-0/rdra-ish-dsl          # latest main
+nix profile install github:manji-0/rdra-ish-dsl/<tag>    # a release after v2.3.0
+nix run github:manji-0/rdra-ish-dsl -- --help            # run without installing
+```
+
+The Nix package brings the `tlc` that `verify` runs and the `z3` that `verify --prove` runs.
+A `tlc` or `z3` already on PATH takes precedence over them.
+
 rdra-ish follows semantic versioning from 1.0.0. [Compatibility](./docs/compatibility.md)
 lists what a minor or patch release keeps: a model that loads keeps loading, and `check`
 and `verify` give it the same verdict within the same printed bounds.
@@ -168,7 +179,7 @@ Java, TLC, Node.js, and pre-commit.
 ```sh
 nix develop          # or `direnv allow` with nix-direnv
 cargo test --all
-nix build            # builds the rdra-ish CLI into ./result
+nix build            # builds rdra-ish and rdra-ish-lsp into ./result
 ```
 
 CI runs every step inside the same `nix develop` shell.

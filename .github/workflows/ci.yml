@@ -43,6 +43,9 @@ jobs:
         run: |
           cargo build -p rdra-ish-cli
           python3 -I scripts/check-skill-snippets.py target/debug/rdra-ish
+      - name: nix package
+        # The package `nix profile install github:manji-0/rdra-ish-dsl` installs.
+        run: nix build -L && ./result/bin/rdra-ish --help >/dev/null && test -x ./result/bin/rdra-ish-lsp
 
   formal-verify:
     runs-on: ubuntu-latest
