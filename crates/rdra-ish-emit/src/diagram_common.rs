@@ -1,6 +1,6 @@
 //! Helpers the Mermaid emitters share.
 
-use crate::{node_description, node_kind_filter_name, ObjectGraphLayer, Scope, View};
+use crate::{node_description, ObjectGraphLayer, Scope, View};
 use rdra_ish_core::lifecycle::{Bounds, Scope as LifecycleScope, TransitionSystem};
 use rdra_ish_core::model::{
     BucKey, ColumnType, EntityKey, EventKey, ExtSystemKey, NodeRef, Raiser, SemanticModel,
@@ -175,7 +175,7 @@ const fn rel(
 
 use EdgeLabel::{Data, Name};
 
-const CRUD: [&str; 5] = ["reads", "writes", "creates", "updates", "deletes"];
+const CRUD: [&str; 4] = ["reads", "creates", "updates", "deletes"];
 const STEP_ORDER: [&str; 4] = ["precedes", "branches", "excepts", "repeats"];
 const CARDINALITIES: [&str; 4] = ["1:1", "1:N", "N:1", "N:M"];
 
@@ -197,7 +197,6 @@ pub const EDGE_RELATIONS: &[EdgeRelation] = &[
     rel("rdra", &["usecase", "api"], &["entity"], CRUD[1], Name),
     rel("rdra", &["usecase", "api"], &["entity"], CRUD[2], Name),
     rel("rdra", &["usecase", "api"], &["entity"], CRUD[3], Name),
-    rel("rdra", &["usecase", "api"], &["entity"], CRUD[4], Name),
     rel("rdra", &["usecase"], &["api"], "invokes", Name),
     rel("rdra", &["api"], &["dto"], "request", Name),
     rel("rdra", &["api"], &["dto"], "response", Name),
@@ -356,7 +355,6 @@ pub const EDGE_RELATIONS: &[EdgeRelation] = &[
     rel("usecase", &["usecase"], &["entity"], CRUD[1], Name),
     rel("usecase", &["usecase"], &["entity"], CRUD[2], Name),
     rel("usecase", &["usecase"], &["entity"], CRUD[3], Name),
-    rel("usecase", &["usecase"], &["entity"], CRUD[4], Name),
     rel("usecase", &["screen"], &["entity"], "shows", Name),
     rel("usecase", &["usecase"], &["state"], "transitions", Data),
     // robustness: actor -> boundary -> control -> entity, and the events between them.
@@ -521,11 +519,7 @@ pub(crate) fn edge_line(diagram: &str, from: &str, arrow: &str, label: &str, to:
 
 /// The node id of the encoding contract, `<kind token>__<DSL id>`, the same in every kind.
 pub(crate) fn contract_id(model: &SemanticModel, node: &NodeRef) -> Option<String> {
-    Some(format!(
-        "{}__{}",
-        node_kind_filter_name(node),
-        model.node_id(node)?
-    ))
+    Some(format!("{}__{}", node.kind_tag(), model.node_id(node)?))
 }
 
 /// The `%%` lines that open every diagram: kind, scope, and the vocabulary the body uses.
@@ -660,7 +654,7 @@ pub(crate) fn declare_flow_node(
     let id = contract_id(model, &node_ref)?;
     let label = model.node_label(&node_ref)?;
     if declared.ids.insert(id.clone()) {
-        let kind = node_kind_filter_name(&node_ref);
+        let kind = node_ref.kind_tag();
         out.push_str(&node_line("  ", &id, &quote(label), kind));
         if let Some(desc) = desc_line(model, &node_ref, &id) {
             out.push_str(&format!("  {desc}\n"));

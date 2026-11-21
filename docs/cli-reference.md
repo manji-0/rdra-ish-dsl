@@ -883,7 +883,7 @@ flowchart LR
   a use case is two relations in `rdra`, `usecase`, and `condition`: the declared
   `applies_to` and the `when` derived from a `.when(Cond)` guard, so both are labelled there
   (`-.->|applies_to|`, `-.->|when|`); a condition to an API or a system stays unlabelled. A label stays
-  where it says something the ends do not: the CRUD verb (`reads`, `writes`, `creates`,
+  where it says something the ends do not: the CRUD verb (`reads`, `creates`,
   `updates`, `deletes`) and the API's `request` / `response` / `error_response`, a
   step order (`precedes`, `branches`, `excepts`, `repeats`), a relate's cardinality
   (`N:1`), a transition, the robustness diagram's use case, CRUD letters, and events, the
