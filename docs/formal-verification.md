@@ -587,6 +587,76 @@ OK: no errors in the selected scope, within 2 instances per entity, Int 0..5
 The rules for each flag and for deferral are in
 [cli-reference.md](./cli-reference.md#partial-runs).
 
+## Proofs for any number of rows
+
+`verify --prove` is experimental. BFS and TLC check a model at a fixed number of instances,
+so a rule that holds at two can still break at three. `--prove` asks z3 whether each state
+rule holds for **any** number of rows, at the same Int range. It never finds a
+counterexample: the bounded engines do that, as before.
+
+Each entity's rows become an uninterpreted sort, each column a function from rows to its
+domain, and each key a function from child rows to parent rows. Each use case's actions
+become a step relation built from the same transition system BFS explores: guards, writes,
+creates, deletes, and choices. A rule is proved when it is part of an **inductive** set of
+formulas: every formula of the set holds in every initial state, and no step from a state
+where all of them hold breaks one. Then no number of rows and no number of steps can break
+it.
+
+The step relation is the explorer's, with one widening: a creation may take any absent row,
+not only the lowest one. That adds steps and removes none, so a proof stays sound. A guard
+or write the encoding cannot state is widened the same way (the guard is dropped, the write
+takes any value) and printed as a `note:` line. A rule the encoding cannot state is
+`out of scope`, never approximated.
+
+Most true rules are not inductive alone: a step breaks them only from a state no run
+reaches. The prover therefore adds candidate **lemmas** and keeps the largest set of
+rules and lemmas that is inductive together (the Houdini algorithm):
+
+- An absent row holds base values, a row of an entity no use case deletes is never
+  deleted, and a present row's key never names an absent row.
+- What BFS shows on each entity cone and each rule's cone at the run's bounds: the
+  patterns a present row takes, the values of each column and of each pair of columns,
+  the patterns a child row takes with the parent its key names (whole, and per parent
+  column), and the pairs of patterns two children of one parent take.
+
+A lemma is only a guess until it survives the same checks, so a capped exploration costs
+proofs, not soundness. The lemmas a proof kept print as `lemma:` lines; a rule you write
+from one is checked by every engine.
+
+```
+proof (Z3 version 4.8.12 - 64 bit): 2 state rules, for any number of rows at the same value bounds
+proved: Forbidden_Order_0
+proved: Inv_Order_0
+lemma: an absent Order row holds base values
+lemma: no Order row is ever deleted
+lemma: every present Order row is one of 5 reached patterns of (status, delivered_at)
+lemma: a present Order row's (status, delivered_at) is one of {(pending, null), (paid, null), (shipped, null), (delivered, present), (cancelled, null)}
+proof: 2 proved, 0 unproved, 0 out of scope
+...
+OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for any number of rows
+```
+
+A rule that is not proved prints a **counterexample to induction** (CTI): a step, the rows
+it binds, and the rule's rows, before and after. The state before holds the rule and every
+kept lemma, but it need not be reachable. It shows which fact a lemma would have to add:
+
+```
+unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it and every proved rule hold (not necessarily reachable)
+  Order#1 (present) status=placed -> status=shipped
+  Shipment#1 (absent -> present) Order=Order#2 -> Order=Order#1
+  Shipment#2 (present) Order=Order#1
+```
+
+Here the CTI is also a real run: `one_to_one_shared` links two Shipments to one Order, and
+`verify` at two instances reports the violation with its trace. A rule z3 gives up on
+(each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. A rule that fails in an
+initial state is `unproved` too; the bounded engines report that violation.
+
+`--prove` reads the state rules only. After-asserts and temporal properties are not tried.
+The result does not change the exit status unless `--deny-unproved` is given. Every rule of
+the domain samples proves; `tests/proof_equivalence.rs` checks on every sample that no rule
+it proves has a BFS counterexample at one, two, or three instances.
+
 ## Approximations and limitations
 
 - **Bounds.** A `verify` OK holds for the stated `InstanceCount` and `IntRange` and says
@@ -836,7 +906,8 @@ gaps.
   three is not checked by default. Each entity is created at most `InstanceCount` times,
   because a deleted slot is never reused. See it: the `bounds:` line. What you can do: run
   `verify`, or pass `--instance-count N` to `check`, `states`, or `verify` for a rule about
-  more instances.
+  more instances, or run `verify --prove` to prove a state rule for any number of rows
+  ([Proofs for any number of rows](#proofs-for-any-number-of-rows)).
 - **Temporal properties are checked only by `verify`, and a scoped run checks none.**
   `check` and `states` evaluate no `property` and print a `note:` that says so. A run with
   `--buc` or `--entity` checks no property: `--buc` drops use cases a property's fairness

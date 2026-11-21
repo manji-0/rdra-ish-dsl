@@ -24,7 +24,7 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
-        # The comparisons with TLC run in release in engine-equivalence, and the domain-sample
+        # The comparisons with TLC and z3 run in release in engine-equivalence, and the domain-sample
         # reduction in formal-verify; in debug they take most of this step. `--skip` matches a
         # part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is skipped too.
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
@@ -35,6 +35,7 @@ jobs:
           --skip tlc_alone_
           --skip a_property_cone_decides_what_the_whole_model_decides
           --skip reduced_domain_cones_decide_what_the_cones_decide
+          --skip no_proved_rule_has_a_bounded_counterexample
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
       - name: skill snippets
@@ -76,3 +77,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Lifecycle BFS and TLC agree on every sample
         run: RDRA_REQUIRE_TLC=1 cargo test --release -p rdra-ish-cli --test engine_equivalence
+      - name: No rule z3 proves has a BFS counterexample at 1 to 3 instances
+        run: RDRA_REQUIRE_Z3=1 cargo test --release -p rdra-ish-cli --test proof_equivalence

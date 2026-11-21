@@ -29,6 +29,7 @@ use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 use crate::export::{checked_system, tla_bounds, Modules};
 use crate::list_output::{render_violation, Finding, TraceSource};
 use crate::property_cone::{ConeRun, PropertyCone, Verdict};
+use crate::prove::{run_proof, ProofTally};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
 use crate::tlc_replay::{explain_property, explain_violation};
@@ -45,6 +46,16 @@ pub struct Budget {
     pub temporal: Duration,
     /// `--deny-undecided`: an undecided finding is an error, not a warning.
     pub deny_undecided: bool,
+    /// `--prove`: z3 tries each state rule for any number of rows.
+    pub prove: Option<Prove>,
+}
+
+/// `verify --prove`.
+pub struct Prove {
+    /// `--z3`: the binary; else `RDRA_Z3`, else `z3` on PATH.
+    pub z3: Option<PathBuf>,
+    /// `--deny-unproved`: a rule left unproved fails the run.
+    pub deny_unproved: bool,
 }
 
 /// A printed module and its cfg.
@@ -654,6 +665,7 @@ pub fn run_tlc(
     Budget {
         temporal: budget,
         deny_undecided,
+        prove,
     }: Budget,
     tlc_jar: Option<PathBuf>,
 ) -> Result<()> {
@@ -695,10 +707,15 @@ pub fn run_tlc(
             .collect();
     }
     let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
+    let proof = match prove {
+        Some(Prove { z3, deny_unproved }) => Some(run_proof(&ts, &selection, z3, deny_unproved)?),
+        None => None,
+    };
     let end = End {
         bfs_errors,
         capped,
         deny_undecided,
+        proof,
     };
 
     let (mut index, index_path) = write_specs_and_index(&dir, &jobs, &whole, keep)?;
@@ -1001,6 +1018,8 @@ struct End {
     /// Findings a BFS cone left undecided at the state cap.
     capped: usize,
     deny_undecided: bool,
+    /// What `--prove` proved, when it ran.
+    proof: Option<ProofTally>,
 }
 
 impl End {
@@ -1049,7 +1068,17 @@ impl End {
             }
             eprintln!("warning: {what}; the OK line holds only for what was decided (--deny-undecided fails the run)");
         }
-        println!("{}", line.ok());
+        match self.proof {
+            Some(p) if p.unproved > 0 && p.deny_unproved => {
+                bail!(
+                    "verification incomplete: {} of {} rules unproved for any number of rows (--deny-unproved)",
+                    p.unproved,
+                    p.rules
+                );
+            }
+            Some(p) => println!("{}; {}", line.ok(), p.clause()),
+            None => println!("{}", line.ok()),
+        }
         Ok(())
     }
 }

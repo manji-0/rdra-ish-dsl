@@ -504,6 +504,16 @@ pub(crate) struct Remap {
 }
 
 impl Remap {
+    /// The restricted system's id of an entity, when it kept it.
+    pub(crate) fn ent_of(&self, e: EntId) -> Option<EntId> {
+        self.ent[e.index()]
+    }
+
+    /// The restricted system's id of a var, when it kept it.
+    pub(crate) fn var_of(&self, v: VarId) -> Option<VarId> {
+        self.var[v.index()]
+    }
+
     pub(crate) fn e(&self, e: EntId) -> EntId {
         self.ent[e.index()].expect("entity outside the component")
     }

@@ -1,0 +1,610 @@
+//! Unbounded proofs: which state rules hold for any number of rows (docs/formal-verification.md,
+//! "Proofs for any number of rows").
+//!
+//! Each rule is a candidate invariant over the encoding in `encode`. The prover keeps the
+//! largest set of candidates that is inductive together (Houdini): every candidate holds in
+//! every initial state, and no step from a state where all of them hold breaks one. A rule in
+//! that set is proved for every slot count. Helper lemmas join the candidates and are kept
+//! only when they survive too. A rule outside the set is unproved, with the step that breaks it
+//! from a state where the set holds: a counterexample to induction, which need not be
+//! reachable. The bounded engines, not this one, find counterexamples.
+
+mod encode;
+mod mine;
+mod solver;
+
+use std::collections::{BTreeMap, BTreeSet};
+
+pub use solver::{Sat, Solver, SolverError, Z3};
+
+use crate::lifecycle::cone::VarSet;
+use crate::lifecycle::types::{ActId, CmpOp, Domain, EntId, Pred, Term, VarId, VarKind};
+use crate::lifecycle::TransitionSystem;
+use encode::{Enc, Formula, Frame, Unsupported};
+use solver::Sexp;
+
+/// What the prover says about each rule it was asked about.
+#[derive(Clone, Debug)]
+pub struct Proof {
+    /// One per rule, in the order asked.
+    pub rules: Vec<RuleProof>,
+    /// The helper lemmas the proof kept, as text a reader can check.
+    pub lemmas: Vec<String>,
+    /// Guards and writes the encoding could not express: guards it dropped and writes it
+    /// left free. Both only add steps, so a proof stays sound; a rule may fail to prove.
+    pub loose: Vec<String>,
+}
+
+impl Proof {
+    pub fn proved(&self) -> usize {
+        self.rules
+            .iter()
+            .filter(|r| matches!(r.verdict, Verdict::Proved))
+            .count()
+    }
+
+    pub fn unproved(&self) -> usize {
+        self.rules
+            .iter()
+            .filter(|r| matches!(r.verdict, Verdict::Unproved(_)))
+            .count()
+    }
+
+    pub fn out_of_scope(&self) -> usize {
+        self.rules
+            .iter()
+            .filter(|r| matches!(r.verdict, Verdict::OutOfScope(_)))
+            .count()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct RuleProof {
+    /// Index into `TransitionSystem::invariants`.
+    pub inv: usize,
+    pub verdict: Verdict,
+}
+
+#[derive(Clone, Debug)]
+pub enum Verdict {
+    /// Holds for any number of rows, at the stated value bounds.
+    Proved,
+    Unproved(Unproved),
+    /// The encoding cannot state the rule; the reason names the construct.
+    OutOfScope(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum Unproved {
+    /// Some initial state violates the rule: a real violation, which the bounded engines
+    /// report with its trace.
+    Initial,
+    /// A step breaks the rule from a state where it and every kept candidate hold.
+    NotInductive(Cti),
+    /// The solver gave up on the step that `action` names.
+    Unknown { action: String },
+}
+
+/// A counterexample to induction: one step, the rows it reads and writes, and the rule's rows.
+#[derive(Clone, Debug)]
+pub struct Cti {
+    /// The action's name and its rows, as `Ship(Order#1)`.
+    pub step: String,
+    /// One line per row: its values before, and what the step changed.
+    pub rows: Vec<String>,
+}
+
+/// Per-query solver settings.
+#[derive(Clone, Copy, Debug)]
+pub struct ProveOptions {
+    /// Milliseconds a check of a rule may take before it counts as unknown.
+    pub timeout_ms: u32,
+    /// The same for a lemma. A lemma that times out leaves the set, which only costs proofs;
+    /// a check that breaks a candidate is the slow kind, so a short one saves the most.
+    pub lemma_timeout_ms: u32,
+}
+
+impl Default for ProveOptions {
+    fn default() -> Self {
+        ProveOptions {
+            timeout_ms: 10_000,
+            lemma_timeout_ms: 500,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Origin {
+    Rule(usize),
+    Lemma(String),
+}
+
+struct Candidate {
+    origin: Origin,
+    formula: Formula,
+    reads: VarSet,
+    /// The formula over the pre-state.
+    pre: String,
+    /// Milliseconds a check of it may take.
+    timeout_ms: u32,
+}
+
+/// Why a candidate left the set, and the step that showed it.
+#[derive(Clone, Debug)]
+enum Fall {
+    Initial,
+    Step(ActId),
+    Unknown(String),
+}
+
+/// Proves `rules` (indices into `ts.invariants()`) for any number of rows.
+pub fn prove(
+    ts: &TransitionSystem,
+    rules: &[usize],
+    solver: &mut dyn Solver,
+    options: ProveOptions,
+) -> Result<Proof, SolverError> {
+    let enc = Enc { ts };
+    let mut verdicts: BTreeMap<usize, Verdict> = BTreeMap::new();
+    let mut cands = Vec::new();
+    let formulas = rules
+        .iter()
+        .map(|&i| {
+            let inv = &ts.invariants()[i];
+            let f = Formula {
+                binders: inv.binders.clone(),
+                body: inv.body.clone(),
+                all_rows: false,
+            };
+            (Origin::Rule(i), f)
+        })
+        .chain(lemmas(ts))
+        .chain(
+            mine::mine(ts, rules)
+                .into_iter()
+                .map(|(text, f)| (Origin::Lemma(text), f)),
+        );
+    for (origin, formula) in formulas {
+        match enc.holds(&formula, Frame::Pre) {
+            Ok(pre) => {
+                let mut reads = VarSet::new();
+                ts.pred_reads(&formula.body, &mut reads);
+                reads.extend(formula.binders.iter().map(|e| ts.entity(*e).exists));
+                let timeout_ms = match origin {
+                    Origin::Rule(_) => options.timeout_ms,
+                    Origin::Lemma(_) => options.lemma_timeout_ms,
+                };
+                cands.push(Candidate {
+                    origin,
+                    formula,
+                    reads,
+                    pre,
+                    timeout_ms,
+                });
+            }
+            Err(Unsupported(why)) => {
+                if let Origin::Rule(i) = origin {
+                    verdicts.insert(i, Verdict::OutOfScope(why));
+                }
+            }
+        }
+    }
+
+    let steps: Vec<_> = ts.actions().iter().map(|a| enc.step(a)).collect();
+    let writes: Vec<VarSet> = ts.actions().iter().map(|a| ts.action_writes(a)).collect();
+    // A step that writes nothing a candidate reads cannot break it.
+    let breaks = |a: usize, c: &Candidate| c.reads.iter().any(|v| writes[a].contains(v));
+    let mut loose: Vec<String> = steps.iter().flat_map(|s| s.loose.clone()).collect();
+    loose.dedup();
+
+    solver.exec(&format!("(reset)\n{}", enc.declarations()))?;
+
+    let mut fell: BTreeMap<usize, Fall> = BTreeMap::new();
+    // Initiation: every candidate holds in every initial state.
+    match enc.initial() {
+        Ok(init) => {
+            solver.exec(&format!("(push)\n{init}"))?;
+            for (k, c) in cands.iter().enumerate() {
+                let fall = match violated(solver, &enc, c, Frame::Pre)? {
+                    Sat::Unsat => continue,
+                    Sat::Sat => Fall::Initial,
+                    Sat::Unknown => Fall::Unknown("the initial states".to_string()),
+                };
+                fell.insert(k, fall);
+            }
+            solver.exec("(pop)")?;
+        }
+        Err(Unsupported(why)) => {
+            for k in 0..cands.len() {
+                fell.insert(k, Fall::Unknown(format!("the initial states ({why})")));
+            }
+        }
+    }
+
+    // Consecution, until a round removes nothing: the kept set is then inductive.
+    loop {
+        let before = fell.len();
+        for (a, step) in steps.iter().enumerate() {
+            let hit: Vec<usize> = (0..cands.len())
+                .filter(|k| !fell.contains_key(k) && breaks(a, &cands[*k]))
+                .collect();
+            if hit.is_empty() {
+                continue;
+            }
+            solver.exec(&format!(
+                "(push)\n{}{}",
+                step.commands,
+                assume(&cands, &fell)
+            ))?;
+            for k in hit {
+                let fall = match violated(solver, &enc, &cands[k], Frame::Post)? {
+                    Sat::Unsat => continue,
+                    Sat::Sat => Fall::Step(ActId::at_index(a)),
+                    Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
+                };
+                fell.insert(k, fall);
+            }
+            solver.exec("(pop)")?;
+        }
+        if fell.len() == before {
+            break;
+        }
+    }
+
+    // Each rule that fell: its step again from the kept set plus the rule, for the CTI.
+    for (k, c) in cands.iter().enumerate() {
+        let Origin::Rule(i) = c.origin else { continue };
+        let verdict = match fell.get(&k) {
+            None => Verdict::Proved,
+            Some(Fall::Initial) => Verdict::Unproved(Unproved::Initial),
+            Some(Fall::Unknown(action)) => Verdict::Unproved(Unproved::Unknown {
+                action: action.clone(),
+            }),
+            Some(Fall::Step(first)) => {
+                let mut cti = None;
+                let order = std::iter::once(first.index())
+                    .chain((0..steps.len()).filter(|a| *a != first.index()));
+                for a in order.filter(|a| breaks(*a, c)) {
+                    solver.exec(&format!(
+                        "(push)\n{}{}(assert {})\n(push)\n{}",
+                        steps[a].commands,
+                        assume(&cands, &fell),
+                        c.pre,
+                        violation(&enc, c, Frame::Post)
+                    ))?;
+                    if solver.check_sat()? == Sat::Sat {
+                        cti = Some(read_cti(solver, ts, ActId::at_index(a), &c.formula)?);
+                    }
+                    solver.exec("(pop)\n(pop)")?;
+                    if cti.is_some() {
+                        break;
+                    }
+                }
+                match cti {
+                    Some(cti) => Verdict::Unproved(Unproved::NotInductive(cti)),
+                    None => Verdict::Unproved(Unproved::Unknown {
+                        action: ts.actions()[first.index()].name.clone(),
+                    }),
+                }
+            }
+        };
+        verdicts.insert(i, verdict);
+    }
+
+    let kept_lemmas = cands
+        .iter()
+        .enumerate()
+        .filter(|(k, _)| !fell.contains_key(k))
+        .filter_map(|(_, c)| match &c.origin {
+            Origin::Lemma(text) => Some(text.clone()),
+            Origin::Rule(_) => None,
+        })
+        .collect();
+    Ok(Proof {
+        rules: rules
+            .iter()
+            .map(|i| RuleProof {
+                inv: *i,
+                verdict: verdicts.remove(i).expect("every rule has a verdict"),
+            })
+            .collect(),
+        lemmas: kept_lemmas,
+        loose,
+    })
+}
+
+/// Asserts every candidate still in the set over the pre-state.
+fn assume(cands: &[Candidate], fell: &BTreeMap<usize, Fall>) -> String {
+    cands
+        .iter()
+        .enumerate()
+        .filter(|(k, _)| !fell.contains_key(k))
+        .map(|(_, c)| format!("(assert {})\n", c.pre))
+        .collect()
+}
+
+/// The commands that assert some rows violate `c` in `frame`, and the candidate's timeout.
+fn violation(enc: &Enc, c: &Candidate, frame: Frame) -> String {
+    let rows = enc
+        .violation(&c.formula, frame)
+        .expect("a candidate that encodes has a violation that encodes");
+    format!("{rows}(set-option :timeout {})\n", c.timeout_ms)
+}
+
+/// Whether some state of the open scope violates `c` in `frame`.
+fn violated(
+    solver: &mut dyn Solver,
+    enc: &Enc,
+    c: &Candidate,
+    frame: Frame,
+) -> Result<Sat, SolverError> {
+    solver.exec(&format!("(push)\n{}", violation(enc, c, frame)))?;
+    let sat = solver.check_sat()?;
+    solver.exec("(pop)")?;
+    Ok(sat)
+}
+
+/// The helper lemmas every model gets as candidates: an absent row holds base values, since
+/// no step writes a row before it is created; no row of an entity that nothing deletes is
+/// deleted; and a present row's key never names a parent row that does not exist yet.
+fn lemmas(ts: &TransitionSystem) -> Vec<(Origin, Formula)> {
+    use crate::lifecycle::types::{At, Value};
+    let slot = |var: VarId, b: u8| Term::Slot {
+        var,
+        at: At::Bound(b),
+    };
+    let mut out = Vec::new();
+    for e in ts.entity_ids() {
+        let decl = ts.entity(e);
+        let row_vars: Vec<VarId> = ts
+            .var_ids()
+            .filter(|v| *v != decl.exists && ts.var_entity(*v) == Some(e))
+            .collect();
+        let body = Pred::Or(vec![
+            Pred::Cmp(slot(decl.exists, 0), CmpOp::Ne, Term::Lit(Value::ABSENT)),
+            Pred::And(
+                row_vars
+                    .iter()
+                    .map(|v| Pred::Cmp(slot(*v, 0), CmpOp::Eq, Term::Lit(ts.var(*v).base)))
+                    .collect(),
+            ),
+        ]);
+        out.push((
+            Origin::Lemma(format!("an absent {} row holds base values", decl.id)),
+            Formula {
+                binders: vec![e],
+                body,
+                all_rows: true,
+            },
+        ));
+    }
+    // No step deletes a row of an entity no action deletes.
+    for e in ts.entity_ids() {
+        let deleted = ts.actions().iter().any(|a| {
+            a.effects.iter().any(|eff| {
+                matches!(eff, crate::lifecycle::types::Effect::Delete { param }
+                    if a.params[usize::from(*param)].entity == e)
+            })
+        });
+        if deleted {
+            continue;
+        }
+        let decl = ts.entity(e);
+        out.push((
+            Origin::Lemma(format!("no {} row is ever deleted", decl.id)),
+            Formula {
+                binders: vec![e],
+                body: Pred::Cmp(slot(decl.exists, 0), CmpOp::Ne, Term::Lit(Value::DELETED)),
+                all_rows: true,
+            },
+        ));
+    }
+    for v in ts.var_ids() {
+        let VarKind::Owner { child, parent, .. } = ts.var(v).kind else {
+            continue;
+        };
+        let body = Pred::Or(vec![
+            Pred::Cmp(
+                slot(ts.entity(child).exists, 0),
+                CmpOp::Ne,
+                Term::Lit(Value::PRESENT),
+            ),
+            Pred::Cmp(slot(v, 0), CmpOp::Ne, Term::Index(At::Bound(1))),
+            Pred::Cmp(
+                slot(ts.entity(parent).exists, 1),
+                CmpOp::Ne,
+                Term::Lit(Value::ABSENT),
+            ),
+        ]);
+        out.push((
+            Origin::Lemma(format!(
+                "a present {} row's {} never names an absent {} row",
+                ts.entity(child).id,
+                ts.var_name(v),
+                ts.entity(parent).id
+            )),
+            Formula {
+                binders: vec![child, parent],
+                body,
+                all_rows: true,
+            },
+        ));
+    }
+    out
+}
+
+/// The model of an open sat scope, as a CTI: the action's rows and the rule's rows, before and
+/// after the step.
+fn read_cti(
+    solver: &mut dyn Solver,
+    ts: &TransitionSystem,
+    act: ActId,
+    formula: &Formula,
+) -> Result<Cti, SolverError> {
+    let action = &ts.actions()[act.index()];
+    let mut rows: Vec<(String, EntId)> = action
+        .params
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (encode::param(i), p.entity))
+        .collect();
+    rows.extend(
+        formula
+            .binders
+            .iter()
+            .enumerate()
+            .map(|(i, e)| (encode::bound(i), *e)),
+    );
+    let enc = Enc { ts };
+    // Per row: its id, then each var before and after.
+    let mut terms: Vec<String> = Vec::new();
+    for (row, e) in &rows {
+        terms.push(row.clone());
+        for v in ts.var_ids().filter(|v| enc.owner(*v) == Some(*e)) {
+            terms.push(enc.read(v, Frame::Pre, row));
+            terms.push(enc.read(v, Frame::Post, row));
+        }
+    }
+    for e in ts.entity_ids() {
+        terms.push(encode::nil(e));
+    }
+    let out = solver
+        .exec(&format!("(get-value ({}))", terms.join(" ")))?
+        .join(" ");
+    let parsed =
+        Sexp::parse(&out).ok_or_else(|| SolverError(format!("cannot read the model: {out}")))?;
+    let Sexp::List(pairs) = parsed else {
+        return Err(SolverError(format!("cannot read the model: {out}")));
+    };
+    let values: Vec<Sexp> = pairs
+        .into_iter()
+        .map(|p| match p {
+            Sexp::List(mut kv) if kv.len() == 2 => Ok(kv.remove(1)),
+            other => Err(SolverError(format!("cannot read a model value: {other:?}"))),
+        })
+        .collect::<Result<_, _>>()?;
+    let mut names = RowNames::default();
+    let nils: Vec<(EntId, Sexp)> = ts
+        .entity_ids()
+        .zip(values[values.len() - ts.entities().len()..].iter().cloned())
+        .collect();
+    names.nils = nils;
+    let mut at = 0;
+    let mut lines = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut row_names = Vec::new();
+    for (_, e) in &rows {
+        let id = values[at].clone();
+        at += 1;
+        let name = names.name(ts, *e, &id);
+        row_names.push(name.clone());
+        let mut before = Vec::new();
+        let mut changed = Vec::new();
+        let mut state = String::new();
+        for v in ts.var_ids().filter(|v| enc.owner(*v) == Some(*e)) {
+            let (pre, post) = (values[at].clone(), values[at + 1].clone());
+            at += 2;
+            let decl = ts.var(v);
+            let show = |s: &Sexp, names: &mut RowNames| show(ts, &decl.domain, s, names);
+            let (pre_s, post_s) = (show(&pre, &mut names), show(&post, &mut names));
+            if let VarKind::Exists(_) = decl.kind {
+                state = if pre_s == post_s {
+                    pre_s
+                } else {
+                    format!("{pre_s} -> {post_s}")
+                };
+                continue;
+            }
+            let label = var_label(ts, v);
+            let in_view = matches!(decl.kind, VarKind::Column { .. } | VarKind::Owner { .. });
+            if in_view {
+                before.push(format!("{label}={pre_s}"));
+            }
+            if pre_s != post_s {
+                changed.push(format!("{label}={post_s}"));
+            }
+        }
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let mut line = format!("{name} ({state})");
+        if !before.is_empty() {
+            line += &format!(" {}", before.join(", "));
+        }
+        if !changed.is_empty() {
+            line += &format!(" -> {}", changed.join(", "));
+        }
+        lines.push(line);
+    }
+    let params: Vec<&str> = row_names[..action.params.len()]
+        .iter()
+        .map(String::as_str)
+        .collect();
+    Ok(Cti {
+        step: format!("{}({})", action.name, params.join(", ")),
+        rows: lines,
+    })
+}
+
+/// Names the solver's row elements `Entity#1`, `Entity#2`, .. in order of first mention.
+#[derive(Default)]
+struct RowNames {
+    seen: BTreeMap<(usize, String), usize>,
+    nils: Vec<(EntId, Sexp)>,
+}
+
+impl RowNames {
+    fn name(&mut self, ts: &TransitionSystem, e: EntId, id: &Sexp) -> String {
+        if self.nils.iter().any(|(n, s)| *n == e && s == id) {
+            return "null".to_string();
+        }
+        let key = (e.index(), format!("{id:?}"));
+        let next = self.seen.keys().filter(|(k, _)| *k == e.index()).count() + 1;
+        let n = *self.seen.entry(key).or_insert(next);
+        format!("{}#{n}", ts.entity(e).id)
+    }
+}
+
+fn show(ts: &TransitionSystem, domain: &Domain, value: &Sexp, names: &mut RowNames) -> String {
+    if let Domain::Instance { parent, .. } = domain {
+        return names.name(ts, *parent, value);
+    }
+    match value.int() {
+        Some(i) => value_name(domain, i),
+        None => format!("{value:?}"),
+    }
+}
+
+/// A domain index as the model writes the value.
+pub(super) fn value_name(domain: &Domain, i: i64) -> String {
+    let idx = usize::try_from(i).unwrap_or(usize::MAX);
+    let named = |names: &[&str]| names.get(idx).map_or(i.to_string(), |s| s.to_string());
+    match domain {
+        Domain::Existence => named(&["absent", "present", "deleted"]),
+        Domain::Enum(values) => values.get(idx).cloned().unwrap_or(i.to_string()),
+        Domain::Bool => named(&["false", "true"]),
+        Domain::Nullable => named(&["null", "present"]),
+        Domain::Int | Domain::Instance { .. } => i.to_string(),
+        Domain::NullableInt => match i {
+            0 => "null".to_string(),
+            n => (n - 1).to_string(),
+        },
+    }
+}
+
+/// A var as a CTI line names it: the column, or the key's role or parent.
+fn var_label(ts: &TransitionSystem, v: VarId) -> String {
+    match &ts.var(v).kind {
+        VarKind::Column { column, .. } => column.clone(),
+        VarKind::Owner { parent, role, .. } => role
+            .clone()
+            .unwrap_or_else(|| ts.entity(*parent).id.clone()),
+        _ => {
+            let name = ts.var_name(v);
+            match name.split_once('.') {
+                Some((_, rest)) => rest.to_string(),
+                None => name,
+            }
+        }
+    }
+}
