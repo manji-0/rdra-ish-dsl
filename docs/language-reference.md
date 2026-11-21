@@ -26,7 +26,7 @@ same order:
 | Business | `business`, `buc`, `flow`, `step`, `timer`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
-| Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
+| Data | `entity`, `variation`, `condition` | What is stored, and how is it related? | [Data Layer](#data-layer) |
 | Lifecycle and rules | `transitions`, `chooses`, `sets`, `drives`, and the rules `forbidden`, `invariant`, `required`, `exclusive` | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
 
 A kind is part of the language only when some review output consumes it. The
@@ -234,6 +234,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `drives` | `(UseCase, Entity.column op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 | `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
 | `chooses` | `(UseCase, Entity.column, value)` | One value the actor may pick; the lines of one use case and column list the choice. `.when(Condition)` guards this value only. See [Guard one value](#guard-one-value-when). |
+| `links`, `relinks`, `unlinks` | `(UseCase, Entity, Entity)` | The use case links an unlinked child row to a parent, moves a linked child to another parent, or unlinks it, through the key from the first entity to the second. See [Linking, moving and unlinking](#linking-moving-and-unlinking-an-existing-child-links-relinks-unlinks). |
 
 `relate(A, B, N:1)` generates a key column on `A` named `{role}_{parent key column}`.
 With the default role (the parent id in lowercase) and a parent key `id`, that is `b_id`.
@@ -263,7 +264,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
 | `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)`, `.references(...)` |
-| `forbidden` | `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
+| `forbidden` | `.when(Condition)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
 | `required`, `exclusive` | `.label("...")` |
 | `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
@@ -271,6 +272,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | `reads` | `.by(...)`, `.order(...)`, `.page(...)`, `.count()`, `.sum(...)`, each at most once: the [query shape](#query-shapes) |
+| `links`, `relinks`, `unlinks` | `.role(...)`, to pick the key when several join the child to the parent |
 | `creates`, `updates`, `deletes` | `.apart()`, on a use case's write: the row need not be joined to the other rows the use case writes, so it draws no `UnjoinedWrite` |
 | every other predicate (including `combines`) | none |
 
@@ -1453,7 +1455,7 @@ names neither a variation column nor a lifecycle column, and guards no use case,
 API, or through `.when` on a `transitions` arm or a `chooses` value; such a body is the use
 case's rule even when it reads only `Bool` or nullable columns, so it is not flagged. A body
 that a `forbidden` or an `invariant` reads through `.when(Cond)` (see
-[`.when(Condition)` on a rule](#when-condition-on-a-rule)) is that rule's condition and is
+[`.when(Condition)` on a rule](#whencondition-on-a-rule)) is that rule's condition and is
 not flagged either. Do not
 add a comparison on the state the use case already moves from to anchor it: the transition
 already requires that state. `applies_to(Condition, System)` adds no guard, so it does not
@@ -1666,7 +1668,7 @@ error names the use case's `holds` body that compares the parent, or its copy fr
 parent, with `.role(<first role>)` added, or, when the use case has neither, says that a
 `holds` guard applied to it or a copy in it must name the key.
 
-`.by(role)` belongs to the call before it:
+`.role(role)` belongs to the call before it:
 
 | Written after | Picks the key of |
 |---|---|
@@ -2025,7 +2027,7 @@ arm's `alt` branch with it; and `list --kind transition` adds it to the `guards`
 the condition diagram the condition `combines` the arm's state model, `derived ... from
 when`.
 
-The second argument must be a use case. Passing an event, the earlier form, is a
+The first argument must be a use case. Passing an event, the earlier form, is a
 `TypeMismatch` whose hint names the use case to write and `scripts/migrate-phase3.py`,
 which rewrites a model to one line per use case that raises the event. See
 [state-derivation.md](./state-derivation.md) for how transitions feed derivation.
@@ -2221,7 +2223,7 @@ case that drives a comparison to one truth while its own Int `sets` make it the 
 | `true` | The comparison holds after this use case runs. |
 | `false` | The comparison does not hold after this use case runs. |
 
-The forms that name the entity apart from the column, `sets(UC, E.col == v)` and
+The forms that name the entity apart from the column, `sets(UC, E, col == v)` and
 `drives(UC, E, cmp, true|false)`, and the four-argument `sets(UC, E, cmp, true|false)`,
 fail to load with the rewrite to write (see
 [Deprecated and removed forms](#deprecated-and-removed-forms)).
@@ -2307,7 +2309,7 @@ forbidden(Coupon, expired_at < now)
 A `.when(Condition)` after the arguments adds the comparisons of the condition's `holds`
 body to the list, as if they were written among the arguments, so a business rule stated
 once as a `condition` guards use cases and names forbidden states alike (see
-[`.when(Condition)` on a rule](#when-condition-on-a-rule)):
+[`.when(Condition)` on a rule](#whencondition-on-a-rule)):
 
 ```rdra
 condition PastDeadline "the deadline has passed"
