@@ -657,12 +657,7 @@ fn model_traces(
             Ok(diag) => {
                 let message = render_violation(program, model, &diag, TraceSource::Tlc)
                     .expect("explain returns a violation");
-                let finding = Finding {
-                    severity: Severity::Error,
-                    name: diag.name(&[]),
-                    message,
-                };
-                finding.to_string()
+                Finding::new(&diag, &[], message).to_string()
             }
             Err(why) => {
                 format!("error: {why}; BFS and TLC disagree (a tool bug). Raw TLC trace follows.")

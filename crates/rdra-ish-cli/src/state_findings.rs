@@ -19,6 +19,8 @@ pub(crate) struct Finding {
     /// `StateDiag::name`.
     pub(crate) name: String,
     pub(crate) message: String,
+    /// The finding is a `StateDiag::Deadlock`.
+    pub(crate) is_deadlock: bool,
 }
 
 impl Finding {
@@ -28,6 +30,7 @@ impl Finding {
             severity: diag.severity(),
             name: diag.name(entities),
             message,
+            is_deadlock: matches!(diag, StateDiag::Deadlock { .. }),
         }
     }
 }
@@ -662,7 +665,7 @@ pub(crate) fn reject_state_errors(findings: &[Finding]) -> anyhow::Result<()> {
 
 /// `reject_state_errors`, but a deadlock does not count: the state diagram colours it.
 pub(crate) fn reject_state_errors_except_deadlock(findings: &[Finding]) -> anyhow::Result<()> {
-    reject_errors_where(findings, |finding| !finding.name.starts_with("Deadlock_"))
+    reject_errors_where(findings, |finding| !finding.is_deadlock)
 }
 
 fn reject_errors_where(
