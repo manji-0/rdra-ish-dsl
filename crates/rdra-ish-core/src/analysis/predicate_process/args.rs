@@ -4,7 +4,7 @@ use crate::analysis_diag::*;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::*;
-use crate::predicate::TRIGGER_PAIRS;
+use crate::predicate::{ArgKind, Predicate, TRIGGER_PAIRS};
 use rdra_ish_syntax::ast::*;
 
 use super::predicate_arg_display;
@@ -13,56 +13,37 @@ use crate::analysis::arg_resolve::resolve_arg;
 pub(super) fn resolve_predicate_args(
     model: &SemanticModel,
     pred: &PredicateCall,
-    sig: &[Vec<&'static str>],
+    sig: &[Vec<ArgKind>],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Vec<Option<NodeRef>> {
     pred.args
         .iter()
         .enumerate()
-        .map(|(i, arg)| {
-            let Some(kinds) = sig.get(i) else {
-                return if matches!(
-                    pred.name.as_str(),
-                    "forbidden"
-                        | "required"
-                        | "exclusive"
-                        | "sets"
-                        | "drives"
-                        | "invariant"
-                        | "after"
-                        | "holds"
-                ) {
-                    None
-                } else {
-                    resolve_arg(model, arg, ctx, diags)
-                };
-            };
-            if matches!(
-                kinds.as_slice(),
-                ["_card"] | ["_col"] | ["_val"] | ["variation", "_col"]
-            ) {
-                return None;
-            }
-            resolve_arg(model, arg, ctx, diags)
+        .map(|(i, arg)| match node_kinds(sig.get(i)?) {
+            Some(_) => resolve_arg(model, arg, ctx, diags),
+            None => None,
         })
         .collect()
 }
 
+/// The declaration kinds an argument takes, when it takes nothing but declarations; its
+/// processor reads any other argument itself.
+fn node_kinds(kinds: &[ArgKind]) -> Option<Vec<&'static str>> {
+    kinds.iter().map(|k| k.node()).collect()
+}
+
 pub(super) fn validate_predicate_arg_types(
     pred: &PredicateCall,
-    sig: &[Vec<&'static str>],
+    sig: &[Vec<ArgKind>],
     resolved: &[Option<NodeRef>],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    for (i, expected_kinds) in sig.iter().enumerate() {
-        if matches!(
-            expected_kinds.as_slice(),
-            ["_card"] | ["_col"] | ["_val"] | ["variation", "_col"]
-        ) {
+    for (i, kinds) in sig.iter().enumerate() {
+        let Some(expected_kinds) = node_kinds(kinds) else {
             continue;
-        }
+        };
         if let Some(Some(node)) = resolved.get(i) {
             let actual = node.kind_tag();
             if !expected_kinds.contains(&actual) {
@@ -89,9 +70,6 @@ pub(super) fn validate_contains_pair(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
-    if pred.name != "contains" {
-        return true;
-    }
     if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
         let valid = matches!(
             (from, to),
@@ -124,20 +102,18 @@ pub(super) fn validate_contains_pair(
 /// cannot express that a timer has no external-system target.
 pub(super) fn validate_trigger_pair(
     pred: &PredicateCall,
-    sig: &[Vec<&'static str>],
+    sig: &[Vec<ArgKind>],
     resolved: &[Option<NodeRef>],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> bool {
-    if pred.name != "triggers" {
-        return true;
-    }
     let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) else {
         return true;
     };
     let pair = (from.kind_tag(), to.kind_tag());
     // A kind outside the signature was already reported by `validate_predicate_arg_types`.
-    let in_signature = sig[0].contains(&pair.0) && sig[1].contains(&pair.1);
+    let in_signature =
+        sig[0].contains(&ArgKind::Node(pair.0)) && sig[1].contains(&ArgKind::Node(pair.1));
     if TRIGGER_PAIRS.contains(&pair) || !in_signature {
         return true;
     }
@@ -159,32 +135,12 @@ pub(super) fn validate_trigger_pair(
     false
 }
 
-/// Fixed-arity predicates must match the signature length exactly.
-/// Variadic / trailing-condition predicates only enforce a minimum.
-pub(super) fn arity_error(pred: &PredicateCall, sig: &[Vec<&'static str>]) -> Option<RdraError> {
+pub(super) fn arity_error(p: Predicate, pred: &PredicateCall) -> Option<RdraError> {
     let got = pred.args.len();
-    let (expected, ok) = match pred.name.as_str() {
-        "sets" => ("2".into(), got == 2),
-        "drives" => ("3".into(), got == 3),
-        "after" => ("at least 1".into(), got >= 1),
-        "forbidden" | "invariant" | "required" | "exclusive" => ("at least 1".into(), got >= 1),
-        "holds" => ("at least 2".into(), got >= 2),
-        "transitions" => ("3".into(), got == 3),
-        "chooses" => ("2 or 3".into(), got == 2 || got == 3),
-        "maps_field" => ("2".into(), got == 2),
-        "relate" => ("3".into(), got == 3),
-        _ => {
-            let n = sig.len();
-            (n.to_string(), got == n)
-        }
-    };
-    if ok {
-        None
-    } else {
-        Some(RdraError::WrongArity {
-            name: pred.name.clone(),
-            expected,
-            got,
-        })
-    }
+    let arity = p.arity();
+    (!arity.accepts(got)).then(|| RdraError::WrongArity {
+        name: pred.name.clone(),
+        expected: arity.expected(),
+        got,
+    })
 }

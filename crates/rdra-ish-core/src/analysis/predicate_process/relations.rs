@@ -9,46 +9,6 @@ use rdra_ish_syntax::ast::*;
 use crate::analysis::arg_resolve::resolve_arg;
 use crate::analysis::constraint::context_value_from_arg;
 
-fn relation_kind_for_predicate(pred_name: &str) -> Option<RelKind> {
-    let kind = match pred_name {
-        "performs" => RelKind::Performs,
-        "reads" => RelKind::Reads,
-        "creates" => RelKind::Creates,
-        "updates" => RelKind::Updates,
-        "deletes" => RelKind::Deletes,
-        "displays" => RelKind::Displays,
-        "shows" => RelKind::Shows,
-        "navigates" => RelKind::Navigates,
-        "raises" => RelKind::Raises,
-        "triggers" => RelKind::Triggers,
-        "contains" => RelKind::Contains,
-        "belongs" => RelKind::Belongs,
-        "has_permission" => RelKind::HasPermission,
-        "requires_permission" => RelKind::RequiresPermission,
-        "requires_medium" => RelKind::RequiresMedium,
-        "motivates" => RelKind::Motivates,
-        "achieves" => RelKind::Achieves,
-        "decides" => RelKind::Decides,
-        "invokes" => RelKind::Invokes,
-        "precedes" => RelKind::Precedes,
-        "branches" => RelKind::Branches,
-        "excepts" => RelKind::Excepts,
-        "repeats" => RelKind::Repeats,
-        "covers" => RelKind::Covers,
-        "compensates" => RelKind::Compensates,
-        "request" => RelKind::Request,
-        "response" => RelKind::Response,
-        "error_response" => RelKind::ErrorResponse,
-        "applies_to" => RelKind::AppliesTo,
-        "qualifies" => RelKind::Qualifies,
-        "constrains" => RelKind::Constrains,
-        "maps_field" => RelKind::MapsField,
-        "owns" => RelKind::Owns,
-        _ => return None,
-    };
-    Some(kind)
-}
-
 fn process_belongs_context(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -83,15 +43,14 @@ fn process_belongs_context(
 
 pub(super) fn process_relation_predicate(
     model: &mut SemanticModel,
+    kind: RelKind,
     pred: &PredicateCall,
     resolved: &[Option<NodeRef>],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some(kind) = relation_kind_for_predicate(&pred.name) else {
-        return;
-    };
     if let (Some(Some(from)), Some(Some(to))) = (resolved.first(), resolved.get(1)) {
+        let belongs = kind == RelKind::Belongs;
         model.relations.push(Relation {
             site: Some(ctx.locate(pred.span.clone())),
             from: from.clone(),
@@ -100,7 +59,7 @@ pub(super) fn process_relation_predicate(
             options: RelationOptions::default(),
             via: None,
         });
-        if pred.name == "belongs" {
+        if belongs {
             process_belongs_context(model, pred, from, to, ctx, diags);
         }
     }

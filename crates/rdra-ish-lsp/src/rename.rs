@@ -417,8 +417,9 @@ performs(Staff, Book)
     #[test]
     fn renames_references_in_every_chain_method_argument() {
         let mut covered = 0;
-        for pred in rdra_ish_core::KNOWN_PREDICATES {
-            for method in rdra_ish_core::predicate::predicate_chain_methods(pred) {
+        for p in rdra_ish_core::predicate::Predicate::ALL {
+            let pred = p.name();
+            for method in p.chain_methods() {
                 if let Some((decls, usage)) = chain_reference_sample(pred, method) {
                     assert_chain_reference_renamed(pred, method, decls, usage);
                     covered += 1;
