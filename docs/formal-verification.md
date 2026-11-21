@@ -621,8 +621,8 @@ rules and lemmas that is inductive together (the Houdini algorithm):
   deleted, and a present row's key never names an absent row.
 - What BFS shows on each entity cone and each rule's cone at the run's bounds: the
   patterns a present row takes, the values of each column and of each pair of columns,
-  the patterns a child row takes with the parent its key names (whole, and per parent
-  column), and the pairs of patterns two children of one parent take.
+  the patterns a child row takes with the parent its key names (whole, per parent column,
+  and one column of each), and the pairs of patterns two children of one parent take.
 
 A lemma is only a guess until it survives the same checks, so a capped exploration costs
 proofs, not soundness. The lemmas a proof kept print as `lemma:` lines.
@@ -647,7 +647,10 @@ has a fact about columns behind it, one step earlier. Find it by following the C
 insurance-claim-ops' 「賠償の請求は示談書がそろってから完了する」 is an example. Its CTI is a
 case between OpenSettlement's two steps (`_run_OpenSettlement=1`) with a completed claim. A
 lemma about cases in `investigating` breaks one step earlier, at RequestInvestigation, from
-`responded`. Generalizing over every status before negotiation closes the proof:
+`responded`. Generalizing over every status before negotiation gives the lemma below. With it,
+the mined lemmas that pair one column of a claim with one column of its case become
+inductive, and together they rule the CTI out, so the rule is proved. Neither the lemma nor
+those mined pairs prove it alone:
 
 ```rdra
 forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (received, responded, investigating), ClaimCase.coverage in (bodily_liability, property_liability)).along(Claim, ClaimCase).label("賠償責任の事故は示談交渉の前に請求を完了しない").lemma()

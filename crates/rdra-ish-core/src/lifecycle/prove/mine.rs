@@ -1,7 +1,8 @@
 //! Candidate lemmas mined from BFS (Houdini's guesses). Each entity cone and each rule's cone
 //! is explored at the system's bounds; what every reached state shows becomes a candidate:
-//! the patterns a row takes, the values and value pairs of its columns, and the patterns a
-//! child row takes together with its parent. A guess is never trusted: the prover keeps it only
+//! the patterns a row takes, the values and value pairs of its columns, the patterns a child
+//! row takes together with its parent (whole, per parent column, and one column of each), and
+//! the patterns of two children of one parent. A guess is never trusted: the prover keeps it only
 //! when it is inductive with the others, so a capped or over-approximate exploration costs
 //! proofs, not soundness.
 
@@ -211,18 +212,35 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
         let VarKind::Owner { child, parent, .. } = ts.var(*o).kind else {
             continue;
         };
-        // The whole parent pattern, then each parent column alone: a parent with many
-        // columns reaches too many whole pairs to list.
-        let mut views: Vec<(Vec<VarId>, Pairs)> = vec![(pvars.clone(), pairs.clone())];
+        // The whole patterns, then each parent column with the whole child, then one column
+        // of each: a row with many columns reaches too many whole pairs to list, and one
+        // column of each keeps the fact a step preserves when the rest of the row does not.
+        let mut views: Vec<(Vec<VarId>, Vec<VarId>, Pairs)> =
+            vec![(cvars.clone(), pvars.clone(), pairs.clone())];
         for (j, pv) in pvars.iter().enumerate() {
             let projected = pairs
                 .iter()
                 .map(|(cp, pp)| (cp.clone(), vec![pp[j]]))
                 .collect();
-            views.push((vec![*pv], projected));
+            views.push((cvars.clone(), vec![*pv], projected));
+            for (i, cv) in cvars.iter().enumerate() {
+                let projected = pairs
+                    .iter()
+                    .map(|(cp, pp)| (vec![cp[i]], vec![pp[j]]))
+                    .collect();
+                views.push((vec![*cv], vec![*pv], projected));
+            }
         }
-        for (pvars, pairs) in views {
-            if pairs.len() > PATTERN_CAP || (cvars.is_empty() && pvars.is_empty()) {
+        for (cvars, pvars, pairs) in views {
+            let full = cvars
+                .iter()
+                .chain(&pvars)
+                .map(|v| ts.var(*v).domain.size(ts.bounds))
+                .product::<usize>();
+            if pairs.len() > PATTERN_CAP
+                || pairs.len() >= full
+                || (cvars.is_empty() && pvars.is_empty())
+            {
                 continue;
             }
             let linked = Pred::Cmp(
@@ -237,7 +255,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                 .iter()
                 .map(|(cp, pp)| {
                     Pred::And(vec![
-                        one_of(cvars, &BTreeSet::from([cp.clone()]), 0),
+                        one_of(&cvars, &BTreeSet::from([cp.clone()]), 0),
                         one_of(&pvars, &BTreeSet::from([pp.clone()]), 1),
                     ])
                 })
@@ -249,7 +267,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                     ts.entity(parent).id,
                     ts.var_name(*o),
                     pairs.len(),
-                    names(cvars),
+                    names(&cvars),
                     names(&pvars)
                 ),
                 Formula {

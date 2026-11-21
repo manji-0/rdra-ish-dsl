@@ -8,6 +8,9 @@
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a
   run mark (#147).
+- `verify --prove` also mines lemmas that pair one column of a child row with one column of
+  the parent its key names. The insurance lemma closes its rule only together with them
+  (#147).
 - `verify` runs no TLC cone for a `.lemma()` rule. The proof uses a lemma only once it
   proves it, and the insurance lemma, which reads both the claim's and the case's columns,
   joined their two large cones into one that TLC did not finish in 10 minutes. `check` still
