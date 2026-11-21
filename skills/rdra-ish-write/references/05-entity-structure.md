@@ -78,8 +78,9 @@ Also ask:
    `.page(cursor)` without `.order`, is `InvalidQueryShape`. `lint` `query-index-missing`
    then names the `@index(...)` the read wants, and `export --kind sql` writes the
    suggested indexes and each read's `SELECT` as comments. It also warns at a use case a
-   `timer` triggers that finds rows by their state, and at a `.has` / `.none` over an
-   entity of a million rows or more. Give an entity `rows 5000` (or `rows "1e6"`) when its
+   `timer` triggers that finds rows by their state, at a `.has` / `.none` over an
+   entity of a million rows or more, and at a guard that compares an entity the use case
+   neither writes nor joins by a key (often a missing `.along(...)`). Give an entity `rows 5000` (or `rows "1e6"`) when its
    size is known: under 10,000 rows the warning is skipped, since a scan is cheap.
 6. Add `owns(System, Entity)` only when intended ownership must be visible before
    complete API CRUD exists; otherwise derive ownership from API operations.

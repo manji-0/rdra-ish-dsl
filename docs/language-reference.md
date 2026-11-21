@@ -1757,7 +1757,7 @@ columns in any order and the next ones the sort, in its direction or all reverse
 primary key, each unique set, each `@index`, and each foreign key count; a read one of them
 serves wants nothing, and so does a read the index of a longer read serves.
 
-Two lookups the model implies want an index too, with no `reads` written:
+Three lookups the model implies want an index too, with no `reads` written:
 
 - **A sweep a timer starts.** A use case a `timer` triggers finds every row at the states its
   `transitions` move off, so it wants the `@tenant` column and the state column. Its arms on
@@ -1767,6 +1767,11 @@ Two lookups the model implies want an index too, with no `reads` written:
   one row's related rows through the foreign key, whose index serves it. When the related
   entity declares `rows` of 1,000,000 or more, it wants the key and the columns it compares
   with `==`.
+- **A guard over an unjoined entity.** A `holds` body without `.along` that compares an
+  entity the guarded use case neither writes nor joins by one key to a row it writes looks
+  for any row at the compared values, across the table. It wants the `@tenant` column and
+  the columns it compares with `==`. When the guard means a related row, join it with
+  `.along(...)` instead.
 
 `lint` `query-index-missing` warns at a lookup no index serves, unless its entity declares
 fewer than 10,000 `rows`, and names the `@index(...)` that declares the one it wants. A sort that mixes directions needs an index with the same mix,

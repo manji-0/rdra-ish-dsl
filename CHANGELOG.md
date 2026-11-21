@@ -11,7 +11,10 @@
   case a `timer` triggers finds the rows at the states its `transitions` move off, and a
   `.has` / `.none` over an entity of 1,000,000 rows or more reads by the foreign key and
   the columns it compares. Both appear in `lint` `query-index-missing` and in the SQL
-  export's index comments. The food-permit and insurance-claim samples declare `@index` on
+  export's index comments. A `holds` guard that compares an entity the use case neither
+  writes nor joins by one key to a written row reads across the table, and wants the
+  columns it compares with `==`; the hint offers `.along(...)` when a related row is meant.
+  The food-permit and insurance-claim samples declare `@index` on
   the state columns their timers sweep.
 
 ### Changed

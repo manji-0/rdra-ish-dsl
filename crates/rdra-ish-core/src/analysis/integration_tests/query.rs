@@ -288,3 +288,57 @@ fn a_row_estimate_parses_or_is_reported() {
     assert_eq!(errors.len(), 1, "{errors:?}");
     assert!(errors[0].contains("many"), "{errors:?}");
 }
+
+const GUARDED: &str = r#"
+entity Shop "Shop" {
+  id: Int @pk
+  mode: Enum(open, closed)
+}
+entity Sale "Sale" {
+  id: Int @pk
+  state: Enum(draft, done)
+}
+entity Notice "Notice" {
+  id: Int @pk
+  level: Enum(low, high)
+}
+LINK
+usecase Sell "sell"
+usecase Refund "refund"
+creates(Sell, Sale)
+updates(Refund, Sale)
+condition Calm "Calm"
+holds(Calm, Notice.level == low, Shop.mode == open)
+applies_to(Calm, Sell)
+applies_to(Calm, Refund)
+"#;
+
+fn guarded(link: &str) -> SemanticModel {
+    let src = GUARDED.replace("LINK", link);
+    let (ast, parse_errors) = parse(&src);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    build_model(&ast).0
+}
+
+/// A guard that compares an entity no written row joins by a key looks for any matching row
+/// across the table, so it wants the compared columns; an entity one key joins to a written
+/// row is read through that key.
+#[test]
+fn a_guard_over_an_unjoined_entity_wants_an_index() {
+    let model = guarded("relate(Sale, Shop, N:1)");
+    let suggestions = model.index_suggestions();
+    let [s] = suggestions.as_slice() else {
+        panic!("{suggestions:?}");
+    };
+    assert_eq!(model.entities[s.entity].id, "Notice");
+    assert_eq!(shown(&s.columns), "level");
+    let [r @ Reader::Guard { usecases, .. }] = s.readers.as_slice() else {
+        panic!("{:?}", s.readers);
+    };
+    assert_eq!(model.reader_name(r), "Calm");
+    assert_eq!(usecases.len(), 2);
+    assert!(model.reader_site(r).is_some());
+
+    let both = guarded("relate(Sale, Shop, N:1)\nrelate(Sale, Notice, N:1)");
+    assert!(both.index_suggestions().is_empty());
+}
