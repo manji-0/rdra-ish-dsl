@@ -52,6 +52,15 @@ use split::Split;
 /// inputs, or unreduced.
 const TLA_CELL_BUDGET: usize = 200_000;
 
+/// Why one attempt at `reduced` left the cone unreduced.
+enum Unreduced {
+    /// The printed tables would pass `TLA_CELL_BUDGET` under a split that had inputs, so the
+    /// split without them is worth a try.
+    OverBudgetWithInputs,
+    /// Nothing reduces.
+    Nothing,
+}
+
 /// A step of a path: the action, its params, and the state it enters.
 pub type Step = (ActId, Box<[u8]>, State);
 /// A class move: the last action of a path that leaves the class, its params, and the class
@@ -346,30 +355,28 @@ impl TransitionSystem {
     pub fn reduced(&self, seeds: &[Seed], caps: Caps) -> TransitionSystem {
         match self.reduced_with(seeds, caps, true) {
             Ok(out) => out,
-            Err(true) => self
+            Err(Unreduced::OverBudgetWithInputs) => self
                 .reduced_with(seeds, caps, false)
                 .unwrap_or_else(|_| self.clone()),
-            Err(false) => self.clone(),
+            Err(Unreduced::Nothing) => self.clone(),
         }
     }
 
-    /// One attempt at `reduced`, with or without the inputs of S. `Err(true)` says the
-    /// printed tables would pass `TLA_CELL_BUDGET` under a split that had inputs, so the
-    /// split without them is worth a try; `Err(false)` that nothing reduces.
+    /// One attempt at `reduced`, with or without the inputs of S.
     fn reduced_with(
         &self,
         seeds: &[Seed],
         caps: Caps,
         inputs: bool,
-    ) -> Result<TransitionSystem, bool> {
+    ) -> Result<TransitionSystem, Unreduced> {
         let split = self.split_with(seeds, inputs);
         // Every S var observed by T makes the quotient the identity, whatever the inputs do.
         if split.s.is_empty() || split.s.is_subset(&split.obs) {
-            return Err(false);
+            return Err(Unreduced::Nothing);
         }
         let ext = Extended::of(self, &split);
         let Some(quotient) = Quotient::of(&ext, self, caps) else {
-            return Err(false);
+            return Err(Unreduced::Nothing);
         };
         let Quotient {
             reps,
@@ -424,7 +431,11 @@ impl TransitionSystem {
             states: n,
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
-            return Err(!split.inputs.is_empty() || !split.folds.is_empty());
+            return Err(if split.inputs.is_empty() && split.folds.is_empty() {
+                Unreduced::Nothing
+            } else {
+                Unreduced::OverBudgetWithInputs
+            });
         }
         let mut out = self.clone();
         out.reduction = Some(Arc::new(reduction));
