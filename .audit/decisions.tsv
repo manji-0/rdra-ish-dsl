@@ -8,3 +8,4 @@ B	Waves: subtract, move, cost, types, decompose; behavior changes listed out of 
 1a	Keep E12 removal of "writes" from the edge contract	writes is a removed predicate (syntax/removed.rs)	grep '"writes"'	VERIFIED
 1b/1c	Apply C2,C8,C9,C10,L1,L3,L6,L9,L10,L15,L21	write-only shadow model, test-only exploration path	1295 tests ok, sample artifacts identical	-1343 lines
 1	Fix list_kinds race in a separate test commit	two parallel tests rewrote one file; seen once by the core agent	OnceLock writes the model once	f285aee
+1	Combined Wave 1 head bar	merge of both branches	fmt ok, clippy ok, artifacts identical; 32/33 binaries ok; diagram_contract sequence test failed once at line 81 (child exited non-zero), passed alone and in a full-binary rerun 40/40	INCONCLUSIVE: rerun at final head
