@@ -1,0 +1,10 @@
+step	decision	why	evidence	result
+A	Route to figure-it-out with 4 parallel read-only audits	117k lines across 5 crates; one reader cannot hold it	.audit/{lifecycle,core,emit,frontends}.md	92 findings ranked
+A	Baseline: cargo test --all with CI skip list	pin before any move	33 test binaries ok, 0 failed	VERIFIED
+B	Waves: subtract, move, cost, types, decompose; behavior changes listed out of scope	subtraction first shrinks what later waves move	.audit/refactoring-plan.md	plan committed
+1	Rebase both Wave 1 branches from 99a1d29 onto branch head	worktree tool started from stale local main	git merge-base showed 99a1d29	rebased clean
+1a/1d	Apply E1-E5,E9,E12,E14,E15,F5,F6,F9,F16,F19	dead gates, copies, no-op code	33/33 tests ok, sample artifacts identical	merged af60403, -352 lines
+1d	F4 done after rebase: one find_on_path for tlc and z3	stale-base agent saw only one lookup; new prove.rs added the second; `which` is absent on Windows	verify.rs which(), prove.rs PATH walk	+12/-19
+1a	Keep E12 removal of "writes" from the edge contract	writes is a removed predicate (syntax/removed.rs)	grep '"writes"'	VERIFIED
+1b/1c	Apply C2,C8,C9,C10,L1,L3,L6,L9,L10,L15,L21	write-only shadow model, test-only exploration path	1295 tests ok, sample artifacts identical	-1343 lines
+1	Fix list_kinds race in a separate test commit	two parallel tests rewrote one file; seen once by the core agent	OnceLock writes the model once	f285aee
