@@ -26,7 +26,7 @@ use rdra_ish_core::lifecycle::{
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
-use crate::export::{checked_system, tla_bounds, Modules};
+use crate::export::{checked_system, tla_bounds, tla_file, Modules};
 use crate::list_output::{render_violation, Finding, TraceSource};
 use crate::property_cone::{ConeRun, PropertyCone, Verdict};
 use crate::prove::{run_proof, Marks, ProofTally};
@@ -150,19 +150,10 @@ impl Ran {
 /// and names the whole-model module `X`; any other `-o` is a directory.
 fn out_dir(out: Option<PathBuf>) -> Result<(PathBuf, String, bool)> {
     let (dir, whole, keep) = match out {
-        Some(path) if path.extension().is_some_and(|e| e == "tla") => {
-            let stem = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("RdraSpec")
-                .to_string();
-            let parent = match path.parent() {
-                Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
-                _ => PathBuf::from("."),
-            };
-            (parent, stem, true)
-        }
-        Some(path) => (path, "RdraSpec".to_string(), true),
+        Some(path) => match tla_file(&path) {
+            Some((parent, stem)) => (parent, stem, true),
+            None => (path, "RdraSpec".to_string(), true),
+        },
         None => (
             std::env::temp_dir().join(format!("rdra-ish-tlc-{}", std::process::id())),
             "RdraSpec".to_string(),
