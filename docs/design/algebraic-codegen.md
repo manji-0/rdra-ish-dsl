@@ -7,7 +7,8 @@
 
 Status: accepted in scope on 2026-11-07 as an experimental extra
 ([vision.md](../vision.md#decisions)). Neither the `codegen` subcommand nor its output is
-covered by [compatibility](../compatibility.md). Phases 0 to 2 and the functions of phase 3 have landed (see
+covered by [compatibility](../compatibility.md). Phases 0 to 4 have landed, phase 5
+has landed except for 11 use cases on the samples (see
 [Phases](#phases)), and every question is [decided](#decisions).
 
 The model already states the shape of the domain: the values an actor chooses
@@ -483,6 +484,12 @@ rules ────────► refinements ──┘                         
   DBML does. State sums and functions refuse when the lifecycle has errors. Under
   `--refine reachable` they also refuse when a cone stopped at the state cap, because an
   undecided cone gives no complete set of patterns.
+
+Note (2026-11-21): what was built differs. `ir.rs` has one declaration type per kind
+(`EnumDecl`, `IdDecl`, `RecordDecl`, `SumDecl`), and `FnDecl` holds rows, inputs, argument
+checks, conditions, and outputs. `codegen` does not go through the lifecycle gate: it runs
+`check` at `Bounds::STATES` and refuses when it reports an error, unless `--allow-failing`.
+`--refine reachable` has not landed.
 
 ## How we know it is right
 

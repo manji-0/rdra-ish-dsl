@@ -26,7 +26,7 @@ same order:
 | Business | `business`, `buc`, `flow`, `step`, `timer`, `medium` | Which business value does it serve, in what order? | [Business Layer](#business-layer) |
 | Interaction | `actor`, `usecase`, `screen`, `field`, `event` | Who does what, on which screen, and what does it cause? | [Interaction Layer](#interaction-layer) |
 | System boundary | `system`, `extsystem`, `api`, `dto`, `permission` | Which boundary owns the operation, and who may call it? | [System Boundary](#system-boundary) |
-| Data | `entity` | What is stored, and how is it related? | [Data Layer](#data-layer) |
+| Data | `entity`, `variation`, `condition` | What is stored, and how is it related? | [Data Layer](#data-layer) |
 | Lifecycle and rules | `transitions`, `chooses`, `sets`, `drives`, and the rules `forbidden`, `invariant`, `required`, `exclusive` | Which states are reachable, and which are forbidden? | [Lifecycle](#lifecycle), [Entity State Constraints](#entity-state-constraints) |
 
 A kind is part of the language only when some review output consumes it. The
@@ -47,12 +47,12 @@ replace those line-comment prefixes with `//`; see the repository
 
 A file may declare the module it belongs to and import other modules:
 
-```
+```rdra
 module shared.actors
 
-import shared.actors             // flat import: brings all names into scope
-import shared.actors as a        // namespaced import under alias `a`
-import shared.actors.{Staff}     // selective import of a single name
+import shared.actors // flat import: brings all names into scope
+import shared.actors as a // namespaced import under alias `a`
+import shared.actors.{Staff} // selective import of a single name
 import shared.actors.{Staff as S} // selective import with a local alias
 ```
 
@@ -234,6 +234,7 @@ qualify the argument with a kind prefix — see [Kind-Qualified References](#kin
 | `drives` | `(UseCase, Entity.column op rhs, true \| false)` | Drives the truth value of a comparison proposition (a derived Bool axis) in state derivation. |
 | `chooses` | `(UseCase, Entity.column)` | The actor picks the value of a variation-typed column again when the use case runs: any value of the variation may follow, as on a creation. See [Choosing a value again](#choosing-a-value-again-chooses). |
 | `chooses` | `(UseCase, Entity.column, value)` | One value the actor may pick; the lines of one use case and column list the choice. `.when(Condition)` guards this value only. See [Guard one value](#guard-one-value-when). |
+| `links`, `relinks`, `unlinks` | `(UseCase, Entity, Entity)` | The use case links an unlinked child row to a parent, moves a linked child to another parent, or unlinks it, through the key from the first entity to the second. See [Linking, moving and unlinking](#linking-moving-and-unlinking-an-existing-child-links-relinks-unlinks). |
 
 `relate(A, B, N:1)` generates a key column on `A` named `{role}_{parent key column}`.
 With the default role (the parent id in lowercase) and a parent key `id`, that is `b_id`.
@@ -263,7 +264,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `transitions` | `.when(Condition)`, at most once: the condition's `holds` body guards this arm |
 | `chooses` | `.when(Condition)`, at most once, on the form with a value: the condition's `holds` body guards this value |
 | `relate` | `.via(...)`, `.optional()`, `.on_delete(...)`, `.on_update(...)`, `.role(...)`, `.key(...)`, `.references(...)` |
-| `forbidden` | `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
+| `forbidden` | `.when(Condition)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
 | `invariant` | `.when(...)`, `.then(...)`, `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)`, `.label("...")`, `.global()`, `.lemma()` |
 | `required`, `exclusive` | `.label("...")` |
 | `holds` | `.has(...)`, `.none(...)`, `.along(...)`, `.role(...)` |
@@ -271,6 +272,7 @@ only the methods below, and any other name is an `unknown chain method` error
 | `after` | `.assert(...)`, `.label("...")` |
 | `exposes` | `.append()`, `.upsert()` (an entity), `.caller(actor \| system \| any)` (a use case) |
 | `reads` | `.by(...)`, `.order(...)`, `.page(...)`, `.count()`, `.sum(...)`, each at most once: the [query shape](#query-shapes) |
+| `links`, `relinks`, `unlinks` | `.role(...)`, to pick the key when several join the child to the parent |
 | `creates`, `updates`, `deletes` | `.apart()`, on a use case's write: the row need not be joined to the other rows the use case writes, so it draws no `UnjoinedWrite` |
 | every other predicate (including `combines`) | none |
 
@@ -294,7 +296,7 @@ A `goal` holds the first two. Its description states the problem the goal solves
 are optional; `lint` reports a goal that has no `metric` or no `target` as
 `goal-unmeasured`.
 
-```
+```rdra
 goal ShortWait "受付から診察までの待ち時間を短くする"
   description "受付後に診察室へ案内されるまでの待ちが長いと、患者が帰ってしまう。"
   metric "受付から診察開始までの中央値"
@@ -313,7 +315,7 @@ A non-goal is a requirement that the model rules out. It has no element of its o
 a `requirement` with `status "out-of-scope"` and a `rationale` that says why. `lint` does
 not ask an out-of-scope requirement for a goal.
 
-```
+```rdra
 requirement ReqNoOnlineConsultation "オンライン診療は対象外とする"
   status "out-of-scope"
   rationale "診察は来院して受ける前提で業務を分けているため、ビデオ通話による受付・診察・会計は扱わない。"
@@ -326,7 +328,7 @@ requirement ReqNoOnlineConsultation "オンライン診療は対象外とする"
 `requirement` declarations may carry requirement-specific metadata after the label or
 description:
 
-```
+```rdra
 requirement ReqCheckout "Checkout must be reliable"
   description "The checkout flow must preserve customer intent."
   priority must
@@ -355,7 +357,7 @@ CSV, or JSON form.
 requirement: a requirement says what must be true, while an ADR says which design
 option was chosen, which options were rejected, and why.
 
-```
+```rdra
 adr AdrCustomerOutbox "Publish customer changes through outbox"
   description "Decision record for external customer-change publication."
   adr_status accepted
@@ -367,7 +369,11 @@ adr AdrCustomerOutbox "Publish customer changes through outbox"
   reason "Avoid coupling write latency to external subscribers."
 
 system CustomerSystem "Customer System"
-entity Customer "Customer" { id: Int @pk }
+
+entity Customer "Customer" {
+  id: Int @pk
+}
+
 api PublishCustomerChanged "Publish customer changed"
 
 decides(AdrCustomerOutbox, CustomerSystem)
@@ -386,7 +392,7 @@ Use `nfr` for a measurable or reviewable quality objective. Use `quality` to nam
 the quality attribute, and `applies_to` to connect the NFR to the use case, API,
 or system it governs:
 
-```
+```rdra
 quality Performance "Performance"
 quality Availability "Availability"
 
@@ -421,7 +427,7 @@ Supported NFR clauses are:
 
 Use `constraint` when the rule is more of a guardrail than a metric:
 
-```
+```rdra
 constraint AuditRetention "Audit retention"
   audit enabled
   logging structured
@@ -451,12 +457,10 @@ use case divide the review.
 `belongs(Buc, Business)` declares the Business area a BUC belongs to. The mapping can
 also carry optional By context with a method-chain clause:
 
-```
+```rdra
 medium FrontDeskTerminal "Front Desk Terminal"
 
-belongs(BucAppointmentScheduling, ClinicOps)
-  .by(FrontDeskTerminal)
-  .by("tablet")
+belongs(BucAppointmentScheduling, ClinicOps).by(FrontDeskTerminal).by("tablet")
 ```
 
 - `.by(...)` records the physical medium, device, terminal, or other operation medium.
@@ -569,7 +573,7 @@ period ends.
 Business flows are optional, first-class narrative structure for cases where BUC
 membership alone is too flat:
 
-```
+```rdra
 buc BucCheckout "Checkout"
 flow CheckoutFlow "Checkout flow"
 step ReviewCart "Review cart"
@@ -660,10 +664,18 @@ a compensation relationship explicit between use cases.
 Use `field` when a screen item needs to be reviewed as a model element rather
 than only inferred from CRUD:
 
-```
+```rdra
 screen CheckoutScreen "Checkout screen"
-field ShippingAddress "Shipping address" access editable required true source actor
-field OrderTotal "Order total" access readonly required true source system
+
+field ShippingAddress "Shipping address"
+  access editable
+  required true
+  source actor
+
+field OrderTotal "Order total"
+  access readonly
+  required true
+  source system
 
 entity Order "Order" {
   id: Int @pk
@@ -813,9 +825,9 @@ actor link.
 extsystem LabSystem "Laboratory System"
 extsystem MessagingGateway "Messaging Gateway"
 
-raises(LabSystem, EvLabResultReceived)               // inbound: the system emits
+raises(LabSystem, EvLabResultReceived) // inbound: the system emits
 triggers(EvLabResultReceived, ReceiveLabResult)
-triggers(EvAppointmentScheduled, MessagingGateway)   // outbound: the event is delivered to it
+triggers(EvAppointmentScheduled, MessagingGateway) // outbound: the event is delivered to it
 ```
 
 An event an external system raises is a free trigger: it may arrive at any time, so the
@@ -839,15 +851,20 @@ else stays internal: no other model can name it.
 ```rdra
 system AuthSystem "Authentication System"
 usecase Login "Log in"
-usecase Revoke "Revoke a session"            // internal
-api SessionApi "Session API" method POST path "/sessions"
+usecase Revoke "Revoke a session" // internal
+
+api SessionApi "Session API"
+  method POST
+  path "/sessions"
+
 contains(AuthSystem, SessionApi)
 invokes(Login, SessionApi)
 
-entity Session "Session" {                   // internal
+entity Session "Session" { // internal
   id: Int @pk
   status: Enum(active, revoked) @default(active)
 }
+
 creates(SessionApi, Session)
 transitions(Revoke, Session.status, active -> revoked)
 
@@ -856,12 +873,13 @@ entity SessionView "Session (published)" {
   session_id: Int @pk
   status: Enum(active, ended)
 }
+
 updates(SessionApi, SessionView)
 sets(Login, SessionView.status == active)
 updates(Revoke, SessionView)
 sets(Revoke, SessionView.status == ended)
 
-exposes(AuthSystem, Login)                   // callable on behalf of an actor
+exposes(AuthSystem, Login) // callable on behalf of an actor
 exposes(AuthSystem, SessionView).upsert()
 ```
 
@@ -931,17 +949,17 @@ or another system calls it (`exposes(..).caller(system)`).
 The `api` element models the backend API layer that sits between a screen and the
 entities it operates. Declare an api once per API endpoint or boundary:
 
-```
+```rdra
 api OrderApi "Order API"
 ```
 
 Then connect it to a use case with `invokes`, and to entities with CRUD predicates:
 
-```
+```rdra
 invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
 creates(OrderApi, OrderLine)
-updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
+updates(PlaceOrder, Cart) // direct write still allowed (mixed form)
 ```
 
 **Transactions**:
@@ -1008,7 +1026,7 @@ updates(PlaceOrder, Cart)   // direct write still allowed (mixed form)
 
 API declarations can carry transport-facing contract metadata:
 
-```
+```rdra
 api CreateOrder "Create order"
   method POST
   path "/orders"
@@ -1029,7 +1047,7 @@ Supported API clauses are:
 
 DTOs model payload shapes separately from database entities:
 
-```
+```rdra
 dto CreateOrderRequest "Create order request" {
   customer_id: Int
   note: String @null
@@ -1068,7 +1086,7 @@ until the DSL has explicit vocabulary for them.
 
 `maps_field(Dto.field, Entity.column)` says which column a DTO field carries:
 
-```
+```rdra
 maps_field(OrderResponse.order_id, Order.id)
 maps_field(OrderResponse.customer_id, Order.customer_id)
 ```
@@ -1089,7 +1107,7 @@ Actor permissions are declared with `permission` and attached to actors with
 `has_permission(Actor, Permission)`. Use cases and APIs can then declare the
 permission and medium they require:
 
-```
+```rdra
 permission ScheduleWrite "Schedule Write"
 medium StaffTerminal "Staff Terminal"
 
@@ -1126,14 +1144,14 @@ is an axis only when a `sets`, a constraint, a condition body, an `after` assert
 An `entity` or `dto` declaration may be followed by a brace-delimited body of
 field definitions:
 
-```
+```rdra
 entity Order "Order" {
-  id:           Int      @pk
-  total:        Money
-  ordered_at:   DateTime
+  id: Int @pk
+  total: Money
+  ordered_at: DateTime
   delivered_at: DateTime @null
-  status:       Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
-  note:         String   @null
+  status: Enum(pending, paid, shipped, delivered, cancelled) @default(pending)
+  note: String @null
 }
 ```
 
@@ -1143,7 +1161,7 @@ is optional/nullable in the payload.
 
 An entity's table takes the entity id as its name. A `table` clause names it instead:
 
-```
+```rdra
 entity OrderLine "Order line"
   table "order_lines" {
   id: Int @pk
@@ -1159,7 +1177,7 @@ cheap, and a `.has` / `.none` over an entity of 1,000,000 rows or more wants its
 (see [Query shapes](#query-shapes)). Write a whole number, bare or quoted, with `_` or `,`
 separators or an exponent:
 
-```
+```rdra
 entity AuditLog "Audit log"
   rows "5e7" {
   id: Int @pk
@@ -1251,14 +1269,14 @@ the state model: a payment method is picked, an order status is driven by use ca
 
 ```rdra
 variation PaymentMethod "Payment Method" {
-  cash       "Cash"
-  card       "Card"
-  insurance  "Insurance"
-  adjustment             // the label is optional
+  cash "Cash"
+  card "Card"
+  insurance "Insurance"
+  adjustment // the label is optional
 }
 
 entity PaymentTransaction "Payment Transaction" {
-  id:     Int           @pk
+  id: Int @pk
   method: PaymentMethod @default(card)
   status: Enum(pending, posted) @default(pending)
 }
@@ -1297,11 +1315,13 @@ variation AmendmentScope "補正の範囲" {
   limited "削除・減縮・誤記の訂正・釈明に限る補正"
   free "限定のない補正"
 }
+
 entity OfficeAction "拒絶理由通知" {
   id: Int @pk
   status: Enum(open, drafted) @default(open)
   amendment: AmendmentScope @default(limited)
 }
+
 usecase DraftResponse "応答案の作成"
 transitions(DraftResponse, OfficeAction.status, open -> drafted)
 chooses(DraftResponse, OfficeAction.amendment)
@@ -1384,9 +1404,9 @@ use cases it applies to. It has two forms, and a condition uses exactly one.
 ```rdra
 // Traceability only (RDRA requirements level): the links are declared.
 condition CopayCappedAtLimit "窓口負担は負担割合で計算し、限度額情報があれば限度額までとする"
-combines(CopayCappedAtLimit, BurdenRatio)            // 条件 to バリエーション
-combines(CopayCappedAtLimit, Appointment.status)     // 条件 to 状態モデル (a lifecycle column)
-applies_to(CopayCappedAtLimit, CalculateVisitBill)   // UC to 条件
+combines(CopayCappedAtLimit, BurdenRatio) // 条件 to バリエーション
+combines(CopayCappedAtLimit, Appointment.status) // 条件 to 状態モデル (a lifecycle column)
+applies_to(CopayCappedAtLimit, CalculateVisitBill) // UC to 条件
 
 // With a body: the links are derived from the columns the body names.
 condition UnreferredFirstVisit "紹介状なしの初診で、除外に当たらない"
@@ -1453,7 +1473,7 @@ names neither a variation column nor a lifecycle column, and guards no use case,
 API, or through `.when` on a `transitions` arm or a `chooses` value; such a body is the use
 case's rule even when it reads only `Bool` or nullable columns, so it is not flagged. A body
 that a `forbidden` or an `invariant` reads through `.when(Cond)` (see
-[`.when(Condition)` on a rule](#when-condition-on-a-rule)) is that rule's condition and is
+[`.when(Condition)` on a rule](#whencondition-on-a-rule)) is that rule's condition and is
 not flagged either. Do not
 add a comparison on the state the use case already moves from to anchor it: the transition
 already requires that state. `applies_to(Condition, System)` adds no guard, so it does not
@@ -1573,11 +1593,20 @@ the crow's-foot notation in the ER diagram and the FK-induced graph used for
 Many-to-many requires an explicit junction entity:
 
 ```rdra
-entity Order "Order" { id: Int @pk }
-entity Product "Product" { id: Int @pk }
-entity OrderProduct "Order product" { id: Int @pk }
+entity Order "Order" {
+  id: Int @pk
+}
+
+entity Product "Product" {
+  id: Int @pk
+}
+
+entity OrderProduct "Order product" {
+  id: Int @pk
+}
 
 relate(Order, Product, N:M).via(OrderProduct)
+
 // generates OrderProduct.order_id and OrderProduct.product_id
 // adds composite unique (order_id, product_id) when missing
 // and synthesizes relate(OrderProduct, Order, N:1) + relate(OrderProduct, Product, N:1)
@@ -1666,7 +1695,7 @@ error names the use case's `holds` body that compares the parent, or its copy fr
 parent, with `.role(<first role>)` added, or, when the use case has neither, says that a
 `holds` guard applied to it or a copy in it must name the key.
 
-`.by(role)` belongs to the call before it:
+`.role(role)` belongs to the call before it:
 
 | Written after | Picks the key of |
 |---|---|
@@ -1677,15 +1706,14 @@ parent, with `.role(<first role>)` added, or, when the use case has neither, say
 | `links`, `relinks` or `unlinks(UC, Child, Parent)` | the key from the child to the parent |
 
 ```rdra
-relate(BusinessPermit, PermitApplication, 1:1)                  // registered under
+relate(BusinessPermit, PermitApplication, 1:1) // registered under
 relate(PermitApplication, BusinessPermit, N:1).optional().role(renews)
 
 // A new application gets one permit: no permit registered under it yet.
 holds(NoPermitYet, PermitApplication.kind == new).none(BusinessPermit).role(PermitApplication)
 // A renewal reads, and links to, the permit it renews.
 holds(RenewsValidPermit, BusinessPermit.status == valid).role(renews)
-forbidden(BusinessPermit, PermitApplication, BusinessPermit.business_type != PermitApplication.business_type)
-  .along(BusinessPermit, PermitApplication).role(PermitApplication)
+forbidden(BusinessPermit, PermitApplication, BusinessPermit.business_type != PermitApplication.business_type).along(BusinessPermit, PermitApplication).role(PermitApplication)
 ```
 
 The selector is a chain call rather than a qualified reference such as
@@ -1715,8 +1743,8 @@ side it ends in: `hi` of `1` for `1`, `*` for `N`. Every card without a range ke
 kind. A minimum of 1 means every parent has at least one child:
 
 ```rdra
-relate(OrderLine, Order, 1..*:1)   // every Order has an OrderLine
-relate(Shipment, Order, 1..1:1)    // every Order has exactly one Shipment
+relate(OrderLine, Order, 1..*:1) // every Order has an OrderLine
+relate(Shipment, Order, 1..1:1) // every Order has exactly one Shipment
 ```
 
 The lifecycle checks that minimum as the invariant `MinCard_<Child>_<role>` (see
@@ -1804,7 +1832,7 @@ state sheet: the use case moves the state, and events stay the interface between
 cases. The Enum column is required; state labels are the Enum variants
 (case-insensitively). Two use cases that drive the same edge each get their own line:
 
-```
+```rdra
 transitions(CancelOrder, Order.status, pending -> cancelled)
 transitions(ExpireOrder, Order.status, pending -> cancelled)
 ```
@@ -1827,7 +1855,7 @@ transitions(CancelOrder, Order.status, confirmed -> cancelled)
 Several arms of one use case from one state on one column are a choice. One run of the
 use case takes exactly one of them, and the actor decides which:
 
-```
+```rdra
 transitions(DecideFiling, Disclosure.status, searched -> decided_file)
 transitions(DecideFiling, Disclosure.status, searched -> decided_secret)
 transitions(DecideFiling, Disclosure.status, searched -> decided_abandon)
@@ -1863,6 +1891,7 @@ entity Disposition "不利益処分" {
   status: Enum(noticed, decided, finalized) @default(noticed)
   publication: Enum(unpublished, published, ended) @default(unpublished)
 }
+
 transitions(Decide, Disposition.status, noticed -> decided)
 transitions(Publish, Disposition.publication, unpublished -> published).when(Decided)
 transitions(EndPublication, Disposition.publication, published -> ended)
@@ -1932,8 +1961,16 @@ follow the same key, and bind the parent by the same rule, so a reassignment rea
 inverse of the assignment.
 
 ```rdra
-entity Handler "Handler" { id: Int @pk  busy: Bool @default(false) }
-entity Case "Case" { id: Int @pk  status: Enum(new, assigned) @default(new) }
+entity Handler "Handler" {
+  id: Int @pk
+  busy: Bool @default(false)
+}
+
+entity Case "Case" {
+  id: Int @pk
+  status: Enum(new, assigned) @default(new)
+}
+
 relate(Case, Handler, N:1).optional()
 
 usecase OpenCase "Open a case"
@@ -2025,7 +2062,7 @@ arm's `alt` branch with it; and `list --kind transition` adds it to the `guards`
 the condition diagram the condition `combines` the arm's state model, `derived ... from
 when`.
 
-The second argument must be a use case. Passing an event, the earlier form, is a
+The first argument must be a use case. Passing an event, the earlier form, is a
 `TypeMismatch` whose hint names the use case to write and `scripts/migrate-phase3.py`,
 which rewrites a model to one line per use case that raises the event. See
 [state-derivation.md](./state-derivation.md) for how transitions feed derivation.
@@ -2038,7 +2075,7 @@ The second argument of `sets` is an unquoted assignment `Entity.column == value`
 column written `Entity.column` as in every other predicate. The value is a bare word or
 number, and what it may be depends on the target column's type:
 
-```
+```rdra
 // Enum column: a variant
 sets(usecase::Capture, Payment.status == captured)
 
@@ -2090,7 +2127,7 @@ set to `present`.
 The right-hand side of `sets` may be a column written `Entity.column`. The use case then
 leaves in the target column the value that the source column holds:
 
-```
+```rdra
 relate(BusinessPermit, PermitApplication, N:1)
 creates(RegisterPermit, BusinessPermit)
 sets(RegisterPermit, BusinessPermit.business_type == PermitApplication.business_type)
@@ -2193,7 +2230,7 @@ evaluated on the Int values of its columns over `0..5` and on `now`. Change the 
 with `sets(Restock, Stock.stock == 3)` and the comparison follows. When the model does
 not track the values, drive the truth value of the comparison instead with `drives`:
 
-```
+```rdra
 // Tell the model that Sell causes (stock < selling) to become true
 drives(Sell, Stock.stock < selling, true)
 
@@ -2221,7 +2258,7 @@ case that drives a comparison to one truth while its own Int `sets` make it the 
 | `true` | The comparison holds after this use case runs. |
 | `false` | The comparison does not hold after this use case runs. |
 
-The forms that name the entity apart from the column, `sets(UC, E.col == v)` and
+The forms that name the entity apart from the column, `sets(UC, E, col == v)` and
 `drives(UC, E, cmp, true|false)`, and the four-argument `sets(UC, E, cmp, true|false)`,
 fail to load with the rewrite to write (see
 [Deprecated and removed forms](#deprecated-and-removed-forms)).
@@ -2272,10 +2309,8 @@ entity Appointment "Appointment" {
   status: Enum(scheduled, checkedin) @default(scheduled)
   checked_in_at: DateTime @null
 }
-invariant(Appointment)
-  .when(status == checkedin)
-  .then(checked_in_at == present)
-  .label("A checked-in appointment records when the patient arrived")
+
+invariant(Appointment).when(status == checkedin).then(checked_in_at == present).label("A checked-in appointment records when the patient arrived")
 ```
 
 The label takes one quoted string, and a rule takes one label (`RuleLabelArg`,
@@ -2287,7 +2322,7 @@ rule next to the [conditions](#conditions) as one business-rule table. The invar
 
 ### `forbidden` — tuple-variadic forbidden states
 
-```
+```rdra
 // A single forbidden value
 forbidden(Order, status == cancelled)
 
@@ -2307,7 +2342,7 @@ forbidden(Coupon, expired_at < now)
 A `.when(Condition)` after the arguments adds the comparisons of the condition's `holds`
 body to the list, as if they were written among the arguments, so a business rule stated
 once as a `condition` guards use cases and names forbidden states alike (see
-[`.when(Condition)` on a rule](#when-condition-on-a-rule)):
+[`.when(Condition)` on a rule](#whencondition-on-a-rule)):
 
 ```rdra
 condition PastDeadline "the deadline has passed"
@@ -2333,25 +2368,17 @@ asymmetry to model, so a single flat list is the most direct encoding.
 
 ### `invariant` — method-chain required co-occurrence
 
-```
-invariant(Order)
-  .when(status == delivered)
-  .then(delivered_at == present)
+```rdra
+invariant(Order).when(status == delivered).then(delivered_at == present)
 
-invariant(Order)
-  .when(status == delivered)
-  .when(refunded == false)     // multiple .when() = AND
-  .then(refund_id == null)
+// multiple .when() = AND
+invariant(Order).when(status == delivered).when(refunded == false).then(refund_id == null)
 
 // Comparison expression in the guard
-invariant(Coupon)
-  .when(expired_at < now)
-  .then(status == expired)
+invariant(Coupon).when(expired_at < now).then(status == expired)
 
 // Comparison expression as the requirement
-invariant(Stock)
-  .when(status == on_sale)
-  .then(stock < selling)
+invariant(Stock).when(status == on_sale).then(stock < selling)
 ```
 
 An invariant is an implication. The `.when(...)` clauses are guards (the antecedent)
@@ -2384,8 +2411,7 @@ condition PastDeadline "the deadline has passed"
 holds(PastDeadline, Coupon.expires_at < now)
 applies_to(PastDeadline, Expire)
 
-invariant(Coupon).when(PastDeadline).then(status == expired)
-  .label("Past its deadline, a coupon is expired")
+invariant(Coupon).when(PastDeadline).then(status == expired).label("Past its deadline, a coupon is expired")
 // the same rule
 invariant(Coupon).when(expires_at < now).then(status == expired)
 ```
@@ -2413,7 +2439,7 @@ invariant(Coupon).when(expires_at < now).then(status == expired)
 
 ### `required` — always-required state facts
 
-```
+```rdra
 required(Account, active == true)
 required(Order, status == paid, paid_at == present)
 required(Coupon, expired_at < now)
@@ -2433,7 +2459,7 @@ state facts readable and avoids empty `.when()` chains.
 
 ### `exclusive` — mutual exclusion between state facts
 
-```
+```rdra
 exclusive(Document, approved == true, rejected == true)
 exclusive(Order, cancelled_at == present, delivered_at == present)
 exclusive(Stock, stock < reorder_threshold, stock > overstock_threshold)
@@ -2463,19 +2489,12 @@ declare the scope, and every rule names them. A rule of one entity without `.alo
 that entity's rule (`Forbidden_Order_0`); a rule of several, or one with `.along(...)`, is a
 cross-entity rule (`MultiForbidden_Order_0`).
 
-```
-forbidden(Order, Payment,
-  Order.status == cancelled,
-  Payment.amount > Order.total)
+```rdra
+forbidden(Order, Payment, Order.status == cancelled, Payment.amount > Order.total)
 
-invariant(Order, Payment)
-  .when(Order.status == paid)
-  .then(Payment.status == captured)
+invariant(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
 
-invariant(Order, Payment)
-  .along(Order, Payment)
-  .when(Order.status == paid)
-  .then(Payment.status == captured)
+invariant(Order, Payment).along(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
 ```
 
 `forbidden(...)` accepts a flat AND-list of conditions. Multi-entity `invariant(...)`
@@ -2539,15 +2558,15 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 Named path properties are checked by TLA+/TLC export (`export --kind tla` /
 `verify --backend tlc`), not by `rdra-ish states`:
 
-```
+```rdra
 property PaidLeadsToShipped "paid eventually reaches shipped"
   leads_to(Order.status == paid, Order.status == shipped)
 
 property EventuallyTerminal "order finishes"
-  eventually(Order.status == delivered or Order.status == cancelled)
+  eventually((Order.status == delivered) or (Order.status == cancelled))
 
 property NeverBoth "mutex"
-  always(not (Order.status == paid and Order.status == cancelled))
+  always(not ((Order.status == paid) and (Order.status == cancelled)))
 ```
 
 | Form | TLA+ |
@@ -2615,7 +2634,7 @@ invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Memb
 `.fair(...)` after an `eventually` or `leads_to` names the use cases whose steps the property
 assumes are not starved:
 
-```
+```rdra
 property GrantEnds "a granted application is registered or dismissed"
   leads_to(Application.status == granted, Application.status in (registered, dismissed)).fair(Register, Dismiss)
 ```
@@ -2765,7 +2784,7 @@ that ticks up to 5. Change the values with `sets(UC, Entity.col == N)`. To say t
 use case makes the comparison true or false without modeling the values, drive it
 explicitly with `drives`, and the comparison becomes a Bool variable:
 
-```
+```rdra
 // Declare that the Sell use case causes (stock < selling) to become true
 drives(Sell, Stock.stock < selling, true)
 

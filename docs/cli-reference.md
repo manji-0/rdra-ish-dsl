@@ -58,7 +58,7 @@ other finding itself.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
@@ -152,6 +152,9 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--int-range-max <n>` | The Int domain is `0..=n`, `1..=255` (default `5`). Printed in the `bounds:` line. Same as [`verify`](#verify). |
 | `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
 | `--entity <id>` | Check only the entity's view and the invariants and after-asserts that read it; repeatable. See [Partial runs](#partial-runs). |
+| `--without-usecase <id>` | Assume the use case never runs and leave it out; repeatable. See [Partial runs](#partial-runs). |
+| `--without-buc <id>` | Assume the use cases the BUC reaches, and no other BUC does, never run; repeatable. See [Partial runs](#partial-runs). |
+| `--actor <id>` | Keep only the use cases the actor performs and those no actor performs; repeatable. See [Partial runs](#partial-runs). |
 
 ### Partial runs
 
@@ -315,6 +318,50 @@ These rules are `warning` rows:
 
 Lint warnings do not fail the command. Existing parse/model errors are emitted as
 `semantic-error` rows and make the command exit with status `1`.
+
+Every rule `lint` reports, by name:
+
+| Rule | Severity | Marks |
+|---|---|---|
+| `api-contract-incomplete` | warning | An API that declares only one of `method` and `path`. |
+| `api-contract-missing` | warning | An API with neither `method` nor `path`; the OpenAPI export omits it. |
+| `api-unused` | warning | An API no use case `invokes`. |
+| `buc-empty` | warning | A BUC that contains no use case; `info` while the BUC has not reached the skeleton stage. |
+| `comparison-trivial-in-range` | warning | See above. |
+| `comparison-unsatisfiable-in-range` | warning | See above. |
+| `condition-applied-without-body` | info | See above. |
+| `condition-no-rdra-anchor` | warning | See above. |
+| `consistency-warning` | warning | A whole-model consistency diagnostic of `check`, such as a missing relation or metadata. |
+| `constraint-unscoped` | warning | A `constraint` that `constrains` no use case, API, system, entity, or DTO. |
+| `coverage-score` | info | See above. |
+| `deprecated-syntax` | warning | See above. |
+| `dto-unused` | warning | A DTO that no API names in `request`, `response`, or `error_response`. |
+| `end-redundant` | warning | An `@end` value that no `transitions` arm leaves, which is an end state without `@end`. |
+| `enum-attribute` | warning | See above. |
+| `field-column-unwritten` | warning | See above. |
+| `field-unmapped` | warning | A screen field that no `maps_field` maps to an entity column. |
+| `field-unplaced` | warning | A screen field that no screen `contains`. |
+| `flow-cycle` | warning | See above. |
+| `flow-empty` | warning | A business flow that contains no step. |
+| `goal-unmeasured` | info | See above. |
+| `multi-rule-unscoped` | warning | A multi-entity `forbidden` or `invariant` with no `.along(...)` and no `.global()`, when keys relate its entities; the message names the `.along(...)` the shortest key path gives. |
+| `naming-column` | warning | An entity column that is not snake_case. |
+| `naming-dto-field` | warning | A DTO field that is not snake_case. |
+| `naming-id` | warning | An element id that is not UpperCamelCase. |
+| `nfr-unscoped` | warning | An `nfr` that `applies_to` no use case, API, or system. |
+| `orphan-node` | warning | An element no predicate connects to another; the `rdra-*` rules replace it for the kinds they cover. |
+| `query-index-missing` | warning | A lookup the model implies that no index serves; skipped for an entity under 10,000 `rows`. See [`export --kind sql`](#export). |
+| `rdra-*` | warning | See above. |
+| `requirement-no-goal` | info | See above. |
+| `requirement-untraced` | warning | A requirement that `motivates` no BUC. |
+| `rule-unlabeled` | info | See above. |
+| `screen-no-fields` | warning | A screen that contains no field. |
+| `screen-no-transition` | info | See above. |
+| `semantic-error` | error | A parse or model error of `check`; the command exits with status `1`. |
+| `semantic-warning` | warning | Any other warning of `check`. |
+| `stage-readiness` | info | See above. |
+| `step-no-cover` | warning | A business step that `covers` no use case, API, or event. |
+| `triggered-usecase-unguarded` | info | See above. |
 
 | Option | Type | Default | Description |
 |---|---|---|---|
@@ -821,8 +868,9 @@ flowchart LR
   classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
 ```
 
-- The header comes first. `scope` is `whole`, `buc:<id>[,<id>]`, or
-  `usecase:<id>[,<id>]`; `model` is the input paths as given. `layers:` (in the kinds
+- The header comes first. `scope` is `whole`, `buc:<id>[,<id>]`,
+  `usecase:<id>[,<id>]` (also the use cases `--entity` or `--actor` keeps in `usecase` and
+  `robustness`), or `entity:<id>[,<id>]` (`--entity` in `state`, `er`, and `information`); `model` is the input paths as given. `layers:` (in the kinds
   with RDRA layers: `rdra` and `usecase`) and `kinds:`
   list only what the body draws. `omitted:` names the node kinds linked to a drawn node
   that the kind leaves out, and in `rdra` the node and relation kinds a filter hid; it
@@ -915,10 +963,11 @@ flowchart LR
 header and the id prefixes carry the kinds:
 
 ```
-%% rdra-ish diagram=state scope=whole model=samples/ec-site
+%% rdra-ish diagram=state scope=buc:BucPayment model=samples/ec-site
 %% kinds: statemodel state usecase
 %% omitted: (none)
 %% set-only: Payment.status (Enum a `sets` writes and no `transitions` drive: a state axis of check, not a state model)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
 stateDiagram-v2
   state "Order.status" as statemodel__Order_status {
     [*] --> state__Order_pending
@@ -969,8 +1018,9 @@ stateDiagram-v2
 ## Sample Artifact Snapshots
 
 `scripts/sample-artifacts.tsv` lists every committed `out/` file of `samples/ec-site`,
-`samples/clinic-ops`, `samples/personal-info`, each `samples/incremental-order` step, and
-`samples/api-contract`. Each row holds the output path and the `rdra-ish` command that
+`samples/clinic-ops`, `samples/patent-ops`, `samples/food-permit-ops`,
+`samples/insurance-claim-ops`, `samples/personal-info`, each `samples/incremental-order`
+step, and `samples/api-contract`. Each row holds the output path and the `rdra-ish` command that
 writes it. CI runs `scripts/check-sample-artifacts.sh` after the Rust snapshot tests. The
 script builds the binary once and runs every row. It then rewrites the documents that
 embed the artifacts: `scripts/embed-sample-artifacts.py` copies each file into the fenced
@@ -1159,14 +1209,14 @@ Export a TLA+ specification and run TLC formal verification. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--buc <ID>]... [--entity <ID>]...
+rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
 | `--backend` | `tlc` | `tlc` | Verification backend. Requires `tlc` or `tlc2` on `PATH`, or `tla2tools.jar` named by `--tlc-jar` (see [Getting TLC](#getting-tlc)). |
-| `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per temporal property with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to`, `cones.txt` listing each module TLC may run and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` for a run by hand and a `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. |
+| `-o`, `--out` | path | temp dir, deleted when every check passes and kept when one fails | Directory for the specs: one `Cone_<check>.tla` / `.cfg` pair per cone, named after the first invariant or after-assert that reads it, one `Cone_<Property>.tla` / `.cfg` pair per temporal property with a `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` and a `Cone_<Property>_Full` pair for a reduced cone, `cones.txt` listing each module TLC may run and the checks it answers, and, when the model declares temporal properties, the whole-model `RdraSpec.tla` / `.cfg` with every `PROPERTY` for a run by hand and a `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs. A path ending in `.tla` writes into its directory and names the whole-model module after its stem, and each whole-model property module `<stem>_<Property>`. |
 | `--instance-count` | unsigned integer | `2` | Multi-instance `InstanceCount` (`1..=255`; `1` warns). |
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and, unless TLC already printed its verdict, the property is `not decided`, which warns and does not fail the run. |
@@ -1177,6 +1227,9 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `--z3` | path | `RDRA_Z3`, else `z3` on `PATH` | With `--prove`: the z3 binary to run. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Check only the entity's view and the invariants and after-asserts that read it, with one TLC job per selected cone. See [Partial runs](#partial-runs). |
+| `--without-usecase <id>` | string (repeatable) | — | Assume the use case never runs and leave it out. See [Partial runs](#partial-runs). |
+| `--without-buc <id>` | string (repeatable) | — | Assume the use cases the BUC reaches, and no other BUC does, never run. See [Partial runs](#partial-runs). |
+| `--actor <id>` | string (repeatable) | — (every actor) | Keep only the use cases the actor performs and those no actor performs. See [Partial runs](#partial-runs). |
 
 A `holds` body applied to a use case is a guard in the spec, so TLC checks it. `verify`
 prints no notice for conditions.
@@ -1186,7 +1239,8 @@ error stops `verify` before TLC runs. Each invariant and `after(..).assert` is c
 its own cone of influence, a restriction of the system whose reachable states are the
 whole model's projected onto it (a superset where an action of the cone creates an entity
 the cone does not read, since the cone does not bound that entity), with the cones run in
-parallel. Each temporal
+parallel. A `.lemma()` rule gets no cone: `check` checks it, and `--prove` uses it once it
+proves it. Each temporal
 property is checked on a cone of its own, of what it reads and of the use cases its
 `.fair` lists, in one run (`Cone_<P>`) or two (`Cone_<P>_WF` adds `WF_vars(Next)`), and
 only when neither decides it on the whole model (`RdraSpec_<P>`), after the cone runs, at
@@ -1231,7 +1285,7 @@ with the code `check` uses. Only the header says `from TLC`:
 ```
 $ rdra-ish verify samples/formal-verification/cross_order_payment_split.rdra
 ...
-Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (43 states)
+Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
 tlc_result: counterexample
 Error: TLC verification failed
 Cone_MultiForbidden_Order_0 (/tmp/rdra-ish-tlc-4242/Cone_MultiForbidden_Order_0.tla):
@@ -1397,7 +1451,7 @@ Derive the reachable state patterns per entity, aggregated across BUCs. See
 [state-derivation.md](./state-derivation.md) for the algorithm.
 
 ```
-rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--max-states <N>] [--instance-count <N>] [--int-range-max <N>] [--entity <ID>]...
+rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--max-states <N>] [--instance-count <N>] [--int-range-max <N>] [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -1410,6 +1464,9 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone, so `--max-states` is reached sooner. |
 | `--int-range-max` | unsigned integer | `5` | The Int domain is `0..=N`, `1..=255` (`0` is rejected). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |
+| `--without-usecase <id>` | string (repeatable) | — | Assume the use case never runs and leave it out. See [Partial runs](#partial-runs). |
+| `--without-buc <id>` | string (repeatable) | — | Assume the use cases the BUC reaches, and no other BUC does, never run. See [Partial runs](#partial-runs). |
+| `--actor <id>` | string (repeatable) | — (every actor) | Keep only the use cases the actor performs and those no actor performs. See [Partial runs](#partial-runs). |
 
 Output is written to stdout. In the table, each entity opens with an `axes:` line, the
 value domain of each state axis, and a `labels:` line when an inline `Enum` axis has

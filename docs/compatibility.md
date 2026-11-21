@@ -135,10 +135,13 @@ minor release.
 - **`codegen`.** The subcommand is an experimental extra: its name, its flags, its exit
   status, and the code it prints (names, shapes, the obligation list) may change or go away
   in any release.
-- **`verify --prove`.** The flag and its companions `--deny-unproved` and `--z3` are
-  experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove, and the
-  clause the `OK:` line gains may change or go away in any release. Without `--prove`,
-  `verify` is unchanged.
+- **`verify --prove` and `.lemma()`.** The flag and its companions `--deny-unproved` and
+  `--z3` are experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove,
+  and the clause the `OK:` line gains may change or go away in any release. So is the
+  `.lemma()` marker on a rule: `check` checks a lemma like any rule, but `verify` runs no
+  TLC cone for one, so a lemma that only fails at two instances passes `verify`. Do not mark
+  a rule the model must keep as a lemma. Apart from lemmas, `verify` without `--prove` is
+  unchanged.
 
 ## Bounds
 

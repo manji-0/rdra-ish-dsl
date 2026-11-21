@@ -7,8 +7,8 @@
 Design for #112, the 2.0 item of #107 and option 2 of #30. It was decided on paper, measured
 with a throwaway prototype, and landed on `main` as the units of the [landing
 plan](#landing-plan). It replaces the decision of 2026-11-01 in
-[vision.md](../vision.md#decisions) ("Events and timers impose no order"), and the next
-release is 2.0.0. This is the second round: an
+[vision.md](../vision.md#decisions) ("Events and timers impose no order"), and it shipped
+in 2.0.0 (2026-11-06). This is the second round: an
 adversarial review of the first found a guard stronger than the order implies, a sample
 verdict misread as a defect, per-variant warnings that were false, an unmeasured cone
 shape, and measurement errors. Each is corrected below and marked "round 2".
@@ -181,8 +181,8 @@ Quotable as the 2.0 semantics. "Binds" means has a parameter on, in any role; "i
 
 - **Deadlock.** Unchanged, per present instance and state column. A row whose only way
   out is a triggered use case that waits for a mark is stuck, and `check` prints
-  `guard: <Ev> was raised on the bound <E>` among what blocks it, as it prints a
-  condition. A set mark is not a state model and is never a deadlock.
+  `guard: event <Ev> was raised on the bound row (triggers)` among what blocks it, as it
+  prints a condition. A set mark is not a state model and is never a deadlock.
 - **Witness and `NeverRuns`.** A witness trace contains the raiser before the triggered
   use case. A use case whose mark never holds is `NeverRuns` with that guard, naming
   the `triggers` line. A self-triggering use case, and an event cycle with no free
@@ -203,7 +203,9 @@ Quotable as the 2.0 semantics. "Binds" means has a parameter on, in any role; "i
   the raiser's reads with them (`property_cone` already keeps a fair action's reads).
 - **Bounds line.** Unchanged. Nothing new is bounded, since the mark has no cap and
   the raiser no wait. A cone that dropped a mark guard says so in its `bounds:` line, as
-  `cone_frees_slots` says an entity is unbounded.
+  `cone_frees_slots` says an entity is unbounded. (Note, 2026-11-21: built instead as a
+  `note:` row under a counterexample, `runs <UC> without <Ev> having been raised`; the
+  `bounds:` line is unchanged.)
 
 ### Cones and the reduction
 
@@ -1338,6 +1340,9 @@ case the earlier tests missed: an arm condition that is never true).
 
 <!-- supersedes #implementation-plan -->
 
+Status (2026-11-21): the nine units landed on `main` and shipped in 2.0.0. `RDRA_SPLIT_DUMP`
+never reached `main`, so `RDRA_EQV_TRACE` is the one documented dump.
+
 Each unit is one PR on `main` after #111, with the check that proves it and the CI job it
 runs in; the budgets are `engine-equivalence` ≤ 30 minutes and `formal-verify` ≤ 40
 minutes on the runner (4 cores, 16 GB), against the 18-core machine here where the full
@@ -1561,6 +1566,10 @@ Each unit is one commit with the check that proves it, in this order. The units 
    check split, and (b) would make the samples show the feature nowhere but clinic-ops.
    The maintainer's "rewrite the samples so `verify` decides" is (b), so this document
    does not apply it without that confirmation.
+   Settled (note, 2026-11-21): none of (a) to (c). The edges stay, and the reduction with
+   monotone inputs and the node fold (rounds 4 and 5) decide every check of both samples at
+   2 instances; insurance-claim-ops states its one real deadlock,
+   `Deadlock_ClaimCase_status_assessed`, in its `// expect verify` header.
 
 Decided since round 1: the meaning of `triggers` and the second-event pattern (rule 8,
 decision 9), the variant name `<UC>_by_<Ev>` with per-use-case findings (decision 10),

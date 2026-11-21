@@ -1,0 +1,26 @@
+%% rdra-ish diagram=robustness scope=buc:BucStoreRestock model=samples/incremental-order/step-7-business-rules/src
+%% kinds: actor screen api usecase entity
+%% omitted: buc medium permission
+flowchart LR
+  actor__OpsStaff(["Operations Staff"]):::actor
+  screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
+  api__OrganizationLookupApi{{"Organization Lookup API"}}:::api
+  api__StoreAdminApi{{"Store Admin API"}}:::api
+  usecase__BlockScheduledRestock("Block Scheduled Restock"):::usecase
+  usecase__ChangeNextRestockDate("Change Next Restock Date"):::usecase
+  entity__Organization[("Organization")]:::entity
+  entity__Store[("Store")]:::entity
+  actor__OpsStaff --> screen__StoreMaintenanceScreen
+  api__OrganizationLookupApi -->|R| entity__Organization
+  api__StoreAdminApi -->|U| entity__Store
+  screen__StoreMaintenanceScreen -->|Block Scheduled Restock| usecase__BlockScheduledRestock
+  screen__StoreMaintenanceScreen -->|Change Next Restock Date| usecase__ChangeNextRestockDate
+  screen__StoreMaintenanceScreen -->|Change Store Parent Organization| api__OrganizationLookupApi
+  screen__StoreMaintenanceScreen -->|Change Store Parent Organization| api__StoreAdminApi
+  usecase__BlockScheduledRestock -->|U| entity__Store
+  usecase__ChangeNextRestockDate -->|U| entity__Store
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

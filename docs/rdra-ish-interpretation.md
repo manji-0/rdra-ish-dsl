@@ -169,9 +169,9 @@ cases it governs.
 At the requirements level that is all a condition has to say, and `combines` records it
 without a body. A `holds` body is the rdra-ish extension for a team that wants to write the
 rule down. When there is a body, the variation and state-model links are derived from the
-columns it names rather than declared a second time, so the two cannot drift. In this
-version the body is stored and validated but no engine reads it; a later phase compiles it
-to a guard on the use cases the condition applies to, and the syntax does not change.
+columns it names rather than declared a second time, so the two cannot drift. The body is
+a guard on the use cases the condition applies to: `states`, `check`, and `verify` run such a
+use case only in a state where the body holds.
 
 ## The RDRA Sheet's 不整合 Columns
 

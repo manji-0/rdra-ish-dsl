@@ -36,7 +36,7 @@ same way, and every kind in the language names the check or output that reviews 
 | `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, robustness, sequence, UC複合図, business flow, screen transitions, information, conditions, state, events, ER, and the whole RDRA graph. Each can be scoped to a BUC, a use case, an actor, or an entity, so it embeds in a PRD or a design document; `--all` writes the set in one run |
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
-| `export`, `verify` | OpenAPI, DBML, SQL DDL, JSON Schema, AsyncAPI, and TLA+ with TLC |
+| `export`, `verify` | OpenAPI, DBML, SQL DDL, JSON Schema, AsyncAPI, and TLA+ with TLC; `verify --prove` (experimental) proves state rules for any number of rows with z3 |
 
 ## Documents from the Model
 
@@ -108,7 +108,7 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit
 # 4) Derive reachable states
 rdra-ish states samples/clinic-ops --entity Appointment
 
-# 5) Formal verification (requires `tlc` or `tlc2` on PATH)
+# 5) Formal verification (requires `tlc` or `tlc2` on PATH, or `--tlc-jar`)
 rdra-ish export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-tla
 rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdra-tla
 ```
@@ -151,8 +151,9 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
   ([`prd.md`](./samples/clinic-ops/prd.md))
 - `samples/patent-ops`, `samples/food-permit-ops`, `samples/insurance-claim-ops`: three
   Japanese business domains (a company's patent work, a 保健所's food business permits, a
-  non-life insurer's motor claims), modeled from primary sources and passing
-  `verify --deny-undecided`
+  non-life insurer's motor claims), modeled from primary sources. `verify --deny-undecided`
+  decides every check on each; insurance-claim-ops keeps one known deadlock, which its
+  `// expect` header names
 - `samples/personal-info`: personal data management sample
 - `samples/api-contract`: API contract metadata and the OpenAPI export
 - `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from
@@ -191,7 +192,7 @@ uvx maturin publish
 crates/
   rdra-ish-syntax/   Lexer, parser, AST, removed-form table
   rdra-ish-core/     Semantic model, type checks, state derivation
-  rdra-ish-emit/     Mermaid/CSV/state/TLA+ emitters
+  rdra-ish-emit/     Mermaid/CSV/state/TLA+/SQL and other export emitters, codegen
   rdra-ish-cli/      rdra-ish command
   rdra-ish-lsp/      Language server
 editors/vscode/      VS Code extension for the language server
