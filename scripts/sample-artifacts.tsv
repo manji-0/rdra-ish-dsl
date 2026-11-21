@@ -629,9 +629,12 @@ samples/incremental-order/step-7-business-rules/out/er.mmd	diagram samples/incre
 samples/incremental-order/step-7-business-rules/out/information.mmd	diagram samples/incremental-order/step-7-business-rules/src --kind information --format mermaid
 samples/incremental-order/step-7-business-rules/out/json-schema.json	export samples/incremental-order/step-7-business-rules/src --kind json-schema
 samples/incremental-order/step-7-business-rules/out/object_graph_buc_store_restock.mmd	diagram samples/incremental-order/step-7-business-rules/src --kind rdra --format mermaid --buc BucStoreRestock
+samples/incremental-order/step-7-business-rules/out/robustness_buc_store_restock.mmd	diagram samples/incremental-order/step-7-business-rules/src --kind robustness --format mermaid --buc BucStoreRestock
 samples/incremental-order/step-7-business-rules/out/schema.dbml	export samples/incremental-order/step-7-business-rules/src --kind dbml
 samples/incremental-order/step-7-business-rules/out/screen_constraints.csv	csv samples/incremental-order/step-7-business-rules/src --kind screen-constraints
+samples/incremental-order/step-7-business-rules/out/sequence_change_next_restock_date.mmd	diagram samples/incremental-order/step-7-business-rules/src --kind sequence --format mermaid --usecase ChangeNextRestockDate
 samples/incremental-order/step-7-business-rules/out/state.mmd	diagram samples/incremental-order/step-7-business-rules/src --kind state --format mermaid
+samples/incremental-order/step-7-business-rules/out/state_store.mmd	diagram samples/incremental-order/step-7-business-rules/src --kind state --format mermaid --entity Store
 samples/incremental-order/step-7-business-rules/out/states_store.txt	states samples/incremental-order/step-7-business-rules/src --format table --entity Store
 samples/incremental-order/step-7-business-rules/out/usecase_buc_store_restock.mmd	diagram samples/incremental-order/step-7-business-rules/src --kind usecase --format mermaid --buc BucStoreRestock
 samples/incremental-order/step-7-business-rules/out/usecase_matrix.csv	csv samples/incremental-order/step-7-business-rules/src --kind matrix

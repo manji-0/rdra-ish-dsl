@@ -4,16 +4,18 @@
 <!-- constrained-by ./incremental-modeling.md -->
 <!-- derived-from ../samples/incremental-order/step-7-business-rules/design.md -->
 
-This guide embeds one generated diagram of each `diagram --kind` but `robustness`,
-`sequence`, and `screen` (see the [kinds](./cli-reference.md#kinds)) and explains how to
-read it during review. The kinds follow the RDRA 3.0 diagrams, in the order a review usually
-walks them: system context and requirements, business, use cases and flows, information
-and conditions, lifecycle and events, then the data model and the whole graph.
+This guide embeds one generated diagram of each `diagram --kind` (see the
+[kinds](./cli-reference.md#kinds)), and for `state` both the index and one entity's
+state model, and explains how to read each during review. The kinds follow the RDRA 3.0
+diagrams, in the order a review usually walks them: system context and requirements,
+business, use cases and their robustness and sequence views, flows and screens,
+information and conditions, lifecycle and events, then the data model and the whole
+graph.
 
 Most examples use `samples/incremental-order/step-7-business-rules`, a small model with
 business scope, permissions, UI, APIs, entities, lifecycle, and two systems. It declares
-no requirement, flow, condition, or event, so those sections use `samples/clinic-ops`
-and `samples/ec-site`.
+no requirement, flow, condition, or event, and only one screen, so those sections use
+`samples/clinic-ops` and `samples/ec-site`.
 
 Regenerate the artifacts with:
 
@@ -342,6 +344,135 @@ Review points:
   needs?
 - Are direct entity writes intentional, or should they move behind an API?
 
+## Robustness Diagram
+
+<!-- derived-from #uc複合図 -->
+
+Generated from:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
+  --kind robustness \
+  --format mermaid \
+  --buc BucStoreRestock \
+  --out samples/incremental-order/step-7-business-rules/out/robustness_buc_store_restock
+```
+
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/robustness_buc_store_restock.mmd -->
+```mermaid
+%% rdra-ish diagram=robustness scope=buc:BucStoreRestock model=samples/incremental-order/step-7-business-rules/src
+%% kinds: actor screen api usecase entity
+%% omitted: buc medium permission
+flowchart LR
+  actor__OpsStaff(["Operations Staff"]):::actor
+  screen__StoreMaintenanceScreen["Store Maintenance"]:::screen
+  api__OrganizationLookupApi{{"Organization Lookup API"}}:::api
+  api__StoreAdminApi{{"Store Admin API"}}:::api
+  usecase__BlockScheduledRestock("Block Scheduled Restock"):::usecase
+  usecase__ChangeNextRestockDate("Change Next Restock Date"):::usecase
+  entity__Organization[("Organization")]:::entity
+  entity__Store[("Store")]:::entity
+  actor__OpsStaff --> screen__StoreMaintenanceScreen
+  api__OrganizationLookupApi -->|R| entity__Organization
+  api__StoreAdminApi -->|U| entity__Store
+  screen__StoreMaintenanceScreen -->|Block Scheduled Restock| usecase__BlockScheduledRestock
+  screen__StoreMaintenanceScreen -->|Change Next Restock Date| usecase__ChangeNextRestockDate
+  screen__StoreMaintenanceScreen -->|Change Store Parent Organization| api__OrganizationLookupApi
+  screen__StoreMaintenanceScreen -->|Change Store Parent Organization| api__StoreAdminApi
+  usecase__BlockScheduledRestock -->|U| entity__Store
+  usecase__ChangeNextRestockDate -->|U| entity__Store
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+```
+
+How to read it:
+
+- This is the same BUC as the UC複合図 above, redrawn as an ICONIX robustness diagram.
+  The nodes sit in one flat list in the order actor, boundary (screens, external
+  systems, timers), control, entity. There are no layer subgraphs.
+- The edges follow one grammar: an actor reaches a screen, a screen reaches a control,
+  and a control reaches an entity. No edge skips a step, so an actor never touches a
+  control and a screen never touches an entity.
+- A control is an API the use case `invokes`, or the use case itself when it reads or
+  writes an entity directly or invokes no API. `ChangeStoreParentOrganization` has no node
+  of its own: it is the label on the two screen edges to `StoreAdminApi` and
+  `OrganizationLookupApi`. `ChangeNextRestockDate` and `BlockScheduledRestock` invoke no
+  API, so each is its own control.
+- A control-to-entity edge is labelled with the CRUD letters of what the control does to
+  the entity, so `StoreAdminApi -->|U| Store` is an update and
+  `OrganizationLookupApi -->|R| Organization` a read.
+- Events show only as labels on dotted control-to-control or external-system edges. This
+  BUC raises none, so it has none. States and conditions are left to their own kinds.
+
+Review points:
+
+- Does every screen reach a control, and every control the entities its use case needs?
+- Two use cases here update `Store` directly while the third goes through
+  `StoreAdminApi`. Is that split intentional, or should every `Store` write go through
+  the API?
+- Is an actor missing from the diagram? An actor whose use cases display no screen has
+  no edge and is left out.
+
+## Sequence Diagram
+
+<!-- derived-from #robustness-diagram -->
+
+Generated from:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
+  --kind sequence \
+  --format mermaid \
+  --usecase ChangeNextRestockDate \
+  --out samples/incremental-order/step-7-business-rules/out/sequence_change_next_restock_date
+```
+
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/sequence_change_next_restock_date.mmd -->
+```mermaid
+%% rdra-ish diagram=sequence scope=usecase:ChangeNextRestockDate model=samples/incremental-order/step-7-business-rules/src
+%% kinds: actor screen usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__OpsStaff as Operations Staff
+  participant screen__StoreMaintenanceScreen as Store Maintenance
+  participant usecase__ChangeNextRestockDate as Change Next Restock Date
+  participant entity__Store as Store
+  actor__OpsStaff ->> screen__StoreMaintenanceScreen: Change Next Restock Date
+  screen__StoreMaintenanceScreen ->> usecase__ChangeNextRestockDate: Change Next Restock Date
+  alt Store.restock_status == normal
+    usecase__ChangeNextRestockDate ->> entity__Store: update restock_status normal -> scheduled, next_restock_date=set
+    usecase__ChangeNextRestockDate -->> screen__StoreMaintenanceScreen: done
+  else guard fails
+    usecase__ChangeNextRestockDate -->> screen__StoreMaintenanceScreen: rejected
+  end
+```
+
+How to read it:
+
+- The diagram plays one use case, so `--usecase` names exactly one. `--buc` plays each
+  use case of the BUC in turn, each under a numbered `Note`.
+- The participants are those of the use case's robustness slice, in the order actor,
+  screen, control, entity. The use case invokes no API, so it is its own control.
+- The actor calls the screen and the screen calls the control, both labelled with the use
+  case.
+- The `transitions` arm leaves `normal`, so the write sits in `alt Store.restock_status ==
+  normal`. `else guard fails` ends with the control replying `rejected` to the screen.
+- The write message names the lifecycle move, `restock_status normal -> scheduled`, and
+  the columns `sets` fixes, `next_restock_date=set`. A transaction with more than one
+  write opens with a `Note over <control>: transaction (...)`. An event the use case
+  raises is a `-)` message to the control or external system it triggers.
+
+Review points:
+
+- Is the guard the business precondition? A restock date can be changed only for a store
+  in `normal`. Is that the rule, or should a `scheduled` store accept a new date too?
+- Does the write leave the entity in a state the business rules accept? Here
+  `scheduled` requires `next_restock_date`, and the same message sets it.
+- Does each write belong to the use case, or should another use case or an API own it?
+
 ## Business Flow
 
 <!-- derived-from #uc複合図 -->
@@ -432,6 +563,66 @@ Review points:
 - Is each step in the lane of the person who does it, and does the hand-off between lanes
   match the work?
 - Is the business order in the flow the order the use cases can run in?
+
+## Screen Transitions
+
+<!-- derived-from #business-flow -->
+
+Generated from:
+
+```sh
+rdra-ish diagram samples/clinic-ops \
+  --kind screen \
+  --format mermaid \
+  --buc BucVisitCheckIn \
+  --out samples/clinic-ops/out/buc/screen_visit_check_in
+```
+
+<!-- embed: ../samples/clinic-ops/out/buc/screen_visit_check_in.mmd -->
+```mermaid
+%% rdra-ish diagram=screen scope=buc:BucVisitCheckIn model=samples/clinic-ops
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__CheckInScreen["受付画面"]:::screen
+  screen__EligibilityScreen["資格確認画面"]:::screen
+  screen__ReferralScreen["紹介状受付画面"]:::screen
+  screen__RoomBoardScreen["診察室ボード画面"]:::screen
+  screen__CheckInScreen -->|受付（初診・再診）| screen__EligibilityScreen
+  screen__CheckInScreen -.->|業務上の順番| screen__ReferralScreen
+  %% derived screen__CheckInScreen -> screen__ReferralScreen via flow__VisitCheckInFlow,step__EligibilityStep,step__ReferralStep
+  screen__CheckInScreen -->|診察室への案内| screen__RoomBoardScreen
+  screen__EligibilityScreen -->|紹介状受付処理| screen__ReferralScreen
+  %% via screen__CheckInScreen -> screen__EligibilityScreen usecase__CheckInPatient
+  %% via screen__CheckInScreen -> screen__RoomBoardScreen usecase__AssignRoom
+  %% via screen__EligibilityScreen -> screen__ReferralScreen usecase__ReceiveReferralLetter
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+```
+
+How to read it:
+
+- The BUC is the one the business flow above draws. Each screen its use cases display is
+  a node, connected or not. Use cases, fields, and entities are not nodes, and
+  `omitted:` names them.
+- A solid edge is a declared `navigates(A, B).via(UseCase)`, labelled with the use case.
+  The `%% via screen__A -> screen__B usecase__<id>` lines after the edges name the same
+  use case by id, so `受付（初診・再診）` is `CheckInPatient`.
+- A dashed `業務上の順番` edge is derived from the flow, where no `navigates` is declared.
+  `EligibilityStep` branches to `ReferralStep`, the receptionist performs both, and
+  `CheckInPatient` covers the first step while `ReceiveReferralLetter` covers the second.
+  So the work goes from `CheckInScreen` to `ReferralScreen`, and the `%% derived` line
+  names the flow and the steps. `EligibilityScreen` to `ReferralScreen` already has a
+  `navigates`, so it has only the solid edge.
+- A dashed edge is the order the work visits the screens, not a transition the UI offers.
+
+Review points:
+
+- Should a dashed edge be a real transition? If the receptionist moves from
+  `CheckInScreen` to `ReferralScreen` in the UI, declare the `navigates` with its use
+  case.
+- Can every screen be reached? A screen with no edge is the `screen-no-transition`
+  finding of `rdra-ish check`.
+- Is each `.via` use case the one that moves the user between the two screens?
 
 ## Information Model
 
@@ -576,18 +767,55 @@ stateDiagram-v2
   }
 ```
 
+Without a scope, the diagram is an index: each state model (a lifecycle column) is one
+composite state, `statemodel__Store_restock_status` labelled `Store.restock_status`,
+holding a note with its counts and the `--entity` option that draws it whole. Run that
+option to draw one entity's state models:
+
+```sh
+rdra-ish diagram samples/incremental-order/step-7-business-rules/src \
+  --kind state \
+  --format mermaid \
+  --entity Store \
+  --out samples/incremental-order/step-7-business-rules/out/state_store
+```
+
+<!-- embed: ../samples/incremental-order/step-7-business-rules/out/state_store.mmd -->
+```mermaid
+%% rdra-ish diagram=state scope=entity:Store model=samples/incremental-order/step-7-business-rules/src
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Store.restock_status" as statemodel__Store_restock_status {
+    [*] --> state__Store_normal
+    state "normal" as state__Store_normal
+    state "scheduled" as state__Store_scheduled
+    state "blocked" as state__Store_blocked
+    %% transition usecase__ChangeNextRestockDate
+    state__Store_normal --> state__Store_scheduled : Change Next Restock Date
+    %% transition usecase__BlockScheduledRestock
+    state__Store_scheduled --> state__Store_blocked : Block Scheduled Restock
+    state__Store_blocked --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Store_blocked stateend
+```
+
 How to read it:
 
-- Without a scope, the diagram is an index: each state model (a lifecycle column) is one
-  composite state, `statemodel__Store_restock_status` labelled `Store.restock_status`,
-  holding a note with its counts and the `--entity` option that draws it whole.
-- With `--entity Store` or `--buc BucStoreRestock`, each state model is drawn whole.
-  `[*] -->` marks the start state, the value the lifecycle gives the column on creation
-  (or its default for an entity that starts present). `--> [*]` marks an end state, one
-  with no transition to another state.
+- With `--entity Store`, every state model of `Store` is drawn whole, inside the same
+  composite state the index draws. `--buc BucStoreRestock` draws the state models the
+  BUC's use cases move, here the same one.
+- `[*] -->` marks the start state, the value the lifecycle gives the column on creation
+  (or its default for an entity that starts present), here `normal`. `--> [*]` marks an
+  end state, one with no transition to another state, here `blocked`.
 - Each edge is labelled with the use case that drives the transition, as the 遷移UC
-  column of an RDRA state sheet is; the `%% transition usecase__BlockScheduledRestock`
-  line before it names the same node as in the UC複合図.
+  column of an RDRA state sheet is. The `%% transition usecase__BlockScheduledRestock`
+  line before it names the same node as in the UC複合図 and the sequence diagram.
+- States are coloured by what the lifecycle check found, and the `%% legend:` line says
+  what each class means. `blocked` is `stateend`. An unreachable or deadlocked state
+  would carry `stateunreachable` or `statedeadlock`.
 - This diagram shows lifecycle topology. Use `rdra-ish states` for rule satisfaction,
   reachable combinations, and diagnostics. `state` is the one kind that refuses to write
   while the lifecycle has an error other than a deadlock, which it colours.
@@ -595,6 +823,8 @@ How to read it:
 Review points:
 
 - `blocked` is an end state: is it terminal by design, or is a way out missing?
+- Does each state have the use cases that should leave it? `scheduled` leaves only for
+  `blocked`, and no use case returns a store to `normal` after a restock.
 - Are business rules such as `scheduled` requiring `next_restock_date` covered by
   state-pattern diagnostics?
 
@@ -803,7 +1033,9 @@ Review points:
 <!-- derived-from #state-model -->
 
 Walk the kinds in the order above: the system context and requirements say who and why,
-the business, UC複合図, and flow say what happens, the information model and conditions
+the business, UC複合図, and flow say what happens, the robustness and sequence diagrams
+say which screens, controls, and entities carry each use case, the screen transitions
+say where the user moves, the information model and conditions
 say what it acts on, and the state model and events say how it changes. `er` and `rdra`
 hold the detail behind each. The transaction and API-boundary warnings come from
 `rdra-ish check`.
