@@ -6,23 +6,26 @@ use rdra_ish_core::model::{Aggregate, OrderKey, Page, Query};
 
 impl Script<'_> {
     pub(super) fn reads_section(&self) -> String {
-        if self.model.queries.is_empty() {
+        let suggestions = self.model.index_suggestions();
+        if self.model.queries.is_empty() && suggestions.is_empty() {
             return String::new();
         }
         let mut out = String::new();
-        let suggestions = self.model.index_suggestions();
         if !suggestions.is_empty() {
             out.push_str(
-                "\n-- Indexes the declared reads want and no key or @index gives (lint: query-index-missing).\n",
+                "\n-- Indexes the reads want and no key or @index gives (lint: query-index-missing): the declared reads, a timer's use case finding rows by their state, a .has/.none over a large entity.\n",
             );
             for s in suggestions {
                 let entity = &self.model.entities[s.entity];
                 let names: Vec<String> = s.columns.iter().map(|k| k.column.clone()).collect();
-                let readers: Vec<&str> = s
-                    .queries
+                let mut readers: Vec<String> = s
+                    .readers
                     .iter()
-                    .filter_map(|&i| self.model.node_id(&self.model.queries[i].source))
+                    .map(|r| self.model.reader_name(r))
                     .collect();
+                if let Some(n) = s.rows.filter(|_| s.is_small()) {
+                    readers.push(format!("small table, {n} rows: a scan is cheap"));
+                }
                 out.push_str(&format!(
                     "-- CREATE INDEX {} ON {} ({}); -- {}\n",
                     ident(&format!("{}_{}_idx", entity.table_name(), names.join("_"))),
@@ -31,6 +34,9 @@ impl Script<'_> {
                     readers.join(", ")
                 ));
             }
+        }
+        if self.model.queries.is_empty() {
+            return out;
         }
         out.push_str("\n-- Reads the model declares, as SQL.\n");
         for query in &self.model.queries {

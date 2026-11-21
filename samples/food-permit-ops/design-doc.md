@@ -3186,7 +3186,7 @@ erDiagram
 | BusinessPermit | 営業許可 | permit_no | String | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | BusinessPermit | 営業許可 | business_type | PermitBusinessType | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | BusinessPermit | 営業許可 | valid_until | Date | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| BusinessPermit | 営業許可 | status | Enum | false | false | false | false |  | false |  |  | false | valid |  | false | false | false |  |
+| BusinessPermit | 営業許可 | status | Enum | false | false | true | false |  | false |  |  | false | valid |  | false | false | false |  |
 | BusinessPermit | 営業許可 | operating | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
 | BusinessPermit | 営業許可 | certificate_issued | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
 | BusinessPermit | 営業許可 | hygiene_manager_appointed | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
@@ -3200,9 +3200,9 @@ erDiagram
 | Disposition | 不利益処分 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Disposition | 不利益処分 | kind | DispositionKind | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Disposition | 不利益処分 | procedure | OpinionProcedure | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| Disposition | 不利益処分 | status | Enum | false | false | false | false |  | false |  |  | false | proposed |  | false | false | false |  |
+| Disposition | 不利益処分 | status | Enum | false | false | true | false |  | false |  |  | false | proposed |  | false | false | false |  |
 | Disposition | 不利益処分 | reason_shown | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
-| Disposition | 不利益処分 | publication | Enum | false | false | false | false |  | false |  |  | false | unpublished |  | false | false | false |  |
+| Disposition | 不利益処分 | publication | Enum | false | false | true | false |  | false |  |  | false | unpublished |  | false | false | false |  |
 | Disposition | 不利益処分 | businesspermit_id | Int | false | false | false | true | BusinessPermit | false |  |  | false |  |  | false | false | false |  |
 | FeeSchedule | 手数料表 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | FeeSchedule | 手数料表 | business_type | PermitBusinessType | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |

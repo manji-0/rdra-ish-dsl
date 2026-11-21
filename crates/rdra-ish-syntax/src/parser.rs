@@ -518,6 +518,7 @@ fn instance_decl() -> impl Parser<Token, InstanceDecl, Error = Simple<Token>> + 
                     field: metadata.field,
                     usecase: metadata.usecase,
                     table: metadata.table,
+                    rows: metadata.rows,
                     bare_values: metadata.bare_values,
                     columns,
                     variation_values,

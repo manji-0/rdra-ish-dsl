@@ -64,6 +64,7 @@ Ast {
                     errors: [],
                 },
                 table: None,
+                rows: None,
                 bare_values: [],
                 columns: [],
                 variation_values: [],

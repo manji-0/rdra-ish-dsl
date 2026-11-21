@@ -52,6 +52,7 @@ fn kind_tag_labels_each_node_ref_kind() {
         field: FieldMetadata::default(),
         usecase: UseCaseMetadata::default(),
         table: None,
+        rows: None,
         bare_values: Vec::new(),
         columns: vec![Column {
             name: "id".to_string(),

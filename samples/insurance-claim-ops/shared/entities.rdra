@@ -103,8 +103,8 @@ entity Claim "保険金請求" {
   id: Int @pk
   // 請求完了日 (tokiomarine-2025-tap-yakkan.txt:4666).
   completed_on: Date @null
-  status: Enum(guided "請求の案内済", submitted "請求書類の提出", completed "請求完了", decided_payment "支払決定", decided_denial "不払決定", paid "支払済", denial_notified "不払通知済", withdrawn "取下げ", time_barred "時効消滅") @default(guided)
-  period: Enum(not_started "未起算", running "30日の期間中", extended "延長期間中", overdue "期限経過", ended "期限の管理を終了") @default(not_started)
+  status: Enum(guided "請求の案内済", submitted "請求書類の提出", completed "請求完了", decided_payment "支払決定", decided_denial "不払決定", paid "支払済", denial_notified "不払通知済", withdrawn "取下げ", time_barred "時効消滅") @default(guided) @index
+  period: Enum(not_started "未起算", running "30日の期間中", extended "延長期間中", overdue "期限経過", ended "期限の管理を終了") @default(not_started) @index
   extension: ExtensionReason
   // 次契約の適用等級の変動について説明した上で、保険金請求意思の確認を行う (sonpo-2026-shiharai-guideline.txt:496-497).
   grade_explained: Bool @default(false)
@@ -131,7 +131,7 @@ entity Payment "保険金の支払" {
 // その債権は当会社に移転します (tokiomarine-2025-tap-yakkan.txt:5188).
 entity Subrogation "求償（請求権代位）" {
   id: Int @pk
-  status: Enum(open "求償中", recovered "回収", abandoned "回収の断念", time_barred "時効消滅") @default(open)
+  status: Enum(open "求償中", recovered "回収", abandoned "回収の断念", time_barred "時効消滅") @default(open) @index
 }
 
 // A complaint about a claim, made to the insurer or through そんぽADRセンター. 苦情解決手続 (sonpo-adr-kujou.md:109);

@@ -283,6 +283,7 @@ pub(crate) fn register_instance(
                 unique_constraints,
                 indexes,
                 table: inst.table.clone(),
+                rows: row_estimate(inst, ctx, diags),
             });
             apply_primary_key_flags(&mut model.entities[k]);
             report_version_columns(inst, &model.entities[k], ctx, diags);
@@ -645,6 +646,36 @@ fn ast_column_to_model(
         ),
     }
     mc
+}
+
+/// `rows 1000000`, `rows "1_000_000"`, or `rows "1e6"` as a count; anything else is
+/// `InvalidRowEstimate`.
+fn row_estimate(inst: &InstanceDecl, ctx: DiagCtxt, diags: &mut Vec<Diagnostic>) -> Option<u64> {
+    let written = inst.rows.as_ref()?;
+    let plain: String = written
+        .chars()
+        .filter(|c| !matches!(c, '_' | ','))
+        .collect();
+    let parsed = match plain.split_once(['e', 'E']) {
+        Some((m, e)) => m
+            .parse::<u64>()
+            .ok()
+            .zip(e.parse::<u32>().ok())
+            .and_then(|(m, e)| 10u64.checked_pow(e).and_then(|p| m.checked_mul(p))),
+        None => plain.parse::<u64>().ok(),
+    };
+    if parsed.is_none() {
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::InvalidRowEstimate {
+                entity: inst.id.clone(),
+                written: written.clone(),
+            },
+        );
+    }
+    parsed
 }
 
 /// One `@version` column per entity: an update checks and advances one version.

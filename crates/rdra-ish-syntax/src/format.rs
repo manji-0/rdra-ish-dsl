@@ -312,6 +312,9 @@ fn instance_lines(instance: &InstanceDecl) -> Vec<Line> {
     if let Some(table) = &instance.table {
         metadata.push(format!("  table {}", meta_value(instance, "table", table)));
     }
+    if let Some(rows) = &instance.rows {
+        metadata.push(format!("  rows {}", meta_value(instance, "rows", rows)));
+    }
 
     let body: Vec<(String, usize)> = if !instance.columns.is_empty() {
         instance

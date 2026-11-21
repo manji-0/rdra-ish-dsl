@@ -373,6 +373,14 @@ fn keeps_a_table_name_and_a_version_column() {
 }
 
 #[test]
+fn keeps_a_row_estimate_bare_or_quoted() {
+    assert_formats_to(
+        "entity E \"E\" table \"es\"   rows   5000 {\n  id: Int @pk\n}\nentity F \"F\" rows \"1e6\" {\n  id: Int @pk\n}\n",
+        "entity E \"E\"\n  table \"es\"\n  rows 5000 {\n  id: Int @pk\n}\n\nentity F \"F\"\n  rows \"1e6\" {\n  id: Int @pk\n}\n",
+    );
+}
+
+#[test]
 fn keeps_a_default_bare_or_quoted_as_written() {
     assert_formats_to(
         "entity E \"E\" {\n  n: Int @default(0)\n  m: Money @default(\"3\")\n  s: Enum(a, b) @default(a)\n}\n",

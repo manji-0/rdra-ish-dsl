@@ -1153,6 +1153,23 @@ entity OrderLine "Order line"
 The SQL and DBML exports name the table, its foreign keys, and its indexes after it; every
 other output, and every rule name, keeps the entity id.
 
+A `rows` clause estimates how many rows the table holds. It decides which index findings
+matter: `lint` `query-index-missing` skips an entity under 10,000 rows, where a scan is
+cheap, and a `.has` / `.none` over an entity of 1,000,000 rows or more wants its own index
+(see [Query shapes](#query-shapes)). Write a whole number, bare or quoted, with `_` or `,`
+separators or an exponent:
+
+```
+entity AuditLog "Audit log"
+  rows "5e7" {
+  id: Int @pk
+}
+```
+
+| Diagnostic | When |
+|---|---|
+| `InvalidRowEstimate` | The `rows` value is not a whole number. |
+
 #### Column types
 
 | Type | Description |
@@ -1740,8 +1757,19 @@ columns in any order and the next ones the sort, in its direction or all reverse
 primary key, each unique set, each `@index`, and each foreign key count; a read one of them
 serves wants nothing, and so does a read the index of a longer read serves.
 
-`lint` `query-index-missing` warns at a read no index serves and names the `@index(...)` that
-declares the one it wants. A sort that mixes directions needs an index with the same mix,
+Two lookups the model implies want an index too, with no `reads` written:
+
+- **A sweep a timer starts.** A use case a `timer` triggers finds every row at the states its
+  `transitions` move off, so it wants the `@tenant` column and the state column. Its arms on
+  one column are one lookup. A use case an actor starts moves the row it already holds,
+  which is a key lookup.
+- **A `.has` / `.none` over a large entity.** A quantifier in a `holds` body or a rule reads
+  one row's related rows through the foreign key, whose index serves it. When the related
+  entity declares `rows` of 1,000,000 or more, it wants the key and the columns it compares
+  with `==`.
+
+`lint` `query-index-missing` warns at a lookup no index serves, unless its entity declares
+fewer than 10,000 `rows`, and names the `@index(...)` that declares the one it wants. A sort that mixes directions needs an index with the same mix,
 which `@index` cannot declare, so the hint points at the index `export --kind sql` writes.
 
 | Diagnostic | When |

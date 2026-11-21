@@ -100,7 +100,17 @@ fn index_suggestions_skip_what_an_index_already_serves() {
     let got: Vec<(String, Vec<usize>)> = model
         .index_suggestions()
         .iter()
-        .map(|s| (shown(&s.columns), s.queries.clone()))
+        .map(|s| {
+            let reads = s
+                .readers
+                .iter()
+                .map(|r| match r {
+                    Reader::Query(i) => *i,
+                    other => panic!("{other:?}"),
+                })
+                .collect();
+            (shown(&s.columns), reads)
+        })
         .collect();
     assert_eq!(
         got,
@@ -176,4 +186,105 @@ fn a_dto_mapping_names_a_field_and_a_column_that_exist_once() {
         assert!(errors[0].contains(want), "{mapping}: {errors:?}");
         assert!(model.dto_mappings.len() <= 1, "{mapping}");
     }
+}
+
+const SWEPT: &str = r#"
+entity Ticket "Ticket" {
+  id: Int @pk
+  tenant_id: Int @tenant
+  state: Enum(open, held, closed)
+}
+timer Tick "tick"
+usecase Sweep "sweep"
+usecase Close "close"
+triggers(Tick, Sweep)
+transitions(Sweep, Ticket.state, open -> closed)
+transitions(Sweep, Ticket.state, held -> closed)
+transitions(Close, Ticket.state, open -> closed)
+"#;
+
+/// A use case a timer starts finds every row at the states it moves off, so it wants the
+/// tenant column and the state column; its arms on one column are one lookup. A use case
+/// an actor starts moves the row it already holds, which wants no index.
+#[test]
+fn a_timer_started_move_wants_an_index_on_its_state_column() {
+    let (ast, parse_errors) = parse(SWEPT);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (model, _) = build_model(&ast);
+    let suggestions = model.index_suggestions();
+    let [s] = suggestions.as_slice() else {
+        panic!("{suggestions:?}");
+    };
+    assert_eq!(shown(&s.columns), "tenant_id, state");
+    let [Reader::Batch { column, from, .. }] = s.readers.as_slice() else {
+        panic!("{:?}", s.readers);
+    };
+    assert_eq!(column, "state");
+    assert_eq!(from, &["open".to_string(), "held".to_string()]);
+    assert_eq!(model.reader_name(&s.readers[0]), "Sweep");
+    assert!(model.reader_site(&s.readers[0]).is_some());
+}
+
+const QUANTIFIED: &str = r#"
+entity Case "Case"ROWS {
+  id: Int @pk
+  open: Bool
+}
+entity Step "Step"ROWS {
+  id: Int @pk
+  state: Enum(todo, done)
+}
+relate(Step, Case, N:1)
+condition Busy "Busy"
+holds(Busy, Case.open == true).has(Step.state == todo)
+"#;
+
+fn quantified(rows: &str) -> SemanticModel {
+    let (ast, parse_errors) = parse(&QUANTIFIED.replace("ROWS", rows));
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    build_model(&ast).0
+}
+
+/// A `.has` reads one row's related rows through the foreign key index, which is enough
+/// until the related entity declares a million rows or more; then it wants the key and
+/// the compared column together.
+#[test]
+fn a_quantifier_wants_an_index_only_over_a_large_entity() {
+    assert!(quantified("").index_suggestions().is_empty());
+    assert!(quantified(" rows 999999").index_suggestions().is_empty());
+    let model = quantified(" rows \"1e6\"");
+    let suggestions = model.index_suggestions();
+    let [s] = suggestions.as_slice() else {
+        panic!("{suggestions:?}");
+    };
+    assert_eq!(shown(&s.columns), "case_id, state");
+    assert!(matches!(&s.readers[..], [Reader::Quantifier { on }] if on == "Busy"));
+    assert_eq!(s.rows, Some(1_000_000));
+    assert!(!s.is_small());
+}
+
+/// `rows` takes a whole number, with `_` or `,` separators or an exponent; anything else
+/// is an error on the entity.
+#[test]
+fn a_row_estimate_parses_or_is_reported() {
+    let rows = |written: &str| {
+        let (ast, _) = parse(&format!(
+            "entity E \"E\" rows {written} {{\n  id: Int @pk\n}}\n"
+        ));
+        let (model, diags) = build_model(&ast);
+        let errors: Vec<String> = diags
+            .iter()
+            .filter(|d| !d.is_warning)
+            .map(|d| d.error.to_string())
+            .collect();
+        (model.entities.values().next().unwrap().rows, errors)
+    };
+    assert_eq!(rows("5000"), (Some(5000), vec![]));
+    assert_eq!(rows("\"1_000_000\"").0, Some(1_000_000));
+    assert_eq!(rows("\"2,500\"").0, Some(2500));
+    assert_eq!(rows("\"3e4\"").0, Some(30_000));
+    let (none, errors) = rows("many");
+    assert_eq!(none, None);
+    assert_eq!(errors.len(), 1, "{errors:?}");
+    assert!(errors[0].contains("many"), "{errors:?}");
 }

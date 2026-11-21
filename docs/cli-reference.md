@@ -1114,9 +1114,12 @@ foreign keys. Every sample's script loads into SQLite, and into PostgreSQL 16.
   `CHECK (("qty" IS NOT NULL AND "qty" >= 1))`, and a row with a null `qty` is rejected.
   `col in (a, b)` is `"col" IN ('a', 'b')` and `not in` is `NOT IN`, with the same null
   case. A rule's `.label("...")` is a comment on the line above its `CHECK`.
-- **Reads.** When `reads` declare [query shapes](./language-reference.md#query-shapes), the
-  script ends with them as comments. First the indexes they want and no key or `@index`
-  gives, as `-- CREATE INDEX ... ; -- <readers>`. Then each read as the `SELECT` it runs:
+- **Reads.** The script ends with the model's reads as comments. First the indexes the
+  lookups want and no key or `@index` gives, as `-- CREATE INDEX ... ; -- <readers>`: the
+  `reads` [query shapes](./language-reference.md#query-shapes), each use case a timer
+  starts that finds rows by their state, and each `.has` / `.none` over an entity of
+  `rows` 1,000,000 or more. An entity under 10,000 `rows` adds `small table, <n> rows: a
+  scan is cheap` to the line. Then, when `reads` declare shapes, each read as the `SELECT` it runs:
   the tenant and `.by` columns compared to parameters (`$1` in PostgreSQL, `?1` in SQLite),
   live rows only on an entity with `@soft_delete`, then `ORDER BY` and the page. A cursor
   page continues after the last row: `("created_at", "id") < ($2, $3)` for a sort one way,

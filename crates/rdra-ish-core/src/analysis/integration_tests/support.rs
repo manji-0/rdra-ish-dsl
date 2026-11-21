@@ -16,6 +16,7 @@ pub(super) fn instance(kind: Kind, id: &str) -> InstanceDecl {
         field: FieldMetadata::default(),
         usecase: UseCaseMetadata::default(),
         table: None,
+        rows: None,
         bare_values: Vec::new(),
         columns: Vec::new(),
         variation_values: Vec::new(),
@@ -88,6 +89,7 @@ pub(super) fn simple_entity_model(ids: &[&str]) -> SemanticModel {
             field: FieldMetadata::default(),
             usecase: UseCaseMetadata::default(),
             table: None,
+            rows: None,
             bare_values: Vec::new(),
             columns: vec![
                 Column {
