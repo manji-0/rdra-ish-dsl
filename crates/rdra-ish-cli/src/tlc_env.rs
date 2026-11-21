@@ -1,5 +1,4 @@
-//! The JVM environment of one TLC run, shared by `verify` and `tests/engine_equivalence.rs`
-//! (which includes this file by path, so it stays std only).
+//! The JVM environment of one TLC run, shared by `verify` and `tests/engine_equivalence.rs`.
 
 use std::path::Path;
 

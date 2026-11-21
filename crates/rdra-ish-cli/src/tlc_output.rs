@@ -3,7 +3,6 @@
 //!
 //! A state is a map from `name[slot]` (or a bare `name` for a global) to the value text as
 //! TLC prints it. The TLA printer renders values the same way, so the two compare as strings.
-//! Std only: `tests/engine_equivalence.rs` includes this file by path.
 
 use std::collections::{BTreeMap, BTreeSet};
 

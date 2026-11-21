@@ -1,6 +1,5 @@
 //! A TLC counterexample in model terms: its states decoded, replayed through the step
 //! relation BFS uses, and the violated check built by the code BFS reports with.
-//! `tests/engine_equivalence.rs` includes this file by path beside `tlc_output.rs`.
 
 use rdra_ish_core::lifecycle::{
     ActId, Loop, ReplayError, State, StateDiag, Target, TransitionSystem,

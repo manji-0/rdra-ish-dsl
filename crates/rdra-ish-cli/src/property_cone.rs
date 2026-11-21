@@ -1,6 +1,5 @@
 //! A temporal property checked on its cone (`TransitionSystem::property_cone`), and what the
-//! cone's TLC runs decide. `tests/engine_equivalence.rs` includes this file by path beside
-//! `tlc_output.rs`, so it stays free of the other CLI modules.
+//! cone's TLC runs decide.
 //!
 //! The cone keeps what the property reads and each action of its `.fair` use cases whole, so
 //! weak fairness on those actions restricted to the cone is weak fairness on them in the whole
