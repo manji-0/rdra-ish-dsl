@@ -44,6 +44,17 @@ pub struct SqlEmitter {
     pub dialect: Dialect,
 }
 
+/// The rules a schema of `dialect` does not enforce, by the names `check` and `verify` report,
+/// each with why: the rules the script's "Not enforced by this schema" comment lists, which
+/// the application or a trigger keeps.
+pub fn unenforced_rules(model: &SemanticModel, dialect: Dialect) -> Vec<(String, &'static str)> {
+    Script::new(model, dialect)
+        .obligations()
+        .into_iter()
+        .map(|r| (r.name, r.why))
+        .collect()
+}
+
 impl Emitter for SqlEmitter {
     fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
         Ok(Script::new(model, self.dialect).document())
@@ -96,6 +107,17 @@ impl<'m> Script<'m> {
         }
     }
 
+    /// The rules the schema leaves to the application: each table's rules without a `CHECK`,
+    /// table by table, then the rules over several rows.
+    fn obligations(&self) -> Vec<Rule> {
+        self.entities()
+            .into_iter()
+            .flat_map(|(key, entity)| self.entity_rules(key, entity))
+            .filter(|r| r.check.is_none())
+            .chain(self.model_obligations())
+            .collect()
+    }
+
     fn entities(&self) -> Vec<(EntityKey, &'m Entity)> {
         let mut entities: Vec<_> = self.model.entities.iter().collect();
         entities.sort_by_key(|(_, e)| e.id.as_str());
@@ -124,7 +146,6 @@ impl<'m> Script<'m> {
         if !self.model.entities.is_empty() {
             out.push_str("-- Tables\n\n");
         }
-        let mut obligations = Vec::new();
         for (key, entity) in self.entities() {
             let rules = self.entity_rules(key, entity);
             out.push_str(&self.table(key, entity, &rules));
@@ -134,7 +155,6 @@ impl<'m> Script<'m> {
                 out.push('\n');
             }
             out.push('\n');
-            obligations.extend(rules.into_iter().filter(|r| r.check.is_none()));
         }
         if self.dialect == Dialect::Postgres {
             let fks: Vec<String> = self
@@ -155,7 +175,7 @@ impl<'m> Script<'m> {
             }
         }
         out.push_str(&self.reads_section());
-        obligations.extend(self.model_obligations());
+        let obligations = self.obligations();
         if !obligations.is_empty() {
             out.push_str(
                 "\n-- Not enforced by this schema: the application or a trigger keeps these rules.\n",

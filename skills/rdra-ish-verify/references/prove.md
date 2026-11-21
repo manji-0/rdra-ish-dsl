@@ -19,6 +19,9 @@ Each rule prints one line before TLC runs:
   `verify` report it with a trace.
 - `unproved: <rule>: z3 gave up on <action>` — the check timed out.
 - `out of scope: <rule>: <why>` — the encoding cannot state the rule.
+- `[not enforced by the SQL schema: <why>]` after a name — `export --kind sql` writes no
+  `CHECK` for the rule, so the application keeps it. Proved, it is an obligation the use
+  cases discharge; unproved, say so when the user designs the database.
 - `lemma: <text>` — a helper fact the proof kept: structural, or mined from the states BFS
   reached.
 

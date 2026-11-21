@@ -1,11 +1,13 @@
 //! `verify --prove`: the rules z3 proves for any number of rows, printed before TLC runs.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 use rdra_ish_core::lifecycle::prove::{self, ProveOptions, RuleProof, Unproved, Verdict, Z3};
 use rdra_ish_core::lifecycle::{label_prefix, Selection, Target, TransitionSystem};
+use rdra_ish_core::SemanticModel;
+use rdra_ish_emit::sql::{unenforced_rules, Dialect};
 
 /// The env variable that names the z3 binary when `--z3` is not given.
 pub(crate) const Z3_ENV: &str = "RDRA_Z3";
@@ -58,16 +60,42 @@ fn find_z3(z3: Option<PathBuf>) -> Result<PathBuf> {
     );
 }
 
-/// Proves the selected state rules of `ts` and prints one line per rule. `lemmas` are the
-/// rules the model marks `.lemma()`: they are proved like any rule, print as `lemma`, and do
-/// not count among the rules.
+/// What the report says about a rule besides its verdict, by index into `ts.invariants()`.
+pub(crate) struct Marks {
+    /// The rules the model marks `.lemma()`: proved like any rule, printed as `lemma`, and not
+    /// counted among the rules.
+    pub lemmas: BTreeSet<usize>,
+    /// The rules the SQL export's schema does not enforce, with why: the application keeps
+    /// them, so a proof discharges that obligation.
+    pub unenforced: BTreeMap<usize, &'static str>,
+}
+
+impl Marks {
+    pub(crate) fn of(model: &SemanticModel, ts: &TransitionSystem) -> Marks {
+        let sql: BTreeMap<String, &'static str> = unenforced_rules(model, Dialect::Postgres)
+            .into_iter()
+            .collect();
+        Marks {
+            lemmas: prove::lemma_invariants(model, ts),
+            unenforced: ts
+                .invariants()
+                .iter()
+                .enumerate()
+                .filter_map(|(i, inv)| Some((i, *sql.get(&inv.name)?)))
+                .collect(),
+        }
+    }
+}
+
+/// Proves the selected state rules of `ts` and prints one line per rule.
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
     selection: &Selection,
-    lemmas: &BTreeSet<usize>,
+    marks: &Marks,
     z3: Option<PathBuf>,
     deny_unproved: bool,
 ) -> Result<ProofTally> {
+    let lemmas = &marks.lemmas;
     let binary = find_z3(z3)?;
     let version = Z3::version(&binary).unwrap_or_default();
     let rules: Vec<usize> = selection
@@ -102,7 +130,7 @@ pub(crate) fn run_proof(
         rules.len()
     );
     for r in yours.iter().chain(&rules) {
-        print_verdict(ts, r, lemmas.contains(&r.inv));
+        print_verdict(ts, r, marks);
     }
     for lemma in &proof.lemmas {
         println!("lemma: {lemma}");
@@ -124,6 +152,20 @@ pub(crate) fn run_proof(
             count(&yours, out_of_scope)
         );
     }
+    let app: Vec<&RuleProof> = rules
+        .iter()
+        .copied()
+        .filter(|r| marks.unenforced.contains_key(&r.inv))
+        .collect();
+    if !app.is_empty() {
+        println!(
+            "proof: the SQL schema leaves {} rules to the application: {} proved, {} unproved, {} out of scope",
+            app.len(),
+            count(&app, proved),
+            count(&app, unproved),
+            count(&app, out_of_scope)
+        );
+    }
     Ok(ProofTally {
         proved: count(&rules, proved),
         rules: rules.len(),
@@ -133,12 +175,20 @@ pub(crate) fn run_proof(
 }
 
 /// One rule's line, and the CTI under an unproved one. A lemma the model marks reads
-/// `lemma <name>`.
-fn print_verdict(ts: &TransitionSystem, r: &RuleProof, lemma: bool) {
+/// `lemma <name>`; a rule the SQL schema does not enforce ends its name with why.
+fn print_verdict(ts: &TransitionSystem, r: &RuleProof, marks: &Marks) {
     let inv = &ts.invariants()[r.inv];
+    let sql = match marks.unenforced.get(&r.inv) {
+        Some(why) => format!(" [not enforced by the SQL schema: {why}]"),
+        None => String::new(),
+    };
     let name = format!(
-        "{}{}{}",
-        if lemma { "lemma " } else { "" },
+        "{}{}{}{sql}",
+        if marks.lemmas.contains(&r.inv) {
+            "lemma "
+        } else {
+            ""
+        },
         label_prefix(&inv.label),
         inv.name
     );
