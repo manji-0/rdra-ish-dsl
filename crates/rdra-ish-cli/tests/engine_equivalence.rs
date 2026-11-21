@@ -27,19 +27,6 @@
 //! turns the skip into a failure. `RDRA_EQV_TRACE=1` prints one line per cone and per
 //! state-model module with its sizes and wall times, to see where a run's time goes.
 
-#[path = "../src/property_cone.rs"]
-#[allow(dead_code)]
-mod property_cone;
-#[path = "../src/tlc_env.rs"]
-#[allow(dead_code)]
-mod tlc_env;
-#[path = "../src/tlc_output.rs"]
-#[allow(dead_code)]
-mod tlc_output;
-#[path = "../src/tlc_replay.rs"]
-#[allow(dead_code)]
-mod tlc_replay;
-
 use std::collections::{BTreeSet, HashMap};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
@@ -47,16 +34,16 @@ use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use property_cone::{ConeRun, PropertyCone, Verdict, Why};
+use rdra_ish_cli::property_cone::{ConeRun, PropertyCone, Verdict, Why};
+use rdra_ish_cli::tlc_env::{tlc_env, Heap};
+use rdra_ish_cli::tlc_output::{parse_dot, Outcome, TlcRun};
+use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
     ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, Runs, Scope, Seed, State,
     StateDiag, StateModelFindings, Taken, Target, TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
-use tlc_env::{tlc_env, Heap};
-use tlc_output::{parse_dot, Outcome, TlcRun};
-use tlc_replay::{explain_property, explain_violation};
 
 /// The largest cone the test compares. At `Bounds::STATES` every cone of every sample is far
 /// below it. At `Bounds::VERIFY` it admits the patent-ops cones of `PatentApplication` (293,833
