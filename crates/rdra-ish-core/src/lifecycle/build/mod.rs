@@ -50,9 +50,8 @@ struct Builder<'m> {
     uc_actions: HashMap<UseCaseKey, Vec<super::types::ActId>>,
     /// Use cases with any write in the full model (before the scope filter).
     active_ucs: HashSet<UseCaseKey>,
-    diags: Vec<Diag>,
-    /// Parallel to `diags`: the entities of the actions each diagnostic altered.
-    altered: Vec<Vec<EntityKey>>,
+    /// Each diagnostic, with the entities of the actions it altered.
+    diags: Vec<(Diag, Vec<EntityKey>)>,
     /// The entities of the use case action being built, if any.
     acting: Vec<EntityKey>,
     /// The entity each `holds` body on a split use case reads before the later transaction
@@ -75,7 +74,6 @@ impl<'m> Builder<'m> {
             uc_actions: HashMap::new(),
             active_ucs: HashSet::new(),
             diags: Vec::new(),
-            altered: Vec::new(),
             acting: Vec::new(),
             later_reads: HashMap::new(),
         }
@@ -94,7 +92,6 @@ impl<'m> Builder<'m> {
         let diags = self
             .diags
             .into_iter()
-            .zip(self.altered)
             .map(|(d, mut involves)| {
                 for k in &d.entities {
                     if !involves.contains(k) {
@@ -117,17 +114,17 @@ impl<'m> Builder<'m> {
     /// action binds: a selection that reads the action does not defer it.
     fn diag(&mut self, entities: Vec<EntityKey>, diag: StateDiag) {
         let d = Diag { entities, diag };
-        let at = match self.diags.iter().position(|x| *x == d) {
+        let at = match self.diags.iter().position(|(x, _)| *x == d) {
             Some(at) => at,
             None => {
-                self.diags.push(d);
-                self.altered.push(Vec::new());
+                self.diags.push((d, Vec::new()));
                 self.diags.len() - 1
             }
         };
+        let altered = &mut self.diags[at].1;
         for k in &self.acting {
-            if !self.altered[at].contains(k) {
-                self.altered[at].push(*k);
+            if !altered.contains(k) {
+                altered.push(*k);
             }
         }
     }
