@@ -4,8 +4,9 @@
 <!-- constrained-by ./incremental-modeling.md -->
 <!-- derived-from ../samples/incremental-order/step-7-business-rules/design.md -->
 
-This guide embeds one generated diagram of each `diagram --kind` and explains how to read
-it during review. The kinds follow the RDRA 3.0 diagrams, in the order a review usually
+This guide embeds one generated diagram of each `diagram --kind` but `robustness`,
+`sequence`, and `screen` (see the [kinds](./cli-reference.md#kinds)) and explains how to
+read it during review. The kinds follow the RDRA 3.0 diagrams, in the order a review usually
 walks them: system context and requirements, business, use cases and flows, information
 and conditions, lifecycle and events, then the data model and the whole graph.
 
@@ -34,7 +35,8 @@ text carries the meaning, so shapes, colours, and direction are free to change.
 
 Every kind follows the [encoding contract](./cli-reference.md#encoding-contract):
 
-- The `%%` header comes first: `%% rdra-ish diagram=<kind> scope=<scope> model=<paths>`,
+- The `%%` header comes first (after the Mermaid `title` that `--title` adds):
+  `%% rdra-ish diagram=<kind> scope=<scope> model=<paths>`,
   then `%% layers:` (in the layered kinds), `%% kinds:` (the node kinds the body draws),
   and `%% omitted:` (the linked kinds the diagram leaves out).
 - Each node id is `<kind>__<DSL id>`, the same in every kind, so
@@ -79,10 +81,13 @@ flowchart LR
 
 How to read it:
 
-- Actors and external systems sit in システム価値, the systems in システム.
+- The nodes sit in no layer subgraph: only the actors, external systems, and systems are
+  drawn, and every edge crosses the system boundary.
 - Every edge is derived. `OpsStaff` performs `BucStoreRestock`, whose use cases invoke an
-  API of each system, so the actor reaches both systems, each edge `via` the BUC.
-- An external system edge reads `raises <Event>` or `triggers <Event>`. When no system
+  API of each system, so the actor reaches both systems, each edge labelled with the BUC
+  and `via` it.
+- An external system edge is labelled with the events it exchanges: toward the system for
+  an event it raises, from the system for an event a use case raises to it. When no system
   is declared, or none contains an API the use cases invoke, the edge ends at
   `system__Model`, with a `%% synthesized` line that says why.
 
@@ -200,17 +205,20 @@ flowchart LR
 
 How to read it:
 
-- Requirements and NFRs sit in システム価値, qualities and constraints in
-  システム外部環境, with what they bind in its own layer.
-- `motivates` runs from a requirement to a BUC; `applies_to` from an NFR to a use case,
-  API, or system; `constrains` from a constraint to what it limits; and `qualifies` from
-  an NFR or constraint to its quality.
+- The nodes sit in no layer subgraph. The tree reads left to right: each goal, with its
+  metric and `baseline → target`, to the requirements that achieve it (`achieves`, drawn
+  from the goal with a `%% derived` line), and each requirement to the BUCs it
+  `motivates`.
+- A requirement with `status "out-of-scope"` sits apart in `やらないこと`, its edges
+  dashed.
+- NFRs, constraints, and qualities are not drawn; `omitted:` names them, and
+  `list --kind nfr` and `list --kind constraint` write them as tables.
 - The DSL has no link from a requirement to the actor who holds it, so none is drawn.
 
 Review points:
 
 - Does every requirement motivate a BUC?
-- Does every NFR and constraint name what it applies to and the quality it serves?
+- Does every requirement achieve a goal, and does every goal have a measure?
 
 ## Business Context and BUCs
 
@@ -242,15 +250,17 @@ flowchart LR
 
 How to read it:
 
-- Each business is `subgraph business__<id>` holding its BUCs, in システム外部環境.
-- `performs(Actor, Buc)` is declared. An actor of one of the BUC's use cases or steps, and
-  an external system whose event starts or leaves the BUC, are derived, each with its
-  `%% derived` line. `--buc` narrows the diagram to the RDRA BUC diagram.
+- Each business is `subgraph business__<id>` holding its BUCs; there are no layer
+  subgraphs.
+- An edge `buc__A -->|<event label>| buc__B` is a hand-off: a use case of A raises the
+  event, and it starts B or one of B's use cases. This model has one BUC, so it has none.
+- Actors and external systems are not drawn: `list --kind buc-roles` is the table of who
+  takes part. `--buc` draws the named BUCs and the BUCs they hand off to or from.
 
 Review points:
 
 - Does every BUC belong to the business that owns its value?
-- Is every actor of the BUC drawn, directly or through its use cases?
+- Is a BUC left without a hand-off edge really standalone, or is an event missing?
 
 ## UC複合図
 
@@ -455,9 +465,9 @@ How to read it:
 
 - Each entity is drawn without columns. `---|N:1|` is a `relate` with its cardinality,
   from its left end.
-- `-.->|statemodel|` links an entity to each column that `transitions` drive, the
-  `statemodel__<Entity>_<column>` id `--kind state` uses. An `Enum` column without
-  transitions is no state model.
+- An unlabelled `-.->` (`statemodel`) links an entity to each column that `transitions`
+  drive, the `statemodel__<Entity>_<column>` id `--kind state` uses. An `Enum` column
+  without transitions is no state model.
 - `-.->|variation <column>|` links an entity to the variation that column takes.
 
 Review points:
@@ -529,8 +539,8 @@ flowchart LR
 
 How to read it:
 
-- Each condition links `-.->|combines|` to the variations and state models it combines,
-  and `-.->|applies_to|` to the use cases it guards.
+- Each condition links with an unlabelled `-.->` (`combines`) to the variations and state
+  models it combines, and with `-.->|applies_to|` to the use cases it guards.
 - `CopayCappedAtLimit` declares its links with `combines`. `UnreferredFirstVisit` has a
   `holds` body, printed on its `%% holds` line, so its links are read from the body and
   each is followed by `%% derived ... from holds`.
@@ -568,17 +578,19 @@ stateDiagram-v2
 
 How to read it:
 
-- Each state model (a lifecycle column) is one composite state,
-  `statemodel__Store_restock_status` labelled `Store.restock_status`.
-- `[*] -->` marks the start state, the value the lifecycle gives the column on creation
+- Without a scope, the diagram is an index: each state model (a lifecycle column) is one
+  composite state, `statemodel__Store_restock_status` labelled `Store.restock_status`,
+  holding a note with its counts and the `--entity` option that draws it whole.
+- With `--entity Store` or `--buc BucStoreRestock`, each state model is drawn whole.
+  `[*] -->` marks the start state, the value the lifecycle gives the column on creation
   (or its default for an entity that starts present). `--> [*]` marks an end state, one
   with no transition to another state.
-- Each edge is labelled with the id of the use case that drives the transition, as the
-  遷移UC column of an RDRA state sheet is; `usecase__BlockScheduledRestock` is the same
-  node in the UC複合図.
+- Each edge is labelled with the use case that drives the transition, as the 遷移UC
+  column of an RDRA state sheet is; the `%% transition usecase__BlockScheduledRestock`
+  line before it names the same node as in the UC複合図.
 - This diagram shows lifecycle topology. Use `rdra-ish states` for rule satisfaction,
   reachable combinations, and diagnostics. `state` is the one kind that refuses to write
-  while `check` reports a lifecycle error.
+  while the lifecycle has an error other than a deadlock, which it colours.
 
 Review points:
 

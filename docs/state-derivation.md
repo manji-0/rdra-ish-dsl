@@ -8,7 +8,9 @@ state columns are reachable, and does any reachable state break a declared rule?
 The tool builds one transition system from the model and explores it by breadth-first
 search (BFS). `states`, `check`, `diagram`, `csv`, `list`, `export`, and the
 TypeScript unions read the explored states. `export --kind tla` and `verify` print the
-same transition system as TLA+ for TLC (see [formal-verification.md](./formal-verification.md)).
+same transition system as TLA+ for TLC (see [formal-verification.md](./formal-verification.md)),
+and `verify --prove` encodes it for z3, for any number of rows
+([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
 No second reading of the model exists, so BFS and TLC cannot disagree on what a use case
 does. The test `engine_equivalence` checks that on every sample.
 
@@ -859,14 +861,16 @@ these names, and the `// expect` headers of the samples list the names of the er
   that lead into a row that reaches it, and those that delete an instance in it. A use case
   that touches the entity without changing a column is not listed. An Int axis prints its
   values (`stock[0..5]`). An entity with no state column prints `(no state axes)`.
-- `csv`. One row per pattern and column, with `entity_id`, `pattern_idx`, `column`,
-  `value`, `is_initial`, `is_terminal`, and `via`.
+- `csv`. One row per pattern and column, with `entity_id`, `entity_label`, `pattern_idx`,
+  `column`, `value`, `is_initial`, `is_terminal`, and `via`.
 - `json`. One object per entity with `axes` (each with its `domain`), `patterns`,
-  `diagnostics`, `no_creation_path`, and the entity id and label. An Int domain lists
-  `"0"` to `"5"`. Each pattern has a `witness`: `start` (the instances a pre-existing
-  entity starts with), `steps` (each with `action`, `usecase`, `bound`, `changes`, and the
-  use case's `site`), and `over_bound`. A change is `create`, `delete`, `set` (with the
-  `site` of the arm or `sets` that wrote it), or `tick`.
+  `diagnostics`, `no_creation_path`, `reachable`, `truncated`, and the entity id and
+  label. An Int domain lists `"0"` to `"5"`. Each pattern has a `witness`: `start` (the
+  instances a pre-existing entity starts with), `steps` (each with `action`, `usecase`,
+  `bound`, `changes`, and the use case's `site`), `over_bound`, and `free_triggers` (each
+  `usecase` that ran without its `event` having been raised, see **Raised marks** under
+  [Exploration by cone of influence](#exploration-by-cone-of-influence)). A change is
+  `create`, `delete`, `set` (with the `site` of the arm or `sets` that wrote it), or `tick`.
 - `typescript`. One union per entity. The union reads the same views.
 
 All formats honor `--entity <id>`, `--buc <id>`, `--max-patterns <n>`, and `--max-states <n>`. `--buc`
