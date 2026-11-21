@@ -4,6 +4,14 @@
 
 ### Added
 
+- `verify --prove` (experimental) tries to prove each state rule for any number of rows with
+  z3, as an inductive invariant. Each rule prints `proved:`, `unproved:` with a
+  counterexample to induction (a step that breaks the rule from a state where the proved
+  rules hold, not necessarily reachable), or `out of scope:`. Helper lemmas are mined from
+  the states BFS reaches and kept only when they are inductive too; the ones a proof used
+  print as `lemma:` lines. `--deny-unproved` fails the run on an unproved rule, and `--z3` or
+  `RDRA_Z3` names the binary (#141).
+
 - An entity takes a `rows` estimate (`rows 5000`, `rows "1e6"`); a value that is not a
   whole number is `InvalidRowEstimate`. `lint` `query-index-missing` skips an entity under
   10,000 rows, and the SQL export marks its suggested index as a small table.

@@ -75,6 +75,8 @@
             # Formal verification (TLC)
             pkgs.jdk17_headless
             pkgs.tlaplus
+            # `verify --prove` (tests/prove_cli.rs, tests/proof_equivalence.rs)
+            pkgs.z3
 
             # VS Code extension (editors/vscode)
             pkgs.nodejs

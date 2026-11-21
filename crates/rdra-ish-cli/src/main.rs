@@ -11,6 +11,7 @@ mod list_output;
 mod load;
 mod next;
 mod property_cone;
+mod prove;
 mod states;
 mod tlc_env;
 mod tlc_output;
@@ -361,6 +362,9 @@ fn main() -> Result<()> {
             int_range_max,
             temporal_budget,
             deny_undecided,
+            prove,
+            deny_unproved,
+            z3,
             tlc_jar,
             scope,
         } => {
@@ -382,6 +386,7 @@ fn main() -> Result<()> {
                 verify::Budget {
                     temporal: std::time::Duration::from_secs(temporal_budget),
                     deny_undecided,
+                    prove: prove.then_some(verify::Prove { z3, deny_unproved }),
                 },
                 tlc_jar,
             )?;

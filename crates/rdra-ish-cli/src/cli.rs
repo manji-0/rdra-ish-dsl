@@ -379,6 +379,18 @@ pub(crate) enum Commands {
         /// temporal property past `--temporal-budget`) as an error (exit 1)
         #[arg(long)]
         deny_undecided: bool,
+        /// [experimental] Also try to prove each state rule for any number of rows with z3
+        /// (SMT inductive invariants); prints proved, unproved with a counterexample to
+        /// induction, or out of scope per rule
+        #[arg(long)]
+        prove: bool,
+        /// With --prove, treat a rule left unproved as an error (exit 1)
+        #[arg(long, requires = "prove")]
+        deny_unproved: bool,
+        /// The z3 binary --prove runs; `RDRA_Z3` sets it when the flag is absent, else `z3`
+        /// on PATH
+        #[arg(long, value_name = "PATH", requires = "prove")]
+        z3: Option<PathBuf>,
         /// Run TLC as `java -cp <path> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` /
         /// `tlc2` launcher on PATH; `RDRA_TLC_JAR` sets it when the flag is absent
         #[arg(long, value_name = "PATH")]

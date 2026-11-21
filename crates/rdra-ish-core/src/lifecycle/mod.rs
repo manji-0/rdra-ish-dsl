@@ -13,6 +13,7 @@ mod explore;
 mod expr;
 mod findings;
 mod lasso;
+pub mod prove;
 mod reduce;
 mod restrict;
 mod select;

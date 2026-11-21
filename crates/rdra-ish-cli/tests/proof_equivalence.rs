@@ -1,0 +1,133 @@
+//! The prover and BFS agree on every sample: no rule `verify --prove` proves for any number
+//! of rows has a reachable violation at one, two, or three instances per entity. A proof
+//! claims more than the bounded engines check, so this keeps the third semantics honest
+//! against the explorer. A cone the BFS does not finish under `STATE_CAP` decides nothing and
+//! is skipped.
+//!
+//! Without `z3` on PATH (or `RDRA_Z3`) the test is skipped with a printed reason;
+//! `RDRA_REQUIRE_Z3=1` turns the skip into a failure.
+
+use std::collections::BTreeMap;
+use std::num::NonZeroU8;
+use std::path::{Path, PathBuf};
+
+use rdra_ish_core::lifecycle::prove::{self, ProveOptions, Unproved, Verdict, Z3};
+use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, StateDiag, Target, TransitionSystem};
+use rdra_ish_core::load_project;
+
+const STATE_CAP: usize = 300_000;
+
+fn repo() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+fn samples() -> Vec<String> {
+    let mut out: Vec<String> = std::fs::read_to_string(repo().join("samples.txt"))
+        .expect("samples.txt")
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(str::to_string)
+        .collect();
+    out.push("samples/formal-verification-fail/order.rdra".to_string());
+    out
+}
+
+fn find_z3() -> Option<PathBuf> {
+    let named = std::env::var_os("RDRA_Z3").map(PathBuf::from);
+    let found = named.or_else(|| {
+        std::env::split_paths(&std::env::var_os("PATH")?)
+            .map(|d| d.join("z3"))
+            .find(|p| p.is_file())
+    });
+    if found.is_none() {
+        let reason = "z3 not on PATH (run inside `nix develop`)";
+        assert!(
+            std::env::var("RDRA_REQUIRE_Z3").as_deref() != Ok("1"),
+            "RDRA_REQUIRE_Z3=1 but {reason}"
+        );
+        println!("skipped: {reason}");
+    }
+    found
+}
+
+fn system(sample: &str, bounds: Bounds) -> Option<TransitionSystem> {
+    let project = load_project(&[repo().join(sample)], None).ok()?;
+    let built = TransitionSystem::build(&project.model, bounds, &Scope::default());
+    (!rdra_ish_core::lifecycle::has_errors(&built.diags)).then_some(built.ts)
+}
+
+/// The rules some reachable state violates at `bounds`, and the rules whose cone BFS did not
+/// finish.
+fn bounded_verdicts(ts: &TransitionSystem) -> (Vec<String>, Vec<String>) {
+    let targets: Vec<Target> = (0..ts.invariants().len()).map(Target::Invariant).collect();
+    let run = ts.explore_targets(&targets, Caps::new(usize::MAX, STATE_CAP));
+    let violated = run
+        .verdicts()
+        .iter()
+        .filter_map(|d| match &d.diag {
+            StateDiag::ConstraintViolated { name, .. } => Some(name.clone()),
+            _ => None,
+        })
+        .collect();
+    let open = targets
+        .iter()
+        .filter(|t| !run.cone_of(**t).run.complete)
+        .map(|t| match t {
+            Target::Invariant(i) => ts.invariants()[*i].name.clone(),
+            _ => unreachable!(),
+        })
+        .collect();
+    (violated, open)
+}
+
+fn instances(n: u8) -> Bounds {
+    Bounds {
+        instances: NonZeroU8::new(n).unwrap(),
+        int_max: Bounds::VERIFY.int_max,
+    }
+}
+
+#[test]
+fn no_proved_rule_has_a_bounded_counterexample() {
+    let Some(z3) = find_z3() else { return };
+    let mut proved_total = 0;
+    for sample in samples() {
+        let Some(ts) = system(&sample, Bounds::VERIFY) else {
+            continue;
+        };
+        let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+        let mut solver = Z3::start(&z3).expect("z3 starts");
+        let proof = prove::prove(&ts, &rules, &mut solver, ProveOptions::default())
+            .unwrap_or_else(|e| panic!("{sample}: {e}"));
+        let verdicts: BTreeMap<String, &Verdict> = proof
+            .rules
+            .iter()
+            .map(|r| (ts.invariants()[r.inv].name.clone(), &r.verdict))
+            .collect();
+        proved_total += proof.proved();
+        for n in 1..=3 {
+            let Some(bounded) = system(&sample, instances(n)) else {
+                continue;
+            };
+            let (violated, open) = bounded_verdicts(&bounded);
+            for name in &violated {
+                assert!(
+                    !matches!(verdicts.get(name), Some(Verdict::Proved)),
+                    "{sample}: {name} is proved for any number of rows, but BFS at {n} instances reaches a violation"
+                );
+            }
+            // A violation in an initial state is one the bounded engines report too, once
+            // there are enough rows for every binder.
+            for (name, v) in verdicts.iter().filter(|_| n == 3) {
+                if let Verdict::Unproved(Unproved::Initial) = v {
+                    assert!(
+                        violated.contains(name) || open.contains(name),
+                        "{sample}: {name} fails in an initial state, but BFS at {n} instances does not report it"
+                    );
+                }
+            }
+        }
+    }
+    assert!(proved_total > 0, "no sample rule was proved");
+}

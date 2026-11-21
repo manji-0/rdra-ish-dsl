@@ -1159,7 +1159,7 @@ Export a TLA+ specification and run TLC formal verification. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--tlc-jar <PATH>] [--buc <ID>]... [--entity <ID>]...
+rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--buc <ID>]... [--entity <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -1172,6 +1172,9 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and, unless TLC already printed its verdict, the property is `not decided`, which warns and does not fail the run. |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | Run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a state, deadlock, or use case a BFS cone left at its state cap. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
+| `--prove` | flag | off | Experimental. Before TLC runs, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows`. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
+| `--deny-unproved` | flag | off | With `--prove`: fail the run (exit 1) when a rule is unproved. A rule out of scope does not count. |
+| `--z3` | path | `RDRA_Z3`, else `z3` on `PATH` | With `--prove`: the z3 binary to run. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Check only the entity's view and the invariants and after-asserts that read it, with one TLC job per selected cone. See [Partial runs](#partial-runs). |
 
@@ -1270,6 +1273,7 @@ with its `State N: Stuttering` or `Back to state K: <action>` line. An example i
 |---|---|
 | `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and each temporal property run `2g`. |
 | `RDRA_TLC_JAR` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
+| `RDRA_Z3` | Path to the z3 binary, used as `--z3` when the flag is absent. |
 | `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once, before any TLC run. Without it, the machine's cores, at most 8. Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another. The result does not depend on it. |
 | `JAVA_TOOL_OPTIONS` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`), so a `-Xmx` here wins. |
 
@@ -1287,6 +1291,15 @@ GUI). Use one of these:
 - The jar: download `tla2tools.jar` from the
   [TLA+ releases](https://github.com/tlaplus/tlaplus/releases), install a JDK, and pass
   `--tlc-jar <path>` or set `RDRA_TLC_JAR=<path>`.
+
+#### Getting z3
+
+`verify --prove` looks for z3 in this order: `--z3`, `RDRA_Z3`, then `z3` on `PATH`. Without
+one, the run stops with an error before TLC starts. Use one of these:
+
+- Nix: run `nix shell nixpkgs#z3`. In this repository, `nix develop` provides `z3`.
+- A package manager: `apt install z3`, `brew install z3`, or `pip install z3-solver`, which
+  installs a `z3` command.
 
 ---
 
