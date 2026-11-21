@@ -135,6 +135,8 @@ enum Fall {
     Initial,
     Step(ActId),
     Unknown(String),
+    /// A fine mined lemma not yet in the set: it joins only when a rule stays unproved.
+    Held,
 }
 
 /// The invariants of `ts` that come from a rule the model marks `.lemma()`.
@@ -181,17 +183,21 @@ pub fn prove(
                 body: inv.body.clone(),
                 all_rows: false,
             };
-            (Origin::Rule(i), f)
+            (Origin::Rule(i), f, false)
         })
-        .chain(lemmas(ts))
+        .chain(lemmas(ts).into_iter().map(|(o, f)| (o, f, false)))
         .chain(
             mine::mine(ts, rules)
                 .into_iter()
-                .map(|(text, f)| (Origin::Lemma(text), f)),
+                .map(|m| (Origin::Lemma(m.text), m.formula, m.fine)),
         );
-    for (origin, formula) in formulas {
+    let mut fine = BTreeSet::new();
+    for (origin, formula, is_fine) in formulas {
         match enc.holds(&formula, Frame::Pre) {
             Ok(pre) => {
+                if is_fine {
+                    fine.insert(cands.len());
+                }
                 let mut reads = VarSet::new();
                 ts.pred_reads(&formula.body, &mut reads);
                 reads.extend(formula.binders.iter().map(|e| ts.entity(*e).exists));
@@ -246,34 +252,56 @@ pub fn prove(
         }
     }
 
-    // Consecution, until a round removes nothing: the kept set is then inductive.
+    // The fine lemmas wait: most models prove every rule without them, and they are many.
+    let at_start: BTreeSet<usize> = fell.keys().copied().collect();
+    for &k in &fine {
+        fell.entry(k).or_insert(Fall::Held);
+    }
+    // Consecution, until a round removes nothing: the kept set is then inductive. When a rule
+    // fell after initiation, the fine lemmas join, the rules that fell come back (the set that
+    // broke one lacked them), and it runs once more.
     loop {
-        let before = fell.len();
-        for (a, step) in steps.iter().enumerate() {
-            let hit: Vec<usize> = (0..cands.len())
-                .filter(|k| !fell.contains_key(k) && breaks(a, &cands[*k]))
-                .collect();
-            if hit.is_empty() {
-                continue;
+        loop {
+            let before = fell.len();
+            for (a, step) in steps.iter().enumerate() {
+                let hit: Vec<usize> = (0..cands.len())
+                    .filter(|k| !fell.contains_key(k) && breaks(a, &cands[*k]))
+                    .collect();
+                if hit.is_empty() {
+                    continue;
+                }
+                solver.exec(&format!(
+                    "(push)\n{}{}",
+                    step.commands,
+                    assume(&cands, &fell)
+                ))?;
+                for k in hit {
+                    let fall = match violated(solver, &enc, &cands[k], Frame::Post)? {
+                        Sat::Unsat => continue,
+                        Sat::Sat => Fall::Step(ActId::at_index(a)),
+                        Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
+                    };
+                    fell.insert(k, fall);
+                }
+                solver.exec("(pop)")?;
             }
-            solver.exec(&format!(
-                "(push)\n{}{}",
-                step.commands,
-                assume(&cands, &fell)
-            ))?;
-            for k in hit {
-                let fall = match violated(solver, &enc, &cands[k], Frame::Post)? {
-                    Sat::Unsat => continue,
-                    Sat::Sat => Fall::Step(ActId::at_index(a)),
-                    Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
-                };
-                fell.insert(k, fall);
+            if fell.len() == before {
+                break;
             }
-            solver.exec("(pop)")?;
         }
-        if fell.len() == before {
+        let open = cands.iter().enumerate().any(|(k, c)| {
+            matches!(c.origin, Origin::Rule(_)) && fell.contains_key(&k) && !at_start.contains(&k)
+        });
+        if !open || !fell.values().any(|f| matches!(f, Fall::Held)) {
             break;
         }
+        fell.retain(|k, why| {
+            at_start.contains(k)
+                || match cands[*k].origin {
+                    Origin::Rule(_) => false,
+                    Origin::Lemma(_) => !matches!(why, Fall::Held),
+                }
+        });
     }
 
     // Each rule that fell: its step again from the kept set plus the rule, for the CTI.
@@ -282,6 +310,7 @@ pub fn prove(
         let verdict = match fell.get(&k) {
             None => Verdict::Proved,
             Some(Fall::Initial) => Verdict::Unproved(Unproved::Initial),
+            Some(Fall::Held) => unreachable!("only a fine lemma waits"),
             Some(Fall::Unknown(action)) => Verdict::Unproved(Unproved::Unknown {
                 action: action.clone(),
             }),

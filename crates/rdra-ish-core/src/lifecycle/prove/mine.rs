@@ -1,7 +1,8 @@
 //! Candidate lemmas mined from BFS (Houdini's guesses). Each entity cone and each rule's cone
 //! is explored at the system's bounds; what every reached state shows becomes a candidate:
-//! the patterns a row takes, the values and value pairs of its columns, and the patterns a
-//! child row takes together with its parent. A guess is never trusted: the prover keeps it only
+//! the patterns a row takes, the values and value pairs of its columns, the patterns a child
+//! row takes together with its parent (whole, per parent column, and one column of each), and
+//! the patterns of two children of one parent. A guess is never trusted: the prover keeps it only
 //! when it is inductive with the others, so a capped or over-approximate exploration costs
 //! proofs, not soundness.
 
@@ -41,7 +42,16 @@ struct Seen {
 }
 
 /// Mined candidates, each with the text the report prints when the proof keeps it.
-pub(super) fn mine(ts: &TransitionSystem, rules: &[usize]) -> Vec<(String, Formula)> {
+/// One mined candidate and the text the report prints when the proof keeps it.
+pub(super) struct Mined {
+    pub text: String,
+    pub formula: Formula,
+    /// A pair of one child column and one parent column. There are many of them on a model
+    /// with many columns, so the prover adds them only when a rule stays unproved without.
+    pub fine: bool,
+}
+
+pub(super) fn mine(ts: &TransitionSystem, rules: &[usize]) -> Vec<Mined> {
     let mut cones = BTreeSet::new();
     for e in ts.entity_ids() {
         cones.insert(ts.target_cone(Target::Entity(e)));
@@ -135,12 +145,16 @@ fn is_row_value(ts: &TransitionSystem, v: VarId) -> bool {
     ) && !matches!(ts.var(v).domain, Domain::Instance { .. })
 }
 
-fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
+fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
     let mut out = Vec::new();
     let mut done: BTreeSet<String> = BTreeSet::new();
-    let mut push = |text: String, f: Formula, out: &mut Vec<(String, Formula)>| {
+    let mut push = |text: String, formula: Formula, out: &mut Vec<Mined>, fine: bool| {
         if done.insert(text.clone()) {
-            out.push((text, f));
+            out.push(Mined {
+                text,
+                formula,
+                fine,
+            });
         }
     };
     let names = |vars: &[VarId]| {
@@ -167,6 +181,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                     all_rows: false,
                 },
                 &mut out,
+                false,
             );
         }
         for (i, a) in vars.iter().enumerate() {
@@ -184,6 +199,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                         all_rows: false,
                     },
                     &mut out,
+                    false,
                 );
             }
             for (j, b) in vars.iter().enumerate().skip(i + 1) {
@@ -202,6 +218,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                             all_rows: false,
                         },
                         &mut out,
+                        false,
                     );
                 }
             }
@@ -211,18 +228,35 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
         let VarKind::Owner { child, parent, .. } = ts.var(*o).kind else {
             continue;
         };
-        // The whole parent pattern, then each parent column alone: a parent with many
-        // columns reaches too many whole pairs to list.
-        let mut views: Vec<(Vec<VarId>, Pairs)> = vec![(pvars.clone(), pairs.clone())];
+        // The whole patterns, then each parent column with the whole child, then one column
+        // of each: a row with many columns reaches too many whole pairs to list, and one
+        // column of each keeps the fact a step preserves when the rest of the row does not.
+        let mut views: Vec<(Vec<VarId>, Vec<VarId>, Pairs, bool)> =
+            vec![(cvars.clone(), pvars.clone(), pairs.clone(), false)];
         for (j, pv) in pvars.iter().enumerate() {
             let projected = pairs
                 .iter()
                 .map(|(cp, pp)| (cp.clone(), vec![pp[j]]))
                 .collect();
-            views.push((vec![*pv], projected));
+            views.push((cvars.clone(), vec![*pv], projected, false));
+            for (i, cv) in cvars.iter().enumerate() {
+                let projected = pairs
+                    .iter()
+                    .map(|(cp, pp)| (vec![cp[i]], vec![pp[j]]))
+                    .collect();
+                views.push((vec![*cv], vec![*pv], projected, true));
+            }
         }
-        for (pvars, pairs) in views {
-            if pairs.len() > PATTERN_CAP || (cvars.is_empty() && pvars.is_empty()) {
+        for (cvars, pvars, pairs, is_fine) in views {
+            let full = cvars
+                .iter()
+                .chain(&pvars)
+                .map(|v| ts.var(*v).domain.size(ts.bounds))
+                .product::<usize>();
+            if pairs.len() > PATTERN_CAP
+                || pairs.len() >= full
+                || (cvars.is_empty() && pvars.is_empty())
+            {
                 continue;
             }
             let linked = Pred::Cmp(
@@ -237,7 +271,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                 .iter()
                 .map(|(cp, pp)| {
                     Pred::And(vec![
-                        one_of(cvars, &BTreeSet::from([cp.clone()]), 0),
+                        one_of(&cvars, &BTreeSet::from([cp.clone()]), 0),
                         one_of(&pvars, &BTreeSet::from([pp.clone()]), 1),
                     ])
                 })
@@ -249,7 +283,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                     ts.entity(parent).id,
                     ts.var_name(*o),
                     pairs.len(),
-                    names(cvars),
+                    names(&cvars),
                     names(&pvars)
                 ),
                 Formula {
@@ -258,6 +292,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                     all_rows: false,
                 },
                 &mut out,
+                is_fine,
             );
         }
     }
@@ -312,6 +347,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<(String, Formula)> {
                 all_rows: false,
             },
             &mut out,
+            false,
         );
     }
     out

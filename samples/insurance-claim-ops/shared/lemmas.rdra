@@ -1,0 +1,12 @@
+module shared.lemmas
+
+import shared.entities
+
+// Lemmas for `verify --prove`: facts that rule out the states a counterexample to induction
+// starts from. `check` checks them; `verify` runs no TLC cone for them. This file loads last,
+// so the rules of the other files keep their names.
+
+// A liability case completes no claim before negotiation, so a case between
+// OpenSettlement's two steps has no completed claim for its new settlement to break
+// 「賠償の請求は示談書がそろってから完了する」.
+forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (received, responded, investigating), ClaimCase.coverage in (bodily_liability, property_liability)).along(Claim, ClaimCase).label("賠償責任の事故は示談交渉の前に請求を完了しない").lemma()

@@ -621,8 +621,10 @@ rules and lemmas that is inductive together (the Houdini algorithm):
   deleted, and a present row's key never names an absent row.
 - What BFS shows on each entity cone and each rule's cone at the run's bounds: the
   patterns a present row takes, the values of each column and of each pair of columns,
-  the patterns a child row takes with the parent its key names (whole, and per parent
-  column), and the pairs of patterns two children of one parent take.
+  the patterns a child row takes with the parent its key names (whole, per parent column,
+  and one column of each), and the pairs of patterns two children of one parent take. The
+  pairs of one column of each are many on a model with many columns, so they join only
+  when a rule stays unproved without them, and the proof runs once more.
 
 A lemma is only a guess until it survives the same checks, so a capped exploration costs
 proofs, not soundness. The lemmas a proof kept print as `lemma:` lines.
@@ -634,14 +636,27 @@ When no mined lemma rules a CTI's state out, write the missing fact as a rule wi
 invariant(Order).when(status == placed).none(Shipment).label("a placed order has no shipment yet").lemma()
 ```
 
-A rule marked `.lemma()` is an ordinary rule to every engine: `check` and `verify` check it,
-so a wrong lemma fails with a trace before it can help a proof. In the proof it is one more
-candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
+A rule marked `.lemma()` is checked by `check` like any rule, so a wrong lemma fails there
+with a trace. `verify` runs no TLC cone for a lemma: the proof keeps a lemma only when it
+proves it, so a wrong one never helps a proof, and a lemma that reads two large cones would
+join them into one far larger cone. In the proof a lemma is one more candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
 `proof: your lemmas: ...` line counts it apart from the rules, so it never counts toward the
-`n of m rules` of the `OK:` line. A lemma reads only what a rule reads: a CTI that turns on a
-split use case's run mark (`_run_<UseCase>`) or an event mark (`_raised_<Event>`) needs a
-fact the DSL cannot state. The one rule of the domain samples that stays unproved,
-insurance-claim-ops' 「賠償の請求は示談書がそろってから完了する」, is such a case.
+`n of m rules` of the `OK:` line.
+
+A lemma reads only what a rule reads, so it cannot name a split use case's run mark
+(`_run_<UseCase>`) or an event mark (`_raised_<Event>`). A CTI that turns on a mark usually
+has a fact about columns behind it, one step earlier. Find it by following the CTIs back.
+insurance-claim-ops' 「賠償の請求は示談書がそろってから完了する」 is an example. Its CTI is a
+case between OpenSettlement's two steps (`_run_OpenSettlement=1`) with a completed claim. A
+lemma about cases in `investigating` breaks one step earlier, at RequestInvestigation, from
+`responded`. Generalizing over every status before negotiation gives the lemma below. With it,
+the mined lemmas that pair one column of a claim with one column of its case become
+inductive, and together they rule the CTI out, so the rule is proved. Neither the lemma nor
+those mined pairs prove it alone:
+
+```rdra
+forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (received, responded, investigating), ClaimCase.coverage in (bodily_liability, property_liability)).along(Claim, ClaimCase).label("賠償責任の事故は示談交渉の前に請求を完了しない").lemma()
+```
 
 ```
 proof (Z3 version 4.8.12 - 64 bit): 2 state rules, for any number of rows and any Int value
@@ -683,7 +698,7 @@ an obligation the use cases already discharge, for any number of rows.
 
 `--prove` reads the state rules only. After-asserts and temporal properties are not tried.
 The result does not change the exit status unless `--deny-unproved` is given. Every rule of
-the domain samples proves except the insurance-claim-ops rule named above.
+the domain samples proves, insurance-claim-ops' with the lemma above.
 `tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS
 counterexample at one, two, or three instances.
 

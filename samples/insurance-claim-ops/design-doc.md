@@ -3265,6 +3265,7 @@ erDiagram
 | condition | 保険金を支払った請求で、まだ求償していない | Claim | (Claim.status == 支払済).none(Subrogation) | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:59 |
 | forbidden | 支払後に求償権が移る | Subrogation\|Claim | Claim.status != 支払済 |  | samples/insurance-claim-ops/buc/buc_subrogation.rdra:125 |
 | after | 求償は保険金を支払った請求についてだけ始める | Claim | Claim.status == 支払済 | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:127 |
+| forbidden | 賠償責任の事故は示談交渉の前に請求を完了しない | Claim\|ClaimCase | Claim.completed_on == present AND ClaimCase.status in (事故受付, 初期対応済, 調査中) AND ClaimCase.coverage in (対人賠償, 対物賠償) |  | samples/insurance-claim-ops/shared/lemmas.rdra:12 |
 
 ## 6. CRUD と権限
 
