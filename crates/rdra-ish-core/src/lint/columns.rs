@@ -1,6 +1,6 @@
 //! Column and enum attribute lint rules.
 
-use crate::model::{ColumnType, SemanticModel};
+use crate::model::{ColumnType, Reader, SemanticModel};
 
 use super::naming::is_snake_caseish;
 use super::{push_element_lint, LintIssue, LintSeverity};
@@ -157,20 +157,36 @@ pub(super) fn lint_redundant_end_values(model: &SemanticModel, issues: &mut Vec<
     }
 }
 
-/// A declared query shape that no key or `@index` serves: the index it wants, as the
-/// `@index(...)` that declares it. One finding per index, at the first read it serves.
+/// A lookup that no key or `@index` serves: a declared read, a timer's use case that finds
+/// rows by their state, or a `.has` / `.none` over a large entity. Names the index it wants,
+/// as the `@index(...)` that declares it; one finding per index, at the first reader. An
+/// entity whose `rows` is below `SMALL_TABLE_ROWS` draws none: a scan is cheap.
 pub(super) fn lint_query_indexes(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     for suggestion in model.index_suggestions() {
+        if suggestion.is_small() {
+            continue;
+        }
         let entity = &model.entities[suggestion.entity];
         let columns: Vec<String> = suggestion
             .columns
             .iter()
             .map(|k| k.column.clone())
             .collect();
-        let readers: Vec<&str> = suggestion
-            .queries
+        let readers: Vec<String> = suggestion
+            .readers
             .iter()
-            .filter_map(|&i| model.node_id(&model.queries[i].source))
+            .map(|r| match r {
+                Reader::Query(_) => format!("the read by {}", model.reader_name(r)),
+                Reader::Batch { column, from, .. } => format!(
+                    "{} (a timer starts it) finding the rows at {column} {}",
+                    model.reader_name(r),
+                    match from.as_slice() {
+                        [one] => format!("== {one}"),
+                        many => format!("in ({})", many.join(", ")),
+                    }
+                ),
+                Reader::Quantifier { on } => format!("the .has/.none of {on}"),
+            })
             .collect();
         let shown: Vec<String> = suggestion
             .columns
@@ -195,14 +211,14 @@ pub(super) fn lint_query_indexes(model: &SemanticModel, issues: &mut Vec<LintIss
             "entity",
             &entity.id,
             format!(
-                "no index of {} serves the read by {}: it wants ({}), so its rows are found by a full scan",
+                "no index of {} serves {}: it wants ({}), so its rows are found by a full scan",
                 entity.id,
                 readers.join(", "),
                 shown.join(", ")
             ),
             hint,
         );
-        if let Some(site) = model.queries[suggestion.queries[0]].site.clone() {
+        if let Some(site) = model.reader_site(&suggestion.readers[0]) {
             issue = issue.with_location(site);
         }
         issues.push(issue);

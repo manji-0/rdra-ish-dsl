@@ -284,6 +284,8 @@ pub struct InstanceDecl {
     pub usecase: UseCaseMetadata,
     /// `table "orders"`: an entity's physical table name.
     pub table: Option<std::string::String>,
+    /// `rows 1000000`: an entity's expected row count, as written.
+    pub rows: Option<std::string::String>,
     /// `(clause keyword, value)` for each metadata value (and the description) written as a
     /// bare token rather than a quoted string, so `fmt` writes it back the same way.
     pub bare_values: Vec<(std::string::String, std::string::String)>,

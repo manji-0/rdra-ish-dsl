@@ -179,6 +179,9 @@ pub struct Entity {
     pub indexes: Vec<Vec<std::string::String>>,
     /// `table "orders"`: the physical table name; `None` is the entity id.
     pub table: Option<std::string::String>,
+    /// `rows 1000000`: the rows the entity is expected to hold, which decides whether a
+    /// read of it wants an index.
+    pub rows: Option<u64>,
 }
 
 impl Entity {

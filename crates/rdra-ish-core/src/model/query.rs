@@ -1,6 +1,6 @@
 //! Query shapes declared on `reads(UseCase | Api, Entity)` and the indexes they want.
 
-use super::{EntityKey, NodeRef, RelKind, SemanticModel};
+use super::{CrossEntityCondition, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
 
 /// `reads(Source, Entity).by(...).order(...).page(...)` with an optional `.count()` or
 /// `.sum(column)`: what a read filters on, how it sorts, and how it pages.
@@ -37,7 +37,32 @@ pub enum Aggregate {
     Sum(String),
 }
 
-/// An index that serves one or more queries, and that no key or `@index` already gives.
+/// Fewer rows than this and a scan is as cheap as an index: `query-index-missing` keeps
+/// quiet about an entity whose `rows` says so.
+pub const SMALL_TABLE_ROWS: u64 = 10_000;
+
+/// At least this many rows and the rows of one parent are many too: a `.has` / `.none` that
+/// filters them wants the filter in the index, not the key alone.
+pub const LARGE_TABLE_ROWS: u64 = 1_000_000;
+
+/// What looks rows up, and so wants an index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Reader {
+    /// `SemanticModel::queries[i]`: a declared `reads(...).by(...)`.
+    Query(usize),
+    /// A use case a timer starts, which moves every row at one of `from` of the entity: the
+    /// rows are found by their state, not picked by a person.
+    Batch {
+        usecase: UseCaseKey,
+        column: String,
+        from: Vec<String>,
+    },
+    /// A `.has(...)` / `.none(...)` that reads the rows of one parent that match its
+    /// comparisons: on a guard (`holds`) or on a rule, by the name it is written under.
+    Quantifier { on: String },
+}
+
+/// An index that serves one or more readers, and that no key or `@index` already gives.
 #[derive(Debug, Clone)]
 pub struct IndexSuggestion {
     pub entity: EntityKey,
@@ -45,8 +70,27 @@ pub struct IndexSuggestion {
     pub columns: Vec<OrderKey>,
     /// How many leading columns are compared for equality; the rest are the sort.
     pub equal: usize,
-    /// Indices into `SemanticModel::queries` it serves.
-    pub queries: Vec<usize>,
+    /// What it serves, declared reads first.
+    pub readers: Vec<Reader>,
+    /// The entity's `rows`, when it says.
+    pub rows: Option<u64>,
+}
+
+impl IndexSuggestion {
+    /// An entity declared smaller than `SMALL_TABLE_ROWS`: a scan is cheap.
+    pub fn is_small(&self) -> bool {
+        self.rows.is_some_and(|n| n < SMALL_TABLE_ROWS)
+    }
+}
+
+/// One lookup a reader makes: the entity, its equality columns, its sort, and, for a
+/// lookup through a key, the key columns an index must lead with to serve it alone.
+struct Want {
+    reader: Reader,
+    entity: EntityKey,
+    equal: Vec<String>,
+    order: Vec<OrderKey>,
+    key: Option<Vec<String>>,
 }
 
 /// A column a read selects, and the response field that carries it.
@@ -178,55 +222,216 @@ impl SemanticModel {
         sets
     }
 
-    /// The indexes the declared query shapes want and the schema does not have, in query
-    /// order. A query an existing index or another suggestion serves adds none.
-    pub fn index_suggestions(&self) -> Vec<IndexSuggestion> {
-        let mut out: Vec<IndexSuggestion> = Vec::new();
-        let wanted: Vec<(Vec<String>, Vec<OrderKey>)> =
-            self.queries.iter().map(|q| q.wanted_index(self)).collect();
-        // Longest first, so a shorter shape lands on the index a longer one asks for.
-        let mut order: Vec<usize> = (0..self.queries.len()).collect();
-        order.sort_by_key(|&i| std::cmp::Reverse(wanted[i].0.len() + wanted[i].1.len()));
-        for i in order {
-            let (equal, sort) = &wanted[i];
-            if equal.is_empty() && sort.is_empty() {
+    /// The name a reader goes by: a use case's id, or the rule or condition a quantifier is
+    /// written on.
+    pub fn reader_name(&self, reader: &Reader) -> String {
+        match reader {
+            Reader::Query(i) => self
+                .node_id(&self.queries[*i].source)
+                .unwrap_or("?")
+                .to_string(),
+            Reader::Batch { usecase, .. } => self.use_cases[*usecase].id.clone(),
+            Reader::Quantifier { on } => on.clone(),
+        }
+    }
+
+    /// Where a reader is written, when the model knows.
+    pub fn reader_site(&self, reader: &Reader) -> Option<crate::location::LocatedSpan> {
+        match reader {
+            Reader::Query(i) => self.queries[*i].site.clone(),
+            Reader::Batch {
+                usecase, column, ..
+            } => self
+                .state_transitions
+                .iter()
+                .find(|t| t.usecase == *usecase && t.column == *column)
+                .and_then(|t| t.site.clone()),
+            Reader::Quantifier { .. } => None,
+        }
+    }
+
+    /// Every lookup that wants an index: each declared read, each state a timer's use case
+    /// moves rows off, and each `.has` / `.none` on a guard or a rule.
+    fn wants(&self) -> Vec<Want> {
+        let mut wants: Vec<Want> = self
+            .queries
+            .iter()
+            .enumerate()
+            .map(|(i, q)| {
+                let (equal, order) = q.wanted_index(self);
+                Want {
+                    reader: Reader::Query(i),
+                    entity: q.entity,
+                    equal,
+                    order,
+                    key: None,
+                }
+            })
+            .collect();
+        let timer_started: Vec<UseCaseKey> = self
+            .relations
+            .iter()
+            .filter_map(|rel| match (&rel.kind, &rel.from, &rel.to) {
+                (RelKind::Triggers, NodeRef::Timer(_), NodeRef::UseCase(uc)) => Some(*uc),
+                _ => None,
+            })
+            .collect();
+        for t in &self.state_transitions {
+            if !timer_started.contains(&t.usecase) {
                 continue;
             }
-            let entity = self.queries[i].entity;
-            if self
-                .existing_indexes(entity)
+            // The arms of one use case on one column are one lookup, by every state they leave.
+            let same = |w: &&mut Want| {
+                matches!(&w.reader, Reader::Batch { usecase, column, .. }
+                    if *usecase == t.usecase && *column == t.column)
+            };
+            if let Some(w) = wants.iter_mut().find(same) {
+                if let Reader::Batch { from, .. } = &mut w.reader {
+                    if !from.contains(&t.from) {
+                        from.push(t.from.clone());
+                    }
+                }
+                continue;
+            }
+            let reader = Reader::Batch {
+                usecase: t.usecase,
+                column: t.column.clone(),
+                from: vec![t.from.clone()],
+            };
+            let mut equal: Vec<String> = self.entities[t.entity]
+                .columns
                 .iter()
-                .any(|idx| serves(idx, equal, sort))
-            {
+                .filter(|c| c.is_tenant_scope)
+                .map(|c| c.name.clone())
+                .collect();
+            if !equal.contains(&t.column) {
+                equal.push(t.column.clone());
+            }
+            wants.push(Want {
+                reader,
+                entity: t.entity,
+                equal,
+                order: Vec::new(),
+                key: None,
+            });
+        }
+        let mut quantified = Vec::new();
+        for c in self.conditions.values() {
+            if let Some(body) = &c.body {
+                let from: Vec<EntityKey> = body.conds.iter().filter_map(condition_entity).collect();
+                for q in &body.quantifiers {
+                    quantified.push((c.id.clone(), from.clone(), q));
+                }
+            }
+        }
+        for (i, rule) in self.quantifier_constraints.iter().enumerate() {
+            let name = format!("Quantifier_{}_{i}", self.entities[rule.anchor].id);
+            quantified.push((name, vec![rule.anchor], &rule.quantifier));
+        }
+        for (on, from, q) in quantified {
+            // The related rows of one row of `from`, through the key the related entity holds;
+            // a quantifier over a parent reads one row by its primary key.
+            let Some(fk) = self
+                .foreign_keys()
+                .map(|(_, fk)| fk)
+                .find(|fk| fk.child == q.related && from.contains(&fk.parent))
+            else {
+                continue;
+            };
+            let key: Vec<String> = fk.columns.iter().map(|(c, _)| c.clone()).collect();
+            let mut equal = key.clone();
+            for cond in &q.conditions {
+                if let CrossEntityCondition::Equals { column, .. } = cond {
+                    if column.entity == q.related && !equal.contains(&column.column) {
+                        equal.push(column.column.clone());
+                    }
+                }
+            }
+            if equal.len() == key.len() {
+                continue;
+            }
+            wants.push(Want {
+                reader: Reader::Quantifier { on },
+                entity: q.related,
+                equal,
+                order: Vec::new(),
+                key: Some(key),
+            });
+        }
+        wants
+    }
+
+    /// The indexes the lookups want and the schema does not have: declared reads first, in
+    /// query order, then batch moves and quantifiers. A lookup an existing index or another
+    /// suggestion serves adds none. A quantifier reads one parent's rows, which an index
+    /// that leads with its key serves, unless the related entity declares
+    /// `LARGE_TABLE_ROWS` or more.
+    pub fn index_suggestions(&self) -> Vec<IndexSuggestion> {
+        let wants = self.wants();
+        let mut out: Vec<IndexSuggestion> = Vec::new();
+        // Longest first, so a shorter shape lands on the index a longer one asks for.
+        let mut order: Vec<usize> = (0..wants.len()).collect();
+        order.sort_by_key(|&i| std::cmp::Reverse(wants[i].equal.len() + wants[i].order.len()));
+        for i in order {
+            let w = &wants[i];
+            if w.equal.is_empty() && w.order.is_empty() {
+                continue;
+            }
+            let rows = self.entities[w.entity].rows;
+            let existing = self.existing_indexes(w.entity);
+            let by_key = w.key.as_ref().is_some_and(|key| {
+                rows.is_none_or(|n| n < LARGE_TABLE_ROWS)
+                    && existing.iter().any(|idx| {
+                        idx.len() >= key.len()
+                            && idx[..key.len()].iter().all(|k| key.contains(&k.column))
+                    })
+            });
+            if by_key || existing.iter().any(|idx| serves(idx, &w.equal, &w.order)) {
                 continue;
             }
             if let Some(s) = out
                 .iter_mut()
-                .find(|s| s.entity == entity && serves(&s.columns, equal, sort))
+                .find(|s| s.entity == w.entity && serves(&s.columns, &w.equal, &w.order))
             {
-                s.queries.push(i);
+                s.readers.push(w.reader.clone());
                 continue;
             }
-            let mut columns: Vec<OrderKey> = equal
+            let mut columns: Vec<OrderKey> = w
+                .equal
                 .iter()
                 .map(|c| OrderKey {
                     column: c.clone(),
                     desc: false,
                 })
                 .collect();
-            columns.extend(sort.iter().cloned());
+            columns.extend(w.order.iter().cloned());
             out.push(IndexSuggestion {
-                entity,
+                entity: w.entity,
                 columns,
-                equal: equal.len(),
-                queries: vec![i],
+                equal: w.equal.len(),
+                readers: vec![w.reader.clone()],
+                rows,
             });
         }
+        let rank = |r: &Reader| {
+            wants
+                .iter()
+                .position(|w| w.reader == *r)
+                .unwrap_or(usize::MAX)
+        };
         for s in &mut out {
-            s.queries.sort_unstable();
+            s.readers.sort_by_key(rank);
         }
-        out.sort_by_key(|s| s.queries[0]);
+        out.sort_by_key(|s| rank(&s.readers[0]));
         out
+    }
+}
+
+/// The entity a guard comparison reads.
+fn condition_entity(cond: &CrossEntityCondition) -> Option<EntityKey> {
+    match cond {
+        CrossEntityCondition::Equals { column, .. } => Some(column.entity),
+        CrossEntityCondition::Comparison(c) => Some(c.lhs.entity),
     }
 }
 

@@ -3166,8 +3166,8 @@ erDiagram
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | Claim | 保険金請求 | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Claim | 保険金請求 | completed_on | Date | false | false | false | false |  | false |  |  | true |  |  | false | false | false |  |
-| Claim | 保険金請求 | status | Enum | false | false | false | false |  | false |  |  | false | guided |  | false | false | false |  |
-| Claim | 保険金請求 | period | Enum | false | false | false | false |  | false |  |  | false | not_started |  | false | false | false |  |
+| Claim | 保険金請求 | status | Enum | false | false | true | false |  | false |  |  | false | guided |  | false | false | false |  |
+| Claim | 保険金請求 | period | Enum | false | false | true | false |  | false |  |  | false | not_started |  | false | false | false |  |
 | Claim | 保険金請求 | extension | ExtensionReason | false | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
 | Claim | 保険金請求 | grade_explained | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
 | Claim | 保険金請求 | fraud_suspected | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
@@ -3208,7 +3208,7 @@ erDiagram
 | Settlement | 示談（示談代行） | victim_consent | Bool | false | false | false | false |  | false |  |  | false | false |  | false | false | false |  |
 | Settlement | 示談（示談代行） | claimcase_id | Int | false | true | false | true | ClaimCase | false |  |  | false |  |  | false | false | false |  |
 | Subrogation | 求償（請求権代位） | id | Int | true | false | false | false |  | false |  |  | false |  |  | false | false | false |  |
-| Subrogation | 求償（請求権代位） | status | Enum | false | false | false | false |  | false |  |  | false | open |  | false | false | false |  |
+| Subrogation | 求償（請求権代位） | status | Enum | false | false | true | false |  | false |  |  | false | open |  | false | false | false |  |
 | Subrogation | 求償（請求権代位） | claim_id | Int | false | true | false | true | Claim | false |  |  | false |  |  | false | false | false |  |
 
 </details>

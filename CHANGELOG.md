@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- An entity takes a `rows` estimate (`rows 5000`, `rows "1e6"`); a value that is not a
+  whole number is `InvalidRowEstimate`. `lint` `query-index-missing` skips an entity under
+  10,000 rows, and the SQL export marks its suggested index as a small table.
+- Index suggestions cover the lookups the model implies, not only declared `reads`: a use
+  case a `timer` triggers finds the rows at the states its `transitions` move off, and a
+  `.has` / `.none` over an entity of 1,000,000 rows or more reads by the foreign key and
+  the columns it compares. Both appear in `lint` `query-index-missing` and in the SQL
+  export's index comments. The food-permit and insurance-claim samples declare `@index` on
+  the state columns their timers sweep.
+
 ### Changed
 
 - Skill `rdra-ish-diagram` says how to lay out a PRD and a design document from the model

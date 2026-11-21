@@ -266,6 +266,9 @@ pub enum RdraError {
     #[error("`.references({columns})` names columns of '{parent}' that are neither its primary key nor one of its unique sets\n  hint: mark them `@unique` (or `@unique(a, b)`) on '{parent}', or drop `.references` to refer to its primary key")]
     ReferencesNotUnique { parent: String, columns: String },
 
+    #[error("entity '{entity}': `rows {written}` is not a row count\n  hint: write a whole number, such as `rows 1000000` or `rows \"1e6\"`")]
+    InvalidRowEstimate { entity: String, written: String },
+
     #[error(
         "column '{col}' of '{entity}': `{written}` is not a type this column takes\n  hint: {hint}"
     )]

@@ -92,6 +92,7 @@ fn register_instance_populates_each_node_store_and_symbol_table() {
         field: FieldMetadata::default(),
         usecase: UseCaseMetadata::default(),
         table: None,
+        rows: None,
         bare_values: Vec::new(),
         columns: vec![Column {
             name: "id".to_string(),

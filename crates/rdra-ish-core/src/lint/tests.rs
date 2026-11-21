@@ -610,3 +610,30 @@ fn a_read_no_index_serves_is_a_query_index_missing_warning() {
     );
     assert!(issues[0].location.is_some());
 }
+
+#[test]
+fn a_timer_sweep_warns_unless_the_table_is_small() {
+    let source = |rows: &str| {
+        format!(
+            "entity Ticket \"Ticket\"{rows} {{\n  id: Int @pk\n  state: Enum(open, closed)\n}}\ntimer Tick \"tick\"\nusecase Sweep \"sweep\"\ntriggers(Tick, Sweep)\ntransitions(Sweep, Ticket.state, open -> closed)\n"
+        )
+    };
+    let missing = |rows: &str| -> Vec<_> {
+        lint_issues(&model_from(&source(rows)), &[])
+            .into_iter()
+            .filter(|i| i.rule == "query-index-missing")
+            .collect()
+    };
+    let issues = missing("");
+    assert_eq!(issues.len(), 1, "{issues:?}");
+    assert!(
+        issues[0]
+            .message
+            .contains("Sweep (a timer starts it) finding the rows at state == open"),
+        "{}",
+        issues[0].message
+    );
+    assert_eq!(issues[0].hint, "declare `@index(state)` on Ticket");
+    assert!(missing(" rows 9999").is_empty());
+    assert_eq!(missing(" rows 10000").len(), 1);
+}

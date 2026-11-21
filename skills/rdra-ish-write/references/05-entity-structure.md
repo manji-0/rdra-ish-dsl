@@ -77,7 +77,10 @@ Also ask:
    or `.count()` / `.sum(total)` for a total. A shape that does not fit, such as
    `.page(cursor)` without `.order`, is `InvalidQueryShape`. `lint` `query-index-missing`
    then names the `@index(...)` the read wants, and `export --kind sql` writes the
-   suggested indexes and each read's `SELECT` as comments.
+   suggested indexes and each read's `SELECT` as comments. It also warns at a use case a
+   `timer` triggers that finds rows by their state, and at a `.has` / `.none` over an
+   entity of a million rows or more. Give an entity `rows 5000` (or `rows "1e6"`) when its
+   size is known: under 10,000 rows the warning is skipped, since a scan is cheap.
 6. Add `owns(System, Entity)` only when intended ownership must be visible before
    complete API CRUD exists; otherwise derive ownership from API operations.
 7. If a relation crosses two derived system entity sets, add or review
@@ -148,8 +151,9 @@ rdra-ish export src/ --kind json-schema --out out/json-schema.json
   metadata are visible in list/export output when modeled. On an entity with a
   `@soft_delete` column, the SQL export makes each declared unique set a partial unique
   index over live rows, so a deleted row frees its value.
-- Each declared read shape is served by a key or an `@index`, or `query-index-missing` is
-  reviewed.
+- Each declared read shape, each timer-started sweep by state, and each `.has` / `.none`
+  over a large entity is served by a key or an `@index`, or `query-index-missing` is
+  reviewed. Small and large entities carry a `rows` estimate.
 - Cross-system relations are coordinated or explicitly marked as unresolved.
 - Explicit ownership warnings from `owns` are reviewed.
 - The API matrix and the transaction warnings of `check` still agree with the entity

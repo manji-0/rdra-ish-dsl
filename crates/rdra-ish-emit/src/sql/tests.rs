@@ -288,6 +288,28 @@ fn declared_reads_become_suggested_indexes_and_selects() {
     assert!(!sql(SHOP, Dialect::Postgres).contains("Reads the model declares"));
 }
 
+/// A timer's sweep with no declared read still gets its index comment, and a small
+/// table says why a scan will do.
+#[test]
+fn a_timer_sweep_suggests_an_index_and_a_small_table_says_so() {
+    let source = |rows: &str| {
+        format!(
+            "entity Ticket \"Ticket\"{rows} {{\n  id: Int @pk\n  state: Enum(open, closed)\n}}\ntimer Tick \"tick\"\nusecase Sweep \"sweep\"\ntriggers(Tick, Sweep)\ntransitions(Sweep, Ticket.state, open -> closed)\n"
+        )
+    };
+    let out = sql(&source(""), Dialect::Postgres);
+    assert!(
+        out.contains("-- CREATE INDEX \"Ticket_state_idx\" ON \"Ticket\" (\"state\"); -- Sweep\n"),
+        "{out}"
+    );
+    assert!(!out.contains("Reads the model declares"), "{out}");
+    let small = sql(&source(" rows 500"), Dialect::Postgres);
+    assert!(
+        small.contains("-- Sweep, small table, 500 rows: a scan is cheap\n"),
+        "{small}"
+    );
+}
+
 /// A read by an API selects the columns its response fields map, under the field names.
 #[test]
 fn a_read_by_an_api_selects_its_mapped_response_fields() {

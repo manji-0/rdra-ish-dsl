@@ -125,7 +125,7 @@ entity BusinessPermit "営業許可" {
   permit_no: String
   business_type: PermitBusinessType
   valid_until: Date
-  status: Enum(valid "有効", suspended "営業停止中", expired "失効（有効期間満了）", revoked "取消", closed "廃業") @default(valid)
+  status: Enum(valid "有効", suspended "営業停止中", expired "失効（有効期間満了）", revoked "取消", closed "廃業") @default(valid) @index
   operating: Bool @default(false)
   certificate_issued: Bool @default(false)
   // 申請の時点で食品衛生責任者の選定が完了していない…場合にあっては、営業の許可後速やかに
@@ -180,12 +180,12 @@ entity Disposition "不利益処分" {
   id: Int @pk
   kind: DispositionKind
   procedure: OpinionProcedure
-  status: Enum(proposed "処分案", notified "意見陳述の通知済", heard "意見陳述の手続終了", decided "処分決定", finalized "確定（審査請求期間の経過）", dropped "処分しない") @default(proposed)
+  status: Enum(proposed "処分案", notified "意見陳述の通知済", heard "意見陳述の手続終了", decided "処分決定", finalized "確定（審査請求期間の経過）", dropped "処分しない") @default(proposed) @index
   // 不利益処分の理由を示さなければならない (egov-gyousei-tetsuzukihou-405AC0000000088.txt:231).
   reason_shown: Bool @default(false)
   // この法律に基づく処分に違反した者の名称等を公表し (egov-shokuhin-eiseihou-322AC0000000233.txt:473):
   // a disposition not made has no violation to publish.
-  publication: Enum(unpublished "未公表", published "公表中", ended "公表終了", excluded "公表対象外") @default(unpublished)
+  publication: Enum(unpublished "未公表", published "公表中", ended "公表終了", excluded "公表対象外") @default(unpublished) @index
 }
 
 // ER relationships
