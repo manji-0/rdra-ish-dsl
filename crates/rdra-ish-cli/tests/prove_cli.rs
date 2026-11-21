@@ -282,3 +282,20 @@ fn a_rule_the_sql_schema_leaves_to_the_application_says_so() {
         "{stdout}"
     );
 }
+
+#[test]
+fn a_cti_shows_the_run_mark_its_step_reads() {
+    if !have("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    // Pay runs in two steps; step 1 reads and sets the Payment's run mark, which no view
+    // column shows. The CTI prints it before the step as well as after.
+    let out = verify(&["--prove", &sample("cross_order_payment_split")]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.starts_with("  Payment#") && l.contains("_run_Pay=none -> ")),
+        "{stdout}"
+    );
+}

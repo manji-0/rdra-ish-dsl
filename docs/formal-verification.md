@@ -657,7 +657,8 @@ OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for a
 ```
 
 A rule that is not proved prints a **counterexample to induction** (CTI): a step, the rows
-it binds, and the rule's rows, before and after. The state before holds the rule and every
+it binds, and the rule's rows, before and after. A run mark (`_run_<UseCase>`) or an event
+mark (`_raised_<Event>`) the step or the rule reads is printed with the columns. The state before holds the rule and every
 kept lemma, but it need not be reachable. It shows which fact a lemma would have to add:
 
 ```

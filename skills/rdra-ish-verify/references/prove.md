@@ -45,7 +45,9 @@ proof: 0 proved, 1 unproved, 0 out of scope
 
 A CTI is one step from a state where the rule and every kept lemma hold. The first line
 names the step and the rows it binds. Each indented line is one row: its existence, its
-columns before the step, and after `->` what the step changed. The rule's own rows are
+columns before the step, and after `->` what the step changed. A split use case's run mark
+(`_run_<UseCase>`) or an event mark (`_raised_<Event>`) shows too when the step or the rule
+reads it. The rule's own rows are
 listed too.
 
 **The state before the step need not be reachable.** Decide which case it is:
