@@ -61,7 +61,7 @@ pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBu
     let out_path = if out.extension().is_some() {
         out.clone()
     } else {
-        out.with_extension(ext.trim_start_matches("*."))
+        out.with_extension(ext)
     };
 
     fs::write(&out_path, &csv_content)
