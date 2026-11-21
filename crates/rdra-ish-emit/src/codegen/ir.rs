@@ -259,8 +259,8 @@ pub enum MarkSource {
 pub struct RowParam {
     /// snake_case.
     pub name: String,
-    /// The action param this row binds.
-    pub param: usize,
+    /// The action param this row binds; none for a row a quantifier or a validator binds.
+    pub param: Option<usize>,
     /// For a state type: the tag column and the source state.
     pub state: Option<(String, String)>,
     pub entity: String,

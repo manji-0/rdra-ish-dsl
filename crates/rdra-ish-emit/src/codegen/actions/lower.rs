@@ -125,7 +125,7 @@ pub(super) fn function(
         row_of.insert(p, rows.len());
         rows.push(RowParam {
             name: fresh(base, &mut taken),
-            param: p,
+            param: Some(p),
             state: picked[p].variant.and_then(|v| {
                 let tag = match declared.get(&entity_id(p)) {
                     Some(Declared::Sum(sum)) => sum.tag.wire.clone(),
@@ -257,7 +257,7 @@ pub(super) fn function(
                 Some(Declared::Sum(sum)) => {
                     let value = if param.role == ParamRole::New {
                         let start = match writes.get(&(p, sum.tag.wire.clone())) {
-                            Some(Write::Lit(Lit::Enum { value, .. })) => value.wire.clone(),
+                            Some(Write::Enum(value)) => value.wire.clone(),
                             _ => start_value(ts, action.params[p].entity, &sum.tag.wire)
                                 .ok_or_else(|| unsupported("a created row with no start state"))?,
                         };
@@ -306,7 +306,11 @@ pub(super) fn function(
             let write = writes.get(&(p, target.wire.clone()));
             let assigned = match write {
                 Some(Write::Lit(lit)) => Assigned::Lit {
-                    lit: typed(lit, target).ok_or_else(|| {
+                    lit: lit.clone(),
+                    wrap: target.nullable,
+                },
+                Some(Write::Enum(value)) => Assigned::Lit {
+                    lit: enum_lit(value.clone(), target).ok_or_else(|| {
                         unsupported("an enum value on a column that is not an enum")
                     })?,
                     wrap: target.nullable,

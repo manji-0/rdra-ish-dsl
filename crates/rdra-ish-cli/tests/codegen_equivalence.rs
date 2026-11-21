@@ -284,8 +284,9 @@ fn functions_agree_with_the_transition_system() {
                 f.rows
                     .iter()
                     .map(|r| {
-                        let e = action.params[r.param].entity;
-                        (ts.entity(e).id.clone(), usize::from(params[r.param]))
+                        let param = r.param.expect("a function row binds a param");
+                        let e = action.params[param].entity;
+                        (ts.entity(e).id.clone(), usize::from(params[param]))
                     })
                     .collect()
             };
@@ -442,7 +443,7 @@ fn functions_agree_with_the_transition_system() {
                                 }
                             };
                             let key_parent = match assigned {
-                                Assigned::ParentId { row: r, .. } => Some(f.rows[*r].param),
+                                Assigned::ParentId { row: r, .. } => f.rows[*r].param,
                                 Assigned::MarkId { mark, .. } => Some(f.marks_in[*mark].param),
                                 Assigned::EventId { param, .. } => Some(*param),
                                 _ => None,

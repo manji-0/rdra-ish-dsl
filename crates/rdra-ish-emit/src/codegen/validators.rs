@@ -28,7 +28,7 @@ pub(super) fn add_validators(
             record.id.clone(),
             RowParam {
                 name: "row".to_string(),
-                param: 0,
+                param: None,
                 state: None,
                 entity: record.id.clone(),
                 ty: record.name.clone(),
@@ -44,7 +44,7 @@ pub(super) fn add_validators(
                 sum.entity.clone(),
                 RowParam {
                     name: "row".to_string(),
-                    param: 0,
+                    param: None,
                     state: Some((sum.tag.wire.clone(), v.value.wire.clone())),
                     entity: sum.entity.clone(),
                     ty: v.name.clone(),

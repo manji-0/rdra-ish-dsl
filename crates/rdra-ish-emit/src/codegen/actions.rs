@@ -36,7 +36,7 @@ use guards::{arm_conditions, fold_next, reads_only_created};
 use lower::function;
 pub(super) use pred::{expr, simplify};
 use pred::{remap_lists, Quant};
-use values::{declared_id, input_index, literal, start_literal, start_value, typed, Write};
+use values::{declared_id, enum_lit, input_index, literal, start_literal, start_value, Write};
 
 /// The most functions one action gets; past it the action is skipped.
 const MAX_COMBINATIONS: usize = 16;
@@ -450,7 +450,7 @@ fn functions(
                         if open.len() < 2 || picked[*p].variant.is_none() {
                             continue;
                         }
-                        let Some(r) = f.rows.iter().position(|row| row.param == *p) else {
+                        let Some(r) = f.rows.iter().position(|row| row.param == Some(*p)) else {
                             continue;
                         };
                         let Some(Declared::Sum(sum)) = declared.get(&f.rows[r].entity) else {

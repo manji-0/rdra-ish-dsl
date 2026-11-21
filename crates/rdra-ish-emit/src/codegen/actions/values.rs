@@ -7,6 +7,8 @@ use super::*;
 #[derive(Clone, Debug)]
 pub(super) enum Write {
     Lit(Lit),
+    /// An enum value; its type is the target field's.
+    Enum(EnumValue),
     Null,
     /// A second lifecycle column: `(from, to)` per arm.
     Switch(Vec<(String, String)>),
@@ -21,13 +23,10 @@ pub(super) fn literal(domain: &Domain, value: Value) -> Option<Write> {
     Some(match domain {
         Domain::Enum(values) => {
             let wire = values.get(usize::from(value.0))?.clone();
-            Write::Lit(Lit::Enum {
-                ty: String::new(),
-                value: EnumValue {
-                    ident: type_ident(&wire),
-                    wire,
-                    label: None,
-                },
+            Write::Enum(EnumValue {
+                ident: type_ident(&wire),
+                wire,
+                label: None,
             })
         }
         Domain::Bool => Write::Lit(Lit::Bool(value == Value::TRUE)),
@@ -54,15 +53,7 @@ pub(super) fn start_literal(
     })?;
     let decl = ts.var(var);
     match literal(&decl.domain, decl.base)? {
-        Write::Lit(Lit::Enum { value, .. }) => {
-            let FieldType::Enum(ty) = &target.ty else {
-                return None;
-            };
-            Some(Some(Lit::Enum {
-                ty: ty.clone(),
-                value,
-            }))
-        }
+        Write::Enum(value) => Some(Some(enum_lit(value, target)?)),
         Write::Lit(lit) => Some(Some(lit)),
         Write::Null => Some(None),
         Write::Input | Write::Parent(..) | Write::Switch(_) => None,
@@ -91,15 +82,14 @@ pub(super) fn declared_id(entity: &str, fields: &[Field]) -> Option<(String, Fie
     })
 }
 
-/// A literal typed for its target field: an enum value takes the field's enum type.
-pub(super) fn typed(lit: &Lit, target: &Field) -> Option<Lit> {
-    match (lit, &target.ty) {
-        (Lit::Enum { value, .. }, FieldType::Enum(ty)) => Some(Lit::Enum {
+/// An enum value as a literal of its target field's enum type; none when the field is not an enum.
+pub(super) fn enum_lit(value: EnumValue, target: &Field) -> Option<Lit> {
+    match &target.ty {
+        FieldType::Enum(ty) => Some(Lit::Enum {
             ty: ty.clone(),
-            value: value.clone(),
+            value,
         }),
-        (Lit::Enum { .. }, _) => None,
-        (other, _) => Some(other.clone()),
+        _ => None,
     }
 }
 

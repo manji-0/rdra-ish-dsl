@@ -77,7 +77,7 @@ pub(in crate::codegen) fn expr(
             let k = q.elems.len();
             q.elems.push(RowParam {
                 name: format!("{}_{k}", snake(&id)),
-                param: usize::MAX,
+                param: None,
                 state: None,
                 entity: id,
                 ty,
