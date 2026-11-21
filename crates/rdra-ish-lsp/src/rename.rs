@@ -80,7 +80,9 @@ pub fn workspace_rename(
         return Err(RenameError::Conflict);
     }
 
-    let _ = rename_span_at_offset(ast, text, &target, offset).ok_or(RenameError::NoSymbol)?;
+    if rename_span_at_offset(ast, text, &target, offset).is_none() {
+        return Err(RenameError::NoSymbol);
+    }
 
     let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
     for (source_path, source_text, source_ast) in &analysis.program.sources {

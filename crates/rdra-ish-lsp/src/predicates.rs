@@ -3,22 +3,16 @@
 use rdra_ish_core::predicate_signature;
 
 pub fn format_predicate_signature(pred: &str) -> Option<String> {
-    let sig = predicate_signature(pred)?;
-    let args: Vec<String> = sig
-        .iter()
-        .map(|kinds| {
-            kinds
-                .iter()
-                .filter(|kind| !kind.starts_with('_'))
-                .copied()
-                .collect::<Vec<_>>()
-                .join("|")
-        })
-        .collect();
+    let args = signature_arguments(pred, "|")?;
     Some(format!("{pred}({})", args.join(", ")))
 }
 
 pub fn predicate_signature_parameters(pred: &str) -> Option<Vec<String>> {
+    signature_arguments(pred, " | ")
+}
+
+/// The kinds each argument of `pred` takes, joined by `separator`, without the `_` marker kinds.
+fn signature_arguments(pred: &str, separator: &str) -> Option<Vec<String>> {
     let sig = predicate_signature(pred)?;
     Some(
         sig.iter()
@@ -28,7 +22,7 @@ pub fn predicate_signature_parameters(pred: &str) -> Option<Vec<String>> {
                     .filter(|kind| !kind.starts_with('_'))
                     .copied()
                     .collect::<Vec<_>>()
-                    .join(" | ")
+                    .join(separator)
             })
             .collect(),
     )
