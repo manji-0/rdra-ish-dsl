@@ -4,6 +4,11 @@
 
 ### Added
 
+- `.lemma()` on a `forbidden` or an `invariant` marks a fact written to help
+  `verify --prove`. Every engine checks it as a rule; the proof reports it as
+  `proved: lemma <name>` and counts it apart from the rules (#141). The `rdra-ish-verify`
+  skill gains `references/prove.md`: reading a counterexample to induction and proposing a
+  lemma.
 - `verify --prove` (experimental) tries to prove each state rule for any number of rows with
   z3, as an inductive invariant. Each rule prints `proved:`, `unproved:` with a
   counterexample to induction (a step that breaks the rule from a state where the proved

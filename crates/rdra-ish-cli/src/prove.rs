@@ -1,9 +1,10 @@
 //! `verify --prove`: the rules z3 proves for any number of rows, printed before TLC runs.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
-use rdra_ish_core::lifecycle::prove::{self, Proof, ProveOptions, Unproved, Verdict, Z3};
+use rdra_ish_core::lifecycle::prove::{self, ProveOptions, RuleProof, Unproved, Verdict, Z3};
 use rdra_ish_core::lifecycle::{label_prefix, Selection, Target, TransitionSystem};
 
 /// The env variable that names the z3 binary when `--z3` is not given.
@@ -57,10 +58,13 @@ fn find_z3(z3: Option<PathBuf>) -> Result<PathBuf> {
     );
 }
 
-/// Proves the selected state rules of `ts` and prints one line per rule.
+/// Proves the selected state rules of `ts` and prints one line per rule. `lemmas` are the
+/// rules the model marks `.lemma()`: they are proved like any rule, print as `lemma`, and do
+/// not count among the rules.
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
     selection: &Selection,
+    lemmas: &BTreeSet<usize>,
     z3: Option<PathBuf>,
     deny_unproved: bool,
 ) -> Result<ProofTally> {
@@ -77,46 +81,28 @@ pub(crate) fn run_proof(
     let mut solver = Z3::start(&binary)?;
     let proof = prove::prove(ts, &rules, &mut solver, ProveOptions::default())
         .map_err(|e| anyhow::anyhow!("z3 failed: {e}"))?;
-    print_proof(ts, &proof, &version);
-    Ok(ProofTally {
-        proved: proof.proved(),
-        rules: proof.rules.len(),
-        unproved: proof.unproved(),
-        deny_unproved,
-    })
-}
+    let (yours, rules): (Vec<&RuleProof>, Vec<&RuleProof>) =
+        proof.rules.iter().partition(|r| lemmas.contains(&r.inv));
+    let count =
+        |rs: &[&RuleProof], f: fn(&Verdict) -> bool| rs.iter().filter(|r| f(&r.verdict)).count();
+    let proved = |v: &Verdict| matches!(v, Verdict::Proved);
+    let unproved = |v: &Verdict| matches!(v, Verdict::Unproved(_));
+    let out_of_scope = |v: &Verdict| matches!(v, Verdict::OutOfScope(_));
 
-fn print_proof(ts: &TransitionSystem, proof: &Proof, version: &str) {
-    let solver = match version {
+    let solver = match version.as_str() {
         "" => String::new(),
         v => format!(" ({v})"),
     };
+    let with_lemmas = match yours.len() {
+        0 => String::new(),
+        n => format!(" and {n} of your lemmas"),
+    };
     println!(
-        "proof{solver}: {} state rules, for any number of rows at the same value bounds",
-        proof.rules.len()
+        "proof{solver}: {} state rules{with_lemmas}, for any number of rows at the same value bounds",
+        rules.len()
     );
-    for r in &proof.rules {
-        let inv = &ts.invariants()[r.inv];
-        let name = format!("{}{}", label_prefix(&inv.label), inv.name);
-        match &r.verdict {
-            Verdict::Proved => println!("proved: {name}"),
-            Verdict::OutOfScope(why) => println!("out of scope: {name}: {why}"),
-            Verdict::Unproved(Unproved::Initial) => {
-                println!("unproved: {name}: an initial state violates it")
-            }
-            Verdict::Unproved(Unproved::Unknown { action }) => {
-                println!("unproved: {name}: z3 gave up on {action}")
-            }
-            Verdict::Unproved(Unproved::NotInductive(cti)) => {
-                println!(
-                    "unproved: {name}: not inductive; {} breaks it from a state where it and every proved rule hold (not necessarily reachable)",
-                    cti.step
-                );
-                for row in &cti.rows {
-                    println!("  {row}");
-                }
-            }
-        }
+    for r in yours.iter().chain(&rules) {
+        print_verdict(ts, r, lemmas.contains(&r.inv));
     }
     for lemma in &proof.lemmas {
         println!("lemma: {lemma}");
@@ -126,8 +112,53 @@ fn print_proof(ts: &TransitionSystem, proof: &Proof, version: &str) {
     }
     println!(
         "proof: {} proved, {} unproved, {} out of scope",
-        proof.proved(),
-        proof.unproved(),
-        proof.out_of_scope()
+        count(&rules, proved),
+        count(&rules, unproved),
+        count(&rules, out_of_scope)
     );
+    if !yours.is_empty() {
+        println!(
+            "proof: your lemmas: {} proved, {} unproved, {} out of scope",
+            count(&yours, proved),
+            count(&yours, unproved),
+            count(&yours, out_of_scope)
+        );
+    }
+    Ok(ProofTally {
+        proved: count(&rules, proved),
+        rules: rules.len(),
+        unproved: count(&rules, unproved),
+        deny_unproved,
+    })
+}
+
+/// One rule's line, and the CTI under an unproved one. A lemma the model marks reads
+/// `lemma <name>`.
+fn print_verdict(ts: &TransitionSystem, r: &RuleProof, lemma: bool) {
+    let inv = &ts.invariants()[r.inv];
+    let name = format!(
+        "{}{}{}",
+        if lemma { "lemma " } else { "" },
+        label_prefix(&inv.label),
+        inv.name
+    );
+    match &r.verdict {
+        Verdict::Proved => println!("proved: {name}"),
+        Verdict::OutOfScope(why) => println!("out of scope: {name}: {why}"),
+        Verdict::Unproved(Unproved::Initial) => {
+            println!("unproved: {name}: an initial state violates it")
+        }
+        Verdict::Unproved(Unproved::Unknown { action }) => {
+            println!("unproved: {name}: z3 gave up on {action}")
+        }
+        Verdict::Unproved(Unproved::NotInductive(cti)) => {
+            println!(
+                "unproved: {name}: not inductive; {} breaks it from a state where it and every proved rule hold (not necessarily reachable)",
+                cti.step
+            );
+            for row in &cti.rows {
+                println!("  {row}");
+            }
+        }
+    }
 }

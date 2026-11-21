@@ -137,6 +137,31 @@ enum Fall {
     Unknown(String),
 }
 
+/// The invariants of `ts` that come from a rule the model marks `.lemma()`.
+pub fn lemma_invariants(
+    model: &crate::model::SemanticModel,
+    ts: &TransitionSystem,
+) -> BTreeSet<usize> {
+    use crate::lifecycle::types::ModelRef;
+    use crate::model::RuleRef;
+    ts.invariants()
+        .iter()
+        .enumerate()
+        .filter(|(_, inv)| {
+            let rule = match inv.site.fact {
+                ModelRef::Forbidden(i) => RuleRef::Forbidden(i),
+                ModelRef::EntityInvariant(i) => RuleRef::Invariant(i),
+                ModelRef::CrossForbidden(i) => RuleRef::CrossForbidden(i),
+                ModelRef::CrossInvariant(i) => RuleRef::CrossInvariant(i),
+                ModelRef::Quantifier(i) => RuleRef::Quantifier(i),
+                _ => return false,
+            };
+            model.lemma_rules.contains(&rule)
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
 /// Proves `rules` (indices into `ts.invariants()`) for any number of rows.
 pub fn prove(
     ts: &TransitionSystem,

@@ -25,7 +25,7 @@ pub(crate) use self::entity_conditions::{
 };
 pub(crate) use self::entity_scope::{find_entity_column, resolve_entity_qref};
 pub(crate) use self::guards::{
-    forbidden_when_conditions, push_rule_guards, resolve_rule_guards, rule_label,
+    forbidden_when_conditions, mark_lemma, push_rule_guards, resolve_rule_guards, rule_label,
     when_condition_ref,
 };
 pub(crate) use self::quantifier::{check_quantifier_paths, resolve_related_quantifier};

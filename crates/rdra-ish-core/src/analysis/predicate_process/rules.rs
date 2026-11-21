@@ -8,7 +8,7 @@ use rdra_ish_syntax::ast::*;
 
 use crate::analysis::comparison::resolve_comparison;
 use crate::analysis::constraint::{
-    arg_as_str, collect_entity_conditions, forbidden_when_conditions, push_rule_guards,
+    arg_as_str, collect_entity_conditions, forbidden_when_conditions, mark_lemma, push_rule_guards,
     resolve_entity_equals_from_comparison, rule_label, when_condition_ref,
 };
 use crate::analysis::effect::parse_effect_value;
@@ -57,6 +57,7 @@ pub(super) fn process_forbidden_predicate(
         });
         let rule = RuleRef::Forbidden(model.forbidden_constraints.len() - 1);
         push_rule_guards(model, rule, &when, ctx);
+        mark_lemma(model, pred, rule);
         model
             .typed_predicates
             .push(TypedPredicate::Forbidden { entity: entity_key });
@@ -294,6 +295,7 @@ pub(super) fn process_invariant_predicate(
         });
         let rule = RuleRef::Invariant(model.entity_invariants.len() - 1);
         push_rule_guards(model, rule, &when, ctx);
+        mark_lemma(model, pred, rule);
         model
             .typed_predicates
             .push(TypedPredicate::Invariant { entity: entity_key });
