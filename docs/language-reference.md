@@ -2509,8 +2509,9 @@ Write `.global()` on a rule meant for every combination to say so; `.global()` w
 `.along(...)` is `GlobalWithAlong`, an error.
 
 `.lemma()` on a `forbidden` or an `invariant` marks a fact written to help `verify --prove`
-prove the other rules for any number of rows. Every engine still checks it as a rule; only
-the proof's report lists it apart from the rules. See [Proofs for any number of
+prove the other rules for any number of rows. `check` checks it as a rule, and `--prove`
+lists it apart from the rules; `verify` runs no TLC cone for it, since the proof uses a lemma
+only once it proves it. See [Proofs for any number of
 rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
 `after(UseCase).assert(Entity.column == value, ...)` checks an assertion at a specific

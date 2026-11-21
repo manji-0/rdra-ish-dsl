@@ -582,7 +582,13 @@ fn check_model(
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     let mut cones: Vec<(Cone, String, Vec<Seed>)> = Vec::new();
-    for t in ts.targets() {
+    // `verify` runs no cone for a `.lemma()` rule, so neither does the comparison.
+    let lemmas = rdra_ish_core::lifecycle::prove::lemma_invariants(model, &ts);
+    let targets = ts
+        .targets()
+        .into_iter()
+        .filter(|t| !matches!(t, Target::Invariant(i) if lemmas.contains(i)));
+    for t in targets {
         let cone = ts.target_cone(t);
         match cones.iter_mut().find(|(c, _, _)| *c == cone) {
             Some((_, _, seeds)) => seeds.push(ts.target_seed(t)),

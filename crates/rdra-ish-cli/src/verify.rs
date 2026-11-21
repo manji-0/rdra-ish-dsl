@@ -685,7 +685,17 @@ pub fn run_tlc(
         true => modules.claim(&whole_name),
         false => whole_name,
     };
-    let mut jobs = cone_jobs(&ts, &names, &selection.targets, &mut modules);
+    // A `.lemma()` rule only helps `--prove`, which keeps a lemma only when it proves it, so
+    // TLC runs no cone for one: a lemma that joins two large cones would cost more than the
+    // rules it helps. `check` still checks it.
+    let lemmas = rdra_ish_core::lifecycle::prove::lemma_invariants(model, &ts);
+    let targets: Vec<Target> = selection
+        .targets
+        .iter()
+        .copied()
+        .filter(|t| !matches!(t, Target::Invariant(i) if lemmas.contains(i)))
+        .collect();
+    let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules);
     let cones = jobs.len();
     let line = print_plan(
         model,

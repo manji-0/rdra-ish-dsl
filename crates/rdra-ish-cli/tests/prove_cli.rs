@@ -299,3 +299,45 @@ fn a_cti_shows_the_run_mark_its_step_reads() {
         "{stdout}"
     );
 }
+
+#[test]
+fn verify_runs_no_tlc_cone_for_a_lemma() {
+    if !have("tlc", "RDRA_REQUIRE_TLC") {
+        return;
+    }
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_lemma_cone");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Order "注文" {
+  id: Int @pk
+  status: Enum(placed, shipped) @default(placed)
+}
+
+entity Shipment "出荷" {
+  id: Int @pk
+}
+
+usecase Place "注文確定"
+usecase Ship "出荷"
+
+creates(Place, Order)
+creates(Ship, Shipment)
+updates(Ship, Order)
+transitions(Ship, Order.status, placed -> shipped)
+relate(Shipment, Order, 1:1)
+
+invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").lemma()
+"#,
+    )
+    .unwrap();
+    let out_dir = dir.join("specs");
+    let out = verify(&[file.to_str().unwrap(), "-o", out_dir.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert_eq!(out.status.code(), Some(0), "{stdout}");
+    let cones = std::fs::read_to_string(out_dir.join("cones.txt")).unwrap();
+    assert!(cones.contains("Unique_Shipment_Order"), "{cones}");
+    assert!(!cones.contains("Cone_Quantifier_Order_0"), "{cones}");
+}

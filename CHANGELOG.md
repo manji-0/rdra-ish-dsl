@@ -8,18 +8,20 @@
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a
   run mark (#147).
-
+- `verify` runs no TLC cone for a `.lemma()` rule. The proof uses a lemma only once it
+  proves it, and the insurance lemma, which reads both the claim's and the case's columns,
+  joined their two large cones into one that TLC did not finish in 10 minutes. `check` still
+  checks lemmas (#147).
 - `verify --prove` marks each rule the SQL export's schema does not enforce (the rules under
   `Not enforced by this schema`) with `[not enforced by the SQL schema: <why>]`, and counts
   how many of them the use cases are proved to keep (#141).
-
 - `verify --prove` also proves for any Int value and any time: Int columns and `now` have no
   top in the proof, `Tick` always runs, and a write of any value takes any number. A rule
   that held only because numbers stop at `--int-range-max` is now unproved, with a CTI
   that shows the larger value (#141).
-
 - `.lemma()` on a `forbidden` or an `invariant` marks a fact written to help
-  `verify --prove`. Every engine checks it as a rule; the proof reports it as
+  `verify --prove`. `check` checks it as a rule, and `verify` runs no TLC cone for it
+  (the proof uses a lemma only once it proves it); the proof reports it as
   `proved: lemma <name>` and counts it apart from the rules (#141). The `rdra-ish-verify`
   skill gains `references/prove.md`: reading a counterexample to induction and proposing a
   lemma.
@@ -30,7 +32,6 @@
   the states BFS reaches and kept only when they are inductive too; the ones a proof used
   print as `lemma:` lines. `--deny-unproved` fails the run on an unproved rule, and `--z3` or
   `RDRA_Z3` names the binary (#141).
-
 - An entity takes a `rows` estimate (`rows 5000`, `rows "1e6"`); a value that is not a
   whole number is `InvalidRowEstimate`. `lint` `query-index-missing` skips an entity under
   10,000 rows, and the SQL export marks its suggested index as a small table.

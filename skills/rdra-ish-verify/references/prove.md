@@ -89,8 +89,9 @@ relate(Shipment, Order, 1:1)
 invariant(Order).when(status == placed).none(Shipment).label("a placed order has no shipment yet").lemma()
 ```
 
-- **Every engine checks a lemma.** `check` and `verify` check it as a rule. A wrong lemma
-  fails with a trace, so run `rdra-ish check` before trusting one.
+- **`check` checks a lemma.** It checks it as a rule, so a wrong lemma fails there with a
+  trace: run `rdra-ish check` before trusting one. `verify` runs no TLC cone for a lemma; the
+  proof uses a lemma only once it proves it.
 - **The proof uses a lemma it can prove.** A lemma becomes a candidate fact, like a rule.
   It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and `proof: your
   lemmas: ...` counts lemmas apart from the rules.

@@ -634,9 +634,10 @@ When no mined lemma rules a CTI's state out, write the missing fact as a rule wi
 invariant(Order).when(status == placed).none(Shipment).label("a placed order has no shipment yet").lemma()
 ```
 
-A rule marked `.lemma()` is an ordinary rule to every engine: `check` and `verify` check it,
-so a wrong lemma fails with a trace before it can help a proof. In the proof it is one more
-candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
+A rule marked `.lemma()` is checked by `check` like any rule, so a wrong lemma fails there
+with a trace. `verify` runs no TLC cone for a lemma: the proof keeps a lemma only when it
+proves it, so a wrong one never helps a proof, and a lemma that reads two large cones would
+join them into one far larger cone. In the proof a lemma is one more candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
 `proof: your lemmas: ...` line counts it apart from the rules, so it never counts toward the
 `n of m rules` of the `OK:` line.
 
