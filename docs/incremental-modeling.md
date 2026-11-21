@@ -388,8 +388,7 @@ business area only through a specific operating medium.
 ```rdra
 medium CustomerDevice "Customer Device"
 
-belongs(BucOrder, Commerce)
-  .by(CustomerDevice)
+belongs(BucOrder, Commerce).by(CustomerDevice)
 ```
 
 A schedule that starts a use case is a `timer` connected with
@@ -573,9 +572,7 @@ conditional co-occurrence, and use `required` only for facts that truly must hol
 every reachable pattern.
 
 ```rdra
-invariant(Order)
-  .when(status == paid)
-  .then(paid_at == present)
+invariant(Order).when(status == paid).then(paid_at == present)
 
 required(Account, active == true)
 ```
@@ -611,13 +608,9 @@ participating entities' instances unless `.along` links them.
 drives(SellItem, Inventory.stock < selling, true)
 forbidden(Inventory, stock < selling)
 
-forbidden(Order, Payment,
-  Order.status == cancelled,
-  Payment.status == captured)
+forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured)
 
-invariant(Order, Payment)
-  .when(Order.status == paid)
-  .then(Payment.status == captured)
+invariant(Order, Payment).when(Order.status == paid).then(Payment.status == captured)
 ```
 
 <!-- stage-spec: ask advanced-rules -->

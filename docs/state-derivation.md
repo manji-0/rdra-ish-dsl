@@ -752,8 +752,7 @@ checked. Another use case that runs between two steps changes the run's rows, an
 assert sees that.
 
 ```rdra
-after(ExecuteCertIssue)
-  .assert(CertificateOrder.status == executed, ClientCertificate.status == active)
+after(ExecuteCertIssue).assert(CertificateOrder.status == executed, ClientCertificate.status == active)
 ```
 
 An entity the last step binds reads that row: the row the step writes, the row an earlier
