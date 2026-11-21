@@ -1,5 +1,6 @@
+use super::event::{declare_flow_node, render_event_flow, Declared, FlowNode};
 use super::*;
-use crate::diagram_common::{declare_flow_node, model_from, render_event_flow, Declared, FlowNode};
+use crate::diagram_common::model_from;
 use crate::{Emitter, Explored, StatesEmitter, View};
 use rdra_ish_core::build_model;
 use rdra_ish_syntax::parse;
