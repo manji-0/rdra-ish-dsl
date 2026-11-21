@@ -199,27 +199,42 @@ A passing `verify` must mean something, and a failing one must say where to look
 
 ## One stage order replaces three
 
-Today one order exists: `ORDER` in `crates/rdra-ish-core/src/refinement/order.rs`.
-`lint` `stage-readiness`, `rdra-ish next`, and the stage map of `incremental-modeling.md`
-read it, and the test `stage_docs_are_in_sync` keeps the docs in step. That order has ten
-stages, from a scope sketch to advanced rules. It brings in screens before entities and
-an API and access boundary before entity structure, and it adds variations with entity
-structure and events, timers, and conditions with the lifecycle. It does not follow the
-RDRA phases yet. The target order follows the author's three phases and nine steps for
-the requirements layer and then adds the two rdra-ish layers:
+One order exists: `ORDER` in `crates/rdra-ish-core/src/refinement/order.rs`. `lint`
+`stage-readiness`, `rdra-ish next`, and the stage map of
+[incremental-modeling.md](./incremental-modeling.md#stage-map) read it, and the test
+`stage_docs_are_in_sync` keeps the docs in step. The target is this order. It has ten
+stages, and it does not follow the author's three phases and nine steps step for step:
 
-1. Build the basis for discussion: actors and businesses, BUCs and activities,
-   information, and state models (RDRA Steps 1 to 4).
-2. Assemble requirements: use cases, screens, events, and timers, then review use cases
-   against information and states (RDRA Steps 5 and 6).
-3. Make the requirements specifiable: conditions and variations (RDRA Steps 7 to 9).
-4. Derive the logical data model (RDRASpec).
-5. Add effects, guards, and constraints, and run `verify`.
+| Stage | Name | RDRA 3.0 or rdra-ish |
+|---|---|---|
+| 0 | Scope sketch | Basis: businesses and the BUCs they hold |
+| 1 | BUC skeleton | Basis: actors, BUCs, activities; requirements: use cases |
+| 2 | Screens | Requirements: screens |
+| 3 | Data touchpoints | Basis: information, as the entities each use case touches |
+| 4 | API and access boundary | rdra-ish: APIs, systems, permissions, and media |
+| 5 | Entity structure | RDRASpec: columns and keys; specification: variations |
+| 6 | Lifecycle | Basis: state models; requirements: events and timers; specification: conditions |
+| 7A to 7C | Local guardrails, local obligations, advanced rules | rdra-ish: effects, guards, and constraints that `verify` checks |
 
-`stage-readiness` checks the RDRA connections of each stage, not only whether any
-element of the stage exists. Today it already judges each stage per element, as
-`rdra-ish next` does, but by the connections of its own ten stages: stage 2, for example,
-needs every use case of the BUC to display a screen or run on a trigger.
+It departs from the author's order for three reasons:
+
+- **A state needs a use case.** In rdra-ish a state model is a lifecycle column that
+  `transitions(UseCase, Entity.column, from -> to)` moves, and a use case is the trigger of
+  every transition. A state model cannot be written before the use cases that move it: an
+  `Enum` column that nothing moves is an attribute, and `lint` warns on it
+  (`enum-attribute`). So states come at stage 6, after use cases, not with the basis.
+- **Each stage is a gate a tool decides.** `next` and `stage-readiness` place each BUC at
+  the last stage of the met prefix of the required stages, and each stage is met when the
+  BUC's elements are connected as it requires, such as every use case displaying a screen
+  or running on a trigger at stage 2. The author's steps include reviews, such as checking
+  use cases against information and states, that no check can decide, and the author
+  expects modelers to go back and forth between them.
+- **rdra-ish adds layers RDRA keeps apart.** The API and access boundary (stage 4) and
+  the rules that `verify` checks (stages 7A to 7C) have no RDRA step.
+
+Within these constraints the order follows RDRA's layers from the outside in: what the
+actor sees (screens) before what the system keeps (entities), and the system boundary
+before the data structure behind it.
 
 ## The work lands in six phases
 
@@ -396,6 +411,14 @@ The maintainer decided these questions on 2026-11-07:
   status, and not the generated code (its type, variant, field, and function names, its
   shape, the obligation list, and its JSON form). Any release may change or remove them. A
   model that a release keeps verifying the same way may generate different code.
+
+The maintainer decided this question on 2026-11-21:
+
+- The stage order stays the ten stages of `refinement/order.rs` and does not move to the
+  author's three phases and nine steps. In rdra-ish a state needs the use case that moves
+  it, each stage is a gate `next` decides per BUC, and the API boundary and the verified
+  rules are rdra-ish layers with no RDRA step. See
+  [One stage order replaces three](#one-stage-order-replaces-three).
 
 ## Sources
 
