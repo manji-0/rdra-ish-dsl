@@ -75,8 +75,6 @@ pub struct ExclusiveConstraint {
     pub label: Option<std::string::String>,
 }
 
-// ── クロスエンティティ制約 ───────────────────────────────────────────────────
-
 /// A column reference resolved to a concrete entity and one of its columns.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct QualifiedModelColumnRef {
@@ -239,8 +237,6 @@ pub struct RuleGuard {
     pub site: Option<crate::location::LocatedSpan>,
 }
 
-// ── Temporal properties (TLA+ / TLC) ──────────────────────────────────────────
-
 /// Atomic comparison over an entity column (equality or arithmetic).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemporalAtom {
@@ -283,7 +279,7 @@ pub enum TemporalFormula {
     Always(TemporalExpr),
     /// `eventually(expr)` → `<>expr`
     Eventually(TemporalExpr),
-    /// `leads_top == q` → `p ~> q`
+    /// `leads_to(p, q)` → `p ~> q`
     LeadsTo {
         antecedent: TemporalExpr,
         consequent: TemporalExpr,

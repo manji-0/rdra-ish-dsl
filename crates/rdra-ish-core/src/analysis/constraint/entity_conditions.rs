@@ -165,8 +165,6 @@ fn context_arg_id(arg: &PredicateArg) -> String {
     }
 }
 
-// ── クロスエンティティ制約ヘルパー ───────────────────────────────────────────
-
 pub(crate) fn push_unique_entity(scope: &mut Vec<EntityKey>, entity: EntityKey) {
     if !scope.contains(&entity) {
         scope.push(entity);

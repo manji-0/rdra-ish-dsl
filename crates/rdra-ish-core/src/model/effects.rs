@@ -152,11 +152,8 @@ pub struct Link {
 /// `sets(...)` 述語由来のカラム効果（解析後）
 #[derive(Debug, Clone)]
 pub struct ColumnEffect {
-    /// 効果を起こす usecase
     pub origin: UseCaseKey,
-    /// 対象 entity のキー
     pub entity: EntityKey,
-    /// 対象カラム名
     pub column: std::string::String,
     /// The value the use case leaves: a literal, or a copy of another row's column.
     pub value: SetValue,

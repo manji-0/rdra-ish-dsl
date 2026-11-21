@@ -493,8 +493,6 @@ fn a_range_out_of_bounds_on_the_parent_side_or_on_an_nm_is_an_error() {
     );
 }
 
-// ── The one join rule (#73) ─────────────────────────────────────────────────
-
 /// Permit is registered under its application (1:1, role `Application` by default), and an
 /// application `renews` a permit: two keys between one pair, in opposite directions.
 const RENEWS: &str = r#"

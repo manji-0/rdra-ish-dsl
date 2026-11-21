@@ -1,8 +1,6 @@
 use super::effects::EffectValue;
 use super::keys::{EntityKey, UseCaseKey};
 
-// ── 比較命題 ─────────────────────────────────────────────────────────────────
-
 /// 比較演算子（モデル層）。`ast::CmpOp` の写し。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CmpOpModel {
@@ -128,8 +126,6 @@ pub struct PropositionEffect {
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
 }
-
-// ── Column expressions (`@check`, `@derived`) ───────────────────────────────
 
 /// A condition over one entity's columns: a `@check`, or a logical `@derived`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

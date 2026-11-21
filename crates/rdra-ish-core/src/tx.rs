@@ -6,8 +6,6 @@ use crate::diagnostics::{Diagnostic, RdraError};
 use crate::location::push_model_decl_diagnostic;
 use crate::model::{ApiKey, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
 
-// ── 公開型 ────────────────────────────────────────────────────────────────────
-
 /// 書き込み操作の種別。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum WriteKind {
@@ -42,7 +40,7 @@ pub struct UcWrite {
     pub entity: EntityKey,
     pub kind: WriteKind,
     /// この書き込みを担う API ノード（`invokes(uc, api)` + `creates(api, entity)` 由来）。
-    /// `None` の場合は usecase が直接 entity に書き込む（レガシー形式）。
+    /// `None` の場合は usecase が直接 entity に書き込む。
     pub via_api: Option<ApiKey>,
 }
 
@@ -110,8 +108,6 @@ impl UsecaseTx {
     }
 }
 
-// ── 推論エントリポイント ──────────────────────────────────────────────────────
-
 /// Every write each use case makes, grouped into transactions (vision rule 6). The lifecycle
 /// runs one action per group and sequence diagrams draw the same groups.
 ///
@@ -123,7 +119,7 @@ impl UsecaseTx {
 /// Grouping (ユースケースごと):
 /// 1. invokes(uc, api) で呼ばれる API ごとの書き込み集合は FK 接続の有無に関係なく
 ///    1 つの原子境界として扱う。
-/// 2. 直接 usecase に付いた書き込みはレガシー形式として収集し、API 経由の同一 entity
+/// 2. 直接 usecase に付いた書き込みも収集し、API 経由の同一 entity
 ///    書き込みがあれば API 側を優先する。
 /// 3. 直接書き込みは FK 連結成分から transaction 境界を推論する。
 /// 4. A direct write to a published entity (`exposes(System, E).append() | .upsert()`)
@@ -307,20 +303,12 @@ fn effect_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {
 pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     for utx in txs {
-        let uc_id = model
-            .use_cases
-            .get(utx.usecase)
-            .map(|u| u.id.clone())
-            .unwrap_or_else(|| "?".to_string());
+        let uc_id = model.use_cases[utx.usecase].id.clone();
         for ek in utx.separate_writes() {
             if model.publication.is_published(ek) {
                 continue;
             }
-            let entity_id = model
-                .entities
-                .get(ek)
-                .map(|e| e.id.clone())
-                .unwrap_or_else(|| "?".to_string());
+            let entity_id = model.entities[ek].id.clone();
             push_model_decl_diagnostic(
                 model,
                 &mut diags,
@@ -336,8 +324,6 @@ pub fn tx_diagnostics(model: &SemanticModel, txs: &[UsecaseTx]) -> Vec<Diagnosti
     }
     diags
 }
-
-// ── 内部ヘルパー ──────────────────────────────────────────────────────────────
 
 /// The FK-connected groups of the direct writes, then each remaining write on its own,
 /// sorted by entity id.
@@ -492,39 +478,21 @@ fn topological_sort_writes(
         .filter(|(_, &d)| d == 0)
         .map(|(&k, _)| k)
         .collect();
-    queue.sort_by_key(|&k| {
-        model
-            .entities
-            .get(k)
-            .map(|e| e.id.clone())
-            .unwrap_or_default()
-    });
+    queue.sort_by_key(|&k| model.entities[k].id.as_str());
 
     let write_map: HashMap<EntityKey, UcWrite> =
         writes.into_iter().map(|w| (w.entity, w)).collect();
     let mut result: Vec<UcWrite> = Vec::new();
 
     while !queue.is_empty() {
-        queue.sort_by_key(|&k| {
-            model
-                .entities
-                .get(k)
-                .map(|e| e.id.clone())
-                .unwrap_or_default()
-        });
+        queue.sort_by_key(|&k| model.entities[k].id.as_str());
         let cur = queue.remove(0);
         if let Some(w) = write_map.get(&cur) {
             result.push(w.clone());
         }
         if let Some(children) = children_of.get(&cur) {
             let mut cs = children.clone();
-            cs.sort_by_key(|&k| {
-                model
-                    .entities
-                    .get(k)
-                    .map(|e| e.id.clone())
-                    .unwrap_or_default()
-            });
+            cs.sort_by_key(|&k| model.entities[k].id.as_str());
             for child in cs {
                 let d = in_degree.entry(child).or_default();
                 if *d > 0 {
@@ -537,7 +505,8 @@ fn topological_sort_writes(
         }
     }
 
-    // サイクルが存在する場合（FKグラフではありえないが防御的に）残りを追加
+    // A self-relate or mutual keys form a cycle whose in-degree never reaches 0, so those
+    // writes never leave the queue; append them.
     for (k, w) in &write_map {
         if !result.iter().any(|r| r.entity == *k) {
             result.push(w.clone());
@@ -546,8 +515,6 @@ fn topological_sort_writes(
 
     result
 }
-
-// ── テスト ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {

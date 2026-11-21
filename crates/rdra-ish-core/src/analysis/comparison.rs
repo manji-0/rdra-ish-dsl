@@ -11,8 +11,6 @@ use slotmap::SlotMap;
 use super::effect::parse_effect_value;
 use super::qref_util::{qref_id, qualified_column_display};
 
-// ── The bare right-hand side ─────────────────────────────────────────────────
-
 /// How a bare identifier on the right of a comparison reads.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum BareRhs {
@@ -127,8 +125,6 @@ fn column_values(
     values
 }
 
-// ── 比較式の型整合チェック・モデル変換 ────────────────────────────────────────
-
 /// `ColumnType` が「比較に使える型カテゴリ」を返す。
 /// - `"numeric"`: Int/Money/Decimal
 /// - `"temporal"`: Date/DateTime
@@ -149,7 +145,6 @@ pub(crate) fn is_order_op(op: &CmpOp) -> bool {
     matches!(op, CmpOp::Lt | CmpOp::Gt | CmpOp::Le | CmpOp::Ge)
 }
 
-/// `ast::CmpOp` → `model::CmpOpModel` への変換。
 pub(crate) fn to_model_op(op: &CmpOp) -> CmpOpModel {
     match op {
         CmpOp::Lt => CmpOpModel::Lt,
@@ -176,7 +171,6 @@ pub(crate) fn resolve_comparison(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<ComparisonProp> {
-    // ── 左辺はカラム参照のみ ──────────────────────────────────────────────────
     let lhs_col_name = match &cmp.lhs {
         Operand::Column(name) => name.clone(),
         Operand::QualifiedColumn(qcol) => {
@@ -254,7 +248,6 @@ pub(crate) fn resolve_comparison(
         return None;
     }
 
-    // ── 右辺の解決と型整合チェック ────────────────────────────────────────────
     let rhs = match &cmp.rhs {
         Operand::Column(rhs_name) => {
             let qualified = |name: &str| {

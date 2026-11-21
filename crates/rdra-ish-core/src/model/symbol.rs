@@ -3,8 +3,6 @@ use std::collections::HashMap;
 
 use super::refs::NodeRef;
 
-// ── Symbol table ─────────────────────────────────────────────────────────────
-
 fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
     matches!(
         (node, kind),

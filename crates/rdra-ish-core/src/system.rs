@@ -434,35 +434,19 @@ fn is_entity_relation(kind: &RelKind) -> bool {
 }
 
 fn api_id(model: &SemanticModel, key: ApiKey) -> String {
-    model
-        .apis
-        .get(key)
-        .map(|a| a.id.clone())
-        .unwrap_or_default()
+    model.apis[key].id.clone()
 }
 
 fn entity_id(model: &SemanticModel, key: EntityKey) -> String {
-    model
-        .entities
-        .get(key)
-        .map(|e| e.id.clone())
-        .unwrap_or_default()
+    model.entities[key].id.clone()
 }
 
 fn system_id(model: &SemanticModel, key: SystemKey) -> String {
-    model
-        .systems
-        .get(key)
-        .map(|s| s.id.clone())
-        .unwrap_or_default()
+    model.systems[key].id.clone()
 }
 
 fn usecase_id(model: &SemanticModel, key: crate::model::UseCaseKey) -> String {
-    model
-        .use_cases
-        .get(key)
-        .map(|u| u.id.clone())
-        .unwrap_or_default()
+    model.use_cases[key].id.clone()
 }
 
 fn system_ids(model: &SemanticModel, keys: &[SystemKey]) -> String {

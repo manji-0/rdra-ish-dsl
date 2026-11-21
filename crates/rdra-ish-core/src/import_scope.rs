@@ -24,7 +24,7 @@ pub struct FileScope {
     pub namespaces: HashMap<String, String>,
     /// The module path of every `import` line, whatever its form.
     pub imported: Vec<String>,
-    /// When true, skip visibility checks (single-file / legacy open scope).
+    /// When true, skip visibility checks (single-file or open scope).
     pub unrestricted: bool,
 }
 
@@ -313,7 +313,7 @@ pub fn build_import_scopes(
             .unwrap_or_default();
 
         // Per-file latch: only files that import become closed scope.
-        // Sibling files without imports keep legacy open-world resolution.
+        // Sibling files without imports keep open-world resolution.
         if imports.is_empty() {
             for (id, kinds) in &local_exports {
                 for kind in kinds {

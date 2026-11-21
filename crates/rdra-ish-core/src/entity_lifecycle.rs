@@ -108,14 +108,11 @@ impl StateModel<'_> {
     }
 }
 
-/// Every state model, sorted by entity id and column. A transition on an entity the model
-/// does not hold is skipped.
+/// Every state model, sorted by entity id and column.
 pub fn state_models(model: &SemanticModel) -> Vec<StateModel<'_>> {
     let mut groups: BTreeMap<(&str, &str), StateModel<'_>> = BTreeMap::new();
     for transition in &model.state_transitions {
-        let Some(entity) = model.entities.get(transition.entity) else {
-            continue;
-        };
+        let entity = &model.entities[transition.entity];
         let group = groups
             .entry((entity.id.as_str(), transition.column.as_str()))
             .or_insert_with(|| StateModel {
