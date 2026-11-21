@@ -447,7 +447,7 @@ impl Enc<'_> {
                         let c = fresh(&mut cmds, self.var_sort(*var));
                         let any: Vec<String> =
                             vals.iter().map(|v| format!("(= {c} {v})")).collect();
-                        cmds += &format!("(assert (or {}))\n", any.join(" "));
+                        cmds += &format!("(assert {})\n", or(any));
                         forks.push((*var, *p, String::new(), c));
                     }
                     Err(Unsupported(why)) => {
@@ -635,11 +635,11 @@ impl Enc<'_> {
                     Op::Num(n) => ("false".to_string(), n.clone()),
                     Op::Row(..) => return unsupported("a row compared as a number"),
                     // A var reads through its own numeric domain, else the other side's.
-                    Op::Var(v, d) => match numeric(o).or(domain.clone()) {
+                    Op::Var(_, Domain::Instance { .. }) => {
+                        return unsupported("a key compared as a number")
+                    }
+                    Op::Var(v, _) => match numeric(o).or(domain.clone()) {
                         Some(Domain::NullableInt) => (format!("(= {v} 0)"), format!("(- {v} 1)")),
-                        _ if matches!(d, Domain::Instance { .. }) => {
-                            return unsupported("a key compared as a number")
-                        }
                         _ => ("false".to_string(), v.clone()),
                     },
                     Op::Lit(v) => match &domain {
@@ -732,5 +732,33 @@ fn or(parts: Vec<String>) -> String {
         0 => "false".to_string(),
         1 => parts.into_iter().next().unwrap(),
         _ => format!("(or {})", parts.join(" ")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifecycle::types::Bounds;
+
+    #[test]
+    fn a_key_against_a_nullable_number_is_unsupported() {
+        let ts = TransitionSystem::empty(Bounds::VERIFY);
+        let enc = Enc { ts: &ts };
+        let key = Op::Var(
+            "(v0 p0)".to_string(),
+            Domain::Instance {
+                parent: EntId::at(0),
+                optional: true,
+            },
+        );
+        let n = Op::Var("(v1 p1)".to_string(), Domain::NullableInt);
+        for (l, r) in [(&key, &n), (&n, &key)] {
+            assert!(enc.compare(l, CmpOp::Eq, r).is_err());
+        }
+    }
+
+    #[test]
+    fn an_empty_disjunction_is_false() {
+        assert_eq!(or(Vec::new()), "false");
     }
 }
