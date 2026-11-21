@@ -8,7 +8,7 @@
 use super::omitted_linked_kinds;
 use super::robustness::controls_of;
 use super::usecase::scoped_use_cases;
-use crate::diagram_common::{contract_id, Header};
+use crate::diagram_common::{contract_id, Diagram, Header};
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{applied_bodies, condition_body_display};
 use rdra_ish_core::model::{
@@ -631,7 +631,7 @@ impl Emitter for SequenceMermaidEmitter {
         }
         let drawn: HashSet<NodeRef> = nodes.into_iter().collect();
         let header = Header {
-            diagram: "sequence",
+            diagram: Diagram::Sequence,
             view,
             layers: None,
             omitted: omitted_linked_kinds(model, |node| scoped.contains(node), &drawn, &kinds),

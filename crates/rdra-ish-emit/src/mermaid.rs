@@ -30,7 +30,9 @@ pub use sequence::SequenceMermaidEmitter;
 pub use state::StateMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
-use crate::diagram_common::{contract_id, desc_line, edge_line, node_line, quote, NodeScope};
+use crate::diagram_common::{
+    contract_id, desc_line, edge_line, node_line, quote, Diagram, NodeScope,
+};
 use crate::{
     collect_object_graph_nodes, is_relate, object_graph_layer, object_graph_rel_label,
     ObjectGraphLayer, OBJECT_GRAPH_LAYERS,
@@ -208,7 +210,7 @@ fn omitted_linked_kinds(
 
 /// Sort `edges`, draw each once, and follow a derived one with its `%% derived` line. An
 /// edge whose label `diagram` reads back from its ends goes without one.
-fn render_edges(out: &mut String, diagram: &str, mut edges: Vec<GraphEdge>) {
+fn render_edges(out: &mut String, diagram: Diagram, mut edges: Vec<GraphEdge>) {
     edges.sort();
     edges.dedup();
     for edge in &edges {

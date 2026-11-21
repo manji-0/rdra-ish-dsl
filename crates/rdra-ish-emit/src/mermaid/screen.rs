@@ -5,7 +5,7 @@
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, edge_label, node_line, quote, Header,
+    class_defs, contract_id, desc_line, edge_label, node_line, quote, Diagram, Header,
 };
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
@@ -127,7 +127,7 @@ impl Emitter for ScreenMermaidEmitter {
                 through.into_iter().collect::<Vec<_>>().join(",")
             )),
         }));
-        render_edges(&mut body, "screen", edges);
+        render_edges(&mut body, Diagram::Screen, edges);
         for via in vias {
             body.push_str(&format!("  {via}\n"));
         }
@@ -146,7 +146,7 @@ impl Emitter for ScreenMermaidEmitter {
             &kinds,
         );
         let header = Header {
-            diagram: "screen",
+            diagram: Diagram::Screen,
             view,
             layers: None,
             kinds,

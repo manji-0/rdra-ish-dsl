@@ -6,7 +6,7 @@ use super::{
     buc_members, guard_edge, kinds_by_layer, omitted_linked_kinds, render_edges,
     render_layered_nodes, state_key, EdgeSet,
 };
-use crate::diagram_common::{class_defs, Header};
+use crate::diagram_common::{class_defs, Diagram, Header};
 use crate::{collect_object_graph_nodes, object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, Relation, SemanticModel, UseCaseKey};
 use std::collections::HashSet;
@@ -235,12 +235,12 @@ impl Emitter for UsecaseMermaidEmitter {
         let layers = render_layered_nodes(&mut body, model, &nodes);
         let mut graph_edges = edges.into_graph_edges();
         graph_edges.extend(guards.into_iter().filter_map(|rel| guard_edge(model, rel)));
-        render_edges(&mut body, "usecase", graph_edges);
+        render_edges(&mut body, Diagram::Usecase, graph_edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
         let header = Header {
-            diagram: "usecase",
+            diagram: Diagram::Usecase,
             view,
             layers: Some(layers),
             omitted: omitted_linked_kinds(

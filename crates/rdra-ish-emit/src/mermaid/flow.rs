@@ -3,7 +3,9 @@
 //! step covers. A step one actor performs sits in that actor's swimlane.
 
 use super::{declare, omitted_linked_kinds, rdra_arrow, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header, NodeScope};
+use crate::diagram_common::{
+    class_defs, contract_id, desc_line, quote, Diagram, Header, NodeScope,
+};
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{HashMap, HashSet};
@@ -201,7 +203,7 @@ impl Emitter for FlowMermaidEmitter {
             declare(&mut body, model, node, "  ");
             add_kind(node.kind_tag());
         }
-        render_edges(&mut body, "flow", edges);
+        render_edges(&mut body, Diagram::Flow, edges);
         body.push_str(&class_defs(&kinds));
 
         let mut drawn: HashSet<NodeRef> = flows.iter().cloned().collect();
@@ -209,7 +211,7 @@ impl Emitter for FlowMermaidEmitter {
         drawn.extend(outside.iter().cloned());
         drawn.extend(performers.values().flatten().map(|actor| (*actor).clone()));
         let header = Header {
-            diagram: "flow",
+            diagram: Diagram::Flow,
             view,
             layers: None,
             omitted: omitted_linked_kinds(

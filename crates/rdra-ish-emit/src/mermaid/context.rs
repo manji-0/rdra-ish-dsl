@@ -4,7 +4,9 @@
 use super::{
     buc_members, buc_scope, declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge,
 };
-use crate::diagram_common::{class_defs, contract_id, edge_label, node_line, Header, NodeScope};
+use crate::diagram_common::{
+    class_defs, contract_id, edge_label, node_line, Diagram, Header, NodeScope,
+};
 use crate::{
     collect_object_graph_nodes, object_graph_layer, EmitError, Emitter, ObjectGraphLayer, Scope,
     View,
@@ -240,7 +242,7 @@ impl Emitter for ContextMermaidEmitter {
         }
         render_edges(
             &mut body,
-            "context",
+            Diagram::Context,
             exchanges
                 .0
                 .into_iter()
@@ -273,7 +275,7 @@ impl Emitter for ContextMermaidEmitter {
         body.push_str(&class_defs(&kinds));
         let drawn: HashSet<NodeRef> = nodes.iter().cloned().collect();
         let header = Header {
-            diagram: "context",
+            diagram: Diagram::Context,
             view,
             layers: None,
             omitted: omitted_linked_kinds(

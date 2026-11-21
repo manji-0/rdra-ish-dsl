@@ -1,8 +1,8 @@
 //! The event diagram (`--kind event`).
 
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, edge_line, node_line, quote, reachable_for_scope, Header,
-    NodeScope,
+    class_defs, contract_id, desc_line, edge_line, node_line, quote, reachable_for_scope, Diagram,
+    Header, NodeScope,
 };
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{
@@ -66,7 +66,7 @@ pub(super) fn declare_flow_node(
 
 /// One association edge of the event diagram, newline included.
 fn association(from: &str, predicate: &str, to: &str) -> String {
-    edge_line("event", from, "-.->", predicate, to)
+    edge_line(Diagram::Event, from, "-.->", predicate, to)
 }
 
 /// Every event flow and timer flow the scope shows.
@@ -198,7 +198,7 @@ impl Emitter for EventMermaidEmitter {
                 .is_some_and(|id| declared.ids.contains(&id))
         });
         let header = Header {
-            diagram: "event",
+            diagram: Diagram::Event,
             view,
             layers: None,
             kinds: declared.kinds,

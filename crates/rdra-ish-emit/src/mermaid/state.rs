@@ -1,6 +1,6 @@
 //! The state transition diagram (`--kind state`).
 
-use crate::diagram_common::{contract_id, lifecycle_start_states, quote, Header};
+use crate::diagram_common::{contract_id, lifecycle_start_states, quote, Diagram, Header};
 use crate::{EmitError, Explored, OnDeadlock, Scope, StatesEmitter, View};
 use rdra_ish_core::analysis::transition_guard_labels;
 use rdra_ish_core::model::{ColumnType, NodeRef, SemanticModel};
@@ -240,7 +240,7 @@ impl StatesEmitter for StateMermaidEmitter {
             )]
         };
         let header = Header {
-            diagram: "state",
+            diagram: Diagram::State,
             view,
             layers: None,
             kinds,

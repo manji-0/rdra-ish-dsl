@@ -6,7 +6,7 @@
 
 use super::{buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_line, quote, Header, NodeScope,
+    class_defs, contract_id, desc_line, node_line, quote, Diagram, Header, NodeScope,
 };
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{Goal, NodeRef, RelKind, SemanticModel};
@@ -151,7 +151,7 @@ impl Emitter for RequirementMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, "requirement", edges);
+        render_edges(&mut body, Diagram::Requirement, edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -179,7 +179,7 @@ impl Emitter for RequirementMermaidEmitter {
             }
         }
         let header = Header {
-            diagram: "requirement",
+            diagram: Diagram::Requirement,
             view,
             layers: None,
             omitted,

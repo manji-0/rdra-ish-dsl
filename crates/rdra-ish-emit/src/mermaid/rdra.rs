@@ -1,7 +1,7 @@
 //! The RDRA overview graph (`--kind rdra`).
 
 use super::{graph_edges, kinds_by_layer, render_edges, render_layered_nodes, GraphEdge};
-use crate::diagram_common::{class_defs, Header, NodeScope};
+use crate::diagram_common::{class_defs, Diagram, Header, NodeScope};
 use crate::{
     collect_object_graph_nodes, object_graph_rel_label, view_node_visible, view_relation_visible,
     EmitError, Emitter, Scope, View,
@@ -65,7 +65,7 @@ impl Emitter for RdraMermaidEmitter {
                 omitted_edges.push(edge_kind_token(&kind));
             }
         }
-        render_edges(&mut body, "rdra", edges);
+        render_edges(&mut body, Diagram::Rdra, edges);
 
         let kinds = kinds_by_layer(&visible_nodes);
         omitted_edges.sort();
@@ -77,7 +77,7 @@ impl Emitter for RdraMermaidEmitter {
             .collect();
         body.push_str(&class_defs(&kinds));
         let header = Header {
-            diagram: "rdra",
+            diagram: Diagram::Rdra,
             view,
             layers: Some(layers),
             kinds,

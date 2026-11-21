@@ -9,6 +9,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// The diagram a `%% rdra-ish diagram=` line names.
+fn diagram_kind(name: &str) -> rdra_ish_emit::Diagram {
+    rdra_ish_emit::Diagram::from_name(name).unwrap_or_else(|| panic!("`{name}` is not a diagram"))
+}
+
 fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -240,7 +245,8 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
     // not declared is left to `check_flowchart`.
     for (n, (from, arrow, label, to)) in raw.into_iter().enumerate() {
         let kinds = chart.nodes.get(&from).zip(chart.nodes.get(&to));
-        let implied = kinds.and_then(|(f, t)| rdra_ish_emit::implied_relation(diagram, f, t));
+        let implied =
+            kinds.and_then(|(f, t)| rdra_ish_emit::implied_relation(diagram_kind(diagram), f, t));
         let relation = match (label, kinds) {
             (None, None) => String::new(),
             (None, Some((f, t))) => {
@@ -259,7 +265,7 @@ fn parse_flowchart(diagram: &str, text: &str) -> Result<Flowchart, String> {
                         "{from} -{label}-> {to}: a {f} to a {t} is `{implied}`, drawn without a label"
                     ));
                 }
-                let listed = rdra_ish_emit::edge_relations(diagram, f, t)
+                let listed = rdra_ish_emit::edge_relations(diagram_kind(diagram), f, t)
                     .any(|r| r.label == rdra_ish_emit::EdgeLabel::Data || r.relation == label);
                 if !listed {
                     return Err(format!(
@@ -420,7 +426,8 @@ fn every_drawn_kind_has_a_shape_and_every_unlabelled_edge_one_relation() {
             }
             for edge @ (from, relation, to) in &chart.unlabelled {
                 let (f, t) = (&chart.nodes[from], &chart.nodes[to]);
-                let relations: Vec<_> = rdra_ish_emit::edge_relations(diagram, f, t).collect();
+                let relations: Vec<_> =
+                    rdra_ish_emit::edge_relations(diagram_kind(diagram), f, t).collect();
                 assert!(
                     matches!(relations.as_slice(), [only] if only.relation == relation
                         && only.label == rdra_ish_emit::EdgeLabel::Name),
@@ -1569,7 +1576,7 @@ fn a_when_guard_is_a_labelled_derived_edge_wherever_applies_to_is_drawn() {
         let mut drawn: Vec<BTreeSet<(String, String, String)>> = Vec::new();
         for kind in ["rdra", "usecase", "condition"] {
             assert_eq!(
-                rdra_ish_emit::implied_relation(kind, "condition", "usecase"),
+                rdra_ish_emit::implied_relation(diagram_kind(kind), "condition", "usecase"),
                 None,
                 "{kind}: a condition to a use case is `applies_to` or `when`"
             );

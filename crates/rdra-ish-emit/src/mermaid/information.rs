@@ -3,7 +3,7 @@
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_line, quote, Header, NodeScope,
+    class_defs, contract_id, desc_line, node_line, quote, Diagram, Header, NodeScope,
 };
 use crate::{is_relate, object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{ColumnType, NodeRef, SemanticModel};
@@ -107,7 +107,7 @@ impl Emitter for InformationMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, "information", edges);
+        render_edges(&mut body, Diagram::Information, edges);
         body.push_str(&class_defs(&kinds));
 
         let drawn: HashSet<NodeRef> = entities
@@ -128,7 +128,7 @@ impl Emitter for InformationMermaidEmitter {
             ))
             .collect();
         let header = Header {
-            diagram: "information",
+            diagram: Diagram::Information,
             view,
             layers: None,
             kinds,

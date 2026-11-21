@@ -1,7 +1,7 @@
 //! The ER diagram (`--kind er`).
 
 use super::entity_neighbourhood;
-use crate::diagram_common::{col_type_str, Header, NodeScope};
+use crate::diagram_common::{col_type_str, Diagram, Header, NodeScope};
 use crate::{is_relate, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, SemanticModel};
 
@@ -22,7 +22,7 @@ impl Emitter for ErMermaidEmitter {
         ents.sort_by_key(|(_, e)| &e.id);
 
         let header = Header {
-            diagram: "er",
+            diagram: Diagram::Er,
             view,
             layers: None,
             kinds: if ents.iter().any(|(k, _)| is_visible(&NodeRef::Entity(*k))) {

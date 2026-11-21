@@ -3,7 +3,9 @@
 //! each BUC is a table (`list --kind buc-roles`), not part of the diagram.
 
 use super::{declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, edge_label, quote, Header};
+use crate::diagram_common::{
+    class_defs, contract_id, desc_line, edge_label, quote, Diagram, Header,
+};
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use rdra_ish_core::{buc_handoffs, buc_members};
@@ -139,7 +141,7 @@ impl Emitter for BusinessMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, "business", edges);
+        render_edges(&mut body, Diagram::Business, edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -151,7 +153,7 @@ impl Emitter for BusinessMermaidEmitter {
             })
             .collect();
         let header = Header {
-            diagram: "business",
+            diagram: Diagram::Business,
             view,
             layers: None,
             omitted: omitted_linked_kinds(model, |nr| anchors.contains(nr), &drawn, &kinds),
