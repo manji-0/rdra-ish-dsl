@@ -136,7 +136,7 @@ stays as it was.
 | RDRA | TLA+ |
 |---|---|
 | Entity | `<E>_Ids == 1..InstanceCount` and `<E>_exists`, a function over the ids with values `"absent"`, `"present"`, `"deleted"` |
-| Enum, Bool, `@null`, Int, Money, Decimal, Date, or DateTime column the system reads or writes; a variation-typed column that something names | `<E>_<col>`, a function over `<E>_Ids`. Int-like columns range over `IntRange` (nullable ones add `"null"`). |
+| Enum, Bool, `@null`, Int, Money, Decimal, Date, or DateTime column the system reads or writes; a variation-typed column that something names | `<E>_<col>`, a function over `<E>_Ids`. Int-like columns range over `IntRange` (nullable ones add `-1` for null). |
 | `relate` N:1, 1:N, 1:1 | `<Child>_owner_<Parent>`, a function from child ids to parent ids. An `.optional()` relate adds `0` for an unlinked child. |
 | Use case | One operator `<UC>(p0, ...)` per transaction group of `UsecaseTx::groups()` (`<UC>_1`, `<UC>_2`, ... when the writes form several groups). `Next` is the disjunction of `\E` over the parameters. |
 | A use case split into k groups | A run mark `<E>_run_<UC>`, a function from the ids of each entity a step before the last writes to `{"none", "1", .., "k-1"}`. `<UC>_1` takes a row at `"none"` and sets `"1"`; `<UC>_i` binds a parameter per earlier row with `<E>_run_<UC>[p] = "i-1"` in place of a presence test, and sets `"i"`, or `"none"` at the last step (see [Runs of a split use case](./state-derivation.md#runs)). |
@@ -153,7 +153,7 @@ stays as it was.
 | `col < now` | A global `now \in IntRange` and a `Tick` action that adds one while `now < max`. |
 | Entity-local and multi-entity `forbidden`, `invariant`, `required`, `exclusive` | One `INVARIANT` each, named `<Kind>_<Entity>_<n>` (`Forbidden_Order_0`, `Inv_Order_0`, `MultiForbidden_Order_0`). Each ranges over the present instances. |
 | `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
-| `col: T @check(expr)` | `INVARIANT Check_<Entity>_<column>_<n>` over the present instances. A nullable operand is guarded: `qty: Int @null @check(qty >= 1)` prints `(E_qty[b0] = -1) \/ (E_qty[b0] # -1 /\ E_qty[b0] >= 1)`. |
+| `col: T @check(expr)` | `INVARIANT Check_<Entity>_<column>_<n>` over the present instances. A nullable operand is guarded: `qty: Int @null @check(qty >= 1)` prints `(E_qty[b0] # -1 /\ E_qty[b0] >= 1)`, so a null `qty` violates it. |
 | `relate(Child, Parent, 1:1)` | `INVARIANT Unique_<Child>_<role>` (role defaults to the parent id): `\A b0, b1 \in <Child>_Ids`, two present children are the same or have different owners. An unlinked optional child owns nothing. |
 | `relate(Child, Parent, 1..*:1)` (child-side minimum) | `INVARIANT MinCard_<Child>_<role>`: `\A b0 \in <Parent>_Ids`, a present parent has `\E b1 \in <Child>_Ids` present with `<Child>_owner_<Parent>[b1] = b0`. Checked in every state, so a parent created without a child in the same transaction, or a deleted last child, is a counterexample. |
 | Pre-existing child of a `relate` | `Init` links the owner: `\in [<Child>_Ids -> <Parent>_Ids]` for N:1 (start `Any`), `[i \in <Child>_Ids \|-> i]` for 1:1 and for a child-side minimum (start `Identity`). An `.optional()` key under a created parent starts unlinked (`Base`). |
@@ -186,8 +186,7 @@ after(Sell).assert(Item.sold >= 1)
 invariant(Cert).when(status == revoked).none(Assign.status == active)
 // equivalent: invariant(Cert, Assign).when(Cert.status == revoked).none(Assign.status == active)
 
-forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured)
-  .along(Order, Payment)
+forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)
 ```
 
 Operators:
@@ -309,8 +308,8 @@ the reduced cone, before the `_WF` note. A property without `.fair` rests on
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
 `HygieneManagerEventuallyAppointed` runs on a 243-state cone and the whole `verify` takes
-18 s; on patent-ops `GrantEnds` runs on a 4,105-state cone; on insurance-claim-ops
-`ClaimEventuallyDecided` runs on a 2,975-state cone and `SubrogationEnds` on a 4,783-state one. The test
+18 s; on patent-ops `GrantEnds` runs on a 75,017-state cone; on insurance-claim-ops
+`ClaimEventuallyDecided` runs on a 633,787-state cone and `SubrogationEnds` on a 372-state one. The test
 `a_property_cone_decides_what_the_whole_model_decides` in `engine_equivalence` compares the
 cone verdict with the whole-model verdict on the temporal samples and on fixtures for each
 case: another entity looping outside the cone, a fair use case whose guard reads another
@@ -574,7 +573,7 @@ $ rdra-ish verify samples/formal-verification/partial_scope.rdra --entity Order
 bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
 scope: --entity Order
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
-temporal properties: none, no whole-model run
+temporal properties: none
 not checked: 1 entity view (Audit), 1 invariant (Forbidden_Audit_1), 0 after-asserts; 1 build error deferred; 1 finding not decided
   deferred error[DerivedColumnRead_Audit_score]: Audit: Audit.score is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead
   whether Record can run is not decided: no cone of a selected entity keeps it
@@ -768,7 +767,7 @@ counterexample at one, two, or three instances.
   of 300,000 states is compared at 1 instance only. The test decides this on the run
   `verify` uses: the reduced cone where the cone reduces, the cone itself where it does not.
   It lists these cones in `VERIFY_FALLBACK` and fails when the list changes, so a cone that
-  grows past the cap fails it until it is listed. Today 10 cones in `samples/clinic-ops`,
+  grows past the cap fails it until it is listed. Today 11 cones in `samples/clinic-ops`,
   `samples/patent-ops`, `samples/food-permit-ops` and `samples/insurance-claim-ops` are
   listed. The table gives each listed cone and each cone the cap of 300,000 took off the
   list, at 2 instances, measured with
@@ -1121,8 +1120,8 @@ Name         = [A-Za-z0-9_]+
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
-Locally (Apple silicon) the 63 runs of the 31 roots take about 220 s: clinic-ops `verify`
-takes 105 s at about 2.0 GB (50 s at 1.4 GB before the run marks of `CheckInPatient`, #80)
-and patent-ops `verify` 68 s at about 1.2 GB, their TLC JVMs included; food-permit-ops
-`verify` takes 16 s, and insurance-claim-ops `verify` about 3 s at about 470 MB. The CI
-step has 5 minutes.
+The script makes 65 runs of the 32 roots. Locally (Apple silicon) clinic-ops `verify` took
+105 s at about 2.0 GB (50 s at 1.4 GB before the run marks of `CheckInPatient`, #80) and
+patent-ops `verify` 68 s at about 1.2 GB, their TLC JVMs included, and food-permit-ops
+`verify` 16 s, when last measured there. insurance-claim-ops `verify` takes about 180 s at
+about 2.1 GB, as the gaps above say. The CI step has 20 minutes.
