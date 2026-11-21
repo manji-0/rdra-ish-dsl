@@ -2,8 +2,8 @@
 
 This note defines what rdra-ish is when it is finished: an RDRA requirements model
 that also carries a logical data model and a lifecycle that TLC can check. It records
-where today's DSL stands against the RDRA primary sources, the semantics the finished
-DSL commits to, and the order of work that gets there.
+where the DSL stood against the RDRA primary sources when it was written,
+the semantics the finished DSL commits to, and the order of work that gets there.
 
 <!-- constrained-by ./language-reference.md -->
 <!-- constrained-by ./formal-verification.md -->
@@ -46,22 +46,24 @@ is that choice.
 | Layer | Source of truth | What the modeler writes | What the tool guarantees |
 |---|---|---|---|
 | Requirements | RDRA 3.0 (`RDRA.md`, the RDRA definition sheet) | RDRA elements and their connections | Every connection the RDRA rules require exists, and nothing is undefined or unconnected |
-| Logical data | The author's RDRASpec mapping | Entities, columns, keys, relations | A normalized relational model that DBML, JSON Schema, and OpenAPI can be generated from |
+| Logical data | The author's RDRASpec mapping | Entities, columns, keys, relations | A normalized relational model that DBML, SQL DDL, JSON Schema, and OpenAPI can be generated from |
 | Lifecycle | rdra-ish | Effects, guards, constraints, properties per use case | Within the stated bounds, no reachable state breaks a constraint, and every declared state is reachable |
 
-Physical database design is out of scope. DBML is the last data output, and the DSL
-gets no DDL emitter. Domain code is in scope: `rdra-ish codegen` prints the data types, state
+Physical database design beyond the schema is out of scope. DBML and the SQL DDL of
+`export --kind sql` (tables, keys, indexes, and `CHECK` constraints) are the last data outputs.
+Domain code is in scope: `rdra-ish codegen` prints the data types, state
 sums, and transition functions of the model in TypeScript, Rust, or Go, for an agent to
-finish ([design](./design/algebraic-codegen.md)). Unbounded proof (TLAPS, inductive invariants) is also out of
+finish ([design](./design/algebraic-codegen.md)). Unbounded proof with TLAPS is also out of
 scope. Verification means bounded model checking with TLC, and the bounds are part of
-every result.
+every result. `verify --prove` (experimental) also tries to prove each state rule for any
+number of rows with z3, as an inductive invariant.
 
 ## The requirements layer conforms to RDRA 3.0
 
 The author's `RDRA.md` lists the elements and the rules that connect them. The table
-compares each element with today's DSL and states the target.
+compares each element with the DSL when this vision was written and states the target.
 
-| RDRA 3.0 element | Today | Target |
+| RDRA 3.0 element | When written | Target |
 |---|---|---|
 | アクター | `actor` | Keep. |
 | アクター群, 外部システム群 | Missing | Defer. Only diagrams would read a group, and a diagram can group by file or tag. |
@@ -82,9 +84,9 @@ compares each element with today's DSL and states the target.
 
 Two consequences of the table matter beyond conformance.
 
-A variation is the missing distinction between a state axis and an attribute. Today
-every `Enum` column is treated as a state axis, so `PaymentTransaction.method` in
-clinic-ops shows up as unreachable variants. In the target, a column typed by a
+A variation is the missing distinction between a state axis and an attribute. Without
+it, every `Enum` column was treated as a state axis, so `PaymentTransaction.method` in
+clinic-ops showed up as unreachable variants. In the target, a column typed by a
 variation is an attribute: an actor chooses its value, and nothing checks whether
 each value is reachable. A column with `transitions` is a state axis. RDRA draws the
 same line between 状態モデル and バリエーション.
@@ -212,13 +214,13 @@ element of the stage exists.
 Each phase ends in a check that the next phase depends on. Removal comes before
 addition.
 
-1. **Soundness.** Export every `sets` effect, warn when a constrained column has no
+1. **Soundness.** Done. Export every `sets` effect, warn when a constrained column has no
    writer, and agree on one initial state. The check is a regression sample that
    reproduces today's vacuous `TLC: OK` and must now fail.
-2. **Subtraction.** Delete `location`, stop declaring `state`, and fix the docs that
+2. **Subtraction.** Done. Delete `location`, stop declaring `state`, and fix the docs that
    describe rules the code does not have. The check is that clinic-ops lint drops the
    66 orphan findings on derived states.
-3. **RDRA conformance.** Restore `condition` and `variation`, turn `timing` into a
+3. **RDRA conformance.** Done. Restore `condition` and `variation`, turn `timing` into a
    timer, make use cases the trigger of transitions, and add the definition-sheet
    lint rules. The check is that clinic-ops passes every inconsistency rule.
 4. **One transition system.** Done. The shared transition system has existence
@@ -334,8 +336,8 @@ These questions were decided on 2026-10-29, during phase 6:
   TLC's state graph. It compares every cone of every sample at 2 instances, except a cone
   whose BFS passes 300,000 states there, which it compares at 1 instance. The test lists
   those cones in `VERIFY_FALLBACK` and fails when a cone joins or leaves the list, so the
-  coverage it gives up is always named. Today the list holds 10 cones: 1 of clinic-ops, 2 of
-  patent-ops, 1 of food-permit-ops, and 6 of insurance-claim-ops
+  coverage it gives up is always named. Today the list holds 11 cones: 1 of clinic-ops, 2 of
+  patent-ops, 1 of food-permit-ops, and 7 of insurance-claim-ops
   ([formal-verification.md](./formal-verification.md#known-verification-gaps) names them).
 - Each sample states its expected result in `// expect` lines of its first file in load
   order, so CI keeps no second list of samples. The deadlock check found one model defect:
