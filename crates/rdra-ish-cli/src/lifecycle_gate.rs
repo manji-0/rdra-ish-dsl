@@ -6,10 +6,12 @@
 //! compile until it says what it reads. A `diagram` or `export` kind is not classified: it
 //! names its emitter as an [`Output`], and the trait the emitter implements is what it
 //! reads. An [`Emitter`] gets the model and the view, so it reads no lifecycle. A
-//! [`StatesEmitter`] also gets [`Explored`], which only [`Output::gate`] builds, so it is
+//! [`StatesEmitter`] also gets [`Explored`], which only [`Output::gate`] hands out, so it is
 //! never reached before its gate. An emitter that starts reading the explored states must
 //! change its trait, and with it the gate. `states` is not gated: its report is the
 //! lifecycle, findings included, and it exits 1 on an error after printing it.
+
+use std::cell::OnceCell;
 
 use rdra_ish_core::lifecycle::{derive_states_built, Bounds, Caps, Scope};
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
@@ -17,9 +19,36 @@ use rdra_ish_emit::{EmitError, Emitter, Explored, OnDeadlock, StatesEmitter, Vie
 
 use crate::cli::{CsvKind, ListKind};
 use crate::state_findings::{
-    note_state_errors, reject_state_errors, reject_state_errors_except_deadlock,
-    READS_NO_LIFECYCLE, TLA_STATE_MODELS,
+    findings_of, note_state_errors, reject_state_errors, reject_state_errors_except_deadlock,
+    Finding, READS_NO_LIFECYCLE, TLA_STATE_MODELS,
 };
+
+/// The lifecycle at the `states` defaults, explored on first use and at most once, so a
+/// command that gates several outputs runs one search.
+pub(crate) struct Lifecycle<'a> {
+    program: &'a ResolvedProgram,
+    model: &'a SemanticModel,
+    explored: OnceCell<(Vec<Finding>, Explored)>,
+}
+
+impl<'a> Lifecycle<'a> {
+    pub(crate) fn new(program: &'a ResolvedProgram, model: &'a SemanticModel) -> Self {
+        Lifecycle {
+            program,
+            model,
+            explored: OnceCell::new(),
+        }
+    }
+
+    fn explored(&self) -> &(Vec<Finding>, Explored) {
+        self.explored.get_or_init(|| {
+            let (report, ts) =
+                derive_states_built(self.model, &Scope::ALL, Bounds::STATES, Caps::STATES);
+            let findings = findings_of(self.program, self.model, &report, &ts).findings;
+            (findings, Explored::from_report(&report))
+        })
+    }
+}
 
 /// What an output reads of the lifecycle.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,16 +118,13 @@ impl CsvKind {
 
 /// Refuses an output that prints explored states while the lifecycle has errors, and notes
 /// the errors for an output that does not.
-pub(crate) fn gate(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-    reads: Reads,
-) -> anyhow::Result<()> {
+pub(crate) fn gate(lifecycle: &Lifecycle, reads: Reads) -> anyhow::Result<()> {
+    let (findings, _) = lifecycle.explored();
     match reads {
-        Reads::Declared => note_state_errors(program, model, READS_NO_LIFECYCLE),
-        Reads::System => note_state_errors(program, model, TLA_STATE_MODELS),
-        Reads::States => reject_state_errors(program, model)?,
-        Reads::StatesDrawingDeadlocks => reject_state_errors_except_deadlock(program, model)?,
+        Reads::Declared => note_state_errors(findings, READS_NO_LIFECYCLE),
+        Reads::System => note_state_errors(findings, TLA_STATE_MODELS),
+        Reads::States => reject_state_errors(findings)?,
+        Reads::StatesDrawingDeadlocks => reject_state_errors_except_deadlock(findings)?,
     }
     Ok(())
 }
@@ -110,9 +136,9 @@ pub(crate) enum Output {
 }
 
 /// An [`Output`] that has passed its gate, with the explored states its emitter reads.
-pub(crate) enum Gated {
+pub(crate) enum Gated<'a> {
     Declared(Box<dyn Emitter>),
-    States(Box<dyn StatesEmitter>, Explored),
+    States(Box<dyn StatesEmitter>, &'a Explored),
 }
 
 impl Output {
@@ -135,25 +161,17 @@ impl Output {
         }
     }
 
-    /// Applies the gate of what the emitter reads, then explores the states it reads.
-    pub(crate) fn gate(
-        self,
-        program: &ResolvedProgram,
-        model: &SemanticModel,
-    ) -> anyhow::Result<Gated> {
-        gate(program, model, self.reads())?;
+    /// Applies the gate of what the emitter reads, then hands it the states it reads.
+    pub(crate) fn gate<'a>(self, lifecycle: &'a Lifecycle) -> anyhow::Result<Gated<'a>> {
+        gate(lifecycle, self.reads())?;
         Ok(match self {
             Output::Declared(emitter) => Gated::Declared(emitter),
-            Output::States(emitter) => {
-                let (report, _) =
-                    derive_states_built(model, &Scope::ALL, Bounds::STATES, Caps::STATES);
-                Gated::States(emitter, Explored::from_report(&report))
-            }
+            Output::States(emitter) => Gated::States(emitter, &lifecycle.explored().1),
         })
     }
 }
 
-impl Gated {
+impl Gated<'_> {
     pub(crate) fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         match self {
             Gated::Declared(emitter) => emitter.emit(model, view),

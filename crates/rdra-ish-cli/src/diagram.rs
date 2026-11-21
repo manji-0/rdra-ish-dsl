@@ -17,7 +17,7 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{DiagramArgs, DiagramKind};
-use crate::lifecycle_gate::{Gated, Output};
+use crate::lifecycle_gate::{Gated, Lifecycle, Output};
 use crate::load::load_clean;
 
 /// Mermaid's default `maxTextSize`: a diagram with more characters is not rendered.
@@ -213,7 +213,8 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
             eprintln!("warning: {}", diag.error);
         }
     }
-    let gated = diagram_output(&kind).gate(&program, &model)?;
+    let lifecycle = Lifecycle::new(&program, &model);
+    let gated = diagram_output(&kind).gate(&lifecycle)?;
     let text = render(
         &gated,
         &model,
@@ -308,6 +309,7 @@ fn write_all(
         DiagramKind::Flow,
         DiagramKind::Sequence,
     ];
+    let lifecycle = Lifecycle::new(program, model);
     let mut written = 0;
     let mut empty = 0;
     let mut write = |kind: &DiagramKind, gated: &Gated, name: String, shot: Shot, about: &str| {
@@ -337,7 +339,7 @@ fn write_all(
     for kind in whole.iter().chain(&per_buc) {
         let name = kind_name(kind);
         // A model with lifecycle errors has no state diagram; the rest are still written.
-        let gated = match diagram_output(kind).gate(program, model) {
+        let gated = match diagram_output(kind).gate(&lifecycle) {
             Ok(gated) => gated,
             Err(err) => {
                 eprintln!("note: --kind {name} is left out: {err}");

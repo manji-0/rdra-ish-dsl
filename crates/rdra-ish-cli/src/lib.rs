@@ -23,7 +23,7 @@ use csv_cmd::run_csv;
 use diagram::run_diagram;
 use export::run_export;
 use fmt_cmd::run_fmt;
-use lifecycle_gate::gate;
+use lifecycle_gate::{gate, Lifecycle};
 use list_output::{format_lint_issues, format_rules, format_transitions, list_elements};
 use load::{deny_deprecated, eprint_diagnostic, load_clean};
 use rdra_ish_core::lifecycle::{Caps, FindingTally, Severity};
@@ -150,7 +150,7 @@ pub fn run() -> Result<()> {
                     .exit();
             }
             let (program, model) = load_clean(&inputs)?;
-            gate(&program, &model, kind.reads())?;
+            gate(&Lifecycle::new(&program, &model), kind.reads())?;
 
             let output = match kind {
                 ListKind::Rule => format_rules(&model, Some(&program), &format)?,

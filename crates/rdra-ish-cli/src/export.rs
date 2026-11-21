@@ -23,7 +23,7 @@ use rdra_ish_emit::{
 };
 
 use crate::cli::{ExportKind, SqlDialect};
-use crate::lifecycle_gate::{gate, Output, Reads};
+use crate::lifecycle_gate::{gate, Lifecycle, Output, Reads};
 use crate::load::load_clean;
 use crate::state_findings::Finding;
 
@@ -75,7 +75,7 @@ pub(crate) fn run_export(
     match export_output(kind, dialect) {
         Export::Artifact(output, ext) => {
             let content = output
-                .gate(&program, &model)?
+                .gate(&Lifecycle::new(&program, &model))?
                 .emit(&model, &View::whole())?;
             let out_path = if out.extension().is_some() {
                 out.to_path_buf()
@@ -95,7 +95,7 @@ pub(crate) fn run_export(
                 whole: bundle,
                 state_models,
             } = tla_export(&model, bounds, &module_name)?;
-            gate(&program, &model, Reads::System)?;
+            gate(&Lifecycle::new(&program, &model), Reads::System)?;
             write_tla(out, bundle, state_models)
         }
     }

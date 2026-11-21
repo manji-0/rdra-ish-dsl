@@ -14,12 +14,12 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{CsvFormat, CsvKind};
-use crate::lifecycle_gate::gate;
+use crate::lifecycle_gate::{gate, Lifecycle};
 use crate::load::load_clean;
 
 pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBuf) -> Result<()> {
     let (program, model) = load_clean(inputs)?;
-    gate(&program, &model, kind.reads())?;
+    gate(&Lifecycle::new(&program, &model), kind.reads())?;
 
     let view = View::whole();
 

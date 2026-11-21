@@ -6,7 +6,7 @@ use std::fmt;
 use rdra_ish_core::lifecycle::{
     derive_states_built, label_prefix, ActionOrigin, Birth, Blocked, Bounds, BoundsLine, Caps,
     Change, GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site,
-    StateDiag, Trace, TraceStep, TransitionSystem,
+    StateDiag, StatesReport, Trace, TraceStep, TransitionSystem,
 };
 use rdra_ish_core::model::{LinkKind, SetValue};
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
@@ -43,16 +43,6 @@ impl fmt::Display for Finding {
     }
 }
 
-/// Every diagnostic of the lifecycle views at the `states` defaults: those on an entity view
-/// first, then each violated constraint or assert once with its counterexample and each
-/// unwitnessed state once, then those that name no entity.
-pub(crate) fn state_consistency_findings(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-) -> Vec<Finding> {
-    state_findings(program, model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings
-}
-
 /// What `check` prints of the lifecycle: the bounds and scope, the findings, and the
 /// `not checked:` block when the scope or a cap left something out.
 pub(crate) struct StateFindings {
@@ -61,8 +51,10 @@ pub(crate) struct StateFindings {
     pub(crate) not_checked: Option<String>,
 }
 
-/// The findings of `state_consistency_findings` for `scope`, with its bounds line and what
-/// it did not check.
+/// Every diagnostic of the lifecycle views for `scope`: those on an entity view first, then
+/// each violated constraint or assert once with its counterexample and each unwitnessed
+/// state once, then those that name no entity. With its bounds line and what it did not
+/// check.
 pub(crate) fn state_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
@@ -71,6 +63,16 @@ pub(crate) fn state_findings(
     caps: Caps,
 ) -> StateFindings {
     let (report, ts) = derive_states_built(model, scope, bounds, caps);
+    findings_of(program, model, &report, &ts)
+}
+
+/// [`state_findings`] of an exploration already run.
+pub(crate) fn findings_of(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    report: &StatesReport,
+    ts: &TransitionSystem,
+) -> StateFindings {
     let on_views = report.views.iter().flat_map(|result| {
         let diags = result.diagnostics.iter().filter(|d| !has_block(d));
         diags.map(move |diag| {
@@ -88,7 +90,7 @@ pub(crate) fn state_findings(
     let violations = report.diags.iter().filter_map(|d| {
         let mut text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
         if report.bounds.instances.get() == 1 {
-            text.push_str(&one_instance_note(&d.diag, &ts));
+            text.push_str(&one_instance_note(&d.diag, ts));
         }
         Some(Finding::new(&d.diag, &[], text))
     });
@@ -115,7 +117,7 @@ pub(crate) fn state_findings(
         .chain(violations)
         .chain(unattributed)
         .collect();
-    let not_checked = report.not_checked(&ts, model);
+    let not_checked = report.not_checked(ts, model);
     StateFindings {
         bounds: report.bounds_line(model),
         findings,
@@ -653,32 +655,23 @@ fn change_row(program: &ResolvedProgram, change: &Change) -> (String, Option<Str
     }
 }
 
-/// Fail closed when state derivation has Error-severity diagnostics (generators).
-pub(crate) fn reject_state_errors(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-) -> anyhow::Result<()> {
-    reject_errors_where(program, model, |_| true)
+/// Fail closed when `findings` has an error (generators).
+pub(crate) fn reject_state_errors(findings: &[Finding]) -> anyhow::Result<()> {
+    reject_errors_where(findings, |_| true)
 }
 
 /// `reject_state_errors`, but a deadlock does not count: the state diagram colours it.
-pub(crate) fn reject_state_errors_except_deadlock(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-) -> anyhow::Result<()> {
-    reject_errors_where(program, model, |finding| {
-        !finding.name.starts_with("Deadlock_")
-    })
+pub(crate) fn reject_state_errors_except_deadlock(findings: &[Finding]) -> anyhow::Result<()> {
+    reject_errors_where(findings, |finding| !finding.name.starts_with("Deadlock_"))
 }
 
 fn reject_errors_where(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
+    findings: &[Finding],
     counts: impl Fn(&Finding) -> bool,
 ) -> anyhow::Result<()> {
     let mut has_error = false;
-    for finding in state_consistency_findings(program, model) {
-        if finding.severity == Severity::Error && counts(&finding) {
+    for finding in findings {
+        if finding.severity == Severity::Error && counts(finding) {
             eprintln!("{finding}");
             has_error = true;
         }
@@ -691,9 +684,9 @@ fn reject_errors_where(
 
 /// An output that prints no reachability result writes on lifecycle errors, with one note
 /// that counts them and ends in `why`, the reason the output is still worth writing.
-pub(crate) fn note_state_errors(program: &ResolvedProgram, model: &SemanticModel, why: &str) {
-    let errors = state_consistency_findings(program, model)
-        .into_iter()
+pub(crate) fn note_state_errors(findings: &[Finding], why: &str) {
+    let errors = findings
+        .iter()
         .filter(|finding| finding.severity == Severity::Error)
         .count();
     if errors > 0 {

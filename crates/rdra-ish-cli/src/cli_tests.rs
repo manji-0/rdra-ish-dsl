@@ -2,7 +2,8 @@ use crate::cli::{ExportKind, ListFormat, ListKind};
 use crate::export::{export_output, Export};
 use crate::lifecycle_gate::Output;
 use crate::list_output::{format_lint_issues, list_elements};
-use crate::state_findings::{state_consistency_findings, state_diag_message};
+use crate::state_findings::{state_diag_message, state_findings};
+use rdra_ish_core::lifecycle::{Bounds, Caps, Scope};
 use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Site, StateDiag, Trace};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_core::{load_project, Project};
@@ -791,7 +792,8 @@ requires_permission(BookAppointment, ScheduleWrite)
         .into_iter()
         .map(|d| d.error.to_string())
         .collect();
-    let state_findings = state_consistency_findings(&program, &model);
+    let state_findings =
+        state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings;
 
     assert!(warnings
         .iter()
@@ -905,7 +907,8 @@ fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
         "clinic-ops must load without errors: {diags:?}"
     );
 
-    let findings = state_consistency_findings(&program, &model);
+    let findings =
+        state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings;
     let unreachable_method: Vec<_> = findings
         .iter()
         .filter(|f| f.message.contains("'method'") && f.message.contains("unreachable"))
