@@ -10,6 +10,7 @@ mod condition;
 mod constraint;
 mod effect;
 mod fk;
+mod index_advice;
 mod instance;
 mod metadata;
 mod predicate_process;
