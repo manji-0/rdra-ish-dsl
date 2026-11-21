@@ -481,6 +481,11 @@ fn read_cti(
             .map(|(i, e)| (encode::bound(i), *e)),
     );
     let enc = Enc { ts };
+    let mut marks_read = VarSet::new();
+    for g in &action.guards {
+        ts.pred_reads(&g.pred, &mut marks_read);
+    }
+    ts.pred_reads(&formula.body, &mut marks_read);
     // Per row: its id, then each var before and after.
     let mut terms: Vec<String> = Vec::new();
     for (row, e) in &rows {
@@ -541,7 +546,13 @@ fn read_cti(
                 continue;
             }
             let label = var_label(ts, v);
-            let in_view = matches!(decl.kind, VarKind::Column { .. } | VarKind::Owner { .. });
+            // A run or raised mark is no view column; it shows when the step or the rule
+            // reads it, since the CTI may turn on it.
+            let in_view = match decl.kind {
+                VarKind::Column { .. } | VarKind::Owner { .. } => true,
+                VarKind::Run { .. } | VarKind::Raised { .. } => marks_read.contains(&v),
+                _ => false,
+            };
             if in_view {
                 before.push(format!("{label}={pre_s}"));
             }
