@@ -4,6 +4,11 @@
 
 ### Added
 
+- insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
+  `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
+  and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a
+  run mark (#147).
+
 - `verify --prove` marks each rule the SQL export's schema does not enforce (the rules under
   `Not enforced by this schema`) with `[not enforced by the SQL schema: <why>]`, and counts
   how many of them the use cases are proved to keep (#141).

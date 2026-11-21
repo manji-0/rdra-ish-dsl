@@ -638,10 +638,19 @@ A rule marked `.lemma()` is an ordinary rule to every engine: `check` and `verif
 so a wrong lemma fails with a trace before it can help a proof. In the proof it is one more
 candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
 `proof: your lemmas: ...` line counts it apart from the rules, so it never counts toward the
-`n of m rules` of the `OK:` line. A lemma reads only what a rule reads: a CTI that turns on a
-split use case's run mark (`_run_<UseCase>`) or an event mark (`_raised_<Event>`) needs a
-fact the DSL cannot state. The one rule of the domain samples that stays unproved,
-insurance-claim-ops' 「賠償の請求は示談書がそろってから完了する」, is such a case.
+`n of m rules` of the `OK:` line.
+
+A lemma reads only what a rule reads, so it cannot name a split use case's run mark
+(`_run_<UseCase>`) or an event mark (`_raised_<Event>`). A CTI that turns on a mark usually
+has a fact about columns behind it, one step earlier. Find it by following the CTIs back.
+insurance-claim-ops' 「賠償の請求は示談書がそろってから完了する」 is an example. Its CTI is a
+case between OpenSettlement's two steps (`_run_OpenSettlement=1`) with a completed claim. A
+lemma about cases in `investigating` breaks one step earlier, at RequestInvestigation, from
+`responded`. Generalizing over every status before negotiation closes the proof:
+
+```rdra
+forbidden(Claim, ClaimCase, Claim.completed_on == present, ClaimCase.status in (received, responded, investigating), ClaimCase.coverage in (bodily_liability, property_liability)).along(Claim, ClaimCase).label("賠償責任の事故は示談交渉の前に請求を完了しない").lemma()
+```
 
 ```
 proof (Z3 version 4.8.12 - 64 bit): 2 state rules, for any number of rows and any Int value
@@ -683,7 +692,7 @@ an obligation the use cases already discharge, for any number of rows.
 
 `--prove` reads the state rules only. After-asserts and temporal properties are not tried.
 The result does not change the exit status unless `--deny-unproved` is given. Every rule of
-the domain samples proves except the insurance-claim-ops rule named above.
+the domain samples proves, insurance-claim-ops' with the lemma above.
 `tests/proof_equivalence.rs` checks on every sample that no rule it proves has a BFS
 counterexample at one, two, or three instances.
 

@@ -94,10 +94,14 @@ invariant(Order).when(status == placed).none(Shipment).label("a placed order has
 - **The proof uses a lemma it can prove.** A lemma becomes a candidate fact, like a rule.
   It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and `proof: your
   lemmas: ...` counts lemmas apart from the rules.
-- **A lemma can read only what a rule can read.** A CTI that turns on a split use case's
-  run mark (`_run_<UseCase>`) or an event mark (`_raised_<Event>`) needs a fact the DSL
-  cannot state. Report that rule as unproved, with the CTI, and do not loop on lemmas.
+- **A lemma can read only what a rule can read.** It cannot name a split use case's run
+  mark (`_run_<UseCase>`) or an event mark (`_raised_<Event>`). When a CTI turns on one,
+  ask which columns keep that state unreachable one step earlier, and state that instead.
+- **When a lemma's own CTI steps back one state, generalize it.** If a lemma about status
+  `investigating` breaks at the step that enters `investigating`, widen it to every status
+  that can lead there (`status in (received, responded, investigating)`), rather than adding
+  a second lemma.
 
 Propose at most one lemma per CTI. Check it with `rdra-ish check`, then rerun
-`rdra-ish verify --prove`. Stop when the CTI's state is reachable (case 1), or when the
-next CTI needs a mark.
+`rdra-ish verify --prove`. Stop when the CTI's state is reachable (case 1), or after three
+lemmas leave the rule unproved: report the rule with its last CTI.
