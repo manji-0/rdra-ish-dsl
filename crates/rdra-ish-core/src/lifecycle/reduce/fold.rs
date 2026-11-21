@@ -19,9 +19,6 @@ pub struct Fold {
     pub(super) t_params: Vec<(u8, bool)>,
     /// The folded guards, by index in the action.
     pub(super) guards: Vec<usize>,
-    /// For a `Linked` key: the folded node's body, with its quantifier over the key's entity
-    /// stripped and its link atoms replaced by `True`, read with the key slot as `Bound(0)`.
-    pub(super) node: Option<Pred>,
 }
 
 /// What indexes a fold's bit.
@@ -43,6 +40,9 @@ pub enum FoldKey {
         entity: EntId,
         link_var: VarId,
         s_param: u8,
+        /// The folded node's body, with its quantifier over `entity` stripped and its link
+        /// atoms replaced by `True`, read with the key slot as `Bound(0)`.
+        body: Pred,
     },
 }
 
@@ -57,7 +57,10 @@ impl Fold {
 
     /// For a `Linked` key, the folded node's body, read with the key slot as `Bound(0)`.
     pub fn node_body(&self) -> Option<&Pred> {
-        self.node.as_ref()
+        match &self.key {
+            FoldKey::Param(_) => None,
+            FoldKey::Linked { body, .. } => Some(body),
+        }
     }
 
     /// The T params and whether each must be on a present row.
@@ -74,11 +77,10 @@ impl Fold {
     pub(super) fn holds(&self, ts: &TransitionSystem, s: &State, c: u8) -> bool {
         let a = &ts.actions[self.act.index()];
         let mut params = vec![0u8; a.params.len()];
-        let key = match self.key {
-            FoldKey::Param(key) => key,
-            FoldKey::Linked { entity, .. } => {
-                let body = self.node.as_ref().expect("a linked fold has its node");
-                if !s.is_present(ts, entity, usize::from(c)) {
+        let key = match &self.key {
+            FoldKey::Param(key) => *key,
+            FoldKey::Linked { entity, body, .. } => {
+                if !s.is_present(ts, *entity, usize::from(c)) {
                     return false;
                 }
                 let mut env = crate::lifecycle::expr::Env::new(&params);
@@ -271,7 +273,6 @@ impl TransitionSystem {
             key: FoldKey::Param(key),
             t_params,
             guards,
-            node: None,
         })
     }
 
@@ -310,10 +311,10 @@ impl TransitionSystem {
                 entity: node.entity,
                 link_var: node.link.0,
                 s_param: node.link.1,
+                body: node.body,
             },
             t_params: Vec::new(),
             guards: vec![guard],
-            node: Some(node.body),
         })
     }
 

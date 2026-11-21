@@ -130,8 +130,8 @@ impl Extended {
                     entity,
                     link_var,
                     s_param,
+                    body,
                 } => {
-                    let body = fold.node.as_ref().expect("a linked fold has its node");
                     let signature = format!("{:?}", (entity, link_var, body));
                     let var = match groups.get(&signature) {
                         Some(&g) => {
