@@ -963,11 +963,13 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
 #[test]
 fn usecase_scope_errors_say_what_to_pass() {
     use crate::cli::DiagramKind;
-    use crate::diagram::{run_diagram, DiagramRequest};
+    use crate::cli::{DiagramArgs, OutputFormat};
+    use crate::diagram::run_diagram;
     let out = std::env::temp_dir().join("rdra_ish_usecase_scope_errors");
-    let request = |kind: DiagramKind, buc: &[&str], usecase: &[&str]| DiagramRequest {
+    let request = |kind: DiagramKind, buc: &[&str], usecase: &[&str]| DiagramArgs {
         inputs: vec![errors_fixture("samples/ec-site")],
         kind,
+        format: OutputFormat::Mermaid,
         buc: buc.iter().map(|id| id.to_string()).collect(),
         usecase: usecase.iter().map(|id| id.to_string()).collect(),
         entity: Vec::new(),
@@ -1009,11 +1011,13 @@ fn usecase_scope_errors_say_what_to_pass() {
 #[test]
 fn entity_scope_errors_say_what_to_pass() {
     use crate::cli::DiagramKind;
-    use crate::diagram::{run_diagram, DiagramRequest};
+    use crate::cli::{DiagramArgs, OutputFormat};
+    use crate::diagram::run_diagram;
     let out = std::env::temp_dir().join("rdra_ish_entity_scope_errors");
-    let request = |kind: DiagramKind, buc: &[&str], entity: &[&str]| DiagramRequest {
+    let request = |kind: DiagramKind, buc: &[&str], entity: &[&str]| DiagramArgs {
         inputs: vec![errors_fixture("samples/ec-site")],
         kind,
+        format: OutputFormat::Mermaid,
         buc: buc.iter().map(|id| id.to_string()).collect(),
         usecase: Vec::new(),
         entity: entity.iter().map(|id| id.to_string()).collect(),
@@ -1051,11 +1055,13 @@ fn entity_scope_errors_say_what_to_pass() {
 #[test]
 fn a_deadlocked_model_still_draws_its_state_diagram_with_the_deadlock_coloured() {
     use crate::cli::DiagramKind;
-    use crate::diagram::{run_diagram, DiagramRequest};
+    use crate::cli::{DiagramArgs, OutputFormat};
+    use crate::diagram::run_diagram;
     let out = std::env::temp_dir().join("rdra_ish_deadlock_state_diagram");
-    run_diagram(DiagramRequest {
+    run_diagram(DiagramArgs {
         inputs: vec![errors_fixture("samples/formal-verification/deadlock.rdra")],
         kind: DiagramKind::State,
+        format: OutputFormat::Mermaid,
         buc: Vec::new(),
         usecase: Vec::new(),
         entity: vec!["Order".to_string()],

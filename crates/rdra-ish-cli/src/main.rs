@@ -19,7 +19,7 @@ mod tlc_replay;
 mod verify;
 use cli::{Cli, Commands, ListFormat, ListKind};
 use csv_cmd::run_csv;
-use diagram::{run_diagram, DiagramRequest};
+use diagram::run_diagram;
 use export::run_export;
 use fmt_cmd::run_fmt;
 use lifecycle_gate::gate;
@@ -126,34 +126,7 @@ fn main() -> Result<()> {
             println!("{}", lifecycle.bounds.ok());
         }
 
-        Commands::Diagram {
-            inputs,
-            kind,
-            all,
-            format: _,
-            buc,
-            usecase,
-            entity,
-            actor,
-            node_kind,
-            edge_kind,
-            title,
-            legend,
-            out,
-        } => run_diagram(DiagramRequest {
-            inputs,
-            kind,
-            all,
-            buc,
-            usecase,
-            entity,
-            actor,
-            node_kind,
-            edge_kind,
-            title,
-            legend,
-            out,
-        })?,
+        Commands::Diagram(args) => run_diagram(args)?,
 
         Commands::Csv {
             inputs,

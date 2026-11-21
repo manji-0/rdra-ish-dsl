@@ -1,8 +1,9 @@
 //! `diagram` CLI command.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{Context, Result};
+use clap::ValueEnum;
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use rdra_ish_emit::{
     mermaid::{
@@ -15,7 +16,7 @@ use rdra_ish_emit::{
 };
 use std::fs;
 
-use crate::cli::DiagramKind;
+use crate::cli::{DiagramArgs, DiagramKind};
 use crate::lifecycle_gate::{Gated, Output};
 use crate::load::load_clean;
 
@@ -24,21 +25,6 @@ const MERMAID_MAX_TEXT: usize = 50_000;
 /// Mermaid's default `maxEdges`: a flowchart with more edges is not rendered.
 const MERMAID_MAX_EDGES: usize = 500;
 
-pub struct DiagramRequest {
-    pub inputs: Vec<PathBuf>,
-    pub kind: DiagramKind,
-    pub all: bool,
-    pub buc: Vec<String>,
-    pub usecase: Vec<String>,
-    pub entity: Vec<String>,
-    pub actor: Vec<String>,
-    pub node_kind: Vec<String>,
-    pub edge_kind: Vec<String>,
-    pub title: bool,
-    pub legend: bool,
-    pub out: Option<PathBuf>,
-}
-
 /// What one diagram draws: its scope, and the entities `--entity` names for the kinds that
 /// read them.
 struct Shot {
@@ -46,8 +32,8 @@ struct Shot {
     entities: Vec<String>,
 }
 
-pub fn run_diagram(request: DiagramRequest) -> Result<()> {
-    let DiagramRequest {
+pub fn run_diagram(args: DiagramArgs) -> Result<()> {
+    let DiagramArgs {
         inputs,
         kind,
         all,
@@ -60,7 +46,8 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         title,
         legend,
         out,
-    } = request;
+        format: _,
+    } = args;
     let inputs = inputs.as_slice();
     let (program, model) = load_clean(inputs)?;
     let model_path = inputs
@@ -576,23 +563,11 @@ fn use_cases_touching(model: &SemanticModel, entities: &[String]) -> Vec<String>
 }
 
 /// The `--kind` value.
-fn kind_name(kind: &DiagramKind) -> &'static str {
-    match kind {
-        DiagramKind::Rdra => "rdra",
-        DiagramKind::Context => "context",
-        DiagramKind::Requirement => "requirement",
-        DiagramKind::Business => "business",
-        DiagramKind::Usecase => "usecase",
-        DiagramKind::Robustness => "robustness",
-        DiagramKind::Sequence => "sequence",
-        DiagramKind::Information => "information",
-        DiagramKind::Condition => "condition",
-        DiagramKind::Flow => "flow",
-        DiagramKind::Screen => "screen",
-        DiagramKind::Er => "er",
-        DiagramKind::State => "state",
-        DiagramKind::Event => "event",
-    }
+fn kind_name(kind: &DiagramKind) -> String {
+    kind.to_possible_value()
+        .expect("no diagram kind is skipped")
+        .get_name()
+        .to_string()
 }
 
 /// The diagram's name as RDRA calls it, for its title.
