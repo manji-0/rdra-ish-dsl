@@ -128,7 +128,7 @@ fn the_ok_line_says_how_many_rules_were_proved() {
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "{stdout}");
     assert!(
-        stdout.contains("; 2 of 2 rules proved for any number of rows\n"),
+        stdout.contains("; 2 of 2 rules proved for any number of rows and any Int value\n"),
         "{stdout}"
     );
 }
@@ -150,7 +150,9 @@ fn deny_unproved_fails_a_run_that_tlc_passes() {
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(1), "{stderr}");
     assert!(
-        stderr.contains("1 of 1 rules unproved for any number of rows (--deny-unproved)"),
+        stderr.contains(
+            "1 of 1 rules unproved for any number of rows and any Int value (--deny-unproved)"
+        ),
         "{stderr}"
     );
 }
@@ -206,4 +208,49 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
         stdout.contains("proof: your lemmas: 1 proved, 0 unproved, 0 out of scope\n"),
         "{stdout}"
     );
+}
+
+#[test]
+fn a_rule_that_holds_only_under_the_int_bound_is_unproved() {
+    if !have("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    // At Int 0..5 no qty passes 5, so `check` passes; Adjust may write any number.
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_int_top");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("m.rdra");
+    std::fs::write(
+        &file,
+        r#"entity Item "商品" {
+  id: Int @pk
+  qty: Int @null
+}
+
+usecase CreateItem "登録"
+usecase Adjust "調整"
+
+creates(CreateItem, Item)
+updates(Adjust, Item)
+sets(Adjust, Item.qty == present)
+forbidden(Item, qty > 5)
+"#,
+    )
+    .unwrap();
+    let out = verify(&["--prove", file.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains("unproved: Forbidden_Item_0: not inductive; Adjust(Item#1) breaks it"),
+        "{stdout}"
+    );
+    // The value z3 picks depends on its version; it is some number above 5.
+    let qty = stdout
+        .lines()
+        .find_map(|l| {
+            l.strip_prefix("  Item#1 (present) ")?
+                .split_once("-> qty=")
+                .map(|(_, v)| v)
+        })
+        .unwrap_or_else(|| panic!("no CTI line that writes qty\n{stdout}"));
+    assert!(qty.trim().parse::<i64>().is_ok_and(|n| n > 5), "{qty}");
 }

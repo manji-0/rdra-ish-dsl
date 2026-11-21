@@ -4,6 +4,11 @@
 
 ### Added
 
+- `verify --prove` also proves for any Int value and any time: Int columns and `now` have no
+  top in the proof, `Tick` always runs, and a write of any value takes any number. A rule
+  that held only because numbers stop at `--int-range-max` is now unproved, with a CTI
+  that shows the larger value (#141).
+
 - `.lemma()` on a `forbidden` or an `invariant` marks a fact written to help
   `verify --prove`. Every engine checks it as a rule; the proof reports it as
   `proved: lemma <name>` and counts it apart from the rules (#141). The `rdra-ish-verify`

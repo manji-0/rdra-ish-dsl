@@ -4,18 +4,21 @@
 //! which stands for an unlinked optional key and is never a row, and `zero<i>`, the slot a
 //! non-optional key holds at base (slot 0). Every var but `now` is a function from its
 //! entity's sort to an `Int` (a domain index, as `Value` holds it) or, for a key, to the
-//! parent's sort. `now` is an `Int` constant. Value domains keep their bounds: only the number
-//! of rows is unbounded.
+//! parent's sort. `now` is an `Int` constant. An Int column and `now` range over every
+//! non-negative integer, not the bounds' `0..=int_max`: the clock ticks without a top, and a
+//! choice of every value of an Int domain (`sets(.., col == present)`, a copy) takes any
+//! number. Enum domains are finite and keep their values.
 //!
-//! The encoding over-approximates the explorer in one place only: a `New` param takes any
-//! absent slot, not the lowest one. Every state and step the explorer reaches, at any slot
-//! count, is then a model of the encoding, so a property proved here holds at every bound.
+//! The encoding over-approximates the explorer in two ways: a `New` param takes any absent
+//! slot, not the lowest one, and numbers have no top. Every state and step the explorer
+//! reaches, at any slot count and any Int range, is then a model of the encoding, so a
+//! property proved here holds at every bound.
 
 use std::collections::BTreeMap;
 
 use crate::lifecycle::types::{
-    Action, At, Birth, CmpOp, Domain, Effect, EntId, ParamRole, Pred, Rhs, Start, Term, Value,
-    VarId, VarKind,
+    Action, At, Birth, CmpOp, Domain, Effect, EntId, GuardWhy, ParamRole, Pred, Rhs, Start, Term,
+    Value, VarId, VarKind,
 };
 use crate::lifecycle::TransitionSystem;
 
@@ -109,6 +112,19 @@ pub(super) fn bound(b: usize) -> String {
 }
 
 impl Enc<'_> {
+    /// `term` lies in `var`'s domain: `0..size` for a finite domain, any non-negative number
+    /// for an Int domain.
+    fn in_domain(&self, var: VarId, term: &str) -> String {
+        let domain = &self.ts.var(var).domain;
+        match domain.is_numeric() {
+            true => format!("(<= 0 {term})"),
+            false => format!(
+                "(and (<= 0 {term}) (< {term} {}))",
+                domain.size(self.ts.bounds)
+            ),
+        }
+    }
+
     /// The parent and optionality of a key var.
     fn key(&self, var: VarId) -> Option<(EntId, bool)> {
         match self.ts.var(var).domain {
@@ -173,10 +189,8 @@ impl Enc<'_> {
         }
         for v in ts.var_ids() {
             let decl = ts.var(v);
-            let size = decl.domain.size(ts.bounds);
             if let VarKind::Now = decl.kind {
-                out +=
-                    &format!("(declare-const now Int)\n(assert (and (<= 0 now) (< now {size})))\n");
+                out += "(declare-const now Int)\n(assert (<= 0 now))\n";
                 continue;
             }
             let e = self.owner(v).expect("a row var has an entity");
@@ -185,7 +199,8 @@ impl Enc<'_> {
             match self.key(v) {
                 None => {
                     out += &format!(
-                        "(assert (forall ((x {s})) (and (<= 0 ({f} x)) (< ({f} x) {size}))))\n"
+                        "(assert (forall ((x {s})) {}))\n",
+                        self.in_domain(v, &format!("({f} x)"))
                     );
                 }
                 Some((parent, false)) => {
@@ -445,9 +460,7 @@ impl Enc<'_> {
                 {
                     Ok(vals) => {
                         let c = fresh(&mut cmds, self.var_sort(*var));
-                        let any: Vec<String> =
-                            vals.iter().map(|v| format!("(= {c} {v})")).collect();
-                        cmds += &format!("(assert {})\n", or(any));
+                        cmds += &format!("(assert {})\n", self.one_of(*var, values, &vals, &c));
                         forks.push((*var, *p, String::new(), c));
                     }
                     Err(Unsupported(why)) => {
@@ -494,7 +507,8 @@ impl Enc<'_> {
             params: &entities,
             bound: Vec::new(),
         };
-        for g in &action.guards {
+        // The clock's guard is the bound's top; without a top, `Tick` always runs.
+        for g in action.guards.iter().filter(|g| g.why != GuardWhy::Clock) {
             match self.pred(&g.pred, &scope) {
                 Ok(p) => cmds += &format!("(assert {p})\n"),
                 Err(Unsupported(why)) => loose.push(format!("a guard of {}: {why}", action.name)),
@@ -506,6 +520,25 @@ impl Enc<'_> {
         }
     }
 
+    /// `c` is one of `values` (whose terms are `terms`). A list of every index from 1 of an Int
+    /// domain at the bounds stands for every index from 1 (every number, or every non-null
+    /// one), and with index 0 for every index.
+    fn one_of(&self, var: VarId, values: &[Value], terms: &[String], c: &str) -> String {
+        let domain = &self.ts.var(var).domain;
+        let size = domain.size(self.ts.bounds);
+        let listed = |from: usize| (from..size).all(|i| values.contains(&Value(i as u8)));
+        // The non-null numbers start at index 1 of a nullable domain; `present` on an Int
+        // column lists 1.. as well.
+        if domain.is_numeric() && listed(1) {
+            let from = match values.contains(&Value(0)) {
+                true => 0,
+                false => 1,
+            };
+            return format!("(<= {from} {c})");
+        }
+        or(terms.iter().map(|t| format!("(= {c} {t})")).collect())
+    }
+
     /// A fresh constant of `var`'s domain.
     fn havoc(
         &self,
@@ -515,10 +548,7 @@ impl Enc<'_> {
     ) -> String {
         let h = fresh(cmds, self.var_sort(var));
         match self.key(var) {
-            None => {
-                let size = self.ts.var(var).domain.size(self.ts.bounds);
-                *cmds += &format!("(assert (and (<= 0 {h}) (< {h} {size})))\n");
-            }
+            None => *cmds += &format!("(assert {})\n", self.in_domain(var, &h)),
             Some((parent, false)) => *cmds += &format!("(assert (not (= {h} {})))\n", nil(parent)),
             Some((_, true)) => {}
         }

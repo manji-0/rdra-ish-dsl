@@ -3,7 +3,8 @@
 `verify` checks a model at a fixed number of instances, so a rule that holds at two can
 still break at three. `verify --prove` is experimental. It asks z3 whether each state rule
 (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`)
-holds for **any** number of rows, at the same Int range. It needs `z3` on `PATH`, or
+holds for **any** number of rows and **any** non-negative Int value, at any time (`now`
+has no top). It needs `z3` on `PATH`, or
 `--z3 <path>`, or `RDRA_Z3`. The repository's `nix develop` shell provides it.
 
 The proof never finds a counterexample. The bounded engines do that, in the same run.
@@ -12,7 +13,7 @@ The proof never finds a counterexample. The bounded engines do that, in the same
 
 Each rule prints one line before TLC runs:
 
-- `proved: <rule>` — the rule holds for any number of rows.
+- `proved: <rule>` — the rule holds for any number of rows and any Int value.
 - `unproved: <rule>: not inductive; ...` — a counterexample to induction (CTI) follows.
 - `unproved: <rule>: an initial state violates it` — a real violation. `check` and
   `verify` report it with a trace.
@@ -21,7 +22,8 @@ Each rule prints one line before TLC runs:
 - `lemma: <text>` — a helper fact the proof kept: structural, or mined from the states BFS
   reached.
 
-The `OK:` line ends with `; <n> of <m> rules proved for any number of rows`. An unproved
+The `OK:` line ends with `; <n> of <m> rules proved for any number of rows and any Int
+value`. An unproved
 rule fails the run only with `--deny-unproved`.
 
 ```text

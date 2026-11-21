@@ -1074,7 +1074,7 @@ impl End {
         match self.proof {
             Some(p) if p.unproved > 0 && p.deny_unproved => {
                 bail!(
-                    "verification incomplete: {} of {} rules unproved for any number of rows (--deny-unproved)",
+                    "verification incomplete: {} of {} rules unproved for any number of rows and any Int value (--deny-unproved)",
                     p.unproved,
                     p.rules
                 );

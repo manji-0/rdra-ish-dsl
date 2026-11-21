@@ -23,7 +23,7 @@ impl ProofTally {
     /// The clause the OK line ends with.
     pub(crate) fn clause(&self) -> String {
         format!(
-            "{} of {} rules proved for any number of rows",
+            "{} of {} rules proved for any number of rows and any Int value",
             self.proved, self.rules
         )
     }
@@ -98,7 +98,7 @@ pub(crate) fn run_proof(
         n => format!(" and {n} of your lemmas"),
     };
     println!(
-        "proof{solver}: {} state rules{with_lemmas}, for any number of rows at the same value bounds",
+        "proof{solver}: {} state rules{with_lemmas}, for any number of rows and any Int value",
         rules.len()
     );
     for r in yours.iter().chain(&rules) {
