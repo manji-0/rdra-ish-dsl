@@ -294,8 +294,6 @@ impl Builder<'_> {
         }
     }
 
-    // ── R-now ────────────────────────────────────────────────────────────────
-
     pub(super) fn clock(&mut self) {
         if self.named.reads_now {
             let var = self.push_var(
@@ -328,6 +326,4 @@ impl Builder<'_> {
             effects: vec![Effect::Tick],
         })
     }
-
-    // ── Actions: R-create, R-delete, R-update, R-bind ────────────────────────
 }

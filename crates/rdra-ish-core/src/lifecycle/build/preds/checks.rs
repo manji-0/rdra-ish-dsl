@@ -8,8 +8,6 @@ use crate::lifecycle::types::{
 use crate::model::{CheckExpr, CmpRhs, ComparisonProp, EffectValue, EntityKey};
 
 impl Builder<'_> {
-    // ── Column expressions (`@check`, logical `@derived`) ────────────────────
-
     /// `expr` as every rule reads a comparison: two-valued, so a null operand satisfies no
     /// comparison but `!=`, and `col == null` admits it.
     fn check_expr(&mut self, ek: EntityKey, at: At, expr: &CheckExpr, site: &Site) -> Pred {

@@ -681,6 +681,13 @@ pub struct Property {
     pub site: Site,
 }
 
+impl Property {
+    /// Whether `.fair` names the use case of `action`.
+    pub fn is_fair(&self, action: &Action) -> bool {
+        matches!(&action.origin, ActionOrigin::UseCase { uc, .. } if self.fair.contains(uc))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Ltl {
     Always(Pred),
@@ -689,6 +696,23 @@ pub enum Ltl {
 }
 
 impl Ltl {
+    /// The operands, left to right.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        match self {
+            Ltl::Always(x) | Ltl::Eventually(x) => std::iter::once(x).chain(None),
+            Ltl::LeadsTo(x, y) => std::iter::once(x).chain(Some(y)),
+        }
+    }
+
+    /// The same operator over `f` of each operand.
+    pub fn map(&self, mut f: impl FnMut(&Pred) -> Pred) -> Ltl {
+        match self {
+            Ltl::Always(x) => Ltl::Always(f(x)),
+            Ltl::Eventually(x) => Ltl::Eventually(f(x)),
+            Ltl::LeadsTo(x, y) => Ltl::LeadsTo(f(x), f(y)),
+        }
+    }
+
     pub fn kind(&self) -> LtlKind {
         match self {
             Ltl::Always(_) => LtlKind::Always,

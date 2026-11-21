@@ -11,8 +11,7 @@ use std::collections::BTreeSet;
 
 use super::expr::State;
 use super::types::{
-    ActId, Action, ActionOrigin, At, Effect, EntId, Guard, GuardWhy, Ltl, ParamRole, Pred, Term,
-    VarId, VarKind,
+    ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Term, VarId, VarKind,
 };
 use super::TransitionSystem;
 
@@ -74,6 +73,22 @@ pub struct Cone {
 }
 
 impl TransitionSystem {
+    /// What a check reads: the existence of each entity it binds, and every var of `preds`.
+    pub(crate) fn check_reads<'p>(
+        &self,
+        binders: &[EntId],
+        preds: impl IntoIterator<Item = &'p Pred>,
+    ) -> VarSet {
+        let mut reads = VarSet::new();
+        for e in binders {
+            reads.insert(self.entity(*e).exists);
+        }
+        for p in preds {
+            self.pred_reads(p, &mut reads);
+        }
+        reads
+    }
+
     pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut VarSet) {
         let term = |t: &Term, out: &mut VarSet| match t {
             Term::Slot { var, .. } => {
@@ -411,20 +426,10 @@ impl TransitionSystem {
     /// actions as kept.
     pub fn property_seed(&self, i: usize) -> Seed {
         let p = &self.properties[i];
-        let mut seed = VarSet::new();
+        let mut seed = self.check_reads(&p.binders, p.formula.preds());
         let mut keep = BTreeSet::new();
-        for e in &p.binders {
-            seed.insert(self.entity(*e).exists);
-        }
-        match &p.formula {
-            Ltl::Always(x) | Ltl::Eventually(x) => self.pred_reads(x, &mut seed),
-            Ltl::LeadsTo(x, y) => {
-                self.pred_reads(x, &mut seed);
-                self.pred_reads(y, &mut seed);
-            }
-        }
         for (k, a) in self.actions.iter().enumerate() {
-            if !matches!(&a.origin, ActionOrigin::UseCase { uc, .. } if p.fair.contains(uc)) {
+            if !p.is_fair(a) {
                 continue;
             }
             keep.insert(ActId::at(k));
@@ -470,10 +475,7 @@ impl TransitionSystem {
     pub fn project(&self, state: &State, vars: &VarSet) -> State {
         let mut out = Vec::new();
         for &v in vars {
-            let width = match self.var(v).kind {
-                VarKind::Now => 1,
-                _ => self.bounds.slots(),
-            };
+            let width = self.slots_of(&self.var(v).kind);
             let at = self.offset(v);
             out.extend_from_slice(&state.0[at..at + width]);
         }

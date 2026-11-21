@@ -26,7 +26,7 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::sync::Arc;
 
-use super::cone::{Cone, Seed, VarSet};
+use super::cone::{named_params, Cone, Seed, VarSet};
 use super::explore::Caps;
 use super::expr::State;
 use super::types::{
@@ -965,14 +965,6 @@ fn names_bound(pred: &Pred) -> bool {
     }
 }
 
-/// The params a predicate names.
-fn named_params(pred: &Pred) -> Vec<u8> {
-    let named = std::cell::RefCell::new(Vec::new());
-    let mut copy = pred.clone();
-    super::restrict::renumber_pred(&mut copy, &|p: &mut u8| named.borrow_mut().push(*p));
-    named.into_inner()
-}
-
 impl TransitionSystem {
     pub fn reduction(&self) -> Option<&Reduction> {
         self.reduction.as_deref()
@@ -1612,10 +1604,7 @@ impl TransitionSystem {
         let spans: Vec<(usize, usize, bool)> = all
             .iter()
             .map(|&v| {
-                let width = match self.var(v).kind {
-                    VarKind::Now => 1,
-                    _ => self.bounds.slots(),
-                };
+                let width = self.slots_of(&self.var(v).kind);
                 (self.offset(v), width, split.s.contains(&v))
             })
             .collect();
@@ -1668,13 +1657,9 @@ impl TransitionSystem {
     /// names an S action. Each has a cone of its own that decides it.
     fn drop_unreadable_checks(&mut self, split: &Split) {
         let readable: VarSet = split.t.union(&split.obs).copied().collect();
-        let reads_ok = |ts: &TransitionSystem, binders: &[EntId], preds: &[&super::types::Pred]| {
-            let mut r = VarSet::new();
-            binders.iter().for_each(|e| {
-                r.insert(ts.entity(*e).exists);
-            });
-            preds.iter().for_each(|p| ts.pred_reads(p, &mut r));
-            r.is_subset(&readable)
+        let reads_ok = |ts: &TransitionSystem, binders: &[EntId], preds: &[&Pred]| {
+            ts.check_reads(binders, preds.iter().copied())
+                .is_subset(&readable)
         };
         let invariants = std::mem::take(&mut self.invariants);
         self.invariants = invariants
@@ -1695,15 +1680,13 @@ impl TransitionSystem {
         self.properties = properties
             .into_iter()
             .filter(|p| {
-                let preds: Vec<&super::types::Pred> = match &p.formula {
-                    super::types::Ltl::Always(x) | super::types::Ltl::Eventually(x) => vec![x],
-                    super::types::Ltl::LeadsTo(x, y) => vec![x, y],
-                };
+                let preds: Vec<&Pred> = p.formula.preds().collect();
                 reads_ok(self, &p.binders, &preds)
-                    && self.actions.iter().enumerate().all(|(i, a)| {
-                        !matches!(&a.origin, ActionOrigin::UseCase { uc, .. } if p.fair.contains(uc))
-                            || split.t_actions.contains(&ActId::at(i))
-                    })
+                    && self
+                        .actions
+                        .iter()
+                        .enumerate()
+                        .all(|(i, a)| !p.is_fair(a) || split.t_actions.contains(&ActId::at(i)))
             })
             .collect();
     }
@@ -1973,20 +1956,13 @@ struct Succ<'a> {
 
 impl<'a> Succ<'a> {
     fn new(run: &'a super::explore::ComponentRun, is_rise: &'a [bool]) -> Self {
-        let n = run.states.len();
-        let mut start = vec![0u32; n + 1];
-        for e in run.edges() {
-            start[e.from as usize + 1] += 1;
-        }
-        for i in 0..n {
-            start[i + 1] += start[i];
-        }
-        let mut fill = start.clone();
-        let mut order = vec![0u32; run.edges().len()];
-        for (k, e) in run.edges().iter().enumerate() {
-            order[fill[e.from as usize] as usize] = k as u32;
-            fill[e.from as usize] += 1;
-        }
+        let by_source: Vec<(u32, u32)> = run
+            .edges()
+            .iter()
+            .enumerate()
+            .map(|(k, e)| (e.from, k as u32))
+            .collect();
+        let Adj { start, list: order } = Adj::new(run.states.len(), &by_source);
         Succ {
             run,
             start,

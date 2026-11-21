@@ -12,8 +12,6 @@ use crate::lifecycle::EntId;
 use crate::model::{CmpRhs, ComparisonProp, EffectValue, EntityKey, Min, RefAction, UseCaseKey};
 
 impl Builder<'_> {
-    // ── Invariants ───────────────────────────────────────────────────────────
-
     fn local_binding(ek: EntityKey) -> Binding {
         vec![(ek, At::Bound(0))]
     }

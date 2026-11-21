@@ -144,8 +144,6 @@ impl<'m> Builder<'m> {
         });
         id
     }
-
-    // ── R-var and R-start ────────────────────────────────────────────────────
 }
 
 /// Why a copy has no source row: the reason for `UnboundCopySource`, or the keys that could
