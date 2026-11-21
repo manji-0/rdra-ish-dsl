@@ -319,6 +319,50 @@ These rules are `warning` rows:
 Lint warnings do not fail the command. Existing parse/model errors are emitted as
 `semantic-error` rows and make the command exit with status `1`.
 
+Every rule `lint` reports, by name:
+
+| Rule | Severity | Marks |
+|---|---|---|
+| `api-contract-incomplete` | warning | An API that declares only one of `method` and `path`. |
+| `api-contract-missing` | warning | An API with neither `method` nor `path`; the OpenAPI export omits it. |
+| `api-unused` | warning | An API no use case `invokes`. |
+| `buc-empty` | warning | A BUC that contains no use case; `info` while the BUC has not reached the skeleton stage. |
+| `comparison-trivial-in-range` | warning | See above. |
+| `comparison-unsatisfiable-in-range` | warning | See above. |
+| `condition-applied-without-body` | info | See above. |
+| `condition-no-rdra-anchor` | warning | See above. |
+| `consistency-warning` | warning | A whole-model consistency diagnostic of `check`, such as a missing relation or metadata. |
+| `constraint-unscoped` | warning | A `constraint` that `constrains` no use case, API, system, entity, or DTO. |
+| `coverage-score` | info | See above. |
+| `deprecated-syntax` | warning | See above. |
+| `dto-unused` | warning | A DTO that no API names in `request`, `response`, or `error_response`. |
+| `end-redundant` | warning | An `@end` value that no `transitions` arm leaves, which is an end state without `@end`. |
+| `enum-attribute` | warning | See above. |
+| `field-column-unwritten` | warning | See above. |
+| `field-unmapped` | warning | A screen field that no `maps_field` maps to an entity column. |
+| `field-unplaced` | warning | A screen field that no screen `contains`. |
+| `flow-cycle` | warning | See above. |
+| `flow-empty` | warning | A business flow that contains no step. |
+| `goal-unmeasured` | info | See above. |
+| `multi-rule-unscoped` | warning | A multi-entity `forbidden` or `invariant` with no `.along(...)` and no `.global()`, when keys relate its entities; the message names the `.along(...)` the shortest key path gives. |
+| `naming-column` | warning | An entity column that is not snake_case. |
+| `naming-dto-field` | warning | A DTO field that is not snake_case. |
+| `naming-id` | warning | An element id that is not UpperCamelCase. |
+| `nfr-unscoped` | warning | An `nfr` that `applies_to` no use case, API, or system. |
+| `orphan-node` | warning | An element no predicate connects to another; the `rdra-*` rules replace it for the kinds they cover. |
+| `query-index-missing` | warning | A lookup the model implies that no index serves; skipped for an entity under 10,000 `rows`. See [`export --kind sql`](#export). |
+| `rdra-*` | warning | See above. |
+| `requirement-no-goal` | info | See above. |
+| `requirement-untraced` | warning | A requirement that `motivates` no BUC. |
+| `rule-unlabeled` | info | See above. |
+| `screen-no-fields` | warning | A screen that contains no field. |
+| `screen-no-transition` | info | See above. |
+| `semantic-error` | error | A parse or model error of `check`; the command exits with status `1`. |
+| `semantic-warning` | warning | Any other warning of `check`. |
+| `stage-readiness` | info | See above. |
+| `step-no-cover` | warning | A business step that `covers` no use case, API, or event. |
+| `triggered-usecase-unguarded` | info | See above. |
+
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `<INPUTS...>` | paths (required) | — | Files and/or directories to load. |
