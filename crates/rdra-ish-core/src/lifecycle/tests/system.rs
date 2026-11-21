@@ -1,4 +1,4 @@
-//! Whole-system behaviour: order.rdra, components, restrict, bounds.
+//! Whole-system behaviour: order.rdra, bounds.
 
 use super::*;
 use crate::lifecycle::Birth;
@@ -110,36 +110,9 @@ creates(AddLine, Line)
         .params
         .iter()
         .any(|p| !p.role.is_written() && built.ts.entity(p.entity).id == "Order"));
-    let comps = built.ts.components();
-    assert_eq!(comps.len(), 1, "the implied parent joins the two entities");
-    let run = built.ts.explore(Caps::new(256, 1000));
+    let run = built.ts.clone().run(Caps::new(256, 1000));
     // absent/absent, open/absent, open/added
-    assert_eq!(run.runs[0].states.len(), 3);
-}
-
-#[test]
-fn independent_entities_are_separate_components() {
-    let src = r#"
-entity A "A" { id: Int @pk  s: Enum(x, y) }
-entity B "B" { id: Int @pk  s: Enum(x, y) }
-usecase MakeA "A"
-usecase MakeB "B"
-usecase FlipA "A2"
-creates(MakeA, A)
-creates(MakeB, B)
-transitions(FlipA, A.s, x -> y)
-"#;
-    let model = model_from(src);
-    let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-    let comps = built.ts.components();
-    assert_eq!(comps.len(), 2);
-    let run = built.ts.explore(Caps::new(256, 1000));
-    let counts: Vec<usize> = run.runs.iter().map(|r| r.states.len()).collect();
-    assert_eq!(counts, vec![3, 2]);
-    let sub = built.ts.restrict(&comps[1]);
-    assert_eq!(sub.entities().len(), 1);
-    assert_eq!(sub.entities()[0].id, "B");
-    assert_eq!(sub.actions().len(), 1);
+    assert_eq!(run.states.len(), 3);
 }
 
 #[test]
@@ -178,11 +151,13 @@ sets(Use, Ticket.used == true)
 "#;
     let model = model_from(src);
     let built = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL);
-    let run = built.ts.explore(Caps::new(256, 1000));
+    let caps = Caps::new(256, 1000);
+    let run = built.ts.clone().run(caps);
     // Slots fill in order: (a,a) (p,a) (p,p); each present slot is used or not.
     // (a,a) + (f,a) (t,a) + (f,f) (t,f) (f,t) (t,t) = 7
-    assert_eq!(run.runs[0].states.len(), 7);
-    let views = run.entity_views(&model, &built.diags);
+    assert_eq!(run.states.len(), 7);
+    let cones = built.ts.explore_targets(&built.selection.targets, caps);
+    let views = cones.entity_views(&built.ts, &model, &built.diags);
     assert_eq!(views[0].patterns.len(), 2);
 }
 
@@ -192,11 +167,6 @@ fn now_ticks_only_when_a_predicate_reads_it() {
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     assert!(built.ts.now().is_some());
     assert!(built.ts.actions().iter().any(|a| a.name == "Tick"));
-    assert_eq!(
-        built.ts.components().len(),
-        1,
-        "the clock joins the entity that reads it"
-    );
     let d = derive(&model);
     assert!(
         d.has("Coupon", |x| matches!(

@@ -5,7 +5,8 @@
 use std::collections::BTreeSet;
 
 use super::*;
-use crate::lifecycle::{At, EntityStateResult, Exploration, Pred, State, Target, Term};
+use crate::lifecycle::view::entity_view;
+use crate::lifecycle::{At, EntId, EntityStateResult, Pred, State, Target, Term};
 use crate::load_project;
 
 pub(super) fn load(rel: &str) -> SemanticModel {
@@ -66,7 +67,7 @@ pub(super) const SAMPLES: &[&str] = &[
 ];
 
 #[test]
-fn cone_exploration_equals_the_projection_of_the_whole_component() {
+fn cone_exploration_equals_the_projection_of_the_whole_system() {
     let mut checked = 0;
     let mut freed = 0;
     for sample in SAMPLES {
@@ -82,7 +83,7 @@ fn cone_exploration_equals_the_projection_of_the_whole_component() {
     assert!(freed > 0, "no sample frees a slot");
 }
 
-/// Each target's cone reaches the projection of its whole component's states, with the same
+/// Each target's cone reaches the projection of the whole system's states, with the same
 /// view and verdict; a cone that frees an unread entity's slots reaches a superset. Returns the
 /// targets checked exactly and the freed ones.
 pub(super) fn assert_cones_exact(
@@ -94,50 +95,48 @@ pub(super) fn assert_cones_exact(
     let mut checked = 0;
     let mut freed = 0;
     let built = TransitionSystem::build(model, bounds, &Scope::ALL);
-    for comp in built.ts.components() {
-        let sub = built.ts.restrict(&comp);
-        let full = sub.clone().run(caps);
-        assert!(full.complete, "{sample}: component does not finish");
-        let whole = Exploration { runs: vec![full] };
-        let full_views = whole.entity_views(model, &[]);
-        let full_diags: Vec<&StateDiag> = whole.diags().map(|d| &d.diag).collect();
-        let full_run = &whole.runs[0];
-        let cones = sub.explore_targets(&sub.targets(), caps);
-        let cone_views = cones.entity_views(&sub, model, &[]);
-        let cone_diags: Vec<&StateDiag> = cones.verdicts().iter().map(|d| &d.diag).collect();
-        for target in sub.targets() {
-            let cr = cones.cone_of(target);
-            let projected: BTreeSet<State> = full_run
-                .states
-                .iter()
-                .map(|s| sub.project(s, &cr.cone.vars))
-                .collect();
-            let reached: BTreeSet<State> = cr.run.states.iter().cloned().collect();
-            if sub.cone_frees_slots(&cr.cone) {
-                // An entity the target does not read never runs out of slots.
-                assert!(
-                    projected.is_subset(&reached),
-                    "{sample} {target:?}: a freed cone still reaches the projection"
-                );
-                freed += 1;
-                continue;
-            }
-            assert_eq!(projected, reached, "{sample} {target:?}: reachable states");
-            match target {
-                Target::Entity(e) => {
-                    let id = &sub.entity(e).id;
-                    let a = full_views.iter().find(|v| v.entity_id == *id).unwrap();
-                    let b = cone_views.iter().find(|v| v.entity_id == *id).unwrap();
-                    assert_eq!(view_set(a), view_set(b), "{sample} {id}: view");
-                }
-                _ => assert_eq!(
-                    violated(&full_diags, target, &sub),
-                    violated(&cone_diags, target, &sub),
-                    "{sample} {target:?}: verdict"
-                ),
-            }
-            checked += 1;
+    let sub = &built.ts;
+    let full_run = sub.clone().run(caps);
+    assert!(full_run.complete, "{sample}: the system does not finish");
+    let full_views: Vec<EntityStateResult> = (0..sub.entities().len())
+        .map(|i| entity_view(model, &full_run, EntId::at(i), &[], Vec::new()))
+        .collect();
+    let full_diags: Vec<&StateDiag> = full_run.diags.iter().map(|d| &d.diag).collect();
+    let cones = sub.explore_targets(&sub.targets(), caps);
+    let cone_views = cones.entity_views(sub, model, &[]);
+    let cone_diags: Vec<&StateDiag> = cones.verdicts().iter().map(|d| &d.diag).collect();
+    for target in sub.targets() {
+        let cr = cones.cone_of(target);
+        let projected: BTreeSet<State> = full_run
+            .states
+            .iter()
+            .map(|s| sub.project(s, &cr.cone.vars))
+            .collect();
+        let reached: BTreeSet<State> = cr.run.states.iter().cloned().collect();
+        if sub.cone_frees_slots(&cr.cone) {
+            // An entity the target does not read never runs out of slots.
+            assert!(
+                projected.is_subset(&reached),
+                "{sample} {target:?}: a freed cone still reaches the projection"
+            );
+            freed += 1;
+            continue;
         }
+        assert_eq!(projected, reached, "{sample} {target:?}: reachable states");
+        match target {
+            Target::Entity(e) => {
+                let id = &sub.entity(e).id;
+                let a = full_views.iter().find(|v| v.entity_id == *id).unwrap();
+                let b = cone_views.iter().find(|v| v.entity_id == *id).unwrap();
+                assert_eq!(view_set(a), view_set(b), "{sample} {id}: view");
+            }
+            _ => assert_eq!(
+                violated(&full_diags, target, sub),
+                violated(&cone_diags, target, sub),
+                "{sample} {target:?}: verdict"
+            ),
+        }
+        checked += 1;
     }
     (checked, freed)
 }

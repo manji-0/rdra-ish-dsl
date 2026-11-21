@@ -242,13 +242,7 @@ impl TransitionSystem {
             if r.fired {
                 for arm in r.arms.into_iter().filter(|a| !a.taken) {
                     if let Some(diag) = arm.never {
-                        let action = &self.actions[i];
-                        let entities = action
-                            .params
-                            .iter()
-                            .filter(|p| p.role.is_written())
-                            .map(|p| self.entity(p.entity).key)
-                            .collect();
+                        let entities = self.written_entities(i);
                         out.verdicts.push(Diag { entities, diag });
                     } else if let Some((cone, why)) = arm.capped {
                         out.undecided.push(Undecided {
@@ -261,13 +255,7 @@ impl TransitionSystem {
                 continue;
             }
             if let Some(diag) = r.never {
-                let action = &self.actions[i];
-                let entities = action
-                    .params
-                    .iter()
-                    .filter(|p| p.role.is_written())
-                    .map(|p| self.entity(p.entity).key)
-                    .collect();
+                let entities = self.written_entities(i);
                 out.verdicts.push(Diag { entities, diag });
                 out.tally.never_run += 1;
             } else if let Some((cone, why)) = r.capped {
@@ -290,6 +278,16 @@ impl TransitionSystem {
         }
         out.targets = answered;
         out
+    }
+
+    /// The entities action `i` writes.
+    fn written_entities(&self, i: usize) -> Vec<EntityKey> {
+        self.actions[i]
+            .params
+            .iter()
+            .filter(|p| p.role.is_written())
+            .map(|p| self.entity(p.entity).key)
+            .collect()
     }
 
     /// The `<UC>_by_<Ev>` variants of one use case step are one use case to the findings: it
@@ -604,9 +602,10 @@ impl TransitionSystem {
     /// verdict incomplete.
     fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
         let run = &cone.run;
-        if matches!(target, Target::Entity(_)) {
-            return Vec::new();
-        }
+        debug_assert!(
+            !matches!(target, Target::Entity(_)),
+            "an entity target has no verdict"
+        );
         let entities = self.target_entities(target);
         let mut out: Vec<Diag> = run
             .diags
@@ -761,7 +760,7 @@ impl TargetExploration {
                         }
                         acc
                     });
-                let mut view = entity_view(model, run, local, build_diags, Some(verdicts));
+                let mut view = entity_view(model, run, local, build_diags, verdicts);
                 for trace in view.patterns.iter_mut().filter_map(|p| p.witness.as_mut()) {
                     ts.annotate(&cone.cone, trace);
                 }

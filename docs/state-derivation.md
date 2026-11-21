@@ -460,7 +460,7 @@ cone of influence:
   system projected onto the cone, except where an action of the cone also creates an
   entity the cone does not read: the cone drops that creation and never runs out of that
   entity's slots (see [Bounds](#bounds)), so it reaches a superset. The cone is not an
-  approximation. The test `cone_exploration_equals_the_projection_of_the_whole_component` in
+  approximation. The test `cone_exploration_equals_the_projection_of_the_whole_system` in
   `crates/rdra-ish-core/src/lifecycle/tests/cone.rs` checks equality on `ec-site`,
   `personal-info`, and the formal-verification samples, and the superset where a cone
   frees slots.

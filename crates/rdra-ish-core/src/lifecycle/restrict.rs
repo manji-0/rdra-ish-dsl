@@ -1,39 +1,14 @@
-//! Independent components and the subsystem of one. Two entities share a component when one
-//! action, invariant, or after-assert reads or writes both; `now` joins whatever reads it.
-//! Components interleave freely, so the reachable set of the whole system is the product of
-//! the components' sets.
+//! The subsystem over a set of vars (`restrict_to`), and the renumbering of params and ids
+//! it needs.
 
 use std::collections::BTreeSet;
 
 use super::cone::{named_params, VarSet};
 use super::types::{
     ActId, Action, AfterAssert, AfterStep, At, Domain, Effect, EntId, EntityDecl, Guard, Invariant,
-    Ltl, Param, ParamRole, Pred, Property, Rhs, Term, VarDecl, VarId, VarKind,
+    Param, ParamRole, Pred, Property, Rhs, Term, VarDecl, VarId, VarKind,
 };
 use super::TransitionSystem;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Component {
-    /// Ascending.
-    pub entities: Vec<EntId>,
-    /// The component holds `now` and its tick.
-    pub now: bool,
-}
-
-/// Entities a footprint touches; `true` in the second slot when it reads or writes `now`.
-#[derive(Default)]
-struct Footprint {
-    entities: Vec<EntId>,
-    now: bool,
-}
-
-impl Footprint {
-    fn add(&mut self, e: EntId) {
-        if !self.entities.contains(&e) {
-            self.entities.push(e);
-        }
-    }
-}
 
 impl TransitionSystem {
     pub(crate) fn var_entity(&self, var: VarId) -> Option<EntId> {
@@ -46,171 +21,6 @@ impl TransitionSystem {
             VarKind::Owner { child, .. } => Some(child),
             VarKind::Now => None,
         }
-    }
-
-    fn pred_footprint(&self, pred: &Pred, fp: &mut Footprint) {
-        let term = |t: &Term, fp: &mut Footprint| match t {
-            // An owner var's domain names its parent's slots, and `restrict` keeps it only
-            // with both ends.
-            Term::Slot { var, .. } => match self.var(*var).kind {
-                VarKind::Owner { child, parent, .. } => {
-                    fp.add(child);
-                    fp.add(parent);
-                }
-                _ => match self.var_entity(*var) {
-                    Some(e) => fp.add(e),
-                    None => fp.now = true,
-                },
-            },
-            Term::Now => fp.now = true,
-            Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
-        };
-        match pred {
-            Pred::True | Pred::False => {}
-            Pred::Cmp(a, _, b) => {
-                term(a, fp);
-                term(b, fp);
-            }
-            Pred::In(a, vs) => {
-                term(a, fp);
-                vs.iter().for_each(|v| term(v, fp));
-            }
-            Pred::Not(p) => self.pred_footprint(p, fp),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| self.pred_footprint(p, fp)),
-            Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
-                fp.add(*entity);
-                self.pred_footprint(body, fp);
-            }
-        }
-    }
-
-    fn action_footprint(&self, action: &Action) -> Footprint {
-        let mut fp = Footprint::default();
-        action.params.iter().for_each(|p| fp.add(p.entity));
-        for g in &action.guards {
-            self.pred_footprint(&g.pred, &mut fp);
-        }
-        if action.effects.iter().any(|e| matches!(e, Effect::Tick)) {
-            fp.now = true;
-        }
-        fp
-    }
-
-    fn invariant_footprint(&self, inv: &Invariant) -> Footprint {
-        let mut fp = Footprint::default();
-        inv.binders.iter().for_each(|e| fp.add(*e));
-        self.pred_footprint(&inv.body, &mut fp);
-        fp
-    }
-
-    fn after_footprint(&self, a: &AfterAssert) -> Footprint {
-        let mut fp = Footprint::default();
-        for step in &a.steps {
-            let afp = self.action_footprint(&self.actions[step.act.index()]);
-            afp.entities.into_iter().for_each(|e| fp.add(e));
-            fp.now |= afp.now;
-            step.binders.iter().for_each(|e| fp.add(*e));
-            self.pred_footprint(&step.post, &mut fp);
-        }
-        fp
-    }
-
-    /// Connected components of the footprint graph, ordered by their first entity; a
-    /// component that holds only the clock comes last.
-    pub fn components(&self) -> Vec<Component> {
-        let n = self.entities.len();
-        let now_node = n;
-        let mut parent: Vec<usize> = (0..=n).collect();
-        fn find(parent: &mut [usize], x: usize) -> usize {
-            let mut r = x;
-            while parent[r] != r {
-                r = parent[r];
-            }
-            let mut x = x;
-            while parent[x] != r {
-                let next = parent[x];
-                parent[x] = r;
-                x = next;
-            }
-            r
-        }
-        let mut join = |fp: Footprint| {
-            let mut nodes: Vec<usize> = fp.entities.iter().map(|e| e.index()).collect();
-            if fp.now {
-                nodes.push(now_node);
-            }
-            for w in nodes.windows(2) {
-                let (a, b) = (find(&mut parent, w[0]), find(&mut parent, w[1]));
-                parent[a] = b;
-            }
-        };
-        for a in &self.actions {
-            join(self.action_footprint(a));
-        }
-        for inv in &self.invariants {
-            join(self.invariant_footprint(inv));
-        }
-        for a in &self.after {
-            join(self.after_footprint(a));
-        }
-        let mut groups: Vec<(usize, Component)> = Vec::new();
-        for i in 0..n {
-            let root = find(&mut parent, i);
-            match groups.iter_mut().find(|(r, _)| *r == root) {
-                Some((_, c)) => c.entities.push(EntId::at(i)),
-                None => groups.push((
-                    root,
-                    Component {
-                        entities: vec![EntId::at(i)],
-                        now: false,
-                    },
-                )),
-            }
-        }
-        if self.now.is_some() {
-            let root = find(&mut parent, now_node);
-            match groups.iter_mut().find(|(r, _)| *r == root) {
-                Some((_, c)) => c.now = true,
-                None => groups.push((
-                    root,
-                    Component {
-                        entities: Vec::new(),
-                        now: true,
-                    },
-                )),
-            }
-        }
-        groups.into_iter().map(|(_, c)| c).collect()
-    }
-
-    /// The subsystem of one component: its entities' vars, and the actions, invariants,
-    /// asserts, and properties that lie inside it.
-    pub fn restrict(&self, comp: &Component) -> TransitionSystem {
-        let inside = |e: EntId| comp.entities.contains(&e);
-        let vars: VarSet = self
-            .vars
-            .iter()
-            .enumerate()
-            .filter(|(_, d)| match d.kind {
-                VarKind::Exists(e)
-                | VarKind::Column { entity: e, .. }
-                | VarKind::Prop { entity: e, .. }
-                | VarKind::Run { entity: e, .. }
-                | VarKind::Raised { entity: e, .. } => inside(e),
-                VarKind::Owner { child, parent, .. } => inside(child) && inside(parent),
-                VarKind::Now => comp.now,
-            })
-            .map(|(i, _)| VarId::at(i))
-            .collect();
-        let keep: BTreeSet<ActId> = (0..self.actions.len())
-            .filter(|&i| {
-                let fp = self.action_footprint(&self.actions[i]);
-                let nonempty = !fp.entities.is_empty() || fp.now;
-                nonempty && fp.entities.iter().all(|e| inside(*e)) && (!fp.now || comp.now)
-            })
-            .map(ActId::at)
-            .collect();
-        self.restrict_to(&vars, &keep)
     }
 
     /// The system over `vars` only. An action stays when it writes a var in `vars` or is in
@@ -356,16 +166,12 @@ impl TransitionSystem {
             map.params[i] = params;
             out.actions.push(map.action(&action));
         }
-        let reads_inside = |preds: &[&Pred], binders: &[EntId]| {
-            let mut r = VarSet::new();
-            binders.iter().for_each(|e| {
-                r.insert(self.entity(*e).exists);
-            });
-            preds.iter().for_each(|p| self.pred_reads(p, &mut r));
-            r.is_subset(vars)
+        let reads_inside = |binders: &[EntId], preds: &[&Pred]| {
+            self.check_reads(binders, preds.iter().copied())
+                .is_subset(vars)
         };
         for inv in &self.invariants {
-            if reads_inside(&[&inv.body], &inv.binders) {
+            if reads_inside(&inv.binders, &[&inv.body]) {
                 out.invariants.push(Invariant {
                     binders: inv.binders.iter().map(|e| map.e(*e)).collect(),
                     body: map.pred(&inv.body),
@@ -377,7 +183,7 @@ impl TransitionSystem {
             let steps: Vec<AfterStep> = a
                 .steps
                 .iter()
-                .filter(|step| reads_inside(&[&step.post], &step.binders))
+                .filter(|step| reads_inside(&step.binders, &[&step.post]))
                 .filter_map(|step| {
                     let i = step.act.index();
                     let mut post = step.post.clone();
@@ -396,19 +202,11 @@ impl TransitionSystem {
             }
         }
         for p in &self.properties {
-            let preds: Vec<&Pred> = match &p.formula {
-                Ltl::Always(x) | Ltl::Eventually(x) => vec![x],
-                Ltl::LeadsTo(x, y) => vec![x, y],
-            };
-            if reads_inside(&preds, &p.binders) {
-                let formula = match &p.formula {
-                    Ltl::Always(x) => Ltl::Always(map.pred(x)),
-                    Ltl::Eventually(x) => Ltl::Eventually(map.pred(x)),
-                    Ltl::LeadsTo(x, y) => Ltl::LeadsTo(map.pred(x), map.pred(y)),
-                };
+            let preds: Vec<&Pred> = p.formula.preds().collect();
+            if reads_inside(&p.binders, &preds) {
                 out.properties.push(Property {
                     binders: p.binders.iter().map(|e| map.e(*e)).collect(),
-                    formula,
+                    formula: p.formula.map(|x| map.pred(x)),
                     ..p.clone()
                 });
             }
