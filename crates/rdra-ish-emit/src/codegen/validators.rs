@@ -146,9 +146,7 @@ pub(super) fn add_validators(
 }
 
 fn push(domain: &mut DomainModel, invariant: Option<String>, text: String, site: Option<String>) {
-    let id = format!("O{}", domain.obligations.len() + 1);
     domain.obligations.push(Obligation {
-        id,
         invariant,
         text,
         site,

@@ -116,8 +116,6 @@ pub struct RecordDecl {
 /// output must keep it.
 #[derive(Clone, Debug)]
 pub struct Obligation {
-    /// `O1`, `O2`, ...
-    pub id: String,
     /// The invariant `check` and `verify` name it by, when they check it.
     pub invariant: Option<String>,
     pub text: String,
@@ -442,7 +440,6 @@ pub enum Assigned {
         field: Field,
         wrap: bool,
     },
-    /// The id of the row a mark argument names (a row an earlier step wrote).
     /// A second lifecycle column: the `to` of the arm whose `from` the row holds.
     Switch {
         row: usize,
@@ -456,6 +453,7 @@ pub enum Assigned {
         param: usize,
         wrap: bool,
     },
+    /// The id of the row a mark argument names (a row an earlier step wrote).
     MarkId {
         mark: usize,
         wrap: bool,
