@@ -850,9 +850,8 @@ flowchart TD
 | condition | 車両・人身傷害の事故の請求である | ClaimCase | ClaimCase.coverage in (車両, 人身傷害) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:115 |
 | condition | 示談が成立している | Settlement | (Settlement.status == 示談成立).along(Claim, ClaimCase, Settlement) | CompleteClaim | samples/insurance-claim-ops/buc/buc_claim.rdra:118 |
 | forbidden | 賠償の請求は示談書がそろってから完了する | Claim\|Settlement | Claim.status == 請求完了 AND Settlement.status != 示談成立 |  | samples/insurance-claim-ops/buc/buc_claim.rdra:222 |
-| forbidden | 賠償責任の事故は示談交渉の前に請求を完了しない | Claim\|ClaimCase | Claim.completed_on == present AND ClaimCase.status in (事故受付, 初期対応済, 調査中) AND ClaimCase.coverage in (対人賠償, 対物賠償) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:225 |
-| forbidden | 等級の変動を説明してから請求の意思を確かめる | Claim | Claim.grade_explained == false AND Claim.status not in (請求の案内済, 取下げ, 時効消滅) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:227 |
-| forbidden | 請求完了から支払・通知までは支払期限を管理する | Claim | Claim.status in (請求完了, 支払決定, 不払決定) AND Claim.period in (未起算, 期限の管理を終了) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:229 |
+| forbidden | 等級の変動を説明してから請求の意思を確かめる | Claim | Claim.grade_explained == false AND Claim.status not in (請求の案内済, 取下げ, 時効消滅) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:224 |
+| forbidden | 請求完了から支払・通知までは支払期限を管理する | Claim | Claim.status in (請求完了, 支払決定, 不払決定) AND Claim.period in (未起算, 期限の管理を終了) |  | samples/insurance-claim-ops/buc/buc_claim.rdra:226 |
 | condition | 苦情を受け付けて解決していない | Complaint | Complaint.status == 苦情受付 | GuideToAdr | samples/insurance-claim-ops/buc/buc_complaint.rdra:97 |
 | condition | 特別調停案ではない和解案である | Complaint | Complaint.proposal == 和解案 | RejectProposal | samples/insurance-claim-ops/buc/buc_complaint.rdra:139 |
 | forbidden | 特別調停案は会社が受諾する | Complaint | Complaint.proposal == 特別調停案 AND Complaint.status == 和解案を受諾しない |  | samples/insurance-claim-ops/buc/buc_complaint.rdra:230 |
@@ -892,6 +891,7 @@ flowchart TD
 | condition | 保険金を支払った請求で、まだ求償していない | Claim | (Claim.status == 支払済).none(Subrogation) | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:59 |
 | forbidden | 支払後に求償権が移る | Subrogation\|Claim | Claim.status != 支払済 |  | samples/insurance-claim-ops/buc/buc_subrogation.rdra:125 |
 | after | 求償は保険金を支払った請求についてだけ始める | Claim | Claim.status == 支払済 | StartSubrogation | samples/insurance-claim-ops/buc/buc_subrogation.rdra:127 |
+| forbidden | 賠償責任の事故は示談交渉の前に請求を完了しない | Claim\|ClaimCase | Claim.completed_on == present AND ClaimCase.status in (事故受付, 初期対応済, 調査中) AND ClaimCase.coverage in (対人賠償, 対物賠償) |  | samples/insurance-claim-ops/shared/lemmas.rdra:12 |
 
 ## 7. 非機能要件
 

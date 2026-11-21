@@ -102,6 +102,9 @@ pub struct ProveOptions {
     /// The same for a lemma. A lemma that times out leaves the set, which only costs proofs;
     /// a check that breaks a candidate is the slow kind, so a short one saves the most.
     pub lemma_timeout_ms: u32,
+    /// When a rule stays unproved, the lemmas that timed out come back with this limit, and
+    /// the proof runs again. A lemma near the short limit then does not decide the result.
+    pub retry_lemma_timeout_ms: u32,
 }
 
 impl Default for ProveOptions {
@@ -109,6 +112,7 @@ impl Default for ProveOptions {
         ProveOptions {
             timeout_ms: 10_000,
             lemma_timeout_ms: 500,
+            retry_lemma_timeout_ms: 5_000,
         }
     }
 }
@@ -125,8 +129,6 @@ struct Candidate {
     reads: VarSet,
     /// The formula over the pre-state.
     pre: String,
-    /// Milliseconds a check of it may take.
-    timeout_ms: u32,
 }
 
 /// Why a candidate left the set, and the step that showed it.
@@ -195,16 +197,11 @@ pub fn prove(
                 let mut reads = VarSet::new();
                 ts.pred_reads(&formula.body, &mut reads);
                 reads.extend(formula.binders.iter().map(|e| ts.entity(*e).exists));
-                let timeout_ms = match origin {
-                    Origin::Rule(_) => options.timeout_ms,
-                    Origin::Lemma(_) => options.lemma_timeout_ms,
-                };
                 cands.push(Candidate {
                     origin,
                     formula,
                     reads,
                     pre,
-                    timeout_ms,
                 });
             }
             Err(Unsupported(why)) => {
@@ -224,13 +221,18 @@ pub fn prove(
 
     solver.exec(&format!("(reset)\n{}", enc.declarations()))?;
 
+    let mut lemma_ms = options.lemma_timeout_ms;
+    let limit = |c: &Candidate, lemma_ms: u32| match c.origin {
+        Origin::Rule(_) => options.timeout_ms,
+        Origin::Lemma(_) => lemma_ms,
+    };
     let mut fell: BTreeMap<usize, Fall> = BTreeMap::new();
     // Initiation: every candidate holds in every initial state.
     match enc.initial() {
         Ok(init) => {
             solver.exec(&format!("(push)\n{init}"))?;
             for (k, c) in cands.iter().enumerate() {
-                let fall = match violated(solver, &enc, c, Frame::Pre)? {
+                let fall = match violated(solver, &enc, c, Frame::Pre, limit(c, lemma_ms))? {
                     Sat::Unsat => continue,
                     Sat::Sat => Fall::Initial,
                     Sat::Unknown => Fall::Unknown("the initial states".to_string()),
@@ -246,34 +248,56 @@ pub fn prove(
         }
     }
 
+    let at_start: BTreeSet<usize> = fell.keys().copied().collect();
     // Consecution, until a round removes nothing: the kept set is then inductive.
     loop {
-        let before = fell.len();
-        for (a, step) in steps.iter().enumerate() {
-            let hit: Vec<usize> = (0..cands.len())
-                .filter(|k| !fell.contains_key(k) && breaks(a, &cands[*k]))
-                .collect();
-            if hit.is_empty() {
-                continue;
+        loop {
+            let before = fell.len();
+            for (a, step) in steps.iter().enumerate() {
+                let hit: Vec<usize> = (0..cands.len())
+                    .filter(|k| !fell.contains_key(k) && breaks(a, &cands[*k]))
+                    .collect();
+                if hit.is_empty() {
+                    continue;
+                }
+                solver.exec(&format!(
+                    "(push)\n{}{}",
+                    step.commands,
+                    assume(&cands, &fell)
+                ))?;
+                for k in hit {
+                    let c = &cands[k];
+                    let fall = match violated(solver, &enc, c, Frame::Post, limit(c, lemma_ms))? {
+                        Sat::Unsat => continue,
+                        Sat::Sat => Fall::Step(ActId::at_index(a)),
+                        Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
+                    };
+                    fell.insert(k, fall);
+                }
+                solver.exec("(pop)")?;
             }
-            solver.exec(&format!(
-                "(push)\n{}{}",
-                step.commands,
-                assume(&cands, &fell)
-            ))?;
-            for k in hit {
-                let fall = match violated(solver, &enc, &cands[k], Frame::Post)? {
-                    Sat::Unsat => continue,
-                    Sat::Sat => Fall::Step(ActId::at_index(a)),
-                    Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
-                };
-                fell.insert(k, fall);
+            if fell.len() == before {
+                break;
             }
-            solver.exec("(pop)")?;
         }
-        if fell.len() == before {
+        // Once, when a rule fell after initiation: the lemmas that timed out come back with
+        // the longer limit, and so do those rules, since the set that broke one may have
+        // lacked a lemma that comes back. A lemma a step broke stays out: the set it broke
+        // under held every candidate the retry starts from.
+        let open = cands.iter().enumerate().any(|(k, c)| {
+            matches!(c.origin, Origin::Rule(_)) && fell.contains_key(&k) && !at_start.contains(&k)
+        });
+        if !open || lemma_ms >= options.retry_lemma_timeout_ms {
             break;
         }
+        lemma_ms = options.retry_lemma_timeout_ms;
+        fell.retain(|k, why| {
+            at_start.contains(k)
+                || match cands[*k].origin {
+                    Origin::Rule(_) => false,
+                    Origin::Lemma(_) => !matches!(why, Fall::Unknown(_)),
+                }
+        });
     }
 
     // Each rule that fell: its step again from the kept set plus the rule, for the CTI.
@@ -295,7 +319,7 @@ pub fn prove(
                         steps[a].commands,
                         assume(&cands, &fell),
                         c.pre,
-                        violation(&enc, c, Frame::Post)
+                        violation(&enc, c, Frame::Post, options.timeout_ms)
                     ))?;
                     if solver.check_sat()? == Sat::Sat {
                         cti = Some(read_cti(solver, ts, ActId::at_index(a), &c.formula)?);
@@ -348,22 +372,23 @@ fn assume(cands: &[Candidate], fell: &BTreeMap<usize, Fall>) -> String {
         .collect()
 }
 
-/// The commands that assert some rows violate `c` in `frame`, and the candidate's timeout.
-fn violation(enc: &Enc, c: &Candidate, frame: Frame) -> String {
+/// The commands that assert some rows violate `c` in `frame`, and the check's time limit.
+fn violation(enc: &Enc, c: &Candidate, frame: Frame, timeout_ms: u32) -> String {
     let rows = enc
         .violation(&c.formula, frame)
         .expect("a candidate that encodes has a violation that encodes");
-    format!("{rows}(set-option :timeout {})\n", c.timeout_ms)
+    format!("{rows}(set-option :timeout {timeout_ms})\n")
 }
 
-/// Whether some state of the open scope violates `c` in `frame`.
+/// Whether some state of the open scope violates `c` in `frame`, within `timeout_ms`.
 fn violated(
     solver: &mut dyn Solver,
     enc: &Enc,
     c: &Candidate,
     frame: Frame,
+    timeout_ms: u32,
 ) -> Result<Sat, SolverError> {
-    solver.exec(&format!("(push)\n{}", violation(enc, c, frame)))?;
+    solver.exec(&format!("(push)\n{}", violation(enc, c, frame, timeout_ms)))?;
     let sat = solver.check_sat()?;
     solver.exec("(pop)")?;
     Ok(sat)
