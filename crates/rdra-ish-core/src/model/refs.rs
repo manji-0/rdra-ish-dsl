@@ -1,6 +1,7 @@
 use super::comparison::{ColumnCheck, DerivedExpr};
 use super::foreign_key::RefAction;
 use super::keys::*;
+use rdra_ish_syntax::ast::Kind;
 
 /// NodeRef: 異種ノード間関連を一様表現
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -34,36 +35,41 @@ pub enum NodeRef {
 }
 
 impl NodeRef {
+    /// The declaration kind, which a state does not have.
+    pub fn kind(&self) -> Option<Kind> {
+        Some(match self {
+            NodeRef::Actor(_) => Kind::Actor,
+            NodeRef::ExtSystem(_) => Kind::ExtSystem,
+            NodeRef::System(_) => Kind::System,
+            NodeRef::Requirement(_) => Kind::Requirement,
+            NodeRef::Adr(_) => Kind::Adr,
+            NodeRef::Goal(_) => Kind::Goal,
+            NodeRef::Nfr(_) => Kind::Nfr,
+            NodeRef::Quality(_) => Kind::Quality,
+            NodeRef::Constraint(_) => Kind::Constraint,
+            NodeRef::Business(_) => Kind::Business,
+            NodeRef::Buc(_) => Kind::Buc,
+            NodeRef::Flow(_) => Kind::Flow,
+            NodeRef::Step(_) => Kind::Step,
+            NodeRef::UseCase(_) => Kind::UseCase,
+            NodeRef::Screen(_) => Kind::Screen,
+            NodeRef::Field(_) => Kind::Field,
+            NodeRef::Event(_) => Kind::Event,
+            NodeRef::Entity(_) => Kind::Entity,
+            NodeRef::State(_) => return None,
+            NodeRef::Api(_) => Kind::Api,
+            NodeRef::Dto(_) => Kind::Dto,
+            NodeRef::Timer(_) => Kind::Timer,
+            NodeRef::Medium(_) => Kind::Medium,
+            NodeRef::Permission(_) => Kind::Permission,
+            NodeRef::Variation(_) => Kind::Variation,
+            NodeRef::Condition(_) => Kind::Condition,
+        })
+    }
+
     /// Kind name as the DSL and every output write it (`"actor"`, `"usecase"`, ...).
     pub fn kind_tag(&self) -> &'static str {
-        match self {
-            NodeRef::Actor(_) => "actor",
-            NodeRef::ExtSystem(_) => "extsystem",
-            NodeRef::System(_) => "system",
-            NodeRef::Requirement(_) => "requirement",
-            NodeRef::Adr(_) => "adr",
-            NodeRef::Goal(_) => "goal",
-            NodeRef::Nfr(_) => "nfr",
-            NodeRef::Quality(_) => "quality",
-            NodeRef::Constraint(_) => "constraint",
-            NodeRef::Business(_) => "business",
-            NodeRef::Buc(_) => "buc",
-            NodeRef::Flow(_) => "flow",
-            NodeRef::Step(_) => "step",
-            NodeRef::UseCase(_) => "usecase",
-            NodeRef::Screen(_) => "screen",
-            NodeRef::Field(_) => "field",
-            NodeRef::Event(_) => "event",
-            NodeRef::Entity(_) => "entity",
-            NodeRef::State(_) => "state",
-            NodeRef::Api(_) => "api",
-            NodeRef::Dto(_) => "dto",
-            NodeRef::Timer(_) => "timer",
-            NodeRef::Medium(_) => "medium",
-            NodeRef::Permission(_) => "permission",
-            NodeRef::Variation(_) => "variation",
-            NodeRef::Condition(_) => "condition",
-        }
+        self.kind().map_or("state", |kind| kind.name())
     }
 }
 
