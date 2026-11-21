@@ -11,19 +11,12 @@ use rdra_ish_core::refinement::{
 use serde_json::{json, Value};
 
 use crate::cli::NextFormat;
-use crate::load::reject_model_errors;
-use rdra_ish_core::{load_project, Project};
+use crate::load::load_clean;
 
 const TEXT_ITEM_LIMIT: usize = 8;
 
 pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) -> Result<()> {
-    let Project {
-        program,
-        model,
-        diags,
-        ..
-    } = load_project(inputs, None)?;
-    reject_model_errors(&program, &diags)?;
+    let (_, model) = load_clean(inputs)?;
 
     let assessment = assess(&model, Depth::Lifecycle);
     let mut standings = assessment.bucs;

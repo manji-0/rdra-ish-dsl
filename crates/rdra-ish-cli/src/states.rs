@@ -12,8 +12,7 @@ use rdra_ish_emit::{
 
 use crate::cli::{ScopeArgs, StatesFormat};
 use crate::list_output::{state_diag_message, Finding};
-use crate::load::reject_model_errors;
-use rdra_ish_core::{load_project, Project};
+use crate::load::load_clean;
 
 pub fn run_states(
     inputs: &[PathBuf],
@@ -22,13 +21,7 @@ pub fn run_states(
     caps: Caps,
     scope: &ScopeArgs,
 ) -> Result<()> {
-    let Project {
-        program,
-        model,
-        diags,
-        ..
-    } = load_project(inputs, None)?;
-    reject_model_errors(&program, &diags)?;
+    let (program, model) = load_clean(inputs)?;
     let scope = scope.resolve(&model)?;
 
     // Exit on structured severity (not string scan) so csv / typescript also fail-closed.

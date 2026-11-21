@@ -1,7 +1,12 @@
 //! Model loading for the CLI.
 
+use std::path::PathBuf;
+
 use anyhow::{bail, Result};
-use rdra_ish_core::{format_diagnostic_message, Diagnostic, RdraError, ResolvedProgram};
+use rdra_ish_core::{
+    format_diagnostic_message, load_project, Diagnostic, Project, RdraError, ResolvedProgram,
+    SemanticModel,
+};
 
 pub(crate) fn eprint_diagnostic(program: &ResolvedProgram, diag: &Diagnostic) {
     let message = format_diagnostic_message(
@@ -35,6 +40,19 @@ pub(crate) fn reject_model_errors(program: &ResolvedProgram, diags: &[Diagnostic
         bail!("model has errors; refusing to continue");
     }
     Ok(())
+}
+
+/// Load the project and reject it when the model has errors: the path every command that
+/// reads the model rather than reports on it takes.
+pub(crate) fn load_clean(inputs: &[PathBuf]) -> Result<(ResolvedProgram, SemanticModel)> {
+    let Project {
+        program,
+        model,
+        diags,
+        ..
+    } = load_project(inputs, None)?;
+    reject_model_errors(&program, &diags)?;
+    Ok((program, model))
 }
 
 #[cfg(test)]

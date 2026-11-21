@@ -26,7 +26,7 @@ use lifecycle_gate::{gate, Reads};
 use list_output::{
     format_lint_issues, format_rules, format_transitions, list_elements, state_findings,
 };
-use load::{deny_deprecated, eprint_diagnostic, reject_model_errors};
+use load::{deny_deprecated, eprint_diagnostic, load_clean};
 use rdra_ish_core::lifecycle::{Caps, FindingTally, Severity};
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
@@ -179,13 +179,7 @@ fn main() -> Result<()> {
                     )
                     .exit();
             }
-            let Project {
-                program,
-                model,
-                diags,
-                ..
-            } = load_project(&inputs, None)?;
-            reject_model_errors(&program, &diags)?;
+            let (program, model) = load_clean(&inputs)?;
             gate(&program, &model, kind.reads())?;
 
             let output = match kind {
@@ -249,13 +243,7 @@ fn main() -> Result<()> {
             int_range_max,
             dialect,
         } => {
-            let Project {
-                program,
-                model,
-                diags,
-                ..
-            } = load_project(&inputs, None)?;
-            reject_model_errors(&program, &diags)?;
+            let (program, model) = load_clean(&inputs)?;
             // An artifact gates by what its emitter reads. The TLA+ export gates after
             // `tla_bundle`, whose build errors stop it first.
             let artifact = match export_output(&kind, dialect) {
@@ -368,13 +356,7 @@ fn main() -> Result<()> {
             tlc_jar,
             scope,
         } => {
-            let Project {
-                program,
-                model,
-                diags,
-                ..
-            } = load_project(&inputs, None)?;
-            reject_model_errors(&program, &diags)?;
+            let (program, model) = load_clean(&inputs)?;
             let scope = scope.resolve(&model)?;
             let cli::VerifyBackend::Tlc = backend;
             run_tlc(

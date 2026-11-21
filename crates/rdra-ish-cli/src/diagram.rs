@@ -17,8 +17,7 @@ use std::fs;
 
 use crate::cli::DiagramKind;
 use crate::lifecycle_gate::{Gated, Output};
-use crate::load::reject_model_errors;
-use rdra_ish_core::{load_project, Project};
+use crate::load::load_clean;
 
 /// Mermaid's default `maxTextSize`: a diagram with more characters is not rendered.
 const MERMAID_MAX_TEXT: usize = 50_000;
@@ -63,13 +62,7 @@ pub fn run_diagram(request: DiagramRequest) -> Result<()> {
         out,
     } = request;
     let inputs = inputs.as_slice();
-    let Project {
-        program,
-        model,
-        diags,
-        ..
-    } = load_project(inputs, None)?;
-    reject_model_errors(&program, &diags)?;
+    let (program, model) = load_clean(inputs)?;
     let model_path = inputs
         .iter()
         .map(|input| input.display().to_string())

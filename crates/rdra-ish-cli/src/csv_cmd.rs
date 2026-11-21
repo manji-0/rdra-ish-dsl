@@ -15,17 +15,10 @@ use std::fs;
 
 use crate::cli::{CsvFormat, CsvKind};
 use crate::lifecycle_gate::gate;
-use crate::load::reject_model_errors;
-use rdra_ish_core::{load_project, Project};
+use crate::load::load_clean;
 
 pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBuf) -> Result<()> {
-    let Project {
-        program,
-        model,
-        diags,
-        ..
-    } = load_project(inputs, None)?;
-    reject_model_errors(&program, &diags)?;
+    let (program, model) = load_clean(inputs)?;
     gate(&program, &model, kind.reads())?;
 
     let view = View::whole();
