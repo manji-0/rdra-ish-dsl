@@ -85,6 +85,9 @@
   over a newer one, and every analysis held up the requests behind it: in the new test, 38
   quick edits to a large file settled in about 3 seconds, where they took about a minute
   before (#157).
+- A BUC whose id another kind also uses (`buc Order` with `entity Order`) reaches its use
+  cases again. It reached nothing, so `lint` drew false findings on it and `--buc`
+  diagrams of it came out empty (#158).
 
 ## v2.3.0 - 2026-11-18
 

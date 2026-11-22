@@ -467,103 +467,102 @@ fn name_missing_imports(model: &SemanticModel, diags: &mut [Diagnostic]) {
     }
 }
 
-/// Return all `NodeRef`s reachable from a BUC node via RDRA relations (forward BFS only).
-/// ER entity-to-entity relations (Relate*) are intentionally excluded so that shared
-/// entities don't pull in unrelated BUCs through the ER graph.
-pub fn reachable_from_buc(model: &SemanticModel, buc_id: &str) -> HashSet<crate::model::NodeRef> {
-    use crate::model::{NodeRef, RelKind};
-    let mut visited: HashSet<NodeRef> = HashSet::new();
-
-    let buc_key = model.symbols.get(buc_id).and_then(|nr| {
-        if let NodeRef::Buc(k) = nr {
-            Some(*k)
-        } else {
-            None
-        }
-    });
-
-    let Some(buc_key) = buc_key else {
-        return visited;
-    };
-
-    let start = NodeRef::Buc(buc_key);
-    let mut queue = vec![start.clone()];
-    visited.insert(start);
-
-    // 前向き BFS: ER entity-entity 関係を除くすべての forward 関係を辿る
-    while let Some(current) = queue.pop() {
-        for rel in &model.relations {
-            if matches!(
-                rel.kind,
-                RelKind::RelateOneToOne
-                    | RelKind::RelateOneToMany
-                    | RelKind::RelateManyToOne
-                    | RelKind::RelateManyToMany
-            ) {
-                continue;
-            }
-            if rel.from == current && !visited.contains(&rel.to) {
-                visited.insert(rel.to.clone());
-                queue.push(rel.to.clone());
-            }
-        }
-    }
-
-    // 閉包内のユースケースを起動するイベント（外部システムからの inbound）も閉包に入れる。
-    // 前向き BFS は inbound イベントに到達しない。
-    let inbound: Vec<NodeRef> = model
-        .relations
-        .iter()
-        .filter(|rel| {
-            rel.kind == RelKind::Triggers
-                && matches!(rel.from, NodeRef::Event(_))
-                && visited.contains(&rel.to)
-        })
-        .map(|rel| rel.from.clone())
-        .collect();
-    visited.extend(inbound);
-
-    // 第2パス: 起点 BUC に直接 performs している Actor と、閉包内へ入る Timer（triggers）/
-    // 外部システム（raises）/ 条件（applies_to）を追加する（推移的探索はしない — 他 BUC への連鎖を防ぐ）。
-    // 条件はそのバリエーションも連れてくる（バリエーションは関係では閉包に入らない）。
-    let buc_ref = NodeRef::Buc(buc_key);
-    let mut sources = Vec::new();
-    for rel in &model.relations {
-        let enters = match (&rel.kind, &rel.from) {
-            (RelKind::Performs, _) => rel.to == buc_ref,
-            (RelKind::Triggers, NodeRef::Timer(_))
-            | (RelKind::Raises, NodeRef::ExtSystem(_))
-            | (RelKind::AppliesTo | RelKind::Guards, NodeRef::Condition(_)) => {
-                visited.contains(&rel.to)
-            }
-            _ => false,
-        };
-        if enters {
-            if let NodeRef::Condition(condition) = &rel.from {
-                for edge in crate::analysis::condition_edges(model, *condition) {
-                    if let crate::model::CombinesTarget::Variation(variation) = edge {
-                        sources.push(NodeRef::Variation(variation));
-                    }
-                }
-            }
-            sources.push(rel.from.clone());
-        }
-    }
-    visited.extend(sources);
-
-    visited
-}
-
-/// Return the union of `reachable_from_buc` for each BUC id in `buc_ids`.
-/// When `buc_ids` is empty the result is an empty set (callers should treat
+/// Return the union of the closures of the BUCs `buc_ids` names. An id that names no BUC
+/// adds nothing. When `buc_ids` is empty the result is an empty set (callers should treat
 /// that as "show everything" / `Scope::Whole`).
 pub fn reachable_from_bucs(
     model: &SemanticModel,
     buc_ids: &[String],
 ) -> HashSet<crate::model::NodeRef> {
+    use crate::model::NodeRef;
+    let bucs =
+        buc_ids
+            .iter()
+            .filter_map(|id| match model.symbols.lookup_qualified(&Kind::Buc, id) {
+                Some(NodeRef::Buc(buc)) => Some(*buc),
+                _ => None,
+            });
+    reachable_from_buc_keys(model, bucs)
+}
+
+/// Return the union of the closures of `bucs`. The closure of a BUC is every `NodeRef`
+/// reachable from it via RDRA relations (forward BFS only), the events that trigger a use case
+/// in it, and the actors, timers, external systems and conditions that enter it directly.
+/// ER entity-to-entity relations (Relate*) are intentionally excluded so that shared
+/// entities don't pull in unrelated BUCs through the ER graph.
+pub fn reachable_from_buc_keys(
+    model: &SemanticModel,
+    bucs: impl IntoIterator<Item = crate::model::BucKey>,
+) -> HashSet<crate::model::NodeRef> {
+    use crate::model::{NodeRef, RelKind};
+    let mut forward: HashMap<&NodeRef, Vec<&NodeRef>> = HashMap::new();
+    for rel in &model.relations {
+        if !matches!(
+            rel.kind,
+            RelKind::RelateOneToOne
+                | RelKind::RelateOneToMany
+                | RelKind::RelateManyToOne
+                | RelKind::RelateManyToMany
+        ) {
+            forward.entry(&rel.from).or_default().push(&rel.to);
+        }
+    }
+
     let mut union = HashSet::new();
-    for id in buc_ids {
-        union.extend(reachable_from_buc(model, id));
+    for buc_key in bucs {
+        let start = NodeRef::Buc(buc_key);
+        let mut visited: HashSet<NodeRef> = HashSet::from([start.clone()]);
+        let mut queue = vec![start];
+        while let Some(current) = queue.pop() {
+            for to in forward.get(&current).into_iter().flatten() {
+                if visited.insert((*to).clone()) {
+                    queue.push((*to).clone());
+                }
+            }
+        }
+
+        // 閉包内のユースケースを起動するイベント（外部システムからの inbound）も閉包に入れる。
+        // 前向き BFS は inbound イベントに到達しない。
+        let inbound: Vec<NodeRef> = model
+            .relations
+            .iter()
+            .filter(|rel| {
+                rel.kind == RelKind::Triggers
+                    && matches!(rel.from, NodeRef::Event(_))
+                    && visited.contains(&rel.to)
+            })
+            .map(|rel| rel.from.clone())
+            .collect();
+        visited.extend(inbound);
+
+        // 第2パス: 起点 BUC に直接 performs している Actor と、閉包内へ入る Timer（triggers）/
+        // 外部システム（raises）/ 条件（applies_to）を追加する（推移的探索はしない — 他 BUC への連鎖を防ぐ）。
+        // 条件はそのバリエーションも連れてくる（バリエーションは関係では閉包に入らない）。
+        let buc_ref = NodeRef::Buc(buc_key);
+        let mut sources = Vec::new();
+        for rel in &model.relations {
+            let enters = match (&rel.kind, &rel.from) {
+                (RelKind::Performs, _) => rel.to == buc_ref,
+                (RelKind::Triggers, NodeRef::Timer(_))
+                | (RelKind::Raises, NodeRef::ExtSystem(_))
+                | (RelKind::AppliesTo | RelKind::Guards, NodeRef::Condition(_)) => {
+                    visited.contains(&rel.to)
+                }
+                _ => false,
+            };
+            if enters {
+                if let NodeRef::Condition(condition) = &rel.from {
+                    for edge in crate::analysis::condition_edges(model, *condition) {
+                        if let crate::model::CombinesTarget::Variation(variation) = edge {
+                            sources.push(NodeRef::Variation(variation));
+                        }
+                    }
+                }
+                sources.push(rel.from.clone());
+            }
+        }
+        visited.extend(sources);
+        union.extend(visited);
     }
     union
 }

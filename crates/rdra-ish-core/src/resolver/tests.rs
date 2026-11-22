@@ -840,9 +840,30 @@ applies_to(There, Refund)
     assert!(errors.is_empty(), "{errors:?}");
     let (model, diags) = crate::analysis::build_model(&ast);
     assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
-    let reached = reachable_from_buc(&model, "InBuc");
+    let reached = reachable_from_bucs(&model, &["InBuc".to_string()]);
     let id_of = |name: &str| model.symbols.get(name).cloned().unwrap();
     assert!(reached.contains(&id_of("Here")));
     assert!(!reached.contains(&id_of("There")));
     assert!(reached.contains(&id_of("Method")));
+}
+
+#[test]
+fn a_buc_named_like_an_entity_still_reaches_its_use_cases() {
+    let src = r#"
+buc Order "注文業務"
+usecase PlaceOrder "注文する"
+entity Order "注文" { id: Int @pk }
+contains(buc::Order, PlaceOrder)
+"#;
+    let (ast, errors) = rdra_ish_syntax::parse(src);
+    assert!(errors.is_empty(), "{errors:?}");
+    let (model, diags) = crate::analysis::build_model(&ast);
+    assert!(diags.iter().all(|d| d.is_warning), "{diags:?}");
+    let place_order = model
+        .symbols
+        .lookup_qualified(&Kind::UseCase, "PlaceOrder")
+        .cloned()
+        .unwrap();
+    assert!(reachable_from_bucs(&model, &["Order".to_string()]).contains(&place_order));
+    assert!(reachable_from_buc_keys(&model, model.bucs.keys()).contains(&place_order));
 }

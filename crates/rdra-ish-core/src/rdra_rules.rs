@@ -9,7 +9,7 @@ use std::collections::HashSet;
 
 use crate::lint::{push_element_lint, LintIssue};
 use crate::model::{ColumnType, NodeRef, SemanticModel};
-use crate::resolver::reachable_from_bucs;
+use crate::resolver::reachable_from_buc_keys;
 
 /// Which RDRA definition sheet a row belongs to. `RdraIsh` marks rows rdra-ish adds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -327,8 +327,7 @@ pub struct BucClosure {
 
 impl BucClosure {
     pub fn of(model: &SemanticModel) -> Self {
-        let buc_ids: Vec<String> = model.bucs.values().map(|buc| buc.id.clone()).collect();
-        let members = reachable_from_bucs(model, &buc_ids);
+        let members = reachable_from_buc_keys(model, model.bucs.keys());
         let pointing_in = model
             .relations
             .iter()
@@ -548,7 +547,7 @@ combines(Eligible, Method)
     #[test]
     fn the_buc_closure_holds_inbound_events_and_their_external_systems() {
         let (model, _) = build(CLEAN);
-        let closure = reachable_from_bucs(&model, &["Checkout".to_string()]);
+        let closure = crate::resolver::reachable_from_bucs(&model, &["Checkout".to_string()]);
         let ids: HashSet<String> = closure
             .iter()
             .filter_map(|node| model.node_id(node).map(str::to_string))
