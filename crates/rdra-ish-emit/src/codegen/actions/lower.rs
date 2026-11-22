@@ -142,7 +142,6 @@ pub(super) fn function(
 
     // What the effects write, per (param, column).
     let mut writes: BTreeMap<(usize, String), Write> = BTreeMap::new();
-    let mut created: Vec<usize> = Vec::new();
     let mut deleted: Vec<usize> = Vec::new();
     // The run mark each param is left at: `(param, step)`, step 0 for none.
     let mut runs: Vec<(usize, u8)> = Vec::new();
@@ -150,7 +149,7 @@ pub(super) fn function(
     let mut raised_at: Vec<(String, usize)> = Vec::new();
     for effect in &action.effects {
         match effect {
-            Effect::Create { param } => created.push(usize::from(*param)),
+            Effect::Create { .. } => {}
             Effect::Delete { param } => deleted.push(usize::from(*param)),
             Effect::Transition {
                 var,
