@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity, StateDiag,
-    Target, TransitionSystem, VarSet,
+    ActId, Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity,
+    StateDiag, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
@@ -121,9 +121,11 @@ struct ConeSystem {
     cone: Cone,
     system: TransitionSystem,
     names: TlaNames,
-    /// The cone reaches exactly the whole model's states projected onto it: none of its
-    /// actions takes a slot of an entity outside it (`cone_frees_slots`).
-    exact: bool,
+    /// Per action of the cone before any reduction, by its id in the whole system: how many
+    /// guards and params the cone leaves it. A cone drops a guard that reads outside it and
+    /// a param whose entity it leaves out, so a larger cone may hold an action back where a
+    /// smaller one lets it run (`covering`).
+    steps: BTreeMap<ActId, (usize, usize)>,
 }
 
 /// What a run decides about its checks.
@@ -248,7 +250,12 @@ fn cone_jobs(
             cfg: bundle.cfg,
             checks,
             kind: JobKind::Cone(Box::new(ConeSystem {
-                exact: !ts.cone_frees_slots(&cone),
+                steps: ts
+                    .restrict_to(&cone.vars, &cone.keep)
+                    .actions()
+                    .iter()
+                    .map(|a| (a.source, (a.guards.len(), a.params.len())))
+                    .collect(),
                 cone,
                 system: sub,
                 names: bundle.names,
@@ -653,45 +660,75 @@ fn run_cones(tlc: &Tlc, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<V
         .collect())
 }
 
-/// For each job, the job that covers it: a safety cone whose module holds every check of
-/// this one. Both cones are closed, so the larger holds the smaller's vars, and when the
-/// smaller reaches exactly the whole model's states projected onto it (`ConeSystem::exact`),
-/// the larger reaches at least those states: a check that passes there passes here. A cone
-/// that reaches more than the projection may fail a check the larger one passes, so it is
-/// never covered. Among the cones that cover a job, the one with the most checks is taken,
-/// the first of those: no cone covers it in turn, so it runs.
+/// For each job, the job that covers it: a safety cone that passes only if this one does.
+/// Among the cones that cover a job, the one with the most checks is taken, the first of
+/// those: no cone covers it in turn, so it runs.
 fn covering(jobs: &[Job]) -> Vec<Option<usize>> {
-    let checks: Vec<Option<BTreeSet<&str>>> = jobs
+    let cones: Vec<Option<Covered>> = jobs
         .iter()
-        .map(|job| match job.kind {
-            JobKind::Cone(_) => Some(job.checks.iter().map(String::as_str).collect()),
+        .map(|job| match &job.kind {
+            JobKind::Cone(cone) => Some(Covered::of(job, cone)),
             JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
         })
         .collect();
-    jobs.iter()
-        .enumerate()
-        .map(|(a, job)| {
-            let mine = checks[a].as_ref().filter(|mine| !mine.is_empty())?;
-            let JobKind::Cone(cone) = &job.kind else {
-                return None;
-            };
-            if !cone.exact {
-                return None;
-            }
+    (0..jobs.len())
+        .map(|a| {
+            let small = cones[a].as_ref()?;
             (0..jobs.len())
                 .filter(|&b| {
-                    checks[b].as_ref().is_some_and(|theirs| {
-                        mine.is_subset(theirs) && (theirs.len() > mine.len() || b < a)
+                    cones[b].as_ref().is_some_and(|large| {
+                        large.covers(small) && (large.checks.len() > small.checks.len() || b < a)
                     })
                 })
                 .max_by_key(|&b| {
-                    (
-                        checks[b].as_ref().map_or(0, BTreeSet::len),
-                        std::cmp::Reverse(b),
-                    )
+                    let checks = cones[b].as_ref().map_or(0, |c| c.checks.len());
+                    (checks, std::cmp::Reverse(b))
                 })
         })
         .collect()
+}
+
+/// What `covering` compares of a safety cone.
+struct Covered<'a> {
+    checks: BTreeSet<&'a str>,
+    cone: &'a ConeSystem,
+}
+
+impl<'a> Covered<'a> {
+    fn of(job: &'a Job, cone: &'a ConeSystem) -> Self {
+        Covered {
+            checks: job.checks.iter().map(String::as_str).collect(),
+            cone,
+        }
+    }
+
+    /// Whether this cone passing means `small` passes: this cone takes every step `small`
+    /// takes, and checks everything `small` checks.
+    ///
+    /// - Its module holds every check of `small`.
+    /// - It holds the vars and the kept actions of `small`. For an invariant that follows
+    ///   from the cones being closed. For an after-assert it does not: the assert's cone
+    ///   holds everything its use case writes, and a cone without those writes takes the
+    ///   use case's step as a stutter, on which the assert passes.
+    /// - It leaves each action of `small` the guards and params `small` leaves it, no more.
+    ///   A cone drops the guards that read outside it and the params of the entities it
+    ///   leaves out (a creation it does not count, a triggering event it does not hold). A
+    ///   guard or param this cone keeps and `small` drops would hold back here a step
+    ///   `small` takes, and `small` could fail a check this cone passes.
+    ///
+    /// Then every step of `small` is a step here from the same vars to the same vars, so
+    /// this cone reaches every state `small` reaches.
+    fn covers(&self, small: &Covered) -> bool {
+        let (large, small_cone) = (&self.cone, &small.cone);
+        !small.checks.is_empty()
+            && small.checks.is_subset(&self.checks)
+            && small_cone.cone.vars.is_subset(&large.cone.vars)
+            && small_cone.cone.keep.is_subset(&large.cone.keep)
+            && small_cone
+                .steps
+                .iter()
+                .all(|(action, shape)| large.steps.get(action) == Some(shape))
+    }
 }
 
 /// TLC workers per cone run when `at_once` runs share `cores`.

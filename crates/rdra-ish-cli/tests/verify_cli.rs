@@ -946,3 +946,76 @@ fn a_cone_another_cone_covers_runs_only_when_that_cone_fails() {
         "{stderr}"
     );
 }
+
+/// Mark writes `a` and `b` and must leave an open row. The forbidden pair reads `status` and
+/// `a`, so its cone holds the assert's reads and its module the assert, but not `b`: there a
+/// Mark that only sets `b` is a stutter, on which the assert passes. Make, Close, Mark is a
+/// real run that breaks the assert, and only the assert's own cone, which holds everything
+/// Mark writes, shows it.
+const ASSERT_BEYOND_THE_LARGER_MODULE: &str = r#"
+entity E "e" { id: Int @pk  status: Enum(open, closed) @default(open)  a: Bool @default(false)  b: Bool @default(false) }
+usecase Make "make"
+usecase Mark "mark"
+usecase Close "close"
+creates(Make, E)
+updates(Mark, E)
+updates(Close, E)
+sets(Make, E.a == true)
+sets(Mark, E.a == true)
+sets(Mark, E.b == true)
+transitions(Close, E.status, open -> closed)
+after(Mark).assert(E.status == open)
+forbidden(E, status == closed, a == false)
+"#;
+
+/// Handle runs only on an event that Raise raises, and Raise never runs. The cone of
+/// `v == true` alone leaves the event's mark out, so Handle runs freely there and the rule
+/// fails; the cone of the pair holds `status`, and with it the mark, so Handle never runs and
+/// both rules pass there. The larger cone holds Handle back where the smaller lets it run.
+const GUARD_ONLY_THE_LARGER_CONE_KEEPS: &str = r#"
+entity E "e" { id: Int @pk  status: Enum(open, ready, raised) @default(open)  v: Bool @default(false) }
+usecase Make "make"
+usecase Raise "raise"
+usecase Handle "handle"
+event Ev "ev"
+creates(Make, E)
+updates(Raise, E)
+updates(Handle, E)
+transitions(Raise, E.status, ready -> raised)
+sets(Handle, E.v == true)
+raises(Raise, Ev)
+triggers(Ev, Handle)
+forbidden(E, v == true)
+forbidden(E, v == true, status == raised)
+"#;
+
+/// A module that holds a cone's checks does not cover the cone when it takes fewer steps
+/// than the cone does: it lacks a var the cone's use case writes, or it keeps a guard the
+/// cone drops. Each cone runs and reports its counterexample.
+#[test]
+fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
+    if !have_tlc() {
+        return;
+    }
+    for (test, src, failing) in [
+        (
+            "verify_cli_assert_cone",
+            ASSERT_BEYOND_THE_LARGER_MODULE,
+            "Cone_AfterAssert_Mark_0 ",
+        ),
+        (
+            "verify_cli_dropped_guard_cone",
+            GUARD_ONLY_THE_LARGER_CONE_KEEPS,
+            "Cone_Forbidden_E_0 ",
+        ),
+    ] {
+        let (stdout, stderr, code, _) = verify_model(test, src, "specs");
+        assert_eq!(code, Some(1), "{test}\n{stdout}\n{stderr}");
+        assert!(!stdout.contains("checked in"), "{test}\n{stdout}");
+        let line = stdout
+            .lines()
+            .find(|l| l.starts_with(failing))
+            .unwrap_or_else(|| panic!("{test}: no line for {failing}\n{stdout}"));
+        assert!(line.contains(": counterexample ("), "{test}: {line}");
+    }
+}

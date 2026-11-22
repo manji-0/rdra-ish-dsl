@@ -52,8 +52,8 @@
 ### Changed
 
 - `verify` runs less TLC: 194 s to 113 s on insurance-claim-ops and 28 s to 23 s on
-  food-permit-ops (4 cores). A cone whose checks all stand in a larger cone's module is
-  not run when the larger cone passes, and prints `ok (checked in Cone_<larger>)` in place
+  food-permit-ops (4 cores). A cone whose checks all stand in the module of a larger cone
+  that takes every step it takes is not run when the larger cone passes, and prints `ok (checked in Cone_<larger>)` in place
   of its state count; when the larger cone fails it runs as before. A reduced cone no
   longer recomputes the sub-lifecycle's class on a step that writes none of its inputs,
   in TLA+ and in BFS (#164).
