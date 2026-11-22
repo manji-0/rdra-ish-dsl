@@ -26,12 +26,13 @@ sample (see [state-derivation.md](./state-derivation.md) and the header of
 `crates/rdra-ish-emit/src/tla/mod.rs`). A passing `verify` now holds within the bounds
 its `bounds:` line prints.
 
-The removal of `condition` and `variation` in 181f6cb contradicts RDRA 3.0. The
+The removal of `condition` and `variation` in 181f6cb contradicted RDRA 3.0. The
 author defines the システム layer as 「システムで管理する情報、状態、ビジネスルール」,
 and 条件 and バリエーション are the business-rule half of it. Phase 3 of the author's
 method (Steps 7 to 9) exists to find them, and 6 of the 15 inconsistency checks in the
 official RDRA definition sheet refer to them. The removal of `usagescene` matches the
-author's own change from 2.0 to 3.0 and stays removed.
+author's own change from 2.0 to 3.0 and stays removed. Phase 3 restored `condition` and
+`variation`.
 
 ## rdra-ish covers three layers of work that RDRA keeps apart
 
@@ -46,57 +47,63 @@ is that choice.
 | Layer | Source of truth | What the modeler writes | What the tool guarantees |
 |---|---|---|---|
 | Requirements | RDRA 3.0 (`RDRA.md`, the RDRA definition sheet) | RDRA elements and their connections | Every connection the RDRA rules require exists, and nothing is undefined or unconnected |
-| Logical data | The author's RDRASpec mapping | Entities, columns, keys, relations | A normalized relational model that DBML, JSON Schema, and OpenAPI can be generated from |
+| Logical data | The author's RDRASpec mapping | Entities, columns, keys, relations | A normalized relational model that DBML, SQL DDL, JSON Schema, and OpenAPI can be generated from |
 | Lifecycle | rdra-ish | Effects, guards, constraints, properties per use case | Within the stated bounds, no reachable state breaks a constraint, and every declared state is reachable |
 
-Physical database design is out of scope. DBML is the last data output, and the DSL
-gets no DDL emitter. Domain code is in scope: `rdra-ish codegen` prints the data types, state
+Physical database design beyond the schema is out of scope. DBML and the SQL DDL of
+`export --kind sql` (tables, keys, indexes, and `CHECK` constraints) are the last data outputs.
+Domain code is in scope: `rdra-ish codegen` prints the data types, state
 sums, and transition functions of the model in TypeScript, Rust, or Go, for an agent to
-finish ([design](./design/algebraic-codegen.md)). Unbounded proof (TLAPS, inductive invariants) is also out of
+finish ([design](./design/algebraic-codegen.md)). Unbounded proof with TLAPS is also out of
 scope. Verification means bounded model checking with TLC, and the bounds are part of
-every result.
+every result. `verify --prove` (experimental) also tries to prove each state rule for any
+number of rows with z3, as an inductive invariant.
 
 ## The requirements layer conforms to RDRA 3.0
 
 The author's `RDRA.md` lists the elements and the rules that connect them. The table
-compares each element with today's DSL and states the target.
+compares each element with today's DSL and states the target. A target that today's DSL
+meets starts with "Met".
 
 | RDRA 3.0 element | Today | Target |
 |---|---|---|
 | アクター | `actor` | Keep. |
 | アクター群, 外部システム群 | Missing | Defer. Only diagrams would read a group, and a diagram can group by file or tag. |
-| 外部システム | `extsystem`, linked only by `uses(actor, extsystem)` and placed in the external-environment layer | Move to the system-value layer. Connect it to use cases through events, as the RDRA rule 「外部システム」は「イベント」で「UC」と連携する requires. |
-| 要求 | `requirement`, traced by `motivates(requirement, buc)` | Keep the BUC trace. Add the RDRA link from a requirement to the actor who holds it. |
+| 外部システム | `extsystem`, placed in the system-value layer and linked to use cases through events: `raises(ExtSystem, Event)` inbound, `triggers(Event, ExtSystem)` outbound. `uses` fails to load. | Met. Move to the system-value layer. Connect it to use cases through events, as the RDRA rule 「外部システム」は「イベント」で「UC」と連携する requires. |
+| 要求 | `requirement`, traced by `motivates(requirement, buc)` and `achieves(requirement, goal)`. Its holder is only the free-text `stakeholder` and `owner` metadata; no predicate links it to an `actor`. | Keep the BUC trace. Add the RDRA link from a requirement to the actor who holds it. |
 | 業務, BUC | `business`, `buc` | Keep. |
-| アクティビティ | `step` inside `flow` | Keep. Add the link from an activity to the actor who performs it. |
-| UC | `usecase` | Keep. The UC becomes the trigger of state transitions (see the lifecycle layer). |
+| アクティビティ | `step` inside `flow`, performed by an actor through `performs(Actor, Step)`, which the flow diagram draws as a lane | Met. Keep. Add the link from an activity to the actor who performs it. |
+| UC | `usecase`, the first argument of `transitions(UseCase, Entity.col, a -> b)` | Met. Keep. The UC becomes the trigger of state transitions (see the lifecycle layer). |
 | 画面 | `screen`, `field` | Keep. |
-| イベント | `event` | Keep as the interface to external systems. It no longer drives transitions directly. |
-| タイマー | Missing. `timing` exists but nothing reads it. | Turn `timing` into タイマー. A timer triggers a use case, which gives the kind a consumer. |
-| コンテキスト | Missing. `system owns entity` is the closest thing. | Defer. A context adds value only if a check reads it, such as the author's heuristic that a UC spanning several contexts is important. |
+| イベント | `event`, the interface between use cases and between a use case and an external system. `transitions` refuses an event. An event a use case raises orders the use cases it triggers (rule 3). | Met. Keep as the interface to external systems. It no longer drives transitions directly. |
+| タイマー | `timer`, connected by `triggers(Timer, UseCase \| Buc)`. `timing` fails to load. | Met. Turn `timing` into タイマー. A timer triggers a use case, which gives the kind a consumer. |
+| コンテキスト | Missing. A `system`, which groups APIs and `owns` entities, is the closest thing. | Defer. A context adds value only if a check reads it, such as the author's heuristic that a UC spanning several contexts is important. |
 | 情報 | `entity`, at the logical level | Keep one kind. The author's own RDRASpec maps 情報 to entity one to one. |
-| 状態モデル, 状態 | An `Enum` column plus `transitions`. `state` is declared but no predicate takes it. | Derive states from the state column. Stop declaring `state`, and exclude derived states from orphan and naming lint. |
-| 条件 | Removed in 181f6cb | Restore. A condition links to use cases, variations, and a state model. Its body stays optional, so RDRA's traceability-only use works. |
-| バリエーション | Removed in 181f6cb | Restore as a named value set that an `Enum` column can use as its type. |
+| 状態モデル, 状態 | An `Enum` column that `transitions` moves. Its variants are the states, and `@end` marks the ones a row may stay at. `state` fails to load. | Met. Derive states from the state column. Stop declaring `state`, and exclude derived states from orphan and naming lint. |
+| 条件 | `condition`, linked by `combines` to variations and lifecycle columns and by `applies_to` to use cases. An optional `holds` body guards those use cases. | Met. Restore. A condition links to use cases, variations, and a state model. Its body stays optional, so RDRA's traceability-only use works. |
+| バリエーション | `variation`, a closed value set that a column names as its type in place of `Enum(...)` | Met. Restore as a named value set that an `Enum` column can use as its type. |
 | 利用シーン | Removed | Stays removed. RDRA 3.0 dropped it. |
 
 Two consequences of the table matter beyond conformance.
 
-A variation is the missing distinction between a state axis and an attribute. Today
-every `Enum` column is treated as a state axis, so `PaymentTransaction.method` in
-clinic-ops shows up as unreachable variants. In the target, a column typed by a
-variation is an attribute: an actor chooses its value, and nothing checks whether
-each value is reachable. A column with `transitions` is a state axis. RDRA draws the
-same line between 状態モデル and バリエーション.
+A variation is the distinction between a state axis and an attribute. Before phase 3,
+every `Enum` column was treated as a state axis, so `PaymentTransaction.method` in
+clinic-ops showed up as unreachable variants. Today that column is typed by the
+variation `PaymentMethod`, and a column typed by a variation is an attribute: an actor
+chooses its value, and nothing checks whether each value is reachable. A column with
+`transitions` is a state axis. RDRA draws the same line between 状態モデル and バリエーション.
 
 A condition is where typed guards come from. The author defines a condition as a
 combination of variations and states (「条件」は「バリエーション」と「状態モデル」の組合せで出来ている).
 A condition with a body over those two things compiles to a guard on the use cases
 that it is linked to. A condition without a body is a trace link and nothing more.
 
-The 15 inconsistency columns of the RDRA definition sheet become lint rules. Each
-column is an "undefined" or "unconnected" check, such as an information item that no
-BUC uses, or a transition use case that no BUC defines.
+The 15 inconsistency columns of the RDRA definition sheet are rules, one row each in
+`RDRA_RULES` (`crates/rdra-ish-core/src/rdra_rules.rs`). Each column is an "undefined" or
+"unconnected" check, such as an information item that no BUC uses. The 11 "undefined"
+columns are load errors and the 4 "unconnected" columns are lint warnings. rdra-ish adds
+three rules of its own, such as a transition use case that no BUC defines
+([the language reference](./language-reference.md#rdra-lint-rules) lists them).
 
 ## The logical data layer follows the author's RDRASpec rules
 
@@ -123,7 +130,7 @@ DSL keeps these rules and adds what a normalized relational model needs:
   read by a constraint.
 - A relation can state a minimum cardinality on its child side, such as `1..*:1`.
   Verification checks it as the invariant `MinCard_<Child>_<role>`, which is always on.
-- An `Enum` column typed by a variation is an attribute, not a state axis.
+- A column typed by a variation is an attribute, not a state axis.
 
 ## The lifecycle layer has one semantics
 
@@ -177,7 +184,8 @@ A passing `verify` must mean something, and a failing one must say where to look
   names the rule that broke.
 - Every state in a state model gets a reachability witness. A state with no witness
   is an error, not a lint warning.
-- A state with no outgoing transition is an end state, as in the RDRA state sheet. A
+- A state with no outgoing transition is an end state, as in the RDRA state sheet, and
+  so is a state that its column marks `@end`. A
   deadlock check reports an instance at a non-end state that can never leave it: no path
   from that state changes the instance's column or deletes it. An instance with no enabled
   action is the simplest such case.
@@ -191,34 +199,55 @@ A passing `verify` must mean something, and a failing one must say where to look
 
 ## One stage order replaces three
 
-The README, `stage-readiness` in `lint.rs`, and `incremental-modeling.md` describe
-three different orders. The target keeps one order, which follows the author's three
-phases and nine steps for the requirements layer and then adds the two rdra-ish
-layers:
+One order exists: `ORDER` in `crates/rdra-ish-core/src/refinement/order.rs`. `lint`
+`stage-readiness`, `rdra-ish next`, and the stage map of
+[incremental-modeling.md](./incremental-modeling.md#stage-map) read it, and the test
+`stage_docs_are_in_sync` keeps the docs in step. The target is this order. It has ten
+stages, and it does not follow the author's three phases and nine steps step for step:
 
-1. Build the basis for discussion: actors and businesses, BUCs and activities,
-   information, and state models (RDRA Steps 1 to 4).
-2. Assemble requirements: use cases, screens, events, and timers, then review use cases
-   against information and states (RDRA Steps 5 and 6).
-3. Make the requirements specifiable: conditions and variations (RDRA Steps 7 to 9).
-4. Derive the logical data model (RDRASpec).
-5. Add effects, guards, and constraints, and run `verify`.
+| Stage | Name | RDRA 3.0 or rdra-ish |
+|---|---|---|
+| 0 | Scope sketch | Basis: businesses and the BUCs they hold |
+| 1 | BUC skeleton | Basis: actors, BUCs, activities; requirements: use cases |
+| 2 | Screens | Requirements: screens |
+| 3 | Data touchpoints | Basis: information, as the entities each use case touches |
+| 4 | API and access boundary | rdra-ish: APIs, systems, permissions, and media |
+| 5 | Entity structure | RDRASpec: columns and keys; specification: variations |
+| 6 | Lifecycle | Basis: state models; requirements: events and timers; specification: conditions |
+| 7A to 7C | Local guardrails, local obligations, advanced rules | rdra-ish: effects, guards, and constraints that `verify` checks |
 
-`stage-readiness` checks the RDRA connections of each stage, not only whether any
-element of the stage exists.
+It departs from the author's order for three reasons:
+
+- **A state needs a use case.** In rdra-ish a state model is a lifecycle column that
+  `transitions(UseCase, Entity.column, from -> to)` moves, and a use case is the trigger of
+  every transition. A state model cannot be written before the use cases that move it: an
+  `Enum` column that nothing moves is an attribute, and `lint` warns on it
+  (`enum-attribute`). So states come at stage 6, after use cases, not with the basis.
+- **Each stage is a gate a tool decides.** `next` and `stage-readiness` place each BUC at
+  the last stage of the met prefix of the required stages, and each stage is met when the
+  BUC's elements are connected as it requires, such as every use case displaying a screen
+  or running on a trigger at stage 2. The author's steps include reviews, such as checking
+  use cases against information and states, that no check can decide, and the author
+  expects modelers to go back and forth between them.
+- **rdra-ish adds layers RDRA keeps apart.** The API and access boundary (stage 4) and
+  the rules that `verify` checks (stages 7A to 7C) have no RDRA step.
+
+Within these constraints the order follows RDRA's layers from the outside in: what the
+actor sees (screens) before what the system keeps (entities), and the system boundary
+before the data structure behind it.
 
 ## The work lands in six phases
 
 Each phase ends in a check that the next phase depends on. Removal comes before
 addition.
 
-1. **Soundness.** Export every `sets` effect, warn when a constrained column has no
+1. **Soundness.** Done. Export every `sets` effect, warn when a constrained column has no
    writer, and agree on one initial state. The check is a regression sample that
-   reproduces today's vacuous `TLC: OK` and must now fail.
-2. **Subtraction.** Delete `location`, stop declaring `state`, and fix the docs that
+   reproduces the vacuous `TLC: OK` and must now fail.
+2. **Subtraction.** Done. Delete `location`, stop declaring `state`, and fix the docs that
    describe rules the code does not have. The check is that clinic-ops lint drops the
    66 orphan findings on derived states.
-3. **RDRA conformance.** Restore `condition` and `variation`, turn `timing` into a
+3. **RDRA conformance.** Done. Restore `condition` and `variation`, turn `timing` into a
    timer, make use cases the trigger of transitions, and add the definition-sheet
    lint rules. The check is that clinic-ops passes every inconsistency rule.
 4. **One transition system.** Done. The shared transition system has existence
@@ -334,8 +363,8 @@ These questions were decided on 2026-10-29, during phase 6:
   TLC's state graph. It compares every cone of every sample at 2 instances, except a cone
   whose BFS passes 300,000 states there, which it compares at 1 instance. The test lists
   those cones in `VERIFY_FALLBACK` and fails when a cone joins or leaves the list, so the
-  coverage it gives up is always named. Today the list holds 10 cones: 1 of clinic-ops, 2 of
-  patent-ops, 1 of food-permit-ops, and 6 of insurance-claim-ops
+  coverage it gives up is always named. Today the list holds 11 cones: 1 of clinic-ops, 2 of
+  patent-ops, 1 of food-permit-ops, and 7 of insurance-claim-ops
   ([formal-verification.md](./formal-verification.md#known-verification-gaps) names them).
 - Each sample states its expected result in `// expect` lines of its first file in load
   order, so CI keeps no second list of samples. The deadlock check found one model defect:
@@ -382,6 +411,14 @@ The maintainer decided these questions on 2026-11-07:
   status, and not the generated code (its type, variant, field, and function names, its
   shape, the obligation list, and its JSON form). Any release may change or remove them. A
   model that a release keeps verifying the same way may generate different code.
+
+The maintainer decided this question on 2026-11-21:
+
+- The stage order stays the ten stages of `refinement/order.rs` and does not move to the
+  author's three phases and nine steps. In rdra-ish a state needs the use case that moves
+  it, each stage is a gate `next` decides per BUC, and the API boundary and the verified
+  rules are rdra-ish layers with no RDRA step. See
+  [One stage order replaces three](#one-stage-order-replaces-three).
 
 ## Sources
 

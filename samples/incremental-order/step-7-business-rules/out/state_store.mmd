@@ -1,0 +1,18 @@
+%% rdra-ish diagram=state scope=entity:Store model=samples/incremental-order/step-7-business-rules/src
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Store.restock_status" as statemodel__Store_restock_status {
+    [*] --> state__Store_normal
+    state "normal" as state__Store_normal
+    state "scheduled" as state__Store_scheduled
+    state "blocked" as state__Store_blocked
+    %% transition usecase__ChangeNextRestockDate
+    state__Store_normal --> state__Store_scheduled : Change Next Restock Date
+    %% transition usecase__BlockScheduledRestock
+    state__Store_scheduled --> state__Store_blocked : Block Scheduled Restock
+    state__Store_blocked --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Store_blocked stateend

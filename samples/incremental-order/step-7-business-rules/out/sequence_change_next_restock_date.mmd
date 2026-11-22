@@ -1,0 +1,16 @@
+%% rdra-ish diagram=sequence scope=usecase:ChangeNextRestockDate model=samples/incremental-order/step-7-business-rules/src
+%% kinds: actor screen usecase entity
+%% omitted: buc medium permission
+sequenceDiagram
+  actor actor__OpsStaff as Operations Staff
+  participant screen__StoreMaintenanceScreen as Store Maintenance
+  participant usecase__ChangeNextRestockDate as Change Next Restock Date
+  participant entity__Store as Store
+  actor__OpsStaff ->> screen__StoreMaintenanceScreen: Change Next Restock Date
+  screen__StoreMaintenanceScreen ->> usecase__ChangeNextRestockDate: Change Next Restock Date
+  alt Store.restock_status == normal
+    usecase__ChangeNextRestockDate ->> entity__Store: update restock_status normal -> scheduled, next_restock_date=set
+    usecase__ChangeNextRestockDate -->> screen__StoreMaintenanceScreen: done
+  else guard fails
+    usecase__ChangeNextRestockDate -->> screen__StoreMaintenanceScreen: rejected
+  end
