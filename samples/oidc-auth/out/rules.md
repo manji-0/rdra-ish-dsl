@@ -1,9 +1,9 @@
 | kind | label | entities | rule | applies_to | site |
 | --- | --- | --- | --- | --- | --- |
-| condition | The client is active | Client | (Client.status == Active).along(BackchannelRequest, Client) | StartBackchannelAuthentication | samples/oidc-auth/buc/buc_ciba.rdra:119 |
-| condition | The client registered poll mode | BackchannelRequest | BackchannelRequest.delivery_mode == Poll | PollBackchannelToken | samples/oidc-auth/buc/buc_ciba.rdra:146 |
-| condition | The client registered ping mode | BackchannelRequest | BackchannelRequest.delivery_mode == Ping | PollBackchannelToken\|SendPingCallback | samples/oidc-auth/buc/buc_ciba.rdra:149 |
-| condition | The client registered push mode | BackchannelRequest | BackchannelRequest.delivery_mode == Push | PushBackchannelTokens | samples/oidc-auth/buc/buc_ciba.rdra:152 |
+| condition | The client is active | Client | (Client.status == Active).along(BackchannelRequest, Client) | StartBackchannelAuthentication | samples/oidc-auth/buc/buc_ciba.rdra:126 |
+| condition | The client registered poll mode | BackchannelRequest | BackchannelRequest.delivery_mode == Poll | PollBackchannelToken | samples/oidc-auth/buc/buc_ciba.rdra:153 |
+| condition | The client registered ping mode | BackchannelRequest | BackchannelRequest.delivery_mode == Ping | PollBackchannelToken\|SendPingCallback | samples/oidc-auth/buc/buc_ciba.rdra:156 |
+| condition | The client registered push mode | BackchannelRequest | BackchannelRequest.delivery_mode == Push | PushBackchannelTokens | samples/oidc-auth/buc/buc_ciba.rdra:159 |
 | condition | The grant of the code is not revoked | Grant | Grant.status == Active | RedeemCode | samples/oidc-auth/buc/buc_code_exchange.rdra:108 |
 | condition | The client is active | Client | (Client.status == Active).along(DeviceAuthorization, Client) | RedeemDeviceCode\|StartDeviceAuthorization | samples/oidc-auth/buc/buc_device.rdra:106 |
 | condition | The OP session has ended | OpSession | OpSession.status in (Logged out, Expired) | SendBackchannelLogout | samples/oidc-auth/buc/buc_logout.rdra:139 |

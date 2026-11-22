@@ -26,15 +26,15 @@
 | AuthorizationRequest | status | Consented (consented) | Responded (responded) | Respond with a code and an access token (Hybrid Flow, code token) (IssueHybridTokenResponse) | response_type=code token |  | samples/oidc-auth/buc/buc_signin.rdra:526 |
 | AuthorizationRequest | status | Consented (consented) | Responded (responded) | Respond with an ID Token (Implicit Flow, id_token) (IssueIdTokenResponse) | response_type=id_token |  | samples/oidc-auth/buc/buc_signin.rdra:487 |
 | AuthorizationRequest | status | Consented (consented) | Responded (responded) | Respond with an ID Token and an access token (Implicit Flow, id_token token) (IssueImplicitTokenResponse) | response_type=id_token token |  | samples/oidc-auth/buc/buc_signin.rdra:499 |
-| BackchannelRequest | status | Pending (pending) | Approved (approved) | Record the End-User's approval (RecordDeviceApproval) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:137 |
-| BackchannelRequest | status | Pending (pending) | Denied (denied) | Record the End-User's denial (RecordDeviceDenial) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:141 |
-| BackchannelRequest | status | Pending (pending) | Expired (expired) | Expire the backchannel request (ExpireBackchannelRequest) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:181 |
-| BackchannelRequest | status | Approved (approved) | Expired (expired) | Expire the backchannel request (ExpireBackchannelRequest) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:181 |
-| BackchannelRequest | status | Approved (approved) | Ping sent (notified) | Ping the client (SendPingCallback) | The client registered ping mode |  | samples/oidc-auth/buc/buc_ciba.rdra:166 |
-| BackchannelRequest | status | Approved (approved) | Tokens issued (redeemed) | Poll for the tokens (PollBackchannelToken) | The client registered poll mode | Relying Party (client application) | samples/oidc-auth/buc/buc_ciba.rdra:160 |
-| BackchannelRequest | status | Approved (approved) | Tokens pushed (pushed) | Push the tokens to the client (PushBackchannelTokens) | The client registered push mode |  | samples/oidc-auth/buc/buc_ciba.rdra:173 |
-| BackchannelRequest | status | Ping sent (notified) | Expired (expired) | Expire the backchannel request (ExpireBackchannelRequest) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:181 |
-| BackchannelRequest | status | Ping sent (notified) | Tokens issued (redeemed) | Poll for the tokens (PollBackchannelToken) | The client registered ping mode | Relying Party (client application) | samples/oidc-auth/buc/buc_ciba.rdra:161 |
+| BackchannelRequest | status | Pending (pending) | Approved (approved) | Record the End-User's approval (RecordDeviceApproval) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:144 |
+| BackchannelRequest | status | Pending (pending) | Denied (denied) | Record the End-User's denial (RecordDeviceDenial) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:148 |
+| BackchannelRequest | status | Pending (pending) | Expired (expired) | Expire the backchannel request (ExpireBackchannelRequest) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:188 |
+| BackchannelRequest | status | Approved (approved) | Expired (expired) | Expire the backchannel request (ExpireBackchannelRequest) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:188 |
+| BackchannelRequest | status | Approved (approved) | Ping sent (notified) | Ping the client (SendPingCallback) | The client registered ping mode |  | samples/oidc-auth/buc/buc_ciba.rdra:173 |
+| BackchannelRequest | status | Approved (approved) | Tokens issued (redeemed) | Poll for the tokens (PollBackchannelToken) | The client registered poll mode | Relying Party (client application) | samples/oidc-auth/buc/buc_ciba.rdra:167 |
+| BackchannelRequest | status | Approved (approved) | Tokens pushed (pushed) | Push the tokens to the client (PushBackchannelTokens) | The client registered push mode |  | samples/oidc-auth/buc/buc_ciba.rdra:180 |
+| BackchannelRequest | status | Ping sent (notified) | Expired (expired) | Expire the backchannel request (ExpireBackchannelRequest) |  |  | samples/oidc-auth/buc/buc_ciba.rdra:188 |
+| BackchannelRequest | status | Ping sent (notified) | Tokens issued (redeemed) | Poll for the tokens (PollBackchannelToken) | The client registered ping mode | Relying Party (client application) | samples/oidc-auth/buc/buc_ciba.rdra:168 |
 | Client | status | Active (active) | Suspended (suspended) | Suspend a client (SuspendClient) |  | OP Administrator | samples/oidc-auth/buc/buc_registration.rdra:137 |
 | Client | status | Suspended (suspended) | Active (active) | Reinstate a client (ReinstateClient) |  | OP Administrator | samples/oidc-auth/buc/buc_registration.rdra:141 |
 | Consent | status | Granted (granted) | Withdrawn (withdrawn) | Withdraw a consent (WithdrawConsent) |  | End-User | samples/oidc-auth/buc/buc_token_maintenance.rdra:225 |
