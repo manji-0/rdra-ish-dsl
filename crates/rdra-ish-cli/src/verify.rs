@@ -28,7 +28,7 @@ use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
 use crate::export::{checked_system, tla_bounds, tla_file, Modules};
 use crate::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict};
-use crate::prove::{run_proof, Marks, ProofTally};
+use crate::prove::{find_z3, run_proof, Marks, ProofTally};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
@@ -728,22 +728,47 @@ pub fn run_tlc(
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
     }
-    let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
-    let proof = match prove {
-        Some(Prove { z3, deny_unproved }) => {
-            let marks = Marks::of(model, &ts);
-            Some(run_proof(&ts, &selection, &marks, z3, deny_unproved)?)
-        }
-        None => None,
+    // TLC starts on the cones while BFS and the proof run here: none reads what another
+    // finds. A failure to write the specs or to find a tool is reported where it was before
+    // the engines ran side by side, after what BFS and the proof print, and starts no TLC run.
+    let written = write_specs_and_index(&dir, &jobs, &whole);
+    let tlc = (!jobs.is_empty()).then(|| Tlc::find(tlc_jar));
+    let z3 = prove.as_ref().map(|p| find_z3(p.z3.clone()));
+    let start = match (&written, &tlc, &z3) {
+        (Ok(_), Some(Ok(tlc)), None | Some(Ok(_))) => Some(tlc),
+        _ => None,
     };
+    let (bfs_errors, capped, proof, cones_ran) = std::thread::scope(|threads| {
+        let cones = start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs)));
+        let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
+        let proof = match (&prove, z3) {
+            (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
+                let marks = Marks::of(model, &ts);
+                run_proof(&ts, &selection, &marks, &z3, *deny_unproved).map(Some)
+            }),
+            _ => Ok(None),
+        };
+        let cones_ran = cones.map(|cones| match cones.join() {
+            Ok(ran) => ran,
+            Err(panic) => std::panic::resume_unwind(panic),
+        });
+        (bfs_errors, capped, proof, cones_ran)
+    });
     let end = End {
         bfs_errors,
         capped,
         deny_undecided,
-        proof,
+        proof: proof?,
     };
 
-    let (mut index, index_path) = write_specs_and_index(&dir, &jobs, &whole, keep)?;
+    let (mut index, index_path) = written?;
+    if keep {
+        println!(
+            "wrote {} specs and {}",
+            jobs.len() + usize::from(whole.is_some()),
+            index_path.display()
+        );
+    }
 
     if jobs.is_empty() {
         if !keep {
@@ -753,8 +778,8 @@ pub fn run_tlc(
         println!("tlc_result: ok");
         return end.finish(&line, &[]);
     }
-    let tlc = Tlc::find(tlc_jar)?;
-    let mut ran = run_cones(&tlc, &dir, &modules, &jobs)?;
+    let tlc = tlc.expect("a run with jobs looks for TLC")?;
+    let mut ran = cones_ran.expect("TLC started once the specs and the tools were there")?;
     for (job, r) in jobs.iter().zip(&ran) {
         println!("{}", r.line(&job.module, &job.checks));
     }
@@ -848,7 +873,6 @@ fn write_specs_and_index(
     dir: &Path,
     jobs: &[Job],
     whole: &Option<TlaBundle>,
-    keep: bool,
 ) -> Result<(String, PathBuf)> {
     let mut index = String::new();
     for job in jobs {
@@ -867,13 +891,6 @@ fn write_specs_and_index(
     let index_path = dir.join("cones.txt");
     fs::write(&index_path, &index)
         .with_context(|| format!("failed to write {}", index_path.display()))?;
-    if keep {
-        println!(
-            "wrote {} specs and {}",
-            jobs.len() + usize::from(whole.is_some()),
-            index_path.display()
-        );
-    }
     Ok((index, index_path))
 }
 
@@ -986,8 +1003,8 @@ fn fail(
 
 /// BFS on each selected entity cone at the verify bounds: the `NoWitness` errors, the
 /// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered,
-/// then the `not checked:` block and one summary line. The exploration is dropped before TLC
-/// starts. Returns the errors and the findings a cone left undecided at the state cap.
+/// then the `not checked:` block and one summary line. Returns the errors and the findings a
+/// cone left undecided at the state cap.
 fn state_models(
     program: &ResolvedProgram,
     model: &SemanticModel,

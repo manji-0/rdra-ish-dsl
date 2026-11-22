@@ -55,8 +55,8 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
 - When TLC runs out of heap the result is `tool_error`: set `RDRA_TLC_HEAP=4g` (default
   `1g` per cone, `2g` per temporal property run), or put `-Xmx` in `JAVA_TOOL_OPTIONS`,
   which wins.
-- Before TLC, `verify` explores the cones itself, side by side on the machine's cores (at
-  most 8). `RDRA_JOBS=2` lowers that when memory is short; the result does not change.
+- While TLC runs, `verify` explores the cones itself, side by side on the machine's cores
+  (at most 8). `RDRA_JOBS=2` lowers that when memory is short; the result does not change.
 
 ## Reading a Run
 
@@ -120,7 +120,8 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
 violated: Error: Temporal properties were violated.
 ```
 
-**A state model fails before TLC.** `verify` first explores each entity's cone by BFS.
+**A state model fails before TLC.** `verify` also explores each entity's cone by BFS and
+prints what it finds first.
 A state no reachable state holds (`error[Witness_<E>_<col>_<value>]`) or an instance that
 can never leave a state with a way out (`error[Deadlock_<E>_<col>_<value>]`) fails the
 run even when TLC passes: `tlc_result: ok`, no `OK:` line, exit 1. A use case that never

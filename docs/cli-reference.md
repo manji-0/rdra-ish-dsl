@@ -1222,7 +1222,7 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and, unless TLC already printed its verdict, the property is `not decided`, which warns and does not fail the run. |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | Run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. |
 | `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a state, deadlock, or use case a BFS cone left at its state cap. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
-| `--prove` | flag | off | Experimental. Before TLC runs, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int value (`now` has no top) with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule the SQL export's schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema leaves ...` line counts those rules. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
+| `--prove` | flag | off | Experimental. While TLC runs, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int value (`now` has no top) with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule the SQL export's schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema leaves ...` line counts those rules. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
 | `--deny-unproved` | flag | off | With `--prove`: fail the run (exit 1) when a rule is unproved. A rule out of scope does not count. |
 | `--z3` | path | `RDRA_Z3`, else `z3` on `PATH` | With `--prove`: the z3 binary to run. |
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the BUC. See [Partial runs](#partial-runs). |
@@ -1253,8 +1253,8 @@ about once a minute, and a run the budget stops before TLC prints its verdict pr
 decided` and is listed under `not checked:`. Stdout or stderr carries one `tlc_result: ok|counterexample|tool_error`
 line. Exits non-zero when TLC is missing or reports a violation.
 
-Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped
-at 8,388,608 states per cone; the `bounds:` line names the cap as `8388608 states per BFS
+While TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped
+at 8,388,608 states per cone, and prints what it finds before TLC's lines; the `bounds:` line names the cap as `8388608 states per BFS
 cone`. A state of a state model with no witness there, and a deadlock, print as in `check`
 and fail the run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line
 follows, and the exit status is 1. A deadlock at the bound and a use case that never runs
@@ -1328,7 +1328,7 @@ with its `State N: Stuttering` or `Back to state K: <action>` line. An example i
 | `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and each temporal property run `2g`. |
 | `RDRA_TLC_JAR` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
 | `RDRA_Z3` | Path to the z3 binary, used as `--z3` when the flag is absent. |
-| `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once, before any TLC run, and how many threads compute the moves of one large cone. Without it, the machine's cores, at most 8. Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another on one thread. The result does not depend on it. |
+| `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once by BFS, and how many threads compute the moves of one large cone. It does not limit the TLC runs, which `verify` starts beside the BFS. Without it, the machine's cores, at most 8. Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another on one thread. The result does not depend on it. |
 | `JAVA_TOOL_OPTIONS` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`), so a `-Xmx` here wins. |
 
 A run that runs out of memory is a `tool_error` whose message names both variables.

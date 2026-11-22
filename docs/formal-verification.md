@@ -319,7 +319,7 @@ cone leaves out, a `.none` guard on a fair use case whose quantified column anot
 case writes, and a condition on a creating use case that reads a column the creation does
 not assign.
 
-Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
+While TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
 8,388,608 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
