@@ -267,9 +267,9 @@ fn bits(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             };
             variants.push(format!("{name}(c)"));
             let key = match fold.key() {
-                FoldKey::Linked { entity, .. } => {
+                FoldKey::Linked { entity, body, .. } => {
                     ctx.depth = 1;
-                    let body = ctx.pred(fold.node_body().expect("a linked fold has its node"));
+                    let body = ctx.pred(body);
                     let present = ctx.present(*entity, "b0");
                     out.push_str(&format!(
                         "{name}(c) == LET b0 == c IN {present} /\\ ({body})\n"

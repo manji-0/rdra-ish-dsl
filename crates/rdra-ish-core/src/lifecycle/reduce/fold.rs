@@ -55,14 +55,6 @@ impl Fold {
         &self.key
     }
 
-    /// For a `Linked` key, the folded node's body, read with the key slot as `Bound(0)`.
-    pub fn node_body(&self) -> Option<&Pred> {
-        match &self.key {
-            FoldKey::Param(_) => None,
-            FoldKey::Linked { body, .. } => Some(body),
-        }
-    }
-
     /// The T params and whether each must be on a present row.
     pub fn t_params(&self) -> &[(u8, bool)] {
         &self.t_params
