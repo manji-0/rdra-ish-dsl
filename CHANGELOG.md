@@ -7,7 +7,7 @@
 - The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
-  a check that is vacuous only at one instance is not reported there (#NNN).
+  a check that is vacuous only at one instance is not reported there (#173).
 - `check` warns `Vacuous_<rule>` when a state rule holds and says nothing: no reachable
   state has the rows it ranges over, the guards of its `.when` never hold, or one condition
   of a `forbidden` of several is one no row ever meets, such as a state no use case enters.
