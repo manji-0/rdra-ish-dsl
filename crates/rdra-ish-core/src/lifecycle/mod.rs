@@ -30,7 +30,7 @@ mod tests;
 pub use cone::{Cone, Seed, Target, VarSet};
 pub use diag::{
     created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,
-    Severity, StateDiag, VarSpread,
+    Severity, StateDiag, UnmetPremise, VarSpread,
 };
 pub use explore::{Caps, ComponentRun, Edge, Graph, LabelledEdges};
 pub use expr::State;

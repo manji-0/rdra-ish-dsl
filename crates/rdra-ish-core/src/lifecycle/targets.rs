@@ -5,10 +5,10 @@ use std::collections::HashMap;
 use std::fmt;
 
 use super::cone::{Cone, Target};
-use super::diag::{Diag, StateDiag};
+use super::diag::{Diag, StateDiag, UnmetPremise};
 use super::explore::{Caps, ComponentRun};
 use super::findings::{Progress, Runs, Taken, Witness};
-use super::types::{ActionOrigin, EntId, GuardWhy, Pred, Site, Term, VarKind};
+use super::types::{ActionOrigin, EntId, GuardWhy, Pred, Premise, Site, Term, VarKind};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
 use crate::model::{EntityKey, SemanticModel};
@@ -630,7 +630,61 @@ impl TransitionSystem {
                 diag: d.diag.clone(),
             });
         }
+        if let Target::Invariant(i) = target {
+            out.extend(self.vacuous(i, cone).map(|diag| Diag { entities, diag }));
+        }
         out
+    }
+
+    /// The `VacuousRule` of invariant `i` on its cone: the rule holds there, the exploration
+    /// is complete, and no reached state meets one of its premises. When no state has the
+    /// rows the rule ranges over, that alone is reported.
+    fn vacuous(&self, i: usize, cone: &ConeRun) -> Option<StateDiag> {
+        let inv = &self.invariants[i];
+        let run = &cone.run;
+        let violated = run.diags.iter().any(
+            |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
+        );
+        if !run.complete || violated {
+            return None;
+        }
+        // The cone's copy of the rule reads the cone's vars.
+        let sys = &run.system;
+        let local = sys.invariants.iter().find(|x| x.name == inv.name)?;
+        let met = |pred: &Pred| {
+            run.states
+                .iter()
+                .any(|s| sys.meets(&local.binders, pred, s))
+        };
+        let unmet = |premise: &Premise| UnmetPremise {
+            rows: TransitionSystem::premise_rows(inv.binders.len(), &premise.pred)
+                .iter()
+                .zip(&inv.binders)
+                .filter(|(asked, _)| **asked)
+                .map(|(_, e)| self.entity(*e).id.clone())
+                .collect(),
+            text: premise.text.clone(),
+        };
+        // A condition the build could not express is `False` and has its own error.
+        let built = |p: &&Premise| !p.pred.nodes().any(|n| matches!(n, Pred::False));
+        let unmet: Vec<UnmetPremise> = match met(&Pred::True) {
+            false if !local.premises.is_empty() => vec![unmet(&Premise::rows())],
+            _ => local
+                .premises
+                .iter()
+                .filter(built)
+                .filter(|p| !met(&p.pred))
+                .map(unmet)
+                .collect(),
+        };
+        (!unmet.is_empty()).then(|| StateDiag::VacuousRule {
+            name: inv.name.clone(),
+            text: inv.text.clone(),
+            label: inv.label.clone(),
+            unmet,
+            one_instance: self.bounds.slots() == 1,
+            site: inv.site.clone(),
+        })
     }
 }
 
@@ -667,6 +721,10 @@ impl TargetExploration {
     pub fn defer_progress(&mut self) {
         let mut kept = Vec::new();
         for d in std::mem::take(&mut self.verdicts) {
+            // A use case the scope drops may reach the state that meets the premise.
+            if matches!(d.diag, StateDiag::VacuousRule { .. }) {
+                continue;
+            }
             let subject = match &d.diag {
                 StateDiag::NoWitness {
                     entity,

@@ -99,6 +99,30 @@ impl fmt::Display for CapGrowth {
     }
 }
 
+/// A premise of a rule that no reachable state meets (`StateDiag::VacuousRule`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UnmetPremise {
+    /// The entities whose rows the premise asks for, by id: those it reads, or every entity
+    /// the rule ranges over when it reads none.
+    pub rows: Vec<String>,
+    /// What the premise asks of those rows, as written; empty when it asks only for them.
+    pub text: String,
+}
+
+impl fmt::Display for UnmetPremise {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.rows[..] {
+            [one] => write!(f, "a row of {one}")?,
+            [a, b] if a == b => write!(f, "two rows of {a}")?,
+            several => write!(f, "rows of {}", several.join(" and "))?,
+        }
+        match self.text.as_str() {
+            "" => Ok(()),
+            text => write!(f, " with {text}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StateDiag {
     /// A declared Enum value no reachable state holds.
@@ -146,6 +170,22 @@ pub enum StateDiag {
         pattern_desc: String,
         site: Site,
         trace: Trace,
+    },
+    /// A state constraint that holds, and one of whose premises no reachable state meets
+    /// (`Invariant::premises`): no state has the rows it ranges over, the guards of its
+    /// `.when` never hold, or a `forbidden` state is out of reach even without one of its
+    /// conditions. The rule would hold whatever the rest of it said.
+    VacuousRule {
+        name: String,
+        text: InvText,
+        /// The rule's `.label("...")`, when it has one.
+        label: Option<String>,
+        /// The premises no reachable state meets.
+        unmet: Vec<UnmetPremise>,
+        /// The run had one instance per entity: a state that needs a second row of some
+        /// entity is not reached there, so the premise may be met at two.
+        one_instance: bool,
+        site: Site,
     },
     /// A step of the anchor use case ends in a state that fails its `after(..).assert`. Each
     /// assert reports its first violation, with a shortest trace ending in that step.
@@ -442,6 +482,7 @@ impl StateDiag {
                 value,
                 ..
             } => Self::witness_name(entity, column, value),
+            StateDiag::VacuousRule { name, .. } => format!("Vacuous_{name}"),
             StateDiag::NeverRuns { action, .. } => format!("Runs_{action}"),
             StateDiag::ArmNeverTaken {
                 action, from, to, ..
@@ -582,6 +623,7 @@ impl StateDiag {
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::NeverRuns { .. }
+            | StateDiag::VacuousRule { .. }
             | StateDiag::ArmNeverTaken { .. }
             | StateDiag::ValueNeverChosen { .. }
             | StateDiag::UnjoinedGuardRead { .. }
@@ -742,6 +784,28 @@ impl fmt::Display for StateDiag {
                 "{}{name} is violated by a reachable state: {pattern_desc}",
                 label_prefix(label)
             ),
+            StateDiag::VacuousRule {
+                name,
+                label,
+                unmet,
+                one_instance,
+                ..
+            } => {
+                let unmet: Vec<String> = unmet.iter().map(UnmetPremise::to_string).collect();
+                write!(
+                    f,
+                    "{}{name} holds vacuously: no reachable state has {}",
+                    label_prefix(label),
+                    unmet.join(", nor ")
+                )?;
+                if *one_instance {
+                    write!(
+                        f,
+                        " (at one instance per entity; a state that needs a second row of some entity is reached only at --instance-count 2)"
+                    )?;
+                }
+                Ok(())
+            }
             StateDiag::AfterAssertViolated {
                 anchor,
                 requireds,

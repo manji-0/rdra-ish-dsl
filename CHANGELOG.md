@@ -4,6 +4,10 @@
 
 ### Added
 
+- `check` warns `Vacuous_<rule>` when a state rule holds and says nothing: no reachable
+  state has the rows it ranges over, the guards of its `.when` never hold, or one condition
+  of a `forbidden` of several is one no row ever meets, such as a state no use case enters.
+  What a `forbidden` forbids being unreachable is its claim and draws no warning (#170).
 - insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a
