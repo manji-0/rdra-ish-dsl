@@ -290,6 +290,38 @@ pub enum TemporalFormula {
     /// `can_reach(expr)`: CTL `AG (present => EF expr)`, which no LTL formula states, so
     /// BFS decides it on the explored graph and the TLA+ export only names it.
     CanReach(TemporalExpr),
+    /// `stable(p)` → `[][(present /\ p) => (present' => p')]_vars`
+    Stable(TemporalExpr),
+    /// `unchanged(E.col, ..).when(p)` → `[][(present /\ p) => (present' => col' = col)]_vars`;
+    /// `when` is `None` without `.when`.
+    Unchanged {
+        columns: Vec<QualifiedModelColumnRef>,
+        when: Option<TemporalExpr>,
+    },
+    /// `precedes(p, q)` → a latch `<P>_seen` set where `present /\ p` holds, and
+    /// `[]((present /\ q) => <P>_seen)`
+    Precedes {
+        first: TemporalExpr,
+        then: TemporalExpr,
+    },
+}
+
+impl TemporalFormula {
+    /// The state predicates of the formula, left to right.
+    pub fn exprs(&self) -> Vec<&TemporalExpr> {
+        match self {
+            TemporalFormula::Always(e)
+            | TemporalFormula::Eventually(e)
+            | TemporalFormula::Stable(e)
+            | TemporalFormula::CanReach(e) => vec![e],
+            TemporalFormula::LeadsTo {
+                antecedent: a,
+                consequent: b,
+            }
+            | TemporalFormula::Precedes { first: a, then: b } => vec![a, b],
+            TemporalFormula::Unchanged { when, .. } => when.iter().collect(),
+        }
+    }
 }
 
 /// `property Id "label"` with a temporal formula body.

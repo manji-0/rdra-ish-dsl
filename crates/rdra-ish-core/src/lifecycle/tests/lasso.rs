@@ -96,7 +96,7 @@ fn verdict(d: Option<StateDiag>) -> Option<Verdict> {
             kind,
             instance.iter().map(Inst::to_string).collect(),
             witness,
-            lasso,
+            lasso.expect("a temporal counterexample is a lasso"),
             trace.steps.iter().map(|s| s.action.clone()).collect(),
         )),
         other => panic!("not a property violation: {other:?}"),

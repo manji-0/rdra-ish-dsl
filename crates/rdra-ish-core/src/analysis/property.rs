@@ -4,8 +4,8 @@ use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::{
-    CmpOpModel, EntityKey, ModelColumn, NodeRef, SemanticModel, TemporalAtom, TemporalExpr,
-    TemporalFormula, TemporalProperty, TemporalRhs, UseCaseKey,
+    CmpOpModel, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef, SemanticModel,
+    TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, UseCaseKey,
 };
 use rdra_ish_syntax::ast::{
     AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PredicateArg, PropertyDecl,
@@ -110,14 +110,26 @@ fn fair_use_cases(
             let err = RdraError::UnknownChainMethod {
                 pred: "property".into(),
                 name: cc.name.clone(),
-                hint: "a property takes `.fair(UseCase, ...)`, `.along(A, B, ..)` with `.role(role)`, and `.global()`".into(),
+                hint: "a property takes `.fair(UseCase, ...)`, `.along(A, B, ..)` with `.role(role)`, and `.global()`; `.when(p)` follows `unchanged(..)` directly".into(),
             };
             push_error(ctx, diags, cc.span.clone(), err);
             ok = false;
             continue;
         }
-        if matches!(decl.formula, AstTemporalFormula::Always(_)) {
-            let err = RdraError::FairOnSafetyProperty { id: id() };
+        let form = match &decl.formula {
+            AstTemporalFormula::Always(_) => Some("always"),
+            AstTemporalFormula::Stable(_) => Some("stable"),
+            AstTemporalFormula::Unchanged { .. } => Some("unchanged"),
+            AstTemporalFormula::Precedes { .. } => Some("precedes"),
+            AstTemporalFormula::Eventually(_)
+            | AstTemporalFormula::LeadsTo { .. }
+            | AstTemporalFormula::CanReach(_) => None,
+        };
+        if let Some(form) = form {
+            let err = RdraError::FairOnSafetyProperty {
+                id: id(),
+                form: form.into(),
+            };
             push_error(ctx, diags, cc.span.clone(), err);
             ok = false;
             continue;
@@ -166,11 +178,48 @@ fn lower_formula(
             antecedent: lower_expr(model, antecedent)?,
             consequent: lower_expr(model, consequent)?,
         }),
+        AstTemporalFormula::Stable(e) => Ok(TemporalFormula::Stable(lower_expr(model, e)?)),
+        AstTemporalFormula::Unchanged { columns, when } => {
+            let mut cols: Vec<QualifiedModelColumnRef> = Vec::new();
+            for operand in columns {
+                let (written, column) = match operand {
+                    Operand::QualifiedColumn(q) => (q.entity.parts.last().cloned(), &q.column),
+                    Operand::Column(c) => (None, c),
+                    other => {
+                        return Err(format!("unchanged(..) takes columns, got {other:?}").into());
+                    }
+                };
+                let (entity, decl) = owner(model, written.as_deref(), column)?;
+                if decl.derived_expr.is_some() {
+                    return Err(format!(
+                        "unchanged(..) keeps stored columns, and {}.{column} is @derived; name the columns its expression reads",
+                        model.entities[entity].id
+                    )
+                    .into());
+                }
+                let col = QualifiedModelColumnRef {
+                    entity,
+                    column: column.clone(),
+                };
+                if !cols.contains(&col) {
+                    cols.push(col);
+                }
+            }
+            Ok(TemporalFormula::Unchanged {
+                columns: cols,
+                when: when.as_ref().map(|e| lower_expr(model, e)).transpose()?,
+            })
+        }
+        AstTemporalFormula::Precedes { first, then } => Ok(TemporalFormula::Precedes {
+            first: lower_expr(model, first)?,
+            then: lower_expr(model, then)?,
+        }),
     }
 }
 
-/// The entities `formula` reads, in the order the lifecycle binds them: each atom's owner,
-/// then the owner of a column it compares with, left to right.
+/// The entities `formula` reads, in the order the lifecycle binds them: the owner of each
+/// `unchanged` column, then each atom's owner and the owner of a column it compares with,
+/// left to right.
 fn formula_entities(formula: &TemporalFormula, out: &mut Vec<EntityKey>) {
     fn walk(expr: &TemporalExpr, out: &mut Vec<EntityKey>) {
         match expr {
@@ -192,17 +241,15 @@ fn formula_entities(formula: &TemporalFormula, out: &mut Vec<EntityKey>) {
             }
         }
     }
-    match formula {
-        TemporalFormula::Always(e)
-        | TemporalFormula::Eventually(e)
-        | TemporalFormula::CanReach(e) => walk(e, out),
-        TemporalFormula::LeadsTo {
-            antecedent,
-            consequent,
-        } => {
-            walk(antecedent, out);
-            walk(consequent, out);
+    if let TemporalFormula::Unchanged { columns, .. } = formula {
+        for col in columns {
+            if !out.contains(&col.entity) {
+                out.push(col.entity);
+            }
         }
+    }
+    for e in formula.exprs() {
+        walk(e, out);
     }
 }
 

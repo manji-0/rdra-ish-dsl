@@ -76,7 +76,8 @@ written by hand can name them:
   `MultiForbidden_<E>_<n>`, `MultiInv_<E>_<n>`, `Quantifier_<E>_<n>`, `Check_<E>_<column>_<n>`,
   `Unique_<Child>_<role>`, `MinCard_<Child>_<role>`, and `TypeOK`.
 - Properties: `AfterAssert_<UC>_<n>`, each temporal property under its declared name, and
-  `Fair_<P>`.
+  `Fair_<P>`. A `precedes` property adds the variable `<P>_seen` and the operator
+  `<P>_latch` in a module whose `.cfg` checks it.
 - Variables and constants: `<E>_exists`, `<E>_<col>`, `<Child>_owner_<Parent>`, `now`,
   `InstanceCount`, and `IntRange`. `<E>_vars` is the tuple of an entity's variables, for an
   entity with two or more; it is claimed last, so a column `vars` keeps `<E>_vars`.
@@ -101,7 +102,7 @@ with no collision keeps every name above:
   `Job_status` beside the column `Job.status` keeps its name, and the variable is
   `Job_status_2`. A use case's id does not move a rule's or a property's name.
 - Among the rest, an `<E>_Ids` set comes before a variable, a variable before a later
-  variable, and a variable before an action. A column `run_Go` beside the run mark of a
+  variable, a variable before an action, and an action before a `<P>_seen` or `<P>_latch`. A column `run_Go` beside the run mark of a
   split use case `Go` gives `Job_run_Go` and `Job_run_Go_2`.
 - The `Rep_<var>` and `Succ_<action>` tables of a reduced cone, and its `S_class`, yield to
   every other name but a state-model spec's `Deadlock_` and `Witness_` invariants, which

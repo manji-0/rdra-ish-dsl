@@ -13,6 +13,7 @@ mod copies;
 mod deadlock;
 mod effects;
 mod events;
+mod explored;
 mod guard_quantifiers;
 mod joins;
 mod lasso;

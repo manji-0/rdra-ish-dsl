@@ -110,7 +110,7 @@ impl TransitionSystem {
                 .map(|(e, slot)| self.inst(*e, usize::from(*slot)))
                 .collect(),
             witness,
-            lasso: replay.tail(),
+            lasso: (!p.formula.kind().is_explored()).then(|| replay.tail()),
             site: p.site.clone(),
             trace,
         })
@@ -119,34 +119,72 @@ impl TransitionSystem {
     /// The first binding of `p`'s binders (every slot, present or not, in index order, as
     /// the printed `\A b \in Ids` ranges) that fails on `states` followed by `states[entry..]`
     /// forever, with the state that shows it.
-    fn property_failure(
+    pub(crate) fn property_failure(
         &self,
         p: &Property,
         states: &[State],
         entry: usize,
     ) -> Option<(Vec<u8>, usize)> {
+        self.binder_slots(p.binders.len())
+            .find_map(|b| Some((b.clone(), self.fails_at(p, &b, states, entry)?)))
+    }
+
+    /// Every binding of `n` binders, each over every slot, the last binder fastest.
+    pub(crate) fn binder_slots(&self, n: usize) -> impl Iterator<Item = Vec<u8>> {
         let slots = self.bounds.slots();
-        let mut binding = vec![0u8; p.binders.len()];
-        loop {
-            if let Some(at) = self.fails_at(p, &binding, states, entry) {
-                return Some((binding, at));
+        (0..slots.pow(n as u32)).map(move |mut k| {
+            let mut b = vec![0u8; n];
+            for slot in b.iter_mut().rev() {
+                *slot = (k % slots) as u8;
+                k /= slots;
             }
-            let mut k = binding.len();
-            loop {
-                k = k.checked_sub(1)?;
-                binding[k] += 1;
-                if usize::from(binding[k]) < slots {
-                    break;
-                }
-                binding[k] = 0;
+            b
+        })
+    }
+
+    /// `pred` with the property's binders at `binding`.
+    pub(crate) fn holds_bound(&self, pred: &Pred, s: &State, binding: &[u8]) -> bool {
+        let mut env = Env::new(&[]);
+        env.bound = binding.to_vec();
+        self.eval(pred, s, &mut env)
+    }
+
+    /// The trigger of every form: the bound slots are present and `.along` links them.
+    pub(crate) fn triggers(&self, p: &Property, binding: &[u8], s: &State) -> bool {
+        self.present(p, binding, s) && self.holds_bound(&p.link, s, binding)
+    }
+
+    fn present(&self, p: &Property, binding: &[u8], s: &State) -> bool {
+        p.binders
+            .iter()
+            .zip(binding)
+            .all(|(e, slot)| s.is_present(self, *e, usize::from(*slot)))
+    }
+
+    /// The step from `a` to `b` breaks `stable` or `unchanged` for `binding`: the trigger
+    /// and `p` (`when`) hold before it, the bound slots are present after it, and `p` fails
+    /// (a column moves). The link is read before the step only, so a step that moves a key
+    /// keeps the obligation the trigger took on. False for every other form.
+    pub(crate) fn step_breaks(&self, p: &Property, binding: &[u8], a: &State, b: &State) -> bool {
+        let breaks = match &p.formula {
+            Ltl::Stable(x) => self.holds_bound(x, a, binding) && !self.holds_bound(x, b, binding),
+            Ltl::Unchanged { when, columns } => {
+                self.holds_bound(when, a, binding)
+                    && columns
+                        .iter()
+                        .any(|c| !self.term_unchanged(c, a, b, binding))
             }
-        }
+            _ => return false,
+        };
+        breaks && self.triggers(p, binding, a) && self.present(p, binding, b)
     }
 
     /// The first state where `p` fails for `binding`, mirroring the printed formula:
     /// `always(x)` is `[](present => x)`, `eventually(x)` is `[](present => <>x)`, and
     /// `leads_to(x, y)` is `(present /\ x) ~> y`. Only the trigger reads `present`, and the
-    /// `.along` link joins it.
+    /// `.along` link joins it. `stable` and `unchanged` fail at the state a step enters, the
+    /// step back to `entry` included; `precedes` fails where `q` holds before `p` has, as its
+    /// latch reads it.
     fn fails_at(
         &self,
         p: &Property,
@@ -154,29 +192,34 @@ impl TransitionSystem {
         states: &[State],
         entry: usize,
     ) -> Option<usize> {
-        let holds = |pred: &Pred, s: &State| {
-            let mut env = Env::new(&[]);
-            env.bound = binding.to_vec();
-            self.eval(pred, s, &mut env)
-        };
-        let present = |s: &State| {
-            p.binders
-                .iter()
-                .zip(binding)
-                .all(|(e, slot)| s.is_present(self, *e, usize::from(*slot)))
-        };
+        let holds = |pred: &Pred, s: &State| self.holds_bound(pred, s, binding);
+        let trigger = |s: &State| self.triggers(p, binding, s);
         // From position i the behavior visits the rest of the finite part, then the loop.
         let never_from =
             |i: usize, goal: &Pred| !states[i.min(entry)..].iter().any(|s| holds(goal, s));
-        states.iter().enumerate().find_map(|(i, s)| {
-            let fails = present(s)
-                && holds(&p.link, s)
-                && match &p.formula {
-                    Ltl::Always(x) => !holds(x, s),
-                    Ltl::Eventually(x) => never_from(i, x),
-                    Ltl::LeadsTo(x, y) => holds(x, s) && never_from(i, y),
-                };
-            fails.then_some(i)
-        })
+        let at = |fails: &dyn Fn(usize) -> bool| (0..states.len()).find(|&i| fails(i));
+        match &p.formula {
+            Ltl::Always(x) => at(&|i| trigger(&states[i]) && !holds(x, &states[i])),
+            Ltl::Eventually(x) => at(&|i| trigger(&states[i]) && never_from(i, x)),
+            Ltl::LeadsTo(x, y) => {
+                at(&|i| trigger(&states[i]) && holds(x, &states[i]) && never_from(i, y))
+            }
+            Ltl::Stable(_) | Ltl::Unchanged { .. } => {
+                let last = states.len() - 1;
+                (0..last)
+                    .map(|i| (i, i + 1))
+                    .chain(std::iter::once((last, entry)))
+                    .find(|&(i, j)| self.step_breaks(p, binding, &states[i], &states[j]))
+                    .map(|(i, _)| i + 1)
+            }
+            Ltl::Precedes(x, y) => {
+                let mut seen = false;
+                states.iter().position(|s| {
+                    let on = trigger(s);
+                    seen |= on && holds(x, s);
+                    on && holds(y, s) && !seen
+                })
+            }
+        }
     }
 }

@@ -755,8 +755,9 @@ pub struct AfterStep {
     pub post: Pred,
 }
 
-/// A temporal property. The explorer does not check it; `explain_property` evaluates it on a
-/// lasso another engine found.
+/// A temporal property. BFS does not check it while it explores; `explain_property`
+/// evaluates it on a lasso another engine found, and `ComponentRun::decide_property` decides
+/// the forms `LtlKind::is_explored` names on an explored graph.
 #[derive(Clone, Debug)]
 pub struct Property {
     pub name: String,
@@ -775,7 +776,8 @@ pub struct Property {
 }
 
 impl Property {
-    /// Every predicate the property reads: the link, then the formula's operands.
+    /// Every predicate the property reads: the link, then the formula's operands. The
+    /// columns of `unchanged` are `formula.columns()`.
     pub fn preds(&self) -> impl Iterator<Item = &Pred> {
         std::iter::once(&self.link).chain(self.formula.preds())
     }
@@ -809,28 +811,56 @@ impl Reach {
     }
 }
 
+/// A property's formula per binding; the trigger of each form is `present /\ link`.
 #[derive(Clone, Debug)]
 pub enum Ltl {
     Always(Pred),
     Eventually(Pred),
     LeadsTo(Pred, Pred),
+    /// `stable(p)`: a step from a state where the trigger and `p` hold to one where the
+    /// instance is present keeps `p`; the link is read before the step only.
+    Stable(Pred),
+    /// `unchanged(cols).when(p)`: a step from a state where the trigger and `when` hold to
+    /// one where the instance is present leaves each column as it is.
+    Unchanged {
+        when: Pred,
+        columns: Vec<Term>,
+    },
+    /// `precedes(p, q)`: every state where the trigger and `q` hold has the trigger and `p`
+    /// in it or in a state before it.
+    Precedes(Pred, Pred),
 }
 
 impl Ltl {
-    /// The operands, left to right.
+    /// The operands, left to right. `unchanged`'s columns are `columns`.
     pub fn preds(&self) -> impl Iterator<Item = &Pred> {
         match self {
-            Ltl::Always(x) | Ltl::Eventually(x) => std::iter::once(x).chain(None),
-            Ltl::LeadsTo(x, y) => std::iter::once(x).chain(Some(y)),
+            Ltl::Always(x) | Ltl::Eventually(x) | Ltl::Stable(x) => std::iter::once(x).chain(None),
+            Ltl::Unchanged { when, .. } => std::iter::once(when).chain(None),
+            Ltl::LeadsTo(x, y) | Ltl::Precedes(x, y) => std::iter::once(x).chain(Some(y)),
         }
     }
 
-    /// The same operator over `f` of each operand.
-    pub fn map(&self, mut f: impl FnMut(&Pred) -> Pred) -> Ltl {
+    /// The columns `unchanged` keeps; empty for every other form.
+    pub fn columns(&self) -> &[Term] {
+        match self {
+            Ltl::Unchanged { columns, .. } => columns,
+            _ => &[],
+        }
+    }
+
+    /// The same operator over `f` of each operand and `g` of each column.
+    pub fn map(&self, mut f: impl FnMut(&Pred) -> Pred, g: impl FnMut(&Term) -> Term) -> Ltl {
         match self {
             Ltl::Always(x) => Ltl::Always(f(x)),
             Ltl::Eventually(x) => Ltl::Eventually(f(x)),
             Ltl::LeadsTo(x, y) => Ltl::LeadsTo(f(x), f(y)),
+            Ltl::Stable(x) => Ltl::Stable(f(x)),
+            Ltl::Unchanged { when, columns } => Ltl::Unchanged {
+                when: f(when),
+                columns: columns.iter().map(g).collect(),
+            },
+            Ltl::Precedes(x, y) => Ltl::Precedes(f(x), f(y)),
         }
     }
 
@@ -839,6 +869,9 @@ impl Ltl {
             Ltl::Always(_) => LtlKind::Always,
             Ltl::Eventually(_) => LtlKind::Eventually,
             Ltl::LeadsTo(..) => LtlKind::LeadsTo,
+            Ltl::Stable(_) => LtlKind::Stable,
+            Ltl::Unchanged { .. } => LtlKind::Unchanged,
+            Ltl::Precedes(..) => LtlKind::Precedes,
         }
     }
 }
@@ -848,4 +881,24 @@ pub enum LtlKind {
     Always,
     Eventually,
     LeadsTo,
+    Stable,
+    Unchanged,
+    Precedes,
+}
+
+impl LtlKind {
+    /// A counterexample may be a run that stops: only `eventually` and `leads_to` read
+    /// `WF_vars(Next)`.
+    pub fn is_liveness(self) -> bool {
+        matches!(self, LtlKind::Eventually | LtlKind::LeadsTo)
+    }
+
+    /// `verify` decides it on the graph BFS explores for its cone, per edge (`stable`,
+    /// `unchanged`) or per state with its latch (`precedes`), and starts no TLC run for it.
+    pub fn is_explored(self) -> bool {
+        matches!(
+            self,
+            LtlKind::Stable | LtlKind::Unchanged | LtlKind::Precedes
+        )
+    }
 }

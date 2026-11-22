@@ -11,9 +11,11 @@ with **TLC**. `rdra-ish states` and `check` explore the same system by breadth-f
 search (BFS) at one instance per entity, and verify safety only: invariants, `after`
 assertions, and state models. They evaluate no temporal property. Temporal properties and
 proofs belong to `verify`, which runs TLC on the system at two instances by default, checks
-the `always`, `eventually`, and `leads_to` properties with it, decides each `can_reach` by
-BFS, and proves state rules under `--prove`. See
-[state-derivation.md](./state-derivation.md) for the system itself.
+the `always`, `eventually`, and `leads_to` properties with it, decides each `can_reach`,
+`stable`, `unchanged`, and `precedes` by BFS, and proves state rules under `--prove`. See
+[state-derivation.md](./state-derivation.md) for the system itself, and
+[Order and stability properties](#order-and-stability-properties) for `stable`,
+`unchanged`, and `precedes`.
 
 ## Commands
 
@@ -165,6 +167,9 @@ stays as it was.
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's last action, so a split use case once per run, on the run's rows. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
 | `property P ... .along(A, B, ..)` | The owner link of each hop joins `present` in the trigger: `[](present /\ link => x)`, `[](present /\ link => <>x)`, `(present /\ link /\ x) ~> y`. Without `.along` a property over several entities ranges over every combination of their rows. |
+| `property P stable(p)` | `P == [][\A b0 \in E_Ids : (present /\ p) => (present' => p')]_vars`, an action property TLC checks on every step. With `.along` the link joins `present` before the step only, so a step that moves a key keeps the obligation. |
+| `property P unchanged(E.col, ..).when(p)` | `P == [][\A b0 \in E_Ids : (present /\ p) => (present' => E_col'[b0] = E_col[b0] /\ ..)]_vars`; `p` is `TRUE` without `.when`. A column no action writes has no var and drops out. |
+| `property P precedes(p, q)` | A latch `P_seen \in [E_Ids -> BOOLEAN]` (`[A_Ids \X B_Ids -> BOOLEAN]` with two binders): `Init` sets it to `present /\ p`, and `P_latch == P_seen' = [b0 \in E_Ids \|-> P_seen[b0] \/ (present /\ p)']` is the last conjunct of every action. `P == [](\A b0 \in E_Ids : (present /\ q) => P_seen[b0])`. The module declares the latch only where its `.cfg` checks `P`. |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
 | `property P ... .fair(UC, ...)` | `Fair_P`, one `WF_vars` per action of each listed use case and per instance it acts on (`\A p0 \in E_Ids : WF_vars(UC(p0))`, a created slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. |
 | Domain of every variable | `INVARIANT TypeOK`, kept apart from the business rules |
@@ -198,12 +203,57 @@ Operators:
 - `always(expr)` → `[]expr`
 - `eventually(expr)` → `<>expr`
 - `leads_to(p, q)` → `p ~> q`
+- `stable(p)`, `unchanged(cols).when(p)` → `[][A]_vars` on every step; `precedes(p, q)` → a
+  latch and `[](q => <P>_seen)`
 - Connectives inside expressions: prefer `and` / `or` / `not` (`/\` `\/` `~` aliases)
 - Set membership in an atom: `Order.status in (a, b)` → `\in {"a", "b"}`, `not in` → `\notin`
 - Property label string is optional (`property StockOk always(...)`)
 
 `rdra-ish states` does not evaluate path properties, and `check` prints a `note:` that it
 did not model-check them. Use `export` or `verify`.
+
+### Order and stability properties
+
+<!-- constrained-by ./language-reference.md#order-and-stability-stable-unchanged-precedes -->
+
+`stable`, `unchanged`, and `precedes` are safety properties that BFS decides on the graph it
+explores. `verify` runs BFS on each one's cone (`TransitionSystem::decide_property`), next to
+the BFS on the entity cones, and starts no TLC run for it. It prints
+`order and stability properties: <n>, each decided by BFS on its cone` under the bounds and
+one line per property:
+
+```
+property CancelledStaysCancelled (BFS on its cone): violated
+error[CancelledStaysCancelled]: property CancelledStaysCancelled is violated: its stable condition holds for Order#1 before step 3 and is false after it
+  counterexample (3 steps):
+    1. Place [Order#1]
+    2. Cancel [Order#1]
+         Order#1.status: draft -> cancelled
+    3. Reopen [Order#1]
+         Order#1.status: cancelled -> draft
+```
+
+- `stable` and `unchanged` are read on every edge, in the order BFS found them. The first
+  edge that breaks the property for some binding comes from the shallowest state, so the
+  BFS path to its source and the edge are the shortest trace to the step.
+- `precedes(p, q)` is read with its latch, which is no var of the system: a state where `q`
+  holds and the latch is unset is one that a path reaches through states where `p` never
+  held for the binding. The search walks the explored graph restricted to those states, per
+  binding, and keeps the shortest walk to a state where `q` holds. That is the walk TLC finds
+  on the product with the latch.
+
+A violation is a finite trace, with no `then nothing changes forever` after it. A cone that
+frees an entity's slots reaches a superset, so a violation there is decided again by BFS on
+the whole model. A cone BFS stops at the state cap with no violation is `not decided`, and
+counts with the other findings the cap leaves. A scoped run (`--buc`, `--entity`) checks
+none of these properties, as it checks no other.
+
+The TLA+ export spells the same formulas (see [Mapping](#mapping)), and
+`engine_equivalence` checks on `order_stability.rdra` and its fixtures that BFS on the cone
+and TLC on the whole model give the same verdict, and that a counterexample has the same
+length and replays as the same violation. The latch is printed only in a module whose
+`.cfg` checks the property, so the cone modules of the rules and the entity cones keep the
+state graph the explorer reaches.
 
 ## What `verify` checks
 
@@ -1161,6 +1211,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `event_order.rdra` | pass, pass | no state rule | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after ExecuteCertIssue raised the event on the order (#30, #112), so the `after(IssueCert).assert` on the order's status holds with no guard |
 | `after_assert_unmet.rdra` | fail, fail | no state rule | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `temporal_fair.rdra` | pass, fail | no state rule | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
+| `order_stability.rdra` | pass, fail | no state rule | `stable`, `unchanged(..).when(..)`, and `precedes` on an Order, decided by BFS on each cone. A shipped order stays shipped, an approved amount stays, and an order ships only after it is paid. Reopen, Refund, and a Ship that reads no invoice break `CancelledStaysCancelled`, `AmountKeptOnceDecided`, and `ShippedAfterInvoiced`, each at the shortest trace to the step or state (#166) |
 | `temporal_along.rdra` | pass, fail | no state rule | `always(not captured or paid)` over a Payment and an Order holds with `.along(Payment, Order)`: Pay captures a payment and pays its own order. The same formula without `.along` fails on a captured payment beside another order that is never paid (#165) |
 | `temporal_unmet.rdra` | pass, fail | no state rule | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
