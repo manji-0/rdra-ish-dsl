@@ -897,11 +897,12 @@ fn print_plan(
         ),
         (false, n) => println!("temporal properties: {n}, not checked: a scoped run checks none"),
     }
-    match checked(|t| matches!(t, Target::Reach(_))) {
-        0 => {}
-        n => println!(
+    match (scope.is_whole(), ts.reach_properties().len()) {
+        (_, 0) => {}
+        (true, n) => println!(
             "can_reach properties: {n}, decided natively by BFS on each one's cone (TLC cannot check AG EF)"
         ),
+        (false, n) => println!("can_reach properties: {n}, not checked: a scoped run checks none"),
     }
     // A verdict under `.fair(...)` holds only on the runs that do not starve those use cases.
     for p in ts.properties().iter().filter(|p| !p.fair.is_empty()) {
@@ -1078,31 +1079,26 @@ fn state_models(
         selection.targets.iter().copied().filter(want).collect()
     };
     let entities = pick(|t| matches!(t, Target::Entity(_)));
-    let reach = pick(|t| matches!(t, Target::Reach(_)));
+    // A scoped run checks no property, `can_reach` included.
+    let reach = match scope.is_whole() {
+        true => ts.reach_targets(),
+        false => Vec::new(),
+    };
     let mut run = ts.explore_targets_reduced(&entities, Caps::VERIFY);
-    // Its own call: a cone shared with an entity target would otherwise share its run.
-    let mut reach_run = (!reach.is_empty()).then(|| ts.explore_targets(&reach, Caps::VERIFY));
+    // Its own call, unreduced: a cone shared with an entity target would share its run.
+    let reach_run = (!reach.is_empty()).then(|| ts.explore_targets(&reach, Caps::VERIFY));
     if !scope.bucs.is_empty() {
         run.defer_progress();
-        if let Some(r) = &mut reach_run {
-            r.defer_progress();
-        }
     }
     // A finding `--buc` leaves open is the scope's choice, not a bound's.
     let capped = run.undecided().iter().filter(|u| u.cone.is_some()).count();
-    let undecided: Vec<_> = run
-        .undecided()
-        .iter()
-        .chain(reach_run.iter().flat_map(|r| r.undecided()))
-        .cloned()
-        .collect();
     let not_checked = NotChecked {
         ts,
         model,
         scope,
         selection,
-        undecided: &undecided,
-        temporal: ts.properties().len(),
+        undecided: run.undecided(),
+        temporal: ts.properties().len() + ts.reach_properties().len(),
     };
     if !not_checked.is_empty() {
         println!("{not_checked}");

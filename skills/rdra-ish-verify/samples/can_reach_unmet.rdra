@@ -3,8 +3,9 @@
 // CloseWindow have run neither holds again: the Order moves between pending and on_hold with
 // no way out. Each of those states has a way out, so no Deadlock is reported; can_reach
 // finds the trap, prints a shortest trace into it, and the states the Order is confined to.
-// BFS decides it on its cone in both commands; TLC does not check it.
-// expect check: fail OrderCanFinish
+// `verify` decides it by BFS on its cone, since TLC cannot check it; `check` verifies safety
+// only and leaves it to `verify`.
+// expect check: ok
 // expect verify: tlc=ok fail OrderCanFinish
 entity Order "注文" {
   id: Int @pk

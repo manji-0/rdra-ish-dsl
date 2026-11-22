@@ -1,6 +1,6 @@
 // can_reach_unmet.rdra with a Restock use case. An Order that has lost its stock and its
 // cancellation window can be restocked and delivered, so from every reachable state some path
-// still finishes it, and can_reach holds in both commands. An Order may still be held and
+// still finishes it, and can_reach holds in `verify`. An Order may still be held and
 // resumed forever: can_reach asks that it can finish, not that it must.
 // expect check: ok
 // expect verify: tlc=ok

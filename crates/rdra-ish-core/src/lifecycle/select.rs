@@ -387,13 +387,6 @@ impl fmt::Display for NotChecked<'_> {
                     "after-asserts"
                 ),
             ));
-            if !self.ts.reach_properties().is_empty() {
-                parts.push(counted(
-                    &of(|t| matches!(t, Target::Reach(_))),
-                    "can_reach property",
-                    "can_reach properties",
-                ));
-            }
         }
         if !self.scope.is_whole() && self.temporal > 0 {
             parts.push(plural(

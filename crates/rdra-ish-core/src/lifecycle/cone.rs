@@ -466,13 +466,19 @@ impl TransitionSystem {
         })
     }
 
+    /// The targets `check` and `states` explore: views and safety checks. A `can_reach` is a
+    /// temporal property, which only `verify` decides (`reach_targets`).
     pub fn targets(&self) -> Vec<Target> {
         (0..self.entities.len())
             .map(|i| Target::Entity(EntId::at(i)))
             .chain((0..self.invariants.len()).map(Target::Invariant))
             .chain((0..self.after.len()).map(Target::AfterAssert))
-            .chain((0..self.reach.len()).map(Target::Reach))
             .collect()
+    }
+
+    /// One target per `can_reach` property, which `verify` explores beside the entity cones.
+    pub fn reach_targets(&self) -> Vec<Target> {
+        (0..self.reach.len()).map(Target::Reach).collect()
     }
 
     /// A state of this system projected onto `vars`, in the layout of `restrict_to(vars, ..)`.

@@ -14,8 +14,9 @@
   reachable state where it is present, some path reaches `p` for it (CTL
   `AG (present => EF p)`). It finds a trap a `Deadlock_*` misses, such as an Order that
   moves between `pending` and `on_hold` forever once a guard is false. TLC cannot check
-  it, so `check` and `verify` decide it by BFS on its cone, and a violation prints a
-  shortest trace and the states the instance is then confined to. `export --kind tla`
+  it, so `verify` decides it by BFS on its cone, and a violation prints a shortest trace
+  and the states the instance is then confined to. `check` and `states` verify safety
+  only and evaluate no property, as the docs now say explicitly. `export --kind tla`
   names it in a comment, and `.fair(...)` on it is `FairOnReachProperty` (#167).
 - insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs

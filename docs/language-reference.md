@@ -2555,9 +2555,9 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 
 ### Temporal path properties
 
-Named path properties are checked by TLA+/TLC export (`export --kind tla` /
-`verify --backend tlc`), not by `rdra-ish states`. The one exception is `can_reach`, which
-`check` and `verify` decide by BFS (see
+Only `verify` evaluates named path properties. `check` and `states` verify safety only, by
+state exploration, and evaluate no `property` of any form. `verify --backend tlc` checks
+`always`, `eventually`, and `leads_to` with TLC, and decides `can_reach` itself by BFS (see
 [Recoverability: `can_reach(...)`](#recoverability-can_reach)):
 
 ```rdra
@@ -2736,9 +2736,9 @@ out, so it misses an instance that moves between `pending` and `on_hold` forever
 guard is false. `eventually` and `leads_to` say that the instance must finish, so they need
 `.fair(...)`, and they fail when an actor may legitimately choose another branch forever.
 
-TLC cannot check a CTL formula. `check` (one instance per entity) and `verify` (its
-bounds) decide `can_reach` by BFS on the property's cone, and the verdict holds within those
-bounds like every other verdict. A violation prints a shortest trace to a state from which
+TLC cannot check a CTL formula, so `verify` decides `can_reach` by BFS on the property's
+cone, at its bounds, and the verdict holds within those bounds like every other verdict.
+`check` and `states` do not evaluate it. A violation prints a shortest trace to a state from which
 the goal is unreachable. It then lists what the goal reads of the instance in the states
 the instance is confined to:
 
@@ -2751,9 +2751,8 @@ error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexam
 ```
 
 `export --kind tla` lists each `can_reach` in a comment and no `.cfg` names it. `.fair(...)`
-on it is `FairOnReachProperty`, since reachability needs no fairness. Under `--buc` a
-violation is not decided, because a use case the scope leaves out may be the way to the
-goal. See
+on it is `FairOnReachProperty`, since reachability needs no fairness. A scoped `verify`
+checks no property, `can_reach` included. See
 [formal-verification.md](./formal-verification.md#recoverability-on-a-cone) and the samples
 `can_reach_unmet.rdra` and `can_reach_met.rdra`.
 

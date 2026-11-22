@@ -55,13 +55,14 @@ property ShippedOnceCaptured
   meant. Neither, with keys relating the entities, draws `lint` `multi-rule-unscoped`;
   `.global()` with `.along` is `GlobalWithAlong`; a path that misses an atom's entity or a
   hop no key binds is `UnbindableScope` (example below the table).
-- Only `verify` evaluates `always`, `eventually`, and `leads_to`, each in its own TLC run on
-  its cone (the whole model only when the cone does not decide it); `check` prints a
-  `note:` that it did not.
+- Only `verify` evaluates properties. `check` and `states` verify safety only, by state
+  exploration, and evaluate no `property`; `check` prints a `note:` that it did not.
+  `verify` checks `always`, `eventually`, and `leads_to` each in its own TLC run on its cone
+  (the whole model only when the cone does not decide it).
 - `can_reach(expr)` says the actors can still finish each present instance: from every
   reachable state, some path on which the instance stays present reaches `expr`. It is CTL
-  `AG (present => EF expr)`, which TLC cannot check, so `check` and `verify` decide it by
-  BFS on its cone and `export --kind tla` only names it in a comment. Use it for a trap a
+  `AG (present => EF expr)`, which TLC cannot check, so `verify` decides it by BFS on its
+  cone and `export --kind tla` only names it in a comment. Use it for a trap a
   `Deadlock_*` misses, such as an instance that moves between two states forever once a
   guard is false. A violation prints a shortest trace, then `confined:` with what `expr`
   reads in the states the instance is left with. Deleting the instance does not reach

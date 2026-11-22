@@ -27,7 +27,6 @@ use lifecycle_gate::{gate, Lifecycle};
 use list_output::{format_lint_issues, format_rules, format_transitions, list_elements};
 use load::{deny_deprecated, eprint_diagnostic, load_clean};
 use rdra_ish_core::lifecycle::{Caps, FindingTally, Severity};
-use rdra_ish_core::model::TemporalFormula;
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use state_findings::state_findings;
@@ -112,12 +111,7 @@ pub fn run() -> Result<()> {
                 eprintln!("{block}");
             }
 
-            // `check` decides a `can_reach` itself; TLC alone checks the other forms.
-            let property_count = model
-                .temporal_properties
-                .iter()
-                .filter(|p| !matches!(p.formula, TemporalFormula::CanReach(_)))
-                .count();
+            let property_count = model.temporal_properties.len();
             if property_count > 0 {
                 eprintln!(
                     "note: {property_count} temporal properties were not model-checked by check; use verify --backend tlc"

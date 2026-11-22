@@ -382,39 +382,18 @@ warning[Runs_Ship]: use case Ship can never run: each of its guards holds in som
     );
 }
 
-/// An Order trapped between pending and on_hold, where each state has a way out, is no
-/// deadlock but fails `can_reach`: a shortest trace into the trap, then the states the Order
-/// is confined to. `check` decides it, so it adds no note that TLC must check a property.
+/// `check` verifies safety only: it passes a model whose `can_reach` fails, and its note
+/// sends the property to `verify`.
 #[test]
-fn check_reports_a_trap_a_can_reach_property_cannot_leave() {
-    let sample = "samples/formal-verification/can_reach_unmet.rdra";
-    let output = run(&["check", sample]);
-    assert_eq!(output.status.code(), Some(1));
-    let stderr = common::relative_to(&String::from_utf8_lossy(&output.stderr), &repo());
-    let file = "skills/rdra-ish-verify/samples/can_reach_unmet.rdra";
+fn check_leaves_a_can_reach_property_to_verify() {
+    let output = run(&["check", "samples/formal-verification/can_reach_unmet.rdra"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
     assert_eq!(
-        stderr,
+        String::from_utf8_lossy(&output.stderr),
         format!(
-            "\
-{BOUNDS}
-error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
-  rule: {file}:56:1
-  counterexample (3 steps):
-    1. Place [Order#1]                                                 {file}:16:1
-         + Order#1 (status=pending, in_stock=true, window_open=true)
-    2. CloseWindow [Order#1]                                           {file}:22:1
-         Order#1.window_open: true -> false                            {file}:46:1
-    3. LoseStock [Order#1]                                             {file}:21:1
-         Order#1.in_stock: true -> false                               {file}:45:1
-  confined: from there Order#1 stays within 2 reachable states, where its goal never holds:
-    status = pending
-    status = on_hold
-"
+            "{BOUNDS}\nnote: 1 temporal properties were not model-checked by check; use verify --backend tlc\n"
         )
     );
-    let ok = run(&["check", "samples/formal-verification/can_reach_met.rdra"]);
-    assert_eq!(ok.status.code(), Some(0), "{ok:?}");
-    assert_eq!(String::from_utf8_lossy(&ok.stderr), format!("{BOUNDS}\n"));
 }
 
 /// From a relative input, `states --format json` names witness sites in the path form

@@ -83,8 +83,6 @@ pub enum Subject {
         column: String,
         value: String,
     },
-    /// Whether a `can_reach` property holds.
-    Reach { property: String },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -133,7 +131,6 @@ impl fmt::Display for Undecided {
                 f,
                 "whether some {entity} can get stuck at {column} = {value} is not decided: "
             )?,
-            Subject::Reach { property } => write!(f, "whether {property} holds is not decided: ")?,
         }
         let cone = self.cone.as_deref().unwrap_or("its");
         match self.why {
@@ -744,10 +741,6 @@ impl TargetExploration {
                     entity: entity.clone(),
                     column: column.clone(),
                     value: value.clone(),
-                },
-                // A left-out use case may be the way to the goal.
-                StateDiag::GoalUnreachable { name, .. } => Subject::Reach {
-                    property: name.clone(),
                 },
                 _ => {
                     kept.push(d);

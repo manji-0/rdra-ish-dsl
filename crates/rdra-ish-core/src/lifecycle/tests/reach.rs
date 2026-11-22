@@ -26,6 +26,13 @@ fn fails_on_the_whole_system(model: &SemanticModel, bounds: Bounds, i: usize) ->
     run.system.reach_failure(i, &run.graph()).is_some()
 }
 
+/// What `verify`'s BFS says about each `can_reach` of `model`, at `bounds`.
+fn reach_verdicts(model: &SemanticModel, bounds: Bounds) -> Vec<Diag> {
+    let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    let run = ts.explore_targets(&ts.reach_targets(), Caps::STATES);
+    run.verdicts().to_vec()
+}
+
 fn fails_on_its_cone(model: &SemanticModel, bounds: Bounds, i: usize) -> bool {
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     // A cone that frees slots reaches a superset, where `EF` may find a path the model lacks.
@@ -48,7 +55,8 @@ fn a_cycle_with_no_way_out_fails_where_no_deadlock_does() {
         "{:?}",
         report.diags
     );
-    let found = unreachable_goals(&report.diags);
+    let verdicts = reach_verdicts(&load(UNMET), Bounds::STATES);
+    let found = unreachable_goals(&verdicts);
     let [StateDiag::GoalUnreachable {
         name,
         instance,
@@ -79,12 +87,8 @@ fn a_cycle_with_no_way_out_fails_where_no_deadlock_does() {
 /// held and resumed forever: `can_reach` asks for a path, not for progress.
 #[test]
 fn a_way_back_to_the_goal_passes() {
-    let report = super::super::derive_states(&load(MET), &Scope::ALL, Caps::STATES);
-    assert!(
-        unreachable_goals(&report.diags).is_empty(),
-        "{:?}",
-        report.diags
-    );
+    let verdicts = reach_verdicts(&load(MET), Bounds::STATES);
+    assert!(unreachable_goals(&verdicts).is_empty(), "{verdicts:?}");
 }
 
 /// The only way to `done` is a use case an event starts, and the event's raiser can never
@@ -169,8 +173,8 @@ applies_to(InStock, Finish)
 property OrderFinishes can_reach(Order.status == done)
 "#,
     );
-    let report = super::super::derive_states(&model, &Scope::ALL, Caps::STATES);
-    let found = unreachable_goals(&report.diags);
+    let verdicts = reach_verdicts(&model, Bounds::STATES);
+    let found = unreachable_goals(&verdicts);
     let [StateDiag::GoalUnreachable { trace, .. }] = found.as_slice() else {
         panic!("one GoalUnreachable expected: {found:?}");
     };
@@ -198,19 +202,9 @@ fn the_cone_decides_what_the_whole_system_decides() {
     }
 }
 
-/// Under `--buc`, a left-out use case may be the way to the goal: a failure is undecided.
+/// `check` and `states` verify safety only: they explore no `can_reach` cone.
 #[test]
-fn a_buc_scope_leaves_a_failure_undecided() {
-    let model = load(UNMET);
-    let scope = Scope::parse(&model, &["BucOrderLifecycle".to_string()], &[]).unwrap();
-    let report = super::super::derive_states(&model, &scope, Caps::STATES);
+fn check_and_states_do_not_evaluate_can_reach() {
+    let report = super::super::derive_states(&load(UNMET), &Scope::ALL, Caps::STATES);
     assert!(unreachable_goals(&report.diags).is_empty());
-    assert!(
-        report.undecided.iter().any(|u| u.subject
-            == crate::lifecycle::Subject::Reach {
-                property: "OrderCanFinish".into()
-            }),
-        "{:?}",
-        report.undecided
-    );
 }
