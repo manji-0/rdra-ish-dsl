@@ -1,0 +1,100 @@
+%% rdra-ish diagram=sequence scope=buc:BucLogout model=samples/oidc-auth
+%% kinds: actor timer usecase screen api entity extsystem
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__EndUser as End-User
+  participant timer__SessionLifetime as OP session lifetime (OP policy, e.g. 12 hours)
+  participant usecase__ExpireSession as Expire the OP session
+  participant usecase__LogOutAtOp as Log out at the OP
+  participant usecase__LogOutFromRp as Log out from the RP (RP-Initiated Logout)
+  actor actor__RelyingParty as Relying Party (client application)
+  participant timer__SessionCheckInterval as RP's session check interval (RP policy, e.g. every few seconds)
+  participant screen__LogoutConfirmScreen as Logout confirmation
+  participant screen__LoggedOutScreen as Logged-out page
+  participant api__EndSessionApi as End session endpoint
+  participant api__AccountLogoutApi as Account page logout
+  participant api__SessionExpiryApi as OP session expiry
+  participant api__LogoutNoticeResultApi as Logout Token delivery result
+  participant api__CheckSessionApi as Check session iframe
+  participant entity__IdToken as ID Token
+  participant entity__OpSession as OP session
+  participant entity__Client as Registered client
+  participant entity__LogoutNotice as Backchannel logout notice
+  participant api__LogoutNoticeApi as Logout Token delivery
+  participant usecase__RenderFrontchannelLogout as Render the front-channel logout iframes
+  participant extsystem__RpCallbackEndpoint as RP callback endpoints (backchannel logout, CIBA notification, initiate login)
+  Note over screen__LogoutConfirmScreen: 1. Log out from the RP (RP-Initiated Logout)
+  actor__EndUser ->> screen__LogoutConfirmScreen: Log out from the RP (RP-Initiated Logout)
+  screen__LogoutConfirmScreen ->> api__EndSessionApi: End session endpoint
+  alt OpSession.status == Authenticated
+    api__EndSessionApi ->> entity__IdToken: read
+    api__EndSessionApi ->> entity__OpSession: update status Authenticated -> Logged out
+    api__EndSessionApi -) api__LogoutNoticeApi: The OP session ended
+    api__EndSessionApi -) usecase__RenderFrontchannelLogout: The OP session ended
+    api__EndSessionApi -->> screen__LogoutConfirmScreen: done
+  else guard fails
+    api__EndSessionApi -->> screen__LogoutConfirmScreen: rejected
+  end
+  Note over screen__LoggedOutScreen: 2. Log out at the OP
+  actor__EndUser ->> screen__LoggedOutScreen: Log out at the OP
+  screen__LoggedOutScreen ->> api__AccountLogoutApi: Account page logout
+  alt OpSession.status == Authenticated
+    api__AccountLogoutApi ->> entity__OpSession: update status Authenticated -> Logged out
+    api__AccountLogoutApi -) api__LogoutNoticeApi: The OP session ended
+    api__AccountLogoutApi -) usecase__RenderFrontchannelLogout: The OP session ended
+    api__AccountLogoutApi -->> screen__LoggedOutScreen: done
+  else guard fails
+    api__AccountLogoutApi -->> screen__LoggedOutScreen: rejected
+  end
+  Note over api__SessionExpiryApi: 3. Expire the OP session
+  timer__SessionLifetime ->> api__SessionExpiryApi: OP session lifetime (OP policy, e.g. 12 hours)
+  alt OpSession.status == Authenticated
+    api__SessionExpiryApi ->> entity__OpSession: update status Authenticated -> Expired
+    api__SessionExpiryApi -) api__LogoutNoticeApi: The OP session ended
+    api__SessionExpiryApi -) usecase__RenderFrontchannelLogout: The OP session ended
+    api__SessionExpiryApi -->> timer__SessionLifetime: done
+  else guard fails
+    api__SessionExpiryApi -->> timer__SessionLifetime: rejected
+  end
+  Note over api__LogoutNoticeApi: 4. Send the Logout Token
+  usecase__ExpireSession ->> api__LogoutNoticeApi: The OP session ended
+  usecase__LogOutAtOp ->> api__LogoutNoticeApi: The OP session ended
+  usecase__LogOutFromRp ->> api__LogoutNoticeApi: The OP session ended
+  alt The OP session has ended: OpSession.status in (Logged out, Expired)
+    api__LogoutNoticeApi ->> entity__OpSession: read
+    api__LogoutNoticeApi ->> entity__Client: read
+    api__LogoutNoticeApi ->> entity__LogoutNotice: create
+    api__LogoutNoticeApi -) extsystem__RpCallbackEndpoint: A Logout Token is posted to an RP
+    api__LogoutNoticeApi -->> usecase__ExpireSession: done
+  else guard fails
+    api__LogoutNoticeApi -->> usecase__ExpireSession: rejected
+  end
+  Note over api__LogoutNoticeResultApi: 5. Record the RP's acknowledgement
+  extsystem__RpCallbackEndpoint ->> api__LogoutNoticeResultApi: The RP acknowledged the Logout Token
+  alt LogoutNotice.status == Pending
+    api__LogoutNoticeResultApi ->> entity__LogoutNotice: update status Pending -> Delivered
+    api__LogoutNoticeResultApi -->> extsystem__RpCallbackEndpoint: done
+  else guard fails
+    api__LogoutNoticeResultApi -->> extsystem__RpCallbackEndpoint: rejected
+  end
+  Note over api__LogoutNoticeResultApi: 6. Record a failed Logout Token delivery
+  extsystem__RpCallbackEndpoint ->> api__LogoutNoticeResultApi: The RP rejected the Logout Token or did not answer
+  alt LogoutNotice.status == Pending
+    api__LogoutNoticeResultApi ->> entity__LogoutNotice: update status Pending -> Failed
+    api__LogoutNoticeResultApi -->> extsystem__RpCallbackEndpoint: done
+  else guard fails
+    api__LogoutNoticeResultApi -->> extsystem__RpCallbackEndpoint: rejected
+  end
+  Note over screen__LoggedOutScreen: 7. Render the front-channel logout iframes
+  usecase__ExpireSession ->> usecase__RenderFrontchannelLogout: The OP session ended
+  usecase__LogOutAtOp ->> usecase__RenderFrontchannelLogout: The OP session ended
+  usecase__LogOutFromRp ->> usecase__RenderFrontchannelLogout: The OP session ended
+  screen__LoggedOutScreen ->> usecase__RenderFrontchannelLogout: Render the front-channel logout iframes
+  usecase__RenderFrontchannelLogout ->> entity__Client: read
+  usecase__RenderFrontchannelLogout ->> entity__OpSession: read
+  usecase__RenderFrontchannelLogout -->> screen__LoggedOutScreen: done
+  Note over api__CheckSessionApi: 8. Check the session state (Session Management)
+  actor__RelyingParty ->> api__CheckSessionApi: Check the session state (Session Management)
+  timer__SessionCheckInterval ->> api__CheckSessionApi: RP's session check interval (RP policy, e.g. every few seconds)
+  api__CheckSessionApi ->> entity__OpSession: read
+  api__CheckSessionApi -->> actor__RelyingParty: done

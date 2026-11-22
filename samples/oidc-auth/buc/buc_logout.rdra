@@ -1,0 +1,250 @@
+module buc.logout
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+buc BucLogout "End the End-User's session at the OP and at every RP"
+  description "The End-User logs out at an RP, which sends the browser to the OP's end_session_endpoint, or logs out at the OP itself, or the OP session expires. The OP ends its session and tells every RP the session signed in to: by a Logout Token posted to each RP's backchannel_logout_uri, and by iframes that load each RP's frontchannel_logout_uri. An RP that watches the session through the check_session_iframe sees it change."
+
+// OpenID Connect RP-Initiated Logout 1.0 §2 and §3: the RP redirects to the
+// end_session_endpoint with id_token_hint and post_logout_redirect_uri; the OP asks the
+// End-User to confirm when it cannot tell the request is theirs.
+usecase LogOutFromRp "Log out from the RP (RP-Initiated Logout)"
+  description "Follow the RP's logout link to the end_session_endpoint with the id_token_hint, confirm, and return to the post_logout_redirect_uri with the state."
+
+usecase LogOutAtOp "Log out at the OP" description "Log out on the OP's own account page."
+
+usecase ExpireSession "Expire the OP session" description "The OP session reaches its lifetime without activity."
+
+// OpenID Connect Back-Channel Logout 1.0 §2.5 and §2.6: a Logout Token (a JWT with sid and
+// the http://schemas.openid.net/event/backchannel-logout event) is posted to each RP; the RP
+// answers 200, or 400 when it rejects the token.
+usecase SendBackchannelLogout "Send the Logout Token"
+  description "Sign a Logout Token naming the sub and the sid, and POST it to the backchannel_logout_uri of each RP the session signed in to."
+
+usecase RecordLogoutDelivered "Record the RP's acknowledgement"
+  description "The RP answered 200: it ended its own session for that sid."
+
+usecase RecordLogoutFailed "Record a failed Logout Token delivery"
+  description "The RP answered 400 or did not answer. Back-Channel Logout §2.8 leaves retries to the OP; the model records the failure."
+
+// OpenID Connect Front-Channel Logout 1.0 §2 and §4: the OP's logout page renders an iframe
+// per RP with the frontchannel_logout_uri, iss, and sid.
+usecase RenderFrontchannelLogout "Render the front-channel logout iframes"
+  description "Show the logged-out page with one hidden iframe per RP that registered a frontchannel_logout_uri."
+
+// OpenID Connect Session Management 1.0 §3 and §4: the RP's iframe posts client_id and the
+// session_state to the OP's check_session_iframe, which answers changed, unchanged, or error.
+usecase CheckSessionState "Check the session state (Session Management)"
+  description "The RP's hidden iframe asks the OP's check_session_iframe whether the session_state has changed; on changed the RP re-authenticates with prompt=none."
+
+event EvLogoutTokenSent "A Logout Token is posted to an RP"
+event EvLogoutAcknowledged "The RP acknowledged the Logout Token"
+event EvLogoutRejected "The RP rejected the Logout Token or did not answer"
+
+screen LogoutConfirmScreen "Logout confirmation"
+screen LoggedOutScreen "Logged-out page"
+
+api EndSessionApi "End session endpoint"
+  method GET
+  path "/end_session"
+  mode sync
+
+api AccountLogoutApi "Account page logout"
+  method POST
+  path "/account/logout"
+  mode sync
+
+api SessionExpiryApi "OP session expiry"
+api LogoutNoticeApi "Logout Token delivery"
+api LogoutNoticeResultApi "Logout Token delivery result"
+
+api CheckSessionApi "Check session iframe"
+  method GET
+  path "/check_session"
+  idempotency "idempotent"
+  mode sync
+
+dto EndSessionRequest "End session request" {
+  id_token_hint: String @null
+  logout_hint: String @null
+  client_id: String @null
+  post_logout_redirect_uri: String @null
+  state: String @null
+}
+
+dto LogoutToken "Logout Token claims" {
+  iss: String
+  aud: String
+  iat: Int
+  jti: String
+  sub: String @null
+  sid: String @null
+  events: String
+}
+
+request(EndSessionApi, EndSessionRequest)
+request(LogoutNoticeApi, LogoutToken)
+maps_field(LogoutToken.sid, OpSession.sid)
+
+performs(EndUser, LogOutFromRp)
+performs(EndUser, LogOutAtOp)
+performs(RelyingParty, CheckSessionState)
+belongs(BucLogout, SessionControl).by(UserAgent).by(BackChannel)
+
+contains(BucLogout, LogOutFromRp)
+contains(BucLogout, LogOutAtOp)
+contains(BucLogout, ExpireSession)
+contains(BucLogout, SendBackchannelLogout)
+contains(BucLogout, RecordLogoutDelivered)
+contains(BucLogout, RecordLogoutFailed)
+contains(BucLogout, RenderFrontchannelLogout)
+contains(BucLogout, CheckSessionState)
+contains(OpenIdProvider, EndSessionApi)
+contains(OpenIdProvider, AccountLogoutApi)
+contains(OpenIdProvider, SessionExpiryApi)
+contains(OpenIdProvider, LogoutNoticeApi)
+contains(OpenIdProvider, LogoutNoticeResultApi)
+contains(OpenIdProvider, CheckSessionApi)
+
+// ── Ending the session ───────────────────────────────────
+
+displays(LogOutFromRp, LogoutConfirmScreen)
+displays(LogOutFromRp, LoggedOutScreen)
+invokes(LogOutFromRp, EndSessionApi)
+updates(EndSessionApi, OpSession)
+reads(EndSessionApi, IdToken)
+transitions(LogOutFromRp, OpSession.status, authenticated -> logged_out)
+raises(LogOutFromRp, EvSessionEnded)
+
+displays(LogOutAtOp, LoggedOutScreen)
+invokes(LogOutAtOp, AccountLogoutApi)
+updates(AccountLogoutApi, OpSession)
+transitions(LogOutAtOp, OpSession.status, authenticated -> logged_out)
+raises(LogOutAtOp, EvSessionEnded)
+
+triggers(SessionLifetime, ExpireSession)
+invokes(ExpireSession, SessionExpiryApi)
+updates(SessionExpiryApi, OpSession)
+transitions(ExpireSession, OpSession.status, authenticated -> expired)
+raises(ExpireSession, EvSessionEnded)
+
+// ── Telling the RPs ──────────────────────────────────────
+
+// The model sends one notice per ended session; the notice names one client the session
+// signed in to.
+condition SessionEnded "The OP session has ended"
+holds(SessionEnded, OpSession.status in (logged_out, expired))
+
+triggers(EvSessionEnded, SendBackchannelLogout)
+invokes(SendBackchannelLogout, LogoutNoticeApi)
+creates(LogoutNoticeApi, LogoutNotice)
+reads(LogoutNoticeApi, OpSession)
+reads(LogoutNoticeApi, Client)
+applies_to(SessionEnded, SendBackchannelLogout)
+raises(SendBackchannelLogout, EvLogoutTokenSent)
+triggers(EvLogoutTokenSent, RpCallbackEndpoint)
+
+raises(RpCallbackEndpoint, EvLogoutAcknowledged)
+raises(RpCallbackEndpoint, EvLogoutRejected)
+
+triggers(EvLogoutAcknowledged, RecordLogoutDelivered)
+invokes(RecordLogoutDelivered, LogoutNoticeResultApi)
+updates(LogoutNoticeResultApi, LogoutNotice)
+transitions(RecordLogoutDelivered, LogoutNotice.status, pending -> delivered)
+
+triggers(EvLogoutRejected, RecordLogoutFailed)
+invokes(RecordLogoutFailed, LogoutNoticeResultApi)
+transitions(RecordLogoutFailed, LogoutNotice.status, pending -> failed)
+
+// The iframes load in the End-User's browser and change nothing at the OP.
+triggers(EvSessionEnded, RenderFrontchannelLogout)
+displays(RenderFrontchannelLogout, LoggedOutScreen)
+reads(RenderFrontchannelLogout, Client)
+reads(RenderFrontchannelLogout, OpSession)
+
+triggers(SessionCheckInterval, CheckSessionState)
+invokes(CheckSessionState, CheckSessionApi)
+reads(CheckSessionApi, OpSession)
+
+// Access constraints
+requires_permission(LogOutFromRp, EndUserCredential)
+requires_medium(LogOutFromRp, UserAgent)
+requires_permission(EndSessionApi, EndUserCredential)
+requires_permission(LogOutAtOp, EndUserCredential)
+requires_medium(LogOutAtOp, UserAgent)
+requires_permission(AccountLogoutApi, EndUserCredential)
+requires_medium(CheckSessionState, UserAgent)
+
+navigates(LogoutConfirmScreen, LoggedOutScreen).via(LogOutFromRp)
+shows(LoggedOutScreen, Client)
+
+field LogoutClientField "Client asking to log out"
+  access readonly
+  required true
+  source system
+
+field SessionStatusField "Session status"
+  access readonly
+  required true
+  source system
+
+contains(LogoutConfirmScreen, LogoutClientField)
+contains(LoggedOutScreen, SessionStatusField)
+maps_field(LogoutClientField, Client.client_id)
+maps_field(SessionStatusField, OpSession.status)
+
+// Business flow
+flow LogoutFlow "Single logout"
+step LogoutStartStep "The End-User logs out, at an RP or at the OP"
+step SessionExpireStep "The OP session expires"
+step NotifyRpStep "The OP notifies every RP"
+step DeliveryResultStep "Each RP acknowledges or fails"
+step SessionWatchStep "An RP watches the session state"
+
+contains(BucLogout, LogoutFlow)
+contains(LogoutFlow, LogoutStartStep)
+contains(LogoutFlow, SessionExpireStep)
+contains(LogoutFlow, NotifyRpStep)
+contains(LogoutFlow, DeliveryResultStep)
+contains(LogoutFlow, SessionWatchStep)
+
+precedes(LogoutStartStep, NotifyRpStep)
+branches(SessionExpireStep, NotifyRpStep)
+precedes(NotifyRpStep, DeliveryResultStep)
+precedes(NotifyRpStep, SessionWatchStep)
+
+covers(LogoutStartStep, LogOutFromRp)
+covers(LogoutStartStep, LogOutAtOp)
+covers(SessionExpireStep, ExpireSession)
+covers(SessionExpireStep, SessionLifetime)
+covers(NotifyRpStep, EvSessionEnded)
+covers(NotifyRpStep, SendBackchannelLogout)
+covers(NotifyRpStep, RenderFrontchannelLogout)
+covers(NotifyRpStep, EvLogoutTokenSent)
+covers(DeliveryResultStep, RecordLogoutDelivered)
+covers(DeliveryResultStep, RecordLogoutFailed)
+covers(DeliveryResultStep, EvLogoutAcknowledged)
+covers(DeliveryResultStep, EvLogoutRejected)
+covers(SessionWatchStep, CheckSessionState)
+covers(SessionWatchStep, SessionCheckInterval)
+
+performs(EndUser, LogoutStartStep)
+performs(RelyingParty, SessionWatchStep)
+
+// Requirement traceability
+requirement ReqSingleLogout "Logging out at the OP or at one RP ends the session at every RP"
+  priority "must"
+  source "OpenID Connect RP-Initiated Logout 1.0 §2"
+  source "OpenID Connect Back-Channel Logout 1.0 §2"
+  source "OpenID Connect Front-Channel Logout 1.0 §2, §4"
+  source "OpenID Connect Session Management 1.0 §3"
+  stakeholder "End-User"
+  acceptance_criteria "When the OP session ends, a Logout Token goes to each RP with a backchannel_logout_uri, the logged-out page loads each frontchannel_logout_uri, and the check_session_iframe answers changed."
+  status "accepted"
+
+motivates(ReqSingleLogout, BucLogout)
+achieves(ReqSingleLogout, ReliableLogout)
+achieves(ReqSingleLogout, SingleSignOn)

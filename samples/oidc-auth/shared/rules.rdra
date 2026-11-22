@@ -1,0 +1,59 @@
+module shared.rules
+
+import shared.entities
+
+// Rules over the entities alone. `check` decides each one at one instance per entity.
+
+// ── The authentication request ───────────────────────────
+
+// RFC 9700 §2.1.1: public clients MUST use PKCE; RFC 7636 §4.2: S256 is mandatory to
+// implement. ValidateRequest's arms let a code-bearing request through only for a
+// confidential client or with S256.
+forbidden(AuthorizationRequest, Client, AuthorizationRequest.status in (validated, consented, responded), AuthorizationRequest.response_type in (code, code_id_token, code_token, code_id_token_token), AuthorizationRequest.pkce in (absent, plain), Client.client_type == public).along(AuthorizationRequest, Client).label("A public client gets no code without an S256 code challenge")
+
+// Core §3.2.2.1 and §3.3.2.11: nonce is REQUIRED when the ID Token comes back from the
+// authorization endpoint.
+forbidden(AuthorizationRequest, nonce == null, response_type in (id_token, id_token_token, code_id_token, code_id_token_token)).label("An ID Token from the authorization endpoint always answers a nonce")
+
+// Core §3.1.2.1: with prompt=none the OP "MUST NOT display any authentication or consent user
+// interface pages".
+forbidden(Interaction, prompt == none, authentication == login).label("prompt=none never shows the login page")
+
+// Core §3.1.2.1: prompt=login makes the OP "reauthenticate the End-User even if the End-User is
+// already authenticated".
+forbidden(Interaction, prompt == login, authentication == sso).label("prompt=login never reuses the session without a login")
+
+// Core §3.1.2.4: the OP obtains the authorization decision "once the End-User is
+// authenticated". The interaction is discarded with the response, so the rule reads the
+// request while it is consented.
+forbidden(AuthorizationRequest, Interaction, AuthorizationRequest.status == consented, Interaction.authentication == pending).along(Interaction, AuthorizationRequest).label("A request is authorized only after the End-User is authenticated")
+
+// Core §3.1.2.1 acr_values; the model's reading: a request asking for a multi-factor class is
+// not served by a single-factor session.
+forbidden(Interaction, OpSession, Interaction.acr == mfa, Interaction.authentication in (login, sso), OpSession.auth_level == single_factor).along(Interaction, OpSession).label("A request asking for a second factor is served only by a multi-factor session")
+
+// ── Grants and tokens ────────────────────────────────────
+
+// Core §3.2.2.5: the Implicit Flow returns no refresh token; the authorization endpoint
+// never issues one (RFC 6749 §4.2.2).
+invariant(Grant).when(flow == implicit).none(RefreshToken).label("The Implicit Flow issues no refresh token")
+
+// RFC 6749 §4.1.2: the second use of a code revokes the tokens issued from it.
+forbidden(AuthorizationCode, Grant, AuthorizationCode.status == replayed, Grant.status == active).along(AuthorizationCode, Grant).label("A replayed code leaves its grant revoked")
+
+// ── Decoupled flows ──────────────────────────────────────
+
+// RFC 8628 §3.3: the End-User who approves at the verification URI is the one the tokens are
+// for.
+invariant(DeviceAuthorization).when(status in (approved, redeemed)).has(UserAccount).label("An approved device authorization names the End-User who approved it")
+
+// CIBA Core 1.0 §5: the client registers one delivery mode, and the OP delivers only by it.
+forbidden(BackchannelRequest, delivery_mode == poll, status in (notified, pushed)).label("A poll-mode client is neither pinged nor pushed to")
+forbidden(BackchannelRequest, delivery_mode == ping, status == pushed).label("A ping-mode client is not pushed the tokens")
+forbidden(BackchannelRequest, delivery_mode == push, status in (notified, redeemed)).label("A push-mode client is neither pinged nor polls")
+
+// ── Logout ───────────────────────────────────────────────
+
+// Back-Channel Logout 1.0 §2.5: the OP sends a Logout Token when the End-User's session at
+// the OP ends.
+forbidden(LogoutNotice, OpSession, OpSession.status == authenticated).along(LogoutNotice, OpSession).label("A Logout Token is sent only for a session that ended")

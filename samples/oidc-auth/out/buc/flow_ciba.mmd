@@ -1,0 +1,64 @@
+%% rdra-ish diagram=flow scope=buc:BucBackchannelSignIn model=samples/oidc-auth
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__CibaFlow["Client-initiated backchannel authentication"]
+    step__CibaExpireStep["The request expires"]:::step
+    step__CibaPingStep["Ping mode: the OP pings, the client fetches"]:::step
+    step__CibaPushStep["Push mode: the OP pushes the tokens"]:::step
+    subgraph lane__CibaFlow__EndUser["End-User"]
+      %% lane lane__CibaFlow__EndUser: actor__EndUser
+      step__CibaDeniedStep["The End-User declines"]:::step
+      step__CibaDeviceStep["The End-User decides on the authentication device"]:::step
+    end
+    subgraph lane__CibaFlow__RelyingParty["Relying Party (client application)"]
+      %% lane lane__CibaFlow__RelyingParty: actor__RelyingParty
+      step__CibaPollStep["Poll mode: the client fetches the tokens"]:::step
+      step__CibaStartStep["The client names the End-User"]:::step
+    end
+  end
+  timer__CibaRequestLifetime(("Backchannel authentication request lifetime (expires_in of the response)")):::timer
+  usecase__ExpireBackchannelRequest("Expire the backchannel request"):::usecase
+  %% desc usecase__ExpireBackchannelRequest: The auth_req_id reaches expires_in before the tokens are delivered.
+  usecase__PollBackchannelToken("Poll for the tokens"):::usecase
+  %% desc usecase__PollBackchannelToken: POST the auth_req_id to the token endpoint and receive the ID Token, the access token, and the refresh token, or authorization_pending, slow_down, access_denied, or expired_token (CIBA §11).
+  usecase__PushBackchannelTokens("Push the tokens to the client"):::usecase
+  %% desc usecase__PushBackchannelTokens: POST the auth_req_id, the ID Token carrying urn:openid:params:jwt:claim:auth_req_id, the access token, and the refresh token to the client notification endpoint.
+  usecase__RecordDeviceApproval("Record the End-User's approval"):::usecase
+  %% desc usecase__RecordDeviceApproval: The authentication device reports that the End-User authenticated and approved the request, after checking the binding_message.
+  usecase__RecordDeviceDenial("Record the End-User's denial"):::usecase
+  %% desc usecase__RecordDeviceDenial: The authentication device reports that the End-User declined.
+  usecase__SendPingCallback("Ping the client"):::usecase
+  %% desc usecase__SendPingCallback: POST the auth_req_id to the client notification endpoint, bearing the client_notification_token.
+  usecase__StartBackchannelAuthentication("Send a backchannel authentication request"):::usecase
+  %% desc usecase__StartBackchannelAuthentication: POST scope openid, a login hint, a binding_message, and, for ping and push, the client_notification_token to the backchannel authentication endpoint, and receive the auth_req_id.
+  event__EvBackchannelApproved>"The End-User approved on the device"]:::event
+  event__EvBackchannelAuthenticationRequested>"The End-User is asked to authenticate on the device"]:::event
+  event__EvBackchannelDenied>"The End-User declined on the device"]:::event
+  event__EvPingSent>"The ping callback is sent"]:::event
+  event__EvTokensPushed>"The tokens are pushed"]:::event
+  step__CibaDeniedStep -.-> event__EvBackchannelDenied
+  step__CibaDeniedStep -.-> usecase__RecordDeviceDenial
+  step__CibaDeviceStep -->|branches| step__CibaPingStep
+  step__CibaDeviceStep -->|branches| step__CibaPushStep
+  step__CibaDeviceStep -.-> event__EvBackchannelApproved
+  step__CibaDeviceStep -.-> usecase__RecordDeviceApproval
+  step__CibaDeviceStep -.->|excepts| step__CibaDeniedStep
+  step__CibaDeviceStep -.->|excepts| step__CibaExpireStep
+  step__CibaDeviceStep -->|precedes| step__CibaPollStep
+  step__CibaExpireStep -.-> timer__CibaRequestLifetime
+  step__CibaExpireStep -.-> usecase__ExpireBackchannelRequest
+  step__CibaPingStep -.-> event__EvPingSent
+  step__CibaPingStep -.-> usecase__SendPingCallback
+  step__CibaPollStep -.-> usecase__PollBackchannelToken
+  step__CibaPushStep -.-> event__EvTokensPushed
+  step__CibaPushStep -.-> usecase__PushBackchannelTokens
+  step__CibaStartStep -.-> event__EvBackchannelAuthenticationRequested
+  step__CibaStartStep -.-> usecase__StartBackchannelAuthentication
+  step__CibaStartStep -->|precedes| step__CibaDeviceStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

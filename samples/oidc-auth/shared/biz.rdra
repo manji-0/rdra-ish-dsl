@@ -1,0 +1,76 @@
+module shared.biz
+
+business Identity "Federated sign-in"
+  description "The OP authenticates End-Users for the clients registered with it, and hands each client an ID Token and the tokens to reach the End-User's resources."
+
+business ClientOnboarding "Client and key management"
+  description "Publishing the OP's metadata and keys, registering clients, and keeping the keys and the registrations current."
+
+business SessionControl "Session and token control"
+  description "Refreshing, revoking, and inspecting tokens, and ending the End-User's sessions at the OP and at every RP."
+
+// The OP itself. The model draws one system: the authorization server, the UserInfo endpoint,
+// and the session store run behind one issuer.
+system OpenIdProvider "OpenID Provider"
+
+// Media are the channels a request travels on. Core §3.1.1 calls the browser leg the front
+// channel and the token endpoint call a direct (back-channel) request.
+medium UserAgent "User agent (front channel)"
+medium BackChannel "Direct HTTPS call (back channel)"
+// RFC 8628 §1: a device that lacks a browser or input; the End-User uses a second device.
+medium InputConstrainedDevice "Input-constrained device"
+medium AdminConsole "OP administration console"
+
+// Expiry periods are timers. A timer has no parameter, so each label carries the period the
+// specification recommends.
+
+// RFC 6749 §4.1.2: "A maximum authorization code lifetime of 10 minutes is RECOMMENDED."
+timer CodeLifetime "Authorization code lifetime (10 minutes at most)"
+// The model's assumption: an OP drops a login interaction the End-User walked away from.
+timer InteractionLifetime "Login interaction lifetime (OP policy, e.g. 30 minutes)"
+// The lifetimes of tokens and sessions are the OP's policy; no specification fixes them.
+timer AccessTokenLifetime "Access token lifetime (OP policy, e.g. 1 hour)"
+timer RefreshTokenLifetime "Refresh token lifetime (OP policy, e.g. 30 days idle)"
+timer SessionLifetime "OP session lifetime (OP policy, e.g. 12 hours)"
+// RFC 8628 §3.2 expires_in; CIBA Core 1.0 §7.3 expires_in.
+timer DeviceCodeLifetime "Device code lifetime (expires_in of the device authorization response)"
+timer CibaRequestLifetime "Backchannel authentication request lifetime (expires_in of the response)"
+
+// Permissions are what each endpoint authenticates.
+// RFC 6749 §2.3: the token endpoint authenticates a confidential client; a public client
+// identifies itself with client_id only (§3.2.1).
+permission ClientCredential "Client identification at the token endpoint"
+// RFC 6750: a bearer access token presented to UserInfo.
+permission BearerAccessToken "Bearer access token"
+// OpenID Connect Dynamic Client Registration 1.0 §3: the registration endpoint may require an
+// initial access token; §4 the configuration endpoint requires the registration access token.
+permission RegistrationAccess "Registration access token"
+// RFC 7662 §2.1: the protected resource authenticates to the introspection endpoint.
+permission ResourceCredential "Resource server credential"
+// The End-User's own authentication: a password, a second factor, or the OP session cookie.
+permission EndUserCredential "End-User credential or OP session"
+permission OpAdministration "OP administration"
+
+// Events several BUCs raise.
+
+// RFC 7009 §2.1 and RFC 6749 §4.1.2: revoking a grant invalidates the tokens issued under it.
+event EvGrantRevoked "A grant is revoked"
+// Back-Channel Logout 1.0 §2: the OP notifies the RPs when the End-User's session ends.
+event EvSessionEnded "The OP session ended"
+
+// The RP calls the OP's back-channel endpoints in answer to what the OP delivered to it.
+// These events order those calls.
+
+// Core §3.1.2.5 and §3.3.2.5: a code reaches the RP on its redirect URI.
+event EvCodeIssued "An authorization code is delivered to the RP"
+// Core §3.2.2.5 and §3.3.2.5: an access token reaches the RP in the fragment.
+event EvFrontChannelAccessToken "An access token is delivered in the fragment"
+// Core §3.1.3.3: the token endpoint returns the tokens.
+event EvTokensIssued "The token endpoint issued the tokens"
+// RFC 6749 §6: the refresh response.
+event EvTokensRefreshed "The tokens were refreshed"
+
+// The RP's own schedules. Discovery 1.0 §4 and Core §10.1.1: an RP caches the configuration
+// and the JWK Set; Session Management 1.0 §4.2: the RP's iframe polls the OP's iframe.
+timer RpMetadataRefresh "RP's metadata cache refresh (RP policy, e.g. daily)"
+timer SessionCheckInterval "RP's session check interval (RP policy, e.g. every few seconds)"

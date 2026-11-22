@@ -1,0 +1,134 @@
+%% rdra-ish diagram=robustness scope=buc:BucBrowserSignIn model=samples/oidc-auth
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__EndUser(["End-User"]):::actor
+  actor__OpAdministrator(["OP Administrator"]):::actor
+  actor__RelyingParty(["Relying Party (client application)"]):::actor
+  extsystem__RpCallbackEndpoint[["RP callback endpoints (backchannel logout, CIBA notification, initiate login)"]]:::extsystem
+  screen__AccountChooserScreen["Account chooser"]:::screen
+  screen__AppLauncherScreen["OP application launcher"]:::screen
+  screen__ConsentAdminScreen["Administrative consents"]:::screen
+  screen__ConsentScreen["Consent page"]:::screen
+  screen__LoginScreen["Login page"]:::screen
+  screen__RpSignInScreen["RP sign-in page"]:::screen
+  screen__SecondFactorScreen["Second factor page"]:::screen
+  timer__InteractionLifetime(("Login interaction lifetime (OP policy, e.g. 30 minutes)")):::timer
+  api__AuthorizationApi{{"Authorization endpoint"}}:::api
+  api__ConsentAdminApi{{"Administrative consent"}}:::api
+  api__ConsentApi{{"Consent form"}}:::api
+  api__ConsentLookupApi{{"Recorded consent lookup"}}:::api
+  api__ErrorResponseApi{{"Authorization error response (redirect)"}}:::api
+  api__LoginApi{{"Login form"}}:::api
+  api__LoginResumeApi{{"Resume the request after the login"}}:::api
+  api__RequestValidationApi{{"Request validation"}}:::api
+  api__SessionLookupApi{{"OP session lookup"}}:::api
+  api__StepUpApi{{"Second factor form"}}:::api
+  usecase__InitiateThirdPartyLogin("Start a sign-in from the OP (third-party initiated login)"):::usecase
+  usecase__IssueCodeResponse("Respond with a code (Authorization Code Flow)"):::usecase
+  usecase__IssueHybridFullResponse("Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)"):::usecase
+  usecase__IssueHybridIdTokenResponse("Respond with a code and an ID Token (Hybrid Flow, code id_token)"):::usecase
+  usecase__IssueHybridTokenResponse("Respond with a code and an access token (Hybrid Flow, code token)"):::usecase
+  usecase__IssueIdTokenResponse("Respond with an ID Token (Implicit Flow, id_token)"):::usecase
+  usecase__IssueImplicitTokenResponse("Respond with an ID Token and an access token (Implicit Flow, id_token token)"):::usecase
+  entity__AccessToken[("Access token")]:::entity
+  entity__AuthorizationCode[("Authorization code")]:::entity
+  entity__AuthorizationRequest[("Authentication request")]:::entity
+  entity__Client[("Registered client")]:::entity
+  entity__Consent[("Consent")]:::entity
+  entity__Grant[("Authorization grant")]:::entity
+  entity__IdToken[("ID Token")]:::entity
+  entity__Interaction[("Login interaction")]:::entity
+  entity__OpSession[("OP session")]:::entity
+  entity__UserAccount[("End-User account")]:::entity
+  actor__EndUser --> screen__AccountChooserScreen
+  actor__EndUser --> screen__AppLauncherScreen
+  actor__EndUser --> screen__ConsentScreen
+  actor__EndUser --> screen__LoginScreen
+  actor__EndUser --> screen__SecondFactorScreen
+  actor__OpAdministrator --> screen__ConsentAdminScreen
+  actor__RelyingParty --> screen__RpSignInScreen
+  api__AuthorizationApi -->|C| entity__AuthorizationRequest
+  api__AuthorizationApi -->|C| entity__Interaction
+  api__AuthorizationApi -->|R| entity__Client
+  api__AuthorizationApi -.->|The authentication request arrived| api__ErrorResponseApi
+  api__AuthorizationApi -.->|The authentication request arrived| api__RequestValidationApi
+  api__ConsentAdminApi -->|C| entity__Consent
+  api__ConsentAdminApi -->|R| entity__Client
+  api__ConsentAdminApi -->|R| entity__UserAccount
+  api__ConsentApi -->|C| entity__Consent
+  api__ConsentApi -->|R| entity__Interaction
+  api__ConsentApi -.->|The authentication request is authorized| usecase__IssueCodeResponse
+  api__ConsentApi -.->|The authentication request is authorized| usecase__IssueHybridFullResponse
+  api__ConsentApi -.->|The authentication request is authorized| usecase__IssueHybridIdTokenResponse
+  api__ConsentApi -.->|The authentication request is authorized| usecase__IssueHybridTokenResponse
+  api__ConsentApi -.->|The authentication request is authorized| usecase__IssueIdTokenResponse
+  api__ConsentApi -.->|The authentication request is authorized| usecase__IssueImplicitTokenResponse
+  api__ConsentApi -->|U| entity__AuthorizationRequest
+  api__ConsentLookupApi -->|R| entity__Consent
+  api__ConsentLookupApi -.->|The authentication request is authorized| usecase__IssueCodeResponse
+  api__ConsentLookupApi -.->|The authentication request is authorized| usecase__IssueHybridFullResponse
+  api__ConsentLookupApi -.->|The authentication request is authorized| usecase__IssueHybridIdTokenResponse
+  api__ConsentLookupApi -.->|The authentication request is authorized| usecase__IssueHybridTokenResponse
+  api__ConsentLookupApi -.->|The authentication request is authorized| usecase__IssueIdTokenResponse
+  api__ConsentLookupApi -.->|The authentication request is authorized| usecase__IssueImplicitTokenResponse
+  api__ConsentLookupApi -->|U| entity__AuthorizationRequest
+  api__ErrorResponseApi -->|D| entity__Interaction
+  api__ErrorResponseApi -->|U| entity__AuthorizationRequest
+  api__LoginApi -->|C| entity__OpSession
+  api__LoginApi -->|R| entity__UserAccount
+  api__LoginResumeApi -->|R| entity__OpSession
+  api__LoginResumeApi -.->|The End-User is authenticated for the request| api__ConsentLookupApi
+  api__LoginResumeApi -.->|The End-User is authenticated for the request| api__ErrorResponseApi
+  api__LoginResumeApi -->|U| entity__Interaction
+  api__RequestValidationApi -->|R| entity__Client
+  api__RequestValidationApi -.->|The authentication request is valid| api__ErrorResponseApi
+  api__RequestValidationApi -.->|The authentication request is valid| api__SessionLookupApi
+  api__RequestValidationApi -->|U| entity__AuthorizationRequest
+  api__SessionLookupApi -->|R| entity__OpSession
+  api__SessionLookupApi -.->|The End-User is authenticated for the request| api__ConsentLookupApi
+  api__SessionLookupApi -.->|The End-User is authenticated for the request| api__ErrorResponseApi
+  api__SessionLookupApi -->|U| entity__Interaction
+  api__StepUpApi -->|U| entity__OpSession
+  screen__AccountChooserScreen -->|Select an account| api__SessionLookupApi
+  screen__AppLauncherScreen -->|Start a sign-in from the OP (third-party initiated login)| usecase__InitiateThirdPartyLogin
+  screen__ConsentAdminScreen -->|Record administrative consent| api__ConsentAdminApi
+  screen__ConsentScreen -->|Consent to the client| api__ConsentApi
+  screen__ConsentScreen -->|Decline the client| api__ErrorResponseApi
+  screen__LoginScreen -->|Authenticate for the request at the login page| api__LoginResumeApi
+  screen__LoginScreen -->|Log in at the OP| api__LoginApi
+  screen__RpSignInScreen -->|Send the authentication request| api__AuthorizationApi
+  screen__SecondFactorScreen -->|Add a second factor to the session| api__StepUpApi
+  timer__InteractionLifetime -.-> api__ErrorResponseApi
+  usecase__InitiateThirdPartyLogin -->|R| entity__Client
+  usecase__InitiateThirdPartyLogin -.->|The OP sends the browser to the client's initiate_login_uri| extsystem__RpCallbackEndpoint
+  usecase__IssueCodeResponse -->|C| entity__AuthorizationCode
+  usecase__IssueCodeResponse -->|C| entity__Grant
+  usecase__IssueCodeResponse -->|D| entity__Interaction
+  usecase__IssueHybridFullResponse -->|C| entity__AccessToken
+  usecase__IssueHybridFullResponse -->|C| entity__AuthorizationCode
+  usecase__IssueHybridFullResponse -->|C| entity__Grant
+  usecase__IssueHybridFullResponse -->|C| entity__IdToken
+  usecase__IssueHybridFullResponse -->|D| entity__Interaction
+  usecase__IssueHybridIdTokenResponse -->|C| entity__AuthorizationCode
+  usecase__IssueHybridIdTokenResponse -->|C| entity__Grant
+  usecase__IssueHybridIdTokenResponse -->|C| entity__IdToken
+  usecase__IssueHybridIdTokenResponse -->|D| entity__Interaction
+  usecase__IssueHybridTokenResponse -->|C| entity__AccessToken
+  usecase__IssueHybridTokenResponse -->|C| entity__AuthorizationCode
+  usecase__IssueHybridTokenResponse -->|C| entity__Grant
+  usecase__IssueHybridTokenResponse -->|D| entity__Interaction
+  usecase__IssueIdTokenResponse -->|C| entity__Grant
+  usecase__IssueIdTokenResponse -->|C| entity__IdToken
+  usecase__IssueIdTokenResponse -->|D| entity__Interaction
+  usecase__IssueImplicitTokenResponse -->|C| entity__AccessToken
+  usecase__IssueImplicitTokenResponse -->|C| entity__Grant
+  usecase__IssueImplicitTokenResponse -->|C| entity__IdToken
+  usecase__IssueImplicitTokenResponse -->|D| entity__Interaction
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

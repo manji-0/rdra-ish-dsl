@@ -1,0 +1,35 @@
+%% rdra-ish diagram=state scope=entity:RefreshToken model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "RefreshToken.status" as statemodel__RefreshToken_status {
+    [*] --> state__RefreshToken_active
+    state "Active, never rotated" as state__RefreshToken_active
+    state "Active, rotated" as state__RefreshToken_rotated
+    state "Expired" as state__RefreshToken_expired
+    state "Revoked" as state__RefreshToken_revoked
+    %% transition usecase__RefreshTokens
+    state__RefreshToken_active --> state__RefreshToken_rotated : Refresh the tokens [The grant is not revoked]
+    %% transition usecase__ExpireRefreshToken
+    state__RefreshToken_active --> state__RefreshToken_expired : Expire a refresh token
+    %% transition usecase__RevokeGrantRefreshTokens
+    state__RefreshToken_active --> state__RefreshToken_revoked : Revoke the refresh tokens of a revoked grant [The grant is revoked]
+    %% transition usecase__RevokeRefreshToken
+    state__RefreshToken_active --> state__RefreshToken_revoked : Revoke a refresh token (RFC 7009)
+    %% transition usecase__RefreshTokens
+    state__RefreshToken_rotated --> state__RefreshToken_rotated : Refresh the tokens [The grant is not revoked]
+    %% transition usecase__ExpireRefreshToken
+    state__RefreshToken_rotated --> state__RefreshToken_expired : Expire a refresh token
+    %% transition usecase__DetectRefreshTokenReuse
+    state__RefreshToken_rotated --> state__RefreshToken_revoked : Detect the reuse of a rotated refresh token
+    %% transition usecase__RevokeGrantRefreshTokens
+    state__RefreshToken_rotated --> state__RefreshToken_revoked : Revoke the refresh tokens of a revoked grant [The grant is revoked]
+    %% transition usecase__RevokeRefreshToken
+    state__RefreshToken_rotated --> state__RefreshToken_revoked : Revoke a refresh token (RFC 7009)
+    state__RefreshToken_expired --> [*]
+    state__RefreshToken_revoked --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__RefreshToken_expired stateend
+  class state__RefreshToken_revoked stateend

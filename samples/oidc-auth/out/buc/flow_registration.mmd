@@ -1,0 +1,49 @@
+%% rdra-ish diagram=flow scope=buc:BucClientRegistration model=samples/oidc-auth
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__RegistrationFlow["Client onboarding"]
+    subgraph lane__RegistrationFlow__OpAdministrator["OP Administrator"]
+      %% lane lane__RegistrationFlow__OpAdministrator: actor__OpAdministrator
+      step__SuspendStep["Suspend or reinstate the client"]:::step
+    end
+    subgraph lane__RegistrationFlow__RelyingParty["Relying Party (client application)"]
+      %% lane lane__RegistrationFlow__RelyingParty: actor__RelyingParty
+      step__DiscoverStep["Discover the OP"]:::step
+      step__RegisterStep["Register the client"]:::step
+      step__VerifyRegistrationStep["Read the registration back"]:::step
+    end
+  end
+  timer__RpMetadataRefresh(("RP's metadata cache refresh (RP policy, e.g. daily)")):::timer
+  usecase__DiscoverProvider("Read the OP configuration"):::usecase
+  %% desc usecase__DiscoverProvider: Fetch the issuer, the endpoint URLs, the supported response types, scopes, claims, and signing algorithms.
+  usecase__FetchJwks("Fetch the OP signing keys (JWKS)"):::usecase
+  %% desc usecase__FetchJwks: Fetch the JWK Set the OP signs ID Tokens with, again whenever an ID Token names a kid the RP has not cached.
+  usecase__ReadClientRegistration("Read the client registration"):::usecase
+  %% desc usecase__ReadClientRegistration: Read the registered metadata back from the client configuration endpoint with the registration access token.
+  usecase__RegisterClient("Register a client"):::usecase
+  %% desc usecase__RegisterClient: Send the client metadata (redirect_uris, response_types, token_endpoint_auth_method, backchannel_logout_uri, CIBA delivery mode) and receive the client_id, the secret of a confidential client, and the registration access token.
+  usecase__ReinstateClient("Reinstate a client"):::usecase
+  %% desc usecase__ReinstateClient: Let a suspended client sign End-Users in again.
+  usecase__SuspendClient("Suspend a client"):::usecase
+  %% desc usecase__SuspendClient: Stop a client from starting new authentications and redeeming tokens, for example after its secret leaked.
+  event__EvClientRegistered>"The client is registered"]:::event
+  event__EvProviderDiscovered>"The RP read the OP configuration"]:::event
+  step__DiscoverStep -.-> event__EvProviderDiscovered
+  step__DiscoverStep -.-> timer__RpMetadataRefresh
+  step__DiscoverStep -.-> usecase__DiscoverProvider
+  step__DiscoverStep -.-> usecase__FetchJwks
+  step__DiscoverStep -->|precedes| step__RegisterStep
+  step__RegisterStep -.-> event__EvClientRegistered
+  step__RegisterStep -.-> usecase__RegisterClient
+  step__RegisterStep -->|precedes| step__VerifyRegistrationStep
+  step__SuspendStep -.-> usecase__ReinstateClient
+  step__SuspendStep -.-> usecase__SuspendClient
+  step__VerifyRegistrationStep -.-> usecase__ReadClientRegistration
+  step__VerifyRegistrationStep -.->|excepts| step__SuspendStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

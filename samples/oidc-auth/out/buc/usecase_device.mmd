@@ -1,0 +1,90 @@
+%% rdra-ish diagram=usecase scope=buc:BucDeviceSignIn model=samples/oidc-auth
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__EndUser(["End-User"]):::actor
+    %% desc actor__EndUser: Signs in to the OP in a user agent, consents to the claims a client asks for, approves a device or a backchannel request, ends the session, and withdraws a consent.
+    actor__RelyingParty(["Relying Party (client application)"]):::actor
+    %% desc actor__RelyingParty: Registers itself, sends the End-User to the authorization endpoint, redeems codes, refreshes and revokes tokens, calls UserInfo, polls for device and CIBA tokens, and starts a logout.
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__DeviceCodeLifetime(("Device code lifetime (expires_in of the device authorization response)")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__ApproveDevice("Approve the device"):::usecase
+    %% desc usecase__ApproveDevice: Open the verification URI on another device, sign in, enter or confirm the user code, check the client and scopes, and approve.
+    usecase__DenyDevice("Deny the device"):::usecase
+    %% desc usecase__DenyDevice: Decline the request after reading which client asks for what.
+    usecase__ExpireDeviceCode("Expire the device code"):::usecase
+    %% desc usecase__ExpireDeviceCode: The device code reaches expires_in before it is redeemed.
+    usecase__PollDevicePending("Poll while the End-User decides"):::usecase
+    %% desc usecase__PollDevicePending: POST grant_type=urn:ietf:params:oauth:grant-type:device_code and receive authorization_pending, or slow_down when the device polled too soon.
+    usecase__RedeemDeviceCode("Redeem the device code"):::usecase
+    %% desc usecase__RedeemDeviceCode: The poll after the approval consumes the device code and receives the ID Token, the access token, and the refresh token.
+    usecase__StartDeviceAuthorization("Request a device code"):::usecase
+    %% desc usecase__StartDeviceAuthorization: POST client_id and scope openid to the device authorization endpoint and receive device_code, user_code, verification_uri, verification_uri_complete, expires_in, and interval.
+    screen__DeviceCodeScreen["User code display on the device"]:::screen
+    screen__DeviceVerificationScreen["Device verification page"]:::screen
+    event__EvDeviceApproved>"The End-User approved the device"]:::event
+    event__EvDeviceCodeIssued>"The device received its codes"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__Client[("Registered client")]:::entity
+    entity__DeviceAuthorization[("Device authorization")]:::entity
+    entity__UserAccount[("End-User account")]:::entity
+    state__DeviceAuthorization_approved((("Approved"))):::state
+    state__DeviceAuthorization_denied((("Denied"))):::state
+    state__DeviceAuthorization_expired((("Expired"))):::state
+    state__DeviceAuthorization_pending((("Pending"))):::state
+    state__DeviceAuthorization_redeemed((("Redeemed"))):::state
+    condition__DeviceClientActive{"The client is active"}:::condition
+  end
+  actor__EndUser -.-> usecase__ApproveDevice
+  actor__EndUser -.-> usecase__DenyDevice
+  actor__RelyingParty -.-> usecase__PollDevicePending
+  actor__RelyingParty -.-> usecase__RedeemDeviceCode
+  actor__RelyingParty -.-> usecase__StartDeviceAuthorization
+  condition__DeviceClientActive -.->|applies_to| usecase__RedeemDeviceCode
+  condition__DeviceClientActive -.->|applies_to| usecase__StartDeviceAuthorization
+  event__EvDeviceApproved -.-> usecase__RedeemDeviceCode
+  event__EvDeviceCodeIssued -.-> usecase__PollDevicePending
+  screen__DeviceVerificationScreen -.-> entity__Client
+  timer__DeviceCodeLifetime -.-> usecase__ExpireDeviceCode
+  usecase__ApproveDevice -.-> screen__DeviceVerificationScreen
+  usecase__ApproveDevice -.-> event__EvDeviceApproved
+  usecase__ApproveDevice -.->|reads| entity__UserAccount
+  %% derived usecase__ApproveDevice -> entity__UserAccount via api__DeviceVerificationApi
+  usecase__ApproveDevice -.->|transitions DeviceAuthorization.status pending->approved| state__DeviceAuthorization_approved
+  usecase__ApproveDevice -.->|updates| entity__DeviceAuthorization
+  %% derived usecase__ApproveDevice -> entity__DeviceAuthorization via api__DeviceVerificationApi
+  usecase__DenyDevice -.-> screen__DeviceVerificationScreen
+  usecase__DenyDevice -.->|reads| entity__UserAccount
+  %% derived usecase__DenyDevice -> entity__UserAccount via api__DeviceVerificationApi
+  usecase__DenyDevice -.->|transitions DeviceAuthorization.status pending->denied| state__DeviceAuthorization_denied
+  usecase__DenyDevice -.->|updates| entity__DeviceAuthorization
+  %% derived usecase__DenyDevice -> entity__DeviceAuthorization via api__DeviceVerificationApi
+  usecase__ExpireDeviceCode -.->|transitions DeviceAuthorization.status approved->expired| state__DeviceAuthorization_expired
+  usecase__ExpireDeviceCode -.->|transitions DeviceAuthorization.status pending->expired| state__DeviceAuthorization_expired
+  usecase__ExpireDeviceCode -.->|updates| entity__DeviceAuthorization
+  %% derived usecase__ExpireDeviceCode -> entity__DeviceAuthorization via api__DeviceExpiryApi
+  usecase__PollDevicePending -.->|reads| entity__DeviceAuthorization
+  %% derived usecase__PollDevicePending -> entity__DeviceAuthorization via api__DevicePollApi
+  usecase__RedeemDeviceCode -.->|transitions DeviceAuthorization.status approved->redeemed| state__DeviceAuthorization_redeemed
+  usecase__RedeemDeviceCode -.->|updates| entity__DeviceAuthorization
+  %% derived usecase__RedeemDeviceCode -> entity__DeviceAuthorization via api__DeviceTokenApi
+  usecase__StartDeviceAuthorization -.->|creates| entity__DeviceAuthorization
+  %% derived usecase__StartDeviceAuthorization -> entity__DeviceAuthorization via api__DeviceAuthorizationApi
+  usecase__StartDeviceAuthorization -.-> screen__DeviceCodeScreen
+  usecase__StartDeviceAuthorization -.-> event__EvDeviceCodeIssued
+  usecase__StartDeviceAuthorization -.->|reads| entity__Client
+  %% derived usecase__StartDeviceAuthorization -> entity__Client via api__DeviceAuthorizationApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

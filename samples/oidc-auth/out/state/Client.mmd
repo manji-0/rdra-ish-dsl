@@ -1,0 +1,14 @@
+%% rdra-ish diagram=state scope=entity:Client model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "Client.status" as statemodel__Client_status {
+    [*] --> state__Client_active
+    state "Active" as state__Client_active
+    state "Suspended" as state__Client_suspended
+    %% transition usecase__SuspendClient
+    state__Client_active --> state__Client_suspended : Suspend a client
+    %% transition usecase__ReinstateClient
+    state__Client_suspended --> state__Client_active : Reinstate a client
+  }

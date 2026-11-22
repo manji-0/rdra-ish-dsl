@@ -1,0 +1,9 @@
+%% rdra-ish diagram=screen scope=buc:BucDeviceSignIn model=samples/oidc-auth
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__DeviceCodeScreen["User code display on the device"]:::screen
+  screen__DeviceVerificationScreen["Device verification page"]:::screen
+  screen__DeviceCodeScreen -->|Approve the device| screen__DeviceVerificationScreen
+  %% via screen__DeviceCodeScreen -> screen__DeviceVerificationScreen usecase__ApproveDevice
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

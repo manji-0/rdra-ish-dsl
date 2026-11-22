@@ -8,6 +8,14 @@
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
   a check that is vacuous only at one instance is not reported there (#173).
+- `samples/oidc-auth` models an OpenID Provider and every OpenID Connect authentication
+  scenario: discovery and dynamic registration, the code, implicit, and hybrid flows with
+  all six response types, PKCE, `prompt` / `max_age` / `acr_values` and the `prompt=none`
+  errors, consent, code redemption and replay, UserInfo, refresh-token rotation, revocation,
+  introspection, the device authorization grant, CIBA in poll, ping, and push mode,
+  RP-initiated, front-channel, and back-channel logout, session management, third-party
+  initiated login, and signing-key rotation. `check` reports nothing, and 13 labelled rules
+  each fail when the guard that protects them is removed.
 - `check` warns `Vacuous_<rule>` when a state rule holds and says nothing: no reachable
   state has the rows it ranges over, the guards of its `.when` never hold, or one condition
   of a `forbidden` of several is one no row ever meets, such as a state no use case enters.

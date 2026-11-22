@@ -1,0 +1,9 @@
+%% rdra-ish diagram=screen scope=buc:BucLogout model=samples/oidc-auth
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__LoggedOutScreen["Logged-out page"]:::screen
+  screen__LogoutConfirmScreen["Logout confirmation"]:::screen
+  screen__LogoutConfirmScreen -->|Log out from the RP (RP-Initiated Logout)| screen__LoggedOutScreen
+  %% via screen__LogoutConfirmScreen -> screen__LoggedOutScreen usecase__LogOutFromRp
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

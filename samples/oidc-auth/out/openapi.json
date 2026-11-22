@@ -1,0 +1,1232 @@
+{
+  "components": {
+    "schemas": {
+      "AuthenticationErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "state": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "AuthenticationRequest": {
+        "properties": {
+          "acr_values": {
+            "nullable": true,
+            "type": "string"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "code_challenge": {
+            "nullable": true,
+            "type": "string"
+          },
+          "code_challenge_method": {
+            "nullable": true,
+            "type": "string"
+          },
+          "max_age": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "nonce": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt": {
+            "nullable": true,
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "response_type": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "state": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "response_type",
+          "client_id",
+          "redirect_uri"
+        ],
+        "type": "object"
+      },
+      "AuthenticationResponse": {
+        "properties": {
+          "access_token": {
+            "nullable": true,
+            "type": "string"
+          },
+          "code": {
+            "nullable": true,
+            "type": "string"
+          },
+          "expires_in": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "id_token": {
+            "nullable": true,
+            "type": "string"
+          },
+          "state": {
+            "nullable": true,
+            "type": "string"
+          },
+          "token_type": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "BackchannelAuthenticationRequest": {
+        "properties": {
+          "binding_message": {
+            "nullable": true,
+            "type": "string"
+          },
+          "client_notification_token": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id_token_hint": {
+            "nullable": true,
+            "type": "string"
+          },
+          "login_hint": {
+            "nullable": true,
+            "type": "string"
+          },
+          "login_hint_token": {
+            "nullable": true,
+            "type": "string"
+          },
+          "requested_expiry": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope"
+        ],
+        "type": "object"
+      },
+      "BackchannelAuthenticationResponse": {
+        "properties": {
+          "auth_req_id": {
+            "type": "string"
+          },
+          "expires_in": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "interval": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "auth_req_id",
+          "expires_in"
+        ],
+        "type": "object"
+      },
+      "DeviceAuthorizationResponse": {
+        "properties": {
+          "device_code": {
+            "type": "string"
+          },
+          "expires_in": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "interval": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "user_code": {
+            "type": "string"
+          },
+          "verification_uri": {
+            "type": "string"
+          },
+          "verification_uri_complete": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "expires_in"
+        ],
+        "type": "object"
+      },
+      "EndSessionRequest": {
+        "properties": {
+          "client_id": {
+            "nullable": true,
+            "type": "string"
+          },
+          "id_token_hint": {
+            "nullable": true,
+            "type": "string"
+          },
+          "logout_hint": {
+            "nullable": true,
+            "type": "string"
+          },
+          "post_logout_redirect_uri": {
+            "nullable": true,
+            "type": "string"
+          },
+          "state": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "IntrospectionResponse": {
+        "properties": {
+          "active": {
+            "type": "boolean"
+          },
+          "client_id": {
+            "nullable": true,
+            "type": "string"
+          },
+          "exp": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "scope": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sub": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "type": "object"
+      },
+      "LogoutToken": {
+        "properties": {
+          "aud": {
+            "type": "string"
+          },
+          "events": {
+            "type": "string"
+          },
+          "iat": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "iss": {
+            "type": "string"
+          },
+          "jti": {
+            "type": "string"
+          },
+          "sid": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sub": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "iss",
+          "aud",
+          "iat",
+          "jti",
+          "events"
+        ],
+        "type": "object"
+      },
+      "RegistrationError": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_description": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "RegistrationRequest": {
+        "properties": {
+          "backchannel_logout_uri": {
+            "nullable": true,
+            "type": "string"
+          },
+          "backchannel_token_delivery_mode": {
+            "nullable": true,
+            "type": "string"
+          },
+          "frontchannel_logout_uri": {
+            "nullable": true,
+            "type": "string"
+          },
+          "grant_types": {
+            "nullable": true,
+            "type": "string"
+          },
+          "redirect_uris": {
+            "type": "string"
+          },
+          "response_types": {
+            "type": "string"
+          },
+          "token_endpoint_auth_method": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "redirect_uris",
+          "response_types",
+          "token_endpoint_auth_method"
+        ],
+        "type": "object"
+      },
+      "RegistrationResponse": {
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "nullable": true,
+            "type": "string"
+          },
+          "registration_access_token": {
+            "type": "string"
+          },
+          "registration_client_uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "registration_access_token",
+          "registration_client_uri"
+        ],
+        "type": "object"
+      },
+      "RevocationRequest": {
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "token_type_hint": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "TokenError": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "error_description": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "TokenRequest": {
+        "properties": {
+          "auth_req_id": {
+            "nullable": true,
+            "type": "string"
+          },
+          "client_assertion": {
+            "nullable": true,
+            "type": "string"
+          },
+          "client_id": {
+            "nullable": true,
+            "type": "string"
+          },
+          "code": {
+            "nullable": true,
+            "type": "string"
+          },
+          "code_verifier": {
+            "nullable": true,
+            "type": "string"
+          },
+          "device_code": {
+            "nullable": true,
+            "type": "string"
+          },
+          "grant_type": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "nullable": true,
+            "type": "string"
+          },
+          "refresh_token": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_type"
+        ],
+        "type": "object"
+      },
+      "TokenResponse": {
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id_token": {
+            "nullable": true,
+            "type": "string"
+          },
+          "refresh_token": {
+            "nullable": true,
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in"
+        ],
+        "type": "object"
+      },
+      "UserInfoResponse": {
+        "properties": {
+          "email": {
+            "nullable": true,
+            "type": "string"
+          },
+          "email_verified": {
+            "nullable": true,
+            "type": "boolean"
+          },
+          "name": {
+            "nullable": true,
+            "type": "string"
+          },
+          "sub": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sub"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "type": "http"
+      },
+      "client": {
+        "in": "header",
+        "name": "X-Auth",
+        "type": "apiKey",
+        "x-rdra-ish-auth-scheme": "client"
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/.well-known/openid-configuration": {
+      "get": {
+        "operationId": "DiscoveryApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "OpenID Provider configuration",
+        "x-rdra-ish-idempotency": "idempotent",
+        "x-rdra-ish-mode": "sync"
+      }
+    },
+    "/account/consents/{id}": {
+      "delete": {
+        "operationId": "ConsentManagementApi",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Authorized applications",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "EndUserCredential"
+        ]
+      }
+    },
+    "/account/logout": {
+      "post": {
+        "operationId": "AccountLogoutApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Account page logout",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "EndUserCredential"
+        ]
+      }
+    },
+    "/admin/clients/{client_id}": {
+      "patch": {
+        "operationId": "ClientAdminApi",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Client administration API",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "OpAdministration"
+        ]
+      }
+    },
+    "/admin/consents": {
+      "post": {
+        "operationId": "ConsentAdminApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Administrative consent",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "OpAdministration"
+        ]
+      }
+    },
+    "/admin/keys": {
+      "post": {
+        "operationId": "KeyAdminApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Signing key administration",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "OpAdministration"
+        ]
+      }
+    },
+    "/authorize": {
+      "get": {
+        "operationId": "AuthorizationApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthenticationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthenticationErrorResponse"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Authorization endpoint",
+        "x-rdra-ish-mode": "sync"
+      }
+    },
+    "/bc-authorize": {
+      "post": {
+        "operationId": "BackchannelAuthenticationApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BackchannelAuthenticationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackchannelAuthenticationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Backchannel authentication endpoint",
+        "x-rdra-ish-mode": "async",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/check_session": {
+      "get": {
+        "operationId": "CheckSessionApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Check session iframe",
+        "x-rdra-ish-idempotency": "idempotent",
+        "x-rdra-ish-mode": "sync"
+      }
+    },
+    "/consent": {
+      "post": {
+        "operationId": "ConsentApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Consent form",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "EndUserCredential"
+        ]
+      }
+    },
+    "/device": {
+      "post": {
+        "operationId": "DeviceVerificationApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Device verification form",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "EndUserCredential"
+        ]
+      }
+    },
+    "/device_authorization": {
+      "post": {
+        "operationId": "DeviceAuthorizationApi",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceAuthorizationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Device authorization endpoint",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/end_session": {
+      "get": {
+        "operationId": "EndSessionApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EndSessionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "End session endpoint",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "EndUserCredential"
+        ]
+      }
+    },
+    "/introspect": {
+      "post": {
+        "operationId": "IntrospectionApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntrospectionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Introspection endpoint",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ResourceCredential"
+        ]
+      }
+    },
+    "/jwks": {
+      "get": {
+        "operationId": "JwksApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "JWK Set",
+        "x-rdra-ish-idempotency": "idempotent",
+        "x-rdra-ish-mode": "sync"
+      }
+    },
+    "/login": {
+      "post": {
+        "operationId": "LoginApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Login form",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "EndUserCredential"
+        ]
+      }
+    },
+    "/login/mfa": {
+      "post": {
+        "operationId": "StepUpApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "summary": "Second factor form",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "EndUserCredential"
+        ]
+      }
+    },
+    "/register": {
+      "post": {
+        "operationId": "RegistrationApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Client registration endpoint",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "RegistrationAccess"
+        ]
+      }
+    },
+    "/register/{client_id}": {
+      "get": {
+        "operationId": "ClientConfigurationApi",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "client_id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegistrationResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Client configuration endpoint",
+        "x-rdra-ish-idempotency": "idempotent",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "RegistrationAccess"
+        ]
+      }
+    },
+    "/revoke": {
+      "post": {
+        "operationId": "RevocationApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Revocation endpoint (refresh token)",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/revoke#access_token": {
+      "post": {
+        "operationId": "AccessTokenRevocationApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevocationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Revocation endpoint (access token)",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/token": {
+      "post": {
+        "operationId": "TokenApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Token endpoint (authorization_code)",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/token#ciba": {
+      "post": {
+        "operationId": "BackchannelTokenApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Token endpoint (ciba)",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/token#device_code": {
+      "post": {
+        "operationId": "DeviceTokenApi",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Token endpoint (device_code)",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/token#device_code_pending": {
+      "post": {
+        "operationId": "DevicePollApi",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenError"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Token endpoint (device_code, pending)",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/token#refresh": {
+      "post": {
+        "operationId": "RefreshApi",
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "client": []
+          }
+        ],
+        "summary": "Token endpoint (refresh_token)",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "ClientCredential"
+        ]
+      }
+    },
+    "/userinfo": {
+      "get": {
+        "operationId": "UserInfoApi",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserInfoResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenError"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "UserInfo endpoint",
+        "x-rdra-ish-idempotency": "idempotent",
+        "x-rdra-ish-mode": "sync",
+        "x-rdra-ish-requires-permission": [
+          "BearerAccessToken"
+        ]
+      }
+    }
+  }
+}

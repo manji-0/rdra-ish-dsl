@@ -79,6 +79,30 @@ const VERIFY_FALLBACK: &[(&str, &str)] = &[
         "samples/insurance-claim-ops",
         "after AfterAssert_PayClaim_0",
     ),
+    // Over 2,000,000, nothing reduces: the browser flow (request, interaction, session,
+    // consent, grant, code, and tokens) is one cone; its verify header runs 1 instance.
+    ("samples/oidc-auth", "entity AccessToken"),
+    ("samples/oidc-auth", "entity AuthorizationCode"),
+    ("samples/oidc-auth", "entity AuthorizationRequest"),
+    ("samples/oidc-auth", "entity Consent"),
+    ("samples/oidc-auth", "entity Grant"),
+    ("samples/oidc-auth", "entity IdToken"),
+    ("samples/oidc-auth", "entity Interaction"),
+    ("samples/oidc-auth", "entity RefreshToken"),
+    ("samples/oidc-auth", "invariant Forbidden_Interaction_1"),
+    (
+        "samples/oidc-auth",
+        "invariant MultiForbidden_AuthorizationCode_3",
+    ),
+    ("samples/oidc-auth", "invariant Quantifier_Grant_0"),
+    (
+        "samples/oidc-auth",
+        "invariant Unique_Grant_AuthorizationRequest",
+    ),
+    (
+        "samples/oidc-auth",
+        "invariant Unique_AuthorizationCode_Grant",
+    ),
 ];
 
 fn repo() -> PathBuf {

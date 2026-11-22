@@ -1,0 +1,59 @@
+%% rdra-ish diagram=state scope=entity:AuthorizationRequest model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "AuthorizationRequest.status" as statemodel__AuthorizationRequest_status {
+    [*] --> state__AuthorizationRequest_received
+    state "Received" as state__AuthorizationRequest_received
+    state "Validated" as state__AuthorizationRequest_validated
+    state "Consented" as state__AuthorizationRequest_consented
+    state "Responded" as state__AuthorizationRequest_responded
+    state "Error response" as state__AuthorizationRequest_failed
+    state "Abandoned" as state__AuthorizationRequest_abandoned
+    %% transition usecase__ValidateRequest
+    state__AuthorizationRequest_received --> state__AuthorizationRequest_validated : Validate the request [No code is issued (Implicit Flow)]
+    %% transition usecase__ValidateRequest
+    state__AuthorizationRequest_received --> state__AuthorizationRequest_validated : Validate the request [The client is confidential]
+    %% transition usecase__ValidateRequest
+    state__AuthorizationRequest_received --> state__AuthorizationRequest_validated : Validate the request [The request carries an S256 code challenge]
+    %% transition usecase__RejectInvalidRequest
+    state__AuthorizationRequest_received --> state__AuthorizationRequest_failed : Reject an invalid request [A public client asks for a code without an S256 challenge]
+    %% transition usecase__AbandonRequest
+    state__AuthorizationRequest_received --> state__AuthorizationRequest_abandoned : Drop an abandoned request
+    %% transition usecase__GrantConsent
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_consented : Consent to the client [The End-User is authenticated for the request, and a page may be shown]
+    %% transition usecase__ReuseConsent
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_consented : Reuse the recorded consent [The End-User is authenticated, prompt is not consent, and a consent to the client is on record]
+    %% transition usecase__DenyConsent
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_failed : Decline the client [The End-User is authenticated for the request, and a page may be shown]
+    %% transition usecase__ReturnAccountSelectionRequired
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_failed : Answer account_selection_required [prompt=none and the End-User is not authenticated]
+    %% transition usecase__ReturnConsentRequired
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_failed : Answer consent_required [prompt=none, the End-User is authenticated, and no consent to the client is on record]
+    %% transition usecase__ReturnInteractionRequired
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_failed : Answer interaction_required [prompt=none, the request asks for a second factor, and the End-User is not authenticated at that level]
+    %% transition usecase__ReturnLoginRequired
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_failed : Answer login_required [prompt=none and the End-User is not authenticated]
+    %% transition usecase__AbandonRequest
+    state__AuthorizationRequest_validated --> state__AuthorizationRequest_abandoned : Drop an abandoned request
+    %% transition usecase__IssueCodeResponse
+    state__AuthorizationRequest_consented --> state__AuthorizationRequest_responded : Respond with a code (Authorization Code Flow) [response_type=code]
+    %% transition usecase__IssueHybridFullResponse
+    state__AuthorizationRequest_consented --> state__AuthorizationRequest_responded : Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token) [response_type=code id_token token]
+    %% transition usecase__IssueHybridIdTokenResponse
+    state__AuthorizationRequest_consented --> state__AuthorizationRequest_responded : Respond with a code and an ID Token (Hybrid Flow, code id_token) [response_type=code id_token]
+    %% transition usecase__IssueHybridTokenResponse
+    state__AuthorizationRequest_consented --> state__AuthorizationRequest_responded : Respond with a code and an access token (Hybrid Flow, code token) [response_type=code token]
+    %% transition usecase__IssueIdTokenResponse
+    state__AuthorizationRequest_consented --> state__AuthorizationRequest_responded : Respond with an ID Token (Implicit Flow, id_token) [response_type=id_token]
+    %% transition usecase__IssueImplicitTokenResponse
+    state__AuthorizationRequest_consented --> state__AuthorizationRequest_responded : Respond with an ID Token and an access token (Implicit Flow, id_token token) [response_type=id_token token]
+    state__AuthorizationRequest_responded --> [*]
+    state__AuthorizationRequest_failed --> [*]
+    state__AuthorizationRequest_abandoned --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__AuthorizationRequest_responded stateend
+  class state__AuthorizationRequest_failed stateend
+  class state__AuthorizationRequest_abandoned stateend

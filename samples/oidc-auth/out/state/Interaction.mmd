@@ -1,0 +1,30 @@
+%% rdra-ish diagram=state scope=entity:Interaction model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out, or declared by @end
+stateDiagram-v2
+  state "Interaction.authentication" as statemodel__Interaction_authentication {
+    [*] --> state__Interaction_pending
+    state "Not yet" as state__Interaction_pending
+    state "Login page" as state__Interaction_login
+    state "Existing session" as state__Interaction_sso
+    %% transition usecase__AuthenticateEndUser
+    state__Interaction_pending --> state__Interaction_login : Authenticate for the request at the login page [The request is valid and lets the OP show a page, The OP session is authenticated with a second factor]
+    %% transition usecase__AuthenticateEndUser
+    state__Interaction_pending --> state__Interaction_login : Authenticate for the request at the login page [The request is valid and lets the OP show a page, The OP session is authenticated and the request asks for no second factor]
+    %% transition usecase__ReuseSession
+    state__Interaction_pending --> state__Interaction_sso : Reuse the OP session (single sign-on) [The request is valid and no prompt forces a login or an account choice, The OP session is authenticated with a second factor]
+    %% transition usecase__ReuseSession
+    state__Interaction_pending --> state__Interaction_sso : Reuse the OP session (single sign-on) [The request is valid and no prompt forces a login or an account choice, The OP session is authenticated and the request asks for no second factor]
+    %% transition usecase__SelectAccount
+    state__Interaction_pending --> state__Interaction_sso : Select an account [prompt=select_account on a valid request, with an authenticated session to pick, The OP session is authenticated with a second factor]
+    %% transition usecase__SelectAccount
+    state__Interaction_pending --> state__Interaction_sso : Select an account [prompt=select_account on a valid request, with an authenticated session to pick, The OP session is authenticated and the request asks for no second factor]
+    state__Interaction_pending --> [*]
+    state__Interaction_login --> [*]
+    state__Interaction_sso --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__Interaction_pending stateend
+  class state__Interaction_login stateend
+  class state__Interaction_sso stateend

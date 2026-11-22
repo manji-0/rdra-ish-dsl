@@ -1,0 +1,34 @@
+%% rdra-ish diagram=context scope=whole model=samples/oidc-auth
+%% kinds: actor extsystem system
+%% omitted: step permission usecase event
+flowchart LR
+  actor__EndUser(["End-User"]):::actor
+  %% desc actor__EndUser: Signs in to the OP in a user agent, consents to the claims a client asks for, approves a device or a backchannel request, ends the session, and withdraws a consent.
+  actor__OpAdministrator(["OP Administrator"]):::actor
+  %% desc actor__OpAdministrator: Suspends and reinstates clients, publishes, activates, and retires signing keys.
+  actor__RelyingParty(["Relying Party (client application)"]):::actor
+  %% desc actor__RelyingParty: Registers itself, sends the End-User to the authorization endpoint, redeems codes, refreshes and revokes tokens, calls UserInfo, polls for device and CIBA tokens, and starts a logout.
+  actor__ResourceServer(["Resource Server"]):::actor
+  %% desc actor__ResourceServer: Receives access tokens from clients and asks the OP whether each is active before serving the request.
+  extsystem__AuthenticationDevice[["Authentication device (CIBA, out of band)"]]:::extsystem
+  extsystem__RpCallbackEndpoint[["RP callback endpoints (backchannel logout, CIBA notification, initiate login)"]]:::extsystem
+  system__OpenIdProvider["OpenID Provider"]:::system
+  actor__EndUser -.->|Sign the End-User in from another device (CIBA)、Sign in on an input-constrained device、End the End-User's session at the OP and at every RP、Sign the End-User in through the browser、Refresh, revoke, and inspect tokens| system__OpenIdProvider
+  %% derived actor__EndUser -> system__OpenIdProvider via buc__BucBackchannelSignIn,buc__BucBrowserSignIn,buc__BucDeviceSignIn,buc__BucLogout,buc__BucTokenMaintenance
+  actor__OpAdministrator -.->|Discover the OP and register a client、Sign the End-User in through the browser、Rotate the ID Token signing keys| system__OpenIdProvider
+  %% derived actor__OpAdministrator -> system__OpenIdProvider via buc__BucBrowserSignIn,buc__BucClientRegistration,buc__BucSigningKeys
+  actor__RelyingParty -.->|Sign the End-User in from another device (CIBA)、Redeem the code and read the End-User's claims、Sign in on an input-constrained device、End the End-User's session at the OP and at every RP、Discover the OP and register a client、Sign the End-User in through the browser、Refresh, revoke, and inspect tokens| system__OpenIdProvider
+  %% derived actor__RelyingParty -> system__OpenIdProvider via buc__BucBackchannelSignIn,buc__BucBrowserSignIn,buc__BucClientRegistration,buc__BucCodeExchange,buc__BucDeviceSignIn,buc__BucLogout,buc__BucTokenMaintenance
+  actor__ResourceServer -.->|Refresh, revoke, and inspect tokens| system__OpenIdProvider
+  %% derived actor__ResourceServer -> system__OpenIdProvider via buc__BucTokenMaintenance
+  extsystem__AuthenticationDevice -.->|The End-User approved on the device、The End-User declined on the device| system__OpenIdProvider
+  %% derived extsystem__AuthenticationDevice -> system__OpenIdProvider via event__EvBackchannelApproved,event__EvBackchannelDenied
+  extsystem__RpCallbackEndpoint -.->|The RP acknowledged the Logout Token、The RP rejected the Logout Token or did not answer| system__OpenIdProvider
+  %% derived extsystem__RpCallbackEndpoint -> system__OpenIdProvider via event__EvLogoutAcknowledged,event__EvLogoutRejected
+  system__OpenIdProvider -.->|The End-User is asked to authenticate on the device| extsystem__AuthenticationDevice
+  %% derived system__OpenIdProvider -> extsystem__AuthenticationDevice via event__EvBackchannelAuthenticationRequested
+  system__OpenIdProvider -.->|The ping callback is sent、The tokens are pushed、A Logout Token is posted to an RP、The OP sends the browser to the client's initiate_login_uri| extsystem__RpCallbackEndpoint
+  %% derived system__OpenIdProvider -> extsystem__RpCallbackEndpoint via event__EvLoginInitiated,event__EvLogoutTokenSent,event__EvPingSent,event__EvTokensPushed
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef system fill:#c5f6fa,stroke:#0b7285,color:#000;

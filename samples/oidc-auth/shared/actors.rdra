@@ -1,0 +1,44 @@
+module shared.actors
+
+// The model is an OpenID Provider (OP) and the parties that use it. Sections cited as
+// "Core §x" are OpenID Connect Core 1.0; the other specifications are named in full.
+//
+// Actor or external system: a party is an actor when it calls an endpoint of the OP or
+// works on one of its pages (the End-User in the browser, the client software at the token
+// endpoint). It is an external system when the OP calls it: the RP's logout and CIBA
+// notification endpoints, and the authentication device that CIBA reaches out of band. An
+// external system talks to the model only through events and holds no permission.
+
+// Core §1.2: "End-User: Human participant."
+actor EndUser "End-User"
+  description "Signs in to the OP in a user agent, consents to the claims a client asks for, approves a device or a backchannel request, ends the session, and withdraws a consent."
+
+// Core §1.2: "Relying Party (RP): OAuth 2.0 Client application requiring End-User
+// Authentication and Claims from an OpenID Provider." The RP is an actor and not an external
+// system because it calls the OP's endpoints: authorization, token, UserInfo, registration,
+// device authorization, backchannel authentication, revocation, and end session.
+actor RelyingParty "Relying Party (client application)"
+  description "Registers itself, sends the End-User to the authorization endpoint, redeems codes, refreshes and revokes tokens, calls UserInfo, polls for device and CIBA tokens, and starts a logout."
+
+// RFC 7662 §1: the protected resource asks the authorization server whether a token is
+// active. The model keeps the resource server apart from the RP because it holds no client
+// grant of its own; it only asks about tokens.
+actor ResourceServer "Resource Server"
+  description "Receives access tokens from clients and asks the OP whether each is active before serving the request."
+
+// The model's assumption: an operator registers clients by hand, suspends a misbehaving one,
+// and rotates the signing keys. No specification names this role.
+actor OpAdministrator "OP Administrator"
+  description "Suspends and reinstates clients, publishes, activates, and retires signing keys."
+
+// OpenID Connect Back-Channel Logout 1.0 §2.5: the OP sends a Logout Token to the RP's
+// backchannel_logout_uri. CIBA Core 1.0 §10.2 and §10.3: the OP sends the ping or the push to
+// the client_notification_endpoint. Core §4: the OP sends the browser to the
+// initiate_login_uri. All are endpoints the RP serves and the OP calls.
+extsystem RpCallbackEndpoint "RP callback endpoints (backchannel logout, CIBA notification, initiate login)"
+
+// CIBA Core 1.0 §1: "Authentication Device: The device on which the user will authenticate
+// and authorize the request, often a smartphone." How the OP reaches it is out of the
+// specification's scope (§7.1), so it is an external system that receives a prompt and
+// answers with the user's decision.
+extsystem AuthenticationDevice "Authentication device (CIBA, out of band)"

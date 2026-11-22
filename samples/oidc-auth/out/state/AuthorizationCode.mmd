@@ -1,0 +1,23 @@
+%% rdra-ish diagram=state scope=entity:AuthorizationCode model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "AuthorizationCode.status" as statemodel__AuthorizationCode_status {
+    [*] --> state__AuthorizationCode_issued
+    state "Issued" as state__AuthorizationCode_issued
+    state "Redeemed" as state__AuthorizationCode_redeemed
+    state "Expired" as state__AuthorizationCode_expired
+    state "Replay detected" as state__AuthorizationCode_replayed
+    %% transition usecase__RedeemCode
+    state__AuthorizationCode_issued --> state__AuthorizationCode_redeemed : Redeem the authorization code [The grant of the code is not revoked]
+    %% transition usecase__ExpireCode
+    state__AuthorizationCode_issued --> state__AuthorizationCode_expired : Expire an unused code
+    %% transition usecase__RejectCodeReplay
+    state__AuthorizationCode_redeemed --> state__AuthorizationCode_replayed : Reject a replayed code and revoke its grant
+    state__AuthorizationCode_expired --> [*]
+    state__AuthorizationCode_replayed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__AuthorizationCode_expired stateend
+  class state__AuthorizationCode_replayed stateend

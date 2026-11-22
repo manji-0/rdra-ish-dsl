@@ -1,0 +1,90 @@
+module shared.governance
+
+import shared.actors
+import shared.biz
+import shared.entities
+
+quality Security "Security"
+quality Privacy "Privacy"
+quality Availability "Availability"
+
+// RFC 6749 §4.1.2: "A maximum authorization code lifetime of 10 minutes is RECOMMENDED."
+nfr CodeLifetimeLimit "Authorization codes live at most 10 minutes"
+  metric code_lifetime_seconds
+  target "<=600"
+  window "1 code"
+
+// The model's assumption: a short access token keeps a leaked one useful for little time.
+nfr AccessTokenLifetimeLimit "Access tokens live at most 1 hour"
+  metric access_token_lifetime_seconds
+  target "<=3600"
+  window "1 token"
+
+// Discovery 1.0 §4 and the JWK Set are read by every RP before each flow.
+nfr MetadataAvailability "The configuration and the JWK Set stay available"
+  metric availability_ratio
+  target ">=99.99%"
+  window "30d"
+  availability multi_az
+
+// Core §16.3, §16.17: an OP keeps a record of what it issued and to whom.
+constraint IssuanceAudit "Record of every issued code, ID Token, and token"
+  audit enabled
+  logging structured
+  retention "1y"
+
+// Core §15.5.1 and §17.3: the OP releases only the claims the End-User consented to.
+constraint ClaimsMinimization "Release only the consented claims"
+  privacy restricted
+
+applies_to(CodeLifetimeLimit, OpenIdProvider)
+applies_to(AccessTokenLifetimeLimit, OpenIdProvider)
+applies_to(MetadataAvailability, OpenIdProvider)
+qualifies(CodeLifetimeLimit, Security)
+qualifies(AccessTokenLifetimeLimit, Security)
+qualifies(MetadataAvailability, Availability)
+qualifies(IssuanceAudit, Security)
+qualifies(ClaimsMinimization, Privacy)
+constrains(IssuanceAudit, Grant)
+constrains(IssuanceAudit, AuthorizationCode)
+constrains(IssuanceAudit, IdToken)
+constrains(ClaimsMinimization, Consent)
+
+// ── Modeling decisions ───────────────────────────────────
+
+adr AdrInteractionApart "Keep the End-User's interaction apart from the request"
+  description "Where prompt, acr_values, and the way the End-User was authenticated live."
+  adr_status accepted
+  context "A request carries six response types, five prompts, three PKCE methods, and two acr choices. On one row with its status, the browser flow passes the 256 patterns `check` allows one entity."
+  decision "Keep prompt, acr, and the authentication on an Interaction row joined 1:1 to the request, and delete it with the response."
+  consequence "A rule that reads the interaction reads it until the request is answered; after the answer only the request's protocol columns remain."
+  accepted "An Interaction entity discarded with the response"
+  rejected "All parameters on the request row"
+  reason "The OP itself keeps the interaction only while it runs, and the split keeps every cone under the state cap."
+
+adr AdrLoginApartFromRequest "Start the OP session apart from any request"
+  description "Who creates the OP session."
+  adr_status accepted
+  context "When the login of a request creates the session, every cone that reads the session (logout, step-up) also explores the request that led to the login."
+  decision "The login creates the session on its own; a request takes the session afterwards, as a fresh login or by single sign-on."
+  consequence "The logout's cone holds the session, the client, and the notice only. A login that no request asked for is the same use case."
+  accepted "LogIn creates the session; AuthenticateEndUser links it"
+  rejected "AuthenticateEndUser creates the session"
+  reason "The OP's login page and account page start the same session; the request only reads it."
+
+adr AdrNoTokenRowsForDecoupledFlows "Keep no token rows for the device and CIBA flows"
+  description "Whether the device and CIBA flows create grants and tokens in the model."
+  adr_status accepted
+  context "Grants and tokens are shared entities. Creating them in three flows joins the three flows in every token cone, which passes the 65,536 states `check` explores per cone."
+  decision "The device and CIBA flows end at redeemed or pushed on their own request; the tokens they return are in the use case descriptions."
+  consequence "Refresh, revocation, introspection, and the grant rules are checked on browser grants only; they are the same endpoints for the other flows."
+  accepted "Token rows for browser grants only"
+  rejected "Token rows for every flow"
+  reason "The token endpoint's behaviour after issue does not depend on the grant type."
+
+decides(AdrInteractionApart, Interaction)
+decides(AdrInteractionApart, AuthorizationRequest)
+decides(AdrLoginApartFromRequest, OpSession)
+decides(AdrNoTokenRowsForDecoupledFlows, DeviceAuthorization)
+decides(AdrNoTokenRowsForDecoupledFlows, BackchannelRequest)
+decides(AdrNoTokenRowsForDecoupledFlows, Grant)

@@ -1,0 +1,80 @@
+%% rdra-ish diagram=flow scope=buc:BucTokenMaintenance model=samples/oidc-auth
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__TokenMaintenanceFlow["Token upkeep"]
+    step__CascadeStep["The grant's tokens are revoked"]:::step
+    step__ExpireStep["Tokens expire"]:::step
+    subgraph lane__TokenMaintenanceFlow__EndUser["End-User"]
+      %% lane lane__TokenMaintenanceFlow__EndUser: actor__EndUser
+      step__WithdrawStep["The End-User withdraws the consent"]:::step
+    end
+    subgraph lane__TokenMaintenanceFlow__RelyingParty["Relying Party (client application)"]
+      %% lane lane__TokenMaintenanceFlow__RelyingParty: actor__RelyingParty
+      step__RefreshStep["The RP refreshes the tokens"]:::step
+      step__ReuseStep["An old refresh token comes back"]:::step
+      step__RevokeStep["The RP revokes a token"]:::step
+    end
+    subgraph lane__TokenMaintenanceFlow__ResourceServer["Resource Server"]
+      %% lane lane__TokenMaintenanceFlow__ResourceServer: actor__ResourceServer
+      step__IntrospectStep["The resource server checks a token"]:::step
+    end
+  end
+  timer__AccessTokenLifetime(("Access token lifetime (OP policy, e.g. 1 hour)")):::timer
+  timer__RefreshTokenLifetime(("Refresh token lifetime (OP policy, e.g. 30 days idle)")):::timer
+  usecase__DetectRefreshTokenReuse("Detect the reuse of a rotated refresh token"):::usecase
+  %% desc usecase__DetectRefreshTokenReuse: A refresh token value that was already rotated comes back: revoke the family and the grant.
+  usecase__ExpireAccessToken("Expire an access token"):::usecase
+  %% desc usecase__ExpireAccessToken: An access token reaches its expires_in.
+  usecase__ExpireRefreshToken("Expire a refresh token"):::usecase
+  %% desc usecase__ExpireRefreshToken: A refresh token reaches the OP's lifetime for it.
+  usecase__IntrospectToken("Introspect a token (RFC 7662)"):::usecase
+  %% desc usecase__IntrospectToken: The resource server posts a token and receives active true with its scope, client_id, sub, and exp, or active false.
+  usecase__RefreshTokens("Refresh the tokens"):::usecase
+  %% desc usecase__RefreshTokens: POST grant_type=refresh_token and receive a new access token, a rotated refresh token, and optionally a new ID Token with the same sub (Core §12.2).
+  usecase__RevokeAccessToken("Revoke an access token (RFC 7009)"):::usecase
+  %% desc usecase__RevokeAccessToken: POST the access token to the revocation endpoint; the OP revokes it only.
+  usecase__RevokeGrantAccessTokens("Revoke the access tokens of a revoked grant"):::usecase
+  %% desc usecase__RevokeGrantAccessTokens: Invalidate every access token issued under a grant that was revoked.
+  usecase__RevokeGrantOnWithdrawal("Revoke the grant of a withdrawn consent"):::usecase
+  %% desc usecase__RevokeGrantOnWithdrawal: Revoke the grant of the client whose consent the End-User withdrew.
+  usecase__RevokeGrantRefreshTokens("Revoke the refresh tokens of a revoked grant"):::usecase
+  %% desc usecase__RevokeGrantRefreshTokens: Invalidate the refresh token family of a grant that was revoked.
+  usecase__RevokeRefreshToken("Revoke a refresh token (RFC 7009)"):::usecase
+  %% desc usecase__RevokeRefreshToken: POST the refresh token to the revocation endpoint; the OP revokes it and the grant behind it.
+  usecase__WithdrawConsent("Withdraw a consent"):::usecase
+  %% desc usecase__WithdrawConsent: The End-User removes a client from the OP's list of authorized applications.
+  event__EvConsentWithdrawn>"A consent is withdrawn"]:::event
+  event__EvGrantRevoked>"A grant is revoked"]:::event
+  event__EvTokensRefreshed>"The tokens were refreshed"]:::event
+  step__CascadeStep -.-> event__EvGrantRevoked
+  step__CascadeStep -.-> usecase__RevokeGrantAccessTokens
+  step__CascadeStep -.-> usecase__RevokeGrantOnWithdrawal
+  step__CascadeStep -.-> usecase__RevokeGrantRefreshTokens
+  step__ExpireStep -.-> timer__AccessTokenLifetime
+  step__ExpireStep -.-> timer__RefreshTokenLifetime
+  step__ExpireStep -.-> usecase__ExpireAccessToken
+  step__ExpireStep -.-> usecase__ExpireRefreshToken
+  step__IntrospectStep -.-> usecase__IntrospectToken
+  step__IntrospectStep -->|precedes| step__RefreshStep
+  step__RefreshStep -->|branches| step__ExpireStep
+  step__RefreshStep -->|branches| step__RevokeStep
+  step__RefreshStep -->|branches| step__WithdrawStep
+  step__RefreshStep -.-> event__EvTokensRefreshed
+  step__RefreshStep -.-> usecase__RefreshTokens
+  step__RefreshStep -.->|excepts| step__ReuseStep
+  step__RefreshStep -->|repeats| step__IntrospectStep
+  step__ReuseStep -.-> usecase__DetectRefreshTokenReuse
+  step__ReuseStep -->|precedes| step__CascadeStep
+  step__RevokeStep -.-> usecase__RevokeAccessToken
+  step__RevokeStep -.-> usecase__RevokeRefreshToken
+  step__RevokeStep -->|precedes| step__CascadeStep
+  step__WithdrawStep -.-> event__EvConsentWithdrawn
+  step__WithdrawStep -.-> usecase__WithdrawConsent
+  step__WithdrawStep -->|precedes| step__CascadeStep
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

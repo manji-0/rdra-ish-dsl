@@ -1,0 +1,262 @@
+%% rdra-ish diagram=event scope=whole model=samples/oidc-auth
+%% kinds: event extsystem usecase timer
+%% omitted: state transitions
+flowchart LR
+  event__EvBackchannelApproved>"The End-User approved on the device"]:::event
+  extsystem__AuthenticationDevice[["Authentication device (CIBA, out of band)"]]:::extsystem
+  extsystem__AuthenticationDevice -.-> event__EvBackchannelApproved
+  usecase__PollBackchannelToken("Poll for the tokens"):::usecase
+  %% desc usecase__PollBackchannelToken: POST the auth_req_id to the token endpoint and receive the ID Token, the access token, and the refresh token, or authorization_pending, slow_down, access_denied, or expired_token (CIBA §11).
+  event__EvBackchannelApproved -.-> usecase__PollBackchannelToken
+  usecase__PushBackchannelTokens("Push the tokens to the client"):::usecase
+  %% desc usecase__PushBackchannelTokens: POST the auth_req_id, the ID Token carrying urn:openid:params:jwt:claim:auth_req_id, the access token, and the refresh token to the client notification endpoint.
+  event__EvBackchannelApproved -.-> usecase__PushBackchannelTokens
+  usecase__RecordDeviceApproval("Record the End-User's approval"):::usecase
+  %% desc usecase__RecordDeviceApproval: The authentication device reports that the End-User authenticated and approved the request, after checking the binding_message.
+  event__EvBackchannelApproved -.-> usecase__RecordDeviceApproval
+  usecase__SendPingCallback("Ping the client"):::usecase
+  %% desc usecase__SendPingCallback: POST the auth_req_id to the client notification endpoint, bearing the client_notification_token.
+  event__EvBackchannelApproved -.-> usecase__SendPingCallback
+  event__EvBackchannelAuthenticationRequested>"The End-User is asked to authenticate on the device"]:::event
+  usecase__StartBackchannelAuthentication("Send a backchannel authentication request"):::usecase
+  %% desc usecase__StartBackchannelAuthentication: POST scope openid, a login hint, a binding_message, and, for ping and push, the client_notification_token to the backchannel authentication endpoint, and receive the auth_req_id.
+  usecase__StartBackchannelAuthentication -.-> event__EvBackchannelAuthenticationRequested
+  event__EvBackchannelAuthenticationRequested -.-> extsystem__AuthenticationDevice
+  event__EvBackchannelDenied>"The End-User declined on the device"]:::event
+  extsystem__AuthenticationDevice -.-> event__EvBackchannelDenied
+  usecase__RecordDeviceDenial("Record the End-User's denial"):::usecase
+  %% desc usecase__RecordDeviceDenial: The authentication device reports that the End-User declined.
+  event__EvBackchannelDenied -.-> usecase__RecordDeviceDenial
+  event__EvClientRegistered>"The client is registered"]:::event
+  usecase__RegisterClient("Register a client"):::usecase
+  %% desc usecase__RegisterClient: Send the client metadata (redirect_uris, response_types, token_endpoint_auth_method, backchannel_logout_uri, CIBA delivery mode) and receive the client_id, the secret of a confidential client, and the registration access token.
+  usecase__RegisterClient -.-> event__EvClientRegistered
+  usecase__ReadClientRegistration("Read the client registration"):::usecase
+  %% desc usecase__ReadClientRegistration: Read the registered metadata back from the client configuration endpoint with the registration access token.
+  event__EvClientRegistered -.-> usecase__ReadClientRegistration
+  event__EvCodeIssued>"An authorization code is delivered to the RP"]:::event
+  usecase__IssueCodeResponse("Respond with a code (Authorization Code Flow)"):::usecase
+  %% desc usecase__IssueCodeResponse: Redirect to the redirect_uri with the authorization code and state in the query.
+  usecase__IssueCodeResponse -.-> event__EvCodeIssued
+  usecase__IssueHybridFullResponse("Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)"):::usecase
+  %% desc usecase__IssueHybridFullResponse: Redirect with the code, the ID Token carrying c_hash and at_hash, the access token, and state in the fragment.
+  usecase__IssueHybridFullResponse -.-> event__EvCodeIssued
+  usecase__IssueHybridIdTokenResponse("Respond with a code and an ID Token (Hybrid Flow, code id_token)"):::usecase
+  %% desc usecase__IssueHybridIdTokenResponse: Redirect with the code, the ID Token carrying c_hash, and state in the fragment.
+  usecase__IssueHybridIdTokenResponse -.-> event__EvCodeIssued
+  usecase__IssueHybridTokenResponse("Respond with a code and an access token (Hybrid Flow, code token)"):::usecase
+  %% desc usecase__IssueHybridTokenResponse: Redirect with the code, the access token, and state in the fragment.
+  usecase__IssueHybridTokenResponse -.-> event__EvCodeIssued
+  usecase__RedeemCode("Redeem the authorization code"):::usecase
+  %% desc usecase__RedeemCode: POST grant_type=authorization_code with the code, the redirect_uri, the client authentication, and the code_verifier, and receive the ID Token, the access token, and the refresh token.
+  event__EvCodeIssued -.-> usecase__RedeemCode
+  event__EvConsentWithdrawn>"A consent is withdrawn"]:::event
+  usecase__WithdrawConsent("Withdraw a consent"):::usecase
+  %% desc usecase__WithdrawConsent: The End-User removes a client from the OP's list of authorized applications.
+  usecase__WithdrawConsent -.-> event__EvConsentWithdrawn
+  usecase__RevokeGrantOnWithdrawal("Revoke the grant of a withdrawn consent"):::usecase
+  %% desc usecase__RevokeGrantOnWithdrawal: Revoke the grant of the client whose consent the End-User withdrew.
+  event__EvConsentWithdrawn -.-> usecase__RevokeGrantOnWithdrawal
+  event__EvDeviceApproved>"The End-User approved the device"]:::event
+  usecase__ApproveDevice("Approve the device"):::usecase
+  %% desc usecase__ApproveDevice: Open the verification URI on another device, sign in, enter or confirm the user code, check the client and scopes, and approve.
+  usecase__ApproveDevice -.-> event__EvDeviceApproved
+  usecase__RedeemDeviceCode("Redeem the device code"):::usecase
+  %% desc usecase__RedeemDeviceCode: The poll after the approval consumes the device code and receives the ID Token, the access token, and the refresh token.
+  event__EvDeviceApproved -.-> usecase__RedeemDeviceCode
+  event__EvDeviceCodeIssued>"The device received its codes"]:::event
+  usecase__StartDeviceAuthorization("Request a device code"):::usecase
+  %% desc usecase__StartDeviceAuthorization: POST client_id and scope openid to the device authorization endpoint and receive device_code, user_code, verification_uri, verification_uri_complete, expires_in, and interval.
+  usecase__StartDeviceAuthorization -.-> event__EvDeviceCodeIssued
+  usecase__PollDevicePending("Poll while the End-User decides"):::usecase
+  %% desc usecase__PollDevicePending: POST grant_type=urn:ietf:params:oauth:grant-type:device_code and receive authorization_pending, or slow_down when the device polled too soon.
+  event__EvDeviceCodeIssued -.-> usecase__PollDevicePending
+  event__EvEndUserAuthenticated>"The End-User is authenticated for the request"]:::event
+  usecase__AuthenticateEndUser("Authenticate for the request at the login page"):::usecase
+  %% desc usecase__AuthenticateEndUser: Show the login page for this request and take the session the End-User logs in to, at the level the request asks for.
+  usecase__AuthenticateEndUser -.-> event__EvEndUserAuthenticated
+  usecase__ReuseSession("Reuse the OP session (single sign-on)"):::usecase
+  %% desc usecase__ReuseSession: Recognize the End-User from the OP session cookie and skip the login page. The session must still be authenticated, and multi-factor when the request asks for it.
+  usecase__ReuseSession -.-> event__EvEndUserAuthenticated
+  usecase__SelectAccount("Select an account"):::usecase
+  %% desc usecase__SelectAccount: Show the accounts the user agent is signed in to and let the End-User pick the one to use.
+  usecase__SelectAccount -.-> event__EvEndUserAuthenticated
+  usecase__ReturnConsentRequired("Answer consent_required"):::usecase
+  %% desc usecase__ReturnConsentRequired: prompt=none, the End-User is authenticated, and no recorded consent covers the request.
+  event__EvEndUserAuthenticated -.-> usecase__ReturnConsentRequired
+  usecase__ReuseConsent("Reuse the recorded consent"):::usecase
+  %% desc usecase__ReuseConsent: Skip the consent page when the End-User has already consented to this client and prompt is not consent.
+  event__EvEndUserAuthenticated -.-> usecase__ReuseConsent
+  event__EvFrontChannelAccessToken>"An access token is delivered in the fragment"]:::event
+  usecase__IssueHybridFullResponse -.-> event__EvFrontChannelAccessToken
+  usecase__IssueHybridTokenResponse -.-> event__EvFrontChannelAccessToken
+  usecase__IssueImplicitTokenResponse("Respond with an ID Token and an access token (Implicit Flow, id_token token)"):::usecase
+  %% desc usecase__IssueImplicitTokenResponse: Redirect with the ID Token, the access token, token_type, expires_in, and state in the fragment.
+  usecase__IssueImplicitTokenResponse -.-> event__EvFrontChannelAccessToken
+  usecase__GetUserInfo("Read the End-User's claims (UserInfo)"):::usecase
+  %% desc usecase__GetUserInfo: GET /userinfo with the access token, and receive the sub and the claims the End-User consented to. The sub must match the sub of the ID Token (Core §5.3.2).
+  event__EvFrontChannelAccessToken -.-> usecase__GetUserInfo
+  usecase__IntrospectToken("Introspect a token (RFC 7662)"):::usecase
+  %% desc usecase__IntrospectToken: The resource server posts a token and receives active true with its scope, client_id, sub, and exp, or active false.
+  event__EvFrontChannelAccessToken -.-> usecase__IntrospectToken
+  usecase__RevokeAccessToken("Revoke an access token (RFC 7009)"):::usecase
+  %% desc usecase__RevokeAccessToken: POST the access token to the revocation endpoint; the OP revokes it only.
+  event__EvFrontChannelAccessToken -.-> usecase__RevokeAccessToken
+  event__EvGrantRevoked>"A grant is revoked"]:::event
+  usecase__DetectRefreshTokenReuse("Detect the reuse of a rotated refresh token"):::usecase
+  %% desc usecase__DetectRefreshTokenReuse: A refresh token value that was already rotated comes back: revoke the family and the grant.
+  usecase__DetectRefreshTokenReuse -.-> event__EvGrantRevoked
+  usecase__RejectCodeReplay("Reject a replayed code and revoke its grant"):::usecase
+  %% desc usecase__RejectCodeReplay: Answer invalid_grant to a second redemption of the same code and revoke the grant issued from it.
+  usecase__RejectCodeReplay -.-> event__EvGrantRevoked
+  usecase__RevokeGrantOnWithdrawal -.-> event__EvGrantRevoked
+  usecase__RevokeRefreshToken("Revoke a refresh token (RFC 7009)"):::usecase
+  %% desc usecase__RevokeRefreshToken: POST the refresh token to the revocation endpoint; the OP revokes it and the grant behind it.
+  usecase__RevokeRefreshToken -.-> event__EvGrantRevoked
+  usecase__RevokeGrantAccessTokens("Revoke the access tokens of a revoked grant"):::usecase
+  %% desc usecase__RevokeGrantAccessTokens: Invalidate every access token issued under a grant that was revoked.
+  event__EvGrantRevoked -.-> usecase__RevokeGrantAccessTokens
+  usecase__RevokeGrantRefreshTokens("Revoke the refresh tokens of a revoked grant"):::usecase
+  %% desc usecase__RevokeGrantRefreshTokens: Invalidate the refresh token family of a grant that was revoked.
+  event__EvGrantRevoked -.-> usecase__RevokeGrantRefreshTokens
+  event__EvLoginInitiated>"The OP sends the browser to the client's initiate_login_uri"]:::event
+  usecase__InitiateThirdPartyLogin("Start a sign-in from the OP (third-party initiated login)"):::usecase
+  %% desc usecase__InitiateThirdPartyLogin: The End-User picks an application on the OP's launcher page; the OP redirects to the client's initiate_login_uri with iss, login_hint, and target_link_uri.
+  usecase__InitiateThirdPartyLogin -.-> event__EvLoginInitiated
+  extsystem__RpCallbackEndpoint[["RP callback endpoints (backchannel logout, CIBA notification, initiate login)"]]:::extsystem
+  event__EvLoginInitiated -.-> extsystem__RpCallbackEndpoint
+  event__EvLogoutAcknowledged>"The RP acknowledged the Logout Token"]:::event
+  extsystem__RpCallbackEndpoint -.-> event__EvLogoutAcknowledged
+  usecase__RecordLogoutDelivered("Record the RP's acknowledgement"):::usecase
+  %% desc usecase__RecordLogoutDelivered: The RP answered 200: it ended its own session for that sid.
+  event__EvLogoutAcknowledged -.-> usecase__RecordLogoutDelivered
+  event__EvLogoutRejected>"The RP rejected the Logout Token or did not answer"]:::event
+  extsystem__RpCallbackEndpoint -.-> event__EvLogoutRejected
+  usecase__RecordLogoutFailed("Record a failed Logout Token delivery"):::usecase
+  %% desc usecase__RecordLogoutFailed: The RP answered 400 or did not answer. Back-Channel Logout §2.8 leaves retries to the OP; the model records the failure.
+  event__EvLogoutRejected -.-> usecase__RecordLogoutFailed
+  event__EvLogoutTokenSent>"A Logout Token is posted to an RP"]:::event
+  usecase__SendBackchannelLogout("Send the Logout Token"):::usecase
+  %% desc usecase__SendBackchannelLogout: Sign a Logout Token naming the sub and the sid, and POST it to the backchannel_logout_uri of each RP the session signed in to.
+  usecase__SendBackchannelLogout -.-> event__EvLogoutTokenSent
+  event__EvLogoutTokenSent -.-> extsystem__RpCallbackEndpoint
+  event__EvPingSent>"The ping callback is sent"]:::event
+  usecase__SendPingCallback -.-> event__EvPingSent
+  event__EvPingSent -.-> usecase__PollBackchannelToken
+  event__EvPingSent -.-> extsystem__RpCallbackEndpoint
+  event__EvProviderDiscovered>"The RP read the OP configuration"]:::event
+  usecase__DiscoverProvider("Read the OP configuration"):::usecase
+  %% desc usecase__DiscoverProvider: Fetch the issuer, the endpoint URLs, the supported response types, scopes, claims, and signing algorithms.
+  usecase__DiscoverProvider -.-> event__EvProviderDiscovered
+  event__EvProviderDiscovered -.-> usecase__RegisterClient
+  event__EvRequestAuthorized>"The authentication request is authorized"]:::event
+  usecase__GrantConsent("Consent to the client"):::usecase
+  %% desc usecase__GrantConsent: Show the client, the scopes, and the claims requested, and record the End-User's consent.
+  usecase__GrantConsent -.-> event__EvRequestAuthorized
+  usecase__ReuseConsent -.-> event__EvRequestAuthorized
+  event__EvRequestAuthorized -.-> usecase__IssueCodeResponse
+  event__EvRequestAuthorized -.-> usecase__IssueHybridFullResponse
+  event__EvRequestAuthorized -.-> usecase__IssueHybridIdTokenResponse
+  event__EvRequestAuthorized -.-> usecase__IssueHybridTokenResponse
+  usecase__IssueIdTokenResponse("Respond with an ID Token (Implicit Flow, id_token)"):::usecase
+  %% desc usecase__IssueIdTokenResponse: Redirect with the ID Token and state in the fragment.
+  event__EvRequestAuthorized -.-> usecase__IssueIdTokenResponse
+  event__EvRequestAuthorized -.-> usecase__IssueImplicitTokenResponse
+  event__EvRequestReceived>"The authentication request arrived"]:::event
+  usecase__RequestAuthentication("Send the authentication request"):::usecase
+  %% desc usecase__RequestAuthentication: Redirect the End-User to the authorization endpoint with scope openid, client_id, redirect_uri, response_type, state, nonce, prompt, max_age, acr_values, and the PKCE code_challenge.
+  usecase__RequestAuthentication -.-> event__EvRequestReceived
+  usecase__RejectInvalidRequest("Reject an invalid request"):::usecase
+  %% desc usecase__RejectInvalidRequest: Answer invalid_request on the redirect URI: a public client asked for a code without an S256 code challenge.
+  event__EvRequestReceived -.-> usecase__RejectInvalidRequest
+  usecase__ValidateRequest("Validate the request"):::usecase
+  %% desc usecase__ValidateRequest: Check the client, the redirect_uri, the response_type the client registered, and that a public client asking for a code sends an S256 code challenge.
+  event__EvRequestReceived -.-> usecase__ValidateRequest
+  event__EvRequestValidated>"The authentication request is valid"]:::event
+  usecase__ValidateRequest -.-> event__EvRequestValidated
+  usecase__ReturnAccountSelectionRequired("Answer account_selection_required"):::usecase
+  %% desc usecase__ReturnAccountSelectionRequired: prompt=none and the user agent holds several sessions the End-User must choose among.
+  event__EvRequestValidated -.-> usecase__ReturnAccountSelectionRequired
+  usecase__ReturnInteractionRequired("Answer interaction_required"):::usecase
+  %% desc usecase__ReturnInteractionRequired: prompt=none and the request asks for a multi-factor class the session does not have.
+  event__EvRequestValidated -.-> usecase__ReturnInteractionRequired
+  usecase__ReturnLoginRequired("Answer login_required"):::usecase
+  %% desc usecase__ReturnLoginRequired: prompt=none and the OP cannot authenticate the End-User without a login page.
+  event__EvRequestValidated -.-> usecase__ReturnLoginRequired
+  event__EvRequestValidated -.-> usecase__ReuseSession
+  event__EvSessionEnded>"The OP session ended"]:::event
+  usecase__ExpireSession("Expire the OP session"):::usecase
+  %% desc usecase__ExpireSession: The OP session reaches its lifetime without activity.
+  usecase__ExpireSession -.-> event__EvSessionEnded
+  usecase__LogOutAtOp("Log out at the OP"):::usecase
+  %% desc usecase__LogOutAtOp: Log out on the OP's own account page.
+  usecase__LogOutAtOp -.-> event__EvSessionEnded
+  usecase__LogOutFromRp("Log out from the RP (RP-Initiated Logout)"):::usecase
+  %% desc usecase__LogOutFromRp: Follow the RP's logout link to the end_session_endpoint with the id_token_hint, confirm, and return to the post_logout_redirect_uri with the state.
+  usecase__LogOutFromRp -.-> event__EvSessionEnded
+  usecase__RenderFrontchannelLogout("Render the front-channel logout iframes"):::usecase
+  %% desc usecase__RenderFrontchannelLogout: Show the logged-out page with one hidden iframe per RP that registered a frontchannel_logout_uri.
+  event__EvSessionEnded -.-> usecase__RenderFrontchannelLogout
+  event__EvSessionEnded -.-> usecase__SendBackchannelLogout
+  event__EvTokensIssued>"The token endpoint issued the tokens"]:::event
+  usecase__RedeemCode -.-> event__EvTokensIssued
+  event__EvTokensIssued -.-> usecase__GetUserInfo
+  event__EvTokensIssued -.-> usecase__IntrospectToken
+  usecase__RefreshTokens("Refresh the tokens"):::usecase
+  %% desc usecase__RefreshTokens: POST grant_type=refresh_token and receive a new access token, a rotated refresh token, and optionally a new ID Token with the same sub (Core §12.2).
+  event__EvTokensIssued -.-> usecase__RefreshTokens
+  event__EvTokensIssued -.-> usecase__RejectCodeReplay
+  event__EvTokensIssued -.-> usecase__RevokeAccessToken
+  event__EvTokensIssued -.-> usecase__RevokeRefreshToken
+  event__EvTokensPushed>"The tokens are pushed"]:::event
+  usecase__PushBackchannelTokens -.-> event__EvTokensPushed
+  event__EvTokensPushed -.-> extsystem__RpCallbackEndpoint
+  event__EvTokensRefreshed>"The tokens were refreshed"]:::event
+  usecase__RefreshTokens -.-> event__EvTokensRefreshed
+  event__EvTokensRefreshed -.-> usecase__DetectRefreshTokenReuse
+  timer__AccessTokenLifetime(("Access token lifetime (OP policy, e.g. 1 hour)")):::timer
+  usecase__ExpireAccessToken("Expire an access token"):::usecase
+  %% desc usecase__ExpireAccessToken: An access token reaches its expires_in.
+  timer__AccessTokenLifetime -.-> usecase__ExpireAccessToken
+  timer__CibaRequestLifetime(("Backchannel authentication request lifetime (expires_in of the response)")):::timer
+  usecase__ExpireBackchannelRequest("Expire the backchannel request"):::usecase
+  %% desc usecase__ExpireBackchannelRequest: The auth_req_id reaches expires_in before the tokens are delivered.
+  timer__CibaRequestLifetime -.-> usecase__ExpireBackchannelRequest
+  timer__CodeLifetime(("Authorization code lifetime (10 minutes at most)")):::timer
+  usecase__ExpireCode("Expire an unused code"):::usecase
+  %% desc usecase__ExpireCode: Mark a code nobody redeemed within its lifetime as expired.
+  timer__CodeLifetime -.-> usecase__ExpireCode
+  timer__DeviceCodeLifetime(("Device code lifetime (expires_in of the device authorization response)")):::timer
+  usecase__ExpireDeviceCode("Expire the device code"):::usecase
+  %% desc usecase__ExpireDeviceCode: The device code reaches expires_in before it is redeemed.
+  timer__DeviceCodeLifetime -.-> usecase__ExpireDeviceCode
+  timer__InteractionLifetime(("Login interaction lifetime (OP policy, e.g. 30 minutes)")):::timer
+  usecase__AbandonRequest("Drop an abandoned request"):::usecase
+  %% desc usecase__AbandonRequest: Discard a request whose End-User did not finish the login or the consent within the interaction lifetime.
+  timer__InteractionLifetime -.-> usecase__AbandonRequest
+  timer__KeyRotationSchedule(("Signing key rotation schedule (OP policy, e.g. every 90 days)")):::timer
+  usecase__ActivateKey("Start signing with the published key"):::usecase
+  %% desc usecase__ActivateKey: Sign new ID Tokens with the key published earlier; its kid appears in their headers.
+  timer__KeyRotationSchedule -.-> usecase__ActivateKey
+  usecase__RetireKey("Retire a signing key"):::usecase
+  %% desc usecase__RetireKey: Remove a key from the JWK Set after the last ID Token it signed has expired.
+  timer__KeyRotationSchedule -.-> usecase__RetireKey
+  timer__RefreshTokenLifetime(("Refresh token lifetime (OP policy, e.g. 30 days idle)")):::timer
+  usecase__ExpireRefreshToken("Expire a refresh token"):::usecase
+  %% desc usecase__ExpireRefreshToken: A refresh token reaches the OP's lifetime for it.
+  timer__RefreshTokenLifetime -.-> usecase__ExpireRefreshToken
+  timer__RpMetadataRefresh(("RP's metadata cache refresh (RP policy, e.g. daily)")):::timer
+  timer__RpMetadataRefresh -.-> usecase__DiscoverProvider
+  usecase__FetchJwks("Fetch the OP signing keys (JWKS)"):::usecase
+  %% desc usecase__FetchJwks: Fetch the JWK Set the OP signs ID Tokens with, again whenever an ID Token names a kid the RP has not cached.
+  timer__RpMetadataRefresh -.-> usecase__FetchJwks
+  timer__SessionCheckInterval(("RP's session check interval (RP policy, e.g. every few seconds)")):::timer
+  usecase__CheckSessionState("Check the session state (Session Management)"):::usecase
+  %% desc usecase__CheckSessionState: The RP's hidden iframe asks the OP's check_session_iframe whether the session_state has changed; on changed the RP re-authenticates with prompt=none.
+  timer__SessionCheckInterval -.-> usecase__CheckSessionState
+  timer__SessionLifetime(("OP session lifetime (OP policy, e.g. 12 hours)")):::timer
+  timer__SessionLifetime -.-> usecase__ExpireSession
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;

@@ -1,0 +1,120 @@
+%% rdra-ish diagram=er scope=whole model=samples/oidc-auth
+%% kinds: entity
+%% omitted: (none)
+erDiagram
+  AccessToken {
+    Int id PK
+    Enum status
+    Int grant_id FK
+  }
+  AuthorizationCode {
+    Int id PK
+    Enum status
+    Int grant_id FK
+  }
+  AuthorizationRequest {
+    Int id PK
+    ResponseType response_type
+    PkceMethod pkce
+    String nonce
+    Enum status
+    Int client_id FK
+  }
+  BackchannelRequest {
+    Int id PK
+    CibaDeliveryMode delivery_mode
+    Enum status
+    Int client_id FK
+    Int useraccount_id FK
+  }
+  Client {
+    Int id PK
+    String client_id
+    ClientType client_type
+    ClientAuthMethod auth_method
+    Enum status
+    String backchannel_logout_uri
+    String frontchannel_logout_uri
+  }
+  Consent {
+    Int id PK
+    Enum status
+    Int useraccount_id FK
+    Int client_id FK
+  }
+  DeviceAuthorization {
+    Int id PK
+    String user_code
+    Enum status
+    Int client_id FK
+    Int useraccount_id FK
+  }
+  Grant {
+    Int id PK
+    Enum flow
+    Enum status
+    DateTime last_refreshed_at
+    Int authorizationrequest_id FK
+  }
+  IdToken {
+    Int id PK
+    String nonce
+    DateTime auth_time
+    String acr
+    String sid
+    Int grant_id FK
+  }
+  Interaction {
+    Int id PK
+    Prompt prompt
+    AcrRequest acr
+    Enum authentication
+    Int authorizationrequest_id FK
+    Int opsession_id FK
+  }
+  LogoutNotice {
+    Int id PK
+    Enum status
+    Int opsession_id FK
+    Int client_id FK
+  }
+  OpSession {
+    Int id PK
+    String sid
+    Enum status
+    Enum auth_level
+    DateTime auth_time
+    Int useraccount_id FK
+  }
+  RefreshToken {
+    Int id PK
+    Enum status
+    Int grant_id FK
+  }
+  SigningKey {
+    Int id PK
+    String kid
+    Enum status
+  }
+  UserAccount {
+    Int id PK
+    String subject
+    Bool mfa_enrolled
+  }
+  AccessToken }o--|| Grant : ""
+  AuthorizationCode ||--|| Grant : ""
+  AuthorizationRequest }o--|| Client : ""
+  BackchannelRequest }o--|| Client : ""
+  BackchannelRequest }o--|| UserAccount : ""
+  Consent }o--|| Client : ""
+  Consent }o--|| UserAccount : ""
+  DeviceAuthorization }o--|| Client : ""
+  DeviceAuthorization }o--|| UserAccount : ""
+  Grant ||--|| AuthorizationRequest : ""
+  IdToken }o--|| Grant : ""
+  Interaction ||--|| AuthorizationRequest : ""
+  Interaction }o--|| OpSession : ""
+  LogoutNotice }o--|| Client : ""
+  LogoutNotice }o--|| OpSession : ""
+  OpSession }o--|| UserAccount : ""
+  RefreshToken }o--|| Grant : ""

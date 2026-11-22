@@ -1,0 +1,156 @@
+%% rdra-ish diagram=sequence scope=buc:BucTokenMaintenance model=samples/oidc-auth
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__RelyingParty as Relying Party (client application)
+  participant usecase__RedeemCode as Redeem the authorization code
+  participant usecase__RefreshTokens as Refresh the tokens
+  participant usecase__IssueHybridFullResponse as Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)
+  participant usecase__IssueHybridTokenResponse as Respond with a code and an access token (Hybrid Flow, code token)
+  participant usecase__IssueImplicitTokenResponse as Respond with an ID Token and an access token (Implicit Flow, id_token token)
+  actor actor__ResourceServer as Resource Server
+  participant timer__AccessTokenLifetime as Access token lifetime (OP policy, e.g. 1 hour)
+  participant timer__RefreshTokenLifetime as Refresh token lifetime (OP policy, e.g. 30 days idle)
+  actor actor__EndUser as End-User
+  participant usecase__WithdrawConsent as Withdraw a consent
+  participant usecase__DetectRefreshTokenReuse as Detect the reuse of a rotated refresh token
+  participant usecase__RejectCodeReplay as Reject a replayed code and revoke its grant
+  participant usecase__RevokeGrantOnWithdrawal as Revoke the grant of a withdrawn consent
+  participant usecase__RevokeRefreshToken as Revoke a refresh token (RFC 7009)
+  participant screen__AuthorizedAppsScreen as Authorized applications
+  participant api__RefreshApi as Token endpoint (refresh_token)
+  participant api__AccessTokenRevocationApi as Revocation endpoint (access token)
+  participant api__IntrospectionApi as Introspection endpoint
+  participant api__AccessTokenExpiryApi as Access token expiry
+  participant api__RefreshTokenExpiryApi as Refresh token expiry
+  participant api__ConsentManagementApi as Authorized applications
+  participant entity__Grant as Authorization grant
+  participant entity__AccessToken as Access token
+  participant entity__RefreshToken as Refresh token (rotation family)
+  participant entity__UserAccount as End-User account
+  participant entity__Consent as Consent
+  participant api__RevocationApi as Revocation endpoint (refresh token)
+  participant api__AccessTokenCascadeApi as Access token revocation on a revoked grant
+  participant api__RefreshTokenCascadeApi as Refresh token revocation on a revoked grant
+  participant api__GrantWithdrawalApi as Grant revocation on consent withdrawal
+  Note over api__RefreshApi: 1. Refresh the tokens
+  actor__RelyingParty ->> api__RefreshApi: Refresh the tokens
+  usecase__RedeemCode ->> api__RefreshApi: The token endpoint issued the tokens
+  alt The grant is not revoked: Grant.status == Active and AccessToken.status in (Active, Expired, Revoked) and RefreshToken.status in (Active, never rotated, Active, rotated)
+    Note over api__RefreshApi: transaction (API atomic boundary)
+    api__RefreshApi ->> entity__Grant: update last_refreshed_at=set
+    api__RefreshApi ->> entity__AccessToken: update status Active -> Active, status Expired -> Active, status Revoked -> Active
+    api__RefreshApi ->> entity__RefreshToken: update status Active, never rotated -> Active, rotated, status Active, rotated -> Active, rotated
+    api__RefreshApi -) api__RevocationApi: The tokens were refreshed
+    api__RefreshApi -->> actor__RelyingParty: done
+  else guard fails
+    api__RefreshApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__RevocationApi: 2. Detect the reuse of a rotated refresh token
+  actor__RelyingParty ->> api__RevocationApi: Detect the reuse of a rotated refresh token
+  usecase__RefreshTokens ->> api__RevocationApi: The tokens were refreshed
+  alt RefreshToken.status == Active, rotated and Grant.status in (Active, Revoked)
+    Note over api__RevocationApi: transaction (API atomic boundary)
+    api__RevocationApi ->> entity__Grant: update status Active -> Revoked, status Revoked -> Revoked
+    api__RevocationApi ->> entity__RefreshToken: update status Active, rotated -> Revoked
+    api__RevocationApi -) api__AccessTokenCascadeApi: A grant is revoked
+    api__RevocationApi -) api__RefreshTokenCascadeApi: A grant is revoked
+    api__RevocationApi -->> actor__RelyingParty: done
+  else guard fails
+    api__RevocationApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__RevocationApi: 3. Revoke a refresh token (RFC 7009)
+  actor__RelyingParty ->> api__RevocationApi: Revoke a refresh token (RFC 7009)
+  usecase__RedeemCode ->> api__RevocationApi: The token endpoint issued the tokens
+  alt RefreshToken.status in (Active, never rotated, Active, rotated) and Grant.status in (Active, Revoked)
+    Note over api__RevocationApi: transaction (API atomic boundary)
+    api__RevocationApi ->> entity__Grant: update status Active -> Revoked, status Revoked -> Revoked
+    api__RevocationApi ->> entity__RefreshToken: update status Active, never rotated -> Revoked, status Active, rotated -> Revoked
+    api__RevocationApi -) api__AccessTokenCascadeApi: A grant is revoked
+    api__RevocationApi -) api__RefreshTokenCascadeApi: A grant is revoked
+    api__RevocationApi -->> actor__RelyingParty: done
+  else guard fails
+    api__RevocationApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__AccessTokenRevocationApi: 4. Revoke an access token (RFC 7009)
+  actor__RelyingParty ->> api__AccessTokenRevocationApi: Revoke an access token (RFC 7009)
+  usecase__IssueHybridFullResponse ->> api__AccessTokenRevocationApi: An access token is delivered in the fragment
+  usecase__IssueHybridTokenResponse ->> api__AccessTokenRevocationApi: An access token is delivered in the fragment
+  usecase__IssueImplicitTokenResponse ->> api__AccessTokenRevocationApi: An access token is delivered in the fragment
+  usecase__RedeemCode ->> api__AccessTokenRevocationApi: The token endpoint issued the tokens
+  alt AccessToken.status == Active
+    api__AccessTokenRevocationApi ->> entity__AccessToken: update status Active -> Revoked
+    api__AccessTokenRevocationApi -->> actor__RelyingParty: done
+  else guard fails
+    api__AccessTokenRevocationApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__IntrospectionApi: 5. Introspect a token (RFC 7662)
+  actor__ResourceServer ->> api__IntrospectionApi: Introspect a token (RFC 7662)
+  usecase__IssueHybridFullResponse ->> api__IntrospectionApi: An access token is delivered in the fragment
+  usecase__IssueHybridTokenResponse ->> api__IntrospectionApi: An access token is delivered in the fragment
+  usecase__IssueImplicitTokenResponse ->> api__IntrospectionApi: An access token is delivered in the fragment
+  usecase__RedeemCode ->> api__IntrospectionApi: The token endpoint issued the tokens
+  api__IntrospectionApi ->> entity__AccessToken: read
+  api__IntrospectionApi ->> entity__Grant: read
+  api__IntrospectionApi ->> entity__UserAccount: read
+  api__IntrospectionApi -->> actor__ResourceServer: done
+  Note over api__AccessTokenExpiryApi: 6. Expire an access token
+  timer__AccessTokenLifetime ->> api__AccessTokenExpiryApi: Access token lifetime (OP policy, e.g. 1 hour)
+  alt AccessToken.status == Active
+    api__AccessTokenExpiryApi ->> entity__AccessToken: update status Active -> Expired
+    api__AccessTokenExpiryApi -->> timer__AccessTokenLifetime: done
+  else guard fails
+    api__AccessTokenExpiryApi -->> timer__AccessTokenLifetime: rejected
+  end
+  Note over api__RefreshTokenExpiryApi: 7. Expire a refresh token
+  timer__RefreshTokenLifetime ->> api__RefreshTokenExpiryApi: Refresh token lifetime (OP policy, e.g. 30 days idle)
+  alt RefreshToken.status in (Active, never rotated, Active, rotated)
+    api__RefreshTokenExpiryApi ->> entity__RefreshToken: update status Active, never rotated -> Expired, status Active, rotated -> Expired
+    api__RefreshTokenExpiryApi -->> timer__RefreshTokenLifetime: done
+  else guard fails
+    api__RefreshTokenExpiryApi -->> timer__RefreshTokenLifetime: rejected
+  end
+  Note over screen__AuthorizedAppsScreen: 8. Withdraw a consent
+  actor__EndUser ->> screen__AuthorizedAppsScreen: Withdraw a consent
+  screen__AuthorizedAppsScreen ->> api__ConsentManagementApi: Authorized applications
+  alt Consent.status == Granted
+    api__ConsentManagementApi ->> entity__Consent: update status Granted -> Withdrawn
+    api__ConsentManagementApi -) api__GrantWithdrawalApi: A consent is withdrawn
+    api__ConsentManagementApi -->> screen__AuthorizedAppsScreen: done
+  else guard fails
+    api__ConsentManagementApi -->> screen__AuthorizedAppsScreen: rejected
+  end
+  Note over api__GrantWithdrawalApi: 9. Revoke the grant of a withdrawn consent
+  usecase__WithdrawConsent ->> api__GrantWithdrawalApi: A consent is withdrawn
+  alt Grant.status == Active
+    api__GrantWithdrawalApi ->> entity__Grant: update status Active -> Revoked
+    api__GrantWithdrawalApi -) api__AccessTokenCascadeApi: A grant is revoked
+    api__GrantWithdrawalApi -) api__RefreshTokenCascadeApi: A grant is revoked
+    api__GrantWithdrawalApi -->> usecase__WithdrawConsent: done
+  else guard fails
+    api__GrantWithdrawalApi -->> usecase__WithdrawConsent: rejected
+  end
+  Note over api__AccessTokenCascadeApi: 10. Revoke the access tokens of a revoked grant
+  usecase__DetectRefreshTokenReuse ->> api__AccessTokenCascadeApi: A grant is revoked
+  usecase__RejectCodeReplay ->> api__AccessTokenCascadeApi: A grant is revoked
+  usecase__RevokeGrantOnWithdrawal ->> api__AccessTokenCascadeApi: A grant is revoked
+  usecase__RevokeRefreshToken ->> api__AccessTokenCascadeApi: A grant is revoked
+  alt The grant is revoked: Grant.status == Revoked and AccessToken.status == Active
+    api__AccessTokenCascadeApi ->> entity__Grant: read
+    api__AccessTokenCascadeApi ->> entity__AccessToken: update status Active -> Revoked
+    api__AccessTokenCascadeApi -->> usecase__DetectRefreshTokenReuse: done
+  else guard fails
+    api__AccessTokenCascadeApi -->> usecase__DetectRefreshTokenReuse: rejected
+  end
+  Note over api__RefreshTokenCascadeApi: 11. Revoke the refresh tokens of a revoked grant
+  usecase__DetectRefreshTokenReuse ->> api__RefreshTokenCascadeApi: A grant is revoked
+  usecase__RejectCodeReplay ->> api__RefreshTokenCascadeApi: A grant is revoked
+  usecase__RevokeGrantOnWithdrawal ->> api__RefreshTokenCascadeApi: A grant is revoked
+  usecase__RevokeRefreshToken ->> api__RefreshTokenCascadeApi: A grant is revoked
+  alt The grant is revoked: Grant.status == Revoked and RefreshToken.status in (Active, never rotated, Active, rotated)
+    api__RefreshTokenCascadeApi ->> entity__Grant: read
+    api__RefreshTokenCascadeApi ->> entity__RefreshToken: update status Active, never rotated -> Revoked, status Active, rotated -> Revoked
+    api__RefreshTokenCascadeApi -->> usecase__DetectRefreshTokenReuse: done
+  else guard fails
+    api__RefreshTokenCascadeApi -->> usecase__DetectRefreshTokenReuse: rejected
+  end
