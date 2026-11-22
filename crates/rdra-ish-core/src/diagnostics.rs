@@ -212,11 +212,9 @@ pub enum RdraError {
     #[error("usecase '{usecase}' writes '{entity}' in its own transaction after the FK-grouped writes\n  hint: it has no FK link to them; if it must be atomic with them, model the operation through an API boundary")]
     SeparateTxInferred { usecase: String, entity: String },
 
-    // ── sets(...) カラム効果述語の診断 ──────────────────────────────────────
     #[error("unknown column: entity '{entity}' has no column '{col}'\n  hint: check the column name in the entity definition")]
     UnknownColumn { entity: String, col: String },
 
-    // ── @check / @derived ────────────────────────────────────────────────────
     #[error("`@check` on '{entity}.{column}' is arithmetic, not a condition\n  hint: write a comparison such as `@check({column} >= 0)`; put arithmetic in `@derived`")]
     ArithNotInCheck { entity: String, column: String },
 
@@ -472,7 +470,6 @@ pub enum RdraError {
     #[error("unknown effect value '{value}' for column '{col}': not an enum variant, bool, null/present, or integer\n  hint: see the allowed value vocabulary in the docs")]
     UnknownEffectValue { col: String, value: String },
 
-    // ── 比較式の診断 ─────────────────────────────────────────────────────────
     #[error("comparison left-hand side must be a column reference, got a literal or `now`\n  hint: write `col < other_col` or `col < 0`")]
     ComparisonLhsMustBeColumn,
 
@@ -531,7 +528,6 @@ pub enum RdraError {
     #[error("cross-entity constraint column '{column}' needs an entity qualifier\n  hint: write `{example}` so the target entity is explicit")]
     CrossConstraintColumnNeedsEntity { column: String, example: String },
 
-    // ── 権限整合性診断 ─────────────────────────────────────────────────────────
     #[error("usecase '{usecase}' requires permission '{permission}', but no actor performs the use case or its containing BUC\n  hint: add `performs(SomeActor, {usecase})`, add `performs(SomeActor, SomeBuc)` where `contains(SomeBuc, {usecase})`, or, if the system runs it, start it with `triggers(Timer, {usecase})` or `triggers(Event, {usecase})`")]
     UseCasePermissionNoActor { usecase: String, permission: String },
 
@@ -570,7 +566,6 @@ pub enum RdraError {
     #[error("actor '{actor}' has permission '{permission}', but no performed usecase or invoked API path currently requires it\n  hint: remove `has_permission({actor}, {permission})`, add the missing `requires_permission` on the operation that needs it, or keep it as an intentional out-of-model grant")]
     ActorPermissionExcess { actor: String, permission: String },
 
-    // ── イベント整合性診断 ────────────────────────────────────────────────────
     #[error("event '{event}' is never raised by any use case\n  hint: add `raises(usecase::Foo, event::{event})` in the relevant BUC file")]
     EventNeverRaised { event: String },
 
@@ -583,14 +578,12 @@ pub enum RdraError {
     #[error("timer '{timer}' triggers use case '{usecase}' which belongs to no BUC\n  hint: add `contains(someBuc, usecase::{usecase})` to include the scheduled use case in a BUC")]
     TimerTriggeredUseCaseUnreachable { timer: String, usecase: String },
 
-    // ── API 整合性診断 ────────────────────────────────────────────────────────
     #[error("api '{api}' is declared but never invoked by any use case\n  hint: add `invokes(usecase::Foo, api::{api})` in the relevant BUC file")]
     ApiNeverInvoked { api: String },
 
     #[error("api '{api}' is invoked but operates no entity\n  hint: add `creates/updates/reads(api::{api}, SomeEntity)` to give the API work to do")]
     ApiInvokedButNoEntity { api: String },
 
-    // ── System 境界診断 ─────────────────────────────────────────────────────
     #[error("api '{api}' belongs to multiple systems ({systems})\n  hint: an API should belong to exactly one system boundary")]
     ApiInMultipleSystems { api: String, systems: String },
 
@@ -672,7 +665,6 @@ pub enum RdraError {
         hint: String,
     },
 
-    // ── exposes / shares: the published surface of an owner model ───────────
     #[error("ExposesChainInvalid: `.{chain}` does not apply to {kind} '{id}'\n  hint: {hint}")]
     ExposesChainInvalid {
         chain: String,

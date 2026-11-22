@@ -183,14 +183,6 @@ maps_field(OrderTotal, Order.total)
         .relations
         .iter()
         .any(|rel| matches!(rel.kind, RelKind::MapsField)));
-    assert_eq!(
-        model
-            .typed_predicates
-            .iter()
-            .filter(|p| matches!(p, TypedPredicate::MapsField { .. }))
-            .count(),
-        2
-    );
 }
 
 #[test]

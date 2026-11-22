@@ -60,8 +60,6 @@ pub(super) enum PathOwner<'a> {
 }
 
 impl<'m> Builder<'m> {
-    // ── R-guard: condition bodies ────────────────────────────────────────────
-
     /// One guard per `holds` body the action carries (`Builder::step_bodies`), each read on
     /// the action's pre-state. An entity the action binds reads its param: on the pre-state,
     /// or in the successor (`At::Next`) when the action creates it, so the body constrains

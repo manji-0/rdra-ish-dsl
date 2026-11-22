@@ -2,33 +2,27 @@
 //! diagram, each entity's state models, and the variations its columns take, without columns.
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
-use crate::{object_graph_rel_label, EmitError, Emitter, Scope, View};
-use rdra_ish_core::model::{ColumnType, NodeRef, RelKind, SemanticModel};
+use crate::diagram_common::{
+    class_defs, contract_id, node_line, push_desc, quote, Diagram, Header, NodeScope,
+};
+use crate::{is_relate, object_graph_rel_label, EmitError, Emitter, Scope, View};
+use rdra_ish_core::model::{ColumnType, NodeRef, SemanticModel};
 use std::collections::{BTreeSet, HashSet};
 
 pub struct InformationMermaidEmitter;
-
-fn is_relate(kind: &RelKind) -> bool {
-    matches!(
-        kind,
-        RelKind::RelateOneToOne
-            | RelKind::RelateOneToMany
-            | RelKind::RelateManyToOne
-            | RelKind::RelateManyToMany
-    )
-}
 
 impl Emitter for InformationMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         // The entities `diagram --kind er` draws for the same scope.
         let reachable = match &view.scope {
-            Scope::Bucs(buc_ids) => Some(rdra_ish_core::reachable_from_bucs(model, buc_ids)),
+            Scope::Bucs(buc_ids) => {
+                NodeScope::Only(rdra_ish_core::reachable_from_bucs(model, buc_ids))
+            }
             Scope::Whole | Scope::UseCases(_) => {
                 super::entity_neighbourhood(model, &view.state.entities)
             }
         };
-        let visible = |nr: &NodeRef| reachable.as_ref().is_none_or(|set| set.contains(nr));
+        let visible = |nr: &NodeRef| reachable.contains(nr);
         let mut entities: Vec<_> = model
             .entities
             .iter()
@@ -53,9 +47,7 @@ impl Emitter for InformationMermaidEmitter {
                 continue;
             };
             declare(&mut body, &id, &entity.label, "entity");
-            if let Some(desc) = desc_line(model, &node, &id) {
-                body.push_str(&format!("  {desc}\n"));
-            }
+            push_desc(&mut body, model, &node, &id, "  ");
             for column in &entity.columns {
                 if model.is_lifecycle_column(*key, &column.name) {
                     let state_model = format!("statemodel__{}_{}", entity.id, column.name);
@@ -91,9 +83,7 @@ impl Emitter for InformationMermaidEmitter {
             let variation = &NodeRef::Variation(*key);
             if let Some(label) = model.node_label(variation) {
                 declare(&mut body, id, label, "variation");
-                if let Some(desc) = desc_line(model, variation, id) {
-                    body.push_str(&format!("  {desc}\n"));
-                }
+                push_desc(&mut body, model, variation, id, "  ");
             }
         }
 
@@ -113,7 +103,7 @@ impl Emitter for InformationMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, "information", edges);
+        render_edges(&mut body, Diagram::Information, edges);
         body.push_str(&class_defs(&kinds));
 
         let drawn: HashSet<NodeRef> = entities
@@ -134,7 +124,7 @@ impl Emitter for InformationMermaidEmitter {
             ))
             .collect();
         let header = Header {
-            diagram: "information",
+            diagram: Diagram::Information,
             view,
             layers: None,
             kinds,

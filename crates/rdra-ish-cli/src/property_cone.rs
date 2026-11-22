@@ -1,6 +1,5 @@
 //! A temporal property checked on its cone (`TransitionSystem::property_cone`), and what the
-//! cone's TLC runs decide. `tests/engine_equivalence.rs` includes this file by path beside
-//! `tlc_output.rs`, so it stays free of the other CLI modules.
+//! cone's TLC runs decide.
 //!
 //! The cone keeps what the property reads and each action of its `.fair` use cases whole, so
 //! weak fairness on those actions restricted to the cone is weak fairness on them in the whole
@@ -64,11 +63,17 @@ pub enum ConeRun {
 pub enum Verdict {
     Ok,
     Counterexample,
-    /// The `Plain` run found a counterexample the cone cannot vouch for; run `WfNext`.
-    NeedsWfNext,
     /// The cone cannot decide: the whole model must run.
     Undecided(Why),
     ToolError,
+}
+
+/// What the `Plain` run alone decides.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AfterPlain {
+    Decided(Verdict),
+    /// The `Plain` run found a counterexample the cone cannot vouch for; run `WfNext`.
+    NeedsWfNext,
 }
 
 /// Why a cone leaves a property undecided.
@@ -138,31 +143,43 @@ impl PropertyCone {
         }
     }
 
-    /// The verdict after the `Plain` run and, when it ran, the `WfNext` run.
-    pub fn verdict(&self, plain: Outcome, wf_next: Option<Outcome>) -> Verdict {
-        verdict(self.kind, self.frees_slots, self.whole, plain, wf_next)
+    /// The verdict after the `Plain` run alone, or that the `WfNext` run must answer.
+    pub fn after_plain(&self, plain: Outcome) -> AfterPlain {
+        after_plain(self.kind, self.frees_slots, plain)
+    }
+
+    /// The verdict after the `Plain` run asked for the `WfNext` run and it ran.
+    pub fn after_wf(&self, plain: Outcome, wf_next: Outcome) -> Verdict {
+        after_wf(self.frees_slots, self.whole, plain, wf_next)
     }
 }
 
-fn verdict(
-    kind: LtlKind,
-    frees_slots: bool,
-    whole: bool,
-    plain: Outcome,
-    wf_next: Option<Outcome>,
-) -> Verdict {
-    let counterexample = match frees_slots {
+fn counterexample(frees_slots: bool) -> Verdict {
+    match frees_slots {
         true => Verdict::Undecided(Why::FreesSlots),
         false => Verdict::Counterexample,
-    };
+    }
+}
+
+fn after_plain(kind: LtlKind, frees_slots: bool, plain: Outcome) -> AfterPlain {
+    match plain {
+        Outcome::Ok => AfterPlain::Decided(Verdict::Ok),
+        Outcome::ToolError => AfterPlain::Decided(Verdict::ToolError),
+        Outcome::Counterexample if kind == LtlKind::Always => {
+            AfterPlain::Decided(counterexample(frees_slots))
+        }
+        Outcome::Counterexample => AfterPlain::NeedsWfNext,
+    }
+}
+
+/// Only reached for a `plain` counterexample on a property that is not `Always`.
+fn after_wf(frees_slots: bool, whole: bool, plain: Outcome, wf_next: Outcome) -> Verdict {
     match (plain, wf_next) {
         (Outcome::Ok, _) => Verdict::Ok,
-        (Outcome::ToolError, _) | (_, Some(Outcome::ToolError)) => Verdict::ToolError,
-        (Outcome::Counterexample, _) if kind == LtlKind::Always => counterexample,
-        (Outcome::Counterexample, None) => Verdict::NeedsWfNext,
-        (Outcome::Counterexample, Some(Outcome::Counterexample)) => counterexample,
-        (Outcome::Counterexample, Some(Outcome::Ok)) if whole => Verdict::Ok,
-        (Outcome::Counterexample, Some(Outcome::Ok)) => Verdict::Undecided(Why::WfNext),
+        (Outcome::ToolError, _) | (_, Outcome::ToolError) => Verdict::ToolError,
+        (Outcome::Counterexample, Outcome::Counterexample) => counterexample(frees_slots),
+        (Outcome::Counterexample, Outcome::Ok) if whole => Verdict::Ok,
+        (Outcome::Counterexample, Outcome::Ok) => Verdict::Undecided(Why::WfNext),
     }
 }
 
@@ -170,36 +187,24 @@ fn verdict(
 mod tests {
     use super::*;
 
+    use AfterPlain::{Decided, NeedsWfNext};
+
     #[test]
     fn a_plain_ok_decides_and_a_counterexample_asks_for_the_wf_run() {
-        let v = |plain, wf| verdict(LtlKind::LeadsTo, false, false, plain, wf);
-        assert_eq!(v(Outcome::Ok, None), Verdict::Ok);
-        assert_eq!(v(Outcome::Counterexample, None), Verdict::NeedsWfNext);
-        assert_eq!(
-            v(Outcome::Counterexample, Some(Outcome::Counterexample)),
-            Verdict::Counterexample
-        );
-        assert_eq!(
-            v(Outcome::Counterexample, Some(Outcome::Ok)),
-            Verdict::Undecided(Why::WfNext)
-        );
-        assert_eq!(v(Outcome::ToolError, None), Verdict::ToolError);
-        assert_eq!(
-            v(Outcome::Counterexample, Some(Outcome::ToolError)),
-            Verdict::ToolError
-        );
+        let plain = |o| after_plain(LtlKind::LeadsTo, false, o);
+        let wf = |o| after_wf(false, false, Outcome::Counterexample, o);
+        assert_eq!(plain(Outcome::Ok), Decided(Verdict::Ok));
+        assert_eq!(plain(Outcome::Counterexample), NeedsWfNext);
+        assert_eq!(wf(Outcome::Counterexample), Verdict::Counterexample);
+        assert_eq!(wf(Outcome::Ok), Verdict::Undecided(Why::WfNext));
+        assert_eq!(plain(Outcome::ToolError), Decided(Verdict::ToolError));
+        assert_eq!(wf(Outcome::ToolError), Verdict::ToolError);
     }
 
     #[test]
     fn the_wf_run_decides_when_the_cone_is_the_whole_model() {
         assert_eq!(
-            verdict(
-                LtlKind::Eventually,
-                false,
-                true,
-                Outcome::Counterexample,
-                Some(Outcome::Ok)
-            ),
+            after_wf(false, true, Outcome::Counterexample, Outcome::Ok),
             Verdict::Ok
         );
     }
@@ -207,24 +212,23 @@ mod tests {
     #[test]
     fn always_needs_one_run_and_freed_slots_keep_only_an_ok() {
         assert_eq!(
-            verdict(LtlKind::Always, false, false, Outcome::Counterexample, None),
-            Verdict::Counterexample
+            after_plain(LtlKind::Always, false, Outcome::Counterexample),
+            Decided(Verdict::Counterexample)
         );
         assert_eq!(
-            verdict(LtlKind::Always, true, false, Outcome::Ok, None),
-            Verdict::Ok
+            after_plain(LtlKind::Always, true, Outcome::Ok),
+            Decided(Verdict::Ok)
         );
         assert_eq!(
-            verdict(LtlKind::Always, true, false, Outcome::Counterexample, None),
-            Verdict::Undecided(Why::FreesSlots)
+            after_plain(LtlKind::Always, true, Outcome::Counterexample),
+            Decided(Verdict::Undecided(Why::FreesSlots))
         );
         assert_eq!(
-            verdict(
-                LtlKind::LeadsTo,
+            after_wf(
                 true,
                 false,
                 Outcome::Counterexample,
-                Some(Outcome::Counterexample)
+                Outcome::Counterexample
             ),
             Verdict::Undecided(Why::FreesSlots)
         );

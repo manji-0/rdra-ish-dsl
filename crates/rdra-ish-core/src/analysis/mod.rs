@@ -10,6 +10,7 @@ mod condition;
 mod constraint;
 mod effect;
 mod fk;
+mod index_advice;
 mod instance;
 mod metadata;
 mod predicate_process;
@@ -19,7 +20,7 @@ mod query;
 
 pub use condition::{
     applied_bodies, chosen_variation, condition_body_display, condition_edges, guard_labels,
-    transition_guard_labels, AppliedBody, ConditionEdge,
+    transition_guard_labels, AppliedBody,
 };
 pub(crate) use condition::{body_condition_display, effect_value_display};
 use fk::{check_join_selectors, resolve_along_links, resolve_foreign_keys};

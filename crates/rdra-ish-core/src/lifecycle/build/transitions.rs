@@ -2,8 +2,8 @@
 
 use super::{variant_index, ActionDraft, Builder, GuardedArm};
 use crate::lifecycle::types::{
-    At, CmpOp, Domain, Effect, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred, Site, Term,
-    Value, VarKind,
+    Arm, At, Choice, CmpOp, Domain, Effect, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred,
+    Site, Term, Value, VarKind,
 };
 use crate::model::{ConditionKey, UseCaseKey};
 
@@ -32,7 +32,7 @@ impl Builder<'_> {
             ) else {
                 continue;
             };
-            let arm = (Value(from), Value(to));
+            let (from, to) = (Value(from), Value(to));
             let site = Site::new(ModelRef::Transition(idx), &st.site);
             let guard: Vec<(ConditionKey, String)> = st
                 .guard
@@ -40,58 +40,37 @@ impl Builder<'_> {
                 .into_iter()
                 .collect();
             let existing = a.effects[first..].iter_mut().find_map(|eff| match eff {
-                Effect::Transition {
-                    var: v,
-                    arms,
-                    sites,
-                    conds,
-                    ..
-                } if *v == var => Some((arms, sites, conds)),
+                Effect::Transition { var: v, arms, .. } if *v == var => Some(arms),
                 _ => None,
             });
+            let arm = Arm {
+                from,
+                to,
+                site,
+                conds: guard,
+            };
             match existing {
-                Some((arms, sites, conds)) => match arms.iter().position(|x| *x == arm) {
+                Some(arms) => match arms.iter_mut().find(|x| (x.from, x.to) == (from, to)) {
                     // The same arm declared again: either declaration enables it.
-                    Some(i) if conds[i].is_empty() => {}
-                    Some(i) if guard.is_empty() => conds[i].clear(),
-                    Some(i) => {
-                        for c in guard {
-                            if !conds[i].contains(&c) {
-                                conds[i].push(c);
-                            }
-                        }
-                    }
-                    None => {
-                        arms.push(arm);
-                        sites.push(site);
-                        conds.push(guard);
-                    }
+                    Some(c) => join_conds(&mut c.conds, arm.conds),
+                    None => arms.push(arm),
                 },
                 None => a.effects.push(Effect::Transition {
                     var,
                     param: p,
                     arms: vec![arm],
-                    sites: vec![site],
-                    conds: vec![guard],
                 }),
             }
         }
         for eff in &a.effects[first..] {
-            let Effect::Transition {
-                var,
-                param,
-                arms,
-                sites,
-                ..
-            } = eff
-            else {
+            let Effect::Transition { var, param, arms } = eff else {
                 continue;
             };
             let at = At::Param(*param);
             let mut froms: Vec<Value> = Vec::new();
-            for (from, _) in arms {
-                if !froms.contains(from) {
-                    froms.push(*from);
+            for arm in arms {
+                if !froms.contains(&arm.from) {
+                    froms.push(arm.from);
                 }
             }
             let pred = Pred::Or(
@@ -103,7 +82,7 @@ impl Builder<'_> {
             a.guards.push(Guard {
                 pred,
                 why: GuardWhy::TransitionFrom,
-                site: sites[0].clone(),
+                site: arms[0].site.clone(),
             });
         }
     }
@@ -120,44 +99,30 @@ impl Builder<'_> {
         for eff in &a.effects {
             // Each arm or value: its comparisons on the column, its site, its conditions.
             let arms: Vec<GuardedArm> = match eff {
-                Effect::Transition {
-                    var,
-                    param,
-                    arms,
-                    sites,
-                    conds,
-                } => {
+                Effect::Transition { var, param, arms } => {
                     let slot = |at| Term::Slot { var: *var, at };
                     arms.iter()
-                        .zip(sites)
-                        .zip(conds)
-                        .map(|(((from, to), site), conds)| {
+                        .map(|arm| {
                             let parts = vec![
-                                Pred::Cmp(slot(At::Param(*param)), CmpOp::Eq, Term::Lit(*from)),
-                                Pred::Cmp(slot(At::Next(*param)), CmpOp::Eq, Term::Lit(*to)),
+                                Pred::Cmp(slot(At::Param(*param)), CmpOp::Eq, Term::Lit(arm.from)),
+                                Pred::Cmp(slot(At::Next(*param)), CmpOp::Eq, Term::Lit(arm.to)),
                             ];
-                            (parts, site, conds)
+                            (parts, &arm.site, &arm.conds)
                         })
                         .collect()
                 }
-                Effect::Choose {
-                    var,
-                    param,
-                    values,
-                    sites,
-                    conds,
-                } => {
+                Effect::Choose { var, param, values } => {
                     let next = Term::Slot {
                         var: *var,
                         at: At::Next(*param),
                     };
+                    // A creation's own choice has no line, so no `.when` guards it.
                     values
                         .iter()
-                        .zip(sites)
-                        .zip(conds)
-                        .map(|((v, site), conds)| {
-                            let parts = vec![Pred::Cmp(next.clone(), CmpOp::Eq, Term::Lit(*v))];
-                            (parts, site, conds)
+                        .filter_map(|c| {
+                            let parts =
+                                vec![Pred::Cmp(next.clone(), CmpOp::Eq, Term::Lit(c.value))];
+                            Some((parts, c.site.as_ref()?, &c.conds))
                         })
                         .collect()
                 }
@@ -212,14 +177,17 @@ impl Builder<'_> {
                 continue;
             }
             let fact = ModelRef::ColumnChoice(idx);
-            let mut values = Vec::new();
-            let mut sites = Vec::new();
-            let mut conds: Vec<Vec<(ConditionKey, String)>> = Vec::new();
+            let mut values: Vec<Choice> = Vec::new();
             if choice.values.is_empty() {
                 let size = self.ts.vars[var.index()].domain.size(self.bounds);
-                values = (0..size).map(|i| Value(i as u8)).collect();
-                sites = vec![Site::new(fact.clone(), &choice.site); values.len()];
-                conds = vec![Vec::new(); values.len()];
+                let site = Site::new(fact.clone(), &choice.site);
+                values = (0..size)
+                    .map(|i| Choice {
+                        value: Value(i as u8),
+                        site: Some(site.clone()),
+                        conds: Vec::new(),
+                    })
+                    .collect();
             }
             let names = match &self.ts.vars[var.index()].domain {
                 Domain::Enum(names) => names.as_slice(),
@@ -234,29 +202,19 @@ impl Builder<'_> {
                     .map(|ck| (ck, model.conditions[ck].id.clone()))
                     .into_iter()
                     .collect();
-                match values.iter().position(|x| *x == v) {
-                    Some(i) if conds[i].is_empty() => {}
-                    Some(i) if guard.is_empty() => conds[i].clear(),
-                    Some(i) => {
-                        for c in guard {
-                            if !conds[i].contains(&c) {
-                                conds[i].push(c);
-                            }
-                        }
-                    }
-                    None => {
-                        values.push(v);
-                        sites.push(Site::new(fact.clone(), &chosen.site));
-                        conds.push(guard);
-                    }
+                match values.iter_mut().find(|x| x.value == v) {
+                    Some(c) => join_conds(&mut c.conds, guard),
+                    None => values.push(Choice {
+                        value: v,
+                        site: Some(Site::new(fact.clone(), &chosen.site)),
+                        conds: guard,
+                    }),
                 }
             }
             a.effects.push(Effect::Choose {
                 var,
                 param: p,
                 values,
-                sites,
-                conds,
             });
         }
     }
@@ -283,11 +241,32 @@ impl Builder<'_> {
                 a.effects.push(Effect::Choose {
                     var,
                     param: p as u8,
-                    values: (0..size).map(|i| Value(i as u8)).collect(),
-                    sites: Vec::new(),
-                    conds: Vec::new(),
+                    values: (0..size)
+                        .map(|i| Choice {
+                            value: Value(i as u8),
+                            site: None,
+                            conds: Vec::new(),
+                        })
+                        .collect(),
                 });
             }
+        }
+    }
+}
+
+/// An arm or value declared again with `guard`: either line enables it, so an unguarded line
+/// clears the conditions and guarded lines join theirs.
+fn join_conds(have: &mut Vec<(ConditionKey, String)>, guard: Vec<(ConditionKey, String)>) {
+    if have.is_empty() {
+        return;
+    }
+    if guard.is_empty() {
+        have.clear();
+        return;
+    }
+    for c in guard {
+        if !have.contains(&c) {
+            have.push(c);
         }
     }
 }

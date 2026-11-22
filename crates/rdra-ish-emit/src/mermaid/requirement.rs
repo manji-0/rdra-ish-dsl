@@ -5,8 +5,10 @@
 //! `omitted:` line names them.
 
 use super::{buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
-use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
+use crate::diagram_common::{
+    class_defs, contract_id, node_line, push_desc, quote, Diagram, Header, NodeScope,
+};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{Goal, NodeRef, RelKind, SemanticModel};
 use std::collections::HashSet;
 
@@ -52,20 +54,18 @@ fn declare_node(out: &mut String, model: &SemanticModel, node: &NodeRef, indent:
             text.push_str(&format!("<br/>{}", label_text(&measure)));
         }
     }
-    let kind = node_kind_filter_name(node);
+    let kind = node.kind_tag();
     out.push_str(&node_line(indent, &id, &text, kind));
-    if let Some(desc) = desc_line(model, node, &id) {
-        out.push_str(&format!("{indent}{desc}\n"));
-    }
+    push_desc(out, model, node, &id, indent);
 }
 
 impl Emitter for RequirementMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let scope = match &view.scope {
-            Scope::Bucs(ids) => Some(buc_scope(model, ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
+            Scope::Bucs(ids) => NodeScope::Only(buc_scope(model, ids)),
+            Scope::Whole | Scope::UseCases(_) => NodeScope::All,
         };
-        let in_scope = |nr: &NodeRef| scope.as_ref().is_none_or(|set| set.contains(nr));
+        let in_scope = |nr: &NodeRef| scope.contains(nr);
 
         // The BUCs a requirement motivates, in the scope.
         let motivated: Vec<(&NodeRef, &NodeRef)> = model
@@ -83,7 +83,7 @@ impl Emitter for RequirementMermaidEmitter {
             .iter()
             .flat_map(|(requirement, buc)| [(*requirement).clone(), (*buc).clone()])
             .collect();
-        if scope.is_none() {
+        if scope.is_all() {
             drawn.extend(collect_object_graph_nodes(model, &|nr| {
                 matches!(nr, NodeRef::Requirement(_) | NodeRef::Goal(_))
             }));
@@ -149,7 +149,7 @@ impl Emitter for RequirementMermaidEmitter {
                 });
             }
         }
-        render_edges(&mut body, "requirement", edges);
+        render_edges(&mut body, Diagram::Requirement, edges);
 
         let kinds = kinds_by_layer(&nodes);
         body.push_str(&class_defs(&kinds));
@@ -177,7 +177,7 @@ impl Emitter for RequirementMermaidEmitter {
             }
         }
         let header = Header {
-            diagram: "requirement",
+            diagram: Diagram::Requirement,
             view,
             layers: None,
             omitted,

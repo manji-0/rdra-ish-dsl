@@ -3,8 +3,10 @@
 //! step covers. A step one actor performs sits in that actor's swimlane.
 
 use super::{declare, omitted_linked_kinds, rdra_arrow, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, quote, Header};
-use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
+use crate::diagram_common::{
+    class_defs, contract_id, push_desc, quote, Diagram, Header, NodeScope,
+};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
 use std::collections::{HashMap, HashSet};
 
@@ -12,8 +14,8 @@ pub struct FlowMermaidEmitter;
 
 /// The flows of the scope, sorted by id: every one, or those the named BUCs contain.
 fn scoped_flows(model: &SemanticModel, scope: &Scope) -> Vec<NodeRef> {
-    let contained: Option<HashSet<NodeRef>> = match scope {
-        Scope::Bucs(ids) => Some(
+    let contained = match scope {
+        Scope::Bucs(ids) => NodeScope::Only(
             model
                 .relations
                 .iter()
@@ -27,10 +29,10 @@ fn scoped_flows(model: &SemanticModel, scope: &Scope) -> Vec<NodeRef> {
                 .map(|rel| rel.to.clone())
                 .collect(),
         ),
-        Scope::Whole | Scope::UseCases(_) => None,
+        Scope::Whole | Scope::UseCases(_) => NodeScope::All,
     };
     collect_object_graph_nodes(model, &|nr| {
-        matches!(nr, NodeRef::Flow(_)) && contained.as_ref().is_none_or(|set| set.contains(nr))
+        matches!(nr, NodeRef::Flow(_)) && contained.contains(nr)
     })
 }
 
@@ -123,9 +125,7 @@ impl Emitter for FlowMermaidEmitter {
                     };
                     add_kind("flow");
                     body.push_str(&format!("  subgraph {id}[\"{}\"]\n", quote(label)));
-                    if let Some(desc) = desc_line(model, flow, &id) {
-                        body.push_str(&format!("    {desc}\n"));
-                    }
+                    push_desc(&mut body, model, flow, &id, "    ");
                     "    "
                 }
                 None => "  ",
@@ -199,9 +199,9 @@ impl Emitter for FlowMermaidEmitter {
         let outside = collect_object_graph_nodes(model, &|nr| outside.contains(nr));
         for node in &outside {
             declare(&mut body, model, node, "  ");
-            add_kind(node_kind_filter_name(node));
+            add_kind(node.kind_tag());
         }
-        render_edges(&mut body, "flow", edges);
+        render_edges(&mut body, Diagram::Flow, edges);
         body.push_str(&class_defs(&kinds));
 
         let mut drawn: HashSet<NodeRef> = flows.iter().cloned().collect();
@@ -209,7 +209,7 @@ impl Emitter for FlowMermaidEmitter {
         drawn.extend(outside.iter().cloned());
         drawn.extend(performers.values().flatten().map(|actor| (*actor).clone()));
         let header = Header {
-            diagram: "flow",
+            diagram: Diagram::Flow,
             view,
             layers: None,
             omitted: omitted_linked_kinds(

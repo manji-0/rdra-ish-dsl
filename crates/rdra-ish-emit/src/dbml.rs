@@ -1,6 +1,8 @@
 use crate::sql::{Dialect, Rule, Script};
 use crate::{EmitError, Emitter, View};
-use rdra_ish_core::model::{ColumnType, Entity, EntityKey, ModelColumn, RefAction, SemanticModel};
+use rdra_ish_core::model::{
+    ColumnType, Entity, EntityKey, EnumValue, ModelColumn, RefAction, SemanticModel,
+};
 
 pub struct DbmlEmitter;
 
@@ -75,7 +77,7 @@ fn dbml_enums(model: &SemanticModel) -> Vec<String> {
     variations.sort_by_key(|variation| variation.id.as_str());
     for variation in variations {
         let mut lines = vec![format!("Enum {} {{", dbml_ident(&variation.id))];
-        for (value, label) in variation.values.iter().zip(&variation.labels) {
+        for EnumValue { value, label } in &variation.values {
             lines.push(match label {
                 Some(label) => format!(
                     "  {} [note: '{}']",

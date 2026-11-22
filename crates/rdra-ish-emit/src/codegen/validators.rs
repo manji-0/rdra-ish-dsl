@@ -28,7 +28,7 @@ pub(super) fn add_validators(
             record.id.clone(),
             RowParam {
                 name: "row".to_string(),
-                param: 0,
+                param: None,
                 state: None,
                 entity: record.id.clone(),
                 ty: record.name.clone(),
@@ -44,7 +44,7 @@ pub(super) fn add_validators(
                 sum.entity.clone(),
                 RowParam {
                     name: "row".to_string(),
-                    param: 0,
+                    param: None,
                     state: Some((sum.tag.wire.clone(), v.value.wire.clone())),
                     entity: sum.entity.clone(),
                     ty: v.name.clone(),
@@ -68,7 +68,7 @@ pub(super) fn add_validators(
 
     let mut obligations: Vec<(String, String, Option<String>)> = Vec::new();
     for inv in ts.invariants() {
-        if matches!(inv.kind, InvKind::Unique | InvKind::MinCard) {
+        if matches!(inv.text.kind(), InvKind::Unique | InvKind::MinCard) {
             continue; // obligations of the data layer
         }
         let at = inv.site.span.as_ref().and_then(site);
@@ -146,9 +146,7 @@ pub(super) fn add_validators(
 }
 
 fn push(domain: &mut DomainModel, invariant: Option<String>, text: String, site: Option<String>) {
-    let id = format!("O{}", domain.obligations.len() + 1);
     domain.obligations.push(Obligation {
-        id,
         invariant,
         text,
         site,
@@ -157,13 +155,16 @@ fn push(domain: &mut DomainModel, invariant: Option<String>, text: String, site:
 
 fn text(t: &InvText) -> String {
     match t {
-        InvText::Conditions(c) => c.clone(),
-        InvText::WhenThen { guards, requireds } => format!("when {guards} then {requireds}"),
-        InvText::Cross {
+        InvText::Forbidden(c)
+        | InvText::Required(c)
+        | InvText::Exclusive(c)
+        | InvText::Check(c) => c.clone(),
+        InvText::Invariant { guards, requireds } => format!("when {guards} then {requireds}"),
+        InvText::CrossForbidden {
             entities,
             conditions,
         } => format!("{entities}: {conditions}"),
-        InvText::CrossWhenThen {
+        InvText::CrossInvariant {
             entities,
             guards,
             requireds,

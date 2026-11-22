@@ -412,9 +412,37 @@ impl Guard {
 }
 
 impl Pred {
+    /// Every node of the predicate, itself first, then its parts left to right.
+    pub fn nodes(&self) -> impl Iterator<Item = &Pred> {
+        let mut stack = vec![self];
+        std::iter::from_fn(move || {
+            let pred = stack.pop()?;
+            match pred {
+                Pred::True | Pred::False | Pred::Cmp(..) | Pred::In(..) => {}
+                Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
+                    stack.push(body)
+                }
+                Pred::And(parts) | Pred::Or(parts) => stack.extend(parts.iter().rev()),
+            }
+            Some(pred)
+        })
+    }
+
+    /// Every term of the predicate, left to right.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
+        self.nodes().flat_map(|pred| {
+            let (first, second, rest): (_, _, &[Term]) = match pred {
+                Pred::Cmp(a, _, b) => (Some(a), Some(b), &[]),
+                Pred::In(a, vs) => (Some(a), None, vs),
+                _ => (None, None, &[]),
+            };
+            first.into_iter().chain(second).chain(rest)
+        })
+    }
+
     /// Whether some slot reference points into the successor.
     pub fn reads_next(&self) -> bool {
-        let term = |t: &Term| {
+        self.terms().any(|t| {
             matches!(
                 t,
                 Term::Slot {
@@ -422,15 +450,7 @@ impl Pred {
                     ..
                 } | Term::Index(At::Next(_))
             )
-        };
-        match self {
-            Pred::True | Pred::False => false,
-            Pred::Cmp(a, _, b) => term(a) || term(b),
-            Pred::In(a, vs) => term(a) || vs.iter().any(term),
-            Pred::Not(p) => p.reads_next(),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().any(Pred::reads_next),
-            Pred::Forall { body, .. } | Pred::Exists { body, .. } => body.reads_next(),
-        }
+        })
     }
 }
 
@@ -483,30 +503,44 @@ pub enum Effect {
     },
     /// var := the `to` of an arm whose `from` the pre-state holds. Arms that share a `from`
     /// are a choice: one successor per arm, forked like `Choose` after the other effects.
-    /// `conds[i]` names the `.when` conditions of arm `i`, key and id (any of them enables it;
-    /// empty when it is unguarded). A `GuardWhy::ArmCondition` guard of the action filters the
-    /// successors.
+    /// A `GuardWhy::ArmCondition` guard of the action filters the successors.
     Transition {
         var: VarId,
         param: u8,
-        arms: Vec<(Value, Value)>,
-        sites: Vec<Site>,
-        conds: Vec<Vec<(ConditionKey, String)>>,
+        arms: Vec<Arm>,
     },
-    /// One successor per value. `sites[i]` is the `sets(.., col == present)` or `chooses` line
-    /// that asks for value `i`; a creation's own choice of a variation value has none (empty).
-    /// `conds[i]` names the `.when` conditions of a `chooses(.., value)` line, as
-    /// `Transition::conds` does for an arm (empty, or empty throughout, when no value is
-    /// guarded); a `GuardWhy::ArmCondition` guard of the action filters the successors.
+    /// One successor per value. A `GuardWhy::ArmCondition` guard of the action filters the
+    /// successors.
     Choose {
         var: VarId,
         param: u8,
-        values: Vec<Value>,
-        sites: Vec<Site>,
-        conds: Vec<Vec<(ConditionKey, String)>>,
+        values: Vec<Choice>,
     },
     /// now := now + 1 while now < int_max.
     Tick,
+}
+
+/// One `transitions` arm of an `Effect::Transition`.
+#[derive(Clone, Debug)]
+pub struct Arm {
+    pub from: Value,
+    pub to: Value,
+    /// The `transitions` line that declares it.
+    pub site: Site,
+    /// Its `.when` conditions, key and id: any of them enables it. Empty when unguarded.
+    pub conds: Vec<(ConditionKey, String)>,
+}
+
+/// One value of an `Effect::Choose`.
+#[derive(Clone, Debug)]
+pub struct Choice {
+    pub value: Value,
+    /// The `sets(.., col == present)`, copy or `chooses` line that asks for the value. A
+    /// creation's own choice of a variation value has none.
+    pub site: Option<Site>,
+    /// The `.when` conditions of a `chooses(.., value)` or guarded `sets` line, as
+    /// `Arm::conds`. Empty when unguarded.
+    pub conds: Vec<(ConditionKey, String)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -578,17 +612,17 @@ pub enum Pred {
 #[derive(Clone, Debug)]
 pub struct Invariant {
     pub name: String,
-    pub kind: InvKind,
     /// Universally bound entities, outermost first.
     pub binders: Vec<EntId>,
     pub body: Pred,
-    /// The constraint as the author wrote it, for diagnostics.
+    /// The constraint as the author wrote it, for diagnostics; its variant is the kind.
     pub text: InvText,
     /// The rule's `.label("...")`, which a violation names.
     pub label: Option<String>,
     pub site: Site,
 }
 
+/// The kind of an `InvText`, as a plain tag.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InvKind {
     Forbidden,
@@ -606,23 +640,44 @@ pub enum InvKind {
     Check,
 }
 
-/// The parts of a constraint that a violation message names.
+impl InvText {
+    pub fn kind(&self) -> InvKind {
+        match self {
+            InvText::Forbidden(_) => InvKind::Forbidden,
+            InvText::Invariant { .. } => InvKind::Invariant,
+            InvText::Required(_) => InvKind::Required,
+            InvText::Exclusive(_) => InvKind::Exclusive,
+            InvText::CrossForbidden { .. } => InvKind::CrossForbidden,
+            InvText::CrossInvariant { .. } => InvKind::CrossInvariant,
+            InvText::Quantifier { .. } => InvKind::Quantifier,
+            InvText::Unique { .. } => InvKind::Unique,
+            InvText::MinCard { .. } => InvKind::MinCard,
+            InvText::Check(_) => InvKind::Check,
+        }
+    }
+}
+
+/// A constraint and the parts of it that a violation message names.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InvText {
-    Conditions(String),
-    WhenThen {
+    Forbidden(String),
+    Invariant {
         guards: String,
         requireds: String,
     },
-    Cross {
+    Required(String),
+    Exclusive(String),
+    CrossForbidden {
         entities: String,
         conditions: String,
     },
-    CrossWhenThen {
+    CrossInvariant {
         entities: String,
         guards: String,
         requireds: String,
     },
+    /// A column's `@check(expr)`: no present slot makes the expression false.
+    Check(String),
     Quantifier {
         anchor: String,
         related: String,
@@ -681,6 +736,13 @@ pub struct Property {
     pub site: Site,
 }
 
+impl Property {
+    /// Whether `.fair` names the use case of `action`.
+    pub fn is_fair(&self, action: &Action) -> bool {
+        matches!(&action.origin, ActionOrigin::UseCase { uc, .. } if self.fair.contains(uc))
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Ltl {
     Always(Pred),
@@ -689,6 +751,23 @@ pub enum Ltl {
 }
 
 impl Ltl {
+    /// The operands, left to right.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        match self {
+            Ltl::Always(x) | Ltl::Eventually(x) => std::iter::once(x).chain(None),
+            Ltl::LeadsTo(x, y) => std::iter::once(x).chain(Some(y)),
+        }
+    }
+
+    /// The same operator over `f` of each operand.
+    pub fn map(&self, mut f: impl FnMut(&Pred) -> Pred) -> Ltl {
+        match self {
+            Ltl::Always(x) => Ltl::Always(f(x)),
+            Ltl::Eventually(x) => Ltl::Eventually(f(x)),
+            Ltl::LeadsTo(x, y) => Ltl::LeadsTo(f(x), f(y)),
+        }
+    }
+
     pub fn kind(&self) -> LtlKind {
         match self {
             Ltl::Always(_) => LtlKind::Always,

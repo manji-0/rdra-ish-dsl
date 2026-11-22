@@ -180,62 +180,7 @@ pub(crate) enum Commands {
         scope: ScopeArgs,
     },
     /// Generate a Mermaid diagram (.mmd)
-    Diagram {
-        #[arg(required = true)]
-        inputs: Vec<PathBuf>,
-        /// Diagram kind: rdra, context, requirement, business, usecase, robustness, sequence, flow, screen,
-        /// information, condition, er, state, or event
-        #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
-        kind: DiagramKind,
-        /// Write the review set under --out, a directory: the whole-model context, requirement,
-        /// business, information, condition, er, screen, event, and state index diagrams, each
-        /// BUC's usecase, robustness, flow, and sequence diagrams, and each entity's state
-        /// models, as `<kind>.mmd` and `<kind>__<id>.mmd`. A diagram with nothing to draw is
-        /// left out. Not together with --kind or a scope.
-        #[arg(long)]
-        all: bool,
-        /// Output format: mermaid, the only one (prints Mermaid text)
-        #[arg(long, default_value = "mermaid", value_parser = WithRemoved::<OutputFormat>::new(REMOVED_FORMATS))]
-        format: OutputFormat,
-        /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
-        /// The union of scoped nodes across all specified BUCs is shown.
-        /// Applies to all diagram kinds.
-        #[arg(long)]
-        buc: Vec<String>,
-        /// Draw only these use cases (by id); repeatable. Applies to --kind usecase, robustness, and
-        /// sequence (which takes exactly one, or --buc for a BUC's use cases in order). One of
-        /// --buc, --usecase, --entity, and --actor at a time.
-        #[arg(long)]
-        usecase: Vec<String>,
-        /// Draw by entity (by id); repeatable. --kind state: these entities' state models, every
-        /// lifecycle column. --kind er and information: these entities and the ones a `relate`
-        /// joins them to. --kind usecase and robustness: the use cases that read or write them.
-        #[arg(long)]
-        entity: Vec<String>,
-        /// Draw the use cases these actors perform (by id); repeatable. Applies to --kind usecase
-        /// and robustness.
-        #[arg(long)]
-        actor: Vec<String>,
-        /// Filter graph diagrams to one or more node kinds; repeatable.
-        /// Applies to --kind rdra.
-        #[arg(long = "node-kind", alias = "kind-filter")]
-        node_kind: Vec<String>,
-        /// Filter graph diagrams to one or more edge/relation kinds; repeatable.
-        /// Applies to --kind rdra.
-        #[arg(long = "edge-kind", alias = "edge-filter")]
-        edge_kind: Vec<String>,
-        /// Open the text with a Mermaid `title`: the diagram's name and what it is scoped to. A
-        /// renderer shows it; the `%%` header, which says the same, it drops.
-        #[arg(long)]
-        title: bool,
-        /// Add a `凡例` box to a flowchart diagram: one node per node kind, in its colour.
-        #[arg(long)]
-        legend: bool,
-        /// Write the Mermaid text to this file (`.mmd` is always the extension). Without it,
-        /// the text goes to stdout. With --all, the directory the files go to.
-        #[arg(short, long)]
-        out: Option<PathBuf>,
-    },
+    Diagram(DiagramArgs),
     /// Generate CSV
     Csv {
         #[arg(required = true)]
@@ -402,6 +347,64 @@ pub(crate) enum Commands {
 
 /// The size of the system `check` and `states` explore. The defaults are `Bounds::STATES`;
 /// `verify` and `export --kind tla` default to two instances instead.
+#[derive(Args)]
+pub(crate) struct DiagramArgs {
+    #[arg(required = true)]
+    pub(crate) inputs: Vec<PathBuf>,
+    /// Diagram kind: rdra, context, requirement, business, usecase, robustness, sequence, flow, screen,
+    /// information, condition, er, state, or event
+    #[arg(long, default_value = "rdra", value_parser = WithRemoved::<DiagramKind>::new(REMOVED_DIAGRAM_KINDS))]
+    pub(crate) kind: DiagramKind,
+    /// Write the review set under --out, a directory: the whole-model context, requirement,
+    /// business, information, condition, er, screen, event, and state index diagrams, each
+    /// BUC's usecase, robustness, flow, and sequence diagrams, and each entity's state
+    /// models, as `<kind>.mmd` and `<kind>__<id>.mmd`. A diagram with nothing to draw is
+    /// left out. Not together with --kind or a scope.
+    #[arg(long)]
+    pub(crate) all: bool,
+    /// Output format: mermaid, the only one (prints Mermaid text)
+    #[arg(long, default_value = "mermaid", value_parser = WithRemoved::<OutputFormat>::new(REMOVED_FORMATS))]
+    pub(crate) format: OutputFormat,
+    /// Filter to one or more BUCs (by id); repeatable (e.g. --buc A --buc B).
+    /// The union of scoped nodes across all specified BUCs is shown.
+    /// Applies to all diagram kinds.
+    #[arg(long)]
+    pub(crate) buc: Vec<String>,
+    /// Draw only these use cases (by id); repeatable. Applies to --kind usecase, robustness, and
+    /// sequence (which takes exactly one, or --buc for a BUC's use cases in order). One of
+    /// --buc, --usecase, --entity, and --actor at a time.
+    #[arg(long)]
+    pub(crate) usecase: Vec<String>,
+    /// Draw by entity (by id); repeatable. --kind state: these entities' state models, every
+    /// lifecycle column. --kind er and information: these entities and the ones a `relate`
+    /// joins them to. --kind usecase and robustness: the use cases that read or write them.
+    #[arg(long)]
+    pub(crate) entity: Vec<String>,
+    /// Draw the use cases these actors perform (by id); repeatable. Applies to --kind usecase
+    /// and robustness.
+    #[arg(long)]
+    pub(crate) actor: Vec<String>,
+    /// Filter graph diagrams to one or more node kinds; repeatable.
+    /// Applies to --kind rdra.
+    #[arg(long = "node-kind", alias = "kind-filter")]
+    pub(crate) node_kind: Vec<String>,
+    /// Filter graph diagrams to one or more edge/relation kinds; repeatable.
+    /// Applies to --kind rdra.
+    #[arg(long = "edge-kind", alias = "edge-filter")]
+    pub(crate) edge_kind: Vec<String>,
+    /// Open the text with a Mermaid `title`: the diagram's name and what it is scoped to. A
+    /// renderer shows it; the `%%` header, which says the same, it drops.
+    #[arg(long)]
+    pub(crate) title: bool,
+    /// Add a `凡例` box to a flowchart diagram: one node per node kind, in its colour.
+    #[arg(long)]
+    pub(crate) legend: bool,
+    /// Write the Mermaid text to this file (`.mmd` is always the extension). Without it,
+    /// the text goes to stdout. With --all, the directory the files go to.
+    #[arg(short, long)]
+    pub(crate) out: Option<PathBuf>,
+}
+
 #[derive(Args, Clone, Debug)]
 pub(crate) struct BoundsArgs {
     /// Instances (slots) per entity
@@ -610,7 +613,7 @@ mod tests {
         .unwrap();
 
         match cli.command {
-            Commands::Diagram {
+            Commands::Diagram(DiagramArgs {
                 inputs,
                 kind,
                 format,
@@ -621,7 +624,7 @@ mod tests {
                 edge_kind,
                 out,
                 ..
-            } => {
+            }) => {
                 assert_eq!(inputs, vec![PathBuf::from("sample.rdra")]);
                 assert!(usecase.is_empty());
                 assert!(entity.is_empty());

@@ -29,11 +29,6 @@ pub(super) fn process_maps_field_predicate(
         entity,
         column: column.clone(),
     });
-    model.typed_predicates.push(TypedPredicate::MapsField {
-        field,
-        entity,
-        column,
-    });
     model.relations.push(Relation {
         site: Some(ctx.locate(pred.span.clone())),
         from: NodeRef::Field(field),

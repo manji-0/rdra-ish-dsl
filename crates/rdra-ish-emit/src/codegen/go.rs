@@ -358,11 +358,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             ));
         }
         out.push_str(&doc(&f.name, &lines, ""));
-        let row = |r: usize| match f.rows.get(r) {
-            Some(x) => local(&x.name),
-            None => local(&f.elems[r - f.rows.len()].name),
-        };
-        let input_var = |i: usize| local(&f.inputs[i].name);
+        let row = |r: usize| local(&f.row(r).name);
         let input = |i: usize| local(&f.inputs[i].name);
         let mut params: Vec<String> = f
             .rows
@@ -449,7 +445,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             out.push_str(&format!(
                 "\tif !({}) {{\n\t\treturn {}{{}}, &Rejected{{Condition: {}, Label: {}, Site: {}}}\n\t}}\n",
-                expr(&c.expr, &row, &input_var),
+                expr(&c.expr, &row, &input),
                 f.result,
                 string_literal(&c.id),
                 string_literal(&c.label),

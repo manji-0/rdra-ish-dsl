@@ -1,34 +1,27 @@
 //! Predicate call context and signature formatting.
 
-use rdra_ish_core::predicate_signature;
+use rdra_ish_core::predicate::Predicate;
 
 pub fn format_predicate_signature(pred: &str) -> Option<String> {
-    let sig = predicate_signature(pred)?;
-    let args: Vec<String> = sig
-        .iter()
-        .map(|kinds| {
-            kinds
-                .iter()
-                .filter(|kind| !kind.starts_with('_'))
-                .copied()
-                .collect::<Vec<_>>()
-                .join("|")
-        })
-        .collect();
+    let args = signature_arguments(pred, "|")?;
     Some(format!("{pred}({})", args.join(", ")))
 }
 
 pub fn predicate_signature_parameters(pred: &str) -> Option<Vec<String>> {
-    let sig = predicate_signature(pred)?;
+    signature_arguments(pred, " | ")
+}
+
+/// The declaration kinds each argument of `pred` takes, joined by `separator`.
+fn signature_arguments(pred: &str, separator: &str) -> Option<Vec<String>> {
+    let sig = Predicate::parse(pred)?.signature();
     Some(
         sig.iter()
             .map(|kinds| {
                 kinds
                     .iter()
-                    .filter(|kind| !kind.starts_with('_'))
-                    .copied()
+                    .filter_map(|kind| kind.node())
                     .collect::<Vec<_>>()
-                    .join(" | ")
+                    .join(separator)
             })
             .collect(),
     )
@@ -108,13 +101,9 @@ pub fn predicate_call_context(source: &str, offset: usize) -> Option<(String, Op
 }
 
 pub fn predicate_arg_kinds(pred_name: &str, arg_index: usize) -> Option<Vec<&'static str>> {
-    let sig = predicate_signature(pred_name)?;
+    let sig = Predicate::parse(pred_name)?.signature();
     let kinds = sig.get(arg_index)?;
-    let symbol_kinds: Vec<&'static str> = kinds
-        .iter()
-        .copied()
-        .filter(|kind| !kind.starts_with('_'))
-        .collect();
+    let symbol_kinds: Vec<&'static str> = kinds.iter().filter_map(|kind| kind.node()).collect();
     if symbol_kinds.is_empty() {
         None
     } else {

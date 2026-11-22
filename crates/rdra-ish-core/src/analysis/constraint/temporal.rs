@@ -160,7 +160,4 @@ pub(crate) fn process_after_predicate(
             scope,
             requireds,
         });
-    model
-        .typed_predicates
-        .push(TypedPredicate::After { anchor: *anchor });
 }

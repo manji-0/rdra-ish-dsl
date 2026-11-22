@@ -344,11 +344,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             ));
         }
         out.push_str(&doc(&lines, ""));
-        let row = |r: usize| match f.rows.get(r) {
-            Some(x) => ident(&x.name),
-            None => ident(&f.elems[r - f.rows.len()].name),
-        };
-        let input_var = |i: usize| ident(&f.inputs[i].name);
+        let row = |r: usize| ident(&f.row(r).name);
         let input = |i: usize| ident(&f.inputs[i].name);
         let mut params: Vec<String> = f
             .rows
@@ -439,7 +435,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             out.push_str(&format!(
                 "    if !({}) {{\n        return ::core::result::Result::Err(Rejected {{ condition: {}, label: {}, site: {} }});\n    }}\n",
-                expr(&c.expr, &row, &input_var),
+                expr(&c.expr, &row, &input),
                 string_literal(&c.id),
                 string_literal(&c.label),
                 c.site.as_ref().map_or("None".to_string(), |s| format!("Some({})", string_literal(s)))

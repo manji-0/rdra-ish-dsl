@@ -71,12 +71,6 @@ pub(super) fn process_links_predicate(
         key: None,
         site: Some(ctx.locate(pred.span.clone())),
     });
-    model.typed_predicates.push(TypedPredicate::Links {
-        kind,
-        origin: *origin,
-        child: *child,
-        parent: *parent,
-    });
 }
 
 pub(super) fn process_drives_predicate(
@@ -201,11 +195,6 @@ fn push_column_effect(
         value,
         by,
         guard,
-    });
-    model.typed_predicates.push(TypedPredicate::SetsColumn {
-        origin,
-        entity,
-        column,
     });
 }
 
@@ -337,12 +326,6 @@ fn record_drives_effect(
                 origin,
                 entity: entity_key,
                 prop: prop.clone(),
-                truth,
-            });
-            model.typed_predicates.push(TypedPredicate::Drives {
-                origin,
-                entity: entity_key,
-                prop,
                 truth,
             });
             true

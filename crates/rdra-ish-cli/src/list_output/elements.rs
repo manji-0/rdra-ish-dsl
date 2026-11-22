@@ -585,8 +585,8 @@ pub(crate) fn format_conditions(
     model: &rdra_ish_core::SemanticModel,
     format: &ListFormat,
 ) -> Result<String> {
-    use rdra_ish_core::analysis::{condition_body_display, condition_edges, ConditionEdge};
-    use rdra_ish_core::model::{NodeRef, RelKind};
+    use rdra_ish_core::analysis::{condition_body_display, condition_edges};
+    use rdra_ish_core::model::{CombinesTarget, NodeRef, RelKind};
 
     let mut conditions: Vec<_> = model.conditions.iter().collect();
     conditions.sort_by_key(|(_, condition)| condition.id.as_str());
@@ -606,12 +606,12 @@ pub(crate) fn format_conditions(
             let mut state_models = Vec::new();
             for edge in condition_edges(model, key) {
                 match edge {
-                    ConditionEdge::Variation(variation) => {
+                    CombinesTarget::Variation(variation) => {
                         if let Some(variation) = model.variations.get(variation) {
                             variations.push(variation.id.clone());
                         }
                     }
-                    ConditionEdge::StateModel { entity, column } => {
+                    CombinesTarget::StateModel { entity, column } => {
                         if let Some(entity) = model.entities.get(entity) {
                             state_models.push(format!("{}.{}", entity.id, column));
                         }

@@ -408,16 +408,6 @@ fn navigates_records_a_screen_transition_and_the_use_case_that_causes_it() {
             ),
         ]
     );
-    let typed = model
-        .typed_predicates
-        .iter()
-        .filter(|p| matches!(p, TypedPredicate::Navigates { .. }))
-        .count();
-    assert_eq!(typed, 2);
-    assert!(model.typed_predicates.iter().any(|p| matches!(
-        p,
-        TypedPredicate::Navigates { via: Some(uc), .. } if model.use_cases[*uc].id == "PlaceOrder"
-    )));
 }
 
 #[test]

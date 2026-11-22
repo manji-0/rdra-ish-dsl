@@ -1,10 +1,10 @@
 use crate::cli::{ExportKind, ListFormat, ListKind};
 use crate::export::{export_output, Export};
 use crate::lifecycle_gate::Output;
-use crate::list_output::{
-    format_lint_issues, list_elements, state_consistency_findings, state_diag_message,
-};
-use rdra_ish_core::lifecycle::{InvKind, InvText, ModelRef, Site, StateDiag, Trace};
+use crate::list_output::{format_lint_issues, list_elements};
+use crate::state_findings::{state_diag_message, state_findings};
+use rdra_ish_core::lifecycle::{Bounds, Caps, Scope};
+use rdra_ish_core::lifecycle::{InvText, ModelRef, Site, StateDiag, Trace};
 use rdra_ish_core::{format_diagnostic_message, lint_issues, SemanticModel};
 use rdra_ish_core::{load_project, Project};
 use rdra_ish_emit::View;
@@ -792,7 +792,8 @@ requires_permission(BookAppointment, ScheduleWrite)
         .into_iter()
         .map(|d| d.error.to_string())
         .collect();
-    let state_findings = state_consistency_findings(&program, &model);
+    let state_findings =
+        state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings;
 
     assert!(warnings
         .iter()
@@ -810,8 +811,7 @@ requires_permission(BookAppointment, ScheduleWrite)
 fn state_diag_message_formats_invariant_violation() {
     let message = state_diag_message(&StateDiag::ConstraintViolated {
         name: "Inv0".to_string(),
-        kind: InvKind::Invariant,
-        text: InvText::WhenThen {
+        text: InvText::Invariant {
             guards: "status=booked".to_string(),
             requireds: "booked_at=present".to_string(),
         },
@@ -831,8 +831,7 @@ fn state_diag_message_formats_invariant_violation() {
 fn state_diag_message_formats_cross_invariant_violation() {
     let message = state_diag_message(&StateDiag::ConstraintViolated {
         name: "Cross0".to_string(),
-        kind: InvKind::CrossInvariant,
-        text: InvText::CrossWhenThen {
+        text: InvText::CrossInvariant {
             entities: "Order, Payment".to_string(),
             guards: "Order.status=paid".to_string(),
             requireds: "Payment.status=captured".to_string(),
@@ -871,7 +870,6 @@ fn state_diag_message_formats_temporal_assertion_violation() {
 fn state_diag_message_formats_quantifier_violation() {
     let message = state_diag_message(&StateDiag::ConstraintViolated {
         name: "Quant0".to_string(),
-        kind: InvKind::Quantifier,
         text: InvText::Quantifier {
             anchor: "ClientCertificate".to_string(),
             related: "TerminalCertAssignment".to_string(),
@@ -906,7 +904,8 @@ fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
         "clinic-ops must load without errors: {diags:?}"
     );
 
-    let findings = state_consistency_findings(&program, &model);
+    let findings =
+        state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings;
     let unreachable_method: Vec<_> = findings
         .iter()
         .filter(|f| f.message.contains("'method'") && f.message.contains("unreachable"))
@@ -963,11 +962,13 @@ fn clinic_ops_conditions_list_their_body_and_derived_links() {
 #[test]
 fn usecase_scope_errors_say_what_to_pass() {
     use crate::cli::DiagramKind;
-    use crate::diagram::{run_diagram, DiagramRequest};
+    use crate::cli::{DiagramArgs, OutputFormat};
+    use crate::diagram::run_diagram;
     let out = std::env::temp_dir().join("rdra_ish_usecase_scope_errors");
-    let request = |kind: DiagramKind, buc: &[&str], usecase: &[&str]| DiagramRequest {
+    let request = |kind: DiagramKind, buc: &[&str], usecase: &[&str]| DiagramArgs {
         inputs: vec![errors_fixture("samples/ec-site")],
         kind,
+        format: OutputFormat::Mermaid,
         buc: buc.iter().map(|id| id.to_string()).collect(),
         usecase: usecase.iter().map(|id| id.to_string()).collect(),
         entity: Vec::new(),
@@ -1009,11 +1010,13 @@ fn usecase_scope_errors_say_what_to_pass() {
 #[test]
 fn entity_scope_errors_say_what_to_pass() {
     use crate::cli::DiagramKind;
-    use crate::diagram::{run_diagram, DiagramRequest};
+    use crate::cli::{DiagramArgs, OutputFormat};
+    use crate::diagram::run_diagram;
     let out = std::env::temp_dir().join("rdra_ish_entity_scope_errors");
-    let request = |kind: DiagramKind, buc: &[&str], entity: &[&str]| DiagramRequest {
+    let request = |kind: DiagramKind, buc: &[&str], entity: &[&str]| DiagramArgs {
         inputs: vec![errors_fixture("samples/ec-site")],
         kind,
+        format: OutputFormat::Mermaid,
         buc: buc.iter().map(|id| id.to_string()).collect(),
         usecase: Vec::new(),
         entity: entity.iter().map(|id| id.to_string()).collect(),
@@ -1051,11 +1054,13 @@ fn entity_scope_errors_say_what_to_pass() {
 #[test]
 fn a_deadlocked_model_still_draws_its_state_diagram_with_the_deadlock_coloured() {
     use crate::cli::DiagramKind;
-    use crate::diagram::{run_diagram, DiagramRequest};
+    use crate::cli::{DiagramArgs, OutputFormat};
+    use crate::diagram::run_diagram;
     let out = std::env::temp_dir().join("rdra_ish_deadlock_state_diagram");
-    run_diagram(DiagramRequest {
+    run_diagram(DiagramArgs {
         inputs: vec![errors_fixture("samples/formal-verification/deadlock.rdra")],
         kind: DiagramKind::State,
+        format: OutputFormat::Mermaid,
         buc: Vec::new(),
         usecase: Vec::new(),
         entity: vec!["Order".to_string()],

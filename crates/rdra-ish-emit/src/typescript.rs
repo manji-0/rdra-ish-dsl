@@ -149,7 +149,7 @@ fn ts_column_type(model: &SemanticModel, col_type: &ColumnType) -> String {
         ColumnType::Variation(key) => model
             .variations
             .get(*key)
-            .map_or_else(|| "string".to_string(), |v| literal_union(&v.values)),
+            .map_or_else(|| "string".to_string(), |v| literal_union(&v.value_names())),
     }
 }
 

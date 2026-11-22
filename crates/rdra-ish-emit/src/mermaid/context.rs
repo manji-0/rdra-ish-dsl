@@ -4,7 +4,9 @@
 use super::{
     buc_members, buc_scope, declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge,
 };
-use crate::diagram_common::{class_defs, contract_id, edge_label, node_line, Header};
+use crate::diagram_common::{
+    class_defs, contract_id, edge_label, node_line, Diagram, Header, NodeScope,
+};
 use crate::{
     collect_object_graph_nodes, object_graph_layer, EmitError, Emitter, ObjectGraphLayer, Scope,
     View,
@@ -116,10 +118,10 @@ fn bucs_of(model: &SemanticModel, node: &NodeRef) -> Vec<NodeRef> {
 impl Emitter for ContextMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let scope = match &view.scope {
-            Scope::Bucs(ids) => Some(buc_scope(model, ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
+            Scope::Bucs(ids) => NodeScope::Only(buc_scope(model, ids)),
+            Scope::Whole | Scope::UseCases(_) => NodeScope::All,
         };
-        let in_scope = |nr: &NodeRef| scope.as_ref().is_none_or(|set| set.contains(nr));
+        let in_scope = |nr: &NodeRef| scope.contains(nr);
         let systems = collect_object_graph_nodes(model, &|nr| matches!(nr, NodeRef::System(_)));
         let via_of = |node: &NodeRef| -> Option<(String, String)> {
             Some((
@@ -215,9 +217,9 @@ impl Emitter for ContextMermaidEmitter {
                 .any(|(from, to)| from == SYNTHESIZED || to == SYNTHESIZED);
         let ends = exchanges.ends();
         let nodes = collect_object_graph_nodes(model, &|nr| match nr {
-            NodeRef::Actor(_) | NodeRef::ExtSystem(_) => scope.is_none() || linked.contains(nr),
+            NodeRef::Actor(_) | NodeRef::ExtSystem(_) => scope.is_all() || linked.contains(nr),
             NodeRef::System(_) => {
-                scope.is_none()
+                scope.is_all()
                     || contract_id(model, nr).is_some_and(|id| ends.contains(id.as_str()))
             }
             _ => false,
@@ -240,7 +242,7 @@ impl Emitter for ContextMermaidEmitter {
         }
         render_edges(
             &mut body,
-            "context",
+            Diagram::Context,
             exchanges
                 .0
                 .into_iter()
@@ -273,7 +275,7 @@ impl Emitter for ContextMermaidEmitter {
         body.push_str(&class_defs(&kinds));
         let drawn: HashSet<NodeRef> = nodes.iter().cloned().collect();
         let header = Header {
-            diagram: "context",
+            diagram: Diagram::Context,
             view,
             layers: None,
             omitted: omitted_linked_kinds(

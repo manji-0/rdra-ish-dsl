@@ -11,14 +11,14 @@ use std::collections::BTreeSet;
 
 use super::expr::State;
 use super::types::{
-    ActId, Action, ActionOrigin, At, Effect, EntId, Guard, GuardWhy, Ltl, ParamRole, Pred, Term,
-    VarId, VarKind,
+    ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Term, VarId, VarKind,
 };
 use super::TransitionSystem;
 
 /// The params a predicate names, in a slot or an index, in the pre-state or the successor.
 pub(crate) fn named_params(pred: &Pred) -> Vec<u8> {
-    fn term(t: &Term, out: &mut Vec<u8>) {
+    let mut out = Vec::new();
+    for t in pred.terms() {
         if let Term::Slot {
             at: At::Param(p) | At::Next(p),
             ..
@@ -30,24 +30,6 @@ pub(crate) fn named_params(pred: &Pred) -> Vec<u8> {
             }
         }
     }
-    fn walk(pred: &Pred, out: &mut Vec<u8>) {
-        match pred {
-            Pred::True | Pred::False => {}
-            Pred::Cmp(a, _, b) => {
-                term(a, out);
-                term(b, out);
-            }
-            Pred::In(a, vs) => {
-                term(a, out);
-                vs.iter().for_each(|v| term(v, out));
-            }
-            Pred::Not(p) => walk(p, out),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| walk(p, out)),
-            Pred::Forall { body, .. } | Pred::Exists { body, .. } => walk(body, out),
-        }
-    }
-    let mut out = Vec::new();
-    walk(pred, &mut out);
     out
 }
 
@@ -74,31 +56,35 @@ pub struct Cone {
 }
 
 impl TransitionSystem {
+    /// What a check reads: the existence of each entity it binds, and every var of `preds`.
+    pub(crate) fn check_reads<'p>(
+        &self,
+        binders: &[EntId],
+        preds: impl IntoIterator<Item = &'p Pred>,
+    ) -> VarSet {
+        let mut reads = VarSet::new();
+        for e in binders {
+            reads.insert(self.entity(*e).exists);
+        }
+        for p in preds {
+            self.pred_reads(p, &mut reads);
+        }
+        reads
+    }
+
     pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut VarSet) {
-        let term = |t: &Term, out: &mut VarSet| match t {
-            Term::Slot { var, .. } => {
-                out.insert(*var);
-            }
-            Term::Now => {
-                out.extend(self.now);
-            }
-            Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
-        };
-        match pred {
-            Pred::True | Pred::False => {}
-            Pred::Cmp(a, _, b) => {
-                term(a, out);
-                term(b, out);
-            }
-            Pred::In(a, vs) => {
-                term(a, out);
-                vs.iter().for_each(|v| term(v, out));
-            }
-            Pred::Not(p) => self.pred_reads(p, out),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| self.pred_reads(p, out)),
-            Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
+        for node in pred.nodes() {
+            if let Pred::Forall { entity, .. } | Pred::Exists { entity, .. } = node {
                 out.insert(self.entity(*entity).exists);
-                self.pred_reads(body, out);
+            }
+        }
+        for t in pred.terms() {
+            match t {
+                Term::Slot { var, .. } => {
+                    out.insert(*var);
+                }
+                Term::Now => out.extend(self.now),
+                Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
             }
         }
     }
@@ -411,20 +397,10 @@ impl TransitionSystem {
     /// actions as kept.
     pub fn property_seed(&self, i: usize) -> Seed {
         let p = &self.properties[i];
-        let mut seed = VarSet::new();
+        let mut seed = self.check_reads(&p.binders, p.formula.preds());
         let mut keep = BTreeSet::new();
-        for e in &p.binders {
-            seed.insert(self.entity(*e).exists);
-        }
-        match &p.formula {
-            Ltl::Always(x) | Ltl::Eventually(x) => self.pred_reads(x, &mut seed),
-            Ltl::LeadsTo(x, y) => {
-                self.pred_reads(x, &mut seed);
-                self.pred_reads(y, &mut seed);
-            }
-        }
         for (k, a) in self.actions.iter().enumerate() {
-            if !matches!(&a.origin, ActionOrigin::UseCase { uc, .. } if p.fair.contains(uc)) {
+            if !p.is_fair(a) {
                 continue;
             }
             keep.insert(ActId::at(k));
@@ -470,10 +446,7 @@ impl TransitionSystem {
     pub fn project(&self, state: &State, vars: &VarSet) -> State {
         let mut out = Vec::new();
         for &v in vars {
-            let width = match self.var(v).kind {
-                VarKind::Now => 1,
-                _ => self.bounds.slots(),
-            };
+            let width = self.slots_of(&self.var(v).kind);
             let at = self.offset(v);
             out.extend_from_slice(&state.0[at..at + width]);
         }

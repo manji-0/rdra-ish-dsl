@@ -1,4 +1,4 @@
-//! BFS over one component's flat states. Guards, invariants, and after-asserts are checked on
+//! BFS over one system's flat states. Guards, invariants, and after-asserts are checked on
 //! the fly; per-entity view statistics are gathered from the edges as they are found. The run
 //! keeps every edge and, per state, the edge that first reached it.
 
@@ -15,16 +15,15 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use super::diag::Diag;
 use super::expr::State;
-use super::restrict::Component;
-use super::types::{ActId, EntId};
+use super::types::ActId;
 use super::TransitionSystem;
 
-/// Where exploration of a component stops.
+/// Where exploration stops.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Caps {
     /// Distinct view patterns per entity (`--max-patterns`).
     pub patterns: usize,
-    /// Joint states per component (`--max-states`).
+    /// Joint states per run (`--max-states`).
     pub states: usize,
 }
 
@@ -39,14 +38,8 @@ impl Caps {
     }
 }
 
-/// One BFS per component.
-pub struct Exploration {
-    pub runs: Vec<ComponentRun>,
-}
-
 pub struct ComponentRun {
-    pub component: Component,
-    /// The component as a standalone system; `states` and the views index into it.
+    /// The system explored; `states` and the views index into it.
     pub system: TransitionSystem,
     /// Reached states in discovery order.
     pub states: Vec<State>,
@@ -163,27 +156,8 @@ struct Bfs<'t> {
 }
 
 impl TransitionSystem {
-    /// Explores every component separately.
-    pub fn explore(&self, caps: Caps) -> Exploration {
-        let runs = self
-            .components()
-            .into_iter()
-            .map(|component| {
-                let system = self.restrict(&component);
-                let mut run = system.run(caps);
-                run.component = component;
-                run
-            })
-            .collect();
-        Exploration { runs }
-    }
-
-    /// Explores this system as one component.
+    /// Explores this system.
     pub fn run(self, caps: Caps) -> ComponentRun {
-        let component = Component {
-            entities: (0..self.entities.len()).map(EntId::at).collect(),
-            now: self.now.is_some(),
-        };
         let mut bfs = Bfs::new(&self, caps);
         bfs.go();
         let Bfs {
@@ -198,7 +172,6 @@ impl TransitionSystem {
             ..
         } = bfs;
         let mut run = ComponentRun {
-            component,
             system: self,
             states,
             complete,

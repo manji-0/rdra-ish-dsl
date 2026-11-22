@@ -24,7 +24,7 @@ pub struct FileScope {
     pub namespaces: HashMap<String, String>,
     /// The module path of every `import` line, whatever its form.
     pub imported: Vec<String>,
-    /// When true, skip visibility checks (single-file / legacy open scope).
+    /// When true, skip visibility checks (single-file or open scope).
     pub unrestricted: bool,
 }
 
@@ -57,14 +57,16 @@ impl ImportScopes {
         scopes
     }
 
-    pub fn scope_for(&self, source_id: SourceId) -> FileScope {
+    /// The scope of `source_id`, or `None` when every name is visible there: an unrestricted
+    /// file or one with no recorded scope.
+    fn restricted(&self, source_id: SourceId) -> Option<&FileScope> {
         self.by_source
             .get(&source_id)
-            .cloned()
-            .unwrap_or(FileScope {
-                unrestricted: true,
-                ..FileScope::default()
-            })
+            .filter(|scope| !scope.unrestricted)
+    }
+
+    pub fn is_unrestricted(&self, source_id: SourceId) -> bool {
+        self.restricted(source_id).is_none()
     }
 
     pub fn module_for_source(&self, source_id: SourceId) -> Option<&str> {
@@ -74,10 +76,7 @@ impl ImportScopes {
     /// The one loaded module that declares `id`, when the file `source_id` imports and does
     /// not import that module, so `import <module>` would make `id` visible.
     pub fn unimported_declarer(&self, source_id: SourceId, id: &str) -> Option<&str> {
-        let scope = self.by_source.get(&source_id)?;
-        if scope.unrestricted {
-            return None;
-        }
+        let scope = self.restricted(source_id)?;
         let mut declarers = self
             .source_exports
             .iter()
@@ -92,14 +91,13 @@ impl ImportScopes {
 
     /// Resolve all flat bindings for a local name under the file scope.
     pub fn resolve_flat_bindings(&self, source_id: SourceId, name: &str) -> Vec<FlatBinding> {
-        let scope = self.scope_for(source_id);
-        if scope.unrestricted {
+        let Some(scope) = self.restricted(source_id) else {
             return vec![FlatBinding {
                 canonical_id: name.to_string(),
                 module: None,
                 kind: None,
             }];
-        }
+        };
         scope.flat.get(name).cloned().unwrap_or_default()
     }
 
@@ -120,14 +118,13 @@ impl ImportScopes {
         alias: &str,
         name: &str,
     ) -> Result<Vec<FlatBinding>, NamespacedResolveError> {
-        let scope = self.scope_for(source_id);
-        if scope.unrestricted {
+        let Some(scope) = self.restricted(source_id) else {
             return Ok(vec![FlatBinding {
                 canonical_id: name.to_string(),
                 module: None,
                 kind: None,
             }]);
-        }
+        };
         let Some(module_path) = scope.namespaces.get(alias) else {
             return Err(NamespacedResolveError::UnknownAlias {
                 alias: alias.to_string(),
@@ -313,7 +310,7 @@ pub fn build_import_scopes(
             .unwrap_or_default();
 
         // Per-file latch: only files that import become closed scope.
-        // Sibling files without imports keep legacy open-world resolution.
+        // Sibling files without imports keep open-world resolution.
         if imports.is_empty() {
             for (id, kinds) in &local_exports {
                 for kind in kinds {

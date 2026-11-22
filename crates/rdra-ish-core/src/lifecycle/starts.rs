@@ -84,14 +84,14 @@ impl TransitionSystem {
                     param: q,
                     values,
                     ..
-                } if *v == var && *q == param => out.extend(values),
+                } if *v == var && *q == param => out.extend(values.iter().map(|c| c.value)),
                 Effect::Transition {
                     var: v,
                     param: q,
                     arms,
                     ..
                 } if *v == var && *q == param => {
-                    out.extend(arms.iter().filter(|(from, _)| *from == base).map(|a| a.1));
+                    out.extend(arms.iter().filter(|arm| arm.from == base).map(|arm| arm.to));
                 }
                 _ => {}
             }

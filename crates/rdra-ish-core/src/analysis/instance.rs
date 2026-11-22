@@ -354,12 +354,10 @@ pub(crate) fn register_instance(
                 values: inst
                     .variation_values
                     .iter()
-                    .map(|v| v.value.clone())
-                    .collect(),
-                labels: inst
-                    .variation_values
-                    .iter()
-                    .map(|v| v.label.clone())
+                    .map(|v| EnumValue {
+                        value: v.value.clone(),
+                        label: v.label.clone(),
+                    })
                     .collect(),
             });
             NodeRef::Variation(k)
@@ -496,7 +494,7 @@ fn ast_column_to_model(
                 }
                 if let ColumnType::Variation(key) = &mc.col_type {
                     if let Some(variation) = model.variations.get(*key) {
-                        if !variation.values.iter().any(|value| value == v) {
+                        if !variation.has_value(v) {
                             push_error(
                                 ctx,
                                 diags,
@@ -504,7 +502,7 @@ fn ast_column_to_model(
                                 RdraError::InvalidVariationValue {
                                     variation: variation.id.clone(),
                                     value: v.clone(),
-                                    allowed: variation.values.join(", "),
+                                    allowed: variation.value_names().join(", "),
                                 },
                             );
                         }
@@ -595,7 +593,7 @@ fn ast_column_to_model(
                 let allowed = match &mc.col_type {
                     ColumnType::Enum(declared) => Some(declared.clone()),
                     ColumnType::Variation(key) => {
-                        model.variations.get(*key).map(|v| v.values.clone())
+                        model.variations.get(*key).map(|v| v.value_names())
                     }
                     _ => None,
                 };

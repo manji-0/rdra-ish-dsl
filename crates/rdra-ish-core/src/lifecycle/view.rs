@@ -4,9 +4,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::diag::{Diag, StateDiag};
-use super::explore::{ComponentRun, Exploration};
+use super::explore::ComponentRun;
 use super::expr::State;
-use super::findings::Witness;
 use super::trace::Trace;
 use super::types::{ActionOrigin, Birth, Domain, EntId, Value, VarKind};
 use super::TransitionSystem;
@@ -186,32 +185,6 @@ fn axis(ts: &TransitionSystem, var: super::types::VarId) -> StateAxis {
     }
 }
 
-impl Exploration {
-    /// Every diagnostic the runs found.
-    pub fn diags(&self) -> impl Iterator<Item = &Diag> {
-        self.runs.iter().flat_map(|r| r.diags.iter())
-    }
-
-    /// Per-entity views sorted by entity id. `build_diags` are reported on the entities they
-    /// name, ahead of what exploration found.
-    pub fn entity_views(
-        &self,
-        model: &SemanticModel,
-        build_diags: &[Diag],
-    ) -> Vec<EntityStateResult> {
-        let mut out: Vec<EntityStateResult> = self
-            .runs
-            .iter()
-            .flat_map(|run| {
-                (0..run.system.entities().len())
-                    .map(move |i| entity_view(model, run, EntId::at(i), build_diags, None))
-            })
-            .collect();
-        out.sort_by(|a, b| a.entity_id.cmp(&b.entity_id));
-        out
-    }
-}
-
 /// Per pattern of `e`'s view, the first state in discovery order where a present slot holds
 /// it.
 fn first_states(run: &ComponentRun, e: EntId) -> Vec<Option<u32>> {
@@ -238,14 +211,14 @@ fn is_cap(d: &StateDiag) -> bool {
     )
 }
 
-/// The view of `e` in `run`. With `verdicts`, the run is the entity's cone: a cap anywhere in
-/// it makes the view incomplete, and the constraint verdicts come from their own cones.
+/// The view of `e` in `run`, the entity's cone: a cap anywhere in it makes the view
+/// incomplete, and the constraint verdicts (`verdicts`) come from their own cones.
 pub(crate) fn entity_view(
     model: &SemanticModel,
     run: &ComponentRun,
     e: EntId,
     build_diags: &[Diag],
-    verdicts: Option<Vec<StateDiag>>,
+    verdicts: Vec<StateDiag>,
 ) -> EntityStateResult {
     let ts = &run.system;
     let decl = ts.entity(e);
@@ -256,24 +229,11 @@ pub(crate) fn entity_view(
         .filter(|d| d.entities.contains(&decl.key))
         .map(|d| d.diag.clone())
         .collect();
-    let in_cone = verdicts.is_some();
-    let found: Vec<StateDiag> = verdicts.unwrap_or_else(|| {
-        let witnesses = ts.state_model_findings(e, &run.graph()).witnesses;
-        run.diags
-            .iter()
-            .filter(|d| !is_cap(&d.diag) && d.entities.contains(&decl.key))
-            .map(|d| d.diag.clone())
-            .chain(witnesses.into_iter().filter_map(|w| match w.witness {
-                Witness::Missing(diag) => Some(*diag),
-                _ => None,
-            }))
-            .collect()
-    });
     if axes.is_empty() {
         // An entity with no state columns has one trivial pattern, as `states` reports it,
         // and still the verdicts of the constraints it binds.
         diagnostics.retain(|d| *d != StateDiag::NoCreationPath);
-        diagnostics.extend(found);
+        diagnostics.extend(verdicts);
         return EntityStateResult {
             entity_id: decl.id.clone(),
             entity_label: decl.label.clone(),
@@ -314,10 +274,7 @@ pub(crate) fn entity_view(
             witness: first[id].map(|at| run.trace_to(at)),
         })
         .collect();
-    let caps = run
-        .diags
-        .iter()
-        .filter(|d| is_cap(&d.diag) && (in_cone || d.entities.contains(&decl.key)));
+    let caps = run.diags.iter().filter(|d| is_cap(&d.diag));
     for d in caps {
         if !diagnostics.contains(&d.diag) {
             diagnostics.push(d.diag.clone());
@@ -352,13 +309,13 @@ pub(crate) fn entity_view(
             }
         }
     }
-    diagnostics.extend(found);
+    diagnostics.extend(verdicts);
     EntityStateResult {
         entity_id: decl.id.clone(),
         entity_label: decl.label.clone(),
         axes,
         patterns,
-        truncated: view.truncated || (in_cone && !run.complete),
+        truncated: view.truncated || !run.complete,
         no_creation_path: decl.birth == Birth::PreExisting,
         diagnostics,
     }

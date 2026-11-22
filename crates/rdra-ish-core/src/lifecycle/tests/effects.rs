@@ -129,8 +129,10 @@ sets(usecase::SetD, Multi.d == present)
 "#,
     );
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-    let run = built.ts.explore(Caps::new(5, 1000));
-    let views = run.entity_views(&model, &built.diags);
+    let run = built
+        .ts
+        .explore_targets(&built.selection.targets, Caps::new(5, 1000));
+    let views = run.entity_views(&built.ts, &model, &built.diags);
     assert!(views[0].truncated);
     assert!(views[0].patterns.len() <= 5);
     assert!(views[0]
@@ -153,10 +155,14 @@ sets(usecase::SetB, Multi.n == 3)
 "#,
     );
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-    let run = built.ts.explore(Caps::new(usize::MAX, 3));
-    let growth = run
-        .diags()
-        .find_map(|d| match &d.diag {
+    let run = built
+        .ts
+        .explore_targets(&built.selection.targets, Caps::new(usize::MAX, 3));
+    let views = run.entity_views(&built.ts, &model, &built.diags);
+    let growth = views
+        .iter()
+        .flat_map(|v| &v.diagnostics)
+        .find_map(|d| match d {
             StateDiag::StateCapReached { cap: 3, growth } => Some(growth.clone()),
             _ => None,
         })
@@ -287,7 +293,7 @@ invariant(Child).when(alive == true).has(Parent).label("every child has a parent
     assert!(d.has("Child", |x| matches!(
         x,
         StateDiag::ConstraintViolated {
-            kind: crate::lifecycle::InvKind::Quantifier,
+            text: crate::lifecycle::InvText::Quantifier { .. },
             ..
         }
     )));

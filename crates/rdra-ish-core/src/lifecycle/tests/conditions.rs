@@ -1,7 +1,7 @@
 //! Condition guards: `applies_to(Cond, UC)` with a `holds` body guards the use case's action.
 
 use super::*;
-use crate::lifecycle::{GuardWhy, InvKind, Pred};
+use crate::lifecycle::{GuardWhy, Pred};
 
 /// A payment under a visit, and a room no relate reaches. `{body}` and `{extra}` complete it.
 pub(super) fn clinic(body: &str, extra: &str) -> String {
@@ -101,7 +101,7 @@ fn an_unbound_atom_is_an_exists_along_the_owner() {
         matches!(
             &x.diag,
             StateDiag::ConstraintViolated {
-                kind: InvKind::CrossInvariant,
+                text: crate::lifecycle::InvText::CrossInvariant { .. },
                 ..
             }
         )

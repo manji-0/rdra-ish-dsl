@@ -3,13 +3,11 @@
 use crate::lifecycle::build::naming::is_driven;
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::types::{
-    At, CmpOp, Domain, InvKind, InvText, Invariant, ModelRef, Pred, Site, Term, Value,
+    At, CmpOp, Domain, InvText, Invariant, ModelRef, Pred, Site, Term, Value,
 };
 use crate::model::{CheckExpr, CmpRhs, ComparisonProp, EffectValue, EntityKey};
 
 impl Builder<'_> {
-    // ── Column expressions (`@check`, logical `@derived`) ────────────────────
-
     /// `expr` as every rule reads a comparison: two-valued, so a null operand satisfies no
     /// comparison but `!=`, and `col == null` admits it.
     fn check_expr(&mut self, ek: EntityKey, at: At, expr: &CheckExpr, site: &Site) -> Pred {
@@ -139,10 +137,9 @@ impl Builder<'_> {
                     let body = self.check_expr(ek, At::Bound(0), &check.expr, &site);
                     self.ts.invariants.push(Invariant {
                         name: format!("Check_{}_{}_{i}", entity.id, col.name),
-                        kind: InvKind::Check,
                         binders: vec![self.ent_of[&ek]],
                         body,
-                        text: InvText::Conditions(check.expr.display()),
+                        text: InvText::Check(check.expr.display()),
                         label: None,
                         site,
                     });

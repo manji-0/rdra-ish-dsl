@@ -689,7 +689,7 @@ sub-lifecycle") is half right. Its conclusion holds: no cone of the two samples 
 both lifecycles splits. Its cause is not the operative one. The four `CloseCase` edges alone
 cost every claim-side cone its reduction, because the handler, on the case's side, reads the
 raised claim row (its mark, its existence, its owner key), and in a cone anchored at the
-claim those are T vars; a read of T makes the reader T (`split_at`, reduce.rs), and an
+claim those are T vars; a read of T makes the reader T (`split_at`, `reduce/split.rs`), and an
 entity's vars share a side, so the case's lifecycle follows. The reverse edge
 (`triggers(EvInitialResponded, SendClaimForms)`) is not what costs the case's cones: a copy
 of the sample with only that edge removed leaves the `ClaimCase` view at 29 vars with S
@@ -792,7 +792,7 @@ every one is a deadlock or an arm.
 
 ### TLC on the view cones, and instance symmetry
 
-The explorer keys a state by its bytes (`seen: HashMap<State, u32>` in `explore/bfs.rs`, `admit`) and nothing under `lifecycle/explore/` canonicalizes two interchangeable instances of an entity; the only canonical form in the engine is `reduce.rs`'s `canonical_initial`, which picks a class representative, not a slot order. The swap symmetry is partly broken already: a create takes the lowest absent slot (`FirstAbsent`) and a deleted slot is never reused, so for 2 instances the states with slot 2 present and slot 1 absent do not exist, and owner keys couple the swaps of a child and its parent. The ceiling is 2^k for k entities in the cone (32 for the `Claim` view, 16 for `BusinessPermit`), the floor well under it. `symmetry_count` measures the factor on the first 1,000,000 BFS states of the `Claim`, `ClaimCase`, and `BusinessPermit` cones under the latch and of the `Claim` cone at 1.2.0; it runs after the timed `verify` in the same chain and writes `d112-sym.txt`. The TLC runs on the exported view cones (`View_Claim`, `View_BusinessPermit`, `View_ClaimCase`, printed by `view_cone_tla` as `verify` prints an invariant cone, `-workers auto`, 12 GB heap, 30 minutes each, one at a time) are queued behind them (`m3.sh`, logs `d112-tlc-*.log`). Both numbers were still pending when this section was committed; the chain keeps running and the files name the result.
+The explorer keys a state by its bytes (`seen: HashMap<State, u32>` in `explore/bfs.rs`, `admit`) and nothing under `lifecycle/explore/` canonicalizes two interchangeable instances of an entity; the only canonical form in the engine is `reduce/mod.rs`'s `canonical_initial`, which picks a class representative, not a slot order. The swap symmetry is partly broken already: a create takes the lowest absent slot (`FirstAbsent`) and a deleted slot is never reused, so for 2 instances the states with slot 2 present and slot 1 absent do not exist, and owner keys couple the swaps of a child and its parent. The ceiling is 2^k for k entities in the cone (32 for the `Claim` view, 16 for `BusinessPermit`), the floor well under it. `symmetry_count` measures the factor on the first 1,000,000 BFS states of the `Claim`, `ClaimCase`, and `BusinessPermit` cones under the latch and of the `Claim` cone at 1.2.0; it runs after the timed `verify` in the same chain and writes `d112-sym.txt`. The TLC runs on the exported view cones (`View_Claim`, `View_BusinessPermit`, `View_ClaimCase`, printed by `view_cone_tla` as `verify` prints an invariant cone, `-workers auto`, 12 GB heap, 30 minutes each, one at a time) are queued behind them (`m3.sh`, logs `d112-tlc-*.log`). Both numbers were still pending when this section was committed; the chain keeps running and the files name the result.
 
 ### What follows
 
@@ -822,7 +822,7 @@ can check one by one.
 The #74 split allows reads in one direction: T reads S through `obs`, S reads nothing of T.
 Round 4 lets an S action read T vars that only rise. A var is *monotone* when the writes of
 the cone system, taken as edges between the var's values, form no cycle
-(`TransitionSystem::monotone_vars` in `reduce.rs`): a create takes an existence from
+(`TransitionSystem::monotone_vars` in `reduce/split.rs`): a create takes an existence from
 `absent` to `present` and a delete from `present` to `deleted`; a delete resets the entity's
 columns and owners, which makes those cyclic; an assignment or a choice in the action that
 creates the row starts from the base value, elsewhere from any value; a transition is its
@@ -1148,7 +1148,7 @@ unreduced module from both tests, which is unit 5.
 
 ### The size guard
 
-Three rules in `TransitionSystem::reduced` (`reduce.rs`), each with its dump line under
+Three rules in `TransitionSystem::reduced` (`reduce/mod.rs`), each with its dump line under
 `RDRA_SPLIT_DUMP=1`:
 
 1. A split whose S is wholly observed (`split.s ⊆ split.obs`) is not explored: the quotient
@@ -1174,7 +1174,7 @@ the 24,000-state cone inside 1 GB, and the reduced and unreduced runs agree
 
 ### The node fold
 
-`FoldKey::Linked` (`reduce.rs`). An S action with no T param whose one T-reading guard reads
+`FoldKey::Linked` (`reduce/fold.rs`). An S action with no T param whose one T-reading guard reads
 T only through *nodes* folds the node into a bit keyed by the row the node's link names. A
 node is a quantifier over a T entity E, or an And/Or of such quantifiers over one E, whose
 bodies read T except link atoms `v[p] = Index(row)` with `v` an S owner var and `p` an S
@@ -1462,7 +1462,7 @@ Each unit is one commit with the check that proves it, in this order. The units 
    `GuardWhy::Raised`, and `ActionOrigin::UseCase::trigger`; extend every match
    (`cone.rs`, `restrict.rs`, `trace.rs`, `explore/bfs.rs`, `explore/scan.rs`,
    `explore/moves.rs` for the `Triggered` binding, `tla/names.rs`, `tla/module.rs`,
-   `list_output/state_findings.rs`). Nothing builds them yet. Check: `cargo test --all`
+   `state_findings.rs`). Nothing builds them yet. Check: `cargo test --all`
    and `scripts/check-sample-artifacts.sh` unchanged.
 2. **Classification.** A pure function in `lifecycle/build/events.rs` (new) from the
    model and the built actions to the list of tracked trigger edges, each with its mark

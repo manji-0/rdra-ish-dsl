@@ -32,8 +32,6 @@ pub(crate) use self::quantifier::{check_quantifier_paths, resolve_related_quanti
 pub(crate) use self::rules::{process_forbidden, process_invariant};
 pub(crate) use self::temporal::process_after_predicate;
 
-// ── 制約述語用ヘルパー ────────────────────────────────────────────────────────
-
 /// `Lit(s)` または kind修飾なし1セグメントの `Ref` から文字列を取り出す。
 /// `whenstatus == delivered` の裸ident引数と `sets(...)` の引用符付きリテラル
 /// 引数の両方を許容するための統一抽出。

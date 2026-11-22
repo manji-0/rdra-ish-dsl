@@ -34,7 +34,7 @@ use crate::analysis_diag::*;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::*;
-use crate::predicate::{predicate_chain_methods, predicate_signature, unknown_chain_method_hint};
+use crate::predicate::{unknown_chain_method_hint, Predicate};
 use rdra_ish_syntax::ast::*;
 
 use super::constraint::{
@@ -66,7 +66,7 @@ pub(crate) fn process_predicate(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let Some(sig) = predicate_signature(&pred.name) else {
+    let Some(p) = Predicate::parse(&pred.name) else {
         push_error(
             ctx,
             diags,
@@ -78,7 +78,7 @@ pub(crate) fn process_predicate(
         return;
     };
 
-    let allowed = predicate_chain_methods(&pred.name);
+    let allowed = p.chain_methods();
     for cc in &pred.chain {
         if !allowed.contains(&cc.name.as_str()) {
             push_error(
@@ -88,13 +88,13 @@ pub(crate) fn process_predicate(
                 RdraError::UnknownChainMethod {
                     pred: pred.name.clone(),
                     name: cc.name.clone(),
-                    hint: unknown_chain_method_hint(&pred.name, &cc.name),
+                    hint: unknown_chain_method_hint(p, &cc.name),
                 },
             );
         }
     }
 
-    if let Some(err) = arity_error(pred, &sig) {
+    if let Some(err) = arity_error(p, pred) {
         push_error(ctx, diags, pred.span.clone(), err);
         return;
     }
@@ -109,7 +109,7 @@ pub(crate) fn process_predicate(
     // Cross-entity: `.along(...)`, two or more leading entity refs
     // (e.g. `forbidden(Order, Payment, Order.status == x, ...)`), or an invariant whose
     // `.has/.none(...)` ranges over related rows. Single-entity: `forbidden(Order, status == x)`.
-    if pred.name == "forbidden" || pred.name == "invariant" {
+    if matches!(p, Predicate::Forbidden | Predicate::Invariant) {
         let leading_entities = pred
             .args
             .iter()
@@ -117,16 +117,16 @@ pub(crate) fn process_predicate(
             .count();
         let is_cross = pred.chain.iter().any(|cc| cc.name == "along")
             || leading_entities >= 2
-            || (pred.name == "invariant"
+            || (p == Predicate::Invariant
                 && pred
                     .chain
                     .iter()
                     .any(|cc| matches!(cc.name.as_str(), "has" | "none")));
         if is_cross {
-            match pred.name.as_str() {
-                "forbidden" => process_cross_forbidden(model, pred, ctx, diags),
-                "invariant" => process_cross_invariant(model, pred, ctx, diags),
-                _ => {}
+            if p == Predicate::Forbidden {
+                process_cross_forbidden(model, pred, ctx, diags);
+            } else {
+                process_cross_invariant(model, pred, ctx, diags);
             }
             return;
         }
@@ -135,55 +135,57 @@ pub(crate) fn process_predicate(
         }
     }
 
+    let sig = p.signature();
     let resolved = resolve_predicate_args(model, pred, &sig, ctx, diags);
     validate_predicate_arg_types(pred, &sig, &resolved, ctx, diags);
-    if !validate_contains_pair(pred, &resolved, ctx, diags)
-        || !validate_trigger_pair(pred, &sig, &resolved, ctx, diags)
-    {
+    let paired = match p {
+        Predicate::Contains => validate_contains_pair(pred, &resolved, ctx, diags),
+        Predicate::Triggers => validate_trigger_pair(pred, &sig, &resolved, ctx, diags),
+        _ => true,
+    };
+    if !paired {
         return;
     }
 
-    match pred.name.as_str() {
-        "coordinates" => process_coordinates_predicate(model, &resolved),
-        "transitions" => process_transitions_predicate(model, pred, &resolved, ctx, diags),
-        "outbox" => process_outbox_predicate(model, &resolved),
-        "exposes" => process_exposes_predicate(model, pred, &resolved, ctx, diags),
-        "shares" => process_shares_predicate(model, pred, &resolved, ctx),
-        "after" => process_after_predicate(model, pred, &resolved, ctx, diags),
-        "sets" => process_sets_predicate(model, pred, &resolved, ctx, diags),
-        "drives" => process_drives_predicate(model, pred, &resolved, ctx, diags),
-        "links" => process_links_predicate(model, LinkKind::Links, pred, &resolved, ctx),
-        "relinks" => process_links_predicate(model, LinkKind::Relinks, pred, &resolved, ctx),
-        "unlinks" => process_links_predicate(model, LinkKind::Unlinks, pred, &resolved, ctx),
-        "chooses" => process_chooses_predicate(model, pred, &resolved, ctx, diags),
-        "combines" => {
+    use Predicate::*;
+    match p {
+        Coordinates => process_coordinates_predicate(model, &resolved),
+        Transitions => process_transitions_predicate(model, pred, &resolved, ctx, diags),
+        Outbox => process_outbox_predicate(model, &resolved),
+        Exposes => process_exposes_predicate(model, pred, &resolved, ctx, diags),
+        Shares => process_shares_predicate(model, pred, &resolved, ctx),
+        After => process_after_predicate(model, pred, &resolved, ctx, diags),
+        Sets => process_sets_predicate(model, pred, &resolved, ctx, diags),
+        Drives => process_drives_predicate(model, pred, &resolved, ctx, diags),
+        Links => process_links_predicate(model, LinkKind::Links, pred, &resolved, ctx),
+        Relinks => process_links_predicate(model, LinkKind::Relinks, pred, &resolved, ctx),
+        Unlinks => process_links_predicate(model, LinkKind::Unlinks, pred, &resolved, ctx),
+        Chooses => process_chooses_predicate(model, pred, &resolved, ctx, diags),
+        Combines => {
             super::condition::process_combines_predicate(model, pred, &resolved, ctx, diags)
         }
-        "holds" => super::condition::process_holds_predicate(model, pred, &resolved, ctx, diags),
-        "forbidden" => process_forbidden_predicate(model, pred, &resolved, ctx, diags),
-        "invariant" => process_invariant_predicate(model, pred, &resolved, ctx, diags),
-        "required" => process_required_predicate(model, pred, &resolved, ctx, diags),
-        "exclusive" => process_exclusive_predicate(model, pred, &resolved, ctx, diags),
-        "maps_field" => process_maps_field_predicate(model, pred, &resolved, ctx, diags),
-        "relate" => process_relate_predicate(model, pred, &resolved, ctx, diags),
-        "navigates" => process_navigates_predicate(model, pred, &resolved, ctx, diags),
-        _ => process_relation_predicate(model, pred, &resolved, ctx, diags),
+        Holds => super::condition::process_holds_predicate(model, pred, &resolved, ctx, diags),
+        Forbidden => process_forbidden_predicate(model, pred, &resolved, ctx, diags),
+        Invariant => process_invariant_predicate(model, pred, &resolved, ctx, diags),
+        Required => process_required_predicate(model, pred, &resolved, ctx, diags),
+        Exclusive => process_exclusive_predicate(model, pred, &resolved, ctx, diags),
+        MapsField => process_maps_field_predicate(model, pred, &resolved, ctx, diags),
+        Relate => process_relate_predicate(model, pred, &resolved, ctx, diags),
+        Navigates => process_navigates_predicate(model, pred, &resolved, ctx, diags),
+        _ => {
+            if let Some(kind) = p.rel_kind() {
+                process_relation_predicate(model, kind, pred, &resolved, ctx, diags);
+            }
+        }
     }
 
     // `.apart()` on a use case's write: its row need not be joined to the other rows it writes.
-    if matches!(pred.name.as_str(), "creates" | "updates" | "deletes")
-        && pred.chain.iter().any(|cc| cc.name == "apart")
-    {
+    if matches!(p, Creates | Updates | Deletes) && pred.chain.iter().any(|cc| cc.name == "apart") {
         if let [Some(NodeRef::UseCase(uc)), Some(NodeRef::Entity(ek))] = resolved.as_slice() {
             if !model.apart_writes.contains(&(*uc, *ek)) {
                 model.apart_writes.push((*uc, *ek));
             }
         }
-    }
-
-    if let Some(typed) = crate::typed_predicate::build_typed_predicate(&pred.name, &resolved, pred)
-    {
-        model.typed_predicates.push(typed);
     }
 }
 

@@ -270,17 +270,17 @@ pub struct InstanceDecl {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
-    /// Non-empty only for `requirement` declarations.
+    /// The clauses of the requirement group, which the parser accepts on a declaration of any kind.
     pub requirement: RequirementMetadata,
-    /// Non-empty only for `adr` declarations.
+    /// The clauses of the adr group, which the parser accepts on a declaration of any kind.
     pub adr: AdrMetadata,
-    /// Non-empty only for `api` declarations.
+    /// The clauses of the api group, which the parser accepts on a declaration of any kind.
     pub api: ApiMetadata,
-    /// Non-empty only for `goal`, `nfr` and `constraint` declarations.
+    /// The clauses of the nfr group, which the parser accepts on a declaration of any kind.
     pub nfr: NfrMetadata,
-    /// Non-empty only for `field` declarations.
+    /// The clauses of the field group, which the parser accepts on a declaration of any kind.
     pub field: FieldMetadata,
-    /// Non-empty only for `usecase` declarations.
+    /// The clauses of the usecase group, which the parser accepts on a declaration of any kind.
     pub usecase: UseCaseMetadata,
     /// `table "orders"`: an entity's physical table name.
     pub table: Option<std::string::String>,

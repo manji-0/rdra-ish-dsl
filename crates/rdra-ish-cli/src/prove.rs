@@ -44,11 +44,7 @@ fn find_z3(z3: Option<PathBuf>) -> Result<PathBuf> {
         }
         return Ok(path);
     }
-    if let Some(path) = std::env::var_os("PATH").and_then(|paths| {
-        std::env::split_paths(&paths)
-            .map(|dir| dir.join("z3"))
-            .find(|p| p.is_file())
-    }) {
+    if let Some(path) = crate::verify::find_on_path("z3") {
         return Ok(path);
     }
     bail!(

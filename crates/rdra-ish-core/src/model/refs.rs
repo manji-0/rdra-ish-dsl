@@ -1,6 +1,7 @@
 use super::comparison::{ColumnCheck, DerivedExpr};
 use super::foreign_key::RefAction;
 use super::keys::*;
+use rdra_ish_syntax::ast::Kind;
 
 /// NodeRef: 異種ノード間関連を一様表現
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -34,36 +35,41 @@ pub enum NodeRef {
 }
 
 impl NodeRef {
+    /// The declaration kind, which a state does not have.
+    pub fn kind(&self) -> Option<Kind> {
+        Some(match self {
+            NodeRef::Actor(_) => Kind::Actor,
+            NodeRef::ExtSystem(_) => Kind::ExtSystem,
+            NodeRef::System(_) => Kind::System,
+            NodeRef::Requirement(_) => Kind::Requirement,
+            NodeRef::Adr(_) => Kind::Adr,
+            NodeRef::Goal(_) => Kind::Goal,
+            NodeRef::Nfr(_) => Kind::Nfr,
+            NodeRef::Quality(_) => Kind::Quality,
+            NodeRef::Constraint(_) => Kind::Constraint,
+            NodeRef::Business(_) => Kind::Business,
+            NodeRef::Buc(_) => Kind::Buc,
+            NodeRef::Flow(_) => Kind::Flow,
+            NodeRef::Step(_) => Kind::Step,
+            NodeRef::UseCase(_) => Kind::UseCase,
+            NodeRef::Screen(_) => Kind::Screen,
+            NodeRef::Field(_) => Kind::Field,
+            NodeRef::Event(_) => Kind::Event,
+            NodeRef::Entity(_) => Kind::Entity,
+            NodeRef::State(_) => return None,
+            NodeRef::Api(_) => Kind::Api,
+            NodeRef::Dto(_) => Kind::Dto,
+            NodeRef::Timer(_) => Kind::Timer,
+            NodeRef::Medium(_) => Kind::Medium,
+            NodeRef::Permission(_) => Kind::Permission,
+            NodeRef::Variation(_) => Kind::Variation,
+            NodeRef::Condition(_) => Kind::Condition,
+        })
+    }
+
     /// Kind name as the DSL and every output write it (`"actor"`, `"usecase"`, ...).
     pub fn kind_tag(&self) -> &'static str {
-        match self {
-            NodeRef::Actor(_) => "actor",
-            NodeRef::ExtSystem(_) => "extsystem",
-            NodeRef::System(_) => "system",
-            NodeRef::Requirement(_) => "requirement",
-            NodeRef::Adr(_) => "adr",
-            NodeRef::Goal(_) => "goal",
-            NodeRef::Nfr(_) => "nfr",
-            NodeRef::Quality(_) => "quality",
-            NodeRef::Constraint(_) => "constraint",
-            NodeRef::Business(_) => "business",
-            NodeRef::Buc(_) => "buc",
-            NodeRef::Flow(_) => "flow",
-            NodeRef::Step(_) => "step",
-            NodeRef::UseCase(_) => "usecase",
-            NodeRef::Screen(_) => "screen",
-            NodeRef::Field(_) => "field",
-            NodeRef::Event(_) => "event",
-            NodeRef::Entity(_) => "entity",
-            NodeRef::State(_) => "state",
-            NodeRef::Api(_) => "api",
-            NodeRef::Dto(_) => "dto",
-            NodeRef::Timer(_) => "timer",
-            NodeRef::Medium(_) => "medium",
-            NodeRef::Permission(_) => "permission",
-            NodeRef::Variation(_) => "variation",
-            NodeRef::Condition(_) => "condition",
-        }
+        self.kind().map_or("state", |kind| kind.name())
     }
 }
 
@@ -191,42 +197,6 @@ pub struct DtoMapping {
     pub column: std::string::String,
 }
 
-/// usecase / api が entity を操作する際の起点。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum EntityTouchpoint {
-    UseCase(UseCaseKey),
-    Api(ApiKey),
-}
-
-impl EntityTouchpoint {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(EntityTouchpoint::UseCase(*k)),
-            NodeRef::Api(k) => Some(EntityTouchpoint::Api(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `performs(actor, ...)` の第2引数。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PerformTarget {
-    UseCase(UseCaseKey),
-    Buc(BucKey),
-    Step(StepKey),
-}
-
-impl PerformTarget {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(PerformTarget::UseCase(*k)),
-            NodeRef::Buc(k) => Some(PerformTarget::Buc(*k)),
-            NodeRef::Step(k) => Some(PerformTarget::Step(*k)),
-            _ => None,
-        }
-    }
-}
-
 /// `raises(raiser, event)` の第1引数。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Raiser {
@@ -244,123 +214,7 @@ impl Raiser {
     }
 }
 
-/// `triggers(source, ...)` の第1引数。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TriggerSource {
-    Event(EventKey),
-    Timer(TimerKey),
-}
-
-impl TriggerSource {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::Event(k) => Some(TriggerSource::Event(*k)),
-            NodeRef::Timer(k) => Some(TriggerSource::Timer(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `triggers(..., target)` の第2引数。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum TriggerTarget {
-    UseCase(UseCaseKey),
-    Buc(BucKey),
-    ExtSystem(ExtSystemKey),
-}
-
-impl TriggerTarget {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(TriggerTarget::UseCase(*k)),
-            NodeRef::Buc(k) => Some(TriggerTarget::Buc(*k)),
-            NodeRef::ExtSystem(k) => Some(TriggerTarget::ExtSystem(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `contains(container, ...)` の container 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ContainerRef {
-    Buc(BucKey),
-    System(SystemKey),
-    Flow(FlowKey),
-    Screen(ScreenKey),
-}
-
-impl ContainerRef {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::Buc(k) => Some(ContainerRef::Buc(*k)),
-            NodeRef::System(k) => Some(ContainerRef::System(*k)),
-            NodeRef::Flow(k) => Some(ContainerRef::Flow(*k)),
-            NodeRef::Screen(k) => Some(ContainerRef::Screen(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `contains(..., contained)` の contained 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ContainedRef {
-    UseCase(UseCaseKey),
-    Api(ApiKey),
-    Flow(FlowKey),
-    Step(StepKey),
-    Field(FieldKey),
-}
-
-impl ContainedRef {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(ContainedRef::UseCase(*k)),
-            NodeRef::Api(k) => Some(ContainedRef::Api(*k)),
-            NodeRef::Flow(k) => Some(ContainedRef::Flow(*k)),
-            NodeRef::Step(k) => Some(ContainedRef::Step(*k)),
-            NodeRef::Field(k) => Some(ContainedRef::Field(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `applies_to(nfr, ...)` の target 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AppliesToTarget {
-    UseCase(UseCaseKey),
-    Api(ApiKey),
-    System(SystemKey),
-}
-
-impl AppliesToTarget {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(AppliesToTarget::UseCase(*k)),
-            NodeRef::Api(k) => Some(AppliesToTarget::Api(*k)),
-            NodeRef::System(k) => Some(AppliesToTarget::System(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `applies_to(source, ...)` の source 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum AppliesSource {
-    Nfr(NfrKey),
-    Condition(ConditionKey),
-}
-
-impl AppliesSource {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::Nfr(k) => Some(AppliesSource::Nfr(*k)),
-            NodeRef::Condition(k) => Some(AppliesSource::Condition(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `combines(condition, target)` の target 側。
+/// What a condition combines: the target of `combines`, and each link `condition_edges` derives.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CombinesTarget {
     Variation(VariationKey),
@@ -369,98 +223,6 @@ pub enum CombinesTarget {
         entity: EntityKey,
         column: std::string::String,
     },
-}
-
-/// `qualifies(...)` の source 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NfrOrConstraint {
-    Nfr(NfrKey),
-    Constraint(ConstraintKey),
-}
-
-impl NfrOrConstraint {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::Nfr(k) => Some(NfrOrConstraint::Nfr(*k)),
-            NodeRef::Constraint(k) => Some(NfrOrConstraint::Constraint(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `constrains(constraint, ...)` の target 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ConstrainsTarget {
-    UseCase(UseCaseKey),
-    Api(ApiKey),
-    System(SystemKey),
-    Entity(EntityKey),
-    Dto(DtoKey),
-}
-
-impl ConstrainsTarget {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(ConstrainsTarget::UseCase(*k)),
-            NodeRef::Api(k) => Some(ConstrainsTarget::Api(*k)),
-            NodeRef::System(k) => Some(ConstrainsTarget::System(*k)),
-            NodeRef::Entity(k) => Some(ConstrainsTarget::Entity(*k)),
-            NodeRef::Dto(k) => Some(ConstrainsTarget::Dto(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `covers(step, ...)` の target 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum CoversTarget {
-    UseCase(UseCaseKey),
-    Api(ApiKey),
-    Event(EventKey),
-    Timer(TimerKey),
-}
-
-impl CoversTarget {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::UseCase(k) => Some(CoversTarget::UseCase(*k)),
-            NodeRef::Api(k) => Some(CoversTarget::Api(*k)),
-            NodeRef::Event(k) => Some(CoversTarget::Event(*k)),
-            NodeRef::Timer(k) => Some(CoversTarget::Timer(*k)),
-            _ => None,
-        }
-    }
-}
-
-/// `decides(adr, ...)` の target 側。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DecidesTarget {
-    Buc(BucKey),
-    UseCase(UseCaseKey),
-    Api(ApiKey),
-    System(SystemKey),
-    Entity(EntityKey),
-    Requirement(RequirementKey),
-    Nfr(NfrKey),
-    Constraint(ConstraintKey),
-    Dto(DtoKey),
-}
-
-impl DecidesTarget {
-    pub fn from_node_ref(node: &NodeRef) -> Option<Self> {
-        match node {
-            NodeRef::Buc(k) => Some(DecidesTarget::Buc(*k)),
-            NodeRef::UseCase(k) => Some(DecidesTarget::UseCase(*k)),
-            NodeRef::Api(k) => Some(DecidesTarget::Api(*k)),
-            NodeRef::System(k) => Some(DecidesTarget::System(*k)),
-            NodeRef::Entity(k) => Some(DecidesTarget::Entity(*k)),
-            NodeRef::Requirement(k) => Some(DecidesTarget::Requirement(*k)),
-            NodeRef::Nfr(k) => Some(DecidesTarget::Nfr(*k)),
-            NodeRef::Constraint(k) => Some(DecidesTarget::Constraint(*k)),
-            NodeRef::Dto(k) => Some(DecidesTarget::Dto(*k)),
-            _ => None,
-        }
-    }
 }
 
 /// カラム型

@@ -1,13 +1,14 @@
 //! Reference-count code lenses on declarations.
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use rdra_ish_core::WorkspaceAnalysis;
-use rdra_ish_syntax::ast::{Ast, Item};
-use tower_lsp::lsp_types::{CodeLens, Command, Location};
+use rdra_ish_syntax::ast::{Ast, Item, Span};
+use tower_lsp::lsp_types::{CodeLens, Command, Location, Url};
 
 use crate::convert::{byte_offset_to_position, span_to_range};
-use crate::refs::{find_symbol_references, instance_id_span, SymbolTarget};
+use crate::refs::{ast_references, instance_id_span};
 use crate::uri::path_to_uri;
 
 pub fn code_lenses(
@@ -22,15 +23,15 @@ pub fn code_lenses(
         Err(_) => return lenses,
     };
 
+    let index = reference_index(analysis);
     for item in &ast.items {
         let Item::Instance(inst) = item else {
             continue;
         };
-        let target = SymbolTarget {
-            kind: inst.kind.name().to_string(),
-            id: inst.id.clone(),
-        };
-        let locations = reference_locations(analysis, &target);
+        let locations = index
+            .get(&(inst.kind.name(), inst.id.as_str()))
+            .map(Vec::as_slice)
+            .unwrap_or_default();
         let count = locations.len();
 
         let id_span = instance_id_span(inst, text);
@@ -50,7 +51,7 @@ pub fn code_lenses(
                 arguments: Some(vec![
                     serde_json::to_value(&file_uri).expect("uri"),
                     serde_json::to_value(position).expect("position"),
-                    serde_json::to_value(&locations).expect("locations"),
+                    serde_json::to_value(locations).expect("locations"),
                 ]),
             }
         };
@@ -65,34 +66,63 @@ pub fn code_lenses(
     lenses
 }
 
-pub fn reference_locations(analysis: &WorkspaceAnalysis, target: &SymbolTarget) -> Vec<Location> {
-    let mut locations = Vec::new();
+type ReferenceIndex<'a> = HashMap<(&'a str, &'a str), Vec<Location>>;
 
-    for (path, source_text, source_ast) in &analysis.program.sources {
-        let Ok(uri) = path_to_uri(path) else {
-            continue;
-        };
+fn add_location<'a>(
+    index: &mut ReferenceIndex<'a>,
+    kind: &'a str,
+    id: &'a str,
+    (uri, text): (&Url, &str),
+    span: Span,
+) {
+    index.entry((kind, id)).or_default().push(Location {
+        uri: uri.clone(),
+        range: span_to_range(text, span),
+    });
+}
 
-        for item in &source_ast.items {
+/// The declaration and reference locations of every `(kind, id)` declared in the workspace,
+/// in source order with a source's declarations before its references. One walk of the
+/// workspace answers every lens, instead of one walk per declaration.
+fn reference_index(analysis: &WorkspaceAnalysis) -> ReferenceIndex<'_> {
+    let mut kinds_by_id: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (_, _, ast) in &analysis.program.sources {
+        for item in &ast.items {
             if let Item::Instance(inst) = item {
-                if inst.kind.name() == target.kind && inst.id == target.id {
-                    locations.push(Location {
-                        uri: uri.clone(),
-                        range: span_to_range(source_text, instance_id_span(inst, source_text)),
-                    });
+                let kinds = kinds_by_id.entry(&inst.id).or_default();
+                if !kinds.contains(&inst.kind.name()) {
+                    kinds.push(inst.kind.name());
                 }
             }
         }
-
-        for span in find_symbol_references(source_ast, target) {
-            locations.push(Location {
-                uri: uri.clone(),
-                range: span_to_range(source_text, span),
-            });
-        }
     }
 
-    locations
+    let mut index = ReferenceIndex::new();
+    for (path, text, ast) in &analysis.program.sources {
+        let Ok(uri) = path_to_uri(path) else {
+            continue;
+        };
+        let mut push = |kind, id, span| add_location(&mut index, kind, id, (&uri, text), span);
+        for item in &ast.items {
+            if let Item::Instance(inst) = item {
+                push(inst.kind.name(), &inst.id, instance_id_span(inst, text));
+            }
+        }
+        for qref in ast_references(ast) {
+            let Some(id) = qref.parts.last() else {
+                continue;
+            };
+            match &qref.kind_qualifier {
+                Some(kind) => push(kind.name(), id, qref.span.clone()),
+                None => {
+                    for kind in kinds_by_id.get(id.as_str()).into_iter().flatten() {
+                        push(kind, id, qref.span.clone());
+                    }
+                }
+            }
+        }
+    }
+    index
 }
 
 fn declaration_lens_range(

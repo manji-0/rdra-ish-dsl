@@ -80,7 +80,9 @@ pub fn workspace_rename(
         return Err(RenameError::Conflict);
     }
 
-    let _ = rename_span_at_offset(ast, text, &target, offset).ok_or(RenameError::NoSymbol)?;
+    if rename_span_at_offset(ast, text, &target, offset).is_none() {
+        return Err(RenameError::NoSymbol);
+    }
 
     let mut changes: HashMap<Url, Vec<TextEdit>> = HashMap::new();
     for (source_path, source_text, source_ast) in &analysis.program.sources {
@@ -415,8 +417,9 @@ performs(Staff, Book)
     #[test]
     fn renames_references_in_every_chain_method_argument() {
         let mut covered = 0;
-        for pred in rdra_ish_core::KNOWN_PREDICATES {
-            for method in rdra_ish_core::predicate::predicate_chain_methods(pred) {
+        for p in rdra_ish_core::predicate::Predicate::ALL {
+            let pred = p.name();
+            for method in p.chain_methods() {
                 if let Some((decls, usage)) = chain_reference_sample(pred, method) {
                     assert_chain_reference_renamed(pred, method, decls, usage);
                     covered += 1;

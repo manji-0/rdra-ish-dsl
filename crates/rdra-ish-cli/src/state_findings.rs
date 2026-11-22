@@ -5,8 +5,8 @@ use std::fmt;
 
 use rdra_ish_core::lifecycle::{
     derive_states_built, label_prefix, ActionOrigin, Birth, Blocked, Bounds, BoundsLine, Caps,
-    Change, GuardWhy, InvKind, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site,
-    StateDiag, Trace, TraceStep, TransitionSystem,
+    Change, GuardWhy, InvText, Loop, ModelRef, ParamRole, Scope, Severity, Site, StateDiag,
+    StatesReport, Trace, TraceStep, TransitionSystem,
 };
 use rdra_ish_core::model::{LinkKind, SetValue};
 use rdra_ish_core::{format_location, ResolvedProgram, SemanticModel};
@@ -19,6 +19,8 @@ pub(crate) struct Finding {
     /// `StateDiag::name`.
     pub(crate) name: String,
     pub(crate) message: String,
+    /// The finding is a `StateDiag::Deadlock`.
+    pub(crate) is_deadlock: bool,
 }
 
 impl Finding {
@@ -28,6 +30,7 @@ impl Finding {
             severity: diag.severity(),
             name: diag.name(entities),
             message,
+            is_deadlock: matches!(diag, StateDiag::Deadlock { .. }),
         }
     }
 }
@@ -43,16 +46,6 @@ impl fmt::Display for Finding {
     }
 }
 
-/// Every diagnostic of the lifecycle views at the `states` defaults: those on an entity view
-/// first, then each violated constraint or assert once with its counterexample and each
-/// unwitnessed state once, then those that name no entity.
-pub(crate) fn state_consistency_findings(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-) -> Vec<Finding> {
-    state_findings(program, model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings
-}
-
 /// What `check` prints of the lifecycle: the bounds and scope, the findings, and the
 /// `not checked:` block when the scope or a cap left something out.
 pub(crate) struct StateFindings {
@@ -61,8 +54,10 @@ pub(crate) struct StateFindings {
     pub(crate) not_checked: Option<String>,
 }
 
-/// The findings of `state_consistency_findings` for `scope`, with its bounds line and what
-/// it did not check.
+/// Every diagnostic of the lifecycle views for `scope`: those on an entity view first, then
+/// each violated constraint or assert once with its counterexample and each unwitnessed
+/// state once, then those that name no entity. With its bounds line and what it did not
+/// check.
 pub(crate) fn state_findings(
     program: &ResolvedProgram,
     model: &SemanticModel,
@@ -71,6 +66,16 @@ pub(crate) fn state_findings(
     caps: Caps,
 ) -> StateFindings {
     let (report, ts) = derive_states_built(model, scope, bounds, caps);
+    findings_of(program, model, &report, &ts)
+}
+
+/// [`state_findings`] of an exploration already run.
+pub(crate) fn findings_of(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    report: &StatesReport,
+    ts: &TransitionSystem,
+) -> StateFindings {
     let on_views = report.views.iter().flat_map(|result| {
         let diags = result.diagnostics.iter().filter(|d| !has_block(d));
         diags.map(move |diag| {
@@ -88,7 +93,7 @@ pub(crate) fn state_findings(
     let violations = report.diags.iter().filter_map(|d| {
         let mut text = render_violation(program, model, &d.diag, TraceSource::Bfs)?;
         if report.bounds.instances.get() == 1 {
-            text.push_str(&one_instance_note(&d.diag, &ts));
+            text.push_str(&one_instance_note(&d.diag, ts));
         }
         Some(Finding::new(&d.diag, &[], text))
     });
@@ -115,7 +120,7 @@ pub(crate) fn state_findings(
         .chain(violations)
         .chain(unattributed)
         .collect();
-    let not_checked = report.not_checked(&ts, model);
+    let not_checked = report.not_checked(ts, model);
     StateFindings {
         bounds: report.bounds_line(model),
         findings,
@@ -653,32 +658,23 @@ fn change_row(program: &ResolvedProgram, change: &Change) -> (String, Option<Str
     }
 }
 
-/// Fail closed when state derivation has Error-severity diagnostics (generators).
-pub(crate) fn reject_state_errors(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-) -> anyhow::Result<()> {
-    reject_errors_where(program, model, |_| true)
+/// Fail closed when `findings` has an error (generators).
+pub(crate) fn reject_state_errors(findings: &[Finding]) -> anyhow::Result<()> {
+    reject_errors_where(findings, |_| true)
 }
 
 /// `reject_state_errors`, but a deadlock does not count: the state diagram colours it.
-pub(crate) fn reject_state_errors_except_deadlock(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
-) -> anyhow::Result<()> {
-    reject_errors_where(program, model, |finding| {
-        !finding.name.starts_with("Deadlock_")
-    })
+pub(crate) fn reject_state_errors_except_deadlock(findings: &[Finding]) -> anyhow::Result<()> {
+    reject_errors_where(findings, |finding| !finding.is_deadlock)
 }
 
 fn reject_errors_where(
-    program: &ResolvedProgram,
-    model: &SemanticModel,
+    findings: &[Finding],
     counts: impl Fn(&Finding) -> bool,
 ) -> anyhow::Result<()> {
     let mut has_error = false;
-    for finding in state_consistency_findings(program, model) {
-        if finding.severity == Severity::Error && counts(&finding) {
+    for finding in findings {
+        if finding.severity == Severity::Error && counts(finding) {
             eprintln!("{finding}");
             has_error = true;
         }
@@ -691,9 +687,9 @@ fn reject_errors_where(
 
 /// An output that prints no reachability result writes on lifecycle errors, with one note
 /// that counts them and ends in `why`, the reason the output is still worth writing.
-pub(crate) fn note_state_errors(program: &ResolvedProgram, model: &SemanticModel, why: &str) {
-    let errors = state_consistency_findings(program, model)
-        .into_iter()
+pub(crate) fn note_state_errors(findings: &[Finding], why: &str) {
+    let errors = findings
+        .iter()
         .filter(|finding| finding.severity == Severity::Error)
         .count();
     if errors > 0 {
@@ -709,74 +705,58 @@ pub(crate) const READS_NO_LIFECYCLE: &str = "this output does not read the lifec
 pub(crate) const TLA_STATE_MODELS: &str = "the whole-model .cfg checks the rules only; the StateModel_* specs written beside it let TLC check the deadlocks and missing witnesses, but a deadlock pass there is no proof, and `rdra-ish verify` decides them";
 
 /// A constraint violation in the wording `check` has always used for its kind.
-fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> {
-    Some(match (kind, text) {
-        (InvKind::Forbidden, InvText::Conditions(c)) => {
+fn violation_message(text: &InvText, p: &str) -> String {
+    match text {
+        InvText::Forbidden(c) => {
             format!("forbidden state is reachable: {c} witnessed by {p}")
         }
-        (InvKind::Required, InvText::Conditions(c)) => {
+        InvText::Required(c) => {
             format!("required state is missing: {c} is not satisfied by {p}")
         }
-        (InvKind::Exclusive, InvText::Conditions(c)) => {
+        InvText::Exclusive(c) => {
             format!("exclusive state conditions co-occur: {c} witnessed by {p}")
         }
-        (InvKind::Invariant, InvText::WhenThen { guards, requireds }) => {
+        InvText::Invariant { guards, requireds } => {
             format!("invariant violated: when {guards} then {requireds} is broken by {p}")
         }
-        (InvKind::Check, InvText::Conditions(c)) => {
+        InvText::Check(c) => {
             format!("check constraint is false: {c} is broken by {p}")
         }
-        (
-            InvKind::CrossForbidden,
-            InvText::Cross {
+        InvText::CrossForbidden {
                 entities,
                 conditions,
-            },
-        ) => format!(
+} => format!(
             "multi-entity forbidden state is reachable across [{entities}]: {conditions} witnessed by {p}"
         ),
-        (
-            InvKind::CrossInvariant,
-            InvText::CrossWhenThen {
+        InvText::CrossInvariant {
                 entities,
                 guards,
                 requireds,
-            },
-        ) => format!(
+} => format!(
             "multi-entity invariant violated across [{entities}]: when {guards} then {requireds} is broken by {p}"
         ),
-        (
-            InvKind::Quantifier,
-            InvText::Quantifier {
+        InvText::Quantifier {
                 anchor,
                 related,
                 constraint,
-            },
-        ) => format!(
+} => format!(
             "to-many quantifier constraint is violated from '{anchor}' to '{related}': {constraint} witnessed by {p}"
         ),
-        (
-            InvKind::Unique,
-            InvText::Unique {
+        InvText::Unique {
                 child,
                 parent,
                 role,
-            },
-        ) => format!(
+} => format!(
             "1:1 key is shared: two '{child}' rows belong to one '{parent}' through '{role}', witnessed by {p}"
         ),
-        (
-            InvKind::MinCard,
-            InvText::MinCard {
+        InvText::MinCard {
                 child,
                 parent,
                 role,
-            },
-        ) => format!(
+} => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}', witnessed by {p}"
         ),
-        _ => return None,
-    })
+    }
 }
 
 pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
@@ -804,15 +784,15 @@ pub(crate) fn state_diag_message(diag: &StateDiag) -> String {
             "{diag}; raise --max-states, or narrow with --entity or --buc"
         ),
         StateDiag::ConstraintViolated {
-            kind,
             text,
             label,
             pattern_desc,
             ..
-        } => violation_message(kind, text, pattern_desc).map_or_else(
-            || diag.to_string(),
-            |message| format!("{}{message}", label_prefix(label)),
-        ),
+        } => format!(
+"{}{}",
+label_prefix(label),
+violation_message(text, pattern_desc)
+),
         StateDiag::AfterAssertViolated {
             anchor,
             requireds,

@@ -1,9 +1,11 @@
 //! CLI export artifact dispatch.
 
 use std::collections::BTreeSet;
+use std::fs;
 use std::num::NonZeroU8;
+use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
     has_errors, Bounds, Built, Caps, Cone, EntId, Scope, Severity, Target, TransitionSystem,
 };
@@ -17,11 +19,13 @@ use rdra_ish_emit::{
     sql::SqlEmitter,
     tla::{self, PrintMode, TlaBundle},
     typescript::TypeScriptStateUnionEmitter,
+    View,
 };
 
 use crate::cli::{ExportKind, SqlDialect};
-use crate::lifecycle_gate::Output;
-use crate::list_output::Finding;
+use crate::lifecycle_gate::{gate, Lifecycle, Output, Reads};
+use crate::load::load_clean;
+use crate::state_findings::Finding;
 
 /// What an export kind writes: an artifact its emitter prints, or the TLA+ bundle, which is
 /// built from the transition system and is not an [`Emitter`].
@@ -55,6 +59,108 @@ pub fn export_output(kind: &ExportKind, dialect: SqlDialect) -> Export {
         ExportKind::MermaidEr => Export::Artifact(Output::declared(ErMermaidEmitter), "er.mmd"),
         ExportKind::Tla => Export::Tla,
     }
+}
+
+pub(crate) fn run_export(
+    inputs: &[PathBuf],
+    kind: &ExportKind,
+    out: &Path,
+    instance_count: u32,
+    int_range_max: u32,
+    dialect: SqlDialect,
+) -> Result<()> {
+    let (program, model) = load_clean(inputs)?;
+    // An artifact gates by what its emitter reads. The TLA+ export gates after `tla_export`,
+    // whose build errors stop it first.
+    match export_output(kind, dialect) {
+        Export::Artifact(output, ext) => {
+            let content = output
+                .gate(&Lifecycle::new(&program, &model))?
+                .emit(&model, &View::whole())?;
+            let out_path = if out.extension().is_some() {
+                out.to_path_buf()
+            } else {
+                out.with_extension(ext)
+            };
+            fs::write(&out_path, &content)
+                .with_context(|| format!("failed to write {}", out_path.display()))?;
+            println!("wrote {}", out_path.display());
+            Ok(())
+        }
+        Export::Tla => {
+            let module_name =
+                tla_file(out).map_or_else(|| "RdraSpec".to_string(), |(_, stem)| stem);
+            let bounds = tla_bounds(instance_count, int_range_max)?;
+            let TlaExport {
+                whole: bundle,
+                state_models,
+            } = tla_export(&model, bounds, &module_name)?;
+            gate(&Lifecycle::new(&program, &model), Reads::System)?;
+            write_tla(out, bundle, state_models)
+        }
+    }
+}
+
+/// `-o X.tla`: the directory the file sits in (`.` for a bare name) and its module name `X`.
+pub(crate) fn tla_file(out: &Path) -> Option<(PathBuf, String)> {
+    if !out.extension().is_some_and(|e| e == "tla") {
+        return None;
+    }
+    let stem = out
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("RdraSpec")
+        .to_string();
+    let dir = match out.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    Some((dir, stem))
+}
+
+/// Write the bundle where `-o` points: `X.tla` and its `X.cfg`, `X.cfg` and its `X.tla`, or
+/// the bundle's own module name under a directory. The state-model modules go beside it.
+fn write_tla(out: &Path, bundle: TlaBundle, state_models: Vec<(TlaBundle, String)>) -> Result<()> {
+    let ext = out.extension();
+    let (tla_path, cfg_path) = if ext.is_some_and(|e| e == "tla") {
+        (out.to_path_buf(), out.with_extension("cfg"))
+    } else if ext.is_some_and(|e| e == "cfg") {
+        (out.with_extension("tla"), out.to_path_buf())
+    } else {
+        let dir = if out.is_dir() || ext.is_none() {
+            out.to_path_buf()
+        } else {
+            out.parent().unwrap_or(Path::new(".")).to_path_buf()
+        };
+        if !dir.exists() {
+            fs::create_dir_all(&dir)
+                .with_context(|| format!("failed to create {}", dir.display()))?;
+        }
+        (
+            dir.join(format!("{}.tla", bundle.module_name)),
+            dir.join(format!("{}.cfg", bundle.module_name)),
+        )
+    };
+    let dir = match tla_path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => p.to_path_buf(),
+        _ => PathBuf::from("."),
+    };
+    let mut files = vec![(tla_path, bundle.tla), (cfg_path, bundle.cfg)];
+    for (sm, witnesses) in state_models {
+        files.push((dir.join(format!("{}.tla", sm.module_name)), sm.tla));
+        files.push((dir.join(format!("{}.cfg", sm.module_name)), sm.cfg));
+        let cfg = sm
+            .witness_cfg
+            .expect("a state-model module has a witness cfg");
+        files.push((dir.join(format!("{witnesses}.cfg")), cfg));
+    }
+    for (path, text) in &files {
+        fs::write(path, text).with_context(|| format!("failed to write {}", path.display()))?;
+    }
+    for (path, _) in &files {
+        println!("wrote {}", path.display());
+    }
+    Ok(())
 }
 
 /// `--instance-count` and `--int-range-max` as the system's bounds.

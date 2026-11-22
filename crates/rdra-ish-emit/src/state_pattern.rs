@@ -4,8 +4,7 @@ use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::{
     lifecycle::{
         derive_states, label_prefix, AbstractValue, ActionOrigin, AxisKind, Caps, Change,
-        EntityStateResult, InvKind, InvText, Provenance, Scope as SystemScope, Site, StateDiag,
-        Trace,
+        EntityStateResult, InvText, Provenance, Scope as SystemScope, Site, StateDiag, Trace,
     },
     SemanticModel,
 };
@@ -75,74 +74,58 @@ fn axis_domain(kind: &AxisKind) -> Vec<String> {
 }
 
 /// A constraint violation in the wording `states` has always used for its kind.
-fn violation_message(kind: &InvKind, text: &InvText, p: &str) -> Option<String> {
-    Some(match (kind, text) {
-        (InvKind::Forbidden, InvText::Conditions(c)) => {
+fn violation_message(text: &InvText, p: &str) -> String {
+    match text {
+        InvText::Forbidden(c) => {
             format!("forbidden state reached: ({c}) in pattern ({p})")
         }
-        (InvKind::Required, InvText::Conditions(c)) => {
+        InvText::Required(c) => {
             format!("required state missing: ({c}) is not satisfied in pattern ({p})")
         }
-        (InvKind::Exclusive, InvText::Conditions(c)) => {
+        InvText::Exclusive(c) => {
             format!("exclusive state conditions co-occur: ({c}) in pattern ({p})")
         }
-        (InvKind::Check, InvText::Conditions(c)) => {
+        InvText::Check(c) => {
             format!("check constraint false: ({c}) in pattern ({p})")
         }
-        (InvKind::Invariant, InvText::WhenThen { guards, requireds }) => format!(
+        InvText::Invariant { guards, requireds } => format!(
             "invariant violated: when ({guards}) holds, ({requireds}) must also hold — but found pattern ({p})"
         ),
-        (
-            InvKind::CrossForbidden,
-            InvText::Cross {
+        InvText::CrossForbidden {
                 entities,
                 conditions,
-            },
-        ) => format!(
+} => format!(
             "multi-entity forbidden state reached across [{entities}]: ({conditions}) in patterns ({p})"
         ),
-        (
-            InvKind::CrossInvariant,
-            InvText::CrossWhenThen {
+        InvText::CrossInvariant {
                 entities,
                 guards,
                 requireds,
-            },
-        ) => format!(
+} => format!(
             "multi-entity invariant violated across [{entities}]: when ({guards}) holds, ({requireds}) must also hold — but found patterns ({p})"
         ),
-        (
-            InvKind::Quantifier,
-            InvText::Quantifier {
+        InvText::Quantifier {
                 anchor,
                 related,
                 constraint,
-            },
-        ) => format!(
+} => format!(
             "to-many quantifier constraint violated from '{anchor}' to '{related}': {constraint} in patterns ({p})"
         ),
-        (
-            InvKind::Unique,
-            InvText::Unique {
+        InvText::Unique {
                 child,
                 parent,
                 role,
-            },
-        ) => format!(
+} => format!(
             "1:1 key shared: two '{child}' rows belong to one '{parent}' through '{role}' in patterns ({p})"
         ),
-        (
-            InvKind::MinCard,
-            InvText::MinCard {
+        InvText::MinCard {
                 child,
                 parent,
                 role,
-            },
-        ) => format!(
+} => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}' in patterns ({p})"
         ),
-        _ => return None,
-    })
+    }
 }
 
 /// 診断メッセージを文字列化する（severity は `StateDiag::severity`、名前は `StateDiag::name` と共有）
@@ -176,15 +159,15 @@ fn diag_message(d: &StateDiag, entity: &str) -> String {
             )
         }
         StateDiag::ConstraintViolated {
-            kind,
             text,
             label,
             pattern_desc,
             ..
-        } => violation_message(kind, text, pattern_desc).map_or_else(
-            || d.to_string(),
-            |message| format!("{}{message}", label_prefix(label)),
-        ),
+        } => format!(
+"{}{}",
+label_prefix(label),
+violation_message(text, pattern_desc)
+),
         StateDiag::AfterAssertViolated {
             anchor,
             requireds,
@@ -304,7 +287,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
         out.push('\n');
 
         // ── テーブル ────────────────────────────────────────────────
-        // カラム幅の計算
         // Proposition 軸はプレフィックス抜きの axis_key を表示名として使う
         let axis_cols: Vec<String> = r
             .axes
@@ -336,7 +318,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             }
         }
 
-        // ヘッダ行
         let header_parts: Vec<String> = axis_cols
             .iter()
             .enumerate()
@@ -349,7 +330,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             .collect();
         out.push_str(&format!("  {}\n", header_parts.join("  ")));
 
-        // セパレータ
         let sep_parts: Vec<String> = col_widths
             .iter()
             .map(|&w| "\u{2500}".repeat(w))
@@ -361,7 +341,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             .collect();
         out.push_str(&format!("  {}\n", sep_parts.join("  ")));
 
-        // データ行
         for p in &r.patterns {
             let vals: Vec<String> = r
                 .axes
@@ -393,7 +372,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             out.push_str(&format!("  {}\n", vals.join("  ")));
         }
 
-        // フッタ
         out.push_str(&format!(
             "\n  reachable: {}{}/ bound: {}\n",
             r.patterns.len(),
@@ -401,7 +379,6 @@ pub fn render_table(results: &[EntityStateResult], model: &SemanticModel) -> Str
             r.bound()
         ));
 
-        // 診断
         if !r.diagnostics.is_empty() {
             out.push_str("  diagnostics:\n");
             for d in &r.diagnostics {

@@ -4,8 +4,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use rdra_ish_core::lifecycle::{
-    ActId, Action, ActionOrigin, At, Birth, CmpOp, Effect, EntId, FoldKey, Ltl, ParamRole, Pred,
-    Rhs, Start, Term, TransitionSystem, Value, VarId, VarKind,
+    ActId, Action, ActionOrigin, Arm, At, Birth, CmpOp, Effect, EntId, FoldKey, Ltl, ParamRole,
+    Pred, Rhs, Start, Term, TransitionSystem, Value, VarId, VarKind,
 };
 use rdra_ish_core::model::UseCaseKey;
 
@@ -267,9 +267,9 @@ fn bits(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             };
             variants.push(format!("{name}(c)"));
             let key = match fold.key() {
-                FoldKey::Linked { entity, .. } => {
+                FoldKey::Linked { entity, body, .. } => {
                     ctx.depth = 1;
-                    let body = ctx.pred(fold.node_body().expect("a linked fold has its node"));
+                    let body = ctx.pred(body);
                     let present = ctx.present(*entity, "b0");
                     out.push_str(&format!(
                         "{name}(c) == LET b0 == c IN {present} /\\ ({body})\n"
@@ -659,18 +659,18 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
                 };
                 // The targets of each source state, in arm order.
                 let mut by_from: Vec<(Value, Vec<Value>)> = Vec::new();
-                for (f, t) in arms {
-                    match by_from.iter_mut().find(|(g, _)| g == f) {
-                        Some((_, tos)) => tos.push(*t),
-                        None => by_from.push((*f, vec![*t])),
+                for arm in arms {
+                    match by_from.iter_mut().find(|(g, _)| *g == arm.from) {
+                        Some((_, tos)) => tos.push(arm.to),
+                        None => by_from.push((arm.from, vec![arm.to])),
                     }
                 }
                 let choice = by_from.iter().any(|(_, tos)| tos.len() > 1);
                 // The `TransitionFrom` guard holds the column at one of the sources, so when
                 // every arm moves to one state the step writes that state.
-                let one_target = arms.iter().all(|(_, t)| *t == arms[0].1);
+                let one_target = arms.iter().all(|arm| arm.to == arms[0].to);
                 if !choice && one_target && from_guarded(a, *var, *param, arms) {
-                    let to = render_value(d, arms[0].1);
+                    let to = render_value(d, arms[0].to);
                     let slot = post.entry(*var).or_default();
                     if !matches!(slot.get(param), Some(Post::Choose(_) | Post::ChooseIn(_))) {
                         slot.insert(*param, Post::Expr(to));
@@ -702,7 +702,11 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
             }
             Effect::Choose {
                 var, param, values, ..
-            } => (*var, *param, Post::Choose(values.clone())),
+            } => (
+                *var,
+                *param,
+                Post::Choose(values.iter().map(|c| c.value).collect()),
+            ),
             Effect::Tick => {
                 tick = true;
                 continue;
@@ -778,7 +782,7 @@ fn effects(ts: &TransitionSystem, names: &TlaNames, a: &Action) -> (Vec<String>,
 
 /// Whether a guard of the action holds `var` of param `param` at a source state of `arms`
 /// on the pre-state: the guard `transitions` adds, which a restriction may drop.
-fn from_guarded(a: &Action, var: VarId, param: u8, arms: &[(Value, Value)]) -> bool {
+fn from_guarded(a: &Action, var: VarId, param: u8, arms: &[Arm]) -> bool {
     let is_source = |p: &Pred| match p {
         Pred::Cmp(
             Term::Slot {
@@ -787,7 +791,7 @@ fn from_guarded(a: &Action, var: VarId, param: u8, arms: &[(Value, Value)]) -> b
             },
             CmpOp::Eq,
             Term::Lit(from),
-        ) => *v == var && *q == param && arms.iter().any(|(f, _)| f == from),
+        ) => *v == var && *q == param && arms.iter().any(|arm| arm.from == *from),
         _ => false,
     };
     a.guards.iter().any(|g| match &g.pred {

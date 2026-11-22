@@ -141,13 +141,12 @@ fn visit_operand(source: &str, raw: &mut Vec<RawToken>, operand: &Operand) {
 }
 
 fn tokenize_qref(source: &str, raw: &mut Vec<RawToken>, qref: &QRef) {
-    if let Some(kind) = &qref.kind_qualifier {
+    if qref.kind_qualifier.is_some() {
         let slice = source.get(qref.span.clone()).unwrap_or_default();
         if let Some(pos) = slice.find("::") {
             let kind_end = qref.span.start + pos;
             push_token(source, raw, qref.span.start..kind_end, TOKEN_TYPE, 0);
             push_token(source, raw, kind_end + 2..qref.span.end, TOKEN_VARIABLE, 0);
-            let _ = kind;
             return;
         }
     }

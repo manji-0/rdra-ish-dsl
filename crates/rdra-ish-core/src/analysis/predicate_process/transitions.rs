@@ -169,13 +169,6 @@ pub(super) fn process_transitions_predicate(
             to: to.clone(),
             guard,
         });
-        model.typed_predicates.push(TypedPredicate::Transitions {
-            entity: entity_key,
-            column: column.clone(),
-            usecase: *usecase,
-            from,
-            to: to.clone(),
-        });
     }
 }
 
@@ -294,7 +287,7 @@ pub(super) fn process_chooses_predicate(
                 other => predicate_arg_display(other),
             };
             let variation = &model.variations[*variation];
-            if !variation.values.contains(&written) {
+            if !variation.has_value(&written) {
                 push_error(
                     ctx,
                     diags,
@@ -302,7 +295,7 @@ pub(super) fn process_chooses_predicate(
                     RdraError::InvalidVariationValue {
                         variation: variation.id.clone(),
                         value: written,
-                        allowed: variation.values.join(", "),
+                        allowed: variation.value_names().join(", "),
                     },
                 );
                 return;
@@ -349,7 +342,6 @@ pub(super) fn process_chooses_predicate(
                     col: column,
                 },
             );
-            return;
         }
         Some(c) => c.values.extend(chosen),
         None => model.column_choices.push(crate::model::ColumnChoice {
@@ -360,11 +352,6 @@ pub(super) fn process_chooses_predicate(
             site,
         }),
     }
-    model.typed_predicates.push(TypedPredicate::Chooses {
-        origin: usecase,
-        entity,
-        column,
-    });
 }
 
 /// The condition of a `.when(Cond)` chain, at most one: `Ok(None)` without one, `Err` after

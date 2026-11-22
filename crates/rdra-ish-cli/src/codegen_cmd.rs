@@ -4,13 +4,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use rdra_ish_core::format_location;
 use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, Severity};
-use rdra_ish_core::{format_location, load_project, Project};
 use rdra_ish_emit::codegen::{generate, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
-use crate::list_output::state_findings;
-use crate::load::reject_model_errors;
+use crate::load::load_clean;
+use crate::state_findings::state_findings;
 
 pub fn run_codegen(
     inputs: &[PathBuf],
@@ -19,13 +19,7 @@ pub fn run_codegen(
     package: &str,
     allow_failing: bool,
 ) -> Result<()> {
-    let Project {
-        program,
-        model,
-        diags,
-        ..
-    } = load_project(inputs, None)?;
-    reject_model_errors(&program, &diags)?;
+    let (program, model) = load_clean(inputs)?;
     // The state types rest on the rules `check` verifies, so the generator runs it first.
     let found = state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES);
     let errors: Vec<String> = found

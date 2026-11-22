@@ -217,7 +217,10 @@ impl<'m> Script<'m> {
             let note = variation_note(variation);
             types.push(match self.dialect {
                 Dialect::Postgres => {
-                    format!("{note}\n{}", create_enum(&variation.id, &variation.values))
+                    format!(
+                        "{note}\n{}",
+                        create_enum(&variation.id, &variation.value_names())
+                    )
                 }
                 Dialect::Sqlite => note,
             });
@@ -259,7 +262,7 @@ impl<'m> Script<'m> {
     fn enum_values(&self, column: &ModelColumn) -> Option<Vec<String>> {
         match &column.col_type {
             ColumnType::Enum(values) => Some(values.clone()),
-            ColumnType::Variation(key) => self.model.variations.get(*key).map(|v| v.values.clone()),
+            ColumnType::Variation(key) => self.model.variations.get(*key).map(|v| v.value_names()),
             _ => None,
         }
     }
@@ -598,7 +601,7 @@ impl<'m> Script<'m> {
             let names: Vec<&Invariant> = self
                 .invariants
                 .iter()
-                .filter(|inv| inv.kind == InvKind::Check && inv.site.fact == fact)
+                .filter(|inv| inv.text.kind() == InvKind::Check && inv.site.fact == fact)
                 .collect();
             for (i, check) in column.check_constraints.iter().enumerate() {
                 let name = names.get(i).map_or_else(
@@ -715,7 +718,7 @@ impl<'m> Script<'m> {
         self.invariants
             .iter()
             .filter_map(|inv| {
-                let why = match inv.kind {
+                let why = match inv.text.kind() {
                     InvKind::CrossForbidden | InvKind::CrossInvariant => "several entities",
                     InvKind::Quantifier => "related rows",
                     InvKind::MinCard => "minimum cardinality",
@@ -966,13 +969,16 @@ fn local_text(equalities: &[(String, EffectValue)], comparisons: &[ComparisonPro
 fn inv_text(inv: &Invariant) -> String {
     use rdra_ish_core::lifecycle::InvText;
     match &inv.text {
-        InvText::Conditions(c) => c.clone(),
-        InvText::WhenThen { guards, requireds } => format!("when {guards} then {requireds}"),
-        InvText::Cross {
+        InvText::Forbidden(c)
+        | InvText::Required(c)
+        | InvText::Exclusive(c)
+        | InvText::Check(c) => c.clone(),
+        InvText::Invariant { guards, requireds } => format!("when {guards} then {requireds}"),
+        InvText::CrossForbidden {
             entities,
             conditions,
         } => format!("{entities}: {conditions}"),
-        InvText::CrossWhenThen {
+        InvText::CrossInvariant {
             entities,
             guards,
             requireds,
@@ -1049,10 +1055,9 @@ fn variation_note(variation: &rdra_ish_core::model::Variation) -> String {
     let values: Vec<String> = variation
         .values
         .iter()
-        .zip(&variation.labels)
-        .map(|(value, label)| match label {
-            Some(label) => format!("{value} = {}", one_line(label)),
-            None => value.clone(),
+        .map(|v| match &v.label {
+            Some(label) => format!("{} = {}", v.value, one_line(label)),
+            None => v.value.clone(),
         })
         .collect();
     format!(

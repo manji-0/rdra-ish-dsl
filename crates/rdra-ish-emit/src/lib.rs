@@ -17,7 +17,7 @@ pub mod typescript;
 /// The flowchart encoding a reader of the `.mmd` needs: each kind's node shape, and the
 /// relation an unlabelled edge stands for.
 pub use diagram_common::{
-    edge_relations, implied_relation, node_shape, EdgeLabel, EdgeRelation, EDGE_RELATIONS,
+    edge_relations, implied_relation, node_shape, Diagram, EdgeLabel, EdgeRelation, EDGE_RELATIONS,
     NODE_SHAPES,
 };
 
@@ -136,12 +136,8 @@ impl View {
 
     pub fn er() -> Self {
         Self {
-            state: StateView::default(),
-            scope: Scope::Whole,
             filter: Filter::Er,
-            model_path: None,
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
+            ..Self::whole()
         }
     }
 
@@ -154,12 +150,8 @@ impl View {
             Scope::Bucs(buc_ids)
         };
         Self {
-            state: StateView::default(),
             scope,
-            filter: Filter::None,
-            model_path: None,
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
+            ..Self::whole()
         }
     }
 
@@ -171,12 +163,8 @@ impl View {
             Scope::UseCases(usecase_ids)
         };
         Self {
-            state: StateView::default(),
             scope,
-            filter: Filter::None,
-            model_path: None,
-            node_kinds: Vec::new(),
-            edge_kinds: Vec::new(),
+            ..Self::whole()
         }
     }
 
@@ -472,47 +460,23 @@ pub fn unknown_diagram_filter_kinds(
     (unknown_nodes, unknown_edges)
 }
 
-pub(crate) fn node_kind_filter_name(node: &NodeRef) -> &'static str {
-    match node {
-        NodeRef::Actor(_) => "actor",
-        NodeRef::ExtSystem(_) => "extsystem",
-        NodeRef::System(_) => "system",
-        NodeRef::Requirement(_) => "requirement",
-        NodeRef::Adr(_) => "adr",
-        NodeRef::Goal(_) => "goal",
-        NodeRef::Nfr(_) => "nfr",
-        NodeRef::Quality(_) => "quality",
-        NodeRef::Constraint(_) => "constraint",
-        NodeRef::Business(_) => "business",
-        NodeRef::Buc(_) => "buc",
-        NodeRef::Flow(_) => "flow",
-        NodeRef::Step(_) => "step",
-        NodeRef::UseCase(_) => "usecase",
-        NodeRef::Screen(_) => "screen",
-        NodeRef::Field(_) => "field",
-        NodeRef::Event(_) => "event",
-        NodeRef::Entity(_) => "entity",
-        NodeRef::State(_) => "state",
-        NodeRef::Api(_) => "api",
-        NodeRef::Dto(_) => "dto",
-        NodeRef::Timer(_) => "timer",
-        NodeRef::Medium(_) => "medium",
-        NodeRef::Permission(_) => "permission",
-        NodeRef::Variation(_) => "variation",
-        NodeRef::Condition(_) => "condition",
-    }
+/// Whether `kind` is one of the four `relate` cardinalities.
+pub(crate) fn is_relate(kind: &RelKind) -> bool {
+    matches!(
+        kind,
+        RelKind::RelateOneToOne
+            | RelKind::RelateOneToMany
+            | RelKind::RelateManyToOne
+            | RelKind::RelateManyToMany
+    )
 }
 
 pub(crate) fn view_node_visible(view: &View, node: &NodeRef) -> bool {
-    if view.node_kinds.is_empty() {
-        return true;
-    }
-    let kind = node_kind_filter_name(node);
-    let normalized = normalize_filter_token(kind);
-    let underscore = kind.replace('-', "_");
-    view.node_kinds
-        .iter()
-        .any(|filter| filter == kind || filter == &normalized || filter == &underscore)
+    view.node_kinds.is_empty()
+        || view
+            .node_kinds
+            .iter()
+            .any(|filter| filter == node.kind_tag())
 }
 
 pub(crate) fn view_relation_visible(view: &View, kind: &RelKind) -> bool {
@@ -522,16 +486,7 @@ pub(crate) fn view_relation_visible(view: &View, kind: &RelKind) -> bool {
     let label = object_graph_rel_label(kind);
     let normalized = normalize_filter_token(label);
     view.edge_kinds.iter().any(|filter| {
-        filter == label
-            || filter == &normalized
-            || (filter == "relate"
-                && matches!(
-                    kind,
-                    RelKind::RelateOneToOne
-                        | RelKind::RelateOneToMany
-                        | RelKind::RelateManyToOne
-                        | RelKind::RelateManyToMany
-                ))
+        filter == label || filter == &normalized || (filter == "relate" && is_relate(kind))
     })
 }
 
@@ -822,37 +777,6 @@ mod tests {
         model
     }
 
-    fn node_id(model: &SemanticModel, node: &NodeRef) -> String {
-        match node {
-            NodeRef::Actor(k) => model.actors[*k].id.clone(),
-            NodeRef::Requirement(k) => model.requirements[*k].id.clone(),
-            NodeRef::Adr(k) => model.adrs[*k].id.clone(),
-            NodeRef::Goal(k) => model.goals[*k].id.clone(),
-            NodeRef::Nfr(k) => model.nfrs[*k].id.clone(),
-            NodeRef::Quality(k) => model.qualities[*k].id.clone(),
-            NodeRef::Constraint(k) => model.constraints[*k].id.clone(),
-            NodeRef::ExtSystem(k) => model.ext_systems[*k].id.clone(),
-            NodeRef::Business(k) => model.businesses[*k].id.clone(),
-            NodeRef::Buc(k) => model.bucs[*k].id.clone(),
-            NodeRef::Flow(k) => model.flows[*k].id.clone(),
-            NodeRef::Step(k) => model.steps[*k].id.clone(),
-            NodeRef::Timer(k) => model.timers[*k].id.clone(),
-            NodeRef::Medium(k) => model.media[*k].id.clone(),
-            NodeRef::Permission(k) => model.permissions[*k].id.clone(),
-            NodeRef::UseCase(k) => model.use_cases[*k].id.clone(),
-            NodeRef::Screen(k) => model.screens[*k].id.clone(),
-            NodeRef::Field(k) => model.fields[*k].id.clone(),
-            NodeRef::Event(k) => model.events[*k].id.clone(),
-            NodeRef::Api(k) => model.apis[*k].id.clone(),
-            NodeRef::Dto(k) => model.dtos[*k].id.clone(),
-            NodeRef::System(k) => model.systems[*k].id.clone(),
-            NodeRef::Entity(k) => model.entities[*k].id.clone(),
-            NodeRef::State(k) => model.states[*k].id.clone(),
-            NodeRef::Variation(k) => model.variations[*k].id.clone(),
-            NodeRef::Condition(k) => model.conditions[*k].id.clone(),
-        }
-    }
-
     #[test]
     fn collect_object_graph_nodes_uses_layer_order_and_id_sorting() {
         let model = model_from(
@@ -888,7 +812,7 @@ transitions(Uc, Entity.status, a -> b)
 
         let ids: Vec<_> = collect_object_graph_nodes(&model, &|_| true)
             .iter()
-            .map(|node| node_id(&model, node))
+            .map(|node| model.node_id(node).unwrap().to_string())
             .collect();
 
         assert_eq!(
@@ -936,7 +860,10 @@ entity Account "Account" { id: Int @pk }
         let nodes = collect_object_graph_nodes(&model, &|node| {
             !matches!(node, NodeRef::Permission(_) | NodeRef::Entity(_))
         });
-        let ids: Vec<_> = nodes.iter().map(|node| node_id(&model, node)).collect();
+        let ids: Vec<_> = nodes
+            .iter()
+            .map(|node| model.node_id(node).unwrap().to_string())
+            .collect();
 
         assert_eq!(ids, vec!["Customer", "Manage"]);
         assert!(nodes

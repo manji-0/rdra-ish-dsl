@@ -135,10 +135,7 @@ impl<'t> Bfs<'t> {
             .var_ids()
             .map(|v| {
                 let decl = ts.var(v);
-                let slots = match decl.kind {
-                    VarKind::Now => 1,
-                    _ => ts.bounds.slots(),
-                };
+                let slots = ts.slots_of(&decl.kind);
                 let reached: BTreeSet<Value> = self
                     .states
                     .iter()

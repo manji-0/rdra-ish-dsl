@@ -116,14 +116,7 @@ fn exposes_records_the_caller_and_the_publish_mode() {
         model.publication.caller_of(revoke),
         Some(CallerKind::System)
     );
-    assert_eq!(
-        model
-            .typed_predicates
-            .iter()
-            .filter(|p| matches!(p, crate::model::TypedPredicate::Exposes { .. }))
-            .count(),
-        4
-    );
+    assert_eq!(items.len(), 4);
 }
 
 #[test]

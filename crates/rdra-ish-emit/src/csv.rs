@@ -1,10 +1,13 @@
-//! CSV emitters: ActorList, EntityList, RelationMatrix, ApiList, ApiEntityMatrix.
+//! CSV emitters: actor, entity, relation and API lists and matrices, screen constraints,
+//! permission callables and audits, and business inputs.
+
+use std::collections::HashMap;
 
 use crate::{EmitError, Emitter, View};
 use rdra_ish_core::{
     derive_actor_input_inferences, derive_actor_permission_audit, derive_permission_callables,
     derive_screen_constraint_patterns,
-    model::{ApiKey, ColumnType, EntityKey, NodeRef, RelKind, SemanticModel, UseCaseKey},
+    model::{EntityKey, NodeRef, RelKind, SemanticModel},
     ActorInputSource,
 };
 
@@ -24,10 +27,7 @@ impl Emitter for ActorListCsvEmitter {
             wtr.write_record([&actor.id, &actor.label])?;
         }
 
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        finish(wtr)
     }
 }
 
@@ -65,7 +65,7 @@ impl Emitter for EntityListCsvEmitter {
 
         for (key, ent) in &entities {
             for col in &ent.columns {
-                let col_type = col_type_to_str(model, &col.col_type);
+                let col_type = crate::diagram_common::col_type_str(model, &col.col_type);
                 let fk = model.column_fk(*key, &col.name).map(|(_, fk)| fk);
                 let fk_target = fk.map_or("", |fk| model.entities[fk.parent].id.as_str());
                 let default_val = col.default_val.as_deref().unwrap_or("").to_string();
@@ -110,10 +110,7 @@ impl Emitter for EntityListCsvEmitter {
             }
         }
 
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        finish(wtr)
     }
 }
 
@@ -124,87 +121,13 @@ pub struct RelationMatrixCsvEmitter;
 
 impl Emitter for RelationMatrixCsvEmitter {
     fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
-        // ソートされたUseCase一覧
         let mut use_cases: Vec<_> = model.use_cases.iter().collect();
         use_cases.sort_by_key(|(_, u)| &u.id);
-
-        // ソートされたEntity一覧
-        let mut entities: Vec<_> = model.entities.iter().collect();
-        entities.sort_by_key(|(_, e)| &e.id);
-
-        // UseCase → Entity → CRUD bits
-        // bits: C=1, R=2, U=4, D=8, W=16
-        use std::collections::HashMap;
-        let mut matrix: HashMap<UseCaseKey, HashMap<rdra_ish_core::model::EntityKey, u8>> =
-            HashMap::new();
-
-        for rel in &model.relations {
-            let (uc_key, ent_key, bit) = match &rel.kind {
-                RelKind::Reads => {
-                    if let (NodeRef::UseCase(uk), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*uk, *ek, 0b00010u8) // R
-                    } else {
-                        continue;
-                    }
-                }
-                RelKind::Creates => {
-                    if let (NodeRef::UseCase(uk), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*uk, *ek, 0b00001u8) // C
-                    } else {
-                        continue;
-                    }
-                }
-                RelKind::Updates => {
-                    if let (NodeRef::UseCase(uk), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*uk, *ek, 0b00100u8) // U
-                    } else {
-                        continue;
-                    }
-                }
-                RelKind::Deletes => {
-                    if let (NodeRef::UseCase(uk), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*uk, *ek, 0b01000u8) // D
-                    } else {
-                        continue;
-                    }
-                }
-                _ => continue,
-            };
-
-            *matrix
-                .entry(uc_key)
-                .or_default()
-                .entry(ent_key)
-                .or_insert(0) |= bit;
-        }
-
-        let mut wtr = csv::Writer::from_writer(vec![]);
-
-        // header: UseCase, entity1, entity2, ...
-        let mut header = vec!["UseCase".to_string()];
-        for (_, ent) in &entities {
-            header.push(ent.id.clone());
-        }
-        wtr.write_record(&header)?;
-
-        // rows
-        for (uc_key, uc) in &use_cases {
-            let mut row = vec![uc.id.clone()];
-            for (ent_key, _) in &entities {
-                let bits = matrix
-                    .get(uc_key)
-                    .and_then(|m| m.get(ent_key))
-                    .copied()
-                    .unwrap_or(0);
-                row.push(bits_to_crud(bits));
-            }
-            wtr.write_record(&row)?;
-        }
-
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        let rows = use_cases
+            .into_iter()
+            .map(|(k, u)| (NodeRef::UseCase(k), u.id.as_str()))
+            .collect();
+        crud_matrix(model, "UseCase", rows)
     }
 }
 
@@ -241,10 +164,7 @@ impl Emitter for ApiListCsvEmitter {
             ])?;
         }
 
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        finish(wtr)
     }
 }
 
@@ -255,77 +175,13 @@ pub struct ApiEntityMatrixCsvEmitter;
 
 impl Emitter for ApiEntityMatrixCsvEmitter {
     fn emit(&self, model: &SemanticModel, _view: &View) -> Result<String, EmitError> {
-        use std::collections::HashMap;
-
         let mut apis: Vec<_> = model.apis.iter().collect();
         apis.sort_by_key(|(_, a)| &a.id);
-
-        let mut entities: Vec<_> = model.entities.iter().collect();
-        entities.sort_by_key(|(_, e)| &e.id);
-
-        let mut matrix: HashMap<ApiKey, HashMap<EntityKey, u8>> = HashMap::new();
-
-        for rel in &model.relations {
-            let (ak, ek, bit) = match &rel.kind {
-                RelKind::Reads => {
-                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*ak, *ek, 0b00010u8)
-                    } else {
-                        continue;
-                    }
-                }
-                RelKind::Creates => {
-                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*ak, *ek, 0b00001u8)
-                    } else {
-                        continue;
-                    }
-                }
-                RelKind::Updates => {
-                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*ak, *ek, 0b00100u8)
-                    } else {
-                        continue;
-                    }
-                }
-                RelKind::Deletes => {
-                    if let (NodeRef::Api(ak), NodeRef::Entity(ek)) = (&rel.from, &rel.to) {
-                        (*ak, *ek, 0b01000u8)
-                    } else {
-                        continue;
-                    }
-                }
-                _ => continue,
-            };
-
-            *matrix.entry(ak).or_default().entry(ek).or_insert(0) |= bit;
-        }
-
-        let mut wtr = csv::Writer::from_writer(vec![]);
-
-        let mut header = vec!["Api".to_string()];
-        for (_, ent) in &entities {
-            header.push(ent.id.clone());
-        }
-        wtr.write_record(&header)?;
-
-        for (api_key, api) in &apis {
-            let mut row = vec![api.id.clone()];
-            for (ent_key, _) in &entities {
-                let bits = matrix
-                    .get(api_key)
-                    .and_then(|m| m.get(ent_key))
-                    .copied()
-                    .unwrap_or(0);
-                row.push(bits_to_crud(bits));
-            }
-            wtr.write_record(&row)?;
-        }
-
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        let rows = apis
+            .into_iter()
+            .map(|(k, a)| (NodeRef::Api(k), a.id.as_str()))
+            .collect();
+        crud_matrix(model, "Api", rows)
     }
 }
 
@@ -367,10 +223,7 @@ impl Emitter for ScreenConstraintCsvEmitter {
             wtr.write_record([screen_id, usecase_id, api_id, &permissions, &media])?;
         }
 
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        finish(wtr)
     }
 }
 
@@ -414,10 +267,7 @@ impl Emitter for PermissionCallableCsvEmitter {
             ])?;
         }
 
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        finish(wtr)
     }
 }
 
@@ -459,10 +309,7 @@ impl Emitter for ActorPermissionAuditCsvEmitter {
             ])?;
         }
 
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        finish(wtr)
     }
 }
 
@@ -499,7 +346,7 @@ impl Emitter for BusinessInputCsvEmitter {
                 .columns
                 .iter()
                 .find(|column| column.name == entry.column)
-                .map(|column| col_type_to_str(model, &column.col_type))
+                .map(|column| crate::diagram_common::col_type_str(model, &column.col_type))
                 .unwrap_or_default();
             let (source_type, source_id) = match entry.source {
                 ActorInputSource::UseCase => ("usecase", usecase.id.as_str()),
@@ -521,10 +368,7 @@ impl Emitter for BusinessInputCsvEmitter {
             ])?;
         }
 
-        let data = wtr
-            .into_inner()
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        Ok(String::from_utf8(data).unwrap_or_default())
+        finish(wtr)
     }
 }
 
@@ -590,8 +434,55 @@ fn bool_str(value: bool) -> &'static str {
     }
 }
 
-fn col_type_to_str(model: &SemanticModel, ct: &ColumnType) -> String {
-    crate::diagram_common::col_type_str(model, ct)
+/// The bit a CRUD relation sets in a matrix cell; `None` for any other relation.
+fn crud_bit(kind: &RelKind) -> Option<u8> {
+    match kind {
+        RelKind::Creates => Some(0b0001),
+        RelKind::Reads => Some(0b0010),
+        RelKind::Updates => Some(0b0100),
+        RelKind::Deletes => Some(0b1000),
+        _ => None,
+    }
+}
+
+/// One row per `(node, id)` in the order given, one column per entity sorted by id; a cell holds
+/// the CRUD letters of the relations from the row's node to the entity.
+fn crud_matrix(
+    model: &SemanticModel,
+    header: &str,
+    rows: Vec<(NodeRef, &str)>,
+) -> Result<String, EmitError> {
+    let mut entities: Vec<_> = model.entities.iter().collect();
+    entities.sort_by_key(|(_, e)| &e.id);
+
+    let mut matrix: HashMap<(NodeRef, EntityKey), u8> = HashMap::new();
+    for rel in &model.relations {
+        if let (Some(bit), NodeRef::Entity(ek)) = (crud_bit(&rel.kind), &rel.to) {
+            *matrix.entry((rel.from.clone(), *ek)).or_insert(0) |= bit;
+        }
+    }
+
+    let mut wtr = csv::Writer::from_writer(vec![]);
+    let mut head = vec![header.to_string()];
+    head.extend(entities.iter().map(|(_, e)| e.id.clone()));
+    wtr.write_record(&head)?;
+    for (node, id) in rows {
+        let mut row = vec![id.to_string()];
+        for (ent_key, _) in &entities {
+            let bits = matrix.get(&(node.clone(), *ent_key)).copied().unwrap_or(0);
+            row.push(bits_to_crud(bits));
+        }
+        wtr.write_record(&row)?;
+    }
+    finish(wtr)
+}
+
+/// The text a finished writer holds.
+fn finish(wtr: csv::Writer<Vec<u8>>) -> Result<String, EmitError> {
+    let data = wtr
+        .into_inner()
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    Ok(String::from_utf8(data).expect("a csv of strings is UTF-8"))
 }
 
 fn bits_to_crud(bits: u8) -> String {

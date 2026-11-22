@@ -199,35 +199,33 @@ chooses(Decide, Doc.scope, broad).when(Never)
 fn untaken_arms(model: &SemanticModel, bounds: Bounds) -> Vec<usize> {
     let built = TransitionSystem::build(model, bounds, &Scope::ALL);
     let mut taken = vec![false; model.state_transitions.len()];
-    for comp in built.ts.components() {
-        let run = built.ts.restrict(&comp).run(Caps::new(usize::MAX, 200_000));
-        assert!(run.complete, "a component does not finish");
-        let ts = &run.system;
-        for (i, st) in model.state_transitions.iter().enumerate() {
-            let Some(var) = ts.var_ids().find(|&v| {
-                matches!(&ts.var(v).kind, VarKind::Column { entity, column, .. }
-                    if ts.entity(*entity).key == st.entity && *column == st.column)
-            }) else {
-                continue;
+    let run = built.ts.clone().run(Caps::new(usize::MAX, 200_000));
+    assert!(run.complete, "the system does not finish");
+    let ts = &run.system;
+    for (i, st) in model.state_transitions.iter().enumerate() {
+        let Some(var) = ts.var_ids().find(|&v| {
+            matches!(&ts.var(v).kind, VarKind::Column { entity, column, .. }
+                if ts.entity(*entity).key == st.entity && *column == st.column)
+        }) else {
+            continue;
+        };
+        let Domain::Enum(values) = &ts.var(var).domain else {
+            continue;
+        };
+        let index = |name: &str| values.iter().position(|v| v.eq_ignore_ascii_case(name));
+        let (Some(from), Some(to)) = (index(&st.from), index(&st.to)) else {
+            continue;
+        };
+        let (from, to) = (Value(from as u8), Value(to as u8));
+        taken[i] |= run.graph().edges().any(|(a, b, act)| {
+            let ActionOrigin::UseCase { uc, .. } = ts.actions()[act.index()].origin else {
+                return false;
             };
-            let Domain::Enum(values) = &ts.var(var).domain else {
-                continue;
-            };
-            let index = |name: &str| values.iter().position(|v| v.eq_ignore_ascii_case(name));
-            let (Some(from), Some(to)) = (index(&st.from), index(&st.to)) else {
-                continue;
-            };
-            let (from, to) = (Value(from as u8), Value(to as u8));
-            taken[i] |= run.graph().edges().any(|(a, b, act)| {
-                let ActionOrigin::UseCase { uc, .. } = ts.actions()[act.index()].origin else {
-                    return false;
-                };
-                let (pre, post) = (&run.states[a as usize], &run.states[b as usize]);
-                uc == st.usecase
-                    && (0..bounds.slots())
-                        .any(|k| pre.get(ts, var, k) == from && post.get(ts, var, k) == to)
-            });
-        }
+            let (pre, post) = (&run.states[a as usize], &run.states[b as usize]);
+            uc == st.usecase
+                && (0..bounds.slots())
+                    .any(|k| pre.get(ts, var, k) == from && post.get(ts, var, k) == to)
+        });
     }
     (0..taken.len()).filter(|&i| !taken[i]).collect()
 }
@@ -243,40 +241,38 @@ fn unpicked_values(model: &SemanticModel, bounds: Bounds) -> Vec<(usize, usize)>
         .flat_map(|(i, c)| (0..c.values.len()).map(move |j| (i, j)))
         .collect();
     let mut picked = vec![false; listed.len()];
-    for comp in built.ts.components() {
-        let run = built.ts.restrict(&comp).run(Caps::new(usize::MAX, 200_000));
-        assert!(run.complete, "a component does not finish");
-        let ts = &run.system;
-        for (n, &(i, j)) in listed.iter().enumerate() {
-            let choice = &model.column_choices[i];
-            let Some(var) = ts.var_ids().find(|&v| {
-                matches!(&ts.var(v).kind, VarKind::Column { entity, column, .. }
-                    if ts.entity(*entity).key == choice.entity && *column == choice.column)
-            }) else {
-                // No rule or guard reads the column, so the system does not model it.
-                picked[n] |= !built.ts.var_ids().any(|v| {
-                    matches!(&built.ts.var(v).kind, VarKind::Column { entity, column, .. }
-                        if built.ts.entity(*entity).key == choice.entity && *column == choice.column)
-                });
-                continue;
-            };
-            let Domain::Enum(values) = &ts.var(var).domain else {
-                continue;
-            };
-            let Some(v) = values.iter().position(|x| *x == choice.values[j].value) else {
-                continue;
-            };
-            let v = Value(v as u8);
-            picked[n] |= run.graph().edges().any(|(a, b, act)| {
-                let ActionOrigin::UseCase { uc, .. } = ts.actions()[act.index()].origin else {
-                    return false;
-                };
-                let (pre, post) = (&run.states[a as usize], &run.states[b as usize]);
-                uc == choice.origin
-                    && pre != post
-                    && (0..bounds.slots()).any(|k| post.get(ts, var, k) == v)
+    let run = built.ts.clone().run(Caps::new(usize::MAX, 200_000));
+    assert!(run.complete, "the system does not finish");
+    let ts = &run.system;
+    for (n, &(i, j)) in listed.iter().enumerate() {
+        let choice = &model.column_choices[i];
+        let Some(var) = ts.var_ids().find(|&v| {
+            matches!(&ts.var(v).kind, VarKind::Column { entity, column, .. }
+                if ts.entity(*entity).key == choice.entity && *column == choice.column)
+        }) else {
+            // No rule or guard reads the column, so the system does not model it.
+            picked[n] |= !built.ts.var_ids().any(|v| {
+                matches!(&built.ts.var(v).kind, VarKind::Column { entity, column, .. }
+                    if built.ts.entity(*entity).key == choice.entity && *column == choice.column)
             });
-        }
+            continue;
+        };
+        let Domain::Enum(values) = &ts.var(var).domain else {
+            continue;
+        };
+        let Some(v) = values.iter().position(|x| *x == choice.values[j].value) else {
+            continue;
+        };
+        let v = Value(v as u8);
+        picked[n] |= run.graph().edges().any(|(a, b, act)| {
+            let ActionOrigin::UseCase { uc, .. } = ts.actions()[act.index()].origin else {
+                return false;
+            };
+            let (pre, post) = (&run.states[a as usize], &run.states[b as usize]);
+            uc == choice.origin
+                && pre != post
+                && (0..bounds.slots()).any(|k| post.get(ts, var, k) == v)
+        });
     }
     listed
         .into_iter()

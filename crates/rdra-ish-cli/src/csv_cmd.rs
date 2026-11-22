@@ -14,19 +14,12 @@ use rdra_ish_emit::{
 use std::fs;
 
 use crate::cli::{CsvFormat, CsvKind};
-use crate::lifecycle_gate::gate;
-use crate::load::reject_model_errors;
-use rdra_ish_core::{load_project, Project};
+use crate::lifecycle_gate::{gate, Lifecycle};
+use crate::load::load_clean;
 
 pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBuf) -> Result<()> {
-    let Project {
-        program,
-        model,
-        diags,
-        ..
-    } = load_project(inputs, None)?;
-    reject_model_errors(&program, &diags)?;
-    gate(&program, &model, kind.reads())?;
+    let (program, model) = load_clean(inputs)?;
+    gate(&Lifecycle::new(&program, &model), kind.reads())?;
 
     let view = View::whole();
 
@@ -68,7 +61,7 @@ pub fn run_csv(inputs: &[PathBuf], kind: CsvKind, format: CsvFormat, out: PathBu
     let out_path = if out.extension().is_some() {
         out.clone()
     } else {
-        out.with_extension(ext.trim_start_matches("*."))
+        out.with_extension(ext)
     };
 
     fs::write(&out_path, &csv_content)

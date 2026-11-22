@@ -2,9 +2,9 @@
 //! (docs/vision.md, "The lifecycle layer has one semantics").
 //!
 //! `TransitionSystem::build` reads the model under explicit `Bounds` and returns the system
-//! with its diagnostics. `explore` runs a BFS per independent component (`components`,
-//! `restrict`), and `Exploration::entity_views` projects the reached states onto per-entity
-//! views shaped like the `states` output.
+//! with its diagnostics. `explore_targets` runs one BFS per target over that target's cone (the
+//! vars the target reads, closed under what writes them), and `TargetExploration::entity_views`
+//! projects the reached states onto per-entity views shaped like the `states` output.
 
 mod build;
 mod cone;
@@ -32,7 +32,7 @@ pub use diag::{
     created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,
     Severity, StateDiag, VarSpread,
 };
-pub use explore::{Caps, ComponentRun, Edge, Exploration, Graph, LabelledEdges};
+pub use explore::{Caps, ComponentRun, Edge, Graph, LabelledEdges};
 pub use expr::State;
 pub use findings::{
     ActionRuns, ArmTaken, ModelState, Progress, Runs, StateModelFindings, Taken, ValueProgress,
@@ -40,15 +40,15 @@ pub use findings::{
 };
 pub use lasso::{LassoReplay, Loop};
 pub use reduce::{ClassMove, Fold, FoldKey, Reduction, Step};
-pub use restrict::Component;
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
 pub use states::{derive_states, derive_states_built, BoundsLine, FindingTally, StatesReport};
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
-    ActId, Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, Bounds, CmpOp, Domain, Effect,
-    EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind, ModelRef, Param,
-    ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId, VarKind,
+    ActId, Action, ActionOrigin, AfterAssert, AfterStep, Arm, At, Birth, Bounds, Choice, CmpOp,
+    Domain, Effect, EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind,
+    ModelRef, Param, ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId,
+    VarKind,
 };
 pub use view::{
     AbstractValue, AxisKind, EntityStateResult, Provenance, ReachablePattern, StateAxis,
@@ -115,16 +115,22 @@ impl TransitionSystem {
         let mut at = 0;
         for var in &self.vars {
             self.offsets.push(at);
-            at += match var.kind {
-                VarKind::Now => 1,
-                _ => self.bounds.slots(),
-            };
+            at += self.slots_of(&var.kind);
         }
         self.width = at;
     }
 
     pub(crate) fn offset(&self, var: VarId) -> usize {
         self.offsets[var.index()]
+    }
+
+    /// How many state bytes a var of this kind takes: `now` is one slot wide, the rest one
+    /// per instance slot.
+    pub(crate) fn slots_of(&self, kind: &VarKind) -> usize {
+        match kind {
+            VarKind::Now => 1,
+            _ => self.bounds.slots(),
+        }
     }
 
     pub fn entities(&self) -> &[EntityDecl] {

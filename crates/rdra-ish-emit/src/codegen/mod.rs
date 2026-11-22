@@ -76,9 +76,7 @@ pub fn generate(
     let mut domain = build(model, refine, site)?;
     if let CheckStatus::Failed { errors } = &options.check {
         for error in errors {
-            let id = format!("O{}", domain.obligations.len() + 1);
             domain.obligations.push(Obligation {
-                id,
                 invariant: None,
                 text: format!("NOT MET by the model, which `check` rejects: {error}"),
                 site: None,
@@ -168,13 +166,13 @@ fn obligations_only(domain: &DomainModel) -> Vec<String> {
         return vec!["Obligations: none.".to_string()];
     }
     let mut lines = vec!["Obligations:".to_string()];
-    for o in &domain.obligations {
+    for (i, o) in domain.obligations.iter().enumerate() {
         let name = o
             .invariant
             .as_ref()
             .map(|n| format!(" [{n}]"))
             .unwrap_or_default();
-        lines.push(format!("{}{name} {}", o.id, o.text));
+        lines.push(format!("O{}{name} {}", i + 1, o.text));
         if let Some(site) = &o.site {
             lines.push(format!("    at {site}"));
         }
@@ -217,13 +215,13 @@ pub fn build(
         domain.enums.push(EnumDecl {
             name,
             doc: doc_of(&variation.label, variation.description.as_deref()),
-            values: distinct_idents(
+            values: distinct(
                 variation
                     .values
                     .iter()
-                    .zip(variation.labels.iter().chain(std::iter::repeat(&None)))
-                    .map(|(v, l)| enum_value(v, l.clone()))
+                    .map(|v| enum_value(&v.value, v.label.clone()))
                     .collect(),
+                |v| &mut v.ident,
             ),
         });
     }
@@ -259,7 +257,7 @@ pub fn build(
             let ty = column_type(model, key, entity, column, &id_of, &mut names, &mut domain)?;
             fields.push(field(column, ty));
         }
-        let fields = distinct_fields(fields);
+        let fields = distinct(fields, |f| &mut f.pascal);
         let doc = doc_of(&entity.label, entity.description.as_deref());
         match states::tag_column(model, key, entity) {
             Some((tag, values)) => {
@@ -296,14 +294,7 @@ pub fn build(
         for column in &dto.fields {
             let ty = match &column.col_type {
                 ColumnType::Enum(values) => {
-                    let enum_name = names.claim(
-                        format!("{name}{}", type_ident(&column.name)),
-                        format!("the Enum of {}.{}", dto.id, column.name),
-                    )?;
-                    domain
-                        .enums
-                        .push(inline_enum(enum_name.clone(), &dto.id, column, values));
-                    FieldType::Enum(enum_name)
+                    inline_enum_type(&mut names, &mut domain, &name, &dto.id, column, values)?
                 }
                 other => value_type(model, other),
             };
@@ -314,7 +305,7 @@ pub fn build(
             id: dto.id.clone(),
             kind: RecordKind::Dto,
             doc: doc_of(&dto.label, dto.description.as_deref()),
-            fields: distinct_fields(fields),
+            fields: distinct(fields, |f| &mut f.pascal),
         });
     }
 
@@ -375,7 +366,8 @@ fn sum_decl(
         .next()
         .expect("the tag column is a column of the entity");
     let mut variants = Vec::new();
-    for value in distinct_idents(values.iter().map(|v| enum_value(v, None)).collect()) {
+    let values = values.iter().map(|v| enum_value(v, None)).collect();
+    for value in distinct(values, |v| &mut v.ident) {
         let variant_name = names.claim(
             format!("{name}{}", value.ident),
             format!("the state {} of {}.{tag}", value.wire, entity.id),
@@ -452,16 +444,14 @@ fn column_type(
         }
     }
     Ok(match &column.col_type {
-        ColumnType::Enum(values) => {
-            let enum_name = names.claim(
-                format!("{}{}", type_ident(&entity.id), type_ident(&column.name)),
-                format!("the Enum of {}.{}", entity.id, column.name),
-            )?;
-            domain
-                .enums
-                .push(inline_enum(enum_name.clone(), &entity.id, column, values));
-            FieldType::Enum(enum_name)
-        }
+        ColumnType::Enum(values) => inline_enum_type(
+            names,
+            domain,
+            &type_ident(&entity.id),
+            &entity.id,
+            column,
+            values,
+        )?,
         other => value_type(model, other),
     })
 }
@@ -486,35 +476,57 @@ fn scalar_of(col_type: &ColumnType) -> Option<Scalar> {
     })
 }
 
+/// The type of an Enum column that has no variation: a new enum named after its owner's type
+/// and the column.
+fn inline_enum_type(
+    names: &mut Names,
+    domain: &mut DomainModel,
+    owner_type: &str,
+    owner: &str,
+    column: &ModelColumn,
+    values: &[String],
+) -> Result<FieldType, CodegenError> {
+    let name = names.claim(
+        format!("{owner_type}{}", type_ident(&column.name)),
+        format!("the Enum of {owner}.{}", column.name),
+    )?;
+    domain
+        .enums
+        .push(inline_enum(name.clone(), owner, column, values));
+    Ok(FieldType::Enum(name))
+}
+
 fn inline_enum(name: String, owner: &str, column: &ModelColumn, values: &[String]) -> EnumDecl {
     EnumDecl {
         name,
         doc: vec![format!("The values of {owner}.{}.", column.name)],
-        values: distinct_idents(
+        values: distinct(
             values
                 .iter()
                 .enumerate()
                 .map(|(i, v)| enum_value(v, column.value_labels.get(i).cloned().flatten()))
                 .collect(),
+            |v| &mut v.ident,
         ),
     }
 }
 
-/// Values whose identifiers coincide (`paid` and `Paid`) keep the first as it is and number
-/// the others, `Paid2`, so every identifier of one enum is distinct.
-fn distinct_idents(mut values: Vec<EnumValue>) -> Vec<EnumValue> {
+/// Items whose names coincide (`paid` and `Paid`, `due_at` and `dueAt`) keep the first as it is
+/// and number the others, `Paid2`, so every name among them is distinct.
+fn distinct<T>(mut items: Vec<T>, name: fn(&mut T) -> &mut String) -> Vec<T> {
     let mut seen: Vec<String> = Vec::new();
-    for value in &mut values {
-        let mut ident = value.ident.clone();
+    for item in &mut items {
+        let base = name(item).clone();
+        let mut candidate = base.clone();
         let mut n = 2;
-        while seen.contains(&ident) {
-            ident = format!("{}{n}", value.ident);
+        while seen.contains(&candidate) {
+            candidate = format!("{base}{n}");
             n += 1;
         }
-        seen.push(ident.clone());
-        value.ident = ident;
+        seen.push(candidate.clone());
+        *name(item) = candidate;
     }
-    values
+    items
 }
 
 fn enum_value(wire: &str, label: Option<String>) -> EnumValue {
@@ -551,23 +563,6 @@ fn field(column: &ModelColumn, ty: FieldType) -> Field {
     }
 }
 
-/// Fields whose PascalCase names coincide (`due_at` and `dueAt`) keep the first and number
-/// the others, as [`distinct_idents`] does.
-fn distinct_fields(mut fields: Vec<Field>) -> Vec<Field> {
-    let mut seen: Vec<String> = Vec::new();
-    for field in &mut fields {
-        let mut pascal = field.pascal.clone();
-        let mut n = 2;
-        while seen.contains(&pascal) {
-            pascal = format!("{}{n}", field.pascal);
-            n += 1;
-        }
-        seen.push(pascal.clone());
-        field.pascal = pascal;
-    }
-    fields
-}
-
 fn doc_of(label: &str, description: Option<&str>) -> Vec<String> {
     let mut doc = vec![label.to_string()];
     if let Some(d) = description.map(str::trim).filter(|d| !d.is_empty()) {
@@ -583,9 +578,7 @@ fn obligations(
 ) -> Vec<Obligation> {
     let mut out: Vec<Obligation> = Vec::new();
     let mut push = |invariant: Option<String>, text: String, at: Option<&LocatedSpan>| {
-        let id = format!("O{}", out.len() + 1);
         out.push(Obligation {
-            id,
             invariant,
             text,
             site: at.and_then(site),

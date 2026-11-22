@@ -3,39 +3,6 @@ use std::collections::HashMap;
 
 use super::refs::NodeRef;
 
-// ── Symbol table ─────────────────────────────────────────────────────────────
-
-fn node_ref_matches_kind(node: &NodeRef, kind: &Kind) -> bool {
-    matches!(
-        (node, kind),
-        (NodeRef::Actor(_), Kind::Actor)
-            | (NodeRef::ExtSystem(_), Kind::ExtSystem)
-            | (NodeRef::System(_), Kind::System)
-            | (NodeRef::Requirement(_), Kind::Requirement)
-            | (NodeRef::Adr(_), Kind::Adr)
-            | (NodeRef::Goal(_), Kind::Goal)
-            | (NodeRef::Nfr(_), Kind::Nfr)
-            | (NodeRef::Quality(_), Kind::Quality)
-            | (NodeRef::Constraint(_), Kind::Constraint)
-            | (NodeRef::Business(_), Kind::Business)
-            | (NodeRef::Buc(_), Kind::Buc)
-            | (NodeRef::Flow(_), Kind::Flow)
-            | (NodeRef::Step(_), Kind::Step)
-            | (NodeRef::UseCase(_), Kind::UseCase)
-            | (NodeRef::Screen(_), Kind::Screen)
-            | (NodeRef::Field(_), Kind::Field)
-            | (NodeRef::Event(_), Kind::Event)
-            | (NodeRef::Entity(_), Kind::Entity)
-            | (NodeRef::Api(_), Kind::Api)
-            | (NodeRef::Dto(_), Kind::Dto)
-            | (NodeRef::Timer(_), Kind::Timer)
-            | (NodeRef::Medium(_), Kind::Medium)
-            | (NodeRef::Permission(_), Kind::Permission)
-            | (NodeRef::Variation(_), Kind::Variation)
-            | (NodeRef::Condition(_), Kind::Condition)
-    )
-}
-
 /// The result of an unqualified symbol lookup.
 pub enum LookupResult<'a> {
     /// Exactly one node with this id.
@@ -120,7 +87,7 @@ impl SymbolTable {
         let entries = self.by_id.get(id)?;
         let matches: Vec<_> = entries
             .iter()
-            .filter(|e| node_ref_matches_kind(&e.node, kind))
+            .filter(|e| e.node.kind().as_ref() == Some(kind))
             .collect();
         match matches.as_slice() {
             [only] => Some(&only.node),
@@ -136,7 +103,7 @@ impl SymbolTable {
         module: &str,
     ) -> Option<&NodeRef> {
         self.by_id.get(id)?.iter().find_map(|e| {
-            (e.module.as_deref() == Some(module) && node_ref_matches_kind(&e.node, kind))
+            (e.module.as_deref() == Some(module) && e.node.kind().as_ref() == Some(kind))
                 .then_some(&e.node)
         })
     }

@@ -37,15 +37,9 @@ fn variation_typed_column_resolves_to_the_variation_and_its_values() {
     let entity = model.entities.values().next().unwrap();
     let method = entity.columns.iter().find(|c| c.name == "method").unwrap();
     assert!(matches!(method.col_type, ColumnType::Variation(_)));
-    assert_eq!(
-        model.column_values(method),
-        Some(&["cash".to_string(), "card".to_string()][..])
-    );
+    assert_eq!(model.column_values(method), Some(vec!["cash", "card"]));
     let status = entity.columns.iter().find(|c| c.name == "status").unwrap();
-    assert_eq!(
-        model.column_values(status),
-        Some(&["pending".to_string(), "posted".to_string()][..])
-    );
+    assert_eq!(model.column_values(status), Some(vec!["pending", "posted"]));
     let id = entity.columns.iter().find(|c| c.name == "id").unwrap();
     assert_eq!(model.column_values(id), None);
 }

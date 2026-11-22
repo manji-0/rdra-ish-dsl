@@ -135,8 +135,24 @@ enum Fall {
     Initial,
     Step(ActId),
     Unknown(String),
-    /// A fine mined lemma not yet in the set: it joins only when a rule stays unproved.
-    Held,
+}
+
+/// The candidate set: what each candidate fell for, and whether the fine mined lemmas are in.
+/// A fine lemma waits outside the set until a rule stays unproved without it.
+struct Set<'a> {
+    fell: Vec<Option<Fall>>,
+    fine: &'a BTreeSet<usize>,
+    fine_joined: bool,
+}
+
+impl Set<'_> {
+    fn contains(&self, k: usize) -> bool {
+        self.fell[k].is_none() && (self.fine_joined || !self.fine.contains(&k))
+    }
+
+    fn fallen(&self) -> usize {
+        self.fell.iter().filter(|f| f.is_some()).count()
+    }
 }
 
 /// The invariants of `ts` that come from a rule the model marks `.lemma()`.
@@ -230,7 +246,11 @@ pub fn prove(
 
     solver.exec(&format!("(reset)\n{}", enc.declarations()))?;
 
-    let mut fell: BTreeMap<usize, Fall> = BTreeMap::new();
+    let mut set = Set {
+        fell: vec![None; cands.len()],
+        fine: &fine,
+        fine_joined: false,
+    };
     // Initiation: every candidate holds in every initial state.
     match enc.initial() {
         Ok(init) => {
@@ -241,31 +261,30 @@ pub fn prove(
                     Sat::Sat => Fall::Initial,
                     Sat::Unknown => Fall::Unknown("the initial states".to_string()),
                 };
-                fell.insert(k, fall);
+                set.fell[k] = Some(fall);
             }
             solver.exec("(pop)")?;
         }
         Err(Unsupported(why)) => {
-            for k in 0..cands.len() {
-                fell.insert(k, Fall::Unknown(format!("the initial states ({why})")));
+            for fall in &mut set.fell {
+                *fall = Some(Fall::Unknown(format!("the initial states ({why})")));
             }
         }
     }
 
     // The fine lemmas wait: most models prove every rule without them, and they are many.
-    let at_start: BTreeSet<usize> = fell.keys().copied().collect();
-    for &k in &fine {
-        fell.entry(k).or_insert(Fall::Held);
-    }
+    let at_start: BTreeSet<usize> = (0..cands.len())
+        .filter(|k| set.fell[*k].is_some())
+        .collect();
     // Consecution, until a round removes nothing: the kept set is then inductive. When a rule
     // fell after initiation, the fine lemmas join, the rules that fell come back (the set that
     // broke one lacked them), and it runs once more.
     loop {
         loop {
-            let before = fell.len();
+            let before = set.fallen();
             for (a, step) in steps.iter().enumerate() {
                 let hit: Vec<usize> = (0..cands.len())
-                    .filter(|k| !fell.contains_key(k) && breaks(a, &cands[*k]))
+                    .filter(|k| set.contains(*k) && breaks(a, &cands[*k]))
                     .collect();
                 if hit.is_empty() {
                     continue;
@@ -273,7 +292,7 @@ pub fn prove(
                 solver.exec(&format!(
                     "(push)\n{}{}",
                     step.commands,
-                    assume(&cands, &fell)
+                    assume(&cands, &set)
                 ))?;
                 for k in hit {
                     let fall = match violated(solver, &enc, &cands[k], Frame::Post)? {
@@ -281,36 +300,35 @@ pub fn prove(
                         Sat::Sat => Fall::Step(ActId::at_index(a)),
                         Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
                     };
-                    fell.insert(k, fall);
+                    set.fell[k] = Some(fall);
                 }
                 solver.exec("(pop)")?;
             }
-            if fell.len() == before {
+            if set.fallen() == before {
                 break;
             }
         }
         let open = cands.iter().enumerate().any(|(k, c)| {
-            matches!(c.origin, Origin::Rule(_)) && fell.contains_key(&k) && !at_start.contains(&k)
+            matches!(c.origin, Origin::Rule(_)) && set.fell[k].is_some() && !at_start.contains(&k)
         });
-        if !open || !fell.values().any(|f| matches!(f, Fall::Held)) {
+        let waiting = !set.fine_joined && fine.iter().any(|k| !at_start.contains(k));
+        if !open || !waiting {
             break;
         }
-        fell.retain(|k, why| {
-            at_start.contains(k)
-                || match cands[*k].origin {
-                    Origin::Rule(_) => false,
-                    Origin::Lemma(_) => !matches!(why, Fall::Held),
-                }
-        });
+        set.fine_joined = true;
+        for (k, c) in cands.iter().enumerate() {
+            if matches!(c.origin, Origin::Rule(_)) && !at_start.contains(&k) {
+                set.fell[k] = None;
+            }
+        }
     }
 
     // Each rule that fell: its step again from the kept set plus the rule, for the CTI.
     for (k, c) in cands.iter().enumerate() {
         let Origin::Rule(i) = c.origin else { continue };
-        let verdict = match fell.get(&k) {
+        let verdict = match &set.fell[k] {
             None => Verdict::Proved,
             Some(Fall::Initial) => Verdict::Unproved(Unproved::Initial),
-            Some(Fall::Held) => unreachable!("only a fine lemma waits"),
             Some(Fall::Unknown(action)) => Verdict::Unproved(Unproved::Unknown {
                 action: action.clone(),
             }),
@@ -322,7 +340,7 @@ pub fn prove(
                     solver.exec(&format!(
                         "(push)\n{}{}(assert {})\n(push)\n{}",
                         steps[a].commands,
-                        assume(&cands, &fell),
+                        assume(&cands, &set),
                         c.pre,
                         violation(&enc, c, Frame::Post)
                     ))?;
@@ -348,7 +366,7 @@ pub fn prove(
     let kept_lemmas = cands
         .iter()
         .enumerate()
-        .filter(|(k, _)| !fell.contains_key(k))
+        .filter(|(k, _)| set.contains(*k))
         .filter_map(|(_, c)| match &c.origin {
             Origin::Lemma(text) => Some(text.clone()),
             Origin::Rule(_) => None,
@@ -368,11 +386,11 @@ pub fn prove(
 }
 
 /// Asserts every candidate still in the set over the pre-state.
-fn assume(cands: &[Candidate], fell: &BTreeMap<usize, Fall>) -> String {
+fn assume(cands: &[Candidate], set: &Set) -> String {
     cands
         .iter()
         .enumerate()
-        .filter(|(k, _)| !fell.contains_key(k))
+        .filter(|(k, _)| set.contains(*k))
         .map(|(_, c)| format!("(assert {})\n", c.pre))
         .collect()
 }

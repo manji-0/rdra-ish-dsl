@@ -79,12 +79,12 @@ impl Derived {
 }
 
 pub(super) fn derive_scoped(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Derived {
-    let built = TransitionSystem::build(model, bounds, scope);
-    let run = built.ts.explore(Caps::new(Caps::DEFAULT_PATTERNS, 100_000));
-    let views = run.entity_views(model, &built.diags);
-    let mut diags = built.diags.clone();
-    diags.extend(run.diags().cloned());
-    Derived { views, diags }
+    let caps = Caps::new(Caps::DEFAULT_PATTERNS, 100_000);
+    let (report, _) = super::derive_states_built(model, scope, bounds, caps);
+    Derived {
+        views: report.views,
+        diags: report.diags,
+    }
 }
 
 /// What `states` derives: `Bounds::STATES`, each view and verdict on its own cone.

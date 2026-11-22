@@ -337,11 +337,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
             super::camel(&f.name),
             params.join(", ")
         ));
-        let row = |r: usize| match f.rows.get(r) {
-            Some(x) => super::camel(&super::type_ident(&x.name)),
-            None => super::camel(&super::type_ident(&f.elems[r - f.rows.len()].name)),
-        };
-        let input_var = |i: usize| super::camel(&super::type_ident(&f.inputs[i].name));
+        let row = |r: usize| super::camel(&super::type_ident(&f.row(r).name));
         let input = |i: usize| super::camel(&super::type_ident(&f.inputs[i].name));
         for check in &f.checks {
             match check {
@@ -397,7 +393,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         for c in &f.conditions {
             out.push_str(&format!(
                 "  if (!({})) {{\n    return {{ rejected: {}, label: {}, site: {} }};\n  }}\n",
-                expr(&c.expr, &row, &input_var),
+                expr(&c.expr, &row, &input),
                 string_literal(&c.id),
                 string_literal(&c.label),
                 c.site

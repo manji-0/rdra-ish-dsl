@@ -3,7 +3,7 @@
 
 use crate::analysis::build_model;
 use crate::model::SemanticModel;
-use crate::predicate::{predicate_chain_methods, KNOWN_PREDICATES};
+use crate::predicate::Predicate;
 use crate::rules::business_rules;
 use rdra_ish_syntax::parse;
 
@@ -469,10 +469,11 @@ fn every_rule_form_records_a_rule_or_fails_to_load() {
 
 #[test]
 fn every_rule_predicate_has_a_form_in_the_audit() {
-    let labelled = KNOWN_PREDICATES
+    let labelled = Predicate::ALL
         .iter()
-        .filter(|p| predicate_chain_methods(p).contains(&"label"));
-    for pred in labelled.chain(&[
+        .filter(|p| p.chain_methods().contains(&"label"))
+        .map(|p| p.name());
+    for pred in labelled.chain([
         "holds",
         "maps_field",
         "sets",

@@ -10,8 +10,6 @@ use crate::lifecycle::types::{At, CmpOp, Domain, Pred, Site, Term, Value};
 use crate::model::{CmpOpModel, CmpRhs, ComparisonProp, DerivedExpr, EffectValue, EntityKey};
 
 impl<'m> Builder<'m> {
-    // ── Atoms ────────────────────────────────────────────────────────────────
-
     pub(super) fn slot(&self, ek: EntityKey, column: &str, at: At) -> Option<(Term, Domain)> {
         let e = self.ent_of[&ek];
         let var = *self.col_var.get(&(e, column.to_string()))?;

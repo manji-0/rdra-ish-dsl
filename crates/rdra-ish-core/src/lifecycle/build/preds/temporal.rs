@@ -16,8 +16,6 @@ use crate::model::{
 };
 
 impl Builder<'_> {
-    // ── R-after ──────────────────────────────────────────────────────────────
-
     /// One step per last action of the anchor use case (one, or one per `<UC>_by_<Ev>`
     /// variant of a use case several events trigger), so a split use case is checked once
     /// per run, after its last transaction group, on the run's rows: an entity an earlier
@@ -94,8 +92,6 @@ impl Builder<'_> {
             });
         }
     }
-
-    // ── R-prop ───────────────────────────────────────────────────────────────
 
     pub(in crate::lifecycle::build) fn properties(&mut self) {
         let model = self.model;
@@ -219,8 +215,6 @@ impl Builder<'_> {
             }
         }
     }
-
-    // ── Phase 1's frozen-constraint warning ─────────────────────────────────
 
     pub(in crate::lifecycle::build) fn unwritten_vars(&mut self) {
         let mut read: Vec<VarId> = Vec::new();

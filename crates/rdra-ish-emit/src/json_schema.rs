@@ -139,9 +139,9 @@ fn column_schema(model: &SemanticModel, fk: Option<&ForeignKey>, column: &ModelC
         ColumnType::Enum(_) | ColumnType::Variation(_) => {
             let mut enum_values: Vec<Value> = model
                 .column_values(column)
-                .unwrap_or(&[])
-                .iter()
-                .map(|value| Value::String(value.clone()))
+                .unwrap_or_default()
+                .into_iter()
+                .map(|value| Value::String(value.to_string()))
                 .collect();
             if column.is_nullable {
                 enum_values.push(Value::Null);

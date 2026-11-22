@@ -85,92 +85,115 @@ pub fn derive_system_boundaries(model: &SemanticModel) -> Vec<SystemBoundary> {
     result
 }
 
+struct SystemIndex {
+    systems_by_api: HashMap<ApiKey, Vec<SystemKey>>,
+    boundary_systems_by_entity: HashMap<EntityKey, Vec<SystemKey>>,
+    api_systems_by_entity: HashMap<EntityKey, Vec<SystemKey>>,
+    owners_by_entity: HashMap<EntityKey, Vec<SystemKey>>,
+}
+
+impl SystemIndex {
+    fn build(model: &SemanticModel) -> Self {
+        let mut systems_by_api: HashMap<ApiKey, Vec<SystemKey>> = HashMap::new();
+        let mut boundary_systems_by_entity: HashMap<EntityKey, Vec<SystemKey>> = HashMap::new();
+        for boundary in derive_system_boundaries(model) {
+            for &api in &boundary.apis {
+                systems_by_api.entry(api).or_default().push(boundary.system);
+            }
+            for &entity in &boundary.entities {
+                boundary_systems_by_entity
+                    .entry(entity)
+                    .or_default()
+                    .push(boundary.system);
+            }
+        }
+        let api_systems_by_entity = api_systems_by_entity(model, &systems_by_api);
+        Self {
+            systems_by_api,
+            boundary_systems_by_entity,
+            api_systems_by_entity,
+            owners_by_entity: owners_by_entity(model),
+        }
+    }
+
+    /// The single system an entity belongs to, or `None` when it has none or several.
+    fn sole_system(&self, entity: EntityKey) -> Option<SystemKey> {
+        match self.boundary_systems_by_entity.get(&entity)?.as_slice() {
+            [system] => Some(*system),
+            _ => None,
+        }
+    }
+}
+
+fn warn(model: &SemanticModel, diags: &mut Vec<Diagnostic>, kind: &str, id: &str, err: RdraError) {
+    push_model_decl_diagnostic(model, diags, kind, id, err, true);
+}
+
 pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
-    let boundaries = derive_system_boundaries(model);
+    let index = SystemIndex::build(model);
     let mut diags = Vec::new();
+    membership_conflicts(model, &index, &mut diags);
+    ownership_conflicts(model, &index, &mut diags);
+    operations_outside_owner(model, &index, &mut diags);
+    cross_system_relations(model, &index, &mut diags);
+    coordination_conflicts(model, &index, &mut diags);
+    diags
+}
 
-    let mut systems_by_api: HashMap<ApiKey, Vec<SystemKey>> = HashMap::new();
-    let mut boundary_systems_by_entity: HashMap<EntityKey, Vec<SystemKey>> = HashMap::new();
-    for boundary in &boundaries {
-        for &api in &boundary.apis {
-            systems_by_api.entry(api).or_default().push(boundary.system);
-        }
-        for &entity in &boundary.entities {
-            boundary_systems_by_entity
-                .entry(entity)
-                .or_default()
-                .push(boundary.system);
-        }
-    }
-    let api_systems_by_entity = api_systems_by_entity(model, &systems_by_api);
-    let owners_by_entity = owners_by_entity(model);
-
-    for (api, systems) in &systems_by_api {
+fn membership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut Vec<Diagnostic>) {
+    for (api, systems) in &index.systems_by_api {
         if systems.len() > 1 {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "api",
-                &api_id(model, *api),
-                RdraError::ApiInMultipleSystems {
-                    api: api_id(model, *api),
-                    systems: system_ids(model, systems),
-                },
-                true,
-            );
+            let api_id = api_id(model, *api);
+            let err = RdraError::ApiInMultipleSystems {
+                api: api_id.clone(),
+                systems: system_ids(model, systems),
+            };
+            warn(model, diags, "api", &api_id, err);
         }
     }
-
-    for (entity, systems) in &api_systems_by_entity {
+    for (entity, systems) in &index.api_systems_by_entity {
         if systems.len() > 1 {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "entity",
-                &entity_id(model, *entity),
-                RdraError::EntityInMultipleSystems {
-                    entity: entity_id(model, *entity),
-                    systems: system_ids(model, systems),
-                },
-                true,
-            );
+            let entity_id = entity_id(model, *entity);
+            let err = RdraError::EntityInMultipleSystems {
+                entity: entity_id.clone(),
+                systems: system_ids(model, systems),
+            };
+            warn(model, diags, "entity", &entity_id, err);
         }
     }
+}
 
-    for (entity, owners) in &owners_by_entity {
+fn ownership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut Vec<Diagnostic>) {
+    for (entity, owners) in &index.owners_by_entity {
+        let entity_id = entity_id(model, *entity);
         if owners.len() > 1 {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "entity",
-                &entity_id(model, *entity),
-                RdraError::EntityOwnedByMultipleSystems {
-                    entity: entity_id(model, *entity),
-                    systems: system_ids(model, owners),
-                },
-                true,
-            );
+            let err = RdraError::EntityOwnedByMultipleSystems {
+                entity: entity_id.clone(),
+                systems: system_ids(model, owners),
+            };
+            warn(model, diags, "entity", &entity_id, err);
         }
         for owner in owners {
-            if !api_systems_by_entity
+            let operated_by_owner = index
+                .api_systems_by_entity
                 .get(entity)
-                .is_some_and(|systems| systems.contains(owner))
-            {
-                push_model_decl_diagnostic(
-                    model,
-                    &mut diags,
-                    "entity",
-                    &entity_id(model, *entity),
-                    RdraError::OwnedEntityWithoutApiOperation {
-                        system: system_id(model, *owner),
-                        entity: entity_id(model, *entity),
-                    },
-                    true,
-                );
+                .is_some_and(|systems| systems.contains(owner));
+            if !operated_by_owner {
+                let err = RdraError::OwnedEntityWithoutApiOperation {
+                    system: system_id(model, *owner),
+                    entity: entity_id.clone(),
+                };
+                warn(model, diags, "entity", &entity_id, err);
             }
         }
     }
+}
 
+fn operations_outside_owner(
+    model: &SemanticModel,
+    index: &SystemIndex,
+    diags: &mut Vec<Diagnostic>,
+) {
     for rel in &model.relations {
         if !is_entity_operation(&rel.kind) {
             continue;
@@ -178,31 +201,28 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         let (NodeRef::Api(api), NodeRef::Entity(entity)) = (&rel.from, &rel.to) else {
             continue;
         };
-        let Some(owner_systems) = owners_by_entity.get(entity) else {
-            continue;
-        };
-        let Some(api_systems) = systems_by_api.get(api) else {
+        let (Some(owner_systems), Some(api_systems)) = (
+            index.owners_by_entity.get(entity),
+            index.systems_by_api.get(api),
+        ) else {
             continue;
         };
         for api_system in api_systems {
             if !owner_systems.contains(api_system) {
-                push_model_decl_diagnostic(
-                    model,
-                    &mut diags,
-                    "api",
-                    &api_id(model, *api),
-                    RdraError::ApiOperatesEntityOutsideOwner {
-                        api: api_id(model, *api),
-                        api_system: system_id(model, *api_system),
-                        entity: entity_id(model, *entity),
-                        owner_systems: system_ids(model, owner_systems),
-                    },
-                    true,
-                );
+                let api_id = api_id(model, *api);
+                let err = RdraError::ApiOperatesEntityOutsideOwner {
+                    api: api_id.clone(),
+                    api_system: system_id(model, *api_system),
+                    entity: entity_id(model, *entity),
+                    owner_systems: system_ids(model, owner_systems),
+                };
+                warn(model, diags, "api", &api_id, err);
             }
         }
     }
+}
 
+fn cross_system_relations(model: &SemanticModel, index: &SystemIndex, diags: &mut Vec<Diagnostic>) {
     for rel in &model.relations {
         if !is_entity_relation(&rel.kind) {
             continue;
@@ -210,128 +230,78 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         let (NodeRef::Entity(from), NodeRef::Entity(to)) = (&rel.from, &rel.to) else {
             continue;
         };
-        let Some(from_systems) = boundary_systems_by_entity.get(from) else {
+        let (Some(from_system), Some(to_system)) =
+            (index.sole_system(*from), index.sole_system(*to))
+        else {
             continue;
         };
-        let Some(to_systems) = boundary_systems_by_entity.get(to) else {
-            continue;
-        };
-        if from_systems.len() != 1 || to_systems.len() != 1 {
-            continue;
-        }
-        let from_system = from_systems[0];
-        let to_system = to_systems[0];
         if from_system != to_system && !has_coordination(model, *from, *to) {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "entity",
-                &entity_id(model, *from),
-                RdraError::CrossSystemEntityRelation {
-                    from: entity_id(model, *from),
-                    from_system: system_id(model, from_system),
-                    to: entity_id(model, *to),
-                    to_system: system_id(model, to_system),
-                },
-                true,
-            );
+            let from_id = entity_id(model, *from);
+            let err = RdraError::CrossSystemEntityRelation {
+                from: from_id.clone(),
+                from_system: system_id(model, from_system),
+                to: entity_id(model, *to),
+                to_system: system_id(model, to_system),
+            };
+            warn(model, diags, "entity", &from_id, err);
         }
     }
+}
 
+fn coordination_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut Vec<Diagnostic>) {
     for coordination in &model.boundary_coordinations {
         let uc_id = usecase_id(model, coordination.usecase);
-        let Some(left_systems) = boundary_systems_by_entity.get(&coordination.left) else {
-            push_model_decl_diagnostic(
+        let (left, right) = (coordination.left, coordination.right);
+        let sides = (index.sole_system(left), index.sole_system(right));
+        let (Some(left_system), Some(right_system)) = sides else {
+            warn(
                 model,
-                &mut diags,
+                diags,
                 "usecase",
                 &uc_id,
-                RdraError::CoordinationNotCrossSystem {
-                    usecase: uc_id.clone(),
-                    from: entity_id(model, coordination.left),
-                    to: entity_id(model, coordination.right),
-                },
-                true,
+                not_cross_system(model, &uc_id, left, right),
             );
             continue;
         };
-        let Some(right_systems) = boundary_systems_by_entity.get(&coordination.right) else {
-            push_model_decl_diagnostic(
+        if left_system == right_system {
+            warn(
                 model,
-                &mut diags,
+                diags,
                 "usecase",
                 &uc_id,
-                RdraError::CoordinationNotCrossSystem {
-                    usecase: uc_id.clone(),
-                    from: entity_id(model, coordination.left),
-                    to: entity_id(model, coordination.right),
-                },
-                true,
-            );
-            continue;
-        };
-        if left_systems.len() != 1
-            || right_systems.len() != 1
-            || left_systems[0] == right_systems[0]
-        {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "usecase",
-                &uc_id,
-                RdraError::CoordinationNotCrossSystem {
-                    usecase: uc_id.clone(),
-                    from: entity_id(model, coordination.left),
-                    to: entity_id(model, coordination.right),
-                },
-                true,
+                not_cross_system(model, &uc_id, left, right),
             );
             continue;
         }
-
-        let left_system = left_systems[0];
-        let right_system = right_systems[0];
-        if !usecase_invokes_api_for_entity_in_system(
-            model,
-            coordination.usecase,
-            coordination.left,
-            left_system,
-        ) {
-            push_model_decl_diagnostic(
+        for (entity, system) in [(left, left_system), (right, right_system)] {
+            if !usecase_invokes_api_for_entity_in_system(
                 model,
-                &mut diags,
-                "usecase",
-                &uc_id,
-                RdraError::CoordinationMissingApi {
+                coordination.usecase,
+                entity,
+                system,
+            ) {
+                let err = RdraError::CoordinationMissingApi {
                     usecase: uc_id.clone(),
-                    entity: entity_id(model, coordination.left),
-                    system: system_id(model, left_system),
-                },
-                true,
-            );
-        }
-        if !usecase_invokes_api_for_entity_in_system(
-            model,
-            coordination.usecase,
-            coordination.right,
-            right_system,
-        ) {
-            push_model_decl_diagnostic(
-                model,
-                &mut diags,
-                "usecase",
-                &uc_id,
-                RdraError::CoordinationMissingApi {
-                    usecase: uc_id.clone(),
-                    entity: entity_id(model, coordination.right),
-                    system: system_id(model, right_system),
-                },
-                true,
-            );
+                    entity: entity_id(model, entity),
+                    system: system_id(model, system),
+                };
+                warn(model, diags, "usecase", &uc_id, err);
+            }
         }
     }
+}
 
-    diags
+fn not_cross_system(
+    model: &SemanticModel,
+    uc_id: &str,
+    left: EntityKey,
+    right: EntityKey,
+) -> RdraError {
+    RdraError::CoordinationNotCrossSystem {
+        usecase: uc_id.to_string(),
+        from: entity_id(model, left),
+        to: entity_id(model, right),
+    }
 }
 
 fn api_systems_by_entity(
@@ -434,35 +404,19 @@ fn is_entity_relation(kind: &RelKind) -> bool {
 }
 
 fn api_id(model: &SemanticModel, key: ApiKey) -> String {
-    model
-        .apis
-        .get(key)
-        .map(|a| a.id.clone())
-        .unwrap_or_default()
+    model.apis[key].id.clone()
 }
 
 fn entity_id(model: &SemanticModel, key: EntityKey) -> String {
-    model
-        .entities
-        .get(key)
-        .map(|e| e.id.clone())
-        .unwrap_or_default()
+    model.entities[key].id.clone()
 }
 
 fn system_id(model: &SemanticModel, key: SystemKey) -> String {
-    model
-        .systems
-        .get(key)
-        .map(|s| s.id.clone())
-        .unwrap_or_default()
+    model.systems[key].id.clone()
 }
 
 fn usecase_id(model: &SemanticModel, key: crate::model::UseCaseKey) -> String {
-    model
-        .use_cases
-        .get(key)
-        .map(|u| u.id.clone())
-        .unwrap_or_default()
+    model.use_cases[key].id.clone()
 }
 
 fn system_ids(model: &SemanticModel, keys: &[SystemKey]) -> String {

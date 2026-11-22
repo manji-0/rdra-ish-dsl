@@ -3,19 +3,21 @@
 //! its values.
 
 use super::{buc_scope, declare, guard_edge, omitted_linked_kinds, render_edges, GraphEdge};
-use crate::diagram_common::{class_defs, contract_id, desc_line, node_line, quote, Header};
-use crate::{collect_object_graph_nodes, node_kind_filter_name, EmitError, Emitter, Scope, View};
-use rdra_ish_core::analysis::{
-    chosen_variation, condition_body_display, condition_edges, ConditionEdge,
+use crate::diagram_common::{
+    class_defs, contract_id, node_line, push_desc, quote, Diagram, Header, NodeScope,
 };
-use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel, VariationKey};
+use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
+use rdra_ish_core::analysis::{chosen_variation, condition_body_display, condition_edges};
+use rdra_ish_core::model::{
+    CombinesTarget, EnumValue, NodeRef, RelKind, SemanticModel, VariationKey,
+};
 use std::collections::{BTreeMap, HashSet};
 
 pub struct ConditionMermaidEmitter;
 
 /// The node id and label of a state model, as `--kind state` and `--kind information` give them.
-fn state_model(model: &SemanticModel, edge: &ConditionEdge) -> Option<(String, String)> {
-    let ConditionEdge::StateModel { entity, column } = edge else {
+fn state_model(model: &SemanticModel, edge: &CombinesTarget) -> Option<(String, String)> {
+    let CombinesTarget::StateModel { entity, column } = edge else {
         return None;
     };
     let entity = &model.entities.get(*entity)?.id;
@@ -34,10 +36,8 @@ fn render_variation(out: &mut String, model: &SemanticModel, key: VariationKey, 
         "  subgraph {id}[\"{}\"]\n",
         quote(&variation.label)
     ));
-    if let Some(desc) = desc_line(model, &NodeRef::Variation(key), id) {
-        out.push_str(&format!("    {desc}\n"));
-    }
-    for (value, label) in variation.values.iter().zip(&variation.labels) {
+    push_desc(out, model, &NodeRef::Variation(key), id, "    ");
+    for EnumValue { value, label } in &variation.values {
         let label = label.as_deref().unwrap_or(value);
         out.push_str(&node_line(
             "    ",
@@ -52,13 +52,13 @@ fn render_variation(out: &mut String, model: &SemanticModel, key: VariationKey, 
 impl Emitter for ConditionMermaidEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         let targets_in_scope = match &view.scope {
-            Scope::Bucs(ids) => Some(buc_scope(model, ids)),
-            Scope::Whole | Scope::UseCases(_) => None,
+            Scope::Bucs(ids) => NodeScope::Only(buc_scope(model, ids)),
+            Scope::Whole | Scope::UseCases(_) => NodeScope::All,
         };
-        let visible = |nr: &NodeRef| targets_in_scope.as_ref().is_none_or(|set| set.contains(nr));
+        let visible = |nr: &NodeRef| targets_in_scope.contains(nr);
         let conditions = collect_object_graph_nodes(model, &|nr| {
             matches!(nr, NodeRef::Condition(_))
-                && (targets_in_scope.is_none()
+                && (targets_in_scope.is_all()
                     || model.relations.iter().any(|rel| {
                         matches!(rel.kind, RelKind::AppliesTo | RelKind::Guards)
                             && rel.from == *nr
@@ -81,11 +81,11 @@ impl Emitter for ConditionMermaidEmitter {
                 .then(|| "from holds".to_string());
             for edge in condition_edges(model, *key) {
                 let to = match &edge {
-                    ConditionEdge::Variation(variation) => {
+                    CombinesTarget::Variation(variation) => {
                         variations.insert(*variation);
                         contract_id(model, &NodeRef::Variation(*variation))
                     }
-                    ConditionEdge::StateModel { .. } => {
+                    CombinesTarget::StateModel { .. } => {
                         state_model(model, &edge).map(|(to, label)| {
                             state_models.insert(to.clone(), label);
                             to
@@ -95,12 +95,12 @@ impl Emitter for ConditionMermaidEmitter {
                 // The state model of a `.when` arm is derived from the arm, the variation of a
                 // `.when` value from its `chooses`.
                 let from_when = match &edge {
-                    ConditionEdge::StateModel { entity, column } => {
+                    CombinesTarget::StateModel { entity, column } => {
                         model.state_transitions.iter().any(|t| {
                             t.guard == Some(*key) && t.entity == *entity && t.column == *column
                         })
                     }
-                    ConditionEdge::Variation(vk) => model.column_choices.iter().any(|c| {
+                    CombinesTarget::Variation(vk) => model.column_choices.iter().any(|c| {
                         c.values.iter().any(|v| v.guard == Some(*key))
                             && chosen_variation(model, c) == Some(*vk)
                     }),
@@ -141,7 +141,7 @@ impl Emitter for ConditionMermaidEmitter {
             }
         }
         // The whole model is the variation sheet: every variation, a condition's or not.
-        if targets_in_scope.is_none() {
+        if targets_in_scope.is_all() {
             variations.extend(model.variations.keys());
         }
 
@@ -186,12 +186,12 @@ impl Emitter for ConditionMermaidEmitter {
         let targets = collect_object_graph_nodes(model, &|nr| targets.contains(nr));
         for target in &targets {
             declare(&mut body, model, target, "  ");
-            let kind = node_kind_filter_name(target);
+            let kind = target.kind_tag();
             if !kinds.contains(&kind) {
                 kinds.push(kind);
             }
         }
-        render_edges(&mut body, "condition", edges);
+        render_edges(&mut body, Diagram::Condition, edges);
         body.push_str(&class_defs(&kinds));
 
         // A state model stands for its entity, which the diagram does not draw itself.
@@ -206,7 +206,7 @@ impl Emitter for ConditionMermaidEmitter {
                 .map(|rel| rel.to.clone()),
         );
         let header = Header {
-            diagram: "condition",
+            diagram: Diagram::Condition,
             view,
             layers: None,
             omitted: omitted_linked_kinds(
