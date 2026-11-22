@@ -66,7 +66,8 @@ property ShippedOnceCaptured
   `Deadlock_*` misses, such as an instance that moves between two states forever once a
   guard is false. A violation prints a shortest trace, then `confined:` with what `expr`
   reads in the states the instance is left with. Deleting the instance does not reach
-  `expr`. `.fair(...)` on it is `FairOnReachProperty`.
+  `expr`. `.along(..)` joins its link to the trigger, as for the other forms.
+  `.fair(...)` on it is `FairOnReachProperty`.
 
 ```rdra
 entity Order "Order" {

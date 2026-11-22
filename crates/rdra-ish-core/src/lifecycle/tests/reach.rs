@@ -208,3 +208,38 @@ fn check_and_states_do_not_evaluate_can_reach() {
     let report = super::super::derive_states(&load(UNMET), &Scope::ALL, Caps::STATES);
     assert!(unreachable_goals(&report.diags).is_empty());
 }
+
+/// `.along` binds only linked rows, as for the other forms: a captured payment's own order
+/// can always be paid, while beside another order that is cancelled it cannot. At two
+/// instances the scoped property holds and the global one fails, on the cone as on the whole
+/// system.
+#[test]
+fn along_binds_only_linked_rows() {
+    let src = |chain: &str| {
+        format!(
+            r#"
+entity Order "x" {{ id: Int @pk
+  status: Enum(draft, paid, cancelled) @default(draft) }}
+entity Payment "x" {{ id: Int @pk
+  status: Enum(pending, captured, voided) @default(pending) }}
+relate(Payment, Order, N:1)
+usecase Pay "x"
+usecase CancelOrder "x"
+transitions(Pay, Order.status, draft -> paid)
+transitions(Pay, Payment.status, pending -> captured)
+transitions(CancelOrder, Order.status, draft -> cancelled)
+property P can_reach((not (Payment.status == captured)) or (Order.status == paid)){chain}
+"#
+        )
+    };
+    let two = Bounds {
+        instances: std::num::NonZeroU8::new(2).unwrap(),
+        int_max: Bounds::STATES.int_max,
+    };
+    let along = model_from(&src(".along(Payment, Order)"));
+    assert!(!fails_on_the_whole_system(&along, two, 0));
+    assert!(!fails_on_its_cone(&along, two, 0));
+    let global = model_from(&src(".global()"));
+    assert!(fails_on_the_whole_system(&global, two, 0));
+    assert!(fails_on_its_cone(&global, two, 0));
+}

@@ -445,7 +445,8 @@ violated: Error: Temporal properties were violated.
 <!-- constrained-by ./language-reference.md#recoverability-can_reach -->
 `property P can_reach(goal)` is the CTL formula `AG (present => E[present U (present /\
 goal)])` per instance of each binder: from every reachable state where the instance is
-present, some path on which it stays present reaches a state where the goal holds for it.
+present (and, under `.along`, linked), some path on which it stays present reaches a state
+where the goal holds for it.
 No TLA+ temporal formula states it, so TLC does not check it. `export --kind tla` lists it
 in a comment, and no `.cfg` names it.
 

@@ -2728,7 +2728,9 @@ property OrderCanFinish "every order can still be delivered or cancelled"
 For each present instance, from every reachable state, some path reaches a state where
 `expr` holds for it. The path may move other instances too. The instance must stay present
 on the path and be present where `expr` holds, so deleting it does not finish it. This is
-the CTL formula `AG (present => EF expr)`. An instance may still loop forever: an Order
+the CTL formula `AG (present => EF expr)`. Over two or more entities it takes `.along(..)`,
+`.role(role)`, and `.global()` as the other forms do: the owner links join `present` in the
+trigger, so only linked rows must be able to finish. An instance may still loop forever: an Order
 that can be held and resumed forever passes while it can also be delivered.
 
 The form finds what the other checks miss. A `Deadlock_*` finding needs a state with no way
