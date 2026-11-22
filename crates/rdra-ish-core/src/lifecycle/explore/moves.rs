@@ -1,6 +1,5 @@
 //! Initial states, bindings, successors, and the moves from a state.
 
-use std::borrow::Cow;
 use std::collections::HashSet;
 
 use crate::lifecycle::expr::{Env, State};
@@ -198,7 +197,7 @@ impl TransitionSystem {
         let slot = |p: u8| usize::from(params[usize::from(p)]);
         let mut next = s.clone();
         let mut deleted: Vec<u8> = Vec::new();
-        let mut choices: Vec<(VarId, u8, Cow<'_, [Value]>)> = Vec::new();
+        let mut choices: Vec<(VarId, u8, Vec<Value>)> = Vec::new();
         for eff in &action.effects {
             match eff {
                 Effect::Create { param } => {
@@ -221,19 +220,19 @@ impl TransitionSystem {
                     let from = s.get(self, *var, slot(*param));
                     let tos: Vec<Value> = arms
                         .iter()
-                        .filter(|(f, _)| *f == from)
-                        .map(|(_, t)| *t)
+                        .filter(|arm| arm.from == from)
+                        .map(|arm| arm.to)
                         .collect();
                     match tos[..] {
                         [] => {}
                         [to] => next.set(self, *var, slot(*param), to),
                         // A choice forks after every other effect, so each arm carries them.
-                        _ => choices.push((*var, *param, Cow::Owned(tos))),
+                        _ => choices.push((*var, *param, tos)),
                     }
                 }
                 Effect::Choose {
                     var, param, values, ..
-                } => choices.push((*var, *param, Cow::Borrowed(values))),
+                } => choices.push((*var, *param, values.iter().map(|c| c.value).collect())),
                 Effect::Tick => {
                     let now = self.now.expect("tick without a clock");
                     let v = s.get(self, now, 0);

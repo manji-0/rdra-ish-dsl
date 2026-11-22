@@ -45,9 +45,10 @@ pub use states::{derive_states, derive_states_built, BoundsLine, FindingTally, S
 pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, UndecidedWhy};
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
-    ActId, Action, ActionOrigin, AfterAssert, AfterStep, At, Birth, Bounds, CmpOp, Domain, Effect,
-    EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind, ModelRef, Param,
-    ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId, VarKind,
+    ActId, Action, ActionOrigin, AfterAssert, AfterStep, Arm, At, Birth, Bounds, Choice, CmpOp,
+    Domain, Effect, EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind,
+    ModelRef, Param, ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId,
+    VarKind,
 };
 pub use view::{
     AbstractValue, AxisKind, EntityStateResult, Provenance, ReachablePattern, StateAxis,

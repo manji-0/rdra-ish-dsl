@@ -17,8 +17,8 @@
 use std::collections::BTreeMap;
 
 use crate::lifecycle::types::{
-    Action, At, Birth, CmpOp, Domain, Effect, EntId, GuardWhy, ParamRole, Pred, Rhs, Start, Term,
-    Value, VarId, VarKind,
+    Action, At, Birth, Choice, CmpOp, Domain, Effect, EntId, GuardWhy, ParamRole, Pred, Rhs, Start,
+    Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::TransitionSystem;
 
@@ -403,8 +403,8 @@ impl Enc<'_> {
                 } => {
                     let from = self.read(*var, Frame::Pre, &param(usize::from(*p)));
                     let mut tos: BTreeMap<Value, Vec<Value>> = BTreeMap::new();
-                    for (f, t) in arms {
-                        tos.entry(*f).or_default().push(*t);
+                    for arm in arms {
+                        tos.entry(arm.from).or_default().push(arm.to);
                     }
                     let mut multi = Vec::new();
                     for (f, ts_) in &tos {
@@ -452,10 +452,9 @@ impl Enc<'_> {
                     var,
                     param: p,
                     values,
-                    ..
                 } => match values
                     .iter()
-                    .map(|v| self.value(*var, *v))
+                    .map(|c| self.value(*var, c.value))
                     .collect::<R<Vec<_>>>()
                 {
                     Ok(vals) => {
@@ -523,14 +522,15 @@ impl Enc<'_> {
     /// `c` is one of `values` (whose terms are `terms`). A list of every index from 1 of an Int
     /// domain at the bounds stands for every index from 1 (every number, or every non-null
     /// one), and with index 0 for every index.
-    fn one_of(&self, var: VarId, values: &[Value], terms: &[String], c: &str) -> String {
+    fn one_of(&self, var: VarId, values: &[Choice], terms: &[String], c: &str) -> String {
         let domain = &self.ts.var(var).domain;
         let size = domain.size(self.ts.bounds);
-        let listed = |from: usize| (from..size).all(|i| values.contains(&Value(i as u8)));
+        let has = |v: Value| values.iter().any(|c| c.value == v);
+        let listed = |from: usize| (from..size).all(|i| has(Value(i as u8)));
         // The non-null numbers start at index 1 of a nullable domain; `present` on an Int
         // column lists 1.. as well.
         if domain.is_numeric() && listed(1) {
-            let from = match values.contains(&Value(0)) {
+            let from = match has(Value(0)) {
                 true => 0,
                 false => 1,
             };

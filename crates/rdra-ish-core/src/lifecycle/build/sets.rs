@@ -5,8 +5,8 @@ use crate::analysis::AppliedBody;
 use crate::lifecycle::build::preds;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    At, CmpOp, Domain, Effect, EntId, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred, Rhs, Site,
-    Term, Value, VarId, VarKind,
+    At, Choice, CmpOp, Domain, Effect, EntId, Guard, GuardWhy, ModelRef, Param, ParamRole, Pred,
+    Rhs, Site, Term, Value, VarId, VarKind,
 };
 use crate::model::{
     CmpOpModel, CmpRhs, ConditionKey, CrossConstraintScope, EffectValue, EntityKey, FkId, Join,
@@ -70,15 +70,16 @@ impl<'m> Builder<'m> {
             match rhs {
                 EffectRhs::Value(v) => self.assign(a, uc, ce.entity, var, p, Rhs::Lit(v), site),
                 EffectRhs::AnyNonNull => {
-                    let values: Vec<Value> = (1..domain.size(self.bounds))
-                        .map(|i| Value(i as u8))
-                        .collect();
                     a.effects.push(Effect::Choose {
                         var,
                         param: p,
-                        sites: vec![site; values.len()],
-                        conds: Vec::new(),
-                        values,
+                        values: (1..domain.size(self.bounds))
+                            .map(|i| Choice {
+                                value: Value(i as u8),
+                                site: Some(site.clone()),
+                                conds: Vec::new(),
+                            })
+                            .collect(),
                     });
                 }
                 EffectRhs::None => {}
@@ -120,8 +121,8 @@ impl<'m> Builder<'m> {
     ) {
         let cond = (ck, self.model.conditions[ck].id.clone());
         let guarded = a.effects.iter().position(|eff| {
-            matches!(eff, Effect::Choose { var: v, param: q, conds, .. }
-                if (*v, *q) == (var, p) && !conds.is_empty() && conds.iter().all(|c| !c.is_empty()))
+            matches!(eff, Effect::Choose { var: v, param: q, values }
+                if (*v, *q) == (var, p) && !values.is_empty() && values.iter().all(|c| !c.conds.is_empty()))
         });
         let at = match guarded {
             Some(at) => at,
@@ -142,30 +143,22 @@ impl<'m> Builder<'m> {
                     var,
                     param: p,
                     values: Vec::new(),
-                    sites: Vec::new(),
-                    conds: Vec::new(),
                 });
                 a.effects.len() - 1
             }
         };
-        let Effect::Choose {
-            values: have,
-            sites,
-            conds,
-            ..
-        } = &mut a.effects[at]
-        else {
+        let Effect::Choose { values: have, .. } = &mut a.effects[at] else {
             return;
         };
         for v in values {
-            match have.iter().position(|x| *x == v) {
-                Some(i) if !conds[i].contains(&cond) => conds[i].push(cond.clone()),
+            match have.iter_mut().find(|x| x.value == v) {
+                Some(c) if !c.conds.contains(&cond) => c.conds.push(cond.clone()),
                 Some(_) => {}
-                None => {
-                    have.push(v);
-                    sites.push(site.clone());
-                    conds.push(vec![cond.clone()]);
-                }
+                None => have.push(Choice {
+                    value: v,
+                    site: Some(site.clone()),
+                    conds: vec![cond.clone()],
+                }),
             }
         }
     }
@@ -286,9 +279,13 @@ impl<'m> Builder<'m> {
             a.effects.push(Effect::Choose {
                 var,
                 param: p,
-                values: (0..size).map(|i| Value(i as u8)).collect(),
-                sites: vec![site.clone(); size],
-                conds: Vec::new(),
+                values: (0..size)
+                    .map(|i| Choice {
+                        value: Value(i as u8),
+                        site: Some(site.clone()),
+                        conds: Vec::new(),
+                    })
+                    .collect(),
             });
             a.guards.push(Guard {
                 pred: copy,

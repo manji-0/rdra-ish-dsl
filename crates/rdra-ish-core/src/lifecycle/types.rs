@@ -483,30 +483,44 @@ pub enum Effect {
     },
     /// var := the `to` of an arm whose `from` the pre-state holds. Arms that share a `from`
     /// are a choice: one successor per arm, forked like `Choose` after the other effects.
-    /// `conds[i]` names the `.when` conditions of arm `i`, key and id (any of them enables it;
-    /// empty when it is unguarded). A `GuardWhy::ArmCondition` guard of the action filters the
-    /// successors.
+    /// A `GuardWhy::ArmCondition` guard of the action filters the successors.
     Transition {
         var: VarId,
         param: u8,
-        arms: Vec<(Value, Value)>,
-        sites: Vec<Site>,
-        conds: Vec<Vec<(ConditionKey, String)>>,
+        arms: Vec<Arm>,
     },
-    /// One successor per value. `sites[i]` is the `sets(.., col == present)` or `chooses` line
-    /// that asks for value `i`; a creation's own choice of a variation value has none (empty).
-    /// `conds[i]` names the `.when` conditions of a `chooses(.., value)` line, as
-    /// `Transition::conds` does for an arm (empty, or empty throughout, when no value is
-    /// guarded); a `GuardWhy::ArmCondition` guard of the action filters the successors.
+    /// One successor per value. A `GuardWhy::ArmCondition` guard of the action filters the
+    /// successors.
     Choose {
         var: VarId,
         param: u8,
-        values: Vec<Value>,
-        sites: Vec<Site>,
-        conds: Vec<Vec<(ConditionKey, String)>>,
+        values: Vec<Choice>,
     },
     /// now := now + 1 while now < int_max.
     Tick,
+}
+
+/// One `transitions` arm of an `Effect::Transition`.
+#[derive(Clone, Debug)]
+pub struct Arm {
+    pub from: Value,
+    pub to: Value,
+    /// The `transitions` line that declares it.
+    pub site: Site,
+    /// Its `.when` conditions, key and id: any of them enables it. Empty when unguarded.
+    pub conds: Vec<(ConditionKey, String)>,
+}
+
+/// One value of an `Effect::Choose`.
+#[derive(Clone, Debug)]
+pub struct Choice {
+    pub value: Value,
+    /// The `sets(.., col == present)`, copy or `chooses` line that asks for the value. A
+    /// creation's own choice of a variation value has none.
+    pub site: Option<Site>,
+    /// The `.when` conditions of a `chooses(.., value)` or guarded `sets` line, as
+    /// `Arm::conds`. Empty when unguarded.
+    pub conds: Vec<(ConditionKey, String)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

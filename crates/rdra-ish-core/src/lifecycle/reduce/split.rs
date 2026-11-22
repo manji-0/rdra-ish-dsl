@@ -77,13 +77,13 @@ impl TransitionSystem {
                         }
                     }
                     Effect::Transition { var, arms, .. } => {
-                        edges[var.index()].extend(arms.iter().map(|(f, t)| (f.0, t.0)));
+                        edges[var.index()].extend(arms.iter().map(|arm| (arm.from.0, arm.to.0)));
                     }
                     Effect::Choose {
                         var, param, values, ..
                     } => {
                         for f in froms(*var, param) {
-                            edges[var.index()].extend(values.iter().map(|v| (f, v.0)));
+                            edges[var.index()].extend(values.iter().map(|c| (f, c.value.0)));
                         }
                     }
                     Effect::Tick => {

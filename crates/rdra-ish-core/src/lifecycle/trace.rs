@@ -255,28 +255,24 @@ impl TransitionSystem {
                     var: v,
                     param,
                     arms,
-                    sites,
-                    ..
                 } if *v == var && slot(param) == at => {
                     // Of a choice, the arm the step took.
-                    let arm = (pre.get(self, var, at), post.get(self, var, at));
+                    let taken = (pre.get(self, var, at), post.get(self, var, at));
                     arms.iter()
-                        .position(|a| *a == arm)
-                        .map(|i| sites[i].clone())
+                        .find(|arm| (arm.from, arm.to) == taken)
+                        .map(|arm| arm.site.clone())
                 }
                 Effect::Choose {
                     var: v,
                     param,
                     values,
-                    sites,
-                    ..
                 } if *v == var && slot(param) == at => {
                     // The line of the value the step picked.
                     let value = post.get(self, var, at);
                     values
                         .iter()
-                        .position(|x| *x == value)
-                        .and_then(|i| sites.get(i).cloned())
+                        .find(|c| c.value == value)
+                        .and_then(|c| c.site.clone())
                 }
                 _ => None,
             })

@@ -296,10 +296,10 @@ fn functions(
             };
             let named: Vec<(String, String)> = a
                 .iter()
-                .map(|(f, t)| {
+                .map(|arm| {
                     (
-                        values[usize::from(f.0)].clone(),
-                        values[usize::from(t.0)].clone(),
+                        values[usize::from(arm.from.0)].clone(),
+                        values[usize::from(arm.to.0)].clone(),
                     )
                 })
                 .collect();

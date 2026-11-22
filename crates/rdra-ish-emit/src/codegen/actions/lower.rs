@@ -170,9 +170,9 @@ pub(super) fn function(
                     };
                     let named = a
                         .iter()
-                        .map(|(f, t)| {
+                        .map(|arm| {
                             let v = |x: Value| values[usize::from(x.0)].clone();
-                            (v(*f), v(*t))
+                            (v(arm.from), v(arm.to))
                         })
                         .collect();
                     writes.insert((p, column.clone()), Write::Switch(named));
@@ -218,7 +218,9 @@ pub(super) fn function(
                 let domain = &ts.var(*var).domain;
                 let all = values.len() == domain.size(ts.bounds);
                 let w = match domain {
-                    Domain::Nullable if values == &[Value::PRESENT] => Write::Input,
+                    Domain::Nullable if matches!(&values[..], [c] if c.value == Value::PRESENT) => {
+                        Write::Input
+                    }
                     Domain::Enum(_) | Domain::Bool if all => Write::Input,
                     _ => return Err(unsupported("a choice among some values (phase 5)")),
                 };

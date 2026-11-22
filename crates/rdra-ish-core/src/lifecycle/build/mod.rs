@@ -224,12 +224,13 @@ fn prior_write(a: &mut ActionDraft, var: VarId, p: u8) -> Option<Site> {
         _ => false,
     })?;
     match &a.effects[at] {
-        Effect::Choose { sites, .. } if sites.is_empty() => {
+        Effect::Choose { values, .. } if values.iter().all(|c| c.site.is_none()) => {
             a.effects.remove(at);
             None
         }
         Effect::Assign { site, .. } => Some(site.clone()),
-        Effect::Choose { sites, .. } | Effect::Transition { sites, .. } => sites.first().cloned(),
+        Effect::Choose { values, .. } => values.first().and_then(|c| c.site.clone()),
+        Effect::Transition { arms, .. } => arms.first().map(|arm| arm.site.clone()),
         _ => None,
     }
 }

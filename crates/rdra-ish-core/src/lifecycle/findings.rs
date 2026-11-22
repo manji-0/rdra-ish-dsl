@@ -188,7 +188,7 @@ impl TransitionSystem {
                 for effect in &action.effects {
                     if let Effect::Transition { var: v, arms, .. } = effect {
                         if *v == var {
-                            values.extend(arms.iter().flat_map(|(from, to)| [*from, *to]));
+                            values.extend(arms.iter().flat_map(|arm| [arm.from, arm.to]));
                         }
                     }
                 }
@@ -300,16 +300,14 @@ impl TransitionSystem {
                         var: v,
                         param,
                         arms,
-                        sites,
-                        ..
                     } if *v == var => {
-                        for ((from, to), site) in arms.iter().zip(sites) {
-                            if *from == value && *to != value {
+                        for arm in arms {
+                            if arm.from == value && arm.to != value {
                                 out.push(ExitArm {
                                     act: ActId::at(ai),
                                     param: usize::from(*param),
-                                    to: Some(*to),
-                                    site: site.clone(),
+                                    to: Some(arm.to),
+                                    site: arm.site.clone(),
                                 });
                             }
                         }
@@ -514,35 +512,20 @@ impl TransitionSystem {
             for effect in &action.effects {
                 // Each guarded arm: (from, to, site, conditions); a chosen value has no `from`.
                 let (var, param, arms): (VarId, u8, Vec<GuardedArm>) = match effect {
-                    Effect::Transition {
-                        var,
-                        param,
-                        arms,
-                        sites,
-                        conds,
-                    } => (
+                    Effect::Transition { var, param, arms } => (
                         *var,
                         *param,
                         arms.iter()
-                            .zip(sites)
-                            .zip(conds)
-                            .map(|(((from, to), site), conds)| (Some(*from), *to, site, conds))
+                            .map(|arm| (Some(arm.from), arm.to, &arm.site, &arm.conds))
                             .collect(),
                     ),
-                    Effect::Choose {
-                        var,
-                        param,
-                        values,
-                        sites,
-                        conds,
-                    } => (
+                    // A creation's own choice has no line, so no `.when` guards it.
+                    Effect::Choose { var, param, values } => (
                         *var,
                         *param,
                         values
                             .iter()
-                            .zip(sites)
-                            .zip(conds)
-                            .map(|((to, site), conds)| (None, *to, site, conds))
+                            .filter_map(|c| Some((None, c.value, c.site.as_ref()?, &c.conds)))
                             .collect(),
                     ),
                     _ => continue,
@@ -715,22 +698,16 @@ impl TransitionSystem {
         let mut into = Vec::new();
         for action in &self.actions {
             for effect in &action.effects {
-                if let Effect::Transition {
-                    var: v,
-                    arms,
-                    sites,
-                    ..
-                } = effect
-                {
+                if let Effect::Transition { var: v, arms, .. } = effect {
                     if *v != var {
                         continue;
                     }
-                    for ((from, to), site) in arms.iter().zip(sites) {
-                        if *to == value && *from != value {
+                    for arm in arms {
+                        if arm.to == value && arm.from != value {
                             into.push(Entry {
                                 action: action.name.clone(),
-                                from: Some(text(*from)),
-                                site: site.clone(),
+                                from: Some(text(arm.from)),
+                                site: arm.site.clone(),
                             });
                         }
                     }

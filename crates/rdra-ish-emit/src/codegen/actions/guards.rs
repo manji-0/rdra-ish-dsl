@@ -62,14 +62,7 @@ pub(super) fn arm_conditions(
 ) -> (String, String) {
     let mut ids: Vec<String> = Vec::new();
     for effect in &action.effects {
-        let Effect::Transition {
-            var,
-            param,
-            arms,
-            conds,
-            ..
-        } = effect
-        else {
+        let Effect::Transition { var, param, arms } = effect else {
             continue;
         };
         let Some(taken) = chosen.get(&usize::from(*param)) else {
@@ -79,11 +72,11 @@ pub(super) fn arm_conditions(
             continue;
         };
         let name = |v: Value| values[usize::from(v.0)].clone();
-        for ((f, t), arm) in arms.iter().zip(conds) {
-            if !taken.contains(&(name(*f), name(*t))) {
+        for arm in arms {
+            if !taken.contains(&(name(arm.from), name(arm.to))) {
                 continue;
             }
-            for (_, id) in arm {
+            for (_, id) in &arm.conds {
                 if !ids.contains(id) {
                     ids.push(id.clone());
                 }
