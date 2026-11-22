@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 use super::cone::VarSet;
 use super::diag::StateDiag;
-use super::explore::Graph;
+use super::explore::{Adjacency, Graph};
 use super::expr::{Env, State};
 use super::trace::Trace;
 use super::types::{EntId, Pred, VarKind};
@@ -23,12 +23,7 @@ impl TransitionSystem {
         debug_assert!(graph.complete, "a capped graph decides no can_reach");
         let r = &self.reach[i];
         let n = graph.states.len();
-        let mut into: Vec<Vec<u32>> = vec![Vec::new(); n];
-        let mut out: Vec<Vec<u32>> = vec![Vec::new(); n];
-        for (from, to, _) in graph.edges().filter(|(from, to, _)| from != to) {
-            into[to as usize].push(from);
-            out[from as usize].push(to);
-        }
+        let Adjacency { out, into } = graph.adjacency();
         let mut worst: Option<(u32, Vec<u8>, Vec<bool>)> = None;
         for binding in self.slot_tuples(r.binders.len()) {
             let present: Vec<bool> = graph

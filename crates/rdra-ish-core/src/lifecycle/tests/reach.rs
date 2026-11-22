@@ -28,6 +28,8 @@ fn fails_on_the_whole_system(model: &SemanticModel, bounds: Bounds, i: usize) ->
 
 fn fails_on_its_cone(model: &SemanticModel, bounds: Bounds, i: usize) -> bool {
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    // A cone that frees slots reaches a superset, where `EF` may find a path the model lacks.
+    assert!(!ts.cone_frees_slots(&ts.target_cone(Target::Reach(i))));
     let run = ts.explore_targets(&[Target::Reach(i)], Caps::new(usize::MAX, 1 << 20));
     !unreachable_goals(run.verdicts()).is_empty()
 }
