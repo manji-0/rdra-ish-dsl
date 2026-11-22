@@ -2556,7 +2556,9 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 ### Temporal path properties
 
 Named path properties are checked by TLA+/TLC export (`export --kind tla` /
-`verify --backend tlc`), not by `rdra-ish states`:
+`verify --backend tlc`), not by `rdra-ish states`. The one exception is `can_reach`, which
+`check` and `verify` decide by BFS (see
+[Recoverability: `can_reach(...)`](#recoverability-can_reach)):
 
 ```rdra
 property PaidLeadsToShipped "paid eventually reaches shipped"
@@ -2574,6 +2576,7 @@ property NeverBoth "mutex"
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
+| `can_reach(expr)` | none: CTL `AG (present => EF expr)`, written as a comment |
 
 Atoms use `Entity.column == value` / `!=`, `Entity.column in (a, b)` / `not in`, or numeric
 comparisons (`<`, `>`, `<=`, `>=`) over Int / Money / Decimal columns and literals. Prefer
@@ -2713,8 +2716,49 @@ step stays enabled. `Spec`, the `.cfg`, and properties without
   nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
   to its temporal runs.
 
+#### Recoverability: `can_reach(...)`
+
+`can_reach(expr)` says that the actors can still finish an instance, not that they must:
+
+```rdra
+property OrderCanFinish "every order can still be delivered or cancelled"
+  can_reach(Order.status in (delivered, cancelled))
+```
+
+For each present instance, from every reachable state, some path reaches a state where
+`expr` holds for it. The path may move other instances too. The instance must stay present
+on the path and be present where `expr` holds, so deleting it does not finish it. This is
+the CTL formula `AG (present => EF expr)`. An instance may still loop forever: an Order
+that can be held and resumed forever passes while it can also be delivered.
+
+The form finds what the other checks miss. A `Deadlock_*` finding needs a state with no way
+out, so it misses an instance that moves between `pending` and `on_hold` forever once some
+guard is false. `eventually` and `leads_to` say that the instance must finish, so they need
+`.fair(...)`, and they fail when an actor may legitimately choose another branch forever.
+
+TLC cannot check a CTL formula. `check` (one instance per entity) and `verify` (its
+bounds) decide `can_reach` by BFS on the property's cone, and the verdict holds within those
+bounds like every other verdict. A violation prints a shortest trace to a state from which
+the goal is unreachable. It then lists what the goal reads of the instance in the states
+the instance is confined to:
+
+```
+error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
+  ...
+  confined: from there Order#1 stays within 2 reachable states, where its goal never holds:
+    status = pending
+    status = on_hold
+```
+
+`export --kind tla` lists each `can_reach` in a comment and no `.cfg` names it. `.fair(...)`
+on it is `FairOnReachProperty`, since reachability needs no fairness. Under `--buc` a
+violation is not decided, because a use case the scope leaves out may be the way to the
+goal. See
+[formal-verification.md](./formal-verification.md#recoverability-on-a-cone) and the samples
+`can_reach_unmet.rdra` and `can_reach_met.rdra`.
+
 Errors: `.fair` on `always(...)` is `FairOnSafetyProperty` (fairness cannot change a safety
-verdict); a `.fair` with no argument, an argument that is not a use case, a use case listed
+verdict); `.fair` on `can_reach(...)` is `FairOnReachProperty`; a `.fair` with no argument, an argument that is not a use case, a use case listed
 twice, or a second `.fair` is `FairRequiresUseCases`; an undefined name is `UndefinedSymbol`;
 an atom whose column no single entity owns (`Order.missing`, or a bare `status` that two
 entities declare) is `UnresolvedPropertyColumn`; a method after a property other than

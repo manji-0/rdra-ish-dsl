@@ -9,7 +9,7 @@
 RDRA-ish prints its lifecycle transition system as **TLA+** and optionally checks it
 with **TLC**. `rdra-ish states` and `check` explore the same system by breadth-first
 search (BFS) at one instance per entity. `verify` runs TLC on it at two instances by
-default and adds the temporal properties that BFS does not evaluate. See
+default and adds the LTL temporal properties that BFS does not evaluate. See
 [state-derivation.md](./state-derivation.md) for the system itself.
 
 ## Commands
@@ -239,7 +239,9 @@ A property with `.fair(UC, ...)` (see
 assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases
 whole. `verify` prints `<P> assumes weak fairness per instance on ...` under the `temporal
 properties:` line, since an `ok` for `P` holds only on the runs that do not starve them.
-`check` and `states` run BFS, which evaluates no temporal property, with or without `.fair`.
+`check` and `states` run BFS, which evaluates no LTL property, with or without `.fair`. A
+`can_reach` property is CTL, which TLC cannot check, so `check` and `verify` decide it by
+BFS instead (see [Recoverability on a cone](#recoverability-on-a-cone)).
 
 ### Temporal properties on a cone
 
@@ -432,6 +434,76 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
     then loops back to step 7
 violated: Error: Temporal properties were violated.
 ```
+
+### Recoverability on a cone
+
+<!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
+<!-- constrained-by ./language-reference.md#recoverability-can_reach -->
+`property P can_reach(goal)` is the CTL formula `AG (present => E[present U (present /\
+goal)])` per instance of each binder: from every reachable state where the instance is
+present, some path on which it stays present reaches a state where the goal holds for it.
+No TLA+ temporal formula states it, so TLC does not check it. `export --kind tla` lists it
+in a comment, and no `.cfg` names it.
+
+`check` and `verify` decide it by BFS on the property's cone, at their own bounds. The run
+keeps every edge it finds, so the decision is one pass over the explored graph per binding
+of the binders. The pass goes backward from the states where the instance is present and
+the goal holds, through states where the instance is present, and marks every state that
+can still reach the goal. A present state the pass does not mark fails the property. The
+first such state in discovery order ends a shortest trace, since BFS reaches states in
+depth order. The finding prints that trace, then what the goal reads of the instance in
+each state reachable from there. The pass is linear in the graph's states and edges, once
+per binding: one binding at one instance, two at `verify`'s two instances.
+
+The cone must be exact, because `EF` is not monotone in the transitions. A step the cone
+allows and the whole model does not could reach the goal and hide a violation. Two kinds of
+cone allow such steps. One creates an entity whose slots the cone does not count (the
+`FreesSlots` case). The other runs a use case without its event's mark. So the cone of a
+`can_reach` keeps every action that writes into it, which brings in the marks it reads, and
+reads the existence of each entity such an action creates, until nothing more is added. On
+that cone, a path of the cone is a path of the whole model and the other way round, so the
+cone's verdict is the whole model's at the same bounds. A reduced cone (the next section)
+keeps stuttering equivalence, which says nothing of `AG EF`, so no `can_reach` cone is
+reduced. A cone that stops at the state cap decides nothing, since a state it did not expand
+has no edges and would look stuck: it reports `StateCapReached` as an invariant's cone
+does. Under `--buc` a violation is not decided, because a use case the scope leaves out may
+be the way to the goal.
+
+`verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
+cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
+the BFS pass with `can_reach (BFS on N cones): N checked, M violated`. A violation fails the
+run after `tlc_result:`, as a deadlock does:
+
+```
+$ rdra-ish verify samples/formal-verification/can_reach_unmet.rdra --backend tlc
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+cones: 0 for 0 invariant(s) and 0 after-assert(s)
+temporal properties: none
+can_reach properties: 1, decided natively by BFS on each one's cone (TLC cannot check AG EF)
+error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
+  rule: skills/rdra-ish-verify/samples/can_reach_unmet.rdra:56:1
+  counterexample (3 steps):
+    1. Place [Order#1]                                                 skills/rdra-ish-verify/samples/can_reach_unmet.rdra:16:1
+         + Order#1 (status=pending, in_stock=true, window_open=true)
+    2. CloseWindow [Order#1]                                           skills/rdra-ish-verify/samples/can_reach_unmet.rdra:22:1
+         Order#1.window_open: true -> false                            skills/rdra-ish-verify/samples/can_reach_unmet.rdra:46:1
+    3. LoseStock [Order#1]                                             skills/rdra-ish-verify/samples/can_reach_unmet.rdra:21:1
+         Order#1.in_stock: true -> false                               skills/rdra-ish-verify/samples/can_reach_unmet.rdra:45:1
+  confined: from there Order#1 stays within 34 reachable states, where its goal never holds:
+    status = pending
+    status = on_hold
+state models (BFS on 1 entity cone): 1 state model, 4 states witnessed, 0 deadlocks, 0 use cases that never run
+can_reach (BFS on 1 cone): 1 checked, 1 violated
+nothing to check
+tlc_result: ok
+Error: verification failed: 1 can_reach error(s) from BFS on their cones
+```
+
+The 34 states count the moves of Order#2 too; Order#1 stays at `pending` or `on_hold` in
+all of them. The tests in `lifecycle::tests::reach` compare the cone's verdict with the
+whole system's on both samples, at one instance and at two, and on a goal behind an event
+that is never raised and a goal that needs a slot the bound never frees, where a cone that
+is not exact would pass.
 
 ### Reduction by an independent sub-lifecycle
 
@@ -968,7 +1040,10 @@ gaps.
   more instances, or run `verify --prove` to prove a state rule for any number of rows
   ([Proofs for any number of rows](#proofs-for-any-number-of-rows)).
 - **Temporal properties are checked only by `verify`, and a scoped run checks none.**
-  `check` and `states` evaluate no `property` and print a `note:` that says so. A run with
+  `check` and `states` evaluate no `always`, `eventually`, or `leads_to` property, and
+  `check` prints a `note:` that says so. A `can_reach` is the exception: `check` and
+  `verify` decide it by BFS ([Recoverability on a cone](#recoverability-on-a-cone)), also in
+  a scoped run, where `--buc` leaves a violation undecided. A run with
   `--buc` or `--entity` checks no property: `--buc` drops use cases a property's fairness
   reads, and `--entity` may defer an error inside a property's cone. See it: the `note:`
   from `check`, and `temporal properties: 2, not checked: a scoped run checks none` in a
@@ -1072,6 +1147,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `check_met.rdra` | pass, pass | 2 of 2 | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
 | `unwitnessed_state.rdra` | fail, pass | 1 of 1 | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
 | `deadlock.rdra` | fail, pass | no state rule | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
+| `can_reach_unmet.rdra` | fail, pass | no state rule | `can_reach(Order.status in (delivered, cancelled))` fails: once LoseStock and CloseWindow have run, an Order moves between `pending` and `on_hold` forever. Each of those states has a way out, so no deadlock is reported. TLC checks nothing; BFS fails `check` and `verify` with a shortest trace and the states the Order is confined to |
+| `can_reach_met.rdra` | pass, pass | no state rule | The same model with Restock, so every reachable state can still finish. An Order may still be held and resumed forever: `can_reach` asks for a path, not for progress |
 | `partial_scope.rdra` | fail, not run | not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
 | `fail/order.rdra` | fail, fail | 0 of 1 | Intentionally unsafe (reachable invariant violation) |
 
