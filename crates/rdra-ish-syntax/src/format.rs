@@ -252,6 +252,14 @@ fn format_property(prop: &PropertyDecl) -> String {
             format_expr(antecedent),
             format_expr(consequent)
         ),
+        AstTemporalFormula::Stable(expr) => format!("stable({})", format_expr(expr)),
+        AstTemporalFormula::Unchanged { columns, when } => {
+            let cols: Vec<String> = columns.iter().map(format_operand).collect();
+            let when = when
+                .as_ref()
+                .map_or(String::new(), |e| format!(".when({})", format_expr(e)));
+            format!("unchanged({}){when}", cols.join(", "))
+        }
     };
     let chain: String = prop.chain.iter().map(format_chain_call).collect();
     let formula = format!("{formula}{chain}");

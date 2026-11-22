@@ -47,8 +47,8 @@ pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, AfterStep, Arm, At, Birth, Bounds, Choice, CmpOp,
     Domain, Effect, EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind,
-    ModelRef, Param, ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId,
-    VarKind,
+    ModelRef, Param, ParamRole, Pred, Property, Rhs, Site, Start, StepKind, StepRule, Term, Value,
+    VarDecl, VarId, VarKind,
 };
 pub use view::{
     AbstractValue, AxisKind, EntityStateResult, Provenance, ReachablePattern, StateAxis,
@@ -77,6 +77,7 @@ pub struct TransitionSystem {
     actions: Vec<Action>,
     invariants: Vec<Invariant>,
     after: Vec<AfterAssert>,
+    steps: Vec<StepRule>,
     properties: Vec<Property>,
     now: Option<VarId>,
     offsets: Vec<usize>,
@@ -100,6 +101,7 @@ impl TransitionSystem {
             actions: Vec::new(),
             invariants: Vec::new(),
             after: Vec::new(),
+            steps: Vec::new(),
             properties: Vec::new(),
             now: None,
             offsets: Vec::new(),
@@ -164,6 +166,11 @@ impl TransitionSystem {
 
     pub fn after_asserts(&self) -> &[AfterAssert] {
         &self.after
+    }
+
+    /// The `stable` and `unchanged` properties, checked on every step.
+    pub fn step_rules(&self) -> &[StepRule] {
+        &self.steps
     }
 
     pub fn properties(&self) -> &[Property] {

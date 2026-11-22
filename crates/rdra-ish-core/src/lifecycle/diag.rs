@@ -4,7 +4,7 @@ use std::fmt;
 
 use super::lasso::Loop;
 use super::trace::{Inst, Trace};
-use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ParamRole, Site};
+use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ParamRole, Site, StepKind};
 use crate::model::EntityKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -157,6 +157,20 @@ pub enum StateDiag {
         /// The rule's `.label("...")`, when it has one.
         label: Option<String>,
         actual: String,
+        site: Site,
+        trace: Trace,
+    },
+    /// A step breaks a `stable` or `unchanged` property: from `before`, true of its rows,
+    /// into `after`. Each rule reports its first violation, with a shortest trace ending in
+    /// that step.
+    StepRuleViolated {
+        /// The property's name, which is the PROPERTY TLC checks.
+        name: String,
+        kind: StepKind,
+        label: String,
+        /// The rows the rule binds, in the pre-state and in the successor.
+        before: String,
+        after: String,
         site: Site,
         trace: Trace,
     },
@@ -435,6 +449,7 @@ impl StateDiag {
         let raw = match self {
             StateDiag::ConstraintViolated { name, .. }
             | StateDiag::AfterAssertViolated { name, .. }
+            | StateDiag::StepRuleViolated { name, .. }
             | StateDiag::PropertyViolated { name, .. } => name.clone(),
             StateDiag::NoWitness {
                 entity,
@@ -547,6 +562,7 @@ impl StateDiag {
         match self {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
+            | StateDiag::StepRuleViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
@@ -557,6 +573,7 @@ impl StateDiag {
         match self {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
+            | StateDiag::StepRuleViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
@@ -596,6 +613,7 @@ impl StateDiag {
             | StateDiag::StateCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::StepRuleViolated { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::Deadlock { .. }
@@ -752,6 +770,19 @@ impl fmt::Display for StateDiag {
                 f,
                 "{}after({anchor}).assert({requireds}) fails: {actual}",
                 label_prefix(label)
+            ),
+            StateDiag::StepRuleViolated {
+                name,
+                kind,
+                label,
+                before,
+                after,
+                ..
+            } => write!(
+                f,
+                "{} property {name} ({}) is broken by a step: {before} becomes {after}",
+                kind.as_str(),
+                label
             ),
             StateDiag::PropertyViolated {
                 name,

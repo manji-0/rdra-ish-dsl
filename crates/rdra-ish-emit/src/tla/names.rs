@@ -30,6 +30,8 @@ pub struct TlaNames {
     actions: Vec<String>,
     invariants: Vec<String>,
     after: Vec<String>,
+    /// The `stable` and `unchanged` properties, by `step_rules()` index.
+    steps: Vec<String>,
     properties: Vec<String>,
     /// `Fair_<property>` for a property with `.fair(...)`.
     fair: Vec<Option<String>>,
@@ -131,6 +133,7 @@ impl TlaNames {
         let properties: Vec<String> = ts.properties().iter().map(|x| x.name.clone()).collect();
         let invariants: Vec<String> = ts.invariants().iter().map(|x| x.name.clone()).collect();
         let after: Vec<String> = ts.after_asserts().iter().map(|x| x.name.clone()).collect();
+        let steps: Vec<String> = ts.step_rules().iter().map(|x| x.name.clone()).collect();
         let fair: Vec<Option<String>> = ts
             .properties()
             .iter()
@@ -174,6 +177,7 @@ impl TlaNames {
             taken: HashSet::new(),
             wanted: properties
                 .iter()
+                .chain(&steps)
                 .chain(&invariants)
                 .chain(&after)
                 .chain(fair.iter().flatten())
@@ -190,6 +194,7 @@ impl TlaNames {
         // the rule names apart from the properties and from each other, so a rule prints here
         // as `check` prints it.
         let properties = taken.claim_all(&properties);
+        let steps = taken.claim_all(&steps);
         let invariants = taken.claim_all(&invariants);
         let after = taken.claim_all(&after);
         let fair = fair
@@ -254,6 +259,7 @@ impl TlaNames {
             actions,
             invariants,
             after,
+            steps,
             properties,
             fair,
             class,
@@ -331,6 +337,15 @@ impl TlaNames {
 
     pub fn after(&self, i: usize) -> &str {
         &self.after[i]
+    }
+
+    /// The PROPERTY of `step_rules()[i]`.
+    pub fn step(&self, i: usize) -> &str {
+        &self.steps[i]
+    }
+
+    pub fn step_index(&self, name: &str) -> Option<usize> {
+        self.steps.iter().position(|n| n == name)
     }
 
     pub fn property(&self, i: usize) -> &str {

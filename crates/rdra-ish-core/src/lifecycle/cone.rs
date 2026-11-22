@@ -46,6 +46,8 @@ pub enum Target {
     Invariant(usize),
     /// Index into `after_asserts()`.
     AfterAssert(usize),
+    /// Index into `step_rules()`.
+    StepRule(usize),
 }
 
 /// A closed var set and the actions that must stay even when they write nothing in it.
@@ -362,6 +364,15 @@ impl TransitionSystem {
                 }
                 self.pred_reads(&inv.body, &mut seed);
             }
+            // Only what the rule reads: an action outside the cone changes none of it, so it
+            // stutters for the rule, and no action is kept whole.
+            Target::StepRule(i) => {
+                let rule = &self.steps[i];
+                for e in &rule.binders {
+                    seed.insert(self.entity(*e).exists);
+                }
+                self.pred_reads(&rule.body, &mut seed);
+            }
             Target::AfterAssert(i) => {
                 for step in &self.after[i].steps {
                     for e in &step.binders {
@@ -439,6 +450,7 @@ impl TransitionSystem {
             .map(|i| Target::Entity(EntId::at(i)))
             .chain((0..self.invariants.len()).map(Target::Invariant))
             .chain((0..self.after.len()).map(Target::AfterAssert))
+            .chain((0..self.steps.len()).map(Target::StepRule))
             .collect()
     }
 

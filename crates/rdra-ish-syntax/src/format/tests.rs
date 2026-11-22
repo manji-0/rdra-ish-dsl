@@ -229,6 +229,13 @@ fn formats_a_property_fair_chain() {
 }
 
 #[test]
+fn formats_step_properties() {
+    let src = "property Fixed\n  unchanged(Order.amount, total).when((Order.status == approved) or (Order.status == paid)).along(Order, Payment)\n\nproperty Stays\n  stable(Order.status == cancelled)\n";
+    let formatted = format_source(src).unwrap();
+    assert_eq!(formatted, src);
+}
+
+#[test]
 fn formats_nm_via_chain() {
     let src = "relate(Order, Product, N:M).via(OrderProduct)\n";
     let formatted = format_source(src).unwrap();

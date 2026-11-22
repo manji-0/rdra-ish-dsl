@@ -115,17 +115,13 @@ impl Named {
             }
         }
         for prop in &model.temporal_properties {
-            let (a, b) = match &prop.formula {
-                crate::model::TemporalFormula::Always(e)
-                | crate::model::TemporalFormula::Eventually(e) => (e, None),
-                crate::model::TemporalFormula::LeadsTo {
-                    antecedent,
-                    consequent,
-                } => (antecedent, Some(consequent)),
-            };
-            n.temporal(a);
-            if let Some(b) = b {
-                n.temporal(b);
+            for e in prop.formula.exprs() {
+                n.temporal(e);
+            }
+            if let crate::model::TemporalFormula::Unchanged { columns, .. } = &prop.formula {
+                for c in columns {
+                    n.name(c.entity, &c.column);
+                }
             }
         }
         // A read of a logical `@derived` column reads the columns of its expression.

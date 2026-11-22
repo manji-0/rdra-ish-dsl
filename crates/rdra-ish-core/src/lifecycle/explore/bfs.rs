@@ -15,7 +15,7 @@ use crate::lifecycle::view::pattern_bound;
 use crate::lifecycle::TransitionSystem;
 use crate::parallel::Helpers;
 
-use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, Threads};
+use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, StepCheck, Threads};
 
 /// States one worker expands at a time. Fewer than two chunks of waiting states are
 /// expanded on the caller's thread, so a small run starts no worker.
@@ -262,6 +262,7 @@ impl<'t> Bfs<'t> {
                 continue;
             }
             self.check_after(from, act, params, s2);
+            self.check_step_rules(from, act, params, &s, s2);
             let to = match self.seen.get(&*s2) {
                 Some(&to) => to,
                 None => {
@@ -451,6 +452,25 @@ impl<'t> Bfs<'t> {
         }
     }
 
+    fn check_step_rules(&mut self, from: u32, act: ActId, params: &[u8], s: &State, s2: &State) {
+        let ts = self.ts;
+        for (i, rule) in ts.steps.iter().enumerate() {
+            if self.violated.contains(&rule.name) {
+                continue;
+            }
+            if let Some(d) = ts.step_rule_violation(i, s, s2) {
+                let reach = Reach::Step {
+                    from,
+                    act,
+                    params: params.into(),
+                    to: s2.clone(),
+                    check: StepCheck::Rule(i),
+                };
+                self.violation(&rule.name, d, reach);
+            }
+        }
+    }
+
     fn check_after(&mut self, from: u32, act: ActId, params: &[u8], s2: &State) {
         let ts = self.ts;
         for (i, a) in ts.after.iter().enumerate() {
@@ -463,7 +483,7 @@ impl<'t> Bfs<'t> {
                     act,
                     params: params.into(),
                     to: s2.clone(),
-                    after: i,
+                    check: StepCheck::After(i),
                 };
                 self.violation(&a.name, d, reach);
             }

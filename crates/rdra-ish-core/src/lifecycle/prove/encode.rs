@@ -610,6 +610,11 @@ impl Enc<'_> {
                 scope.bound[usize::from(b)],
                 scope.frame,
             ),
+            At::NextBound(b) => (
+                bound(usize::from(b)),
+                scope.bound[usize::from(b)],
+                Frame::Post,
+            ),
         }
     }
 

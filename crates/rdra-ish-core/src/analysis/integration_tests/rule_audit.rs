@@ -390,6 +390,21 @@ const FORMS: &[(&str, Expect)] = &[
         "property P always(Order.status != paid or Ticket.status == done).along(Ticket, Nosuch)",
         Error,
     ),
+    // step properties: `stable` and `unchanged` are safety, so `.fair` is an error
+    ("property P stable(Order.status == paid)", Recorded),
+    (
+        "property P unchanged(Order.total).when(Order.status == paid)",
+        Recorded,
+    ),
+    ("property P unchanged(Order.total, kind)", Recorded),
+    (
+        "property P unchanged(Order.total, Ticket.status).along(Ticket, Order)",
+        Recorded,
+    ),
+    ("property P stable(Order.status == paid).fair(Pay)", Error),
+    ("property P unchanged(Order.missing)", Error),
+    ("property P unchanged()", Error),
+    ("property P unchanged(3)", Error),
 ];
 
 /// The rules a model records, its field mappings, its `sets` effects, and each condition body

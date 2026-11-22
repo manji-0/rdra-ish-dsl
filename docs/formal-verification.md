@@ -161,6 +161,8 @@ stays as it was.
 | `invariant(...).when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's last action, so a split use case once per run, on the run's rows. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
+| `property P stable(p)` | `PROPERTY P`: `[][\A b0 \in E_Ids : present => (~p \/ ~present' \/ p')]_vars`, an action property over the rows present before the step. BFS checks it on every edge, so `check` and `states` report it too. |
+| `property P unchanged(E.col, ..).when(p)` | `PROPERTY P`: `[][\A b0 \in E_Ids : present => (~p \/ ~present' \/ E_col'[b0] = E_col[b0])]_vars`. Without `.when` the trigger is `TRUE`. Checked like `stable`. |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
 | `property P ... .fair(UC, ...)` | `Fair_P`, one `WF_vars` per action of each listed use case and per instance it acts on (`\A p0 \in E_Ids : WF_vars(UC(p0))`, a created slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. |
 | Domain of every variable | `INVARIANT TypeOK`, kept apart from the business rules |
@@ -199,7 +201,10 @@ Operators:
 - Property label string is optional (`property StockOk always(...)`)
 
 `rdra-ish states` does not evaluate path properties, and `check` prints a `note:` that it
-did not model-check them. Use `export` or `verify`.
+did not model-check them. Use `export` or `verify`. `stable` and `unchanged` are step
+properties, not path properties: BFS checks them on every edge, `verify` on their cone (what
+they read; no action is kept whole, since an action outside the cone changes none of it),
+and each violation ends in the step that breaks it.
 
 ## What `verify` checks
 

@@ -724,18 +724,11 @@ fn empty_sets(items: &[Item]) -> Vec<Span> {
                     }
                 }
             }
-            Item::Property(prop) => match &prop.formula {
-                AstTemporalFormula::Always(e) | AstTemporalFormula::Eventually(e) => {
-                    expr(e, &mut out)
+            Item::Property(prop) => {
+                for e in prop.formula.exprs() {
+                    expr(e, &mut out);
                 }
-                AstTemporalFormula::LeadsTo {
-                    antecedent,
-                    consequent,
-                } => {
-                    expr(antecedent, &mut out);
-                    expr(consequent, &mut out);
-                }
-            },
+            }
             Item::Instance(inst) => {
                 for ann in inst.columns.iter().flat_map(|c| c.annotations.iter()) {
                     if let Annotation::Check(ColumnExpr::Logical(e))
@@ -843,7 +836,29 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
             consequent,
         });
 
-    let formula = choice((leads_to, always, eventually));
+    let stable = just(Token::Ident("stable".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(AstTemporalFormula::Stable);
+
+    let column = operand().try_map(|o, span| match o {
+        Operand::Column(_) | Operand::QualifiedColumn(_) => Ok(o),
+        _ => Err(Simple::custom(span, "`unchanged` takes columns")),
+    });
+    let when = just(Token::Dot)
+        .ignore_then(just(Token::Ident("when".to_string())))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen));
+    let unchanged = just(Token::Ident("unchanged".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(column.separated_by(just(Token::Comma)).at_least(1))
+        .then_ignore(just(Token::RParen))
+        .then(when.or_not())
+        .map(|(columns, when)| AstTemporalFormula::Unchanged { columns, when });
+
+    let formula = choice((leads_to, always, eventually, stable, unchanged));
 
     just(Token::Property)
         .ignore_then(ident())

@@ -1142,3 +1142,39 @@ property Linked
         "{tla}"
     );
 }
+
+/// `stable` and `unchanged` are action properties over the rows present before the step.
+#[test]
+fn step_properties_print_as_action_properties() {
+    let src = r#"
+entity Order "Order" { id: Int @pk  status: Enum(open, done) @default(open)  amount: Int @default(1) }
+usecase Place "Place"
+usecase Close "Close"
+usecase Bump "Bump"
+creates(Place, Order)
+transitions(Close, Order.status, open -> done)
+sets(Bump, Order.amount == 2)
+property DoneStays stable(Order.status == done)
+property AmountFixed unchanged(Order.amount).when(Order.status == done)
+"#;
+    let bundle = print(&system(src), PrintMode::Check, "M");
+    let tla = &bundle.tla;
+    assert!(
+        tla.contains(
+            "DoneStays == [][\\A b0 \\in Order_Ids : (Order_exists[b0] = \"present\") => \
+             ((~(Order_status[b0] = \"done\")) \\/ ((~(Order_exists'[b0] = \"present\")) \\/ (Order_status'[b0] = \"done\")))]_vars\n"
+        ),
+        "{tla}"
+    );
+    assert!(
+        tla.contains("\\/ (Order_amount'[b0] = Order_amount[b0])))]_vars\n"),
+        "{tla}"
+    );
+    assert!(
+        bundle
+            .cfg
+            .contains("PROPERTY DoneStays\nPROPERTY AmountFixed\n"),
+        "{}",
+        bundle.cfg
+    );
+}

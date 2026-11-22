@@ -4,8 +4,9 @@ use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::{
-    CmpOpModel, CrossConstraintScope, EntityKey, ModelColumn, NodeRef, SemanticModel, TemporalAtom,
-    TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, UseCaseKey,
+    CmpOpModel, CrossConstraintScope, EntityKey, ModelColumn, NodeRef, QualifiedModelColumnRef,
+    SemanticModel, TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs,
+    UseCaseKey,
 };
 use rdra_ish_syntax::ast::{
     AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PredicateArg, PropertyDecl,
@@ -113,7 +114,7 @@ fn fair_use_cases(
             ok = false;
             continue;
         }
-        if matches!(decl.formula, AstTemporalFormula::Always(_)) {
+        if decl.formula.is_safety() {
             let err = RdraError::FairOnSafetyProperty { id: id() };
             push_error(ctx, diags, cc.span.clone(), err);
             ok = false;
@@ -182,6 +183,32 @@ fn lower_formula(
             antecedent: lower_expr(model, antecedent)?,
             consequent: lower_expr(model, consequent)?,
         }),
+        AstTemporalFormula::Stable(e) => Ok(TemporalFormula::Stable(lower_expr(model, e)?)),
+        AstTemporalFormula::Unchanged { columns, when } => {
+            let mut cols: Vec<QualifiedModelColumnRef> = Vec::new();
+            for operand in columns {
+                let (entity, column) = match operand {
+                    Operand::QualifiedColumn(q) => {
+                        (q.entity.parts.last().map(String::as_str), q.column.as_str())
+                    }
+                    Operand::Column(c) => (None, c.as_str()),
+                    other => return Err(format!("`unchanged` takes columns, got {other:?}").into()),
+                };
+                let (ek, _) = owner(model, entity, column)?;
+                let col = QualifiedModelColumnRef {
+                    entity: ek,
+                    column: column.to_string(),
+                };
+                if !cols.contains(&col) {
+                    cols.push(col);
+                }
+            }
+            let when = when.as_ref().map(|e| lower_expr(model, e)).transpose()?;
+            Ok(TemporalFormula::Unchanged {
+                columns: cols,
+                when,
+            })
+        }
     }
 }
 

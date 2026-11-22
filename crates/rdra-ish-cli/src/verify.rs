@@ -211,6 +211,7 @@ fn cone_jobs(
             Target::Entity(_) => continue,
             Target::Invariant(i) => names.invariant(i).to_string(),
             Target::AfterAssert(i) => names.after(i).to_string(),
+            Target::StepRule(i) => names.step(i).to_string(),
         };
         let cone = ts.target_cone(target);
         match at.get(&cone.vars) {
@@ -238,6 +239,7 @@ fn cone_jobs(
         let checks = (0..sub.invariants().len())
             .map(|i| n.invariant(i).to_string())
             .chain((0..sub.after_asserts().len()).map(|i| n.after(i).to_string()))
+            .chain((0..sub.step_rules().len()).map(|i| n.step(i).to_string()))
             .collect();
         Job {
             module: bundle.module_name,
@@ -884,10 +886,19 @@ fn print_plan(
         BoundsLine::verify(bounds, Some(Caps::VERIFY)).with_scope(scope.line(model, selection));
     println!("{line}");
     let checked = |pick: fn(&Target) -> bool| selection.targets.iter().filter(|t| pick(t)).count();
+    let steps = checked(|t| matches!(t, Target::StepRule(_)));
     println!(
-        "cones: {cones} for {} invariant(s) and {} after-assert(s)",
+        "cones: {cones} for {} invariant(s) and {} after-assert(s){}",
         checked(|t| matches!(t, Target::Invariant(_))),
-        checked(|t| matches!(t, Target::AfterAssert(_)))
+        checked(|t| matches!(t, Target::AfterAssert(_))),
+        if steps == 0 {
+            String::new()
+        } else {
+            format!(
+                " and {steps} step propert{}",
+                if steps == 1 { "y" } else { "ies" }
+            )
+        }
     );
     match (temporal, ts.properties().len()) {
         (_, 0) => println!("temporal properties: none"),

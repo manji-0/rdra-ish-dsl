@@ -149,14 +149,23 @@ pub struct Graph<'a> {
 enum Reach {
     /// `states[at]` violates `invariants()[inv]`.
     State { at: u32, inv: usize },
-    /// The step from `states[from]` to `to` fails `after_asserts()[after]`.
+    /// The step from `states[from]` to `to` fails `check`.
     Step {
         from: u32,
         act: ActId,
         params: Box<[u8]>,
         to: State,
-        after: usize,
+        check: StepCheck,
     },
+}
+
+/// What a step fails.
+#[derive(Clone, Copy)]
+enum StepCheck {
+    /// Index into `after_asserts()`.
+    After(usize),
+    /// Index into `step_rules()`.
+    Rule(usize),
 }
 
 /// What the edges said about one entity's view patterns, indexed by pattern id.
@@ -253,14 +262,21 @@ impl TransitionSystem {
             bindings: bindings.list,
         };
         for (at, reach) in &violations {
-            let (trace, last) = run.trace_of(reach);
+            let (trace, before, last) = run.trace_of(reach);
             // A reduced run holds representatives: the message describes the lifted state.
             if run.system.reduction().is_some() {
                 let rebuilt = match reach {
                     Reach::State { inv, .. } => run.system.invariant_violation(*inv, &last),
                     Reach::Step {
-                        after, act, params, ..
+                        check: StepCheck::After(after),
+                        act,
+                        params,
+                        ..
                     } => run.system.after_violation(*after, *act, params, &last),
+                    Reach::Step {
+                        check: StepCheck::Rule(rule),
+                        ..
+                    } => run.system.step_rule_violation(*rule, &before, &last),
                 };
                 if let Some(d) = rebuilt {
                     run.diags[*at].diag = d.diag;

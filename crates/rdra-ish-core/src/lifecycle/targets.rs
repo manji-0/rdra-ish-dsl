@@ -593,6 +593,9 @@ impl TransitionSystem {
             (Target::AfterAssert(i), StateDiag::AfterAssertViolated { site, .. }) => {
                 *site == self.after[i].site
             }
+            (Target::StepRule(i), StateDiag::StepRuleViolated { name, .. }) => {
+                *name == self.steps[i].name
+            }
             _ => false,
         }
     }

@@ -569,6 +569,8 @@ pub enum At {
     /// An action parameter's slot in the successor. A condition atom on a created param reads
     /// it, so the condition constrains what the action creates.
     Next(u8),
+    /// A binder's slot in the successor: a step rule reads its post-state here.
+    NextBound(u8),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -728,6 +730,37 @@ pub struct AfterStep {
     pub binders: Vec<EntId>,
     /// `At::Param` reads the action's params in the post-state.
     pub post: Pred,
+}
+
+/// A step property, `stable` or `unchanged`: on every step from a state where its binders are
+/// present, `body` holds. It reads the pre-state through `At::Bound` and the successor through
+/// `At::NextBound`, so the explorer checks it on each edge and TLA+ prints it as
+/// `[][body]_vars`.
+#[derive(Clone, Debug)]
+pub struct StepRule {
+    pub name: String,
+    /// Universally bound entities, present in the pre-state, outermost first.
+    pub binders: Vec<EntId>,
+    pub body: Pred,
+    pub kind: StepKind,
+    /// The property's label (its id when it has none).
+    pub label: String,
+    pub site: Site,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StepKind {
+    Stable,
+    Unchanged,
+}
+
+impl StepKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            StepKind::Stable => "stable",
+            StepKind::Unchanged => "unchanged",
+        }
+    }
 }
 
 /// A temporal property. The explorer does not check it; `explain_property` evaluates it on a

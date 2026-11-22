@@ -235,6 +235,11 @@ impl TransitionSystem {
                 .iter()
                 .map(|e| self.entity(*e).key)
                 .collect(),
+            Target::StepRule(i) => self.steps[i]
+                .binders
+                .iter()
+                .map(|e| self.entity(*e).key)
+                .collect(),
             Target::AfterAssert(i) => {
                 let mut entities = Vec::new();
                 for step in &self.after[i].steps {
@@ -334,6 +339,7 @@ impl NotChecked<'_> {
                     let anchor = self.ts.after_asserts()[i].steps[0].act;
                     format!("after({})", self.ts.actions()[anchor.index()].name)
                 }
+                Target::StepRule(i) => self.ts.step_rules()[i].name.clone(),
             })
             .collect()
     }
@@ -363,24 +369,28 @@ impl fmt::Display for NotChecked<'_> {
             let of = |pick: fn(&Target) -> bool| {
                 self.names(self.selection.unchecked.iter().copied().filter(&pick))
             };
-            parts.push(format!(
-                "{}, {}, {}",
+            let steps = of(|t| matches!(t, Target::StepRule(_)));
+            let mut views = vec![
                 counted(
                     &of(|t| matches!(t, Target::Entity(_))),
                     "entity view",
-                    "entity views"
+                    "entity views",
                 ),
                 counted(
                     &of(|t| matches!(t, Target::Invariant(_))),
                     "invariant",
-                    "invariants"
+                    "invariants",
                 ),
                 counted(
                     &of(|t| matches!(t, Target::AfterAssert(_))),
                     "after-assert",
-                    "after-asserts"
+                    "after-asserts",
                 ),
-            ));
+            ];
+            if !steps.is_empty() {
+                views.push(counted(&steps, "step property", "step properties"));
+            }
+            parts.push(views.join(", "));
         }
         if !self.scope.is_whole() && self.temporal > 0 {
             parts.push(plural(

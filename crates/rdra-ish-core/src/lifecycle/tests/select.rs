@@ -39,7 +39,7 @@ fn an_error_no_selected_cone_reads_is_deferred() {
         .map(|t| match *t {
             Target::Entity(e) => ts.entity(e).id.clone(),
             Target::Invariant(i) => ts.invariants()[i].name.clone(),
-            Target::AfterAssert(_) => unreachable!(),
+            Target::AfterAssert(_) | Target::StepRule(_) => unreachable!(),
         })
         .collect();
     assert_eq!(names, ["Order", "Forbidden_Order_0"]);

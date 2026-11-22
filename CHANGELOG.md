@@ -4,6 +4,12 @@
 
 ### Added
 
+- `property P stable(p)` and `property P unchanged(E.col, ..).when(p)`: step properties
+  that say a row keeps a state once it has it, or keeps columns while a condition holds,
+  whatever use case runs. BFS checks them on every step, so `check` and `states` report them
+  with a trace ending in the breaking step; TLA+ prints them as action properties and
+  `verify` checks them on their cone (#166).
+
 - A `property` over two or more entities takes `.along(A, B, ..)` with `.role(role)`, or
   `.global()`, as a multi-entity `forbidden` or `invariant` does. The owner links of the
   path join the trigger of the formula, so `verify` no longer reads a paid order together

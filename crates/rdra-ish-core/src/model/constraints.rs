@@ -287,6 +287,13 @@ pub enum TemporalFormula {
         antecedent: TemporalExpr,
         consequent: TemporalExpr,
     },
+    /// `stable(p)` → `[][p => p']_vars`
+    Stable(TemporalExpr),
+    /// `unchanged(E.col, ..).when(p)` → `[][p => col' = col]_vars`; no `.when` is `true`.
+    Unchanged {
+        columns: Vec<QualifiedModelColumnRef>,
+        when: Option<TemporalExpr>,
+    },
 }
 
 /// `property Id "label"` with a temporal formula body.
@@ -311,12 +318,24 @@ impl TemporalFormula {
     /// The operands, left to right.
     pub fn exprs(&self) -> Vec<&TemporalExpr> {
         match self {
-            TemporalFormula::Always(e) | TemporalFormula::Eventually(e) => vec![e],
+            TemporalFormula::Always(e)
+            | TemporalFormula::Eventually(e)
+            | TemporalFormula::Stable(e) => vec![e],
             TemporalFormula::LeadsTo {
                 antecedent,
                 consequent,
             } => vec![antecedent, consequent],
+            TemporalFormula::Unchanged { when, .. } => when.iter().collect(),
         }
+    }
+
+    /// Whether it is checked step by step (`stable`, `unchanged`) rather than as a temporal
+    /// formula over whole behaviors.
+    pub fn is_step(&self) -> bool {
+        matches!(
+            self,
+            TemporalFormula::Stable(_) | TemporalFormula::Unchanged { .. }
+        )
     }
 }
 
@@ -350,6 +369,13 @@ impl TemporalProperty {
         let mut out = Vec::new();
         for e in self.formula.exprs() {
             e.entities(&mut out);
+        }
+        if let TemporalFormula::Unchanged { columns, .. } = &self.formula {
+            for c in columns {
+                if !out.contains(&c.entity) {
+                    out.push(c.entity);
+                }
+            }
         }
         out
     }

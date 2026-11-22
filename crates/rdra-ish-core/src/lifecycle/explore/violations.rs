@@ -2,7 +2,7 @@
 
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::diag::{Diag, StateDiag};
-use crate::lifecycle::expr::State;
+use crate::lifecycle::expr::{Env, State};
 use crate::lifecycle::trace::Trace;
 use crate::lifecycle::types::{ActId, EntId, InvKind};
 use crate::lifecycle::view::describe_slot;
@@ -96,5 +96,34 @@ impl TransitionSystem {
                     },
                 })
             })
+    }
+
+    /// The violation of `step_rules()[i]` by the step from `s` into `s2`, with an empty
+    /// trace; `None` when it holds.
+    pub(crate) fn step_rule_violation(&self, i: usize, s: &State, s2: &State) -> Option<Diag> {
+        let rule = &self.steps[i];
+        let mut env = Env::new(&[]);
+        env.next = Some(s2);
+        let binding = self.search(&rule.binders, &rule.body, s, &mut env)?;
+        let rows = |state: &State| {
+            rule.binders
+                .iter()
+                .zip(&binding)
+                .map(|(e, slot)| describe_slot(self, state, *e, usize::from(*slot), true))
+                .collect::<Vec<_>>()
+                .join("; ")
+        };
+        Some(Diag {
+            entities: rule.binders.iter().map(|e| self.entity(*e).key).collect(),
+            diag: StateDiag::StepRuleViolated {
+                name: rule.name.clone(),
+                kind: rule.kind,
+                label: rule.label.clone(),
+                before: rows(s),
+                after: rows(s2),
+                site: rule.site.clone(),
+                trace: Trace::default(),
+            },
+        })
     }
 }

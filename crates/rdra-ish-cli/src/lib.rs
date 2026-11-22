@@ -111,7 +111,12 @@ pub fn run() -> Result<()> {
                 eprintln!("{block}");
             }
 
-            let property_count = model.temporal_properties.len();
+            // `stable` and `unchanged` are checked step by step, here too.
+            let property_count = model
+                .temporal_properties
+                .iter()
+                .filter(|p| !p.formula.is_step())
+                .count();
             if property_count > 0 {
                 eprintln!(
                     "note: {property_count} temporal properties were not model-checked by check; use verify --backend tlc"

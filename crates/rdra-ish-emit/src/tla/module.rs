@@ -925,6 +925,14 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             steps.join(" /\\ ")
         ));
     }
+    // A step rule is an action property: every step from a state where its rows are present.
+    for (i, r) in ts.step_rules().iter().enumerate() {
+        out.push_str(&format!(
+            "{} == [][{}]_vars\n",
+            names.step(i),
+            closed(ts, names, &r.binders, false, &r.body)
+        ));
+    }
     for (i, p) in ts.properties().iter().enumerate() {
         let mut ctx = Ctx {
             ts,
@@ -957,7 +965,10 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             None => out.push_str(&format!("{} == {quant}{formula}\n", names.property(i))),
         }
     }
-    if !ts.invariants().is_empty() || !ts.after_asserts().is_empty() || !ts.properties().is_empty()
+    if !ts.invariants().is_empty()
+        || !ts.after_asserts().is_empty()
+        || !ts.step_rules().is_empty()
+        || !ts.properties().is_empty()
     {
         out.push('\n');
     }

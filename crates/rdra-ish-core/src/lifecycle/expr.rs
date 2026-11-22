@@ -42,7 +42,7 @@ impl<'a> Env<'a> {
     fn slot(&self, at: At) -> usize {
         usize::from(match at {
             At::Param(p) | At::Next(p) => self.params[usize::from(p)],
-            At::Bound(b) => self.bound[usize::from(b)],
+            At::Bound(b) | At::NextBound(b) => self.bound[usize::from(b)],
         })
     }
 }
@@ -112,7 +112,7 @@ impl TransitionSystem {
         self.search(binders, body, state, &mut env)
     }
 
-    fn search(
+    pub(crate) fn search(
         &self,
         binders: &[EntId],
         body: &Pred,
@@ -140,7 +140,9 @@ impl TransitionSystem {
         match term {
             Term::Slot { var, at } => {
                 let read = match at {
-                    At::Next(_) => env.next.expect("a successor guard without a successor"),
+                    At::Next(_) | At::NextBound(_) => {
+                        env.next.expect("a successor read without a successor")
+                    }
                     _ => state,
                 };
                 Operand::Value(

@@ -2574,6 +2574,8 @@ property NeverBoth "mutex"
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
+| `stable(expr)` | `[][expr => expr']_vars` |
+| `unchanged(E.col, ..).when(expr)` | `[][expr => col' = col]_vars` |
 
 Atoms use `Entity.column == value` / `!=`, `Entity.column in (a, b)` / `not in`, or numeric
 comparisons (`<`, `>`, `<=`, `>=`) over Int / Money / Decimal columns and literals. Prefer
@@ -2628,6 +2630,30 @@ when the rule has a path.
 // joins Member and Loan, and the rule would count every loan in the system.
 invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)
 ```
+
+#### Step properties: `stable` and `unchanged`
+
+`stable(p)` says that once `p` holds for a row, no step makes it false while the row is
+present. `unchanged(E.col, ..).when(p)` says that a step from a state where `p` holds leaves
+the listed columns as they are; without `.when(..)`, no step changes them. Write `.when`
+right after the column list.
+
+```rdra
+property CancelledStays "a cancelled order stays cancelled"
+  stable(Order.status == cancelled)
+
+property AmountFixed "an approved order's amount is fixed"
+  unchanged(Order.amount).when(Order.status == approved)
+```
+
+Both are checked on every step, per binding of the rows present before it; a step that
+deletes the row does not break them. Unlike `after(UC).assert(...)`, which checks the use
+case it names, they catch any use case that breaks the rule. BFS checks them, so `check`,
+`states`, and `verify` all report a violation, with a shortest trace that ends in the
+breaking step. TLA+ prints each as an action property, `[][\A b0 \in E_Ids : present =>
+(...)]_vars`. They take `.along`, `.role`, and `.global()` like the other forms; `.fair` is
+`FairOnSafetyProperty`, and a column of `unchanged` no single entity owns is
+`UnresolvedPropertyColumn`.
 
 #### Rows across entities: `.along(...)`
 

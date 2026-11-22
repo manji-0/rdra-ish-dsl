@@ -481,7 +481,45 @@ pub struct ChainCall {
 pub enum AstTemporalFormula {
     Always(Expr),
     Eventually(Expr),
-    LeadsTo { antecedent: Expr, consequent: Expr },
+    LeadsTo {
+        antecedent: Expr,
+        consequent: Expr,
+    },
+    /// `stable(p)`: once `p` holds, every step keeps it while the row is present.
+    Stable(Expr),
+    /// `unchanged(E.col, ..)` with an optional `.when(p)` right after it: while `p` holds,
+    /// every step leaves the columns as they are. Each column is a `Column` or
+    /// `QualifiedColumn` operand.
+    Unchanged {
+        columns: Vec<Operand>,
+        when: Option<Expr>,
+    },
+}
+
+impl AstTemporalFormula {
+    /// The logical expressions of the formula, left to right.
+    pub fn exprs(&self) -> Vec<&Expr> {
+        match self {
+            AstTemporalFormula::Always(e)
+            | AstTemporalFormula::Eventually(e)
+            | AstTemporalFormula::Stable(e) => vec![e],
+            AstTemporalFormula::LeadsTo {
+                antecedent,
+                consequent,
+            } => vec![antecedent, consequent],
+            AstTemporalFormula::Unchanged { when, .. } => when.iter().collect(),
+        }
+    }
+
+    /// Whether it is a safety property, on which fairness changes nothing.
+    pub fn is_safety(&self) -> bool {
+        matches!(
+            self,
+            AstTemporalFormula::Always(_)
+                | AstTemporalFormula::Stable(_)
+                | AstTemporalFormula::Unchanged { .. }
+        )
+    }
 }
 
 /// A `property` declaration binding a temporal formula to an id/label.

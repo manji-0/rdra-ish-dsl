@@ -197,6 +197,12 @@ pub fn cfg_without(
                 out.push_str(&format!("PROPERTY {name}\n"));
             }
         }
+        for i in 0..ts.step_rules().len() {
+            let name = names.step(i);
+            if !skip.contains(name) {
+                out.push_str(&format!("PROPERTY {name}\n"));
+            }
+        }
     }
     for i in properties {
         out.push_str(&format!("PROPERTY {}\n", names.property(i)));

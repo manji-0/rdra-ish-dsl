@@ -61,6 +61,15 @@ fn one_of_each() -> Vec<StateDiag> {
             site: site(),
             trace: Trace::default(),
         },
+        StateDiag::StepRuleViolated {
+            name: "CancelledStays".into(),
+            kind: crate::lifecycle::StepKind::Stable,
+            label: "CancelledStays".into(),
+            before: "Order(status=cancelled)".into(),
+            after: "Order(status=pending)".into(),
+            site: site(),
+            trace: Trace::default(),
+        },
         StateDiag::PropertyViolated {
             name: "NeverShipped".into(),
             kind: LtlKind::Always,
@@ -238,6 +247,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::StateCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::StepRuleViolated { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::NeverRuns { .. }

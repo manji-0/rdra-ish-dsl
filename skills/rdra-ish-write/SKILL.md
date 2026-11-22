@@ -188,7 +188,7 @@ kinds fail to parse, with a hint naming the replacement.
 | `forbidden` (multi-entity) | `(Entity..., Entity.col == val\|Entity.col op rhs, ...)[.along(...)[.role(role)] \| .global()]` | forbidden combination across entities; `.global()` for every combination, else `lint` `multi-rule-unscoped` |
 | `invariant` (multi-entity) | `(Entity...).when(...).then(...)[.along(...)[.role(role)] \| .global()]` | required co-occurrence across entities |
 | `invariant` (quantifier) | `(Entity).when(...).none/has(...)` | to-many quantifier over related rows (prefer `Entity.col`) |
-| `property` | `Name ["label"] always\|eventually\|leads_to(...)[.along(...)[.role(role)] \| .global()][.fair(UC, ...)]` | temporal path property, checked by `verify` only |
+| `property` | `Name ["label"] always\|eventually\|leads_to\|stable(...)\|unchanged(E.col, ...)[.when(...)][.along(...)[.role(role)] \| .global()][.fair(UC, ...)]` | temporal path property, checked by `verify` only; `stable` and `unchanged` are step properties `check` checks too |
 | `after` | `(UseCase).assert(...)` | predicate on the state each run of the use case leaves, read after its last step |
 | `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation and generated key; see below |
 | `has_permission` | `(Actor, Permission)` | actor-side grant |

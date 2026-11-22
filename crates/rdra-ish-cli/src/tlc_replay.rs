@@ -18,10 +18,15 @@ pub fn explain_violation(
     let name = v.name.as_deref().ok_or("TLC names no check")?;
     let target = match v.kind {
         ViolationKind::Invariant => names.invariant_index(name).map(Target::Invariant),
-        ViolationKind::ActionProperty => names.after_index(name).map(Target::AfterAssert),
+        ViolationKind::ActionProperty => names
+            .after_index(name)
+            .map(Target::AfterAssert)
+            .or_else(|| names.step_index(name).map(Target::StepRule)),
         ViolationKind::Temporal | ViolationKind::Other => None,
     }
-    .ok_or_else(|| format!("TLC check {name} is no invariant or after-assert of the cone"))?;
+    .ok_or_else(|| {
+        format!("TLC check {name} is no invariant, after-assert, or step property of the cone")
+    })?;
     let (states, actions) = decode(ts, names, v)?;
     let replay = ts
         .replay(states, &actions)

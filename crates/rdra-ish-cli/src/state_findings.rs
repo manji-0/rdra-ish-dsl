@@ -526,6 +526,7 @@ pub(crate) fn render_violation(
             trace,
         ),
         StateDiag::AfterAssertViolated { site, trace, .. }
+        | StateDiag::StepRuleViolated { site, trace, .. }
         | StateDiag::PropertyViolated { site, trace, .. } => {
             (state_diag_message(diag), site, trace)
         }
@@ -802,6 +803,22 @@ violation_message(text, pattern_desc)
         } => format!(
             "{}temporal assertion violated after '{anchor}': expected {requireds}, but found {actual}",
             label_prefix(label)
+        ),
+        StateDiag::StepRuleViolated {
+            name,
+            kind,
+            label,
+            before,
+            after,
+            ..
+        } => format!(
+            "{} property {name} violated{}: a step takes {before} to {after}",
+            kind.as_str(),
+            if label == name {
+                String::new()
+            } else {
+                format!(" ({label})")
+            }
         ),
         StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }

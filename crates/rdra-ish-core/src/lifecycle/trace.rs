@@ -442,6 +442,14 @@ impl TransitionSystem {
                 let (act, params, _) = steps.last()?;
                 self.after_violation(i, *act, params, last)?
             }
+            Target::StepRule(i) => {
+                let before = match steps.len() {
+                    0 => return None,
+                    1 => &start,
+                    n => &steps[n - 2].2,
+                };
+                self.step_rule_violation(i, before, last)?
+            }
         };
         if let Some(t) = d.diag.trace_mut() {
             *t = self.trace_from(&start, &steps);

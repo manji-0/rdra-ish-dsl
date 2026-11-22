@@ -201,6 +201,15 @@ impl TransitionSystem {
                 out.after.push(AfterAssert { steps, ..a.clone() });
             }
         }
+        for r in &self.steps {
+            if reads_inside(&r.binders, &[&r.body]) {
+                out.steps.push(super::types::StepRule {
+                    binders: r.binders.iter().map(|e| map.e(*e)).collect(),
+                    body: map.pred(&r.body),
+                    ..r.clone()
+                });
+            }
+        }
         for p in &self.properties {
             let preds: Vec<&Pred> = p.preds().collect();
             if reads_inside(&p.binders, &preds) {

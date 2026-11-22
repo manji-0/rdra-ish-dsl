@@ -95,7 +95,8 @@ impl ComponentRun {
     /// The trace of a violation: the path to the violating state, or for an after-assert the
     /// path to the step's source and the step itself. The step need not be on the BFS path to
     /// its target, which another path may reach first. Also the trace's last state.
-    pub(super) fn trace_of(&self, reach: &Reach) -> (Trace, State) {
+    /// The trace to `reach`, the state before its last step, and its last state.
+    pub(super) fn trace_of(&self, reach: &Reach) -> (Trace, State, State) {
         match reach {
             Reach::State { at, .. } => self.lifted_trace(*at, None),
             Reach::Step {
@@ -108,8 +109,9 @@ impl ComponentRun {
         }
     }
 
-    /// The path to `states[at]`, then `extra`, lifted and in model terms, with its last state.
-    fn lifted_trace(&self, at: u32, extra: Option<Step>) -> (Trace, State) {
+    /// The path to `states[at]`, then `extra`, lifted and in model terms, with the state
+    /// before its last step and its last state.
+    fn lifted_trace(&self, at: u32, extra: Option<Step>) -> (Trace, State, State) {
         let path = self.path_to(at);
         let first = path.first().map_or(at, |e| e.from);
         let mut steps: Vec<Step> = path
@@ -122,8 +124,13 @@ impl ComponentRun {
         steps.extend(extra);
         let ts = &self.system;
         let (start, steps) = ts.lifted(&self.states[first as usize], &steps);
+        let before = match steps.len() {
+            0 | 1 => start.clone(),
+            n => steps[n - 2].2.clone(),
+        };
         (
             ts.trace_from(&start, &steps),
+            before,
             steps.last().map_or(start, |s| s.2.clone()),
         )
     }

@@ -60,6 +60,12 @@ property ShippedOnceCaptured
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
+| `stable(expr)` | `[][expr => expr']_vars`, checked by BFS too |
+| `unchanged(E.col, ..).when(expr)` | `[][expr => col' = col]_vars`, checked by BFS too |
+
+`stable` and `unchanged` are step properties: `check`, `states`, and `verify` check them on
+every step (any use case, not only the one an `after(UC).assert` names), and a violation's
+trace ends in the breaking step. `.when` goes right after the column list.
 
 ## Postconditions
 

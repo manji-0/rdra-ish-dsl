@@ -19,7 +19,7 @@ pub(super) struct Ctx<'a> {
 pub(super) fn at(a: At) -> String {
     match a {
         At::Param(p) | At::Next(p) => format!("p{p}"),
-        At::Bound(b) => format!("b{b}"),
+        At::Bound(b) | At::NextBound(b) => format!("b{b}"),
     }
 }
 
@@ -85,7 +85,7 @@ impl Ctx<'_> {
         match t {
             Term::Slot { var, at: a } => {
                 let prime = match a {
-                    At::Next(_) => "'",
+                    At::Next(_) | At::NextBound(_) => "'",
                     _ => self.prime(),
                 };
                 Some((

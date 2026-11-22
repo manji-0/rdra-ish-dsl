@@ -475,6 +475,11 @@ impl TransitionSystem {
                 })
             })
             .collect();
+        let steps = std::mem::take(&mut self.steps);
+        self.steps = steps
+            .into_iter()
+            .filter(|r| reads_ok(self, &r.binders, &[&r.body]))
+            .collect();
         let properties = std::mem::take(&mut self.properties);
         self.properties = properties
             .into_iter()

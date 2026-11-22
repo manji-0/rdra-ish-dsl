@@ -3,12 +3,12 @@
 use std::collections::HashSet;
 
 use super::display::cross_display;
-use super::{at_of, cmp_op, collect_vars, Binding};
+use super::{at_of, cmp_op, collect_vars, implies, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     ActId, ActionOrigin, AfterAssert, AfterStep, At, CmpOp, Effect, Guard, GuardWhy, Ltl, ModelRef,
-    Pred, Property, Site, Start, VarId, VarKind,
+    Pred, Property, Site, Start, StepKind, StepRule, Term, Value, VarId, VarKind,
 };
 use crate::model::{
     CrossConstraintScope, CrossEntityCondition, EffectValue, EntityKey, TemporalExpr,
@@ -97,6 +97,10 @@ impl Builder<'_> {
         let model = self.model;
         for (i, prop) in model.temporal_properties.iter().enumerate() {
             let site = Site::new(ModelRef::TemporalProperty(i), &prop.site);
+            if prop.formula.is_step() {
+                self.step_rule(prop, site);
+                continue;
+            }
             let mut binding: Binding = Vec::new();
             let formula = match &prop.formula {
                 TemporalFormula::Always(e) => {
@@ -112,6 +116,9 @@ impl Builder<'_> {
                     let a = self.temporal(&prop.id, antecedent, &mut binding, &site);
                     let c = self.temporal(&prop.id, consequent, &mut binding, &site);
                     Ltl::LeadsTo(a, c)
+                }
+                TemporalFormula::Stable(_) | TemporalFormula::Unchanged { .. } => {
+                    unreachable!("a step property is a step rule")
                 }
             };
             for uk in &prop.fair {
@@ -136,6 +143,74 @@ impl Builder<'_> {
                 site,
             });
         }
+    }
+
+    /// A `stable` or `unchanged` property as a step rule: on a step from a state where its
+    /// binders are present, the scope and the trigger in the pre-state imply, for binders still
+    /// present in the successor, the trigger again (`stable`) or each column at its old value
+    /// (`unchanged`).
+    fn step_rule(&mut self, prop: &TemporalProperty, site: Site) {
+        let mut binding: Binding = Vec::new();
+        let (kind, when, post) = match &prop.formula {
+            TemporalFormula::Stable(e) => {
+                let p = self.temporal(&prop.id, e, &mut binding, &site);
+                let next = successor(&p);
+                (StepKind::Stable, p, next)
+            }
+            TemporalFormula::Unchanged { columns, when } => {
+                let w = match when {
+                    Some(e) => self.temporal(&prop.id, e, &mut binding, &site),
+                    None => Pred::True,
+                };
+                let mut same = Vec::new();
+                for c in columns {
+                    let at = Self::bind(&mut binding, c.entity);
+                    if let Some((term, _)) = self.read_slot(c.entity, &c.column, at, &site) {
+                        same.push(Pred::Cmp(successor_term(&term), CmpOp::Eq, term));
+                    }
+                }
+                (StepKind::Unchanged, w, Pred::And(same))
+            }
+            _ => unreachable!("only `stable` and `unchanged` are step rules"),
+        };
+        let Some(scope) = self.property_scope(prop, &mut binding, &site) else {
+            return;
+        };
+        let present_next: Vec<Pred> = binding
+            .iter()
+            .map(|(ek, at)| {
+                let At::Bound(k) = at else {
+                    unreachable!("a property binds every entity it reads")
+                };
+                let exists = self.ts.entities[self.ent_of[ek].index()].exists;
+                Pred::Cmp(
+                    Term::Slot {
+                        var: exists,
+                        at: At::NextBound(*k),
+                    },
+                    CmpOp::Eq,
+                    Term::Lit(Value::PRESENT),
+                )
+            })
+            .collect();
+        let pre: Vec<Pred> = [scope, when]
+            .into_iter()
+            .filter(|p| *p != Pred::True)
+            .collect();
+        let pre = match pre.len() {
+            0 => Pred::True,
+            1 => pre.into_iter().next().expect("one part"),
+            _ => Pred::And(pre),
+        };
+        let body = implies(pre, implies(Pred::And(present_next), post));
+        self.ts.steps.push(StepRule {
+            name: prop.id.clone(),
+            binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
+            body,
+            kind,
+            label: prop.label.clone(),
+            site,
+        });
     }
 
     /// The owner links of a property's `.along(..)` path, binding each path entity its atoms
@@ -246,6 +321,9 @@ impl Builder<'_> {
         for step in self.ts.after.iter().flat_map(|a| a.steps.iter()) {
             collect_vars(&step.post, &mut read);
         }
+        for rule in &self.ts.steps {
+            collect_vars(&rule.body, &mut read);
+        }
         let condition_guards = self.ts.actions.iter().flat_map(|a| a.guards.iter());
         let read_by_condition = |g: &&Guard| {
             matches!(
@@ -285,6 +363,36 @@ impl Builder<'_> {
                 vec![ek],
                 StateDiag::UnwrittenConstrainedVar { column, site },
             );
+        }
+    }
+}
+
+/// `term` read in the successor: a binder's slot becomes `At::NextBound`.
+fn successor_term(term: &Term) -> Term {
+    match term {
+        Term::Slot {
+            var,
+            at: At::Bound(b),
+        } => Term::Slot {
+            var: *var,
+            at: At::NextBound(*b),
+        },
+        t => t.clone(),
+    }
+}
+
+/// `pred` read in the successor. A temporal atom has no quantifier, whose body would read the
+/// rows of the pre-state.
+fn successor(pred: &Pred) -> Pred {
+    match pred {
+        Pred::True | Pred::False => pred.clone(),
+        Pred::Cmp(a, op, b) => Pred::Cmp(successor_term(a), *op, successor_term(b)),
+        Pred::In(t, vs) => Pred::In(successor_term(t), vs.iter().map(successor_term).collect()),
+        Pred::Not(p) => Pred::Not(Box::new(successor(p))),
+        Pred::And(ps) => Pred::And(ps.iter().map(successor).collect()),
+        Pred::Or(ps) => Pred::Or(ps.iter().map(successor).collect()),
+        Pred::Forall { .. } | Pred::Exists { .. } => {
+            unreachable!("a temporal atom has no quantifier")
         }
     }
 }

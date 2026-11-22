@@ -155,6 +155,16 @@ violation_message(text, pattern_desc)
             "{}temporal assertion violated after '{anchor}': expected ({requireds}) but found {actual}",
             label_prefix(label)
         ),
+        StateDiag::StepRuleViolated {
+            kind,
+            label,
+            before,
+            after,
+            ..
+        } => format!(
+            "{} property violated ({label}): a step takes {before} to {after}",
+            kind.as_str()
+        ),
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }
