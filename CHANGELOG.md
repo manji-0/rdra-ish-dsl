@@ -76,6 +76,10 @@
 - A key column copied from an enum key column keeps the labels of its values, so SQL
   comments, DBML notes and the other outputs that print labels show them on the copy too
   (#155).
+- `diagram --all` fails on an error from an emitter and names the diagram. It counted
+  every error as a diagram with nothing to draw and left it out. A sequence diagram of a
+  BUC with no use case is still left out, and its error no longer opens with `IO error:`
+  (#156).
 
 ## v2.3.0 - 2026-11-18
 

@@ -12,7 +12,7 @@ use rdra_ish_emit::{
         RequirementMermaidEmitter, RobustnessMermaidEmitter, ScreenMermaidEmitter,
         SequenceMermaidEmitter, StateMermaidEmitter, UsecaseMermaidEmitter,
     },
-    unknown_diagram_filter_kinds, Filter, Scope, StateView, View,
+    unknown_diagram_filter_kinds, EmitError, Filter, Scope, StateView, View,
 };
 use std::fs;
 
@@ -224,8 +224,8 @@ pub fn run_diagram(args: DiagramArgs) -> Result<()> {
         node_kind,
         edge_kind,
     )?;
-    for line in findings(&text, &kind) {
-        eprintln!("{line}");
+    if let Some(finding) = Finding::of(&text) {
+        eprintln!("{}", finding.message(&kind));
     }
     let text = dress.apply(text, &kind, &about);
     match out {
@@ -316,19 +316,20 @@ fn write_all(
         let text = match render(gated, model, kind, shot, model_path, Vec::new(), Vec::new()) {
             Ok(text) => text,
             // A sequence diagram of a BUC without use cases.
-            Err(_) => {
+            Err(err) if matches!(err.downcast_ref(), Some(EmitError::NoSequence)) => {
                 empty += 1;
                 return Ok(());
             }
+            Err(err) => return Err(err.context(format!("failed to draw {name}"))),
         };
-        let lines = findings(&text, kind);
-        if lines.iter().any(|l| l.starts_with("note: nothing to draw")) {
+        let finding = Finding::of(&text);
+        if matches!(finding, Some(Finding::NothingToDraw)) {
             empty += 1;
             return Ok(());
         }
         let path = dir.join(format!("{name}.mmd"));
-        for line in lines {
-            eprintln!("{}: {line}", path.display());
+        if let Some(finding) = finding {
+            eprintln!("{}: {}", path.display(), finding.message(kind));
         }
         fs::write(&path, dress.apply(text, kind, about))
             .with_context(|| format!("failed to write {}", path.display()))?;
@@ -380,46 +381,57 @@ fn write_all(
     Ok(())
 }
 
-/// What a reader of the diagram should know before rendering it: that Mermaid's default
-/// limits refuse it, or that it draws nothing.
-fn findings(text: &str, kind: &DiagramKind) -> Vec<String> {
-    let mut out = Vec::new();
-    let name = kind_name(kind);
-    if text.lines().any(|l| l.trim() == "%% kinds: (none)") {
-        out.push(format!(
-            "note: nothing to draw: the model declares nothing --kind {name} draws in this scope"
-        ));
-        return out;
+/// What a reader of the diagram should know before rendering it: that it draws nothing, or
+/// that Mermaid's default limits refuse it.
+enum Finding {
+    NothingToDraw,
+    TooLarge { chars: usize, edges: Option<usize> },
+}
+
+impl Finding {
+    fn of(text: &str) -> Option<Finding> {
+        if text.lines().any(|l| l.trim() == "%% kinds: (none)") {
+            return Some(Finding::NothingToDraw);
+        }
+        let chars = text.chars().count();
+        let flowchart = text.lines().any(|l| l.starts_with("flowchart"));
+        let edges = flowchart.then(|| {
+            text.lines()
+                .filter(|l| !l.trim_start().starts_with("%%"))
+                .filter(|l| ["-->", "-.->", "==>", "---"].iter().any(|a| l.contains(a)))
+                .count()
+        });
+        (chars > MERMAID_MAX_TEXT || edges.unwrap_or(0) > MERMAID_MAX_EDGES)
+            .then_some(Finding::TooLarge { chars, edges })
     }
-    let chars = text.chars().count();
-    let flowchart = text.lines().any(|l| l.starts_with("flowchart"));
-    let edges = if flowchart {
-        text.lines()
-            .filter(|l| !l.trim_start().starts_with("%%"))
-            .filter(|l| ["-->", "-.->", "==>", "---"].iter().any(|a| l.contains(a)))
-            .count()
-    } else {
-        0
-    };
-    if chars > MERMAID_MAX_TEXT || edges > MERMAID_MAX_EDGES {
-        let narrow = match kind {
-            DiagramKind::Usecase | DiagramKind::Robustness => {
-                "--buc, --usecase, --actor, or --entity"
+
+    fn message(&self, kind: &DiagramKind) -> String {
+        let name = kind_name(kind);
+        match self {
+            Finding::NothingToDraw => format!(
+                "note: nothing to draw: the model declares nothing --kind {name} draws in this scope"
+            ),
+            Finding::TooLarge { chars, edges } => {
+                let narrow = match kind {
+                    DiagramKind::Usecase | DiagramKind::Robustness => {
+                        "--buc, --usecase, --actor, or --entity"
+                    }
+                    DiagramKind::Er | DiagramKind::Information => "--buc or --entity",
+                    DiagramKind::Rdra => {
+                        "--buc, --node-kind, or --edge-kind, or use a narrower --kind"
+                    }
+                    _ => "--buc",
+                };
+                let size = match edges {
+                    Some(edges) => format!("{chars} characters and {edges} edges"),
+                    None => format!("{chars} characters"),
+                };
+                format!(
+                    "warning: this diagram has {size}; Mermaid's defaults stop at {MERMAID_MAX_TEXT} characters (maxTextSize) and {MERMAID_MAX_EDGES} edges (maxEdges), so it does not render as is. Narrow it with {narrow}, or raise the limits in the renderer's config"
+                )
             }
-            DiagramKind::Er | DiagramKind::Information => "--buc or --entity",
-            DiagramKind::Rdra => "--buc, --node-kind, or --edge-kind, or use a narrower --kind",
-            _ => "--buc",
-        };
-        let size = if flowchart {
-            format!("{chars} characters and {edges} edges")
-        } else {
-            format!("{chars} characters")
-        };
-        out.push(format!(
-            "warning: this diagram has {size}; Mermaid's defaults stop at {MERMAID_MAX_TEXT} characters (maxTextSize) and {MERMAID_MAX_EDGES} edges (maxEdges), so it does not render as is. Narrow it with {narrow}, or raise the limits in the renderer's config"
-        ));
+        }
     }
-    out
 }
 
 /// `--title` and `--legend`: what a rendered diagram shows of itself. The `%%` header says

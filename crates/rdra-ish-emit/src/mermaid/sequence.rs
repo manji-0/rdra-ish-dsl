@@ -576,10 +576,7 @@ impl Emitter for SequenceMermaidEmitter {
         };
         let one = matches!(view.scope, Scope::UseCases(_));
         if usecases.is_empty() || (one && usecases.len() != 1) {
-            return Err(EmitError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "a sequence diagram draws one use case, or the use cases of a BUC",
-            )));
+            return Err(EmitError::NoSequence);
         }
         let mut participants = Participants::default();
         let mut script = Script {
@@ -645,6 +642,19 @@ impl Emitter for SequenceMermaidEmitter {
 mod tests {
     use super::*;
     use crate::diagram_common::model_from;
+
+    #[test]
+    fn a_buc_without_use_cases_has_no_sequence() {
+        let model = model_from("buc Empty \"Empty\"\n");
+        let view = View {
+            scope: Scope::Bucs(vec!["Empty".to_string()]),
+            ..View::whole()
+        };
+        assert!(matches!(
+            SequenceMermaidEmitter.emit(&model, &view),
+            Err(EmitError::NoSequence)
+        ));
+    }
 
     const CLINIC: &str = r#"
 actor Patient "Patient"

@@ -30,6 +30,9 @@ pub enum EmitError {
     Csv(#[from] ::csv::Error),
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    /// A sequence diagram's scope names no use case, or `--usecase` names more than one.
+    #[error("a sequence diagram draws one use case, or the use cases of a BUC")]
+    NoSequence,
 }
 
 /// 出力のスコープ
