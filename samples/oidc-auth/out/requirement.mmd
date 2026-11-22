@@ -1,0 +1,97 @@
+%% rdra-ish diagram=requirement scope=whole model=samples/oidc-auth
+%% kinds: requirement goal buc
+%% omitted: nfr quality constraint business flow usecase system entity
+flowchart LR
+  requirement__ReqBrowserFlows[/"The OP answers every response type of the code, implicit, and hybrid flows"\]:::requirement
+  requirement__ReqCiba[/"A client signs the End-User in on the End-User's own device, in the mode it registered"\]:::requirement
+  requirement__ReqDeviceFlow[/"A device without a browser signs the End-User in through another device"\]:::requirement
+  requirement__ReqDiscoverAndRegister[/"An RP configures itself from the OP's metadata and registers without manual steps"\]:::requirement
+  requirement__ReqHonourPrompt[/"The OP honours prompt, max_age, and acr_values"\]:::requirement
+  requirement__ReqPkceForPublicClients[/"A public client gets a code only with an S256 code challenge"\]:::requirement
+  requirement__ReqRotateAndRevoke[/"Refresh tokens rotate, and a revoked grant stops every token under it"\]:::requirement
+  requirement__ReqRotateKeysSafely[/"Signing keys rotate without breaking ID Token validation"\]:::requirement
+  requirement__ReqSingleLogout[/"Logging out at the OP or at one RP ends the session at every RP"\]:::requirement
+  requirement__ReqSingleUseCode[/"An authorization code is redeemed once, and its replay revokes what it gave"\]:::requirement
+  goal__OpenInterop[/"Work with any conforming RP<br/>OpenID Foundation conformance test plans the OP passes: Basic, Implicit, Hybrid → Basic, Implicit, Hybrid, Config, Dynamic, Logout, CIBA"/]:::goal
+  %% desc goal__OpenInterop: RPs are built with many libraries; the OP must answer every flow the specifications define the way they define it.
+  goal__ReliableLogout[/"End the End-User's session everywhere when they log out<br/>Share of Logout Tokens acknowledged by the RP: 92% → 99%"/]:::goal
+  %% desc goal__ReliableLogout: An RP that keeps its own session after the End-User logged out at the OP leaves the End-User signed in on a shared device.
+  goal__SecureSignIn[/"Sign End-Users in without leaking a code or a token to anyone else<br/>Incidents in which a code or a token was used by a party it was not issued to: 4 per year → 0 per year"/]:::goal
+  %% desc goal__SecureSignIn: A stolen or replayed authorization code, a token sent to a client that did not prove itself, or a refresh token used by an attacker lets someone else act as the End-User.
+  goal__SingleSignOn[/"Let the End-User sign in once for every RP<br/>Share of authentication requests answered from an existing OP session: 55% → 75%"/]:::goal
+  %% desc goal__SingleSignOn: Every login page shown again is friction; every request that may show no page must still get an answer.
+  buc__BucBackchannelSignIn["Sign the End-User in from another device (CIBA)"]:::buc
+  %% desc buc__BucBackchannelSignIn: A client that is not where the End-User is (a call-center agent's tool, a point of sale) asks the OP to authenticate the End-User it names with a login_hint. The OP reaches the End-User's authentication device out of band; the End-User approves or denies there. The client then receives the tokens by polling the token endpoint, by a ping that tells it to fetch them, or by a push of the tokens to its notification endpoint.
+  buc__BucBrowserSignIn["Sign the End-User in through the browser"]:::buc
+  %% desc buc__BucBrowserSignIn: The RP sends the End-User's browser to the authorization endpoint with a response_type, a prompt, PKCE, a nonce, and acr_values. The OP authenticates the End-User with a login page or the existing session, steps the authentication up when a second factor is asked for, obtains or reuses the consent, and answers on the redirect URI with the code, the tokens, or an error.
+  buc__BucClientRegistration["Discover the OP and register a client"]:::buc
+  %% desc buc__BucClientRegistration: The RP reads the OP's metadata and keys, registers itself with its redirect URIs, authentication method, and logout endpoints, and reads its registration back. The administrator suspends a client that misbehaves and reinstates it.
+  buc__BucCodeExchange["Redeem the code and read the End-User's claims"]:::buc
+  %% desc buc__BucCodeExchange: The RP redeems the authorization code at the token endpoint with its client authentication or the PKCE code_verifier, receives the ID Token, the access token, and the refresh token, validates the ID Token, and reads the End-User's claims from UserInfo. A code presented a second time revokes everything issued from it; a code nobody redeems expires.
+  buc__BucDeviceSignIn["Sign in on an input-constrained device"]:::buc
+  %% desc buc__BucDeviceSignIn: A device without a browser or a keyboard (a TV, a CLI) asks the OP for a device code and a user code, shows the user code and the verification URI, and polls the token endpoint. The End-User opens the URI on a phone or a computer, signs in, and approves or denies the device.
+  buc__BucLogout["End the End-User's session at the OP and at every RP"]:::buc
+  %% desc buc__BucLogout: The End-User logs out at an RP, which sends the browser to the OP's end_session_endpoint, or logs out at the OP itself, or the OP session expires. The OP ends its session and tells every RP the session signed in to: by a Logout Token posted to each RP's backchannel_logout_uri, and by iframes that load each RP's frontchannel_logout_uri. An RP that watches the session through the check_session_iframe sees it change.
+  buc__BucSigningKeys["Rotate the ID Token signing keys"]:::buc
+  %% desc buc__BucSigningKeys: The OP publishes the next key in its JWK Set before it signs with it, switches signing to it, and retires the old key once the ID Tokens it signed have expired. RPs that meet an unknown kid fetch the JWK Set again.
+  buc__BucTokenMaintenance["Refresh, revoke, and inspect tokens"]:::buc
+  %% desc buc__BucTokenMaintenance: The RP trades the refresh token for a new access token and a rotated refresh token; an old refresh token presented again revokes the family. The RP revokes a token it no longer needs, the resource server asks whether a token is active, and the End-User withdraws a consent. Expired tokens lapse.
+  subgraph group_out_of_scope["やらないこと"]
+    requirement__ReqNoClientCredentials[/"The Client Credentials grant is out of scope"\]:::requirement
+    requirement__ReqNoPasswordGrant[/"The Resource Owner Password Credentials grant is out of scope"\]:::requirement
+    requirement__ReqNoSelfIssuedOp[/"Self-Issued OPs are out of scope"\]:::requirement
+    requirement__ReqRequestEncodingAsData[/"Request objects, PAR, and the claims parameter are carried as request parameters"\]:::requirement
+  end
+  goal__OpenInterop --> requirement__ReqBrowserFlows
+  %% derived goal__OpenInterop -> requirement__ReqBrowserFlows via requirement__ReqBrowserFlows
+  goal__OpenInterop --> requirement__ReqCiba
+  %% derived goal__OpenInterop -> requirement__ReqCiba via requirement__ReqCiba
+  goal__OpenInterop --> requirement__ReqDeviceFlow
+  %% derived goal__OpenInterop -> requirement__ReqDeviceFlow via requirement__ReqDeviceFlow
+  goal__OpenInterop --> requirement__ReqDiscoverAndRegister
+  %% derived goal__OpenInterop -> requirement__ReqDiscoverAndRegister via requirement__ReqDiscoverAndRegister
+  goal__OpenInterop --> requirement__ReqHonourPrompt
+  %% derived goal__OpenInterop -> requirement__ReqHonourPrompt via requirement__ReqHonourPrompt
+  goal__OpenInterop --> requirement__ReqPkceForPublicClients
+  %% derived goal__OpenInterop -> requirement__ReqPkceForPublicClients via requirement__ReqPkceForPublicClients
+  goal__OpenInterop --> requirement__ReqRotateKeysSafely
+  %% derived goal__OpenInterop -> requirement__ReqRotateKeysSafely via requirement__ReqRotateKeysSafely
+  goal__ReliableLogout --> requirement__ReqSingleLogout
+  %% derived goal__ReliableLogout -> requirement__ReqSingleLogout via requirement__ReqSingleLogout
+  goal__SecureSignIn --> requirement__ReqBrowserFlows
+  %% derived goal__SecureSignIn -> requirement__ReqBrowserFlows via requirement__ReqBrowserFlows
+  goal__SecureSignIn --> requirement__ReqHonourPrompt
+  %% derived goal__SecureSignIn -> requirement__ReqHonourPrompt via requirement__ReqHonourPrompt
+  goal__SecureSignIn --> requirement__ReqPkceForPublicClients
+  %% derived goal__SecureSignIn -> requirement__ReqPkceForPublicClients via requirement__ReqPkceForPublicClients
+  goal__SecureSignIn --> requirement__ReqRotateAndRevoke
+  %% derived goal__SecureSignIn -> requirement__ReqRotateAndRevoke via requirement__ReqRotateAndRevoke
+  goal__SecureSignIn --> requirement__ReqRotateKeysSafely
+  %% derived goal__SecureSignIn -> requirement__ReqRotateKeysSafely via requirement__ReqRotateKeysSafely
+  goal__SecureSignIn --> requirement__ReqSingleUseCode
+  %% derived goal__SecureSignIn -> requirement__ReqSingleUseCode via requirement__ReqSingleUseCode
+  goal__SingleSignOn --> requirement__ReqBrowserFlows
+  %% derived goal__SingleSignOn -> requirement__ReqBrowserFlows via requirement__ReqBrowserFlows
+  goal__SingleSignOn --> requirement__ReqHonourPrompt
+  %% derived goal__SingleSignOn -> requirement__ReqHonourPrompt via requirement__ReqHonourPrompt
+  goal__SingleSignOn --> requirement__ReqPkceForPublicClients
+  %% derived goal__SingleSignOn -> requirement__ReqPkceForPublicClients via requirement__ReqPkceForPublicClients
+  goal__SingleSignOn --> requirement__ReqSingleLogout
+  %% derived goal__SingleSignOn -> requirement__ReqSingleLogout via requirement__ReqSingleLogout
+  requirement__ReqBrowserFlows --> buc__BucBrowserSignIn
+  requirement__ReqCiba --> buc__BucBackchannelSignIn
+  requirement__ReqDeviceFlow --> buc__BucDeviceSignIn
+  requirement__ReqDiscoverAndRegister --> buc__BucClientRegistration
+  requirement__ReqHonourPrompt --> buc__BucBrowserSignIn
+  requirement__ReqNoClientCredentials -.-> buc__BucCodeExchange
+  requirement__ReqNoPasswordGrant -.-> buc__BucCodeExchange
+  requirement__ReqNoSelfIssuedOp -.-> buc__BucBrowserSignIn
+  requirement__ReqPkceForPublicClients --> buc__BucBrowserSignIn
+  requirement__ReqRequestEncodingAsData -.-> buc__BucBrowserSignIn
+  requirement__ReqRotateAndRevoke --> buc__BucTokenMaintenance
+  requirement__ReqRotateKeysSafely --> buc__BucSigningKeys
+  requirement__ReqSingleLogout --> buc__BucLogout
+  requirement__ReqSingleUseCode --> buc__BucCodeExchange
+  classDef requirement fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef goal fill:#fff3bf,stroke:#e67700,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;

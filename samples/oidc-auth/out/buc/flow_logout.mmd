@@ -1,0 +1,63 @@
+%% rdra-ish diagram=flow scope=buc:BucLogout model=samples/oidc-auth
+%% kinds: flow step lane timer usecase event
+%% omitted: buc
+flowchart TD
+  subgraph flow__LogoutFlow["Single logout"]
+    step__DeliveryResultStep["Each RP acknowledges or fails"]:::step
+    step__NotifyRpStep["The OP notifies every RP"]:::step
+    step__SessionExpireStep["The OP session expires"]:::step
+    subgraph lane__LogoutFlow__EndUser["End-User"]
+      %% lane lane__LogoutFlow__EndUser: actor__EndUser
+      step__LogoutStartStep["The End-User logs out, at an RP or at the OP"]:::step
+    end
+    subgraph lane__LogoutFlow__RelyingParty["Relying Party (client application)"]
+      %% lane lane__LogoutFlow__RelyingParty: actor__RelyingParty
+      step__SessionWatchStep["An RP watches the session state"]:::step
+    end
+  end
+  timer__SessionCheckInterval(("RP's session check interval (RP policy, e.g. every few seconds)")):::timer
+  timer__SessionLifetime(("OP session lifetime (OP policy, e.g. 12 hours)")):::timer
+  usecase__CheckSessionState("Check the session state (Session Management)"):::usecase
+  %% desc usecase__CheckSessionState: The RP's hidden iframe asks the OP's check_session_iframe whether the session_state has changed; on changed the RP re-authenticates with prompt=none.
+  usecase__ExpireSession("Expire the OP session"):::usecase
+  %% desc usecase__ExpireSession: The OP session reaches its lifetime without activity.
+  usecase__LogOutAtOp("Log out at the OP"):::usecase
+  %% desc usecase__LogOutAtOp: Log out on the OP's own account page.
+  usecase__LogOutFromRp("Log out from the RP (RP-Initiated Logout)"):::usecase
+  %% desc usecase__LogOutFromRp: Follow the RP's logout link to the end_session_endpoint with the id_token_hint, confirm, and return to the post_logout_redirect_uri with the state.
+  usecase__RecordLogoutDelivered("Record the RP's acknowledgement"):::usecase
+  %% desc usecase__RecordLogoutDelivered: The RP answered 200: it ended its own session for that sid.
+  usecase__RecordLogoutFailed("Record a failed Logout Token delivery"):::usecase
+  %% desc usecase__RecordLogoutFailed: The RP answered 400 or did not answer. Back-Channel Logout §2.8 leaves retries to the OP; the model records the failure.
+  usecase__RenderFrontchannelLogout("Render the front-channel logout iframes"):::usecase
+  %% desc usecase__RenderFrontchannelLogout: Show the logged-out page with one hidden iframe per RP that registered a frontchannel_logout_uri.
+  usecase__SendBackchannelLogout("Send the Logout Token"):::usecase
+  %% desc usecase__SendBackchannelLogout: Sign a Logout Token naming the sub and the sid, and POST it to the backchannel_logout_uri of each RP the session signed in to.
+  event__EvLogoutAcknowledged>"The RP acknowledged the Logout Token"]:::event
+  event__EvLogoutRejected>"The RP rejected the Logout Token or did not answer"]:::event
+  event__EvLogoutTokenSent>"A Logout Token is posted to an RP"]:::event
+  event__EvSessionEnded>"The OP session ended"]:::event
+  step__DeliveryResultStep -.-> event__EvLogoutAcknowledged
+  step__DeliveryResultStep -.-> event__EvLogoutRejected
+  step__DeliveryResultStep -.-> usecase__RecordLogoutDelivered
+  step__DeliveryResultStep -.-> usecase__RecordLogoutFailed
+  step__LogoutStartStep -.-> usecase__LogOutAtOp
+  step__LogoutStartStep -.-> usecase__LogOutFromRp
+  step__LogoutStartStep -->|precedes| step__NotifyRpStep
+  step__NotifyRpStep -.-> event__EvLogoutTokenSent
+  step__NotifyRpStep -.-> event__EvSessionEnded
+  step__NotifyRpStep -.-> usecase__RenderFrontchannelLogout
+  step__NotifyRpStep -.-> usecase__SendBackchannelLogout
+  step__NotifyRpStep -->|precedes| step__DeliveryResultStep
+  step__NotifyRpStep -->|precedes| step__SessionWatchStep
+  step__SessionExpireStep -->|branches| step__NotifyRpStep
+  step__SessionExpireStep -.-> timer__SessionLifetime
+  step__SessionExpireStep -.-> usecase__ExpireSession
+  step__SessionWatchStep -.-> timer__SessionCheckInterval
+  step__SessionWatchStep -.-> usecase__CheckSessionState
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;

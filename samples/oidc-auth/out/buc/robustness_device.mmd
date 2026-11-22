@@ -1,0 +1,37 @@
+%% rdra-ish diagram=robustness scope=buc:BucDeviceSignIn model=samples/oidc-auth
+%% kinds: actor screen timer api entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__EndUser(["End-User"]):::actor
+  actor__RelyingParty(["Relying Party (client application)"]):::actor
+  screen__DeviceCodeScreen["User code display on the device"]:::screen
+  screen__DeviceVerificationScreen["Device verification page"]:::screen
+  timer__DeviceCodeLifetime(("Device code lifetime (expires_in of the device authorization response)")):::timer
+  api__DeviceAuthorizationApi{{"Device authorization endpoint"}}:::api
+  api__DeviceExpiryApi{{"Device code expiry"}}:::api
+  api__DevicePollApi{{"Token endpoint (device_code, pending)"}}:::api
+  api__DeviceTokenApi{{"Token endpoint (device_code)"}}:::api
+  api__DeviceVerificationApi{{"Device verification form"}}:::api
+  entity__Client[("Registered client")]:::entity
+  entity__DeviceAuthorization[("Device authorization")]:::entity
+  entity__UserAccount[("End-User account")]:::entity
+  actor__EndUser --> screen__DeviceVerificationScreen
+  actor__RelyingParty --> screen__DeviceCodeScreen
+  api__DeviceAuthorizationApi -->|C| entity__DeviceAuthorization
+  api__DeviceAuthorizationApi -->|R| entity__Client
+  api__DeviceAuthorizationApi -.->|The device received its codes| api__DevicePollApi
+  api__DeviceExpiryApi -->|U| entity__DeviceAuthorization
+  api__DevicePollApi -->|R| entity__DeviceAuthorization
+  api__DeviceTokenApi -->|U| entity__DeviceAuthorization
+  api__DeviceVerificationApi -->|R| entity__UserAccount
+  api__DeviceVerificationApi -.->|The End-User approved the device| api__DeviceTokenApi
+  api__DeviceVerificationApi -->|U| entity__DeviceAuthorization
+  screen__DeviceCodeScreen -->|Request a device code| api__DeviceAuthorizationApi
+  screen__DeviceVerificationScreen -->|Approve the device| api__DeviceVerificationApi
+  screen__DeviceVerificationScreen -->|Deny the device| api__DeviceVerificationApi
+  timer__DeviceCodeLifetime -.-> api__DeviceExpiryApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

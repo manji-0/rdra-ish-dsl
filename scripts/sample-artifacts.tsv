@@ -559,6 +559,80 @@ samples/insurance-claim-ops/out/states_settlement.txt	states samples/insurance-c
 samples/insurance-claim-ops/out/asyncapi.json	export samples/insurance-claim-ops --kind asyncapi
 samples/insurance-claim-ops/out/er.mmd	diagram samples/insurance-claim-ops --kind er --format mermaid
 samples/insurance-claim-ops/out/transitions.md	list samples/insurance-claim-ops --kind transition --format markdown
+samples/oidc-auth/out/actor_permission_audit.csv	csv samples/oidc-auth --kind actor-permission-audit
+samples/oidc-auth/out/api_matrix.csv	csv samples/oidc-auth --kind api-matrix
+samples/oidc-auth/out/matrix.csv	csv samples/oidc-auth --kind matrix
+samples/oidc-auth/out/business.mmd	diagram samples/oidc-auth --kind business --format mermaid
+samples/oidc-auth/out/condition.mmd	diagram samples/oidc-auth --kind condition --format mermaid
+samples/oidc-auth/out/context.mmd	diagram samples/oidc-auth --kind context --format mermaid
+samples/oidc-auth/out/event_flow.mmd	diagram samples/oidc-auth --kind event --format mermaid
+samples/oidc-auth/out/information.mmd	diagram samples/oidc-auth --kind information --format mermaid
+samples/oidc-auth/out/requirement.mmd	diagram samples/oidc-auth --kind requirement --format mermaid
+samples/oidc-auth/out/screen.mmd	diagram samples/oidc-auth --kind screen --format mermaid
+samples/oidc-auth/out/er.mmd	diagram samples/oidc-auth --kind er --format mermaid
+samples/oidc-auth/out/rdra_buc_code_exchange.mmd	diagram samples/oidc-auth --kind rdra --format mermaid --buc BucCodeExchange
+samples/oidc-auth/out/screen_constraints.csv	csv samples/oidc-auth --kind screen-constraints
+samples/oidc-auth/out/state_whole.mmd	diagram samples/oidc-auth --kind state --format mermaid
+samples/oidc-auth/out/state/Client.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity Client
+samples/oidc-auth/out/state/SigningKey.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity SigningKey
+samples/oidc-auth/out/state/OpSession.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity OpSession
+samples/oidc-auth/out/state/Consent.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity Consent
+samples/oidc-auth/out/state/AuthorizationRequest.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity AuthorizationRequest
+samples/oidc-auth/out/state/Interaction.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity Interaction
+samples/oidc-auth/out/state/Grant.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity Grant
+samples/oidc-auth/out/state/AuthorizationCode.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity AuthorizationCode
+samples/oidc-auth/out/state/AccessToken.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity AccessToken
+samples/oidc-auth/out/state/RefreshToken.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity RefreshToken
+samples/oidc-auth/out/state/DeviceAuthorization.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity DeviceAuthorization
+samples/oidc-auth/out/state/BackchannelRequest.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity BackchannelRequest
+samples/oidc-auth/out/state/LogoutNotice.mmd	diagram samples/oidc-auth --kind state --format mermaid --entity LogoutNotice
+samples/oidc-auth/out/states_authorization_request.txt	states samples/oidc-auth --format table --entity AuthorizationRequest
+samples/oidc-auth/out/states_interaction.txt	states samples/oidc-auth --format table --entity Interaction
+samples/oidc-auth/out/states_grant.txt	states samples/oidc-auth --format table --entity Grant
+samples/oidc-auth/out/states_backchannel_request.txt	states samples/oidc-auth --format table --entity BackchannelRequest
+samples/oidc-auth/out/asyncapi.json	export samples/oidc-auth --kind asyncapi
+samples/oidc-auth/out/openapi.json	export samples/oidc-auth --kind openapi
+samples/oidc-auth/out/transitions.md	list samples/oidc-auth --kind transition --format markdown
+samples/oidc-auth/out/rules.md	list samples/oidc-auth --kind rule --format markdown
+samples/oidc-auth/out/buc/flow_registration.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucClientRegistration
+samples/oidc-auth/out/buc/usecase_registration.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucClientRegistration
+samples/oidc-auth/out/buc/robustness_registration.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucClientRegistration
+samples/oidc-auth/out/buc/sequence_registration.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucClientRegistration
+samples/oidc-auth/out/buc/screen_registration.mmd	diagram samples/oidc-auth --kind screen --format mermaid --buc BucClientRegistration
+samples/oidc-auth/out/buc/flow_signing_keys.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucSigningKeys
+samples/oidc-auth/out/buc/usecase_signing_keys.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucSigningKeys
+samples/oidc-auth/out/buc/robustness_signing_keys.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucSigningKeys
+samples/oidc-auth/out/buc/sequence_signing_keys.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucSigningKeys
+samples/oidc-auth/out/buc/screen_signing_keys.mmd	diagram samples/oidc-auth --kind screen --format mermaid --buc BucSigningKeys
+samples/oidc-auth/out/buc/flow_signin.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucBrowserSignIn
+samples/oidc-auth/out/buc/usecase_signin.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucBrowserSignIn
+samples/oidc-auth/out/buc/robustness_signin.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucBrowserSignIn
+samples/oidc-auth/out/buc/sequence_signin.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucBrowserSignIn
+samples/oidc-auth/out/buc/screen_signin.mmd	diagram samples/oidc-auth --kind screen --format mermaid --buc BucBrowserSignIn
+samples/oidc-auth/out/buc/flow_code_exchange.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucCodeExchange
+samples/oidc-auth/out/buc/usecase_code_exchange.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucCodeExchange
+samples/oidc-auth/out/buc/robustness_code_exchange.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucCodeExchange
+samples/oidc-auth/out/buc/sequence_code_exchange.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucCodeExchange
+samples/oidc-auth/out/buc/flow_token_maintenance.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucTokenMaintenance
+samples/oidc-auth/out/buc/usecase_token_maintenance.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucTokenMaintenance
+samples/oidc-auth/out/buc/robustness_token_maintenance.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucTokenMaintenance
+samples/oidc-auth/out/buc/sequence_token_maintenance.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucTokenMaintenance
+samples/oidc-auth/out/buc/screen_token_maintenance.mmd	diagram samples/oidc-auth --kind screen --format mermaid --buc BucTokenMaintenance
+samples/oidc-auth/out/buc/flow_device.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucDeviceSignIn
+samples/oidc-auth/out/buc/usecase_device.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucDeviceSignIn
+samples/oidc-auth/out/buc/robustness_device.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucDeviceSignIn
+samples/oidc-auth/out/buc/sequence_device.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucDeviceSignIn
+samples/oidc-auth/out/buc/screen_device.mmd	diagram samples/oidc-auth --kind screen --format mermaid --buc BucDeviceSignIn
+samples/oidc-auth/out/buc/flow_ciba.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucBackchannelSignIn
+samples/oidc-auth/out/buc/usecase_ciba.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucBackchannelSignIn
+samples/oidc-auth/out/buc/robustness_ciba.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucBackchannelSignIn
+samples/oidc-auth/out/buc/sequence_ciba.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucBackchannelSignIn
+samples/oidc-auth/out/buc/screen_ciba.mmd	diagram samples/oidc-auth --kind screen --format mermaid --buc BucBackchannelSignIn
+samples/oidc-auth/out/buc/flow_logout.mmd	diagram samples/oidc-auth --kind flow --format mermaid --buc BucLogout
+samples/oidc-auth/out/buc/usecase_logout.mmd	diagram samples/oidc-auth --kind usecase --format mermaid --buc BucLogout
+samples/oidc-auth/out/buc/robustness_logout.mmd	diagram samples/oidc-auth --kind robustness --format mermaid --buc BucLogout
+samples/oidc-auth/out/buc/sequence_logout.mmd	diagram samples/oidc-auth --kind sequence --format mermaid --buc BucLogout
+samples/oidc-auth/out/buc/screen_logout.mmd	diagram samples/oidc-auth --kind screen --format mermaid --buc BucLogout
 samples/ec-site/out/actors.actor.csv	csv samples/ec-site --kind actor
 samples/ec-site/out/api_matrix.csv	csv samples/ec-site --kind api-matrix
 samples/ec-site/out/business.mmd	diagram samples/ec-site --kind business --format mermaid

@@ -165,6 +165,10 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
   non-life insurer's motor claims), modeled from primary sources. `verify --deny-undecided`
   decides every check on each; insurance-claim-ops keeps one known deadlock, which its
   `// expect` header names
+- `samples/oidc-auth`: an OpenID Provider with every OpenID Connect authentication scenario
+  (code, implicit, and hybrid flows, PKCE, `prompt` errors, step-up, refresh rotation,
+  revocation, device flow, CIBA, and RP-initiated, front-channel, and back-channel logout),
+  with a [scenario table](./samples/oidc-auth/README.md#scenarios)
 - `samples/personal-info`: personal data management sample
 - `samples/api-contract`: API contract metadata and the OpenAPI export
 - `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from

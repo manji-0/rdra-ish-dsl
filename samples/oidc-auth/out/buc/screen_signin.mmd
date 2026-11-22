@@ -1,0 +1,38 @@
+%% rdra-ish diagram=screen scope=buc:BucBrowserSignIn model=samples/oidc-auth
+%% kinds: screen
+%% omitted: usecase field entity
+flowchart LR
+  screen__AccountChooserScreen["Account chooser"]:::screen
+  screen__AppLauncherScreen["OP application launcher"]:::screen
+  screen__ConsentAdminScreen["Administrative consents"]:::screen
+  screen__ConsentScreen["Consent page"]:::screen
+  screen__LoginScreen["Login page"]:::screen
+  screen__RpSignInScreen["RP sign-in page"]:::screen
+  screen__SecondFactorScreen["Second factor page"]:::screen
+  screen__AccountChooserScreen -->|Select an account| screen__ConsentScreen
+  screen__AccountChooserScreen -->|Select an account| screen__LoginScreen
+  screen__AccountChooserScreen -.->|業務上の順番| screen__ConsentAdminScreen
+  %% derived screen__AccountChooserScreen -> screen__ConsentAdminScreen via flow__SignInFlow,step__ConsentStep,step__LoginStep
+  screen__AppLauncherScreen -->|Start a sign-in from the OP (third-party initiated login)| screen__RpSignInScreen
+  screen__ConsentAdminScreen -.->|業務上の順番| screen__ConsentScreen
+  %% derived screen__ConsentAdminScreen -> screen__ConsentScreen via flow__SignInFlow,step__ConsentStep,step__DenyStep
+  screen__LoginScreen -->|Authenticate for the request at the login page| screen__ConsentScreen
+  screen__LoginScreen -->|Log in at the OP| screen__SecondFactorScreen
+  screen__LoginScreen -.->|業務上の順番| screen__ConsentAdminScreen
+  %% derived screen__LoginScreen -> screen__ConsentAdminScreen via flow__SignInFlow,step__ConsentStep,step__LoginStep
+  screen__RpSignInScreen -->|Send the authentication request| screen__AccountChooserScreen
+  screen__RpSignInScreen -->|Send the authentication request| screen__ConsentScreen
+  screen__RpSignInScreen -->|Send the authentication request| screen__LoginScreen
+  screen__SecondFactorScreen -->|Add a second factor to the session| screen__ConsentScreen
+  screen__SecondFactorScreen -.->|業務上の順番| screen__ConsentAdminScreen
+  %% derived screen__SecondFactorScreen -> screen__ConsentAdminScreen via flow__SignInFlow,step__ConsentStep,step__StepUpStep
+  %% via screen__AccountChooserScreen -> screen__ConsentScreen usecase__SelectAccount
+  %% via screen__AccountChooserScreen -> screen__LoginScreen usecase__SelectAccount
+  %% via screen__AppLauncherScreen -> screen__RpSignInScreen usecase__InitiateThirdPartyLogin
+  %% via screen__LoginScreen -> screen__ConsentScreen usecase__AuthenticateEndUser
+  %% via screen__LoginScreen -> screen__SecondFactorScreen usecase__LogIn
+  %% via screen__RpSignInScreen -> screen__AccountChooserScreen usecase__RequestAuthentication
+  %% via screen__RpSignInScreen -> screen__ConsentScreen usecase__RequestAuthentication
+  %% via screen__RpSignInScreen -> screen__LoginScreen usecase__RequestAuthentication
+  %% via screen__SecondFactorScreen -> screen__ConsentScreen usecase__StepUpAuthentication
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;

@@ -4,6 +4,14 @@
 
 ### Added
 
+- `samples/oidc-auth` models an OpenID Provider and every OpenID Connect authentication
+  scenario: discovery and dynamic registration, the code, implicit, and hybrid flows with
+  all six response types, PKCE, `prompt` / `max_age` / `acr_values` and the `prompt=none`
+  errors, consent, code redemption and replay, UserInfo, refresh-token rotation, revocation,
+  introspection, the device authorization grant, CIBA in poll, ping, and push mode,
+  RP-initiated, front-channel, and back-channel logout, session management, third-party
+  initiated login, and signing-key rotation. `check` reports nothing, and 13 labelled rules
+  each fail when the guard that protects them is removed.
 - insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a

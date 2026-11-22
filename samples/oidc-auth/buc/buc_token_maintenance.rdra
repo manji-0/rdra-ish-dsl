@@ -1,0 +1,330 @@
+module buc.token_maintenance
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+buc BucTokenMaintenance "Refresh, revoke, and inspect tokens"
+  description "The RP trades the refresh token for a new access token and a rotated refresh token; an old refresh token presented again revokes the family. The RP revokes a token it no longer needs, the resource server asks whether a token is active, and the End-User withdraws a consent. Expired tokens lapse."
+
+// Core §12.1 and RFC 6749 §6; RFC 9700 §4.14.2 rotation.
+usecase RefreshTokens "Refresh the tokens"
+  description "POST grant_type=refresh_token and receive a new access token, a rotated refresh token, and optionally a new ID Token with the same sub (Core §12.2)."
+  error "invalid_grant: the refresh token is expired, revoked, or not the latest of its family."
+
+// RFC 9700 §4.14.2: "If a refresh token is compromised and subsequently used by both the
+// attacker and the legitimate client, one of them will present an invalidated refresh token,
+// which will inform the authorization server of the breach."
+usecase DetectRefreshTokenReuse "Detect the reuse of a rotated refresh token"
+  description "A refresh token value that was already rotated comes back: revoke the family and the grant."
+
+// RFC 7009 §2.1: revoking a refresh token also invalidates the access tokens of the grant.
+usecase RevokeRefreshToken "Revoke a refresh token (RFC 7009)"
+  description "POST the refresh token to the revocation endpoint; the OP revokes it and the grant behind it."
+
+usecase RevokeAccessToken "Revoke an access token (RFC 7009)"
+  description "POST the access token to the revocation endpoint; the OP revokes it only."
+
+// RFC 7662 §2.
+usecase IntrospectToken "Introspect a token (RFC 7662)"
+  description "The resource server posts a token and receives active true with its scope, client_id, sub, and exp, or active false."
+
+usecase ExpireAccessToken "Expire an access token" description "An access token reaches its expires_in."
+
+usecase ExpireRefreshToken "Expire a refresh token" description "A refresh token reaches the OP's lifetime for it."
+
+// RFC 7009 §2.1: "the authorization server SHOULD also invalidate all access tokens based on
+// the same authorization grant". The model raises EvGrantRevoked wherever a grant is revoked,
+// and these two use cases carry the revocation down to the tokens.
+usecase RevokeGrantAccessTokens "Revoke the access tokens of a revoked grant"
+  description "Invalidate every access token issued under a grant that was revoked."
+
+usecase RevokeGrantRefreshTokens "Revoke the refresh tokens of a revoked grant"
+  description "Invalidate the refresh token family of a grant that was revoked."
+
+// Core §3.1.2.4 lets the OP remember consent; the End-User may withdraw it at the OP.
+usecase WithdrawConsent "Withdraw a consent"
+  description "The End-User removes a client from the OP's list of authorized applications."
+
+usecase RevokeGrantOnWithdrawal "Revoke the grant of a withdrawn consent"
+  description "Revoke the grant of the client whose consent the End-User withdrew."
+
+event EvConsentWithdrawn "A consent is withdrawn"
+
+screen AuthorizedAppsScreen "Authorized applications"
+
+api RefreshApi "Token endpoint (refresh_token)"
+  method POST
+  path "/token#refresh"
+  mode sync
+  auth client
+
+api RevocationApi "Revocation endpoint (refresh token)"
+  method POST
+  path "/revoke"
+  mode sync
+  auth client
+
+api AccessTokenRevocationApi "Revocation endpoint (access token)"
+  method POST
+  path "/revoke#access_token"
+  mode sync
+  auth client
+
+api IntrospectionApi "Introspection endpoint"
+  method POST
+  path "/introspect"
+  mode sync
+  auth client
+
+api AccessTokenExpiryApi "Access token expiry"
+api RefreshTokenExpiryApi "Refresh token expiry"
+api AccessTokenCascadeApi "Access token revocation on a revoked grant"
+api RefreshTokenCascadeApi "Refresh token revocation on a revoked grant"
+
+api ConsentManagementApi "Authorized applications"
+  method DELETE
+  path "/account/consents/{id}"
+  mode sync
+
+dto RevocationRequest "Revocation request" {
+  token: String
+  token_type_hint: String @null
+}
+
+dto IntrospectionResponse "Introspection response" {
+  active: Bool
+  scope: String @null
+  client_id: String @null
+  sub: String @null
+  exp: Int @null
+}
+
+request(RevocationApi, RevocationRequest)
+request(AccessTokenRevocationApi, RevocationRequest)
+request(IntrospectionApi, RevocationRequest)
+response(IntrospectionApi, IntrospectionResponse)
+maps_field(IntrospectionResponse.sub, UserAccount.subject)
+
+performs(RelyingParty, RefreshTokens)
+performs(RelyingParty, DetectRefreshTokenReuse)
+performs(RelyingParty, RevokeRefreshToken)
+performs(RelyingParty, RevokeAccessToken)
+performs(ResourceServer, IntrospectToken)
+performs(EndUser, WithdrawConsent)
+belongs(BucTokenMaintenance, SessionControl).by(BackChannel).by(UserAgent)
+
+contains(BucTokenMaintenance, RefreshTokens)
+contains(BucTokenMaintenance, DetectRefreshTokenReuse)
+contains(BucTokenMaintenance, RevokeRefreshToken)
+contains(BucTokenMaintenance, RevokeAccessToken)
+contains(BucTokenMaintenance, IntrospectToken)
+contains(BucTokenMaintenance, ExpireAccessToken)
+contains(BucTokenMaintenance, ExpireRefreshToken)
+contains(BucTokenMaintenance, RevokeGrantAccessTokens)
+contains(BucTokenMaintenance, RevokeGrantRefreshTokens)
+contains(BucTokenMaintenance, WithdrawConsent)
+contains(BucTokenMaintenance, RevokeGrantOnWithdrawal)
+contains(OpenIdProvider, RefreshApi)
+contains(OpenIdProvider, RevocationApi)
+contains(OpenIdProvider, AccessTokenRevocationApi)
+contains(OpenIdProvider, IntrospectionApi)
+contains(OpenIdProvider, AccessTokenExpiryApi)
+contains(OpenIdProvider, RefreshTokenExpiryApi)
+contains(OpenIdProvider, AccessTokenCascadeApi)
+contains(OpenIdProvider, RefreshTokenCascadeApi)
+contains(OpenIdProvider, ConsentManagementApi)
+
+// ── Refresh and rotation ─────────────────────────────────
+
+// The family stays usable and records that it was rotated. The model keeps one access token row per
+// grant, the one most recently issued: a refresh replaces it, whatever became of the old one.
+condition RefreshAllowed "The grant is not revoked"
+holds(RefreshAllowed, Grant.status == active)
+
+triggers(EvTokensIssued, RefreshTokens)
+raises(RefreshTokens, EvTokensRefreshed)
+invokes(RefreshTokens, RefreshApi)
+updates(RefreshApi, RefreshToken)
+updates(RefreshApi, Grant)
+updates(RefreshApi, AccessToken)
+transitions(RefreshTokens, AccessToken.status, (active, expired, revoked) -> active)
+transitions(RefreshTokens, RefreshToken.status, (active, rotated) -> rotated)
+sets(RefreshTokens, Grant.last_refreshed_at == present)
+applies_to(RefreshAllowed, RefreshTokens)
+
+triggers(EvTokensRefreshed, DetectRefreshTokenReuse)
+invokes(DetectRefreshTokenReuse, RevocationApi)
+updates(RevocationApi, RefreshToken)
+updates(RevocationApi, Grant)
+transitions(DetectRefreshTokenReuse, RefreshToken.status, rotated -> revoked)
+transitions(DetectRefreshTokenReuse, Grant.status, active -> revoked)
+transitions(DetectRefreshTokenReuse, Grant.status, revoked -> revoked)
+raises(DetectRefreshTokenReuse, EvGrantRevoked)
+
+// ── Revocation ───────────────────────────────────────────
+
+triggers(EvTokensIssued, RevokeRefreshToken)
+invokes(RevokeRefreshToken, RevocationApi)
+transitions(RevokeRefreshToken, RefreshToken.status, (active, rotated) -> revoked)
+transitions(RevokeRefreshToken, Grant.status, active -> revoked)
+transitions(RevokeRefreshToken, Grant.status, revoked -> revoked)
+raises(RevokeRefreshToken, EvGrantRevoked)
+
+triggers(EvTokensIssued, RevokeAccessToken)
+triggers(EvFrontChannelAccessToken, RevokeAccessToken)
+invokes(RevokeAccessToken, AccessTokenRevocationApi)
+updates(AccessTokenRevocationApi, AccessToken)
+transitions(RevokeAccessToken, AccessToken.status, active -> revoked)
+
+// The cascade. Each use case runs on the tokens of the grant the event was raised on.
+condition GrantRevoked "The grant is revoked"
+holds(GrantRevoked, Grant.status == revoked)
+
+triggers(EvGrantRevoked, RevokeGrantAccessTokens)
+invokes(RevokeGrantAccessTokens, AccessTokenCascadeApi)
+updates(AccessTokenCascadeApi, AccessToken)
+reads(AccessTokenCascadeApi, Grant)
+transitions(RevokeGrantAccessTokens, AccessToken.status, active -> revoked)
+applies_to(GrantRevoked, RevokeGrantAccessTokens)
+
+triggers(EvGrantRevoked, RevokeGrantRefreshTokens)
+invokes(RevokeGrantRefreshTokens, RefreshTokenCascadeApi)
+updates(RefreshTokenCascadeApi, RefreshToken)
+reads(RefreshTokenCascadeApi, Grant)
+transitions(RevokeGrantRefreshTokens, RefreshToken.status, (active, rotated) -> revoked)
+applies_to(GrantRevoked, RevokeGrantRefreshTokens)
+
+// ── Introspection ────────────────────────────────────────
+
+triggers(EvTokensIssued, IntrospectToken)
+triggers(EvFrontChannelAccessToken, IntrospectToken)
+invokes(IntrospectToken, IntrospectionApi)
+reads(IntrospectionApi, AccessToken)
+reads(IntrospectionApi, Grant)
+reads(IntrospectionApi, UserAccount)
+
+// ── Expiry and cleanup ───────────────────────────────────
+
+triggers(AccessTokenLifetime, ExpireAccessToken)
+invokes(ExpireAccessToken, AccessTokenExpiryApi)
+updates(AccessTokenExpiryApi, AccessToken)
+transitions(ExpireAccessToken, AccessToken.status, active -> expired)
+
+triggers(RefreshTokenLifetime, ExpireRefreshToken)
+invokes(ExpireRefreshToken, RefreshTokenExpiryApi)
+updates(RefreshTokenExpiryApi, RefreshToken)
+transitions(ExpireRefreshToken, RefreshToken.status, (active, rotated) -> expired)
+
+// ── Consent withdrawal ───────────────────────────────────
+
+displays(WithdrawConsent, AuthorizedAppsScreen)
+invokes(WithdrawConsent, ConsentManagementApi)
+updates(ConsentManagementApi, Consent)
+transitions(WithdrawConsent, Consent.status, granted -> withdrawn)
+raises(WithdrawConsent, EvConsentWithdrawn)
+shows(AuthorizedAppsScreen, Consent)
+shows(AuthorizedAppsScreen, Client)
+
+triggers(EvConsentWithdrawn, RevokeGrantOnWithdrawal)
+invokes(RevokeGrantOnWithdrawal, GrantWithdrawalApi)
+updates(GrantWithdrawalApi, Grant)
+transitions(RevokeGrantOnWithdrawal, Grant.status, active -> revoked)
+raises(RevokeGrantOnWithdrawal, EvGrantRevoked)
+
+api GrantWithdrawalApi "Grant revocation on consent withdrawal"
+contains(OpenIdProvider, GrantWithdrawalApi)
+
+// Access constraints
+requires_permission(RefreshTokens, ClientCredential)
+requires_medium(RefreshTokens, BackChannel)
+requires_permission(RefreshApi, ClientCredential)
+requires_permission(DetectRefreshTokenReuse, ClientCredential)
+requires_medium(DetectRefreshTokenReuse, BackChannel)
+requires_permission(RevokeRefreshToken, ClientCredential)
+requires_medium(RevokeRefreshToken, BackChannel)
+requires_permission(RevocationApi, ClientCredential)
+requires_permission(RevokeAccessToken, ClientCredential)
+requires_medium(RevokeAccessToken, BackChannel)
+requires_permission(AccessTokenRevocationApi, ClientCredential)
+requires_permission(IntrospectToken, ResourceCredential)
+requires_medium(IntrospectToken, BackChannel)
+requires_permission(IntrospectionApi, ResourceCredential)
+requires_permission(WithdrawConsent, EndUserCredential)
+requires_medium(WithdrawConsent, UserAgent)
+requires_permission(ConsentManagementApi, EndUserCredential)
+
+field AuthorizedClientField "Authorized client"
+  access readonly
+  required true
+  source system
+
+contains(AuthorizedAppsScreen, AuthorizedClientField)
+maps_field(AuthorizedClientField, Client.client_id)
+
+// Business flow
+flow TokenMaintenanceFlow "Token upkeep"
+step RefreshStep "The RP refreshes the tokens"
+step ReuseStep "An old refresh token comes back"
+step RevokeStep "The RP revokes a token"
+step WithdrawStep "The End-User withdraws the consent"
+step CascadeStep "The grant's tokens are revoked"
+step IntrospectStep "The resource server checks a token"
+step ExpireStep "Tokens expire"
+
+contains(BucTokenMaintenance, TokenMaintenanceFlow)
+contains(TokenMaintenanceFlow, RefreshStep)
+contains(TokenMaintenanceFlow, ReuseStep)
+contains(TokenMaintenanceFlow, RevokeStep)
+contains(TokenMaintenanceFlow, WithdrawStep)
+contains(TokenMaintenanceFlow, CascadeStep)
+contains(TokenMaintenanceFlow, IntrospectStep)
+contains(TokenMaintenanceFlow, ExpireStep)
+
+precedes(IntrospectStep, RefreshStep)
+repeats(RefreshStep, IntrospectStep)
+excepts(RefreshStep, ReuseStep)
+precedes(ReuseStep, CascadeStep)
+branches(RefreshStep, RevokeStep)
+precedes(RevokeStep, CascadeStep)
+branches(RefreshStep, WithdrawStep)
+precedes(WithdrawStep, CascadeStep)
+branches(RefreshStep, ExpireStep)
+
+covers(RefreshStep, RefreshTokens)
+covers(RefreshStep, EvTokensRefreshed)
+covers(ReuseStep, DetectRefreshTokenReuse)
+covers(RevokeStep, RevokeRefreshToken)
+covers(RevokeStep, RevokeAccessToken)
+covers(WithdrawStep, WithdrawConsent)
+covers(WithdrawStep, EvConsentWithdrawn)
+covers(CascadeStep, RevokeGrantOnWithdrawal)
+covers(CascadeStep, EvGrantRevoked)
+covers(CascadeStep, RevokeGrantAccessTokens)
+covers(CascadeStep, RevokeGrantRefreshTokens)
+covers(IntrospectStep, IntrospectToken)
+covers(ExpireStep, ExpireAccessToken)
+covers(ExpireStep, ExpireRefreshToken)
+covers(ExpireStep, AccessTokenLifetime)
+covers(ExpireStep, RefreshTokenLifetime)
+
+performs(RelyingParty, RefreshStep)
+performs(RelyingParty, ReuseStep)
+performs(RelyingParty, RevokeStep)
+performs(EndUser, WithdrawStep)
+performs(ResourceServer, IntrospectStep)
+
+// Requirement traceability
+requirement ReqRotateAndRevoke "Refresh tokens rotate, and a revoked grant stops every token under it"
+  priority "must"
+  source "RFC 9700 §4.14.2"
+  source "RFC 7009 §2.1"
+  source "RFC 7662 §2"
+  stakeholder "End-User"
+  stakeholder "Resource server operator"
+  acceptance_criteria "The reuse of a rotated refresh token revokes the family and the grant; revoking a refresh token or withdrawing a consent revokes the grant and then its tokens; introspection reports a revoked token inactive."
+  status "accepted"
+
+motivates(ReqRotateAndRevoke, BucTokenMaintenance)
+achieves(ReqRotateAndRevoke, SecureSignIn)

@@ -1,0 +1,31 @@
+%% rdra-ish diagram=robustness scope=buc:BucClientRegistration model=samples/oidc-auth
+%% kinds: actor screen timer api entity
+%% omitted: buc step medium permission event
+flowchart LR
+  actor__OpAdministrator(["OP Administrator"]):::actor
+  screen__ClientAdminScreen["Client administration"]:::screen
+  timer__RpMetadataRefresh(("RP's metadata cache refresh (RP policy, e.g. daily)")):::timer
+  api__ClientAdminApi{{"Client administration API"}}:::api
+  api__ClientConfigurationApi{{"Client configuration endpoint"}}:::api
+  api__DiscoveryApi{{"OpenID Provider configuration"}}:::api
+  api__JwksApi{{"JWK Set"}}:::api
+  api__RegistrationApi{{"Client registration endpoint"}}:::api
+  entity__Client[("Registered client")]:::entity
+  entity__SigningKey[("ID Token signing key")]:::entity
+  actor__OpAdministrator --> screen__ClientAdminScreen
+  api__ClientAdminApi -->|U| entity__Client
+  api__ClientConfigurationApi -->|R| entity__Client
+  api__DiscoveryApi -->|R| entity__SigningKey
+  api__DiscoveryApi -.->|The RP read the OP configuration| api__RegistrationApi
+  api__JwksApi -->|R| entity__SigningKey
+  api__RegistrationApi -->|C| entity__Client
+  api__RegistrationApi -.->|The client is registered| api__ClientConfigurationApi
+  screen__ClientAdminScreen -->|Reinstate a client| api__ClientAdminApi
+  screen__ClientAdminScreen -->|Suspend a client| api__ClientAdminApi
+  timer__RpMetadataRefresh -.-> api__DiscoveryApi
+  timer__RpMetadataRefresh -.-> api__JwksApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,32 @@
+%% rdra-ish diagram=robustness scope=buc:BucCodeExchange model=samples/oidc-auth
+%% kinds: timer api entity
+%% omitted: actor buc step medium permission event condition
+flowchart LR
+  timer__CodeLifetime(("Authorization code lifetime (10 minutes at most)")):::timer
+  api__CodeHousekeepingApi{{"Code expiry"}}:::api
+  api__TokenApi{{"Token endpoint (authorization_code)"}}:::api
+  api__TokenReplayApi{{"Token endpoint (replayed code)"}}:::api
+  api__UserInfoApi{{"UserInfo endpoint"}}:::api
+  entity__AccessToken[("Access token")]:::entity
+  entity__AuthorizationCode[("Authorization code")]:::entity
+  entity__Grant[("Authorization grant")]:::entity
+  entity__IdToken[("ID Token")]:::entity
+  entity__RefreshToken[("Refresh token (rotation family)")]:::entity
+  entity__UserAccount[("End-User account")]:::entity
+  api__CodeHousekeepingApi -->|U| entity__AuthorizationCode
+  api__TokenApi -->|C| entity__AccessToken
+  api__TokenApi -->|C| entity__IdToken
+  api__TokenApi -->|C| entity__RefreshToken
+  api__TokenApi -->|R| entity__Grant
+  api__TokenApi -.->|The token endpoint issued the tokens| api__TokenReplayApi
+  api__TokenApi -.->|The token endpoint issued the tokens| api__UserInfoApi
+  api__TokenApi -->|U| entity__AuthorizationCode
+  api__TokenReplayApi -->|U| entity__AuthorizationCode
+  api__TokenReplayApi -->|U| entity__Grant
+  api__UserInfoApi -->|R| entity__AccessToken
+  api__UserInfoApi -->|R| entity__Grant
+  api__UserInfoApi -->|R| entity__UserAccount
+  timer__CodeLifetime -.-> api__CodeHousekeepingApi
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

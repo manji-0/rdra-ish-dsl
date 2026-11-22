@@ -1,0 +1,30 @@
+%% rdra-ish diagram=flow scope=buc:BucSigningKeys model=samples/oidc-auth
+%% kinds: flow step lane timer usecase
+%% omitted: buc
+flowchart TD
+  subgraph flow__KeyRotationFlow["Key rotation"]
+    step__ActivateKeyStep["Sign with it"]:::step
+    step__RetireKeyStep["Retire the old key"]:::step
+    subgraph lane__KeyRotationFlow__OpAdministrator["OP Administrator"]
+      %% lane lane__KeyRotationFlow__OpAdministrator: actor__OpAdministrator
+      step__PublishKeyStep["Publish the next key"]:::step
+    end
+  end
+  timer__KeyRotationSchedule(("Signing key rotation schedule (OP policy, e.g. every 90 days)")):::timer
+  usecase__ActivateKey("Start signing with the published key"):::usecase
+  %% desc usecase__ActivateKey: Sign new ID Tokens with the key published earlier; its kid appears in their headers.
+  usecase__PublishNextKey("Publish the next signing key"):::usecase
+  %% desc usecase__PublishNextKey: Generate a key pair and add its public key to the JWK Set, so RPs cache it before it signs.
+  usecase__RetireKey("Retire a signing key"):::usecase
+  %% desc usecase__RetireKey: Remove a key from the JWK Set after the last ID Token it signed has expired.
+  step__ActivateKeyStep -.-> timer__KeyRotationSchedule
+  step__ActivateKeyStep -.-> usecase__ActivateKey
+  step__ActivateKeyStep -->|precedes| step__RetireKeyStep
+  step__PublishKeyStep -.-> usecase__PublishNextKey
+  step__PublishKeyStep -->|precedes| step__ActivateKeyStep
+  step__RetireKeyStep -.-> usecase__RetireKey
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef lane fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;

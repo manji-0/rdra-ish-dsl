@@ -1,0 +1,246 @@
+module buc.ciba
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+import buc.code_exchange.{TokenRequest, TokenResponse, TokenError}
+
+buc BucBackchannelSignIn "Sign the End-User in from another device (CIBA)"
+  description "A client that is not where the End-User is (a call-center agent's tool, a point of sale) asks the OP to authenticate the End-User it names with a login_hint. The OP reaches the End-User's authentication device out of band; the End-User approves or denies there. The client then receives the tokens by polling the token endpoint, by a ping that tells it to fetch them, or by a push of the tokens to its notification endpoint."
+
+// CIBA Core 1.0 §7.1 and §7.3: the authentication request names the End-User with
+// login_hint, login_hint_token, or id_token_hint, and the OP answers auth_req_id,
+// expires_in, and interval.
+usecase StartBackchannelAuthentication "Send a backchannel authentication request"
+  description "POST scope openid, a login hint, a binding_message, and, for ping and push, the client_notification_token to the backchannel authentication endpoint, and receive the auth_req_id."
+  error "unknown_user_id, expired_login_hint_token, access_denied (CIBA §13)."
+
+// CIBA Core 1.0 §7.4 and §8: the OP authenticates the End-User on the authentication device.
+usecase RecordDeviceApproval "Record the End-User's approval"
+  description "The authentication device reports that the End-User authenticated and approved the request, after checking the binding_message."
+
+usecase RecordDeviceDenial "Record the End-User's denial"
+  description "The authentication device reports that the End-User declined."
+
+// CIBA Core 1.0 §10.1 poll mode and §10.2 ping mode: the client fetches the tokens from the
+// token endpoint with grant_type=urn:openid:params:grant-type:ciba.
+usecase PollBackchannelToken "Poll for the tokens"
+  description "POST the auth_req_id to the token endpoint and receive the ID Token, the access token, and the refresh token, or authorization_pending, slow_down, access_denied, or expired_token (CIBA §11)."
+
+// CIBA Core 1.0 §10.2: in ping mode the OP calls the client_notification_endpoint with the
+// auth_req_id, and the client then fetches the tokens.
+usecase SendPingCallback "Ping the client"
+  description "POST the auth_req_id to the client notification endpoint, bearing the client_notification_token."
+
+// CIBA Core 1.0 §10.3: in push mode the OP posts the tokens themselves.
+usecase PushBackchannelTokens "Push the tokens to the client"
+  description "POST the auth_req_id, the ID Token carrying urn:openid:params:jwt:claim:auth_req_id, the access token, and the refresh token to the client notification endpoint."
+
+usecase ExpireBackchannelRequest "Expire the backchannel request"
+  description "The auth_req_id reaches expires_in before the tokens are delivered."
+
+// CIBA Core 1.0 §1: the Consumption Device is where the End-User consumes the service, such
+// as a call-center agent's tool or a point-of-sale terminal; the client runs there.
+screen ConsumptionDeviceScreen "Client's consumption device"
+
+field LoginHintEntryField "End-User identifier (login_hint)"
+  access editable
+  required true
+  source actor
+
+contains(ConsumptionDeviceScreen, LoginHintEntryField)
+maps_field(LoginHintEntryField, UserAccount.subject)
+
+event EvBackchannelAuthenticationRequested "The End-User is asked to authenticate on the device"
+event EvBackchannelApproved "The End-User approved on the device"
+event EvBackchannelDenied "The End-User declined on the device"
+event EvPingSent "The ping callback is sent"
+event EvTokensPushed "The tokens are pushed"
+
+api BackchannelAuthenticationApi "Backchannel authentication endpoint"
+  method POST
+  path "/bc-authorize"
+  mode async
+  auth client
+
+api BackchannelDecisionApi "Authentication device decision"
+
+api BackchannelTokenApi "Token endpoint (ciba)"
+  method POST
+  path "/token#ciba"
+  mode sync
+  auth client
+
+api BackchannelNotificationApi "Client notification (ping and push)"
+api BackchannelExpiryApi "Backchannel request expiry"
+
+dto BackchannelAuthenticationRequest "Backchannel authentication request" {
+  scope: String
+  login_hint: String @null
+  login_hint_token: String @null
+  id_token_hint: String @null
+  binding_message: String @null
+  client_notification_token: String @null
+  requested_expiry: Int @null
+}
+
+dto BackchannelAuthenticationResponse "Backchannel authentication response" {
+  auth_req_id: String
+  expires_in: Int
+  interval: Int @null
+}
+
+request(BackchannelAuthenticationApi, BackchannelAuthenticationRequest)
+response(BackchannelAuthenticationApi, BackchannelAuthenticationResponse)
+request(BackchannelTokenApi, TokenRequest)
+response(BackchannelTokenApi, TokenResponse)
+error_response(BackchannelTokenApi, TokenError)
+
+performs(RelyingParty, StartBackchannelAuthentication)
+performs(RelyingParty, PollBackchannelToken)
+belongs(BucBackchannelSignIn, Identity).by(BackChannel)
+
+contains(BucBackchannelSignIn, StartBackchannelAuthentication)
+contains(BucBackchannelSignIn, RecordDeviceApproval)
+contains(BucBackchannelSignIn, RecordDeviceDenial)
+contains(BucBackchannelSignIn, PollBackchannelToken)
+contains(BucBackchannelSignIn, SendPingCallback)
+contains(BucBackchannelSignIn, PushBackchannelTokens)
+contains(BucBackchannelSignIn, ExpireBackchannelRequest)
+contains(OpenIdProvider, BackchannelAuthenticationApi)
+contains(OpenIdProvider, BackchannelDecisionApi)
+contains(OpenIdProvider, BackchannelTokenApi)
+contains(OpenIdProvider, BackchannelNotificationApi)
+contains(OpenIdProvider, BackchannelExpiryApi)
+
+// The request names the End-User; the OP sends the prompt to that End-User's device.
+condition BackchannelClientActive "The client is active"
+holds(BackchannelClientActive, Client.status == active).along(BackchannelRequest, Client)
+
+displays(StartBackchannelAuthentication, ConsumptionDeviceScreen)
+invokes(StartBackchannelAuthentication, BackchannelAuthenticationApi)
+creates(BackchannelAuthenticationApi, BackchannelRequest)
+reads(BackchannelAuthenticationApi, Client)
+reads(BackchannelAuthenticationApi, UserAccount)
+applies_to(BackchannelClientActive, StartBackchannelAuthentication)
+raises(StartBackchannelAuthentication, EvBackchannelAuthenticationRequested)
+triggers(EvBackchannelAuthenticationRequested, AuthenticationDevice)
+
+// The device answers with the End-User's decision.
+raises(AuthenticationDevice, EvBackchannelApproved)
+raises(AuthenticationDevice, EvBackchannelDenied)
+
+triggers(EvBackchannelApproved, RecordDeviceApproval)
+invokes(RecordDeviceApproval, BackchannelDecisionApi)
+updates(BackchannelDecisionApi, BackchannelRequest)
+transitions(RecordDeviceApproval, BackchannelRequest.status, pending -> approved)
+
+triggers(EvBackchannelDenied, RecordDeviceDenial)
+invokes(RecordDeviceDenial, BackchannelDecisionApi)
+transitions(RecordDeviceDenial, BackchannelRequest.status, pending -> denied)
+
+// Poll mode fetches after the approval and ping mode after the ping. A push-mode client
+// receives the tokens and does not call the token endpoint (CIBA §10.3), so it has no arm.
+condition PollMode "The client registered poll mode"
+holds(PollMode, BackchannelRequest.delivery_mode == poll)
+
+condition PingMode "The client registered ping mode"
+holds(PingMode, BackchannelRequest.delivery_mode == ping)
+
+condition PushMode "The client registered push mode"
+holds(PushMode, BackchannelRequest.delivery_mode == push)
+
+// A poll-mode client polls once the End-User decided; a ping-mode client fetches after the
+// ping.
+triggers(EvBackchannelApproved, PollBackchannelToken)
+triggers(EvPingSent, PollBackchannelToken)
+invokes(PollBackchannelToken, BackchannelTokenApi)
+updates(BackchannelTokenApi, BackchannelRequest)
+transitions(PollBackchannelToken, BackchannelRequest.status, approved -> redeemed).when(PollMode)
+transitions(PollBackchannelToken, BackchannelRequest.status, notified -> redeemed).when(PingMode)
+
+triggers(EvBackchannelApproved, SendPingCallback)
+invokes(SendPingCallback, BackchannelNotificationApi)
+updates(BackchannelNotificationApi, BackchannelRequest)
+transitions(SendPingCallback, BackchannelRequest.status, approved -> notified)
+applies_to(PingMode, SendPingCallback)
+raises(SendPingCallback, EvPingSent)
+triggers(EvPingSent, RpCallbackEndpoint)
+
+triggers(EvBackchannelApproved, PushBackchannelTokens)
+invokes(PushBackchannelTokens, BackchannelNotificationApi)
+transitions(PushBackchannelTokens, BackchannelRequest.status, approved -> pushed)
+applies_to(PushMode, PushBackchannelTokens)
+raises(PushBackchannelTokens, EvTokensPushed)
+triggers(EvTokensPushed, RpCallbackEndpoint)
+
+triggers(CibaRequestLifetime, ExpireBackchannelRequest)
+invokes(ExpireBackchannelRequest, BackchannelExpiryApi)
+updates(BackchannelExpiryApi, BackchannelRequest)
+transitions(ExpireBackchannelRequest, BackchannelRequest.status, (pending, approved, notified) -> expired)
+
+// Access constraints
+requires_permission(StartBackchannelAuthentication, ClientCredential)
+requires_medium(StartBackchannelAuthentication, BackChannel)
+requires_permission(BackchannelAuthenticationApi, ClientCredential)
+requires_permission(PollBackchannelToken, ClientCredential)
+requires_medium(PollBackchannelToken, BackChannel)
+requires_permission(BackchannelTokenApi, ClientCredential)
+
+// Business flow
+flow CibaFlow "Client-initiated backchannel authentication"
+step CibaStartStep "The client names the End-User"
+step CibaDeviceStep "The End-User decides on the authentication device"
+step CibaDeniedStep "The End-User declines"
+step CibaPollStep "Poll mode: the client fetches the tokens"
+step CibaPingStep "Ping mode: the OP pings, the client fetches"
+step CibaPushStep "Push mode: the OP pushes the tokens"
+step CibaExpireStep "The request expires"
+
+contains(BucBackchannelSignIn, CibaFlow)
+contains(CibaFlow, CibaStartStep)
+contains(CibaFlow, CibaDeviceStep)
+contains(CibaFlow, CibaDeniedStep)
+contains(CibaFlow, CibaPollStep)
+contains(CibaFlow, CibaPingStep)
+contains(CibaFlow, CibaPushStep)
+contains(CibaFlow, CibaExpireStep)
+
+precedes(CibaStartStep, CibaDeviceStep)
+precedes(CibaDeviceStep, CibaPollStep)
+branches(CibaDeviceStep, CibaPingStep)
+branches(CibaDeviceStep, CibaPushStep)
+excepts(CibaDeviceStep, CibaDeniedStep)
+excepts(CibaDeviceStep, CibaExpireStep)
+
+covers(CibaStartStep, StartBackchannelAuthentication)
+covers(CibaStartStep, EvBackchannelAuthenticationRequested)
+covers(CibaDeviceStep, RecordDeviceApproval)
+covers(CibaDeviceStep, EvBackchannelApproved)
+covers(CibaDeniedStep, RecordDeviceDenial)
+covers(CibaDeniedStep, EvBackchannelDenied)
+covers(CibaPollStep, PollBackchannelToken)
+covers(CibaPingStep, SendPingCallback)
+covers(CibaPingStep, EvPingSent)
+covers(CibaPushStep, PushBackchannelTokens)
+covers(CibaPushStep, EvTokensPushed)
+covers(CibaExpireStep, ExpireBackchannelRequest)
+covers(CibaExpireStep, CibaRequestLifetime)
+
+performs(RelyingParty, CibaStartStep)
+performs(EndUser, CibaDeviceStep)
+performs(EndUser, CibaDeniedStep)
+performs(RelyingParty, CibaPollStep)
+
+// Requirement traceability
+requirement ReqCiba "A client signs the End-User in on the End-User's own device, in the mode it registered"
+  priority "should"
+  source "OpenID Connect Client-Initiated Backchannel Authentication Core 1.0 §5, §7, §10"
+  stakeholder "End-User"
+  stakeholder "Call-center operator"
+  acceptance_criteria "A poll-mode client polls, a ping-mode client is pinged and then fetches, and a push-mode client receives the tokens; none receives them another way."
+  status "accepted"
+
+motivates(ReqCiba, BucBackchannelSignIn)
+achieves(ReqCiba, OpenInterop)

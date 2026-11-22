@@ -1,0 +1,349 @@
+%% rdra-ish diagram=usecase scope=buc:BucBrowserSignIn model=samples/oidc-auth
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor extsystem timer usecase screen event entity state condition
+%% omitted: buc step medium permission field api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__EndUser(["End-User"]):::actor
+    %% desc actor__EndUser: Signs in to the OP in a user agent, consents to the claims a client asks for, approves a device or a backchannel request, ends the session, and withdraws a consent.
+    actor__OpAdministrator(["OP Administrator"]):::actor
+    %% desc actor__OpAdministrator: Suspends and reinstates clients, publishes, activates, and retires signing keys.
+    actor__RelyingParty(["Relying Party (client application)"]):::actor
+    %% desc actor__RelyingParty: Registers itself, sends the End-User to the authorization endpoint, redeems codes, refreshes and revokes tokens, calls UserInfo, polls for device and CIBA tokens, and starts a logout.
+    extsystem__RpCallbackEndpoint[["RP callback endpoints (backchannel logout, CIBA notification, initiate login)"]]:::extsystem
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__InteractionLifetime(("Login interaction lifetime (OP policy, e.g. 30 minutes)")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__AbandonRequest("Drop an abandoned request"):::usecase
+    %% desc usecase__AbandonRequest: Discard a request whose End-User did not finish the login or the consent within the interaction lifetime.
+    usecase__AuthenticateEndUser("Authenticate for the request at the login page"):::usecase
+    %% desc usecase__AuthenticateEndUser: Show the login page for this request and take the session the End-User logs in to, at the level the request asks for.
+    usecase__DenyConsent("Decline the client"):::usecase
+    %% desc usecase__DenyConsent: The End-User declines; the OP answers access_denied on the redirect URI.
+    usecase__GrantConsent("Consent to the client"):::usecase
+    %% desc usecase__GrantConsent: Show the client, the scopes, and the claims requested, and record the End-User's consent.
+    usecase__InitiateThirdPartyLogin("Start a sign-in from the OP (third-party initiated login)"):::usecase
+    %% desc usecase__InitiateThirdPartyLogin: The End-User picks an application on the OP's launcher page; the OP redirects to the client's initiate_login_uri with iss, login_hint, and target_link_uri.
+    usecase__IssueCodeResponse("Respond with a code (Authorization Code Flow)"):::usecase
+    %% desc usecase__IssueCodeResponse: Redirect to the redirect_uri with the authorization code and state in the query.
+    usecase__IssueHybridFullResponse("Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)"):::usecase
+    %% desc usecase__IssueHybridFullResponse: Redirect with the code, the ID Token carrying c_hash and at_hash, the access token, and state in the fragment.
+    usecase__IssueHybridIdTokenResponse("Respond with a code and an ID Token (Hybrid Flow, code id_token)"):::usecase
+    %% desc usecase__IssueHybridIdTokenResponse: Redirect with the code, the ID Token carrying c_hash, and state in the fragment.
+    usecase__IssueHybridTokenResponse("Respond with a code and an access token (Hybrid Flow, code token)"):::usecase
+    %% desc usecase__IssueHybridTokenResponse: Redirect with the code, the access token, and state in the fragment.
+    usecase__IssueIdTokenResponse("Respond with an ID Token (Implicit Flow, id_token)"):::usecase
+    %% desc usecase__IssueIdTokenResponse: Redirect with the ID Token and state in the fragment.
+    usecase__IssueImplicitTokenResponse("Respond with an ID Token and an access token (Implicit Flow, id_token token)"):::usecase
+    %% desc usecase__IssueImplicitTokenResponse: Redirect with the ID Token, the access token, token_type, expires_in, and state in the fragment.
+    usecase__LogIn("Log in at the OP"):::usecase
+    %% desc usecase__LogIn: Enter the account identifier and the password on the OP's login page and start an OP session for the user agent.
+    usecase__RecordAdministrativeConsent("Record administrative consent"):::usecase
+    %% desc usecase__RecordAdministrativeConsent: The administrator consents for an End-User to a client the organization trusts, so the End-User sees no consent page for it.
+    usecase__RejectInvalidRequest("Reject an invalid request"):::usecase
+    %% desc usecase__RejectInvalidRequest: Answer invalid_request on the redirect URI: a public client asked for a code without an S256 code challenge.
+    usecase__RequestAuthentication("Send the authentication request"):::usecase
+    %% desc usecase__RequestAuthentication: Redirect the End-User to the authorization endpoint with scope openid, client_id, redirect_uri, response_type, state, nonce, prompt, max_age, acr_values, and the PKCE code_challenge.
+    usecase__ReturnAccountSelectionRequired("Answer account_selection_required"):::usecase
+    %% desc usecase__ReturnAccountSelectionRequired: prompt=none and the user agent holds several sessions the End-User must choose among.
+    usecase__ReturnConsentRequired("Answer consent_required"):::usecase
+    %% desc usecase__ReturnConsentRequired: prompt=none, the End-User is authenticated, and no recorded consent covers the request.
+    usecase__ReturnInteractionRequired("Answer interaction_required"):::usecase
+    %% desc usecase__ReturnInteractionRequired: prompt=none and the request asks for a multi-factor class the session does not have.
+    usecase__ReturnLoginRequired("Answer login_required"):::usecase
+    %% desc usecase__ReturnLoginRequired: prompt=none and the OP cannot authenticate the End-User without a login page.
+    usecase__ReuseConsent("Reuse the recorded consent"):::usecase
+    %% desc usecase__ReuseConsent: Skip the consent page when the End-User has already consented to this client and prompt is not consent.
+    usecase__ReuseSession("Reuse the OP session (single sign-on)"):::usecase
+    %% desc usecase__ReuseSession: Recognize the End-User from the OP session cookie and skip the login page. The session must still be authenticated, and multi-factor when the request asks for it.
+    usecase__SelectAccount("Select an account"):::usecase
+    %% desc usecase__SelectAccount: Show the accounts the user agent is signed in to and let the End-User pick the one to use.
+    usecase__StepUpAuthentication("Add a second factor to the session"):::usecase
+    %% desc usecase__StepUpAuthentication: Enter the second factor, because a request asks for a multi-factor class or the End-User chose to, and raise the OP session to multi-factor.
+    usecase__ValidateRequest("Validate the request"):::usecase
+    %% desc usecase__ValidateRequest: Check the client, the redirect_uri, the response_type the client registered, and that a public client asking for a code sends an S256 code challenge.
+    screen__AccountChooserScreen["Account chooser"]:::screen
+    screen__AppLauncherScreen["OP application launcher"]:::screen
+    screen__ConsentAdminScreen["Administrative consents"]:::screen
+    screen__ConsentScreen["Consent page"]:::screen
+    screen__LoginScreen["Login page"]:::screen
+    screen__RpSignInScreen["RP sign-in page"]:::screen
+    screen__SecondFactorScreen["Second factor page"]:::screen
+    event__EvCodeIssued>"An authorization code is delivered to the RP"]:::event
+    event__EvEndUserAuthenticated>"The End-User is authenticated for the request"]:::event
+    event__EvFrontChannelAccessToken>"An access token is delivered in the fragment"]:::event
+    event__EvLoginInitiated>"The OP sends the browser to the client's initiate_login_uri"]:::event
+    event__EvRequestAuthorized>"The authentication request is authorized"]:::event
+    event__EvRequestReceived>"The authentication request arrived"]:::event
+    event__EvRequestValidated>"The authentication request is valid"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__AccessToken[("Access token")]:::entity
+    entity__AuthorizationCode[("Authorization code")]:::entity
+    entity__AuthorizationRequest[("Authentication request")]:::entity
+    entity__Client[("Registered client")]:::entity
+    entity__Consent[("Consent")]:::entity
+    entity__Grant[("Authorization grant")]:::entity
+    entity__IdToken[("ID Token")]:::entity
+    entity__Interaction[("Login interaction")]:::entity
+    entity__OpSession[("OP session")]:::entity
+    entity__UserAccount[("End-User account")]:::entity
+    state__AuthorizationRequest_abandoned((("Abandoned"))):::state
+    state__AuthorizationRequest_consented((("Consented"))):::state
+    state__AuthorizationRequest_failed((("Error response"))):::state
+    state__AuthorizationRequest_received((("Received"))):::state
+    state__AuthorizationRequest_responded((("Responded"))):::state
+    state__AuthorizationRequest_validated((("Validated"))):::state
+    state__Interaction_login((("Login page"))):::state
+    state__Interaction_pending((("Not yet"))):::state
+    state__Interaction_sso((("Existing session"))):::state
+    state__OpSession_auth_level_multi_factor((("Multi-factor"))):::state
+    state__OpSession_auth_level_single_factor((("Single factor"))):::state
+    condition__AccountChoiceAsked{"prompt=select_account on a valid request, with an authenticated session to pick"}:::condition
+    condition__ConfidentialClient{"The client is confidential"}:::condition
+    condition__ConsentOnRecord{"The End-User is authenticated, prompt is not consent, and a consent to the client is on record"}:::condition
+    condition__EndUserAuthenticated{"The End-User is authenticated for the request, and a page may be shown"}:::condition
+    condition__FrontChannelIdToken{"An ID Token comes back from the authorization endpoint"}:::condition
+    condition__NoCodeIssued{"No code is issued (Implicit Flow)"}:::condition
+    condition__NoFrontChannelIdToken{"No ID Token comes back from the authorization endpoint"}:::condition
+    condition__PublicClientWithoutS256{"A public client asks for a code without an S256 challenge"}:::condition
+    condition__RequestValidated{"The request is valid and lets the OP show a page"}:::condition
+    condition__ResponseTypeCode{"response_type=code"}:::condition
+    condition__ResponseTypeCodeIdToken{"response_type=code id_token"}:::condition
+    condition__ResponseTypeCodeIdTokenToken{"response_type=code id_token token"}:::condition
+    condition__ResponseTypeCodeToken{"response_type=code token"}:::condition
+    condition__ResponseTypeIdToken{"response_type=id_token"}:::condition
+    condition__ResponseTypeIdTokenToken{"response_type=id_token token"}:::condition
+    condition__S256Challenge{"The request carries an S256 code challenge"}:::condition
+    condition__SessionAuthenticated{"The OP session is authenticated"}:::condition
+    condition__SessionCoversAcr{"The OP session is authenticated with a second factor"}:::condition
+    condition__SessionMayServe{"The request is valid and no prompt forces a login or an account choice"}:::condition
+    condition__SilentStepUp{"prompt=none, the request asks for a second factor, and the End-User is not authenticated at that level"}:::condition
+    condition__SilentUnauthenticated{"prompt=none and the End-User is not authenticated"}:::condition
+    condition__SilentWithoutConsent{"prompt=none, the End-User is authenticated, and no consent to the client is on record"}:::condition
+    condition__SingleFactorEnough{"The OP session is authenticated and the request asks for no second factor"}:::condition
+  end
+  actor__EndUser -.-> usecase__AuthenticateEndUser
+  actor__EndUser -.-> usecase__DenyConsent
+  actor__EndUser -.-> usecase__GrantConsent
+  actor__EndUser -.-> usecase__InitiateThirdPartyLogin
+  actor__EndUser -.-> usecase__LogIn
+  actor__EndUser -.-> usecase__RecordAdministrativeConsent
+  %% derived actor__EndUser -> usecase__RecordAdministrativeConsent via step__ConsentStep
+  actor__EndUser -.-> usecase__SelectAccount
+  actor__EndUser -.-> usecase__StepUpAuthentication
+  actor__OpAdministrator -.-> usecase__RecordAdministrativeConsent
+  actor__RelyingParty -.-> usecase__InitiateThirdPartyLogin
+  %% derived actor__RelyingParty -> usecase__InitiateThirdPartyLogin via step__SendRequestStep
+  actor__RelyingParty -.-> usecase__RequestAuthentication
+  condition__AccountChoiceAsked -.->|applies_to| usecase__SelectAccount
+  condition__ConfidentialClient -.->|when| usecase__ValidateRequest
+  %% derived condition__ConfidentialClient -> usecase__ValidateRequest via transitions AuthorizationRequest.status received->validated
+  condition__ConsentOnRecord -.->|applies_to| usecase__ReuseConsent
+  condition__EndUserAuthenticated -.->|applies_to| usecase__DenyConsent
+  condition__EndUserAuthenticated -.->|applies_to| usecase__GrantConsent
+  condition__FrontChannelIdToken -.->|when| usecase__RequestAuthentication
+  %% derived condition__FrontChannelIdToken -> usecase__RequestAuthentication via sets AuthorizationRequest.nonce present
+  condition__NoCodeIssued -.->|when| usecase__ValidateRequest
+  %% derived condition__NoCodeIssued -> usecase__ValidateRequest via transitions AuthorizationRequest.status received->validated
+  condition__NoFrontChannelIdToken -.->|when| usecase__RequestAuthentication
+  %% derived condition__NoFrontChannelIdToken -> usecase__RequestAuthentication via sets AuthorizationRequest.nonce null
+  condition__PublicClientWithoutS256 -.->|applies_to| usecase__RejectInvalidRequest
+  condition__RequestValidated -.->|applies_to| usecase__AuthenticateEndUser
+  condition__ResponseTypeCode -.->|applies_to| usecase__IssueCodeResponse
+  condition__ResponseTypeCodeIdToken -.->|applies_to| usecase__IssueHybridIdTokenResponse
+  condition__ResponseTypeCodeIdTokenToken -.->|applies_to| usecase__IssueHybridFullResponse
+  condition__ResponseTypeCodeToken -.->|applies_to| usecase__IssueHybridTokenResponse
+  condition__ResponseTypeIdToken -.->|applies_to| usecase__IssueIdTokenResponse
+  condition__ResponseTypeIdTokenToken -.->|applies_to| usecase__IssueImplicitTokenResponse
+  condition__S256Challenge -.->|when| usecase__ValidateRequest
+  %% derived condition__S256Challenge -> usecase__ValidateRequest via transitions AuthorizationRequest.status received->validated
+  condition__SessionAuthenticated -.->|applies_to| usecase__StepUpAuthentication
+  condition__SessionCoversAcr -.->|when| usecase__AuthenticateEndUser
+  %% derived condition__SessionCoversAcr -> usecase__AuthenticateEndUser via transitions Interaction.authentication pending->login
+  condition__SessionCoversAcr -.->|when| usecase__ReuseSession
+  %% derived condition__SessionCoversAcr -> usecase__ReuseSession via transitions Interaction.authentication pending->sso
+  condition__SessionCoversAcr -.->|when| usecase__SelectAccount
+  %% derived condition__SessionCoversAcr -> usecase__SelectAccount via transitions Interaction.authentication pending->sso
+  condition__SessionMayServe -.->|applies_to| usecase__ReuseSession
+  condition__SilentStepUp -.->|applies_to| usecase__ReturnInteractionRequired
+  condition__SilentUnauthenticated -.->|applies_to| usecase__ReturnAccountSelectionRequired
+  condition__SilentUnauthenticated -.->|applies_to| usecase__ReturnLoginRequired
+  condition__SilentWithoutConsent -.->|applies_to| usecase__ReturnConsentRequired
+  condition__SingleFactorEnough -.->|when| usecase__AuthenticateEndUser
+  %% derived condition__SingleFactorEnough -> usecase__AuthenticateEndUser via transitions Interaction.authentication pending->login
+  condition__SingleFactorEnough -.->|when| usecase__ReuseSession
+  %% derived condition__SingleFactorEnough -> usecase__ReuseSession via transitions Interaction.authentication pending->sso
+  condition__SingleFactorEnough -.->|when| usecase__SelectAccount
+  %% derived condition__SingleFactorEnough -> usecase__SelectAccount via transitions Interaction.authentication pending->sso
+  event__EvEndUserAuthenticated -.-> usecase__ReturnConsentRequired
+  event__EvEndUserAuthenticated -.-> usecase__ReuseConsent
+  event__EvLoginInitiated -.-> extsystem__RpCallbackEndpoint
+  event__EvRequestAuthorized -.-> usecase__IssueCodeResponse
+  event__EvRequestAuthorized -.-> usecase__IssueHybridFullResponse
+  event__EvRequestAuthorized -.-> usecase__IssueHybridIdTokenResponse
+  event__EvRequestAuthorized -.-> usecase__IssueHybridTokenResponse
+  event__EvRequestAuthorized -.-> usecase__IssueIdTokenResponse
+  event__EvRequestAuthorized -.-> usecase__IssueImplicitTokenResponse
+  event__EvRequestReceived -.-> usecase__RejectInvalidRequest
+  event__EvRequestReceived -.-> usecase__ValidateRequest
+  event__EvRequestValidated -.-> usecase__ReturnAccountSelectionRequired
+  event__EvRequestValidated -.-> usecase__ReturnInteractionRequired
+  event__EvRequestValidated -.-> usecase__ReturnLoginRequired
+  event__EvRequestValidated -.-> usecase__ReuseSession
+  screen__AccountChooserScreen -.-> entity__OpSession
+  screen__AppLauncherScreen -.-> entity__Client
+  screen__ConsentScreen -.-> entity__Client
+  timer__InteractionLifetime -.-> usecase__AbandonRequest
+  usecase__AbandonRequest -.->|deletes| entity__Interaction
+  %% derived usecase__AbandonRequest -> entity__Interaction via api__ErrorResponseApi
+  usecase__AbandonRequest -.->|transitions AuthorizationRequest.status received->abandoned| state__AuthorizationRequest_abandoned
+  usecase__AbandonRequest -.->|transitions AuthorizationRequest.status validated->abandoned| state__AuthorizationRequest_abandoned
+  usecase__AbandonRequest -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__AbandonRequest -> entity__AuthorizationRequest via api__ErrorResponseApi
+  usecase__AuthenticateEndUser -.-> screen__LoginScreen
+  usecase__AuthenticateEndUser -.-> event__EvEndUserAuthenticated
+  usecase__AuthenticateEndUser -.->|reads| entity__OpSession
+  %% derived usecase__AuthenticateEndUser -> entity__OpSession via api__LoginResumeApi
+  usecase__AuthenticateEndUser -.->|transitions Interaction.authentication pending->login| state__Interaction_login
+  usecase__AuthenticateEndUser -.->|updates| entity__Interaction
+  %% derived usecase__AuthenticateEndUser -> entity__Interaction via api__LoginResumeApi
+  usecase__DenyConsent -.->|deletes| entity__Interaction
+  %% derived usecase__DenyConsent -> entity__Interaction via api__ErrorResponseApi
+  usecase__DenyConsent -.-> screen__ConsentScreen
+  usecase__DenyConsent -.->|transitions AuthorizationRequest.status validated->failed| state__AuthorizationRequest_failed
+  usecase__DenyConsent -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__DenyConsent -> entity__AuthorizationRequest via api__ErrorResponseApi
+  usecase__GrantConsent -.->|creates| entity__Consent
+  %% derived usecase__GrantConsent -> entity__Consent via api__ConsentApi
+  usecase__GrantConsent -.-> screen__ConsentScreen
+  usecase__GrantConsent -.-> event__EvRequestAuthorized
+  usecase__GrantConsent -.->|reads| entity__Interaction
+  %% derived usecase__GrantConsent -> entity__Interaction via api__ConsentApi
+  usecase__GrantConsent -.->|transitions AuthorizationRequest.status validated->consented| state__AuthorizationRequest_consented
+  usecase__GrantConsent -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__GrantConsent -> entity__AuthorizationRequest via api__ConsentApi
+  usecase__InitiateThirdPartyLogin -.-> screen__AppLauncherScreen
+  usecase__InitiateThirdPartyLogin -.-> event__EvLoginInitiated
+  usecase__InitiateThirdPartyLogin -.->|reads| entity__Client
+  usecase__IssueCodeResponse -.->|creates| entity__AuthorizationCode
+  usecase__IssueCodeResponse -.->|creates| entity__Grant
+  usecase__IssueCodeResponse -.->|deletes| entity__Interaction
+  usecase__IssueCodeResponse -.-> event__EvCodeIssued
+  usecase__IssueCodeResponse -.->|transitions AuthorizationRequest.status consented->responded| state__AuthorizationRequest_responded
+  usecase__IssueHybridFullResponse -.->|creates| entity__AccessToken
+  usecase__IssueHybridFullResponse -.->|creates| entity__AuthorizationCode
+  usecase__IssueHybridFullResponse -.->|creates| entity__Grant
+  usecase__IssueHybridFullResponse -.->|creates| entity__IdToken
+  usecase__IssueHybridFullResponse -.->|deletes| entity__Interaction
+  usecase__IssueHybridFullResponse -.-> event__EvCodeIssued
+  usecase__IssueHybridFullResponse -.-> event__EvFrontChannelAccessToken
+  usecase__IssueHybridFullResponse -.->|transitions AuthorizationRequest.status consented->responded| state__AuthorizationRequest_responded
+  usecase__IssueHybridIdTokenResponse -.->|creates| entity__AuthorizationCode
+  usecase__IssueHybridIdTokenResponse -.->|creates| entity__Grant
+  usecase__IssueHybridIdTokenResponse -.->|creates| entity__IdToken
+  usecase__IssueHybridIdTokenResponse -.->|deletes| entity__Interaction
+  usecase__IssueHybridIdTokenResponse -.-> event__EvCodeIssued
+  usecase__IssueHybridIdTokenResponse -.->|transitions AuthorizationRequest.status consented->responded| state__AuthorizationRequest_responded
+  usecase__IssueHybridTokenResponse -.->|creates| entity__AccessToken
+  usecase__IssueHybridTokenResponse -.->|creates| entity__AuthorizationCode
+  usecase__IssueHybridTokenResponse -.->|creates| entity__Grant
+  usecase__IssueHybridTokenResponse -.->|deletes| entity__Interaction
+  usecase__IssueHybridTokenResponse -.-> event__EvCodeIssued
+  usecase__IssueHybridTokenResponse -.-> event__EvFrontChannelAccessToken
+  usecase__IssueHybridTokenResponse -.->|transitions AuthorizationRequest.status consented->responded| state__AuthorizationRequest_responded
+  usecase__IssueIdTokenResponse -.->|creates| entity__Grant
+  usecase__IssueIdTokenResponse -.->|creates| entity__IdToken
+  usecase__IssueIdTokenResponse -.->|deletes| entity__Interaction
+  usecase__IssueIdTokenResponse -.->|transitions AuthorizationRequest.status consented->responded| state__AuthorizationRequest_responded
+  usecase__IssueImplicitTokenResponse -.->|creates| entity__AccessToken
+  usecase__IssueImplicitTokenResponse -.->|creates| entity__Grant
+  usecase__IssueImplicitTokenResponse -.->|creates| entity__IdToken
+  usecase__IssueImplicitTokenResponse -.->|deletes| entity__Interaction
+  usecase__IssueImplicitTokenResponse -.-> event__EvFrontChannelAccessToken
+  usecase__IssueImplicitTokenResponse -.->|transitions AuthorizationRequest.status consented->responded| state__AuthorizationRequest_responded
+  usecase__LogIn -.->|creates| entity__OpSession
+  %% derived usecase__LogIn -> entity__OpSession via api__LoginApi
+  usecase__LogIn -.-> screen__LoginScreen
+  usecase__LogIn -.->|reads| entity__UserAccount
+  %% derived usecase__LogIn -> entity__UserAccount via api__LoginApi
+  usecase__RecordAdministrativeConsent -.->|creates| entity__Consent
+  %% derived usecase__RecordAdministrativeConsent -> entity__Consent via api__ConsentAdminApi
+  usecase__RecordAdministrativeConsent -.-> screen__ConsentAdminScreen
+  usecase__RecordAdministrativeConsent -.->|reads| entity__Client
+  %% derived usecase__RecordAdministrativeConsent -> entity__Client via api__ConsentAdminApi
+  usecase__RecordAdministrativeConsent -.->|reads| entity__UserAccount
+  %% derived usecase__RecordAdministrativeConsent -> entity__UserAccount via api__ConsentAdminApi
+  usecase__RejectInvalidRequest -.->|deletes| entity__Interaction
+  %% derived usecase__RejectInvalidRequest -> entity__Interaction via api__ErrorResponseApi
+  usecase__RejectInvalidRequest -.->|transitions AuthorizationRequest.status received->failed| state__AuthorizationRequest_failed
+  usecase__RejectInvalidRequest -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__RejectInvalidRequest -> entity__AuthorizationRequest via api__ErrorResponseApi
+  usecase__RequestAuthentication -.->|creates| entity__AuthorizationRequest
+  %% derived usecase__RequestAuthentication -> entity__AuthorizationRequest via api__AuthorizationApi
+  usecase__RequestAuthentication -.->|creates| entity__Interaction
+  %% derived usecase__RequestAuthentication -> entity__Interaction via api__AuthorizationApi
+  usecase__RequestAuthentication -.-> screen__RpSignInScreen
+  usecase__RequestAuthentication -.-> event__EvRequestReceived
+  usecase__RequestAuthentication -.->|reads| entity__Client
+  %% derived usecase__RequestAuthentication -> entity__Client via api__AuthorizationApi
+  usecase__ReturnAccountSelectionRequired -.->|deletes| entity__Interaction
+  %% derived usecase__ReturnAccountSelectionRequired -> entity__Interaction via api__ErrorResponseApi
+  usecase__ReturnAccountSelectionRequired -.->|transitions AuthorizationRequest.status validated->failed| state__AuthorizationRequest_failed
+  usecase__ReturnAccountSelectionRequired -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__ReturnAccountSelectionRequired -> entity__AuthorizationRequest via api__ErrorResponseApi
+  usecase__ReturnConsentRequired -.->|deletes| entity__Interaction
+  %% derived usecase__ReturnConsentRequired -> entity__Interaction via api__ErrorResponseApi
+  usecase__ReturnConsentRequired -.->|transitions AuthorizationRequest.status validated->failed| state__AuthorizationRequest_failed
+  usecase__ReturnConsentRequired -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__ReturnConsentRequired -> entity__AuthorizationRequest via api__ErrorResponseApi
+  usecase__ReturnInteractionRequired -.->|deletes| entity__Interaction
+  %% derived usecase__ReturnInteractionRequired -> entity__Interaction via api__ErrorResponseApi
+  usecase__ReturnInteractionRequired -.->|transitions AuthorizationRequest.status validated->failed| state__AuthorizationRequest_failed
+  usecase__ReturnInteractionRequired -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__ReturnInteractionRequired -> entity__AuthorizationRequest via api__ErrorResponseApi
+  usecase__ReturnLoginRequired -.->|deletes| entity__Interaction
+  %% derived usecase__ReturnLoginRequired -> entity__Interaction via api__ErrorResponseApi
+  usecase__ReturnLoginRequired -.->|transitions AuthorizationRequest.status validated->failed| state__AuthorizationRequest_failed
+  usecase__ReturnLoginRequired -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__ReturnLoginRequired -> entity__AuthorizationRequest via api__ErrorResponseApi
+  usecase__ReuseConsent -.-> event__EvRequestAuthorized
+  usecase__ReuseConsent -.->|reads| entity__Consent
+  %% derived usecase__ReuseConsent -> entity__Consent via api__ConsentLookupApi
+  usecase__ReuseConsent -.->|transitions AuthorizationRequest.status validated->consented| state__AuthorizationRequest_consented
+  usecase__ReuseConsent -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__ReuseConsent -> entity__AuthorizationRequest via api__ConsentLookupApi
+  usecase__ReuseSession -.-> event__EvEndUserAuthenticated
+  usecase__ReuseSession -.->|reads| entity__OpSession
+  %% derived usecase__ReuseSession -> entity__OpSession via api__SessionLookupApi
+  usecase__ReuseSession -.->|transitions Interaction.authentication pending->sso| state__Interaction_sso
+  usecase__ReuseSession -.->|updates| entity__Interaction
+  %% derived usecase__ReuseSession -> entity__Interaction via api__SessionLookupApi
+  usecase__SelectAccount -.-> screen__AccountChooserScreen
+  usecase__SelectAccount -.-> event__EvEndUserAuthenticated
+  usecase__SelectAccount -.->|reads| entity__OpSession
+  %% derived usecase__SelectAccount -> entity__OpSession via api__SessionLookupApi
+  usecase__SelectAccount -.->|transitions Interaction.authentication pending->sso| state__Interaction_sso
+  usecase__SelectAccount -.->|updates| entity__Interaction
+  %% derived usecase__SelectAccount -> entity__Interaction via api__SessionLookupApi
+  usecase__StepUpAuthentication -.-> screen__SecondFactorScreen
+  usecase__StepUpAuthentication -.->|transitions OpSession.auth_level single_factor->multi_factor| state__OpSession_auth_level_multi_factor
+  usecase__StepUpAuthentication -.->|updates| entity__OpSession
+  %% derived usecase__StepUpAuthentication -> entity__OpSession via api__StepUpApi
+  usecase__ValidateRequest -.-> event__EvRequestValidated
+  usecase__ValidateRequest -.->|reads| entity__Client
+  %% derived usecase__ValidateRequest -> entity__Client via api__RequestValidationApi
+  usecase__ValidateRequest -.->|transitions AuthorizationRequest.status received->validated| state__AuthorizationRequest_validated
+  usecase__ValidateRequest -.->|updates| entity__AuthorizationRequest
+  %% derived usecase__ValidateRequest -> entity__AuthorizationRequest via api__RequestValidationApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

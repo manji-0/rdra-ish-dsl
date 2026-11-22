@@ -1,0 +1,82 @@
+%% rdra-ish diagram=sequence scope=buc:BucCodeExchange model=samples/oidc-auth
+%% kinds: actor usecase timer api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__RelyingParty as Relying Party (client application)
+  participant usecase__IssueCodeResponse as Respond with a code (Authorization Code Flow)
+  participant usecase__IssueHybridFullResponse as Respond with a code, an ID Token, and an access token (Hybrid Flow, code id_token token)
+  participant usecase__IssueHybridIdTokenResponse as Respond with a code and an ID Token (Hybrid Flow, code id_token)
+  participant usecase__IssueHybridTokenResponse as Respond with a code and an access token (Hybrid Flow, code token)
+  participant usecase__RedeemCode as Redeem the authorization code
+  participant timer__CodeLifetime as Authorization code lifetime (10 minutes at most)
+  participant usecase__IssueImplicitTokenResponse as Respond with an ID Token and an access token (Implicit Flow, id_token token)
+  participant api__TokenApi as Token endpoint (authorization_code)
+  participant api__CodeHousekeepingApi as Code expiry
+  participant entity__Grant as Authorization grant
+  participant entity__AccessToken as Access token
+  participant entity__AuthorizationCode as Authorization code
+  participant entity__IdToken as ID Token
+  participant entity__RefreshToken as Refresh token (rotation family)
+  participant entity__UserAccount as End-User account
+  participant api__TokenReplayApi as Token endpoint (replayed code)
+  participant api__UserInfoApi as UserInfo endpoint
+  participant api__RefreshApi as Token endpoint (refresh_token)
+  participant api__RevocationApi as Revocation endpoint (refresh token)
+  participant api__AccessTokenRevocationApi as Revocation endpoint (access token)
+  participant api__IntrospectionApi as Introspection endpoint
+  participant api__AccessTokenCascadeApi as Access token revocation on a revoked grant
+  participant api__RefreshTokenCascadeApi as Refresh token revocation on a revoked grant
+  Note over api__TokenApi: 1. Redeem the authorization code
+  actor__RelyingParty ->> api__TokenApi: Redeem the authorization code
+  usecase__IssueCodeResponse ->> api__TokenApi: An authorization code is delivered to the RP
+  usecase__IssueHybridFullResponse ->> api__TokenApi: An authorization code is delivered to the RP
+  usecase__IssueHybridIdTokenResponse ->> api__TokenApi: An authorization code is delivered to the RP
+  usecase__IssueHybridTokenResponse ->> api__TokenApi: An authorization code is delivered to the RP
+  alt The grant of the code is not revoked: Grant.status == Active and AuthorizationCode.status == Issued
+    api__TokenApi ->> entity__Grant: read
+    Note over api__TokenApi: transaction (API atomic boundary)
+    api__TokenApi ->> entity__AccessToken: create
+    api__TokenApi ->> entity__AuthorizationCode: update status Issued -> Redeemed
+    api__TokenApi ->> entity__IdToken: create
+    api__TokenApi ->> entity__RefreshToken: create
+    api__TokenApi -) api__TokenReplayApi: The token endpoint issued the tokens
+    api__TokenApi -) api__UserInfoApi: The token endpoint issued the tokens
+    api__TokenApi -) api__RefreshApi: The token endpoint issued the tokens
+    api__TokenApi -) api__RevocationApi: The token endpoint issued the tokens
+    api__TokenApi -) api__AccessTokenRevocationApi: The token endpoint issued the tokens
+    api__TokenApi -) api__IntrospectionApi: The token endpoint issued the tokens
+    api__TokenApi -->> actor__RelyingParty: done
+  else guard fails
+    api__TokenApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__TokenReplayApi: 2. Reject a replayed code and revoke its grant
+  actor__RelyingParty ->> api__TokenReplayApi: Reject a replayed code and revoke its grant
+  usecase__RedeemCode ->> api__TokenReplayApi: The token endpoint issued the tokens
+  alt AuthorizationCode.status == Redeemed and Grant.status in (Active, Revoked)
+    Note over api__TokenReplayApi: transaction (API atomic boundary)
+    api__TokenReplayApi ->> entity__Grant: update status Active -> Revoked, status Revoked -> Revoked
+    api__TokenReplayApi ->> entity__AuthorizationCode: update status Redeemed -> Replay detected
+    api__TokenReplayApi -) api__AccessTokenCascadeApi: A grant is revoked
+    api__TokenReplayApi -) api__RefreshTokenCascadeApi: A grant is revoked
+    api__TokenReplayApi -->> actor__RelyingParty: done
+  else guard fails
+    api__TokenReplayApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__CodeHousekeepingApi: 3. Expire an unused code
+  timer__CodeLifetime ->> api__CodeHousekeepingApi: Authorization code lifetime (10 minutes at most)
+  alt AuthorizationCode.status == Issued
+    api__CodeHousekeepingApi ->> entity__AuthorizationCode: update status Issued -> Expired
+    api__CodeHousekeepingApi -->> timer__CodeLifetime: done
+  else guard fails
+    api__CodeHousekeepingApi -->> timer__CodeLifetime: rejected
+  end
+  Note over api__UserInfoApi: 4. Read the End-User's claims (UserInfo)
+  actor__RelyingParty ->> api__UserInfoApi: Read the End-User's claims (UserInfo)
+  usecase__IssueHybridFullResponse ->> api__UserInfoApi: An access token is delivered in the fragment
+  usecase__IssueHybridTokenResponse ->> api__UserInfoApi: An access token is delivered in the fragment
+  usecase__IssueImplicitTokenResponse ->> api__UserInfoApi: An access token is delivered in the fragment
+  usecase__RedeemCode ->> api__UserInfoApi: The token endpoint issued the tokens
+  api__UserInfoApi ->> entity__AccessToken: read
+  api__UserInfoApi ->> entity__Grant: read
+  api__UserInfoApi ->> entity__UserAccount: read
+  api__UserInfoApi -->> actor__RelyingParty: done

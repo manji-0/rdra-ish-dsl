@@ -1,0 +1,56 @@
+%% rdra-ish diagram=robustness scope=buc:BucLogout model=samples/oidc-auth
+%% kinds: actor extsystem screen timer api usecase entity
+%% omitted: buc step medium permission event condition
+flowchart LR
+  actor__EndUser(["End-User"]):::actor
+  extsystem__RpCallbackEndpoint[["RP callback endpoints (backchannel logout, CIBA notification, initiate login)"]]:::extsystem
+  screen__LoggedOutScreen["Logged-out page"]:::screen
+  screen__LogoutConfirmScreen["Logout confirmation"]:::screen
+  timer__SessionCheckInterval(("RP's session check interval (RP policy, e.g. every few seconds)")):::timer
+  timer__SessionLifetime(("OP session lifetime (OP policy, e.g. 12 hours)")):::timer
+  api__AccountLogoutApi{{"Account page logout"}}:::api
+  api__CheckSessionApi{{"Check session iframe"}}:::api
+  api__EndSessionApi{{"End session endpoint"}}:::api
+  api__LogoutNoticeApi{{"Logout Token delivery"}}:::api
+  api__LogoutNoticeResultApi{{"Logout Token delivery result"}}:::api
+  api__SessionExpiryApi{{"OP session expiry"}}:::api
+  usecase__RenderFrontchannelLogout("Render the front-channel logout iframes"):::usecase
+  entity__Client[("Registered client")]:::entity
+  entity__IdToken[("ID Token")]:::entity
+  entity__LogoutNotice[("Backchannel logout notice")]:::entity
+  entity__OpSession[("OP session")]:::entity
+  actor__EndUser --> screen__LoggedOutScreen
+  actor__EndUser --> screen__LogoutConfirmScreen
+  api__AccountLogoutApi -.->|The OP session ended| api__LogoutNoticeApi
+  api__AccountLogoutApi -.->|The OP session ended| usecase__RenderFrontchannelLogout
+  api__AccountLogoutApi -->|U| entity__OpSession
+  api__CheckSessionApi -->|R| entity__OpSession
+  api__EndSessionApi -->|R| entity__IdToken
+  api__EndSessionApi -.->|The OP session ended| api__LogoutNoticeApi
+  api__EndSessionApi -.->|The OP session ended| usecase__RenderFrontchannelLogout
+  api__EndSessionApi -->|U| entity__OpSession
+  api__LogoutNoticeApi -.->|A Logout Token is posted to an RP| extsystem__RpCallbackEndpoint
+  api__LogoutNoticeApi -->|C| entity__LogoutNotice
+  api__LogoutNoticeApi -->|R| entity__Client
+  api__LogoutNoticeApi -->|R| entity__OpSession
+  api__LogoutNoticeResultApi -->|U| entity__LogoutNotice
+  api__SessionExpiryApi -.->|The OP session ended| api__LogoutNoticeApi
+  api__SessionExpiryApi -.->|The OP session ended| usecase__RenderFrontchannelLogout
+  api__SessionExpiryApi -->|U| entity__OpSession
+  extsystem__RpCallbackEndpoint -.->|The RP acknowledged the Logout Token| api__LogoutNoticeResultApi
+  extsystem__RpCallbackEndpoint -.->|The RP rejected the Logout Token or did not answer| api__LogoutNoticeResultApi
+  screen__LoggedOutScreen -->|Log out at the OP| api__AccountLogoutApi
+  screen__LoggedOutScreen -->|Log out from the RP (RP-Initiated Logout)| api__EndSessionApi
+  screen__LoggedOutScreen -->|Render the front-channel logout iframes| usecase__RenderFrontchannelLogout
+  screen__LogoutConfirmScreen -->|Log out from the RP (RP-Initiated Logout)| api__EndSessionApi
+  timer__SessionCheckInterval -.-> api__CheckSessionApi
+  timer__SessionLifetime -.-> api__SessionExpiryApi
+  usecase__RenderFrontchannelLogout -->|R| entity__Client
+  usecase__RenderFrontchannelLogout -->|R| entity__OpSession
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef extsystem fill:#e9ecef,stroke:#495057,color:#000;
+  classDef screen fill:#e5dbff,stroke:#5f3dc4,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;

@@ -1,0 +1,73 @@
+%% rdra-ish diagram=sequence scope=buc:BucDeviceSignIn model=samples/oidc-auth
+%% kinds: actor usecase timer screen api entity
+%% omitted: buc step medium permission event condition
+sequenceDiagram
+  actor actor__RelyingParty as Relying Party (client application)
+  actor actor__EndUser as End-User
+  participant usecase__StartDeviceAuthorization as Request a device code
+  participant usecase__ApproveDevice as Approve the device
+  participant timer__DeviceCodeLifetime as Device code lifetime (expires_in of the device authorization response)
+  participant screen__DeviceCodeScreen as User code display on the device
+  participant screen__DeviceVerificationScreen as Device verification page
+  participant api__DeviceAuthorizationApi as Device authorization endpoint
+  participant api__DeviceVerificationApi as Device verification form
+  participant api__DeviceExpiryApi as Device code expiry
+  participant entity__Client as Registered client
+  participant entity__DeviceAuthorization as Device authorization
+  participant entity__UserAccount as End-User account
+  participant api__DevicePollApi as Token endpoint (device_code, pending)
+  participant api__DeviceTokenApi as Token endpoint (device_code)
+  Note over screen__DeviceCodeScreen: 1. Request a device code
+  actor__RelyingParty ->> screen__DeviceCodeScreen: Request a device code
+  screen__DeviceCodeScreen ->> api__DeviceAuthorizationApi: Device authorization endpoint
+  alt The client is active: (Client.status == Active).along(DeviceAuthorization, Client)
+    api__DeviceAuthorizationApi ->> entity__Client: read
+    api__DeviceAuthorizationApi ->> entity__DeviceAuthorization: create
+    api__DeviceAuthorizationApi -) api__DevicePollApi: The device received its codes
+    api__DeviceAuthorizationApi -->> screen__DeviceCodeScreen: done
+  else guard fails
+    api__DeviceAuthorizationApi -->> screen__DeviceCodeScreen: rejected
+  end
+  Note over screen__DeviceVerificationScreen: 2. Approve the device
+  actor__EndUser ->> screen__DeviceVerificationScreen: Approve the device
+  screen__DeviceVerificationScreen ->> api__DeviceVerificationApi: Device verification form
+  alt DeviceAuthorization.status == Pending
+    api__DeviceVerificationApi ->> entity__UserAccount: read
+    api__DeviceVerificationApi ->> entity__DeviceAuthorization: update status Pending -> Approved
+    api__DeviceVerificationApi -) api__DeviceTokenApi: The End-User approved the device
+    api__DeviceVerificationApi -->> screen__DeviceVerificationScreen: done
+  else guard fails
+    api__DeviceVerificationApi -->> screen__DeviceVerificationScreen: rejected
+  end
+  Note over screen__DeviceVerificationScreen: 3. Deny the device
+  actor__EndUser ->> screen__DeviceVerificationScreen: Deny the device
+  screen__DeviceVerificationScreen ->> api__DeviceVerificationApi: Device verification form
+  alt DeviceAuthorization.status == Pending
+    api__DeviceVerificationApi ->> entity__UserAccount: read
+    api__DeviceVerificationApi ->> entity__DeviceAuthorization: update status Pending -> Denied
+    api__DeviceVerificationApi -->> screen__DeviceVerificationScreen: done
+  else guard fails
+    api__DeviceVerificationApi -->> screen__DeviceVerificationScreen: rejected
+  end
+  Note over api__DevicePollApi: 4. Poll while the End-User decides
+  actor__RelyingParty ->> api__DevicePollApi: Poll while the End-User decides
+  usecase__StartDeviceAuthorization ->> api__DevicePollApi: The device received its codes
+  api__DevicePollApi ->> entity__DeviceAuthorization: read
+  api__DevicePollApi -->> actor__RelyingParty: done
+  Note over api__DeviceTokenApi: 5. Redeem the device code
+  actor__RelyingParty ->> api__DeviceTokenApi: Redeem the device code
+  usecase__ApproveDevice ->> api__DeviceTokenApi: The End-User approved the device
+  alt The client is active: (Client.status == Active).along(DeviceAuthorization, Client) and DeviceAuthorization.status == Approved
+    api__DeviceTokenApi ->> entity__DeviceAuthorization: update status Approved -> Redeemed
+    api__DeviceTokenApi -->> actor__RelyingParty: done
+  else guard fails
+    api__DeviceTokenApi -->> actor__RelyingParty: rejected
+  end
+  Note over api__DeviceExpiryApi: 6. Expire the device code
+  timer__DeviceCodeLifetime ->> api__DeviceExpiryApi: Device code lifetime (expires_in of the device authorization response)
+  alt DeviceAuthorization.status in (Pending, Approved)
+    api__DeviceExpiryApi ->> entity__DeviceAuthorization: update status Pending -> Expired, status Approved -> Expired
+    api__DeviceExpiryApi -->> timer__DeviceCodeLifetime: done
+  else guard fails
+    api__DeviceExpiryApi -->> timer__DeviceCodeLifetime: rejected
+  end

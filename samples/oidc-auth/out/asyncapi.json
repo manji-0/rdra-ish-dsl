@@ -1,0 +1,1752 @@
+{
+  "asyncapi": "3.1.0",
+  "channels": {
+    "EvBackchannelApproved": {
+      "address": "EvBackchannelApproved",
+      "messages": {
+        "EvBackchannelApproved": {
+          "$ref": "#/components/messages/EvBackchannelApproved"
+        }
+      },
+      "x-publisher": [
+        "AuthenticationDevice"
+      ]
+    },
+    "EvBackchannelAuthenticationRequested": {
+      "address": "EvBackchannelAuthenticationRequested",
+      "messages": {
+        "EvBackchannelAuthenticationRequested": {
+          "$ref": "#/components/messages/EvBackchannelAuthenticationRequested"
+        }
+      },
+      "x-subscriber": [
+        "AuthenticationDevice"
+      ]
+    },
+    "EvBackchannelDenied": {
+      "address": "EvBackchannelDenied",
+      "messages": {
+        "EvBackchannelDenied": {
+          "$ref": "#/components/messages/EvBackchannelDenied"
+        }
+      },
+      "x-publisher": [
+        "AuthenticationDevice"
+      ]
+    },
+    "EvClientRegistered": {
+      "address": "EvClientRegistered",
+      "messages": {
+        "EvClientRegistered": {
+          "$ref": "#/components/messages/EvClientRegistered"
+        }
+      }
+    },
+    "EvCodeIssued": {
+      "address": "EvCodeIssued",
+      "messages": {
+        "EvCodeIssued": {
+          "$ref": "#/components/messages/EvCodeIssued"
+        }
+      }
+    },
+    "EvConsentWithdrawn": {
+      "address": "EvConsentWithdrawn",
+      "messages": {
+        "EvConsentWithdrawn": {
+          "$ref": "#/components/messages/EvConsentWithdrawn"
+        }
+      }
+    },
+    "EvDeviceApproved": {
+      "address": "EvDeviceApproved",
+      "messages": {
+        "EvDeviceApproved": {
+          "$ref": "#/components/messages/EvDeviceApproved"
+        }
+      }
+    },
+    "EvDeviceCodeIssued": {
+      "address": "EvDeviceCodeIssued",
+      "messages": {
+        "EvDeviceCodeIssued": {
+          "$ref": "#/components/messages/EvDeviceCodeIssued"
+        }
+      }
+    },
+    "EvEndUserAuthenticated": {
+      "address": "EvEndUserAuthenticated",
+      "messages": {
+        "EvEndUserAuthenticated": {
+          "$ref": "#/components/messages/EvEndUserAuthenticated"
+        }
+      }
+    },
+    "EvFrontChannelAccessToken": {
+      "address": "EvFrontChannelAccessToken",
+      "messages": {
+        "EvFrontChannelAccessToken": {
+          "$ref": "#/components/messages/EvFrontChannelAccessToken"
+        }
+      }
+    },
+    "EvGrantRevoked": {
+      "address": "EvGrantRevoked",
+      "messages": {
+        "EvGrantRevoked": {
+          "$ref": "#/components/messages/EvGrantRevoked"
+        }
+      }
+    },
+    "EvLoginInitiated": {
+      "address": "EvLoginInitiated",
+      "messages": {
+        "EvLoginInitiated": {
+          "$ref": "#/components/messages/EvLoginInitiated"
+        }
+      },
+      "x-subscriber": [
+        "RpCallbackEndpoint"
+      ]
+    },
+    "EvLogoutAcknowledged": {
+      "address": "EvLogoutAcknowledged",
+      "messages": {
+        "EvLogoutAcknowledged": {
+          "$ref": "#/components/messages/EvLogoutAcknowledged"
+        }
+      },
+      "x-publisher": [
+        "RpCallbackEndpoint"
+      ]
+    },
+    "EvLogoutRejected": {
+      "address": "EvLogoutRejected",
+      "messages": {
+        "EvLogoutRejected": {
+          "$ref": "#/components/messages/EvLogoutRejected"
+        }
+      },
+      "x-publisher": [
+        "RpCallbackEndpoint"
+      ]
+    },
+    "EvLogoutTokenSent": {
+      "address": "EvLogoutTokenSent",
+      "messages": {
+        "EvLogoutTokenSent": {
+          "$ref": "#/components/messages/EvLogoutTokenSent"
+        }
+      },
+      "x-subscriber": [
+        "RpCallbackEndpoint"
+      ]
+    },
+    "EvPingSent": {
+      "address": "EvPingSent",
+      "messages": {
+        "EvPingSent": {
+          "$ref": "#/components/messages/EvPingSent"
+        }
+      },
+      "x-subscriber": [
+        "RpCallbackEndpoint"
+      ]
+    },
+    "EvProviderDiscovered": {
+      "address": "EvProviderDiscovered",
+      "messages": {
+        "EvProviderDiscovered": {
+          "$ref": "#/components/messages/EvProviderDiscovered"
+        }
+      }
+    },
+    "EvRequestAuthorized": {
+      "address": "EvRequestAuthorized",
+      "messages": {
+        "EvRequestAuthorized": {
+          "$ref": "#/components/messages/EvRequestAuthorized"
+        }
+      }
+    },
+    "EvRequestReceived": {
+      "address": "EvRequestReceived",
+      "messages": {
+        "EvRequestReceived": {
+          "$ref": "#/components/messages/EvRequestReceived"
+        }
+      }
+    },
+    "EvRequestValidated": {
+      "address": "EvRequestValidated",
+      "messages": {
+        "EvRequestValidated": {
+          "$ref": "#/components/messages/EvRequestValidated"
+        }
+      }
+    },
+    "EvSessionEnded": {
+      "address": "EvSessionEnded",
+      "messages": {
+        "EvSessionEnded": {
+          "$ref": "#/components/messages/EvSessionEnded"
+        }
+      }
+    },
+    "EvTokensIssued": {
+      "address": "EvTokensIssued",
+      "messages": {
+        "EvTokensIssued": {
+          "$ref": "#/components/messages/EvTokensIssued"
+        }
+      }
+    },
+    "EvTokensPushed": {
+      "address": "EvTokensPushed",
+      "messages": {
+        "EvTokensPushed": {
+          "$ref": "#/components/messages/EvTokensPushed"
+        }
+      },
+      "x-subscriber": [
+        "RpCallbackEndpoint"
+      ]
+    },
+    "EvTokensRefreshed": {
+      "address": "EvTokensRefreshed",
+      "messages": {
+        "EvTokensRefreshed": {
+          "$ref": "#/components/messages/EvTokensRefreshed"
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "EvBackchannelApproved": {
+        "name": "EvBackchannelApproved",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvBackchannelApproved",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The End-User approved on the device",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "approved",
+            "to": "notified"
+          },
+          {
+            "from": "approved",
+            "to": "pushed"
+          },
+          {
+            "from": "approved",
+            "to": "redeemed"
+          },
+          {
+            "from": "notified",
+            "to": "redeemed"
+          },
+          {
+            "from": "pending",
+            "to": "approved"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "PollBackchannelToken",
+          "PushBackchannelTokens",
+          "RecordDeviceApproval",
+          "SendPingCallback"
+        ]
+      },
+      "EvBackchannelAuthenticationRequested": {
+        "name": "EvBackchannelAuthenticationRequested",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvBackchannelAuthenticationRequested",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The End-User is asked to authenticate on the device",
+        "x-rdra-ish-raised-by-usecases": [
+          "StartBackchannelAuthentication"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvBackchannelDenied": {
+        "name": "EvBackchannelDenied",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvBackchannelDenied",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The End-User declined on the device",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "pending",
+            "to": "denied"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordDeviceDenial"
+        ]
+      },
+      "EvClientRegistered": {
+        "name": "EvClientRegistered",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvClientRegistered",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The client is registered",
+        "x-rdra-ish-raised-by-usecases": [
+          "RegisterClient"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReadClientRegistration"
+        ]
+      },
+      "EvCodeIssued": {
+        "name": "EvCodeIssued",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvCodeIssued",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "An authorization code is delivered to the RP",
+        "x-rdra-ish-raised-by-usecases": [
+          "IssueCodeResponse",
+          "IssueHybridFullResponse",
+          "IssueHybridIdTokenResponse",
+          "IssueHybridTokenResponse"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "issued",
+            "to": "redeemed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RedeemCode"
+        ]
+      },
+      "EvConsentWithdrawn": {
+        "name": "EvConsentWithdrawn",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvConsentWithdrawn",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "A consent is withdrawn",
+        "x-rdra-ish-raised-by-usecases": [
+          "WithdrawConsent"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "active",
+            "to": "revoked"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RevokeGrantOnWithdrawal"
+        ]
+      },
+      "EvDeviceApproved": {
+        "name": "EvDeviceApproved",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDeviceApproved",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The End-User approved the device",
+        "x-rdra-ish-raised-by-usecases": [
+          "ApproveDevice"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "approved",
+            "to": "redeemed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RedeemDeviceCode"
+        ]
+      },
+      "EvDeviceCodeIssued": {
+        "name": "EvDeviceCodeIssued",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvDeviceCodeIssued",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The device received its codes",
+        "x-rdra-ish-raised-by-usecases": [
+          "StartDeviceAuthorization"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "PollDevicePending"
+        ]
+      },
+      "EvEndUserAuthenticated": {
+        "name": "EvEndUserAuthenticated",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvEndUserAuthenticated",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The End-User is authenticated for the request",
+        "x-rdra-ish-raised-by-usecases": [
+          "AuthenticateEndUser",
+          "ReuseSession",
+          "SelectAccount"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "validated",
+            "to": "consented"
+          },
+          {
+            "from": "validated",
+            "to": "failed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReturnConsentRequired",
+          "ReuseConsent"
+        ]
+      },
+      "EvFrontChannelAccessToken": {
+        "name": "EvFrontChannelAccessToken",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvFrontChannelAccessToken",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "An access token is delivered in the fragment",
+        "x-rdra-ish-raised-by-usecases": [
+          "IssueHybridFullResponse",
+          "IssueHybridTokenResponse",
+          "IssueImplicitTokenResponse"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "active",
+            "to": "revoked"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "GetUserInfo",
+          "IntrospectToken",
+          "RevokeAccessToken"
+        ]
+      },
+      "EvGrantRevoked": {
+        "name": "EvGrantRevoked",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvGrantRevoked",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "A grant is revoked",
+        "x-rdra-ish-raised-by-usecases": [
+          "DetectRefreshTokenReuse",
+          "RejectCodeReplay",
+          "RevokeGrantOnWithdrawal",
+          "RevokeRefreshToken"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "active",
+            "to": "revoked"
+          },
+          {
+            "from": "active",
+            "to": "revoked"
+          },
+          {
+            "from": "rotated",
+            "to": "revoked"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RevokeGrantAccessTokens",
+          "RevokeGrantRefreshTokens"
+        ]
+      },
+      "EvLoginInitiated": {
+        "name": "EvLoginInitiated",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvLoginInitiated",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The OP sends the browser to the client's initiate_login_uri",
+        "x-rdra-ish-raised-by-usecases": [
+          "InitiateThirdPartyLogin"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvLogoutAcknowledged": {
+        "name": "EvLogoutAcknowledged",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvLogoutAcknowledged",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The RP acknowledged the Logout Token",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "pending",
+            "to": "delivered"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordLogoutDelivered"
+        ]
+      },
+      "EvLogoutRejected": {
+        "name": "EvLogoutRejected",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvLogoutRejected",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The RP rejected the Logout Token or did not answer",
+        "x-rdra-ish-raised-by-usecases": [],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "pending",
+            "to": "failed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RecordLogoutFailed"
+        ]
+      },
+      "EvLogoutTokenSent": {
+        "name": "EvLogoutTokenSent",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvLogoutTokenSent",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "A Logout Token is posted to an RP",
+        "x-rdra-ish-raised-by-usecases": [
+          "SendBackchannelLogout"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvPingSent": {
+        "name": "EvPingSent",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvPingSent",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The ping callback is sent",
+        "x-rdra-ish-raised-by-usecases": [
+          "SendPingCallback"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "approved",
+            "to": "redeemed"
+          },
+          {
+            "from": "notified",
+            "to": "redeemed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "PollBackchannelToken"
+        ]
+      },
+      "EvProviderDiscovered": {
+        "name": "EvProviderDiscovered",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvProviderDiscovered",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The RP read the OP configuration",
+        "x-rdra-ish-raised-by-usecases": [
+          "DiscoverProvider"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RegisterClient"
+        ]
+      },
+      "EvRequestAuthorized": {
+        "name": "EvRequestAuthorized",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRequestAuthorized",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The authentication request is authorized",
+        "x-rdra-ish-raised-by-usecases": [
+          "GrantConsent",
+          "ReuseConsent"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "consented",
+            "to": "responded"
+          },
+          {
+            "from": "consented",
+            "to": "responded"
+          },
+          {
+            "from": "consented",
+            "to": "responded"
+          },
+          {
+            "from": "consented",
+            "to": "responded"
+          },
+          {
+            "from": "consented",
+            "to": "responded"
+          },
+          {
+            "from": "consented",
+            "to": "responded"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "IssueCodeResponse",
+          "IssueHybridFullResponse",
+          "IssueHybridIdTokenResponse",
+          "IssueHybridTokenResponse",
+          "IssueIdTokenResponse",
+          "IssueImplicitTokenResponse"
+        ]
+      },
+      "EvRequestReceived": {
+        "name": "EvRequestReceived",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRequestReceived",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The authentication request arrived",
+        "x-rdra-ish-raised-by-usecases": [
+          "RequestAuthentication"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "received",
+            "to": "failed"
+          },
+          {
+            "from": "received",
+            "to": "validated"
+          },
+          {
+            "from": "received",
+            "to": "validated"
+          },
+          {
+            "from": "received",
+            "to": "validated"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RejectInvalidRequest",
+          "ValidateRequest"
+        ]
+      },
+      "EvRequestValidated": {
+        "name": "EvRequestValidated",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvRequestValidated",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The authentication request is valid",
+        "x-rdra-ish-raised-by-usecases": [
+          "ValidateRequest"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "pending",
+            "to": "sso"
+          },
+          {
+            "from": "pending",
+            "to": "sso"
+          },
+          {
+            "from": "validated",
+            "to": "failed"
+          },
+          {
+            "from": "validated",
+            "to": "failed"
+          },
+          {
+            "from": "validated",
+            "to": "failed"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "ReturnAccountSelectionRequired",
+          "ReturnInteractionRequired",
+          "ReturnLoginRequired",
+          "ReuseSession"
+        ]
+      },
+      "EvSessionEnded": {
+        "name": "EvSessionEnded",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvSessionEnded",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The OP session ended",
+        "x-rdra-ish-raised-by-usecases": [
+          "ExpireSession",
+          "LogOutAtOp",
+          "LogOutFromRp"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "RenderFrontchannelLogout",
+          "SendBackchannelLogout"
+        ]
+      },
+      "EvTokensIssued": {
+        "name": "EvTokensIssued",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvTokensIssued",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The token endpoint issued the tokens",
+        "x-rdra-ish-raised-by-usecases": [
+          "RedeemCode"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "active",
+            "to": "active"
+          },
+          {
+            "from": "active",
+            "to": "revoked"
+          },
+          {
+            "from": "active",
+            "to": "revoked"
+          },
+          {
+            "from": "active",
+            "to": "revoked"
+          },
+          {
+            "from": "active",
+            "to": "revoked"
+          },
+          {
+            "from": "active",
+            "to": "rotated"
+          },
+          {
+            "from": "expired",
+            "to": "active"
+          },
+          {
+            "from": "redeemed",
+            "to": "replayed"
+          },
+          {
+            "from": "revoked",
+            "to": "active"
+          },
+          {
+            "from": "revoked",
+            "to": "revoked"
+          },
+          {
+            "from": "revoked",
+            "to": "revoked"
+          },
+          {
+            "from": "rotated",
+            "to": "revoked"
+          },
+          {
+            "from": "rotated",
+            "to": "rotated"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "GetUserInfo",
+          "IntrospectToken",
+          "RefreshTokens",
+          "RejectCodeReplay",
+          "RevokeAccessToken",
+          "RevokeRefreshToken"
+        ]
+      },
+      "EvTokensPushed": {
+        "name": "EvTokensPushed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvTokensPushed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The tokens are pushed",
+        "x-rdra-ish-raised-by-usecases": [
+          "PushBackchannelTokens"
+        ],
+        "x-rdra-ish-transitions": [],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": []
+      },
+      "EvTokensRefreshed": {
+        "name": "EvTokensRefreshed",
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "x-rdra-ish-event-id": "EvTokensRefreshed",
+          "x-rdra-ish-payload": "unspecified"
+        },
+        "title": "The tokens were refreshed",
+        "x-rdra-ish-raised-by-usecases": [
+          "RefreshTokens"
+        ],
+        "x-rdra-ish-transitions": [
+          {
+            "from": "active",
+            "to": "revoked"
+          },
+          {
+            "from": "revoked",
+            "to": "revoked"
+          },
+          {
+            "from": "rotated",
+            "to": "revoked"
+          }
+        ],
+        "x-rdra-ish-triggers-bucs": [],
+        "x-rdra-ish-triggers-usecases": [
+          "DetectRefreshTokenReuse"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "RDRA-ish event catalog",
+    "version": "0.1.0"
+  },
+  "operations": {
+    "consumeEvBackchannelApproved": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvBackchannelApproved"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvBackchannelApproved/messages/EvBackchannelApproved"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "approved",
+          "to": "notified"
+        },
+        {
+          "from": "approved",
+          "to": "pushed"
+        },
+        {
+          "from": "approved",
+          "to": "redeemed"
+        },
+        {
+          "from": "notified",
+          "to": "redeemed"
+        },
+        {
+          "from": "pending",
+          "to": "approved"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "PollBackchannelToken",
+        "PushBackchannelTokens",
+        "RecordDeviceApproval",
+        "SendPingCallback"
+      ]
+    },
+    "consumeEvBackchannelDenied": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvBackchannelDenied"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvBackchannelDenied/messages/EvBackchannelDenied"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "pending",
+          "to": "denied"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordDeviceDenial"
+      ]
+    },
+    "consumeEvClientRegistered": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvClientRegistered"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClientRegistered/messages/EvClientRegistered"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReadClientRegistration"
+      ]
+    },
+    "consumeEvCodeIssued": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvCodeIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvCodeIssued/messages/EvCodeIssued"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "issued",
+          "to": "redeemed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RedeemCode"
+      ]
+    },
+    "consumeEvConsentWithdrawn": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvConsentWithdrawn"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvConsentWithdrawn/messages/EvConsentWithdrawn"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "active",
+          "to": "revoked"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RevokeGrantOnWithdrawal"
+      ]
+    },
+    "consumeEvDeviceApproved": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDeviceApproved"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDeviceApproved/messages/EvDeviceApproved"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "approved",
+          "to": "redeemed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RedeemDeviceCode"
+      ]
+    },
+    "consumeEvDeviceCodeIssued": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvDeviceCodeIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDeviceCodeIssued/messages/EvDeviceCodeIssued"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "PollDevicePending"
+      ]
+    },
+    "consumeEvEndUserAuthenticated": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvEndUserAuthenticated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvEndUserAuthenticated/messages/EvEndUserAuthenticated"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "validated",
+          "to": "consented"
+        },
+        {
+          "from": "validated",
+          "to": "failed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReturnConsentRequired",
+        "ReuseConsent"
+      ]
+    },
+    "consumeEvFrontChannelAccessToken": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvFrontChannelAccessToken"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFrontChannelAccessToken/messages/EvFrontChannelAccessToken"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "active",
+          "to": "revoked"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "GetUserInfo",
+        "IntrospectToken",
+        "RevokeAccessToken"
+      ]
+    },
+    "consumeEvGrantRevoked": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvGrantRevoked"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvGrantRevoked/messages/EvGrantRevoked"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "active",
+          "to": "revoked"
+        },
+        {
+          "from": "active",
+          "to": "revoked"
+        },
+        {
+          "from": "rotated",
+          "to": "revoked"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RevokeGrantAccessTokens",
+        "RevokeGrantRefreshTokens"
+      ]
+    },
+    "consumeEvLogoutAcknowledged": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvLogoutAcknowledged"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvLogoutAcknowledged/messages/EvLogoutAcknowledged"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "pending",
+          "to": "delivered"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordLogoutDelivered"
+      ]
+    },
+    "consumeEvLogoutRejected": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvLogoutRejected"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvLogoutRejected/messages/EvLogoutRejected"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "pending",
+          "to": "failed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RecordLogoutFailed"
+      ]
+    },
+    "consumeEvPingSent": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvPingSent"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPingSent/messages/EvPingSent"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "approved",
+          "to": "redeemed"
+        },
+        {
+          "from": "notified",
+          "to": "redeemed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "PollBackchannelToken"
+      ]
+    },
+    "consumeEvProviderDiscovered": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvProviderDiscovered"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvProviderDiscovered/messages/EvProviderDiscovered"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RegisterClient"
+      ]
+    },
+    "consumeEvRequestAuthorized": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRequestAuthorized"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRequestAuthorized/messages/EvRequestAuthorized"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "consented",
+          "to": "responded"
+        },
+        {
+          "from": "consented",
+          "to": "responded"
+        },
+        {
+          "from": "consented",
+          "to": "responded"
+        },
+        {
+          "from": "consented",
+          "to": "responded"
+        },
+        {
+          "from": "consented",
+          "to": "responded"
+        },
+        {
+          "from": "consented",
+          "to": "responded"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "IssueCodeResponse",
+        "IssueHybridFullResponse",
+        "IssueHybridIdTokenResponse",
+        "IssueHybridTokenResponse",
+        "IssueIdTokenResponse",
+        "IssueImplicitTokenResponse"
+      ]
+    },
+    "consumeEvRequestReceived": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRequestReceived"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRequestReceived/messages/EvRequestReceived"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "received",
+          "to": "failed"
+        },
+        {
+          "from": "received",
+          "to": "validated"
+        },
+        {
+          "from": "received",
+          "to": "validated"
+        },
+        {
+          "from": "received",
+          "to": "validated"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RejectInvalidRequest",
+        "ValidateRequest"
+      ]
+    },
+    "consumeEvRequestValidated": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvRequestValidated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRequestValidated/messages/EvRequestValidated"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "pending",
+          "to": "sso"
+        },
+        {
+          "from": "pending",
+          "to": "sso"
+        },
+        {
+          "from": "validated",
+          "to": "failed"
+        },
+        {
+          "from": "validated",
+          "to": "failed"
+        },
+        {
+          "from": "validated",
+          "to": "failed"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "ReturnAccountSelectionRequired",
+        "ReturnInteractionRequired",
+        "ReturnLoginRequired",
+        "ReuseSession"
+      ]
+    },
+    "consumeEvSessionEnded": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvSessionEnded"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSessionEnded/messages/EvSessionEnded"
+        }
+      ],
+      "x-rdra-ish-transitions": [],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "RenderFrontchannelLogout",
+        "SendBackchannelLogout"
+      ]
+    },
+    "consumeEvTokensIssued": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvTokensIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvTokensIssued/messages/EvTokensIssued"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "active",
+          "to": "active"
+        },
+        {
+          "from": "active",
+          "to": "revoked"
+        },
+        {
+          "from": "active",
+          "to": "revoked"
+        },
+        {
+          "from": "active",
+          "to": "revoked"
+        },
+        {
+          "from": "active",
+          "to": "revoked"
+        },
+        {
+          "from": "active",
+          "to": "rotated"
+        },
+        {
+          "from": "expired",
+          "to": "active"
+        },
+        {
+          "from": "redeemed",
+          "to": "replayed"
+        },
+        {
+          "from": "revoked",
+          "to": "active"
+        },
+        {
+          "from": "revoked",
+          "to": "revoked"
+        },
+        {
+          "from": "revoked",
+          "to": "revoked"
+        },
+        {
+          "from": "rotated",
+          "to": "revoked"
+        },
+        {
+          "from": "rotated",
+          "to": "rotated"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "GetUserInfo",
+        "IntrospectToken",
+        "RefreshTokens",
+        "RejectCodeReplay",
+        "RevokeAccessToken",
+        "RevokeRefreshToken"
+      ]
+    },
+    "consumeEvTokensRefreshed": {
+      "action": "receive",
+      "channel": {
+        "$ref": "#/channels/EvTokensRefreshed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvTokensRefreshed/messages/EvTokensRefreshed"
+        }
+      ],
+      "x-rdra-ish-transitions": [
+        {
+          "from": "active",
+          "to": "revoked"
+        },
+        {
+          "from": "revoked",
+          "to": "revoked"
+        },
+        {
+          "from": "rotated",
+          "to": "revoked"
+        }
+      ],
+      "x-rdra-ish-triggers-bucs": [],
+      "x-rdra-ish-triggers-usecases": [
+        "DetectRefreshTokenReuse"
+      ]
+    },
+    "publishEvBackchannelAuthenticationRequested": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvBackchannelAuthenticationRequested"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvBackchannelAuthenticationRequested/messages/EvBackchannelAuthenticationRequested"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "StartBackchannelAuthentication"
+      ]
+    },
+    "publishEvClientRegistered": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvClientRegistered"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvClientRegistered/messages/EvClientRegistered"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RegisterClient"
+      ]
+    },
+    "publishEvCodeIssued": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvCodeIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvCodeIssued/messages/EvCodeIssued"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "IssueCodeResponse",
+        "IssueHybridFullResponse",
+        "IssueHybridIdTokenResponse",
+        "IssueHybridTokenResponse"
+      ]
+    },
+    "publishEvConsentWithdrawn": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvConsentWithdrawn"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvConsentWithdrawn/messages/EvConsentWithdrawn"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "WithdrawConsent"
+      ]
+    },
+    "publishEvDeviceApproved": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvDeviceApproved"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDeviceApproved/messages/EvDeviceApproved"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ApproveDevice"
+      ]
+    },
+    "publishEvDeviceCodeIssued": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvDeviceCodeIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvDeviceCodeIssued/messages/EvDeviceCodeIssued"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "StartDeviceAuthorization"
+      ]
+    },
+    "publishEvEndUserAuthenticated": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvEndUserAuthenticated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvEndUserAuthenticated/messages/EvEndUserAuthenticated"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "AuthenticateEndUser",
+        "ReuseSession",
+        "SelectAccount"
+      ]
+    },
+    "publishEvFrontChannelAccessToken": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvFrontChannelAccessToken"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvFrontChannelAccessToken/messages/EvFrontChannelAccessToken"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "IssueHybridFullResponse",
+        "IssueHybridTokenResponse",
+        "IssueImplicitTokenResponse"
+      ]
+    },
+    "publishEvGrantRevoked": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvGrantRevoked"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvGrantRevoked/messages/EvGrantRevoked"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DetectRefreshTokenReuse",
+        "RejectCodeReplay",
+        "RevokeGrantOnWithdrawal",
+        "RevokeRefreshToken"
+      ]
+    },
+    "publishEvLoginInitiated": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvLoginInitiated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvLoginInitiated/messages/EvLoginInitiated"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "InitiateThirdPartyLogin"
+      ]
+    },
+    "publishEvLogoutTokenSent": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvLogoutTokenSent"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvLogoutTokenSent/messages/EvLogoutTokenSent"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "SendBackchannelLogout"
+      ]
+    },
+    "publishEvPingSent": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvPingSent"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvPingSent/messages/EvPingSent"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "SendPingCallback"
+      ]
+    },
+    "publishEvProviderDiscovered": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvProviderDiscovered"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvProviderDiscovered/messages/EvProviderDiscovered"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "DiscoverProvider"
+      ]
+    },
+    "publishEvRequestAuthorized": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvRequestAuthorized"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRequestAuthorized/messages/EvRequestAuthorized"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "GrantConsent",
+        "ReuseConsent"
+      ]
+    },
+    "publishEvRequestReceived": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvRequestReceived"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRequestReceived/messages/EvRequestReceived"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RequestAuthentication"
+      ]
+    },
+    "publishEvRequestValidated": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvRequestValidated"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvRequestValidated/messages/EvRequestValidated"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ValidateRequest"
+      ]
+    },
+    "publishEvSessionEnded": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvSessionEnded"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvSessionEnded/messages/EvSessionEnded"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "ExpireSession",
+        "LogOutAtOp",
+        "LogOutFromRp"
+      ]
+    },
+    "publishEvTokensIssued": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvTokensIssued"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvTokensIssued/messages/EvTokensIssued"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RedeemCode"
+      ]
+    },
+    "publishEvTokensPushed": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvTokensPushed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvTokensPushed/messages/EvTokensPushed"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "PushBackchannelTokens"
+      ]
+    },
+    "publishEvTokensRefreshed": {
+      "action": "send",
+      "channel": {
+        "$ref": "#/channels/EvTokensRefreshed"
+      },
+      "messages": [
+        {
+          "$ref": "#/channels/EvTokensRefreshed/messages/EvTokensRefreshed"
+        }
+      ],
+      "x-rdra-ish-raised-by-usecases": [
+        "RefreshTokens"
+      ]
+    }
+  }
+}

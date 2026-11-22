@@ -1,0 +1,20 @@
+%% rdra-ish diagram=state scope=entity:LogoutNotice model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "LogoutNotice.status" as statemodel__LogoutNotice_status {
+    [*] --> state__LogoutNotice_pending
+    state "Pending" as state__LogoutNotice_pending
+    state "Delivered" as state__LogoutNotice_delivered
+    state "Failed" as state__LogoutNotice_failed
+    %% transition usecase__RecordLogoutDelivered
+    state__LogoutNotice_pending --> state__LogoutNotice_delivered : Record the RP's acknowledgement
+    %% transition usecase__RecordLogoutFailed
+    state__LogoutNotice_pending --> state__LogoutNotice_failed : Record a failed Logout Token delivery
+    state__LogoutNotice_delivered --> [*]
+    state__LogoutNotice_failed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__LogoutNotice_delivered stateend
+  class state__LogoutNotice_failed stateend

@@ -1,0 +1,99 @@
+module buc.signing_keys
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+buc BucSigningKeys "Rotate the ID Token signing keys"
+  description "The OP publishes the next key in its JWK Set before it signs with it, switches signing to it, and retires the old key once the ID Tokens it signed have expired. RPs that meet an unknown kid fetch the JWK Set again."
+
+// Core §10.1.1: "the signer can begin using a new key at its discretion and signals the
+// change to the verifier using the kid value"; the verifier fetches the jwks_uri again.
+usecase PublishNextKey "Publish the next signing key"
+  description "Generate a key pair and add its public key to the JWK Set, so RPs cache it before it signs."
+
+usecase ActivateKey "Start signing with the published key"
+  description "Sign new ID Tokens with the key published earlier; its kid appears in their headers."
+
+usecase RetireKey "Retire a signing key"
+  description "Remove a key from the JWK Set after the last ID Token it signed has expired."
+
+timer KeyRotationSchedule "Signing key rotation schedule (OP policy, e.g. every 90 days)"
+
+screen KeyAdminScreen "Signing keys"
+
+api KeyAdminApi "Signing key administration"
+  method POST
+  path "/admin/keys"
+  mode sync
+
+api KeyRotationApi "Signing key rotation"
+
+performs(OpAdministrator, PublishNextKey)
+belongs(BucSigningKeys, ClientOnboarding).by(AdminConsole)
+
+contains(BucSigningKeys, PublishNextKey)
+contains(BucSigningKeys, ActivateKey)
+contains(BucSigningKeys, RetireKey)
+contains(OpenIdProvider, KeyAdminApi)
+contains(OpenIdProvider, KeyRotationApi)
+
+displays(PublishNextKey, KeyAdminScreen)
+invokes(PublishNextKey, KeyAdminApi)
+creates(KeyAdminApi, SigningKey)
+shows(KeyAdminScreen, SigningKey)
+
+triggers(KeyRotationSchedule, ActivateKey)
+invokes(ActivateKey, KeyRotationApi)
+updates(KeyRotationApi, SigningKey)
+transitions(ActivateKey, SigningKey.status, published -> active)
+
+triggers(KeyRotationSchedule, RetireKey)
+invokes(RetireKey, KeyRotationApi)
+transitions(RetireKey, SigningKey.status, active -> retired)
+
+requires_permission(PublishNextKey, OpAdministration)
+requires_medium(PublishNextKey, AdminConsole)
+requires_permission(KeyAdminApi, OpAdministration)
+
+field KeyIdField "kid"
+  access readonly
+  required true
+  source system
+
+contains(KeyAdminScreen, KeyIdField)
+maps_field(KeyIdField, SigningKey.kid)
+
+// Business flow
+flow KeyRotationFlow "Key rotation"
+step PublishKeyStep "Publish the next key"
+step ActivateKeyStep "Sign with it"
+step RetireKeyStep "Retire the old key"
+
+contains(BucSigningKeys, KeyRotationFlow)
+contains(KeyRotationFlow, PublishKeyStep)
+contains(KeyRotationFlow, ActivateKeyStep)
+contains(KeyRotationFlow, RetireKeyStep)
+precedes(PublishKeyStep, ActivateKeyStep)
+precedes(ActivateKeyStep, RetireKeyStep)
+
+covers(PublishKeyStep, PublishNextKey)
+covers(ActivateKeyStep, ActivateKey)
+covers(ActivateKeyStep, KeyRotationSchedule)
+covers(RetireKeyStep, RetireKey)
+
+performs(OpAdministrator, PublishKeyStep)
+
+// Requirement traceability
+requirement ReqRotateKeysSafely "Signing keys rotate without breaking ID Token validation"
+  priority "should"
+  source "OpenID Connect Core 1.0 §10.1.1"
+  stakeholder "OP operator"
+  stakeholder "RP developer"
+  acceptance_criteria "A key is in the JWK Set before it signs, and stays there until the ID Tokens it signed expire."
+  status "accepted"
+
+motivates(ReqRotateKeysSafely, BucSigningKeys)
+achieves(ReqRotateKeysSafely, SecureSignIn)
+achieves(ReqRotateKeysSafely, OpenInterop)

@@ -1,0 +1,86 @@
+%% rdra-ish diagram=usecase scope=buc:BucCodeExchange model=samples/oidc-auth
+%% layers: value=システム価値 environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: actor timer usecase event entity state condition
+%% omitted: buc step medium permission api
+flowchart LR
+  subgraph layer_value["システム価値"]
+    actor__RelyingParty(["Relying Party (client application)"]):::actor
+    %% desc actor__RelyingParty: Registers itself, sends the End-User to the authorization endpoint, redeems codes, refreshes and revokes tokens, calls UserInfo, polls for device and CIBA tokens, and starts a logout.
+  end
+  subgraph layer_environment["システム外部環境"]
+    timer__CodeLifetime(("Authorization code lifetime (10 minutes at most)")):::timer
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__ExpireCode("Expire an unused code"):::usecase
+    %% desc usecase__ExpireCode: Mark a code nobody redeemed within its lifetime as expired.
+    usecase__GetUserInfo("Read the End-User's claims (UserInfo)"):::usecase
+    %% desc usecase__GetUserInfo: GET /userinfo with the access token, and receive the sub and the claims the End-User consented to. The sub must match the sub of the ID Token (Core §5.3.2).
+    usecase__RedeemCode("Redeem the authorization code"):::usecase
+    %% desc usecase__RedeemCode: POST grant_type=authorization_code with the code, the redirect_uri, the client authentication, and the code_verifier, and receive the ID Token, the access token, and the refresh token.
+    usecase__RejectCodeReplay("Reject a replayed code and revoke its grant"):::usecase
+    %% desc usecase__RejectCodeReplay: Answer invalid_grant to a second redemption of the same code and revoke the grant issued from it.
+    event__EvCodeIssued>"An authorization code is delivered to the RP"]:::event
+    event__EvFrontChannelAccessToken>"An access token is delivered in the fragment"]:::event
+    event__EvGrantRevoked>"A grant is revoked"]:::event
+    event__EvTokensIssued>"The token endpoint issued the tokens"]:::event
+  end
+  subgraph layer_system["システム"]
+    entity__AccessToken[("Access token")]:::entity
+    entity__AuthorizationCode[("Authorization code")]:::entity
+    entity__Grant[("Authorization grant")]:::entity
+    entity__IdToken[("ID Token")]:::entity
+    entity__RefreshToken[("Refresh token (rotation family)")]:::entity
+    entity__UserAccount[("End-User account")]:::entity
+    state__AuthorizationCode_expired((("Expired"))):::state
+    state__AuthorizationCode_issued((("Issued"))):::state
+    state__AuthorizationCode_redeemed((("Redeemed"))):::state
+    state__AuthorizationCode_replayed((("Replay detected"))):::state
+    state__Grant_active((("Active"))):::state
+    state__Grant_revoked((("Revoked"))):::state
+    condition__CodeGrantActive{"The grant of the code is not revoked"}:::condition
+  end
+  actor__RelyingParty -.-> usecase__GetUserInfo
+  actor__RelyingParty -.-> usecase__RedeemCode
+  actor__RelyingParty -.-> usecase__RejectCodeReplay
+  condition__CodeGrantActive -.->|applies_to| usecase__RedeemCode
+  event__EvCodeIssued -.-> usecase__RedeemCode
+  event__EvFrontChannelAccessToken -.-> usecase__GetUserInfo
+  event__EvTokensIssued -.-> usecase__GetUserInfo
+  event__EvTokensIssued -.-> usecase__RejectCodeReplay
+  timer__CodeLifetime -.-> usecase__ExpireCode
+  usecase__ExpireCode -.->|transitions AuthorizationCode.status issued->expired| state__AuthorizationCode_expired
+  usecase__ExpireCode -.->|updates| entity__AuthorizationCode
+  %% derived usecase__ExpireCode -> entity__AuthorizationCode via api__CodeHousekeepingApi
+  usecase__GetUserInfo -.->|reads| entity__AccessToken
+  %% derived usecase__GetUserInfo -> entity__AccessToken via api__UserInfoApi
+  usecase__GetUserInfo -.->|reads| entity__Grant
+  %% derived usecase__GetUserInfo -> entity__Grant via api__UserInfoApi
+  usecase__GetUserInfo -.->|reads| entity__UserAccount
+  %% derived usecase__GetUserInfo -> entity__UserAccount via api__UserInfoApi
+  usecase__RedeemCode -.->|creates| entity__AccessToken
+  %% derived usecase__RedeemCode -> entity__AccessToken via api__TokenApi
+  usecase__RedeemCode -.->|creates| entity__IdToken
+  %% derived usecase__RedeemCode -> entity__IdToken via api__TokenApi
+  usecase__RedeemCode -.->|creates| entity__RefreshToken
+  %% derived usecase__RedeemCode -> entity__RefreshToken via api__TokenApi
+  usecase__RedeemCode -.-> event__EvTokensIssued
+  usecase__RedeemCode -.->|reads| entity__Grant
+  %% derived usecase__RedeemCode -> entity__Grant via api__TokenApi
+  usecase__RedeemCode -.->|transitions AuthorizationCode.status issued->redeemed| state__AuthorizationCode_redeemed
+  usecase__RedeemCode -.->|updates| entity__AuthorizationCode
+  %% derived usecase__RedeemCode -> entity__AuthorizationCode via api__TokenApi
+  usecase__RejectCodeReplay -.-> event__EvGrantRevoked
+  usecase__RejectCodeReplay -.->|transitions AuthorizationCode.status redeemed->replayed| state__AuthorizationCode_replayed
+  usecase__RejectCodeReplay -.->|transitions Grant.status active->revoked| state__Grant_revoked
+  usecase__RejectCodeReplay -.->|transitions Grant.status revoked->revoked| state__Grant_revoked
+  usecase__RejectCodeReplay -.->|updates| entity__AuthorizationCode
+  %% derived usecase__RejectCodeReplay -> entity__AuthorizationCode via api__TokenReplayApi
+  usecase__RejectCodeReplay -.->|updates| entity__Grant
+  %% derived usecase__RejectCodeReplay -> entity__Grant via api__TokenReplayApi
+  classDef actor fill:#ffe3e3,stroke:#c92a2a,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

@@ -1,0 +1,196 @@
+module buc.code_exchange
+
+import shared.actors
+import shared.entities
+import shared.biz
+import shared.goals
+
+buc BucCodeExchange "Redeem the code and read the End-User's claims"
+  description "The RP redeems the authorization code at the token endpoint with its client authentication or the PKCE code_verifier, receives the ID Token, the access token, and the refresh token, validates the ID Token, and reads the End-User's claims from UserInfo. A code presented a second time revokes everything issued from it; a code nobody redeems expires."
+
+// Core §3.1.3.1 and §3.1.3.2: the token request and its validation; RFC 7636 §4.6: the
+// code_verifier is checked against the code_challenge.
+usecase RedeemCode "Redeem the authorization code"
+  description "POST grant_type=authorization_code with the code, the redirect_uri, the client authentication, and the code_verifier, and receive the ID Token, the access token, and the refresh token."
+  precondition "The code is unused and unexpired, was issued to this client for this redirect_uri, and the code_verifier matches."
+  postcondition "The RP validates the ID Token (Core §3.1.3.7): iss, aud, exp, iat, nonce, and the signature with the OP's JWK Set."
+  error "invalid_grant (RFC 6749 §5.2): the code is unknown, expired, used, or the verifier does not match."
+
+// RFC 6749 §4.1.2: "If an authorization code is used more than once, the authorization server
+// MUST deny the request and SHOULD revoke (when possible) all tokens previously issued based
+// on that authorization code."
+usecase RejectCodeReplay "Reject a replayed code and revoke its grant"
+  description "Answer invalid_grant to a second redemption of the same code and revoke the grant issued from it."
+
+// RFC 6749 §4.1.2: the code "MUST expire shortly after it is issued".
+usecase ExpireCode "Expire an unused code" description "Mark a code nobody redeemed within its lifetime as expired."
+
+// Core §5.3: the UserInfo endpoint returns the claims about the End-User the access token
+// grants.
+usecase GetUserInfo "Read the End-User's claims (UserInfo)"
+  description "GET /userinfo with the access token, and receive the sub and the claims the End-User consented to. The sub must match the sub of the ID Token (Core §5.3.2)."
+  precondition "The access token is active and its grant is not revoked."
+  error "invalid_token (RFC 6750 §3.1)."
+
+api TokenApi "Token endpoint (authorization_code)"
+  method POST
+  path "/token"
+  mode sync
+  auth client
+
+api TokenReplayApi "Token endpoint (replayed code)"
+api CodeHousekeepingApi "Code expiry"
+
+api UserInfoApi "UserInfo endpoint"
+  method GET
+  path "/userinfo"
+  idempotency "idempotent"
+  mode sync
+  auth bearer
+
+dto TokenRequest "Token request" {
+  grant_type: String
+  code: String @null
+  redirect_uri: String @null
+  code_verifier: String @null
+  refresh_token: String @null
+  device_code: String @null
+  auth_req_id: String @null
+  client_id: String @null
+  client_assertion: String @null
+}
+
+dto TokenResponse "Token response" {
+  access_token: String
+  token_type: String
+  expires_in: Int
+  refresh_token: String @null
+  id_token: String @null
+}
+
+dto TokenError "Token error response" {
+  error: String
+  error_description: String @null
+}
+
+dto UserInfoResponse "UserInfo response" {
+  sub: String
+  name: String @null
+  email: String @null
+  email_verified: Bool @null
+}
+
+request(TokenApi, TokenRequest)
+response(TokenApi, TokenResponse)
+error_response(TokenApi, TokenError)
+response(TokenReplayApi, TokenError)
+response(UserInfoApi, UserInfoResponse)
+error_response(UserInfoApi, TokenError)
+maps_field(UserInfoResponse.sub, UserAccount.subject)
+
+performs(RelyingParty, RedeemCode)
+performs(RelyingParty, RejectCodeReplay)
+performs(RelyingParty, GetUserInfo)
+belongs(BucCodeExchange, Identity).by(BackChannel)
+
+contains(BucCodeExchange, RedeemCode)
+contains(BucCodeExchange, RejectCodeReplay)
+contains(BucCodeExchange, ExpireCode)
+contains(BucCodeExchange, GetUserInfo)
+contains(OpenIdProvider, TokenApi)
+contains(OpenIdProvider, TokenReplayApi)
+contains(OpenIdProvider, CodeHousekeepingApi)
+contains(OpenIdProvider, UserInfoApi)
+
+// The redemption writes the code, and issues the tokens under the code's grant, in one
+// transaction.
+condition CodeGrantActive "The grant of the code is not revoked"
+holds(CodeGrantActive, Grant.status == active)
+
+triggers(EvCodeIssued, RedeemCode)
+raises(RedeemCode, EvTokensIssued)
+invokes(RedeemCode, TokenApi)
+updates(TokenApi, AuthorizationCode)
+reads(TokenApi, Grant)
+creates(TokenApi, AccessToken)
+creates(TokenApi, RefreshToken)
+creates(TokenApi, IdToken)
+transitions(RedeemCode, AuthorizationCode.status, issued -> redeemed)
+applies_to(CodeGrantActive, RedeemCode)
+
+// The grant may already be revoked (by the End-User, say); the replay is still rejected.
+triggers(EvTokensIssued, RejectCodeReplay)
+invokes(RejectCodeReplay, TokenReplayApi)
+updates(TokenReplayApi, AuthorizationCode)
+updates(TokenReplayApi, Grant)
+transitions(RejectCodeReplay, AuthorizationCode.status, redeemed -> replayed)
+transitions(RejectCodeReplay, Grant.status, active -> revoked)
+transitions(RejectCodeReplay, Grant.status, revoked -> revoked)
+raises(RejectCodeReplay, EvGrantRevoked)
+
+triggers(CodeLifetime, ExpireCode)
+invokes(ExpireCode, CodeHousekeepingApi)
+updates(CodeHousekeepingApi, AuthorizationCode)
+transitions(ExpireCode, AuthorizationCode.status, issued -> expired)
+
+// UserInfo reads and writes nothing, so the model has no guard to put on it; its precondition
+// is review text, and the rule on a revoked grant is in shared/rules.rdra.
+triggers(EvTokensIssued, GetUserInfo)
+triggers(EvFrontChannelAccessToken, GetUserInfo)
+invokes(GetUserInfo, UserInfoApi)
+reads(UserInfoApi, AccessToken)
+reads(UserInfoApi, Grant)
+reads(UserInfoApi, UserAccount)
+
+// Access constraints
+requires_permission(RedeemCode, ClientCredential)
+requires_medium(RedeemCode, BackChannel)
+requires_permission(TokenApi, ClientCredential)
+requires_permission(RejectCodeReplay, ClientCredential)
+requires_medium(RejectCodeReplay, BackChannel)
+requires_permission(TokenReplayApi, ClientCredential)
+requires_permission(GetUserInfo, BearerAccessToken)
+requires_medium(GetUserInfo, BackChannel)
+requires_permission(UserInfoApi, BearerAccessToken)
+
+// Business flow
+flow CodeExchangeFlow "Code redemption"
+step RedeemStep "The RP redeems the code"
+step ReplayStep "The same code comes back"
+step ExpireCodeStep "The code is never redeemed"
+step UserInfoStep "The RP reads the claims"
+
+contains(BucCodeExchange, CodeExchangeFlow)
+contains(CodeExchangeFlow, RedeemStep)
+contains(CodeExchangeFlow, ReplayStep)
+contains(CodeExchangeFlow, ExpireCodeStep)
+contains(CodeExchangeFlow, UserInfoStep)
+precedes(RedeemStep, UserInfoStep)
+excepts(RedeemStep, ReplayStep)
+excepts(RedeemStep, ExpireCodeStep)
+
+covers(RedeemStep, RedeemCode)
+covers(RedeemStep, EvTokensIssued)
+covers(ReplayStep, RejectCodeReplay)
+covers(ReplayStep, EvGrantRevoked)
+covers(ExpireCodeStep, ExpireCode)
+covers(ExpireCodeStep, CodeLifetime)
+covers(UserInfoStep, GetUserInfo)
+
+performs(RelyingParty, RedeemStep)
+performs(RelyingParty, ReplayStep)
+performs(RelyingParty, UserInfoStep)
+
+// Requirement traceability
+requirement ReqSingleUseCode "An authorization code is redeemed once, and its replay revokes what it gave"
+  priority "must"
+  source "RFC 6749 §4.1.2"
+  source "OpenID Connect Core 1.0 §3.1.3"
+  stakeholder "End-User"
+  acceptance_criteria "A second redemption of a code is answered invalid_grant and leaves the code's grant revoked; an unredeemed code expires."
+  status "accepted"
+
+motivates(ReqSingleUseCode, BucCodeExchange)
+achieves(ReqSingleUseCode, SecureSignIn)
+motivates(ReqNoClientCredentials, BucCodeExchange)
+motivates(ReqNoPasswordGrant, BucCodeExchange)

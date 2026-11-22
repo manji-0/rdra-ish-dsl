@@ -1,0 +1,30 @@
+%% rdra-ish diagram=state scope=entity:DeviceAuthorization model=samples/oidc-auth
+%% kinds: statemodel state usecase
+%% omitted: (none)
+%% legend: stateunreachable = no reachable state holds it, statedeadlock = an instance cannot leave it, stateend = no transition out
+stateDiagram-v2
+  state "DeviceAuthorization.status" as statemodel__DeviceAuthorization_status {
+    [*] --> state__DeviceAuthorization_pending
+    state "Pending" as state__DeviceAuthorization_pending
+    state "Approved" as state__DeviceAuthorization_approved
+    state "Denied" as state__DeviceAuthorization_denied
+    state "Expired" as state__DeviceAuthorization_expired
+    state "Redeemed" as state__DeviceAuthorization_redeemed
+    %% transition usecase__ApproveDevice
+    state__DeviceAuthorization_pending --> state__DeviceAuthorization_approved : Approve the device
+    %% transition usecase__DenyDevice
+    state__DeviceAuthorization_pending --> state__DeviceAuthorization_denied : Deny the device
+    %% transition usecase__ExpireDeviceCode
+    state__DeviceAuthorization_pending --> state__DeviceAuthorization_expired : Expire the device code
+    %% transition usecase__ExpireDeviceCode
+    state__DeviceAuthorization_approved --> state__DeviceAuthorization_expired : Expire the device code
+    %% transition usecase__RedeemDeviceCode
+    state__DeviceAuthorization_approved --> state__DeviceAuthorization_redeemed : Redeem the device code [The client is active]
+    state__DeviceAuthorization_denied --> [*]
+    state__DeviceAuthorization_expired --> [*]
+    state__DeviceAuthorization_redeemed --> [*]
+  }
+  classDef stateend fill:#dfd,stroke:#383,color:#141
+  class state__DeviceAuthorization_denied stateend
+  class state__DeviceAuthorization_expired stateend
+  class state__DeviceAuthorization_redeemed stateend

@@ -1,0 +1,245 @@
+%% rdra-ish diagram=rdra scope=buc:BucCodeExchange model=samples/oidc-auth
+%% layers: environment=システム外部環境 boundary=システム境界 system=システム
+%% kinds: business buc flow step timer medium permission usecase event api dto entity state condition
+%% omitted: (none)
+flowchart LR
+  subgraph layer_environment["システム外部環境"]
+    business__Identity[\"Federated sign-in"/]:::business
+    %% desc business__Identity: The OP authenticates End-Users for the clients registered with it, and hands each client an ID Token and the tokens to reach the End-User's resources.
+    buc__BucCodeExchange["Redeem the code and read the End-User's claims"]:::buc
+    %% desc buc__BucCodeExchange: The RP redeems the authorization code at the token endpoint with its client authentication or the PKCE code_verifier, receives the ID Token, the access token, and the refresh token, validates the ID Token, and reads the End-User's claims from UserInfo. A code presented a second time revokes everything issued from it; a code nobody redeems expires.
+    flow__CodeExchangeFlow["Code redemption"]:::flow
+    step__ExpireCodeStep["The code is never redeemed"]:::step
+    step__RedeemStep["The RP redeems the code"]:::step
+    step__ReplayStep["The same code comes back"]:::step
+    step__UserInfoStep["The RP reads the claims"]:::step
+    timer__CodeLifetime(("Authorization code lifetime (10 minutes at most)")):::timer
+    medium__BackChannel["Direct HTTPS call (back channel)"]:::medium
+    permission__BearerAccessToken["Bearer access token"]:::permission
+    permission__ClientCredential["Client identification at the token endpoint"]:::permission
+    permission__ResourceCredential["Resource server credential"]:::permission
+  end
+  subgraph layer_boundary["システム境界"]
+    usecase__DetectRefreshTokenReuse("Detect the reuse of a rotated refresh token"):::usecase
+    %% desc usecase__DetectRefreshTokenReuse: A refresh token value that was already rotated comes back: revoke the family and the grant.
+    usecase__ExpireCode("Expire an unused code"):::usecase
+    %% desc usecase__ExpireCode: Mark a code nobody redeemed within its lifetime as expired.
+    usecase__GetUserInfo("Read the End-User's claims (UserInfo)"):::usecase
+    %% desc usecase__GetUserInfo: GET /userinfo with the access token, and receive the sub and the claims the End-User consented to. The sub must match the sub of the ID Token (Core §5.3.2).
+    usecase__IntrospectToken("Introspect a token (RFC 7662)"):::usecase
+    %% desc usecase__IntrospectToken: The resource server posts a token and receives active true with its scope, client_id, sub, and exp, or active false.
+    usecase__RedeemCode("Redeem the authorization code"):::usecase
+    %% desc usecase__RedeemCode: POST grant_type=authorization_code with the code, the redirect_uri, the client authentication, and the code_verifier, and receive the ID Token, the access token, and the refresh token.
+    usecase__RefreshTokens("Refresh the tokens"):::usecase
+    %% desc usecase__RefreshTokens: POST grant_type=refresh_token and receive a new access token, a rotated refresh token, and optionally a new ID Token with the same sub (Core §12.2).
+    usecase__RejectCodeReplay("Reject a replayed code and revoke its grant"):::usecase
+    %% desc usecase__RejectCodeReplay: Answer invalid_grant to a second redemption of the same code and revoke the grant issued from it.
+    usecase__RevokeAccessToken("Revoke an access token (RFC 7009)"):::usecase
+    %% desc usecase__RevokeAccessToken: POST the access token to the revocation endpoint; the OP revokes it only.
+    usecase__RevokeGrantAccessTokens("Revoke the access tokens of a revoked grant"):::usecase
+    %% desc usecase__RevokeGrantAccessTokens: Invalidate every access token issued under a grant that was revoked.
+    usecase__RevokeGrantRefreshTokens("Revoke the refresh tokens of a revoked grant"):::usecase
+    %% desc usecase__RevokeGrantRefreshTokens: Invalidate the refresh token family of a grant that was revoked.
+    usecase__RevokeRefreshToken("Revoke a refresh token (RFC 7009)"):::usecase
+    %% desc usecase__RevokeRefreshToken: POST the refresh token to the revocation endpoint; the OP revokes it and the grant behind it.
+    event__EvCodeIssued>"An authorization code is delivered to the RP"]:::event
+    event__EvFrontChannelAccessToken>"An access token is delivered in the fragment"]:::event
+    event__EvGrantRevoked>"A grant is revoked"]:::event
+    event__EvTokensIssued>"The token endpoint issued the tokens"]:::event
+    event__EvTokensRefreshed>"The tokens were refreshed"]:::event
+  end
+  subgraph layer_system["システム"]
+    api__AccessTokenCascadeApi{{"Access token revocation on a revoked grant"}}:::api
+    api__AccessTokenRevocationApi{{"Revocation endpoint (access token)"}}:::api
+    api__CodeHousekeepingApi{{"Code expiry"}}:::api
+    api__IntrospectionApi{{"Introspection endpoint"}}:::api
+    api__RefreshApi{{"Token endpoint (refresh_token)"}}:::api
+    api__RefreshTokenCascadeApi{{"Refresh token revocation on a revoked grant"}}:::api
+    api__RevocationApi{{"Revocation endpoint (refresh token)"}}:::api
+    api__TokenApi{{"Token endpoint (authorization_code)"}}:::api
+    api__TokenReplayApi{{"Token endpoint (replayed code)"}}:::api
+    api__UserInfoApi{{"UserInfo endpoint"}}:::api
+    dto__IntrospectionResponse["Introspection response"]:::dto
+    dto__RevocationRequest["Revocation request"]:::dto
+    dto__TokenError["Token error response"]:::dto
+    dto__TokenRequest["Token request"]:::dto
+    dto__TokenResponse["Token response"]:::dto
+    dto__UserInfoResponse["UserInfo response"]:::dto
+    entity__AccessToken[("Access token")]:::entity
+    entity__AuthorizationCode[("Authorization code")]:::entity
+    entity__Grant[("Authorization grant")]:::entity
+    entity__IdToken[("ID Token")]:::entity
+    entity__RefreshToken[("Refresh token (rotation family)")]:::entity
+    entity__UserAccount[("End-User account")]:::entity
+    state__AccessToken_active((("Active"))):::state
+    state__AccessToken_expired((("Expired"))):::state
+    state__AccessToken_revoked((("Revoked"))):::state
+    state__AuthorizationCode_expired((("Expired"))):::state
+    state__AuthorizationCode_issued((("Issued"))):::state
+    state__AuthorizationCode_redeemed((("Redeemed"))):::state
+    state__AuthorizationCode_replayed((("Replay detected"))):::state
+    state__Grant_active((("Active"))):::state
+    state__Grant_revoked((("Revoked"))):::state
+    state__RefreshToken_active((("Active, never rotated"))):::state
+    state__RefreshToken_revoked((("Revoked"))):::state
+    state__RefreshToken_rotated((("Active, rotated"))):::state
+    condition__CodeGrantActive{"The grant of the code is not revoked"}:::condition
+    condition__GrantRevoked{"The grant is revoked"}:::condition
+    condition__RefreshAllowed{"The grant is not revoked"}:::condition
+  end
+  api__AccessTokenCascadeApi -.->|reads| entity__Grant
+  api__AccessTokenCascadeApi -.->|updates| entity__AccessToken
+  api__AccessTokenRevocationApi -.->|request| dto__RevocationRequest
+  api__AccessTokenRevocationApi -.-> permission__ClientCredential
+  api__AccessTokenRevocationApi -.->|updates| entity__AccessToken
+  api__CodeHousekeepingApi -.->|updates| entity__AuthorizationCode
+  api__IntrospectionApi -.->|reads| entity__AccessToken
+  api__IntrospectionApi -.->|reads| entity__Grant
+  api__IntrospectionApi -.->|reads| entity__UserAccount
+  api__IntrospectionApi -.->|request| dto__RevocationRequest
+  api__IntrospectionApi -.-> permission__ResourceCredential
+  api__IntrospectionApi -.->|response| dto__IntrospectionResponse
+  api__RefreshApi -.-> permission__ClientCredential
+  api__RefreshApi -.->|updates| entity__AccessToken
+  api__RefreshApi -.->|updates| entity__Grant
+  api__RefreshApi -.->|updates| entity__RefreshToken
+  api__RefreshTokenCascadeApi -.->|reads| entity__Grant
+  api__RefreshTokenCascadeApi -.->|updates| entity__RefreshToken
+  api__RevocationApi -.->|request| dto__RevocationRequest
+  api__RevocationApi -.-> permission__ClientCredential
+  api__RevocationApi -.->|updates| entity__Grant
+  api__RevocationApi -.->|updates| entity__RefreshToken
+  api__TokenApi -.->|creates| entity__AccessToken
+  api__TokenApi -.->|creates| entity__IdToken
+  api__TokenApi -.->|creates| entity__RefreshToken
+  api__TokenApi -.->|error_response| dto__TokenError
+  api__TokenApi -.->|reads| entity__Grant
+  api__TokenApi -.->|request| dto__TokenRequest
+  api__TokenApi -.-> permission__ClientCredential
+  api__TokenApi -.->|response| dto__TokenResponse
+  api__TokenApi -.->|updates| entity__AuthorizationCode
+  api__TokenReplayApi -.-> permission__ClientCredential
+  api__TokenReplayApi -.->|response| dto__TokenError
+  api__TokenReplayApi -.->|updates| entity__AuthorizationCode
+  api__TokenReplayApi -.->|updates| entity__Grant
+  api__UserInfoApi -.->|error_response| dto__TokenError
+  api__UserInfoApi -.->|reads| entity__AccessToken
+  api__UserInfoApi -.->|reads| entity__Grant
+  api__UserInfoApi -.->|reads| entity__UserAccount
+  api__UserInfoApi -.-> permission__BearerAccessToken
+  api__UserInfoApi -.->|response| dto__UserInfoResponse
+  buc__BucCodeExchange --> business__Identity
+  buc__BucCodeExchange --> flow__CodeExchangeFlow
+  buc__BucCodeExchange --> usecase__ExpireCode
+  buc__BucCodeExchange --> usecase__GetUserInfo
+  buc__BucCodeExchange --> usecase__RedeemCode
+  buc__BucCodeExchange --> usecase__RejectCodeReplay
+  condition__CodeGrantActive -.->|applies_to| usecase__RedeemCode
+  condition__CodeGrantActive -.-> entity__Grant
+  %% derived condition__CodeGrantActive -> entity__Grant from holds
+  condition__GrantRevoked -.->|applies_to| usecase__RevokeGrantAccessTokens
+  condition__GrantRevoked -.->|applies_to| usecase__RevokeGrantRefreshTokens
+  condition__GrantRevoked -.-> entity__Grant
+  %% derived condition__GrantRevoked -> entity__Grant from holds
+  condition__RefreshAllowed -.->|applies_to| usecase__RefreshTokens
+  condition__RefreshAllowed -.-> entity__Grant
+  %% derived condition__RefreshAllowed -> entity__Grant from holds
+  entity__AccessToken ---|N:1| entity__Grant
+  entity__AuthorizationCode ---|1:1| entity__Grant
+  entity__IdToken ---|N:1| entity__Grant
+  entity__RefreshToken ---|N:1| entity__Grant
+  event__EvCodeIssued -.-> usecase__RedeemCode
+  event__EvFrontChannelAccessToken -.-> usecase__GetUserInfo
+  event__EvFrontChannelAccessToken -.-> usecase__IntrospectToken
+  event__EvFrontChannelAccessToken -.-> usecase__RevokeAccessToken
+  event__EvGrantRevoked -.-> usecase__RevokeGrantAccessTokens
+  event__EvGrantRevoked -.-> usecase__RevokeGrantRefreshTokens
+  event__EvTokensIssued -.-> usecase__GetUserInfo
+  event__EvTokensIssued -.-> usecase__IntrospectToken
+  event__EvTokensIssued -.-> usecase__RefreshTokens
+  event__EvTokensIssued -.-> usecase__RejectCodeReplay
+  event__EvTokensIssued -.-> usecase__RevokeAccessToken
+  event__EvTokensIssued -.-> usecase__RevokeRefreshToken
+  event__EvTokensRefreshed -.-> usecase__DetectRefreshTokenReuse
+  flow__CodeExchangeFlow --> step__ExpireCodeStep
+  flow__CodeExchangeFlow --> step__RedeemStep
+  flow__CodeExchangeFlow --> step__ReplayStep
+  flow__CodeExchangeFlow --> step__UserInfoStep
+  step__ExpireCodeStep -.-> timer__CodeLifetime
+  step__ExpireCodeStep -.-> usecase__ExpireCode
+  step__RedeemStep -.-> event__EvTokensIssued
+  step__RedeemStep -.-> usecase__RedeemCode
+  step__RedeemStep -.->|excepts| step__ExpireCodeStep
+  step__RedeemStep -.->|excepts| step__ReplayStep
+  step__RedeemStep -->|precedes| step__UserInfoStep
+  step__ReplayStep -.-> event__EvGrantRevoked
+  step__ReplayStep -.-> usecase__RejectCodeReplay
+  step__UserInfoStep -.-> usecase__GetUserInfo
+  timer__CodeLifetime -.-> usecase__ExpireCode
+  usecase__DetectRefreshTokenReuse -.-> api__RevocationApi
+  usecase__DetectRefreshTokenReuse -.-> event__EvGrantRevoked
+  usecase__DetectRefreshTokenReuse -.-> medium__BackChannel
+  usecase__DetectRefreshTokenReuse -.-> permission__ClientCredential
+  usecase__DetectRefreshTokenReuse -.->|transitions Grant.status active->revoked| state__Grant_revoked
+  usecase__DetectRefreshTokenReuse -.->|transitions Grant.status revoked->revoked| state__Grant_revoked
+  usecase__DetectRefreshTokenReuse -.->|transitions RefreshToken.status rotated->revoked| state__RefreshToken_revoked
+  usecase__ExpireCode -.-> api__CodeHousekeepingApi
+  usecase__ExpireCode -.->|transitions AuthorizationCode.status issued->expired| state__AuthorizationCode_expired
+  usecase__GetUserInfo -.-> api__UserInfoApi
+  usecase__GetUserInfo -.-> medium__BackChannel
+  usecase__GetUserInfo -.-> permission__BearerAccessToken
+  usecase__IntrospectToken -.-> api__IntrospectionApi
+  usecase__IntrospectToken -.-> medium__BackChannel
+  usecase__IntrospectToken -.-> permission__ResourceCredential
+  usecase__RedeemCode -.-> api__TokenApi
+  usecase__RedeemCode -.-> event__EvTokensIssued
+  usecase__RedeemCode -.-> medium__BackChannel
+  usecase__RedeemCode -.-> permission__ClientCredential
+  usecase__RedeemCode -.->|transitions AuthorizationCode.status issued->redeemed| state__AuthorizationCode_redeemed
+  usecase__RefreshTokens -.-> api__RefreshApi
+  usecase__RefreshTokens -.-> event__EvTokensRefreshed
+  usecase__RefreshTokens -.-> medium__BackChannel
+  usecase__RefreshTokens -.-> permission__ClientCredential
+  usecase__RefreshTokens -.->|transitions AccessToken.status active->active| state__AccessToken_active
+  usecase__RefreshTokens -.->|transitions AccessToken.status expired->active| state__AccessToken_active
+  usecase__RefreshTokens -.->|transitions AccessToken.status revoked->active| state__AccessToken_active
+  usecase__RefreshTokens -.->|transitions RefreshToken.status active->rotated| state__RefreshToken_rotated
+  usecase__RefreshTokens -.->|transitions RefreshToken.status rotated->rotated| state__RefreshToken_rotated
+  usecase__RejectCodeReplay -.-> api__TokenReplayApi
+  usecase__RejectCodeReplay -.-> event__EvGrantRevoked
+  usecase__RejectCodeReplay -.-> medium__BackChannel
+  usecase__RejectCodeReplay -.-> permission__ClientCredential
+  usecase__RejectCodeReplay -.->|transitions AuthorizationCode.status redeemed->replayed| state__AuthorizationCode_replayed
+  usecase__RejectCodeReplay -.->|transitions Grant.status active->revoked| state__Grant_revoked
+  usecase__RejectCodeReplay -.->|transitions Grant.status revoked->revoked| state__Grant_revoked
+  usecase__RevokeAccessToken -.-> api__AccessTokenRevocationApi
+  usecase__RevokeAccessToken -.-> medium__BackChannel
+  usecase__RevokeAccessToken -.-> permission__ClientCredential
+  usecase__RevokeAccessToken -.->|transitions AccessToken.status active->revoked| state__AccessToken_revoked
+  usecase__RevokeGrantAccessTokens -.-> api__AccessTokenCascadeApi
+  usecase__RevokeGrantAccessTokens -.->|transitions AccessToken.status active->revoked| state__AccessToken_revoked
+  usecase__RevokeGrantRefreshTokens -.-> api__RefreshTokenCascadeApi
+  usecase__RevokeGrantRefreshTokens -.->|transitions RefreshToken.status active->revoked| state__RefreshToken_revoked
+  usecase__RevokeGrantRefreshTokens -.->|transitions RefreshToken.status rotated->revoked| state__RefreshToken_revoked
+  usecase__RevokeRefreshToken -.-> api__RevocationApi
+  usecase__RevokeRefreshToken -.-> event__EvGrantRevoked
+  usecase__RevokeRefreshToken -.-> medium__BackChannel
+  usecase__RevokeRefreshToken -.-> permission__ClientCredential
+  usecase__RevokeRefreshToken -.->|transitions Grant.status active->revoked| state__Grant_revoked
+  usecase__RevokeRefreshToken -.->|transitions Grant.status revoked->revoked| state__Grant_revoked
+  usecase__RevokeRefreshToken -.->|transitions RefreshToken.status active->revoked| state__RefreshToken_revoked
+  usecase__RevokeRefreshToken -.->|transitions RefreshToken.status rotated->revoked| state__RefreshToken_revoked
+  classDef business fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef buc fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef flow fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef step fill:#d3f9d8,stroke:#2b8a3e,color:#000;
+  classDef timer fill:#ffe8cc,stroke:#d9480f,color:#000;
+  classDef medium fill:#f1f3f5,stroke:#333,color:#000;
+  classDef permission fill:#f1f3f5,stroke:#333,color:#000;
+  classDef usecase fill:#d0ebff,stroke:#1864ab,color:#000;
+  classDef event fill:#ffdeeb,stroke:#a61e4d,color:#000;
+  classDef api fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef dto fill:#c5f6fa,stroke:#0b7285,color:#000;
+  classDef entity fill:#fff9db,stroke:#5c940d,color:#000;
+  classDef state fill:#f8f9fa,stroke:#5c940d,color:#000;
+  classDef condition fill:#f3d9fa,stroke:#862e9c,color:#000;

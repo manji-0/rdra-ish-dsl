@@ -1,0 +1,57 @@
+%% rdra-ish diagram=sequence scope=buc:BucClientRegistration model=samples/oidc-auth
+%% kinds: actor timer usecase screen api entity
+%% omitted: buc step medium permission event
+sequenceDiagram
+  actor actor__RelyingParty as Relying Party (client application)
+  participant timer__RpMetadataRefresh as RP's metadata cache refresh (RP policy, e.g. daily)
+  participant usecase__DiscoverProvider as Read the OP configuration
+  participant usecase__RegisterClient as Register a client
+  actor actor__OpAdministrator as OP Administrator
+  participant screen__ClientAdminScreen as Client administration
+  participant api__DiscoveryApi as OpenID Provider configuration
+  participant api__JwksApi as JWK Set
+  participant api__ClientAdminApi as Client administration API
+  participant entity__SigningKey as ID Token signing key
+  participant entity__Client as Registered client
+  participant api__RegistrationApi as Client registration endpoint
+  participant api__ClientConfigurationApi as Client configuration endpoint
+  Note over api__DiscoveryApi: 1. Read the OP configuration
+  actor__RelyingParty ->> api__DiscoveryApi: Read the OP configuration
+  timer__RpMetadataRefresh ->> api__DiscoveryApi: RP's metadata cache refresh (RP policy, e.g. daily)
+  api__DiscoveryApi ->> entity__SigningKey: read
+  api__DiscoveryApi -) api__RegistrationApi: The RP read the OP configuration
+  api__DiscoveryApi -->> actor__RelyingParty: done
+  Note over api__JwksApi: 2. Fetch the OP signing keys (JWKS)
+  actor__RelyingParty ->> api__JwksApi: Fetch the OP signing keys (JWKS)
+  timer__RpMetadataRefresh ->> api__JwksApi: RP's metadata cache refresh (RP policy, e.g. daily)
+  api__JwksApi ->> entity__SigningKey: read
+  api__JwksApi -->> actor__RelyingParty: done
+  Note over api__RegistrationApi: 3. Register a client
+  actor__RelyingParty ->> api__RegistrationApi: Register a client
+  usecase__DiscoverProvider ->> api__RegistrationApi: The RP read the OP configuration
+  api__RegistrationApi ->> entity__Client: create
+  api__RegistrationApi -) api__ClientConfigurationApi: The client is registered
+  api__RegistrationApi -->> actor__RelyingParty: done
+  Note over api__ClientConfigurationApi: 4. Read the client registration
+  actor__RelyingParty ->> api__ClientConfigurationApi: Read the client registration
+  usecase__RegisterClient ->> api__ClientConfigurationApi: The client is registered
+  api__ClientConfigurationApi ->> entity__Client: read
+  api__ClientConfigurationApi -->> actor__RelyingParty: done
+  Note over screen__ClientAdminScreen: 5. Suspend a client
+  actor__OpAdministrator ->> screen__ClientAdminScreen: Suspend a client
+  screen__ClientAdminScreen ->> api__ClientAdminApi: Client administration API
+  alt Client.status == Active
+    api__ClientAdminApi ->> entity__Client: update status Active -> Suspended
+    api__ClientAdminApi -->> screen__ClientAdminScreen: done
+  else guard fails
+    api__ClientAdminApi -->> screen__ClientAdminScreen: rejected
+  end
+  Note over screen__ClientAdminScreen: 6. Reinstate a client
+  actor__OpAdministrator ->> screen__ClientAdminScreen: Reinstate a client
+  screen__ClientAdminScreen ->> api__ClientAdminApi: Client administration API
+  alt Client.status == Suspended
+    api__ClientAdminApi ->> entity__Client: update status Suspended -> Active
+    api__ClientAdminApi -->> screen__ClientAdminScreen: done
+  else guard fails
+    api__ClientAdminApi -->> screen__ClientAdminScreen: rejected
+  end
