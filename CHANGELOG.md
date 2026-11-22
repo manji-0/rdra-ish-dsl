@@ -59,7 +59,9 @@
   that does not pass runs again on one worker, so a counterexample is the one a single
   worker finds. `verify --prove` shares the checks of a step over several z3 processes.
   `RDRA_JOBS` also sets the BFS threads of one cone and the number of z3 processes. The peak
-  memory is now BFS plus the TLC heaps (#163).
+  memory is now BFS plus the TLC heaps. A counterexample to induction may show another value
+  for a column its step does not constrain: the solver that reads it starts over first, so
+  the CTI does not depend on the number of z3 processes (#163).
 - Skill `rdra-ish-diagram` says how to lay out a PRD and a design document from the model
   (`references/documents.md`): which diagrams and tables go into each section, in which
   order, and the rules for embedding them (generate, stay under Mermaid's limits, tables as
