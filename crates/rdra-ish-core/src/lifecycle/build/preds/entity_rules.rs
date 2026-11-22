@@ -349,7 +349,7 @@ impl Builder<'_> {
             );
             let premises = match self.ts.bounds.slots() {
                 1 => Vec::new(),
-                _ => vec![premise(vec![two_rows], format!("two {child} rows"))],
+                _ => vec![premise(vec![two_rows], String::new())],
             };
             self.ts.invariants.push(Invariant {
                 name: format!("Unique_{child}_{role}"),

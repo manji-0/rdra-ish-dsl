@@ -3,16 +3,21 @@
 use std::collections::BTreeMap;
 
 use super::model_from;
-use crate::lifecycle::{Bounds, Caps, Scope, StateDiag, TransitionSystem};
+use crate::lifecycle::{Bounds, Caps, Diag, Scope, StateDiag, TransitionSystem};
 
 /// The premises no reachable state meets, per rule that holds vacuously.
 fn vacuous(src: &str, bounds: Bounds, caps: Caps) -> BTreeMap<String, Vec<String>> {
     let ts = TransitionSystem::build(&model_from(src), bounds, &Scope::ALL).ts;
-    ts.explore_targets(&ts.targets(), caps)
-        .verdicts()
+    texts(ts.explore_targets(&ts.targets(), caps).verdicts())
+}
+
+fn texts(verdicts: &[Diag]) -> BTreeMap<String, Vec<String>> {
+    verdicts
         .iter()
         .filter_map(|d| match &d.diag {
-            StateDiag::VacuousRule { name, unmet, .. } => Some((name.clone(), unmet.clone())),
+            StateDiag::VacuousRule { name, unmet, .. } => {
+                Some((name.clone(), unmet.iter().map(|u| u.text.clone()).collect()))
+            }
             _ => None,
         })
         .collect()
@@ -130,4 +135,72 @@ relate(Payment, Order, N:1)
 forbidden(Order, Payment, Order.status == cancelled, Payment.status == captured).along(Order, Payment)
 "#;
     assert_eq!(vacuous(src, Bounds::STATES, Caps::STATES), BTreeMap::new());
+}
+
+/// A `.none(...)` says something only of rows of the related entity: with no such row ever,
+/// it holds vacuously, as the `forbidden` that says the same does. A `.has(...)` asks for a
+/// row, so it has no such premise.
+#[test]
+fn a_none_over_rows_that_never_exist_holds_vacuously() {
+    let src = format!(
+        "{ORDERS}entity Line \"明細\" {{ id: Int @pk  kind: Enum(plain, gift) @default(plain) }}\n\
+         relate(Line, Order, N:1)\n\
+         usecase AddLine \"明細追加\"\ncreates(AddLine, Line)\n\
+         condition Never \"起きない\"\nholds(Never, Order.status == void)\napplies_to(Never, AddLine)\n\
+         invariant(Order).none(Line.kind == gift)\n"
+    );
+    let found = vacuous(&src, Bounds::STATES, Caps::STATES);
+    assert_eq!(
+        found.get("Quantifier_Order_0"),
+        Some(&vec!["some Line row beside it".to_string()]),
+        "{found:?}"
+    );
+}
+
+/// The finding names the rows each premise asks for: a condition on one entity of a rule
+/// over two asks for a row of that entity alone. It says when the run had one instance per
+/// entity, where a state that needs a second row of some entity is not reached.
+#[test]
+fn the_finding_names_the_rows_each_premise_asks_for() {
+    let src = r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, void) @default(pending) }
+entity Payment "決済" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+usecase Place "注文確定"
+usecase Pay "決済確定"
+creates(Place, Order)
+creates(Place, Payment)
+transitions(Pay, Payment.status, pending -> captured)
+relate(Payment, Order, N:1)
+forbidden(Order, Payment, Order.status == void, Payment.status == captured).along(Order, Payment)
+"#;
+    for (bounds, note) in [(Bounds::STATES, true), (Bounds::VERIFY, false)] {
+        let ts = TransitionSystem::build(&model_from(src), bounds, &Scope::ALL).ts;
+        let run = ts.explore_targets(&ts.targets(), Caps::VERIFY);
+        let message = run
+            .verdicts()
+            .iter()
+            .find(|d| matches!(d.diag, StateDiag::VacuousRule { .. }))
+            .expect("the rule is vacuous: no order is void")
+            .diag
+            .to_string();
+        assert!(
+            message.starts_with(
+                "MultiForbidden_Order_0 holds vacuously: no reachable state has a row of Order with Order.status=void"
+            ),
+            "{message}"
+        );
+        assert_eq!(message.contains("--instance-count 2"), note, "{message}");
+    }
+}
+
+/// A scope that drops use cases may drop the one that reaches the premise, so its run
+/// reports no vacuity (`TargetExploration::defer_progress`).
+#[test]
+fn a_run_whose_scope_drops_use_cases_reports_no_vacuity() {
+    let src = format!("{ORDERS}forbidden(Order, status == void, flagged == true)\n");
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let mut run = ts.explore_targets(&ts.targets(), Caps::STATES);
+    assert_eq!(texts(run.verdicts()).len(), 1);
+    run.defer_progress();
+    assert_eq!(texts(run.verdicts()), BTreeMap::new());
 }

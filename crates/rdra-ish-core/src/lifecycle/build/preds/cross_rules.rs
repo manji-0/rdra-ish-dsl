@@ -112,12 +112,10 @@ impl Builder<'_> {
                 continue;
             };
             let conds = self.cross_all(&c.conditions, &binding, &site);
-            let premises = match &conds {
-                Pred::And(parts) => {
-                    forbidden_premises(&link, parts, &cross_displays(model, &c.conditions))
-                }
-                _ => Vec::new(),
+            let Pred::And(parts) = &conds else {
+                unreachable!("cross_all builds a conjunction")
             };
+            let premises = forbidden_premises(&link, parts, &cross_displays(model, &c.conditions));
             let body = implies(link, Pred::Not(Box::new(conds)));
             let text = InvText::CrossForbidden {
                 entities: entity_list(model, &c.scope),
@@ -212,10 +210,19 @@ impl Builder<'_> {
             let site = Site::new(ModelRef::Quantifier(i), &q.site);
             let anchor: Binding = vec![(c.anchor, At::Bound(0))];
             let guards = self.cross_all(&c.guards, &anchor, &site);
-            let premises = vec![premise(
+            let mut premises = vec![premise(
                 vec![guards.clone()],
                 cross_display(model, &c.guards),
             )];
+            // `none` says something only of rows of the related entity; `has` asks for one.
+            if matches!(q.kind, QuantifierKind::None) {
+                let related = Pred::Exists {
+                    entity: self.ent_of[&q.related],
+                    body: Box::new(Pred::True),
+                };
+                let text = format!("some {} row beside it", model.entities[q.related].id);
+                premises.push(premise(vec![related], text));
+            }
             let kind = match q.kind {
                 QuantifierKind::Has => "has",
                 QuantifierKind::None => "none",

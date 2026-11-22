@@ -100,12 +100,10 @@ impl TransitionSystem {
         all
     }
 
-    /// Whether `state` meets a premise: `pred` holds for some present rows of the binders it
-    /// reads. A binder it does not read needs no row, so a condition on one entity of a rule
-    /// over two is met by a row of that entity alone. A `pred` that reads no binder asks for
-    /// a row of each.
-    pub(crate) fn meets(&self, binders: &[EntId], pred: &Pred, state: &State) -> bool {
-        let mut read = vec![false; binders.len()];
+    /// Which of a rule's binders a premise asks rows of: those `pred` reads, or every one
+    /// when it reads none.
+    pub(crate) fn premise_rows(binders: usize, pred: &Pred) -> Vec<bool> {
+        let mut read = vec![false; binders];
         for term in pred.terms() {
             let (Term::Slot {
                 at: At::Bound(b), ..
@@ -121,6 +119,14 @@ impl TransitionSystem {
         if !read.contains(&true) {
             read.fill(true);
         }
+        read
+    }
+
+    /// Whether `state` meets a premise: `pred` holds for some present rows of the binders it
+    /// asks rows of (`premise_rows`). A binder it does not read needs no row, so a condition
+    /// on one entity of a rule over two is met by a row of that entity alone.
+    pub(crate) fn meets(&self, binders: &[EntId], pred: &Pred, state: &State) -> bool {
+        let read = Self::premise_rows(binders.len(), pred);
         let slots = self.bounds.slots();
         let mut env = Env::new(&[]);
         env.bound = vec![0; binders.len()];

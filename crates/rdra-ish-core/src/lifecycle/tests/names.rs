@@ -4,7 +4,7 @@ use super::model_from;
 use crate::lifecycle::trace::{Inst, Trace};
 use crate::lifecycle::types::{ActionOrigin, InvText, LtlKind, ModelRef, Site};
 use crate::lifecycle::{
-    Blocked, Bounds, CapGrowth, Exit, Loop, Scope, StateDiag, TransitionSystem,
+    Blocked, Bounds, CapGrowth, Exit, Loop, Scope, StateDiag, TransitionSystem, UnmetPremise,
 };
 
 /// One value of each variant, with key fields that hold characters a name cannot.
@@ -227,8 +227,11 @@ fn one_of_each() -> Vec<StateDiag> {
             name: "Inv_Order_0".into(),
             text: InvText::Forbidden("status=void".into()),
             label: None,
-            rows: vec!["Order".into()],
-            unmet: vec!["status=void".into()],
+            unmet: vec![UnmetPremise {
+                rows: vec!["Order".into()],
+                text: "status=void".into(),
+            }],
+            one_instance: true,
             site: site(),
         },
     ];
