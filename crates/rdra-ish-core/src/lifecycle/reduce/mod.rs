@@ -93,6 +93,9 @@ pub struct Reduction {
     tail: Box<[u8]>,
     s_actions: BTreeSet<ActId>,
     skip: Vec<bool>,
+    /// Per action of the cone: it writes no raw input and no var a bit reads, so no step of
+    /// it changes the inputs and the class stays where it is.
+    steady: Vec<bool>,
     s_entity: Vec<bool>,
     /// S vars the T-side actions read.
     obs: VarSet,
@@ -135,6 +138,12 @@ impl Reduction {
     /// The raw inputs of S, ascending: T vars its actions read, each of which only rises.
     pub fn inputs(&self) -> &[VarId] {
         &self.inputs
+    }
+
+    /// Whether no step of `act` changes the inputs: it writes no raw input and no var a bit
+    /// reads. Such a step leaves the class alone, so neither engine recomputes it.
+    pub fn is_steady(&self, act: ActId) -> bool {
+        self.steady[act.index()]
     }
 
     /// The input bits: per group, the folds of the S actions that read it.
@@ -418,6 +427,15 @@ impl TransitionSystem {
             .iter()
             .map(|e| split.s.contains(&e.exists))
             .collect();
+        let mut input_reads: VarSet = split.inputs.iter().copied().collect();
+        for fold in ext.bits.iter().flatten() {
+            input_reads.extend(fold.reads(self));
+        }
+        let steady = self
+            .actions
+            .iter()
+            .map(|a| self.action_writes(a).is_disjoint(&input_reads))
+            .collect();
         let reduction = Reduction {
             vars: split.s.iter().copied().collect(),
             inputs: split.inputs.iter().copied().collect(),
@@ -429,6 +447,7 @@ impl TransitionSystem {
             tail,
             s_actions: split.s_actions.clone(),
             skip,
+            steady,
             s_entity,
             obs: split.obs.clone(),
             reps,
@@ -566,7 +585,12 @@ impl TransitionSystem {
             |act| r.is_some_and(|r| r.skips(act)),
             scratch,
             |act, params, next| {
-                if let Some((r, before)) = &rises {
+                // A steady action's step leaves the inputs as they were, so the class too.
+                debug_assert!(rises
+                    .as_ref()
+                    .is_none_or(|(r, before)| !r.is_steady(act)
+                        || r.input_bytes(self, next) == *before));
+                if let Some((r, before)) = rises.as_ref().filter(|(r, _)| !r.is_steady(act)) {
                     r.input_bytes_into(self, next, &mut after);
                     if after != *before {
                         let class = r
