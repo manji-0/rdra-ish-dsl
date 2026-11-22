@@ -1,0 +1,214 @@
+//! `can_reach(goal)`: from every reachable state where the instance is present, some path on
+//! which it stays present reaches the goal. BFS decides it on the property's cone, and the
+//! cone decides what the whole system decides.
+
+use super::cone::load;
+use super::*;
+use crate::lifecycle::{Inst, Target};
+
+const UNMET: &str = "samples/formal-verification/can_reach_unmet.rdra";
+const MET: &str = "samples/formal-verification/can_reach_met.rdra";
+
+fn unreachable_goals(diags: &[Diag]) -> Vec<&StateDiag> {
+    diags
+        .iter()
+        .map(|d| &d.diag)
+        .filter(|d| matches!(d, StateDiag::GoalUnreachable { .. }))
+        .collect()
+}
+
+/// Whether `can_reach` `i` fails on the whole system explored unrestricted, the reference the
+/// cone's verdict must match.
+fn fails_on_the_whole_system(model: &SemanticModel, bounds: Bounds, i: usize) -> bool {
+    let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    let run = ts.run(Caps::new(usize::MAX, 1 << 20));
+    assert!(run.complete);
+    run.system.reach_failure(i, &run.graph()).is_some()
+}
+
+fn fails_on_its_cone(model: &SemanticModel, bounds: Bounds, i: usize) -> bool {
+    let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+    let run = ts.explore_targets(&[Target::Reach(i)], Caps::new(usize::MAX, 1 << 20));
+    !unreachable_goals(run.verdicts()).is_empty()
+}
+
+/// An Order that has lost its stock and its cancellation window moves between pending and
+/// on_hold forever. Both states have a way out, so no deadlock is reported; `can_reach` is,
+/// with a shortest trace into the trap and the states the Order is then confined to.
+#[test]
+fn a_cycle_with_no_way_out_fails_where_no_deadlock_does() {
+    let report = super::super::derive_states(&load(UNMET), &Scope::ALL, Caps::STATES);
+    assert!(
+        !report
+            .diags
+            .iter()
+            .any(|d| matches!(d.diag, StateDiag::Deadlock { .. })),
+        "{:?}",
+        report.diags
+    );
+    let found = unreachable_goals(&report.diags);
+    let [StateDiag::GoalUnreachable {
+        name,
+        instance,
+        confined,
+        states,
+        trace,
+        ..
+    }] = found.as_slice()
+    else {
+        panic!("one GoalUnreachable expected: {found:?}");
+    };
+    assert_eq!(name, "OrderCanFinish");
+    assert_eq!(
+        instance,
+        &[Inst {
+            entity: "Order".into(),
+            slot: 1
+        }]
+    );
+    let actions: Vec<&str> = trace.steps.iter().map(|s| s.action.as_str()).collect();
+    assert_eq!(actions, ["Place", "CloseWindow", "LoseStock"]);
+    assert_eq!(confined, &["status = pending", "status = on_hold"]);
+    assert_eq!(*states, 2);
+    assert_eq!(found[0].name(&[]), "OrderCanFinish");
+}
+
+/// With a way to restock, every reachable state can still finish, though an Order may be
+/// held and resumed forever: `can_reach` asks for a path, not for progress.
+#[test]
+fn a_way_back_to_the_goal_passes() {
+    let report = super::super::derive_states(&load(MET), &Scope::ALL, Caps::STATES);
+    assert!(
+        unreachable_goals(&report.diags).is_empty(),
+        "{:?}",
+        report.diags
+    );
+}
+
+/// The only way to `done` is a use case an event starts, and the event's raiser can never
+/// run. A cone that left the event's mark out would let `Finish` run freely and pass; the
+/// cone keeps it, and fails as the whole system does.
+#[test]
+fn a_goal_behind_an_event_that_is_never_raised_is_unreachable() {
+    let model = model_from(
+        r#"
+entity Order "x" { id: Int @pk
+  status: Enum(open, done) @default(open) }
+entity Approval "x" { id: Int @pk
+  status: Enum(waiting, granted) @default(waiting) }
+relate(Approval, Order, N:1)
+usecase Place "x"
+usecase Request "x"
+usecase Grant "x"
+usecase Finish "x"
+event EvGranted "x"
+creates(Place, Order)
+creates(Request, Approval)
+transitions(Grant, Approval.status, waiting -> granted)
+raises(Grant, EvGranted)
+triggers(EvGranted, Finish)
+transitions(Finish, Order.status, open -> done)
+condition Never "x"
+holds(Never, Approval.status == granted)
+applies_to(Never, Grant)
+property OrderFinishes can_reach(Order.status == done)
+"#,
+    );
+    assert!(fails_on_the_whole_system(&model, Bounds::STATES, 0));
+    assert!(fails_on_its_cone(&model, Bounds::STATES, 0));
+}
+
+/// The only way to `done` creates a Receipt, and the one Receipt slot is taken by a receipt
+/// that is never removed. A cone that did not count Receipt slots would pass; the cone counts
+/// them, and fails as the whole system does.
+#[test]
+fn a_goal_that_needs_a_slot_the_bound_never_frees_is_unreachable() {
+    let model = model_from(
+        r#"
+entity Order "x" { id: Int @pk
+  status: Enum(open, done) @default(open) }
+entity Receipt "x" { id: Int @pk }
+relate(Receipt, Order, N:1)
+usecase Place "x"
+usecase Issue "x"
+usecase Finish "x"
+creates(Place, Order)
+creates(Issue, Receipt)
+creates(Finish, Receipt)
+transitions(Finish, Order.status, open -> done)
+property OrderFinishes can_reach(Order.status == done)
+"#,
+    );
+    assert!(fails_on_the_whole_system(&model, Bounds::STATES, 0));
+    assert!(fails_on_its_cone(&model, Bounds::STATES, 0));
+}
+
+/// The instance must reach the goal itself: deleting it is not finishing it, so an Order that
+/// can only be purged fails.
+#[test]
+fn deleting_the_instance_does_not_reach_the_goal() {
+    let model = model_from(
+        r#"
+entity Order "x" { id: Int @pk
+  status: Enum(open, done) @default(open)
+  in_stock: Bool @default(true) }
+usecase Place "x"
+usecase Finish "x"
+usecase LoseStock "x"
+usecase Purge "x"
+creates(Place, Order)
+updates(LoseStock, Order)
+deletes(Purge, Order)
+transitions(Finish, Order.status, open -> done)
+sets(usecase::LoseStock, Order.in_stock == false)
+condition InStock "x"
+holds(InStock, Order.in_stock == true)
+applies_to(InStock, Finish)
+property OrderFinishes can_reach(Order.status == done)
+"#,
+    );
+    let report = super::super::derive_states(&model, &Scope::ALL, Caps::STATES);
+    let found = unreachable_goals(&report.diags);
+    let [StateDiag::GoalUnreachable { trace, .. }] = found.as_slice() else {
+        panic!("one GoalUnreachable expected: {found:?}");
+    };
+    let actions: Vec<&str> = trace.steps.iter().map(|s| s.action.as_str()).collect();
+    assert_eq!(actions, ["Place", "LoseStock"]);
+}
+
+/// On the samples, at one instance and at two, the cone's verdict is the whole system's.
+#[test]
+fn the_cone_decides_what_the_whole_system_decides() {
+    let two = Bounds {
+        instances: std::num::NonZeroU8::new(2).unwrap(),
+        int_max: Bounds::STATES.int_max,
+    };
+    for (sample, fails) in [(UNMET, true), (MET, false)] {
+        let model = load(sample);
+        for bounds in [Bounds::STATES, two] {
+            assert_eq!(
+                fails_on_the_whole_system(&model, bounds, 0),
+                fails,
+                "{sample}"
+            );
+            assert_eq!(fails_on_its_cone(&model, bounds, 0), fails, "{sample}");
+        }
+    }
+}
+
+/// Under `--buc`, a left-out use case may be the way to the goal: a failure is undecided.
+#[test]
+fn a_buc_scope_leaves_a_failure_undecided() {
+    let model = load(UNMET);
+    let scope = Scope::parse(&model, &["BucOrderLifecycle".to_string()], &[]).unwrap();
+    let report = super::super::derive_states(&model, &scope, Caps::STATES);
+    assert!(unreachable_goals(&report.diags).is_empty());
+    assert!(
+        report.undecided.iter().any(|u| u.subject
+            == crate::lifecycle::Subject::Reach {
+                property: "OrderCanFinish".into()
+            }),
+        "{:?}",
+        report.undecided
+    );
+}

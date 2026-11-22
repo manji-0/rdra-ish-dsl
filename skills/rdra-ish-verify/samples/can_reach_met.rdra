@@ -1,0 +1,59 @@
+// can_reach_unmet.rdra with a Restock use case. An Order that has lost its stock and its
+// cancellation window can be restocked and delivered, so from every reachable state some path
+// still finishes it, and can_reach holds in both commands. An Order may still be held and
+// resumed forever: can_reach asks that it can finish, not that it must.
+// expect check: ok
+// expect verify: tlc=ok
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, on_hold, delivered, cancelled) @default(pending)
+  in_stock: Bool @default(true)
+  window_open: Bool @default(true)
+}
+
+usecase Place "注文確定"
+usecase Hold "保留"
+usecase Resume "保留解除"
+usecase Deliver "配達"
+usecase Cancel "キャンセル"
+usecase LoseStock "在庫切れ"
+usecase CloseWindow "キャンセル受付終了"
+usecase Restock "再入荷"
+
+buc BucOrderLifecycle "Order lifecycle"
+contains(BucOrderLifecycle, Place)
+contains(BucOrderLifecycle, Hold)
+contains(BucOrderLifecycle, Resume)
+contains(BucOrderLifecycle, Deliver)
+contains(BucOrderLifecycle, Cancel)
+contains(BucOrderLifecycle, LoseStock)
+contains(BucOrderLifecycle, CloseWindow)
+contains(BucOrderLifecycle, Restock)
+
+creates(Place, Order)
+updates(Hold, Order)
+updates(Resume, Order)
+updates(Deliver, Order)
+updates(Cancel, Order)
+updates(LoseStock, Order)
+updates(CloseWindow, Order)
+updates(Restock, Order)
+
+transitions(Hold, Order.status, pending -> on_hold)
+transitions(Resume, Order.status, on_hold -> pending)
+transitions(Deliver, Order.status, pending -> delivered)
+transitions(Cancel, Order.status, pending -> cancelled)
+sets(usecase::LoseStock, Order.in_stock == false)
+sets(usecase::CloseWindow, Order.window_open == false)
+sets(usecase::Restock, Order.in_stock == true)
+
+condition InStock "在庫あり"
+holds(InStock, Order.in_stock == true)
+applies_to(InStock, Deliver)
+
+condition WindowOpen "キャンセル受付中"
+holds(WindowOpen, Order.window_open == true)
+applies_to(WindowOpen, Cancel)
+
+property OrderCanFinish "every order can still be delivered or cancelled"
+  can_reach(Order.status in (delivered, cancelled))

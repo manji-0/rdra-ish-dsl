@@ -229,6 +229,13 @@ fn formats_a_property_fair_chain() {
 }
 
 #[test]
+fn formats_a_can_reach_property() {
+    let src = "property OrderCanFinish \"every order can finish\"\n  can_reach(Order.status == delivered)\n";
+    let formatted = format_source(src).unwrap();
+    assert_eq!(formatted, src);
+}
+
+#[test]
 fn formats_nm_via_chain() {
     let src = "relate(Order, Product, N:M).via(OrderProduct)\n";
     let formatted = format_source(src).unwrap();

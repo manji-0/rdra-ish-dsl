@@ -46,6 +46,8 @@ pub enum Target {
     Invariant(usize),
     /// Index into `after_asserts()`.
     AfterAssert(usize),
+    /// Index into `reach_properties()`.
+    Reach(usize),
 }
 
 /// A closed var set and the actions that must stay even when they write nothing in it.
@@ -374,8 +376,38 @@ impl TransitionSystem {
                     keep.insert(step.act);
                 }
             }
+            Target::Reach(i) => return self.reach_seed(i),
         }
         (seed, keep)
+    }
+
+    /// What a `can_reach` reads, grown until its cone is exact. `EF` is not monotone in the
+    /// transitions: a step the cone allows and the whole model does not (a creation of an
+    /// entity whose slots the cone does not count, or a use case run without its event's
+    /// mark) could reach the goal where the whole model cannot. So every action that writes
+    /// into the cone is kept, which brings in the marks it reads, and the existence of each
+    /// entity it creates is read; with no such step left out, a path of the cone is a path of
+    /// the whole model and the other way round.
+    fn reach_seed(&self, i: usize) -> Seed {
+        let r = &self.reach[i];
+        let mut seed = self.check_reads(&r.binders, r.preds());
+        let mut keep = BTreeSet::new();
+        loop {
+            let vars = self.cone(&seed, &keep);
+            let mut grew = false;
+            for (k, a) in self.actions.iter().enumerate() {
+                if !keep.contains(&ActId::at(k)) && self.action_writes(a).is_disjoint(&vars) {
+                    continue;
+                }
+                grew |= keep.insert(ActId::at(k));
+                for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
+                    grew |= seed.insert(self.entity(p.entity).exists);
+                }
+            }
+            if !grew {
+                return (seed, keep);
+            }
+        }
     }
 
     /// The cone a temporal property is checked on: what its formula reads, and each action of
@@ -439,6 +471,7 @@ impl TransitionSystem {
             .map(|i| Target::Entity(EntId::at(i)))
             .chain((0..self.invariants.len()).map(Target::Invariant))
             .chain((0..self.after.len()).map(Target::AfterAssert))
+            .chain((0..self.reach.len()).map(Target::Reach))
             .collect()
     }
 

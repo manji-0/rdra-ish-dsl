@@ -287,6 +287,9 @@ pub enum TemporalFormula {
         antecedent: TemporalExpr,
         consequent: TemporalExpr,
     },
+    /// `can_reach(expr)`: CTL `AG (present => EF expr)`, which no LTL formula states, so
+    /// BFS decides it on the explored graph and the TLA+ export only names it.
+    CanReach(TemporalExpr),
 }
 
 /// `property Id "label"` with a temporal formula body.

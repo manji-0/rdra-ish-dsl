@@ -14,6 +14,7 @@ mod expr;
 mod findings;
 mod lasso;
 pub mod prove;
+mod reach;
 mod reduce;
 mod restrict;
 mod select;
@@ -47,8 +48,8 @@ pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, AfterStep, Arm, At, Birth, Bounds, Choice, CmpOp,
     Domain, Effect, EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind,
-    ModelRef, Param, ParamRole, Pred, Property, Rhs, Site, Start, Term, Value, VarDecl, VarId,
-    VarKind,
+    ModelRef, Param, ParamRole, Pred, Property, Reach, Rhs, Site, Start, Term, Value, VarDecl,
+    VarId, VarKind,
 };
 pub use view::{
     AbstractValue, AxisKind, EntityStateResult, Provenance, ReachablePattern, StateAxis,
@@ -78,6 +79,7 @@ pub struct TransitionSystem {
     invariants: Vec<Invariant>,
     after: Vec<AfterAssert>,
     properties: Vec<Property>,
+    reach: Vec<Reach>,
     now: Option<VarId>,
     offsets: Vec<usize>,
     width: usize,
@@ -101,6 +103,7 @@ impl TransitionSystem {
             invariants: Vec::new(),
             after: Vec::new(),
             properties: Vec::new(),
+            reach: Vec::new(),
             now: None,
             offsets: Vec::new(),
             width: 0,
@@ -168,6 +171,11 @@ impl TransitionSystem {
 
     pub fn properties(&self) -> &[Property] {
         &self.properties
+    }
+
+    /// The `can_reach` properties, which BFS decides and TLC does not check.
+    pub fn reach_properties(&self) -> &[Reach] {
+        &self.reach
     }
 
     pub fn now(&self) -> Option<VarId> {

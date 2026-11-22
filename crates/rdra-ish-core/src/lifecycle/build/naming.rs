@@ -117,7 +117,8 @@ impl Named {
         for prop in &model.temporal_properties {
             let (a, b) = match &prop.formula {
                 crate::model::TemporalFormula::Always(e)
-                | crate::model::TemporalFormula::Eventually(e) => (e, None),
+                | crate::model::TemporalFormula::Eventually(e)
+                | crate::model::TemporalFormula::CanReach(e) => (e, None),
                 crate::model::TemporalFormula::LeadsTo {
                     antecedent,
                     consequent,

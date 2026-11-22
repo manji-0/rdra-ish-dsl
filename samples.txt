@@ -7,6 +7,8 @@ samples/personal-info
 samples/api-contract
 samples/incremental-order/step-7-business-rules/src
 samples/formal-verification/after_assert_unmet.rdra
+samples/formal-verification/can_reach_met.rdra
+samples/formal-verification/can_reach_unmet.rdra
 samples/formal-verification/check_met.rdra
 samples/formal-verification/check_unmet.rdra
 samples/formal-verification/cross_order_payment.rdra
