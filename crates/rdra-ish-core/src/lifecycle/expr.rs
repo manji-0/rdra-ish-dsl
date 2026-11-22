@@ -100,6 +100,56 @@ impl TransitionSystem {
         all
     }
 
+    /// Which of a rule's binders a premise asks rows of: those `pred` reads, or every one
+    /// when it reads none.
+    pub(crate) fn premise_rows(binders: usize, pred: &Pred) -> Vec<bool> {
+        let mut read = vec![false; binders];
+        for term in pred.terms() {
+            let (Term::Slot {
+                at: At::Bound(b), ..
+            }
+            | Term::Index(At::Bound(b))) = term
+            else {
+                continue;
+            };
+            if let Some(read) = read.get_mut(usize::from(*b)) {
+                *read = true;
+            }
+        }
+        if !read.contains(&true) {
+            read.fill(true);
+        }
+        read
+    }
+
+    /// Whether `state` meets a premise: `pred` holds for some present rows of the binders it
+    /// asks rows of (`premise_rows`). A binder it does not read needs no row, so a condition
+    /// on one entity of a rule over two is met by a row of that entity alone.
+    pub(crate) fn meets(&self, binders: &[EntId], pred: &Pred, state: &State) -> bool {
+        let read = Self::premise_rows(binders.len(), pred);
+        let slots = self.bounds.slots();
+        let mut env = Env::new(&[]);
+        env.bound = vec![0; binders.len()];
+        loop {
+            let present = (0..binders.len())
+                .all(|k| !read[k] || state.is_present(self, binders[k], usize::from(env.bound[k])));
+            if present && self.eval(pred, state, &mut env) {
+                return true;
+            }
+            // The next rows of the binders the premise reads; the others stay at slot 0.
+            let Some(k) = (0..binders.len())
+                .rev()
+                .find(|&k| read[k] && usize::from(env.bound[k]) + 1 < slots)
+            else {
+                return false;
+            };
+            env.bound[k] += 1;
+            for later in (k + 1..binders.len()).filter(|&l| read[l]) {
+                env.bound[later] = 0;
+            }
+        }
+    }
+
     /// The first binding of `binders` (present slots, index order) under which `body` fails.
     pub(crate) fn find_violation(
         &self,

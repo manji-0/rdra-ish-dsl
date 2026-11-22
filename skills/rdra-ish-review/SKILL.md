@@ -164,6 +164,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
         instance slot is missing)
       - `warning[Runs_<UseCase>]`: the use case never runs, with the guard or instance
         that blocks it
+      - `warning[Vacuous_<rule>]`: the rule holds and says nothing; no reachable state
+        meets the premise the message names
       - `warning[UnreachableEnumVariant_...]`: a declared variant that is no state of the
         state model and that nothing reaches
       - `warning[UnjoinedWrite_<UC>_<A>_<B>]`: the use case writes two entities that a key

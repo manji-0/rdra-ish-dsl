@@ -10,7 +10,7 @@ mod guards;
 mod temporal;
 
 use crate::lifecycle::diag::StateDiag;
-use crate::lifecycle::types::{At, CmpOp, Pred, Site, Term, VarId};
+use crate::lifecycle::types::{At, CmpOp, Pred, Premise, Site, Term, VarId};
 use crate::model::{CmpOpModel, CrossCmpRhs, CrossEntityCondition, EntityKey, FkId};
 
 /// Binds each entity of a predicate to a slot reference.
@@ -36,6 +36,35 @@ fn collect_vars(pred: &Pred, out: &mut Vec<VarId>) {
         Term::Slot { var, .. } => Some(*var),
         _ => None,
     }));
+}
+
+/// The premise that `parts` hold together, written `text`.
+pub(super) fn premise(parts: Vec<Pred>, text: String) -> Premise {
+    let mut parts: Vec<Pred> = parts.into_iter().filter(|p| *p != Pred::True).collect();
+    let pred = match parts.len() {
+        0 => Pred::True,
+        1 => parts.remove(0),
+        _ => Pred::And(parts),
+    };
+    Premise { pred, text }
+}
+
+/// The premises of a `forbidden` whose rows `link` ties and whose conditions are `conds`,
+/// written `texts`: the linked rows, and, when there are several conditions, each on its own.
+/// That the conditions never hold together is what the rule claims, so their conjunction is
+/// no premise, and neither is the one condition of a rule that has no other. A condition of
+/// several that no row ever meets alone makes the rule hold whatever the others say.
+pub(super) fn forbidden_premises(link: &Pred, conds: &[Pred], texts: &[String]) -> Vec<Premise> {
+    let mut premises = vec![premise(vec![link.clone()], String::new())];
+    if conds.len() > 1 {
+        premises.extend(
+            conds
+                .iter()
+                .zip(texts)
+                .map(|(cond, text)| premise(vec![cond.clone()], text.clone())),
+        );
+    }
+    premises
 }
 
 pub(super) fn implies(a: Pred, b: Pred) -> Pred {

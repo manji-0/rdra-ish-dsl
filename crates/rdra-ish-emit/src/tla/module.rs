@@ -692,9 +692,10 @@ fn action(ts: &TransitionSystem, names: &TlaNames, id: ActId, latches: &[Latch],
     conj.extend(pre.into_iter().map(guard));
     let (assigns, written) = effects(ts, names, a);
     conj.extend(assigns);
-    let rises = ts
-        .reduction()
-        .is_some_and(|r| !r.bits().is_empty() || r.inputs().iter().any(|v| written.contains(v)));
+    // A step that writes no input of the sub-lifecycle and nothing a bit reads leaves the
+    // class alone: it gets `UNCHANGED`, not the `Rise` lookup, whose bits TLC would evaluate
+    // before and after every such step.
+    let rises = ts.reduction().is_some_and(|r| !r.is_steady(id));
     conj.extend(unchanged(&tuple_items(
         ts,
         names,
