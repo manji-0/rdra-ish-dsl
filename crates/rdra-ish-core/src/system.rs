@@ -141,7 +141,7 @@ pub fn system_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 }
 
 fn membership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut Vec<Diagnostic>) {
-    for (api, systems) in &index.systems_by_api {
+    for (api, systems) in by_id(&index.systems_by_api, |api| api_id(model, api)) {
         if systems.len() > 1 {
             let api_id = api_id(model, *api);
             let err = RdraError::ApiInMultipleSystems {
@@ -151,7 +151,7 @@ fn membership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut 
             warn(model, diags, "api", &api_id, err);
         }
     }
-    for (entity, systems) in &index.api_systems_by_entity {
+    for (entity, systems) in by_id(&index.api_systems_by_entity, |e| entity_id(model, e)) {
         if systems.len() > 1 {
             let entity_id = entity_id(model, *entity);
             let err = RdraError::EntityInMultipleSystems {
@@ -164,7 +164,7 @@ fn membership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut 
 }
 
 fn ownership_conflicts(model: &SemanticModel, index: &SystemIndex, diags: &mut Vec<Diagnostic>) {
-    for (entity, owners) in &index.owners_by_entity {
+    for (entity, owners) in by_id(&index.owners_by_entity, |e| entity_id(model, e)) {
         let entity_id = entity_id(model, *entity);
         if owners.len() > 1 {
             let err = RdraError::EntityOwnedByMultipleSystems {
@@ -403,6 +403,14 @@ fn is_entity_relation(kind: &RelKind) -> bool {
     )
 }
 
+/// The entries of `map` sorted by the id of their key, so diagnostics come out in the same
+/// order on every run.
+fn by_id<K: Copy, V>(map: &HashMap<K, V>, id: impl Fn(K) -> String) -> Vec<(&K, &V)> {
+    let mut entries: Vec<(&K, &V)> = map.iter().collect();
+    entries.sort_by_cached_key(|(key, _)| id(**key));
+    entries
+}
+
 fn api_id(model: &SemanticModel, key: ApiKey) -> String {
     model.apis[key].id.clone()
 }
@@ -467,6 +475,26 @@ updates(StoreApi, Store)
             .map(|key| model.entities.get(*key).unwrap().id.as_str())
             .collect();
         assert_eq!(entity_ids, vec!["Organization", "Store"]);
+    }
+
+    #[test]
+    fn system_diagnostics_come_in_id_order() {
+        let mut src = String::from("system SysA \"A\"\nsystem SysB \"B\"\n");
+        let ids = ["Api3", "Api1", "Api4", "Api0", "Api2"];
+        for id in ids {
+            src.push_str(&format!(
+                "api {id} \"{id}\"\ncontains(SysA, {id})\ncontains(SysB, {id})\n"
+            ));
+        }
+        let model = model_from(&src);
+        let apis: Vec<String> = system_diagnostics(&model)
+            .iter()
+            .filter_map(|d| match &d.error {
+                RdraError::ApiInMultipleSystems { api, .. } => Some(api.clone()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(apis, ["Api0", "Api1", "Api2", "Api3", "Api4"]);
     }
 
     #[test]

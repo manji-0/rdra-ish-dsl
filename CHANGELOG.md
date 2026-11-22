@@ -61,6 +61,13 @@
 - The sample design documents open each BUC section's processing with the BUC's sequence
   diagram (`diagram --kind sequence --buc`), before the per-use-case ones.
 
+### Fixed
+
+- `check`, `lint` and the LSP print the warnings for an API or an entity in several
+  systems, an entity owned by several systems or without an API of its owner, and a
+  permission no actor can reach in id order. They came in the order of a hash map, which
+  could change from one run to the next (#152).
+
 ## v2.3.0 - 2026-11-18
 
 Upgrading from v2.2.0 needs no change: a model that passed `check` and `verify` still

@@ -378,6 +378,8 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 
     let mut diags = Vec::new();
 
+    let mut uc_requirements: Vec<_> = uc_requirements.into_iter().collect();
+    uc_requirements.sort_by_key(|(usecase, _)| model.use_cases[*usecase].id.clone());
     for (usecase, permissions) in &uc_requirements {
         let usecase = *usecase;
         let actors = actors_for_usecase(model, usecase);
@@ -399,6 +401,8 @@ pub fn permission_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
         }
     }
 
+    let mut api_requirements: Vec<_> = api_requirements.into_iter().collect();
+    api_requirements.sort_by_key(|(api, _)| model.apis[*api].id.clone());
     for (api, permissions) in &api_requirements {
         let api = *api;
         let mut invoking_usecases = usecases_invoking_api(model, api);
