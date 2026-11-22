@@ -56,7 +56,7 @@
   not run when the larger cone passes, and prints `ok (checked in Cone_<larger>)` in place
   of its state count; when the larger cone fails it runs as before. A reduced cone no
   longer recomputes the sub-lifecycle's class on a step that writes none of its inputs,
-  in TLA+ and in BFS (#NNN).
+  in TLA+ and in BFS (#164).
 - `verify` is faster and prints what it printed: 43 s to 20 s on clinic-ops, 53 s to 30 s on
   patent-ops, 101 s to 27 s on food-permit-ops, and 355 s to 194 s on insurance-claim-ops
   (4 cores). BFS computes the moves of one large cone on several threads and reaches the
