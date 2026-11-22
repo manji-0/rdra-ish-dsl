@@ -1054,7 +1054,7 @@ fn verify_warns_of_checks_that_hold_vacuously() {
     assert!(stdout.contains("tlc_result: ok"), "{stdout}");
     for warning in [
         "warning[Vacuous_Inv_Order_0]: Inv_Order_0 holds vacuously: no reachable state has a row of Order with held=true\n",
-        "warning[Vacuous_AfterAssert_Ship_0]: AfterAssert_Ship_0 holds vacuously: Ship never runs\n",
+        "warning[Vacuous_AfterAssert_Ship_0]: AfterAssert_Ship_0 holds vacuously: Ship never runs to its last step\n",
         "warning[Vacuous_HeldFlags]: HeldFlags holds vacuously: its leads_to trigger holds in no reachable state\n",
     ] {
         assert!(stderr.contains(warning), "missing {warning}\n{stderr}");

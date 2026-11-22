@@ -1246,22 +1246,31 @@ fn state_models(
 /// premise of the cone's own rules, asserts, or property. TLC says only that a check holds.
 /// The cones are explored side by side, and each run is dropped once it is read.
 fn vacuous_checks(ts: &TransitionSystem, jobs: &[Job]) -> Vec<Diag> {
-    let found = in_parallel(
-        jobs.iter().collect(),
-        rdra_ish_core::jobs(),
-        |job| match &job.kind {
-            JobKind::Cone(cone) => {
-                let run = cone.system.clone().run(Caps::VERIFY);
-                let found = cone.targets.iter().filter_map(|t| ts.vacuity(*t, &run));
-                found.collect::<Vec<Diag>>()
-            }
-            JobKind::PropertyCone(p) => {
-                let run = p.cone.reduced.clone().run(Caps::VERIFY);
-                ts.property_vacuity(p.index, &run).into_iter().collect()
-            }
-            JobKind::Whole(_) => Vec::new(),
-        },
-    );
+    // A covered cone takes the steps of the cone that covers it and no others on its own
+    // vars, so its checks are read off that cone's run and it is not explored again.
+    let covers = covering(jobs);
+    let at: Vec<usize> = (0..jobs.len()).collect();
+    let found = in_parallel(at, rdra_ish_core::jobs(), |at| match &jobs[at].kind {
+        JobKind::Cone(_) if covers[at].is_some() => Vec::new(),
+        JobKind::Cone(cone) => {
+            let run = cone.system.clone().run(Caps::VERIFY);
+            let covered = (0..jobs.len()).filter(|a| covers[*a] == Some(at));
+            std::iter::once(at)
+                .chain(covered)
+                .filter_map(|a| match &jobs[a].kind {
+                    JobKind::Cone(cone) => Some(&cone.targets),
+                    JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
+                })
+                .flatten()
+                .filter_map(|t| ts.vacuity(*t, &run))
+                .collect::<Vec<Diag>>()
+        }
+        JobKind::PropertyCone(p) => {
+            let run = p.cone.reduced.clone().run(Caps::VERIFY);
+            ts.property_vacuity(p.index, &run).into_iter().collect()
+        }
+        JobKind::Whole(_) => Vec::new(),
+    });
     found.into_iter().flatten().collect()
 }
 

@@ -242,7 +242,7 @@ fn an_assert_after_a_use_case_that_never_runs_holds_vacuously() {
         BTreeMap::from([
             (
                 "AfterAssert_Ship_0".to_string(),
-                vec!["Ship never runs".to_string()]
+                vec!["Ship never runs to its last step".to_string()]
             ),
             (
                 "AfterAssert_Pay_2".to_string(),
@@ -277,5 +277,36 @@ fn a_leads_to_whose_trigger_never_holds_holds_vacuously() {
     assert_eq!(
         texts(&ts.vacuous_properties(Caps::new(256, 1))),
         BTreeMap::new()
+    );
+}
+
+/// A property over two entities is read per pair of present rows, as TLC reads it. A Desk
+/// opens only once the one Order is paid, so no state has an open order beside a desk: the
+/// trigger never fires, though open orders exist.
+#[test]
+fn a_trigger_needs_a_row_of_every_entity_the_property_ranges_over() {
+    let src = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid) @default(open) }
+entity Desk "窓口" { id: Int @pk  busy: Bool @default(false) }
+usecase Place "注文"
+usecase Pay "支払"
+usecase Open "開設"
+creates(Place, Order)
+transitions(Pay, Order.status, open -> paid)
+creates(Open, Desk)
+condition Paid "済"
+holds(Paid, Order.status == paid)
+applies_to(Paid, Open)
+property TwoLead "両方"
+  leads_to(Order.status == open, Desk.busy == true)
+"#;
+    let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
+    let found = texts(&ts.vacuous_properties(Caps::STATES));
+    assert_eq!(
+        found.get("TwoLead"),
+        Some(&vec![
+            "its leads_to trigger holds in no reachable state".to_string()
+        ]),
+        "{found:?}"
     );
 }

@@ -428,8 +428,8 @@ none does:
 | Every state rule | Rows of the entities it ranges over exist, linked as its `.along` says. For `Unique_*` that is two rows of the child, so it has no premise at one instance per entity. |
 | `invariant(...).when(G)`, a quantifier rule with guards | The guards `G` hold for some rows. |
 | `invariant(E).none(R...)` | A row of `R` exists beside a row of `E`. A `.has(R...)` asks for a row itself, so it has no such premise. |
-| `after(UC).assert(...)` | `UC` takes its last step. When the assertion reads an entity the step does not bind, some such step ends in a state with a row of it. |
-| `property` | Rows of the entities it ranges over exist. For a `leads_to`, its trigger holds for some rows. |
+| `after(UC).assert(...)` | `UC` runs to its last step, the one the assertion follows (a split use case may run its earlier transactions without it). When the assertion reads an entity the step does not bind, some such step ends in a state with a row of it. |
+| `property` | Rows of the entities it ranges over exist together. For a `leads_to`, its trigger holds for some such rows. |
 | `forbidden` of several conditions | Each condition holds for some row, on its own. A rule over two entities meets a condition on one of them with a row of that entity alone. |
 
 That the conditions of a `forbidden` never hold together is what the rule claims, so their
@@ -442,7 +442,8 @@ payments exist, even if no cancelled order keeps a payment.
 
 The warning names the rows each premise asks for: `no reachable state has a row of Order
 with Order.status=void`. It does not fail `check`, and `states` and `next` list it with the
-other findings. It is not raised for a rule that is violated, on a cone a cap stopped, where
+other findings of an entity; a vacuous property, which belongs to no one entity, is listed
+by `check` and `verify` only. It is not raised for a rule that is violated, on a cone a cap stopped, where
 an unseen state may meet the premise, or under `--buc`, which drops use cases that may reach
 it. `check` explores one instance per entity, where a state that needs a second row of some
 entity is not reached: a rule may be vacuous there and violated at `--instance-count 2`, and

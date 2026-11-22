@@ -779,10 +779,19 @@ impl TransitionSystem {
         if !run.complete {
             return None;
         }
+        // A formula the build could not express is `False` and has its own error.
+        let unbuilt = |pred: &Pred| pred.nodes().any(|n| matches!(n, Pred::False));
+        if local.formula.preds().any(unbuilt) {
+            return None;
+        }
+        // The formula is read per binding of every binder to a present row, as TLC reads it:
+        // a trigger that holds only while another binder has no row never fires.
         let met = |pred: &Pred| {
-            run.states
-                .iter()
-                .any(|s| sys.meets(&local.binders, pred, s))
+            let absent = Pred::Not(Box::new(pred.clone()));
+            run.states.iter().any(|s| {
+                sys.find_violation(&local.binders, &absent, s, &[])
+                    .is_some()
+            })
         };
         let unmet = match &local.formula {
             _ if !met(&Pred::True) => UnmetPremise::Rows {

@@ -2673,7 +2673,7 @@ Entity: BusinessPermit (営業許可)
   reachable: 60 / bound: 120
   diagnostics:
     [info][UnjoinedTrigger_BusinessPermit_EvRenewalGranted_ExtendPermitTerm] triggers(EvRenewalGranted, ExtendPermitTerm): ExtendPermitTerm binds no row of PermitApplication, the entity EvRenewalGranted is raised on, and no key joins its rows to one, so any PermitApplication the event was raised on lets ExtendPermitTerm run
-    [warn][Vacuous_AfterAssert_ExtendPermitTerm_1] 「失効した許可は更新できない」: AfterAssert_ExtendPermitTerm_1 holds vacuously: ExtendPermitTerm never runs (at one instance per entity; a state that needs a second row of some entity is reached only at --instance-count 2)
+    [warn][Vacuous_AfterAssert_ExtendPermitTerm_1] 「失効した許可は更新できない」: AfterAssert_ExtendPermitTerm_1 holds vacuously: ExtendPermitTerm never runs to its last step (at one instance per entity; a state that needs a second row of some entity is reached only at --instance-count 2)
     [warn][Runs_ExtendPermitTerm] ExtendPermitTerm can never run: in no reachable state do its guards hold
 ```
 
@@ -3032,7 +3032,7 @@ Entity: PermitApplication (営業許可申請)
 
   reachable: 60 / bound: 288
   diagnostics:
-    [warn][Vacuous_AfterAssert_ExtendPermitTerm_1] 「失効した許可は更新できない」: AfterAssert_ExtendPermitTerm_1 holds vacuously: ExtendPermitTerm never runs (at one instance per entity; a state that needs a second row of some entity is reached only at --instance-count 2)
+    [warn][Vacuous_AfterAssert_ExtendPermitTerm_1] 「失効した許可は更新できない」: AfterAssert_ExtendPermitTerm_1 holds vacuously: ExtendPermitTerm never runs to its last step (at one instance per entity; a state that needs a second row of some entity is reached only at --instance-count 2)
     [warn][Runs_RenewPermit] RenewPermit can never run: in no reachable state do its guards hold
     [warn][Runs_ApplyRenewal] ApplyRenewal can never run: no reachable state has all the instances it needs at once
 ```

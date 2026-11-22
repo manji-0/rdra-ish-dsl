@@ -108,7 +108,8 @@ pub enum UnmetPremise {
     /// over when it reads none. `text` is the condition as written; empty when the premise
     /// asks only for the rows.
     Rows { rows: Vec<String>, text: String },
-    /// An `after(UC).assert`: no run takes the last step of the use case.
+    /// An `after(UC).assert`: no run takes the last step of the use case, the one the
+    /// assertion follows. A split use case may still run its earlier transactions.
     NeverRuns { usecase: String },
     /// An `after(UC).assert` over entities no param of the step binds: the step runs, but
     /// never into a state with rows of them.
@@ -136,7 +137,9 @@ impl fmt::Display for UnmetPremise {
                     text => write!(f, " with {text}"),
                 }
             }
-            UnmetPremise::NeverRuns { usecase } => write!(f, "{usecase} never runs"),
+            UnmetPremise::NeverRuns { usecase } => {
+                write!(f, "{usecase} never runs to its last step")
+            }
             UnmetPremise::NoRowsAfter { usecase, rows } => {
                 write!(
                     f,
