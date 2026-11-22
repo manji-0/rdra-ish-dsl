@@ -10,8 +10,11 @@
 Status: proposed on 2026-11-23. Nothing here is implemented. The plan starts after
 [#165](https://github.com/manji-0/rdra-ish-dsl/issues/165),
 [#166](https://github.com/manji-0/rdra-ish-dsl/issues/166), and
-[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) land, and
-[Decisions](#decisions) lists what the maintainer still has to decide.
+[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) land. The owner decided three
+questions on 2026-11-23: `verify` defaults to the native checker and `--with-tlc` adds
+TLC, each phase lands on `main` when it passes while the next release waits until the
+native checker is stable, and `check` and `states` evaluate no `property`.
+[Decisions](#decisions) records them and lists what is still open.
 
 `verify` needs a JVM and TLC today. TLC decides every invariant cone, every `after`
 assertion, and every temporal property, while the explorer in `rdra-ish-core` reaches the
@@ -21,7 +24,8 @@ that a run may ask for and no longer a tool that `verify` cannot run without.
 
 **Purpose.** `verify` gives the verdicts it gives today, at the same bounds, with no
 external tool. It prints each counterexample in the form it prints now. TLC stays as the
-oracle of the tests and as an optional cross-check of a run.
+oracle of the tests, and `verify --with-tlc` runs it beside the native checker and fails
+when the two disagree.
 
 ## What exists today
 
@@ -111,8 +115,12 @@ Goals:
   the numbered steps, `then loops back to step K`, or `then nothing changes forever`.
 - **No JVM for a default `verify`.** That includes the invariant and `after` cones, which
   move to the BFS that `check` already uses.
-- **TLC stays the oracle.** The tests keep comparing the engines, and a run can ask for the
-  comparison.
+- **TLC stays the oracle.** The tests keep comparing the engines, and `--with-tlc` asks
+  for the comparison in a run.
+- **One command per kind of question.** `check` and `states` verify safety by state
+  exploration: the rules, the `after` assertions, and the state-model findings. Every
+  `property` form and every inductive proof is `verify`'s. The docs say so in one place
+  each (see [Migration](#migration)).
 
 Non-goals:
 
@@ -212,6 +220,13 @@ Weak fairness of an instance `a` says that a behavior does not stay forever in s
 where `a` is enabled without taking an `a` step. On a finite graph, "enabled" at a state
 means that the state has an out-edge labelled `a` whose target differs from its source.
 
+**Who evaluates a property.** `verify` alone, for all seven forms. `check` and `states`
+evaluate no `property`, whatever its class. `always`, `stable`, `unchanged`, and
+`precedes` are safety properties that BFS can decide, and they are still `verify`'s,
+because the rule goes by the declaration and not by the class. `check` keeps printing its
+note that the properties were not checked, and the note names `verify`. A rule that
+`check` must enforce is written as a `forbidden`, an `invariant`, or an `after` assertion.
+
 Out of the fragment: operators nested in an operand, a property that compares two moments
 of one row other than through `stable`, `unchanged`, or `precedes`, strong fairness, a
 bound on the number of steps, and any property over the run marks or raised marks, which no
@@ -232,10 +247,12 @@ It never explores. Each class of form asks a different question of the same grap
 | Branching | Does some triggered state have no path to a goal state? | One backward pass |
 
 State and step safety already run inside BFS for invariants and `after` assertions
-(`check_invariants`, `check_after` in `explore/bfs.rs`), and #166 adds its forms there.
-`always(x)` is an invariant over the present binders with the name of the property, so it
-joins that list and gets the shortest trace BFS gives every invariant. `can_reach` is the
-backward pass of #167. The liveness routine is the new part.
+(`check_invariants`, `check_after` in `explore/bfs.rs`). The property forms use the same
+two evaluators, and only a run that `verify` starts hands them the properties. `always(x)`
+is an invariant over the present binders with the name of the property, and it gets the
+shortest trace BFS gives every invariant. `stable`, `unchanged`, and `precedes` are the
+evaluators of #166, and `can_reach` is the backward pass of #167. The liveness routine is
+the new part.
 
 ### Liveness by fair components
 
@@ -449,22 +466,25 @@ delete resets it, a candidate `W` that shares a writer with the cone, a candidat
 drops a mark, and a widened cone that is the whole model.
 
 **Random models.** `scripts/reduction-diff.py` gains a mode that runs each seed with
-`--backend native` and with `--backend tlc` and compares what it compares today: the exit
-code, the finding names, the verdict of each check, and the state-model summary. The
+`verify --with-tlc` and records every check on which the two engines differ, beside what
+it compares today between the reduced and the unreduced run: the exit code, the finding
+names, the verdict of each check, and the state-model summary. The
 generator already emits `leads_to` and `eventually` with and without `.fair`. It gains
 `always`, the forms of #166 and #167, `.along` on a two-entity property, a fair use case
 that creates, and a fair use case split over two APIs. A second mode, at 2 instances on
 models small enough for a whole-model TLC run, compares every native verdict with the
 whole model, so that steps 4 to 6 are tested where no fixture was written for them.
 
-**Samples.** `scripts/verify-samples.sh` runs every root with both backends and fails on a
-difference in exit status or error names.
+**Samples.** `scripts/verify-samples.sh` runs every root as its header says, and CI runs
+every root once more with `--with-tlc`, which fails on a check the engines decide
+differently.
 
 **When the engines disagree.** In a test, the case fails, the model is copied out, and
-`minimize` shrinks it, as `reduction-diff.py` does today. In a run with the cross-check,
+`minimize` shrinks it, as `reduction-diff.py` does today. In a run with `--with-tlc`,
 `verify` prints the engine-disagreement line with both verdicts, keeps the spec directory,
 and exits 1. Neither verdict is reported as the result. A disagreement is a bug in the
-tool, never a finding about the model.
+tool, never a finding about the model. A property that the native checker decides and TLC
+leaves `not decided` at its budget is not a disagreement, since TLC gave no verdict.
 
 **What the tests do not show.** Agreement is tested at 1 to 3 instances on models TLC can
 finish. A native verdict on a cone TLC cannot finish has no oracle, as a BFS finding on a
@@ -545,47 +565,141 @@ cones.
 
 ## Migration
 
-**Flags.** `--backend` gains the value `native`. `--backend tlc` keeps its meaning. A new
-flag `--cross-check tlc` runs TLC beside the native checker on every cone and property and
-fails on a disagreement. `--tlc-jar` and the TLC heap settings apply only when TLC runs.
-`--temporal-budget` bounds the widened cone of step 6 in seconds, as it bounds the
-whole-model run today.
+The owner decided the shape on 2026-11-23. The native checker is the default of `verify`,
+and `--with-tlc` adds TLC. Each phase, the change of default included, lands on `main` as
+soon as its exit check passes. The next tagged release waits until the native checker is
+stable.
+
+**`main` is the early channel.** A user who wants the native checker before the release
+installs from `main`, for example with `nix profile install github:manji-0/rdra-ish-dsl`,
+which the README documents. The promises of [compatibility](../compatibility.md) cover
+releases, not `main`: between two releases `main` may change a default, an output line, or
+a verdict, and each such change is in the `Unreleased` section of the changelog. What a
+user of `main` gets after each phase:
+
+| After phase | `verify` on `main` |
+|---|---|
+| 0 | As released. Nothing a user sees changes. |
+| 1 and 2 | As released. `verify` still needs TLC, and the native path runs only under a test hook. |
+| 3 | Native by default, with no JVM. The verdicts are those of today's run structure, so a property the cone leaves open still ends as `not decided` where the whole model is too large. `--with-tlc` runs TLC beside it. The verdict line, the `// expect` grammar, and the sample headers are the new ones. |
+| 4 | A property that ended as `not decided` gets a verdict on a cone. A run that passed with a `not decided` property can now fail with its counterexample. |
+| 5 | A counterexample on a reduced cone whose unreduced cone passes the cap prints, lifted. Lassos on reduced cones may differ from those of phase 3. |
+| 6 | The same tool, tagged as a release, with the contract of `compatibility.md` in force again. |
+
+**Before the default changes.** Phases 1 and 2 build the native path while `verify` still
+runs TLC. A test hook selects it, `RDRA_ISH_NATIVE`, which is not a setting, as
+`RDRA_ISH_NO_REDUCE` is not one. No flag is added for a state that lasts two phases.
+
+**Flags after the default changes.**
+
+| Flag | Meaning |
+|---|---|
+| `verify` | The native checker decides every cone and every property. No JVM starts. |
+| `verify --with-tlc` | The native checker decides, TLC runs the modules it runs today, and the run fails with the engine-disagreement line when a check has two verdicts. A missing `tlc` is exit 1, as today. |
+| `--prove`, `--deny-unproved`, `--z3` | Unchanged. The proof reads the state rules and uses z3, with or without `--with-tlc`. |
+| `--tlc-jar`, `RDRA_TLC_HEAP` | Apply only with `--with-tlc`. |
+| `--temporal-budget` | Bounds the widened cone of step 6 in seconds, and TLC's whole-model run under `--with-tlc`. |
+| `-o <dir>` | Still writes the modules and `cones.txt`, for a TLC run by hand. |
+| `--backend tlc` | Open, see [Decisions](#decisions). |
 
 **Output.** A native run prints the lines `verify` prints today, with these differences.
 The cone names stay `Cone_<name>` as labels, so a script that reads the lines keeps
-working, and `-o` still writes the modules for a run by hand. The second and third runs
-keep their notes (`Cone_P_WF: ok`). Steps 4 to 6 add a note that says why the cone decided
-(`nothing outside the cone runs forever`, `<Entity> runs forever outside the cone`, `on
-the cone widened by N vars`). A native run prints no `tlc_result:` line, since
-[compatibility](../compatibility.md#the-command-line) gives that line to TLC's verdict. It
-prints a `native_result:` line of the same form, and the `// expect` grammar gains
-`native=` beside `tlc=`.
+working. The second and third runs keep their notes (`Cone_P_WF: ok`). Steps 4 to 6 add a
+note that says why the cone decided (`nothing outside the cone runs forever`, `<Entity>
+runs forever outside the cone`, `on the cone widened by N vars`). The `tlc_result:` line
+prints only when TLC ran, which is under `--with-tlc`. What a native run prints in its
+place is open (see [Decisions](#decisions)).
 
-**When TLC stops being required.** `verify --backend native` needs no TLC from the phase
-that wires it in. The default changes only in a major release, because three covered
-items move with it: the default value of `--backend`, the `tlc_result:` line that scripts
-and `// expect` headers read, and the exit status of a model whose property goes from `not
-decided` (exit 0) to a counterexample (exit 1) at the same bounds. Until then every
-existing invocation behaves as it does now.
+**`compatibility.md` changes in the change that moves a covered item.** The page states
+what the next release keeps, so it is edited where the behavior moves and not at the
+release. The change of phase 3 edits the page, the changelog, and every sample header
+together. The covered items that move:
 
-**Compatibility promises.** The diagnostic names, the property names, and the exit status
-rules stay. The message wording, the state counts, and the lasso TLC would have picked are
-not covered and change. `export --kind tla` is untouched.
+- **The command line.** The default of `verify`, the new `--with-tlc`, and the fate of
+  `--backend`. "`verify` without `tlc`" stops being an example of exit status 1 and
+  becomes "`verify --with-tlc` without `tlc`".
+- **The `tlc_result:` line.** Its form stays parseable, and the page says that it prints
+  under `--with-tlc` only.
+- **`// expect` headers.** A `verify` line without flags no longer expects a `tlc_result:`
+  line. The grammar in
+  [Sample expectations](../formal-verification.md#sample-expectations) changes with it, and
+  all 32 roots are rewritten in the same change.
+- **Meaning.** A property that ended as `not decided` (exit 0) can become a counterexample
+  (exit 1) at the same bounds, once steps 4 to 6 land. Each change of phase 4 that moves a
+  sample's verdict adds the property to the `### Breaking` entry and says how to see the
+  case in a model.
+- **Not covered, and changing.** The message wording, the state counts, and the lasso TLC
+  would have picked.
 
-**CI.** The `formal-verify` job gains the native run of `verify-samples.sh` and the
-native-versus-TLC mode of `reduction-diff.py` on the fixed seeds. `engine_equivalence`
-keeps `RDRA_REQUIRE_TLC=1`. After the default changes, the job that checks every sample
-against its header needs no JVM, and TLC stays in the engine-equivalence job and the
-random sweep only.
+These are breaks of covered items, so by the rule on that page the release that carries
+them is a major release. That follows from the contract. It does not gate the work.
 
-**The skill and the docs.** `docs/formal-verification.md` loses "TLC" from its title and
-gains a section on the native checker. `skills/rdra-ish-verify` stops telling the reader to
-install TLC first.
+**The release gate: what "stable" means.** No release is tagged between the change of
+default and the day all of these hold at one commit of `main`. The criteria are this
+plan's proposal:
+
+1. **Every phase has passed.** Phases 0 to 5 have passed their exit checks, or the owner
+   has moved a phase out of the release in [Decisions](#decisions).
+2. **The samples agree.** `verify --with-tlc` on every root of `samples.txt` reports no
+   disagreement, and the native run alone matches every `// expect` header.
+3. **Random models agree.** `reduction-diff.py` in its `--with-tlc` mode and in its
+   whole-model mode finds no disagreement on seeds `0:2000` at 2 and at 3 instances, with
+   no seed that only one side finished. A sweep of 500 seeds that no earlier run used
+   finds none either, so the fixed seeds are not the only evidence.
+4. **No wrong verdict is open.** Every disagreement found since the default changed is
+   closed with a fixture in `engine_equivalence` that fails without its fix. No open issue
+   reports a native verdict as wrong, whether a test or a user of `main` found it.
+5. **No counterexample failed its own check.** No run of items 2 and 3 printed the tool-bug
+   line for a lasso that does not replay or does not satisfy its fairness.
+6. **Nothing got worse.** No sample check that `verify` decided with TLC is `not decided`
+   natively. Each domain sample's native `verify` takes no more wall time and no more peak
+   memory than the TLC run in [What exists today](#what-exists-today), measured on the
+   same machine.
+7. **Two weeks without a fix to a verdict.** For 14 days no commit on `main` changed a
+   native verdict on a sample, a fixture, or a sweep seed.
+8. **The contract is written.** `compatibility.md`, the changelog, the docs, and the
+   skills below describe the tool at that commit.
+
+Item 7 is a waiting time and the others are checks. The owner may prefer another length.
+
+**CI.** Before the default changes, the `formal-verify` job runs the samples as today and
+once more under `RDRA_ISH_NATIVE`. After it, the step that checks every sample against its
+header runs without a JVM, and a second step runs the samples with `--with-tlc`.
+`engine_equivalence` keeps `RDRA_REQUIRE_TLC=1`, and the sweep runs its `--with-tlc` mode
+on the fixed seeds.
+
+**Docs that change.** The documents must say in plain words who checks what:
+
+- **`docs/formal-verification.md`.** The title loses "TLC". The page opens with the split:
+  `check` and `states` verify safety by state exploration, `verify` checks every `property`
+  natively and proves state rules with `--prove`, and TLC is `--with-tlc`. The "Temporal
+  properties are checked only by `verify`" gap becomes that statement and stops being a
+  gap. Every `verify ... --backend tlc` transcript is rerun.
+- **`docs/state-derivation.md`.** The `property` row of
+  [Checks](../state-derivation.md#checks) lists all seven forms and says that BFS in
+  `check` and `states` does not evaluate them and that `verify` does.
+- **`docs/language-reference.md`.**
+  [Temporal path properties](../language-reference.md#temporal-path-properties) says once,
+  for every form, that a `property` is checked by `verify` and that a rule for `check` is a
+  `forbidden`, an `invariant`, or an `after` assertion.
+- **`docs/cli-reference.md`.** The `verify` flags, the `check` note, and the exit statuses.
+- **`docs/vision.md`.** A dated entry under Decisions for the three decisions, and
+  "Verification is bounded, fails closed, and points at the model" says which command
+  checks which declaration.
+- **`docs/compatibility.md`.** As above, and one sentence that the page covers releases
+  and that `main` between releases is the `Unreleased` section of the changelog.
+- **`README.md`.** Beside the install from `main`, a line that `main` holds the native
+  checker before its release and that its output may still change.
+- **The `check` note.** `crates/rdra-ish-cli/src/lib.rs:117` says `use verify --backend
+  tlc`. It says `use verify`.
+- **`skills/rdra-ish-verify`.** It stops telling the reader to install TLC first and
+  presents `--with-tlc` as the second opinion.
 
 ## Phases
 
 Each phase ends in a state that a test proves. A phase starts after the one before it has
-passed its exit check.
+passed its exit check, and it lands on `main` when its own exit check passes. No phase has
+`check` or `states` evaluate a `property`.
 
 **Phase 0: shared graph helpers and the measurement.** Move `Adjacency` out of
 `findings.rs` to a module the property checks share, with both directions and without
@@ -593,12 +707,14 @@ self-loops. Add the edge count, the self-loop count, and the component time to
 `lifecycle_measure`. No behavior changes. Exit: `cargo test` passes, and `lifecycle_measure`
 reproduces the table in [Measurements](#measurements) within the run-to-run spread.
 
-**Phase 1: safety cones on BFS.** Under `--backend native`, `verify` decides each
-invariant cone and each `after` cone by the BFS that `check` uses, at the bounds of
-`verify`, reduced as today. `always` joins the invariants. The forms of #166 and #167
-arrive native and need only the dispatch. Exit: `verify-samples.sh` with `--backend native`
-reports the exit status and error names of `--backend tlc` on every root that has no
-`eventually` or `leads_to`, and `engine_equivalence` is unchanged.
+**Phase 1: safety cones on BFS.** Under the test hook, `verify` decides each invariant
+cone and each `after` cone by the explorer, at the bounds of `verify`, reduced as today.
+`always` joins the invariants of a `verify` run. `stable`, `unchanged`, `precedes`, and
+`can_reach` need only the dispatch, since #166 and #167 bring their evaluators. `verify`
+keeps skipping the cone of a `.lemma()` rule. Exit: under the hook, `verify-samples.sh`
+reports the exit status and error names that the TLC run reports on every root that has no
+`eventually` or `leads_to`, `check` reports for every sample what it reported before, and
+`engine_equivalence` is unchanged.
 
 **Phase 2: the liveness routine.** Add the fair-component routine to `rdra-ish-core` with
 the two modes, the lasso builder, and the fairness check of a lasso. It reads a `Graph` and
@@ -606,17 +722,21 @@ returns a verdict with a lasso. `verify` does not call it yet. Exit: in
 `a_property_cone_decides_what_the_whole_model_decides`, the native verdict of each run
 equals TLC's on every case, and every native lasso replays and passes both checks.
 
-**Phase 3: liveness in `verify`.** Wire the routine into `--backend native` with the run
-structure of today, the whole-model run included, on BFS under the budget and the cap. Add
-`--cross-check tlc` and the `native_result:` line. Exit: `verify-samples.sh` agrees between
-the backends on every root, and `reduction-diff.py` in its native-versus-TLC mode finds no
-difference on seeds `0:500` at a 120 s timeout.
+**Phase 3: the native checker becomes the default.** Wire the liveness routine into
+`verify` with the run structure of today, the whole-model run included, on BFS under the
+budget and the cap. Make the native path the default, add `--with-tlc`, remove the test
+hook, and in the same change edit `compatibility.md`, the changelog, the sample headers,
+and the docs listed under [Migration](#migration). Exit: `verify-samples.sh` passes with
+no `tlc` on `PATH`, `verify --with-tlc` reports no disagreement on any root, and
+`reduction-diff.py` in its `--with-tlc` mode finds none on seeds `0:500` at a 120 s
+timeout. From this phase on, no release is tagged until the gate passes.
 
-**Phase 4: decide on a cone what the whole model decided.** Add the widening that makes
-a cone exact, by existence and by raised mark, then steps 4, 5, and 6, each in its own change with its fixtures. Exit: the undecided list
-of `TEMPORAL_CASES` is empty with every verdict equal to the whole model's, the
-whole-model mode of `reduction-diff.py` finds no difference on seeds `0:500`, and
-`order.rdra` prints no `RdraSpec_` line.
+**Phase 4: decide on a cone what the whole model decided.** Add the widening that makes a
+cone exact, by existence and by raised mark, then steps 4, 5, and 6, each in its own
+change with its fixtures. Each change that moves a sample's verdict adds the property to
+the `### Breaking` entry. Exit: the undecided list of `TEMPORAL_CASES` is empty with every
+verdict equal to the whole model's, the whole-model mode of `reduction-diff.py` finds no
+difference on seeds `0:500`, and `order.rdra` prints no `RdraSpec_` line.
 
 **Phase 5: lift a reduced lasso.** Replace the second run by the lift where the unreduced
 cone passes the cap, then everywhere if the lifted lassos are no longer than the explored
@@ -624,15 +744,22 @@ ones on the samples. Exit: on `reduced_gate`, whose two counterexamples the test
 the second run today, the lifted lasso replays on the unreduced cone and passes both checks
 with no exploration of that cone.
 
-**Phase 6: the default.** In the next major release, `--backend native` becomes the
-default, the sample headers move to `native=`, and the docs and the skill change. Exit: the
-`formal-verify` job passes with no `tlc` on `PATH` for the sample step, and
-`engine_equivalence` and the sweep still pass with it.
+**Phase 6: the release gate.** No code. Run the eight checks of the release gate in
+[Migration](#migration) at one commit and record the result in the changelog entry. Exit:
+all eight hold, and the release is tagged at that commit.
 
 ## What #165 to #167 can do to make this cheaper
 
 The three issues are in review. Each of these choices costs little there and saves a
-rewrite here.
+rewrite here. The first one is not a choice any more.
+
+- **#166 and #167: `verify` evaluates the new forms, and `check` does not.** Both issues
+  say that `check` and `states` report their forms. The owner decided on 2026-11-23 that
+  `check` and `states` evaluate no `property`. The evaluators stay where the issues put
+  them, in the explorer, and only a run that `verify` starts receives the properties.
+  `check` prints its note for these forms as for `always`. The TLC formula of `stable` and
+  `unchanged` and the latch of `precedes` stay, because `--with-tlc` and the tests compare
+  them.
 
 - **#165: keep the link as its own field.** Store the `.along` link as one `Pred` on
   `Property`, beside the formula, and not inside the operands. The printer, `fails_at`, the
@@ -644,8 +771,8 @@ rewrite here.
   obligation. `fails_at` and the printer should have a test for a moved key.
 - **#166: make the form's class a total function.** Replace or extend `Ltl` with one enum
   of the seven forms and a method that returns its class: state safety, step safety,
-  liveness, or branching. `verify`, `check`, the cone, and the printer then dispatch with
-  one `match`, and a new form fails to compile until each of them handles it.
+  liveness, or branching. `verify`, the cone, and the printer then dispatch with one
+  `match`, and a new form fails to compile until each of them handles it.
 - **#166: keep the latch in the property's cone only.** The latch of `precedes` is a var,
   so a step that only sets it changes the state. Give it to the cone of its property and
   to no other cone, as a raised mark belongs to the cones that read it. A latch in another
@@ -671,8 +798,13 @@ rewrite here.
 - **A wrong `ok` from the cone ladder.** Steps 4 to 6 rest on arguments about what runs
   outside a cone. A gap there is silent, and the first draft of this plan had one: it
   applied step 4 to a cone that frees slots, which the receipt model refutes. Mitigation: each step lands alone, behind the
-  whole-model oracle on fixtures and random models, and `--cross-check tlc` stays
-  available after the default changes.
+  whole-model oracle on fixtures and random models, `--with-tlc` stays available in every
+  run, and the release gate keeps a wrong verdict found on `main` out of a release.
+- **Users of `main` meet verdicts that still move.** From phase 3 on, `main` gives native
+  verdicts, and phases 4 and 5 change some of them. The owner chose that: `main` is the
+  early channel. Mitigation: phase 3 keeps today's run structure, whose verdicts are
+  TLC's, every later move is in the `Unreleased` changelog, and the README says what
+  `main` is.
 - **Semantic drift between the printer and the checker.** Two definitions of fairness can
   diverge when one changes. Mitigation: `engine_equivalence` compares per run in CI, and
   the fair instance is derived from `ParamRole` in one function that both use.
@@ -692,26 +824,49 @@ rewrite here.
 
 ## Decisions
 
-Open questions, each with a recommendation. None is decided.
+The owner decided these questions on 2026-11-23:
 
-- **Open: is the native checker allowed to decide what today is `not decided`?** A property
-  that step 4, 5, or 6 decides as a counterexample fails a run that passes today at the same
-  bounds. Recommendation: yes, and only under `--backend native` until the major release
-  that changes the default, with a `### Breaking` entry that names the properties whose
-  verdict moves. A `not decided` is not a verdict that anyone should rely on.
-- **Open: when does the default change?** Recommendation: the next major release, after
-  the native backend has shipped opt-in for at least one minor release and the sweep has
-  run clean on it. The alternative, a default of `native` with a fallback to TLC, keeps two
-  behaviors behind one flag value.
-- **Open: `native_result:` or a neutral line?** Recommendation: add `native_result:` and
-  the `native=` header key now, since a minor release may add to the covered output. A
-  neutral `result:` line that replaces `tlc_result:` is cleaner and needs the major release.
-  The maintainer may prefer to wait for it.
-- **Open: do `check` and `states` evaluate `always`, `eventually`, and `leads_to`?** After
-  #166 and #167, `check` evaluates four of the seven forms, and the native routine could
-  give it the rest at one instance. A model whose `check` passes today could then fail.
-  Recommendation: not in this plan. Decide it with the major release, where `check` could
-  evaluate every property at its own bounds.
+- **`verify` defaults to the native checker, and `--with-tlc` adds TLC.** With the flag,
+  TLC runs beside the native checker and the run fails when the two disagree. The plan had
+  proposed an opt-in `--backend native` and a `--cross-check tlc`. Both are gone. The z3
+  options (`--prove`, `--deny-unproved`, `--z3`) stay as they are.
+- **Each phase lands on `main` when it passes, and no release ships until the native
+  checker is stable.** The change of default is not tied to a major release. It lands with
+  phase 3, with `compatibility.md` edited in the same change. `main` is the channel for a
+  user who wants the unreleased native checker, and the promises of `compatibility.md`
+  cover releases, not `main`. The next tagged release waits for the release gate in
+  [Migration](#migration). The eight criteria there are this plan's proposal for what
+  "stable" means, and the owner has not confirmed them.
+- **`check` and `states` do safety verification by state exploration only.** Every
+  `property` form, the forms of #166 and #167 included, and every inductive proof belong to
+  `verify`, and the docs say so. This closes the question of whether `check` evaluates
+  `always`, `eventually`, and `leads_to`, and it changes what #166 and #167 say about
+  `check`.
+
+Still open, each with a recommendation:
+
+- **Open: the release gate's criteria.** [Migration](#migration) proposes eight.
+  Recommendation: adopt them, and treat the 14 days of item 7 as the one number to argue
+  about.
+- **Open: what happens to `--backend tlc`?** The flag is covered, it has one value, and
+  every doc, skill, and sample transcript writes it. Recommendation: keep accepting
+  `--backend tlc` as a deprecated spelling of `--with-tlc` that prints a warning, and
+  remove it in the major release after this one. A script that passes it then keeps
+  running TLC, which is what the script asked for. Removing the flag at once is simpler
+  and breaks every such script on upgrade.
+- **Open: which line states the verdict of a native run?** The decisions above removed
+  the reason to keep `tlc_result:` as the only line, since the contract changes in the
+  same change. Recommendation: one neutral `result:` line in every run, with the form
+  `tlc_result:` has, and `tlc_result:` beside it under `--with-tlc`. An `// expect verify:`
+  header then reads `ok` or `fail <Names>`, and `tlc=` stays for a line whose flags hold
+  `--with-tlc`. The earlier recommendation was a `native_result:` line. It named the engine
+  in a line that every run prints, which a default engine does not need.
+- **Open: is the native checker allowed to decide what today is `not decided`?** A
+  property that step 4, 5, or 6 decides as a counterexample fails a run that passes today
+  at the same bounds. The decisions above leave little against it: the release already
+  carries breaks, users of `main` see the move first, and `--with-tlc` reads a TLC `not
+  decided` as no verdict. Recommendation: yes, with each moved sample property named in the
+  `### Breaking` entry. A `not decided` is not a verdict that anyone should rely on.
 - **Open: step 5 or only step 6?** Step 5 is a shortcut for a case step 6 also decides, at
   the cost of a product of two graphs. Recommendation: keep step 5, because the product is
   what makes the domain samples' whole models too large, and measure in phase 4 how often
@@ -720,6 +875,8 @@ Open questions, each with a recommendation. None is decided.
   loop inside themselves, the run with `WF_vars(Next)` could use the reduced cone.
   Recommendation: out of this plan. It changes the reduction's partition and its proof, and
   phase 5 already removes the need for the unreduced cone in the counterexample case.
-- **Open: does `verify --cross-check tlc` run in CI on the samples after the default
-  changes?** Recommendation: no. `engine_equivalence` and the sweep compare more than a
-  sample run does, and the sample step is the one that should need no JVM.
+- **Open: does CI keep running the samples with `--with-tlc` after the release?** Until
+  the gate passes it must, since item 2 of the gate is that run. Recommendation: keep it
+  afterwards too, as its own step in the job that already installs TLC, so the step that
+  checks the headers stays free of a JVM. The earlier recommendation was to drop it. A
+  default that most runs never cross-check should be cross-checked in CI.
