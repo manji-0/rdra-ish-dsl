@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
+use rdra_ish_core::project::Manifest;
 use rdra_ish_core::{
     format_diagnostic_message, load_project, Diagnostic, Project, RdraError, ResolvedProgram,
     SemanticModel,
@@ -45,14 +46,23 @@ pub(crate) fn reject_model_errors(program: &ResolvedProgram, diags: &[Diagnostic
 /// Load the project and reject it when the model has errors: the path every command that
 /// reads the model rather than reports on it takes.
 pub(crate) fn load_clean(inputs: &[PathBuf]) -> Result<(ResolvedProgram, SemanticModel)> {
+    let (program, model, _) = load_clean_with_manifest(inputs)?;
+    Ok((program, model))
+}
+
+/// `load_clean`, and the project's `rdra.toml` when it has one.
+pub(crate) fn load_clean_with_manifest(
+    inputs: &[PathBuf],
+) -> Result<(ResolvedProgram, SemanticModel, Option<Manifest>)> {
     let Project {
         program,
         model,
         diags,
+        manifest,
         ..
     } = load_project(inputs, None)?;
     reject_model_errors(&program, &diags)?;
-    Ok((program, model))
+    Ok((program, model, manifest))
 }
 
 #[cfg(test)]

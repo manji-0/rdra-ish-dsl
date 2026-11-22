@@ -488,7 +488,7 @@ pub fn summarize(run: &TlcRun, output: &str) -> String {
     }
     if output.contains("OutOfMemoryError") || output.contains("out of memory") {
         lines.push(
-            "hint: TLC ran out of memory; raise the heap with RDRA_TLC_HEAP=4g or JAVA_TOOL_OPTIONS=-Xmx4g"
+            "hint: TLC ran out of memory; set the heap with RDRA_TLC_HEAP=4g or JAVA_TOOL_OPTIONS=-Xmx4g, or raise --memory when it left the heap less than 1g"
                 .to_string(),
         );
     }

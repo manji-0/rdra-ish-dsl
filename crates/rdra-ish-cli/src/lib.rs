@@ -9,6 +9,7 @@ mod fmt_cmd;
 mod lifecycle_gate;
 mod list_output;
 mod load;
+mod memory;
 mod next;
 pub mod property_cone;
 mod prove;
@@ -25,8 +26,10 @@ use export::run_export;
 use fmt_cmd::run_fmt;
 use lifecycle_gate::{gate, Lifecycle};
 use list_output::{format_lint_issues, format_rules, format_transitions, list_elements};
-use load::{deny_deprecated, eprint_diagnostic, load_clean};
+use load::{deny_deprecated, eprint_diagnostic, load_clean, load_clean_with_manifest};
+use memory::{memory_limit, Budgeted};
 use rdra_ish_core::lifecycle::{Caps, FindingTally, Severity};
+use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use state_findings::state_findings;
@@ -55,6 +58,7 @@ pub fn run() -> Result<()> {
             deny_deprecated: deny,
             max_patterns,
             max_states,
+            memory,
             bounds,
             scope,
         } => {
@@ -62,6 +66,7 @@ pub fn run() -> Result<()> {
                 program,
                 model,
                 mut diags,
+                manifest,
                 ..
             } = load_project(&inputs, None)?;
             if deny {
@@ -86,7 +91,10 @@ pub fn run() -> Result<()> {
 
             let scope = scope.resolve(&model)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
-            let caps = Caps::new(max_patterns, max_states);
+            let caps = Caps::new(max_patterns, max_states).charged_to(MemoryPool::for_command(
+                memory_limit(memory, manifest.as_ref(), Budgeted::Check),
+                Budgeted::Check.raise(),
+            ));
             let lifecycle = state_findings(&program, &model, &scope, bounds.bounds()?, caps);
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
@@ -219,13 +227,14 @@ pub fn run() -> Result<()> {
             format,
             max_patterns,
             max_states,
+            memory,
             bounds,
             scope,
         } => run_states(
             &inputs,
             format,
             bounds.bounds()?,
-            Caps::new(max_patterns, max_states),
+            (Caps::new(max_patterns, max_states), memory),
             &scope,
         )?,
 
@@ -241,9 +250,12 @@ pub fn run() -> Result<()> {
             deny_unproved,
             z3,
             tlc_jar,
+            memory,
             scope,
         } => {
-            let (program, model) = load_clean(&inputs)?;
+            let (program, model, manifest) = load_clean_with_manifest(&inputs)?;
+            let memory = memory_limit(memory, manifest.as_ref(), Budgeted::Verify);
+            let memory = memory::VerifySplit::of(memory)?;
             let scope = scope.resolve(&model)?;
             let cli::VerifyBackend::Tlc = backend;
             run_tlc(
@@ -256,6 +268,7 @@ pub fn run() -> Result<()> {
                     temporal: std::time::Duration::from_secs(temporal_budget),
                     deny_undecided,
                     prove: prove.then_some(verify::Prove { z3, deny_unproved }),
+                    memory,
                 },
                 tlc_jar,
             )?;

@@ -2,6 +2,7 @@ use clap::builder::{PossibleValue, TypedValueParser};
 use clap::error::ErrorKind;
 use clap::{Arg, Args, Command, Parser, Subcommand, ValueEnum};
 use rdra_ish_core::lifecycle::Caps;
+use rdra_ish_core::memory::MemorySize;
 use std::ffi::OsStr;
 use std::marker::PhantomData;
 use std::path::PathBuf;
@@ -174,6 +175,11 @@ pub(crate) enum Commands {
         /// `StateCapReached` error
         #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
         max_states: usize,
+        /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
+        /// a cone whose states pass it stops, as at --max-states. Default: `memory` under
+        /// [check] in rdra.toml, else 4GiB
+        #[arg(long, value_name = "SIZE")]
+        memory: Option<MemorySize>,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]
@@ -294,6 +300,11 @@ pub(crate) enum Commands {
         /// `StateCapReached` error
         #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
         max_states: usize,
+        /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
+        /// a cone whose states pass it stops, as at --max-states. Default: `memory` under
+        /// [check] in rdra.toml, else 4GiB
+        #[arg(long, value_name = "SIZE")]
+        memory: Option<MemorySize>,
         #[command(flatten)]
         bounds: BoundsArgs,
         #[command(flatten)]
@@ -320,8 +331,8 @@ pub(crate) enum Commands {
         /// printed its verdict
         #[arg(long, default_value_t = 300)]
         temporal_budget: u64,
-        /// Treat a finding verify leaves undecided (a BFS cone stopped at the state cap, a
-        /// temporal property past `--temporal-budget`) as an error (exit 1)
+        /// Treat a finding verify leaves undecided (a BFS cone stopped at the state cap or the
+        /// memory limit, a temporal property past `--temporal-budget`) as an error (exit 1)
         #[arg(long)]
         deny_undecided: bool,
         /// [experimental] Also try to prove each state rule for any number of rows and any Int value with z3
@@ -340,6 +351,11 @@ pub(crate) enum Commands {
         /// `tlc2` launcher on PATH; `RDRA_TLC_JAR` sets it when the flag is absent
         #[arg(long, value_name = "PATH")]
         tlc_jar: Option<PathBuf>,
+        /// What the run and its TLC runs may hold in memory, such as 16GiB (G and GB also
+        /// mean GiB): BFS takes half, and the TLC runs at once take no more `-Xmx` than the
+        /// rest. Default: `memory` under [verify] in rdra.toml, else 16GiB
+        #[arg(long, value_name = "SIZE")]
+        memory: Option<MemorySize>,
         #[command(flatten)]
         scope: ScopeArgs,
     },
