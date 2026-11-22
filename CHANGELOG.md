@@ -4,6 +4,13 @@
 
 ### Added
 
+- Three `property` forms for order and stability: `stable(p)` keeps `p` once it holds,
+  `unchanged(E.col, ..).when(p)` keeps the columns while `p` holds, and `precedes(p, q)`
+  lets `q` hold only after `p` has. `verify` decides each by BFS on its cone, with no TLC
+  run, and prints the shortest trace to the step or state that breaks it. `check` and
+  `states` still evaluate no property. `export --kind tla` writes `stable` and `unchanged`
+  as action properties and `precedes` as an invariant over a latch `<P>_seen`. `.along`
+  scopes them, and `.fair` on them is `FairOnSafetyProperty` (#166).
 - A `property` over two or more entities takes `.along(A, B, ..)` with `.role(role)`, and
   `.global()`, as a multi-entity `invariant` does. The owner links of the path join the
   trigger, so `verify` no longer reports a pair of unrelated rows as a counterexample.
