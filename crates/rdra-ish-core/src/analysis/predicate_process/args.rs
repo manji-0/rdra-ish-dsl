@@ -33,13 +33,16 @@ fn node_kinds(kinds: &[ArgKind]) -> Option<Vec<&'static str>> {
     kinds.iter().map(|k| k.node()).collect()
 }
 
+/// Reports each argument whose kind the signature does not allow. Returns whether every
+/// argument type-checks: a predicate that does not adds no fact.
 pub(super) fn validate_predicate_arg_types(
     pred: &PredicateCall,
     sig: &[Vec<ArgKind>],
     resolved: &[Option<NodeRef>],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
-) {
+) -> bool {
+    let mut well_typed = true;
     for (i, kinds) in sig.iter().enumerate() {
         let Some(expected_kinds) = node_kinds(kinds) else {
             continue;
@@ -47,6 +50,7 @@ pub(super) fn validate_predicate_arg_types(
         if let Some(Some(node)) = resolved.get(i) {
             let actual = node.kind_tag();
             if !expected_kinds.contains(&actual) {
+                well_typed = false;
                 push_error_arg(
                     ctx,
                     diags,
@@ -62,6 +66,7 @@ pub(super) fn validate_predicate_arg_types(
             }
         }
     }
+    well_typed
 }
 
 pub(super) fn validate_contains_pair(

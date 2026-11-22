@@ -83,7 +83,7 @@ entity Order "Order" { id: Int @pk }
 performs(Customer, PlaceOrder)
 invokes(PlaceOrder, OrderApi)
 creates(OrderApi, Order)
-displays(PlaceOrder, Order)
+reads(PlaceOrder, Order)
 "#;
     let model = model_from(src);
     let view = View::whole().with_graph_filters(
@@ -106,9 +106,9 @@ displays(PlaceOrder, Order)
         result.contains("%% kinds: usecase api entity\n"),
         "{result}"
     );
-    // The header names what the filters hid: the actor, and the displays edge whose
+    // The header names what the filters hid: the actor, and the reads edge whose
     // ends are both drawn.
-    assert!(result.contains("%% omitted: actor displays\n"), "{result}");
+    assert!(result.contains("%% omitted: actor reads\n"), "{result}");
 }
 
 #[test]

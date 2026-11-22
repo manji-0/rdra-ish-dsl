@@ -172,6 +172,27 @@ invokes(PlaceOrder, Order)
 }
 
 #[test]
+fn an_ill_typed_predicate_adds_no_relation() {
+    let src = r#"
+usecase PlaceOrder "注文する"
+entity Order "注文" { id: Int @pk }
+invokes(PlaceOrder, Order)
+"#;
+    let (ast, _) = parse(src);
+    let (model, diags) = build_model(&ast);
+    let errors: Vec<String> = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| d.error.to_string())
+        .collect();
+    assert!(
+        matches!(errors.as_slice(), [only] if only.contains("type mismatch")),
+        "{errors:?}"
+    );
+    assert!(model.relations.is_empty(), "{:?}", model.relations);
+}
+
+#[test]
 fn test_usecase_crud_still_allowed() {
     // 後方互換: usecase が直接 entity を creates しても OK
     let src = r#"

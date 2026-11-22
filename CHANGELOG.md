@@ -60,6 +60,10 @@
   the diagrams are made for a PRD or a design document and links the guide.
 - The sample design documents open each BUC section's processing with the BUC's sequence
   diagram (`diagram --kind sequence --buc`), before the per-use-case ones.
+- A predicate whose arguments have the wrong kinds adds no relation. `invokes(UseCase,
+  Entity)` reports its type mismatch and stops, as a wrong `contains` or `triggers` pair
+  already did, so the diagnostics that followed from the bad edge, and the edge in
+  diagrams and in the LSP, are gone (#159).
 
 ### Fixed
 

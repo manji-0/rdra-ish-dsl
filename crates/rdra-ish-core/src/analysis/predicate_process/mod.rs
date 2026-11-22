@@ -137,7 +137,9 @@ pub(crate) fn process_predicate(
 
     let sig = p.signature();
     let resolved = resolve_predicate_args(model, pred, &sig, ctx, diags);
-    validate_predicate_arg_types(pred, &sig, &resolved, ctx, diags);
+    if !validate_predicate_arg_types(pred, &sig, &resolved, ctx, diags) {
+        return;
+    }
     let paired = match p {
         Predicate::Contains => validate_contains_pair(pred, &resolved, ctx, diags),
         Predicate::Triggers => validate_trigger_pair(pred, &sig, &resolved, ctx, diags),
