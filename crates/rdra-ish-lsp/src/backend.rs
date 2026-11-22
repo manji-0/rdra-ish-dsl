@@ -12,8 +12,8 @@ use url::Url;
 use crate::code_actions::code_actions;
 use crate::code_lens::code_lenses;
 use crate::completion::completion_items;
-use crate::convert::{full_document_range, span_to_range};
-use crate::document::{byte_offset_at, open_document};
+use crate::convert::{full_document_range, position_to_byte_offset, span_to_range};
+use crate::document::{open_document, OpenDocument};
 use crate::folding::folding_ranges;
 use crate::hover::{hover_content, signature_help};
 use crate::inlay_hints::inlay_hints;
@@ -31,6 +31,35 @@ struct ServerState {
     analysis: Option<WorkspaceAnalysis>,
     published: HashSet<Url>,
     manifest_error: Option<String>,
+}
+
+/// An analyzed document a request names: the analysis, its path and its source entry.
+struct Located<'a> {
+    analysis: &'a WorkspaceAnalysis,
+    path: PathBuf,
+    doc: OpenDocument<'a>,
+}
+
+impl ServerState {
+    /// The document `uri` names, or `None` when it is not a file URI, nothing is analyzed
+    /// yet, or the analysis has no such source.
+    fn document(&self, uri: &Url) -> Option<Located<'_>> {
+        let path = uri_to_path(uri).ok()?;
+        let analysis = self.analysis.as_ref()?;
+        let doc = open_document(analysis, &path)?;
+        Some(Located {
+            analysis,
+            path,
+            doc,
+        })
+    }
+
+    /// `document`, plus the byte offset of an LSP cursor position inside it.
+    fn cursor(&self, uri: &Url, position: Position) -> Option<(Located<'_>, usize)> {
+        let found = self.document(uri)?;
+        let offset = position_to_byte_offset(found.doc.text, position)?;
+        Some((found, offset))
+    }
 }
 
 pub struct Backend {
@@ -298,98 +327,68 @@ impl LanguageServer for Backend {
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        let path = match uri_to_path(&params.text_document_position_params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.text_document_position_params.position;
-
+        let at = &params.text_document_position_params;
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some((found, offset)) = state.cursor(&at.text_document.uri, at.position) else {
             return Ok(None);
         };
-        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
+        let analysis = found.analysis;
+        let Some(reference) = reference_at_offset(found.doc.ast, offset) else {
             return Ok(None);
         };
-        let reference = match reference_at_offset(doc.ast, offset) {
-            Some(reference) => reference,
-            None => return Ok(None),
-        };
-        let decl = match resolve_decl_site(&analysis.model, reference) {
-            Some(decl) => decl,
-            None => return Ok(None),
+        let Some(decl) = resolve_decl_site(&analysis.model, reference) else {
+            return Ok(None);
         };
         let (target_path, target_text, _) = &analysis.program.sources[decl.source_id];
-        let target_uri = match path_to_uri(target_path) {
-            Ok(uri) => uri,
-            Err(_) => return Ok(None),
+        let Ok(uri) = path_to_uri(target_path) else {
+            return Ok(None);
         };
         let range = span_to_range(target_text, decl.span);
         Ok(Some(GotoDefinitionResponse::Scalar(Location {
-            uri: target_uri,
+            uri,
             range,
         })))
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
-        let path = match uri_to_path(&params.text_document_position.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.text_document_position.position;
-
+        let at = &params.text_document_position;
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some((found, offset)) = state.cursor(&at.text_document.uri, at.position) else {
             return Ok(None);
         };
-        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
+        let analysis = found.analysis;
+        let Some(reference) = reference_at_offset(found.doc.ast, offset) else {
             return Ok(None);
         };
-        let reference = match reference_at_offset(doc.ast, offset) {
-            Some(reference) => reference,
-            None => return Ok(None),
-        };
-        let target = match symbol_target(&analysis.model, reference) {
-            Some(target) => target,
-            None => return Ok(None),
+        let Some(target) = symbol_target(&analysis.model, reference) else {
+            return Ok(None);
         };
 
         let mut locations = Vec::new();
-        for (ref_source_id, (ref_path, ref_text, ref_ast)) in
-            analysis.program.sources.iter().enumerate()
-        {
-            for span in find_symbol_references(ref_ast, &target) {
-                let uri = match path_to_uri(ref_path) {
-                    Ok(uri) => uri,
-                    Err(_) => continue,
-                };
-                locations.push(Location {
-                    uri,
-                    range: span_to_range(ref_text, span),
-                });
+        for (ref_path, ref_text, ref_ast) in &analysis.program.sources {
+            let spans = find_symbol_references(ref_ast, &target);
+            if spans.is_empty() {
+                continue;
             }
-            let _ = ref_source_id;
+            let Ok(uri) = path_to_uri(ref_path) else {
+                continue;
+            };
+            locations.extend(spans.into_iter().map(|span| Location {
+                uri: uri.clone(),
+                range: span_to_range(ref_text, span),
+            }));
         }
 
         Ok(Some(locations))
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        let path = match uri_to_path(&params.text_document_position.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.text_document_position.position;
-
+        let at = &params.text_document_position;
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some((found, offset)) = state.cursor(&at.text_document.uri, at.position) else {
             return Ok(None);
         };
-        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
-            return Ok(None);
-        };
-        let items = completion_items(&analysis.model, doc.text, offset);
-        let _ = doc.ast;
+        let items = completion_items(&found.analysis.model, found.doc.text, offset);
         Ok(Some(CompletionResponse::Array(items)))
     }
 
@@ -397,21 +396,12 @@ impl LanguageServer for Backend {
         &self,
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
-        let path = match uri_to_path(&params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(found) = state.document(&params.text_document.uri) else {
             return Ok(None);
         };
-        let Some(doc) = open_document(analysis, &path) else {
-            return Ok(None);
-        };
-
         Ok(Some(DocumentSymbolResponse::Nested(document_symbols(
-            doc.ast,
+            found.doc.ast,
         ))))
     }
 
@@ -460,77 +450,43 @@ impl LanguageServer for Backend {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        let path = match uri_to_path(&params.text_document_position_params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.text_document_position_params.position;
-
+        let at = &params.text_document_position_params;
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some((found, offset)) = state.cursor(&at.text_document.uri, at.position) else {
             return Ok(None);
         };
-        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
-            return Ok(None);
-        };
-        Ok(hover_content(&analysis.model, doc.ast, offset))
+        Ok(hover_content(&found.analysis.model, found.doc.ast, offset))
     }
 
     async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
-        let path = match uri_to_path(&params.text_document_position_params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.text_document_position_params.position;
-
+        let at = &params.text_document_position_params;
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some((found, offset)) = state.cursor(&at.text_document.uri, at.position) else {
             return Ok(None);
         };
-        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
-            return Ok(None);
-        };
-        Ok(signature_help(doc.text, offset))
+        Ok(signature_help(found.doc.text, offset))
     }
 
     async fn prepare_rename(
         &self,
         params: TextDocumentPositionParams,
     ) -> Result<Option<PrepareRenameResponse>> {
-        let path = match uri_to_path(&params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.position;
-
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some((found, offset)) = state.cursor(&params.text_document.uri, params.position) else {
             return Ok(None);
         };
-        let Some((_, offset)) = byte_offset_at(analysis, &path, position) else {
-            return Ok(None);
-        };
-
-        Ok(prepare_rename_range(analysis, &path, offset).map(PrepareRenameResponse::Range))
+        Ok(prepare_rename_range(found.analysis, &found.path, offset)
+            .map(PrepareRenameResponse::Range))
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        let path = match uri_to_path(&params.text_document_position.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.text_document_position.position;
-        let new_name = params.new_name;
-
+        let at = &params.text_document_position;
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
-            return Ok(None);
-        };
-        let Some((_, offset)) = byte_offset_at(analysis, &path, position) else {
+        let Some((found, offset)) = state.cursor(&at.text_document.uri, at.position) else {
             return Ok(None);
         };
 
-        match workspace_rename(analysis, &path, offset, &new_name) {
+        match workspace_rename(found.analysis, &found.path, offset, &params.new_name) {
             Ok(edit) => Ok(Some(edit)),
             Err(RenameError::InvalidIdentifier) => Err(tower_lsp::jsonrpc::Error::invalid_params(
                 "new name must be a valid identifier",
@@ -546,38 +502,28 @@ impl LanguageServer for Backend {
         &self,
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
-        let path = match uri_to_path(&params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(found) = state.document(&params.text_document.uri) else {
             return Ok(None);
         };
-        let Some(doc) = open_document(analysis, &path) else {
-            return Ok(None);
-        };
-
-        Ok(Some(SemanticTokensResult::Tokens(semantic_tokens(doc.ast))))
+        Ok(Some(SemanticTokensResult::Tokens(semantic_tokens(
+            found.doc.ast,
+        ))))
     }
 
     async fn code_action(&self, params: CodeActionParams) -> Result<Option<CodeActionResponse>> {
-        let path = match uri_to_path(&params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let uri = params.text_document.uri.clone();
-
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
-            return Ok(None);
-        };
-        let Some(doc) = open_document(analysis, &path) else {
+        let Some(found) = state.document(&params.text_document.uri) else {
             return Ok(None);
         };
 
-        let actions = code_actions(analysis, doc.source_id, doc.text, uri, params.range);
+        let actions = code_actions(
+            found.analysis,
+            found.doc.source_id,
+            found.doc.text,
+            params.text_document.uri.clone(),
+            params.range,
+        );
         if actions.is_empty() {
             return Ok(None);
         }
@@ -585,57 +531,35 @@ impl LanguageServer for Backend {
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
-        let path = match uri_to_path(&params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(found) = state.document(&params.text_document.uri) else {
             return Ok(None);
         };
-        let Some(doc) = open_document(analysis, &path) else {
-            return Ok(None);
-        };
-
-        Ok(Some(code_lenses(analysis, doc.ast, doc.text, &path)))
+        Ok(Some(code_lenses(
+            found.analysis,
+            found.doc.ast,
+            found.doc.text,
+            &found.path,
+        )))
     }
 
     async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
-        let path = match uri_to_path(&params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(found) = state.document(&params.text_document.uri) else {
             return Ok(None);
         };
-        let Some(doc) = open_document(analysis, &path) else {
-            return Ok(None);
-        };
-
-        Ok(Some(folding_ranges(doc.ast, doc.text)))
+        Ok(Some(folding_ranges(found.doc.ast, found.doc.text)))
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
-        let path = match uri_to_path(&params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some(found) = state.document(&params.text_document.uri) else {
             return Ok(None);
         };
-        let Some(doc) = open_document(analysis, &path) else {
-            return Ok(None);
-        };
-
         Ok(Some(inlay_hints(
-            &analysis.model,
-            doc.ast,
-            doc.text,
+            &found.analysis.model,
+            found.doc.ast,
+            found.doc.text,
             Some(params.range),
         )))
     }
@@ -644,24 +568,15 @@ impl LanguageServer for Backend {
         &self,
         params: LinkedEditingRangeParams,
     ) -> Result<Option<LinkedEditingRanges>> {
-        let path = match uri_to_path(&params.text_document_position_params.text_document.uri) {
-            Ok(path) => path,
-            Err(_) => return Ok(None),
-        };
-        let position = params.text_document_position_params.position;
-
+        let at = &params.text_document_position_params;
         let state = self.state.read().await;
-        let Some(analysis) = state.analysis.as_ref() else {
+        let Some((found, offset)) = state.cursor(&at.text_document.uri, at.position) else {
             return Ok(None);
         };
-        let Some((doc, offset)) = byte_offset_at(analysis, &path, position) else {
-            return Ok(None);
-        };
-
         Ok(linked_editing_ranges(
-            &analysis.model,
-            doc.ast,
-            doc.text,
+            &found.analysis.model,
+            found.doc.ast,
+            found.doc.text,
             offset,
         ))
     }
