@@ -202,10 +202,11 @@ impl TransitionSystem {
             }
         }
         for p in &self.properties {
-            let preds: Vec<&Pred> = p.formula.preds().collect();
+            let preds: Vec<&Pred> = p.preds().collect();
             if reads_inside(&p.binders, &preds) {
                 out.properties.push(Property {
                     binders: p.binders.iter().map(|e| map.e(*e)).collect(),
+                    scope: map.pred(&p.scope),
                     formula: p.formula.map(|x| map.pred(x)),
                     ..p.clone()
                 });

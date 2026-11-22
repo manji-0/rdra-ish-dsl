@@ -112,15 +112,15 @@ pub(super) fn lint_rule_labels(model: &SemanticModel, issues: &mut Vec<LintIssue
     }
 }
 
-/// A `forbidden` or `invariant` over several entities with no `.along(...)` holds over every
-/// combination of their rows. When keys relate the entities, the rule is often meant only
+/// A `forbidden`, `invariant`, or `property` over several entities with no `.along(...)` holds
+/// over every combination of their rows. When keys relate the entities, the rule is often meant only
 /// for related rows, and `check` at one instance per entity cannot tell the difference.
 pub(super) fn lint_unscoped_multi_rules(model: &SemanticModel, issues: &mut Vec<LintIssue>) {
     use crate::model::CrossConstraintScope;
     let forbidden = model.cross_forbidden_constraints.iter().map(|c| {
         (
             "forbidden",
-            &c.scope,
+            c.scope.clone(),
             &c.scope_semantics,
             c.global,
             c.site.clone(),
@@ -129,17 +129,27 @@ pub(super) fn lint_unscoped_multi_rules(model: &SemanticModel, issues: &mut Vec<
     let invariants = model.cross_entity_invariants.iter().map(|c| {
         (
             "invariant",
-            &c.scope,
+            c.scope.clone(),
             &c.scope_semantics,
             c.global,
             c.site.clone(),
         )
     });
-    for (kind, scope, semantics, global, site) in forbidden.chain(invariants) {
+    let properties = model.temporal_properties.iter().map(|p| {
+        (
+            "property",
+            p.entities(),
+            &p.scope_semantics,
+            p.global,
+            p.site.clone(),
+        )
+    });
+    let rules = forbidden.chain(invariants).chain(properties);
+    for (kind, scope, semantics, global, site) in rules {
         if global || scope.len() < 2 || !matches!(semantics, CrossConstraintScope::GlobalProduct) {
             continue;
         }
-        let Some(path) = along_path(model, scope) else {
+        let Some(path) = along_path(model, &scope) else {
             continue;
         };
         let ids: Vec<&str> = scope
@@ -156,8 +166,13 @@ pub(super) fn lint_unscoped_multi_rules(model: &SemanticModel, issues: &mut Vec<
             kind,
             ids.join("|"),
             format!(
-                "{kind} on {} has no `.along(...)`, so it holds over every combination of their rows, related or not; `check` at one instance per entity sees one combination only",
-                ids.join(", ")
+                "{kind} on {} has no `.along(...)`, so it holds over every combination of their rows, related or not; {}",
+                ids.join(", "),
+                if kind == "property" {
+                    "`verify` at two instances per entity reads unrelated rows together"
+                } else {
+                    "`check` at one instance per entity sees one combination only"
+                }
             ),
             format!(
                 "add `.along({})` to hold it over related rows only, or `.global()` if every combination is meant",

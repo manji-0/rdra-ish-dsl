@@ -361,6 +361,35 @@ const FORMS: &[(&str, Expect)] = &[
         "property P leads_to(Order.status == open, Order.status == paid).when(Ready)",
         Error,
     ),
+    // a property over two entities scopes its rows as a multi-entity rule does
+    (
+        "property P always(Order.status != paid or Ticket.status == done).along(Ticket, Order)",
+        Recorded,
+    ),
+    (
+        "property P always(Order.status != paid or Ticket.status == done).global()",
+        Recorded,
+    ),
+    (
+        "property P leads_to(Order.status == paid, Ticket.status == done).along(Order, Ticket).fair(Pay)",
+        Recorded,
+    ),
+    (
+        "property P always(Order.status != paid or Ticket.status == done).along(Ticket, Order).global()",
+        Error,
+    ),
+    (
+        "property P always(Order.status != paid or Ticket.status == done).role(r)",
+        Error,
+    ),
+    (
+        "property P always(Order.status != paid or Ticket.status == done).along(Ticket, Order).role(nosuch)",
+        Error,
+    ),
+    (
+        "property P always(Order.status != paid or Ticket.status == done).along(Ticket, Nosuch)",
+        Error,
+    ),
 ];
 
 /// The rules a model records, its field mappings, its `sets` effects, and each condition body

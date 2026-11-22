@@ -403,8 +403,8 @@ fn resolve_junction_keys(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>)
     model.junction_keys = junction_keys;
 }
 
-/// Fills each `.along(..)` path's `links` (of a `forbidden`, an `invariant`, or a `holds`
-/// body): the one key between each pair of neighbours, or
+/// Fills each `.along(..)` path's `links` (of a `forbidden`, an `invariant`, a `holds`
+/// body, or a `property`): the one key between each pair of neighbours, or
 /// the one whose role `.role(..)` names when several join them.
 pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Diagnostic>) {
     let scopes = model
@@ -429,6 +429,12 @@ pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Dia
                 .quantifier_constraints
                 .iter()
                 .map(|c| (&c.along, &c.quantifier.site)),
+        )
+        .chain(
+            model
+                .temporal_properties
+                .iter()
+                .map(|p| (&p.scope_semantics, &p.site)),
         );
     let resolved: Vec<Vec<Option<FkId>>> = scopes
         .map(|(scope, site)| match scope {
@@ -460,6 +466,12 @@ pub(crate) fn resolve_along_links(model: &mut SemanticModel, diags: &mut Vec<Dia
                 .quantifier_constraints
                 .iter_mut()
                 .map(|c| &mut c.along),
+        )
+        .chain(
+            model
+                .temporal_properties
+                .iter_mut()
+                .map(|p| &mut p.scope_semantics),
         );
     for (scope, resolved) in scopes.zip(resolved) {
         if let CrossConstraintScope::RelationPath { links, .. } = scope {

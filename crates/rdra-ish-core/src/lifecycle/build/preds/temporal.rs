@@ -11,7 +11,8 @@ use crate::lifecycle::types::{
     Pred, Property, Site, Start, VarId, VarKind,
 };
 use crate::model::{
-    CrossEntityCondition, EffectValue, EntityKey, TemporalExpr, TemporalFormula, TemporalRhs,
+    CrossConstraintScope, CrossEntityCondition, EffectValue, EntityKey, TemporalExpr,
+    TemporalFormula, TemporalProperty, TemporalRhs,
 };
 
 impl Builder<'_> {
@@ -123,13 +124,51 @@ impl Builder<'_> {
                     self.diag(binding.iter().map(|(ek, _)| *ek).collect(), diag);
                 }
             }
+            let Some(scope) = self.property_scope(prop, &mut binding, &site) else {
+                continue;
+            };
             self.ts.properties.push(Property {
                 name: prop.id.clone(),
                 binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
+                scope,
                 formula,
                 fair: prop.fair.clone(),
                 site,
             });
+        }
+    }
+
+    /// The owner links of a property's `.along(..)` path, binding each path entity its atoms
+    /// do not read; `Pred::True` without a path. `None` after `UnbindableScope`: the path does
+    /// not cover an entity the atoms read, or no key joins a hop.
+    fn property_scope(
+        &mut self,
+        prop: &TemporalProperty,
+        binding: &mut Binding,
+        site: &Site,
+    ) -> Option<Pred> {
+        let CrossConstraintScope::RelationPath { path, links, .. } = &prop.scope_semantics else {
+            return Some(Pred::True);
+        };
+        let read: Vec<EntityKey> = binding.iter().map(|(ek, _)| *ek).collect();
+        let constraint = format!("property {}", prop.id);
+        if let Some(out) = read.iter().find(|ek| !path.contains(ek)) {
+            let id = self.model.entities[*out].id.clone();
+            let reason = format!("along(..) does not cover {id}");
+            self.unbindable_scope(&read, &constraint, reason, site);
+            return None;
+        }
+        // A path entity the atoms do not read joins the binders: bound universally under the
+        // link, it is bound existentially, as in a multi-entity rule.
+        for &ek in path {
+            Self::bind(binding, ek);
+        }
+        match self.hop_links(path, links, binding) {
+            Ok(links) => Some(Pred::And(links)),
+            Err(reason) => {
+                self.unbindable_scope(&read, &constraint, reason, site);
+                None
+            }
         }
     }
 

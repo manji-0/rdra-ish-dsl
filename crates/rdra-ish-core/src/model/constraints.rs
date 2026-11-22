@@ -297,7 +297,60 @@ pub struct TemporalProperty {
     pub formula: TemporalFormula,
     /// `.fair(UC, ...)`: the use cases assumed weakly fair per instance they act on.
     pub fair: Vec<UseCaseKey>,
+    /// `.along(A, B, ..)`: the formula speaks about rows the keys of the path join, as a
+    /// multi-entity `invariant` does; `GlobalProduct` without one.
+    pub scope_semantics: CrossConstraintScope,
+    /// `.global()`: the formula is meant for every combination of rows.
+    pub global: bool,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
+}
+
+impl TemporalFormula {
+    /// The operands, left to right.
+    pub fn exprs(&self) -> Vec<&TemporalExpr> {
+        match self {
+            TemporalFormula::Always(e) | TemporalFormula::Eventually(e) => vec![e],
+            TemporalFormula::LeadsTo {
+                antecedent,
+                consequent,
+            } => vec![antecedent, consequent],
+        }
+    }
+}
+
+impl TemporalExpr {
+    /// The entities its atoms read, in order of first appearance, added to `out`.
+    pub fn entities(&self, out: &mut Vec<EntityKey>) {
+        let mut push = |ek: EntityKey| {
+            if !out.contains(&ek) {
+                out.push(ek);
+            }
+        };
+        match self {
+            TemporalExpr::Atom(a) => {
+                push(a.entity);
+                if let TemporalRhs::Column { entity, .. } = &a.rhs {
+                    push(*entity);
+                }
+            }
+            TemporalExpr::Not(x) => x.entities(out),
+            TemporalExpr::And(x, y) | TemporalExpr::Or(x, y) => {
+                x.entities(out);
+                y.entities(out);
+            }
+        }
+    }
+}
+
+impl TemporalProperty {
+    /// The entities its formula reads, in order of first appearance.
+    pub fn entities(&self) -> Vec<EntityKey> {
+        let mut out = Vec::new();
+        for e in self.formula.exprs() {
+            e.entities(&mut out);
+        }
+        out
+    }
 }

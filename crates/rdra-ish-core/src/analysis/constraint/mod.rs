@@ -16,7 +16,7 @@ use rdra_ish_syntax::ast::*;
 #[cfg(test)]
 pub(crate) use self::cross::cross_scope_semantics_from_chain;
 pub(crate) use self::cross::{
-    add_condition_entities_to_scope, along_scope, resolve_cross_condition,
+    add_condition_entities_to_scope, along_scope, chain_along_scope, resolve_cross_condition,
 };
 #[cfg(test)]
 pub(crate) use self::entity_conditions::push_unique_entity;

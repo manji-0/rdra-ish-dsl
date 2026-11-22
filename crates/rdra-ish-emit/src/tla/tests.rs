@@ -1119,3 +1119,26 @@ fn arms_to_one_state_write_it_and_params_are_named() {
         assert!(tla.contains(line), "missing {line}\n{tla}");
     }
 }
+
+/// `.along(..)` on a property joins the owner link to the trigger, after `present`.
+#[test]
+fn an_along_property_joins_the_owner_link_to_its_trigger() {
+    let src = r#"
+entity Order "Order" { id: Int @pk  status: Enum(open, paid) @default(open) }
+entity Payment "Payment" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Place "Place"
+creates(Place, Order)
+creates(Place, Payment)
+property Linked
+  leads_to(Order.status == paid, Payment.status == captured).along(Payment, Order)
+"#;
+    let tla = print(&system(src), PrintMode::Check, "M").tla;
+    assert!(
+        tla.contains(
+            "Linked == \\A b0 \\in Order_Ids, b1 \\in Payment_Ids : \
+             ((Order_exists[b0] = \"present\" /\\ Payment_exists[b1] = \"present\" /\\ Payment_owner_Order[b1] = b0) /\\ (Order_status[b0] = \"paid\")) ~> "
+        ),
+        "{tla}"
+    );
+}

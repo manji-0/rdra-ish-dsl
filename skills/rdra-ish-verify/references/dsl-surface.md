@@ -39,6 +39,10 @@ property ShippedOnceCaptured
 - Each atom names its entity (`Order.status`); an atom whose column no single entity
   owns is the model error `UnresolvedPropertyColumn`, which `check` reports.
 - Prefer `and` / `or` / `not` (`/\` `\/` `~` remain aliases).
+- A property over two or more entities takes `.along(A, B, ..)` (with `.role(role)`) or
+  `.global()`, as a multi-entity rule does; without either it reads every combination of
+  rows and `lint` `multi-rule-unscoped` warns. The owner links join the trigger:
+  `(present /\ link /\ x) ~> y`.
 - Any `eventually` / `leads_to` causes `WF_vars(Next)` in the Spec: some step is taken,
   not a step in particular, so another instance's loop satisfies it.
 - `.fair(UC, ...)` after an `eventually` / `leads_to` assumes each listed use case is weakly

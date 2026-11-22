@@ -2,7 +2,7 @@
 //! the way the printed TLA formula reads them.
 
 use super::*;
-use crate::lifecycle::{ActId, Inst, Loop, LtlKind, ReplayError, State};
+use crate::lifecycle::{ActId, Inst, Loop, LtlKind, Pred, ReplayError, State};
 
 const ORDER: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped, cancelled) @default(pending) }
@@ -292,4 +292,62 @@ fn a_back_edge_no_move_takes_does_not_replay() {
         Err(ReplayError::Length),
         "a back edge needs its own action"
     );
+}
+
+const PAYMENTS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid) @default(open) }
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, 1:1)
+usecase Place "注文"
+usecase Pay "支払"
+creates(Place, Order)
+creates(Place, Payment)
+transitions(Pay, Order.status, open -> paid)
+transitions(Pay, Payment.status, pending -> captured)
+property Global
+  always(Order.status != paid or Payment.status == captured).global()
+property Linked
+  always(Order.status != paid or Payment.status == captured).along(Payment, Order)
+"#;
+
+/// `.along(..)` joins the owner link to the trigger: a paid order and another order's pending
+/// payment break the global form only.
+#[test]
+fn an_along_scope_reads_only_linked_rows() {
+    let ts = TransitionSystem::build(&model_from(PAYMENTS), Bounds::VERIFY, &Scope::ALL).ts;
+    let mut states = vec![ts.initial_states()[0].clone()];
+    let mut acts = Vec::new();
+    for name in ["Place", "Place", "Pay"] {
+        let m = ts
+            .moves(states.last().unwrap())
+            .find(|m| ts.actions()[m.act.index()].name == name)
+            .unwrap_or_else(|| panic!("{name} does not run"));
+        acts.push(m.act);
+        states.push(m.next);
+    }
+    let l = ts
+        .replay_lasso(states, &acts, Loop::Stutter)
+        .expect("the path replays");
+    assert!(matches!(ts.properties()[1].scope, Pred::And(_)));
+    assert!(
+        ts.explain_property(0, &l).is_some(),
+        "global reads every pair"
+    );
+    assert_eq!(
+        ts.explain_property(1, &l),
+        None,
+        "linked reads related rows"
+    );
+}
+
+/// An `.along(..)` that leaves out an entity the formula reads binds nothing.
+#[test]
+fn an_along_that_misses_an_entity_is_unbindable() {
+    let src = PAYMENTS.replace(".along(Payment, Order)", ".along(Order, Order)");
+    let built = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL);
+    assert!(built
+        .diags
+        .iter()
+        .any(|d| matches!(&d.diag, StateDiag::UnbindableScope { constraint, .. } if constraint == "property Linked")));
+    assert_eq!(built.ts.properties().len(), 1);
 }

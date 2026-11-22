@@ -292,14 +292,15 @@ pub(crate) fn add_condition_entities_to_scope(
 
 fn collect_cross_along_path(
     model: &SemanticModel,
-    pred: &PredicateCall,
+    name: &str,
+    chain: &[ChainCall],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<(usize, Vec<EntityKey>)> {
-    let at = pred.chain.iter().position(|cc| cc.name == "along")?;
+    let at = chain.iter().position(|cc| cc.name == "along")?;
     let mut path = Vec::new();
-    for arg in &pred.chain[at].args {
-        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
+    for arg in &chain[at].args {
+        if let Some(entity) = resolve_entity_scope_arg(model, name, arg, ctx, diags) {
             path.push(entity);
         }
     }
@@ -326,10 +327,21 @@ pub(crate) fn along_scope(
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> CrossConstraintScope {
-    match collect_cross_along_path(model, pred, ctx, diags) {
+    chain_along_scope(model, &pred.name, &pred.chain, ctx, diags)
+}
+
+/// [`along_scope`] over the chain of a statement named `name` (a predicate or `property`).
+pub(crate) fn chain_along_scope(
+    model: &SemanticModel,
+    name: &str,
+    chain: &[ChainCall],
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> CrossConstraintScope {
+    match collect_cross_along_path(model, name, chain, ctx, diags) {
         Some((at, path)) => CrossConstraintScope::RelationPath {
             path,
-            by: selectors(&pred.chain, Some(at)),
+            by: selectors(chain, Some(at)),
             links: Vec::new(),
         },
         None => CrossConstraintScope::GlobalProduct,

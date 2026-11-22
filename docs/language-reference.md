@@ -2629,6 +2629,26 @@ when the rule has a path.
 invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)
 ```
 
+#### Rows across entities: `.along(...)`
+
+A property whose atoms read two or more entities is quantified over each entity's present
+instances on its own, so without a scope it speaks about every combination of rows, related
+or not. `.along(A, B, ..)` limits it to the rows the keys of the path join, as on a
+multi-entity `invariant`, with `.role(role)` after it on a hop that two keys join:
+
+```rdra
+property PaidMeansCaptured "a paid order's payment is captured"
+  always(Order.status != paid or Payment.status == captured).along(Payment, Order)
+```
+
+The owner links join the trigger of the formula: `always x` is
+`[](present /\ link => x)`, `eventually x` is `[](present /\ link => <>x)`, and
+`leads_to x y` is `(present /\ link /\ x) ~> y`. `.global()` says every combination is meant.
+With neither, `lint` `multi-rule-unscoped` warns and names the `.along(...)` the shortest key
+path gives. `.global()` with `.along` is `GlobalWithAlong`; a path that leaves out an entity
+the formula reads, or a hop no key joins, is `UnbindableScope`, and the property is not
+checked. `.along` and `.fair` combine in either order.
+
 #### Fairness: `.fair(UseCase, ...)`
 
 `.fair(...)` after an `eventually` or `leads_to` names the use cases whose steps the property
@@ -2679,8 +2699,8 @@ Errors: `.fair` on `always(...)` is `FairOnSafetyProperty` (fairness cannot chan
 verdict); a `.fair` with no argument, an argument that is not a use case, a use case listed
 twice, or a second `.fair` is `FairRequiresUseCases`; an undefined name is `UndefinedSymbol`;
 an atom whose column no single entity owns (`Order.missing`, or a bare `status` that two
-entities declare) is `UnresolvedPropertyColumn`; any other method after a property is
-`UnknownChainMethod`. A listed use case that changes
+entities declare) is `UnresolvedPropertyColumn`; any method after a property other than
+`.fair`, `.along`, `.role`, and `.global` is `UnknownChainMethod`. A listed use case that changes
 nothing is `FairOnInertUseCase`.
 
 ### Comparison Expressions in Constraints

@@ -932,7 +932,11 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             primed: false,
             depth: p.binders.len() as u8,
         };
-        let (quant, present) = binders(&ctx, &p.binders);
+        let (quant, mut present) = binders(&ctx, &p.binders);
+        // An `.along(..)` scope joins the trigger: the formula speaks about linked rows.
+        if !matches!(p.scope, Pred::True) {
+            present = format!("{present} /\\ {}", ctx.pred(&p.scope));
+        }
         // A property speaks about an instance once it exists.
         let formula = match &p.formula {
             Ltl::Always(x) => format!("[](({present}) => ({}))", ctx.pred(x)),

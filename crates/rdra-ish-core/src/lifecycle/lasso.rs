@@ -145,7 +145,8 @@ impl TransitionSystem {
 
     /// The first state where `p` fails for `binding`, mirroring the printed formula:
     /// `always(x)` is `[](present => x)`, `eventually(x)` is `[](present => <>x)`, and
-    /// `leads_to(x, y)` is `(present /\ x) ~> y`. Only the trigger reads `present`.
+    /// `leads_to(x, y)` is `(present /\ x) ~> y`. Only the trigger reads `present`, and the
+    /// owner links of an `.along(..)` scope join it.
     fn fails_at(
         &self,
         p: &Property,
@@ -163,6 +164,7 @@ impl TransitionSystem {
                 .iter()
                 .zip(binding)
                 .all(|(e, slot)| s.is_present(self, *e, usize::from(*slot)))
+                && holds(&p.scope, s)
         };
         // From position i the behavior visits the rest of the finite part, then the loop.
         let never_from =

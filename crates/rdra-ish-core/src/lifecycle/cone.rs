@@ -397,7 +397,7 @@ impl TransitionSystem {
     /// actions as kept.
     pub fn property_seed(&self, i: usize) -> Seed {
         let p = &self.properties[i];
-        let mut seed = self.check_reads(&p.binders, p.formula.preds());
+        let mut seed = self.check_reads(&p.binders, p.preds());
         let mut keep = BTreeSet::new();
         for (k, a) in self.actions.iter().enumerate() {
             if !p.is_fair(a) {

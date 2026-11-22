@@ -4,8 +4,8 @@ use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::{
-    CmpOpModel, EntityKey, ModelColumn, NodeRef, SemanticModel, TemporalAtom, TemporalExpr,
-    TemporalFormula, TemporalProperty, TemporalRhs, UseCaseKey,
+    CmpOpModel, CrossConstraintScope, EntityKey, ModelColumn, NodeRef, SemanticModel, TemporalAtom,
+    TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, UseCaseKey,
 };
 use rdra_ish_syntax::ast::{
     AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PredicateArg, PropertyDecl,
@@ -13,6 +13,7 @@ use rdra_ish_syntax::ast::{
 
 use super::arg_resolve::resolve_arg;
 use super::comparison::{resolve_bare_rhs, resolve_set_values, BareRhs};
+use super::constraint::{chain_along_scope, report_leading_by};
 
 /// Why an atom does not lower: a message for `InvalidTemporalProperty`, a column no single
 /// entity owns, or a comparison error reported as itself.
@@ -49,6 +50,9 @@ pub(crate) fn register_property(
     let Ok(fair) = fair_use_cases(model, decl, ctx, diags) else {
         return;
     };
+    let Some((scope_semantics, global)) = property_scope(model, decl, ctx, diags) else {
+        return;
+    };
     match lower_formula(model, &decl.formula) {
         Ok(formula) => {
             model.temporal_properties.push(TemporalProperty {
@@ -57,6 +61,8 @@ pub(crate) fn register_property(
                 label: decl.label.clone().unwrap_or_else(|| decl.id.clone()),
                 formula,
                 fair,
+                scope_semantics,
+                global,
             });
         }
         Err(LowerError::Comparison(err)) => push_error(ctx, diags, decl.span.clone(), err),
@@ -92,12 +98,16 @@ fn fair_use_cases(
     let mut fair = Vec::new();
     let mut ok = true;
     let id = || decl.id.clone();
-    for (index, cc) in decl.chain.iter().enumerate() {
+    let mut seen_fair = false;
+    for cc in &decl.chain {
+        if SCOPE_METHODS.contains(&cc.name.as_str()) {
+            continue;
+        }
         if cc.name != "fair" {
             let err = RdraError::UnknownChainMethod {
                 pred: "property".into(),
                 name: cc.name.clone(),
-                hint: "a property takes only `.fair(UseCase, ...)`".into(),
+                hint: "a property takes `.fair(UseCase, ...)`, `.along(Entity, ...)`, `.role(role)`, and `.global()`".into(),
             };
             push_error(ctx, diags, cc.span.clone(), err);
             ok = false;
@@ -109,7 +119,8 @@ fn fair_use_cases(
             ok = false;
             continue;
         }
-        let mut well_formed = index == 0 && !cc.args.is_empty();
+        let mut well_formed = !seen_fair && !cc.args.is_empty();
+        seen_fair = true;
         for arg in &cc.args {
             match resolve_arg(model, arg, ctx, diags) {
                 Some(NodeRef::UseCase(uk)) if !fair.contains(&uk) => fair.push(uk),
@@ -129,6 +140,32 @@ fn fair_use_cases(
     } else {
         Err(())
     }
+}
+
+/// The chain methods that scope the rows a property speaks about.
+const SCOPE_METHODS: [&str; 3] = ["along", "role", "global"];
+
+/// The `.along(..)` scope of a property and whether it says `.global()`; `None` after
+/// reporting `.global()` with `.along`, or an argument to `.global()`.
+fn property_scope(
+    model: &SemanticModel,
+    decl: &PropertyDecl,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<(CrossConstraintScope, bool)> {
+    report_leading_by(&decl.chain, ctx, diags);
+    let scope = chain_along_scope(model, "property", &decl.chain, ctx, diags);
+    let Some(global) = decl.chain.iter().find(|cc| cc.name == "global") else {
+        return Some((scope, false));
+    };
+    if matches!(scope, CrossConstraintScope::RelationPath { .. }) {
+        let err = RdraError::GlobalWithAlong {
+            pred: "property".into(),
+        };
+        push_error(ctx, diags, global.span.clone(), err);
+        return None;
+    }
+    Some((scope, true))
 }
 
 fn lower_formula(

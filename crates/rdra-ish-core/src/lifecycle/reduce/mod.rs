@@ -479,7 +479,7 @@ impl TransitionSystem {
         self.properties = properties
             .into_iter()
             .filter(|p| {
-                let preds: Vec<&Pred> = p.formula.preds().collect();
+                let preds: Vec<&Pred> = p.preds().collect();
                 reads_ok(self, &p.binders, &preds)
                     && self
                         .actions
