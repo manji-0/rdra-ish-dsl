@@ -486,14 +486,14 @@ cones: 0 for 0 invariant(s) and 0 after-assert(s)
 temporal properties: none
 can_reach properties: 1, decided natively by BFS on each one's cone (TLC cannot check AG EF)
 error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
-  rule: skills/rdra-ish-verify/samples/can_reach_unmet.rdra:56:1
+  rule: skills/rdra-ish-verify/samples/can_reach_unmet.rdra:57:1
   counterexample (3 steps):
-    1. Place [Order#1]                                                 skills/rdra-ish-verify/samples/can_reach_unmet.rdra:16:1
+    1. Place [Order#1]                                                 skills/rdra-ish-verify/samples/can_reach_unmet.rdra:17:1
          + Order#1 (status=pending, in_stock=true, window_open=true)
-    2. CloseWindow [Order#1]                                           skills/rdra-ish-verify/samples/can_reach_unmet.rdra:22:1
-         Order#1.window_open: true -> false                            skills/rdra-ish-verify/samples/can_reach_unmet.rdra:46:1
-    3. LoseStock [Order#1]                                             skills/rdra-ish-verify/samples/can_reach_unmet.rdra:21:1
-         Order#1.in_stock: true -> false                               skills/rdra-ish-verify/samples/can_reach_unmet.rdra:45:1
+    2. CloseWindow [Order#1]                                           skills/rdra-ish-verify/samples/can_reach_unmet.rdra:23:1
+         Order#1.window_open: true -> false                            skills/rdra-ish-verify/samples/can_reach_unmet.rdra:47:1
+    3. LoseStock [Order#1]                                             skills/rdra-ish-verify/samples/can_reach_unmet.rdra:22:1
+         Order#1.in_stock: true -> false                               skills/rdra-ish-verify/samples/can_reach_unmet.rdra:46:1
   confined: from there Order#1 stays within 34 reachable states, where its goal never holds:
     status = pending
     status = on_hold
