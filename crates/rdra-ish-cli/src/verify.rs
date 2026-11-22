@@ -1,6 +1,7 @@
 //! `rdra-ish verify --backend tlc`: check every invariant, after-assert, and temporal property
 //! on its own cone, and a temporal property on the whole system only when its cone does not
-//! decide it.
+//! decide it. BFS decides `stable`, `unchanged`, and `precedes` on its own cones
+//! (`TransitionSystem::decide_property`); TLC runs none of them.
 //!
 //! A cone (`TransitionSystem::target_cone`) is closed: its restricted system reaches exactly
 //! the projection of the whole system's states, so a safety verdict on the cone is the
@@ -20,7 +21,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    Bounds, BoundsLine, Caps, Cone, Diag, LtlKind, NotChecked, Scope, Selection, Severity,
+    Bounds, BoundsLine, Caps, Cone, Diag, NotChecked, PropertyVerdict, Scope, Selection, Severity,
     StateDiag, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
@@ -259,18 +260,18 @@ fn cone_jobs(
 /// `Cone_<property>` is claimed before any `_Full` or `_WF`, so each property's own module
 /// keeps its name.
 fn property_jobs(ts: &TransitionSystem, names: &TlaNames, modules: &mut Modules) -> Vec<Job> {
-    let plain: Vec<String> = (0..ts.properties().len())
-        .map(|i| modules.claim(&format!("Cone_{}", names.property(i))))
+    let tlc: Vec<usize> = (0..ts.properties().len())
+        .filter(|&i| !ts.properties()[i].formula.kind().is_explored())
+        .collect();
+    let plain: Vec<String> = tlc
+        .iter()
+        .map(|&i| modules.claim(&format!("Cone_{}", names.property(i))))
         .collect();
     // Reducing a property's cone reads nothing of another's; the `_Full` and `_WF` names are
     // claimed afterwards, in property order.
-    let cones = in_parallel((0..plain.len()).collect(), jobs(), |i| {
-        PropertyCone::new(ts, i)
-    });
-    plain
-        .into_iter()
-        .zip(cones)
-        .enumerate()
+    let cones = in_parallel(tlc.clone(), jobs(), |i| PropertyCone::new(ts, i));
+    tlc.into_iter()
+        .zip(plain.into_iter().zip(cones))
         .map(|(i, (module, cone))| {
             let name = names.property(i);
             let plain = cone.bundle(ConeRun::Plain, &module);
@@ -285,7 +286,7 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames, modules: &mut Modules)
                 names = b.names.clone();
                 spec(b)
             });
-            let wf = (cone.kind != LtlKind::Always).then(|| {
+            let wf = cone.kind.is_liveness().then(|| {
                 let module = modules.claim(&format!("{module}_WF"));
                 spec(cone.bundle(ConeRun::WfNext, &module))
             });
@@ -785,9 +786,13 @@ pub fn run_tlc(
         (Ok(_), Some(Ok(tlc)), None | Some(Ok(_))) => Some(tlc),
         _ => None,
     };
-    let (bfs, proof, cones_ran) = std::thread::scope(|threads| {
+    let (bfs, explored, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs)));
         let bfs = state_models(program, model, &ts, scope, &selection);
+        let explored = match temporal {
+            true => explored_properties(program, model, &ts),
+            false => Explored::default(),
+        };
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
@@ -799,10 +804,11 @@ pub fn run_tlc(
             Ok(ran) => ran,
             Err(panic) => std::panic::resume_unwind(panic),
         });
-        (bfs, proof, cones_ran)
+        (bfs, explored, proof, cones_ran)
     });
     let end = End {
         bfs,
+        explored,
         deny_undecided,
         proof: proof?,
     };
@@ -889,13 +895,28 @@ fn print_plan(
         checked(|t| matches!(t, Target::Invariant(_))),
         checked(|t| matches!(t, Target::AfterAssert(_)))
     );
-    match (temporal, ts.properties().len()) {
-        (_, 0) => println!("temporal properties: none"),
-        (true, n) => println!(
-            "temporal properties: {n}, each checked on its cone, and on the whole model only when the cone does not decide it (budget {} s)",
-            budget.as_secs()
+    let explored = ts
+        .properties()
+        .iter()
+        .filter(|p| p.formula.kind().is_explored())
+        .count();
+    match (temporal, ts.properties().len() - explored, explored) {
+        (_, 0, 0) => println!("temporal properties: none"),
+        (true, n, m) => {
+            if n > 0 {
+                println!(
+                    "temporal properties: {n}, each checked on its cone, and on the whole model only when the cone does not decide it (budget {} s)",
+                    budget.as_secs()
+                );
+            }
+            if m > 0 {
+                println!("order and stability properties: {m}, each decided by BFS on its cone");
+            }
+        }
+        (false, n, m) => println!(
+            "temporal properties: {}, not checked: a scoped run checks none",
+            n + m
         ),
-        (false, n) => println!("temporal properties: {n}, not checked: a scoped run checks none"),
     }
     match (scope.is_whole(), ts.reach_properties().len()) {
         (_, 0) => {}
@@ -1150,9 +1171,53 @@ fn state_models(
     }
 }
 
+/// What BFS decided of the `stable`, `unchanged`, and `precedes` properties.
+#[derive(Default)]
+struct Explored {
+    violated: usize,
+    /// Properties whose cone BFS stopped at the state cap before a violation.
+    capped: usize,
+}
+
+/// Each property `LtlKind::is_explored` names, decided by BFS on its cone: a line per
+/// property, and each violation rendered with the shortest trace to the step or state that
+/// breaks it.
+fn explored_properties(
+    program: &ResolvedProgram,
+    model: &SemanticModel,
+    ts: &TransitionSystem,
+) -> Explored {
+    let mut out = Explored::default();
+    for (i, p) in ts.properties().iter().enumerate() {
+        let kind = p.formula.kind();
+        if !kind.is_explored() {
+            continue;
+        }
+        let verdict = ts.decide_property(i, Caps::VERIFY);
+        let said = match &verdict {
+            PropertyVerdict::Holds => "ok",
+            PropertyVerdict::Violated(_) => "violated",
+            PropertyVerdict::Undecided => "not decided: BFS stopped at the state cap",
+        };
+        println!("property {} (BFS on its cone): {said}", p.name);
+        match verdict {
+            PropertyVerdict::Holds => {}
+            PropertyVerdict::Undecided => out.capped += 1,
+            PropertyVerdict::Violated(diag) => {
+                let text = render_violation(program, model, &diag, TraceSource::Bfs)
+                    .expect("a property violation renders");
+                eprintln!("{}", Finding::new(&diag, &[], text));
+                out.violated += 1;
+            }
+        }
+    }
+    out
+}
+
 /// How a run whose TLC checks passed ends.
 struct End {
     bfs: Bfs,
+    explored: Explored,
     deny_undecided: bool,
     /// What `--prove` proved, when it ran.
     proof: Option<ProofTally>,
@@ -1184,6 +1249,10 @@ impl End {
                 self.bfs.reach_errors,
                 "can_reach error(s) from BFS on their cones",
             ),
+            (
+                self.explored.violated,
+                "property violation(s) from BFS on the property cones",
+            ),
         ]
         .iter()
         .filter(|(n, _)| *n > 0)
@@ -1194,7 +1263,7 @@ impl End {
         }
         let open = [
             (
-                self.bfs.capped,
+                self.bfs.capped + self.explored.capped,
                 "finding a cone stopped at the state cap left",
                 "findings a cone stopped at the state cap left",
             ),

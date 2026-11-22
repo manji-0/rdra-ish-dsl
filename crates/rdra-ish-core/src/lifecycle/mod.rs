@@ -33,7 +33,7 @@ pub use diag::{
     created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,
     Severity, StateDiag, VarSpread,
 };
-pub use explore::{Adjacency, Caps, ComponentRun, Edge, Graph, LabelledEdges};
+pub use explore::{Adjacency, Caps, ComponentRun, Edge, Graph, LabelledEdges, PropertyVerdict};
 pub use expr::State;
 pub use findings::{
     ActionRuns, ArmTaken, ModelState, Progress, Runs, StateModelFindings, Taken, ValueProgress,

@@ -571,6 +571,93 @@ fn a_fair_property_assumes_weak_fairness_per_instance() {
     assert!(bundle.cfg.contains("PROPERTY Ends\nPROPERTY Plain\n"));
 }
 
+const ORDER_AND_STABILITY: &str = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, cancelled, shipped) @default(draft)
+  amount: Int @default(0)
+  paid: Bool @default(false)
+}
+entity Payment "Payment" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Cancel "Cancel"
+usecase Pay "Pay"
+usecase Amend "Amend"
+transitions(Cancel, Order.status, draft -> cancelled)
+sets(Amend, Order.amount == 2)
+sets(Pay, Order.paid == true)
+transitions(Pay, Payment.status, pending -> captured)
+property Kept stable(Order.status == cancelled)
+property Fixed unchanged(Order.amount, Order.paid).when(Order.status != draft)
+property Paid precedes(Order.paid == true, Order.status == shipped)
+property Captured precedes(Payment.status == captured, Order.status == shipped).along(Payment, Order)
+"#;
+
+/// `stable` and `unchanged` are action properties quantified inside `[]`, so TLC checks them
+/// on every step; `precedes` reads a latch `<P>_seen` per binding that `Init` and every action
+/// set (#166).
+#[test]
+fn the_order_and_stability_forms_print_as_steps_and_a_latch() {
+    let ts = system(ORDER_AND_STABILITY);
+    let tla = print(&ts, PrintMode::Check, "M").tla;
+    let present = |e: &str, b: &str, primed: &str| format!("{e}_exists{primed}[{b}] = \"present\"");
+    let expected = [
+        format!(
+            "Kept == [][\\A b0 \\in Order_Ids : (({}) /\\ (Order_status[b0] = \"cancelled\")) => (({}) => (Order_status'[b0] = \"cancelled\"))]_vars\n",
+            present("Order", "b0", ""),
+            present("Order", "b0", "'")
+        ),
+        format!(
+            "Fixed == [][\\A b0 \\in Order_Ids : (({}) /\\ (~(Order_status[b0] = \"draft\"))) => (({}) => (Order_amount'[b0] = Order_amount[b0] /\\ Order_paid'[b0] = Order_paid[b0]))]_vars\n",
+            present("Order", "b0", ""),
+            present("Order", "b0", "'")
+        ),
+        format!(
+            "Paid == [](\\A b0 \\in Order_Ids : (({}) /\\ (Order_status[b0] = \"shipped\")) => Paid_seen[b0])\n",
+            present("Order", "b0", "")
+        ),
+        format!(
+            "  /\\ Paid_seen = [b0 \\in Order_Ids |-> ({}) /\\ (Order_paid[b0] = TRUE)]\n",
+            present("Order", "b0", "")
+        ),
+        format!(
+            "Paid_latch == Paid_seen' = [b0 \\in Order_Ids |-> Paid_seen[b0] \\/ (({}) /\\ (Order_paid'[b0] = TRUE))]\n",
+            present("Order", "b0", "'")
+        ),
+        "  /\\ Paid_seen \\in [Order_Ids -> BOOLEAN]\n".to_string(),
+        "  /\\ Captured_seen \\in [Payment_Ids \\X Order_Ids -> BOOLEAN]\n".to_string(),
+        format!(
+            "Captured == [](\\A b0 \\in Payment_Ids, b1 \\in Order_Ids : (({} /\\ {} /\\ Payment_owner_Order[b0] = b1) /\\ (Order_status[b1] = \"shipped\")) => Captured_seen[b0, b1])\n",
+            present("Payment", "b0", ""),
+            present("Order", "b1", "")
+        ),
+        "vars == <<Order_vars, Payment_vars, Paid_seen, Captured_seen>>\n".to_string(),
+        "  /\\ Paid_latch\n  /\\ Captured_latch\n".to_string(),
+    ];
+    for line in expected {
+        assert!(tla.contains(&line), "{line}\n{tla}");
+    }
+}
+
+/// A latch is a var only where the cfg checks its property: a safety cone and another
+/// property's run keep the explorer's state graph.
+#[test]
+fn a_latch_is_declared_only_where_its_property_is_checked() {
+    let ts = system(ORDER_AND_STABILITY);
+    for mode in [
+        PrintMode::Safety,
+        PrintMode::Explore,
+        PrintMode::ConeProperty(0),
+    ] {
+        let tla = print(&ts, mode, "M").tla;
+        assert!(!tla.contains("_seen"), "{mode:?}\n{tla}");
+        assert!(!tla.contains("_latch"), "{mode:?}\n{tla}");
+    }
+    let tla = print(&ts, PrintMode::ConeProperty(2), "M").tla;
+    assert!(tla.contains("Paid_seen"), "{tla}");
+    assert!(!tla.contains("Captured_seen"), "{tla}");
+}
+
 const ALONG: &str = r#"
 entity Order "Order" { id: Int @pk  status: Enum(draft, paid) @default(draft) }
 entity Payment "Payment" { id: Int @pk  status: Enum(pending, captured) @default(pending) }

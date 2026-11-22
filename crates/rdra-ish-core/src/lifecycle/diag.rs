@@ -160,8 +160,9 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
-    /// A temporal property fails on the infinite behavior of a lasso: `trace`, then `lasso`.
-    /// Only a replayed TLC counterexample builds it; BFS does not check properties.
+    /// A temporal property fails on the infinite behavior of a lasso, `trace` then `lasso`,
+    /// or on the finite `trace` of a form `LtlKind::is_explored` names. A replayed TLC
+    /// counterexample builds it, and so does `ComponentRun::decide_property`.
     PropertyViolated {
         /// The property's name, which is the PROPERTY TLC checks.
         name: String,
@@ -169,10 +170,13 @@ pub enum StateDiag {
         /// The instance of each binder the formula fails for, outermost first.
         instance: Vec<Inst>,
         /// The state that shows it, 0 for the start and k for the state after step k: where
-        /// `always` is false, or where the instance is present (and the `leads_to` trigger
-        /// holds) and the goal never holds from then on.
+        /// `always` is false, where the instance is present (and the `leads_to` trigger
+        /// holds) and the goal never holds from then on, where the step that breaks
+        /// `stable` or `unchanged` ends, or where `precedes`' second condition holds first
+        /// without the first.
         witness: usize,
-        lasso: Loop,
+        /// `None` for a form `LtlKind::is_explored` names, which a finite trace violates.
+        lasso: Option<Loop>,
         site: Site,
         trace: Trace,
     },
@@ -798,6 +802,18 @@ impl fmt::Display for StateDiag {
                     LtlKind::LeadsTo => write!(
                         f,
                         "its leads_to trigger holds for {inst} {at}, and its goal never holds from then on"
+                    ),
+                    LtlKind::Stable => write!(
+                        f,
+                        "its stable condition holds for {inst} before step {witness} and is false after it"
+                    ),
+                    LtlKind::Unchanged => write!(
+                        f,
+                        "step {witness} changes a column unchanged(..) keeps for {inst} while its when condition holds"
+                    ),
+                    LtlKind::Precedes => write!(
+                        f,
+                        "its second condition holds for {inst} {at}, and its first condition has not held for it at or before that state"
                     ),
                 }
             }

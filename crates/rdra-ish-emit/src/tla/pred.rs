@@ -81,7 +81,7 @@ impl Ctx<'_> {
         }
     }
 
-    fn slot(&self, t: &Term) -> Option<(String, &Domain)> {
+    pub fn slot(&self, t: &Term) -> Option<(String, &Domain)> {
         match t {
             Term::Slot { var, at: a } => {
                 let prime = match a {

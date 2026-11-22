@@ -14,7 +14,7 @@ mod tests;
 
 use std::collections::BTreeSet;
 
-use rdra_ish_core::lifecycle::{Domain, EntId, Ltl, TransitionSystem, Value};
+use rdra_ish_core::lifecycle::{Domain, EntId, TransitionSystem, Value};
 
 pub use names::{Decoder, StateCheck, TlaNames};
 
@@ -58,7 +58,12 @@ pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBu
     let module_name = module_name_of(module_name);
     let names = TlaNames::new(ts);
     let wf_next = !matches!(mode, PrintMode::ConeProperty(_)) && needs_fairness(ts);
-    let tla = module::render(ts, &names, &module_name, wf_next);
+    // A `precedes` latch is a var of the module only where the cfg checks the property, so
+    // a cone's state graph is the explorer's everywhere else.
+    let latched: Vec<usize> = checked_properties(ts, mode)
+        .filter(|i| names.seen(*i).is_some())
+        .collect();
+    let tla = module::render(ts, &names, &module_name, wf_next, &latched);
     let cfg = cfg_without(ts, &names, mode, &BTreeSet::new());
     TlaBundle {
         module_name,
@@ -81,7 +86,7 @@ pub fn print_state_models(
 ) -> TlaBundle {
     let module_name = module_name_of(module_name);
     let names = TlaNames::with_state_models(ts, entities);
-    let tla = module::render(ts, &names, &module_name, false);
+    let tla = module::render(ts, &names, &module_name, false, &[]);
     let none = BTreeSet::new();
     TlaBundle {
         cfg: cfg_without(ts, &names, PrintMode::Deadlocks, &none),
@@ -164,15 +169,15 @@ pub fn cfg_without(
     mode: PrintMode,
     skip: &BTreeSet<String>,
 ) -> String {
-    let all = 0..ts.properties().len();
-    let (safety, properties) = match mode {
-        PrintMode::Check => (true, all),
-        PrintMode::Safety => (true, 0..0),
-        PrintMode::Temporal => (false, all),
-        PrintMode::Property(i) | PrintMode::ConeProperty(i) => (false, i..i + 1),
-        PrintMode::Explore => (false, 0..0),
+    let safety = match mode {
+        PrintMode::Check | PrintMode::Safety => true,
+        PrintMode::Temporal
+        | PrintMode::Property(_)
+        | PrintMode::ConeProperty(_)
+        | PrintMode::Explore => false,
         PrintMode::Deadlocks | PrintMode::Witnesses => return state_cfg(names, mode, skip),
     };
+    let properties = checked_properties(ts, mode);
     let mut out = String::from("SPECIFICATION Spec\n");
     if mode != PrintMode::Explore {
         out.push_str("INVARIANT TypeOK\n");
@@ -202,6 +207,17 @@ pub fn cfg_without(
         out.push_str(&format!("PROPERTY {}\n", names.property(i)));
     }
     out
+}
+
+/// The properties the cfg of `mode` checks.
+fn checked_properties(ts: &TransitionSystem, mode: PrintMode) -> std::ops::Range<usize> {
+    match mode {
+        PrintMode::Check | PrintMode::Temporal => 0..ts.properties().len(),
+        PrintMode::Property(i) | PrintMode::ConeProperty(i) => i..i + 1,
+        PrintMode::Safety | PrintMode::Explore | PrintMode::Deadlocks | PrintMode::Witnesses => {
+            0..0
+        }
+    }
 }
 
 /// The cfg of a `print_state_models` module, without the checks `skip` names.
@@ -235,7 +251,7 @@ fn state_cfg(names: &TlaNames, mode: PrintMode, skip: &BTreeSet<String>) -> Stri
 fn needs_fairness(ts: &TransitionSystem) -> bool {
     ts.properties()
         .iter()
-        .any(|p| matches!(p.formula, Ltl::Eventually(_) | Ltl::LeadsTo(..)))
+        .any(|p| p.formula.kind().is_liveness())
 }
 
 pub(crate) fn sanitize_ident(s: &str) -> String {

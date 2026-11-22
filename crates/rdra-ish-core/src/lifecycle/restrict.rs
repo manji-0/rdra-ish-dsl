@@ -202,12 +202,11 @@ impl TransitionSystem {
             }
         }
         for p in &self.properties {
-            let preds: Vec<&Pred> = p.preds().collect();
-            if reads_inside(&p.binders, &preds) {
+            if self.property_reads(p).is_subset(vars) {
                 out.properties.push(Property {
                     binders: p.binders.iter().map(|e| map.e(*e)).collect(),
                     link: map.pred(&p.link),
-                    formula: p.formula.map(|x| map.pred(x)),
+                    formula: p.formula.map(|x| map.pred(x), |t| map.term(t)),
                     ..p.clone()
                 });
             }

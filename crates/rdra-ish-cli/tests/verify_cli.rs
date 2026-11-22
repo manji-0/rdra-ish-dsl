@@ -44,6 +44,78 @@ fn verify(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
         .expect("rdra-ish runs")
 }
 
+/// `order_stability.rdra`: BFS decides `stable`, `unchanged`, and `precedes` on each one's
+/// cone, with no TLC run, and prints the shortest trace to the step or state that breaks each
+/// failing one. `check` evaluates none of them (#166).
+#[test]
+fn verify_decides_order_and_stability_by_bfs_and_check_does_not() {
+    let tmp = scratch("verify_cli_order_stability");
+    let sample = repo().join("samples/formal-verification/order_stability.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("\norder and stability properties: 6, each decided by BFS on its cone\n"),
+        "{stdout}"
+    );
+    for (name, verdict) in [
+        ("ShippedStaysShipped", "ok"),
+        ("CancelledStaysCancelled", "violated"),
+        ("AmountKeptOnceApproved", "ok"),
+        ("AmountKeptOnceDecided", "violated"),
+        ("ShippedAfterPaid", "ok"),
+        ("ShippedAfterInvoiced", "violated"),
+    ] {
+        assert!(
+            stdout.contains(&format!("property {name} (BFS on its cone): {verdict}\n")),
+            "{name}\n{stdout}"
+        );
+    }
+    let stable = "error[CancelledStaysCancelled]: property CancelledStaysCancelled is violated: its stable condition holds for Order#1 before step 3 and is false after it";
+    assert!(stderr.contains(stable), "{stderr}");
+    assert!(
+        stderr.contains("counterexample (3 steps):\n    1. Place [Order#1]"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("    3. Reopen [Order#1]"), "{stderr}");
+    assert!(
+        stderr.contains("error[AmountKeptOnceDecided]: property AmountKeptOnceDecided is violated: step 4 changes a column unchanged(..) keeps for Order#1 while its when condition holds"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("error[ShippedAfterInvoiced]: property ShippedAfterInvoiced is violated: its second condition holds for Order#1 after step 4"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("then nothing changes forever"), "{stderr}");
+    assert!(
+        stderr.contains(
+            "verification failed: 3 property violation(s) from BFS on the property cones"
+        ),
+        "{stderr}"
+    );
+
+    let check = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .arg("check")
+        .arg(&sample)
+        .output()
+        .expect("rdra-ish runs");
+    let out = format!(
+        "{}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+    assert_eq!(check.status.code(), Some(0), "{out}");
+    for name in [
+        "CancelledStaysCancelled",
+        "AmountKeptOnceDecided",
+        "ShippedAfterInvoiced",
+    ] {
+        assert!(!out.contains(name), "check reports {name}\n{out}");
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 #[test]
 fn failed_verify_without_out_keeps_and_names_its_specs() {
     if !have_tlc() {

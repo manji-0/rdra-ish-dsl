@@ -1,0 +1,166 @@
+//! The property forms BFS decides on the graph it explored (`LtlKind::is_explored`):
+//! `stable` and `unchanged` on each edge, and `precedes` on each state with the latch the
+//! TLA+ printer spells `<P>_seen`. The latch is no var of the system: a state where `q`
+//! holds and the latch is unset is one a path reaches through states where `p` never held,
+//! so the search walks the graph that keeps only those states.
+
+use std::collections::VecDeque;
+
+use crate::lifecycle::diag::StateDiag;
+use crate::lifecycle::expr::State;
+use crate::lifecycle::types::{Ltl, Pred, Property};
+
+use super::{Caps, ComponentRun, Edge};
+use crate::lifecycle::TransitionSystem;
+
+/// What the explorer decides of one property on one run.
+#[derive(Clone, Debug)]
+pub enum PropertyVerdict {
+    Holds,
+    /// The shortest trace to the step (`stable`, `unchanged`) or state (`precedes`) that
+    /// breaks it.
+    Violated(Box<StateDiag>),
+    /// The run stopped at the state cap with no violation in what it reached.
+    Undecided,
+}
+
+impl TransitionSystem {
+    /// `properties()[i]`, a form `LtlKind::is_explored` names, decided by BFS on its cone
+    /// under `caps`. A cone that frees an entity's slots (`cone_frees_slots`) reaches a
+    /// superset, so a violation there is decided again on the whole system.
+    pub fn decide_property(&self, i: usize, caps: Caps) -> PropertyVerdict {
+        let cone = self.property_cone(i);
+        let system = self.restrict_to(&cone.vars, &cone.keep);
+        let name = &self.properties()[i].name;
+        let index = system
+            .properties()
+            .iter()
+            .position(|p| p.name == *name)
+            .expect("the cone holds what the property reads");
+        let verdict = system
+            .run(caps)
+            .decide_property(index)
+            .expect("an explored form");
+        match verdict {
+            PropertyVerdict::Violated(_) if self.cone_frees_slots(&cone) => self
+                .clone()
+                .run(caps)
+                .decide_property(i)
+                .expect("an explored form"),
+            verdict => verdict,
+        }
+    }
+}
+
+impl ComponentRun {
+    /// `properties()[i]` of the explored system on its graph; `None` for a form
+    /// `LtlKind::is_explored` does not name.
+    pub fn decide_property(&self, i: usize) -> Option<PropertyVerdict> {
+        let ts = &self.system;
+        let p = &ts.properties()[i];
+        let found = match &p.formula {
+            Ltl::Stable(_) | Ltl::Unchanged { .. } => self.breaking_step(p),
+            Ltl::Precedes(x, y) => self.unlatched_state(p, x, y),
+            Ltl::Always(_) | Ltl::Eventually(_) | Ltl::LeadsTo(..) => return None,
+        };
+        let Some((first, path)) = found else {
+            return Some(match self.complete {
+                true => PropertyVerdict::Holds,
+                false => PropertyVerdict::Undecided,
+            });
+        };
+        let states: Vec<State> = std::iter::once(first)
+            .chain(path.iter().map(|e| e.to))
+            .map(|k| self.states[k as usize].clone())
+            .collect();
+        let (instance, witness) = ts
+            .property_failure(p, &states, states.len() - 1)
+            .expect("the path the search found breaks the property");
+        Some(PropertyVerdict::Violated(Box::new(
+            StateDiag::PropertyViolated {
+                name: p.name.clone(),
+                kind: p.formula.kind(),
+                instance: p
+                    .binders
+                    .iter()
+                    .zip(&instance)
+                    .map(|(e, slot)| ts.inst(*e, usize::from(*slot)))
+                    .collect(),
+                witness,
+                lasso: None,
+                site: p.site.clone(),
+                trace: self.trace_along(first, &path),
+            },
+        )))
+    }
+
+    /// The first edge, in the order BFS found them, that breaks `p` for some binding, and the
+    /// BFS path to its source before it. BFS expands states in depth order, so no edge from a
+    /// shallower state breaks it.
+    fn breaking_step(&self, p: &Property) -> Option<(u32, Vec<Edge>)> {
+        let ts = &self.system;
+        let bindings: Vec<Vec<u8>> = ts.binder_slots(p.binders.len()).collect();
+        let edge = self.edges.iter().find(|e| {
+            let (a, b) = (&self.states[e.from as usize], &self.states[e.to as usize]);
+            e.from != e.to && bindings.iter().any(|bd| ts.step_breaks(p, bd, a, b))
+        })?;
+        let mut path = self.path_to(edge.from);
+        let first = path.first().map_or(edge.from, |e| e.from);
+        path.push(*edge);
+        Some((first, path))
+    }
+
+    /// The shortest walk to a state where the trigger and `y` hold and the latch of `x` is
+    /// unset, over every binding: a walk from an initial state through states where the
+    /// trigger and `x` never hold.
+    fn unlatched_state(&self, p: &Property, x: &Pred, y: &Pred) -> Option<(u32, Vec<Edge>)> {
+        let ts = &self.system;
+        let mut out: Vec<Vec<u32>> = vec![Vec::new(); self.states.len()];
+        for (k, e) in self.edges.iter().enumerate() {
+            out[e.from as usize].push(k as u32);
+        }
+        let mut best: Option<(u32, Vec<Edge>)> = None;
+        for bd in ts.binder_slots(p.binders.len()) {
+            let on =
+                |s: &State, pred: &Pred| ts.triggers(p, &bd, s) && ts.holds_bound(pred, s, &bd);
+            let open: Vec<bool> = self.states.iter().map(|s| !on(s, x)).collect();
+            // Per reached state: the edge into it, or `None` for an initial state.
+            let mut via: Vec<Option<Option<u32>>> = vec![None; self.states.len()];
+            let mut queue: VecDeque<u32> = VecDeque::new();
+            for (k, parent) in self.parents.iter().enumerate() {
+                if parent.is_none() && open[k] {
+                    via[k] = Some(None);
+                    queue.push_back(k as u32);
+                }
+            }
+            let mut found = None;
+            while let Some(k) = queue.pop_front() {
+                if on(&self.states[k as usize], y) {
+                    found = Some(k);
+                    break;
+                }
+                for &ek in &out[k as usize] {
+                    let to = self.edges[ek as usize].to as usize;
+                    if open[to] && via[to].is_none() {
+                        via[to] = Some(Some(ek));
+                        queue.push_back(to as u32);
+                    }
+                }
+            }
+            let Some(mut at) = found else {
+                continue;
+            };
+            let mut path = Vec::new();
+            while let Some(Some(ek)) = via[at as usize] {
+                let e = self.edges[ek as usize];
+                path.push(e);
+                at = e.from;
+            }
+            path.reverse();
+            if best.as_ref().is_none_or(|(_, b)| path.len() < b.len()) {
+                best = Some((at, path));
+            }
+        }
+        best
+    }
+}

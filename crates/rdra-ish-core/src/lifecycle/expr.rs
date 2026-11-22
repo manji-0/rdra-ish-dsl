@@ -136,6 +136,24 @@ impl TransitionSystem {
         None
     }
 
+    /// Whether the slot `term` names under `binding` holds the same value in `a` and `b`; a
+    /// term that names no slot never changes.
+    pub(crate) fn term_unchanged(&self, term: &Term, a: &State, b: &State, binding: &[u8]) -> bool {
+        match term {
+            Term::Slot {
+                var,
+                at: At::Bound(k),
+            } => {
+                let slot = usize::from(binding[usize::from(*k)]);
+                a.get(self, *var, slot) == b.get(self, *var, slot)
+            }
+            Term::Now => self
+                .now
+                .is_none_or(|now| a.get(self, now, 0) == b.get(self, now, 0)),
+            _ => true,
+        }
+    }
+
     fn operand(&self, term: &Term, state: &State, env: &Env) -> Operand<'_> {
         match term {
             Term::Slot { var, at } => {
