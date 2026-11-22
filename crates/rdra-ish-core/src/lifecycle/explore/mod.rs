@@ -58,6 +58,16 @@ pub struct ComponentRun {
     bindings: Vec<(ActId, Box<[u8]>)>,
 }
 
+/// The worker threads a run computes moves on, beside the thread that reads them.
+#[derive(Clone, Copy)]
+enum Threads {
+    /// This many, whatever other runs hold; none runs on the caller's thread alone.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Fixed(usize),
+    /// What the process-wide budget has left (`parallel::Helpers`), `jobs()` less one in all.
+    Shared,
+}
+
 /// One move of the run: `states[from]` steps to `states[to]` under one `(action, params)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Edge {
@@ -213,12 +223,12 @@ struct Bfs<'t> {
 impl TransitionSystem {
     /// Explores this system.
     pub fn run(self, caps: Caps) -> ComponentRun {
-        self.run_on(caps, crate::parallel::jobs())
+        self.run_on(caps, Threads::Shared)
     }
 
-    /// `run` on up to `threads` threads. The run does not depend on the number: the states,
-    /// the edges, and the findings come out in the order one thread finds them.
-    fn run_on(self, caps: Caps, threads: usize) -> ComponentRun {
+    /// `run` with `threads` workers. The run does not depend on the number: the states, the
+    /// edges, and the findings come out in the order one thread finds them.
+    fn run_on(self, caps: Caps, threads: Threads) -> ComponentRun {
         let mut bfs = Bfs::new(&self, caps);
         bfs.go(threads);
         let Bfs {

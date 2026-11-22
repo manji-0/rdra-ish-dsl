@@ -10,6 +10,43 @@ pub fn jobs() -> usize {
         .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get().min(8)))
 }
 
+/// Threads that help a run beyond the one it runs on, taken from one budget for the whole
+/// process: `jobs()` less one. Runs that are themselves side by side (`in_parallel`) would
+/// otherwise start `jobs()` helpers each. Dropping the value gives them back.
+pub(crate) struct Helpers(usize);
+
+static HELPING: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+impl Helpers {
+    /// Every helper the budget has left, which may be none.
+    pub(crate) fn take() -> Helpers {
+        use std::sync::atomic::Ordering;
+        let budget = jobs().saturating_sub(1);
+        let mut held = HELPING.load(Ordering::Relaxed);
+        loop {
+            let free = budget.saturating_sub(held);
+            if free == 0 {
+                return Helpers(0);
+            }
+            match HELPING.compare_exchange(held, held + free, Ordering::Relaxed, Ordering::Relaxed)
+            {
+                Ok(_) => return Helpers(free),
+                Err(now) => held = now,
+            }
+        }
+    }
+
+    pub(crate) fn count(&self) -> usize {
+        self.0
+    }
+}
+
+impl Drop for Helpers {
+    fn drop(&mut self) {
+        HELPING.fetch_sub(self.0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 /// `f` of each item, in item order, on up to `threads` threads. One thread, or one item,
 /// runs on the caller's.
 pub fn in_parallel<T: Send, R: Send>(

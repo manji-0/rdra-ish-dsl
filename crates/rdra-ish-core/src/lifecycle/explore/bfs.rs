@@ -13,8 +13,9 @@ use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, Domain, EntId, Value, VarKind};
 use crate::lifecycle::view::pattern_bound;
 use crate::lifecycle::TransitionSystem;
+use crate::parallel::Helpers;
 
-use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach};
+use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, Threads};
 
 /// States one worker expands at a time. Fewer than two chunks of waiting states are
 /// expanded on the caller's thread, so a small run starts no worker.
@@ -47,7 +48,10 @@ fn expand(ts: &TransitionSystem, states: &[State]) -> Expanded {
 struct Workers<'scope, 'env> {
     scope: &'scope Scope<'scope, 'env>,
     ts: &'env TransitionSystem,
-    threads: usize,
+    /// How many workers the run starts; `None` until `Threads::Shared` has taken some.
+    threads: Option<usize>,
+    /// The helpers a `Threads::Shared` run holds, given back when the run ends.
+    held: Option<Helpers>,
     /// `None` until the first chunk is handed out.
     jobs: Option<Sender<Vec<State>>>,
     /// Per chunk handed out and not yet read, in order: its result once a worker sends it.
@@ -59,12 +63,20 @@ struct Workers<'scope, 'env> {
 }
 
 impl<'scope, 'env> Workers<'scope, 'env> {
-    fn new(scope: &'scope Scope<'scope, 'env>, ts: &'env TransitionSystem, threads: usize) -> Self {
+    fn new(
+        scope: &'scope Scope<'scope, 'env>,
+        ts: &'env TransitionSystem,
+        threads: Threads,
+    ) -> Self {
         let (done_tx, done) = mpsc::channel();
         Workers {
             scope,
             ts,
-            threads,
+            threads: match threads {
+                Threads::Fixed(n) => Some(n),
+                Threads::Shared => None,
+            },
+            held: None,
             jobs: None,
             waiting: VecDeque::new(),
             read: 0,
@@ -73,15 +85,32 @@ impl<'scope, 'env> Workers<'scope, 'env> {
         }
     }
 
-    fn has_room(&self) -> bool {
-        self.threads > 1 && self.waiting.len() < self.threads * AHEAD
+    /// Whether another chunk may be handed out. A shared run asks the budget for helpers
+    /// here, when it first has chunks to hand out, and again each time while it has none.
+    fn has_room(&mut self) -> bool {
+        let threads = match self.threads {
+            Some(threads) => threads,
+            None => {
+                let helpers = Helpers::take();
+                let count = helpers.count();
+                if count > 0 {
+                    self.threads = Some(count);
+                    self.held = Some(helpers);
+                }
+                count
+            }
+        };
+        threads > 0 && self.waiting.len() < threads * AHEAD
     }
 
     fn hand_out(&mut self, states: Vec<State>) {
         let jobs = self.jobs.get_or_insert_with(|| {
             let (jobs, queue) = mpsc::channel::<Vec<State>>();
             let queue = Arc::new(Mutex::new((0usize, queue)));
-            for _ in 0..self.threads {
+            for _ in 0..self
+                .threads
+                .expect("a chunk is handed out once there are workers")
+            {
                 let (queue, done, ts) = (queue.clone(), self.done_tx.clone(), self.ts);
                 self.scope.spawn(move || loop {
                     // The chunk and its number are taken together, so the numbers are the
@@ -152,8 +181,8 @@ impl<'t> Bfs<'t> {
         }
     }
 
-    /// Explores on up to `threads` threads; the run is the same on any number.
-    pub(super) fn go(&mut self, threads: usize) {
+    /// Explores with `threads` workers; the run is the same with any number.
+    pub(super) fn go(&mut self, threads: Threads) {
         let ts = self.ts;
         for s in ts.initial_states() {
             for (i, _) in ts.entities.iter().enumerate() {
@@ -185,7 +214,7 @@ impl<'t> Bfs<'t> {
         // States before `next` are read; states before `sent` are read or handed out.
         let (mut next, mut sent) = (0, 0);
         loop {
-            while workers.has_room() && self.states.len() - sent >= 2 * CHUNK {
+            while self.states.len() - sent >= 2 * CHUNK && workers.has_room() {
                 workers.hand_out(self.states[sent..sent + CHUNK].to_vec());
                 sent += CHUNK;
             }
