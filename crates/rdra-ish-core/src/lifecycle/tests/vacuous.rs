@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use super::model_from;
-use crate::lifecycle::{Bounds, Caps, Diag, Scope, StateDiag, TransitionSystem};
+use crate::lifecycle::{Bounds, Caps, Diag, Scope, StateDiag, TransitionSystem, UnmetPremise};
 
 /// The premises no reachable state meets, per rule that holds vacuously.
 fn vacuous(src: &str, bounds: Bounds, caps: Caps) -> BTreeMap<String, Vec<String>> {
@@ -16,7 +16,11 @@ fn texts(verdicts: &[Diag]) -> BTreeMap<String, Vec<String>> {
         .iter()
         .filter_map(|d| match &d.diag {
             StateDiag::VacuousRule { name, unmet, .. } => {
-                Some((name.clone(), unmet.iter().map(|u| u.text.clone()).collect()))
+                let text = |u: &UnmetPremise| match u {
+                    UnmetPremise::Rows { text, .. } => text.clone(),
+                    other => other.to_string(),
+                };
+                Some((name.clone(), unmet.iter().map(text).collect()))
             }
             _ => None,
         })
@@ -203,4 +207,75 @@ fn a_run_whose_scope_drops_use_cases_reports_no_vacuity() {
     assert_eq!(texts(run.verdicts()).len(), 1);
     run.defer_progress();
     assert_eq!(texts(run.verdicts()), BTreeMap::new());
+}
+
+const SHIPPING: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid, shipped, void) @default(open) }
+entity Desk "窓口" { id: Int @pk }
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Open "開設"
+creates(Place, Order)
+transitions(Pay, Order.status, open -> paid)
+transitions(Ship, Order.status, void -> shipped)
+creates(Open, Desk)
+condition Never "起きない"
+holds(Never, Order.status == void)
+applies_to(Never, Open)
+"#;
+
+/// An `after` assertion says something once its use case runs. Ship needs a void order and
+/// none is ever void, so its assertion holds vacuously; Pay runs, so its assertion does not.
+/// An assertion that reads an entity its step does not bind needs a row of it after the step:
+/// no Desk ever exists.
+#[test]
+fn an_assert_after_a_use_case_that_never_runs_holds_vacuously() {
+    let src = format!(
+        "{SHIPPING}after(Ship).assert(Order.status == shipped)\n\
+         after(Pay).assert(Order.status == paid)\n\
+         after(Pay).assert(Desk.id == 1)\n"
+    );
+    let found = vacuous(&src, Bounds::STATES, Caps::STATES);
+    assert_eq!(
+        found,
+        BTreeMap::from([
+            (
+                "AfterAssert_Ship_0".to_string(),
+                vec!["Ship never runs".to_string()]
+            ),
+            (
+                "AfterAssert_Pay_2".to_string(),
+                vec!["no run of Pay ends in a state with a row of Desk".to_string()]
+            ),
+        ])
+    );
+}
+
+/// A `leads_to` whose trigger no reachable state meets holds vacuously, and so does any
+/// property over rows that never exist. A property whose trigger is reached is not vacuous,
+/// whatever its verdict: BFS evaluates no temporal formula.
+#[test]
+fn a_leads_to_whose_trigger_never_holds_holds_vacuously() {
+    let src = format!(
+        "{SHIPPING}property VoidShips \"無効は出荷\"\n  leads_to(Order.status == void, Order.status == shipped)\n\
+         property OpenPays \"未払は支払\"\n  leads_to(Order.status == open, Order.status == paid)\n\
+         property DeskStays \"窓口は残る\"\n  always(Desk.id == 1)\n"
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let found = texts(&ts.vacuous_properties(Caps::STATES));
+    assert_eq!(
+        found,
+        BTreeMap::from([
+            (
+                "VoidShips".to_string(),
+                vec!["its leads_to trigger holds in no reachable state".to_string()]
+            ),
+            ("DeskStays".to_string(), vec![String::new()]),
+        ])
+    );
+    assert_eq!(
+        texts(&ts.vacuous_properties(Caps::new(256, 1))),
+        BTreeMap::new()
+    );
 }

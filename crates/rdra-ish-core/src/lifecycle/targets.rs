@@ -7,8 +7,12 @@ use std::fmt;
 use super::cone::{Cone, Target};
 use super::diag::{Diag, StateDiag, UnmetPremise};
 use super::explore::{Caps, ComponentRun};
+use super::expr::State;
 use super::findings::{Progress, Runs, Taken, Witness};
-use super::types::{ActionOrigin, EntId, GuardWhy, Pred, Premise, Site, Term, VarKind};
+use super::types::{
+    ActionOrigin, AfterAssert, AfterStep, EntId, GuardWhy, Invariant, Ltl, Pred, Premise, Site,
+    Term, VarKind,
+};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
 use crate::model::{EntityKey, SemanticModel};
@@ -630,22 +634,53 @@ impl TransitionSystem {
                 diag: d.diag.clone(),
             });
         }
-        if let Target::Invariant(i) = target {
-            out.extend(self.vacuous(i, cone).map(|diag| Diag { entities, diag }));
-        }
+        out.extend(self.vacuity(target, run));
         out
     }
 
-    /// The `VacuousRule` of invariant `i` on its cone: the rule holds there, the exploration
-    /// is complete, and no reached state meets one of its premises. When no state has the
-    /// rows the rule ranges over, that alone is reported.
-    fn vacuous(&self, i: usize, cone: &ConeRun) -> Option<StateDiag> {
-        let inv = &self.invariants[i];
-        let run = &cone.run;
+    /// The `VacuousRule` of an invariant or an after-assert on a run of its cone: the check
+    /// holds there, the run is complete, and no reached state meets one of its premises.
+    /// `run` explores the target's cone, reduced or not, at this system's bounds.
+    pub fn vacuity(&self, target: Target, run: &ComponentRun) -> Option<Diag> {
+        if !run.complete {
+            return None;
+        }
+        let (name, label, site, unmet) = match target {
+            Target::Entity(_) => return None,
+            Target::Invariant(i) => {
+                let inv = &self.invariants[i];
+                (
+                    &inv.name,
+                    &inv.label,
+                    &inv.site,
+                    self.unmet_of_rule(inv, run)?,
+                )
+            }
+            Target::AfterAssert(i) => {
+                let a = &self.after[i];
+                (&a.name, &a.label, &a.site, Self::unmet_of_assert(a, run)?)
+            }
+        };
+        (!unmet.is_empty()).then(|| Diag {
+            entities: self.target_entities(target),
+            diag: StateDiag::VacuousRule {
+                name: name.clone(),
+                label: label.clone(),
+                unmet,
+                one_instance: self.bounds.slots() == 1,
+                site: site.clone(),
+            },
+        })
+    }
+
+    /// The premises of `inv` no state of `run` meets; `None` when the rule is violated there
+    /// or the cone does not hold it. When no state has the rows the rule ranges over, that
+    /// alone is reported.
+    fn unmet_of_rule(&self, inv: &Invariant, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
         let violated = run.diags.iter().any(
             |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
         );
-        if !run.complete || violated {
+        if violated {
             return None;
         }
         // The cone's copy of the rule reads the cone's vars.
@@ -656,7 +691,7 @@ impl TransitionSystem {
                 .iter()
                 .any(|s| sys.meets(&local.binders, pred, s))
         };
-        let unmet = |premise: &Premise| UnmetPremise {
+        let unmet = |premise: &Premise| UnmetPremise::Rows {
             rows: TransitionSystem::premise_rows(inv.binders.len(), &premise.pred)
                 .iter()
                 .zip(&inv.binders)
@@ -667,7 +702,7 @@ impl TransitionSystem {
         };
         // A condition the build could not express is `False` and has its own error.
         let built = |p: &&Premise| !p.pred.nodes().any(|n| matches!(n, Pred::False));
-        let unmet: Vec<UnmetPremise> = match met(&Pred::True) {
+        Some(match met(&Pred::True) {
             false if !local.premises.is_empty() => vec![unmet(&Premise::rows())],
             _ => local
                 .premises
@@ -676,14 +711,104 @@ impl TransitionSystem {
                 .filter(|p| !met(&p.pred))
                 .map(unmet)
                 .collect(),
+        })
+    }
+
+    /// The premises of the after-assert `a` no step of `run` meets; `None` when the assert
+    /// is violated there or the cone does not hold it. The assert says something once its use
+    /// case takes its last step, into a state that has rows of the entities the step does not
+    /// bind, when it reads any.
+    fn unmet_of_assert(a: &AfterAssert, run: &ComponentRun) -> Option<Vec<UnmetPremise>> {
+        let violated = run.diags.iter().any(
+            |d| matches!(&d.diag, StateDiag::AfterAssertViolated { name, .. } if *name == a.name),
+        );
+        if violated {
+            return None;
+        }
+        let sys = &run.system;
+        let local = sys.after.iter().find(|x| x.name == a.name)?;
+        let steps = |step: &AfterStep| {
+            run.edges()
+                .iter()
+                .filter(|edge| run.step(edge).0 == step.act)
+                .map(|edge| &run.states[edge.to as usize])
+                .collect::<Vec<_>>()
         };
-        (!unmet.is_empty()).then(|| StateDiag::VacuousRule {
-            name: inv.name.clone(),
-            text: inv.text.clone(),
-            label: inv.label.clone(),
-            unmet,
-            one_instance: self.bounds.slots() == 1,
-            site: inv.site.clone(),
+        let ran: Vec<(&AfterStep, Vec<&State>)> = local
+            .steps
+            .iter()
+            .map(|step| (step, steps(step)))
+            .filter(|(_, ends)| !ends.is_empty())
+            .collect();
+        let usecase = a.anchor.clone();
+        if ran.is_empty() {
+            return Some(vec![UnmetPremise::NeverRuns { usecase }]);
+        }
+        let with_rows = ran.iter().any(|(step, ends)| {
+            ends.iter()
+                .any(|s| sys.meets(&step.binders, &Pred::True, s))
+        });
+        Some(match with_rows {
+            true => Vec::new(),
+            false => {
+                let rows = ran[0].0.binders.iter();
+                let rows = rows.map(|e| sys.entity(*e).id.clone()).collect();
+                vec![UnmetPremise::NoRowsAfter { usecase, rows }]
+            }
+        })
+    }
+
+    /// The `VacuousRule` of each temporal property, each on its own cone explored under
+    /// `caps`: no reachable state has the rows the property ranges over, or the trigger of
+    /// its `leads_to` holds for none. A cone a cap stops reports nothing. BFS evaluates no
+    /// temporal formula, so a property that is violated may be reported too.
+    pub fn vacuous_properties(&self, caps: Caps) -> Vec<Diag> {
+        let found = in_parallel((0..self.properties.len()).collect(), jobs(), |i| {
+            let cone = self.property_cone(i);
+            let run = self.restrict_to(&cone.vars, &cone.keep).run(caps);
+            self.property_vacuity(i, &run)
+        });
+        found.into_iter().flatten().collect()
+    }
+
+    /// The `VacuousRule` of property `i` on a run of its cone, reduced or not.
+    pub fn property_vacuity(&self, i: usize, run: &ComponentRun) -> Option<Diag> {
+        let property = &self.properties[i];
+        let sys = &run.system;
+        let local = sys.properties.iter().find(|p| p.name == property.name)?;
+        if !run.complete {
+            return None;
+        }
+        let met = |pred: &Pred| {
+            run.states
+                .iter()
+                .any(|s| sys.meets(&local.binders, pred, s))
+        };
+        let unmet = match &local.formula {
+            _ if !met(&Pred::True) => UnmetPremise::Rows {
+                rows: property
+                    .binders
+                    .iter()
+                    .map(|e| self.entity(*e).id.clone())
+                    .collect(),
+                text: String::new(),
+            },
+            Ltl::LeadsTo(trigger, _) if !met(trigger) => UnmetPremise::Trigger,
+            _ => return None,
+        };
+        Some(Diag {
+            entities: property
+                .binders
+                .iter()
+                .map(|e| self.entity(*e).key)
+                .collect(),
+            diag: StateDiag::VacuousRule {
+                name: property.name.clone(),
+                label: None,
+                unmet: vec![unmet],
+                one_instance: self.bounds.slots() == 1,
+                site: property.site.clone(),
+            },
         })
     }
 }

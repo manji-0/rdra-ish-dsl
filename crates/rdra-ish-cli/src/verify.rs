@@ -20,7 +20,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    ActId, Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity,
+    ActId, Bounds, BoundsLine, Caps, Cone, Diag, LtlKind, NotChecked, Scope, Selection, Severity,
     StateDiag, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
@@ -119,6 +119,8 @@ impl Job {
 /// its module prints.
 struct ConeSystem {
     cone: Cone,
+    /// The invariants and after-asserts whose cone this is.
+    targets: Vec<Target>,
     system: TransitionSystem,
     names: TlaNames,
     /// Per action of the cone before any reduction, by its id in the whole system: how many
@@ -256,6 +258,7 @@ fn cone_jobs(
                     .iter()
                     .map(|a| (a.source, (a.guards.len(), a.params.len())))
                     .collect(),
+                targets: shared,
                 cone,
                 system: sub,
                 names: bundle.names,
@@ -910,6 +913,14 @@ pub fn run_tlc(
     let (bfs_errors, capped, proof, cones_ran) = std::thread::scope(|threads| {
         let cones = start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs)));
         let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
+        // A `--buc` drops use cases that may reach a premise.
+        if scope.bucs.is_empty() {
+            for d in vacuous_checks(&ts, &jobs) {
+                if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
+                    eprintln!("{}", Finding::new(&d.diag, &[], text));
+                }
+            }
+        }
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
@@ -1228,6 +1239,30 @@ fn state_models(
         ),
     );
     (errors, capped)
+}
+
+/// The checks TLC is asked about that hold vacuously (`StateDiag::VacuousRule`): BFS explores
+/// each cone as TLC gets it, at the same bounds, and looks for a state that meets each
+/// premise of the cone's own rules, asserts, or property. TLC says only that a check holds.
+/// The cones are explored side by side, and each run is dropped once it is read.
+fn vacuous_checks(ts: &TransitionSystem, jobs: &[Job]) -> Vec<Diag> {
+    let found = in_parallel(
+        jobs.iter().collect(),
+        rdra_ish_core::jobs(),
+        |job| match &job.kind {
+            JobKind::Cone(cone) => {
+                let run = cone.system.clone().run(Caps::VERIFY);
+                let found = cone.targets.iter().filter_map(|t| ts.vacuity(*t, &run));
+                found.collect::<Vec<Diag>>()
+            }
+            JobKind::PropertyCone(p) => {
+                let run = p.cone.reduced.clone().run(Caps::VERIFY);
+                ts.property_vacuity(p.index, &run).into_iter().collect()
+            }
+            JobKind::Whole(_) => Vec::new(),
+        },
+    );
+    found.into_iter().flatten().collect()
 }
 
 /// How a run whose TLC checks passed ends.

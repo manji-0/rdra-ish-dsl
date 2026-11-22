@@ -1254,8 +1254,11 @@ decided` and is listed under `not checked:`. Stdout or stderr carries one `tlc_r
 line. Exits non-zero when TLC is missing or reports a violation.
 
 While TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped
-at 8,388,608 states per cone, and prints what it finds before TLC's lines; the `bounds:` line names the cap as `8388608 states per BFS
-cone`. A state of a state model with no witness there, and a deadlock, print as in `check`
+at 8,388,608 states per cone, and prints what it finds before TLC's lines; the `bounds:` line
+names the cap as `8388608 states per BFS cone`. It explores the cones it hands to TLC the
+same way and warns `Vacuous_<name>` for a rule, an `after` assertion, or a property that
+holds there and says nothing (see
+[Rules that hold vacuously](./state-derivation.md#rules-that-hold-vacuously)). A state of a state model with no witness there, and a deadlock, print as in `check`
 and fail the run even when TLC passes: stdout ends with `tlc_result: ok`, no `OK:` line
 follows, and the exit status is 1. A deadlock at the bound and a use case that never runs
 print as in `check`, as a `warning:` that does not fail the run. A cone that stops at the
