@@ -4,6 +4,12 @@
 
 ### Added
 
+- A `property` over two or more entities takes `.along(A, B, ..)` with `.role(role)`, and
+  `.global()`, as a multi-entity `invariant` does. The owner links of the path join the
+  trigger, so `verify` no longer reports a pair of unrelated rows as a counterexample.
+  `.global()` with `.along` is `GlobalWithAlong`, a path that misses an entity is
+  `UnbindableScope`, and `lint` `multi-rule-unscoped` now warns on a property with
+  neither. A property without the chain keeps its meaning (#165).
 - insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a

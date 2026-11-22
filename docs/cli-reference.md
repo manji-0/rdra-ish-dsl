@@ -344,7 +344,7 @@ Every rule `lint` reports, by name:
 | `flow-cycle` | warning | See above. |
 | `flow-empty` | warning | A business flow that contains no step. |
 | `goal-unmeasured` | info | See above. |
-| `multi-rule-unscoped` | warning | A multi-entity `forbidden` or `invariant` with no `.along(...)` and no `.global()`, when keys relate its entities; the message names the `.along(...)` the shortest key path gives. |
+| `multi-rule-unscoped` | warning | A multi-entity `forbidden`, `invariant` or `property` with no `.along(...)` and no `.global()`, when keys relate its entities; the message names the `.along(...)` the shortest key path gives. |
 | `naming-column` | warning | An entity column that is not snake_case. |
 | `naming-dto-field` | warning | A DTO field that is not snake_case. |
 | `naming-id` | warning | An element id that is not UpperCamelCase. |

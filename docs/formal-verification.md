@@ -161,6 +161,7 @@ stays as it was.
 | `invariant(...).when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's last action, so a split use case once per run, on the run's rows. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
+| `property P ... .along(A, B, ..)` | The owner link of each hop joins `present` in the trigger: `[](present /\ link => x)`, `[](present /\ link => <>x)`, `(present /\ link /\ x) ~> y`. Without `.along` a property over several entities ranges over every combination of their rows. |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
 | `property P ... .fair(UC, ...)` | `Fair_P`, one `WF_vars` per action of each listed use case and per instance it acts on (`\A p0 \in E_Ids : WF_vars(UC(p0))`, a created slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. |
 | Domain of every variable | `INVARIANT TypeOK`, kept apart from the business rules |
@@ -245,8 +246,9 @@ properties:` line, since an `ok` for `P` holds only on the runs that do not star
 <!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
 <!-- constrained-by ./language-reference.md#fairness-fairusecase- -->
 A property's cone (`TransitionSystem::property_cone`) is the smallest closed var set that
-holds what the formula reads and, for each action of each use case its `.fair` lists,
-everything the action reads and writes: its guards with the `applies_to` conditions and the
+holds what the formula reads, the owner vars of its `.along(...)` link, and, for each
+action of each use case its `.fair` lists, everything the action reads and writes: its
+guards with the `applies_to` conditions and the
 quantifier reads inside them, the existence of each instance it binds, the source of each
 transition, the clock when it ticks, the columns it assigns, transitions, or chooses, and the
 existence of each entity it creates or deletes. Closed means what it means for an invariant's
@@ -400,7 +402,8 @@ it: where an `always` condition is false, or where an `eventually` instance exis
 `leads_to` trigger holds and the goal never holds from then on. `verify` evaluates the
 property on the infinite behavior the way the module spells it, per instance of each
 binder: `always x` is `[](present => x)`, `eventually x` is `[](present => <>x)`, and
-`leads_to x y` is `(present /\ x) ~> y`. A lasso that does not replay, or that does not
+`leads_to x y` is `(present /\ x) ~> y`, with the `.along(...)` link joined to `present`
+when the property has one. A lasso that does not replay, or that does not
 violate the property, is a tool bug and prints the engine-disagreement line. TLC picks the
 lasso, so two runs may print different steps. In this run of `temporal_unmet.rdra`, TLC
 ends with `Back to state 7: CancelOrder`, and Order#1 is cancelled and reopened forever:
@@ -1058,6 +1061,7 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `event_order.rdra` | pass, pass | no state rule | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after ExecuteCertIssue raised the event on the order (#30, #112), so the `after(IssueCert).assert` on the order's status holds with no guard |
 | `after_assert_unmet.rdra` | fail, fail | no state rule | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `temporal_fair.rdra` | pass, fail | no state rule | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
+| `temporal_along.rdra` | pass, fail | no state rule | `always(not captured or paid)` over a Payment and an Order holds with `.along(Payment, Order)`: Pay captures a payment and pays its own order. The same formula without `.along` fails on a captured payment beside another order that is never paid (#165) |
 | `temporal_unmet.rdra` | pass, fail | no state rule | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `none_any_child.rdra` | pass, pass | 1 of 1 | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |

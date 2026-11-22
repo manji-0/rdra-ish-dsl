@@ -48,6 +48,13 @@ property ShippedOnceCaptured
   `.fair` is `FairRequiresUseCases`; a use case that changes nothing is `FairOnInertUseCase`.
 - A property holds per present instance: `always x` is `[](present => x)`,
   `eventually x` is `[](present => <>x)`, and `leads_to x y` is `(present /\ x) ~> y`.
+- A property whose atoms read two or more entities ranges over every combination of their
+  rows. `.along(A, B, ..)` (with `.role(role)` after it) limits it to linked rows, as on a
+  multi-entity `invariant`: the owner links join `present` in the trigger, so
+  `always x` is `[](present /\ link => x)`. Write `.global()` when every combination is
+  meant. Neither, with keys relating the entities, draws `lint` `multi-rule-unscoped`;
+  `.global()` with `.along` is `GlobalWithAlong`; a path that misses an atom's entity or a
+  hop no key binds is `UnbindableScope` (example below the table).
 - Only `verify` evaluates properties, each in its own TLC run on its cone (the whole model
   only when the cone does not decide it); `check` prints a `note:` that it did not.
 
@@ -56,6 +63,25 @@ property ShippedOnceCaptured
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
+
+A property over a Payment and the Order it belongs to:
+
+```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, paid) @default(draft)
+}
+
+entity Payment "Payment" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+
+relate(Payment, Order, N:1)
+
+property CapturedPaid
+  always((not (Payment.status == captured)) or (Order.status == paid)).along(Payment, Order)
+```
 
 ## Postconditions
 
