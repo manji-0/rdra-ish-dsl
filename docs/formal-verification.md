@@ -767,9 +767,9 @@ counterexample at one, two, or three instances.
   of 300,000 states is compared at 1 instance only. The test decides this on the run
   `verify` uses: the reduced cone where the cone reduces, the cone itself where it does not.
   It lists these cones in `VERIFY_FALLBACK` and fails when the list changes, so a cone that
-  grows past the cap fails it until it is listed. Today 11 cones in `samples/clinic-ops`,
-  `samples/patent-ops`, `samples/food-permit-ops` and `samples/insurance-claim-ops` are
-  listed. The table gives each listed cone and each cone the cap of 300,000 took off the
+  grows past the cap fails it until it is listed. Today 24 cones in `samples/clinic-ops`,
+  `samples/patent-ops`, `samples/food-permit-ops`, `samples/insurance-claim-ops` and
+  `samples/oidc-auth` are listed. The table gives each listed cone and each cone the cap of 300,000 took off the
   list, at 2 instances, measured with
   `lifecycle_measure -- 9000000 verify <sample>` (`RDRA_CONE_VARS=1` prints the vars of the
   cone and of its sub-lifecycle). "Sub-lifecycle" is the S side's states and classes; T is
@@ -786,6 +786,7 @@ counterexample at one, two, or three instances.
   | insurance-claim-ops entity `Claim` | 836,427 | over 9,000,000 | 255,292 / 2,428 | As `Payment`, with `senior_approved` and `completed_on` in place of the payment's columns. |
   | insurance-claim-ops invariant `MultiForbidden_Payment_3` (also `AfterAssert_PayClaim_0`, a separate cone of the same size) | 783,427 | over 9,000,000 | 255,292 / 2,428 | As `Payment`, without the payment's status. |
   | insurance-claim-ops invariants `Forbidden_Claim_0` and `Forbidden_Claim_4` (two cones, with the claim's other rules) | 633,787 | over 9,000,000 | 255,292 / 2,428 | As `Claim`, with fewer of the claim's columns (no `completed_on` or `late_interest_due`). |
+  | oidc-auth entities `AccessToken`, `AuthorizationCode`, `AuthorizationRequest`, `Consent`, `Grant`, `IdToken`, `Interaction` and `RefreshToken`, and invariants `Forbidden_Interaction_1`, `MultiForbidden_AuthorizationCode_3`, `Quantifier_Grant_0`, `Unique_Grant_AuthorizationRequest` and `Unique_AuthorizationCode_Grant` (13 cones) | over 2,000,000 | over 2,000,000 | none | The browser flow is one cone: the request, the interaction, the session it logs in or reuses, the consent, the grant, its code, and its tokens read each other through guards and raised events. Nothing reduces. The sample's `verify` header runs it at 1 instance (30,277 states) with `--prove`. |
   | patent-ops entity `PatentApplication` (compared at 2 instances since the cap of 300,000) | 293,833 | 2,167,411 | 73 / 73 | The filing guard `DraftsApproved` reads the drafting order and `FileApplication` moves the order to `filed`, so the order joins the application in T. S is the disclosure, its inventor and the firm; S is reduced inside, so its 73 states are already a quotient, and `obs` tells them all apart. |
   | patent-ops entity `Patent` and invariant `Forbidden_Patent_4` (two cones; compared at 2 instances since the cap of 300,000) | 202,569 | 1,494,339 | 73 / 73 | As `PatentApplication`, with the patent's columns in T beside fewer of the application's. |
   | food-permit-ops entity `PermitApplication` (off the list since #112) | 52,597 | 2,094,157 | 348 / 228 | The order lets the inspection's and the permit's side reduce against the application's; 1.2.0 listed this cone. |
@@ -882,9 +883,9 @@ gaps.
   BFS and TLC agree on the states, edges, findings, and verdicts of every cone, unreduced
   and reduced. A cone whose BFS, reduced as `verify` explores it, passes the test's cap of
   300,000 states at 2 instances is compared at 1 instance only. `VERIFY_FALLBACK` in
-  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 11 cones today (19 before the
+  `crates/rdra-ish-cli/tests/engine_equivalence.rs` lists them, 24 cones today (19 before the
   reduction of #74, 16 after the patent-ops filing guard, 10 since the cap went from 200,000
-  to 300,000, and 11 since the event order of #112). The table under
+  to 300,000, 11 since the event order of #112, and 24 with `samples/oidc-auth`). The table under
   [Approximations and limitations](#approximations-and-limitations) gives each cone's size
   and what keeps it large:
   - `samples/clinic-ops`: entity `EligibilityCheck`, 905,528 states, which nothing
@@ -905,9 +906,12 @@ gaps.
     claim's events as input bits) they reach 633,787 to 903,987 states. The `ClaimCase`
     view is reduced the other way, by the claim's and the payment's side under the case's
     two bits (93,904 states in 4,368 classes), to 4,580,087.
+  - `samples/oidc-auth`: 13 cones of the browser flow, over 2,000,000 states each, which
+    nothing reduces. `verify` at 2 instances does not finish them in 15 GB, so the sample's
+    header checks them at 1 instance with `--prove`.
 
-  `verify` still checks these cones at 2 instances: TLC runs on each, and BFS runs on each
-  entity cone. Only the agreement of the two engines is tested at 1 instance. This is
+  `verify` still checks these cones at 2 instances, except the oidc-auth cones its header
+  runs at 1: TLC runs on each, and BFS runs on each entity cone. Only the agreement of the two engines is tested at 1 instance. This is
   accepted for 1.0. See it: the list in the test, which fails when a cone joins or leaves
   it. What you can do: treat a `verify` verdict on these cones as TLC's alone, and keep a
   new model's cones under 300,000 states at 2 instances if you want the agreement tested.
