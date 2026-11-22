@@ -893,3 +893,56 @@ fn a_missing_tlc_jar_is_named_in_the_error() {
         "{stderr}"
     );
 }
+
+/// The check on `qty` reads one column; the forbidden pair reads `qty` and `flagged`, so its
+/// cone holds the check's cone and its module the check too.
+const NESTED_CONES: &str = r#"
+entity Order "注文" { id: Int @pk  qty: Int @default("1") @check(qty >= 1)  flagged: Bool @default(false) }
+usecase Place "注文"
+usecase Bump "増量"
+usecase Flag "印"
+creates(Place, Order)
+sets(Bump, Order.qty == 2)
+sets(Flag, Order.flagged == true)
+"#;
+
+/// A cone whose checks another cone's module holds is not run when that cone passes: its line
+/// names the cone that checked it. When that cone fails, the smaller one runs as before, so
+/// its line carries its own state count and the counterexample is the larger cone's alone.
+#[test]
+fn a_cone_another_cone_covers_runs_only_when_that_cone_fails() {
+    if !have_tlc() {
+        return;
+    }
+    let line = |stdout: &str| {
+        stdout
+            .lines()
+            .find(|l| l.starts_with("Cone_Check_Order_qty_0 "))
+            .unwrap_or_else(|| panic!("no line for the check's cone\n{stdout}"))
+            .to_string()
+    };
+    // No order has qty 0, so the pair is never reached and the larger cone passes.
+    let passing = format!("{NESTED_CONES}forbidden(Order, qty == 0, flagged == true)\n");
+    let (stdout, stderr, code, dir) = verify_model("verify_cli_covered_cone", &passing, "specs");
+    assert_eq!(code, Some(0), "{stdout}\n{stderr}");
+    let covered = line(&stdout);
+    assert!(
+        covered.ends_with(": ok (checked in Cone_Forbidden_Order_0)"),
+        "{covered}"
+    );
+    // The covered cone's spec is still written, for a run by hand.
+    assert!(dir.join("specs/Cone_Check_Order_qty_0.tla").is_file());
+
+    // Bump then Flag reaches the pair: the larger cone fails, so the check's cone runs.
+    let failing = format!("{NESTED_CONES}forbidden(Order, qty == 2, flagged == true)\n");
+    let (stdout, stderr, code, _) = verify_model("verify_cli_uncovered_cone", &failing, "specs");
+    assert_eq!(code, Some(1), "{stdout}\n{stderr}");
+    let ran = line(&stdout);
+    assert!(ran.contains(": ok (") && ran.contains(" states)"), "{ran}");
+    assert!(!stdout.contains("checked in"), "{stdout}");
+    assert!(stderr.contains("Forbidden_Order_0"), "{stderr}");
+    assert!(
+        !stderr.contains("Check_Order_qty_0 is violated"),
+        "{stderr}"
+    );
+}

@@ -233,6 +233,17 @@ again on one worker, and `verify` reports only that run, so a counterexample is 
 single worker finds. A temporal property's lasso differs from run to run on one worker
 too.
 
+A cone's module holds every check that reads only the cone's vars, so a larger cone often
+holds all the checks of a smaller one. `verify` does not run the smaller cone when the
+larger one passes: its line reads `ok (checked in Cone_<larger>)`, with no state count.
+Both cones are closed, so the larger holds the smaller's vars and reaches at least the
+states the smaller does, and a check that passes there passes on the smaller cone. That
+needs the smaller cone to reach exactly the whole model's states projected onto it: a
+cone that leaves an entity it does not read unbounded reaches more, may fail a check the
+larger cone passes, and always runs. When the larger cone does not pass, the smaller one
+runs as well, so a counterexample is read on the smallest cone that shows it. The specs
+of a cone that did not run are still written.
+
 A property with `.fair(UC, ...)` (see
 [language-reference.md](./language-reference.md#fairness-fairusecase-)) carries its
 assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases
