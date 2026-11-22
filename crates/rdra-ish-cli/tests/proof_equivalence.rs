@@ -97,8 +97,8 @@ fn no_proved_rule_has_a_bounded_counterexample() {
             continue;
         };
         let rules: Vec<usize> = (0..ts.invariants().len()).collect();
-        let mut solver = Z3::start(&z3).expect("z3 starts");
-        let proof = prove::prove(&ts, &rules, &mut solver, ProveOptions::default())
+        let mut solvers = [(); 2].map(|()| Z3::start(&z3).expect("z3 starts"));
+        let proof = prove::prove(&ts, &rules, &mut solvers, ProveOptions::default())
             .unwrap_or_else(|e| panic!("{sample}: {e}"));
         let verdicts: BTreeMap<String, &Verdict> = proof
             .rules
@@ -130,4 +130,35 @@ fn no_proved_rule_has_a_bounded_counterexample() {
         }
     }
     assert!(proved_total > 0, "no sample rule was proved");
+}
+
+/// The proof does not depend on how many solvers share its checks: the same verdicts, the
+/// same counterexamples to induction, and the same kept lemmas on one solver and on three.
+/// The formal-verification samples cover proved rules, rules that fail in an initial state,
+/// and rules with a CTI.
+#[test]
+fn a_proof_is_the_same_on_any_number_of_solvers() {
+    let Some(z3) = find_z3() else { return };
+    let mut with_cti = 0;
+    for sample in samples()
+        .into_iter()
+        .filter(|s| s.contains("formal-verification"))
+    {
+        let Some(ts) = system(&sample, Bounds::VERIFY) else {
+            continue;
+        };
+        let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+        let proof = |solvers: usize| {
+            let mut solvers: Vec<Z3> = (0..solvers)
+                .map(|_| Z3::start(&z3).expect("z3 starts"))
+                .collect();
+            let proof = prove::prove(&ts, &rules, &mut solvers, ProveOptions::default())
+                .unwrap_or_else(|e| panic!("{sample}: {e}"));
+            format!("{proof:?}")
+        };
+        let one = proof(1);
+        with_cti += usize::from(one.contains("NotInductive"));
+        assert_eq!(proof(3), one, "{sample}");
+    }
+    assert!(with_cti >= 3, "{with_cti} samples with a CTI");
 }

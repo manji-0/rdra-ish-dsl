@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use super::cone::{named_params, VarSet};
 use super::types::{
     ActId, Action, AfterAssert, AfterStep, At, Domain, Effect, EntId, EntityDecl, Guard, Invariant,
-    Param, ParamRole, Pred, Property, Rhs, Term, VarDecl, VarId, VarKind,
+    Param, ParamRole, Pred, Premise, Property, Rhs, Term, VarDecl, VarId, VarKind,
 };
 use super::TransitionSystem;
 
@@ -175,6 +175,14 @@ impl TransitionSystem {
                 out.invariants.push(Invariant {
                     binders: inv.binders.iter().map(|e| map.e(*e)).collect(),
                     body: map.pred(&inv.body),
+                    premises: inv
+                        .premises
+                        .iter()
+                        .map(|p| Premise {
+                            pred: map.pred(&p.pred),
+                            text: p.text.clone(),
+                        })
+                        .collect(),
                     ..inv.clone()
                 });
             }

@@ -439,8 +439,10 @@ impl Pred {
     }
 
     /// Whether some slot reference points into the successor.
+    /// The explorer asks this of every guard in every state, so it walks the tree in place:
+    /// `terms` keeps a stack on the heap.
     pub fn reads_next(&self) -> bool {
-        self.terms().any(|t| {
+        let next = |t: &Term| {
             matches!(
                 t,
                 Term::Slot {
@@ -448,7 +450,16 @@ impl Pred {
                     ..
                 } | Term::Index(At::Next(_))
             )
-        })
+        };
+        match self {
+            Pred::True | Pred::False => false,
+            Pred::Cmp(a, _, b) => next(a) || next(b),
+            Pred::In(a, values) => next(a) || values.iter().any(next),
+            Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
+                body.reads_next()
+            }
+            Pred::And(parts) | Pred::Or(parts) => parts.iter().any(Pred::reads_next),
+        }
     }
 }
 
@@ -606,6 +617,28 @@ pub enum Pred {
     },
 }
 
+/// What some reachable state must show for a rule's holding to say anything: present rows
+/// of the binders `pred` reads (of every binder, when it reads none) under which `pred`
+/// holds. A rule with a premise no reachable state meets holds vacuously
+/// (`StateDiag::VacuousRule`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Premise {
+    /// Read under the rule's binders, as its body is. `True` asks only that the rows exist.
+    pub pred: Pred,
+    /// The conditions as the author wrote them; empty for `True`.
+    pub text: String,
+}
+
+impl Premise {
+    /// Only that rows of the binders exist.
+    pub fn rows() -> Self {
+        Premise {
+            pred: Pred::True,
+            text: String::new(),
+        }
+    }
+}
+
 /// A state constraint, closed over present slots of its binders.
 #[derive(Clone, Debug)]
 pub struct Invariant {
@@ -613,6 +646,9 @@ pub struct Invariant {
     /// Universally bound entities, outermost first.
     pub binders: Vec<EntId>,
     pub body: Pred,
+    /// The premises of the rule, each of which some reachable state must meet: the rows it
+    /// ranges over, the guards of a `.when`, and each condition of a `forbidden` on its own.
+    pub premises: Vec<Premise>,
     /// The constraint as the author wrote it, for diagnostics; its variant is the kind.
     pub text: InvText,
     /// The rule's `.label("...")`, which a violation names.

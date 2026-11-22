@@ -108,6 +108,7 @@ under it the values that step changed.
 | `error[Deadlock_<E>_<col>_<v>]` | An instance reaches a state that has a way out, and nothing ever moves it off | Read `leaves` and the `guard:` lines: fix the guard, or add the missing use case. If staying there is correct (a stock row waiting to be used), declare it with `@end(<v>)` on the column |
 | `warning[Deadlock_...]: deadlock at the bound` | The way out needs a free slot of an entity it creates | The instance bound, not the model; check with `verify` at two instances |
 | `warning[Runs_<UC>]` | The use case never runs; `needs:` or `guard:` lines say why | Fix the guard or the missing instance, or remove the use case |
+| `warning[Vacuous_<rule>]` | The rule holds and says nothing: no reachable state meets the premise the message names | Fix the value (a typo, a state no use case enters), or add the use case that reaches it |
 | `error[<rule name>]` with a counterexample | A reachable state breaks the rule | Follow the steps: add the missing `sets` or transition, or fix the rule |
 | Enum/Bool/nullable column never appears in axes | No modeled lifecycle effect | Add `sets`, `transitions`, or accept that it is not stateful |
 | Enum variants reported unreachable that an actor simply chooses (payment method, channel) | The column is an attribute, not a lifecycle | Type it by a `variation`; `lint` `enum-attribute` finds these |

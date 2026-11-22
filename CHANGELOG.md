@@ -12,6 +12,10 @@
   RP-initiated, front-channel, and back-channel logout, session management, third-party
   initiated login, and signing-key rotation. `check` reports nothing, and 13 labelled rules
   each fail when the guard that protects them is removed.
+- `check` warns `Vacuous_<rule>` when a state rule holds and says nothing: no reachable
+  state has the rows it ranges over, the guards of its `.when` never hold, or one condition
+  of a `forbidden` of several is one no row ever meets, such as a state no use case enters.
+  What a `forbidden` forbids being unreachable is its claim and draws no warning (#170).
 - insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a
@@ -59,6 +63,23 @@
 
 ### Changed
 
+- `verify` runs less TLC: 194 s to 113 s on insurance-claim-ops and 28 s to 23 s on
+  food-permit-ops (4 cores). A cone whose checks all stand in the module of a larger cone
+  that takes every step it takes is not run when the larger cone passes, and prints `ok (checked in Cone_<larger>)` in place
+  of its state count; when the larger cone fails it runs as before. A reduced cone no
+  longer recomputes the sub-lifecycle's class on a step that writes none of its inputs,
+  in TLA+ and in BFS (#164).
+- `verify` is faster and prints what it printed: 43 s to 20 s on clinic-ops, 53 s to 30 s on
+  patent-ops, 101 s to 27 s on food-permit-ops, and 355 s to 194 s on insurance-claim-ops
+  (4 cores). BFS computes the moves of one large cone on several threads and reaches the
+  states in the order one thread does. The TLC cone runs start while BFS and the proof run,
+  the long ones first, each with at least 2 TLC workers on 4 cores or more; a safety cone
+  that does not pass runs again on one worker, so a counterexample is the one a single
+  worker finds. `verify --prove` shares the checks of a step over several z3 processes.
+  `RDRA_JOBS` also sets the BFS threads of one cone and the number of z3 processes. The peak
+  memory is now BFS plus the TLC heaps. A counterexample to induction may show another value
+  for a column its step does not constrain: the solver that reads it starts over first, so
+  the CTI does not depend on the number of z3 processes (#163).
 - Skill `rdra-ish-diagram` says how to lay out a PRD and a design document from the model
   (`references/documents.md`): which diagrams and tables go into each section, in which
   order, and the rules for embedding them (generate, stay under Mermaid's limits, tables as

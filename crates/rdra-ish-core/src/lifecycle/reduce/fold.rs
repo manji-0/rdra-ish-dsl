@@ -65,6 +65,27 @@ impl Fold {
         &self.guards
     }
 
+    /// The vars `holds` reads: a step that writes none of them leaves the bit as it was.
+    pub(super) fn reads(&self, ts: &TransitionSystem) -> VarSet {
+        let a = &ts.actions[self.act.index()];
+        let mut reads = VarSet::new();
+        match &self.key {
+            FoldKey::Linked { entity, body, .. } => {
+                reads.insert(ts.entity(*entity).exists);
+                ts.pred_reads(body, &mut reads);
+            }
+            FoldKey::Param(_) => {
+                for (p, _) in &self.t_params {
+                    reads.insert(ts.entity(a.params[usize::from(*p)].entity).exists);
+                }
+                for g in &self.guards {
+                    ts.pred_reads(&a.guards[*g].pred, &mut reads);
+                }
+            }
+        }
+        reads
+    }
+
     /// Whether the bit holds for slot `c` of the key in `s`.
     pub(super) fn holds(&self, ts: &TransitionSystem, s: &State, c: u8) -> bool {
         let a = &ts.actions[self.act.index()];

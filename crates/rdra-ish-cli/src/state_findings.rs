@@ -170,6 +170,7 @@ fn has_block(diag: &StateDiag) -> bool {
         || matches!(
             diag,
             StateDiag::NoWitness { .. }
+                | StateDiag::VacuousRule { .. }
                 | StateDiag::NeverRuns { .. }
                 | StateDiag::ArmNeverTaken { .. }
                 | StateDiag::ValueNeverChosen { .. }
@@ -473,6 +474,12 @@ pub(crate) fn render_violation(
     }
     if let Some(text) = render_deadlock(program, model, diag) {
         return Some(text);
+    }
+    if let StateDiag::VacuousRule { site, .. } = diag {
+        return Some(format!(
+            "{diag}{}",
+            aligned(vec![("  rule:".to_string(), location(program, site))])
+        ));
     }
     if let StateDiag::ArmNeverTaken { site, .. } = diag {
         return Some(format!(
@@ -804,6 +811,7 @@ violation_message(text, pattern_desc)
             label_prefix(label)
         ),
         StateDiag::NoWitness { .. }
+        | StateDiag::VacuousRule { .. }
         | StateDiag::NeverRuns { .. }
         | StateDiag::ArmNeverTaken { .. }
         | StateDiag::ValueNeverChosen { .. }

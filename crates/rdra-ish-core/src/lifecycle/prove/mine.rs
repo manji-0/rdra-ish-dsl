@@ -12,6 +12,7 @@ use crate::lifecycle::cone::Target;
 use crate::lifecycle::explore::Caps;
 use crate::lifecycle::types::{At, CmpOp, Domain, EntId, Pred, Term, Value, VarId, VarKind};
 use crate::lifecycle::TransitionSystem;
+use crate::parallel::{in_parallel, jobs};
 
 use super::encode::Formula;
 
@@ -59,14 +60,18 @@ pub(super) fn mine(ts: &TransitionSystem, rules: &[usize]) -> Vec<Mined> {
     for &i in rules {
         cones.insert(ts.target_cone(Target::Invariant(i)));
     }
-    let mut seen = Seen::default();
-    for cone in &cones {
+    // The cones are explored side by side; what they reach is gathered in cone order into
+    // sets, so the candidates do not depend on the threads.
+    let runs = in_parallel(cones.into_iter().collect(), jobs(), |cone| {
         let (sub, map) = ts.restrict_to_mapped(&cone.vars, &cone.keep, true);
+        (map, sub.run(Caps::new(usize::MAX, STATE_CAP)))
+    });
+    let mut seen = Seen::default();
+    for (map, run) in &runs {
         let back: BTreeMap<VarId, VarId> = ts
             .var_ids()
             .filter_map(|v| map.var_of(v).map(|s| (s, v)))
             .collect();
-        let run = sub.run(Caps::new(usize::MAX, STATE_CAP));
         let sys = &run.system;
         // Per sub entity: the whole system's entity and its row vars, sub and whole ids.
         let entities: Vec<(EntId, EntId, Vec<VarId>, Vec<VarId>)> = sys
