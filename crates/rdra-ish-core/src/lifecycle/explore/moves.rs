@@ -6,7 +6,7 @@ use crate::lifecycle::expr::{Env, State};
 use crate::lifecycle::types::{ActId, Action, Effect, EntId, ParamRole, Rhs, Start, Value, VarId};
 use crate::lifecycle::TransitionSystem;
 
-use super::Move;
+use super::{Move, Moves};
 
 impl TransitionSystem {
     pub(crate) fn pattern_key(&self, state: &State, e: EntId, slot: usize) -> Box<[u8]> {
@@ -15,6 +15,17 @@ impl TransitionSystem {
             .iter()
             .map(|v| state.get(self, *v, slot).0)
             .collect()
+    }
+
+    /// `pattern_key` written into `key`, which keeps its allocation.
+    pub(crate) fn pattern_key_into(&self, state: &State, e: EntId, slot: usize, key: &mut Vec<u8>) {
+        key.clear();
+        key.extend(
+            self.entity(e)
+                .columns
+                .iter()
+                .map(|v| state.get(self, *v, slot).0),
+        );
     }
 
     pub(crate) fn initial_states(&self) -> Vec<State> {
@@ -111,39 +122,47 @@ impl TransitionSystem {
         out
     }
 
-    /// The `bindings` of `action` in `state` whose pre-guards hold, in `bindings` order. It
-    /// walks the choices in one buffer and keeps a binding only once its guards hold, so a
-    /// state where the action cannot run costs no allocation per binding.
+    /// The `bindings` of `action` in `state` whose pre-guards hold, in `bindings` order.
+    #[cfg(test)]
     pub(super) fn enabled_bindings(&self, action: &Action, state: &State) -> Vec<Box<[u8]>> {
+        let mut out = Vec::new();
+        self.each_enabled(action, state, |params| out.push(params.into()));
+        out
+    }
+
+    /// Calls `found` with each of the `bindings` of `action` in `state` whose pre-guards hold,
+    /// in `bindings` order. It walks the choices in buffers on the stack, so a state where
+    /// the action cannot run costs no allocation.
+    fn each_enabled(&self, action: &Action, state: &State, mut found: impl FnMut(&[u8])) {
+        const MAX: usize = 16;
         let slots = self.bounds.slots();
-        // Per param: its candidate slots, lowest first.
-        let mut choices: Vec<(usize, [u8; 16])> = Vec::with_capacity(action.params.len());
-        if slots > 16 {
-            return self
-                .bindings(action, state)
-                .into_iter()
-                .filter(|params| self.pre_guards_hold(action, state, params))
-                .map(Vec::into_boxed_slice)
-                .collect();
+        let count = action.params.len();
+        if slots > MAX || count > MAX {
+            for params in self.bindings(action, state) {
+                if self.pre_guards_hold(action, state, &params) {
+                    found(&params);
+                }
+            }
+            return;
         }
-        for p in &action.params {
+        // Per param: how many candidate slots it has, and the slots, lowest first.
+        let mut choices = [(0usize, [0u8; MAX]); MAX];
+        for (p, (n, list)) in action.params.iter().zip(&mut choices) {
             let exists = self.entity(p.entity).exists;
-            let mut list = [0u8; 16];
-            let mut n = 0;
             match p.role {
                 ParamRole::New => {
                     if let Some(s) =
                         (0..slots).find(|&s| state.get(self, exists, s) == Value::ABSENT)
                     {
                         list[0] = s as u8;
-                        n = 1;
+                        *n = 1;
                     }
                 }
                 ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered => {
                     for s in 0..slots {
                         if state.get(self, exists, s) == Value::PRESENT {
-                            list[n] = s as u8;
-                            n += 1;
+                            list[*n] = s as u8;
+                            *n += 1;
                         }
                     }
                 }
@@ -151,26 +170,28 @@ impl TransitionSystem {
                     for (s, cell) in list.iter_mut().enumerate().take(slots) {
                         *cell = s as u8;
                     }
-                    n = slots;
+                    *n = slots;
                 }
             }
-            if n == 0 {
-                return Vec::new();
+            if *n == 0 {
+                return;
             }
-            choices.push((n, list));
         }
-        let mut out = Vec::new();
-        let mut at = vec![0usize; choices.len()];
-        let mut params: Vec<u8> = choices.iter().map(|(_, list)| list[0]).collect();
+        let choices = &choices[..count];
+        let mut at = [0usize; MAX];
+        let mut params = [0u8; MAX];
+        for (param, (_, list)) in params.iter_mut().zip(choices) {
+            *param = list[0];
+        }
         loop {
-            if self.pre_guards_hold(action, state, &params) {
-                out.push(params.clone().into_boxed_slice());
+            if self.pre_guards_hold(action, state, &params[..count]) {
+                found(&params[..count]);
             }
             // The last param varies fastest, as `bindings` lists them.
-            let mut i = choices.len();
+            let mut i = count;
             loop {
                 if i == 0 {
-                    return out;
+                    return;
                 }
                 i -= 1;
                 at[i] += 1;
@@ -194,8 +215,29 @@ impl TransitionSystem {
     }
 
     pub(super) fn successors(&self, action: &Action, params: &[u8], s: &State) -> Vec<State> {
+        let mut out = Vec::new();
+        let mut scratch = s.clone();
+        self.each_successor(action, params, s, &mut scratch, |next| {
+            out.push(next.clone())
+        });
+        out
+    }
+
+    /// Calls `found` with each successor of `s` under `action` bound to `params`, before the
+    /// post-guards: one, or one per value of each choice the effects leave open. `found` may
+    /// change the successor it is given. The one successor of a step without a choice is
+    /// built in `scratch`, a state of the same system.
+    fn each_successor(
+        &self,
+        action: &Action,
+        params: &[u8],
+        s: &State,
+        scratch: &mut State,
+        mut found: impl FnMut(&mut State),
+    ) {
         let slot = |p: u8| usize::from(params[usize::from(p)]);
-        let mut next = s.clone();
+        scratch.0.copy_from_slice(&s.0);
+        let next = scratch;
         let mut deleted: Vec<u8> = Vec::new();
         let mut choices: Vec<(VarId, u8, Vec<Value>)> = Vec::new();
         for eff in &action.effects {
@@ -218,16 +260,15 @@ impl TransitionSystem {
                     var, param, arms, ..
                 } => {
                     let from = s.get(self, *var, slot(*param));
-                    let tos: Vec<Value> = arms
-                        .iter()
-                        .filter(|arm| arm.from == from)
-                        .map(|arm| arm.to)
-                        .collect();
-                    match tos[..] {
-                        [] => {}
-                        [to] => next.set(self, *var, slot(*param), to),
+                    let mut tos = arms.iter().filter(|arm| arm.from == from).map(|arm| arm.to);
+                    match (tos.next(), tos.next()) {
+                        (None, _) => {}
+                        (Some(to), None) => next.set(self, *var, slot(*param), to),
                         // A choice forks after every other effect, so each arm carries them.
-                        _ => choices.push((*var, *param, tos)),
+                        (Some(first), Some(second)) => {
+                            let tos = [first, second].into_iter().chain(tos).collect();
+                            choices.push((*var, *param, tos));
+                        }
                     }
                 }
                 Effect::Choose {
@@ -249,7 +290,10 @@ impl TransitionSystem {
             next.set(self, decl.exists, slot(p), Value::DELETED);
         }
         choices.retain(|(_, p, _)| !deleted.contains(p));
-        let mut out = vec![next];
+        if choices.is_empty() {
+            return found(next);
+        }
+        let mut out = vec![next.clone()];
         for (var, p, values) in choices {
             let sl = slot(p);
             out = out
@@ -263,45 +307,55 @@ impl TransitionSystem {
                 })
                 .collect();
         }
-        out
+        out.iter_mut().for_each(found);
     }
 
     /// Every move from `s`, in BFS order: actions by index, then `bindings`, then the
     /// successors of each binding whose pre-guards hold, keeping those whose post-guards hold.
     /// With a reduction, the S actions are left out and the class moves come last.
-    pub(crate) fn moves<'s>(&'s self, s: &'s State) -> impl Iterator<Item = Move> + 's {
-        self.moves_of(s, true)
+    pub(crate) fn moves(&self, s: &State) -> impl Iterator<Item = Move> {
+        let mut out = Moves::default();
+        self.moves_into(s, &mut s.clone(), &mut out);
+        out.into_moves().into_iter()
     }
 
-    /// `moves` without the reduction.
-    pub(crate) fn raw_moves<'s>(&'s self, s: &'s State) -> impl Iterator<Item = Move> + 's {
-        self.actions
-            .iter()
-            .enumerate()
-            .flat_map(move |(ai, action)| {
-                self.enabled_bindings(action, s)
-                    .into_iter()
-                    .flat_map(move |params| {
-                        self.successors(action, &params, s)
-                            .into_iter()
-                            .filter(|next| {
-                                let mut env = Env {
-                                    next: Some(next),
-                                    ..Env::new(&params)
-                                };
-                                action
-                                    .guards
-                                    .iter()
-                                    .filter(|g| g.reads_successor())
-                                    .all(|g| self.eval(&g.pred, s, &mut env))
-                            })
-                            .map(|next| Move {
-                                act: ActId::at(ai),
-                                params: params.clone(),
-                                next,
-                            })
-                            .collect::<Vec<_>>()
-                    })
-            })
+    /// `moves`, appended to `out`. `scratch` is any state of this system; it is overwritten.
+    pub(crate) fn moves_into(&self, s: &State, scratch: &mut State, out: &mut Moves) {
+        self.moves_of_into(s, true, scratch, out);
+    }
+
+    /// Calls `found` with each move from `s` of an action `skip` does not name, without the
+    /// reduction: its action, its params, and its successor, which `found` may change.
+    pub(crate) fn each_raw_move(
+        &self,
+        s: &State,
+        skip: impl Fn(ActId) -> bool,
+        scratch: &mut State,
+        mut found: impl FnMut(ActId, &[u8], &mut State),
+    ) {
+        for (ai, action) in self.actions.iter().enumerate() {
+            let act = ActId::at(ai);
+            if skip(act) {
+                continue;
+            }
+            self.each_enabled(action, s, |params| {
+                self.each_successor(action, params, s, scratch, |next| {
+                    let holds = {
+                        let mut env = Env {
+                            next: Some(next),
+                            ..Env::new(params)
+                        };
+                        action
+                            .guards
+                            .iter()
+                            .filter(|g| g.reads_successor())
+                            .all(|g| self.eval(&g.pred, s, &mut env))
+                    };
+                    if holds {
+                        found(act, params, next);
+                    }
+                });
+            });
+        }
     }
 }

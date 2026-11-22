@@ -180,13 +180,16 @@ pub fn lemma_invariants(
         .collect()
 }
 
-/// Proves `rules` (indices into `ts.invariants()`) for any number of rows.
-pub fn prove(
+/// Proves `rules` (indices into `ts.invariants()`) for any number of rows. The checks of one
+/// scope are shared out over `solvers`, at least one; the proof does not depend on how many
+/// there are (`violated_each`).
+pub fn prove<S: Solver + Send>(
     ts: &TransitionSystem,
     rules: &[usize],
-    solver: &mut dyn Solver,
+    solvers: &mut [S],
     options: ProveOptions,
 ) -> Result<Proof, SolverError> {
+    assert!(!solvers.is_empty(), "a proof needs a solver");
     let enc = Enc { ts };
     let mut verdicts: BTreeMap<usize, Verdict> = BTreeMap::new();
     let mut cands = Vec::new();
@@ -244,7 +247,10 @@ pub fn prove(
     let mut loose: Vec<String> = steps.iter().flat_map(|s| s.loose.clone()).collect();
     loose.dedup();
 
-    solver.exec(&format!("(reset)\n{}", enc.declarations()))?;
+    let declarations = format!("(reset)\n{}", enc.declarations());
+    for solver in solvers.iter_mut() {
+        solver.exec(&declarations)?;
+    }
 
     let mut set = Set {
         fell: vec![None; cands.len()],
@@ -254,16 +260,16 @@ pub fn prove(
     // Initiation: every candidate holds in every initial state.
     match enc.initial() {
         Ok(init) => {
-            solver.exec(&format!("(push)\n{init}"))?;
-            for (k, c) in cands.iter().enumerate() {
-                let fall = match violated(solver, &enc, c, Frame::Pre)? {
+            let all: Vec<usize> = (0..cands.len()).collect();
+            let answers = violated_each(solvers, &enc, &cands, &all, &init, Frame::Pre)?;
+            for (k, sat) in all.into_iter().zip(answers) {
+                let fall = match sat {
                     Sat::Unsat => continue,
                     Sat::Sat => Fall::Initial,
                     Sat::Unknown => Fall::Unknown("the initial states".to_string()),
                 };
                 set.fell[k] = Some(fall);
             }
-            solver.exec("(pop)")?;
         }
         Err(Unsupported(why)) => {
             for fall in &mut set.fell {
@@ -289,20 +295,18 @@ pub fn prove(
                 if hit.is_empty() {
                     continue;
                 }
-                solver.exec(&format!(
-                    "(push)\n{}{}",
-                    step.commands,
-                    assume(&cands, &set)
-                ))?;
-                for k in hit {
-                    let fall = match violated(solver, &enc, &cands[k], Frame::Post)? {
+                // The set is asserted once for the step, so a candidate that falls here
+                // still stands for the step's other checks, on one solver or on several.
+                let scope = format!("{}{}", step.commands, assume(&cands, &set));
+                let answers = violated_each(solvers, &enc, &cands, &hit, &scope, Frame::Post)?;
+                for (k, sat) in hit.into_iter().zip(answers) {
+                    let fall = match sat {
                         Sat::Unsat => continue,
                         Sat::Sat => Fall::Step(ActId::at_index(a)),
                         Sat::Unknown => Fall::Unknown(ts.actions()[a].name.clone()),
                     };
                     set.fell[k] = Some(fall);
                 }
-                solver.exec("(pop)")?;
             }
             if set.fallen() == before {
                 break;
@@ -323,7 +327,11 @@ pub fn prove(
         }
     }
 
-    // Each rule that fell: its step again from the kept set plus the rule, for the CTI.
+    // Each rule that fell: its step again from the kept set plus the rule, for the CTI. The
+    // model z3 gives depends on what the solver has checked before, which depends on how many
+    // solvers shared the checks, so the CTIs come from a solver that starts over.
+    let solver = &mut solvers[0];
+    solver.exec(&declarations)?;
     for (k, c) in cands.iter().enumerate() {
         let Origin::Rule(i) = c.origin else { continue };
         let verdict = match &set.fell[k] {
@@ -401,6 +409,56 @@ fn violation(enc: &Enc, c: &Candidate, frame: Frame) -> String {
         .violation(&c.formula, frame)
         .expect("a candidate that encodes has a violation that encodes");
     format!("{rows}(set-option :timeout {})\n", c.timeout_ms)
+}
+
+/// Whether some state of `scope` violates each of `cands[ks]` in `frame`: one answer per
+/// candidate, in the order of `ks`. The candidates are dealt out to the solvers, each of
+/// which opens `scope` for itself. A check leaves nothing in its solver that another reads,
+/// so the answers are those one solver gives.
+fn violated_each<S: Solver + Send>(
+    solvers: &mut [S],
+    enc: &Enc,
+    cands: &[Candidate],
+    ks: &[usize],
+    scope: &str,
+    frame: Frame,
+) -> Result<Vec<Sat>, SolverError> {
+    let hands = solvers.len().min(ks.len()).max(1);
+    let deal = |solver: &mut S, hand: usize| -> Result<Vec<(usize, Sat)>, SolverError> {
+        solver.exec(&format!("(push)\n{scope}"))?;
+        let mut answers = Vec::new();
+        for (at, k) in ks.iter().enumerate().skip(hand).step_by(hands) {
+            answers.push((at, violated(solver, enc, &cands[*k], frame)?));
+        }
+        solver.exec("(pop)")?;
+        Ok(answers)
+    };
+    let dealt: Vec<_> = if hands == 1 {
+        vec![deal(&mut solvers[0], 0)]
+    } else {
+        std::thread::scope(|threads| {
+            let running: Vec<_> = solvers
+                .iter_mut()
+                .take(hands)
+                .enumerate()
+                .map(|(hand, solver)| threads.spawn(move || deal(solver, hand)))
+                .collect();
+            running
+                .into_iter()
+                .map(|thread| match thread.join() {
+                    Ok(answers) => answers,
+                    Err(panic) => std::panic::resume_unwind(panic),
+                })
+                .collect()
+        })
+    };
+    let mut sat = vec![Sat::Unknown; ks.len()];
+    for answers in dealt {
+        for (at, answer) in answers? {
+            sat[at] = answer;
+        }
+    }
+    Ok(sat)
 }
 
 /// Whether some state of the open scope violates `c` in `frame`.

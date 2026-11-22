@@ -223,6 +223,16 @@ TLC reports a temporal violation as `Temporal properties were violated.` without
 property, so each property runs alone: module `Cone_<Property>` with a `.cfg` that names
 that one `PROPERTY`. The property cones run with the other cones, in parallel.
 
+Up to 8 cone runs go at once, the property cones and the cones with the most variables
+first, since those tend to be the long ones. Each run gets the cores divided by the runs
+at once, and no fewer than 2 TLC workers on 4 cores or more: once the short cones are
+done, a long cone on one worker would leave the other cores idle. With several workers
+TLC reaches the same states, so an `ok` is the `ok` of one worker, but it no longer finds
+a violation by the shortest trace. A safety cone that does not pass is therefore run
+again on one worker, and `verify` reports only that run, so a counterexample is the one a
+single worker finds. A temporal property's lasso differs from run to run on one worker
+too.
+
 A property with `.fair(UC, ...)` (see
 [language-reference.md](./language-reference.md#fairness-fairusecase-)) carries its
 assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases
@@ -319,7 +329,7 @@ cone leaves out, a `.none` guard on a fair use case whose quantified column anot
 case writes, and a condition on a creating use case that reads a column the creation does
 not assign.
 
-Before TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
+While TLC runs, `verify` explores each entity's cone with BFS at the same bounds, capped at
 8,388,608 states per cone (`Caps::VERIFY`, named in the `bounds:` line). Each state of a
 state model must have a witness there (see
 [state-derivation.md](./state-derivation.md#state-models-and-witnesses)). A `NoWitness`
@@ -684,7 +694,9 @@ unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks
 
 Here the CTI is also a real run: `one_to_one_shared` links two Shipments to one Order, and
 `verify` at two instances reports the violation with its trace. A rule z3 gives up on
-(each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. A rule that fails in an
+(each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. The checks of one
+step are shared out over several z3 processes (`RDRA_JOBS`); the proof and its CTIs do not
+depend on how many. A rule that fails in an
 initial state is `unproved` too; the bounded engines report that violation.
 
 Some rules have no `CHECK` in the schema `export --kind sql` writes: a rule over several

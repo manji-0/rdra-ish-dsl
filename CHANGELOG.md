@@ -51,6 +51,17 @@
 
 ### Changed
 
+- `verify` is faster and prints what it printed: 43 s to 20 s on clinic-ops, 53 s to 30 s on
+  patent-ops, 101 s to 27 s on food-permit-ops, and 355 s to 194 s on insurance-claim-ops
+  (4 cores). BFS computes the moves of one large cone on several threads and reaches the
+  states in the order one thread does. The TLC cone runs start while BFS and the proof run,
+  the long ones first, each with at least 2 TLC workers on 4 cores or more; a safety cone
+  that does not pass runs again on one worker, so a counterexample is the one a single
+  worker finds. `verify --prove` shares the checks of a step over several z3 processes.
+  `RDRA_JOBS` also sets the BFS threads of one cone and the number of z3 processes. The peak
+  memory is now BFS plus the TLC heaps. A counterexample to induction may show another value
+  for a column its step does not constrain: the solver that reads it starts over first, so
+  the CTI does not depend on the number of z3 processes (#163).
 - Skill `rdra-ish-diagram` says how to lay out a PRD and a design document from the model
   (`references/documents.md`): which diagrams and tables go into each section, in which
   order, and the rules for embedding them (generate, stay under Mermaid's limits, tables as

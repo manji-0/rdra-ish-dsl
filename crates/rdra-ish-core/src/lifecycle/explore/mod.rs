@@ -11,7 +11,9 @@ mod violations;
 
 pub use graph::LabelledEdges;
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
+
+use crate::fasthash::FastMap;
 
 use super::diag::Diag;
 use super::expr::State;
@@ -56,6 +58,16 @@ pub struct ComponentRun {
     bindings: Vec<(ActId, Box<[u8]>)>,
 }
 
+/// The worker threads a run computes moves on, beside the thread that reads them.
+#[derive(Clone, Copy)]
+enum Threads {
+    /// This many, whatever other runs hold; none runs on the caller's thread alone.
+    #[cfg_attr(not(test), allow(dead_code))]
+    Fixed(usize),
+    /// What the process-wide budget has left (`parallel::Helpers`), `jobs()` less one in all.
+    Shared,
+}
+
 /// One move of the run: `states[from]` steps to `states[to]` under one `(action, params)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Edge {
@@ -70,6 +82,57 @@ pub(crate) struct Move {
     pub act: ActId,
     pub params: Box<[u8]>,
     pub next: State,
+}
+
+/// Moves in the order found, in flat buffers: an edge of a large run costs no allocation.
+#[derive(Default)]
+pub(crate) struct Moves {
+    acts: Vec<ActId>,
+    /// The params of every move, end to end.
+    params: Vec<u8>,
+    /// Where each move's params end.
+    param_ends: Vec<usize>,
+    /// The successor of every move, `width` bytes each.
+    next: Vec<u8>,
+    width: usize,
+}
+
+impl Moves {
+    pub fn len(&self) -> usize {
+        self.acts.len()
+    }
+
+    pub fn push(&mut self, act: ActId, params: &[u8], next: &State) {
+        debug_assert!(self.acts.is_empty() || self.width == next.0.len());
+        self.width = next.0.len();
+        self.acts.push(act);
+        self.params.extend_from_slice(params);
+        self.param_ends.push(self.params.len());
+        self.next.extend_from_slice(&next.0);
+    }
+
+    /// Move `i`: its action, its params, and its successor's bytes.
+    pub fn get(&self, i: usize) -> (ActId, &[u8], &[u8]) {
+        let from = i.checked_sub(1).map_or(0, |i| self.param_ends[i]);
+        (
+            self.acts[i],
+            &self.params[from..self.param_ends[i]],
+            &self.next[i * self.width..(i + 1) * self.width],
+        )
+    }
+
+    pub fn into_moves(self) -> Vec<Move> {
+        (0..self.len())
+            .map(|i| {
+                let (act, params, next) = self.get(i);
+                Move {
+                    act,
+                    params: params.into(),
+                    next: State(next.into()),
+                }
+            })
+            .collect()
+    }
 }
 
 /// What both engines produce for one cone: the reached states in discovery order, initial
@@ -100,7 +163,7 @@ enum Reach {
 #[derive(Default)]
 pub(crate) struct EntityView {
     pub patterns: Vec<Box<[u8]>>,
-    index: HashMap<Box<[u8]>, usize>,
+    index: FastMap<Box<[u8]>, usize>,
     pub initial: Vec<bool>,
     /// Some enabled action moves a slot off this pattern.
     pub changes: Vec<bool>,
@@ -135,14 +198,16 @@ pub(crate) enum Scan {
 struct Bindings {
     list: Vec<(ActId, Box<[u8]>)>,
     /// Per action: its params to their index in `list`.
-    index: Vec<HashMap<Box<[u8]>, u32>>,
+    index: Vec<FastMap<Box<[u8]>, u32>>,
 }
 
 struct Bfs<'t> {
     ts: &'t TransitionSystem,
     caps: Caps,
     states: Vec<State>,
-    seen: HashMap<State, u32>,
+    seen: FastMap<State, u32>,
+    /// Scratch for the pattern keys `observe` reads, so an edge allocates none.
+    keys: (Vec<u8>, Vec<u8>),
     complete: bool,
     diags: Vec<Diag>,
     views: Vec<EntityView>,
@@ -158,8 +223,14 @@ struct Bfs<'t> {
 impl TransitionSystem {
     /// Explores this system.
     pub fn run(self, caps: Caps) -> ComponentRun {
+        self.run_on(caps, Threads::Shared)
+    }
+
+    /// `run` with `threads` workers. The run does not depend on the number: the states, the
+    /// edges, and the findings come out in the order one thread finds them.
+    fn run_on(self, caps: Caps, threads: Threads) -> ComponentRun {
         let mut bfs = Bfs::new(&self, caps);
-        bfs.go();
+        bfs.go(threads);
         let Bfs {
             states,
             complete,

@@ -23,12 +23,12 @@ use rdra_ish_core::lifecycle::{
     Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity, StateDiag,
     Target, TransitionSystem, VarSet,
 };
-use rdra_ish_core::{ResolvedProgram, SemanticModel};
+use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
 use crate::export::{checked_system, tla_bounds, tla_file, Modules};
 use crate::property_cone::{AfterPlain, ConeRun, PropertyCone, Verdict};
-use crate::prove::{run_proof, Marks, ProofTally};
+use crate::prove::{find_z3, run_proof, Marks, ProofTally};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_env::{tlc_env, Heap};
 use crate::tlc_output::{progress, summarize, Outcome, TlcRun};
@@ -100,6 +100,17 @@ impl Job {
         match self.kind {
             JobKind::Cone(_) | JobKind::PropertyCone(_) => Heap::Cone,
             JobKind::Whole(_) => Heap::Temporal,
+        }
+    }
+
+    /// A guess at how long the run takes, to start the long ones first: a temporal property
+    /// before a safety cone, since TLC also searches its behavior graph, then the system with
+    /// more variables.
+    fn weight(&self) -> (bool, usize) {
+        match &self.kind {
+            JobKind::Cone(cone) => (false, cone.system.var_ids().count()),
+            JobKind::PropertyCone(p) => (true, p.cone.reduced.var_ids().count()),
+            JobKind::Whole(_) => (true, usize::MAX),
         }
     }
 }
@@ -213,31 +224,33 @@ fn cone_jobs(
             }
         }
     }
-    order
+    // The names are claimed in target order; reducing and printing a cone reads nothing of
+    // another, so the cones are prepared side by side.
+    let named: Vec<(Cone, String, Vec<Target>)> = order
         .into_iter()
-        .map(|(cone, first, shared)| {
-            let seeds = shared.iter().map(|t| ts.target_seed(*t));
-            let sub = ts.reduced_cone(&cone, seeds, Caps::VERIFY);
-            let module = modules.claim(&format!("Cone_{first}"));
-            let bundle = tla::print(&sub, PrintMode::Safety, &module);
-            let n = &bundle.names;
-            let checks = (0..sub.invariants().len())
-                .map(|i| n.invariant(i).to_string())
-                .chain((0..sub.after_asserts().len()).map(|i| n.after(i).to_string()))
-                .collect();
-            Job {
-                module: bundle.module_name,
-                tla: bundle.tla,
-                cfg: bundle.cfg,
-                checks,
-                kind: JobKind::Cone(Box::new(ConeSystem {
-                    cone,
-                    system: sub,
-                    names: bundle.names,
-                })),
-            }
-        })
-        .collect()
+        .map(|(cone, first, shared)| (cone, modules.claim(&format!("Cone_{first}")), shared))
+        .collect();
+    in_parallel(named, jobs(), |(cone, module, shared)| {
+        let seeds = shared.iter().map(|t| ts.target_seed(*t));
+        let sub = ts.reduced_cone(&cone, seeds, Caps::VERIFY);
+        let bundle = tla::print(&sub, PrintMode::Safety, &module);
+        let n = &bundle.names;
+        let checks = (0..sub.invariants().len())
+            .map(|i| n.invariant(i).to_string())
+            .chain((0..sub.after_asserts().len()).map(|i| n.after(i).to_string()))
+            .collect();
+        Job {
+            module: bundle.module_name,
+            tla: bundle.tla,
+            cfg: bundle.cfg,
+            checks,
+            kind: JobKind::Cone(Box::new(ConeSystem {
+                cone,
+                system: sub,
+                names: bundle.names,
+            })),
+        }
+    })
 }
 
 /// One run per temporal property on its cone, module `Cone_<property>`, with the `_WF`
@@ -248,12 +261,17 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames, modules: &mut Modules)
     let plain: Vec<String> = (0..ts.properties().len())
         .map(|i| modules.claim(&format!("Cone_{}", names.property(i))))
         .collect();
+    // Reducing a property's cone reads nothing of another's; the `_Full` and `_WF` names are
+    // claimed afterwards, in property order.
+    let cones = in_parallel((0..plain.len()).collect(), jobs(), |i| {
+        PropertyCone::new(ts, i)
+    });
     plain
         .into_iter()
+        .zip(cones)
         .enumerate()
-        .map(|(i, module)| {
+        .map(|(i, (module, cone))| {
             let name = names.property(i);
-            let cone = PropertyCone::new(ts, i);
             let plain = cone.bundle(ConeRun::Plain, &module);
             let spec = |b: TlaBundle| Spec {
                 module: b.module_name,
@@ -311,6 +329,20 @@ fn whole_job(ts: &TransitionSystem, names: &TlaNames, module: &str, i: usize) ->
 fn run_job(tlc: &Tlc, dir: &Path, modules: &Modules, job: &Job, workers: &str) -> Result<Ran> {
     let cfg = format!("{}.cfg", job.module);
     let safety = matches!(job.kind, JobKind::Cone(_));
+    // With several workers TLC reaches the same states, so an `ok` is the `ok` of one
+    // worker, but it no longer finds a violation by the shortest trace, nor the same one on
+    // every run. A safety cone that does not pass is therefore run again on one worker, and
+    // only that run is reported. A property's lasso differs from run to run on one worker too.
+    let workers = match (safety, workers) {
+        (true, many) if many != "1" => {
+            let ran = run_cfg(tlc, dir, &job.module, job.heap(), &cfg, many, safety)?;
+            if ran.decision.outcome() == Outcome::Ok {
+                return Ok(ran);
+            }
+            "1"
+        }
+        _ => workers,
+    };
     let mut ran = run_cfg(tlc, dir, &job.module, job.heap(), &cfg, workers, safety)?;
     match &job.kind {
         JobKind::Cone(cs) => {
@@ -566,12 +598,23 @@ fn run_whole(tlc: &Tlc, dir: &Path, job: &Job, workers: &str, budget: Duration) 
     })
 }
 
-/// Runs the cone jobs, up to 8 at once with one TLC worker each.
+/// Runs the cone jobs, up to 8 at once. Each run gets the cores divided by the runs at once,
+/// and no fewer than 2 workers on 4 cores or more: most models have a few long cones and
+/// many short ones, and once the short ones are done a long run on one worker would leave
+/// the other cores idle.
 fn run_cones(tlc: &Tlc, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<Vec<Ran>> {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    run_some(jobs, cores.min(8), "1", |job, workers| {
+    let at_once = cores.min(8).min(jobs.len()).max(1);
+    let workers = cone_workers(cores, at_once).to_string();
+    run_some(jobs, at_once, &workers, |job, workers| {
         run_job(tlc, dir, modules, job, workers)
     })
+}
+
+/// TLC workers per cone run when `at_once` runs share `cores`.
+fn cone_workers(cores: usize, at_once: usize) -> usize {
+    let floor = if cores >= 4 { 2 } else { 1 };
+    (cores / at_once).max(floor)
 }
 
 /// Runs the whole-model property jobs, up to 2 at once (each takes the temporal heap) sharing
@@ -585,22 +628,25 @@ fn run_wholes(tlc: &Tlc, dir: &Path, jobs: &[Job], budget: Duration) -> Result<V
     })
 }
 
-/// Runs `jobs` on `threads` threads, each TLC run with `workers` workers, in job order.
+/// Runs `jobs` on `threads` threads, each TLC run with `workers` workers, the heaviest first
+/// (`Job::weight`). The results come back in job order.
 fn run_some(
     jobs: &[Job],
     threads: usize,
     workers: &str,
     run: impl Fn(&Job, &str) -> Result<Ran> + Sync,
 ) -> Result<Vec<Ran>> {
+    let mut order: Vec<usize> = (0..jobs.len()).collect();
+    order.sort_by_key(|i| std::cmp::Reverse(jobs[*i].weight()));
     let next = AtomicUsize::new(0);
     let done: Mutex<Vec<(usize, Result<Ran>)>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for _ in 0..threads.min(jobs.len()) {
-            s.spawn(|| loop {
-                let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some(job) = jobs.get(i) else { break };
-                let ran = run(job, workers);
-                done.lock().expect("lock").push((i, ran));
+            s.spawn(|| {
+                while let Some(&i) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let ran = run(&jobs[i], workers);
+                    done.lock().expect("lock").push((i, ran));
+                }
             });
         }
     });
@@ -728,22 +774,47 @@ pub fn run_tlc(
             .map(|i| modules.claim(&format!("{whole_stem}_{}", names.property(i))))
             .collect();
     }
-    let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
-    let proof = match prove {
-        Some(Prove { z3, deny_unproved }) => {
-            let marks = Marks::of(model, &ts);
-            Some(run_proof(&ts, &selection, &marks, z3, deny_unproved)?)
-        }
-        None => None,
+    // TLC starts on the cones while BFS and the proof run here: none reads what another
+    // finds. A failure to write the specs or to find a tool is reported where it was before
+    // the engines ran side by side, after what BFS and the proof print, and starts no TLC run.
+    let written = write_specs_and_index(&dir, &jobs, &whole);
+    let tlc = (!jobs.is_empty()).then(|| Tlc::find(tlc_jar));
+    let z3 = prove.as_ref().map(|p| find_z3(p.z3.clone()));
+    let start = match (&written, &tlc, &z3) {
+        (Ok(_), Some(Ok(tlc)), None | Some(Ok(_))) => Some(tlc),
+        _ => None,
     };
+    let (bfs_errors, capped, proof, cones_ran) = std::thread::scope(|threads| {
+        let cones = start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs)));
+        let (bfs_errors, capped) = state_models(program, model, &ts, scope, &selection);
+        let proof = match (&prove, z3) {
+            (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
+                let marks = Marks::of(model, &ts);
+                run_proof(&ts, &selection, &marks, &z3, *deny_unproved).map(Some)
+            }),
+            _ => Ok(None),
+        };
+        let cones_ran = cones.map(|cones| match cones.join() {
+            Ok(ran) => ran,
+            Err(panic) => std::panic::resume_unwind(panic),
+        });
+        (bfs_errors, capped, proof, cones_ran)
+    });
     let end = End {
         bfs_errors,
         capped,
         deny_undecided,
-        proof,
+        proof: proof?,
     };
 
-    let (mut index, index_path) = write_specs_and_index(&dir, &jobs, &whole, keep)?;
+    let (mut index, index_path) = written?;
+    if keep {
+        println!(
+            "wrote {} specs and {}",
+            jobs.len() + usize::from(whole.is_some()),
+            index_path.display()
+        );
+    }
 
     if jobs.is_empty() {
         if !keep {
@@ -753,8 +824,8 @@ pub fn run_tlc(
         println!("tlc_result: ok");
         return end.finish(&line, &[]);
     }
-    let tlc = Tlc::find(tlc_jar)?;
-    let mut ran = run_cones(&tlc, &dir, &modules, &jobs)?;
+    let tlc = tlc.expect("a run with jobs looks for TLC")?;
+    let mut ran = cones_ran.expect("TLC started once the specs and the tools were there")?;
     for (job, r) in jobs.iter().zip(&ran) {
         println!("{}", r.line(&job.module, &job.checks));
     }
@@ -848,7 +919,6 @@ fn write_specs_and_index(
     dir: &Path,
     jobs: &[Job],
     whole: &Option<TlaBundle>,
-    keep: bool,
 ) -> Result<(String, PathBuf)> {
     let mut index = String::new();
     for job in jobs {
@@ -867,13 +937,6 @@ fn write_specs_and_index(
     let index_path = dir.join("cones.txt");
     fs::write(&index_path, &index)
         .with_context(|| format!("failed to write {}", index_path.display()))?;
-    if keep {
-        println!(
-            "wrote {} specs and {}",
-            jobs.len() + usize::from(whole.is_some()),
-            index_path.display()
-        );
-    }
     Ok((index, index_path))
 }
 
@@ -986,8 +1049,8 @@ fn fail(
 
 /// BFS on each selected entity cone at the verify bounds: the `NoWitness` errors, the
 /// `Deadlock`s (errors, or warnings at the bound), and the `NeverRuns` warnings, rendered,
-/// then the `not checked:` block and one summary line. The exploration is dropped before TLC
-/// starts. Returns the errors and the findings a cone left undecided at the state cap.
+/// then the `not checked:` block and one summary line. Returns the errors and the findings a
+/// cone left undecided at the state cap.
 fn state_models(
     program: &ResolvedProgram,
     model: &SemanticModel,
@@ -1187,6 +1250,24 @@ pub(crate) fn find_on_path(name: &str) -> Option<PathBuf> {
             .map(|file| dir.join(file))
             .find(|path| path.is_file())
     })
+}
+
+#[cfg(test)]
+mod worker_tests {
+    use super::cone_workers;
+
+    /// The runs at once never get fewer workers than the cores divide into, and a long run
+    /// keeps a second worker once the short ones are done.
+    #[test]
+    fn cone_runs_share_the_cores_and_keep_two_workers_on_four_cores() {
+        assert_eq!(cone_workers(1, 1), 1);
+        assert_eq!(cone_workers(2, 2), 1);
+        assert_eq!(cone_workers(4, 4), 2);
+        assert_eq!(cone_workers(4, 1), 4);
+        assert_eq!(cone_workers(8, 8), 2);
+        assert_eq!(cone_workers(16, 8), 2);
+        assert_eq!(cone_workers(16, 2), 8);
+    }
 }
 
 #[cfg(test)]
