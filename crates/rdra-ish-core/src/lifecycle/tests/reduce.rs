@@ -881,6 +881,45 @@ fn a_quantifier_over_t_folds_into_a_bit_keyed_by_the_linked_row() {
     );
 }
 
+/// A steady action (`Reduction::is_steady`) writes nothing the inputs of the sub-lifecycle
+/// read, so its steps skip the class lookup in BFS and print `UNCHANGED` for the class in
+/// TLA+. On every reduced cone of the case fold and of insurance-claim-ops, each step of a
+/// steady action from each reached state leaves the input bytes as they were. The cones
+/// have steps of both kinds: steady ones, and ones that change an input.
+#[test]
+fn a_steady_action_never_changes_the_inputs() {
+    let (mut steady, mut moving) = (0, 0);
+    for model in [model_from(CASE_FOLD), load("samples/insurance-claim-ops")] {
+        let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
+        let targets = ts.targets();
+        let reduced = ts.explore_targets_reduced(&targets, Caps::STATES);
+        for cone in &reduced.cones {
+            let sys = &cone.run.system;
+            let Some(red) = sys.reduction() else { continue };
+            for s in &cone.run.states {
+                let before = red.input_bytes(sys, s);
+                for (act, _, next) in sys.plain_moves(s) {
+                    if red.skips(act) {
+                        continue;
+                    }
+                    let changed = red.input_bytes(sys, &next) != before;
+                    if red.is_steady(act) {
+                        steady += 1;
+                        let name = &sys.actions()[act.index()].name;
+                        assert!(!changed, "{name} changed the inputs");
+                    } else {
+                        moving += usize::from(changed);
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        steady > 0 && moving > 0,
+        "{steady} steady steps, {moving} that change an input"
+    );
+}
+
 /// A class move's params are the extended sub-lifecycle's, which drops a folded action's T
 /// params. In clinic-ops, `ReviewPatientResponse` updates a `CarePlan` (S) and its
 /// `FollowUpMessage` (T) on the cone of `Unique_FollowUpMessage_CarePlan`: the BFS takes the
