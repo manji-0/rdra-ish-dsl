@@ -2576,6 +2576,8 @@ property NeverBoth "mutex"
 | `leads_to(p, q)` | `p ~> q` |
 | `stable(expr)` | `[][expr => expr']_vars` |
 | `unchanged(E.col, ..).when(expr)` | `[][expr => col' = col]_vars` |
+| `precedes(p, q)` | none: decided on the explored graph |
+| `can_reach(expr)` | none (CTL `AG EF expr`): decided on the explored graph |
 
 Atoms use `Entity.column == value` / `!=`, `Entity.column in (a, b)` / `not in`, or numeric
 comparisons (`<`, `>`, `<=`, `>=`) over Int / Money / Decimal columns and literals. Prefer
@@ -2655,6 +2657,38 @@ breaking step. TLA+ prints each as an action property, `[][\A b0 \in E_Ids : pre
 `FairOnSafetyProperty`, and a column of `unchanged` no single entity owns is
 `UnresolvedPropertyColumn`.
 
+#### Graph properties: `precedes` and `can_reach`
+
+`precedes(p, q)` says that a row satisfies `q` only once it has satisfied `p`: no path from an
+initial state reaches a state where `q` holds for the row while `p` has not held for it in
+that state or any before. `can_reach(p)` says the row is never stuck short of `p`: from every
+reachable state where the row is present, some path reaches a state where `p` holds for it.
+The path may move other rows too.
+
+```rdra
+property PaidBeforeShipped "an order is shipped only after it was paid"
+  precedes(Order.status == paid, Order.status == shipped)
+
+property OrderCanFinish "every order can still be shipped or cancelled"
+  can_reach(Order.status in (shipped, cancelled))
+```
+
+`can_reach` asks what the actors *can* do, where `eventually` says what they *must* do: an
+order an actor may keep on hold forever fails `eventually` without `.fair`, but passes
+`can_reach` as long as a way out stays open. `Deadlock_*` finds a state with no step out;
+`can_reach` also finds a cycle the row cannot leave.
+
+TLA+ cannot state either one, so BFS decides them on the graph it explores for the
+property's cone (what it reads; no action is kept whole), per binding of the rows: `check`
+and `states` at their bounds, `verify` at its own, beside its TLC runs. A `precedes`
+violation prints a shortest path to the state where `q` holds first; a `can_reach` violation
+prints a shortest path to a state from which `p` is unreachable and how many states the run
+is then confined to. A cone stopped at the state cap decides a `precedes` violation it found,
+but no `can_reach` verdict: a state it did not reach may lead to `p`. `export --kind tla`
+names each in a comment and leaves it out of the `.cfg`. Both take `.along`, `.role`, and
+`.global()`; `.fair` is `FairOnSafetyProperty`, since fairness changes which runs count, not
+which paths exist.
+
 #### Rows across entities: `.along(...)`
 
 A property whose atoms read two or more entities is quantified over each entity's present
@@ -2721,7 +2755,7 @@ step stays enabled. `Spec`, the `.cfg`, and properties without
   nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
   to its temporal runs.
 
-Errors: `.fair` on `always(...)` is `FairOnSafetyProperty` (fairness cannot change a safety
+Errors: `.fair` on `always(...)`, `stable`, `unchanged`, `precedes`, or `can_reach` is `FairOnSafetyProperty` (fairness cannot change a safety
 verdict); a `.fair` with no argument, an argument that is not a use case, a use case listed
 twice, or a second `.fair` is `FairRequiresUseCases`; an undefined name is `UndefinedSymbol`;
 an atom whose column no single entity owns (`Order.missing`, or a bare `status` that two

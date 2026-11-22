@@ -70,6 +70,21 @@ fn one_of_each() -> Vec<StateDiag> {
             site: site(),
             trace: Trace::default(),
         },
+        StateDiag::PrecedenceViolated {
+            name: "PaidBeforeShipped".into(),
+            label: "PaidBeforeShipped".into(),
+            rows: "Order(status=shipped)".into(),
+            site: site(),
+            trace: Trace::default(),
+        },
+        StateDiag::ReachabilityViolated {
+            name: "CanFinish".into(),
+            label: "CanFinish".into(),
+            rows: "Order(status=on_hold)".into(),
+            confined: 2,
+            site: site(),
+            trace: Trace::default(),
+        },
         StateDiag::PropertyViolated {
             name: "NeverShipped".into(),
             kind: LtlKind::Always,
@@ -248,6 +263,8 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::StepRuleViolated { .. }
+            | StateDiag::PrecedenceViolated { .. }
+            | StateDiag::ReachabilityViolated { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::NeverRuns { .. }
@@ -301,6 +318,8 @@ fn names_keep_the_checks_own_names() {
         "Forbidden_Order_0",
         "AfterAssert_Pay_0",
         "NeverShipped",
+        "PaidBeforeShipped",
+        "CanFinish",
         "Witness_Order_status_paid",
         "Runs_Pay_2",
         "Deadlock_Order_status_paid",

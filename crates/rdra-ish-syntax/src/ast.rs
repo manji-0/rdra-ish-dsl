@@ -494,6 +494,13 @@ pub enum AstTemporalFormula {
         columns: Vec<Operand>,
         when: Option<Expr>,
     },
+    /// `precedes(p, q)`: a row satisfies `q` only once it has satisfied `p`.
+    Precedes {
+        first: Expr,
+        then: Expr,
+    },
+    /// `can_reach(p)`: from every reachable state of a row, some path reaches `p`.
+    CanReach(Expr),
 }
 
 impl AstTemporalFormula {
@@ -502,23 +509,40 @@ impl AstTemporalFormula {
         match self {
             AstTemporalFormula::Always(e)
             | AstTemporalFormula::Eventually(e)
-            | AstTemporalFormula::Stable(e) => vec![e],
+            | AstTemporalFormula::Stable(e)
+            | AstTemporalFormula::CanReach(e) => vec![e],
             AstTemporalFormula::LeadsTo {
                 antecedent,
                 consequent,
+            }
+            | AstTemporalFormula::Precedes {
+                first: antecedent,
+                then: consequent,
             } => vec![antecedent, consequent],
             AstTemporalFormula::Unchanged { when, .. } => when.iter().collect(),
         }
     }
 
-    /// Whether it is a safety property, on which fairness changes nothing.
-    pub fn is_safety(&self) -> bool {
-        matches!(
+    /// Whether fairness changes nothing about its verdict: a safety property, or `can_reach`,
+    /// which asks whether some path exists.
+    pub fn ignores_fairness(&self) -> bool {
+        !matches!(
             self,
-            AstTemporalFormula::Always(_)
-                | AstTemporalFormula::Stable(_)
-                | AstTemporalFormula::Unchanged { .. }
+            AstTemporalFormula::Eventually(_) | AstTemporalFormula::LeadsTo { .. }
         )
+    }
+
+    /// The keyword the formula starts with.
+    pub fn keyword(&self) -> &'static str {
+        match self {
+            AstTemporalFormula::Always(_) => "always",
+            AstTemporalFormula::Eventually(_) => "eventually",
+            AstTemporalFormula::LeadsTo { .. } => "leads_to",
+            AstTemporalFormula::Stable(_) => "stable",
+            AstTemporalFormula::Unchanged { .. } => "unchanged",
+            AstTemporalFormula::Precedes { .. } => "precedes",
+            AstTemporalFormula::CanReach(_) => "can_reach",
+        }
     }
 }
 

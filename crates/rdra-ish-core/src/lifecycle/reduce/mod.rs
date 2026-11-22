@@ -480,6 +480,11 @@ impl TransitionSystem {
             .into_iter()
             .filter(|r| reads_ok(self, &r.binders, &[&r.body]))
             .collect();
+        let graph = std::mem::take(&mut self.graph);
+        self.graph = graph
+            .into_iter()
+            .filter(|r| reads_ok(self, &r.binders, &r.preds()))
+            .collect();
         let properties = std::mem::take(&mut self.properties);
         self.properties = properties
             .into_iter()

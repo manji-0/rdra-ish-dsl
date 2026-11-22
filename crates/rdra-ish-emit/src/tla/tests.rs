@@ -1178,3 +1178,31 @@ property AmountFixed unchanged(Order.amount).when(Order.status == done)
         bundle.cfg
     );
 }
+
+/// TLA+ cannot state `precedes` or `can_reach`: the module names them in a comment, and the
+/// cfg lists neither.
+#[test]
+fn graph_properties_are_comments_not_properties() {
+    let src = r#"
+entity Order "Order" { id: Int @pk  status: Enum(open, paid, shipped) @default(open) }
+usecase Place "Place"
+usecase Pay "Pay"
+usecase Ship "Ship"
+creates(Place, Order)
+transitions(Pay, Order.status, open -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+property PaidFirst precedes(Order.status == paid, Order.status == shipped)
+property Ends can_reach(Order.status == shipped)
+"#;
+    let bundle = print(&system(src), PrintMode::Check, "M");
+    assert!(
+        bundle.tla.contains(
+            "\\* PaidFirst: precedes is decided by rdra-ish on the explored graph, not by TLC\n\
+             \\* Ends: can_reach is decided by rdra-ish on the explored graph, not by TLC\n"
+        ),
+        "{}",
+        bundle.tla
+    );
+    assert!(!bundle.cfg.contains("PaidFirst"), "{}", bundle.cfg);
+    assert!(!bundle.cfg.contains("Ends"), "{}", bundle.cfg);
+}

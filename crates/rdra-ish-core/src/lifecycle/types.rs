@@ -763,6 +763,64 @@ impl StepKind {
     }
 }
 
+/// A `precedes` or `can_reach` property: TLA+ cannot state it, so it is decided on the graph
+/// BFS explores for its cone, per binding of `binders` whose rows are present and joined by
+/// `scope`.
+#[derive(Clone, Debug)]
+pub struct GraphRule {
+    pub name: String,
+    /// Universally bound entities, outermost first.
+    pub binders: Vec<EntId>,
+    /// The owner links of its `.along(..)` path, `Pred::True` without one.
+    pub scope: Pred,
+    pub kind: GraphKind,
+    /// The property's label (its id when it has none).
+    pub label: String,
+    pub site: Site,
+}
+
+#[derive(Clone, Debug)]
+pub enum GraphKind {
+    /// No path reaches a state where `then` holds before one where `first` holds.
+    Precedes { first: Pred, then: Pred },
+    /// From every reachable state, some path reaches one where `goal` holds.
+    CanReach { goal: Pred },
+}
+
+impl GraphRule {
+    /// Every predicate the rule reads: its scope, then its operands.
+    pub fn preds(&self) -> Vec<&Pred> {
+        match &self.kind {
+            GraphKind::Precedes { first, then } => vec![&self.scope, first, then],
+            GraphKind::CanReach { goal } => vec![&self.scope, goal],
+        }
+    }
+
+    /// The same rule over `f` of each predicate.
+    pub fn map(&self, mut f: impl FnMut(&Pred) -> Pred) -> GraphRule {
+        let kind = match &self.kind {
+            GraphKind::Precedes { first, then } => GraphKind::Precedes {
+                first: f(first),
+                then: f(then),
+            },
+            GraphKind::CanReach { goal } => GraphKind::CanReach { goal: f(goal) },
+        };
+        GraphRule {
+            scope: f(&self.scope),
+            kind,
+            ..self.clone()
+        }
+    }
+
+    /// The form's keyword.
+    pub fn form(&self) -> &'static str {
+        match self.kind {
+            GraphKind::Precedes { .. } => "precedes",
+            GraphKind::CanReach { .. } => "can_reach",
+        }
+    }
+}
+
 /// A temporal property. The explorer does not check it; `explain_property` evaluates it on a
 /// lasso another engine found.
 #[derive(Clone, Debug)]

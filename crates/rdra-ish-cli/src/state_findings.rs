@@ -527,6 +527,8 @@ pub(crate) fn render_violation(
         ),
         StateDiag::AfterAssertViolated { site, trace, .. }
         | StateDiag::StepRuleViolated { site, trace, .. }
+        | StateDiag::PrecedenceViolated { site, trace, .. }
+        | StateDiag::ReachabilityViolated { site, trace, .. }
         | StateDiag::PropertyViolated { site, trace, .. } => {
             (state_diag_message(diag), site, trace)
         }
@@ -804,6 +806,9 @@ violation_message(text, pattern_desc)
             "{}temporal assertion violated after '{anchor}': expected {requireds}, but found {actual}",
             label_prefix(label)
         ),
+        StateDiag::PrecedenceViolated { .. } | StateDiag::ReachabilityViolated { .. } => {
+            diag.to_string()
+        }
         StateDiag::StepRuleViolated {
             name,
             kind,

@@ -236,6 +236,13 @@ fn formats_step_properties() {
 }
 
 #[test]
+fn formats_graph_properties() {
+    let src = "property PaidFirst\n  precedes(Order.status == paid, Order.status == shipped).along(Order, Payment)\n\nproperty Ends\n  can_reach(Order.status in (shipped, cancelled))\n";
+    let formatted = format_source(src).unwrap();
+    assert_eq!(formatted, src);
+}
+
+#[test]
 fn formats_nm_via_chain() {
     let src = "relate(Order, Product, N:M).via(OrderProduct)\n";
     let formatted = format_source(src).unwrap();

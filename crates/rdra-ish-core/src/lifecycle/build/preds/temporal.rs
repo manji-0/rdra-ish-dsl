@@ -7,8 +7,9 @@ use super::{at_of, cmp_op, collect_vars, implies, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    ActId, ActionOrigin, AfterAssert, AfterStep, At, CmpOp, Effect, Guard, GuardWhy, Ltl, ModelRef,
-    Pred, Property, Site, Start, StepKind, StepRule, Term, Value, VarId, VarKind,
+    ActId, ActionOrigin, AfterAssert, AfterStep, At, CmpOp, Effect, GraphKind, GraphRule, Guard,
+    GuardWhy, Ltl, ModelRef, Pred, Property, Site, Start, StepKind, StepRule, Term, Value, VarId,
+    VarKind,
 };
 use crate::model::{
     CrossConstraintScope, CrossEntityCondition, EffectValue, EntityKey, TemporalExpr,
@@ -101,6 +102,10 @@ impl Builder<'_> {
                 self.step_rule(prop, site);
                 continue;
             }
+            if prop.formula.is_graph() {
+                self.graph_rule(prop, site);
+                continue;
+            }
             let mut binding: Binding = Vec::new();
             let formula = match &prop.formula {
                 TemporalFormula::Always(e) => {
@@ -117,8 +122,11 @@ impl Builder<'_> {
                     let c = self.temporal(&prop.id, consequent, &mut binding, &site);
                     Ltl::LeadsTo(a, c)
                 }
-                TemporalFormula::Stable(_) | TemporalFormula::Unchanged { .. } => {
-                    unreachable!("a step property is a step rule")
+                TemporalFormula::Stable(_)
+                | TemporalFormula::Unchanged { .. }
+                | TemporalFormula::Precedes { .. }
+                | TemporalFormula::CanReach(_) => {
+                    unreachable!("a step or graph property is a rule of its own")
                 }
             };
             for uk in &prop.fair {
@@ -207,6 +215,32 @@ impl Builder<'_> {
             name: prop.id.clone(),
             binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
             body,
+            kind,
+            label: prop.label.clone(),
+            site,
+        });
+    }
+
+    /// A `precedes` or `can_reach` property as a graph rule over its binders and scope.
+    fn graph_rule(&mut self, prop: &TemporalProperty, site: Site) {
+        let mut binding: Binding = Vec::new();
+        let kind = match &prop.formula {
+            TemporalFormula::Precedes { first, then } => GraphKind::Precedes {
+                first: self.temporal(&prop.id, first, &mut binding, &site),
+                then: self.temporal(&prop.id, then, &mut binding, &site),
+            },
+            TemporalFormula::CanReach(e) => GraphKind::CanReach {
+                goal: self.temporal(&prop.id, e, &mut binding, &site),
+            },
+            _ => unreachable!("only `precedes` and `can_reach` are graph rules"),
+        };
+        let Some(scope) = self.property_scope(prop, &mut binding, &site) else {
+            return;
+        };
+        self.ts.graph.push(GraphRule {
+            name: prop.id.clone(),
+            binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
+            scope,
             kind,
             label: prop.label.clone(),
             site,
@@ -323,6 +357,11 @@ impl Builder<'_> {
         }
         for rule in &self.ts.steps {
             collect_vars(&rule.body, &mut read);
+        }
+        for rule in &self.ts.graph {
+            for p in rule.preds() {
+                collect_vars(p, &mut read);
+            }
         }
         let condition_guards = self.ts.actions.iter().flat_map(|a| a.guards.iter());
         let read_by_condition = |g: &&Guard| {

@@ -622,6 +622,14 @@ impl TransitionSystem {
                 d
             })
             .collect();
+        if let Target::GraphRule(i) = target {
+            if let Some(mut d) = run.graph_rule_violation(&self.graph[i].name) {
+                if let Some(trace) = d.diag.trace_mut() {
+                    self.annotate(&cone.cone, trace);
+                }
+                out.push(d);
+            }
+        }
         for d in run.diags.iter().filter(|d| {
             matches!(
                 d.diag,

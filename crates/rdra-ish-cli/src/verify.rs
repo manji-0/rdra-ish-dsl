@@ -208,7 +208,8 @@ fn cone_jobs(
     let mut order: Vec<(Cone, String, Vec<Target>)> = Vec::new();
     for &target in targets {
         let first = match target {
-            Target::Entity(_) => continue,
+            // BFS decides a graph rule; TLA+ cannot state it.
+            Target::Entity(_) | Target::GraphRule(_) => continue,
             Target::Invariant(i) => names.invariant(i).to_string(),
             Target::AfterAssert(i) => names.after(i).to_string(),
             Target::StepRule(i) => names.step(i).to_string(),
@@ -1073,8 +1074,12 @@ fn state_models(
         .targets
         .iter()
         .copied()
-        .filter(|t| matches!(t, Target::Entity(_)))
+        .filter(|t| matches!(t, Target::Entity(_) | Target::GraphRule(_)))
         .collect();
+    let graph = entities
+        .iter()
+        .filter(|t| matches!(t, Target::GraphRule(_)))
+        .count();
     let mut run = ts.explore_targets_reduced(&entities, Caps::VERIFY);
     if !scope.bucs.is_empty() {
         run.defer_progress();
@@ -1115,6 +1120,18 @@ fn state_models(
             "use cases that never run"
         ),
     );
+    if graph > 0 {
+        println!(
+            "graph properties: {} decided by BFS on {} cone{}, not by TLC",
+            plural(
+                graph,
+                "precedes/can_reach property",
+                "precedes/can_reach properties"
+            ),
+            if graph == 1 { "its" } else { "their" },
+            if graph == 1 { "" } else { "s" }
+        );
+    }
     (errors, capped)
 }
 

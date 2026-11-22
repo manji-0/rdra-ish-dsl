@@ -436,7 +436,8 @@ impl TransitionSystem {
         let (start, steps) = self.lifted_replay(replay);
         let last = steps.last().map_or(&start, |s| &s.2);
         let mut d = match target {
-            Target::Entity(_) => return None,
+            // TLC never checks a graph rule, so no TLC trace ends in one.
+            Target::Entity(_) | Target::GraphRule(_) => return None,
             Target::Invariant(i) => self.invariant_violation(i, last)?,
             Target::AfterAssert(i) => {
                 let (act, params, _) = steps.last()?;

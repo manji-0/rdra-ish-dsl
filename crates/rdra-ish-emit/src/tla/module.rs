@@ -933,6 +933,14 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             closed(ts, names, &r.binders, false, &r.body)
         ));
     }
+    // TLA+ states no path quantifier: BFS decides these on the explored graph.
+    for r in ts.graph_rules() {
+        out.push_str(&format!(
+            "\\* {}: {} is decided by rdra-ish on the explored graph, not by TLC\n",
+            r.name,
+            r.form()
+        ));
+    }
     for (i, p) in ts.properties().iter().enumerate() {
         let mut ctx = Ctx {
             ts,
@@ -968,6 +976,7 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     if !ts.invariants().is_empty()
         || !ts.after_asserts().is_empty()
         || !ts.step_rules().is_empty()
+        || !ts.graph_rules().is_empty()
         || !ts.properties().is_empty()
     {
         out.push('\n');

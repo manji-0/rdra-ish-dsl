@@ -253,6 +253,10 @@ fn format_property(prop: &PropertyDecl) -> String {
             format_expr(consequent)
         ),
         AstTemporalFormula::Stable(expr) => format!("stable({})", format_expr(expr)),
+        AstTemporalFormula::Precedes { first, then } => {
+            format!("precedes({}, {})", format_expr(first), format_expr(then))
+        }
+        AstTemporalFormula::CanReach(expr) => format!("can_reach({})", format_expr(expr)),
         AstTemporalFormula::Unchanged { columns, when } => {
             let cols: Vec<String> = columns.iter().map(format_operand).collect();
             let when = when

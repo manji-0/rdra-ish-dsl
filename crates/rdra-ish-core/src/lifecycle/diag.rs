@@ -174,6 +174,27 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
+    /// A `precedes(p, q)` property fails: a path reaches a state where its rows satisfy `q`
+    /// without having satisfied `p`. `trace` is a shortest such path.
+    PrecedenceViolated {
+        name: String,
+        label: String,
+        /// The rows the rule binds, in the last state of the trace.
+        rows: String,
+        site: Site,
+        trace: Trace,
+    },
+    /// A `can_reach(p)` property fails: a reachable state where its rows are present from
+    /// which no path reaches `p`. `trace` is a shortest path to such a state, and `confined`
+    /// the number of states (of the explored cone) reachable from it.
+    ReachabilityViolated {
+        name: String,
+        label: String,
+        rows: String,
+        confined: usize,
+        site: Site,
+        trace: Trace,
+    },
     /// A temporal property fails on the infinite behavior of a lasso: `trace`, then `lasso`.
     /// Only a replayed TLC counterexample builds it; BFS does not check properties.
     PropertyViolated {
@@ -450,6 +471,8 @@ impl StateDiag {
             StateDiag::ConstraintViolated { name, .. }
             | StateDiag::AfterAssertViolated { name, .. }
             | StateDiag::StepRuleViolated { name, .. }
+            | StateDiag::PrecedenceViolated { name, .. }
+            | StateDiag::ReachabilityViolated { name, .. }
             | StateDiag::PropertyViolated { name, .. } => name.clone(),
             StateDiag::NoWitness {
                 entity,
@@ -563,6 +586,8 @@ impl StateDiag {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
             | StateDiag::StepRuleViolated { trace, .. }
+            | StateDiag::PrecedenceViolated { trace, .. }
+            | StateDiag::ReachabilityViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
@@ -574,6 +599,8 @@ impl StateDiag {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
             | StateDiag::StepRuleViolated { trace, .. }
+            | StateDiag::PrecedenceViolated { trace, .. }
+            | StateDiag::ReachabilityViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
@@ -614,6 +641,8 @@ impl StateDiag {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::StepRuleViolated { .. }
+            | StateDiag::PrecedenceViolated { .. }
+            | StateDiag::ReachabilityViolated { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::Deadlock { .. }
@@ -783,6 +812,25 @@ impl fmt::Display for StateDiag {
                 "{} property {name} ({}) is broken by a step: {before} becomes {after}",
                 kind.as_str(),
                 label
+            ),
+            StateDiag::PrecedenceViolated {
+                name, label, rows, ..
+            } => write!(
+                f,
+                "precedes property {name}{} violated: {rows} gets to its second condition without having met its first",
+                label_suffix(name, label)
+            ),
+            StateDiag::ReachabilityViolated {
+                name,
+                label,
+                rows,
+                confined,
+                ..
+            } => write!(
+                f,
+                "can_reach property {name}{} violated: from {rows} no path reaches its condition; the run is confined to {confined} state{}",
+                label_suffix(name, label),
+                if *confined == 1 { "" } else { "s" }
             ),
             StateDiag::PropertyViolated {
                 name,
@@ -1087,5 +1135,14 @@ impl fmt::Display for StateDiag {
                 }
             }
         }
+    }
+}
+
+/// ` (label)` when the label says more than the name.
+pub fn label_suffix(name: &str, label: &str) -> String {
+    if label == name {
+        String::new()
+    } else {
+        format!(" ({label})")
     }
 }

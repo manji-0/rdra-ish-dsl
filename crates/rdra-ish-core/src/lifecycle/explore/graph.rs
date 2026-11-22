@@ -114,6 +114,17 @@ impl ComponentRun {
     fn lifted_trace(&self, at: u32, extra: Option<Step>) -> (Trace, State, State) {
         let path = self.path_to(at);
         let first = path.first().map_or(at, |e| e.from);
+        self.lifted_path(first, &path, extra)
+    }
+
+    /// `path` from `states[first]`, then `extra`, lifted and in model terms, with the state
+    /// before its last step and its last state.
+    pub(super) fn lifted_path(
+        &self,
+        first: u32,
+        path: &[Edge],
+        extra: Option<Step>,
+    ) -> (Trace, State, State) {
         let mut steps: Vec<Step> = path
             .iter()
             .map(|e| {

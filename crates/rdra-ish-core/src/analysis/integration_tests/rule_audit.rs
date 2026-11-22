@@ -405,6 +405,20 @@ const FORMS: &[(&str, Expect)] = &[
     ("property P unchanged(Order.missing)", Error),
     ("property P unchanged()", Error),
     ("property P unchanged(3)", Error),
+    // graph properties: `precedes` and `can_reach` ask about paths, which fairness leaves as
+    // they are
+    (
+        "property P precedes(Order.status == paid, Ticket.status == done).along(Ticket, Order)",
+        Recorded,
+    ),
+    ("property P can_reach(Order.status == paid)", Recorded),
+    (
+        "property P precedes(Order.status == open, Order.status == paid).fair(Pay)",
+        Error,
+    ),
+    ("property P can_reach(Order.status == paid).fair(Pay)", Error),
+    ("property P can_reach()", Error),
+    ("property P precedes(Order.status == paid)", Error),
 ];
 
 /// The rules a model records, its field mappings, its `sets` effects, and each condition body

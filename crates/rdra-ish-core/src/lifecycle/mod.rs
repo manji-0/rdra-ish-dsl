@@ -46,9 +46,9 @@ pub use targets::{ConeRun, Subject, Tally, TargetExploration, Undecided, Undecid
 pub use trace::{Change, Inst, Replay, ReplayError, Trace, TraceStep};
 pub use types::{
     ActId, Action, ActionOrigin, AfterAssert, AfterStep, Arm, At, Birth, Bounds, Choice, CmpOp,
-    Domain, Effect, EntId, EntityDecl, Guard, GuardWhy, InvKind, InvText, Invariant, Ltl, LtlKind,
-    ModelRef, Param, ParamRole, Pred, Property, Rhs, Site, Start, StepKind, StepRule, Term, Value,
-    VarDecl, VarId, VarKind,
+    Domain, Effect, EntId, EntityDecl, GraphKind, GraphRule, Guard, GuardWhy, InvKind, InvText,
+    Invariant, Ltl, LtlKind, ModelRef, Param, ParamRole, Pred, Property, Rhs, Site, Start,
+    StepKind, StepRule, Term, Value, VarDecl, VarId, VarKind,
 };
 pub use view::{
     AbstractValue, AxisKind, EntityStateResult, Provenance, ReachablePattern, StateAxis,
@@ -78,6 +78,7 @@ pub struct TransitionSystem {
     invariants: Vec<Invariant>,
     after: Vec<AfterAssert>,
     steps: Vec<StepRule>,
+    graph: Vec<GraphRule>,
     properties: Vec<Property>,
     now: Option<VarId>,
     offsets: Vec<usize>,
@@ -102,6 +103,7 @@ impl TransitionSystem {
             invariants: Vec::new(),
             after: Vec::new(),
             steps: Vec::new(),
+            graph: Vec::new(),
             properties: Vec::new(),
             now: None,
             offsets: Vec::new(),
@@ -171,6 +173,11 @@ impl TransitionSystem {
     /// The `stable` and `unchanged` properties, checked on every step.
     pub fn step_rules(&self) -> &[StepRule] {
         &self.steps
+    }
+
+    /// The `precedes` and `can_reach` properties, decided on the explored graph.
+    pub fn graph_rules(&self) -> &[GraphRule] {
+        &self.graph
     }
 
     pub fn properties(&self) -> &[Property] {

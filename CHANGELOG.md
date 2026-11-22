@@ -4,6 +4,13 @@
 
 ### Added
 
+- `property P precedes(p, q)` says a row meets `q` only after it has met `p` (#166), and
+  `property P can_reach(p)` that from every reachable state the row can still reach `p`, so
+  a cycle it cannot leave fails as a dead end does (#167). TLA+ cannot state either, so BFS
+  decides them on the graph it explores for the property's cone, in `check`, `states`, and
+  `verify`, with a shortest trace; `export --kind tla` names them in a comment.
+- `FairOnSafetyProperty` names the form it is on, not always `always`.
+
 - `property P stable(p)` and `property P unchanged(E.col, ..).when(p)`: step properties
   that say a row keeps a state once it has it, or keeps columns while a condition holds,
   whatever use case runs. BFS checks them on every step, so `check` and `states` report them

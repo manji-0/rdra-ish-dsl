@@ -62,10 +62,17 @@ property ShippedOnceCaptured
 | `leads_to(p, q)` | `p ~> q` |
 | `stable(expr)` | `[][expr => expr']_vars`, checked by BFS too |
 | `unchanged(E.col, ..).when(expr)` | `[][expr => col' = col]_vars`, checked by BFS too |
+| `precedes(p, q)` | none; BFS decides it on the explored graph |
+| `can_reach(expr)` | none (`AG EF expr`); BFS decides it on the explored graph |
 
 `stable` and `unchanged` are step properties: `check`, `states`, and `verify` check them on
 every step (any use case, not only the one an `after(UC).assert` names), and a violation's
 trace ends in the breaking step. `.when` goes right after the column list.
+
+`precedes(p, q)` (a row meets `q` only after `p`) and `can_reach(p)` (a row is never stuck
+short of `p`; it *can* get there, where `eventually` says it *must*) are graph properties:
+TLA+ cannot state them, so BFS decides them on the property's cone in `check`, `states`, and
+`verify`, and `export` writes them as comments. `.fair` on either is `FairOnSafetyProperty`.
 
 ## Postconditions
 

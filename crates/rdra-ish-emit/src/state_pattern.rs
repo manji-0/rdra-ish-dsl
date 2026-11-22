@@ -165,6 +165,9 @@ violation_message(text, pattern_desc)
             "{} property violated ({label}): a step takes {before} to {after}",
             kind.as_str()
         ),
+        StateDiag::PrecedenceViolated { .. } | StateDiag::ReachabilityViolated { .. } => {
+            d.to_string()
+        }
         StateDiag::StateCapReached { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }

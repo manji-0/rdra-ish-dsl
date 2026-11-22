@@ -240,6 +240,11 @@ impl TransitionSystem {
                 .iter()
                 .map(|e| self.entity(*e).key)
                 .collect(),
+            Target::GraphRule(i) => self.graph[i]
+                .binders
+                .iter()
+                .map(|e| self.entity(*e).key)
+                .collect(),
             Target::AfterAssert(i) => {
                 let mut entities = Vec::new();
                 for step in &self.after[i].steps {
@@ -340,6 +345,7 @@ impl NotChecked<'_> {
                     format!("after({})", self.ts.actions()[anchor.index()].name)
                 }
                 Target::StepRule(i) => self.ts.step_rules()[i].name.clone(),
+                Target::GraphRule(i) => self.ts.graph_rules()[i].name.clone(),
             })
             .collect()
     }
@@ -369,7 +375,7 @@ impl fmt::Display for NotChecked<'_> {
             let of = |pick: fn(&Target) -> bool| {
                 self.names(self.selection.unchecked.iter().copied().filter(&pick))
             };
-            let steps = of(|t| matches!(t, Target::StepRule(_)));
+            let steps = of(|t| matches!(t, Target::StepRule(_) | Target::GraphRule(_)));
             let mut views = vec![
                 counted(
                     &of(|t| matches!(t, Target::Entity(_))),

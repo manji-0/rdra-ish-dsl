@@ -114,8 +114,11 @@ fn fair_use_cases(
             ok = false;
             continue;
         }
-        if decl.formula.is_safety() {
-            let err = RdraError::FairOnSafetyProperty { id: id() };
+        if decl.formula.ignores_fairness() {
+            let err = RdraError::FairOnSafetyProperty {
+                id: id(),
+                form: decl.formula.keyword().into(),
+            };
             push_error(ctx, diags, cc.span.clone(), err);
             ok = false;
             continue;
@@ -184,6 +187,11 @@ fn lower_formula(
             consequent: lower_expr(model, consequent)?,
         }),
         AstTemporalFormula::Stable(e) => Ok(TemporalFormula::Stable(lower_expr(model, e)?)),
+        AstTemporalFormula::Precedes { first, then } => Ok(TemporalFormula::Precedes {
+            first: lower_expr(model, first)?,
+            then: lower_expr(model, then)?,
+        }),
+        AstTemporalFormula::CanReach(e) => Ok(TemporalFormula::CanReach(lower_expr(model, e)?)),
         AstTemporalFormula::Unchanged { columns, when } => {
             let mut cols: Vec<QualifiedModelColumnRef> = Vec::new();
             for operand in columns {

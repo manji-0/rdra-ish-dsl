@@ -538,6 +538,7 @@ fn target_label(ts: &TransitionSystem, t: Target) -> String {
         Target::Invariant(i) => format!("invariant {}", ts.invariants()[i].name),
         Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
         Target::StepRule(i) => format!("step {}", ts.step_rules()[i].name),
+        Target::GraphRule(i) => format!("graph {}", ts.graph_rules()[i].name),
     }
 }
 

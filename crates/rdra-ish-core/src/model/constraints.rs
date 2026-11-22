@@ -294,6 +294,13 @@ pub enum TemporalFormula {
         columns: Vec<QualifiedModelColumnRef>,
         when: Option<TemporalExpr>,
     },
+    /// `precedes(p, q)`: no path reaches `q` without passing `p`; decided on the explored graph.
+    Precedes {
+        first: TemporalExpr,
+        then: TemporalExpr,
+    },
+    /// `can_reach(p)` → CTL `AG EF p`; decided on the explored graph.
+    CanReach(TemporalExpr),
 }
 
 /// `property Id "label"` with a temporal formula body.
@@ -320,10 +327,15 @@ impl TemporalFormula {
         match self {
             TemporalFormula::Always(e)
             | TemporalFormula::Eventually(e)
-            | TemporalFormula::Stable(e) => vec![e],
+            | TemporalFormula::Stable(e)
+            | TemporalFormula::CanReach(e) => vec![e],
             TemporalFormula::LeadsTo {
                 antecedent,
                 consequent,
+            }
+            | TemporalFormula::Precedes {
+                first: antecedent,
+                then: consequent,
             } => vec![antecedent, consequent],
             TemporalFormula::Unchanged { when, .. } => when.iter().collect(),
         }
@@ -335,6 +347,15 @@ impl TemporalFormula {
         matches!(
             self,
             TemporalFormula::Stable(_) | TemporalFormula::Unchanged { .. }
+        )
+    }
+
+    /// Whether it is decided on the explored graph (`precedes`, `can_reach`), which TLA+
+    /// cannot state.
+    pub fn is_graph(&self) -> bool {
+        matches!(
+            self,
+            TemporalFormula::Precedes { .. } | TemporalFormula::CanReach(_)
         )
     }
 }

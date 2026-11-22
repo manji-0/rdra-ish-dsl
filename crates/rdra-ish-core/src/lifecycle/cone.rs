@@ -48,6 +48,8 @@ pub enum Target {
     AfterAssert(usize),
     /// Index into `step_rules()`.
     StepRule(usize),
+    /// Index into `graph_rules()`.
+    GraphRule(usize),
 }
 
 /// A closed var set and the actions that must stay even when they write nothing in it.
@@ -373,6 +375,17 @@ impl TransitionSystem {
                 }
                 self.pred_reads(&rule.body, &mut seed);
             }
+            // What the rule reads; the graph of that cone is the graph of the whole system
+            // projected, since every action that changes it reads only inside it.
+            Target::GraphRule(i) => {
+                let rule = &self.graph[i];
+                for e in &rule.binders {
+                    seed.insert(self.entity(*e).exists);
+                }
+                for p in rule.preds() {
+                    self.pred_reads(p, &mut seed);
+                }
+            }
             Target::AfterAssert(i) => {
                 for step in &self.after[i].steps {
                     for e in &step.binders {
@@ -451,6 +464,7 @@ impl TransitionSystem {
             .chain((0..self.invariants.len()).map(Target::Invariant))
             .chain((0..self.after.len()).map(Target::AfterAssert))
             .chain((0..self.steps.len()).map(Target::StepRule))
+            .chain((0..self.graph.len()).map(Target::GraphRule))
             .collect()
     }
 

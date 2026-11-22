@@ -111,11 +111,12 @@ pub fn run() -> Result<()> {
                 eprintln!("{block}");
             }
 
-            // `stable` and `unchanged` are checked step by step, here too.
+            // `stable` and `unchanged` are checked step by step, and `precedes` and
+            // `can_reach` on the explored graph, here too.
             let property_count = model
                 .temporal_properties
                 .iter()
-                .filter(|p| !p.formula.is_step())
+                .filter(|p| !p.formula.is_step() && !p.formula.is_graph())
                 .count();
             if property_count > 0 {
                 eprintln!(

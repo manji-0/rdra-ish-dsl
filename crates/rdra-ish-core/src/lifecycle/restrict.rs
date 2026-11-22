@@ -210,6 +210,13 @@ impl TransitionSystem {
                 });
             }
         }
+        for r in &self.graph {
+            if reads_inside(&r.binders, &r.preds()) {
+                let mut rule = r.map(|x| map.pred(x));
+                rule.binders = r.binders.iter().map(|e| map.e(*e)).collect();
+                out.graph.push(rule);
+            }
+        }
         for p in &self.properties {
             let preds: Vec<&Pred> = p.preds().collect();
             if reads_inside(&p.binders, &preds) {

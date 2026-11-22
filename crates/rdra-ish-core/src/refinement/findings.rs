@@ -30,6 +30,8 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::StateCapReached { .. }
         | StateDiag::AfterAssertViolated { .. }
         | StateDiag::StepRuleViolated { .. }
+        | StateDiag::PrecedenceViolated { .. }
+        | StateDiag::ReachabilityViolated { .. }
         | StateDiag::PropertyViolated { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::NeverRuns { .. }

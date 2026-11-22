@@ -4,6 +4,7 @@
 
 mod bfs;
 mod graph;
+mod graph_rules;
 mod moves;
 mod scan;
 mod views;

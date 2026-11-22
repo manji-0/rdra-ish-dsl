@@ -858,7 +858,23 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
         .then(when.or_not())
         .map(|(columns, when)| AstTemporalFormula::Unchanged { columns, when });
 
-    let formula = choice((leads_to, always, eventually, stable, unchanged));
+    let precedes = just(Token::Ident("precedes".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::Comma))
+        .then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(|(first, then)| AstTemporalFormula::Precedes { first, then });
+
+    let can_reach = just(Token::Ident("can_reach".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(AstTemporalFormula::CanReach);
+
+    let formula = choice((
+        leads_to, always, eventually, stable, unchanged, precedes, can_reach,
+    ));
 
     just(Token::Property)
         .ignore_then(ident())

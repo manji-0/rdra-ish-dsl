@@ -12,6 +12,8 @@
 | Int comparison (`stock < selling`), Int / Money / Decimal arithmetic | `check` or `verify` | Both read Int values over `0..5` |
 | `col < now` / DateTime vs `now` | `check` or `verify` | Global `now` + `Tick`; the invariant finds violations |
 | `property` `always` / `eventually` / `leads_to` | `verify` | Path properties; `check` and `states` do not evaluate them |
+| `property` `stable` / `unchanged` | `check` or `verify` | Step properties; BFS checks every step, TLC the same action property |
+| `property` `precedes` / `can_reach` | `check` or `verify` | Graph properties TLA+ cannot state; BFS decides them on the property's cone, `verify` at two instances |
 | `after(UC).assert(...)` | `check` or `verify` | Checked after the last step of each run of the use case |
 | `invariant(...).when(...).none/has(...)` | `check`, or `verify` for two related rows | Quantifiers over present instances |
 | Multi-entity `forbidden` / `invariant` + `.along` | `check` for one instance, `verify` for two | Both join instances through the `relate` owners |
