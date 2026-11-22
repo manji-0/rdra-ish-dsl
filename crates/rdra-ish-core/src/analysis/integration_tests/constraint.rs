@@ -235,9 +235,10 @@ required(Coupon, status == usable, expired_at < now)
 
     assert_eq!(model.required_constraints.len(), 1);
     let constraint = &model.required_constraints[0];
-    assert_eq!(constraint.conditions.len(), 1);
-    assert_eq!(constraint.comparisons.len(), 1);
-    assert_eq!(constraint.comparisons[0].axis_key(), "expired_at<now");
+    assert_eq!(constraint.equals().count(), 1);
+    let comparisons: Vec<_> = constraint.comparisons().collect();
+    assert_eq!(comparisons.len(), 1);
+    assert_eq!(comparisons[0].axis_key(), "expired_at<now");
 }
 
 #[test]
@@ -259,8 +260,8 @@ exclusive(Document, approved == true, rejected == true)
 
     assert_eq!(model.exclusive_constraints.len(), 1);
     let constraint = &model.exclusive_constraints[0];
-    assert_eq!(constraint.conditions.len(), 2);
-    assert_eq!(constraint.comparisons.len(), 0);
+    assert_eq!(constraint.equals().count(), 2);
+    assert_eq!(constraint.comparisons().count(), 0);
 }
 
 #[test]

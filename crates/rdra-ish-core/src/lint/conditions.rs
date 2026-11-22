@@ -2,7 +2,7 @@
 
 use crate::location::LocatedSpan;
 use crate::model::{
-    CmpOpModel, CmpRhs, ColumnType, ComparisonProp, CrossCmpRhs, CrossEntityCondition, EntityKey,
+    CmpOpModel, CmpRhs, ColumnType, CrossCmpRhs, CrossEntityCondition, EntityCondition, EntityKey,
     NodeRef, RelKind, SemanticModel,
 };
 
@@ -103,8 +103,8 @@ struct IntComparison {
 
 fn int_comparisons(model: &SemanticModel) -> Vec<IntComparison> {
     let mut out = Vec::new();
-    let mut single = |entity: EntityKey, props: &[ComparisonProp], site: &Option<LocatedSpan>| {
-        for prop in props {
+    let mut single = |entity: EntityKey, conds: &[EntityCondition], site: &Option<LocatedSpan>| {
+        for prop in EntityCondition::comparisons(conds) {
             if let CmpRhs::IntLit(value) = prop.rhs {
                 out.push(IntComparison {
                     entity,
@@ -117,17 +117,17 @@ fn int_comparisons(model: &SemanticModel) -> Vec<IntComparison> {
         }
     };
     for c in &model.forbidden_constraints {
-        single(c.entity, &c.comparisons, &c.site);
+        single(c.entity, &c.conditions, &c.site);
     }
     for c in &model.required_constraints {
-        single(c.entity, &c.comparisons, &c.site);
+        single(c.entity, &c.conditions, &c.site);
     }
     for c in &model.exclusive_constraints {
-        single(c.entity, &c.comparisons, &c.site);
+        single(c.entity, &c.conditions, &c.site);
     }
     for c in &model.entity_invariants {
-        single(c.entity, &c.guard_comparisons, &c.site);
-        single(c.entity, &c.required_comparisons, &c.site);
+        single(c.entity, &c.guards, &c.site);
+        single(c.entity, &c.requireds, &c.site);
     }
     let mut cross = |conds: &mut dyn Iterator<Item = &CrossEntityCondition>,
                      site: &Option<LocatedSpan>| {

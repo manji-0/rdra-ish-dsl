@@ -127,10 +127,13 @@ pub(crate) fn push_rule_guards(
 
 /// A body comparison as an entity-local rule reads it, or `None` when it names another
 /// entity.
-fn local_condition(cond: &CrossEntityCondition, entity: EntityKey) -> Option<LocalCondition> {
+fn local_condition(cond: &CrossEntityCondition, entity: EntityKey) -> Option<EntityCondition> {
     match cond {
         CrossEntityCondition::Equals { column, value } if column.entity == entity => {
-            Some(LocalCondition::Equals(column.column.clone(), value.clone()))
+            Some(EntityCondition::Equals {
+                column: column.column.clone(),
+                value: value.clone(),
+            })
         }
         CrossEntityCondition::Comparison(prop) if prop.lhs.entity == entity => {
             let rhs = match &prop.rhs {
@@ -141,7 +144,7 @@ fn local_condition(cond: &CrossEntityCondition, entity: EntityKey) -> Option<Loc
                 CrossCmpRhs::Value(v) => CmpRhs::Value(v.clone()),
                 CrossCmpRhs::Values(vs) => CmpRhs::Values(vs.clone()),
             };
-            Some(LocalCondition::Comparison(ComparisonProp {
+            Some(EntityCondition::Comparison(ComparisonProp {
                 lhs_column: prop.lhs.column.clone(),
                 op: prop.op,
                 rhs,
@@ -149,11 +152,6 @@ fn local_condition(cond: &CrossEntityCondition, entity: EntityKey) -> Option<Loc
         }
         _ => None,
     }
-}
-
-enum LocalCondition {
-    Equals(String, EffectValue),
-    Comparison(ComparisonProp),
 }
 
 /// The entity a body comparison names first.
@@ -226,13 +224,11 @@ pub(crate) fn resolve_rule_guards(model: &mut SemanticModel, diags: &mut Vec<Dia
         match g.rule {
             RuleRef::Forbidden(_) | RuleRef::Invariant(_) => {
                 let entity = subject[0];
-                let mut equals = Vec::new();
-                let mut comparisons = Vec::new();
+                let mut local = Vec::new();
                 let mut outside = None;
                 for cond in &conds {
                     match local_condition(cond, entity) {
-                        Some(LocalCondition::Equals(column, value)) => equals.push((column, value)),
-                        Some(LocalCondition::Comparison(prop)) => comparisons.push(prop),
+                        Some(cond) => local.push(cond),
                         None => {
                             outside = Some(first_entity(cond));
                             break;
@@ -261,14 +257,10 @@ pub(crate) fn resolve_rule_guards(model: &mut SemanticModel, diags: &mut Vec<Dia
                 }
                 match g.rule {
                     RuleRef::Forbidden(i) => {
-                        let rule = &mut model.forbidden_constraints[i];
-                        rule.conditions.extend(equals);
-                        rule.comparisons.extend(comparisons);
+                        model.forbidden_constraints[i].conditions.extend(local);
                     }
                     RuleRef::Invariant(i) => {
-                        let rule = &mut model.entity_invariants[i];
-                        rule.guards.extend(equals);
-                        rule.guard_comparisons.extend(comparisons);
+                        model.entity_invariants[i].guards.extend(local);
                     }
                     _ => unreachable!("matched above"),
                 }

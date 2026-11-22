@@ -3,15 +3,45 @@ use super::effects::EffectValue;
 use super::foreign_key::FkId;
 use super::keys::{EntityKey, UseCaseKey};
 
-/// `forbidden(Entity, col == val, ...)` で宣言された禁止状態制約。
-/// `conditions` に列挙した全ての col == val が同時に成立する状態は禁止（AND）。
+/// One condition of a single-entity rule, on a column of the rule's entity.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum EntityCondition {
+    /// `column == value`.
+    Equals {
+        column: std::string::String,
+        value: EffectValue,
+    },
+    /// A typed comparison such as `total > 0` or `status != paid`.
+    Comparison(ComparisonProp),
+}
+
+impl EntityCondition {
+    /// The `column == value` conditions of `conditions`, in order.
+    pub fn equals(conditions: &[Self]) -> impl Iterator<Item = (&str, &EffectValue)> {
+        conditions.iter().filter_map(|c| match c {
+            Self::Equals { column, value } => Some((column.as_str(), value)),
+            Self::Comparison(_) => None,
+        })
+    }
+
+    /// The comparisons of `conditions`, in order.
+    pub fn comparisons(conditions: &[Self]) -> impl Iterator<Item = &ComparisonProp> {
+        conditions.iter().filter_map(|c| match c {
+            Self::Comparison(prop) => Some(prop),
+            Self::Equals { .. } => None,
+        })
+    }
+}
+
+/// A `forbidden`, `required` or `exclusive` rule on one entity. Which one it is follows from
+/// the model list that holds it:
+/// - `forbidden(Entity, ...)`: a reached state where every condition holds is a violation.
+/// - `required(Entity, ...)`: a reached state where some condition fails is a violation.
+/// - `exclusive(Entity, ...)`: a reached state where two or more conditions hold is a violation.
 #[derive(Debug, Clone)]
-pub struct ForbiddenConstraint {
+pub struct EntityRule {
     pub entity: EntityKey,
-    /// 禁止する等値 (カラム名, 値) の組合せ（全件 AND）
-    pub conditions: Vec<(std::string::String, EffectValue)>,
-    /// 禁止条件に含まれる比較命題（全件 AND、等値条件と合わせて評価）
-    pub comparisons: Vec<ComparisonProp>,
+    pub conditions: Vec<EntityCondition>,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,
@@ -20,53 +50,25 @@ pub struct ForbiddenConstraint {
     pub label: Option<std::string::String>,
 }
 
-/// `invariant(Entity).when(col == val).then(col == val)` で宣言された不変条件。
-/// `guards` が全て成立するとき、`requireds` も全て成立しなければならない。
+impl EntityRule {
+    /// The `column == value` conditions, in order.
+    pub fn equals(&self) -> impl Iterator<Item = (&str, &EffectValue)> {
+        EntityCondition::equals(&self.conditions)
+    }
+
+    /// The comparisons, in order.
+    pub fn comparisons(&self) -> impl Iterator<Item = &ComparisonProp> {
+        EntityCondition::comparisons(&self.conditions)
+    }
+}
+
+/// `invariant(Entity).when(...).then(...)`: in a reached state where every guard holds, every
+/// required condition holds too.
 #[derive(Debug, Clone)]
 pub struct EntityInvariant {
     pub entity: EntityKey,
-    /// 等値ガード条件 (カラム名, 値)（全件 AND）
-    pub guards: Vec<(std::string::String, EffectValue)>,
-    /// 比較命題ガード条件（全件 AND、等値 guards と合わせて評価）
-    pub guard_comparisons: Vec<ComparisonProp>,
-    /// 等値必要条件 (カラム名, 値)（全件 AND）
-    pub requireds: Vec<(std::string::String, EffectValue)>,
-    /// 比較命題必要条件（全件 AND、等値 requireds と合わせて評価）
-    pub required_comparisons: Vec<ComparisonProp>,
-
-    /// Source site of the predicate/declaration that produced this fact.
-    pub site: Option<crate::location::LocatedSpan>,
-
-    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
-    pub label: Option<std::string::String>,
-}
-
-/// `required(Entity, col == val, ...)` で宣言された常時成立制約。
-/// `conditions` と `comparisons` が全て成立しない到達状態は違反。
-#[derive(Debug, Clone)]
-pub struct RequiredConstraint {
-    pub entity: EntityKey,
-    /// 常に成立すべき等値条件（全件 AND）
-    pub conditions: Vec<(std::string::String, EffectValue)>,
-    /// 常に true であるべき比較命題（全件 AND）
-    pub comparisons: Vec<ComparisonProp>,
-
-    /// Source site of the predicate/declaration that produced this fact.
-    pub site: Option<crate::location::LocatedSpan>,
-
-    /// `.label("...")`: the rule in the author's words, for the rule table and violations.
-    pub label: Option<std::string::String>,
-}
-
-/// `exclusive(Entity, col == val, ...)` で宣言された相互排他制約。
-/// 列挙した条件のうち 2 件以上が同時に成立する到達状態は違反。
-#[derive(Debug, Clone)]
-pub struct ExclusiveConstraint {
-    pub entity: EntityKey,
-    /// 相互排他にしたい等値条件
-    pub conditions: Vec<(std::string::String, EffectValue)>,
-    /// 相互排他にしたい比較命題
-    pub comparisons: Vec<ComparisonProp>,
+    pub guards: Vec<EntityCondition>,
+    pub requireds: Vec<EntityCondition>,
 
     /// Source site of the predicate/declaration that produced this fact.
     pub site: Option<crate::location::LocatedSpan>,

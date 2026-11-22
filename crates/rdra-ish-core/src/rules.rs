@@ -6,7 +6,7 @@ use crate::analysis::{body_condition_display, condition_body_display, effect_val
 use crate::location::LocatedSpan;
 use crate::model::{
     values_display, CmpRhs, ComparisonProp, CrossConstraintScope, CrossEntityCondition,
-    EffectValue, EntityKey, NodeRef, QuantifierKind, RelKind, SemanticModel,
+    EffectValue, EntityCondition, EntityKey, NodeRef, QuantifierKind, RelKind, SemanticModel,
 };
 
 /// One row of the business-rule table.
@@ -33,22 +33,15 @@ impl BusinessRule {
 }
 
 /// The conditions of a single-entity rule, each qualified by the entity.
-fn local_parts(
-    model: &SemanticModel,
-    entity: EntityKey,
-    equals: &[(String, EffectValue)],
-    comparisons: &[ComparisonProp],
-) -> Vec<String> {
+fn local_parts(model: &SemanticModel, entity: EntityKey, conds: &[EntityCondition]) -> Vec<String> {
     let id = &model.entities[entity].id;
-    equals
-        .iter()
+    EntityCondition::equals(conds)
         .map(|(column, value)| {
             let value = effect_value_display(model, entity, column, value);
             format!("{id}.{column} == {value}")
         })
         .chain(
-            comparisons
-                .iter()
+            EntityCondition::comparisons(conds)
                 .map(|prop| format!("{id}.{}", comparison_display(model, entity, prop))),
         )
         .collect()
@@ -135,7 +128,7 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
         };
 
     for c in &model.forbidden_constraints {
-        let text = all_of(&local_parts(model, c.entity, &c.conditions, &c.comparisons));
+        let text = all_of(&local_parts(model, c.entity, &c.conditions));
         let entities = entity_ids(model, &[c.entity]);
         push("forbidden", &c.label, entities, text, vec![], &c.site);
     }
@@ -145,8 +138,8 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
         push("forbidden", &c.label, entities, text, vec![], &c.site);
     }
     for c in &model.entity_invariants {
-        let guards = local_parts(model, c.entity, &c.guards, &c.guard_comparisons);
-        let requireds = local_parts(model, c.entity, &c.requireds, &c.required_comparisons);
+        let guards = local_parts(model, c.entity, &c.guards);
+        let requireds = local_parts(model, c.entity, &c.requireds);
         let entities = entity_ids(model, &[c.entity]);
         let text = when_then(&guards, &requireds);
         push("invariant", &c.label, entities, text, vec![], &c.site);
@@ -160,12 +153,12 @@ pub fn business_rules(model: &SemanticModel) -> Vec<BusinessRule> {
         push("invariant", &c.label, entities, text, vec![], &c.site);
     }
     for c in &model.required_constraints {
-        let text = all_of(&local_parts(model, c.entity, &c.conditions, &c.comparisons));
+        let text = all_of(&local_parts(model, c.entity, &c.conditions));
         let entities = entity_ids(model, &[c.entity]);
         push("required", &c.label, entities, text, vec![], &c.site);
     }
     for c in &model.exclusive_constraints {
-        let parts = local_parts(model, c.entity, &c.conditions, &c.comparisons);
+        let parts = local_parts(model, c.entity, &c.conditions);
         let text = format!("at most one of: {}", parts.join(", "));
         let entities = entity_ids(model, &[c.entity]);
         push("exclusive", &c.label, entities, text, vec![], &c.site);

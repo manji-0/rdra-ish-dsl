@@ -11,12 +11,6 @@ use rdra_ish_syntax::ast::*;
 
 use slotmap::SlotMap;
 
-#[derive(Default)]
-pub(crate) struct EntityConditions {
-    pub(crate) equals: Vec<(String, EffectValue)>,
-    pub(crate) comparisons: Vec<ComparisonProp>,
-}
-
 pub(crate) fn resolve_entity_equals_from_comparison(
     variations: &SlotMap<VariationKey, Variation>,
     entity_cols: &[ModelColumn],
@@ -90,8 +84,8 @@ pub(crate) fn collect_entity_conditions(
     args: &[PredicateArg],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
-) -> Option<EntityConditions> {
-    let mut conditions = EntityConditions::default();
+) -> Option<Vec<EntityCondition>> {
+    let mut conditions = Vec::new();
     for arg in args {
         if let PredicateArg::Expr(Expr::Cmp(cmp)) = arg {
             match resolve_entity_equals_from_comparison(
@@ -102,12 +96,14 @@ pub(crate) fn collect_entity_conditions(
                 ctx,
                 diags,
             ) {
-                Ok(Some(condition)) => conditions.equals.push(condition),
+                Ok(Some((column, value))) => {
+                    conditions.push(EntityCondition::Equals { column, value })
+                }
                 Ok(None) => {
                     if let Some(prop) =
                         resolve_comparison(variations, entity_cols, entity_id, cmp, ctx, diags)
                     {
-                        conditions.comparisons.push(prop);
+                        conditions.push(EntityCondition::Comparison(prop));
                     }
                 }
                 Err(()) => return None,

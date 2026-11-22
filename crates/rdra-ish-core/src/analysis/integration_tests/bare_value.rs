@@ -74,6 +74,13 @@ fn equals(model: &SemanticModel, cond: &CrossEntityCondition) -> (String, String
     }
 }
 
+fn local_equals(column: &str, value: EffectValue) -> EntityCondition {
+    EntityCondition::Equals {
+        column: column.to_string(),
+        value,
+    }
+}
+
 #[test]
 fn forbidden_reads_a_bare_rhs_that_is_also_a_column_as_the_value() {
     let model = ok("forbidden(E, status == paid, paid == false)\n");
@@ -81,11 +88,10 @@ fn forbidden_reads_a_bare_rhs_that_is_also_a_column_as_the_value() {
     assert_eq!(
         f.conditions,
         vec![
-            ("status".to_string(), variant("paid")),
-            ("paid".to_string(), EffectValue::Bool(false)),
+            local_equals("status", variant("paid")),
+            local_equals("paid", EffectValue::Bool(false)),
         ]
     );
-    assert!(f.comparisons.is_empty());
 }
 
 #[test]
@@ -93,13 +99,13 @@ fn required_and_exclusive_read_the_value() {
     let model = ok("required(E, status == paid)\nexclusive(E, status == paid, method == cash)\n");
     assert_eq!(
         model.required_constraints[0].conditions,
-        vec![("status".to_string(), variant("paid"))]
+        vec![local_equals("status", variant("paid"))]
     );
     assert_eq!(
         model.exclusive_constraints[0].conditions,
         vec![
-            ("status".to_string(), variant("paid")),
-            ("method".to_string(), variant("cash")),
+            local_equals("status", variant("paid")),
+            local_equals("method", variant("cash")),
         ]
     );
 }
@@ -108,8 +114,8 @@ fn required_and_exclusive_read_the_value() {
 fn single_entity_invariant_reads_the_value_in_when_and_then() {
     let model = ok("invariant(E).when(status == paid).then(method == cash)\n");
     let inv = &model.entity_invariants[0];
-    assert_eq!(inv.guards, vec![("status".to_string(), variant("paid"))]);
-    assert_eq!(inv.requireds, vec![("method".to_string(), variant("cash"))]);
+    assert_eq!(inv.guards, vec![local_equals("status", variant("paid"))]);
+    assert_eq!(inv.requireds, vec![local_equals("method", variant("cash"))]);
 }
 
 #[test]
@@ -230,9 +236,11 @@ entity T "T" {
 #[test]
 fn not_equal_to_a_value_is_a_comparison_with_a_value() {
     let model = ok("forbidden(E, status != open, paid == false)\n");
-    let f = &model.forbidden_constraints[0];
-    assert_eq!(f.comparisons[0].rhs, CmpRhs::Value(variant("open")));
-    assert_eq!(f.comparisons[0].op, CmpOpModel::Ne);
+    let EntityCondition::Comparison(prop) = &model.forbidden_constraints[0].conditions[0] else {
+        panic!("{:?}", model.forbidden_constraints[0].conditions);
+    };
+    assert_eq!(prop.rhs, CmpRhs::Value(variant("open")));
+    assert_eq!(prop.op, CmpOpModel::Ne);
     let model = ok("invariant(E).when(E.status != paid).none(Item.status != pending)\n");
     let q = &model.quantifier_constraints[0];
     let CrossEntityCondition::Comparison(prop) = &q.guards[0] else {
@@ -273,7 +281,11 @@ fn a_bare_column_that_is_not_a_value_is_an_error_with_the_qualified_rewrite() {
 fn a_qualified_rhs_is_a_column_comparison() {
     let model = ok("forbidden(E, status == E.other)\n");
     assert_eq!(
-        model.forbidden_constraints[0].comparisons[0].rhs,
+        model.forbidden_constraints[0]
+            .comparisons()
+            .next()
+            .unwrap()
+            .rhs,
         CmpRhs::Column("other".to_string())
     );
 }
@@ -282,12 +294,16 @@ fn a_qualified_rhs_is_a_column_comparison() {
 fn a_bare_rhs_on_a_numeric_column_is_still_a_column() {
     let model = ok("forbidden(E, qty == limit)\nforbidden(E, paid_at == null)\n");
     assert_eq!(
-        model.forbidden_constraints[0].comparisons[0].rhs,
+        model.forbidden_constraints[0]
+            .comparisons()
+            .next()
+            .unwrap()
+            .rhs,
         CmpRhs::Column("limit".to_string())
     );
     assert_eq!(
         model.forbidden_constraints[1].conditions,
-        vec![("paid_at".to_string(), EffectValue::Null)]
+        vec![local_equals("paid_at", EffectValue::Null)]
     );
 }
 

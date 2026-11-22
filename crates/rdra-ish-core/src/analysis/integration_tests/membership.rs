@@ -103,34 +103,46 @@ exclusive(E, paid in (true), status not in (pending))
 invariant(E).when(status in (open, paid)).then(paid_at not in (null))
 "#);
     assert_eq!(
-        model.forbidden_constraints[0].comparisons,
-        vec![local(
+        model.forbidden_constraints[0].conditions,
+        vec![EntityCondition::Comparison(local(
             CmpOpModel::In,
             "status",
             vec![variant("open"), variant("paid")]
-        )]
+        ))]
     );
     assert_eq!(
-        model.required_constraints[0].comparisons,
-        vec![local(CmpOpModel::NotIn, "method", vec![variant("card")])]
+        model.required_constraints[0].conditions,
+        vec![EntityCondition::Comparison(local(
+            CmpOpModel::NotIn,
+            "method",
+            vec![variant("card")]
+        ))]
     );
-    assert_eq!(model.exclusive_constraints[0].comparisons.len(), 2);
+    assert_eq!(model.exclusive_constraints[0].comparisons().count(), 2);
     assert_eq!(
-        model.exclusive_constraints[0].comparisons[0].rhs,
+        model.exclusive_constraints[0]
+            .comparisons()
+            .next()
+            .unwrap()
+            .rhs,
         CmpRhs::Values(vec![EffectValue::Bool(true)])
     );
     let inv = &model.entity_invariants[0];
     assert_eq!(
-        inv.guard_comparisons,
-        vec![local(
+        inv.guards,
+        vec![EntityCondition::Comparison(local(
             CmpOpModel::In,
             "status",
             vec![variant("open"), variant("paid")]
-        )]
+        ))]
     );
     assert_eq!(
-        inv.required_comparisons,
-        vec![local(CmpOpModel::NotIn, "paid_at", vec![EffectValue::Null])]
+        inv.requireds,
+        vec![EntityCondition::Comparison(local(
+            CmpOpModel::NotIn,
+            "paid_at",
+            vec![EffectValue::Null]
+        ))]
     );
 }
 
@@ -138,12 +150,12 @@ invariant(E).when(status in (open, paid)).then(paid_at not in (null))
 fn an_int_column_takes_integer_literals() {
     let model = ok("forbidden(E, qty in (1, 2))\n");
     assert_eq!(
-        model.forbidden_constraints[0].comparisons,
-        vec![local(
+        model.forbidden_constraints[0].conditions,
+        vec![EntityCondition::Comparison(local(
             CmpOpModel::In,
             "qty",
             vec![EffectValue::Int(1), EffectValue::Int(2)]
-        )]
+        ))]
     );
 }
 

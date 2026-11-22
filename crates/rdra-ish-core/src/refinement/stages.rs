@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use super::facts::Axis;
 use super::{BucFacts, Check, Gap, Requirement, StageId, StageSpec, SubjectKind, Weight};
 use crate::model::{
-    CmpRhs, ColumnType, ComparisonProp, CrossCmpRhs, CrossEntityCondition, EffectValue, EntityKey,
+    CmpRhs, ColumnType, CrossCmpRhs, CrossEntityCondition, EntityCondition, EntityKey,
     SemanticModel,
 };
 
@@ -583,10 +583,10 @@ pub(super) enum RuleTier {
 }
 
 pub(super) enum Rule<'m> {
-    Forbidden(&'m crate::model::ForbiddenConstraint),
-    Exclusive(&'m crate::model::ExclusiveConstraint),
+    Forbidden(&'m crate::model::EntityRule),
+    Exclusive(&'m crate::model::EntityRule),
     Invariant(&'m crate::model::EntityInvariant),
-    Required(&'m crate::model::RequiredConstraint),
+    Required(&'m crate::model::EntityRule),
     CrossForbidden(&'m crate::model::CrossForbiddenConstraint),
     CrossInvariant(&'m crate::model::CrossEntityInvariant),
 }
@@ -615,12 +615,14 @@ impl<'m> Rule<'m> {
 
     pub(super) fn tier(&self) -> RuleTier {
         let has_comparison = match self {
-            Rule::Forbidden(c) => !c.comparisons.is_empty(),
-            Rule::Exclusive(c) => !c.comparisons.is_empty(),
-            Rule::Invariant(c) => {
-                !c.guard_comparisons.is_empty() || !c.required_comparisons.is_empty()
+            Rule::Forbidden(c) | Rule::Exclusive(c) | Rule::Required(c) => {
+                c.comparisons().next().is_some()
             }
-            Rule::Required(c) => !c.comparisons.is_empty(),
+            Rule::Invariant(c) => c
+                .guards
+                .iter()
+                .chain(&c.requireds)
+                .any(|cond| matches!(cond, EntityCondition::Comparison(_))),
             Rule::CrossForbidden(_) | Rule::CrossInvariant(_) => return RuleTier::Advanced,
         };
         match self {
@@ -634,23 +636,12 @@ impl<'m> Rule<'m> {
     fn columns(&self) -> BTreeSet<(EntityKey, String)> {
         let mut columns = BTreeSet::new();
         match self {
-            Rule::Forbidden(c) => {
-                local_columns(&mut columns, c.entity, &c.conditions, &c.comparisons)
-            }
-            Rule::Exclusive(c) => {
-                local_columns(&mut columns, c.entity, &c.conditions, &c.comparisons)
-            }
-            Rule::Required(c) => {
-                local_columns(&mut columns, c.entity, &c.conditions, &c.comparisons)
+            Rule::Forbidden(c) | Rule::Exclusive(c) | Rule::Required(c) => {
+                local_columns(&mut columns, c.entity, &c.conditions)
             }
             Rule::Invariant(c) => {
-                local_columns(&mut columns, c.entity, &c.guards, &c.guard_comparisons);
-                local_columns(
-                    &mut columns,
-                    c.entity,
-                    &c.requireds,
-                    &c.required_comparisons,
-                );
+                local_columns(&mut columns, c.entity, &c.guards);
+                local_columns(&mut columns, c.entity, &c.requireds);
             }
             Rule::CrossForbidden(c) => cross_columns(&mut columns, &c.conditions),
             Rule::CrossInvariant(c) => {
@@ -665,16 +656,19 @@ impl<'m> Rule<'m> {
 fn local_columns(
     columns: &mut BTreeSet<(EntityKey, String)>,
     entity: EntityKey,
-    conditions: &[(String, EffectValue)],
-    comparisons: &[ComparisonProp],
+    conditions: &[EntityCondition],
 ) {
-    for (column, _) in conditions {
-        columns.insert((entity, column.clone()));
-    }
-    for cmp in comparisons {
-        columns.insert((entity, cmp.lhs_column.clone()));
-        if let CmpRhs::Column(rhs) = &cmp.rhs {
-            columns.insert((entity, rhs.clone()));
+    for condition in conditions {
+        match condition {
+            EntityCondition::Equals { column, .. } => {
+                columns.insert((entity, column.clone()));
+            }
+            EntityCondition::Comparison(cmp) => {
+                columns.insert((entity, cmp.lhs_column.clone()));
+                if let CmpRhs::Column(rhs) = &cmp.rhs {
+                    columns.insert((entity, rhs.clone()));
+                }
+            }
         }
     }
 }

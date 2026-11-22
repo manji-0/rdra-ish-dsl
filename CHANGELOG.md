@@ -68,6 +68,15 @@
   `UnresolvedPropertyColumn`, which `check` and the LSP report while building the model.
   It was the lifecycle's `UnresolvedPropertyAtom`, and until then the atom's bare
   right-hand side was read by its spelling. The lifecycle diagnostic is gone (#160).
+- `rdra-ish-core` keeps the conditions of a single-entity rule in one list of
+  `EntityCondition` (`Equals { column, value }` or `Comparison`), in the order written, as
+  cross-entity rules keep `CrossEntityCondition`. `forbidden_constraints`,
+  `required_constraints` and `exclusive_constraints` hold `EntityRule`, which replaces
+  `ForbiddenConstraint`, `RequiredConstraint` and `ExclusiveConstraint`; its `equals()`
+  and `comparisons()` read one kind. `EntityInvariant` has `guards` and `requireds` only.
+  `EffectValue::TypedPresent`, `EffectValue::normalize()` and the always-empty `pg_type`
+  of `AxisKind::Nullable` and `StateFieldValue::Present` are gone, and
+  `AbstractValue::display_with_type(None)` is `display()`. Output is unchanged (#162).
 
 ### Fixed
 

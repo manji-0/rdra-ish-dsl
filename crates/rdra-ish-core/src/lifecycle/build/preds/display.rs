@@ -1,15 +1,15 @@
 //! Rule text for diagnostics: the display of a local or cross-entity condition, a quantifier, and an entity list.
 
 use crate::model::{
-    ComparisonProp, CrossCmpRhs, CrossEntityCondition, EffectValue, EntityKey, QuantifierKind,
-    RelatedQuantifier,
+    ComparisonProp, CrossCmpRhs, CrossEntityCondition, EffectValue, EntityCondition, EntityKey,
+    QuantifierKind, RelatedQuantifier,
 };
 
-pub(super) fn local_display(eqs: &[(String, EffectValue)], cmps: &[ComparisonProp]) -> String {
-    eqs.iter()
+pub(super) fn local_display(conds: &[EntityCondition]) -> String {
+    EntityCondition::equals(conds)
         .map(|(c, v)| format!("{c}={}", v.literal()))
         // A comparison prints as written, `status != oa` or `status in (a, b)`.
-        .chain(cmps.iter().map(ComparisonProp::display))
+        .chain(EntityCondition::comparisons(conds).map(ComparisonProp::display))
         .collect::<Vec<_>>()
         .join(" AND ")
 }

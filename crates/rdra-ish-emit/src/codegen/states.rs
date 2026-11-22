@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::model::{
-    CmpOpModel, CmpRhs, ColumnType, ComparisonProp, EffectValue, Entity, EntityKey, RuleRef,
+    CmpOpModel, CmpRhs, ColumnType, EffectValue, Entity, EntityCondition, EntityKey, RuleRef,
     SemanticModel,
 };
 
@@ -62,9 +62,14 @@ pub(super) fn refinements(
         .iter()
         .filter(|r| r.entity == key)
     {
-        for (column, value) in &rule.conditions {
+        for (column, value) in rule.equals() {
             if let (true, Some(refined)) = (nullable(column), presence(value)) {
-                found.push((values.to_vec(), column.clone(), refined, rule.site.clone()));
+                found.push((
+                    values.to_vec(),
+                    column.to_string(),
+                    refined,
+                    rule.site.clone(),
+                ));
             }
         }
     }
@@ -73,10 +78,10 @@ pub(super) fn refinements(
         if rule.entity != key || guarded(RuleRef::Forbidden(i)) {
             continue;
         }
-        let Some(states) = tag_states(tag, values, &rule.conditions, &rule.comparisons) else {
+        let Some(states) = tag_states(tag, values, &rule.conditions) else {
             continue;
         };
-        let others: Vec<_> = rule.conditions.iter().filter(|(c, _)| c != tag).collect();
+        let others: Vec<_> = rule.equals().filter(|(c, _)| *c != tag).collect();
         let [(column, value)] = others.as_slice() else {
             continue;
         };
@@ -85,7 +90,7 @@ pub(super) fn refinements(
                 Refined::Present => Refined::Null,
                 Refined::Null => Refined::Present,
             };
-            found.push((states, column.clone(), opposite, rule.site.clone()));
+            found.push((states, column.to_string(), opposite, rule.site.clone()));
         }
     }
 
@@ -93,20 +98,27 @@ pub(super) fn refinements(
         if rule.entity != key || guarded(RuleRef::Invariant(i)) {
             continue;
         }
-        if rule.guards.iter().all(|(c, _)| c != tag)
-            && !rule.guard_comparisons.iter().any(|p| p.lhs_column == tag)
-        {
+        let reads_tag = |cond: &EntityCondition| match cond {
+            EntityCondition::Equals { column, .. } => column == tag,
+            EntityCondition::Comparison(p) => p.lhs_column == tag,
+        };
+        if !rule.guards.iter().any(reads_tag) {
             continue;
         }
-        let Some(states) = tag_states(tag, values, &rule.guards, &rule.guard_comparisons) else {
+        let Some(states) = tag_states(tag, values, &rule.guards) else {
             continue;
         };
-        if rule.guards.iter().any(|(c, _)| c != tag) {
+        if EntityCondition::equals(&rule.guards).any(|(c, _)| c != tag) {
             continue;
         }
-        for (column, value) in &rule.requireds {
+        for (column, value) in EntityCondition::equals(&rule.requireds) {
             if let (true, Some(refined)) = (nullable(column), presence(value)) {
-                found.push((states.clone(), column.clone(), refined, rule.site.clone()));
+                found.push((
+                    states.clone(),
+                    column.to_string(),
+                    refined,
+                    rule.site.clone(),
+                ));
             }
         }
     }
@@ -142,20 +154,15 @@ pub(super) fn refinements(
 
 /// The tag values a rule's tag atoms select: every value when it has none, `None` when an
 /// atom is not a plain `==` or `in` on the tag, or when a comparison reads another column.
-fn tag_states(
-    tag: &str,
-    values: &[String],
-    conditions: &[(String, EffectValue)],
-    comparisons: &[ComparisonProp],
-) -> Option<Vec<String>> {
+fn tag_states(tag: &str, values: &[String], conditions: &[EntityCondition]) -> Option<Vec<String>> {
     let mut states: Vec<String> = values.to_vec();
-    for (_, value) in conditions.iter().filter(|(c, _)| c == tag) {
+    for (_, value) in EntityCondition::equals(conditions).filter(|(c, _)| *c == tag) {
         let EffectValue::EnumVariant(v) = value else {
             return None;
         };
         states.retain(|s| s.eq_ignore_ascii_case(v));
     }
-    for prop in comparisons {
+    for prop in EntityCondition::comparisons(conditions) {
         if prop.lhs_column != tag || prop.op != CmpOpModel::In {
             return None;
         }

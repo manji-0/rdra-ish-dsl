@@ -41,19 +41,18 @@ pub(super) fn process_forbidden_predicate(
         return;
     };
 
-    if conditions.equals.is_empty() && conditions.comparisons.is_empty() && when.is_empty() {
+    if conditions.is_empty() && when.is_empty() {
         let err = RdraError::RuleWithoutCondition {
             pred: pred.name.clone(),
         };
         push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
     } else {
         let label = rule_label(pred, ctx, diags);
-        model.forbidden_constraints.push(ForbiddenConstraint {
+        model.forbidden_constraints.push(EntityRule {
             label,
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
-            conditions: conditions.equals,
-            comparisons: conditions.comparisons,
+            conditions,
         });
         let rule = RuleRef::Forbidden(model.forbidden_constraints.len() - 1);
         push_rule_guards(model, rule, &when, ctx);
@@ -86,19 +85,18 @@ pub(super) fn process_required_predicate(
         return;
     };
 
-    if conditions.equals.is_empty() && conditions.comparisons.is_empty() {
+    if conditions.is_empty() {
         let err = RdraError::RuleWithoutCondition {
             pred: pred.name.clone(),
         };
         push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
     } else {
         let label = rule_label(pred, ctx, diags);
-        model.required_constraints.push(RequiredConstraint {
+        model.required_constraints.push(EntityRule {
             label,
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
-            conditions: conditions.equals,
-            comparisons: conditions.comparisons,
+            conditions,
         });
     }
 }
@@ -128,18 +126,17 @@ pub(super) fn process_exclusive_predicate(
         return;
     };
 
-    let got = conditions.equals.len() + conditions.comparisons.len();
+    let got = conditions.len();
     if got < 2 {
         let err = RdraError::ExclusiveNeedsTwo { got };
         push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
     } else {
         let label = rule_label(pred, ctx, diags);
-        model.exclusive_constraints.push(ExclusiveConstraint {
+        model.exclusive_constraints.push(EntityRule {
             label,
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
-            conditions: conditions.equals,
-            comparisons: conditions.comparisons,
+            conditions,
         });
     }
 }
@@ -158,12 +155,10 @@ pub(super) fn process_invariant_predicate(
     let before = diags.len();
     let entity_id = model.entities[entity_key].id.clone();
     let entity_cols = model.entities[entity_key].columns.clone();
-    let mut guards: Vec<(String, EffectValue)> = Vec::new();
-    let mut guard_comparisons: Vec<ComparisonProp> = Vec::new();
+    let mut guards: Vec<EntityCondition> = Vec::new();
     // `.when(Cond)` calls: their bodies join the guards after every predicate is read.
     let mut when: Vec<(ConditionKey, Span)> = Vec::new();
-    let mut requireds: Vec<(String, EffectValue)> = Vec::new();
-    let mut required_comparisons: Vec<ComparisonProp> = Vec::new();
+    let mut requireds: Vec<EntityCondition> = Vec::new();
 
     for cc in &pred.chain {
         let is_guard = cc.name == "when";
@@ -197,11 +192,12 @@ pub(super) fn process_invariant_predicate(
                         ctx,
                         diags,
                     ) {
-                        Ok(Some((col_str, value))) => {
+                        Ok(Some((column, value))) => {
+                            let cond = EntityCondition::Equals { column, value };
                             if is_guard {
-                                guards.push((col_str, value));
+                                guards.push(cond);
                             } else {
-                                requireds.push((col_str, value));
+                                requireds.push(cond);
                             }
                         }
                         Ok(None) => {
@@ -213,10 +209,11 @@ pub(super) fn process_invariant_predicate(
                                 ctx,
                                 diags,
                             ) {
+                                let cond = EntityCondition::Comparison(prop);
                                 if is_guard {
-                                    guard_comparisons.push(prop);
+                                    guards.push(cond);
                                 } else {
-                                    required_comparisons.push(prop);
+                                    requireds.push(cond);
                                 }
                             }
                         }
@@ -248,10 +245,14 @@ pub(super) fn process_invariant_predicate(
                     };
                     match parse_effect_value(&model.variations, &col, &val_str) {
                         Ok(value) => {
+                            let cond = EntityCondition::Equals {
+                                column: col_str,
+                                value,
+                            };
                             if is_guard {
-                                guards.push((col_str, value));
+                                guards.push(cond);
                             } else {
-                                requireds.push((col_str, value));
+                                requireds.push(cond);
                             }
                         }
                         Err(e) => {
@@ -265,8 +266,8 @@ pub(super) fn process_invariant_predicate(
         }
     }
 
-    let has_guards = !guards.is_empty() || !guard_comparisons.is_empty() || !when.is_empty();
-    let has_requireds = !requireds.is_empty() || !required_comparisons.is_empty();
+    let has_guards = !guards.is_empty() || !when.is_empty();
+    let has_requireds = !requireds.is_empty();
     if !has_requireds {
         let err = RdraError::InvariantWithoutConsequence;
         push_error_unless_reported(ctx, diags, before, pred.span.clone(), err);
@@ -280,9 +281,7 @@ pub(super) fn process_invariant_predicate(
             site: Some(ctx.locate(pred.span.clone())),
             entity: entity_key,
             guards,
-            guard_comparisons,
             requireds,
-            required_comparisons,
         });
         let rule = RuleRef::Invariant(model.entity_invariants.len() - 1);
         push_rule_guards(model, rule, &when, ctx);

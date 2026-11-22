@@ -337,13 +337,13 @@ pub struct SemanticModel {
     /// `drives(origin, Entity.column op rhs, bool)` で宣言された比較命題の真偽効果
     pub proposition_effects: Vec<PropositionEffect>,
     /// `forbidden(...)` 述語で宣言された禁止状態制約
-    pub forbidden_constraints: Vec<ForbiddenConstraint>,
+    pub forbidden_constraints: Vec<EntityRule>,
     /// `invariant(...)` 述語で宣言された不変条件制約
     pub entity_invariants: Vec<EntityInvariant>,
     /// `required(...)` 述語で宣言された常時成立制約
-    pub required_constraints: Vec<RequiredConstraint>,
+    pub required_constraints: Vec<EntityRule>,
     /// `exclusive(...)` 述語で宣言された相互排他制約
-    pub exclusive_constraints: Vec<ExclusiveConstraint>,
+    pub exclusive_constraints: Vec<EntityRule>,
     /// `forbidden(...)` 述語で宣言されたクロスエンティティ禁止制約
     pub cross_forbidden_constraints: Vec<CrossForbiddenConstraint>,
     /// `invariant(...)` 述語で宣言されたクロスエンティティ不変条件

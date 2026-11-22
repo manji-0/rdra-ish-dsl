@@ -54,10 +54,10 @@ pub use location::{
 };
 pub use model::{
     Adr, AdrKey, Api, ApiKey, ColumnEffect, CrossCmpRhs, CrossComparisonProp, CrossEntityCondition,
-    CrossEntityInvariant, CrossForbiddenConstraint, EffectValue, EntityKey, ExclusiveConstraint,
-    LookupResult, Medium, MediumKey, Permission, PermissionKey, QualifiedModelColumnRef, Raiser,
-    RequiredConstraint, SemanticModel, StateTransition, System, SystemKey, TemporalAtom,
-    TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, Timer, TimerKey,
+    CrossEntityInvariant, CrossForbiddenConstraint, EffectValue, EntityCondition, EntityKey,
+    EntityRule, LookupResult, Medium, MediumKey, Permission, PermissionKey,
+    QualifiedModelColumnRef, Raiser, SemanticModel, StateTransition, System, SystemKey,
+    TemporalAtom, TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, Timer, TimerKey,
 };
 pub use model::{CallerKind, Exposed, Exposure, Publication, PublishMode, Share};
 pub use predicate::KNOWN_PREDICATES;
