@@ -846,6 +846,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action, so its fairness constrains no step. |
 | `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
 | `StateCapReached { cap, growth }` | `StateCapReached_<E>` | error | A cone exceeded `--max-states`. The message names the variables the reached states vary in and the use cases that reached the most of them. Raise the flag, narrow `--entity` or `--buc`, or drop the guard that pulls another entity into the cone. |
+| `MemoryCapReached { limit, states, growth, .. }` | `MemoryCapReached_<E>` | error | A cone's states outgrew the [memory limit](./cli-reference.md#memory-limit) (`--memory`, default `4GiB`). The message names the limit, the states reached, what they vary in, and how to raise the limit. Raise it, or narrow the cone as for `StateCapReached`. |
 
 ---
 

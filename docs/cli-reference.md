@@ -58,7 +58,7 @@ other finding itself.
 Parse, type-check, and run whole-model consistency checks; produce no artifact output.
 
 ```
-rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish check <INPUTS...> [--strict] [--deny-deprecated] [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--instance-count <N>] [--int-range-max <N>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 Prints each diagnostic to stderr. If any error (non-warning) is present, exits with
@@ -148,6 +148,7 @@ E can get stuck at col = v is not decided: ...`. See [Deadlocks](./state-derivat
 | `--deny-deprecated` | Promote each `DeprecatedSyntax` warning (a [deprecated form](./language-reference.md#deprecated-and-removed-forms) that still loads) to an error, so `check` prints it as `error:` and exits `1`. Without the flag a deprecated form does not change the exit status. |
 | `--max-patterns <n>` | Cap on each entity's distinct patterns within one target cone (default `256`). Past it, the run records a `PatternCapReached` **error**. Same as [`states`](#states). |
 | `--max-states <n>` | Cap on the joint states of one target cone (default `65536`), printed in the `bounds:` line. Past it, the run records a `StateCapReached` **error** that names what the cone's states vary in. A larger `--instance-count` or `--int-range-max` makes more states per cone, so it reaches the cap sooner. Same as [`states`](#states). |
+| `--memory <size>` | What the run may hold in memory: the states of the cones it explores at once. Default: `memory` under `[check]` in [`rdra.toml`](#project-manifest), else `4GiB`. A cone whose states pass it stops as at `--max-states`: the run records a `MemoryCapReached` **error** that names the limit, and the findings the cone leaves are listed under `not checked:`. See [Memory limit](#memory-limit). Same as [`states`](#states). |
 | `--instance-count <n>` | Instances (slots) per entity, `1..=255` (default `1`). A violation that needs two rows of an entity (a uniqueness or a quantifier across rows) shows only from `2`. The `bounds:` line and the final `OK:` line print the value used. Same name and validation as [`verify`](#verify); the default differs (`verify` runs `2`). |
 | `--int-range-max <n>` | The Int domain is `0..=n`, `1..=255` (default `5`). Printed in the `bounds:` line. Same as [`verify`](#verify). |
 | `--buc <id>` | Keep only the use cases reachable from the BUC; repeatable. See [Partial runs](#partial-runs). |
@@ -502,9 +503,20 @@ name = "shop"
 auth = { path = "../auth-model" }
 ```
 
-`[model] name` is required. The `[dependencies]` table is parsed and not used yet, so a
-manifest changes no output. A malformed manifest, or one without `[model] name`, makes every
-loading command exit `1` with a message that names `rdra.toml` and the line.
+`[model] name` is required. The `[dependencies]` table is parsed and not used yet. The
+`[check]` and `[verify]` tables set the [memory limit](#memory-limit) of those commands:
+
+```toml
+[check]           # check and states
+memory = "4GiB"
+
+[verify]
+memory = "16GiB"
+```
+
+A malformed manifest, one without `[model] name`, an unknown key in `[check]` or `[verify]`,
+or a `memory` value that is not a [size](#memory-limit), makes every loading command exit `1`
+with a message that names `rdra.toml` and the line.
 
 A loading command finds the manifest like this:
 
@@ -526,6 +538,56 @@ in the editor, as `check` does. An import resolves by the `module` a loaded file
 before it is looked up by path, in both.
 A malformed `rdra.toml` clears the LSP's diagnostics and shows the error in a message, and in
 a diagnostic on an open `.rdra` file.
+
+### Memory limit
+<!-- constrained-by #project-manifest -->
+
+`check`, `states`, and `verify` each run within a memory limit: `--memory`, else `memory` in
+the command's `rdra.toml` table (`[check]` for `check` and `states`, `[verify]` for
+`verify`), else `4GiB` for `check` and `states` and `16GiB` for `verify`.
+
+A size is a whole number and a binary unit: `4GiB`, `512MiB`, `64KiB`, `1TiB`. `G` and `GB`
+mean `GiB` too, and likewise `K`, `M`, and `T`, so `4G` and `4GB` are 4 × 2^30 bytes. A bare
+number, `0`, and a fraction are refused.
+
+What the limit counts:
+
+- **BFS.** The states a cone has reached are counted in bytes as they are stored: each
+  state twice (in the list and in the index of seen states), its parent, every edge, and the
+  bindings, by the length and capacity of each collection. The count is the same on every
+  machine and with any number of threads, so a cone stops at the same state wherever it
+  runs. A finished cone keeps its states and edges until its findings are read, so they
+  stay counted, and the next cone has the rest of the limit. The cones run side by side,
+  yet each stops where it would stop if they ran one at a time in order: a cone that met a
+  pool the others had filled, or that grew past the room left to it, runs again on its own.
+- **What the count leaves out.** The transition system, the per-entity views, the states a
+  worker holds while it expands them, and the memory that reading the findings of a cone
+  takes. On `insurance-claim-ops` at two instances, where most cones stop at the limit, the
+  process peaked at 1.2 to 1.4 times the limit run one cone at a time (`RDRA_JOBS=1`) and at
+  up to twice the limit with eight; a single large cone peaked within 20% of it. The
+  default limits stop no cone of the samples.
+- **TLC** (`verify` only). Each TLC run's `-Xmx`. `verify` gives the TLC cone runs half the
+  limit (at least `64MiB`) and BFS the rest; it starts no more cone runs at once than their
+  heaps fit in that half (at `16GiB`, eight runs of `1g`, as before), and a heap
+  shrinks only when one default heap does not fit. The whole-model property runs start after
+  BFS has finished and may take the whole limit. A JVM uses some memory beyond its heap.
+  `RDRA_TLC_HEAP` and an `-Xmx` in `JAVA_TOOL_OPTIONS` still set the heap as given; the
+  runs then queue so that their heaps fit, and run one at a time when one heap alone is past
+  the share. A `--memory` that leaves no BFS beside `64MiB` of TLC heap is refused.
+- **z3** (`verify --prove`) is not counted. A z3 that reaches its own `memory_max_size`
+  exits, which would end the proof, so `verify` leaves z3 unbounded.
+
+A cone that reaches the limit stops as a cone that reaches `--max-states` does. `check`
+reports a `MemoryCapReached` error that names the limit and how to raise it, and exits `1`.
+`states` marks the views it cut. `verify` lists the findings the cone leaves under `not
+checked:`, ends with a warning, and exits `0`, or `1` under `--deny-undecided`:
+
+```text
+not checked: 10 findings not decided
+  whether some OfficeAction can get stuck at status = open is not decided: the OfficeAction cone stopped at the memory limit (512MiB; raise it with --memory or `memory` under [verify] in rdra.toml; BFS has 256MiB of it)
+...
+warning: 10 findings a cone stopped at the state cap or the memory limit left undecided; the OK line holds only for what was decided (--deny-undecided fails the run)
+```
 
 ---
 
@@ -1209,7 +1271,7 @@ Export a TLA+ specification and run TLC formal verification. See
 [formal-verification.md](./formal-verification.md).
 
 ```
-rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [--int-range-max <N>] [--temporal-budget <SECS>] [--deny-undecided] [--prove [--deny-unproved] [--z3 <PATH>]] [--tlc-jar <PATH>] [--memory <SIZE>] [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -1221,7 +1283,8 @@ rdra-ish verify <INPUTS...> [--backend tlc] [-o <OUT>] [--instance-count <N>] [-
 | `--int-range-max` | unsigned integer | `5` | Upper bound for `IntRange == 0..N` (`1..=255`; `0` rejected). |
 | `--temporal-budget` | unsigned integer | `300` | Seconds a temporal property's whole-model run gets when its cone does not decide it. Past them, or at the first progress line (about one a minute) past 2,097,152 distinct states, the run is stopped and, unless TLC already printed its verdict, the property is `not decided`, which warns and does not fail the run. |
 | `--tlc-jar` | path | `RDRA_TLC_JAR`, else none | Run TLC as `java -cp <PATH> tlc2.TLC` from `tla2tools.jar` instead of a `tlc` / `tlc2` launcher on `PATH`. Needs `java` on `PATH`. |
-| `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a state, deadlock, or use case a BFS cone left at its state cap. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
+| `--memory` | size | `memory` under `[verify]` in `rdra.toml`, else `16GiB` | What the run and its TLC runs may hold in memory, such as `16GiB` or `512MiB` (`G` and `GB` also mean GiB). BFS takes half and the TLC cone runs going at once the other half, at least `64MiB`; a BFS cone past its half stops and leaves its findings undecided. See [Memory limit](#memory-limit). |
+| `--deny-undecided` | flag | off | Fail the run (exit 1) when it leaves a finding undecided: a temporal property past `--temporal-budget`, or a state, deadlock, or use case a BFS cone left at its state cap or the memory limit. Findings a `--buc` or `--entity` scope leaves open do not count. Without it, `verify` prints `warning: <what> undecided; the OK line holds only for what was decided (--deny-undecided fails the run)` on stderr and passes. |
 | `--prove` | flag | off | Experimental. While TLC runs, try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`) for any number of rows and any non-negative Int value (`now` has no top) with z3, and print one `proved:`, `unproved:`, or `out of scope:` line per rule. The `OK:` line gains `; <n> of <m> rules proved for any number of rows and any Int value`. A rule the SQL export's schema does not enforce is marked `[not enforced by the SQL schema: <why>]`, and a `proof: the SQL schema leaves ...` line counts those rules. Needs z3 (see [Getting z3](#getting-z3)). See [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows). |
 | `--deny-unproved` | flag | off | With `--prove`: fail the run (exit 1) when a rule is unproved. A rule out of scope does not count. |
 | `--z3` | path | `RDRA_Z3`, else `z3` on `PATH` | With `--prove`: the z3 binary to run. |
@@ -1325,7 +1388,7 @@ with its `State N: Stuttering` or `Back to state K: <action>` line. An example i
 
 | Environment variable | Effect |
 |---|---|
-| `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and each temporal property run `2g`. |
+| `RDRA_TLC_HEAP` | Heap of every TLC JVM, such as `4g`. Without it a cone gets `1g` and each temporal property run `2g`, less when the [memory limit](#memory-limit) has less room. The runs queue so that their heaps fit the limit. |
 | `RDRA_TLC_JAR` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
 | `RDRA_Z3` | Path to the z3 binary, used as `--z3` when the flag is absent. |
 | `RDRA_JOBS` | How many cones `check`, `states`, and `verify` explore at once by BFS, how many threads compute the moves of one large cone, and how many z3 processes `verify --prove` starts. It does not limit the TLC runs, which `verify` starts beside the BFS. Without it, the machine's cores, at most 8. Each cone holds its reached states, so a lower number uses less memory; `1` explores them one after another on one thread. The result does not depend on it. |
@@ -1451,7 +1514,7 @@ Derive the reachable state patterns per entity, aggregated across BUCs. See
 [state-derivation.md](./state-derivation.md) for the algorithm.
 
 ```
-rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--max-states <N>] [--instance-count <N>] [--int-range-max <N>] [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
+rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns <N>] [--max-states <N>] [--memory <SIZE>] [--instance-count <N>] [--int-range-max <N>] [--entity <ID>]... [--without-usecase <ID>]... [--without-buc <ID>]... [--actor <ID>]...
 ```
 
 | Option | Type | Default | Description |
@@ -1461,6 +1524,7 @@ rdra-ish states <INPUTS...> [--format <FORMAT>] [--buc <ID>]... [--max-patterns 
 | `--buc <id>` | string (repeatable) | — (whole model) | Keep only the use cases reachable from the named BUCs. See [Partial runs](#partial-runs). |
 | `--max-patterns` | unsigned integer | `256` | Cap on each entity's distinct patterns within one target cone (an entity view, invariant, or after-assert is explored on the variables it reads). Only entities the target reads are bounded to one instance: a use case that also creates an entity outside the cone (an audit row, say) never runs out of slots for it. When the cap is hit, the result is marked `truncated` and a fail-closed `PatternCapReached` **error** is recorded (exit non-zero for all formats). |
 | `--max-states` | unsigned integer | `65536` | Cap on the joint states of one target cone, printed in the `bounds:` line. When the cap is hit, the result is marked `truncated` and a fail-closed `StateCapReached` **error** is recorded (exit non-zero for all formats). The message names what the reached states vary in, so you can see which entity's columns a guard pulled into the cone (see the example below). |
+| `--memory` | size | `memory` under `[check]` in `rdra.toml`, else `4GiB` | What the run may hold in memory, such as `4GiB` or `512MiB` (`G` and `GB` also mean GiB). A cone whose states pass it stops as at `--max-states`, with a fail-closed `MemoryCapReached` error. See [Memory limit](#memory-limit). |
 | `--instance-count` | unsigned integer | `1` | Instances (slots) per entity, `1..=255`. The `bounds:` line prints the value used. A larger value makes more states per cone, so `--max-states` is reached sooner. |
 | `--int-range-max` | unsigned integer | `5` | The Int domain is `0..=N`, `1..=255` (`0` is rejected). |
 | `--entity <id>` | string (repeatable) | — (all entities) | Derive only the named entities' views, and the invariants and after-asserts that read them, each on its own cone. Every output format holds only those views. Exit severity considers the selected targets and the build errors their cones read; a build error outside them is deferred and listed under `not checked:`. See [Partial runs](#partial-runs). |

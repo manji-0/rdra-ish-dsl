@@ -45,6 +45,10 @@ pair for each property its cone leaves undecided, which TLC runs (see
 Without `-o`, `verify` writes them to a temp dir. It deletes the dir when every check
 passes, and keeps it and prints `specs: <dir>` when one fails. The TLC heap settings
 (`RDRA_TLC_HEAP`, `JAVA_TOOL_OPTIONS`) are in [cli-reference.md](./cli-reference.md#verify).
+`verify` runs within a memory limit, `16GiB` unless `--memory` or `memory` under `[verify]`
+in `rdra.toml` says otherwise: BFS takes half, and TLC runs only as many cones at once as
+their `-Xmx` fit in the other half (see
+[Memory limit](./cli-reference.md#memory-limit)).
 
 The `.cfg` names `SPECIFICATION Spec`, `INVARIANT TypeOK`, one `INVARIANT` per
 constraint, one `PROPERTY` per `after` assertion and temporal property, and
@@ -971,6 +975,11 @@ gaps.
   See it: the error, whose message names the variables the reached states vary in. What
   you can do: raise the cap with `--max-states`, or narrow the cone by moving a guard that
   reads another entity.
+- **A cone stops at the memory limit too.** `check` and `states` hold at most `4GiB` of
+  states, `verify`'s BFS half of `16GiB`; `--memory` or `memory` in `rdra.toml` changes
+  either. A cone that reaches it stops as at the state cap: `MemoryCapReached_<E>` in
+  `check`, and in `verify` its findings under `not checked:`, named `stopped at the memory
+  limit`. What you can do: raise the limit, or narrow the cone as for the state cap.
 - **Int columns range over `0..5`, and `now` is a bounded clock.** Every Int, Money,
   Decimal, Date, and DateTime column takes values in `IntRange`. `now` starts in that range
   and a `Tick` action raises it to the top, so a run never sees a later time. See it: the
