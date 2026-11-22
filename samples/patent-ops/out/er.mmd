@@ -96,12 +96,12 @@ erDiagram
     Date claimed_on
     Int patentapplication_id FK
   }
-  Patent ||--|| PatentApplication : ""
-  InventorReward }o--|| InventionDisclosure : ""
-  InventionDisclosure }o--|| Employee : ""
-  DraftingOrder }o--|| PatentFirm : ""
+  DivisionalFiling }o--|| PatentApplication : ""
   DraftingOrder }o--|| InventionDisclosure : ""
+  DraftingOrder }o--|| PatentFirm : ""
+  InventionDisclosure }o--|| Employee : ""
+  InventorReward }o--|| InventionDisclosure : ""
+  OfficeAction }o--|| PatentApplication : ""
+  Patent ||--|| PatentApplication : ""
   PatentApplication ||--|| DraftingOrder : ""
   PriorityClaim }o--|| PatentApplication : ""
-  DivisionalFiling }o--|| PatentApplication : ""
-  OfficeAction }o--|| PatentApplication : ""

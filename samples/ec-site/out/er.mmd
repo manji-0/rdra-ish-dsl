@@ -69,13 +69,13 @@ erDiagram
     String name
     Int customeraccount_id FK
   }
-  Product }o--|| Category : ""
-  ShippingAddress }o--|| CustomerAccount : ""
   Cart }o--|| CustomerAccount : ""
-  CartItem }o--|| Product : ""
   CartItem }o--|| Cart : ""
+  CartItem }o--|| Product : ""
   Order }o--|| CustomerAccount : ""
   Order }o--|| ShippingAddress : ""
-  OrderLine }o--|| Product : ""
   OrderLine }o--|| Order : ""
+  OrderLine }o--|| Product : ""
   Payment ||--|| Order : ""
+  Product }o--|| Category : ""
+  ShippingAddress }o--|| CustomerAccount : ""

@@ -3150,14 +3150,14 @@ erDiagram
     Enum status
     Int claim_id FK
   }
+  Claim }o--|| ClaimCase : ""
+  Complaint }o--|| ClaimCase : ""
   Investigation ||--|| ClaimCase : ""
+  JibaisekiSurvey }o--|| ClaimCase : ""
+  Payment ||--|| Claim : ""
   RepairEstimate }o--|| ClaimCase : ""
   Settlement ||--|| ClaimCase : ""
-  JibaisekiSurvey }o--|| ClaimCase : ""
-  Claim }o--|| ClaimCase : ""
-  Payment ||--|| Claim : ""
   Subrogation ||--|| Claim : ""
-  Complaint }o--|| ClaimCase : ""
 ```
 
 <details><summary>エンティティの列の一覧</summary>

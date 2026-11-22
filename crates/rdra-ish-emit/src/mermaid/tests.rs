@@ -198,6 +198,29 @@ relate(Order, Customer, N:1)
 }
 
 #[test]
+fn test_er_mermaid_orders_relations_by_entity_id() {
+    let mut src = String::from("entity Hub \"H\" { id: Int @pk }\n");
+    let ids = ["K", "J", "I", "H", "G", "F", "E", "D", "C", "B", "A"];
+    for id in ids {
+        src.push_str(&format!("entity {id} \"{id}\" {{ id: Int @pk }}\n"));
+    }
+    for id in ids {
+        src.push_str(&format!("relate({id}, Hub, N:1)\n"));
+    }
+    let model = model_from(&src);
+    let result = ErMermaidEmitter.emit(&model, &View::er()).unwrap();
+    let froms: Vec<&str> = result
+        .lines()
+        .filter(|line| line.ends_with(": \"\""))
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    assert_eq!(
+        froms,
+        ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K"]
+    );
+}
+
+#[test]
 fn test_er_mermaid_opens_with_the_header() {
     let model = model_from("entity Order \"O\" { id: Int @pk }\n");
     let view = View::er().with_model_path("m.rdra");

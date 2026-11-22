@@ -67,6 +67,9 @@
   systems, an entity owned by several systems or without an API of its owner, and a
   permission no actor can reach in id order. They came in the order of a hash map, which
   could change from one run to the next (#152).
+- The ER diagram lists its relations by the ids of the two entities they join. They were
+  sorted by the debug text of internal keys, so the tenth entity of a model came before
+  the second (#153).
 
 ## v2.3.0 - 2026-11-18
 

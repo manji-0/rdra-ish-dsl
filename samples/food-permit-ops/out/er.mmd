@@ -76,10 +76,10 @@ erDiagram
     Enum status
     Int businesspermit_id FK
   }
-  SiteVisit }o--|| MonitoringPlan : ""
-  Disposition }o--|| BusinessPermit : ""
-  PermitApplication }o--|| BusinessPermit : ""
-  Inspection ||--|| PermitApplication : ""
   BusinessPermit ||--|| PermitApplication : ""
   ChangeNotice }o--|| BusinessPermit : ""
+  Disposition }o--|| BusinessPermit : ""
+  Inspection ||--|| PermitApplication : ""
+  PermitApplication }o--|| BusinessPermit : ""
+  SiteVisit }o--|| MonitoringPlan : ""
   SuccessionNotice }o--|| BusinessPermit : ""

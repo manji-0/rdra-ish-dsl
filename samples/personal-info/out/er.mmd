@@ -54,8 +54,8 @@ erDiagram
     DateTime created_at
     DateTime last_login_at
   }
-  PersonalInfo ||--|| UserAccount : ""
-  PostalAddress }o--|| UserAccount : ""
+  AuditLog }o--|| UserAccount : ""
   CreditCard }o--|| UserAccount : ""
   PasswordCredential ||--|| UserAccount : ""
-  AuditLog }o--|| UserAccount : ""
+  PersonalInfo ||--|| UserAccount : ""
+  PostalAddress }o--|| UserAccount : ""

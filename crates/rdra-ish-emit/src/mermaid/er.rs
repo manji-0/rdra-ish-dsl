@@ -61,7 +61,7 @@ impl Emitter for ErMermaidEmitter {
             .enumerate()
             .filter(|(_, r)| is_relate(&r.kind))
             .collect();
-        er_rels.sort_by_key(|(_, r)| format!("{:?}{:?}", r.from, r.to));
+        er_rels.sort_by_key(|(_, r)| (model.node_id(&r.from), model.node_id(&r.to)));
 
         for &(index, rel) in &er_rels {
             if !is_visible(&rel.from) || !is_visible(&rel.to) {
