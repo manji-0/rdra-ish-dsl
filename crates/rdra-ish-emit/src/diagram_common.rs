@@ -829,6 +829,7 @@ pub(crate) fn model_from(src: &str) -> SemanticModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rdra_ish_core::predicate::{ArgKind, Predicate, TRIGGER_PAIRS};
     use std::collections::BTreeSet;
 
     /// The relation label the rdra diagram writes for a predicate, when it draws one.
@@ -847,25 +848,33 @@ mod tests {
 
     #[test]
     fn the_rdra_rows_cover_every_pair_a_predicate_signature_allows() {
-        for predicate in rdra_ish_core::KNOWN_PREDICATES {
-            let Some(signature) = rdra_ish_core::predicate_signature(predicate) else {
-                continue;
-            };
+        // The kind a drawn argument is: `combines(Condition, Entity.column)` is drawn to the
+        // entity, and no drawn predicate takes a value or a cardinality.
+        let drawn = |kind: &ArgKind| match kind {
+            ArgKind::Node(kind) => *kind,
+            ArgKind::Column => "entity",
+            ArgKind::Value | ArgKind::Card => panic!("a drawn argument is a {kind:?}"),
+        };
+        for predicate in Predicate::ALL {
+            let signature = predicate.signature();
             let [from, to, ..] = signature.as_slice() else {
                 continue;
             };
             // `triggers` takes only the listed pairs of its kinds.
-            let pairs: Vec<(&str, &str)> = if *predicate == "triggers" {
-                rdra_ish_core::predicate::TRIGGER_PAIRS.to_vec()
+            let pairs: Vec<(ArgKind, ArgKind)> = if *predicate == Predicate::Triggers {
+                TRIGGER_PAIRS
+                    .iter()
+                    .map(|&(f, t)| (ArgKind::Node(f), ArgKind::Node(t)))
+                    .collect()
             } else {
                 from.iter()
                     .flat_map(|f| to.iter().map(move |t| (*f, *t)))
                     .collect()
             };
+            let predicate = predicate.name();
             for label in drawn_labels(predicate) {
                 for (f, t) in &pairs {
-                    // `combines(Condition, Entity.column)` is drawn to the entity.
-                    let t = if *t == "_col" { "entity" } else { *t };
+                    let (f, t) = (drawn(f), drawn(t));
                     assert!(
                         edge_relations(Diagram::Rdra, f, t).any(|r| r.relation == label),
                         "{predicate}({f}, {t}) has no `{label}` row"

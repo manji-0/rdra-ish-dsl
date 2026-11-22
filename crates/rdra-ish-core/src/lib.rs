@@ -60,7 +60,7 @@ pub use model::{
     TemporalExpr, TemporalFormula, TemporalProperty, TemporalRhs, Timer, TimerKey,
 };
 pub use model::{CallerKind, Exposed, Exposure, Publication, PublishMode, Share};
-pub use predicate::{predicate_signature, KNOWN_PREDICATES};
+pub use predicate::KNOWN_PREDICATES;
 pub use project::{
     collect_rdra_files, discover, load_project, root_include_paths, Manifest, ModelSection,
     Project, ProjectError,

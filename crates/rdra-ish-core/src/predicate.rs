@@ -128,15 +128,6 @@ impl ArgKind {
             ArgKind::Column | ArgKind::Value | ArgKind::Card => None,
         }
     }
-
-    fn tag(self) -> &'static str {
-        match self {
-            ArgKind::Node(kind) => kind,
-            ArgKind::Column => "_col",
-            ArgKind::Value => "_val",
-            ArgKind::Card => "_card",
-        }
-    }
 }
 
 /// How many arguments a predicate takes.
@@ -336,17 +327,6 @@ impl Predicate {
         };
         Some(kind)
     }
-}
-
-/// Each predicate's expected argument kind strings per position, with `_col`, `_val` and
-/// `_card` for the arguments that name no declaration.
-pub fn predicate_signature(pred: &str) -> Option<Vec<Vec<&'static str>>> {
-    let sig = Predicate::parse(pred)?.signature();
-    Some(
-        sig.iter()
-            .map(|kinds| kinds.iter().map(|k| k.tag()).collect())
-            .collect(),
-    )
 }
 
 /// Hint text for an unknown chain method `name` on `pred`.
