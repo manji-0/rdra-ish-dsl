@@ -23,7 +23,7 @@
 //! be longer than the reduced one and name another use case on an S step. S is explored with
 //! the same reduction applied to it, so a reduction nests.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 use super::cone::{Cone, Seed, VarSet};
@@ -80,7 +80,7 @@ pub struct Reduction {
     spans: Vec<(usize, usize, bool)>,
     /// Per class and the input bytes a T step leaves, the class the representative is in
     /// under those inputs.
-    rises: HashMap<(u32, Box<[u8]>), u32>,
+    rises: BTreeMap<(u32, Box<[u8]>), u32>,
     /// The input bits: per group of S actions whose reads of T fold into one bit, the folds.
     /// A bit is a function of the T state (`bit_values`); in the extended sub-lifecycle it is
     /// a var that flips freely.
@@ -282,14 +282,11 @@ impl Reduction {
     /// The rises from a class, sorted: the input bytes a T step leaves and the class they put
     /// the representative in.
     pub fn rises_from(&self, class: u32) -> Vec<(&[u8], u32)> {
-        let mut out: Vec<(&[u8], u32)> = self
-            .rises
-            .iter()
-            .filter(|((c, _), _)| *c == class)
+        self.rises
+            .range((class, Box::default())..)
+            .take_while(|((c, _), _)| *c == class)
             .map(|((_, k), to)| (k.as_ref(), *to))
-            .collect();
-        out.sort_unstable();
-        out
+            .collect()
     }
 
     /// Whether the var is in S.

@@ -1,5 +1,5 @@
 //! The quotient of the extended sub-lifecycle: stuttering partition refinement.
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::Arc;
 
 use super::extended::Extended;
@@ -16,7 +16,7 @@ pub(super) struct Quotient {
     pub(super) class_of: HashMap<Box<[u8]>, u32>,
     pub(super) init: HashMap<Box<[u8]>, u32>,
     pub(super) moves: Vec<Vec<ClassMove>>,
-    pub(super) rises: HashMap<(u32, Box<[u8]>), u32>,
+    pub(super) rises: BTreeMap<(u32, Box<[u8]>), u32>,
     pub(super) inner: Option<Arc<Reduction>>,
     pub(super) states: usize,
 }
@@ -74,7 +74,7 @@ impl Quotient {
                 reps: vec![rep],
                 init: initial.iter().map(|st| (st.0.clone(), 0)).collect(),
                 moves: vec![Vec::new()],
-                rises: HashMap::new(),
+                rises: BTreeMap::new(),
                 inner: None,
                 states: initial.len(),
             });
@@ -135,7 +135,7 @@ impl Quotient {
             init.insert(st.0.clone(), class[at]);
         }
         let mut moves: Vec<Vec<ClassMove>> = vec![Vec::new(); reps.len()];
-        let mut rises: HashMap<(u32, Box<[u8]>), u32> = HashMap::new();
+        let mut rises: BTreeMap<(u32, Box<[u8]>), u32> = BTreeMap::new();
         let mut seen: BTreeSet<(u32, ActId, Box<[u8]>, u32)> = BTreeSet::new();
         for e in run.edges() {
             let (x, y) = (e.from as usize, e.to as usize);
