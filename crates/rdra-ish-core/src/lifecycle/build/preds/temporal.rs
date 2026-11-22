@@ -96,7 +96,12 @@ impl Builder<'_> {
         let model = self.model;
         for (i, prop) in model.temporal_properties.iter().enumerate() {
             let site = Site::new(ModelRef::TemporalProperty(i), &prop.site);
-            let mut binding: Binding = Vec::new();
+            let constraint = format!("property {}", prop.id);
+            let Some((mut binding, link)) =
+                self.scope_binding(&prop.scope, &prop.scope_semantics, &constraint, &site)
+            else {
+                continue;
+            };
             let formula = match &prop.formula {
                 TemporalFormula::Always(e) => {
                     Ltl::Always(self.temporal(&prop.id, e, &mut binding, &site))
@@ -126,6 +131,7 @@ impl Builder<'_> {
             self.ts.properties.push(Property {
                 name: prop.id.clone(),
                 binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
+                link,
                 formula,
                 fair: prop.fair.clone(),
                 site,

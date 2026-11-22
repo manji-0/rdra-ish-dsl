@@ -932,8 +932,12 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             primed: false,
             depth: p.binders.len() as u8,
         };
-        let (quant, present) = binders(&ctx, &p.binders);
-        // A property speaks about an instance once it exists.
+        let (quant, mut present) = binders(&ctx, &p.binders);
+        // A property speaks about an instance once it exists, and about the rows `.along`
+        // links.
+        if !matches!(p.link, Pred::True) {
+            present = format!("{present} /\\ {}", ctx.pred(&p.link));
+        }
         let formula = match &p.formula {
             Ltl::Always(x) => format!("[](({present}) => ({}))", ctx.pred(x)),
             Ltl::Eventually(x) => format!("[](({present}) => <>({}))", ctx.pred(x)),

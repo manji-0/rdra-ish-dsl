@@ -295,6 +295,14 @@ pub struct TemporalProperty {
     pub id: std::string::String,
     pub label: std::string::String,
     pub formula: TemporalFormula,
+    /// The entities the formula's atoms read, in the order the atoms first read them.
+    pub scope: Vec<EntityKey>,
+    /// `.along(A, B, ..)`: the formula speaks only of rows its keys link, as on a
+    /// multi-entity `invariant`. `GlobalProduct` without one.
+    pub scope_semantics: CrossConstraintScope,
+    /// `.global()`: the formula is meant for every combination of rows, though keys relate
+    /// them.
+    pub global: bool,
     /// `.fair(UC, ...)`: the use cases assumed weakly fair per instance they act on.
     pub fair: Vec<UseCaseKey>,
 

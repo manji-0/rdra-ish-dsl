@@ -310,6 +310,43 @@ fn a_fair_property_holds_where_the_unfair_one_loops() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// `temporal_along.rdra`: the property with `.along(Payment, Order)` holds on its cone, which
+/// keeps the owner link, and the same formula without it fails on a captured payment beside
+/// an order it does not belong to (#165).
+#[test]
+fn a_property_along_reads_only_linked_rows() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_along");
+    let sample = repo().join("samples/formal-verification/temporal_along.rdra");
+    let out = tmp.join("M.tla");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "-o", out.to_str().unwrap()],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(stdout.contains("[CapturedPaid]: ok"), "{stdout}");
+    assert!(
+        stdout.contains("[CapturedPaidAnyOrder]: counterexample"),
+        "{stdout}"
+    );
+    assert!(!stderr.contains("error[CapturedPaid]:"), "{stderr}");
+    assert!(
+        stderr.contains("error[CapturedPaidAnyOrder]: property CapturedPaidAnyOrder is violated"),
+        "{stderr}"
+    );
+    let tla = std::fs::read_to_string(tmp.join("Cone_CapturedPaid.tla")).unwrap();
+    assert!(
+        tla.contains("Payment_exists[b0] = \"present\" /\\ Order_exists[b1] = \"present\" /\\ Payment_owner_Order[b0] = b1) =>"),
+        "{tla}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// A property without `.fair` rests on the whole model's `WF_vars(Next)`, which the cone
 /// does not keep: the cone's two runs leave it undecided, and the whole-model run decides it
 /// under the budget. With a budget of 0 s the whole-model run is stopped, the property is

@@ -737,6 +737,10 @@ pub struct Property {
     pub name: String,
     /// Entities the formula is quantified over per instance, outermost first.
     pub binders: Vec<EntId>,
+    /// `.along(..)`: the owner links that join the binders. It joins `present` in the
+    /// formula's trigger, so the formula speaks only of linked rows. `Pred::True` without
+    /// `.along`.
+    pub link: Pred,
     pub formula: Ltl,
     /// `.fair(UC, ...)`: each action of these use cases is weakly fair per instance it acts
     /// on. The TLA+ printer finds the actions by `ActionOrigin`, so a restriction that drops
@@ -746,6 +750,11 @@ pub struct Property {
 }
 
 impl Property {
+    /// Every predicate the property reads: the link, then the formula's operands.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        std::iter::once(&self.link).chain(self.formula.preds())
+    }
+
     /// Whether `.fair` names the use case of `action`.
     pub fn is_fair(&self, action: &Action) -> bool {
         matches!(&action.origin, ActionOrigin::UseCase { uc, .. } if self.fair.contains(uc))

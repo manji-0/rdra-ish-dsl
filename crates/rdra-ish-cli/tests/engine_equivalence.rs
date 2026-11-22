@@ -2482,6 +2482,7 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ),
     ("samples/formal-verification/int_stock.rdra", "", &[]),
     ("samples/formal-verification/temporal_fair.rdra", "", &[]),
+    ("samples/formal-verification/temporal_along.rdra", "", &[]),
     ("samples/formal-verification/temporal_unmet.rdra", "", &[]),
     ("samples/formal-verification/split_run_order.rdra", "", &[]),
     (

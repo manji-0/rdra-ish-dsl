@@ -13,6 +13,7 @@ use rdra_ish_syntax::ast::{
 
 use super::arg_resolve::resolve_arg;
 use super::comparison::{resolve_bare_rhs, resolve_set_values, BareRhs};
+use super::constraint::{cross_scope_semantics_from_chain, global_chain};
 
 /// Why an atom does not lower: a message for `InvalidTemporalProperty`, a column no single
 /// entity owns, or a comparison error reported as itself.
@@ -49,13 +50,21 @@ pub(crate) fn register_property(
     let Ok(fair) = fair_use_cases(model, decl, ctx, diags) else {
         return;
     };
+    let scope_semantics =
+        cross_scope_semantics_from_chain(model, "property", &decl.chain, ctx, diags);
+    let global = global_chain("property", &decl.chain, &scope_semantics, ctx, diags);
     match lower_formula(model, &decl.formula) {
         Ok(formula) => {
+            let mut scope = Vec::new();
+            formula_entities(&formula, &mut scope);
             model.temporal_properties.push(TemporalProperty {
                 site: Some(ctx.locate(decl.span.clone())),
                 id: decl.id.clone(),
                 label: decl.label.clone().unwrap_or_else(|| decl.id.clone()),
                 formula,
+                scope,
+                scope_semantics,
+                global,
                 fair,
             });
         }
@@ -81,8 +90,9 @@ pub(crate) fn register_property(
     }
 }
 
-/// The use cases of the one `.fair(...)` chain, `Err` after reporting any other chain, a
-/// `.fair` on `always`, or a `.fair` that names anything but distinct use cases.
+/// The use cases of the one `.fair(...)` chain, `Err` after reporting a chain method a
+/// property does not take, a `.fair` on `always`, or a `.fair` that names anything but
+/// distinct use cases. The scope reads `.along`, `.role` and `.global`.
 fn fair_use_cases(
     model: &SemanticModel,
     decl: &PropertyDecl,
@@ -93,11 +103,14 @@ fn fair_use_cases(
     let mut ok = true;
     let id = || decl.id.clone();
     for (index, cc) in decl.chain.iter().enumerate() {
+        if matches!(cc.name.as_str(), "along" | "role" | "global") {
+            continue;
+        }
         if cc.name != "fair" {
             let err = RdraError::UnknownChainMethod {
                 pred: "property".into(),
                 name: cc.name.clone(),
-                hint: "a property takes only `.fair(UseCase, ...)`".into(),
+                hint: "a property takes `.fair(UseCase, ...)`, `.along(A, B, ..)` with `.role(role)`, and `.global()`".into(),
             };
             push_error(ctx, diags, cc.span.clone(), err);
             ok = false;
@@ -109,7 +122,8 @@ fn fair_use_cases(
             ok = false;
             continue;
         }
-        let mut well_formed = index == 0 && !cc.args.is_empty();
+        let first = !decl.chain[..index].iter().any(|c| c.name == "fair");
+        let mut well_formed = first && !cc.args.is_empty();
         for arg in &cc.args {
             match resolve_arg(model, arg, ctx, diags) {
                 Some(NodeRef::UseCase(uk)) if !fair.contains(&uk) => fair.push(uk),
@@ -145,6 +159,41 @@ fn lower_formula(
             antecedent: lower_expr(model, antecedent)?,
             consequent: lower_expr(model, consequent)?,
         }),
+    }
+}
+
+/// The entities `formula` reads, in the order the lifecycle binds them: each atom's owner,
+/// then the owner of a column it compares with, left to right.
+fn formula_entities(formula: &TemporalFormula, out: &mut Vec<EntityKey>) {
+    fn walk(expr: &TemporalExpr, out: &mut Vec<EntityKey>) {
+        match expr {
+            TemporalExpr::Atom(atom) => {
+                let rhs = match &atom.rhs {
+                    TemporalRhs::Column { entity, .. } => Some(*entity),
+                    _ => None,
+                };
+                for ek in std::iter::once(atom.entity).chain(rhs) {
+                    if !out.contains(&ek) {
+                        out.push(ek);
+                    }
+                }
+            }
+            TemporalExpr::Not(inner) => walk(inner, out),
+            TemporalExpr::And(a, b) | TemporalExpr::Or(a, b) => {
+                walk(a, out);
+                walk(b, out);
+            }
+        }
+    }
+    match formula {
+        TemporalFormula::Always(e) | TemporalFormula::Eventually(e) => walk(e, out),
+        TemporalFormula::LeadsTo {
+            antecedent,
+            consequent,
+        } => {
+            walk(antecedent, out);
+            walk(consequent, out);
+        }
     }
 }
 

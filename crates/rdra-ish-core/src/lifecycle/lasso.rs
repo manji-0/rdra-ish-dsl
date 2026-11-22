@@ -145,7 +145,8 @@ impl TransitionSystem {
 
     /// The first state where `p` fails for `binding`, mirroring the printed formula:
     /// `always(x)` is `[](present => x)`, `eventually(x)` is `[](present => <>x)`, and
-    /// `leads_to(x, y)` is `(present /\ x) ~> y`. Only the trigger reads `present`.
+    /// `leads_to(x, y)` is `(present /\ x) ~> y`. Only the trigger reads `present`, and the
+    /// `.along` link joins it.
     fn fails_at(
         &self,
         p: &Property,
@@ -169,6 +170,7 @@ impl TransitionSystem {
             |i: usize, goal: &Pred| !states[i.min(entry)..].iter().any(|s| holds(goal, s));
         states.iter().enumerate().find_map(|(i, s)| {
             let fails = present(s)
+                && holds(&p.link, s)
                 && match &p.formula {
                     Ltl::Always(x) => !holds(x, s),
                     Ltl::Eventually(x) => never_from(i, x),

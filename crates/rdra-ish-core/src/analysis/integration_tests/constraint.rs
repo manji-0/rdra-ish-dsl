@@ -82,7 +82,13 @@ fn cross_scope_semantics_from_chain_returns_relation_path_for_along_chain() {
         span: 0..0,
     };
 
-    let semantics = cross_scope_semantics_from_chain(&model, &pred, DiagCtxt::new(0), &mut diags);
+    let semantics = cross_scope_semantics_from_chain(
+        &model,
+        &pred.name,
+        &pred.chain,
+        DiagCtxt::new(0),
+        &mut diags,
+    );
 
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
     let CrossConstraintScope::RelationPath { path, .. } = semantics else {
@@ -105,7 +111,13 @@ fn cross_scope_semantics_from_chain_defaults_to_global_product_without_along() {
         span: 0..0,
     };
 
-    let semantics = cross_scope_semantics_from_chain(&model, &pred, DiagCtxt::new(0), &mut diags);
+    let semantics = cross_scope_semantics_from_chain(
+        &model,
+        &pred.name,
+        &pred.chain,
+        DiagCtxt::new(0),
+        &mut diags,
+    );
 
     assert!(diags.is_empty(), "unexpected diagnostics: {diags:?}");
     assert!(matches!(semantics, CrossConstraintScope::GlobalProduct));
@@ -599,6 +611,41 @@ fn library_rule(rule: &str) -> (SemanticModel, Vec<RdraError>) {
         .map(|d| d.error)
         .collect();
     (model, errors)
+}
+
+/// A property's `.along` resolves its hops' keys as a rule's does, and its scope lists the
+/// entities its atoms read (#165).
+#[test]
+fn a_property_keeps_its_path_and_scope() {
+    let (model, errors) = library_rule(
+        "property P always(not (Loan.status == open) or (Member.status == active)).along(Loan, Card, Member)",
+    );
+    assert!(errors.is_empty(), "{errors:?}");
+    let [property] = model.temporal_properties.as_slice() else {
+        panic!("{:?}", model.temporal_properties);
+    };
+    let id = |e: &EntityKey| model.entities[*e].id.as_str();
+    let scope: Vec<&str> = property.scope.iter().map(id).collect();
+    assert_eq!(scope, ["Loan", "Member"]);
+    let CrossConstraintScope::RelationPath { path, links, .. } = &property.scope_semantics else {
+        panic!("{:?}", property.scope_semantics);
+    };
+    let path: Vec<&str> = path.iter().map(id).collect();
+    assert_eq!(path, ["Loan", "Card", "Member"]);
+    assert!(links.iter().all(Option::is_some), "{links:?}");
+    assert!(!property.global);
+}
+
+/// `.global()` and `.along(...)` together on a property are `GlobalWithAlong`, as on a rule.
+#[test]
+fn a_property_with_global_and_along_is_an_error() {
+    let (_, errors) = library_rule(
+        "property P always(not (Loan.status == open) or (Member.status == active)).along(Loan, Card, Member).global()",
+    );
+    assert!(
+        matches!(errors.as_slice(), [RdraError::GlobalWithAlong { pred }] if pred == "property"),
+        "{errors:?}"
+    );
 }
 
 /// The `.along` of a `.has`/`.none` invariant is kept on the rule with its hops' keys (#90), and
