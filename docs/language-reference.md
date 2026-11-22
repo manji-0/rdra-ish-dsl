@@ -2708,7 +2708,8 @@ property ShippedAfterPaid precedes(Order.paid == true, Order.status == shipped)
   columns are `Entity.column` or a bare column one entity owns. Without `.when(p)` the
   columns never change while the instance is present. `.when(p)` takes the same logical
   expression as a formula and comes directly after `unchanged(...)`, before any other
-  method.
+  method. A logical `@derived` column is rejected: it changes with the columns its
+  expression reads, so name those columns instead.
 - `precedes(p, q)`: a state where the instance is present and `q` holds has `p` hold for
   it in that state or in an earlier one. The two facts may live in different columns or, with
   `.along`, in different entities. A latch remembers `p`: in TLA+ it is the variable
@@ -2726,7 +2727,9 @@ which TLC reports as `Invariant <P> is violated`. A module declares the latch on
 `.cfg` checks the property, so the cone modules of the rules keep the explorer's states.
 
 `.along(...)`, `.role(role)` and `.global()` scope these forms as they scope the others.
-`.fair(...)` on any of them is `FairOnSafetyProperty`.
+The link joins the trigger before the step only: after it `stable` and `unchanged` read
+just `present`, so a step that moves a key and breaks `p` in one go still breaks the
+property. `.fair(...)` on any of them is `FairOnSafetyProperty`.
 
 #### Fairness: `.fair(UseCase, ...)`
 
