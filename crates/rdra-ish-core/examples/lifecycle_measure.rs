@@ -25,6 +25,7 @@ fn target_name(ts: &TransitionSystem, t: Target) -> String {
         Target::Entity(e) => format!("view {}", ts.entity(e).id),
         Target::Invariant(i) => format!("inv {}", ts.invariants()[i].name),
         Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
+        Target::Reach(i) => format!("can_reach {}", ts.reach_properties()[i].name),
     }
 }
 

@@ -8,7 +8,7 @@ use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     ActId, ActionOrigin, AfterAssert, AfterStep, At, CmpOp, Effect, Guard, GuardWhy, Ltl, ModelRef,
-    Pred, Property, Site, Start, VarId, VarKind,
+    Pred, Property, Reach, Site, Start, VarId, VarKind,
 };
 use crate::model::{
     CrossEntityCondition, EffectValue, EntityKey, TemporalExpr, TemporalFormula, TemporalRhs,
@@ -96,7 +96,12 @@ impl Builder<'_> {
         let model = self.model;
         for (i, prop) in model.temporal_properties.iter().enumerate() {
             let site = Site::new(ModelRef::TemporalProperty(i), &prop.site);
-            let mut binding: Binding = Vec::new();
+            let constraint = format!("property {}", prop.id);
+            let Some((mut binding, link)) =
+                self.scope_binding(&prop.scope, &prop.scope_semantics, &constraint, &site)
+            else {
+                continue;
+            };
             let formula = match &prop.formula {
                 TemporalFormula::Always(e) => {
                     Ltl::Always(self.temporal(&prop.id, e, &mut binding, &site))
@@ -112,6 +117,18 @@ impl Builder<'_> {
                     let c = self.temporal(&prop.id, consequent, &mut binding, &site);
                     Ltl::LeadsTo(a, c)
                 }
+                // `.fair` on it is an error, so there is no fairness to check.
+                TemporalFormula::CanReach(e) => {
+                    let goal = self.temporal(&prop.id, e, &mut binding, &site);
+                    self.ts.reach.push(Reach {
+                        name: prop.id.clone(),
+                        binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
+                        link,
+                        goal,
+                        site,
+                    });
+                    continue;
+                }
             };
             for uk in &prop.fair {
                 if !self.uc_actions.contains_key(uk) && !self.active_ucs.contains(uk) {
@@ -126,6 +143,7 @@ impl Builder<'_> {
             self.ts.properties.push(Property {
                 name: prop.id.clone(),
                 binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
+                link,
                 formula,
                 fair: prop.fair.clone(),
                 site,

@@ -15,6 +15,31 @@ impl Graph<'_> {
             .iter()
             .map(|e| (e.from, e.to, self.bindings[e.binding as usize].0))
     }
+
+    /// The distinct successors and predecessors of every state, self-loops left out, for the
+    /// passes that walk the graph rather than replay a run (`can_reach`).
+    pub fn adjacency(&self) -> Adjacency {
+        let n = self.states.len();
+        let mut out = vec![Vec::new(); n];
+        let mut into = vec![Vec::new(); n];
+        for e in self.edges.iter().filter(|e| e.from != e.to) {
+            out[e.from as usize].push(e.to);
+            into[e.to as usize].push(e.from);
+        }
+        for list in out.iter_mut().chain(into.iter_mut()) {
+            list.sort_unstable();
+            list.dedup();
+        }
+        Adjacency { out, into }
+    }
+}
+
+/// A graph's moves as adjacency lists, indexed by state.
+pub struct Adjacency {
+    /// Per state, the states one move reaches.
+    pub out: Vec<Vec<u32>>,
+    /// Per state, the states one move comes from.
+    pub into: Vec<Vec<u32>>,
 }
 
 /// Moves another engine found, each naming its action but not its params, so that its graph

@@ -1027,6 +1027,20 @@ fn test_parse_property_leads_to() {
 }
 
 #[test]
+fn test_parse_property_can_reach() {
+    let ast = parse_ok(
+        r#"property OrderCanFinish
+  can_reach(Order.status in (delivered, cancelled))
+"#,
+    );
+    let Item::Property(prop) = &ast.items[0] else {
+        panic!("expected Property");
+    };
+    assert_eq!(prop.id, "OrderCanFinish");
+    assert!(matches!(&prop.formula, AstTemporalFormula::CanReach(_)));
+}
+
+#[test]
 fn test_parse_property_fair_chain() {
     let ast = parse_ok(
         r#"property GrantEnds

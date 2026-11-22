@@ -933,8 +933,12 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             primed: false,
             depth: p.binders.len() as u8,
         };
-        let (quant, present) = binders(&ctx, &p.binders);
-        // A property speaks about an instance once it exists.
+        let (quant, mut present) = binders(&ctx, &p.binders);
+        // A property speaks about an instance once it exists, and about the rows `.along`
+        // links.
+        if !matches!(p.link, Pred::True) {
+            present = format!("{present} /\\ {}", ctx.pred(&p.link));
+        }
         let formula = match &p.formula {
             Ltl::Always(x) => format!("[](({present}) => ({}))", ctx.pred(x)),
             Ltl::Eventually(x) => format!("[](({present}) => <>({}))", ctx.pred(x)),
@@ -954,7 +958,33 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
             None => out.push_str(&format!("{} == {quant}{formula}\n", names.property(i))),
         }
     }
-    if !ts.invariants().is_empty() || !ts.after_asserts().is_empty() || !ts.properties().is_empty()
+    if !ts.reach_properties().is_empty() {
+        out.push_str(
+            "\\* can_reach properties are CTL, AG (present => EF goal), which no TLA+ formula\n\
+             \\* states and TLC does not check; rdra-ish check and verify decide them by BFS.\n",
+        );
+    }
+    for r in ts.reach_properties() {
+        let mut ctx = Ctx {
+            ts,
+            names,
+            primed: false,
+            depth: r.binders.len() as u8,
+        };
+        let (quant, mut present) = binders(&ctx, &r.binders);
+        if !matches!(r.link, Pred::True) {
+            present = format!("{present} /\\ {}", ctx.pred(&r.link));
+        }
+        let goal = ctx.pred(&r.goal);
+        out.push_str(&format!(
+            "\\*   {}: {quant}AG(({present}) => EF({goal}))\n",
+            r.name
+        ));
+    }
+    if !ts.invariants().is_empty()
+        || !ts.after_asserts().is_empty()
+        || !ts.properties().is_empty()
+        || !ts.reach_properties().is_empty()
     {
         out.push('\n');
     }

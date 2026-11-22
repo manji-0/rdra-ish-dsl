@@ -658,6 +658,9 @@ pub enum RdraError {
     #[error("property '{id}' is `always(...)`, a safety property, and `.fair(...)` cannot change its verdict\n  hint: drop `.fair(...)`; fairness only rules out runs that starve a use case, which matters for `eventually` and `leads_to`")]
     FairOnSafetyProperty { id: String },
 
+    #[error("property '{id}' is `can_reach(...)`, which asks whether some path reaches its goal, and `.fair(...)` cannot change its verdict\n  hint: drop `.fair(...)`; reachability needs no fairness, which only rules out runs, and `can_reach` asks whether one exists")]
+    FairOnReachProperty { id: String },
+
     #[error("duplicate temporal property id '{id}'\n  hint: each `property` declaration must have a unique id")]
     DuplicateProperty { id: String },
 

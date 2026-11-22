@@ -725,9 +725,9 @@ fn empty_sets(items: &[Item]) -> Vec<Span> {
                 }
             }
             Item::Property(prop) => match &prop.formula {
-                AstTemporalFormula::Always(e) | AstTemporalFormula::Eventually(e) => {
-                    expr(e, &mut out)
-                }
+                AstTemporalFormula::Always(e)
+                | AstTemporalFormula::Eventually(e)
+                | AstTemporalFormula::CanReach(e) => expr(e, &mut out),
                 AstTemporalFormula::LeadsTo {
                     antecedent,
                     consequent,
@@ -843,7 +843,13 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
             consequent,
         });
 
-    let formula = choice((leads_to, always, eventually));
+    let can_reach = just(Token::Ident("can_reach".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(AstTemporalFormula::CanReach);
+
+    let formula = choice((leads_to, always, eventually, can_reach));
 
     just(Token::Property)
         .ignore_then(ident())

@@ -205,7 +205,7 @@ use cases outside the BUCs, and for `--without-usecase`, `--without-buc`, and `-
 lists the use cases assumed not to run. The `not checked:` block lists the targets the scope leaves
 out, the deferred build errors, and each finding a scope or a cap left undecided. A whole
 run prints it only when a cap left something undecided. `verify` under a scope also lists
-the temporal properties: a scoped run checks none.
+the temporal properties, `can_reach` ones included: a scoped run checks none.
 
 <!-- derived-from ./state-derivation.md#diagnostics -->
 `check` includes the same broad review signals exposed elsewhere:
@@ -344,7 +344,7 @@ Every rule `lint` reports, by name:
 | `flow-cycle` | warning | See above. |
 | `flow-empty` | warning | A business flow that contains no step. |
 | `goal-unmeasured` | info | See above. |
-| `multi-rule-unscoped` | warning | A multi-entity `forbidden` or `invariant` with no `.along(...)` and no `.global()`, when keys relate its entities; the message names the `.along(...)` the shortest key path gives. |
+| `multi-rule-unscoped` | warning | A multi-entity `forbidden`, `invariant` or `property` with no `.along(...)` and no `.global()`, when keys relate its entities; the message names the `.along(...)` the shortest key path gives. |
 | `naming-column` | warning | An entity column that is not snake_case. |
 | `naming-dto-field` | warning | A DTO field that is not snake_case. |
 | `naming-id` | warning | An element id that is not UpperCamelCase. |

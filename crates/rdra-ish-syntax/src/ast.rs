@@ -481,7 +481,13 @@ pub struct ChainCall {
 pub enum AstTemporalFormula {
     Always(Expr),
     Eventually(Expr),
-    LeadsTo { antecedent: Expr, consequent: Expr },
+    LeadsTo {
+        antecedent: Expr,
+        consequent: Expr,
+    },
+    /// `can_reach(p)`: from every reachable state with the instance present, some path
+    /// reaches `p` (CTL `AG (present => EF p)`).
+    CanReach(Expr),
 }
 
 /// A `property` declaration binding a temporal formula to an id/label.
@@ -491,7 +497,8 @@ pub struct PropertyDecl {
     /// Optional display label; omitted in `property Id <formula>`.
     pub label: Option<std::string::String>,
     pub formula: AstTemporalFormula,
-    /// `.fair(UseCase, ...)` after the formula; the semantic layer rejects any other method.
+    /// `.fair(UseCase, ...)`, `.along(A, B, ..)`, `.role(role)` and `.global()` after the
+    /// formula; the semantic layer rejects any other method.
     pub chain: Vec<ChainCall>,
     pub span: Span,
 }

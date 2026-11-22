@@ -292,44 +292,48 @@ pub(crate) fn add_condition_entities_to_scope(
 
 fn collect_cross_along_path(
     model: &SemanticModel,
-    pred: &PredicateCall,
+    pred: &str,
+    chain: &[ChainCall],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> Option<(usize, Vec<EntityKey>)> {
-    let at = pred.chain.iter().position(|cc| cc.name == "along")?;
+    let at = chain.iter().position(|cc| cc.name == "along")?;
     let mut path = Vec::new();
-    for arg in &pred.chain[at].args {
-        if let Some(entity) = resolve_entity_scope_arg(model, &pred.name, arg, ctx, diags) {
+    for arg in &chain[at].args {
+        if let Some(entity) = resolve_entity_scope_arg(model, pred, arg, ctx, diags) {
             path.push(entity);
         }
     }
     Some((at, path))
 }
 
-/// The scope of a cross-entity `forbidden` or `invariant`. A `.role(..)` that follows no
-/// `.along`, `.has` or `.none` is reported here.
+/// The scope of a cross-entity `forbidden`, `invariant` or `property`, from the chain of the
+/// statement `pred` names. A `.role(..)` that follows no `.along`, `.has` or `.none` is
+/// reported here.
 pub(crate) fn cross_scope_semantics_from_chain(
     model: &SemanticModel,
-    pred: &PredicateCall,
+    pred: &str,
+    chain: &[ChainCall],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> CrossConstraintScope {
-    report_leading_by(&pred.chain, ctx, diags);
-    along_scope(model, pred, ctx, diags)
+    report_leading_by(chain, ctx, diags);
+    along_scope(model, pred, chain, ctx, diags)
 }
 
 /// The `.along(..)` path of a statement and the selectors of its hops, or `GlobalProduct`
 /// without one.
 pub(crate) fn along_scope(
     model: &SemanticModel,
-    pred: &PredicateCall,
+    pred: &str,
+    chain: &[ChainCall],
     ctx: DiagCtxt,
     diags: &mut Vec<Diagnostic>,
 ) -> CrossConstraintScope {
-    match collect_cross_along_path(model, pred, ctx, diags) {
+    match collect_cross_along_path(model, pred, chain, ctx, diags) {
         Some((at, path)) => CrossConstraintScope::RelationPath {
             path,
-            by: selectors(&pred.chain, Some(at)),
+            by: selectors(chain, Some(at)),
             links: Vec::new(),
         },
         None => CrossConstraintScope::GlobalProduct,

@@ -333,6 +333,8 @@ const FORMS: &[(&str, Expect)] = &[
     ),
     ("property P eventually(Order.status == paid).fair(Pay)", Recorded),
     ("property P always(Order.status != paid).fair(Pay)", Error),
+    ("property P can_reach(Order.status == paid)", Recorded),
+    ("property P can_reach(Order.status == paid).fair(Pay)", Error),
     (
         "property P leads_to(Order.status == open, Order.status == paid).fair(Nosuch)",
         Error,
@@ -359,6 +361,27 @@ const FORMS: &[(&str, Expect)] = &[
     ),
     (
         "property P leads_to(Order.status == open, Order.status == paid).when(Ready)",
+        Error,
+    ),
+    // a property over several entities takes the scope of a multi-entity rule (#165)
+    (
+        "property P always(not (Ticket.status == done) or (Order.status == paid)).along(Ticket, Order)",
+        Recorded,
+    ),
+    (
+        "property P always(not (Ticket.status == done) or (Order.status == paid)).global()",
+        Recorded,
+    ),
+    (
+        "property P leads_to(Ticket.status == done, Order.status == paid).along(Ticket, Order).fair(Pay)",
+        Recorded,
+    ),
+    (
+        "property P always(not (Ticket.status == done) or (Order.status == paid)).along(Ticket, Order).global()",
+        Error,
+    ),
+    (
+        "property P always(not (Ticket.status == done) or (Order.status == paid)).role(owner)",
         Error,
     ),
 ];

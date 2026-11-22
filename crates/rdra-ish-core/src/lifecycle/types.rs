@@ -762,6 +762,10 @@ pub struct Property {
     pub name: String,
     /// Entities the formula is quantified over per instance, outermost first.
     pub binders: Vec<EntId>,
+    /// `.along(..)`: the owner links that join the binders. It joins `present` in the
+    /// formula's trigger, so the formula speaks only of linked rows. `Pred::True` without
+    /// `.along`.
+    pub link: Pred,
     pub formula: Ltl,
     /// `.fair(UC, ...)`: each action of these use cases is weakly fair per instance it acts
     /// on. The TLA+ printer finds the actions by `ActionOrigin`, so a restriction that drops
@@ -771,9 +775,37 @@ pub struct Property {
 }
 
 impl Property {
+    /// Every predicate the property reads: the link, then the formula's operands.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        std::iter::once(&self.link).chain(self.formula.preds())
+    }
+
     /// Whether `.fair` names the use case of `action`.
     pub fn is_fair(&self, action: &Action) -> bool {
         matches!(&action.origin, ActionOrigin::UseCase { uc, .. } if self.fair.contains(uc))
+    }
+}
+
+/// A `can_reach(goal)` property: from every reachable state where its instance is present
+/// (and linked, under `.along`), some path on which it stays present reaches `goal`. That is
+/// CTL `AG (present => E[present U (present /\ goal)])`, which no LTL formula states, so TLC
+/// never checks it: BFS decides it on its cone's graph (`reach.rs`).
+#[derive(Clone, Debug)]
+pub struct Reach {
+    pub name: String,
+    /// Entities the goal is quantified over per instance, outermost first.
+    pub binders: Vec<EntId>,
+    /// `.along(..)`: the owner links that join the binders, read with `present`, so the
+    /// property speaks only of linked rows. `Pred::True` without `.along`.
+    pub link: Pred,
+    pub goal: Pred,
+    pub site: Site,
+}
+
+impl Reach {
+    /// Every predicate the property reads: the link, then the goal.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        [&self.link, &self.goal].into_iter()
     }
 }
 
