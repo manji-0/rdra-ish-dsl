@@ -275,6 +275,9 @@ rdra-ish export src/ --kind asyncapi --out out/asyncapi.json
   state already.
 - `warning[Runs_<UseCase>]`: the use case never runs, with the guard or instance that
   blocks it.
+- `warning[Vacuous_<rule>]`: the rule holds and says nothing, because no reachable state
+  has the rows it ranges over, the guards of its `.when`, or one of the conditions of a
+  `forbidden` of several. Check the value for a typo or a state no use case enters.
 
 Each prints the `transitions` arm or use case at fault with its `path:line:col`. The
 fix is usually in the model (a missing `creates`, `transitions` arm, or `sets`), not in

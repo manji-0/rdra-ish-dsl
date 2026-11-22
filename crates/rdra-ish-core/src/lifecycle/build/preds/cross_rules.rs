@@ -1,8 +1,8 @@
 //! Rules over several entities: scoped cross-entity invariants and related-row quantifiers.
 
-use super::display::{cross_display, entity_list, quantifier_display};
+use super::display::{cross_display, cross_displays, entity_list, quantifier_display};
 use super::guards::{Chain, PathOwner};
-use super::{at_of, implies, Binding};
+use super::{at_of, forbidden_premises, implies, premise, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{At, InvText, ModelRef, Pred, Site};
@@ -112,6 +112,12 @@ impl Builder<'_> {
                 continue;
             };
             let conds = self.cross_all(&c.conditions, &binding, &site);
+            let premises = match &conds {
+                Pred::And(parts) => {
+                    forbidden_premises(&link, parts, &cross_displays(model, &c.conditions))
+                }
+                _ => Vec::new(),
+            };
             let body = implies(link, Pred::Not(Box::new(conds)));
             let text = InvText::CrossForbidden {
                 entities: entity_list(model, &c.scope),
@@ -121,7 +127,7 @@ impl Builder<'_> {
                 "MultiForbidden",
                 i,
                 &binding,
-                body,
+                (body, premises),
                 text,
                 c.label.clone(),
                 site,
@@ -139,12 +145,14 @@ impl Builder<'_> {
             };
             let g = self.cross_all(&c.guards, &binding, &site);
             let r = self.cross_all(&c.requireds, &binding, &site);
+            let premises = vec![premise(vec![link.clone(), g.clone()], guards.clone())];
             let body = implies(link, implies(g, r));
             let text = InvText::CrossInvariant {
                 entities: entity_list(model, &c.scope),
                 guards,
                 requireds,
             };
+            let body = (body, premises);
             self.push_invariant("MultiInv", i, &binding, body, text, c.label.clone(), site);
         }
     }
@@ -204,6 +212,10 @@ impl Builder<'_> {
             let site = Site::new(ModelRef::Quantifier(i), &q.site);
             let anchor: Binding = vec![(c.anchor, At::Bound(0))];
             let guards = self.cross_all(&c.guards, &anchor, &site);
+            let premises = vec![premise(
+                vec![guards.clone()],
+                cross_display(model, &c.guards),
+            )];
             let kind = match q.kind {
                 QuantifierKind::Has => "has",
                 QuantifierKind::None => "none",
@@ -243,7 +255,7 @@ impl Builder<'_> {
                 "Quantifier",
                 i,
                 &anchor,
-                implies(guards, inner),
+                (implies(guards, inner), premises),
                 text,
                 c.label.clone(),
                 site,

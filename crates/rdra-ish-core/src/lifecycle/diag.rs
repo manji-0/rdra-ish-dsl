@@ -147,6 +147,22 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
+    /// A state constraint that holds, and one of whose premises no reachable state meets
+    /// (`Invariant::premises`): no state has the rows it ranges over, the guards of its
+    /// `.when` never hold, or a `forbidden` state is out of reach even without one of its
+    /// conditions. The rule would hold whatever the rest of it said.
+    VacuousRule {
+        name: String,
+        text: InvText,
+        /// The rule's `.label("...")`, when it has one.
+        label: Option<String>,
+        /// The entities the rule ranges over, by id, outermost first.
+        rows: Vec<String>,
+        /// The premises no reachable state meets, as written; an empty one asks only that
+        /// the rows exist.
+        unmet: Vec<String>,
+        site: Site,
+    },
     /// A step of the anchor use case ends in a state that fails its `after(..).assert`. Each
     /// assert reports its first violation, with a shortest trace ending in that step.
     AfterAssertViolated {
@@ -442,6 +458,7 @@ impl StateDiag {
                 value,
                 ..
             } => Self::witness_name(entity, column, value),
+            StateDiag::VacuousRule { name, .. } => format!("Vacuous_{name}"),
             StateDiag::NeverRuns { action, .. } => format!("Runs_{action}"),
             StateDiag::ArmNeverTaken {
                 action, from, to, ..
@@ -582,6 +599,7 @@ impl StateDiag {
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::NeverRuns { .. }
+            | StateDiag::VacuousRule { .. }
             | StateDiag::ArmNeverTaken { .. }
             | StateDiag::ValueNeverChosen { .. }
             | StateDiag::UnjoinedGuardRead { .. }
@@ -742,6 +760,31 @@ impl fmt::Display for StateDiag {
                 "{}{name} is violated by a reachable state: {pattern_desc}",
                 label_prefix(label)
             ),
+            StateDiag::VacuousRule {
+                name,
+                label,
+                rows,
+                unmet,
+                ..
+            } => {
+                let rows = match &rows[..] {
+                    [one] => format!("a row of {one}"),
+                    several => format!("rows of {} together", several.join(" and ")),
+                };
+                let unmet: Vec<String> = unmet
+                    .iter()
+                    .map(|premise| match premise.as_str() {
+                        "" => rows.clone(),
+                        premise => format!("{rows} with {premise}"),
+                    })
+                    .collect();
+                write!(
+                    f,
+                    "{}{name} holds vacuously: no reachable state has {}",
+                    label_prefix(label),
+                    unmet.join(", nor ")
+                )
+            }
             StateDiag::AfterAssertViolated {
                 anchor,
                 requireds,

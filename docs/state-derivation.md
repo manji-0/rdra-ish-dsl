@@ -417,6 +417,33 @@ clock has ticked past it. A deadline that depends on the row is one guarded `set
 Every check reads the instances that exist. A rule over an entity with no instance
 holds vacuously in that state.
 
+### Rules that hold vacuously
+
+A rule that holds may still say nothing. `check` looks, on the rule's own cone, for a
+reachable state that meets each *premise* of the rule, and warns `Vacuous_<rule>` when none
+does:
+
+| Rule | Premises |
+|---|---|
+| Every state rule | Rows of the entities it ranges over exist, linked as its `.along` says. For `Unique_*` that is two rows of the child, so it has no premise at one instance per entity. |
+| `invariant(...).when(G)`, a quantifier rule with guards | The guards `G` hold for some rows. |
+| `forbidden` of several conditions | Each condition holds for some row, on its own. A rule over two entities meets a condition on one of them with a row of that entity alone. |
+
+That the conditions of a `forbidden` never hold together is what the rule claims, so their
+conjunction is no premise, and neither is the one condition of a rule that has no other.
+`forbidden(Order, status == void, flagged == true)` is vacuous when no order is ever
+`void`: it would hold whatever its second condition said, and the value is often a typo or
+a state no use case enters. `forbidden(Order, Payment, Order.status == cancelled,
+Payment.status == captured)` is not vacuous when cancelled orders exist and captured
+payments exist, even if no cancelled order keeps a payment.
+
+The warning does not fail `check`. It is not raised for a rule that is violated, nor on a
+cone a cap stopped, where an unseen state may meet the premise. `check` explores one
+instance per entity, so a premise that needs two rows of one entity is met only at
+`--instance-count 2` or more. `verify` checks the rules with TLC and does not look for
+premises; temporal properties and `after` assertions have no such warning yet (an
+`after` assertion on a use case that never runs draws `Runs_<UseCase>`).
+
 ---
 
 ## Bounds
@@ -811,6 +838,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnreachableEnumVariant { column, variant }` | `UnreachableEnumVariant_<E>_<column>_<variant>` | warning | No reachable pattern holds a declared Enum variant that is not a state of a state model. |
 | `NoWitness { entity, column, value, into }` | `Witness_<entity>_<column>_<value>` | error | No reachable state holds a state of a state model: a `transitions` endpoint or a start value of a lifecycle column. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
 | `Deadlock { entity, column, value, at, exits, trace }` | `Deadlock_<entity>_<column>_<value>` | error, or warning at the bound | A reachable state has a present instance at a state of a state model that is not an end state (one with no way out, or one `@end` declares), and no path moves it: no edge changes its column or deletes it. Reported once per state, at the first such state, with a shortest path and each way out (`exits`, a `transitions` arm or a deletion) with what blocks it. A warning when some way out lacks only a free slot of an entity it creates. Not raised when a cap stopped the cone or `--buc` drops use cases; those are listed under `not checked:`. |
+| `VacuousRule { name, rows, unmet, site }` | `Vacuous_<rule>` | warning | The rule holds on its cone and no reachable state meets one of its premises (see [Rules that hold vacuously](#rules-that-hold-vacuously)). `unmet` lists the premises as written; when no state has the rows the rule ranges over, that alone. Not raised for a violated rule or on a cone a cap stopped. |
 | `NeverRuns { action, origin, site, why }` | `Runs_<action>` | warning | No edge of any entity cone that keeps the action carries it, self-loops included. `why` is `NoInstance`, `Apart` (the instances are never present at once), `Crowded` (the guards hold only where a created entity has no free slot), `Guards` (only the guards that hold in no reachable state, each with its site), or `Together`. Not raised when a cap stopped every such cone, `--buc` drops use cases, or `--entity` selects no cone that keeps the action; those are listed under `not checked:`. |
 | `ArmNeverTaken { action, column, from, to, conditions, site }` | `Arm_<action>_<from>_<to>` | warning | A `transitions(..).when(Cond)` arm that no edge of any entity cone takes, while its action runs there and some present instance holds its `from`: the guard never holds where the use case could take the arm. One cone that takes it is enough. An action that never runs is `NeverRuns` instead, and a `from` no state holds is the witness check's. Not raised when a cap stopped the cones that keep the action or `--buc` drops use cases; those are listed under `not checked:` (`whether <action> can take <Entity.column> <from> -> <to> is not decided`). |
 | `ValueNeverChosen { action, column, value, conditions, site }` | `Choice_<action>_<column>_<value>` | warning | A `chooses(.., value).when(Cond)` value that no edge of any entity cone picks while its action runs there: the guard never holds where the use case runs. One cone that picks it is enough. An action that never runs is `NeverRuns` instead. Not raised when a cap stopped the cones that keep the action or `--buc` drops use cases; those are listed under `not checked:` (`whether <action> can choose <Entity.column> = <value> is not decided`). |

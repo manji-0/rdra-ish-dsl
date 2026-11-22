@@ -1,12 +1,12 @@
 //! Rules of one entity: its invariants, driven columns, min cards, unique keys, and cascade deletes.
 
-use super::display::local_display;
-use super::{implies, Binding};
+use super::display::{local_display, local_displays};
+use super::{forbidden_premises, implies, premise, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     Action, ActionOrigin, At, Birth, CmpOp, Effect, InvText, Invariant, ModelRef, ParamRole, Pred,
-    Rhs, Site, Term, Value, VarId, VarKind,
+    Premise, Rhs, Site, Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::EntId;
 use crate::model::{CmpRhs, EntityCondition, EntityKey, Min, RefAction, UseCaseKey};
@@ -32,7 +32,7 @@ impl Builder<'_> {
         prefix: &str,
         idx: usize,
         binding: &Binding,
-        body: Pred,
+        (body, premises): (Pred, Vec<Premise>),
         text: InvText,
         label: Option<String>,
         site: Site,
@@ -42,6 +42,7 @@ impl Builder<'_> {
             name: format!("{prefix}_{entity}_{idx}"),
             binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
             body,
+            premises,
             text,
             label,
             site,
@@ -55,9 +56,10 @@ impl Builder<'_> {
             let conds = self.local_conds(c.entity, &c.conditions, &site);
             let text = InvText::Forbidden(local_display(&c.conditions));
             let b = Self::local_binding(c.entity);
+            let premises = forbidden_premises(&Pred::True, &conds, &local_displays(&c.conditions));
             let body = Pred::Not(Box::new(Pred::And(conds)));
             let label = c.label.clone();
-            self.push_invariant("Forbidden", i, &b, body, text, label, site);
+            self.push_invariant("Forbidden", i, &b, (body, premises), text, label, site);
         }
         for (i, c) in model.entity_invariants.iter().enumerate() {
             let site = Site::new(ModelRef::EntityInvariant(i), &c.site);
@@ -68,9 +70,10 @@ impl Builder<'_> {
                 requireds: local_display(&c.requireds),
             };
             let b = Self::local_binding(c.entity);
+            let premises = vec![premise(guards.clone(), local_display(&c.guards))];
             let body = implies(Pred::And(guards), Pred::And(reqs));
             let label = c.label.clone();
-            self.push_invariant("Inv", i, &b, body, text, label, site);
+            self.push_invariant("Inv", i, &b, (body, premises), text, label, site);
         }
         for (i, c) in model.required_constraints.iter().enumerate() {
             let site = Site::new(ModelRef::Required(i), &c.site);
@@ -81,7 +84,7 @@ impl Builder<'_> {
                 "Required",
                 i,
                 &b,
-                Pred::And(conds),
+                (Pred::And(conds), vec![Premise::rows()]),
                 text,
                 c.label.clone(),
                 site,
@@ -100,7 +103,8 @@ impl Builder<'_> {
             let b = Self::local_binding(c.entity);
             let body = Pred::Not(Box::new(Pred::Or(pairs)));
             let label = c.label.clone();
-            self.push_invariant("Exclusive", i, &b, body, text, label, site);
+            let premises = vec![Premise::rows()];
+            self.push_invariant("Exclusive", i, &b, (body, premises), text, label, site);
         }
         self.column_checks();
         self.cross_invariants();
@@ -285,6 +289,7 @@ impl Builder<'_> {
             self.ts.invariants.push(Invariant {
                 name: format!("MinCard_{child}_{role}"),
                 binders: vec![self.ent_of[&fk.parent]],
+                premises: vec![Premise::rows()],
                 body: Pred::Exists {
                     entity: self.ent_of[&fk.child],
                     body: Box::new(link),
@@ -335,9 +340,21 @@ impl Builder<'_> {
                 model.entities[fk.parent].id.clone(),
             );
             let role = fk.role_or(&parent).to_string();
+            // Two rows of the child: at one instance per entity there are none, which the
+            // bounds say, so the rule has no premise to miss there.
+            let two_rows = Pred::Cmp(
+                Term::Index(At::Bound(0)),
+                CmpOp::Ne,
+                Term::Index(At::Bound(1)),
+            );
+            let premises = match self.ts.bounds.slots() {
+                1 => Vec::new(),
+                _ => vec![premise(vec![two_rows], format!("two {child} rows"))],
+            };
             self.ts.invariants.push(Invariant {
                 name: format!("Unique_{child}_{role}"),
                 binders: vec![c, c],
+                premises,
                 body: Pred::Or(apart),
                 text: InvText::Unique {
                     child,

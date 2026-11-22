@@ -630,7 +630,53 @@ impl TransitionSystem {
                 diag: d.diag.clone(),
             });
         }
+        if let Target::Invariant(i) = target {
+            out.extend(self.vacuous(i, cone).map(|diag| Diag { entities, diag }));
+        }
         out
+    }
+
+    /// The `VacuousRule` of invariant `i` on its cone: the rule holds there, the exploration
+    /// is complete, and no reached state meets one of its premises. When no state has the
+    /// rows the rule ranges over, that alone is reported.
+    fn vacuous(&self, i: usize, cone: &ConeRun) -> Option<StateDiag> {
+        let inv = &self.invariants[i];
+        let run = &cone.run;
+        let violated = run.diags.iter().any(
+            |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
+        );
+        if !run.complete || violated {
+            return None;
+        }
+        // The cone's copy of the rule reads the cone's vars.
+        let sys = &run.system;
+        let local = sys.invariants.iter().find(|x| x.name == inv.name)?;
+        let met = |pred: &Pred| {
+            run.states
+                .iter()
+                .any(|s| sys.meets(&local.binders, pred, s))
+        };
+        let unmet: Vec<String> = match met(&Pred::True) {
+            false if !local.premises.is_empty() => vec![String::new()],
+            _ => local
+                .premises
+                .iter()
+                .filter(|p| !met(&p.pred))
+                .map(|p| p.text.clone())
+                .collect(),
+        };
+        (!unmet.is_empty()).then(|| StateDiag::VacuousRule {
+            name: inv.name.clone(),
+            text: inv.text.clone(),
+            label: inv.label.clone(),
+            rows: inv
+                .binders
+                .iter()
+                .map(|e| self.entity(*e).id.clone())
+                .collect(),
+            unmet,
+            site: inv.site.clone(),
+        })
     }
 }
 

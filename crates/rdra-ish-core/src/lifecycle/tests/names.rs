@@ -223,6 +223,14 @@ fn one_of_each() -> Vec<StateDiag> {
             path: vec!["Account".into(), "Device".into(), "Store".into()],
             site: site(),
         },
+        StateDiag::VacuousRule {
+            name: "Inv_Order_0".into(),
+            text: InvText::Forbidden("status=void".into()),
+            label: None,
+            rows: vec!["Order".into()],
+            unmet: vec!["status=void".into()],
+            site: site(),
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -237,6 +245,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::PatternCapReached { .. }
             | StateDiag::StateCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
+            | StateDiag::VacuousRule { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::NoWitness { .. }
