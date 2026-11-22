@@ -2,7 +2,7 @@
 
 /// How many threads parallel work uses: `RDRA_JOBS`, else the machine's cores, at most 8.
 /// Each lifecycle cone holds its own reached states, so memory grows with the number.
-pub(crate) fn jobs() -> usize {
+pub fn jobs() -> usize {
     std::env::var("RDRA_JOBS")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())

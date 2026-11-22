@@ -694,7 +694,9 @@ unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks
 
 Here the CTI is also a real run: `one_to_one_shared` links two Shipments to one Order, and
 `verify` at two instances reports the violation with its trace. A rule z3 gives up on
-(each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. A rule that fails in an
+(each check of a rule has 10 s, of a lemma 0.5 s) is `unproved` with `z3 gave up on <action>`. The checks of one
+step are shared out over several z3 processes (`RDRA_JOBS`); the proof and its CTIs do not
+depend on how many. A rule that fails in an
 initial state is `unproved` too; the bounded engines report that violation.
 
 Some rules have no `CHECK` in the schema `export --kind sql` writes: a rule over several

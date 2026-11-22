@@ -101,8 +101,11 @@ pub(crate) fn run_proof(
             _ => None,
         })
         .collect();
-    let mut solver = Z3::start(binary)?;
-    let proof = prove::prove(ts, &rules, &mut solver, ProveOptions::default())
+    // One z3 per thread `RDRA_JOBS` allows; the proof is the same on any number.
+    let mut solvers = (0..rdra_ish_core::jobs())
+        .map(|_| Z3::start(binary))
+        .collect::<Result<Vec<_>, _>>()?;
+    let proof = prove::prove(ts, &rules, &mut solvers, ProveOptions::default())
         .map_err(|e| anyhow::anyhow!("z3 failed: {e}"))?;
     let (yours, rules): (Vec<&RuleProof>, Vec<&RuleProof>) =
         proof.rules.iter().partition(|r| lemmas.contains(&r.inv));
