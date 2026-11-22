@@ -33,7 +33,7 @@ mod values;
 
 use dispatch::dispatchers;
 use guards::{arm_conditions, fold_next, reads_only_created};
-use lower::function;
+use lower::{function, ActionCx};
 pub(super) use pred::{expr, simplify};
 use pred::{remap_lists, Quant};
 use values::{declared_id, enum_lit, input_index, literal, start_literal, start_value, Write};
@@ -366,6 +366,16 @@ fn functions(
     }
     let varies: Vec<bool> = sources.iter().map(|s| s.len() > 1).collect();
     let usecase = &model.use_cases[uc];
+    let cx = ActionCx {
+        model,
+        ts,
+        action,
+        declared,
+        raises,
+        site,
+        usecase: &usecase.id,
+        steps,
+    };
 
     let mut out = Vec::new();
     for combo in combos {
@@ -429,20 +439,7 @@ fn functions(
             if !to.is_empty() {
                 name = format!("{name}To{}", to.join("And"));
             }
-            match function(
-                model,
-                ts,
-                action,
-                &picked,
-                &chosen,
-                declared,
-                raises,
-                site,
-                &name,
-                &usecase.id,
-                steps,
-                marks,
-            ) {
+            match function(&cx, &picked, &chosen, &name, marks) {
                 Ok(mut f) => {
                     f.doc
                         .insert(0, format!("{} ({}).", usecase.label, usecase.id));
