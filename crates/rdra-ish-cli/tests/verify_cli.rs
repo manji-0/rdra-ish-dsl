@@ -516,6 +516,58 @@ fn a_deadlock_fails_verify_while_tlc_passes() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// `verify` decides a `can_reach` by BFS at its bounds and says so; TLC runs nothing for it.
+/// At two instances the trap is the same, and the passing model passes.
+#[test]
+fn verify_decides_a_can_reach_natively() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_can_reach");
+    let sample = repo().join("samples/formal-verification/can_reach_unmet.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.lines().any(|l| l
+            == "can_reach properties: 1, decided natively by BFS on each one's cone (TLC cannot check AG EF)"),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 1 violated"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("not checked"), "{stdout}");
+    assert!(
+        stderr.contains(
+            "error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("  confined: from there Order#1 stays within 34 reachable states, where its goal never holds:\n    status = pending\n    status = on_hold\n"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("Error: verification failed: 1 can_reach error(s) from BFS on their cones"),
+        "{stderr}"
+    );
+    let met = repo().join("samples/formal-verification/can_reach_met.rdra");
+    let output = verify(&repo(), &tmp, &[met.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(0), "{stdout}");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 0 violated"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// `verify --entity Order` defers Audit's build error, runs TLC on Order's invariant cone,
 /// and passes in the selected scope; the whole run stops at the build gate.
 #[test]

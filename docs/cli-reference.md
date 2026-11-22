@@ -205,7 +205,7 @@ use cases outside the BUCs, and for `--without-usecase`, `--without-buc`, and `-
 lists the use cases assumed not to run. The `not checked:` block lists the targets the scope leaves
 out, the deferred build errors, and each finding a scope or a cap left undecided. A whole
 run prints it only when a cap left something undecided. `verify` under a scope also lists
-the temporal properties: a scoped run checks none.
+the temporal properties, `can_reach` ones included: a scoped run checks none.
 
 <!-- derived-from ./state-derivation.md#diagnostics -->
 `check` includes the same broad review signals exposed elsewhere:

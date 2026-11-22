@@ -175,7 +175,9 @@ pub fn ast_references(ast: &Ast) -> Vec<&QRef> {
             }
             Item::Property(prop) => {
                 match &prop.formula {
-                    AstTemporalFormula::Always(expr) | AstTemporalFormula::Eventually(expr) => {
+                    AstTemporalFormula::Always(expr)
+                    | AstTemporalFormula::Eventually(expr)
+                    | AstTemporalFormula::CanReach(expr) => {
                         collect_expr_references(expr, &mut refs)
                     }
                     AstTemporalFormula::LeadsTo {

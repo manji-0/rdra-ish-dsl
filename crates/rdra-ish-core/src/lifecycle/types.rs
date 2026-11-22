@@ -761,6 +761,29 @@ impl Property {
     }
 }
 
+/// A `can_reach(goal)` property: from every reachable state where its instance is present
+/// (and linked, under `.along`), some path on which it stays present reaches `goal`. That is
+/// CTL `AG (present => E[present U (present /\ goal)])`, which no LTL formula states, so TLC
+/// never checks it: BFS decides it on its cone's graph (`reach.rs`).
+#[derive(Clone, Debug)]
+pub struct Reach {
+    pub name: String,
+    /// Entities the goal is quantified over per instance, outermost first.
+    pub binders: Vec<EntId>,
+    /// `.along(..)`: the owner links that join the binders, read with `present`, so the
+    /// property speaks only of linked rows. `Pred::True` without `.along`.
+    pub link: Pred,
+    pub goal: Pred,
+    pub site: Site,
+}
+
+impl Reach {
+    /// Every predicate the property reads: the link, then the goal.
+    pub fn preds(&self) -> impl Iterator<Item = &Pred> {
+        [&self.link, &self.goal].into_iter()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum Ltl {
     Always(Pred),

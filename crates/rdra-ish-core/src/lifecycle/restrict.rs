@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use super::cone::{named_params, VarSet};
 use super::types::{
     ActId, Action, AfterAssert, AfterStep, At, Domain, Effect, EntId, EntityDecl, Guard, Invariant,
-    Param, ParamRole, Pred, Property, Rhs, Term, VarDecl, VarId, VarKind,
+    Param, ParamRole, Pred, Property, Reach, Rhs, Term, VarDecl, VarId, VarKind,
 };
 use super::TransitionSystem;
 
@@ -209,6 +209,17 @@ impl TransitionSystem {
                     link: map.pred(&p.link),
                     formula: p.formula.map(|x| map.pred(x)),
                     ..p.clone()
+                });
+            }
+        }
+        for r in &self.reach {
+            let preds: Vec<&Pred> = r.preds().collect();
+            if reads_inside(&r.binders, &preds) {
+                out.reach.push(Reach {
+                    binders: r.binders.iter().map(|e| map.e(*e)).collect(),
+                    link: map.pred(&r.link),
+                    goal: map.pred(&r.goal),
+                    ..r.clone()
                 });
             }
         }

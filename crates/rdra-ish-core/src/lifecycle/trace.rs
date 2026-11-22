@@ -436,7 +436,7 @@ impl TransitionSystem {
         let (start, steps) = self.lifted_replay(replay);
         let last = steps.last().map_or(&start, |s| &s.2);
         let mut d = match target {
-            Target::Entity(_) => return None,
+            Target::Entity(_) | Target::Reach(_) => return None,
             Target::Invariant(i) => self.invariant_violation(i, last)?,
             Target::AfterAssert(i) => {
                 let (act, params, _) = steps.last()?;

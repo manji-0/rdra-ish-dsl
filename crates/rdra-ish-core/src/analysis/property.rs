@@ -122,6 +122,12 @@ fn fair_use_cases(
             ok = false;
             continue;
         }
+        if matches!(decl.formula, AstTemporalFormula::CanReach(_)) {
+            let err = RdraError::FairOnReachProperty { id: id() };
+            push_error(ctx, diags, cc.span.clone(), err);
+            ok = false;
+            continue;
+        }
         let first = !decl.chain[..index].iter().any(|c| c.name == "fair");
         let mut well_formed = first && !cc.args.is_empty();
         for arg in &cc.args {
@@ -152,6 +158,7 @@ fn lower_formula(
     match formula {
         AstTemporalFormula::Always(e) => Ok(TemporalFormula::Always(lower_expr(model, e)?)),
         AstTemporalFormula::Eventually(e) => Ok(TemporalFormula::Eventually(lower_expr(model, e)?)),
+        AstTemporalFormula::CanReach(e) => Ok(TemporalFormula::CanReach(lower_expr(model, e)?)),
         AstTemporalFormula::LeadsTo {
             antecedent,
             consequent,
@@ -186,7 +193,9 @@ fn formula_entities(formula: &TemporalFormula, out: &mut Vec<EntityKey>) {
         }
     }
     match formula {
-        TemporalFormula::Always(e) | TemporalFormula::Eventually(e) => walk(e, out),
+        TemporalFormula::Always(e)
+        | TemporalFormula::Eventually(e)
+        | TemporalFormula::CanReach(e) => walk(e, out),
         TemporalFormula::LeadsTo {
             antecedent,
             consequent,

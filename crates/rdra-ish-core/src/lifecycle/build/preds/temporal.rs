@@ -8,7 +8,7 @@ use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
     ActId, ActionOrigin, AfterAssert, AfterStep, At, CmpOp, Effect, Guard, GuardWhy, Ltl, ModelRef,
-    Pred, Property, Site, Start, VarId, VarKind,
+    Pred, Property, Reach, Site, Start, VarId, VarKind,
 };
 use crate::model::{
     CrossEntityCondition, EffectValue, EntityKey, TemporalExpr, TemporalFormula, TemporalRhs,
@@ -116,6 +116,18 @@ impl Builder<'_> {
                     let a = self.temporal(&prop.id, antecedent, &mut binding, &site);
                     let c = self.temporal(&prop.id, consequent, &mut binding, &site);
                     Ltl::LeadsTo(a, c)
+                }
+                // `.fair` on it is an error, so there is no fairness to check.
+                TemporalFormula::CanReach(e) => {
+                    let goal = self.temporal(&prop.id, e, &mut binding, &site);
+                    self.ts.reach.push(Reach {
+                        name: prop.id.clone(),
+                        binders: binding.iter().map(|(ek, _)| self.ent_of[ek]).collect(),
+                        link,
+                        goal,
+                        site,
+                    });
+                    continue;
                 }
             };
             for uk in &prop.fair {

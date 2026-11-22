@@ -537,6 +537,7 @@ fn target_label(ts: &TransitionSystem, t: Target) -> String {
         Target::Entity(e) => format!("entity {}", ts.entity(e).id),
         Target::Invariant(i) => format!("invariant {}", ts.invariants()[i].name),
         Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
+        Target::Reach(i) => format!("can_reach {}", ts.reach_properties()[i].name),
     }
 }
 
@@ -569,12 +570,14 @@ fn check_model(
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     let mut cones: Vec<(Cone, String, Vec<Seed>)> = Vec::new();
-    // `verify` runs no cone for a `.lemma()` rule, so neither does the comparison.
+    // `verify` runs no TLC cone for a `.lemma()` rule or a `can_reach`, so neither does the
+    // comparison.
     let lemmas = rdra_ish_core::lifecycle::prove::lemma_invariants(model, &ts);
-    let targets = ts
-        .targets()
-        .into_iter()
-        .filter(|t| !matches!(t, Target::Invariant(i) if lemmas.contains(i)));
+    let targets = ts.targets().into_iter().filter(|t| match t {
+        Target::Invariant(i) => !lemmas.contains(i),
+        Target::Reach(_) => false,
+        _ => true,
+    });
     for t in targets {
         let cone = ts.target_cone(t);
         match cones.iter_mut().find(|(c, _, _)| *c == cone) {

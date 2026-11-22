@@ -3,6 +3,34 @@ use crate::diagnostics::RdraError;
 use crate::model::{NodeRef, RelKind};
 use rdra_ish_syntax::parse;
 
+/// Reachability asks whether a path exists, which fairness cannot change.
+#[test]
+fn fair_on_can_reach_is_an_error_of_its_own() {
+    let src = r#"
+entity Order "注文" { id: Int @pk
+  status: Enum(open, paid) @default(open) }
+usecase Pay "支払い"
+transitions(Pay, Order.status, open -> paid)
+property P can_reach(Order.status == paid).fair(Pay)
+"#;
+    let (ast, parse_errors) = parse(src);
+    assert!(parse_errors.is_empty(), "{parse_errors:?}");
+    let (model, diags) = build_model(&ast);
+    let errors: Vec<&RdraError> = diags
+        .iter()
+        .filter(|d| !d.is_warning)
+        .map(|d| &d.error)
+        .collect();
+    assert!(
+        matches!(errors.as_slice(), [RdraError::FairOnReachProperty { id }] if id == "P"),
+        "{errors:?}"
+    );
+    assert!(errors[0]
+        .to_string()
+        .contains("reachability needs no fairness"));
+    assert!(model.temporal_properties.is_empty());
+}
+
 #[test]
 fn test_duplicate_definition_same_kind() {
     let src = r#"

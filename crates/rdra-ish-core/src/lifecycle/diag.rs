@@ -176,6 +176,21 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
+    /// A `can_reach` property fails: from the last state of `trace`, a shortest path to such
+    /// a state, no path on which the instance stays present reaches the goal.
+    GoalUnreachable {
+        /// The property's name.
+        name: String,
+        /// The instance of each binder, outermost first.
+        instance: Vec<Inst>,
+        /// What the goal reads of the instance in the states it can still reach from there,
+        /// one line per distinct reading.
+        confined: Vec<String>,
+        /// How many states it can still reach, the last state of the trace included.
+        states: usize,
+        site: Site,
+        trace: Trace,
+    },
     /// A state of a state model (a `transitions` endpoint, or a value a creating use case
     /// sets) that no reachable state holds.
     NoWitness {
@@ -435,7 +450,8 @@ impl StateDiag {
         let raw = match self {
             StateDiag::ConstraintViolated { name, .. }
             | StateDiag::AfterAssertViolated { name, .. }
-            | StateDiag::PropertyViolated { name, .. } => name.clone(),
+            | StateDiag::PropertyViolated { name, .. }
+            | StateDiag::GoalUnreachable { name, .. } => name.clone(),
             StateDiag::NoWitness {
                 entity,
                 column,
@@ -548,6 +564,7 @@ impl StateDiag {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
+            | StateDiag::GoalUnreachable { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
@@ -558,6 +575,7 @@ impl StateDiag {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
+            | StateDiag::GoalUnreachable { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
@@ -597,6 +615,7 @@ impl StateDiag {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::PropertyViolated { .. }
+            | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
@@ -781,6 +800,17 @@ impl fmt::Display for StateDiag {
                         "its leads_to trigger holds for {inst} {at}, and its goal never holds from then on"
                     ),
                 }
+            }
+            StateDiag::GoalUnreachable { name, instance, .. } => {
+                let inst = instance
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "property {name} is violated: from the counterexample's last state no path reaches its goal for {inst}"
+                )
             }
             StateDiag::NoWitness {
                 entity,

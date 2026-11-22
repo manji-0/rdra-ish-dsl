@@ -333,6 +333,8 @@ const FORMS: &[(&str, Expect)] = &[
     ),
     ("property P eventually(Order.status == paid).fair(Pay)", Recorded),
     ("property P always(Order.status != paid).fair(Pay)", Error),
+    ("property P can_reach(Order.status == paid)", Recorded),
+    ("property P can_reach(Order.status == paid).fair(Pay)", Error),
     (
         "property P leads_to(Order.status == open, Order.status == paid).fair(Nosuch)",
         Error,

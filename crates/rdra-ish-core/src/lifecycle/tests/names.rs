@@ -73,6 +73,17 @@ fn one_of_each() -> Vec<StateDiag> {
             site: site(),
             trace: Trace::default(),
         },
+        StateDiag::GoalUnreachable {
+            name: "OrderCanFinish".into(),
+            instance: vec![Inst {
+                entity: "Order".into(),
+                slot: 1,
+            }],
+            confined: vec!["status = on_hold".into()],
+            states: 1,
+            site: site(),
+            trace: Trace::default(),
+        },
         StateDiag::NoWitness {
             entity: "Order".into(),
             column: "status".into(),
@@ -239,6 +250,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::PropertyViolated { .. }
+            | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::NeverRuns { .. }
             | StateDiag::ArmNeverTaken { .. }

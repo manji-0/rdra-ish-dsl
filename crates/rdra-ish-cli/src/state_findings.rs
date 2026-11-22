@@ -526,9 +526,8 @@ pub(crate) fn render_violation(
             trace,
         ),
         StateDiag::AfterAssertViolated { site, trace, .. }
-        | StateDiag::PropertyViolated { site, trace, .. } => {
-            (state_diag_message(diag), site, trace)
-        }
+        | StateDiag::PropertyViolated { site, trace, .. }
+        | StateDiag::GoalUnreachable { site, trace, .. } => (state_diag_message(diag), site, trace),
         _ => return None,
     };
     let mut out = head;
@@ -555,6 +554,22 @@ pub(crate) fn render_violation(
             lasso: Loop::Back { to },
             ..
         } => out.push_str(&format!("\n    then loops back to step {to}")),
+        StateDiag::GoalUnreachable {
+            instance,
+            confined,
+            states,
+            ..
+        } => {
+            let inst: Vec<String> = instance.iter().map(ToString::to_string).collect();
+            let plural = if *states == 1 { "" } else { "s" };
+            out.push_str(&format!(
+                "\n  confined: from there {} stays within {states} reachable state{plural}, where its goal never holds:",
+                inst.join(", ")
+            ));
+            for line in confined {
+                out.push_str(&format!("\n    {line}"));
+            }
+        }
         _ => {}
     }
     Some(out)
@@ -832,6 +847,7 @@ violation_message(text, pattern_desc)
         | StateDiag::DeleteLeavesChildren { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
-        | StateDiag::DefaultOnVariationIgnored { .. } => diag.to_string(),
+        | StateDiag::DefaultOnVariationIgnored { .. }
+        | StateDiag::GoalUnreachable { .. } => diag.to_string(),
     }
 }
