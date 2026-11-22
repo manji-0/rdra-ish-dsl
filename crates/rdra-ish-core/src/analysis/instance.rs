@@ -84,6 +84,25 @@ pub(crate) fn register_instance(
         );
     }
 
+    let module = model
+        .import_scopes
+        .module_for_source(ctx.source_id)
+        .map(str::to_string);
+    if model
+        .symbols
+        .declares(&inst.id, inst.kind.name(), module.as_deref())
+    {
+        push_error(
+            ctx,
+            diags,
+            inst.span.clone(),
+            RdraError::DuplicateDefinition {
+                id: inst.id.clone(),
+            },
+        );
+        return;
+    }
+
     let node = match inst.kind {
         Kind::Actor => {
             let k = model.actors.insert(Actor {
@@ -364,32 +383,17 @@ pub(crate) fn register_instance(
         }
     };
 
-    if model.symbols.insert_in_module(
-        inst.id.clone(),
-        node,
-        model
-            .import_scopes
-            .module_for_source(ctx.source_id)
-            .map(str::to_string),
-    ) {
-        push_error(
-            ctx,
-            diags,
-            inst.span.clone(),
-            RdraError::DuplicateDefinition {
-                id: inst.id.clone(),
-            },
-        );
-    } else {
-        model.decl_sites.insert(
-            inst.kind.name(),
-            &inst.id,
-            DeclSite {
-                source_id: ctx.source_id,
-                span: inst.span.clone(),
-            },
-        );
-    }
+    model
+        .symbols
+        .insert_in_module(inst.id.clone(), node, module);
+    model.decl_sites.insert(
+        inst.kind.name(),
+        &inst.id,
+        DeclSite {
+            source_id: ctx.source_id,
+            span: inst.span.clone(),
+        },
+    );
 }
 
 fn model_columns(

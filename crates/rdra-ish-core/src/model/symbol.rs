@@ -47,16 +47,24 @@ impl SymbolTable {
         node: NodeRef,
         module: Option<String>,
     ) -> bool {
-        let entries = self.by_id.entry(id).or_default();
-        let kind = node.kind_tag();
-        if entries
-            .iter()
-            .any(|e| e.node.kind_tag() == kind && e.module == module)
-        {
+        if self.declares(&id, node.kind_tag(), module.as_deref()) {
             return true;
         }
-        entries.push(SymbolEntry { node, module });
+        self.by_id
+            .entry(id)
+            .or_default()
+            .push(SymbolEntry { node, module });
         false
+    }
+
+    /// Whether a node of `kind` (a [`NodeRef::kind_tag`]) with this id is already declared in
+    /// `module`.
+    pub fn declares(&self, id: &str, kind: &str, module: Option<&str>) -> bool {
+        self.by_id.get(id).is_some_and(|entries| {
+            entries
+                .iter()
+                .any(|e| e.node.kind_tag() == kind && e.module.as_deref() == module)
+        })
     }
 
     /// Unqualified lookup across all modules/kinds.

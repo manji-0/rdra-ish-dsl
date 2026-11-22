@@ -70,6 +70,9 @@
 - The ER diagram lists its relations by the ids of the two entities they join. They were
   sorted by the debug text of internal keys, so the tenth entity of a model came before
   the second (#153).
+- A second definition of the same kind and id in one module no longer leaves a node with
+  no symbol and no declaration site in the model. Diagrams, lists and exports of a model
+  that `check` rejects for the duplicate show the node once (#154).
 
 ## v2.3.0 - 2026-11-18
 

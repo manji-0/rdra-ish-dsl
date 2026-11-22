@@ -210,7 +210,7 @@ fn maps_field_checks_the_entity_and_the_column_it_names() {
 }
 
 #[test]
-fn register_instance_reports_duplicate_same_kind_but_keeps_cross_kind_names() {
+fn register_instance_reports_and_drops_a_same_kind_duplicate_but_keeps_cross_kind_names() {
     let mut model = SemanticModel::default();
     let mut diags = Vec::new();
 
@@ -233,7 +233,7 @@ fn register_instance_reports_duplicate_same_kind_but_keeps_cross_kind_names() {
         &mut diags,
     );
 
-    assert_eq!(model.actors.len(), 2);
+    assert_eq!(model.actors.len(), 1);
     assert_eq!(model.use_cases.len(), 1);
     assert_eq!(diags.len(), 1);
     assert!(diags[0].error.to_string().contains("duplicate definition"));
