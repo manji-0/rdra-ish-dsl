@@ -205,6 +205,24 @@ fn parse_card(card: &str) -> Result<Option<(RelKind, Min)>, RdraError> {
     Ok(Some((kind, child.map_or(Min::Zero, |(min, _)| min))))
 }
 
+/// The relate card argument's span, or the whole call's when the card has none.
+fn card_span(pred: &PredicateCall) -> Span {
+    pred.args
+        .get(2)
+        .map(arg_span)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| pred.span.clone())
+}
+
+/// The `.via(..)` chain call's span, or the whole call's when absent.
+fn via_span(pred: &PredicateCall) -> Span {
+    pred.chain
+        .iter()
+        .find(|cc| cc.name == "via")
+        .map(|cc| cc.span.clone())
+        .unwrap_or_else(|| pred.span.clone())
+}
+
 pub(super) fn process_relate_predicate(
     model: &mut SemanticModel,
     pred: &PredicateCall,
@@ -228,150 +246,119 @@ pub(super) fn process_relate_predicate(
         Ok(Some(card)) => card,
         Ok(None) => return,
         Err(err) => {
-            let span = pred
-                .args
-                .get(2)
-                .map(arg_span)
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| pred.span.clone());
-            push_error(ctx, diags, span, err);
+            push_error(ctx, diags, card_span(pred), err);
             return;
         }
     };
     options.children_min = children_min;
 
-    if had_via && kind != RelKind::RelateManyToMany {
-        let span = pred
-            .chain
-            .iter()
-            .find(|cc| cc.name == "via")
-            .map(|cc| cc.span.clone())
-            .unwrap_or_else(|| pred.span.clone());
-        push_error(ctx, diags, span, RdraError::ViaOnlyForNM);
+    let many_to_many = kind == RelKind::RelateManyToMany;
+    if had_via && !many_to_many {
+        push_error(ctx, diags, via_span(pred), RdraError::ViaOnlyForNM);
         return;
     }
 
-    if kind == RelKind::RelateManyToMany {
-        for cc in pred
-            .chain
-            .iter()
-            .filter(|cc| matches!(cc.name.as_str(), "role" | "key"))
-        {
-            push_error(
-                ctx,
-                diags,
-                cc.span.clone(),
-                RdraError::KeyOptionOnManyToMany {
-                    method: cc.name.clone(),
-                },
-            );
+    if many_to_many {
+        if !many_to_many_is_valid(model, pred, (from, to), via.as_ref(), had_via, ctx, diags) {
+            return;
         }
         // The junction relates synthesized from this one must not inherit them.
         options.role = None;
         options.key.clear();
     }
 
-    if kind == RelKind::RelateManyToMany && via.is_none() {
-        // If `.via` was present but failed to resolve, keep that diagnostic only.
-        if had_via {
-            return;
-        }
-        let from_id = match from {
-            NodeRef::Entity(k) => model.entities[*k].id.clone(),
-            _ => "?".into(),
-        };
-        let to_id = match to {
-            NodeRef::Entity(k) => model.entities[*k].id.clone(),
-            _ => "?".into(),
-        };
-        push_error(
-            ctx,
-            diags,
-            pred.args
-                .get(2)
-                .map(arg_span)
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| pred.span.clone()),
-            RdraError::NMRelation {
-                from: from_id,
-                to: to_id,
-            },
-        );
-        return;
-    }
-
-    if kind == RelKind::RelateManyToMany {
-        if let (NodeRef::Entity(fk), NodeRef::Entity(tk)) = (from, to) {
-            if fk == tk {
-                push_error(
-                    ctx,
-                    diags,
-                    pred.span.clone(),
-                    RdraError::SelfNMRelation {
-                        entity: model.entities[*fk].id.clone(),
-                    },
-                );
-                return;
-            }
-        }
-        if let (NodeRef::Entity(fk), NodeRef::Entity(tk), Some(NodeRef::Entity(jk))) =
-            (from, to, via.as_ref())
-        {
-            if jk == fk || jk == tk {
-                let via_span = pred
-                    .chain
-                    .iter()
-                    .find(|cc| cc.name == "via")
-                    .map(|cc| cc.span.clone())
-                    .unwrap_or_else(|| pred.span.clone());
-                push_error(
-                    ctx,
-                    diags,
-                    via_span,
-                    RdraError::ViaMustBeDistinct {
-                        from: model.entities[*fk].id.clone(),
-                        to: model.entities[*tk].id.clone(),
-                        via: model.entities[*jk].id.clone(),
-                    },
-                );
-                return;
-            }
-        }
-    }
-
-    let synthesize_via_n1 = kind == RelKind::RelateManyToMany && via.is_some();
-    let via_for_synth = via.clone();
     model.relations.push(Relation {
         site: Some(ctx.locate(pred.span.clone())),
         from: from.clone(),
         to: to.clone(),
         kind,
         options: options.clone(),
-        via,
+        via: via.clone(),
     });
 
     // N:M.via(J) ≡ two N:1 edges J→A, J→B so TLA/ER/.along/has_relate_edge see the junction path.
-    if synthesize_via_n1 {
-        if let (NodeRef::Entity(_), NodeRef::Entity(_), Some(NodeRef::Entity(junction))) =
-            (from, to, via_for_synth.as_ref())
-        {
-            let junction_ref = NodeRef::Entity(*junction);
-            for end in [from.clone(), to.clone()] {
-                if !relation_exists(model, &junction_ref, &end, RelKind::RelateManyToOne)
-                    && !relation_exists(model, &end, &junction_ref, RelKind::RelateOneToMany)
-                {
-                    model.relations.push(Relation {
-                        site: Some(ctx.locate(pred.span.clone())),
-                        from: junction_ref.clone(),
-                        to: end,
-                        kind: RelKind::RelateManyToOne,
-                        options: options.clone(),
-                        via: None,
-                    });
-                }
+    if let (true, NodeRef::Entity(_), NodeRef::Entity(_), Some(NodeRef::Entity(junction))) =
+        (many_to_many, from, to, via.as_ref())
+    {
+        let junction_ref = NodeRef::Entity(*junction);
+        for end in [from.clone(), to.clone()] {
+            if !relation_exists(model, &junction_ref, &end, RelKind::RelateManyToOne)
+                && !relation_exists(model, &end, &junction_ref, RelKind::RelateOneToMany)
+            {
+                model.relations.push(Relation {
+                    site: Some(ctx.locate(pred.span.clone())),
+                    from: junction_ref.clone(),
+                    to: end,
+                    kind: RelKind::RelateManyToOne,
+                    options: options.clone(),
+                    via: None,
+                });
             }
         }
     }
+}
+
+/// Reports what is wrong with an N:M relate and returns whether it is sound.
+/// Errors come in a fixed order: `.role`/`.key` first, then a missing `.via`,
+/// then a self relation, then a junction that is one of the two ends.
+fn many_to_many_is_valid(
+    model: &SemanticModel,
+    pred: &PredicateCall,
+    (from, to): (&NodeRef, &NodeRef),
+    via: Option<&NodeRef>,
+    had_via: bool,
+    ctx: DiagCtxt,
+    diags: &mut Vec<Diagnostic>,
+) -> bool {
+    for cc in pred
+        .chain
+        .iter()
+        .filter(|cc| matches!(cc.name.as_str(), "role" | "key"))
+    {
+        let err = RdraError::KeyOptionOnManyToMany {
+            method: cc.name.clone(),
+        };
+        push_error(ctx, diags, cc.span.clone(), err);
+    }
+
+    if via.is_none() {
+        // If `.via` was present but failed to resolve, keep that diagnostic only.
+        if !had_via {
+            let entity_id = |node: &NodeRef| match node {
+                NodeRef::Entity(k) => model.entities[*k].id.clone(),
+                _ => "?".into(),
+            };
+            let err = RdraError::NMRelation {
+                from: entity_id(from),
+                to: entity_id(to),
+            };
+            push_error(ctx, diags, card_span(pred), err);
+        }
+        return false;
+    }
+
+    let (NodeRef::Entity(fk), NodeRef::Entity(tk)) = (from, to) else {
+        return true;
+    };
+    if fk == tk {
+        let err = RdraError::SelfNMRelation {
+            entity: model.entities[*fk].id.clone(),
+        };
+        push_error(ctx, diags, pred.span.clone(), err);
+        return false;
+    }
+    if let Some(NodeRef::Entity(jk)) = via {
+        if jk == fk || jk == tk {
+            let err = RdraError::ViaMustBeDistinct {
+                from: model.entities[*fk].id.clone(),
+                to: model.entities[*tk].id.clone(),
+                via: model.entities[*jk].id.clone(),
+            };
+            push_error(ctx, diags, via_span(pred), err);
+            return false;
+        }
+    }
+    true
 }
 
 fn relation_exists(model: &SemanticModel, from: &NodeRef, to: &NodeRef, kind: RelKind) -> bool {
