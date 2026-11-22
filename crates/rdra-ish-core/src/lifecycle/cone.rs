@@ -17,7 +17,8 @@ use super::TransitionSystem;
 
 /// The params a predicate names, in a slot or an index, in the pre-state or the successor.
 pub(crate) fn named_params(pred: &Pred) -> Vec<u8> {
-    fn term(t: &Term, out: &mut Vec<u8>) {
+    let mut out = Vec::new();
+    for t in pred.terms() {
         if let Term::Slot {
             at: At::Param(p) | At::Next(p),
             ..
@@ -29,24 +30,6 @@ pub(crate) fn named_params(pred: &Pred) -> Vec<u8> {
             }
         }
     }
-    fn walk(pred: &Pred, out: &mut Vec<u8>) {
-        match pred {
-            Pred::True | Pred::False => {}
-            Pred::Cmp(a, _, b) => {
-                term(a, out);
-                term(b, out);
-            }
-            Pred::In(a, vs) => {
-                term(a, out);
-                vs.iter().for_each(|v| term(v, out));
-            }
-            Pred::Not(p) => walk(p, out),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| walk(p, out)),
-            Pred::Forall { body, .. } | Pred::Exists { body, .. } => walk(body, out),
-        }
-    }
-    let mut out = Vec::new();
-    walk(pred, &mut out);
     out
 }
 
@@ -90,30 +73,18 @@ impl TransitionSystem {
     }
 
     pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut VarSet) {
-        let term = |t: &Term, out: &mut VarSet| match t {
-            Term::Slot { var, .. } => {
-                out.insert(*var);
-            }
-            Term::Now => {
-                out.extend(self.now);
-            }
-            Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
-        };
-        match pred {
-            Pred::True | Pred::False => {}
-            Pred::Cmp(a, _, b) => {
-                term(a, out);
-                term(b, out);
-            }
-            Pred::In(a, vs) => {
-                term(a, out);
-                vs.iter().for_each(|v| term(v, out));
-            }
-            Pred::Not(p) => self.pred_reads(p, out),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| self.pred_reads(p, out)),
-            Pred::Forall { entity, body } | Pred::Exists { entity, body } => {
+        for node in pred.nodes() {
+            if let Pred::Forall { entity, .. } | Pred::Exists { entity, .. } = node {
                 out.insert(self.entity(*entity).exists);
-                self.pred_reads(body, out);
+            }
+        }
+        for t in pred.terms() {
+            match t {
+                Term::Slot { var, .. } => {
+                    out.insert(*var);
+                }
+                Term::Now => out.extend(self.now),
+                Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
             }
         }
     }

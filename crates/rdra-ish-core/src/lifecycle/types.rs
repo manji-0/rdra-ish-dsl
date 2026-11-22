@@ -412,9 +412,37 @@ impl Guard {
 }
 
 impl Pred {
+    /// Every node of the predicate, itself first, then its parts left to right.
+    pub fn nodes(&self) -> impl Iterator<Item = &Pred> {
+        let mut stack = vec![self];
+        std::iter::from_fn(move || {
+            let pred = stack.pop()?;
+            match pred {
+                Pred::True | Pred::False | Pred::Cmp(..) | Pred::In(..) => {}
+                Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
+                    stack.push(body)
+                }
+                Pred::And(parts) | Pred::Or(parts) => stack.extend(parts.iter().rev()),
+            }
+            Some(pred)
+        })
+    }
+
+    /// Every term of the predicate, left to right.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
+        self.nodes().flat_map(|pred| {
+            let (first, second, rest): (_, _, &[Term]) = match pred {
+                Pred::Cmp(a, _, b) => (Some(a), Some(b), &[]),
+                Pred::In(a, vs) => (Some(a), None, vs),
+                _ => (None, None, &[]),
+            };
+            first.into_iter().chain(second).chain(rest)
+        })
+    }
+
     /// Whether some slot reference points into the successor.
     pub fn reads_next(&self) -> bool {
-        let term = |t: &Term| {
+        self.terms().any(|t| {
             matches!(
                 t,
                 Term::Slot {
@@ -422,15 +450,7 @@ impl Pred {
                     ..
                 } | Term::Index(At::Next(_))
             )
-        };
-        match self {
-            Pred::True | Pred::False => false,
-            Pred::Cmp(a, _, b) => term(a) || term(b),
-            Pred::In(a, vs) => term(a) || vs.iter().any(term),
-            Pred::Not(p) => p.reads_next(),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().any(Pred::reads_next),
-            Pred::Forall { body, .. } | Pred::Exists { body, .. } => body.reads_next(),
-        }
+        })
     }
 }
 

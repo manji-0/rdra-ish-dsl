@@ -32,25 +32,10 @@ pub(super) fn cond_entities(cond: &CrossEntityCondition) -> Vec<EntityKey> {
 }
 
 fn collect_vars(pred: &Pred, out: &mut Vec<VarId>) {
-    let term = |t: &Term, out: &mut Vec<VarId>| {
-        if let Term::Slot { var, .. } = t {
-            out.push(*var);
-        }
-    };
-    match pred {
-        Pred::True | Pred::False => {}
-        Pred::Cmp(a, _, b) => {
-            term(a, out);
-            term(b, out);
-        }
-        Pred::In(a, vs) => {
-            term(a, out);
-            vs.iter().for_each(|v| term(v, out));
-        }
-        Pred::Not(p) => collect_vars(p, out),
-        Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| collect_vars(p, out)),
-        Pred::Forall { body, .. } | Pred::Exists { body, .. } => collect_vars(body, out),
-    }
+    out.extend(pred.terms().filter_map(|t| match t {
+        Term::Slot { var, .. } => Some(*var),
+        _ => None,
+    }));
 }
 
 pub(super) fn implies(a: Pred, b: Pred) -> Pred {

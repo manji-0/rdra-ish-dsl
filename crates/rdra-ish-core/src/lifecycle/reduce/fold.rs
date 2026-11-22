@@ -135,7 +135,7 @@ impl Node {
 
 /// Whether `pred` reads a slot or index of a bound row.
 pub(super) fn names_bound(pred: &Pred) -> bool {
-    let term = |t: &Term| {
+    pred.terms().any(|t| {
         matches!(
             t,
             Term::Slot {
@@ -143,15 +143,7 @@ pub(super) fn names_bound(pred: &Pred) -> bool {
                 ..
             } | Term::Index(At::Bound(_))
         )
-    };
-    match pred {
-        Pred::True | Pred::False => false,
-        Pred::Cmp(a, _, b) => term(a) || term(b),
-        Pred::In(a, vs) => term(a) || vs.iter().any(term),
-        Pred::Not(x) => names_bound(x),
-        Pred::And(xs) | Pred::Or(xs) => xs.iter().any(names_bound),
-        Pred::Forall { body, .. } | Pred::Exists { body, .. } => names_bound(body),
-    }
+    })
 }
 
 impl TransitionSystem {

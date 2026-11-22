@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 
 use super::*;
 use crate::lifecycle::view::entity_view;
-use crate::lifecycle::{At, EntId, EntityStateResult, Pred, State, Target, Term};
+use crate::lifecycle::{At, EntId, EntityStateResult, State, Target, Term};
 use crate::load_project;
 
 pub(super) fn load(rel: &str) -> SemanticModel {
@@ -398,33 +398,17 @@ after(Decide).assert(Doc.status != drop)
         .find(|s| sub.actions()[s.act.index()].name == "Decide_2")
         .unwrap();
     assert_eq!(sub.actions()[step.act.index()].params.len(), 1);
-    fn params_read(pred: &Pred, out: &mut BTreeSet<u8>) {
-        let term = |t: &Term, out: &mut BTreeSet<u8>| {
-            if let Term::Slot {
+    let read: BTreeSet<u8> = step
+        .post
+        .terms()
+        .filter_map(|t| match t {
+            Term::Slot {
                 at: At::Param(p), ..
             }
-            | Term::Index(At::Param(p)) = t
-            {
-                out.insert(*p);
-            }
-        };
-        match pred {
-            Pred::True | Pred::False => {}
-            Pred::Cmp(a, _, b) => {
-                term(a, out);
-                term(b, out);
-            }
-            Pred::In(a, vs) => {
-                term(a, out);
-                vs.iter().for_each(|v| term(v, out));
-            }
-            Pred::Not(p) => params_read(p, out),
-            Pred::And(ps) | Pred::Or(ps) => ps.iter().for_each(|p| params_read(p, out)),
-            Pred::Forall { body, .. } | Pred::Exists { body, .. } => params_read(body, out),
-        }
-    }
-    let mut read = BTreeSet::new();
-    params_read(&step.post, &mut read);
+            | Term::Index(At::Param(p)) => Some(*p),
+            _ => None,
+        })
+        .collect();
     assert_eq!(
         read,
         BTreeSet::from([0]),
