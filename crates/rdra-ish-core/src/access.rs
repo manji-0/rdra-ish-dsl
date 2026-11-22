@@ -114,7 +114,7 @@ pub fn derive_actor_input_inferences(model: &SemanticModel) -> Vec<ActorInputInf
             continue;
         }
 
-        let bucs = bucs_containing_usecase(model, usecase);
+        let bucs = crate::business_flow::bucs_of_use_case(model, usecase);
         let buc_options: Vec<Option<BucKey>> = if bucs.is_empty() {
             vec![None]
         } else {
@@ -732,7 +732,7 @@ pub fn actors_for_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<Act
         sort_dedup_actors(model, &mut actors);
         return actors;
     }
-    let bucs = bucs_containing_usecase(model, usecase);
+    let bucs = crate::business_flow::bucs_of_use_case(model, usecase);
     for rel in &model.relations {
         if rel.kind == RelKind::Performs {
             if let (NodeRef::Actor(actor), NodeRef::Buc(buc)) = (&rel.from, &rel.to) {
@@ -763,7 +763,7 @@ fn bucs_lending_usecases(
         if performs(NodeRef::UseCase(source.usecase)) {
             continue;
         }
-        for buc in bucs_containing_usecase(model, source.usecase) {
+        for buc in crate::business_flow::bucs_of_use_case(model, source.usecase) {
             if performs(NodeRef::Buc(buc)) {
                 bucs.push(model.bucs[buc].id.clone());
             }
@@ -790,24 +790,6 @@ fn apis_invoked_by_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<Ap
     apis.sort_by_key(|api| model.apis[*api].id.as_str());
     apis.dedup();
     apis
-}
-
-fn bucs_containing_usecase(model: &SemanticModel, usecase: UseCaseKey) -> Vec<BucKey> {
-    let mut bucs: Vec<BucKey> = model
-        .relations
-        .iter()
-        .filter_map(|rel| {
-            if rel.kind == RelKind::Contains && rel.to == NodeRef::UseCase(usecase) {
-                if let NodeRef::Buc(buc) = &rel.from {
-                    return Some(*buc);
-                }
-            }
-            None
-        })
-        .collect();
-    bucs.sort_by_key(|buc| model.bucs[*buc].id.as_str());
-    bucs.dedup();
-    bucs
 }
 
 fn option_buc_id(model: &SemanticModel, buc: Option<BucKey>) -> &str {

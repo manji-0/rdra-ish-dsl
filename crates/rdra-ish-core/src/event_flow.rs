@@ -209,10 +209,7 @@ pub fn event_diagnostics(model: &SemanticModel) -> Vec<Diagnostic> {
 
         // triggers 先 UC がどの BUC にも contains されていない
         for &uc_key in &flow.triggers_ucs {
-            let belongs_to_buc = model
-                .relations
-                .iter()
-                .any(|r| r.kind == RelKind::Contains && r.to == NodeRef::UseCase(uc_key));
+            let belongs_to_buc = !crate::business_flow::bucs_of_use_case(model, uc_key).is_empty();
             if !belongs_to_buc {
                 let uc_id = model.use_cases[uc_key].id.clone();
                 push_model_decl_diagnostic(

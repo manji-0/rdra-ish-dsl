@@ -489,3 +489,31 @@ requires_permission(RecordGrant, DocketManage)
         ["actor 'Clerk' is missing permission 'DocketManage' required by usecase 'RecordGrant'\n  hint: add `has_permission(Clerk, DocketManage)`, narrow the actor's `performs` path, or relax the UC/API requirement if it is too strict; `performs(Clerk, BucFees)` makes Clerk perform every use case of BucFees: to say Clerk only takes part in BucFees, write `performs(Clerk, UseCase)` for the use cases it runs or `performs(Clerk, Step)` for its steps instead"]
     );
 }
+
+#[test]
+fn a_buc_actor_reaches_a_use_case_its_flow_steps_cover() {
+    let model = model_from(
+        r#"
+actor Staff "Staff"
+buc BucScheduling "Scheduling"
+flow SchedulingFlow "Scheduling flow"
+step BookStep "Book"
+usecase BookAppointment "Book Appointment"
+permission ScheduleWrite "Schedule Write"
+performs(Staff, BucScheduling)
+contains(BucScheduling, SchedulingFlow)
+contains(SchedulingFlow, BookStep)
+covers(BookStep, BookAppointment)
+requires_permission(BookAppointment, ScheduleWrite)
+"#,
+    );
+
+    let diags = permission_diagnostics(&model);
+    assert!(
+        !diags.iter().any(|diag| matches!(
+            &diag.error,
+            RdraError::UseCasePermissionNoActor { usecase, .. } if usecase == "BookAppointment"
+        )),
+        "{diags:?}"
+    );
+}

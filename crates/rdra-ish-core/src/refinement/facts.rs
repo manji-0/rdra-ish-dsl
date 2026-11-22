@@ -32,7 +32,7 @@ pub(crate) enum Axis {
 
 impl<'m> BucFacts<'m> {
     pub fn collect(model: &'m SemanticModel, buc: BucKey) -> Self {
-        let use_cases = buc_use_cases(model, buc);
+        let use_cases = crate::business_flow::buc_use_cases(model, buc);
         let mut entities = Vec::new();
         for &uc in &use_cases {
             for entity in use_case_entities(model, uc) {
@@ -300,32 +300,6 @@ impl<'m> BucFacts<'m> {
     pub fn column_label(&self, entity: EntityKey, column: &str) -> String {
         format!("{}.{column}", self.entity_id(entity))
     }
-}
-
-fn buc_use_cases(model: &SemanticModel, buc: BucKey) -> Vec<UseCaseKey> {
-    let mut use_cases = Vec::new();
-    let mut visited = vec![NodeRef::Buc(buc)];
-    let mut queue = vec![NodeRef::Buc(buc)];
-    while let Some(current) = queue.pop() {
-        for rel in &model.relations {
-            if !matches!(rel.kind, RelKind::Contains | RelKind::Covers) || rel.from != current {
-                continue;
-            }
-            match &rel.to {
-                NodeRef::UseCase(uc) => {
-                    if !use_cases.contains(uc) {
-                        use_cases.push(*uc);
-                    }
-                }
-                to @ (NodeRef::Flow(_) | NodeRef::Step(_)) if !visited.contains(to) => {
-                    visited.push(to.clone());
-                    queue.push(to.clone());
-                }
-                _ => {}
-            }
-        }
-    }
-    use_cases
 }
 
 fn use_case_entities(model: &SemanticModel, uc: UseCaseKey) -> Vec<EntityKey> {

@@ -88,6 +88,10 @@
 - A BUC whose id another kind also uses (`buc Order` with `entity Order`) reaches its use
   cases again. It reached nothing, so `lint` drew false findings on it and `--buc`
   diagrams of it came out empty (#158).
+- A use case that a step of a BUC's flow covers is one of the BUC's use cases for
+  permissions, actor inputs and the `TriggeredUseCaseUnreachable` warning too, as it
+  already was for `next` and the BUC hand-offs. `performs(Actor, Buc)` now lends the actor
+  to it, so its required permissions find the actor (#161).
 
 ## v2.3.0 - 2026-11-18
 

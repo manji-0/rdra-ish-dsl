@@ -1,7 +1,7 @@
 //! How BUCs connect and who takes part in them: the hand-offs between BUCs through events,
 //! and each actor's and external system's part in a BUC. Both read declared relations only.
 
-use crate::model::{BucKey, EventKey, NodeRef, RelKind, SemanticModel};
+use crate::model::{BucKey, EventKey, NodeRef, RelKind, SemanticModel, UseCaseKey};
 use std::collections::BTreeSet;
 
 /// The use cases and steps that `bucs` contain: a use case directly or through a step of one
@@ -26,6 +26,30 @@ pub fn buc_members(model: &SemanticModel, bucs: &[NodeRef]) -> (Vec<NodeRef>, Ve
         .filter(|node| matches!(node, NodeRef::UseCase(_)))
         .collect();
     (usecases, steps)
+}
+
+/// The use cases of `buc` as [`buc_members`] finds them, each once.
+pub fn buc_use_cases(model: &SemanticModel, buc: BucKey) -> Vec<UseCaseKey> {
+    let mut use_cases = Vec::new();
+    for node in buc_members(model, &[NodeRef::Buc(buc)]).0 {
+        if let NodeRef::UseCase(uc) = node {
+            if !use_cases.contains(&uc) {
+                use_cases.push(uc);
+            }
+        }
+    }
+    use_cases
+}
+
+/// The BUCs that have `usecase` among their [`buc_use_cases`], sorted by id.
+pub fn bucs_of_use_case(model: &SemanticModel, usecase: UseCaseKey) -> Vec<BucKey> {
+    let mut bucs: Vec<BucKey> = model
+        .bucs
+        .keys()
+        .filter(|buc| buc_use_cases(model, *buc).contains(&usecase))
+        .collect();
+    bucs.sort_by_key(|buc| model.bucs[*buc].id.as_str());
+    bucs
 }
 
 /// A BUC that starts another: a use case contained in `from` raises `event`, and `event`
