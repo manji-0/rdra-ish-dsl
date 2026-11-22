@@ -188,3 +188,71 @@ fn a_malformed_manifest_clears_diagnostics_and_reports_the_error() {
     });
     let _ = std::fs::remove_dir_all(root);
 }
+
+#[test]
+fn a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text() {
+    let root = workspace();
+    let open = root.join("other.rdra");
+    let mut client = Client::start();
+    client.send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"processId": null, "rootUri": uri(&root), "capabilities": {}}}));
+    client.wait_for("initialize", |m| m["id"] == 1);
+    client.notify("initialized", json!({}));
+    client.notify(
+        "textDocument/didOpen",
+        json!({"textDocument": {"uri": uri(&open), "languageId": "rdra", "version": 1,
+            "text": std::fs::read_to_string(&open).unwrap()}}),
+    );
+    client.wait_for_diagnostics(&uri(&open), "diagnostics of the opened text", |_| true);
+    for version in 2..40 {
+        let text = if version == 39 {
+            "entity Order \"Order\" { id: Int @pk }\n".to_string()
+        } else {
+            // Older texts are larger, so their analysis is slower and would finish last.
+            let mut text = format!(
+                "entity Order \"Order\" {{ id: Int @pk }}\nreads(Missing{version}, Order)\n"
+            );
+            for n in 0..(40 - version) * 40 {
+                text.push_str(&format!(
+                    "entity E{n} \"E\" {{ id: Int @pk  o: Int }}\nrelate(E{n}, Order, N:1)\n"
+                ));
+            }
+            text
+        };
+        client.notify(
+            "textDocument/didChange",
+            json!({"textDocument": {"uri": uri(&open), "version": version},
+                "contentChanges": [{"text": text}]}),
+        );
+    }
+
+    let mut last = Some(
+        client.wait_for("diagnostics after the edits", |m| {
+            m["method"] == "textDocument/publishDiagnostics"
+                && m["params"]["uri"] == uri(&open).as_str()
+        })["params"]["diagnostics"]
+            .clone(),
+    );
+    loop {
+        match client.messages.recv_timeout(Duration::from_secs(3)) {
+            Ok(m) => {
+                if m["method"] == "textDocument/publishDiagnostics"
+                    && m["params"]["uri"] == uri(&open).as_str()
+                {
+                    last = Some(m["params"]["diagnostics"].clone());
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => break,
+            Err(RecvTimeoutError::Disconnected) => panic!("server exited"),
+        }
+    }
+    let last = last.expect("diagnostics published for other.rdra");
+    assert!(
+        last.as_array()
+            .unwrap()
+            .iter()
+            .all(|d| !d["message"].as_str().unwrap().contains("Missing")),
+        "the last diagnostics are of an older text: {last}"
+    );
+    let _ = std::fs::remove_dir_all(root);
+}

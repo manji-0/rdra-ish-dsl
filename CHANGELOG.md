@@ -80,6 +80,11 @@
   every error as a diagram with nothing to draw and left it out. A sequence diagram of a
   BUC with no use case is still left out, and its error no longer opens with `IO error:`
   (#156).
+- The language server analyzes the workspace off its message loop and publishes a result
+  only while it is the latest. A slower analysis of older text could otherwise publish
+  over a newer one, and every analysis held up the requests behind it: in the new test, 38
+  quick edits to a large file settled in about 3 seconds, where they took about a minute
+  before (#157).
 
 ## v2.3.0 - 2026-11-18
 

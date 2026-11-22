@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use rdra_ish_core::{analyze_project, load_project, Diagnostic, ProjectError, WorkspaceAnalysis};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
@@ -65,6 +66,11 @@ impl ServerState {
 pub struct Backend {
     client: Client,
     state: Arc<RwLock<ServerState>>,
+    /// Counts refreshes. A refresh publishes only while it is still the latest one, so a
+    /// slower refresh of older text cannot overwrite the result of a newer one.
+    generation: AtomicU64,
+    /// Held from the generation check to the end of publishing.
+    publishing: Mutex<()>,
 }
 
 impl Backend {
@@ -72,11 +78,15 @@ impl Backend {
         Self {
             client,
             state: Arc::new(RwLock::new(ServerState::default())),
+            generation: AtomicU64::new(0),
+            publishing: Mutex::new(()),
         }
     }
 
     async fn refresh_analysis(&self) {
         let state = self.state.read().await;
+        // Taken under the read lock, so a refresh that saw newer documents has a later number.
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let mut inputs: Vec<PathBuf> = state
             .workspace_roots
             .iter()
@@ -95,15 +105,25 @@ impl Backend {
         let overlays = state.documents.clone();
         drop(state);
 
-        let project = match load_project(&inputs, Some(&overlays)) {
-            Ok(project) => project,
+        let analyzed = tokio::task::spawn_blocking({
+            let overlays = overlays.clone();
+            move || load_project(&inputs, Some(&overlays)).map(analyze_project)
+        })
+        .await
+        .unwrap_or_else(|err| std::panic::resume_unwind(err.into_panic()));
+
+        let _publishing = self.publishing.lock().await;
+        if self.generation.load(Ordering::SeqCst) != generation {
+            return;
+        }
+        let analysis = match analyzed {
+            Ok(analysis) => analysis,
             Err(ProjectError::NoRdraFiles) => return,
             Err(err) => {
                 self.report_load_error(&err, &overlays).await;
                 return;
             }
         };
-        let analysis = analyze_project(project);
         self.publish_diagnostics(&analysis).await;
 
         let mut state = self.state.write().await;
