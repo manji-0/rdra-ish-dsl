@@ -893,3 +893,129 @@ fn a_missing_tlc_jar_is_named_in_the_error() {
         "{stderr}"
     );
 }
+
+/// The check on `qty` reads one column; the forbidden pair reads `qty` and `flagged`, so its
+/// cone holds the check's cone and its module the check too.
+const NESTED_CONES: &str = r#"
+entity Order "注文" { id: Int @pk  qty: Int @default("1") @check(qty >= 1)  flagged: Bool @default(false) }
+usecase Place "注文"
+usecase Bump "増量"
+usecase Flag "印"
+creates(Place, Order)
+sets(Bump, Order.qty == 2)
+sets(Flag, Order.flagged == true)
+"#;
+
+/// A cone whose checks another cone's module holds is not run when that cone passes: its line
+/// names the cone that checked it. When that cone fails, the smaller one runs as before, so
+/// its line carries its own state count and the counterexample is the larger cone's alone.
+#[test]
+fn a_cone_another_cone_covers_runs_only_when_that_cone_fails() {
+    if !have_tlc() {
+        return;
+    }
+    let line = |stdout: &str| {
+        stdout
+            .lines()
+            .find(|l| l.starts_with("Cone_Check_Order_qty_0 "))
+            .unwrap_or_else(|| panic!("no line for the check's cone\n{stdout}"))
+            .to_string()
+    };
+    // No order has qty 0, so the pair is never reached and the larger cone passes.
+    let passing = format!("{NESTED_CONES}forbidden(Order, qty == 0, flagged == true)\n");
+    let (stdout, stderr, code, dir) = verify_model("verify_cli_covered_cone", &passing, "specs");
+    assert_eq!(code, Some(0), "{stdout}\n{stderr}");
+    let covered = line(&stdout);
+    assert!(
+        covered.ends_with(": ok (checked in Cone_Forbidden_Order_0)"),
+        "{covered}"
+    );
+    // The covered cone's spec is still written, for a run by hand.
+    assert!(dir.join("specs/Cone_Check_Order_qty_0.tla").is_file());
+
+    // Bump then Flag reaches the pair: the larger cone fails, so the check's cone runs.
+    let failing = format!("{NESTED_CONES}forbidden(Order, qty == 2, flagged == true)\n");
+    let (stdout, stderr, code, _) = verify_model("verify_cli_uncovered_cone", &failing, "specs");
+    assert_eq!(code, Some(1), "{stdout}\n{stderr}");
+    let ran = line(&stdout);
+    assert!(ran.contains(": ok (") && ran.contains(" states)"), "{ran}");
+    assert!(!stdout.contains("checked in"), "{stdout}");
+    assert!(stderr.contains("Forbidden_Order_0"), "{stderr}");
+    assert!(
+        !stderr.contains("Check_Order_qty_0 is violated"),
+        "{stderr}"
+    );
+}
+
+/// Mark writes `a` and `b` and must leave an open row. The forbidden pair reads `status` and
+/// `a`, so its cone holds the assert's reads and its module the assert, but not `b`: there a
+/// Mark that only sets `b` is a stutter, on which the assert passes. Make, Close, Mark is a
+/// real run that breaks the assert, and only the assert's own cone, which holds everything
+/// Mark writes, shows it.
+const ASSERT_BEYOND_THE_LARGER_MODULE: &str = r#"
+entity E "e" { id: Int @pk  status: Enum(open, closed) @default(open)  a: Bool @default(false)  b: Bool @default(false) }
+usecase Make "make"
+usecase Mark "mark"
+usecase Close "close"
+creates(Make, E)
+updates(Mark, E)
+updates(Close, E)
+sets(Make, E.a == true)
+sets(Mark, E.a == true)
+sets(Mark, E.b == true)
+transitions(Close, E.status, open -> closed)
+after(Mark).assert(E.status == open)
+forbidden(E, status == closed, a == false)
+"#;
+
+/// Handle runs only on an event that Raise raises, and Raise never runs. The cone of
+/// `v == true` alone leaves the event's mark out, so Handle runs freely there and the rule
+/// fails; the cone of the pair holds `status`, and with it the mark, so Handle never runs and
+/// both rules pass there. The larger cone holds Handle back where the smaller lets it run.
+const GUARD_ONLY_THE_LARGER_CONE_KEEPS: &str = r#"
+entity E "e" { id: Int @pk  status: Enum(open, ready, raised) @default(open)  v: Bool @default(false) }
+usecase Make "make"
+usecase Raise "raise"
+usecase Handle "handle"
+event Ev "ev"
+creates(Make, E)
+updates(Raise, E)
+updates(Handle, E)
+transitions(Raise, E.status, ready -> raised)
+sets(Handle, E.v == true)
+raises(Raise, Ev)
+triggers(Ev, Handle)
+forbidden(E, v == true)
+forbidden(E, v == true, status == raised)
+"#;
+
+/// A module that holds a cone's checks does not cover the cone when it takes fewer steps
+/// than the cone does: it lacks a var the cone's use case writes, or it keeps a guard the
+/// cone drops. Each cone runs and reports its counterexample.
+#[test]
+fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
+    if !have_tlc() {
+        return;
+    }
+    for (test, src, failing) in [
+        (
+            "verify_cli_assert_cone",
+            ASSERT_BEYOND_THE_LARGER_MODULE,
+            "Cone_AfterAssert_Mark_0 ",
+        ),
+        (
+            "verify_cli_dropped_guard_cone",
+            GUARD_ONLY_THE_LARGER_CONE_KEEPS,
+            "Cone_Forbidden_E_0 ",
+        ),
+    ] {
+        let (stdout, stderr, code, _) = verify_model(test, src, "specs");
+        assert_eq!(code, Some(1), "{test}\n{stdout}\n{stderr}");
+        assert!(!stdout.contains("checked in"), "{test}\n{stdout}");
+        let line = stdout
+            .lines()
+            .find(|l| l.starts_with(failing))
+            .unwrap_or_else(|| panic!("{test}: no line for {failing}\n{stdout}"));
+        assert!(line.contains(": counterexample ("), "{test}: {line}");
+    }
+}

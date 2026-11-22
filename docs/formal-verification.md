@@ -233,6 +233,26 @@ again on one worker, and `verify` reports only that run, so a counterexample is 
 single worker finds. A temporal property's lasso differs from run to run on one worker
 too.
 
+A cone's module holds every check that reads only the cone's vars, so a larger cone often
+holds all the checks of a smaller one. `verify` does not run the smaller cone when the
+larger one passes: its line reads `ok (checked in Cone_<larger>)`, with no state count. That
+is sound when the larger cone takes every step the smaller one takes, so that it reaches
+every state the smaller one reaches. `verify` asks for three things:
+
+- The larger module holds every check of the smaller.
+- The larger cone holds the smaller cone's vars and kept actions. For an invariant this
+  follows from the cones being closed. For an `after` assertion it does not: its cone holds
+  everything the use case writes, and a cone without those writes takes the use case's step
+  as a stutter, on which the assertion passes.
+- The larger cone leaves each action of the smaller the guards and params the smaller leaves
+  it. A cone drops a guard that reads outside it and the param of an entity it leaves out (a
+  creation it does not count, a triggering event it does not hold), so a larger cone may hold
+  back a step the smaller one takes, and the smaller one may fail a check the larger passes.
+
+A cone that is not covered runs as before. When the larger cone does not pass, the smaller
+one runs as well, so a counterexample is read on the smallest cone that shows it. The specs
+of a cone that did not run are still written.
+
 A property with `.fair(UC, ...)` (see
 [language-reference.md](./language-reference.md#fairness-fairusecase-)) carries its
 assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases

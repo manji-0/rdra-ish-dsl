@@ -20,8 +20,8 @@ use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use rdra_ish_core::lifecycle::{
-    Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity, StateDiag,
-    Target, TransitionSystem, VarSet,
+    ActId, Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity,
+    StateDiag, Target, TransitionSystem, VarSet,
 };
 use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
@@ -121,6 +121,11 @@ struct ConeSystem {
     cone: Cone,
     system: TransitionSystem,
     names: TlaNames,
+    /// Per action of the cone before any reduction, by its id in the whole system: how many
+    /// guards and params the cone leaves it. A cone drops a guard that reads outside it and
+    /// a param whose entity it leaves out, so a larger cone may hold an action back where a
+    /// smaller one lets it run (`covering`).
+    steps: BTreeMap<ActId, (usize, usize)>,
 }
 
 /// What a run decides about its checks.
@@ -245,6 +250,12 @@ fn cone_jobs(
             cfg: bundle.cfg,
             checks,
             kind: JobKind::Cone(Box::new(ConeSystem {
+                steps: ts
+                    .restrict_to(&cone.vars, &cone.keep)
+                    .actions()
+                    .iter()
+                    .map(|a| (a.source, (a.guards.len(), a.params.len())))
+                    .collect(),
                 cone,
                 system: sub,
                 names: bundle.names,
@@ -602,13 +613,122 @@ fn run_whole(tlc: &Tlc, dir: &Path, job: &Job, workers: &str, budget: Duration) 
 /// and no fewer than 2 workers on 4 cores or more: most models have a few long cones and
 /// many short ones, and once the short ones are done a long run on one worker would leave
 /// the other cores idle.
+///
+/// A cone another cone covers (`covering`) waits for that one: when it passes, the covered
+/// cone is `ok` without a run, and when it does not, the covered cone runs as it would have.
 fn run_cones(tlc: &Tlc, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<Vec<Ran>> {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    let at_once = cores.min(8).min(jobs.len()).max(1);
-    let workers = cone_workers(cores, at_once).to_string();
-    run_some(jobs, at_once, &workers, |job, workers| {
-        run_job(tlc, dir, modules, job, workers)
-    })
+    let run = |only: &[usize]| {
+        let at_once = cores.min(8).min(only.len()).max(1);
+        let workers = cone_workers(cores, at_once).to_string();
+        run_some(jobs, only, at_once, &workers, |job, workers| {
+            run_job(tlc, dir, modules, job, workers)
+        })
+    };
+    let covers = covering(jobs);
+    let first: Vec<usize> = (0..jobs.len()).filter(|i| covers[*i].is_none()).collect();
+    let mut ran: Vec<Option<Ran>> = jobs.iter().map(|_| None).collect();
+    for (i, r) in first.iter().zip(run(&first)?) {
+        ran[*i] = Some(r);
+    }
+    let passed = |ran: &[Option<Ran>], i: usize| {
+        matches!(
+            ran[i].as_ref().map(|r| &r.decision),
+            Some(Decision::Decided(Outcome::Ok))
+        )
+    };
+    let again: Vec<usize> = (0..jobs.len())
+        .filter(|i| covers[*i].is_some_and(|by| !passed(&ran, by)))
+        .collect();
+    for (i, r) in again.iter().zip(run(&again)?) {
+        ran[*i] = Some(r);
+    }
+    Ok(ran
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| {
+            r.unwrap_or_else(|| Ran {
+                decision: Decision::Decided(Outcome::Ok),
+                run: TlcRun::parse(""),
+                log: String::new(),
+                notes: vec![format!(
+                    "checked in {}",
+                    jobs[covers[i].expect("a job without a run is covered")].module
+                )],
+            })
+        })
+        .collect())
+}
+
+/// For each job, the job that covers it: a safety cone that passes only if this one does.
+/// Among the cones that cover a job, the one with the most checks is taken, the first of
+/// those: no cone covers it in turn, so it runs.
+fn covering(jobs: &[Job]) -> Vec<Option<usize>> {
+    let cones: Vec<Option<Covered>> = jobs
+        .iter()
+        .map(|job| match &job.kind {
+            JobKind::Cone(cone) => Some(Covered::of(job, cone)),
+            JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
+        })
+        .collect();
+    (0..jobs.len())
+        .map(|a| {
+            let small = cones[a].as_ref()?;
+            (0..jobs.len())
+                .filter(|&b| {
+                    cones[b].as_ref().is_some_and(|large| {
+                        large.covers(small) && (large.checks.len() > small.checks.len() || b < a)
+                    })
+                })
+                .max_by_key(|&b| {
+                    let checks = cones[b].as_ref().map_or(0, |c| c.checks.len());
+                    (checks, std::cmp::Reverse(b))
+                })
+        })
+        .collect()
+}
+
+/// What `covering` compares of a safety cone.
+struct Covered<'a> {
+    checks: BTreeSet<&'a str>,
+    cone: &'a ConeSystem,
+}
+
+impl<'a> Covered<'a> {
+    fn of(job: &'a Job, cone: &'a ConeSystem) -> Self {
+        Covered {
+            checks: job.checks.iter().map(String::as_str).collect(),
+            cone,
+        }
+    }
+
+    /// Whether this cone passing means `small` passes: this cone takes every step `small`
+    /// takes, and checks everything `small` checks.
+    ///
+    /// - Its module holds every check of `small`.
+    /// - It holds the vars and the kept actions of `small`. For an invariant that follows
+    ///   from the cones being closed. For an after-assert it does not: the assert's cone
+    ///   holds everything its use case writes, and a cone without those writes takes the
+    ///   use case's step as a stutter, on which the assert passes.
+    /// - It leaves each action of `small` the guards and params `small` leaves it, no more.
+    ///   A cone drops the guards that read outside it and the params of the entities it
+    ///   leaves out (a creation it does not count, a triggering event it does not hold). A
+    ///   guard or param this cone keeps and `small` drops would hold back here a step
+    ///   `small` takes, and `small` could fail a check this cone passes.
+    ///
+    /// Then every step of `small` is a step here from the same vars to the same vars, so
+    /// this cone reaches every state `small` reaches.
+    fn covers(&self, small: &Covered) -> bool {
+        let (large, small_cone) = (&self.cone, &small.cone);
+        !small.checks.is_empty()
+            && small.checks.is_subset(&self.checks)
+            && small_cone.cone.vars.is_subset(&large.cone.vars)
+            && small_cone.cone.keep.is_subset(&large.cone.keep)
+            && small_cone
+                .steps
+                .iter()
+                .all(|(action, shape)| large.steps.get(action) == Some(shape))
+    }
 }
 
 /// TLC workers per cone run when `at_once` runs share `cores`.
@@ -623,35 +743,38 @@ fn run_wholes(tlc: &Tlc, dir: &Path, jobs: &[Job], budget: Duration) -> Result<V
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
     let at_once = jobs.len().clamp(1, 2);
     let workers = (cores / at_once).max(1).to_string();
-    run_some(jobs, at_once, &workers, |job, workers| {
+    let all: Vec<usize> = (0..jobs.len()).collect();
+    run_some(jobs, &all, at_once, &workers, |job, workers| {
         run_whole(tlc, dir, job, workers, budget)
     })
 }
 
-/// Runs `jobs` on `threads` threads, each TLC run with `workers` workers, the heaviest first
-/// (`Job::weight`). The results come back in job order.
+/// Runs the jobs `only` names on `threads` threads, each TLC run with `workers` workers, the
+/// heaviest first (`Job::weight`). The results come back in the order of `only`.
 fn run_some(
     jobs: &[Job],
+    only: &[usize],
     threads: usize,
     workers: &str,
     run: impl Fn(&Job, &str) -> Result<Ran> + Sync,
 ) -> Result<Vec<Ran>> {
-    let mut order: Vec<usize> = (0..jobs.len()).collect();
-    order.sort_by_key(|i| std::cmp::Reverse(jobs[*i].weight()));
+    // Positions in `only`, heaviest job first.
+    let mut order: Vec<usize> = (0..only.len()).collect();
+    order.sort_by_key(|at| std::cmp::Reverse(jobs[only[*at]].weight()));
     let next = AtomicUsize::new(0);
     let done: Mutex<Vec<(usize, Result<Ran>)>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
-        for _ in 0..threads.min(jobs.len()) {
+        for _ in 0..threads.min(only.len()) {
             s.spawn(|| {
-                while let Some(&i) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
-                    let ran = run(&jobs[i], workers);
-                    done.lock().expect("lock").push((i, ran));
+                while let Some(&at) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let ran = run(&jobs[only[at]], workers);
+                    done.lock().expect("lock").push((at, ran));
                 }
             });
         }
     });
     let mut done = done.into_inner().expect("lock");
-    done.sort_by_key(|(i, _)| *i);
+    done.sort_by_key(|(at, _)| *at);
     done.into_iter().map(|(_, r)| r).collect()
 }
 
