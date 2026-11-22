@@ -94,7 +94,7 @@ pub(crate) fn resolve_set_values(
                 allowed: allowed.join(", "),
             }
         })?;
-        if values.iter().any(|v| v.normalize() == value.normalize()) {
+        if values.contains(&value) {
             return Err(RdraError::DuplicateSetValue {
                 col: col.name.clone(),
                 value: name.clone(),

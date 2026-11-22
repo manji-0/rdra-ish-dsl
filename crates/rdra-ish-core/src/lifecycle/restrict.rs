@@ -328,13 +328,11 @@ impl Remap {
                 column,
                 lifecycle,
                 variation,
-                pg_type,
             } => VarKind::Column {
                 entity: self.e(*entity),
                 column: column.clone(),
                 lifecycle: *lifecycle,
                 variation: *variation,
-                pg_type: pg_type.clone(),
             },
             VarKind::Prop { entity, key } => VarKind::Prop {
                 entity: self.e(*entity),

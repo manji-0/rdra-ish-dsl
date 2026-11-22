@@ -127,14 +127,9 @@ fn ts_type_for_field(
         StateFieldValue::Null => "null".to_string(),
         // The value is one of the bounded domain `0..=int_max`, not a fact of the row.
         StateFieldValue::Int(_) => "number".to_string(),
-        StateFieldValue::Present { pg_type } => match pg_type.as_deref() {
-            Some("timestamptz" | "timestamp" | "date") => "Date".to_string(),
-            Some("uuid") => "string".to_string(),
-            Some("json" | "jsonb") => "Record<string, unknown>".to_string(),
-            Some("money" | "decimal") => "number".to_string(),
-            Some(_) => "string".to_string(),
-            None => declared.map_or_else(|| "unknown".to_string(), |t| ts_column_type(model, t)),
-        },
+        StateFieldValue::Present => {
+            declared.map_or_else(|| "unknown".to_string(), |t| ts_column_type(model, t))
+        }
     }
 }
 

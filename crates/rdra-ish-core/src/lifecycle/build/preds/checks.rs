@@ -106,7 +106,7 @@ impl Builder<'_> {
             .comparisons()
             .iter()
             .any(|prop| !self.null_operands(ek, at, prop).is_empty());
-        match value.normalize() {
+        match value {
             EffectValue::Bool(b) if !nullable => self.passes(ek, at, expr, *b, site),
             EffectValue::Bool(true) => not(self.passes(ek, at, expr, false, site)),
             EffectValue::Bool(false) => not(self.passes(ek, at, expr, true, site)),

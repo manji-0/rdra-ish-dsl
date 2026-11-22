@@ -35,7 +35,7 @@ fn effect_value(value: &EffectValue) -> String {
         EffectValue::EnumVariant(variant) => variant.clone(),
         EffectValue::Bool(flag) => flag.to_string(),
         EffectValue::Int(number) => number.to_string(),
-        EffectValue::Present | EffectValue::TypedPresent(_) => "set".to_string(),
+        EffectValue::Present => "set".to_string(),
         EffectValue::Null => "null".to_string(),
     }
 }

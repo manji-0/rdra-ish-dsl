@@ -9,7 +9,7 @@ use crate::lifecycle::types::{
     Action, ActionOrigin, Birth, CmpOp, Domain, Effect, EntId, EntityDecl, Guard, GuardWhy,
     ModelRef, Pred, Site, Start, Term, Value, VarId, VarKind,
 };
-use crate::model::{ColumnType, EffectValue, EntityKey, Min, ModelColumn, SetValue, UseCaseKey};
+use crate::model::{ColumnType, EntityKey, Min, ModelColumn, UseCaseKey};
 use crate::tx::{infer_usecase_transactions, WriteKind};
 
 impl Builder<'_> {
@@ -169,21 +169,12 @@ impl Builder<'_> {
             }
             _ => return None,
         };
-        let pg_type = model
-            .column_effects
-            .iter()
-            .filter(|ce| ce.entity == ek && ce.column == col.name)
-            .find_map(|ce| match &ce.value {
-                SetValue::Value(EffectValue::TypedPresent(t)) => Some(t.clone()),
-                _ => None,
-            });
         let var = self.push_var(
             VarKind::Column {
                 entity: e,
                 column: col.name.clone(),
                 lifecycle: model.is_lifecycle_column(ek, &col.name),
                 variation,
-                pg_type,
             },
             domain,
             base,

@@ -17,8 +17,6 @@ pub struct StateTransition {
 
 /// `sets(...)` 述語で宣言されるカラム効果の抽象値
 ///
-/// 到達判定において `TypedPresent(_)` は `Present` と同値であり、
-/// 型名はメタデータ（出力・provenance 用）として記録される。
 /// `Int` は TLA+/TLC 算術軸向け。BFS `states` では状態軸にならない。
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EffectValue {
@@ -32,36 +30,22 @@ pub enum EffectValue {
     Present,
     /// Nullable カラムが null
     Null,
-    /// Nullable カラムが非null で、PostgreSQL 特殊型名を記録（例: "timestamptz", "jsonb"）。
-    /// 到達判定は `Present` と同一。
-    TypedPresent(std::string::String),
 }
 
 impl EffectValue {
-    /// 到達判定用の正規化: `TypedPresent` を `Present` に畳む
-    pub fn normalize(&self) -> &EffectValue {
-        match self {
-            EffectValue::TypedPresent(_) => &EffectValue::Present,
-            other => other,
-        }
-    }
-
-    /// null/非null の軸か（EffectValue が Present/Null/TypedPresent であれば true）
+    /// null/非null の軸か（EffectValue が Present/Null であれば true）
     pub fn is_nullable_axis(&self) -> bool {
-        matches!(
-            self,
-            EffectValue::Present | EffectValue::Null | EffectValue::TypedPresent(_)
-        )
+        matches!(self, EffectValue::Present | EffectValue::Null)
     }
 
     /// The value as the DSL writes it: `paid`, `true`, `3`, `present`, `null`.
     pub fn literal(&self) -> std::string::String {
-        match self.normalize() {
+        match self {
             EffectValue::EnumVariant(v) => v.clone(),
             EffectValue::Bool(b) => b.to_string(),
             EffectValue::Int(n) => n.to_string(),
             EffectValue::Null => "null".to_string(),
-            EffectValue::Present | EffectValue::TypedPresent(_) => "present".to_string(),
+            EffectValue::Present => "present".to_string(),
         }
     }
 }

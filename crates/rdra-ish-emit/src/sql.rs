@@ -796,12 +796,9 @@ impl<'m> Script<'m> {
             // A list of plain values is `IN (...)`; a null `col` is in no list and outside
             // every one, as `==` and `!=` read it.
             CmpRhs::Values(values)
-                if values.iter().all(|v| {
-                    !matches!(
-                        v.normalize(),
-                        EffectValue::Null | EffectValue::Present | EffectValue::TypedPresent(_)
-                    )
-                }) =>
+                if values
+                    .iter()
+                    .all(|v| !matches!(v, EffectValue::Null | EffectValue::Present)) =>
             {
                 let list: Vec<String> = values.iter().map(literal).collect();
                 let list = list.join(", ");
@@ -829,7 +826,7 @@ impl<'m> Script<'m> {
                 CmpOpModel::Ne => format!("{col} IS NOT NULL"),
                 _ => format!("{col} IS NULL"),
             },
-            CmpRhs::Value(EffectValue::Present | EffectValue::TypedPresent(_)) => match op {
+            CmpRhs::Value(EffectValue::Present) => match op {
                 CmpOpModel::Ne => format!("{col} IS NULL"),
                 _ => format!("{col} IS NOT NULL"),
             },
@@ -940,13 +937,13 @@ fn and(parts: &[String]) -> String {
 }
 
 fn literal(value: &EffectValue) -> String {
-    match value.normalize() {
+    match value {
         EffectValue::EnumVariant(v) => string(v),
         EffectValue::Bool(true) => "TRUE".to_string(),
         EffectValue::Bool(false) => "FALSE".to_string(),
         EffectValue::Int(n) => n.to_string(),
         EffectValue::Null => "NULL".to_string(),
-        EffectValue::Present | EffectValue::TypedPresent(_) => "NULL".to_string(),
+        EffectValue::Present => "NULL".to_string(),
     }
 }
 

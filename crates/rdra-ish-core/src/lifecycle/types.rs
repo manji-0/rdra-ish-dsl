@@ -117,8 +117,6 @@ pub enum VarKind {
         lifecycle: bool,
         /// Typed by a `variation`: the actor chooses the value.
         variation: bool,
-        /// PostgreSQL type a `sets(.., present:<type>)` declared, for display only.
-        pg_type: Option<String>,
     },
     /// A comparison proposition a `drives(UC, E, cmp, bool)` names.
     Prop {

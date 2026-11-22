@@ -164,7 +164,7 @@ impl TransitionSystem {
                 Some(slot) => self.inst(*parent, usize::from(slot)).to_string(),
                 None => "null".to_string(),
             },
-            d => AbstractValue::of(d, value).display_with_type(None),
+            d => AbstractValue::of(d, value).display(),
         }
     }
 

@@ -66,13 +66,13 @@ impl<'m> Builder<'m> {
         }
         let Some((term, domain)) = self.read_slot(ek, column, at, site) else {
             // Not a state var: a non-null column is always present and never null.
-            return match value.normalize() {
+            return match value {
                 EffectValue::Present => Pred::True,
                 _ => Pred::False,
             };
         };
         let lit = |v: Value| Pred::Cmp(term.clone(), CmpOp::Eq, Term::Lit(v));
-        match (&domain, value.normalize()) {
+        match (&domain, value) {
             (Domain::Enum(values), EffectValue::EnumVariant(s)) => {
                 crate::lifecycle::build::variant_index(values, s)
                     .map_or(Pred::False, |i| lit(Value(i)))

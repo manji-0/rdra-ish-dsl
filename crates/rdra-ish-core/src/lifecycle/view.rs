@@ -15,7 +15,7 @@ use crate::model::SemanticModel;
 pub enum AxisKind {
     Enum(Vec<String>),
     Bool,
-    Nullable { pg_type: Option<String> },
+    Nullable,
     Int { max: u8 },
     NullableInt { max: u8 },
     Proposition { axis_key: String },
@@ -51,15 +51,14 @@ impl AbstractValue {
         }
     }
 
-    /// Display form; a present nullable column names the PostgreSQL type a `sets` declared.
-    pub fn display_with_type(&self, pg_type: Option<&str>) -> String {
-        match (self, pg_type) {
-            (AbstractValue::Present, Some(t)) => format!("present:{t}"),
-            (AbstractValue::Present, None) => "present".to_string(),
-            (AbstractValue::Null, _) => "null".to_string(),
-            (AbstractValue::Enum(s), _) => s.clone(),
-            (AbstractValue::Bool(b), _) => b.to_string(),
-            (AbstractValue::Int(n), _) => n.to_string(),
+    /// Display form: `paid`, `true`, `3`, `present`, `null`.
+    pub fn display(&self) -> String {
+        match self {
+            AbstractValue::Present => "present".to_string(),
+            AbstractValue::Null => "null".to_string(),
+            AbstractValue::Enum(s) => s.clone(),
+            AbstractValue::Bool(b) => b.to_string(),
+            AbstractValue::Int(n) => n.to_string(),
         }
     }
 }
@@ -108,7 +107,7 @@ impl EntityStateResult {
             .iter()
             .map(|a| match &a.kind {
                 AxisKind::Enum(v) => v.len(),
-                AxisKind::Bool | AxisKind::Nullable { .. } | AxisKind::Proposition { .. } => 2,
+                AxisKind::Bool | AxisKind::Nullable | AxisKind::Proposition { .. } => 2,
                 AxisKind::Int { max } => usize::from(*max) + 1,
                 AxisKind::NullableInt { max } => usize::from(*max) + 2,
             })
@@ -152,7 +151,7 @@ pub(crate) fn describe_slot(
     let body = p
         .values
         .iter()
-        .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
+        .map(|(c, v)| format!("{c}={}", v.display()))
         .collect::<Vec<_>>()
         .join(", ");
     let id = &ts.entity(e).id;
@@ -172,12 +171,9 @@ fn axis(ts: &TransitionSystem, var: super::types::VarId) -> StateAxis {
         },
         (_, Domain::Enum(values)) => AxisKind::Enum(values.clone()),
         (_, Domain::Bool) => AxisKind::Bool,
-        (VarKind::Column { pg_type, .. }, Domain::Nullable) => AxisKind::Nullable {
-            pg_type: pg_type.clone(),
-        },
         (_, Domain::Int) => AxisKind::Int { max },
         (_, Domain::NullableInt) => AxisKind::NullableInt { max },
-        _ => AxisKind::Nullable { pg_type: None },
+        _ => AxisKind::Nullable,
     };
     StateAxis {
         column: ts.var_name(var),

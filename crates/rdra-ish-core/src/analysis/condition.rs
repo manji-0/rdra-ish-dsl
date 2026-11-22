@@ -119,7 +119,7 @@ pub(crate) fn effect_value_display(
         EffectValue::EnumVariant(v) => model.value_display(entity, column, v).to_string(),
         EffectValue::Bool(b) => b.to_string(),
         EffectValue::Int(n) => n.to_string(),
-        EffectValue::Present | EffectValue::TypedPresent(_) => "present".to_string(),
+        EffectValue::Present => "present".to_string(),
         EffectValue::Null => "null".to_string(),
     }
 }

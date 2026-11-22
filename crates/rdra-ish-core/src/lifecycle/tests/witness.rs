@@ -61,7 +61,7 @@ fn every_witness_ends_in_its_pattern() {
                     .iter()
                     .map(|(c, v)| {
                         let field = c.strip_prefix("__cmp:").unwrap_or(c).to_string();
-                        (field, v.display_with_type(None))
+                        (field, v.display())
                     })
                     .collect();
                 let held = final_values(trace);

@@ -483,8 +483,7 @@ impl TransitionSystem {
                     subject: Subject::State {
                         entity: decl.id.clone(),
                         column: run.system.var_name(w.var),
-                        value: AbstractValue::of(&run.system.var(w.var).domain, w.value)
-                            .display_with_type(None),
+                        value: AbstractValue::of(&run.system.var(w.var).domain, w.value).display(),
                     },
                     cone: Some(decl.id.clone()),
                     why: capped(),

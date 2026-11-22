@@ -14,19 +14,17 @@ pub enum StateFieldValue {
     Enum(String),
     Bool(bool),
     Null,
-    Present { pg_type: Option<String> },
+    Present,
     Int(i64),
 }
 
 impl StateFieldValue {
-    pub fn from_abstract(val: &AbstractValue, pg_type: Option<&str>) -> Self {
+    pub fn from_abstract(val: &AbstractValue) -> Self {
         match val {
             AbstractValue::Enum(s) => StateFieldValue::Enum(s.clone()),
             AbstractValue::Bool(b) => StateFieldValue::Bool(*b),
             AbstractValue::Null => StateFieldValue::Null,
-            AbstractValue::Present => StateFieldValue::Present {
-                pg_type: pg_type.map(str::to_string),
-            },
+            AbstractValue::Present => StateFieldValue::Present,
             AbstractValue::Int(n) => StateFieldValue::Int(*n),
         }
     }
@@ -92,7 +90,7 @@ fn entity_state_variants_for_result(
     let variants = result
         .patterns
         .iter()
-        .map(|reachable| to_entity_state_variant(&result.axes, &discriminator_column, reachable))
+        .map(|reachable| to_entity_state_variant(&discriminator_column, reachable))
         .collect();
 
     Some(EntityStateVariants {
@@ -110,7 +108,6 @@ fn first_enum_axis_column(axes: &[StateAxis]) -> Option<String> {
 }
 
 fn to_entity_state_variant(
-    axes: &[StateAxis],
     discriminator_column: &str,
     reachable: &ReachablePattern,
 ) -> EntityStateVariant {
@@ -120,7 +117,7 @@ fn to_entity_state_variant(
         .get(discriminator_column)
         .map(|val| match val {
             AbstractValue::Enum(s) => s.clone(),
-            other => other.display_with_type(None),
+            other => other.display(),
         })
         .unwrap_or_else(|| "_".to_string());
 
@@ -129,18 +126,7 @@ fn to_entity_state_variant(
         if column == discriminator_column {
             continue;
         }
-        let pg_type = axes.iter().find_map(|ax| {
-            if ax.column == *column {
-                if let AxisKind::Nullable { pg_type } = &ax.kind {
-                    return pg_type.as_deref();
-                }
-            }
-            None
-        });
-        fields.insert(
-            column.clone(),
-            StateFieldValue::from_abstract(value, pg_type),
-        );
+        fields.insert(column.clone(), StateFieldValue::from_abstract(value));
     }
 
     EntityStateVariant {
@@ -220,7 +206,7 @@ sets(usecase::DeliverOrder, Order.delivered_at == present)
         assert!(delivered.is_terminal);
         assert_eq!(
             delivered.fields.get("delivered_at"),
-            Some(&StateFieldValue::Present { pg_type: None })
+            Some(&StateFieldValue::Present)
         );
     }
 

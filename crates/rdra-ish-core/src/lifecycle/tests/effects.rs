@@ -201,10 +201,7 @@ sets(usecase::Publish, Doc.metadata == present)
 "#,
     );
     assert_eq!(d.rows("Doc"), vec!["metadata=null", "metadata=present"]);
-    assert_eq!(
-        d.entity("Doc").axes[0].kind,
-        AxisKind::Nullable { pg_type: None }
-    );
+    assert_eq!(d.entity("Doc").axes[0].kind, AxisKind::Nullable);
 }
 
 #[test]

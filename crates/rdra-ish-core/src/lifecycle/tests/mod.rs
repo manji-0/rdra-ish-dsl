@@ -66,7 +66,7 @@ impl Derived {
                 p.pattern
                     .values
                     .iter()
-                    .map(|(c, v)| format!("{c}={}", v.display_with_type(None)))
+                    .map(|(c, v)| format!("{c}={}", v.display()))
                     .collect::<Vec<_>>()
                     .join(", ")
             })

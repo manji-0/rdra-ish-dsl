@@ -439,7 +439,7 @@ impl<'m> Builder<'m> {
         let literal = |column: &str| {
             model.column_effects.iter().enumerate().find_map(|(i, ce)| {
                 match (ce.origin == uc && ce.entity == pe.entity && ce.column == column)
-                    .then(|| ce.value.literal().map(EffectValue::normalize))
+                    .then(|| ce.value.literal())
                     .flatten()
                 {
                     Some(EffectValue::Int(n)) => Some((*n, i)),
@@ -541,7 +541,7 @@ impl<'m> Builder<'m> {
         site: &Site,
         ek: EntityKey,
     ) -> EffectRhs {
-        match (domain, value.normalize()) {
+        match (domain, value) {
             (Domain::Enum(values), EffectValue::EnumVariant(s)) => {
                 variant_index(values, s).map_or(EffectRhs::None, |i| EffectRhs::Value(Value(i)))
             }

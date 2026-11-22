@@ -172,7 +172,7 @@ fn tag_states(
 }
 
 fn presence(value: &EffectValue) -> Option<Refined> {
-    match value.normalize() {
+    match value {
         EffectValue::Present => Some(Refined::Present),
         EffectValue::Null => Some(Refined::Null),
         _ => None,
