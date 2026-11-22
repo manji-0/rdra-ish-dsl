@@ -439,8 +439,10 @@ impl Pred {
     }
 
     /// Whether some slot reference points into the successor.
+    /// The explorer asks this of every guard in every state, so it walks the tree in place:
+    /// `terms` keeps a stack on the heap.
     pub fn reads_next(&self) -> bool {
-        self.terms().any(|t| {
+        let next = |t: &Term| {
             matches!(
                 t,
                 Term::Slot {
@@ -448,7 +450,16 @@ impl Pred {
                     ..
                 } | Term::Index(At::Next(_))
             )
-        })
+        };
+        match self {
+            Pred::True | Pred::False => false,
+            Pred::Cmp(a, _, b) => next(a) || next(b),
+            Pred::In(a, values) => next(a) || values.iter().any(next),
+            Pred::Not(body) | Pred::Forall { body, .. } | Pred::Exists { body, .. } => {
+                body.reads_next()
+            }
+            Pred::And(parts) | Pred::Or(parts) => parts.iter().any(Pred::reads_next),
+        }
     }
 }
 

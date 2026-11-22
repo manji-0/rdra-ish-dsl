@@ -186,13 +186,24 @@ impl Reduction {
     /// then the bits.
     pub(crate) fn input_bytes(&self, ts: &TransitionSystem, s: &State) -> Vec<u8> {
         let mut out = Vec::new();
+        self.input_bytes_into(ts, s, &mut out);
+        out
+    }
+
+    /// `input_bytes` written into `out`, which keeps its allocation.
+    pub(crate) fn input_bytes_into(&self, ts: &TransitionSystem, s: &State, out: &mut Vec<u8>) {
+        out.clear();
         for &(at, w, in_s) in &self.spans {
             if !in_s {
                 out.extend_from_slice(&s.0[at..at + w]);
             }
         }
-        out.extend(self.bit_values(ts, s));
-        out
+        let slots = ts.bounds.slots();
+        for group in &self.bits {
+            for c in 0..slots as u8 {
+                out.push(u8::from(group.iter().any(|f| f.holds(ts, s, c))));
+            }
+        }
     }
 
     /// The input bits of a state: per bit group and slot of its key, whether some fold of
@@ -527,7 +538,10 @@ impl TransitionSystem {
 
     /// The moves of `s` without the reduction: the real step relation on a reduced state.
     pub(crate) fn plain_moves(&self, s: &State) -> Vec<Step> {
-        self.moves_of(s, false)
+        let mut out = super::explore::Moves::default();
+        self.moves_of_into(s, false, &mut s.clone(), &mut out);
+        out.into_moves()
+            .into_iter()
             .map(|m| (m.act, m.params, m.next))
             .collect()
     }
@@ -535,28 +549,25 @@ impl TransitionSystem {
     /// The moves of `s`, with the reduction applied when the system has one and `reduced`: the
     /// S actions are left out, the class moves come last, and a T step that sets an input of
     /// S moves the representative to the class the inputs put it in.
-    pub(crate) fn moves_of<'s>(
-        &'s self,
-        s: &'s State,
+    pub(crate) fn moves_of_into(
+        &self,
+        s: &State,
         reduced: bool,
-    ) -> impl Iterator<Item = super::explore::Move> + 's {
-        let r = if reduced { self.reduction() } else { None };
-        let extra: Vec<super::explore::Move> = r
-            .map(|r| {
-                r.moves_from(self, s)
-                    .into_iter()
-                    .map(|(act, params, next)| super::explore::Move { act, params, next })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let inputs = r
+        scratch: &mut State,
+        out: &mut super::explore::Moves,
+    ) {
+        let r = self.reduction().filter(|_| reduced);
+        let rises = r
             .filter(|r| !r.inputs.is_empty() || !r.bits.is_empty())
             .map(|r| (r, r.input_bytes(self, s)));
-        self.raw_moves(s)
-            .filter(move |m| r.is_none_or(|r| !r.skips(m.act)))
-            .map(move |mut m| {
-                if let Some((r, before)) = &inputs {
-                    let after = r.input_bytes(self, &m.next);
+        let mut after = Vec::new();
+        self.each_raw_move(
+            s,
+            |act| r.is_some_and(|r| r.skips(act)),
+            scratch,
+            |act, params, next| {
+                if let Some((r, before)) = &rises {
+                    r.input_bytes_into(self, next, &mut after);
                     if after != *before {
                         let class = r
                             .class(self, s)
@@ -564,15 +575,20 @@ impl TransitionSystem {
                         let to = r.recanon(class, before, &after).unwrap_or_else(|| {
                             panic!(
                                 "a T step's rise is a rise of the extended sub-lifecycle: {} from class {class} inputs {before:?} to {after:?}, known {:?}",
-                                self.actions[m.act.index()].name,
+                                self.actions[act.index()].name,
                                 r.rises_from(class)
                             )
                         });
-                        r.write(&mut m.next, &r.reps[to as usize]);
+                        r.write(next, &r.reps[to as usize]);
                     }
                 }
-                m
-            })
-            .chain(extra)
+                out.push(act, params, next);
+            },
+        );
+        if let Some(r) = r {
+            for (act, params, next) in r.moves_from(self, s) {
+                out.push(act, &params, &next);
+            }
+        }
     }
 }

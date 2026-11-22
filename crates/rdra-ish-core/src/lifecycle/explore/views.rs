@@ -11,13 +11,13 @@ impl EntityView {
         self.index.get(key).copied()
     }
 
-    pub(super) fn intern(&mut self, key: Box<[u8]>) -> usize {
-        if let Some(id) = self.index.get(&key) {
+    pub(super) fn intern(&mut self, key: &[u8]) -> usize {
+        if let Some(id) = self.index.get(key) {
             return *id;
         }
         let id = self.patterns.len();
-        self.index.insert(key.clone(), id);
-        self.patterns.push(key);
+        self.index.insert(key.into(), id);
+        self.patterns.push(key.into());
         self.initial.push(false);
         self.changes.push(false);
         self.deletable.push(false);
