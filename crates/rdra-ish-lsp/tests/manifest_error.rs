@@ -63,7 +63,7 @@ impl Client {
     }
 
     fn wait_for(&self, what: &str, mut matches: impl FnMut(&Value) -> bool) -> Value {
-        let deadline = Instant::now() + Duration::from_secs(20);
+        let deadline = Instant::now() + Duration::from_secs(60);
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
             match self.messages.recv_timeout(left) {
@@ -226,32 +226,37 @@ fn a_burst_of_edits_ends_on_the_diagnostics_of_the_last_text() {
         );
     }
 
-    let mut last = Some(
-        client.wait_for("diagnostics after the edits", |m| {
-            m["method"] == "textDocument/publishDiagnostics"
-                && m["params"]["uri"] == uri(&open).as_str()
-        })["params"]["diagnostics"]
-            .clone(),
-    );
+    // Analyses of intermediate texts can take seconds on a slow runner, so a quiet window
+    // alone does not mean the server has settled. Wait for the last text's diagnostics first,
+    // then make sure nothing older is published after them.
+    let is_last_text = |diagnostics: &Value| {
+        diagnostics
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|d| !d["message"].as_str().unwrap().contains("Missing"))
+    };
+    let mut last = client.wait_for("diagnostics of the last text", |m| {
+        m["method"] == "textDocument/publishDiagnostics"
+            && m["params"]["uri"] == uri(&open).as_str()
+            && is_last_text(&m["params"]["diagnostics"])
+    })["params"]["diagnostics"]
+        .clone();
     loop {
         match client.messages.recv_timeout(Duration::from_secs(3)) {
             Ok(m) => {
                 if m["method"] == "textDocument/publishDiagnostics"
                     && m["params"]["uri"] == uri(&open).as_str()
                 {
-                    last = Some(m["params"]["diagnostics"].clone());
+                    last = m["params"]["diagnostics"].clone();
                 }
             }
             Err(RecvTimeoutError::Timeout) => break,
             Err(RecvTimeoutError::Disconnected) => panic!("server exited"),
         }
     }
-    let last = last.expect("diagnostics published for other.rdra");
     assert!(
-        last.as_array()
-            .unwrap()
-            .iter()
-            .all(|d| !d["message"].as_str().unwrap().contains("Missing")),
+        is_last_text(&last),
         "the last diagnostics are of an older text: {last}"
     );
     let _ = std::fs::remove_dir_all(root);
