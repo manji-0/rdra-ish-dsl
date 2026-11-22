@@ -102,6 +102,17 @@ impl Job {
             JobKind::Whole(_) => Heap::Temporal,
         }
     }
+
+    /// A guess at how long the run takes, to start the long ones first: a temporal property
+    /// before a safety cone, since TLC also searches its behavior graph, then the system with
+    /// more variables.
+    fn weight(&self) -> (bool, usize) {
+        match &self.kind {
+            JobKind::Cone(cone) => (false, cone.system.var_ids().count()),
+            JobKind::PropertyCone(p) => (true, p.cone.reduced.var_ids().count()),
+            JobKind::Whole(_) => (true, usize::MAX),
+        }
+    }
 }
 
 /// A cone as TLC checks it: the whole system's cone, its restricted system, and the names
@@ -311,6 +322,20 @@ fn whole_job(ts: &TransitionSystem, names: &TlaNames, module: &str, i: usize) ->
 fn run_job(tlc: &Tlc, dir: &Path, modules: &Modules, job: &Job, workers: &str) -> Result<Ran> {
     let cfg = format!("{}.cfg", job.module);
     let safety = matches!(job.kind, JobKind::Cone(_));
+    // With several workers TLC reaches the same states, so an `ok` is the `ok` of one
+    // worker, but it no longer finds a violation by the shortest trace, nor the same one on
+    // every run. A safety cone that does not pass is therefore run again on one worker, and
+    // only that run is reported. A property's lasso differs from run to run on one worker too.
+    let workers = match (safety, workers) {
+        (true, many) if many != "1" => {
+            let ran = run_cfg(tlc, dir, &job.module, job.heap(), &cfg, many, safety)?;
+            if ran.decision.outcome() == Outcome::Ok {
+                return Ok(ran);
+            }
+            "1"
+        }
+        _ => workers,
+    };
     let mut ran = run_cfg(tlc, dir, &job.module, job.heap(), &cfg, workers, safety)?;
     match &job.kind {
         JobKind::Cone(cs) => {
@@ -566,12 +591,23 @@ fn run_whole(tlc: &Tlc, dir: &Path, job: &Job, workers: &str, budget: Duration) 
     })
 }
 
-/// Runs the cone jobs, up to 8 at once with one TLC worker each.
+/// Runs the cone jobs, up to 8 at once. Each run gets the cores divided by the runs at once,
+/// and no fewer than 2 workers on 4 cores or more: most models have a few long cones and
+/// many short ones, and once the short ones are done a long run on one worker would leave
+/// the other cores idle.
 fn run_cones(tlc: &Tlc, dir: &Path, modules: &Modules, jobs: &[Job]) -> Result<Vec<Ran>> {
     let cores = std::thread::available_parallelism().map_or(4, |n| n.get());
-    run_some(jobs, cores.min(8), "1", |job, workers| {
+    let at_once = cores.min(8).min(jobs.len()).max(1);
+    let workers = cone_workers(cores, at_once).to_string();
+    run_some(jobs, at_once, &workers, |job, workers| {
         run_job(tlc, dir, modules, job, workers)
     })
+}
+
+/// TLC workers per cone run when `at_once` runs share `cores`.
+fn cone_workers(cores: usize, at_once: usize) -> usize {
+    let floor = if cores >= 4 { 2 } else { 1 };
+    (cores / at_once).max(floor)
 }
 
 /// Runs the whole-model property jobs, up to 2 at once (each takes the temporal heap) sharing
@@ -585,22 +621,25 @@ fn run_wholes(tlc: &Tlc, dir: &Path, jobs: &[Job], budget: Duration) -> Result<V
     })
 }
 
-/// Runs `jobs` on `threads` threads, each TLC run with `workers` workers, in job order.
+/// Runs `jobs` on `threads` threads, each TLC run with `workers` workers, the heaviest first
+/// (`Job::weight`). The results come back in job order.
 fn run_some(
     jobs: &[Job],
     threads: usize,
     workers: &str,
     run: impl Fn(&Job, &str) -> Result<Ran> + Sync,
 ) -> Result<Vec<Ran>> {
+    let mut order: Vec<usize> = (0..jobs.len()).collect();
+    order.sort_by_key(|i| std::cmp::Reverse(jobs[*i].weight()));
     let next = AtomicUsize::new(0);
     let done: Mutex<Vec<(usize, Result<Ran>)>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for _ in 0..threads.min(jobs.len()) {
-            s.spawn(|| loop {
-                let i = next.fetch_add(1, Ordering::SeqCst);
-                let Some(job) = jobs.get(i) else { break };
-                let ran = run(job, workers);
-                done.lock().expect("lock").push((i, ran));
+            s.spawn(|| {
+                while let Some(&i) = order.get(next.fetch_add(1, Ordering::SeqCst)) {
+                    let ran = run(&jobs[i], workers);
+                    done.lock().expect("lock").push((i, ran));
+                }
             });
         }
     });
@@ -1204,6 +1243,24 @@ pub(crate) fn find_on_path(name: &str) -> Option<PathBuf> {
             .map(|file| dir.join(file))
             .find(|path| path.is_file())
     })
+}
+
+#[cfg(test)]
+mod worker_tests {
+    use super::cone_workers;
+
+    /// The runs at once never get fewer workers than the cores divide into, and a long run
+    /// keeps a second worker once the short ones are done.
+    #[test]
+    fn cone_runs_share_the_cores_and_keep_two_workers_on_four_cores() {
+        assert_eq!(cone_workers(1, 1), 1);
+        assert_eq!(cone_workers(2, 2), 1);
+        assert_eq!(cone_workers(4, 4), 2);
+        assert_eq!(cone_workers(4, 1), 4);
+        assert_eq!(cone_workers(8, 8), 2);
+        assert_eq!(cone_workers(16, 8), 2);
+        assert_eq!(cone_workers(16, 2), 8);
+    }
 }
 
 #[cfg(test)]

@@ -223,6 +223,16 @@ TLC reports a temporal violation as `Temporal properties were violated.` without
 property, so each property runs alone: module `Cone_<Property>` with a `.cfg` that names
 that one `PROPERTY`. The property cones run with the other cones, in parallel.
 
+Up to 8 cone runs go at once, the property cones and the cones with the most variables
+first, since those tend to be the long ones. Each run gets the cores divided by the runs
+at once, and no fewer than 2 TLC workers on 4 cores or more: once the short cones are
+done, a long cone on one worker would leave the other cores idle. With several workers
+TLC reaches the same states, so an `ok` is the `ok` of one worker, but it no longer finds
+a violation by the shortest trace. A safety cone that does not pass is therefore run
+again on one worker, and `verify` reports only that run, so a counterexample is the one a
+single worker finds. A temporal property's lasso differs from run to run on one worker
+too.
+
 A property with `.fair(UC, ...)` (see
 [language-reference.md](./language-reference.md#fairness-fairusecase-)) carries its
 assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases
