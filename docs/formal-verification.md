@@ -1104,8 +1104,11 @@ Name         = [A-Za-z0-9_]+
 - An `error: ...` line without a name, such as a load error, is a mismatch whatever the
   header says.
 - Each `(command, flags)` pair runs once, and a pair may appear on one line only. A root
-  with no `check` line expects `check: ok`, and one with no unflagged `verify` line expects
-  `verify: tlc=ok`. A flagged line adds a run and replaces neither default.
+  with no `check` line expects `check: ok`, and one with no `verify` line expects
+  `verify: tlc=ok`. A root whose `verify` lines all carry flags runs only those: use this
+  for a model whose default bounds do not finish, and name the bounds it is checked at
+  (`samples/oidc-auth` runs `--instance-count 1 --prove` and a scoped run at two
+  instances).
 
 ```rdra
 // unwitnessed_state.rdra: TLC passes, and the BFS state-model findings fail the run.
@@ -1120,7 +1123,7 @@ Name         = [A-Za-z0-9_]+
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
-The script makes 65 runs of the 32 roots. Locally (Apple silicon) clinic-ops `verify` took
+The script makes 68 runs of the 33 roots. Locally (Apple silicon) clinic-ops `verify` took
 105 s at about 2.0 GB (50 s at 1.4 GB before the run marks of `CheckInPatient`, #80) and
 patent-ops `verify` 68 s at about 1.2 GB, their TLC JVMs included, and food-permit-ops
 `verify` 16 s, when last measured there. insurance-claim-ops `verify` takes about 180 s at

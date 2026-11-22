@@ -141,8 +141,17 @@ alone keeps it:
   one `IdToken` or `AccessToken` slot that `RedeemCode` would create, so
   `out/states_grant.txt` shows refreshed grants of the code flow only. At two instances the
   redemption has its own rows.
-- **`verify` has not been run on this model.** `check` decides every rule at one instance
-  per entity. The largest cone is 30,277 states (`lifecycle_measure`), about half the cap.
+- **`verify` runs at one instance per entity.** `verify --prove --instance-count 1` passes
+  TLC (9 cones, the largest 30,277 states, about 80 s) and proves all 16 rules with z3 for
+  any number of rows. At the default two instances, the cones of the browser flow exceed
+  two million states and do not finish in 15 GB of memory. Only the decoupled entities
+  pass at two instances:
+
+  ```sh
+  rdra-ish verify samples/oidc-auth --instance-count 1 --prove
+  rdra-ish verify samples/oidc-auth --entity BackchannelRequest --entity DeviceAuthorization \
+    --entity LogoutNotice --entity SigningKey
+  ```
 
 ## Diagnostics left in place
 

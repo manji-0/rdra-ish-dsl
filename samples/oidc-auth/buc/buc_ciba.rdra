@@ -1,3 +1,10 @@
+// The browser-flow cones exceed two million states at two instances, so verify runs them
+// at one instance and proves every rule for any number of rows; the decoupled entities
+// are checked at two instances.
+// expect check: ok
+// expect verify --instance-count 1 --prove --deny-undecided: tlc=ok
+// expect verify --deny-undecided --entity BackchannelRequest --entity DeviceAuthorization --entity LogoutNotice --entity SigningKey: tlc=ok
+
 module buc.ciba
 
 import shared.actors

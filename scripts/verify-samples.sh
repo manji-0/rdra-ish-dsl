@@ -100,10 +100,12 @@ while IFS= read -r root; do
     mismatches=$((mismatches + 1))
     continue
   fi
+  # A command with no header line runs once without flags. A root whose lines for a
+  # command are all flagged runs only those: the flags state the bounds it is checked at.
   for default in "check|ok" "verify|tlc=ok"; do
     found=false
     for k in ${keys[@]+"${keys[@]}"}; do
-      [[ "$k" == "${default%%|*}|" ]] && found=true
+      [[ "${k%%|*}" == "${default%%|*}" ]] && found=true
     done
     if ! $found; then
       keys+=("${default%%|*}|")
