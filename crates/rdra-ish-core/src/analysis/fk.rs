@@ -213,19 +213,20 @@ fn generate_key_columns(
     }
 
     let parent = &model.entities[model.foreign_keys[index].parent];
-    // A key column stores what the parent's key column stores.
-    let details: Vec<TypeDetail> = pk
+    // A key column stores what the parent's key column stores, and an enum's values keep
+    // their labels.
+    let copied: Vec<(TypeDetail, Vec<Option<String>>)> = pk
         .iter()
         .map(|(pk, _)| {
             parent
                 .columns
                 .iter()
                 .find(|c| c.name == *pk)
-                .map(|c| c.detail)
+                .map(|c| (c.detail, c.value_labels.clone()))
                 .unwrap_or_default()
         })
         .collect();
-    for ((name, (_, col_type)), detail) in names.iter().zip(pk).zip(details) {
+    for ((name, (_, col_type)), (detail, value_labels)) in names.iter().zip(pk).zip(copied) {
         model.entities[child_key].columns.push(ModelColumn {
             name: name.clone(),
             col_type: col_type.clone(),
@@ -240,7 +241,7 @@ fn generate_key_columns(
             is_history: false,
             is_tenant_scope: false,
             derived_expr: None,
-            value_labels: Vec::new(),
+            value_labels,
             end_values: Vec::new(),
             detail,
             generated: None,

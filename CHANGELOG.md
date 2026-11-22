@@ -73,6 +73,9 @@
 - A second definition of the same kind and id in one module no longer leaves a node with
   no symbol and no declaration site in the model. Diagrams, lists and exports of a model
   that `check` rejects for the duplicate show the node once (#154).
+- A key column copied from an enum key column keeps the labels of its values, so SQL
+  comments, DBML notes and the other outputs that print labels show them on the copy too
+  (#155).
 
 ## v2.3.0 - 2026-11-18
 
