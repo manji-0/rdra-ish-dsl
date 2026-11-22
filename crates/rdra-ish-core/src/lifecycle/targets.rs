@@ -11,6 +11,7 @@ use super::findings::{Progress, Runs, Taken, Witness};
 use super::types::{ActionOrigin, EntId, GuardWhy, Pred, Site, Term, VarKind};
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
+use crate::memory::{watch, MemorySize};
 use crate::model::{EntityKey, SemanticModel};
 use crate::parallel::{in_parallel, jobs};
 
@@ -91,6 +92,8 @@ pub enum UndecidedWhy {
     StateCap(usize),
     /// The entity's cone stopped at this many patterns of one entity.
     PatternCap(usize),
+    /// The entity's cone reached the memory limit; the str says how to raise it.
+    MemoryCap(MemorySize, &'static str),
     /// `--buc` leaves use cases out, so what they would reach or enable is not ruled out.
     Scope,
     /// `--entity` explores no cone that keeps the action.
@@ -140,6 +143,10 @@ impl fmt::Display for Undecided {
             UndecidedWhy::PatternCap(cap) => write!(
                 f,
                 "the {cone} cone stopped at the pattern cap ({cap} patterns)"
+            ),
+            UndecidedWhy::MemoryCap(limit, raise) => write!(
+                f,
+                "the {cone} cone stopped at the memory limit ({limit}; raise it with {raise})"
             ),
             UndecidedWhy::Scope => write!(f, "--buc leaves use cases out of the run"),
             UndecidedWhy::Unselected => write!(f, "no cone of a selected entity keeps it"),
@@ -205,18 +212,49 @@ impl TransitionSystem {
         }
         // Each cone is explored on its own system, so the cones run side by side; the runs
         // come back in cone order, and each is what it is alone.
-        let cones: Vec<ConeRun> = in_parallel(groups, jobs(), |(cone, shared)| {
+        let explore = |cone: &Cone, shared: &[Target], caps: Caps| {
             let system = if reduce {
                 let seeds = shared.iter().map(|t| self.target_seed(*t));
-                self.reduced_cone(&cone, seeds, caps)
+                self.reduced_cone(cone, seeds, caps)
             } else {
                 self.restrict_to(&cone.vars, &cone.keep)
             };
-            ConeRun {
-                cone,
-                run: system.run(caps),
-            }
+            system.run(caps)
+        };
+        let ran = in_parallel(groups, jobs(), |(cone, shared)| {
+            let (run, seen) = watch(|| explore(&cone, &shared, caps));
+            (cone, shared, run, seen)
         });
+        // Under a memory limit the result is the one of the cones run one at a time in cone
+        // order, each with the room the results before it leave. A cone whose run side by
+        // side met a fuller pool, or reached past that room, runs again alone with it.
+        // A crowded run is dropped before the first run again, so that what the runs hold
+        // stays near the limit.
+        let ran: Vec<_> = ran
+            .into_iter()
+            .map(|(cone, shared, run, seen)| {
+                let run = (!seen.crowded).then_some(run);
+                (cone, shared, run, seen.peak)
+            })
+            .collect();
+        let mut held = 0u64;
+        let mut cones = Vec::with_capacity(ran.len());
+        for (cone, shared, run, peak) in ran {
+            let run = match (caps.memory, run) {
+                (None, Some(run)) => run,
+                (Some(pool), run) => {
+                    let room = pool.room().saturating_sub(held);
+                    let run = match run.filter(|_| peak <= room) {
+                        Some(run) => run,
+                        None => explore(&cone, &shared, caps.charged_to(pool.with_room(room))),
+                    };
+                    held += run.kept;
+                    run
+                }
+                (None, None) => unreachable!("only a run charged to a pool is crowded"),
+            };
+            cones.push(ConeRun { cone, run });
+        }
         let mut out = TargetExploration {
             cones: Vec::new(),
             targets: Vec::new(),
@@ -464,6 +502,9 @@ impl TransitionSystem {
         let why = run.diags.iter().find_map(|d| match d.diag {
             StateDiag::StateCapReached { cap, .. } => Some(UndecidedWhy::StateCap(cap)),
             StateDiag::PatternCapReached { cap, .. } => Some(UndecidedWhy::PatternCap(cap)),
+            StateDiag::MemoryCapReached { limit, raise, .. } => {
+                Some(UndecidedWhy::MemoryCap(limit, raise))
+            }
             _ => None,
         });
         let capped = || why.expect("an incomplete run stopped at a cap");
@@ -622,7 +663,9 @@ impl TransitionSystem {
         for d in run.diags.iter().filter(|d| {
             matches!(
                 d.diag,
-                StateDiag::PatternCapReached { .. } | StateDiag::StateCapReached { .. }
+                StateDiag::PatternCapReached { .. }
+                    | StateDiag::StateCapReached { .. }
+                    | StateDiag::MemoryCapReached { .. }
             )
         }) {
             out.push(Diag {

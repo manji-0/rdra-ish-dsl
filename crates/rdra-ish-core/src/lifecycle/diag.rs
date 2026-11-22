@@ -5,6 +5,7 @@ use std::fmt;
 use super::lasso::Loop;
 use super::trace::{Inst, Trace};
 use super::types::{ActionOrigin, GuardWhy, InvText, LtlKind, ParamRole, Site};
+use crate::memory::MemorySize;
 use crate::model::EntityKey;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -136,6 +137,14 @@ pub enum StateDiag {
     /// The component's joint state count exceeded the cap; exploration stopped. `growth`
     /// names what the reached states vary in.
     StateCapReached { cap: usize, growth: CapGrowth },
+    /// The run's state store reached the memory limit at `states` states; exploration
+    /// stopped. `raise` says how to raise the limit.
+    MemoryCapReached {
+        limit: MemorySize,
+        raise: &'static str,
+        states: usize,
+        growth: CapGrowth,
+    },
     /// A reachable state violates a state constraint. Each constraint reports its first
     /// violation, with a shortest trace to it.
     ConstraintViolated {
@@ -481,6 +490,7 @@ impl StateDiag {
             }
             StateDiag::PatternCapReached { .. } => with("PatternCapReached", &[]),
             StateDiag::StateCapReached { .. } => with("StateCapReached", &[]),
+            StateDiag::MemoryCapReached { .. } => with("MemoryCapReached", &[]),
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 with("AssertOnInertUseCase", &[anchor])
             }
@@ -594,6 +604,7 @@ impl StateDiag {
             | StateDiag::PatternCapReached { .. }
             | StateDiag::ContradictoryDrivenComparison { .. }
             | StateDiag::StateCapReached { .. }
+            | StateDiag::MemoryCapReached { .. }
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::PropertyViolated { .. }
@@ -732,6 +743,15 @@ impl fmt::Display for StateDiag {
             StateDiag::StateCapReached { cap, growth } => {
                 write!(f, "state cap {cap} reached; results are incomplete: {growth}")
             }
+            StateDiag::MemoryCapReached {
+                limit,
+                states,
+                growth,
+                ..
+            } => write!(
+                f,
+                "memory limit {limit} reached at {states} states; results are incomplete: {growth}"
+            ),
             StateDiag::ConstraintViolated {
                 name,
                 label,

@@ -13,8 +13,10 @@ use crate::lifecycle::expr::State;
 use crate::lifecycle::types::{ActId, Domain, EntId, Value, VarKind};
 use crate::lifecycle::view::pattern_bound;
 use crate::lifecycle::TransitionSystem;
+use crate::memory::Charge;
 use crate::parallel::Helpers;
 
+use super::store::binding_bytes;
 use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, Threads};
 
 /// States one worker expands at a time. Fewer than two chunks of waiting states are
@@ -156,6 +158,7 @@ impl Bindings {
             return *id;
         }
         let id = u32::try_from(self.list.len()).expect("bindings fit in u32");
+        self.bytes += binding_bytes(params);
         self.list.push((act, params.into()));
         self.index[act.index()].insert(params.into(), id);
         id
@@ -178,6 +181,7 @@ impl<'t> Bfs<'t> {
             parents: Vec::new(),
             edges: Vec::new(),
             bindings: Bindings::default(),
+            charge: caps.memory.map(Charge::new),
         }
     }
 
@@ -277,8 +281,8 @@ impl<'t> Bfs<'t> {
         true
     }
 
-    /// Adds a new state; false when the state cap stops the run. `parent` is the index in
-    /// `edges` that the edge reaching it takes.
+    /// Adds a new state; false when the state cap or the memory limit stops the run.
+    /// `parent` is the index in `edges` that the edge reaching it takes.
     fn admit(&mut self, s: State, parent: Option<u32>) -> bool {
         if self.seen.contains_key(&s) {
             return true;
@@ -294,6 +298,24 @@ impl<'t> Bfs<'t> {
                 },
             });
             return false;
+        }
+        let bytes = self.bytes_with_one_more();
+        if let Some(charge) = &mut self.charge {
+            if !charge.cover(bytes) {
+                let pool = charge.pool();
+                self.complete = false;
+                let entities = self.ts.entities.iter().map(|e| e.key).collect();
+                self.diags.push(Diag {
+                    entities,
+                    diag: StateDiag::MemoryCapReached {
+                        limit: pool.limit(),
+                        raise: pool.raise(),
+                        states: self.states.len(),
+                        growth: self.growth(),
+                    },
+                });
+                return false;
+            }
         }
         self.check_invariants(&s, self.states.len() as u32);
         self.seen.insert(s.clone(), self.states.len() as u32);

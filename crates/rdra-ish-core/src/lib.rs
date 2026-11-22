@@ -13,6 +13,7 @@ pub mod import_scope;
 pub mod lifecycle;
 pub mod lint;
 pub mod location;
+pub mod memory;
 pub mod model;
 mod parallel;
 pub use parallel::{in_parallel, jobs};

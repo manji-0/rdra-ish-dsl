@@ -107,3 +107,38 @@ fn a_run_is_the_same_on_any_number_of_threads() {
         }
     }
 }
+
+/// A run charged to a pool stops at the memory limit at the same state on any number of
+/// threads, short of the states the limit leaves room for, and names the limit.
+#[test]
+fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() {
+    use crate::lifecycle::StateDiag;
+    use crate::memory::{MemoryPool, MemorySize};
+
+    let bounds = Bounds {
+        instances: NonZeroU8::new(3).expect("3 instances"),
+        int_max: 5,
+    };
+    let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
+    let limit = MemorySize::from_bytes(512 << 10).expect("not zero");
+    let charged = || Caps::VERIFY.charged_to(MemoryPool::for_command(limit, "--memory"));
+    let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
+    let one = ts.clone().run_on(charged(), Threads::Fixed(0));
+    assert!(!one.complete);
+    assert!(
+        one.states.len() > 100 && one.states.len() < whole.states.len(),
+        "{} of {} states",
+        one.states.len(),
+        whole.states.len()
+    );
+    assert!(one.diags.iter().any(|d| matches!(
+        d.diag,
+        StateDiag::MemoryCapReached { limit: l, states, .. }
+            if l == limit && states == one.states.len()
+    )));
+    for threads in [1, 2, 4] {
+        let many = ts.clone().run_on(charged(), Threads::Fixed(threads));
+        assert_eq!(many.states, one.states, "{threads} threads");
+        assert_eq!(many.diags, one.diags, "{threads} threads");
+    }
+}
