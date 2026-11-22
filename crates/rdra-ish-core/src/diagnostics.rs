@@ -629,6 +629,9 @@ pub enum RdraError {
     #[error("invalid temporal property '{id}': {message}\n  hint: use always/eventually/leads_to with ==/!= or Int comparisons (<,>,<=,>=) over entity columns, combining with and / or / not (`/\\` `\\/` `~` remain aliases)")]
     InvalidTemporalProperty { id: String, message: String },
 
+    #[error("property {property}: no single entity owns column {column}\n  hint: name the entity, as in `Order.{column}`, and check the column is declared on it")]
+    UnresolvedPropertyColumn { property: String, column: String },
+
     #[error("unknown predicate '{name}'\n  hint: check spelling; known predicates include performs, reads, sets, transitions, forbidden, …")]
     UnknownPredicate { name: String },
 

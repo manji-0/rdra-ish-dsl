@@ -4,8 +4,8 @@ use crate::analysis_diag::push_error;
 use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use crate::model::{
-    CmpOpModel, EffectValue, NodeRef, SemanticModel, TemporalAtom, TemporalExpr, TemporalFormula,
-    TemporalProperty, TemporalRhs, UseCaseKey,
+    CmpOpModel, EntityKey, ModelColumn, NodeRef, SemanticModel, TemporalAtom, TemporalExpr,
+    TemporalFormula, TemporalProperty, TemporalRhs, UseCaseKey,
 };
 use rdra_ish_syntax::ast::{
     AstTemporalFormula, CmpOp, Comparison, Expr, Operand, PredicateArg, PropertyDecl,
@@ -14,10 +14,11 @@ use rdra_ish_syntax::ast::{
 use super::arg_resolve::resolve_arg;
 use super::comparison::{resolve_bare_rhs, resolve_set_values, BareRhs};
 
-/// Why an atom does not lower: a message for `InvalidTemporalProperty`, or a comparison error
-/// reported as itself.
+/// Why an atom does not lower: a message for `InvalidTemporalProperty`, a column no single
+/// entity owns, or a comparison error reported as itself.
 enum LowerError {
     Message(String),
+    Unresolved(String),
     Comparison(RdraError),
 }
 
@@ -59,6 +60,13 @@ pub(crate) fn register_property(
             });
         }
         Err(LowerError::Comparison(err)) => push_error(ctx, diags, decl.span.clone(), err),
+        Err(LowerError::Unresolved(column)) => {
+            let err = RdraError::UnresolvedPropertyColumn {
+                property: decl.label.clone().unwrap_or_else(|| decl.id.clone()),
+                column,
+            };
+            push_error(ctx, diags, decl.span.clone(), err);
+        }
         Err(LowerError::Message(message)) => {
             push_error(
                 ctx,
@@ -150,37 +158,23 @@ fn lower_expr(model: &SemanticModel, expr: &Expr) -> Result<TemporalExpr, LowerE
     }
 }
 
-/// A bare right-hand side of `==` / `!=` read by the left-hand column's type, when the atom's
-/// entity and column resolve; `None` leaves the atom to the lifecycle, which reports it.
-fn typed_bare_rhs(
-    model: &SemanticModel,
+/// The entity that owns `column`: `entity` when written, else the one entity with a column of
+/// that name. The column must be declared on it.
+fn owner<'m>(
+    model: &'m SemanticModel,
     entity: Option<&str>,
     column: &str,
-    op: &CmpOp,
-    name: &str,
-) -> Option<Result<TemporalRhs, LowerError>> {
-    if !matches!(op, CmpOp::Eq | CmpOp::Ne) {
-        return None;
-    }
-    let ek = model.property_entity(entity, column)?;
-    let ent = &model.entities[ek];
-    let lhs = ent.columns.iter().find(|c| c.name == column)?;
-    let qualified = |n: &str| {
-        ent.columns
-            .iter()
-            .any(|c| c.name == n)
-            .then(|| format!("{}.{n}", ent.id))
-    };
-    Some(
-        match resolve_bare_rhs(&model.variations, lhs, op, name, qualified) {
-            Ok(BareRhs::Value(value)) => Ok(TemporalRhs::Value(value)),
-            Ok(BareRhs::Column) => Ok(TemporalRhs::Column {
-                entity: None,
-                column: name.to_string(),
-            }),
-            Err(err) => Err(LowerError::Comparison(err)),
-        },
-    )
+) -> Result<(EntityKey, &'m ModelColumn), LowerError> {
+    model
+        .property_entity(entity, column)
+        .and_then(|ek| {
+            let col = model.entities[ek]
+                .columns
+                .iter()
+                .find(|c| c.name == column)?;
+            Some((ek, col))
+        })
+        .ok_or_else(|| LowerError::Unresolved(column.to_string()))
 }
 
 fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, LowerError> {
@@ -195,7 +189,7 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
         CmpOp::NotIn => CmpOpModel::NotIn,
     };
 
-    let (entity, column) = match &cmp.lhs {
+    let (written, column) = match &cmp.lhs {
         Operand::QualifiedColumn(q) => {
             let entity = q
                 .entity
@@ -210,6 +204,7 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
             return Err(format!("temporal atom lhs must be a column, got {other:?}").into());
         }
     };
+    let (entity, lhs) = owner(model, written.as_deref(), &column)?;
 
     let rhs = match &cmp.rhs {
         Operand::IntLit(n) => {
@@ -219,36 +214,35 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
             TemporalRhs::IntLit(parsed)
         }
         Operand::QualifiedColumn(q) => {
-            let ent = q.entity.parts.last().cloned();
+            let (rk, _) = owner(model, q.entity.parts.last().map(String::as_str), &q.column)?;
             TemporalRhs::Column {
-                entity: ent,
+                entity: rk,
                 column: q.column.clone(),
             }
         }
-        Operand::Column(name) => {
-            match typed_bare_rhs(model, entity.as_deref(), &column, &cmp.op, name) {
-                Some(rhs) => rhs?,
-                // An order comparison, or an atom whose column does not resolve (the lifecycle
-                // reports it): literals by their spelling, any other name a column.
-                None => match name.as_str() {
-                    "true" | "false" | "null" | "present" => {
-                        TemporalRhs::Value(parse_effect_literal(name))
-                    }
-                    other if other.chars().all(|c| c.is_ascii_digit() || c == '-') => {
-                        let parsed = other
-                            .parse::<i64>()
-                            .map_err(|_| format!("invalid integer literal `{other}`"))?;
-                        TemporalRhs::IntLit(parsed)
-                    }
-                    other if matches!(op, CmpOpModel::Eq | CmpOpModel::Ne) => {
-                        // Heuristic: ==/!= with bare ident → enum/bool literal.
-                        TemporalRhs::Value(parse_effect_literal(other))
-                    }
-                    other => TemporalRhs::Column {
-                        entity: None,
-                        column: other.to_string(),
-                    },
+        Operand::Column(name) if matches!(op, CmpOpModel::Eq | CmpOpModel::Ne) => {
+            let ent = &model.entities[entity];
+            let qualified = |n: &str| {
+                ent.columns
+                    .iter()
+                    .any(|c| c.name == n)
+                    .then(|| format!("{}.{n}", ent.id))
+            };
+            match resolve_bare_rhs(&model.variations, lhs, &cmp.op, name, qualified) {
+                Ok(BareRhs::Value(value)) => TemporalRhs::Value(value),
+                Ok(BareRhs::Column) => TemporalRhs::Column {
+                    entity,
+                    column: name.clone(),
                 },
+                Err(err) => return Err(LowerError::Comparison(err)),
+            }
+        }
+        // An order comparison: another column, of the written entity when there is one.
+        Operand::Column(name) => {
+            let (rk, _) = owner(model, written.as_deref(), name)?;
+            TemporalRhs::Column {
+                entity: rk,
+                column: name.clone(),
             }
         }
         Operand::Now => {
@@ -256,7 +250,9 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
                 "`now` is not supported in temporal property atoms".into(),
             ));
         }
-        Operand::Values(names) => set_rhs(model, entity.as_deref(), &column, names)?,
+        Operand::Values(names) => TemporalRhs::Values(
+            resolve_set_values(&model.variations, lhs, names).map_err(LowerError::Comparison)?,
+        ),
     };
 
     // Relational ops require numeric-ish rhs (IntLit or Column), not enum literals.
@@ -274,40 +270,4 @@ fn lower_atom(model: &SemanticModel, cmp: &Comparison) -> Result<TemporalAtom, L
         op,
         rhs,
     })
-}
-
-/// The values of `in` / `not in`, read by the left-hand column's type when the atom's entity
-/// and column resolve; otherwise by their spelling, and the lifecycle reports the column.
-fn set_rhs(
-    model: &SemanticModel,
-    entity: Option<&str>,
-    column: &str,
-    names: &[String],
-) -> Result<TemporalRhs, LowerError> {
-    let lhs = model
-        .property_entity(entity, column)
-        .and_then(|ek| model.entities[ek].columns.iter().find(|c| c.name == column));
-    let values = match lhs {
-        Some(lhs) => {
-            resolve_set_values(&model.variations, lhs, names).map_err(LowerError::Comparison)?
-        }
-        None => names
-            .iter()
-            .map(|name| match name.parse::<i64>() {
-                Ok(n) => EffectValue::Int(n),
-                Err(_) => parse_effect_literal(name),
-            })
-            .collect(),
-    };
-    Ok(TemporalRhs::Values(values))
-}
-
-fn parse_effect_literal(name: &str) -> EffectValue {
-    match name {
-        "true" => EffectValue::Bool(true),
-        "false" => EffectValue::Bool(false),
-        "null" => EffectValue::Null,
-        "present" => EffectValue::Present,
-        other => EffectValue::EnumVariant(other.to_string()),
-    }
 }

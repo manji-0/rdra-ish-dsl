@@ -162,11 +162,6 @@ fn one_of_each() -> Vec<StateDiag> {
             column: "Audit.score".into(),
             site: site(),
         },
-        StateDiag::UnresolvedPropertyAtom {
-            property: "Eventually Paid".into(),
-            column: "status".into(),
-            site: site(),
-        },
         StateDiag::ArmNeverTaken {
             action: "Decide".into(),
             column: "Doc.status".into(),
@@ -260,7 +255,6 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::UnwrittenConstrainedVar { .. }
             | StateDiag::UnsupportedComparison { .. }
             | StateDiag::DerivedColumnRead { .. }
-            | StateDiag::UnresolvedPropertyAtom { .. }
             | StateDiag::UnjoinedGuardRead { .. }
             | StateDiag::UnjoinedWrite { .. }
             | StateDiag::UnboundAfterRead { .. }

@@ -2678,7 +2678,9 @@ step stays enabled. `Spec`, the `.cfg`, and properties without
 Errors: `.fair` on `always(...)` is `FairOnSafetyProperty` (fairness cannot change a safety
 verdict); a `.fair` with no argument, an argument that is not a use case, a use case listed
 twice, or a second `.fair` is `FairRequiresUseCases`; an undefined name is `UndefinedSymbol`;
-any other method after a property is `UnknownChainMethod`. A listed use case that changes
+an atom whose column no single entity owns (`Order.missing`, or a bare `status` that two
+entities declare) is `UnresolvedPropertyColumn`; any other method after a property is
+`UnknownChainMethod`. A listed use case that changes
 nothing is `FairOnInertUseCase`.
 
 ### Comparison Expressions in Constraints

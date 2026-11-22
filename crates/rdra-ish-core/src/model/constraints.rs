@@ -240,8 +240,9 @@ pub struct RuleGuard {
 /// Atomic comparison over an entity column (equality or arithmetic).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TemporalAtom {
-    /// Entity id when written as `Order.status`; `None` for bare columns.
-    pub entity: Option<std::string::String>,
+    /// The entity that owns `column`: the one written (`Order.status`), or the one entity
+    /// with a column of that name.
+    pub entity: EntityKey,
     pub column: std::string::String,
     pub op: super::comparison::CmpOpModel,
     pub rhs: TemporalRhs,
@@ -258,7 +259,7 @@ pub enum TemporalRhs {
     IntLit(i64),
     /// Column reference (`stock < selling` or `Item.stock < Item.selling`).
     Column {
-        entity: Option<std::string::String>,
+        entity: EntityKey,
         column: std::string::String,
     },
 }

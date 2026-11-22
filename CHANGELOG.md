@@ -64,6 +64,10 @@
   Entity)` reports its type mismatch and stops, as a wrong `contains` or `triggers` pair
   already did, so the diagnostics that followed from the bad edge, and the edge in
   diagrams and in the LSP, are gone (#159).
+- A `property` atom whose column no single entity owns is the model error
+  `UnresolvedPropertyColumn`, which `check` and the LSP report while building the model.
+  It was the lifecycle's `UnresolvedPropertyAtom`, and until then the atom's bare
+  right-hand side was read by its spelling. The lifecycle diagnostic is gone (#160).
 
 ### Fixed
 

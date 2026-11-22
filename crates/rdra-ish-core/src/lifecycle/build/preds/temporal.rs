@@ -4,7 +4,6 @@ use std::collections::HashSet;
 
 use super::display::cross_display;
 use super::{at_of, cmp_op, collect_vars, Binding};
-use crate::lifecycle::build::naming::property_entity;
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
@@ -162,18 +161,7 @@ impl Builder<'_> {
                 self.temporal(property, b, binding, site),
             ]),
             TemporalExpr::Atom(atom) => {
-                let model = self.model;
-                let Some(ek) = property_entity(model, atom.entity.as_deref(), &atom.column) else {
-                    self.diag(
-                        Vec::new(),
-                        StateDiag::UnresolvedPropertyAtom {
-                            property: property.to_string(),
-                            column: atom.column.clone(),
-                            site: site.clone(),
-                        },
-                    );
-                    return Pred::False;
-                };
+                let ek = atom.entity;
                 let at = Self::bind(binding, ek);
                 if let TemporalRhs::Values(values) = &atom.rhs {
                     return self.member_atom(ek, at, &atom.column, atom.op, values, site);
@@ -193,13 +181,8 @@ impl Builder<'_> {
                             None => Pred::False,
                         }
                     }
-                    TemporalRhs::Column { entity, column } => {
-                        let rk = property_entity(
-                            model,
-                            entity.as_deref().or(atom.entity.as_deref()),
-                            column,
-                        );
-                        let Some(rk) = rk else { return Pred::False };
+                    TemporalRhs::Column { entity: rk, column } => {
+                        let rk = *rk;
                         let rat = Self::bind(binding, rk);
                         match (
                             self.read_slot(ek, &atom.column, at, site),

@@ -305,7 +305,7 @@ fn property_atoms_read_by_the_column_type() {
     );
     assert_eq!(atom(&model, 0).rhs, TemporalRhs::Value(variant("paid")));
     let column = TemporalRhs::Column {
-        entity: None,
+        entity: atom(&model, 1).entity,
         column: "limit".to_string(),
     };
     assert_eq!(atom(&model, 1).rhs, column);
@@ -320,6 +320,25 @@ fn property_atoms_read_by_the_column_type() {
         ),
         "{diags:?}"
     );
+}
+
+#[test]
+fn a_property_atom_on_an_unknown_column_is_a_model_error() {
+    for src in [
+        "property A\n  always(E.missing == paid)\n",
+        "property B\n  always(missing == paid)\n",
+        "property C\n  always(E.qty <= missing)\n",
+    ] {
+        let (model, diags) = with(src);
+        assert!(
+            matches!(
+                errors(&diags).as_slice(),
+                [RdraError::UnresolvedPropertyColumn { column, .. }] if column == "missing"
+            ),
+            "{src}: {diags:?}"
+        );
+        assert!(model.temporal_properties.is_empty(), "{src}");
+    }
 }
 
 #[test]

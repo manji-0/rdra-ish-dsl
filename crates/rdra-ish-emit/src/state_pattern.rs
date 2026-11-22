@@ -199,7 +199,6 @@ violation_message(text, pattern_desc)
         | StateDiag::UnsupportedComparison { .. }
         | StateDiag::DerivedColumnRead { .. }
         | StateDiag::PropertyViolated { .. }
-        | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
         | StateDiag::UnjoinedWrite { .. }
         | StateDiag::UnboundAfterRead { .. }

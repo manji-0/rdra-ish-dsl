@@ -318,12 +318,6 @@ pub enum StateDiag {
         path: Vec<String>,
         site: Site,
     },
-    /// A property atom names a column no single entity owns.
-    UnresolvedPropertyAtom {
-        property: String,
-        column: String,
-        site: Site,
-    },
     /// An `after(UC).assert` atom reads an entity no step of the use case's run binds, so it
     /// is read on every present row.
     UnboundAfterRead {
@@ -515,9 +509,6 @@ impl StateDiag {
             StateDiag::UnsupportedComparison { comparison, .. } => {
                 with("UnsupportedComparison", &[comparison])
             }
-            StateDiag::UnresolvedPropertyAtom {
-                property, column, ..
-            } => with("UnresolvedPropertyAtom", &[property, column]),
             StateDiag::UnjoinedGuardRead {
                 condition, usecase, ..
             } => with("UnjoinedGuardRead", &[condition, usecase]),
@@ -616,8 +607,7 @@ impl StateDiag {
             | StateDiag::UnboundCopySource { .. }
             | StateDiag::AmbiguousOwnerLink { .. }
             | StateDiag::UnsupportedComparison { .. }
-            | StateDiag::DerivedColumnRead { .. }
-            | StateDiag::UnresolvedPropertyAtom { .. } => Severity::Error,
+            | StateDiag::DerivedColumnRead { .. } => Severity::Error,
         }
     }
 }
@@ -942,12 +932,6 @@ impl fmt::Display for StateDiag {
             StateDiag::DerivedColumnRead { column, .. } => write!(
                 f,
                 "{column} is derived by arithmetic, which the lifecycle cannot evaluate; compare the columns it reads instead"
-            ),
-            StateDiag::UnresolvedPropertyAtom {
-                property, column, ..
-            } => write!(
-                f,
-                "property {property}: no single entity owns column {column}"
             ),
             StateDiag::UnjoinedGuardRead {
                 condition,

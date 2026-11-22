@@ -166,9 +166,9 @@ impl Named {
                     consequent,
                 } => (antecedent, Some(consequent)),
             };
-            n.temporal(model, a);
+            n.temporal(a);
             if let Some(b) = b {
-                n.temporal(model, b);
+                n.temporal(b);
             }
         }
         // A read of a logical `@derived` column reads the columns of its expression.
@@ -276,55 +276,35 @@ impl Named {
         }
     }
 
-    fn temporal(&mut self, model: &SemanticModel, expr: &TemporalExpr) {
+    fn temporal(&mut self, expr: &TemporalExpr) {
         match expr {
             TemporalExpr::Atom(atom) => {
-                let Some(ek) = property_entity(model, atom.entity.as_deref(), &atom.column) else {
-                    return;
-                };
+                let ek = atom.entity;
                 let ordered = atom.op.is_ordered();
                 match &atom.rhs {
                     TemporalRhs::Value(v) if !ordered => self.value(ek, &atom.column, v),
                     TemporalRhs::Values(vs) => {
                         vs.iter().for_each(|v| self.value(ek, &atom.column, v))
                     }
-                    TemporalRhs::Column { entity, column } => {
-                        let rk = property_entity(
-                            model,
-                            entity.as_deref().or(atom.entity.as_deref()),
-                            column,
-                        );
+                    TemporalRhs::Column { entity: rk, column } => {
                         if ordered {
                             self.number(ek, &atom.column);
-                            if let Some(rk) = rk {
-                                self.number(rk, column);
-                            }
+                            self.number(*rk, column);
                         } else {
                             self.name(ek, &atom.column);
-                            if let Some(rk) = rk {
-                                self.name(rk, column);
-                            }
+                            self.name(*rk, column);
                         }
                     }
                     _ => self.number(ek, &atom.column),
                 }
             }
-            TemporalExpr::Not(inner) => self.temporal(model, inner),
+            TemporalExpr::Not(inner) => self.temporal(inner),
             TemporalExpr::And(a, b) | TemporalExpr::Or(a, b) => {
-                self.temporal(model, a);
-                self.temporal(model, b);
+                self.temporal(a);
+                self.temporal(b);
             }
         }
     }
-}
-
-/// A property atom's entity: the named one, or the only entity that has the column.
-pub(super) fn property_entity(
-    model: &SemanticModel,
-    entity: Option<&str>,
-    column: &str,
-) -> Option<EntityKey> {
-    model.property_entity(entity, column)
 }
 
 /// A `drives(UC, E, cmp, bool)` names this comparison, so it reads a proposition var.

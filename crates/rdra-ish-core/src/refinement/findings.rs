@@ -42,7 +42,6 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
         | StateDiag::UnboundCopySource { .. }
         | StateDiag::AmbiguousOwnerLink { .. }
         | StateDiag::DerivedColumnRead { .. }
-        | StateDiag::UnresolvedPropertyAtom { .. }
         | StateDiag::UnjoinedGuardRead { .. }
         | StateDiag::UnjoinedWrite { .. }
         | StateDiag::UnboundAfterRead { .. }

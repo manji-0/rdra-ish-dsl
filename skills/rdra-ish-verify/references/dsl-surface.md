@@ -37,7 +37,7 @@ property ShippedOnceCaptured
 
 - Label string after the name is **optional**.
 - Each atom names its entity (`Order.status`); an atom whose column no single entity
-  owns is `UnresolvedPropertyAtom`.
+  owns is the model error `UnresolvedPropertyColumn`, which `check` reports.
 - Prefer `and` / `or` / `not` (`/\` `\/` `~` remain aliases).
 - Any `eventually` / `leads_to` causes `WF_vars(Next)` in the Spec: some step is taken,
   not a step in particular, so another instance's loop satisfies it.
