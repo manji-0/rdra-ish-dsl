@@ -15,7 +15,7 @@ pub mod lint;
 pub mod location;
 pub mod model;
 mod parallel;
-pub use parallel::jobs;
+pub use parallel::{in_parallel, jobs};
 pub mod predicate;
 pub mod project;
 pub mod publication;

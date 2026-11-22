@@ -12,7 +12,7 @@ pub fn jobs() -> usize {
 
 /// `f` of each item, in item order, on up to `threads` threads. One thread, or one item,
 /// runs on the caller's.
-pub(crate) fn in_parallel<T: Send, R: Send>(
+pub fn in_parallel<T: Send, R: Send>(
     items: Vec<T>,
     threads: usize,
     f: impl Fn(T) -> R + Sync,

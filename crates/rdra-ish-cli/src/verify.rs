@@ -23,7 +23,7 @@ use rdra_ish_core::lifecycle::{
     Bounds, BoundsLine, Caps, Cone, LtlKind, NotChecked, Scope, Selection, Severity, StateDiag,
     Target, TransitionSystem, VarSet,
 };
-use rdra_ish_core::{ResolvedProgram, SemanticModel};
+use rdra_ish_core::{in_parallel, jobs, ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle, TlaNames};
 
 use crate::export::{checked_system, tla_bounds, tla_file, Modules};
@@ -224,31 +224,33 @@ fn cone_jobs(
             }
         }
     }
-    order
+    // The names are claimed in target order; reducing and printing a cone reads nothing of
+    // another, so the cones are prepared side by side.
+    let named: Vec<(Cone, String, Vec<Target>)> = order
         .into_iter()
-        .map(|(cone, first, shared)| {
-            let seeds = shared.iter().map(|t| ts.target_seed(*t));
-            let sub = ts.reduced_cone(&cone, seeds, Caps::VERIFY);
-            let module = modules.claim(&format!("Cone_{first}"));
-            let bundle = tla::print(&sub, PrintMode::Safety, &module);
-            let n = &bundle.names;
-            let checks = (0..sub.invariants().len())
-                .map(|i| n.invariant(i).to_string())
-                .chain((0..sub.after_asserts().len()).map(|i| n.after(i).to_string()))
-                .collect();
-            Job {
-                module: bundle.module_name,
-                tla: bundle.tla,
-                cfg: bundle.cfg,
-                checks,
-                kind: JobKind::Cone(Box::new(ConeSystem {
-                    cone,
-                    system: sub,
-                    names: bundle.names,
-                })),
-            }
-        })
-        .collect()
+        .map(|(cone, first, shared)| (cone, modules.claim(&format!("Cone_{first}")), shared))
+        .collect();
+    in_parallel(named, jobs(), |(cone, module, shared)| {
+        let seeds = shared.iter().map(|t| ts.target_seed(*t));
+        let sub = ts.reduced_cone(&cone, seeds, Caps::VERIFY);
+        let bundle = tla::print(&sub, PrintMode::Safety, &module);
+        let n = &bundle.names;
+        let checks = (0..sub.invariants().len())
+            .map(|i| n.invariant(i).to_string())
+            .chain((0..sub.after_asserts().len()).map(|i| n.after(i).to_string()))
+            .collect();
+        Job {
+            module: bundle.module_name,
+            tla: bundle.tla,
+            cfg: bundle.cfg,
+            checks,
+            kind: JobKind::Cone(Box::new(ConeSystem {
+                cone,
+                system: sub,
+                names: bundle.names,
+            })),
+        }
+    })
 }
 
 /// One run per temporal property on its cone, module `Cone_<property>`, with the `_WF`
@@ -259,12 +261,17 @@ fn property_jobs(ts: &TransitionSystem, names: &TlaNames, modules: &mut Modules)
     let plain: Vec<String> = (0..ts.properties().len())
         .map(|i| modules.claim(&format!("Cone_{}", names.property(i))))
         .collect();
+    // Reducing a property's cone reads nothing of another's; the `_Full` and `_WF` names are
+    // claimed afterwards, in property order.
+    let cones = in_parallel((0..plain.len()).collect(), jobs(), |i| {
+        PropertyCone::new(ts, i)
+    });
     plain
         .into_iter()
+        .zip(cones)
         .enumerate()
-        .map(|(i, module)| {
+        .map(|(i, (module, cone))| {
             let name = names.property(i);
-            let cone = PropertyCone::new(ts, i);
             let plain = cone.bundle(ConeRun::Plain, &module);
             let spec = |b: TlaBundle| Spec {
                 module: b.module_name,
