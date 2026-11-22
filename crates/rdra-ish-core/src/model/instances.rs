@@ -1,4 +1,5 @@
 use super::refs::ModelColumn;
+pub use rdra_ish_syntax::ast::EnumValue;
 
 /// 各要素（全て id: String, label: String を持つ最小構造）
 #[derive(Debug, Clone)]
@@ -270,10 +271,19 @@ pub struct Variation {
     pub id: std::string::String,
     pub label: std::string::String,
     pub description: Option<std::string::String>,
-    /// Value names in declaration order.
-    pub values: Vec<std::string::String>,
-    /// `labels[i]` is the optional label of `values[i]`.
-    pub labels: Vec<Option<std::string::String>>,
+    /// Values in declaration order, each with its optional label.
+    pub values: Vec<EnumValue>,
+}
+
+impl Variation {
+    /// The value names in declaration order.
+    pub fn value_names(&self) -> Vec<std::string::String> {
+        self.values.iter().map(|v| v.value.clone()).collect()
+    }
+
+    pub fn has_value(&self, name: &str) -> bool {
+        self.values.iter().any(|v| v.value == name)
+    }
 }
 
 #[derive(Debug, Clone)]

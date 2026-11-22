@@ -217,7 +217,10 @@ impl<'m> Script<'m> {
             let note = variation_note(variation);
             types.push(match self.dialect {
                 Dialect::Postgres => {
-                    format!("{note}\n{}", create_enum(&variation.id, &variation.values))
+                    format!(
+                        "{note}\n{}",
+                        create_enum(&variation.id, &variation.value_names())
+                    )
                 }
                 Dialect::Sqlite => note,
             });
@@ -259,7 +262,7 @@ impl<'m> Script<'m> {
     fn enum_values(&self, column: &ModelColumn) -> Option<Vec<String>> {
         match &column.col_type {
             ColumnType::Enum(values) => Some(values.clone()),
-            ColumnType::Variation(key) => self.model.variations.get(*key).map(|v| v.values.clone()),
+            ColumnType::Variation(key) => self.model.variations.get(*key).map(|v| v.value_names()),
             _ => None,
         }
     }
@@ -1052,10 +1055,9 @@ fn variation_note(variation: &rdra_ish_core::model::Variation) -> String {
     let values: Vec<String> = variation
         .values
         .iter()
-        .zip(&variation.labels)
-        .map(|(value, label)| match label {
-            Some(label) => format!("{value} = {}", one_line(label)),
-            None => value.clone(),
+        .map(|v| match &v.label {
+            Some(label) => format!("{} = {}", v.value, one_line(label)),
+            None => v.value.clone(),
         })
         .collect();
     format!(

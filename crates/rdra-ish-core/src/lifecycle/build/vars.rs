@@ -122,7 +122,7 @@ impl Builder<'_> {
                 if !self.named.any.contains(&key) {
                     return None;
                 }
-                let values = model.variations.get(*vk)?.values.clone();
+                let values = model.variations.get(*vk)?.value_names();
                 if values.is_empty() {
                     return None;
                 }

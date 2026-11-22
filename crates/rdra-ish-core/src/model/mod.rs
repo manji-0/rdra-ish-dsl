@@ -89,10 +89,13 @@ impl SemanticModel {
     /// Values of an `Enum` or variation-typed column; `None` for scalar types.
     ///
     /// This is the single lookup every exporter uses for "what may this column hold".
-    pub fn column_values<'a>(&'a self, col: &'a ModelColumn) -> Option<&'a [std::string::String]> {
+    pub fn column_values<'a>(&'a self, col: &'a ModelColumn) -> Option<Vec<&'a str>> {
         match &col.col_type {
-            ColumnType::Enum(values) => Some(values),
-            ColumnType::Variation(key) => self.variations.get(*key).map(|v| v.values.as_slice()),
+            ColumnType::Enum(values) => Some(values.iter().map(|v| v.as_str()).collect()),
+            ColumnType::Variation(key) => self
+                .variations
+                .get(*key)
+                .map(|v| v.values.iter().map(|v| v.value.as_str()).collect()),
             _ => None,
         }
     }
@@ -109,8 +112,12 @@ impl SemanticModel {
         };
         let label = match &col.col_type {
             ColumnType::Variation(key) => self.variations.get(*key).and_then(|variation| {
-                let index = variation.values.iter().position(|v| v == value)?;
-                variation.labels.get(index)?.as_deref()
+                variation
+                    .values
+                    .iter()
+                    .find(|v| v.value == value)?
+                    .label
+                    .as_deref()
             }),
             _ => col.value_label(value),
         };

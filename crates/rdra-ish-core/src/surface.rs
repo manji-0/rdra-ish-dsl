@@ -246,7 +246,9 @@ fn type_text(model: &SemanticModel, col_type: &ColumnType) -> String {
         ColumnType::Bool => "Bool".to_string(),
         ColumnType::Decimal => "Decimal".to_string(),
         ColumnType::Enum(values) => format!("Enum({})", values.join(", ")),
-        ColumnType::Variation(key) => format!("Enum({})", model.variations[*key].values.join(", ")),
+        ColumnType::Variation(key) => {
+            format!("Enum({})", model.variations[*key].value_names().join(", "))
+        }
     }
 }
 

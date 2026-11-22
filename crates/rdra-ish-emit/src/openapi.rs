@@ -257,7 +257,7 @@ fn column_schema(model: &SemanticModel, col: &rdra_ish_core::model::ModelColumn)
         ColumnType::Date => json!({ "type": "string", "format": "date" }),
         ColumnType::Bool => json!({ "type": "boolean" }),
         ColumnType::Enum(_) | ColumnType::Variation(_) => {
-            json!({ "type": "string", "enum": model.column_values(col).unwrap_or(&[]) })
+            json!({ "type": "string", "enum": model.column_values(col).unwrap_or_default() })
         }
     };
     if col.is_nullable {

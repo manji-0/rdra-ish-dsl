@@ -8,7 +8,9 @@ use crate::diagram_common::{
 };
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{chosen_variation, condition_body_display, condition_edges};
-use rdra_ish_core::model::{CombinesTarget, NodeRef, RelKind, SemanticModel, VariationKey};
+use rdra_ish_core::model::{
+    CombinesTarget, EnumValue, NodeRef, RelKind, SemanticModel, VariationKey,
+};
 use std::collections::{BTreeMap, HashSet};
 
 pub struct ConditionMermaidEmitter;
@@ -37,7 +39,7 @@ fn render_variation(out: &mut String, model: &SemanticModel, key: VariationKey, 
     if let Some(desc) = desc_line(model, &NodeRef::Variation(key), id) {
         out.push_str(&format!("    {desc}\n"));
     }
-    for (value, label) in variation.values.iter().zip(&variation.labels) {
+    for EnumValue { value, label } in &variation.values {
         let label = label.as_deref().unwrap_or(value);
         out.push_str(&node_line(
             "    ",

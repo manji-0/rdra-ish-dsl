@@ -219,8 +219,7 @@ pub fn build(
                 variation
                     .values
                     .iter()
-                    .zip(variation.labels.iter().chain(std::iter::repeat(&None)))
-                    .map(|(v, l)| enum_value(v, l.clone()))
+                    .map(|v| enum_value(&v.value, v.label.clone()))
                     .collect(),
                 |v| &mut v.ident,
             ),

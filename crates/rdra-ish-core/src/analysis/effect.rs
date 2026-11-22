@@ -100,7 +100,7 @@ pub(crate) fn parse_effect_value(
         }
         ColumnType::Variation(key) => {
             let variation = variations.get(*key);
-            let values = variation.map(|v| v.values.as_slice()).unwrap_or(&[]);
+            let values = variation.map(|v| v.value_names()).unwrap_or_default();
             if values.iter().any(|v| v == lit) {
                 Ok(EffectValue::EnumVariant(lit.to_string()))
             } else {

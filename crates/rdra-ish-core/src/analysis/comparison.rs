@@ -114,7 +114,7 @@ fn column_values(
         ColumnType::Enum(variants) => variants.clone(),
         ColumnType::Variation(key) => variations
             .get(*key)
-            .map(|v| v.values.clone())
+            .map(|v| v.value_names())
             .unwrap_or_default(),
         ColumnType::Bool => vec!["true".to_string(), "false".to_string()],
         _ => Vec::new(),

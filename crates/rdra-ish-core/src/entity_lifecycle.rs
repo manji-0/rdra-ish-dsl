@@ -124,7 +124,6 @@ pub fn state_models(model: &SemanticModel) -> Vec<StateModel<'_>> {
                     .iter()
                     .find(|c| c.name == transition.column)
                     .and_then(|c| model.column_values(c))
-                    .map(|values| values.iter().map(String::as_str).collect())
                     .unwrap_or_default(),
                 transitions: Vec::new(),
             });

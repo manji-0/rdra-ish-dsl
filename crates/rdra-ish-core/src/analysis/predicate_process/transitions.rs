@@ -287,7 +287,7 @@ pub(super) fn process_chooses_predicate(
                 other => predicate_arg_display(other),
             };
             let variation = &model.variations[*variation];
-            if !variation.values.contains(&written) {
+            if !variation.has_value(&written) {
                 push_error(
                     ctx,
                     diags,
@@ -295,7 +295,7 @@ pub(super) fn process_chooses_predicate(
                     RdraError::InvalidVariationValue {
                         variation: variation.id.clone(),
                         value: written,
-                        allowed: variation.values.join(", "),
+                        allowed: variation.value_names().join(", "),
                     },
                 );
                 return;
