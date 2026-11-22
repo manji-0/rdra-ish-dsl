@@ -5,7 +5,7 @@
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, edge_label, node_line, quote, Diagram, Header,
+    class_defs, contract_id, edge_label, node_line, push_desc, quote, Diagram, Header,
 };
 use crate::{EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
@@ -58,9 +58,7 @@ impl Emitter for ScreenMermaidEmitter {
         for (id, node) in &screens {
             if let Some(label) = model.node_label(node) {
                 body.push_str(&node_line("  ", id, &quote(label), "screen"));
-                if let Some(desc) = desc_line(model, node, id) {
-                    body.push_str(&format!("  {desc}\n"));
-                }
+                push_desc(&mut body, model, node, id, "  ");
             }
         }
 

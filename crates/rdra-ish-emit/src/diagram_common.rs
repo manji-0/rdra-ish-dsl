@@ -777,15 +777,27 @@ fn or_none(list: &str) -> &str {
     }
 }
 
-/// `%% desc <id>: <text>` for a node that has a description, its lines joined by a space.
-pub(crate) fn desc_line(model: &SemanticModel, node: &NodeRef, id: &str) -> Option<String> {
-    let text = node_description(model, node)?
+/// Appends `<indent>%% desc <id>: <text>` for a node that has a description, its lines
+/// joined by a space.
+pub(crate) fn push_desc(
+    out: &mut String,
+    model: &SemanticModel,
+    node: &NodeRef,
+    id: &str,
+    indent: &str,
+) {
+    let Some(description) = node_description(model, node) else {
+        return;
+    };
+    let text = description
         .lines()
         .map(str::trim)
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join(" ");
-    (!text.is_empty()).then(|| format!("%% desc {id}: {text}"))
+    if !text.is_empty() {
+        out.push_str(&format!("{indent}%% desc {id}: {text}\n"));
+    }
 }
 
 /// One `classDef` per kind, so Mermaid accepts the `:::<kind>` on each node. Each RDRA

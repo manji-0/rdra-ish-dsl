@@ -1,7 +1,7 @@
 //! The event diagram (`--kind event`).
 
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, edge_line, node_line, quote, reachable_for_scope, Diagram,
+    class_defs, contract_id, edge_line, node_line, push_desc, quote, reachable_for_scope, Diagram,
     Header, NodeScope,
 };
 use crate::{EmitError, Emitter, Scope, View};
@@ -54,9 +54,7 @@ pub(super) fn declare_flow_node(
     if declared.ids.insert(id.clone()) {
         let kind = node_ref.kind_tag();
         out.push_str(&node_line("  ", &id, &quote(label), kind));
-        if let Some(desc) = desc_line(model, &node_ref, &id) {
-            out.push_str(&format!("  {desc}\n"));
-        }
+        push_desc(out, model, &node_ref, &id, "  ");
         if !declared.kinds.contains(&kind) {
             declared.kinds.push(kind);
         }

@@ -4,7 +4,7 @@
 
 use super::{buc_scope, declare, guard_edge, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_line, quote, Diagram, Header, NodeScope,
+    class_defs, contract_id, node_line, push_desc, quote, Diagram, Header, NodeScope,
 };
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::analysis::{chosen_variation, condition_body_display, condition_edges};
@@ -36,9 +36,7 @@ fn render_variation(out: &mut String, model: &SemanticModel, key: VariationKey, 
         "  subgraph {id}[\"{}\"]\n",
         quote(&variation.label)
     ));
-    if let Some(desc) = desc_line(model, &NodeRef::Variation(key), id) {
-        out.push_str(&format!("    {desc}\n"));
-    }
+    push_desc(out, model, &NodeRef::Variation(key), id, "    ");
     for EnumValue { value, label } in &variation.values {
         let label = label.as_deref().unwrap_or(value);
         out.push_str(&node_line(

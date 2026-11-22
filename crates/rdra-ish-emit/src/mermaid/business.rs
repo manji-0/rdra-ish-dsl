@@ -4,7 +4,7 @@
 
 use super::{declare, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, edge_label, quote, Diagram, Header,
+    class_defs, contract_id, edge_label, push_desc, quote, Diagram, Header,
 };
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
@@ -82,9 +82,7 @@ impl Emitter for BusinessMermaidEmitter {
                 continue;
             };
             body.push_str(&format!("  subgraph {id}[\"{}\"]\n", quote(label)));
-            if let Some(desc) = desc_line(model, business, &id) {
-                body.push_str(&format!("    {desc}\n"));
-            }
+            push_desc(&mut body, model, business, &id, "    ");
             for (_, buc) in nested.iter().filter(|(b, _)| b == business) {
                 declare(&mut body, model, buc, "    ");
             }

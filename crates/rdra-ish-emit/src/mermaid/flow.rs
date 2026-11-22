@@ -4,7 +4,7 @@
 
 use super::{declare, omitted_linked_kinds, rdra_arrow, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, quote, Diagram, Header, NodeScope,
+    class_defs, contract_id, push_desc, quote, Diagram, Header, NodeScope,
 };
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{NodeRef, RelKind, SemanticModel};
@@ -125,9 +125,7 @@ impl Emitter for FlowMermaidEmitter {
                     };
                     add_kind("flow");
                     body.push_str(&format!("  subgraph {id}[\"{}\"]\n", quote(label)));
-                    if let Some(desc) = desc_line(model, flow, &id) {
-                        body.push_str(&format!("    {desc}\n"));
-                    }
+                    push_desc(&mut body, model, flow, &id, "    ");
                     "    "
                 }
                 None => "  ",

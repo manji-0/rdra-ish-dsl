@@ -31,7 +31,7 @@ pub use state::StateMermaidEmitter;
 pub use usecase::UsecaseMermaidEmitter;
 
 use crate::diagram_common::{
-    contract_id, desc_line, edge_line, node_line, quote, Diagram, NodeScope,
+    contract_id, edge_line, node_line, push_desc, quote, Diagram, NodeScope,
 };
 use crate::{
     collect_object_graph_nodes, is_relate, object_graph_layer, object_graph_rel_label,
@@ -79,9 +79,7 @@ fn render_layered_nodes(
         ));
         for (nr, id, label) in nodes {
             out.push_str(&node_line("    ", &id, &quote(label), nr.kind_tag()));
-            if let Some(desc) = desc_line(model, nr, &id) {
-                out.push_str(&format!("    {desc}\n"));
-            }
+            push_desc(out, model, nr, &id, "    ");
         }
         out.push_str("  end\n");
     }
@@ -95,9 +93,7 @@ fn declare(out: &mut String, model: &SemanticModel, node: &NodeRef, indent: &str
     };
     let kind = node.kind_tag();
     out.push_str(&node_line(indent, &id, &quote(label), kind));
-    if let Some(desc) = desc_line(model, node, &id) {
-        out.push_str(&format!("{indent}{desc}\n"));
-    }
+    push_desc(out, model, node, &id, indent);
 }
 
 type EdgeKey = (String, String, String);

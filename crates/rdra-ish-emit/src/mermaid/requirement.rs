@@ -6,7 +6,7 @@
 
 use super::{buc_scope, kinds_by_layer, omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_line, quote, Diagram, Header, NodeScope,
+    class_defs, contract_id, node_line, push_desc, quote, Diagram, Header, NodeScope,
 };
 use crate::{collect_object_graph_nodes, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{Goal, NodeRef, RelKind, SemanticModel};
@@ -56,9 +56,7 @@ fn declare_node(out: &mut String, model: &SemanticModel, node: &NodeRef, indent:
     }
     let kind = node.kind_tag();
     out.push_str(&node_line(indent, &id, &text, kind));
-    if let Some(desc) = desc_line(model, node, &id) {
-        out.push_str(&format!("{indent}{desc}\n"));
-    }
+    push_desc(out, model, node, &id, indent);
 }
 
 impl Emitter for RequirementMermaidEmitter {

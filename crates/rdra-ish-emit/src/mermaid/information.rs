@@ -3,7 +3,7 @@
 
 use super::{omitted_linked_kinds, render_edges, GraphEdge};
 use crate::diagram_common::{
-    class_defs, contract_id, desc_line, node_line, quote, Diagram, Header, NodeScope,
+    class_defs, contract_id, node_line, push_desc, quote, Diagram, Header, NodeScope,
 };
 use crate::{is_relate, object_graph_rel_label, EmitError, Emitter, Scope, View};
 use rdra_ish_core::model::{ColumnType, NodeRef, SemanticModel};
@@ -47,9 +47,7 @@ impl Emitter for InformationMermaidEmitter {
                 continue;
             };
             declare(&mut body, &id, &entity.label, "entity");
-            if let Some(desc) = desc_line(model, &node, &id) {
-                body.push_str(&format!("  {desc}\n"));
-            }
+            push_desc(&mut body, model, &node, &id, "  ");
             for column in &entity.columns {
                 if model.is_lifecycle_column(*key, &column.name) {
                     let state_model = format!("statemodel__{}_{}", entity.id, column.name);
@@ -85,9 +83,7 @@ impl Emitter for InformationMermaidEmitter {
             let variation = &NodeRef::Variation(*key);
             if let Some(label) = model.node_label(variation) {
                 declare(&mut body, id, label, "variation");
-                if let Some(desc) = desc_line(model, variation, id) {
-                    body.push_str(&format!("  {desc}\n"));
-                }
+                push_desc(&mut body, model, variation, id, "  ");
             }
         }
 
