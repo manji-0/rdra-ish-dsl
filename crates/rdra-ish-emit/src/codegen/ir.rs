@@ -210,6 +210,15 @@ pub struct FnDecl {
     pub marks_out: Vec<MarkOut>,
 }
 
+impl FnDecl {
+    /// Row `r` of an `Expr`: an argument row, or a quantifier's element after them.
+    pub fn row(&self, r: usize) -> &RowParam {
+        self.rows
+            .get(r)
+            .unwrap_or_else(|| &self.elems[r - self.rows.len()])
+    }
+}
+
 /// A run mark: the id of a row step `step` of a split use case wrote, which the next step
 /// takes (docs/design/algebraic-codegen.md, "Use cases split into transactions").
 #[derive(Clone, Debug, PartialEq, Eq)]
