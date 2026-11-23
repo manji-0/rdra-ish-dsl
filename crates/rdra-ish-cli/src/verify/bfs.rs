@@ -9,7 +9,7 @@ use rdra_ish_core::lifecycle::{
     StateDiag, Target, TargetExploration, TransitionSystem,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 /// What BFS found at the verify bounds.
 pub(super) struct Bfs {
@@ -24,13 +24,13 @@ pub(super) struct Bfs {
 }
 
 /// The entity cones whose state models TLC checks under `--with-tlc`, and the deadlocks and
-/// missing witnesses BFS found on any cone, each with its severity.
+/// missing witnesses BFS found on any cone, errors and warnings alike.
 #[derive(Default)]
 pub(super) struct StateModels {
     pub(super) cones: Vec<StateModelCone>,
     /// Too large for TLC: each module's name and BFS's state count.
     pub(super) skipped: Vec<(String, usize)>,
-    pub(super) found: BTreeMap<String, Severity>,
+    pub(super) found: BTreeSet<String>,
 }
 
 /// An entity cone BFS explored to the end, as TLC checks its state models: the system BFS
@@ -197,8 +197,8 @@ fn state_model_cones(ts: &TransitionSystem, run: &TargetExploration) -> StateMod
     out.found = run
         .verdicts()
         .iter()
-        .map(|d| (d.diag.name(&[]), d.diag.severity()))
-        .filter(|(n, _)| n.starts_with("Deadlock_") || n.starts_with("Witness_"))
+        .map(|d| d.diag.name(&[]))
+        .filter(|n| n.starts_with("Deadlock_") || n.starts_with("Witness_"))
         .collect();
     out
 }

@@ -17,7 +17,7 @@ use crate::memory::tlc_plan;
 use crate::tlc_env::{current_user_heap, Heap};
 use crate::tlc_output::{InvariantScan, Outcome};
 use anyhow::{Context, Result};
-use rdra_ish_core::lifecycle::{Severity, TransitionSystem};
+use rdra_ish_core::lifecycle::TransitionSystem;
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
 use std::collections::{BTreeSet, VecDeque};
 use std::fs;
@@ -71,24 +71,23 @@ impl StateModelRan {
             .collect()
     }
 
-    /// What the run adds to `tlc_result:`: a counterexample when TLC found a deadlock or a
-    /// missing witness that is an error, as BFS rates it. A deadlock that only the instance
-    /// bound blocks is a warning, and TLC reports it as it reports any other.
-    pub(super) fn outcome(&self, job: &StateModelJob, models: &StateModels) -> Outcome {
-        if self.error.is_some() {
-            return Outcome::ToolError;
-        }
-        let error = |name: &String| models.found.get(name) == Some(&Severity::Error);
-        match self.found(job).iter().any(error) {
-            true => Outcome::Counterexample,
-            false => Outcome::Ok,
+    /// What the run adds to `tlc_result:`: only a run that failed as a tool. Its findings are
+    /// BFS's, which the run checks; `tlc_result:` is the verdict of the runs that print
+    /// TLC's own `violated:` lines, and a witnesses run violates every state it reaches.
+    pub(super) fn outcome(&self) -> Outcome {
+        match self.error {
+            Some(_) => Outcome::ToolError,
+            None => Outcome::Ok,
         }
     }
 
     pub(super) fn line(&self, job: &StateModelJob) -> String {
-        let states = self
-            .states
-            .map_or(String::new(), |n| format!(" ({n} states)"));
+        // TLC counts the states in its deadlocks run; a module with no deadlock check
+        // reports BFS's count.
+        let states = match self.states {
+            Some(n) => format!(" ({n} states)"),
+            None => format!(" ({} states by BFS)", job.states),
+        };
         let checks = format!(
             "{} deadlock and {} witness checks",
             job.deadlocks.len(),
@@ -240,7 +239,10 @@ fn run_one(
         ran.error = Some(why);
         return Ok(ran);
     }
-    let continued = ran.states.is_some_and(|n| n <= CONTINUE_STATES);
+    // A module with no `Deadlock_` check has no deadlocks run to count its states; TLC
+    // runs the system BFS explored, so BFS's count stands in.
+    let states = ran.states.unwrap_or(job.states as u64);
+    let continued = states <= CONTINUE_STATES;
     let witnesses = rerun(
         (tlc, dir, modules, job, jvm),
         (&job.witnesses_cfg, PrintMode::Witnesses, &job.witnesses),
@@ -377,16 +379,12 @@ pub(super) fn state_model_disagreements(
             continue;
         }
         for w in &job.witnesses {
-            let (native, tlc) = (models.found.contains_key(w), !r.witnessed.contains(w));
+            let (native, tlc) = (models.found.contains(w), !r.witnessed.contains(w));
             if native != tlc {
                 out.push(line(&job.module, w, said(native), said(tlc)));
             }
         }
-        for d in r
-            .deadlocks
-            .iter()
-            .filter(|d| !models.found.contains_key(*d))
-        {
+        for d in r.deadlocks.iter().filter(|d| !models.found.contains(*d)) {
             out.push(line(&job.module, d, "ok", "counterexample"));
         }
     }

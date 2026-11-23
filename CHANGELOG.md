@@ -120,9 +120,8 @@
     states without a witness as BFS, and each deadlock TLC reports must be one BFS reports.
     A deadlock only BFS finds is no disagreement, since a cycle in the column's cone hides
     it from TLC. A larger cone prints `not run, over the limit of 100000 states`.
-  - Any other difference prints `error[EngineDisagreement]` and fails the run. A missing
-    witness or a deadlock BFS rates an error now makes `tlc_result:` `counterexample`, where
-    it said `ok` before.
+  - Any other difference prints `error[EngineDisagreement]` and fails the run. A state-model
+    run moves `tlc_result:` only when it fails as a tool, since its findings are BFS's.
   - `can_reach` and the use cases that never run stay native-only. A run without
     `--with-tlc` builds none of these jobs, and its output does not change.
 

@@ -364,11 +364,7 @@ pub fn run(
         disagreed.extend(state_model_disagreements(models, &model_jobs, &model_ran));
         let all_jobs: Vec<&Job> = jobs.iter().chain(&wholes).collect();
         let all_ran: Vec<&Ran> = ran.iter().chain(&whole_ran).collect();
-        let model_outcomes: Vec<Outcome> = model_jobs
-            .iter()
-            .zip(&model_ran)
-            .map(|(job, r)| r.outcome(job, models))
-            .collect();
+        let model_outcomes: Vec<Outcome> = model_ran.iter().map(|r| r.outcome()).collect();
         let outcome = worst(
             all_ran
                 .iter()

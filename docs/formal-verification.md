@@ -167,9 +167,9 @@ shows BFS's count, `(<n> states by BFS)`. A larger cone prints `tlc: StateModel_
 states by BFS): not run, over the limit of 100000 states`. TLC must name the same states without a witness as BFS, and each deadlock
 TLC reports must be one that BFS reports. A deadlock that only BFS finds is no disagreement,
 for the reason above. Any other difference prints `error[EngineDisagreement]:
-StateModel_<E> [<check>]: native <a>, TLC <b>; ...` and fails the run. A missing witness, or a
-deadlock that BFS rates an error, makes `tlc_result:` `counterexample`. The run prints no
-`violated:` line for these modules, since a witnesses cfg violates every reached state.
+StateModel_<E> [<check>]: native <a>, TLC <b>; ...` and fails the run. These runs move
+`tlc_result:` only when one fails as a tool: the findings are BFS's, which they check, and
+they print no `violated:` line, since a witnesses cfg violates every reached state.
 
 ## Mapping
 
