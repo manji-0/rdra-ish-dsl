@@ -101,6 +101,8 @@
             pkgs.go
 
             pkgs.pre-commit
+            # Mutation run over the liveness ladder (.cargo/mutants.toml, .github/workflows/mutants.yml)
+            pkgs.cargo-mutants
           ]
           # GNU time for scripts/verify-samples.sh (macOS has BSD /usr/bin/time).
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.time ];
