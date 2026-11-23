@@ -28,7 +28,7 @@ use std::sync::Arc;
 
 use super::cone::{Cone, Seed, VarSet};
 use super::explore::Caps;
-use super::expr::State;
+use super::expr::{State, StateSlice};
 use super::types::{ActId, EntId, Pred, Value, VarId};
 use super::TransitionSystem;
 
@@ -193,7 +193,7 @@ impl Reduction {
 
     /// The S and input bytes of a state, as the extended sub-lifecycle's state: its vars in
     /// their layout, the stubs, then the input bits.
-    pub(crate) fn key(&self, ts: &TransitionSystem, s: &State) -> Vec<u8> {
+    pub(crate) fn key(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
         let mut key = Vec::new();
         for &(at, w, _) in &self.spans {
             key.extend_from_slice(&s.0[at..at + w]);
@@ -205,14 +205,19 @@ impl Reduction {
 
     /// The input bytes of a state, in the extended sub-lifecycle's order: the raw inputs,
     /// then the bits.
-    pub(crate) fn input_bytes(&self, ts: &TransitionSystem, s: &State) -> Vec<u8> {
+    pub(crate) fn input_bytes(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
         let mut out = Vec::new();
         self.input_bytes_into(ts, s, &mut out);
         out
     }
 
     /// `input_bytes` written into `out`, which keeps its allocation.
-    pub(crate) fn input_bytes_into(&self, ts: &TransitionSystem, s: &State, out: &mut Vec<u8>) {
+    pub(crate) fn input_bytes_into(
+        &self,
+        ts: &TransitionSystem,
+        s: &StateSlice,
+        out: &mut Vec<u8>,
+    ) {
         out.clear();
         for &(at, w, in_s) in &self.spans {
             if !in_s {
@@ -229,7 +234,7 @@ impl Reduction {
 
     /// The input bits of a state: per bit group and slot of its key, whether some fold of
     /// the group holds there.
-    fn bit_values(&self, ts: &TransitionSystem, s: &State) -> Vec<u8> {
+    fn bit_values(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<u8> {
         let slots = ts.bounds.slots();
         let mut out = Vec::with_capacity(self.bits.len() * slots);
         for group in &self.bits {
@@ -252,7 +257,7 @@ impl Reduction {
     }
 
     /// The class of a state whose S part is a representative.
-    pub fn class(&self, ts: &TransitionSystem, s: &State) -> Option<u32> {
+    pub fn class(&self, ts: &TransitionSystem, s: &StateSlice) -> Option<u32> {
         self.class_of.get(self.key(ts, s).as_slice()).copied()
     }
 
@@ -339,22 +344,22 @@ impl Reduction {
 
     /// The state with its S part replaced by the representative of the class it starts in;
     /// `None` when the S part is no initial S state.
-    pub(crate) fn canonical_initial(&self, ts: &TransitionSystem, s: &State) -> Option<State> {
+    pub(crate) fn canonical_initial(&self, ts: &TransitionSystem, s: &StateSlice) -> Option<State> {
         let class = *self.init.get(self.key(ts, s).as_slice())?;
-        let mut out = s.clone();
+        let mut out = s.to_owned();
         self.write(&mut out, &self.reps[class as usize]);
         Some(out)
     }
 
     /// The class moves from `s`: the last action, its params, and the successor.
-    pub(crate) fn moves_from(&self, ts: &TransitionSystem, s: &State) -> Vec<Step> {
+    pub(crate) fn moves_from(&self, ts: &TransitionSystem, s: &StateSlice) -> Vec<Step> {
         let class = self
             .class(ts, s)
             .expect("a reduced state holds a representative");
         self.moves[class as usize]
             .iter()
             .map(|(act, params, to)| {
-                let mut s2 = s.clone();
+                let mut s2 = s.to_owned();
                 self.write(&mut s2, &self.reps[*to as usize]);
                 (*act, params.clone(), s2)
             })
@@ -574,9 +579,9 @@ impl TransitionSystem {
     }
 
     /// The moves of `s` without the reduction: the real step relation on a reduced state.
-    pub(crate) fn plain_moves(&self, s: &State) -> Vec<Step> {
+    pub(crate) fn plain_moves(&self, s: &StateSlice) -> Vec<Step> {
         let mut out = super::explore::Moves::default();
-        self.moves_of_into(s, false, &mut s.clone(), &mut out);
+        self.moves_of_into(s, false, &mut s.to_owned(), &mut out);
         out.into_moves()
             .into_iter()
             .map(|m| (m.act, m.params, m.next))
@@ -588,7 +593,7 @@ impl TransitionSystem {
     /// S moves the representative to the class the inputs put it in.
     pub(crate) fn moves_of_into(
         &self,
-        s: &State,
+        s: &StateSlice,
         reduced: bool,
         scratch: &mut State,
         out: &mut super::explore::Moves,

@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use crate::fasthash::FastMap;
 use crate::lifecycle::diag::{CapGrowth, Diag, StateDiag, VarSpread};
-use crate::lifecycle::expr::State;
+use crate::lifecycle::expr::{State, StateSlice};
 use crate::lifecycle::types::{ActId, Domain, EntId, Value, VarKind};
 use crate::lifecycle::view::pattern_bound;
 use crate::lifecycle::TransitionSystem;
@@ -18,7 +18,7 @@ use crate::memory::Charge;
 use crate::parallel::Helpers;
 
 use super::store::binding_bytes;
-use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, Threads};
+use super::{Bfs, Bindings, Caps, Edge, EntityView, Moves, Reach, States, Threads};
 
 /// States one worker expands at a time. Fewer than two chunks of waiting states are
 /// expanded on the caller's thread, so a small run starts no worker.
@@ -30,15 +30,14 @@ const AHEAD: usize = 4;
 /// The moves from a run of states, in state order, and where each state's moves end.
 type Expanded = (Moves, Vec<usize>);
 
-fn expand(ts: &TransitionSystem, states: &[State]) -> Expanded {
+fn expand(ts: &TransitionSystem, states: &States, range: Range<usize>) -> Expanded {
     let mut moves = Moves::default();
-    let Some(mut scratch) = states.first().cloned() else {
+    let Some(mut scratch) = states.get(range.start).map(ToOwned::to_owned) else {
         return (moves, Vec::new());
     };
-    let ends = states
-        .iter()
-        .map(|s| {
-            ts.moves_into(s, &mut scratch, &mut moves);
+    let ends = range
+        .map(|i| {
+            ts.moves_into(&states[i], &mut scratch, &mut moves);
             moves.len()
         })
         .collect();
@@ -56,7 +55,7 @@ struct Workers<'scope, 'env> {
     /// The helpers a `Threads::Shared` run holds, given back when the run ends.
     held: Option<Helpers>,
     /// `None` until the first chunk is handed out.
-    jobs: Option<Sender<Vec<State>>>,
+    jobs: Option<Sender<States>>,
     /// Per chunk handed out and not yet read, in order: its result once a worker sends it.
     waiting: VecDeque<Option<std::thread::Result<Expanded>>>,
     /// The chunks before `waiting[0]`: how many were handed out and read.
@@ -106,9 +105,9 @@ impl<'scope, 'env> Workers<'scope, 'env> {
         threads > 0 && self.waiting.len() < threads * AHEAD
     }
 
-    fn hand_out(&mut self, states: Vec<State>) {
+    fn hand_out(&mut self, states: States) {
         let jobs = self.jobs.get_or_insert_with(|| {
-            let (jobs, queue) = mpsc::channel::<Vec<State>>();
+            let (jobs, queue) = mpsc::channel::<States>();
             let queue = Arc::new(Mutex::new((0usize, queue)));
             for _ in 0..self
                 .threads
@@ -124,7 +123,8 @@ impl<'scope, 'env> Workers<'scope, 'env> {
                         queue.0 += 1;
                         (queue.0 - 1, states)
                     };
-                    let expanded = catch_unwind(AssertUnwindSafe(|| expand(ts, &states)));
+                    let expanded =
+                        catch_unwind(AssertUnwindSafe(|| expand(ts, &states, 0..states.len())));
                     if done.send((number, expanded)).is_err() {
                         break;
                     }
@@ -171,8 +171,8 @@ impl<'t> Bfs<'t> {
         Bfs {
             ts,
             caps,
-            states: Vec::new(),
-            seen: FastMap::default(),
+            states: States::new(ts.width),
+            seen: Default::default(),
             keys: Default::default(),
             complete: true,
             diags: Vec::new(),
@@ -204,7 +204,7 @@ impl<'t> Bfs<'t> {
                     }
                 }
             }
-            if !self.admit(s, None) {
+            if !self.admit(&s, None) {
                 return;
             }
         }
@@ -215,21 +215,21 @@ impl<'t> Bfs<'t> {
     /// is left or a cap stops the run.
     fn explore(&mut self, mut workers: Workers) {
         // The successor being read, copied out of the worker's buffer.
-        let Some(mut s2) = self.states.first().cloned() else {
+        let Some(mut s2) = self.states.first().map(ToOwned::to_owned) else {
             return;
         };
         // States before `next` are read; states before `sent` are read or handed out.
         let (mut next, mut sent) = (0, 0);
         loop {
             while self.states.len() - sent >= 2 * CHUNK && workers.has_room() {
-                workers.hand_out(self.states[sent..sent + CHUNK].to_vec());
+                workers.hand_out(self.states.slice(sent..sent + CHUNK));
                 sent += CHUNK;
             }
             let expanded = if next < sent {
                 workers.next()
             } else if sent < self.states.len() {
                 let end = self.states.len().min(sent + CHUNK);
-                let expanded = expand(self.ts, &self.states[sent..end]);
+                let expanded = expand(self.ts, &self.states, sent..end);
                 sent = end;
                 expanded
             } else {
@@ -252,7 +252,7 @@ impl<'t> Bfs<'t> {
     fn take(&mut self, at: usize, moves: &Moves, range: Range<usize>, s2: &mut State) -> bool {
         self.layers.read(at);
         let from = at as u32;
-        let s = self.states[at].clone();
+        let s = self.states[at].to_owned();
         for i in range {
             let (act, params, next) = moves.get(i);
             s2.0.copy_from_slice(next);
@@ -270,11 +270,11 @@ impl<'t> Bfs<'t> {
                 continue;
             }
             self.check_after(from, act, params, s2);
-            let to = match self.seen.get(&*s2) {
-                Some(&to) => to,
+            let to = match self.seen.find(&self.states, s2) {
+                Some(to) => to,
                 None => {
                     let to = self.states.len() as u32;
-                    if !self.admit(s2.clone(), Some(edge)) {
+                    if !self.admit(s2, Some(edge)) {
                         return false;
                     }
                     to
@@ -287,8 +287,8 @@ impl<'t> Bfs<'t> {
 
     /// Adds a new state; false when the state cap or the memory limit stops the run.
     /// `parent` is the index in `edges` that the edge reaching it takes.
-    fn admit(&mut self, s: State, parent: Option<u32>) -> bool {
-        if self.seen.contains_key(&s) {
+    fn admit(&mut self, s: &StateSlice, parent: Option<u32>) -> bool {
+        if self.seen.find(&self.states, s).is_some() {
             return true;
         }
         if self.states.len() >= self.caps.states {
@@ -338,9 +338,9 @@ impl<'t> Bfs<'t> {
                 return false;
             }
         }
-        self.check_invariants(&s, self.states.len() as u32);
-        self.seen.insert(s.clone(), self.states.len() as u32);
+        self.check_invariants(s, self.states.len() as u32);
         self.states.push(s);
+        self.seen.insert(&self.states, self.states.len() as u32 - 1);
         self.parents.push(parent);
         self.layers.admit(parent.is_none());
         true
@@ -420,7 +420,7 @@ impl<'t> Bfs<'t> {
     }
 
     /// Records what one edge says about each written slot's pattern.
-    fn observe(&mut self, act: ActId, params: &[u8], s: &State, s2: &State) -> bool {
+    fn observe(&mut self, act: ActId, params: &[u8], s: &StateSlice, s2: &StateSlice) -> bool {
         let ts = self.ts;
         let action = &ts.actions[act.index()];
         let (mut before, mut after) = std::mem::take(&mut self.keys);
@@ -483,7 +483,7 @@ impl<'t> Bfs<'t> {
         }
     }
 
-    fn check_invariants(&mut self, s: &State, at: u32) {
+    fn check_invariants(&mut self, s: &StateSlice, at: u32) {
         let ts = self.ts;
         for (i, inv) in ts.invariants.iter().enumerate() {
             if self.violated.contains(&inv.name) {
@@ -495,7 +495,7 @@ impl<'t> Bfs<'t> {
         }
     }
 
-    fn check_after(&mut self, from: u32, act: ActId, params: &[u8], s2: &State) {
+    fn check_after(&mut self, from: u32, act: ActId, params: &[u8], s2: &StateSlice) {
         let ts = self.ts;
         for (i, a) in ts.after.iter().enumerate() {
             if self.violated.contains(&a.name) {
@@ -506,7 +506,7 @@ impl<'t> Bfs<'t> {
                     from,
                     act,
                     params: params.into(),
-                    to: s2.clone(),
+                    to: s2.to_owned(),
                     after: i,
                 };
                 self.violation(&a.name, d, reach);

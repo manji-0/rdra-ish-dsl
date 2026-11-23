@@ -1,7 +1,7 @@
 # Target shape of rdra-ish
 
 This note defines what rdra-ish is when it is finished: an RDRA requirements model
-that also carries a logical data model and a lifecycle that TLC can check. It records
+that also carries a logical data model and a lifecycle that `verify` can check. It records
 where today's DSL stands against the RDRA primary sources, the semantics the finished
 DSL commits to, and the order of work that gets there.
 
@@ -368,8 +368,8 @@ These questions were decided on 2026-10-29, during phase 6:
   TLC's state graph. It compares every cone of every sample at 2 instances, except a cone
   whose BFS passes 300,000 states there, which it compares at 1 instance. The test lists
   those cones in `VERIFY_FALLBACK` and fails when a cone joins or leaves the list, so the
-  coverage it gives up is always named. Today the list holds 11 cones: 1 of clinic-ops, 2 of
-  patent-ops, 1 of food-permit-ops, and 7 of insurance-claim-ops
+  coverage it gives up is always named. Today the list holds 24 cones: 1 of clinic-ops, 2 of
+  patent-ops, 1 of food-permit-ops, 7 of insurance-claim-ops, and 13 of oidc-auth
   ([formal-verification.md](./formal-verification.md#known-verification-gaps) names them).
 - Each sample states its expected result in `// expect` lines of its first file in load
   order, so CI keeps no second list of samples. The deadlock check found one model defect:

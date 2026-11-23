@@ -2,7 +2,7 @@
 use std::collections::BTreeSet;
 
 use crate::lifecycle::cone::{named_params, VarSet};
-use crate::lifecycle::expr::State;
+use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::types::{ActId, At, CmpOp, Effect, EntId, ParamRole, Pred, Rhs, Term, VarId};
 use crate::lifecycle::TransitionSystem;
 
@@ -87,7 +87,7 @@ impl Fold {
     }
 
     /// Whether the bit holds for slot `c` of the key in `s`.
-    pub(super) fn holds(&self, ts: &TransitionSystem, s: &State, c: u8) -> bool {
+    pub(super) fn holds(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
         let a = &ts.actions[self.act.index()];
         let mut params = vec![0u8; a.params.len()];
         let key = match &self.key {

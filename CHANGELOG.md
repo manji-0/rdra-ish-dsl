@@ -127,9 +127,9 @@
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
-  decide: past the budget, or 2,097,152 states, the run stops with
-  `TimeBudgetReached` or the state cap and the property is `not decided` unless the partial
-  graph already holds a counterexample.
+  decide: past the budget, the memory limit, or `--max-states` when given, the run stops
+  and the property is `not decided` unless the partial graph already holds a
+  counterexample.
 - The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
@@ -231,6 +231,15 @@
   `not decided`. No sample's verdict changes. The argument is in
   [WF_vars(Next) on a reduced cone](docs/formal-verification.md#wf_varsnext-on-a-reduced-cone);
   `RDRA_ISH_NO_WF_REDUCED` turns the run off for measurement.
+- BFS keeps each explored state once, in one buffer, with a table of state numbers to find
+  it by, in place of a heap block per state and a second copy as the key of the seen
+  set. The store per state on the sample cones of a thousand states and more falls from
+  215 to 125 bytes at the median at `check` bounds (260 to 154 at the most) and from 248 to
+  159 at `verify` bounds (403 to 316). States, edges, verdicts, and counterexamples do not
+  change, but a cone fits more states under `--memory`: a cone that stopped at the limit
+  stops later or finishes, and the `held at <N> B per state` of `MemoryCapReached` is
+  smaller. The memory estimate follows the new store, `(w + 12)·p2(n) + 5·buckets(n) +
+  12·p2(e)` bytes.
 - The TypeScript types of `codegen --lang ts` are covered by the compatibility contract
   ([The TypeScript types of `codegen`](./docs/compatibility.md#the-typescript-types-of-codegen)).
   The contract covers the scalars, the `<Entity>Id` types, the value sets with their

@@ -175,6 +175,7 @@ stays as it was.
 | `.along(...)` | Quantified over `<E>_Ids`, joined by `<Child>_owner_<Parent>` equalities. |
 | `col: T @check(expr)` | `INVARIANT Check_<Entity>_<column>_<n>` over the present instances. A nullable operand is guarded: `qty: Int @null @check(qty >= 1)` prints `(E_qty[b0] # -1 /\ E_qty[b0] >= 1)`, so a null `qty` violates it. |
 | `relate(Child, Parent, 1:1)` | `INVARIANT Unique_<Child>_<role>` (role defaults to the parent id): `\A b0, b1 \in <Child>_Ids`, two present children are the same or have different owners. An unlinked optional child owns nothing. |
+| `@unique`, `@unique(a, b)`, the key pair of a `relate(A, B, N:M).via(J)` junction | `INVARIANT Unique_<Entity>_<columns>`, the columns joined by `_`: `\A b0, b1 \in <Entity>_Ids`, two present rows are the same or differ in some column of the set. A key column reads as `<Entity>_owner_<Parent>`. A null Int (`-1`) or an unlinked optional key (`0`) exempts its row. Only a set whose every column the lifecycle holds; see [Unique column sets](./state-derivation.md#unique-column-sets). |
 | `relate(Child, Parent, 1..*:1)` (child-side minimum) | `INVARIANT MinCard_<Child>_<role>`: `\A b0 \in <Parent>_Ids`, a present parent has `\E b1 \in <Child>_Ids` present with `<Child>_owner_<Parent>[b1] = b0`. Checked in every state, so a parent created without a child in the same transaction, or a deleted last child, is a counterexample. |
 | Pre-existing child of a `relate` | `Init` links the owner: `\in [<Child>_Ids -> <Parent>_Ids]` for N:1 (start `Any`), `[i \in <Child>_Ids \|-> i]` for 1:1 and for a child-side minimum (start `Identity`). An `.optional()` key under a created parent starts unlinked (`Base`). |
 | An action that creates a parent and updates an existing child | The action links the child. An `.optional()` key guards the assignment with an unlinked owner, so a linked child keeps its first parent. A mandatory key assigns without a guard, which moves the child. |
@@ -240,12 +241,14 @@ one line per property:
 ```
 property CancelledStaysCancelled (BFS on its cone): violated
 error[CancelledStaysCancelled]: property CancelledStaysCancelled is violated: its stable condition holds for Order#1 before step 3 and is false after it
+  rule: skills/rdra-ish-verify/samples/order_stability.rdra:64:1
   counterexample (3 steps):
-    1. Place [Order#1]
-    2. Cancel [Order#1]
-         Order#1.status: draft -> cancelled
-    3. Reopen [Order#1]
-         Order#1.status: cancelled -> draft
+    1. Place [Order#1]                          skills/rdra-ish-verify/samples/order_stability.rdra:18:1
+         + Order#1 (status=draft, paid=false)
+    2. Cancel [Order#1]                         skills/rdra-ish-verify/samples/order_stability.rdra:21:1
+         Order#1.status: draft -> cancelled     skills/rdra-ish-verify/samples/order_stability.rdra:42:1
+    3. Reopen [Order#1]                         skills/rdra-ish-verify/samples/order_stability.rdra:22:1
+         Order#1.status: cancelled -> draft     skills/rdra-ish-verify/samples/order_stability.rdra:43:1
 ```
 
 - `stable` and `unchanged` are read on every edge, in the order BFS found them. The first
@@ -259,8 +262,9 @@ error[CancelledStaysCancelled]: property CancelledStaysCancelled is violated: it
 
 A violation is a finite trace, with no `then nothing changes forever` after it. A cone that
 frees an entity's slots reaches a superset, so a violation there is decided again by BFS on
-the whole model. A cone BFS stops at the state cap with no violation is `not decided`, and
-counts with the other findings the cap leaves. A scoped run (`--buc`, `--entity`) checks
+the whole model. A cone BFS stops at `--max-states` or the memory limit with no violation is
+`not decided`, and counts with the other findings the stop leaves. A scoped run (`--buc`,
+`--entity`) checks
 none of these properties, as it checks no other.
 
 The TLA+ export spells the same formulas (see [Mapping](#mapping)), and
@@ -406,8 +410,8 @@ before it prints; one that does not is a tool bug and prints `error[LassoFault]`
    its progress (distinct states, queue, seconds, about once a minute) and stops at the same
    budget or at the first progress line past 2,097,152 states, or past `--max-states` when
    given: TLC's heap is not `--memory`'s pool, so its whole-model run keeps a bound. A run stopped after it found a counterexample keeps that verdict;
-   otherwise the property is `not decided`, listed under `not checked:`, and the run still
-   ends in `OK:`
+   otherwise the property is `not decided`, listed under `not checked:`, the run prints
+   `result: not decided`, and it still ends in `OK:`
    with exit status 0, as a BFS cone at its cap does, after a `warning:` on stderr that
    counts what was left undecided. `--deny-undecided` makes that an error with exit
    status 1.
@@ -452,19 +456,20 @@ hide a stuck instance. The `StateModel_` specs that `export` writes let TLC alon
 same missing witnesses and the deadlocks that no cycle of the cone hides (see
 [State models with TLC alone](#state-models-with-tlc-alone)). The same pass finds each use case that never runs (see
 [state-derivation.md](./state-derivation.md#use-cases-that-never-run)) and prints it as a
-warning, which does not fail the run. A cone that stops at the cap decides nothing about its
+warning, which does not fail the run. A cone that stops at the memory limit or at
+`--max-states` decides nothing about its
 unwitnessed states, its deadlocks, or its actions with no edge, and `verify` lists each
 under `not checked:`. The
-pass ends with a `state models (BFS on N entity cones): ...` summary line. The cap counts the
-states of the reduced cone (see
+pass ends with a `state models (BFS on N entity cones): ...` summary line. `--max-states`
+counts the states of the reduced cone (see
 [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)); the
-sub-lifecycle it explores to reduce a cone has the same cap, and a cone whose sub-lifecycle
-passes it runs unreduced. On clinic-ops the whole `verify` takes about 3 s and 1.3 GB (it
+sub-lifecycle it explores to reduce a cone has the same bounds, and a cone whose sub-lifecycle
+passes them runs unreduced. On clinic-ops the whole `verify` takes about 3 s and 1.3 GB (it
 took 2.5 minutes and 3.7 GB with TLC before the reduction); its largest cone is `EligibilityCheck`
-(905,528 states at 2 instances, which nothing reduces), while `Charge`, past the cap
+(905,528 states at 2 instances, which nothing reduces), while `Charge`, over 8,388,608 states
 unreduced, is 38,533 states reduced and `Prescription` (4,266,635 unreduced) is 1,690. On
-patent-ops the `OfficeAction` cone (over 8,388,608 states unreduced, 1,341,707 reduced) is under
-the cap too, so `verify` decides all four of its stuck-state checks (see the sample's README).
+patent-ops the `OfficeAction` cone (over 8,388,608 states unreduced, 1,341,707 reduced)
+finishes too, so `verify` decides all four of its stuck-state checks (see the sample's README).
 
 ```
 $ rdra-ish verify samples/formal-verification/order.rdra
@@ -564,9 +569,9 @@ reads the existence of each entity such an action creates, until nothing more is
 that cone, a path of the cone is a path of the whole model and the other way round, so the
 cone's verdict is the whole model's at the same bounds. A reduced cone (the next section)
 keeps stuttering equivalence, which says nothing of `AG EF`, so no `can_reach` cone is
-reduced. A cone that stops at the state cap decides nothing, since a state it did not expand
-has no edges and would look stuck: it reports `StateCapReached` as an invariant's cone
-does. A scoped `verify` checks no property, `can_reach` included.
+reduced. A cone that stops at `--max-states` or the memory limit decides nothing, since a
+state it did not expand has no edges and would look stuck: no violation is read from it.
+A scoped `verify` checks no property, `can_reach` included.
 
 `verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
 cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
@@ -915,7 +920,7 @@ invariant(Order).when(status == placed).none(Shipment).label("a placed order has
 ```
 
 A rule marked `.lemma()` is checked by `check` like any rule, so a wrong lemma fails there
-with a trace. `verify` runs no cone for a lemma: the proof keeps a lemma only when it
+with a trace. `verify` runs no cone of its own for a lemma, and checks one only inside a cone another check runs: the proof keeps a lemma only when it
 proves it, so a wrong one never helps a proof, and a lemma that reads two large cones would
 join them into one far larger cone. In the proof a lemma is one more candidate. It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and the
 `proof: your lemmas: ...` line counts it apart from the rules, so it never counts toward the
@@ -1011,7 +1016,7 @@ to add a case.
   `IntLiteralOutOfBounds` in `check` and `states` too: raise `--int-range-max` or lower
   the value. `@default(0)` is accepted for Int columns.
 - **`now`.** `now` is a global Int clock with a `Tick` action. Nothing pins a column
-  that `now` is compared to, so the clock can tick past it and TLC finds a violation of
+  that `now` is compared to, so the clock can tick past it and `check` and `verify` find a violation of
   `forbidden(col < now)` (see `now_coupon.rdra`).
 - **`WF_vars(Next)`.** Fairness is on the whole `Next` disjunction, not per action. Another
   instance's endless loop satisfies it, so a property about one instance fails on a run that
@@ -1023,7 +1028,7 @@ to add a case.
   [Temporal properties on a cone](#temporal-properties-on-a-cone)); otherwise the property
   runs on the whole model, which explores every reachable state at once and on
   `samples/patent-ops`, `samples/food-permit-ops`, or `samples/insurance-claim-ops` at
-  `InstanceCount=2` stops at the budget or the state cap as `not decided`. A `.fair` that names
+  `InstanceCount=2` stops at the budget or the memory limit as `not decided`. A `.fair` that names
   the use cases the property relies on keeps it on its cone.
 - **`.along`.** An `.along` path needs a `relate` that binds each adjacent pair. Without
   one, the rule is `UnbindableScope`, an error in every command, not a dropped filter.
@@ -1119,12 +1124,24 @@ to add a case.
   comparison, `after` assertions and temporal properties, at 2 or 3 instances per entity. It
   runs `verify --deny-undecided` on the model as users run it and again with every cone
   unreduced (the test hook `RDRA_ISH_NO_REDUCE`, which is not a setting), and compares the
-  exit code, the finding names, the verdict of each check, and the state-model summary; the
-  state counts and traces differ by design. A diverging model is copied out as `.rdra`, and
-  `minimize` shrinks it by deleting lines while it still diverges. A seed past the per-run
-  timeout is listed with the side that timed out, never dropped. CI runs a fixed set of
-  quick seeds in formal-verify with `--fail-on-timeout`, so a seed that slows down fails the
-  job rather than leaving the set; larger sweeps run locally under `nix develop`:
+  exit code, the finding names, the verdict of each check, the `result:` line, and the
+  state-model summary; the state counts and traces differ by design. When one run leaves a
+  check or a state-model finding open at a bound (a cone past `--max-states` or the memory
+  limit, a property past the budget) that the other decides, the seed is listed under
+  `plain_undecided` or `reduced_undecided` and compared on what both decide: a check is
+  compared only where both runs decide it, a finding one run prints must be one the other
+  prints or leaves open (the open findings are read by name from `not checked:`), the run that
+  leaves nothing open counts at least as many witnessed states, deadlocks, and use cases that
+  never run, and the exit code and the `result:` and `Error: verification` lines, which sum up
+  what each run decided, are not compared. A diverging model is copied out as `.rdra`, and `minimize` shrinks it by
+  deleting lines while it still diverges. A seed past the per-run timeout is listed with the
+  side that timed out, never dropped. A seed whose run prints `error[LassoFault]` (a native
+  counterexample that fails its own check) or, with `--with-tlc`, which also runs TLC on both
+  sides, `error[EngineDisagreement]` is listed under `disagreed`. `selfcheck` runs the comparison on saved output pairs under
+  `scripts/reduction-diff-fixtures` and checks each gets the status its `expect` file names.
+  CI runs `selfcheck`, then a fixed set of quick seeds in formal-verify with
+  `--fail-on-timeout --with-tlc`, so a seed that slows down fails the job rather than leaving
+  the set; larger sweeps run locally under `nix develop`:
 
   ```sh
   cargo build --release -p rdra-ish-cli
@@ -1224,10 +1241,11 @@ gaps.
   invariants `not decided`. The count is the states of the cone reduced
   by its independent sub-lifecycle (see
   [Reduction by an independent sub-lifecycle](#reduction-by-an-independent-sub-lifecycle)).
-  Every sample cone is under 8,388,608 states, the cap before `--max-states` (default none) (the largest, `BusinessPermit` of
+  Every sample cone, at the bounds its `// expect verify` header names, finishes within the
+  default `16GiB` (the largest, `BusinessPermit` of
   food-permit-ops, has 4,648,771 states reduced; `Charge` of clinic-ops, over 8,388,608
   unreduced, has 38,533), so `verify --deny-undecided` decides every check on all of them;
-  the price is insurance-claim-ops's 180 s and 2.1 GB. See it: each undecided finding under
+  the largest run, insurance-claim-ops, holds about 2.1 GB. See it: each undecided finding under
   `not checked:` on stdout and the `warning:` on stderr that counts them (`--deny-undecided` fails the run instead). What
   you can do: rely on `check` at 1 instance for those findings, or shrink the cone, for
   example by removing a guard that pulls another entity's columns in. Or raise
@@ -1235,17 +1253,19 @@ gaps.
   whole-model run of TLC under `--with-tlc` keeps its own cap of 2,097,152 distinct states
   unless `--max-states` is given.
 - **`check` has no state cap, and a cone stops at the memory limit.** `check` and `states`
-  hold at most `4GiB` of states, `verify`'s BFS half of `16GiB`; `--memory` or `memory` in
+  hold at most `4GiB` of states, `verify`'s BFS `16GiB` (half of it under `--with-tlc`);
+  `--memory` or `memory` in
   `rdra.toml` changes either. `--max-states <N>` adds a state cap, and a cone past it is the
   `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone. A
   cone that reaches the memory limit stops the same way: `MemoryCapReached_<E>` in `check`,
   and in `verify` its findings under `not checked:`, named `stopped at the memory limit`. The
-  `check` message gives the states the cone held and the bytes each took, and, when the cone's
-  variables bound its states, an estimate of the memory to finish it (`at least about
-  12GiB`, for the cone alone, from the edges per state seen so far) and the `--memory` to give. The
-  bound is the product of the variables' domains, so on a large cone it is loose: the message
-  then says it is over `1TiB` and suggests narrowing. See it: the error, whose message names
-  the variables the reached states vary in. What you can do: raise `--memory`, or narrow the
+  `check` message gives the states the cone held and the bytes each took. Once the BFS
+  frontier has shrunk for two depths past its peak, it estimates the states the cone holds
+  (the fall taken to mirror the rise) and names the `--memory` for a quarter more, for the
+  cone alone. While the frontier still grows it gives no estimate, and falls back on the most
+  states the cone's variables allow (`at least about 12GiB`, if all are reachable) when that
+  is no more than `1TiB`. See it: the error, whose message names the variables the reached
+  states vary in. What you can do: raise `--memory`, or narrow the
   cone by moving a guard that reads another entity.
 - **Int columns range over `0..5`, and `now` is a bounded clock.** Every Int, Money,
   Decimal, Date, and DateTime column takes values in `IntRange`. `now` starts in that range
@@ -1278,7 +1298,8 @@ gaps.
   given), and the property is then `not decided`, which warns and does not fail
   the run unless `--deny-undecided` is given. The `not checked:` line names the cause. At
   the state cap it says that `--temporal-budget` does not lift the cap and offers
-  `--max-states`; at the time budget it offers the budget. Both suggest `.fair(UseCase, ...)` naming the use cases the property
+  `--max-states`; at the time budget it offers the budget, and at the memory limit
+  `--memory`. Each suggests `.fair(UseCase, ...)` naming the use cases the property
   relies on, which decides it on its cone. On
   patent-ops, food-permit-ops, and insurance-claim-ops at 2 instances a whole-model run does
   not finish (14 million states in 11 minutes, 6.9 million in 300 s, and 2.3 million with 1.7
@@ -1286,23 +1307,23 @@ gaps.
   cones only with `.fair`). See it: `not decided` on the
   property's line and under `not checked:`. What you can do: add `.fair(...)` naming the
   use cases the property relies on, which keeps it on its cone, or raise the budget.
-- **food-permit-ops checks its renewal guard just under the cap.** A renewal application
+- **food-permit-ops checks its renewal guard on large cones.** A renewal application
   names the permit it renews (`renews`, a second key between the two entities since #73), and
   `失効後の更新はできない` guards `ApplyRenewal` and `RenewPermit` on that permit's status. The
   guard adds the permit's existence, its status and the `renews` link to the application's
   cone: at 2 instances the view of `PermitApplication` grows from 127,165 to 2,094,157
-  states, a quarter of the cap of 8,388,608, and the views of `Inspection` and `Disposition`
+  states, and the views of `Inspection` and `Disposition`
   from 14,197 and 23,156 to about 232,000 each, unreduced. Since #112 the reduction takes
   the application's view to 52,597 states, the inspection's to 5,885 and the disposition's to
   138,246, while the permit's view, which now holds the raisers of the events that move the
-  permit, is 4,648,771 states reduced, about half the cap. `verify` decides every check
-  (36 s and 1.6 GB locally). At 1 instance a renewal needs a second application slot,
+  permit, is 4,648,771 states reduced. `verify` decides every check within the default
+  memory limit (1.6 GB locally). At 1 instance a renewal needs a second application slot,
   so `check` warns that `ApplyRenewal` and `RenewPermit` never run. The sample also joins a
   disposition's decision to the permit's ledger by an event. Its temporal property, that a
   valid permit without a 食品衛生責任者 ends with one appointed, is checked on its cone. See it:
   [Known verification gaps](../samples/food-permit-ops/README.md#known-verification-gaps). What
-  you can do: a change that grows the permit's cone further takes the view past the cap;
-  measure it with `lifecycle_measure` first.
+  you can do: a change that grows the permit's cone further takes the view toward the
+  memory limit; measure it with `lifecycle_measure` first.
 - **insurance-claim-ops checks its settlement guard reduced.** A liability claim is completed
   with the 示談書, and the claim and the settlement are both children of the accident case. The
   guard on `CompleteClaim` reads the settlement of the claim's own case
@@ -1310,7 +1331,7 @@ gaps.
   says the same on the claim's rows. Both join the claim's cone to the case's. Without the
   reduction of #74 the views of `Claim`, `Payment`, and `Subrogation` passed 3,000,000 states at
   2 instances and TLC had not finished after 20 minutes. Reduced, the claim's cone is 836,427
-  states, and `verify --deny-undecided` decides every check in about 180 s, with the one
+  states, and `verify --deny-undecided` decides every check, with the one
   deadlock the sample's header names. The claim's cones and the case's view are in
   `VERIFY_FALLBACK`: `engine_equivalence` compares them with TLC at 1 instance only.
   See it: [Verification](../samples/insurance-claim-ops/README.md#verification). What you can
@@ -1344,7 +1365,13 @@ Install: see [`skills/README.md`](../skills/README.md) (`npx skills add` / `gh s
 Canonical files: `skills/rdra-ish-verify/samples/` (each file is **standalone** —
 do not `check` the whole directory; ids such as `Order` collide). In this repo,
 `samples/formal-verification/` and `samples/formal-verification-fail/` are
-symlinks to those skill-bundled files (CLI tests keep working after skill install).
+symlinks to those skill-bundled files (CLI tests keep working after skill install), except
+`unique_double_booking.rdra` and `unique_booking_guarded.rdra`, which live only in
+`samples/formal-verification/`.
+
+The second column gives `check`'s verdict, then `verify`'s on the cones of the rules,
+`after` assertions, and properties. A state with no witness or a deadlock fails both
+commands even where every cone passes; the `// expect` headers state each exit status.
 
 | Sample | `check` and `verify`'s cones | `--prove` | Focus |
 |---|---|---|---|
@@ -1372,18 +1399,18 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `min_card_met.rdra` | pass, pass | 1 of 1 | The same model with Place creating the Order and its first line in one transaction. At one instance `check` warns that AddLine never runs: an Order exists only with the one OrderLine slot taken. At two instances it runs |
 | `check_unmet.rdra` | fail, fail | 0 of 1 | `qty: Int @default(1) @check(qty >= 1)` adds `Check_CartLine_qty_0`; ClearQty sets `qty` to 0 |
 | `check_met.rdra` | pass, pass | 2 of 2 | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
-| `unwitnessed_state.rdra` | fail, pass | 1 of 1 | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
-| `deadlock.rdra` | fail, pass | no state rule | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
-| `can_reach_unmet.rdra` | pass, pass | no state rule | `can_reach(Order.status in (delivered, cancelled))` fails: once LoseStock and CloseWindow have run, an Order moves between `pending` and `on_hold` forever. Each of those states has a way out, so no deadlock is reported. `check` evaluates no property and TLC checks nothing; `verify`'s BFS fails it with a shortest trace and the states the Order is confined to |
+| `unwitnessed_state.rdra` | fail, pass | 1 of 1 | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. The rule's cone passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
+| `deadlock.rdra` | fail, pass | no state rule | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. The cones pass; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
+| `can_reach_unmet.rdra` | pass, fail | no state rule | `can_reach(Order.status in (delivered, cancelled))` fails: once LoseStock and CloseWindow have run, an Order moves between `pending` and `on_hold` forever. Each of those states has a way out, so no deadlock is reported. `check` evaluates no property and TLC cannot check it; `verify`'s BFS fails it on its cone with a shortest trace and the states the Order is confined to |
 | `can_reach_met.rdra` | pass, pass | no state rule | The same model with Restock, so every reachable state can still finish. An Order may still be held and resumed forever: `can_reach` asks for a path, not for progress |
-| `partial_scope.rdra` | fail, not run | not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
+| `partial_scope.rdra` | fail, not run | not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before any cone. With `--entity Order` both defer it under `not checked:` and pass; `verify` checks `Forbidden_Order_0` on its cone |
 | `fail/order.rdra` | fail, fail | 0 of 1 | Intentionally unsafe (reachable invariant violation) |
 
-The native checker and TLC give the same verdict on every row at the same bounds.
+Under `--with-tlc`, TLC gives the native checker's verdict on every check it runs.
 `check` runs at one
 instance per entity, where `Unique_*` holds vacuously. The `--prove` column counts the state
-rules `verify --prove` proves for any number of rows. A rule that fails `check` or TLC is
-never proved, and `one_to_one_shared`, `none_any_child_bypassed`, and
+rules `verify --prove` proves for any number of rows. A rule that fails `check` or `verify`
+is never proved, and `one_to_one_shared`, `none_any_child_bypassed`, and
 `unique_double_booking`, which pass `check`, are unproved too.
 
 ### Sample expectations
@@ -1455,8 +1482,7 @@ Name         = [A-Za-z0-9_]+
 
 The script prints one line per run with the verdict, the wall time, and the maximum RSS
 (GNU `time` on Linux, BSD `/usr/bin/time` on macOS), then the count of roots and runs.
-The script makes 68 runs of the 33 roots. Locally (Apple silicon) clinic-ops `verify` took
-105 s at about 2.0 GB (50 s at 1.4 GB before the run marks of `CheckInPatient`, #80) and
-patent-ops `verify` 68 s at about 1.2 GB, their TLC JVMs included, and food-permit-ops
-`verify` 16 s, when last measured there. insurance-claim-ops `verify` takes about 180 s at
-about 2.1 GB, as the gaps above say. The CI step has 20 minutes.
+The script makes 80 runs of the 39 roots. In one local run (Apple silicon, 18 cores, shared
+with other jobs) the longest, the `verify` runs of insurance-claim-ops, food-permit-ops, and
+oidc-auth's `--instance-count 1 --prove`, took under a minute each, and no run held more
+than about 2.1 GB. The `--with-tlc` mode adds the TLC runs. Each CI step has 20 minutes.

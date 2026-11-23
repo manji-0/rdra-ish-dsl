@@ -10,8 +10,10 @@
 Status: in progress. The plan started after
 [#165](https://github.com/manji-0/rdra-ish-dsl/issues/165),
 [#166](https://github.com/manji-0/rdra-ish-dsl/issues/166), and
-[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) landed, and phases 0 to 2 landed
-on 2026-11-23 (#176, #177, #178). The owner decided three
+[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) landed. Phases 0 to 3 have landed
+on `main` (#176, #177, #178, #179): `verify` decides every check natively by default, and
+TLC runs only under `--with-tlc`. The conservative divergence trial landed and was adopted
+(#227, [Decisions](#decisions)). Phases 4 to 6 have not landed. The owner decided three
 questions on 2026-11-23: `verify` defaults to the native checker and `--with-tlc` adds
 TLC, each phase lands on `main` when it passes while the next release waits until the
 native checker is stable, and `check` and `states` evaluate no `property`. The same day

@@ -62,10 +62,11 @@ Each figure is a cone size from `crates/rdra-ish-core/examples/lifecycle_measure
   (`UnderExamination`, `ExaminationOver`) put its state into the office action's cone, and the
   required link to the drafting order (`DraftsApproved`) adds the order and the disclosure. The
   cone passes 8,388,608 states unreduced at 2 instances and is 1,341,707 reduced by its
-  independent sub-lifecycle (#74). `verify` runs TLC on the reduced cone (its
-  invariants hold) and its BFS, under the cap of 8,388,608 states, decides whether an office action
-  can get stuck at `open`, `drafted`, `overdue`, or `answered` (about 25 s and 0.8 GB in all). Before the cap
-  was raised from 2,097,152, those four checks were listed under `not checked:`.
+  independent sub-lifecycle (#74). `verify` checks the invariants on the reduced cone (they
+  hold), and its BFS decides whether an office action can get stuck at `open`, `drafted`,
+  `overdue`, or `answered` (about 25 s and 0.8 GB in all). When `verify` had a state cap of
+  2,097,152 per cone, those four checks were listed under `not checked:`; it has no state cap
+  now, and the memory limit stops a cone.
   `engine_equivalence` compares the office action's cones with TLC at 1 instance only
   (`VERIFY_FALLBACK`). The cones of `PatentApplication` and `Patent` (293,833 and 202,569
   reduced; the filing guard's link adds the drafting order to them) are under its cap of

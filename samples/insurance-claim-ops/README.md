@@ -157,11 +157,12 @@ not.
 
 ## Verification
 
-`check` reports no warning. `verify --deny-undecided` at 2 instances decides every check and
-prints `result: ok`, with one error, `Deadlock_ClaimCase_status_assessed` (see
+`check` reports no warning. `verify --deny-undecided` at 2 instances decides every check;
+every rule, assertion, and property holds, and the run fails with one state-model error,
+`Deadlock_ClaimCase_status_assessed` (see
 [Known verification gaps](#known-verification-gaps)), which the `// expect verify` header
-names; it takes about 180 s locally (2.1 GB for `rdra-ish`, 5.9 GB with TLC's JVMs). The
-settlement guard on `CompleteClaim` joins the claim's cone to the case's, and `verify` explores
+names, so it prints `result: counterexample`. It takes about 70 s and 2.1 GB locally, with
+no JVM. The settlement guard on `CompleteClaim` joins the claim's cone to the case's, and `verify` explores
 each cone reduced by its independent sub-lifecycle (#74;
 [formal-verification.md](../../docs/formal-verification.md#reduction-by-an-independent-sub-lifecycle)):
 in the claim's cones the case, its investigation and its settlement are the sub-lifecycle,
@@ -292,7 +293,9 @@ What the model could say but `verify` could not check, and what it could not say
 - **(D) The hint for a whole-model run stopped at the state cap names the time budget.** The
   run above prints `the whole-model run stopped at the state cap of 2097152 states after 2272892
   states; raise --temporal-budget or shrink the model`, 143 s into a 300 s budget. Raising the
-  budget does not lift the cap, and no flag does.
+  budget did not lift the cap, and no flag did. The native whole-model run now has no state
+  cap unless `--max-states` gives one: the memory limit or `--temporal-budget` stops it, and
+  the hint names the flag to raise.
 - **(D/M) A use case that invokes two APIs is two actions, and the second ran without the
   guard and without the first.** `OpenSettlement` invokes the case API (moving the case to
   示談交渉中) and a settlement API (creating the settlement), guarded by `SettlementEligible`
