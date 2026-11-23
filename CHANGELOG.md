@@ -244,6 +244,9 @@
   violated check does not have, and no cap note. The `(N states)` of a failing
   `Cone_<name>` run line now counts the states BFS reached before it stopped, so it can be
   smaller than TLC's line for the same module (`samples/formal-verification-fail`: 7 to 3).
+  On `crates/rdra-ish-cli/tests/fixtures/early_stop/flags_fail.rdra` at
+  `--instance-count 3` the rule's cone stops at 3 of its 16,843,009 states, and `verify`
+  takes 108 s where it took 206 s; the Task entity cone, which runs to the end, is the rest.
   BFS also tracks violated checks as a bit per check name instead of a set of strings.
 - `verify` runs `Cone_<P>_WF` on the reduced cone first, with every class whose
   sub-lifecycle can loop taken as a place a behavior may stop. An `ok` there is the
