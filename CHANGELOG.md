@@ -4,6 +4,25 @@
 
 ### Breaking
 
+- `verify --prove` decides an invariant cone that BFS stopped at the memory limit (#232).
+  When z3 proves every rule the cone checks for any number of rows, the rules hold at the
+  run's bounds too, so the cone's line reads `ok (<n> states, BFS stopped at the memory
+  limit, decided by proof: --prove proved every check for any number of rows)` where it read
+  `not decided`. The cone no longer counts toward the closing warning or `--deny-undecided`,
+  and a run with nothing else open prints `result: ok`. A cone with an `after` assertion, or
+  with a rule z3 leaves unproved or out of scope, stays `not decided`, as does a cone stopped
+  at `--max-states` or `--max-patterns`. Without `--prove` nothing changes.
+
+- `verify --prove` gives each z3 check a budget of z3 resource units (`rlimit`) instead of
+  wall-clock time: 20,000,000 units for a check of a rule and 2,000,000 for a lemma, where
+  it gave 10 s and 0.5 s. Whether a rule is proved, and which lemmas it keeps, no longer
+  depends on the machine, its load, or `RDRA_JOBS`, so a proof can decide a verdict. No
+  flag sets the budgets. On every sample and engine-corpus case the proofs are the same as
+  with no practical limit, and a lemma check past its budget drops the lemma as a breaking
+  step does. In `rdra-ish-core`, `ProveOptions` has `rlimit` and `lemma_rlimit` in place of
+  `timeout_ms` and `lemma_timeout_ms`, and `Solver::check_sat` takes the check's budget.
+  `examples/prove_rlimit.rs` measures what each check spends.
+
 - The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
   and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
   `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,

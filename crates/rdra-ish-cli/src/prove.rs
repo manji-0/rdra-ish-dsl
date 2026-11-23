@@ -84,7 +84,8 @@ impl Marks {
 }
 
 /// Proves the selected state rules of `ts` and prints one line per rule. Lemmas are mined
-/// from `twin` too (`prove::mining_twin`).
+/// from `twin` too (`prove::mining_twin`). Returns the tally and the rules proved, lemmas
+/// included, by index into `ts.invariants()`.
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
     twin: Option<&TransitionSystem>,
@@ -92,7 +93,7 @@ pub(crate) fn run_proof(
     marks: &Marks,
     binary: &Path,
     deny_unproved: bool,
-) -> Result<ProofTally> {
+) -> Result<(ProofTally, BTreeSet<usize>)> {
     let lemmas = &marks.lemmas;
     let version = Z3::version(binary).unwrap_or_default();
     let rules: Vec<usize> = selection
@@ -166,12 +167,19 @@ pub(crate) fn run_proof(
             count(&app, out_of_scope)
         );
     }
-    Ok(ProofTally {
+    let tally = ProofTally {
         proved: count(&rules, proved),
         rules: rules.len(),
         unproved: count(&rules, unproved),
         deny_unproved,
-    })
+    };
+    let proved = proof
+        .rules
+        .iter()
+        .filter(|r| matches!(r.verdict, Verdict::Proved))
+        .map(|r| r.inv)
+        .collect();
+    Ok((tally, proved))
 }
 
 /// One rule's line, and the CTI under an unproved one. A lemma the model marks reads

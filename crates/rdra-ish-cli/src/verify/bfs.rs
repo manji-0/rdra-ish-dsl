@@ -186,9 +186,14 @@ pub(super) enum BfsCone {
         found: Vec<Diag>,
         /// False when the run stopped at the state cap or the memory limit.
         complete: bool,
+        /// The run stopped at the memory limit.
+        memory: bool,
     },
     /// The cone at this index of the jobs covers this one (`covering`) and passed.
     Covered(usize),
+    /// BFS stopped at the memory limit after `states` states and before a violation, and
+    /// `--prove` proved every check of the cone for any number of rows (`decide_by_proof`).
+    Proved { states: usize },
 }
 
 impl BfsCone {
@@ -216,6 +221,47 @@ impl BfsCone {
             states: run.states.len(),
             found,
             complete: run.complete,
+            memory: crowded(run),
+        }
+    }
+
+    /// The cone, decided by `--prove` when BFS stopped at the memory limit before a violation
+    /// and every check of it is an invariant in `proved` (indices into `ts.invariants()`).
+    /// The proof's encoding allows every step the explorer takes, at any number of rows and
+    /// any Int value, so a rule it proves holds at verify's bounds too. An after-assert,
+    /// which the proof does not state, leaves the cone undecided.
+    fn decided_by_proof(
+        self,
+        ts: &TransitionSystem,
+        cone: &ConeSystem,
+        proved: &BTreeSet<usize>,
+    ) -> BfsCone {
+        let BfsCone::Ran {
+            states,
+            found,
+            complete: false,
+            memory: true,
+        } = &self
+        else {
+            return self;
+        };
+        // A cone's invariant is the whole system's of the same name; should two share a name,
+        // both must be proved.
+        let is_proved = |name: &str| {
+            let mut same = (0..ts.invariants().len())
+                .filter(|i| ts.invariants()[*i].name == name)
+                .peekable();
+            same.peek().is_some() && same.all(|i| proved.contains(&i))
+        };
+        let all_proved = cone.system.after_asserts().is_empty()
+            && cone
+                .system
+                .invariants()
+                .iter()
+                .all(|inv| is_proved(&inv.name));
+        match found.is_empty() && all_proved {
+            true => BfsCone::Proved { states: *states },
+            false => self,
         }
     }
 
@@ -233,7 +279,7 @@ impl BfsCone {
                 (true, true) => Some(Outcome::Ok),
                 (true, false) => None,
             },
-            BfsCone::Covered(_) => Some(Outcome::Ok),
+            BfsCone::Covered(_) | BfsCone::Proved { .. } => Some(Outcome::Ok),
         }
     }
 
@@ -257,8 +303,36 @@ impl BfsCone {
                 None,
                 &[format!("checked in {}", jobs[*by].module)],
             ),
+            BfsCone::Proved { states } => run_line(
+                module,
+                checks,
+                verdict,
+                Some(*states as u64),
+                &[
+                    "BFS stopped at the memory limit".to_string(),
+                    "decided by proof: --prove proved every check for any number of rows"
+                        .to_string(),
+                ],
+            ),
         }
     }
+}
+
+/// Each safety cone of `cones` that BFS left undecided at the memory limit, decided by the
+/// rules `--prove` proved (`BfsCone::decided_by_proof`).
+pub(super) fn decide_by_proof(
+    ts: &TransitionSystem,
+    jobs: &[Job],
+    cones: Vec<Option<BfsCone>>,
+    proved: &BTreeSet<usize>,
+) -> Vec<Option<BfsCone>> {
+    jobs.iter()
+        .zip(cones)
+        .map(|(job, cone)| match (&job.kind, cone) {
+            (JobKind::Cone(system), Some(cone)) => Some(cone.decided_by_proof(ts, system, proved)),
+            (_, cone) => cone,
+        })
+        .collect()
 }
 
 /// The run met the memory limit, maybe only because the runs beside it held the rest.
