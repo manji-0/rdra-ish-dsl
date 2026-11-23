@@ -142,7 +142,8 @@ model has:
   entities with more than one linked row, and 1:1 keys (`Unique_*`)
 
 ```sh
-rdra-ish verify src/ --backend tlc   # requires tlc on PATH, or --tlc-jar <tla2tools.jar>
+rdra-ish verify src/              # native, no JVM
+rdra-ish verify src/ --with-tlc   # a second opinion: requires tlc on PATH, or --tlc-jar <tla2tools.jar>
 ```
 
 ## How To Fix

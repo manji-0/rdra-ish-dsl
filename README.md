@@ -36,7 +36,7 @@ same way, and every kind in the language names the check or output that reviews 
 | `diagram` | The RDRA 3.0 diagrams as Mermaid text for a reader that redraws them: system context, requirements, business, robustness, sequence, UC複合図, business flow, screen transitions, information, conditions, state, events, ER, and the whole RDRA graph. Each can be scoped to a BUC, a use case, an actor, or an entity, so it embeds in a PRD or a design document; `--all` writes the set in one run |
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
-| `export`, `verify` | OpenAPI, DBML, SQL DDL, JSON Schema, AsyncAPI, and TLA+ with TLC; `verify --prove` (experimental) proves state rules for any number of rows with z3 |
+| `export`, `verify` | OpenAPI, DBML, SQL DDL, JSON Schema, AsyncAPI, and TLA+; `verify` checks every rule and temporal property with a native checker and no JVM, `--with-tlc` adds TLC as a second opinion, and `--prove` (experimental) proves state rules for any number of rows with z3 |
 
 ## Documents from the Model
 
@@ -82,13 +82,17 @@ rdra-ish --help
 With Nix (flakes enabled), install `rdra-ish` and `rdra-ish-lsp` from this repository:
 
 ```sh
-nix profile install github:manji-0/rdra-ish-dsl          # latest main
+nix profile install github:manji-0/rdra-ish-dsl          # latest main, the early channel
 nix profile install github:manji-0/rdra-ish-dsl/<tag>    # a release after v2.3.0
 nix run github:manji-0/rdra-ish-dsl -- --help            # run without installing
 ```
 
-The Nix package brings the `tlc` that `verify` runs and the `z3` that `verify --prove` runs.
-A `tlc` or `z3` already on PATH takes precedence over them.
+The Nix package brings the `tlc` that `verify --with-tlc` runs and the `z3` that
+`verify --prove` runs. A `tlc` or `z3` already on PATH takes precedence over them.
+
+`main` is the early channel: it gets each change first, and may change between releases
+what [Compatibility](./docs/compatibility.md) keeps across them. The `Unreleased` section
+of the [changelog](./CHANGELOG.md) lists those changes.
 
 rdra-ish follows semantic versioning from 1.0.0. [Compatibility](./docs/compatibility.md)
 lists what a minor or patch release keeps: a model that loads keeps loading, and `check`
@@ -119,9 +123,9 @@ rdra-ish csv samples/clinic-ops --kind actor-permission-audit
 # 4) Derive reachable states
 rdra-ish states samples/clinic-ops --entity Appointment
 
-# 5) Formal verification (requires `tlc` or `tlc2` on PATH, or `--tlc-jar`)
-rdra-ish export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-tla
-rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdra-tla
+# 5) Formal verification (no JVM; --with-tlc also runs `tlc` or `tlc2` from PATH)
+rdra-ish verify samples/formal-verification/order.rdra
+rdra-ish verify samples/formal-verification/order.rdra --with-tlc -o /tmp/rdra-tla
 ```
 
 ## What You Can Review
@@ -145,7 +149,7 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
 - [CLI Reference](./docs/cli-reference.md)
 - [RDRA-ish Interpretation](./docs/rdra-ish-interpretation.md)
 - [State Derivation](./docs/state-derivation.md)
-- [Formal Verification (TLA+/TLC)](./docs/formal-verification.md)
+- [Formal Verification](./docs/formal-verification.md)
 - [Compatibility](./docs/compatibility.md) — what each release from 1.0.0 keeps stable
 - [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
 - [PRD and Design Document Guide](./skills/rdra-ish-diagram/references/documents.md) — which
@@ -171,7 +175,7 @@ rdra-ish verify samples/formal-verification/order.rdra --backend tlc -o /tmp/rdr
   with a [scenario table](./samples/oidc-auth/README.md#scenarios)
 - `samples/personal-info`: personal data management sample
 - `samples/api-contract`: API contract metadata and the OpenAPI export
-- `skills/rdra-ish-verify/samples`: TLA+/TLC examples (also linked from
+- `skills/rdra-ish-verify/samples`: `verify` examples (also linked from
   `samples/formal-verification/` and, for a model that must fail,
   `samples/formal-verification-fail/`; check files individually)
 

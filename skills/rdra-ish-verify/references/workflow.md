@@ -12,14 +12,16 @@ root:
 ```sh
 rdra-ish check samples/order.rdra
 rdra-ish states samples/order.rdra       # the reachable patterns, optional
-rdra-ish verify samples/order.rdra       # needs tlc or tlc2 on PATH
+rdra-ish verify samples/order.rdra       # native, no JVM
+rdra-ish verify samples/order.rdra --with-tlc   # also TLC, from tlc or tlc2 on PATH
 rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-model spec, to read
 ```
 
 | Command | Role |
 |---|---|
-| `check`, `states` | BFS on the transition system, by default at one instance per entity (`--instance-count`, `--int-range-max` change it); no TLC |
-| `verify --backend tlc` | BFS on each entity's cone at the TLC bounds, then TLC on one spec per cone of influence and one per temporal property |
+| `check`, `states` | BFS on the transition system, by default at one instance per entity (`--instance-count`, `--int-range-max` change it); no `property` |
+| `verify` | At two instances by default: BFS on each entity's cone, then the native checker on one cone of influence per group of checks and one per temporal property; no JVM |
+| `verify --with-tlc` | The same, and TLC on the spec of each cone and property run beside it; a check the two decide differently fails the run |
 | `export --kind tla` | Write the whole-model `.tla` **and** sibling `.cfg` for reading or a run by hand, and a `StateModel_<E>` spec per entity cone that checks its deadlocks and witnesses with TLC |
 
 ### Output Paths
@@ -30,18 +32,19 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   decides), and `StateModel_<E>_witnesses.cfg`
   (TLC reports every reached state's `Witness_` invariant violated; one it does not report
   is a missing witness; rerun with `-continue` without the reported ones until none is new).
-- `verify -o DIR` writes one `Cone_<first check>.tla` / `.cfg` pair per cone, one
-  `Cone_<Property>` pair per temporal property with a `Cone_<Property>_WF` pair beside it
-  for an `eventually` or `leads_to` (TLC runs each property alone, because it does not name
-  the property a temporal counterexample violates), `cones.txt`, and, when the model has
-  temporal properties, the whole-model `RdraSpec` pair for a run by hand and a
-  `RdraSpec_<Property>` pair for each property its cone leaves undecided, which TLC runs
-  under `--temporal-budget`.
+- `verify -o DIR` writes, for a TLC run by hand, one `Cone_<first check>.tla` / `.cfg`
+  pair per cone, one `Cone_<Property>` pair per temporal property with a
+  `Cone_<Property>_WF` pair beside it for an `eventually` or `leads_to` (TLC does not name
+  the property a temporal counterexample violates, so each runs alone), `cones.txt`, and,
+  when the model has temporal properties, the whole-model `RdraSpec` pair and a
+  `RdraSpec_<Property>` pair for each property its cone leaves undecided. The run labels
+  name these modules, whichever engine runs them; the whole-model run stops at
+  `--temporal-budget`.
 - A finding `verify` leaves undecided (a temporal property past `--temporal-budget`, or a
   state, deadlock, or use case a BFS cone left at its cap) prints a `warning:` and passes.
   In CI, add `--deny-undecided` so it fails instead.
-- Without `-o`, `verify` uses a temp dir. A passing run deletes it; a failed run ends
-  with `specs: <dir> (kept because a check failed)`.
+- Without `-o`, `verify` writes no spec. `verify --with-tlc` uses a temp dir: a passing
+  run deletes it; a failed run ends with `specs: <dir> (kept because a check failed)`.
 - `verify --entity <E>` (repeatable) checks only `E`'s view and the invariants and
   after-asserts that read it, each on its exact cone. `verify --buc <B>` keeps only the
   use cases reachable from `B`, so witnesses, deadlocks, and use cases that never run are
@@ -52,29 +55,32 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   `check --actor <A>`, `--without-buc <B>`, or `--without-usecase <UC>`. These assume the
   other use cases never run, decide deadlocks, witnesses, and use cases that never run
   under that assumption, and name the use cases left out on the `scope:` line.
-- When TLC runs out of heap the result is `tool_error`: set `RDRA_TLC_HEAP=4g` (default
-  `1g` per cone, `2g` per temporal property run), or put `-Xmx` in `JAVA_TOOL_OPTIONS`,
-  which wins. `verify` starts only as many TLC runs at once as their heaps fit in half its
-  memory limit (`--memory`, or `memory` under `[verify]` in `rdra.toml`; default `16GiB`).
+- Under `--with-tlc`, when TLC runs out of heap the result is `tool_error`: set
+  `RDRA_TLC_HEAP=4g` (default `1g` per cone, `2g` per temporal property run), or put
+  `-Xmx` in `JAVA_TOOL_OPTIONS`, which wins. `verify --with-tlc` starts only as many TLC
+  runs at once as their heaps fit in half its memory limit (`--memory`, or `memory` under
+  `[verify]` in `rdra.toml`; default `16GiB`).
 - A finding listed as `not decided: the <E> cone stopped at the memory limit (...)` means
-  the cone's states outgrew BFS's half of that limit. Raise `--memory`, or narrow the cone
+  the cone's states outgrew BFS's share of that limit (all of it, half under `--with-tlc`). Raise `--memory`, or narrow the cone
   as for the state cap; `check` reports the same stop as `MemoryCapReached_<E>` (default
   limit `4GiB`, `memory` under `[check]`).
-- While TLC runs, `verify` explores the cones itself, side by side on the machine's cores
+- `verify` explores the cones side by side on the machine's cores
   (at most 8). `RDRA_JOBS=2` lowers that when memory is short; the result does not change.
 
 ## Reading a Run
 
 Every result opens with its `bounds:` line, and `OK: no errors within ...` holds only
-inside those bounds. Stdout carries one `tlc_result: ok|counterexample|tool_error` line.
+inside those bounds. Every run carries one `result: ok|counterexample|tool_error` line,
+and `--with-tlc` adds TLC's own `tlc_result:` line after it.
 Each finding prints its stable name after the severity, so cite that name.
 
 **An invariant or `after` assertion fails.** Each cone line names the checks it answers.
 The failure prints first in model terms, the same renderer `check` uses: one step per
 use case with the instances it binds and its site, and under each step the values it
-changed with the `transitions` arm or `sets` that wrote them. TLC's own `violated:`
-line and raw trace follow. Here `Pay` writes through two APIs, so it is two actions, and
-`Cancel` runs between them:
+changed with the `transitions` arm or `sets` that wrote them; the trace is the shortest one BFS
+found. Under `--with-tlc`, TLC's counterexample, its `violated:` line, and its raw trace
+follow under a `tlc: <module> (<path>):` line. Here `Pay` writes through two APIs, so it is
+two actions, and `Cancel` runs between them:
 
 ```text
 $ rdra-ish verify samples/cross_order_payment_split.rdra
@@ -83,12 +89,9 @@ cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
 Cone_MultiForbidden_Order_0 [MultiForbidden_Order_0]: counterexample (31 states)
-tlc_result: counterexample
-Error: TLC verification failed
-...
 error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: multi-entity forbidden state is reachable across [Order, Payment]: Order.status=cancelled AND Payment.status=captured witnessed by Order[1](status=cancelled); Payment[1](status=captured)
   rule: samples/cross_order_payment_split.rdra:44:1
-  counterexample (3 steps, from TLC):
+  counterexample (3 steps):
     1. Place [Order#1, Payment#1]                            samples/cross_order_payment_split.rdra:17:1
          + Order#1 (status=pending)
          + Payment#1 (status=pending, owner Order=Order#1)
@@ -96,40 +99,33 @@ error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: mul
          Payment#1.status: pending -> captured               samples/cross_order_payment_split.rdra:39:1
     3. Cancel [Order#1]                                      samples/cross_order_payment_split.rdra:19:1
          Order#1.status: pending -> cancelled                samples/cross_order_payment_split.rdra:38:1
-violated: Error: Invariant MultiForbidden_Order_0 is violated.
-...
+result: counterexample
+Error: verification failed: 1 invariant or after-assert violation(s)
 ```
 
 **A temporal property fails.** It prints the same way under `error[<Property>]`, from
-the run of that property alone. TLC's counterexample is a lasso: it ends with `then
-nothing changes forever` (a stutter) or `then loops back to step K` (the behavior
-repeats steps K to the last one forever). TLC picks the lasso, so two runs may print
-different steps. One run of `samples/temporal_unmet.rdra` printed:
+the run of that property alone. An `eventually` or `leads_to` counterexample is a lasso:
+it ends with `then nothing changes forever` (a stop) or `then loops back to step K` (the
+behavior repeats steps K to the last one forever). `samples/temporal_unmet.rdra` prints:
 
 ```text
-error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: its leads_to trigger holds for Order#2 after step 2, and its goal never holds from then on
+error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: its leads_to trigger holds for Order#1 after step 1, and its goal never holds from then on
   rule: samples/temporal_unmet.rdra:48:1
-  counterexample (8 steps, from TLC):
-    1. PlaceOrder [Order#1]                              samples/temporal_unmet.rdra:15:1
-         + Order#1 (status=pending, delivered_at=null)
-    2. PlaceOrder [Order#2]                              samples/temporal_unmet.rdra:15:1
-         + Order#2 (status=pending, delivered_at=null)
-    ...
-    6. CancelOrder [Order#2]                             samples/temporal_unmet.rdra:19:1
-         Order#2.status: pending -> cancelled            samples/temporal_unmet.rdra:40:1
-    7. ReopenOrder [Order#2]                             samples/temporal_unmet.rdra:20:1
-         Order#2.status: cancelled -> pending            samples/temporal_unmet.rdra:41:1
-    8. CancelOrder [Order#2]                             samples/temporal_unmet.rdra:19:1
-         Order#2.status: pending -> cancelled            samples/temporal_unmet.rdra:40:1
-    then loops back to step 7
-violated: Error: Temporal properties were violated.
+  counterexample (3 steps):
+    1. PlaceOrder [Order#1]                     samples/temporal_unmet.rdra:15:1
+         + Order#1 (status=pending)
+    2. CancelOrder [Order#1]                    samples/temporal_unmet.rdra:19:1
+         Order#1.status: pending -> cancelled   samples/temporal_unmet.rdra:40:1
+    3. ReopenOrder [Order#1]                    samples/temporal_unmet.rdra:20:1
+         Order#1.status: cancelled -> pending   samples/temporal_unmet.rdra:41:1
+    then loops back to step 2
 ```
 
-**A state model fails before TLC.** `verify` also explores each entity's cone by BFS and
+**A state model fails.** `verify` also explores each entity's cone by BFS and
 prints what it finds first.
 A state no reachable state holds (`error[Witness_<E>_<col>_<value>]`) or an instance that
 can never leave a state with a way out (`error[Deadlock_<E>_<col>_<value>]`) fails the
-run even when TLC passes: `tlc_result: ok`, no `OK:` line, exit 1. A use case that never
+run even when every check holds: `result: ok`, no `OK:` line, exit 1. A use case that never
 runs (`warning[Runs_<action>]`) and a deadlock that only a free instance slot would
 clear (`deadlock at the bound`) are warnings. When staying at a state is correct, such as
 a stock row waiting at `free` to be used, declare it with `@end(free)` on the column
@@ -152,13 +148,15 @@ warning[Runs_Ship]: use case Ship can never run: each of its guards holds in som
   declared: use case Ship   samples/deadlock.rdra:14:1
 state models (BFS on 1 entity cone): 1 state model, 3 states witnessed, 1 deadlock, 1 use case that never runs
 nothing to check
-tlc_result: ok
+result: ok
 Error: verification failed: 1 state-model error(s) from BFS on the entity cones
 ```
 
-**The engines disagree.** `error: TLC step <n> (label <action>) matches no move of the
-cone; BFS and TLC disagree (a tool bug)` is a bug in rdra-ish, not a model defect.
-Report it with the raw trace that follows.
+**The engines disagree, or a counterexample fails its own check.**
+`error[EngineDisagreement]: ...` (under `--with-tlc`), `error: TLC step <n> (label
+<action>) matches no move of the cone; BFS and TLC disagree (a tool bug)`, and
+`error[LassoFault]: ...` are bugs in rdra-ish, not model defects, and the run ends with
+`result: tool_error`. Report them with the output and the specs directory it names.
 
 **Part of a model.** A scoped run lists what it left out, and a build error that no
 selected cone reads is deferred rather than failing the run:

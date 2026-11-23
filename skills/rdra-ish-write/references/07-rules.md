@@ -166,8 +166,8 @@ rdra-ish check src/ --entity Order   # only Order's view and the rules that read
 rdra-ish list src/ --kind rule --format markdown   # the business-rule table
 rdra-ish lint src/ --format table
 rdra-ish states src/ --format json --entity Order
-# two instances per entity and temporal properties (needs tlc on PATH)
-rdra-ish verify src/ --backend tlc
+# two instances per entity and temporal properties (no JVM; --with-tlc adds TLC)
+rdra-ish verify src/
 ```
 
 A broken rule prints once, under its name, with a shortest counterexample in model

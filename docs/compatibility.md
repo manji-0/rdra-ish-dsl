@@ -8,6 +8,11 @@ From 1.0.0 on, rdra-ish follows semantic versioning. A change that breaks a cove
 needs a major release. A minor release adds to the covered surface and fixes bugs. A patch
 release fixes bugs only.
 
+The page covers releases. Between two releases, `main` may change a default, an output
+line, or a verdict, and the `Unreleased` section of the changelog lists each such change.
+This page states what the next release keeps, so it changes on `main` in the same change as
+the behavior it describes.
+
 ## What a major release protects
 
 ### The language
@@ -25,7 +30,9 @@ release fixes bugs only.
   a lint error, is a breaking change. A new warning or info finding is not.
 - **`// expect` headers.** The header grammar in
   [Sample expectations](./formal-verification.md#sample-expectations) and the names it
-  matches are stable, so a sample's expectation keeps holding.
+  matches are stable, so a sample's expectation keeps holding. The next release changes the
+  grammar: a `verify` line reads `ok` or `fail <Names>`, and `tlc=` stays only on a line
+  whose flags hold `--with-tlc`.
 
 ### The command line
 
@@ -33,17 +40,25 @@ release fixes bugs only.
 - **Subcommands and flags.** Each subcommand and flag in the
   [CLI reference](./cli-reference.md) keeps its name, its meaning, and the values it takes,
   such as each `--kind` and `--format`.
+- **The default of `verify`.** `verify` decides every check with its native checker and
+  starts no JVM. `--with-tlc` runs TLC beside it and fails the run when the two decide a
+  check differently. `--backend tlc` is a deprecated spelling of `--with-tlc` that prints a
+  warning, and the major release after the one that changed the default removes it. The
+  next release makes these changes, so it is a major release.
 - **Exit status.** `0` is a clean run. `1` is a run that found errors, failed to load a
-  model, or could not run a tool it needs (such as `verify` without `tlc`). `2` is a usage
-  error: an unknown subcommand or flag, or a `--format` the kind does not take.
+  model, or could not run a tool it needs (such as `verify --with-tlc` without `tlc`). `2`
+  is a usage error: an unknown subcommand or flag, or a `--format` the kind does not take.
 - **Machine-readable output.** The `--format json` keys of `lint`, `next`, `list`, and
   `states`, and the `--format csv` columns of `lint`, `list`, `states`, and `csv`, as the
   CLI reference and [Output formats](./state-derivation.md#output-formats) document them. A release may add a key or append a column. It does not
   rename, remove, or reorder one.
   In `next`, a stage's `slug` is its stable id. Its `stage` value (`"2"`, `"7A"`) is a
   display label that a change to the stage order renumbers.
-- **The `bounds:` line and `tlc_result:` line.** Their form stays parseable as the CLI
-  reference shows it.
+- **The `bounds:`, `result:`, and `tlc_result:` lines.** Their form stays parseable as the
+  CLI reference shows it. Every `verify` run that reaches its checks prints `result:` with
+  `ok`, `counterexample`, or `tool_error`: the verdict of the invariants, the
+  after-assertions, and the properties. `tlc_result:` has the same form, gives TLC's
+  verdict, and prints only under `--with-tlc`.
 
 ### The Mermaid diagrams
 
@@ -130,6 +145,9 @@ minor release.
 - **The agent skills' file layout.** The files under `skills/` and their names.
 - **Message wording.** The text of a human-readable message may change. Its diagnostic
   name may not.
+- **Which counterexample prints.** `verify` prints the native checker's counterexample, the
+  shortest trace or lasso its search finds. It may differ from the one TLC picks, and from
+  one release to the next.
 - **Performance and state counts.** Run time, memory, and the number of states a run
   explores or prints.
 - **Diagram layout.** Where a renderer places the nodes, as above.
@@ -140,7 +158,7 @@ minor release.
   `--z3` are experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove,
   and the clause the `OK:` line gains may change or go away in any release. So is the
   `.lemma()` marker on a rule: `check` checks a lemma like any rule, but `verify` runs no
-  TLC cone for one, so a lemma that only fails at two instances passes `verify`. Do not mark
+  cone for one, so a lemma that only fails at two instances passes `verify`. Do not mark
   a rule the model must keep as a lemma. Apart from lemmas, `verify` without `--prove` is
   unchanged.
 

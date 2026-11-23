@@ -1822,7 +1822,7 @@ declares state machine edges, `chooses` lets the actor pick a variation value ag
 `sets` and `drives` declare column effects, and the rules in
 [Entity State Constraints](#entity-state-constraints) say which combinations must never or
 must always hold. `rdra-ish states` derives the reachable
-patterns, and `export --kind tla` / `verify --backend tlc` check temporal properties.
+patterns, `export --kind tla` prints temporal properties as TLA+, and `verify` checks them.
 
 ### `transitions` and the state machine
 
@@ -2529,7 +2529,7 @@ Write `.global()` on a rule meant for every combination to say so; `.global()` w
 
 `.lemma()` on a `forbidden` or an `invariant` marks a fact written to help `verify --prove`
 prove the other rules for any number of rows. `check` checks it as a rule, and `--prove`
-lists it apart from the rules; `verify` runs no TLC cone for it, since the proof uses a lemma
+lists it apart from the rules; `verify` runs no cone for it, since the proof uses a lemma
 only once it proves it. See [Proofs for any number of
 rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
@@ -2555,13 +2555,15 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 
 ### Temporal path properties
 
-Only `verify` evaluates named path properties. `check` and `states` verify safety only, by
-state exploration, and evaluate no `property` of any form. `verify --backend tlc` checks
-`always`, `eventually`, and `leads_to` with TLC, and decides `can_reach` (see
-[Recoverability: `can_reach(...)`](#recoverability-can_reach)) and `stable`, `unchanged`,
-and `precedes` (see [Order and stability](#order-and-stability-stable-unchanged-precedes))
-itself by BFS. A rule that `check` must enforce is a `forbidden`, an `invariant`, or an
-`after` assertion:
+<!-- constrained-by ./formal-verification.md#temporal-properties-on-a-cone -->
+A `property` of every form is checked by `verify`, and by `verify` only: `always`,
+`eventually`, `leads_to`, `can_reach` (see
+[Recoverability: `can_reach(...)`](#recoverability-can_reach)), and `stable`, `unchanged`,
+and `precedes` (see [Order and stability](#order-and-stability-stable-unchanged-precedes)).
+`verify` decides each one natively on its own cone, with no JVM, and `verify --with-tlc`
+also has TLC check the forms TLA+ can state. `check` and `states` verify safety by state
+exploration and evaluate no `property`. A rule that `check` must enforce is a `forbidden`,
+an `invariant`, or an `after` assertion:
 
 ```rdra
 property PaidLeadsToShipped "paid eventually reaches shipped"
