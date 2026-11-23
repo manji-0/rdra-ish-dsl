@@ -170,9 +170,14 @@
   past 65,536 states, which `check` used to refuse at the default cap, now completes within
   the memory limit. The default `--max-patterns` follows `--instance-count`: 2^(10 + 8 * (n -
   1)) patterns (1,024, 2^18, 2^26, ...) for `n` instances, up from 256 at one; a shift past
-  the word size saturates, and a flag you pass always wins. The generators have no memory
-  pool, so they keep their state cap of 65,536 and 1,024 patterns. `verify`'s caps do not
-  change.
+  the word size saturates, and a flag you pass always wins. The generators (`codegen`,
+  `next`, and the lifecycle gate of `diagram`, `export`, `list`, and `csv`) explore at the
+  caps `check` runs at by default: no state cap, 1,024 patterns, and `memory` under
+  `[check]` in `rdra.toml` (4GiB by default). A cone past 65,536 states that `check` passes
+  no longer makes `codegen` or a state diagram refuse with `StateCapReached`. They take no
+  `--memory` flag; a cone past the limit is `MemoryCapReached`, which refuses `codegen`
+  and the outputs that read the explored states, and is a note on the others. `verify`'s
+  caps do not change.
 - `verify` checks `always`, `eventually`, and `leads_to` natively on the graph BFS
   explores, under each property's fairness, through the same ladder of runs TLC took: the
   reduced cone, the full cone, the cone with `WF_vars(Next)`, and the whole model. A

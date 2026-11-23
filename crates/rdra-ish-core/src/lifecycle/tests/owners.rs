@@ -264,7 +264,7 @@ fn initial_owners(src: &str) -> (Vec<Vec<Option<u8>>>, Vec<Diag>) {
         .unwrap();
     let owner = idle.entity(profile).owners[0];
     let domain = idle.var(owner).domain.clone();
-    let run = idle.run(Caps::new(Caps::STATES.patterns, 100));
+    let run = idle.run(Caps::new(Caps::for_instances(1).patterns, 100));
     let mut out: Vec<Vec<Option<u8>>> = run
         .states
         .iter()
@@ -459,7 +459,7 @@ sets(GenerateClaim, Claim.origin == generated)
 /// Every reachable `(claims present, charges present)` pair at two slots.
 fn populations(src: &str) -> Vec<(usize, usize)> {
     let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
-    let run = ts.run(Caps::new(Caps::STATES.patterns, 100_000));
+    let run = ts.run(Caps::new(Caps::for_instances(1).patterns, 100_000));
     let ts = &run.system;
     let exists = |id: &str| {
         let e = ts.entity_ids().find(|e| ts.entity(*e).id == id).unwrap();

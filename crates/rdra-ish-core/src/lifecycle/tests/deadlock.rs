@@ -21,7 +21,8 @@ fn deadlocks(diags: &[Diag]) -> Vec<&StateDiag> {
 fn only_the_explained_samples_deadlock() {
     let mut found = Vec::new();
     for sample in SAMPLES {
-        let report = super::super::derive_states(&load(sample), &Scope::ALL, Caps::STATES);
+        let report =
+            super::super::derive_states(&load(sample), &Scope::ALL, Caps::for_instances(1));
         for d in deadlocks(&report.diags) {
             found.push((*sample, d.name(&[]), d.severity()));
         }
@@ -48,7 +49,8 @@ fn only_the_explained_samples_deadlock() {
 fn every_deadlock_trace_ends_at_its_state() {
     let mut checked = 0;
     for sample in SAMPLES {
-        let report = super::super::derive_states(&load(sample), &Scope::ALL, Caps::STATES);
+        let report =
+            super::super::derive_states(&load(sample), &Scope::ALL, Caps::for_instances(1));
         for d in deadlocks(&report.diags) {
             let StateDiag::Deadlock {
                 column,
@@ -142,7 +144,7 @@ applies_to(Unsettled, RetryPayment)
 #[test]
 fn a_way_out_blocked_only_by_the_instance_bound_is_a_warning() {
     let model = model_from(RETRY);
-    let report = super::super::derive_states(&model, &Scope::ALL, Caps::STATES);
+    let report = super::super::derive_states(&model, &Scope::ALL, Caps::for_instances(1));
     let found = deadlocks(&report.diags);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(found[0].severity(), Severity::Warning);
@@ -186,7 +188,7 @@ pub(super) fn retry_via_api() -> String {
 #[test]
 fn a_way_out_blocked_by_a_slot_an_api_creates_names_the_api() {
     let model = model_from(&retry_via_api());
-    let report = super::super::derive_states(&model, &Scope::ALL, Caps::STATES);
+    let report = super::super::derive_states(&model, &Scope::ALL, Caps::for_instances(1));
     let found = deadlocks(&report.diags);
     assert_eq!(found.len(), 1, "{found:?}");
     assert_eq!(
@@ -225,7 +227,7 @@ applies_to(Packed, Ship)
     let model = model_from(src);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
     let ts = &built.ts;
-    let run = ts.explore_targets(&ts.targets(), Caps::STATES);
+    let run = ts.explore_targets(&ts.targets(), Caps::for_instances(1));
     let order = ts.local_entity(model.entities.keys().next().unwrap());
     let g = run.cone_of(Target::Entity(order)).run.graph();
     let mut moves = vec![false; g.states.len()];

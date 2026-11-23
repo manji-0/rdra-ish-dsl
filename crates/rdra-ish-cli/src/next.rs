@@ -12,13 +12,14 @@ use serde_json::{json, Value};
 
 use crate::cli::NextFormat;
 use crate::load::load_clean;
+use crate::memory::generator_caps;
 
 const TEXT_ITEM_LIMIT: usize = 8;
 
 pub(crate) fn run_next(inputs: &[PathBuf], bucs: &[String], format: NextFormat) -> Result<()> {
-    let (_, model) = load_clean(inputs)?;
+    let (_, model, manifest) = load_clean(inputs)?;
 
-    let assessment = assess(&model, Depth::Lifecycle);
+    let assessment = assess(&model, Depth::Lifecycle(generator_caps(manifest.as_ref())));
     let mut standings = assessment.bucs;
     if !bucs.is_empty() {
         for id in bucs {

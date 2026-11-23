@@ -17,6 +17,7 @@ mod validators;
 
 use std::collections::BTreeMap;
 
+use rdra_ish_core::lifecycle::Caps;
 use rdra_ish_core::location::LocatedSpan;
 use rdra_ish_core::model::{ColumnType, Entity, EntityKey, Max, Min, ModelColumn, RefAction};
 use rdra_ish_core::SemanticModel;
@@ -49,8 +50,9 @@ pub struct Options {
 /// The result of the `check` the generator ran before printing.
 #[derive(Clone, Debug)]
 pub enum CheckStatus {
-    /// `check` reported no error, within these bounds (its `bounds:` line).
-    Passed { bounds: String },
+    /// `check` reported no error, within these bounds (its `bounds:` line), exploring at
+    /// `caps`. The state refinements explore the model again at the same caps.
+    Passed { bounds: String, caps: Caps },
     /// `check` reported these errors (`name: message`), and the caller asked for the code
     /// anyway: the state sums refine nothing, and each error is an unmet obligation.
     Failed { errors: Vec<String> },
@@ -72,7 +74,10 @@ pub fn generate(
     options: &Options,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<String, CodegenError> {
-    let refine = matches!(options.check, CheckStatus::Passed { .. });
+    let refine = match options.check {
+        CheckStatus::Passed { caps, .. } => Some(caps),
+        CheckStatus::Failed { .. } => None,
+    };
     let mut domain = build(model, refine, site)?;
     if let CheckStatus::Failed { errors } = &options.check {
         for error in errors {
@@ -110,7 +115,7 @@ fn header_lines(options: &Options) -> Vec<String> {
         String::new(),
     ];
     match &options.check {
-        CheckStatus::Passed { bounds } => {
+        CheckStatus::Passed { bounds, .. } => {
             lines.push(
                 "`check` passed. A state type narrows a column only where a rule says so, and"
                     .to_string(),
@@ -180,10 +185,12 @@ fn obligations_only(domain: &DomainModel) -> Vec<String> {
     lines
 }
 
-/// Builds the domain model of the data layer.
+/// Builds the domain model of the data layer. `refine` is the caps of the `check` the model
+/// passed: with them the state types narrow by the rules and the reachable states, explored
+/// at those caps; with `None` they narrow nothing.
 pub fn build(
     model: &SemanticModel,
-    refine: bool,
+    refine: Option<Caps>,
     site: &dyn Fn(&LocatedSpan) -> Option<String>,
 ) -> Result<DomainModel, CodegenError> {
     let mut names = Names::default();
@@ -261,7 +268,7 @@ pub fn build(
         let doc = doc_of(&entity.label, entity.description.as_deref());
         match states::tag_column(model, key, entity) {
             Some((tag, values)) => {
-                let refinements = if refine {
+                let refinements = if refine.is_some() {
                     states::refinements(model, key, entity, tag, values)
                 } else {
                     states::Refinements::new()
@@ -313,7 +320,7 @@ pub fn build(
 
     // Transition functions and rule checks rest on the verified system: only a model `check`
     // passed gets them.
-    if refine {
+    if let Some(caps) = refine {
         let built = rdra_ish_core::lifecycle::TransitionSystem::build(
             model,
             rdra_ish_core::lifecycle::Bounds::STATES,
@@ -321,7 +328,7 @@ pub fn build(
         );
         actions::add_functions(model, &built.ts, &mut domain, &mut names, site)?;
         validators::add_validators(&built.ts, &mut domain, &mut names, site)?;
-        domain.candidates = states::candidates(model, &domain.sums);
+        domain.candidates = states::candidates(model, &domain.sums, caps);
     }
 
     // Go declares `<Enum>Values` and one `<Enum><Value>` constant per value in the package

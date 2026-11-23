@@ -7,7 +7,7 @@ mod findings;
 mod order;
 mod stages;
 
-use crate::lifecycle::Severity;
+use crate::lifecycle::{Caps, Severity};
 use crate::model::SemanticModel;
 
 pub(crate) use facts::BucFacts;
@@ -18,10 +18,10 @@ pub enum Depth {
     /// Model relations only: cheap enough for lint and the LSP on every edit. No stage is
     /// `Blocked`, because no finding is looked for.
     Structure,
-    /// Also runs state derivation once over the whole model, as `check` does, and attributes
-    /// each finding to the BUCs that touch its entity and the stage that owns it. What
-    /// `rdra-ish next` uses.
-    Lifecycle,
+    /// Also runs state derivation once over the whole model at these caps, as `check` does,
+    /// and attributes each finding to the BUCs that touch its entity and the stage that owns
+    /// it. What `rdra-ish next` uses, at the caps `check` runs at.
+    Lifecycle(Caps),
 }
 
 /// One stage of the incremental modeling flow. Identity only: the order is `order::ORDER`.
@@ -358,7 +358,7 @@ fn assess_with(model: &SemanticModel, depth: Depth, order: &[StageId]) -> Assess
         .collect();
     let mut findings = match depth {
         Depth::Structure => None,
-        Depth::Lifecycle => Some(findings::attribute(model, &facts)),
+        Depth::Lifecycle(caps) => Some(findings::attribute(model, &facts, caps)),
     };
     let bucs = facts
         .iter()

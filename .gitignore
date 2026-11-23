@@ -12,3 +12,7 @@ editors/vscode/out/
 # Default output of a command run at the repository root (verify, export, csv)
 /out/
 /out.*
+
+# cargo mutants --in-place (.cargo/mutants.toml)
+mutants.out/
+mutants.out.old/

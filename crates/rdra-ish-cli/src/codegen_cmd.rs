@@ -5,11 +5,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use rdra_ish_core::format_location;
-use rdra_ish_core::lifecycle::{Bounds, Caps, Scope, Severity};
+use rdra_ish_core::lifecycle::{Bounds, Scope, Severity};
 use rdra_ish_emit::codegen::{generate, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
 use crate::load::load_clean;
+use crate::memory::generator_caps;
 use crate::state_findings::state_findings;
 
 pub fn run_codegen(
@@ -19,9 +20,11 @@ pub fn run_codegen(
     package: &str,
     allow_failing: bool,
 ) -> Result<()> {
-    let (program, model) = load_clean(inputs)?;
-    // The state types rest on the rules `check` verifies, so the generator runs it first.
-    let found = state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES);
+    let (program, model, manifest) = load_clean(inputs)?;
+    // The state types rest on the rules `check` verifies, so the generator runs it first, at
+    // the caps `check` runs at by default.
+    let caps = generator_caps(manifest.as_ref());
+    let found = state_findings(&program, &model, &Scope::ALL, Bounds::STATES, caps);
     let errors: Vec<String> = found
         .findings
         .iter()
@@ -32,6 +35,7 @@ pub fn run_codegen(
         let line = found.bounds.to_string();
         CheckStatus::Passed {
             bounds: line.strip_prefix("bounds: ").unwrap_or(&line).to_string(),
+            caps,
         }
     } else if allow_failing {
         eprintln!(

@@ -232,6 +232,49 @@ fn the_flag_overrides_rdra_toml_which_overrides_the_default() {
     assert_eq!(states.status.code(), Some(1));
 }
 
+const WIDE: &str = "crates/rdra-ish-cli/tests/fixtures/memory/wide.rdra";
+
+/// The generators explore at the caps `check` runs at by default: a cone past 65,536 states
+/// that `check` finishes, the generators finish too.
+#[test]
+fn the_generators_finish_a_cone_check_finishes() {
+    for args in [
+        &["check", WIDE][..],
+        &["codegen", "--lang", "ts", WIDE],
+        &["diagram", "--kind", "state", WIDE],
+    ] {
+        let out = run(&repo(), args);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(out.status.success(), "{args:?}\n{stderr}");
+        assert!(!stderr.contains("StateCapReached"), "{args:?}\n{stderr}");
+    }
+    // The cone is past the 65,536 states the generators used to stop at.
+    let out = run(&repo(), &["check", "--max-states", "65536", WIDE]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("error[StateCapReached_Task]"), "{stderr}");
+}
+
+/// The generators take `memory` under `[check]` and stop where `check` stops.
+#[test]
+fn the_generators_stop_at_the_check_memory_limit() {
+    let dir = project(
+        "memory_cli_generators",
+        "[model]\nname = \"order\"\n\n[check]\nmemory = \"1KiB\"\n",
+    );
+    for args in [
+        &["codegen", "--lang", "ts", "order.rdra"][..],
+        &["diagram", "--kind", "state", "order.rdra"],
+    ] {
+        let out = run(&dir, args);
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(1), "{args:?}\n{stderr}");
+        assert!(
+            stderr.contains("error[MemoryCapReached_Order]") && stderr.contains("1KiB"),
+            "{args:?}\n{stderr}"
+        );
+    }
+}
+
 #[test]
 fn a_bad_memory_value_is_a_manifest_error_with_its_line() {
     let dir = project(

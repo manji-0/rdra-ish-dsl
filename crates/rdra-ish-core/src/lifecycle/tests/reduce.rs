@@ -508,7 +508,7 @@ fn a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace() {
     let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
     let job = entity_target(&ts, "Job");
     let rule = Target::Invariant(0);
-    let caps = Caps::STATES;
+    let caps = Caps::for_instances(1);
     let plain = ts.explore_targets(&[job, rule], caps);
     let reduced = ts.explore_targets_reduced(&[job, rule], caps);
     let cone = reduced.cone_of(rule);
@@ -892,7 +892,7 @@ fn a_steady_action_never_changes_the_inputs() {
     for model in [model_from(CASE_FOLD), load("samples/insurance-claim-ops")] {
         let ts = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
         let targets = ts.targets();
-        let reduced = ts.explore_targets_reduced(&targets, Caps::STATES);
+        let reduced = ts.explore_targets_reduced(&targets, Caps::for_instances(1));
         for cone in &reduced.cones {
             let sys = &cone.run.system;
             let Some(red) = sys.reduction() else { continue };
@@ -936,7 +936,7 @@ fn a_class_move_of_a_folded_action_binds_the_cones_params() {
             matches!(t, Target::Invariant(i) if ts.invariants()[*i].name == "Unique_FollowUpMessage_CarePlan")
         })
         .expect("the 1:1 key's invariant");
-    let caps = Caps::STATES;
+    let caps = Caps::for_instances(1);
     let plain = ts.explore_targets(&[target], caps);
     let reduced = ts.explore_targets_reduced(&[target], caps);
     let cone = reduced.cone_of(target);

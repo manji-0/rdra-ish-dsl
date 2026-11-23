@@ -546,8 +546,12 @@ Two caps and the memory limit stop a cone, and `check` and `states` take all thr
 The default pattern cap grows with `--instance-count` because each added instance
 multiplies a cone's states. A shift past the machine's word size saturates, so a very large
 count has no pattern cap of its own. A flag you pass always replaces its default. The
-generators (the outputs that read the explored states) charge their runs to no memory
-pool, so they keep a state cap of 65,536 per cone.
+generators (`codegen`, `next`, and the lifecycle gate of `diagram`, `export`, `list`, and
+`csv`) explore at the caps `check` runs at by default: no state cap, 1,024 patterns, and
+`memory` under `[check]` in `rdra.toml` (4GiB by default). They take no `--memory` flag. A
+model `check` passes at its defaults explores the same in them. A cone past the memory
+limit is `MemoryCapReached`, which refuses `codegen` and the outputs that read the
+explored states, and is a note on the others.
 
 When a cap is hit, the view is marked `truncated` and `PatternCapReached` or
 `StateCapReached` is an error: a rule checked on a partial set is not sound. The

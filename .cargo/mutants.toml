@@ -1,0 +1,21 @@
+# cargo mutants over the native liveness ladder (#204): `.github/workflows/mutants.yml` runs
+# it on GitHub Actions on demand, and docs/engine-agreement.md#mutation-run says how to read it.
+examine_globs = [
+    "crates/rdra-ish-cli/src/property_cone.rs",
+    "crates/rdra-ish-cli/src/verify/native.rs",
+    "crates/rdra-ish-core/src/lifecycle/cone.rs",
+    "crates/rdra-ish-core/src/lifecycle/explore/liveness.rs",
+]
+# Every mutant, in either crate, runs the corpus: its stated verdicts, the header check, and
+# the capped-graph test. Run with tlc and z3 off PATH, so the stated verdicts alone must
+# catch a wrong ok that native and TLC would share through the cone ladder.
+# cargo-mutants 27.1 ignores test_package for its own baseline, so a run of rdra-ish-core
+# mutants alone needs `--baseline skip --timeout 60` after an unmutated
+# `cargo test --profile mutants -p rdra-ish-cli --test engine_corpus`, as the workflow does.
+test_package = ["rdra-ish-cli"]
+# In additional_cargo_args, so the build phase too builds only the corpus test binary.
+additional_cargo_args = ["--test", "engine_corpus"]
+# Optimized like the corpus's CI job; `mutants` in Cargo.toml is release, built incrementally.
+profile = "mutants"
+# A mutant that only trips a lint is still a mutant to test.
+cap_lints = true

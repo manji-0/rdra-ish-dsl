@@ -265,9 +265,14 @@ fn functions_agree_with_the_transition_system() {
         }
         let project = load_project(&[repo().join(&sample)], None).expect("loads");
         let model = project.model;
-        let domain = build(&model, true, &|_| None).expect("builds");
+        let domain = build(&model, Some(Caps::for_instances(1)), &|_| None).expect("builds");
         let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-        let run = built.ts.clone().run(Caps::STATES);
+        // The whole system, not a cone, and charged to no pool: its first 65,536 states
+        // sample the moves.
+        let run = built
+            .ts
+            .clone()
+            .run(Caps::new(Caps::for_instances(1).patterns, 1 << 16));
         let ts = &run.system;
         for edge in run.edges() {
             let (act, params) = run.step(edge);
