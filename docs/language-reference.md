@@ -2555,8 +2555,13 @@ after(Pay).assert(Order.status == paid, Payment.status == captured)
 
 ### Temporal path properties
 
-Named path properties are checked by TLA+/TLC export (`export --kind tla` /
-`verify --backend tlc`), not by `rdra-ish states`:
+Only `verify` evaluates named path properties. `check` and `states` verify safety only, by
+state exploration, and evaluate no `property` of any form. `verify --backend tlc` checks
+`always`, `eventually`, and `leads_to` with TLC, and decides `can_reach` (see
+[Recoverability: `can_reach(...)`](#recoverability-can_reach)) and `stable`, `unchanged`,
+and `precedes` (see [Order and stability](#order-and-stability-stable-unchanged-precedes))
+itself by BFS. A rule that `check` must enforce is a `forbidden`, an `invariant`, or an
+`after` assertion:
 
 ```rdra
 property PaidLeadsToShipped "paid eventually reaches shipped"
@@ -2574,6 +2579,13 @@ property NeverBoth "mutex"
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
+| `can_reach(expr)` | none: CTL `AG (present => EF expr)`, written as a comment |
+| `stable(p)` | `[][(present /\ p) => (present' => p')]_vars` |
+| `unchanged(E.col, ..).when(p)` | `[][(present /\ p) => (present' => col' = col)]_vars` |
+| `precedes(p, q)` | `[](present /\ q => <P>_seen)`, with a latch `<P>_seen` per instance |
+
+The last three are [order and stability](#order-and-stability-stable-unchanged-precedes)
+properties.
 
 Atoms use `Entity.column == value` / `!=`, `Entity.column in (a, b)` / `not in`, or numeric
 comparisons (`<`, `>`, `<=`, `>=`) over Int / Money / Decimal columns and literals. Prefer
@@ -2585,7 +2597,9 @@ When any `eventually` / `leads_to` property is exported, the Spec includes
 `WF_vars(Next)`: some step is taken while one can be, but no step in particular. Another
 instance's loop satisfies it, so a property about one instance can fail on a run that only
 ever moves the others. Temporal formulas are quantified over the present instances of each
-entity. `after(UseCase).assert(...)` becomes an independent TLA `PROPERTY`,
+entity, every combination of them unless `.along(...)` limits it (see [Scope of a property
+over several entities](#scope-of-a-property-over-several-entities)).
+`after(UseCase).assert(...)` becomes an independent TLA `PROPERTY`,
 `[][(\A p : UC(p) => post')]_vars`, that checks the state each step leaves and is **not**
 injected into the effects. Every constraint is its own `INVARIANT`; see
 [formal-verification.md](./formal-verification.md).
@@ -2628,6 +2642,94 @@ when the rule has a path.
 // joins Member and Loan, and the rule would count every loan in the system.
 invariant(Member).when(status == withdrawn).none(Loan.status == open).along(Member, Card, Loan)
 ```
+
+#### Scope of a property over several entities
+
+<!-- constrained-by #cross-entity-constraints -->
+
+A property whose atoms read two or more entities binds each one on its own, so the formula
+ranges over every combination of their rows, related or not. `.along(A, B, ..)` limits it
+to the rows that the keys of the path link, with `.role(role)` after it to pick the key of
+a hop that two keys join, as on a multi-entity `invariant` (see [Cross-Entity
+Constraints](#cross-entity-constraints)):
+
+```rdra
+// Pay captures a payment and pays the order it belongs to. Without `.along`, a captured
+// payment beside another order that is not paid breaks the property.
+property CapturedPaid "a captured payment's order is paid"
+  always(not (Payment.status == captured) or (Order.status == paid)).along(Payment, Order)
+```
+
+The link joins the trigger of the formula, next to the condition that the rows exist:
+
+| Form | TLA+ with `.along` |
+|---|---|
+| `always(x)` | `[](present /\ link => x)` |
+| `eventually(x)` | `[](present /\ link => <>x)` |
+| `leads_to(x, y)` | `(present /\ link /\ x) ~> y` |
+| `stable(p)` | `[][present /\ link /\ p => (present' => p')]_vars` |
+| `unchanged(cols).when(p)` | `[][present /\ link /\ p => (present' => cols' = cols)]_vars` |
+| `precedes(p, q)` | the latch is set where `present /\ link /\ p` holds, and `[](present /\ link /\ q => <P>_seen)` |
+
+`link` is the owner link of each hop, such as `Payment_owner_Order[b0] = b1`. A path entity
+that no atom reads joins the binders and only links the ends. The path must cover every
+entity the atoms read, and each hop needs a key that binds it; otherwise the property is
+`UnbindableScope`, an error, and is not checked. A `verify` counterexample
+names the linked rows, and the property's cone keeps the owner vars the link reads.
+
+Write `.global()` on a property meant for every combination. `.global()` with `.along(...)`
+is `GlobalWithAlong`, an error. When keys relate the entities and the property has
+neither, `lint` `multi-rule-unscoped` warns and names the `.along(...)` the shortest key
+path gives. `.along` and `.global()` may come before or after `.fair(...)`.
+
+#### Order and stability: `stable`, `unchanged`, `precedes`
+
+Three forms state a rule that compares two moments of one row, or of the rows `.along`
+links:
+
+```rdra
+// Once cancelled, an order stays cancelled while it exists.
+property CancelledStaysCancelled stable(Order.status == cancelled)
+
+// While the order is approved or shipped, a step leaves its amount as it is.
+property AmountKeptOnceApproved
+  unchanged(Order.amount).when(Order.status in (approved, shipped))
+
+// An order is shipped only in a state where it is paid or was paid before.
+property ShippedAfterPaid precedes(Order.paid == true, Order.status == shipped)
+```
+
+- `stable(p)`: once `p` holds for an instance, it keeps holding while the instance is
+  present. A step from a state where the instance is present and `p` holds, into a state
+  where the instance is present, must keep `p`. `after(UC).assert(...)` reads only the steps
+  of the use case it names; `stable` reads every step.
+- `unchanged(E.col, ..).when(p)`: a step from a state where the instance is present and `p`
+  holds, into one where the instance is present, leaves each listed column as it is. The
+  columns are `Entity.column` or a bare column one entity owns. Without `.when(p)` the
+  columns never change while the instance is present. `.when(p)` takes the same logical
+  expression as a formula and comes directly after `unchanged(...)`, before any other
+  method. A logical `@derived` column is rejected: it changes with the columns its
+  expression reads, so name those columns instead.
+- `precedes(p, q)`: a state where the instance is present and `q` holds has `p` hold for
+  it in that state or in an earlier one. The two facts may live in different columns or, with
+  `.along`, in different entities. A latch remembers `p`: in TLA+ it is the variable
+  `<Property>_seen`, a Boolean per instance (per tuple of instances with several binders),
+  set in `Init` and by every action whose successor has the instance present with `p`.
+
+Each form is a safety property: a finite run breaks it. `verify` decides each one by BFS on
+the property's cone, and starts no TLC run for it. `stable` and `unchanged` are checked on
+every edge of the explored graph, and `precedes` on every state the latch can reach unset.
+A violation prints the shortest trace to the step (`stable`, `unchanged`) or the state
+(`precedes`) that breaks it, with no loop after it. `export --kind tla` writes the same
+formulas: `stable` and `unchanged` as action properties quantified inside `[]`, which TLC
+reports as `Action property <P> is violated`, and `precedes` as `[](...)` over the latch,
+which TLC reports as `Invariant <P> is violated`. A module declares the latch only where its
+`.cfg` checks the property, so the cone modules of the rules keep the explorer's states.
+
+`.along(...)`, `.role(role)` and `.global()` scope these forms as they scope the others.
+The link joins the trigger before the step only: after it `stable` and `unchanged` read
+just `present`, so a step that moves a key and breaks `p` in one go still breaks the
+property. `.fair(...)` on any of them is `FairOnSafetyProperty`.
 
 #### Fairness: `.fair(UseCase, ...)`
 
@@ -2675,13 +2777,57 @@ step stays enabled. `Spec`, the `.cfg`, and properties without
   nothing there; `verify` prints `<Property> assumes weak fairness per instance on ...` next
   to its temporal runs.
 
-Errors: `.fair` on `always(...)` is `FairOnSafetyProperty` (fairness cannot change a safety
-verdict); a `.fair` with no argument, an argument that is not a use case, a use case listed
+#### Recoverability: `can_reach(...)`
+
+`can_reach(expr)` says that the actors can still finish an instance, not that they must:
+
+```rdra
+property OrderCanFinish "every order can still be delivered or cancelled"
+  can_reach(Order.status in (delivered, cancelled))
+```
+
+For each present instance, from every reachable state, some path reaches a state where
+`expr` holds for it. The path may move other instances too. The instance must stay present
+on the path and be present where `expr` holds, so deleting it does not finish it. This is
+the CTL formula `AG (present => EF expr)`. Over two or more entities it takes `.along(..)`,
+`.role(role)`, and `.global()` as the other forms do: the owner links join `present` in the
+trigger, so only linked rows must be able to finish. An instance may still loop forever: an Order
+that can be held and resumed forever passes while it can also be delivered.
+
+The form finds what the other checks miss. A `Deadlock_*` finding needs a state with no way
+out, so it misses an instance that moves between `pending` and `on_hold` forever once some
+guard is false. `eventually` and `leads_to` say that the instance must finish, so they need
+`.fair(...)`, and they fail when an actor may legitimately choose another branch forever.
+
+TLC cannot check a CTL formula, so `verify` decides `can_reach` by BFS on the property's
+cone, at its bounds, and the verdict holds within those bounds like every other verdict.
+`check` and `states` do not evaluate it. A violation prints a shortest trace to a state from which
+the goal is unreachable. It then lists what the goal reads of the instance in the states
+the instance is confined to:
+
+```
+error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
+  ...
+  confined: from there Order#1 stays within 2 reachable states, where its goal never holds:
+    status = pending
+    status = on_hold
+```
+
+`export --kind tla` lists each `can_reach` in a comment and no `.cfg` names it. `.fair(...)`
+on it is `FairOnReachProperty`, since reachability needs no fairness. A scoped `verify`
+checks no property, `can_reach` included. See
+[formal-verification.md](./formal-verification.md#recoverability-on-a-cone) and the samples
+`can_reach_unmet.rdra` and `can_reach_met.rdra`.
+
+Errors: `.fair` on `always(...)`, `stable(...)`, `unchanged(...)` or `precedes(...)` is
+`FairOnSafetyProperty` (fairness cannot change a safety verdict); `.fair` on `can_reach(...)` is `FairOnReachProperty`; a `.fair` with no argument, an argument that is not a use case, a use case listed
 twice, or a second `.fair` is `FairRequiresUseCases`; an undefined name is `UndefinedSymbol`;
 an atom whose column no single entity owns (`Order.missing`, or a bare `status` that two
-entities declare) is `UnresolvedPropertyColumn`; any other method after a property is
-`UnknownChainMethod`. A listed use case that changes
-nothing is `FairOnInertUseCase`.
+entities declare) is `UnresolvedPropertyColumn`; a method after a property other than
+`.fair`, `.along`, `.role` and `.global` is `UnknownChainMethod`, and so is a `.when` that
+does not follow `unchanged(...)` directly; a column of `unchanged(...)` that is not a column
+is `InvalidTemporalProperty`. A listed use case that
+changes nothing is `FairOnInertUseCase`.
 
 ### Comparison Expressions in Constraints
 

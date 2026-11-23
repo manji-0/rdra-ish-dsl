@@ -363,6 +363,34 @@ property Unfair leads_to(Order.status == paid, Order.status == shipped)
     );
 }
 
+/// No action reads the key from Payment to Order, so only the `.along` link puts the owner
+/// var in the property's cone; without it the cone would not see which payment is whose
+/// (#165).
+#[test]
+fn a_property_cone_keeps_the_owner_its_along_reads() {
+    let src = r#"
+entity Order "注文" { id: Int @pk  status: Enum(draft, paid) @default(draft) }
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Pay "支払"
+usecase Capture "確定"
+transitions(Pay, Order.status, draft -> paid)
+transitions(Capture, Payment.status, pending -> captured)
+property Linked always(not (Payment.status == captured) or (Order.status == paid)).along(Payment, Order)
+property AnyPair always(not (Payment.status == captured) or (Order.status == paid)).global()
+"#;
+    let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+    let owners = |i: usize| {
+        ts.property_cone(i)
+            .vars
+            .iter()
+            .filter(|v| matches!(ts.var(**v).kind, crate::lifecycle::VarKind::Owner { .. }))
+            .count()
+    };
+    assert_eq!(owners(0), 1, "the link reads Payment's owner");
+    assert_eq!(owners(1), 0, "nothing else reads it");
+}
+
 /// Decide updates Doc and creates Log in two isolated groups, so `Decide_2` binds the log it
 /// creates and the doc step 1 moved. Doc's cone drops the unread Log param; the after-assert
 /// step on `Decide_2` must then read the doc by its new index, in the BFS and in TLA+.

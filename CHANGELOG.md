@@ -20,6 +20,27 @@
   state has the rows it ranges over, the guards of its `.when` never hold, or one condition
   of a `forbidden` of several is one no row ever meets, such as a state no use case enters.
   What a `forbidden` forbids being unreachable is its claim and draws no warning (#170).
+- Three `property` forms for order and stability: `stable(p)` keeps `p` once it holds,
+  `unchanged(E.col, ..).when(p)` keeps the columns while `p` holds, and `precedes(p, q)`
+  lets `q` hold only after `p` has. `verify` decides each by BFS on its cone, with no TLC
+  run, and prints the shortest trace to the step or state that breaks it. `check` and
+  `states` still evaluate no property. `export --kind tla` writes `stable` and `unchanged`
+  as action properties and `precedes` as an invariant over a latch `<P>_seen`. `.along`
+  scopes them, and `.fair` on them is `FairOnSafetyProperty` (#166).
+- A `property` over two or more entities takes `.along(A, B, ..)` with `.role(role)`, and
+  `.global()`, as a multi-entity `invariant` does. The owner links of the path join the
+  trigger, so `verify` no longer reports a pair of unrelated rows as a counterexample.
+  `.global()` with `.along` is `GlobalWithAlong`, a path that misses an entity is
+  `UnbindableScope`, and `lint` `multi-rule-unscoped` now warns on a property with
+  neither. A property without the chain keeps its meaning (#165).
+- `property P can_reach(p)` says the actors can still finish each instance: from every
+  reachable state where it is present, some path reaches `p` for it (CTL
+  `AG (present => EF p)`). It finds a trap a `Deadlock_*` misses, such as an Order that
+  moves between `pending` and `on_hold` forever once a guard is false. TLC cannot check
+  it, so `verify` decides it by BFS on its cone, and a violation prints a shortest trace
+  and the states the instance is then confined to. `check` and `states` verify safety
+  only and evaluate no property, as the docs now say explicitly. `export --kind tla`
+  names it in a comment, and `.fair(...)` on it is `FairOnReachProperty` (#167).
 - insurance-claim-ops states 「賠償責任の事故は示談交渉の前に請求を完了しない」 as a
   `.lemma()`, so `verify --prove` proves every state rule of every domain sample. The docs
   and the `rdra-ish-verify` skill show how to find a lemma behind a CTI that turns on a

@@ -1,0 +1,58 @@
+// An Order can be put on hold and resumed forever, which is fine while it can still finish.
+// Deliver needs stock and Cancel needs the cancellation window, and once LoseStock and
+// CloseWindow have run neither holds again: the Order moves between pending and on_hold with
+// no way out. Each of those states has a way out, so no Deadlock is reported; can_reach
+// finds the trap, prints a shortest trace into it, and the states the Order is confined to.
+// `verify` decides it by BFS on its cone, since TLC cannot check it; `check` verifies safety
+// only and leaves it to `verify`.
+// expect check: ok
+// expect verify: tlc=ok fail OrderCanFinish
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, on_hold, delivered, cancelled) @default(pending)
+  in_stock: Bool @default(true)
+  window_open: Bool @default(true)
+}
+
+usecase Place "注文確定"
+usecase Hold "保留"
+usecase Resume "保留解除"
+usecase Deliver "配達"
+usecase Cancel "キャンセル"
+usecase LoseStock "在庫切れ"
+usecase CloseWindow "キャンセル受付終了"
+
+buc BucOrderLifecycle "Order lifecycle"
+contains(BucOrderLifecycle, Place)
+contains(BucOrderLifecycle, Hold)
+contains(BucOrderLifecycle, Resume)
+contains(BucOrderLifecycle, Deliver)
+contains(BucOrderLifecycle, Cancel)
+contains(BucOrderLifecycle, LoseStock)
+contains(BucOrderLifecycle, CloseWindow)
+
+creates(Place, Order)
+updates(Hold, Order)
+updates(Resume, Order)
+updates(Deliver, Order)
+updates(Cancel, Order)
+updates(LoseStock, Order)
+updates(CloseWindow, Order)
+
+transitions(Hold, Order.status, pending -> on_hold)
+transitions(Resume, Order.status, on_hold -> pending)
+transitions(Deliver, Order.status, pending -> delivered)
+transitions(Cancel, Order.status, pending -> cancelled)
+sets(usecase::LoseStock, Order.in_stock == false)
+sets(usecase::CloseWindow, Order.window_open == false)
+
+condition InStock "在庫あり"
+holds(InStock, Order.in_stock == true)
+applies_to(InStock, Deliver)
+
+condition WindowOpen "キャンセル受付中"
+holds(WindowOpen, Order.window_open == true)
+applies_to(WindowOpen, Cancel)
+
+property OrderCanFinish "every order can still be delivered or cancelled"
+  can_reach(Order.status in (delivered, cancelled))

@@ -210,7 +210,9 @@ impl TransitionSystem {
         // Each cone is explored on its own system, so the cones run side by side; the runs
         // come back in cone order, and each is what it is alone.
         let cones: Vec<ConeRun> = in_parallel(groups, jobs(), |(cone, shared)| {
-            let system = if reduce {
+            // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
+            let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
+            let system = if reduce && !reach {
                 let seeds = shared.iter().map(|t| self.target_seed(*t));
                 self.reduced_cone(&cone, seeds, caps)
             } else {
@@ -243,7 +245,13 @@ impl TransitionSystem {
         }
         out.cones = cones;
         out.tally.entity_cones = entity_cones.len();
-        for (i, r) in self.merge_variants(runs, &mut out.verdicts, &mut out.undecided) {
+        // Whether an action runs is judged on entity cones only: a run of other targets alone
+        // (verify's `can_reach` cones) judges none.
+        let judged = match entity_cones.is_empty() {
+            true => Vec::new(),
+            false => self.merge_variants(runs, &mut out.verdicts, &mut out.undecided),
+        };
+        for (i, r) in judged {
             if r.fired {
                 for arm in r.arms.into_iter().filter(|a| !a.taken) {
                     if let Some(diag) = arm.never {
@@ -601,9 +609,9 @@ impl TransitionSystem {
         }
     }
 
-    /// What the target's own cone says about an invariant or assert: its violations, each
-    /// trace marked when it creates more instances than the bound, and any cap that left the
-    /// verdict incomplete.
+    /// What the target's own cone says about an invariant, assert, or `can_reach`: its
+    /// violations, each trace marked when it creates more instances than the bound, and any
+    /// cap that left the verdict incomplete.
     fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
         let run = &cone.run;
         debug_assert!(
@@ -611,6 +619,26 @@ impl TransitionSystem {
             "an entity target has no verdict"
         );
         let entities = self.target_entities(target);
+        if let Target::Reach(i) = target {
+            // A state the cap left unexpanded has no edges, so it would look stuck: only a
+            // complete graph decides.
+            if run.complete {
+                let name = &self.reach[i].name;
+                let local = run
+                    .system
+                    .reach_properties()
+                    .iter()
+                    .position(|r| r.name == *name)
+                    .expect("the cone holds what the property reads");
+                if let Some((at, mut diag)) = run.system.reach_failure(local, &run.graph()) {
+                    if let Some(trace) = diag.trace_mut() {
+                        *trace = run.trace_to(at);
+                    }
+                    return vec![Diag { entities, diag }];
+                }
+                return Vec::new();
+            }
+        }
         let mut out: Vec<Diag> = run
             .diags
             .iter()
@@ -646,7 +674,8 @@ impl TransitionSystem {
             return None;
         }
         let (name, label, site, unmet) = match target {
-            Target::Entity(_) => return None,
+            // A `can_reach` is a witness, and one that holds has its state.
+            Target::Entity(_) | Target::Reach(_) => return None,
             Target::Invariant(i) => {
                 let inv = &self.invariants[i];
                 (
@@ -763,12 +792,16 @@ impl TransitionSystem {
     /// its `leads_to` holds for none. A cone a cap stops reports nothing. BFS evaluates no
     /// temporal formula, so a property that is violated may be reported too.
     pub fn vacuous_properties(&self, caps: Caps) -> Vec<Diag> {
-        let found = in_parallel((0..self.properties.len()).collect(), jobs(), |i| {
-            let cone = self.property_cone(i);
-            let run = self.restrict_to(&cone.vars, &cone.keep).run(caps);
-            self.property_vacuity(i, &run)
-        });
+        let all = (0..self.properties.len()).collect();
+        let found = in_parallel(all, jobs(), |i| self.vacuous_property(i, caps));
         found.into_iter().flatten().collect()
+    }
+
+    /// The `VacuousRule` of property `i` on its own cone, explored under `caps`.
+    pub fn vacuous_property(&self, i: usize, caps: Caps) -> Option<Diag> {
+        let cone = self.property_cone(i);
+        let run = self.restrict_to(&cone.vars, &cone.keep).run(caps);
+        self.property_vacuity(i, &run)
     }
 
     /// The `VacuousRule` of property `i` on a run of its cone, reduced or not.
@@ -781,7 +814,7 @@ impl TransitionSystem {
         }
         // A formula the build could not express is `False` and has its own error.
         let unbuilt = |pred: &Pred| pred.nodes().any(|n| matches!(n, Pred::False));
-        if local.formula.preds().any(unbuilt) {
+        if local.preds().any(unbuilt) {
             return None;
         }
         // The formula is read per binding of every binder to a present row, as TLC reads it:
@@ -793,8 +826,19 @@ impl TransitionSystem {
                     .is_some()
             })
         };
-        let unmet = match &local.formula {
-            _ if !met(&Pred::True) => UnmetPremise::Rows {
+        // Every form speaks of the rows its `.along` links, and beyond that of the states
+        // where its condition holds: the trigger of a `leads_to`, what a `stable` keeps, the
+        // `.when` of an `unchanged`, and what a `precedes` asks a predecessor for.
+        let linked = |pred: &Pred| Pred::And(vec![local.link.clone(), pred.clone()]);
+        let asks = match &local.formula {
+            Ltl::Always(_) | Ltl::Eventually(_) => None,
+            Ltl::LeadsTo(trigger, _) => Some(("leads_to trigger", trigger)),
+            Ltl::Stable(kept) => Some(("stable condition", kept)),
+            Ltl::Unchanged { when, .. } => Some(("unchanged `.when`", when)),
+            Ltl::Precedes(_, later) => Some(("precedes second condition", later)),
+        };
+        let unmet = match asks {
+            _ if !met(&local.link) => UnmetPremise::Rows {
                 rows: property
                     .binders
                     .iter()
@@ -802,7 +846,9 @@ impl TransitionSystem {
                     .collect(),
                 text: String::new(),
             },
-            Ltl::LeadsTo(trigger, _) if !met(trigger) => UnmetPremise::Trigger,
+            Some((what, pred)) if !met(&linked(pred)) => UnmetPremise::Trigger {
+                what: what.to_string(),
+            },
             _ => return None,
         };
         Some(Diag {

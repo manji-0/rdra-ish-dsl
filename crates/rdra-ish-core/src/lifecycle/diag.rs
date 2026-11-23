@@ -114,8 +114,11 @@ pub enum UnmetPremise {
     /// An `after(UC).assert` over entities no param of the step binds: the step runs, but
     /// never into a state with rows of them.
     NoRowsAfter { usecase: String, rows: Vec<String> },
-    /// A `leads_to`: its trigger holds for no rows in any reachable state.
-    Trigger,
+    /// A property that says something only where a condition of it holds: the trigger of a
+    /// `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second
+    /// condition of a `precedes`. `what` names it; it holds for no rows in any reachable
+    /// state.
+    Trigger { what: String },
 }
 
 /// `a row of X`, `two rows of X`, or `rows of X and Y`.
@@ -147,8 +150,8 @@ impl fmt::Display for UnmetPremise {
                     rows_of(rows)
                 )
             }
-            UnmetPremise::Trigger => {
-                write!(f, "its leads_to trigger holds in no reachable state")
+            UnmetPremise::Trigger { what } => {
+                write!(f, "its {what} holds in no reachable state")
             }
         }
     }
@@ -232,8 +235,9 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
-    /// A temporal property fails on the infinite behavior of a lasso: `trace`, then `lasso`.
-    /// Only a replayed TLC counterexample builds it; BFS does not check properties.
+    /// A temporal property fails on the infinite behavior of a lasso, `trace` then `lasso`,
+    /// or on the finite `trace` of a form `LtlKind::is_explored` names. A replayed TLC
+    /// counterexample builds it, and so does `ComponentRun::decide_property`.
     PropertyViolated {
         /// The property's name, which is the PROPERTY TLC checks.
         name: String,
@@ -241,10 +245,28 @@ pub enum StateDiag {
         /// The instance of each binder the formula fails for, outermost first.
         instance: Vec<Inst>,
         /// The state that shows it, 0 for the start and k for the state after step k: where
-        /// `always` is false, or where the instance is present (and the `leads_to` trigger
-        /// holds) and the goal never holds from then on.
+        /// `always` is false, where the instance is present (and the `leads_to` trigger
+        /// holds) and the goal never holds from then on, where the step that breaks
+        /// `stable` or `unchanged` ends, or where `precedes`' second condition holds first
+        /// without the first.
         witness: usize,
-        lasso: Loop,
+        /// `None` for a form `LtlKind::is_explored` names, which a finite trace violates.
+        lasso: Option<Loop>,
+        site: Site,
+        trace: Trace,
+    },
+    /// A `can_reach` property fails: from the last state of `trace`, a shortest path to such
+    /// a state, no path on which the instance stays present reaches the goal.
+    GoalUnreachable {
+        /// The property's name.
+        name: String,
+        /// The instance of each binder, outermost first.
+        instance: Vec<Inst>,
+        /// What the goal reads of the instance in the states it can still reach from there,
+        /// one line per distinct reading.
+        confined: Vec<String>,
+        /// How many states it can still reach, the last state of the trace included.
+        states: usize,
         site: Site,
         trace: Trace,
     },
@@ -507,7 +529,8 @@ impl StateDiag {
         let raw = match self {
             StateDiag::ConstraintViolated { name, .. }
             | StateDiag::AfterAssertViolated { name, .. }
-            | StateDiag::PropertyViolated { name, .. } => name.clone(),
+            | StateDiag::PropertyViolated { name, .. }
+            | StateDiag::GoalUnreachable { name, .. } => name.clone(),
             StateDiag::NoWitness {
                 entity,
                 column,
@@ -621,6 +644,7 @@ impl StateDiag {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
+            | StateDiag::GoalUnreachable { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
@@ -631,6 +655,7 @@ impl StateDiag {
             StateDiag::ConstraintViolated { trace, .. }
             | StateDiag::AfterAssertViolated { trace, .. }
             | StateDiag::PropertyViolated { trace, .. }
+            | StateDiag::GoalUnreachable { trace, .. }
             | StateDiag::Deadlock { trace, .. } => Some(trace),
             _ => None,
         }
@@ -671,6 +696,7 @@ impl StateDiag {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::PropertyViolated { .. }
+            | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::Deadlock { .. }
             | StateDiag::AssertOnInertUseCase { .. }
@@ -876,7 +902,30 @@ impl fmt::Display for StateDiag {
                         f,
                         "its leads_to trigger holds for {inst} {at}, and its goal never holds from then on"
                     ),
+                    LtlKind::Stable => write!(
+                        f,
+                        "its stable condition holds for {inst} before step {witness} and is false after it"
+                    ),
+                    LtlKind::Unchanged => write!(
+                        f,
+                        "step {witness} changes a column unchanged(..) keeps for {inst} while its when condition holds"
+                    ),
+                    LtlKind::Precedes => write!(
+                        f,
+                        "its second condition holds for {inst} {at}, and its first condition has not held for it at or before that state"
+                    ),
                 }
+            }
+            StateDiag::GoalUnreachable { name, instance, .. } => {
+                let inst = instance
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                write!(
+                    f,
+                    "property {name} is violated: from the counterexample's last state no path reaches its goal for {inst}"
+                )
             }
             StateDiag::NoWitness {
                 entity,

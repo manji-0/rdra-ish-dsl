@@ -8,9 +8,14 @@
 
 RDRA-ish prints its lifecycle transition system as **TLA+** and optionally checks it
 with **TLC**. `rdra-ish states` and `check` explore the same system by breadth-first
-search (BFS) at one instance per entity. `verify` runs TLC on it at two instances by
-default and adds the temporal properties that BFS does not evaluate. See
-[state-derivation.md](./state-derivation.md) for the system itself.
+search (BFS) at one instance per entity, and verify safety only: invariants, `after`
+assertions, and state models. They evaluate no temporal property. Temporal properties and
+proofs belong to `verify`, which runs TLC on the system at two instances by default, checks
+the `always`, `eventually`, and `leads_to` properties with it, decides each `can_reach`,
+`stable`, `unchanged`, and `precedes` by BFS, and proves state rules under `--prove`. See
+[state-derivation.md](./state-derivation.md) for the system itself, and
+[Order and stability properties](#order-and-stability-properties) for `stable`,
+`unchanged`, and `precedes`.
 
 ## Commands
 
@@ -23,7 +28,7 @@ rdra-ish verify <INPUTS...> --backend tlc [-o <OUT_DIR>] [--instance-count N] [-
 |---|---|
 | `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs that check the deadlocks and witnesses |
 | `verify --backend tlc` | Print one spec per cone of influence and one per temporal property, then run `tlc` / `tlc2` from `PATH` |
-| `states`, `check` | BFS on the same system, with no TLC dependency |
+| `states`, `check` | BFS on the same system, with no TLC dependency; safety only, no temporal property |
 
 `--instance-count` (default `2`) sets `InstanceCount` (`1..=255`; `1` warns that
 singleton ids cannot distinguish instances). `--int-range-max` (default `5`) sets
@@ -161,6 +166,10 @@ stays as it was.
 | `invariant(...).when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>`. A `relate` joins the sides by owner; without one the related side is independent. |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars`. It checks every step of the use case's last action, so a split use case once per run, on the run's rows. |
 | `property` with `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, quantified per present instance |
+| `property P ... .along(A, B, ..)` | The owner link of each hop joins `present` in the trigger: `[](present /\ link => x)`, `[](present /\ link => <>x)`, `(present /\ link /\ x) ~> y`. Without `.along` a property over several entities ranges over every combination of their rows. |
+| `property P stable(p)` | `P == [][\A b0 \in E_Ids : (present /\ p) => (present' => p')]_vars`, an action property TLC checks on every step. With `.along` the link joins `present` before the step only, so a step that moves a key keeps the obligation. |
+| `property P unchanged(E.col, ..).when(p)` | `P == [][\A b0 \in E_Ids : (present /\ p) => (present' => E_col'[b0] = E_col[b0] /\ ..)]_vars`; `p` is `TRUE` without `.when`. A column no action writes has no var and drops out. |
+| `property P precedes(p, q)` | A latch `P_seen \in [E_Ids -> BOOLEAN]` (`[A_Ids \X B_Ids -> BOOLEAN]` with two binders): `Init` sets it to `present /\ p`, and `P_latch == P_seen' = [b0 \in E_Ids \|-> P_seen[b0] \/ (present /\ p)']` is the last conjunct of every action. `P == [](\A b0 \in E_Ids : (present /\ q) => P_seen[b0])`. The module declares the latch only where its `.cfg` checks `P`. |
 | Any `eventually` / `leads_to` property | `Spec` includes `WF_vars(Next)` |
 | `property P ... .fair(UC, ...)` | `Fair_P`, one `WF_vars` per action of each listed use case and per instance it acts on (`\A p0 \in E_Ids : WF_vars(UC(p0))`, a created slot bound inside with `\E`), and `P == Fair_P => (...)`. `Spec` is unchanged. |
 | Domain of every variable | `INVARIANT TypeOK`, kept apart from the business rules |
@@ -194,12 +203,57 @@ Operators:
 - `always(expr)` → `[]expr`
 - `eventually(expr)` → `<>expr`
 - `leads_to(p, q)` → `p ~> q`
+- `stable(p)`, `unchanged(cols).when(p)` → `[][A]_vars` on every step; `precedes(p, q)` → a
+  latch and `[](q => <P>_seen)`
 - Connectives inside expressions: prefer `and` / `or` / `not` (`/\` `\/` `~` aliases)
 - Set membership in an atom: `Order.status in (a, b)` → `\in {"a", "b"}`, `not in` → `\notin`
 - Property label string is optional (`property StockOk always(...)`)
 
 `rdra-ish states` does not evaluate path properties, and `check` prints a `note:` that it
 did not model-check them. Use `export` or `verify`.
+
+### Order and stability properties
+
+<!-- constrained-by ./language-reference.md#order-and-stability-stable-unchanged-precedes -->
+
+`stable`, `unchanged`, and `precedes` are safety properties that BFS decides on the graph it
+explores. `verify` runs BFS on each one's cone (`TransitionSystem::decide_property`), next to
+the BFS on the entity cones, and starts no TLC run for it. It prints
+`order and stability properties: <n>, each decided by BFS on its cone` under the bounds and
+one line per property:
+
+```
+property CancelledStaysCancelled (BFS on its cone): violated
+error[CancelledStaysCancelled]: property CancelledStaysCancelled is violated: its stable condition holds for Order#1 before step 3 and is false after it
+  counterexample (3 steps):
+    1. Place [Order#1]
+    2. Cancel [Order#1]
+         Order#1.status: draft -> cancelled
+    3. Reopen [Order#1]
+         Order#1.status: cancelled -> draft
+```
+
+- `stable` and `unchanged` are read on every edge, in the order BFS found them. The first
+  edge that breaks the property for some binding comes from the shallowest state, so the
+  BFS path to its source and the edge are the shortest trace to the step.
+- `precedes(p, q)` is read with its latch, which is no var of the system: a state where `q`
+  holds and the latch is unset is one that a path reaches through states where `p` never
+  held for the binding. The search walks the explored graph restricted to those states, per
+  binding, and keeps the shortest walk to a state where `q` holds. That is the walk TLC finds
+  on the product with the latch.
+
+A violation is a finite trace, with no `then nothing changes forever` after it. A cone that
+frees an entity's slots reaches a superset, so a violation there is decided again by BFS on
+the whole model. A cone BFS stops at the state cap with no violation is `not decided`, and
+counts with the other findings the cap leaves. A scoped run (`--buc`, `--entity`) checks
+none of these properties, as it checks no other.
+
+The TLA+ export spells the same formulas (see [Mapping](#mapping)), and
+`engine_equivalence` checks on `order_stability.rdra` and its fixtures that BFS on the cone
+and TLC on the whole model give the same verdict, and that a counterexample has the same
+length and replays as the same violation. The latch is printed only in a module whose
+`.cfg` checks the property, so the cone modules of the rules and the entity cones keep the
+state graph the explorer reaches.
 
 ## What `verify` checks
 
@@ -258,15 +312,19 @@ A property with `.fair(UC, ...)` (see
 assumption in its own formula, `Fair_P => (...)`, and its cone keeps the listed use cases
 whole. `verify` prints `<P> assumes weak fairness per instance on ...` under the `temporal
 properties:` line, since an `ok` for `P` holds only on the runs that do not starve them.
-`check` and `states` run BFS, which evaluates no temporal property, with or without `.fair`.
+`check` and `states` verify safety only, by state exploration: they evaluate no temporal
+property, with or without `.fair`. A `can_reach` property is CTL, which TLC cannot check, so
+`verify` decides it by BFS instead (see
+[Recoverability on a cone](#recoverability-on-a-cone)).
 
 ### Temporal properties on a cone
 
 <!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
 <!-- constrained-by ./language-reference.md#fairness-fairusecase- -->
 A property's cone (`TransitionSystem::property_cone`) is the smallest closed var set that
-holds what the formula reads and, for each action of each use case its `.fair` lists,
-everything the action reads and writes: its guards with the `applies_to` conditions and the
+holds what the formula reads, the owner vars of its `.along(...)` link, and, for each
+action of each use case its `.fair` lists, everything the action reads and writes: its
+guards with the `applies_to` conditions and the
 quantifier reads inside them, the existence of each instance it binds, the source of each
 transition, the clock when it ticks, the columns it assigns, transitions, or chooses, and the
 existence of each entity it creates or deletes. Closed means what it means for an invariant's
@@ -420,7 +478,8 @@ it: where an `always` condition is false, or where an `eventually` instance exis
 `leads_to` trigger holds and the goal never holds from then on. `verify` evaluates the
 property on the infinite behavior the way the module spells it, per instance of each
 binder: `always x` is `[](present => x)`, `eventually x` is `[](present => <>x)`, and
-`leads_to x y` is `(present /\ x) ~> y`. A lasso that does not replay, or that does not
+`leads_to x y` is `(present /\ x) ~> y`, with the `.along(...)` link joined to `present`
+when the property has one. A lasso that does not replay, or that does not
 violate the property, is a tool bug and prints the engine-disagreement line. TLC picks the
 lasso, so two runs may print different steps. In this run of `temporal_unmet.rdra`, TLC
 ends with `Back to state 7: CancelOrder`, and Order#1 is cancelled and reopened forever:
@@ -449,6 +508,77 @@ error[PendingLeadsToDelivered]: property PendingLeadsToDelivered is violated: it
     then loops back to step 7
 violated: Error: Temporal properties were violated.
 ```
+
+### Recoverability on a cone
+
+<!-- derived-from ./state-derivation.md#exploration-by-cone-of-influence -->
+<!-- constrained-by ./language-reference.md#recoverability-can_reach -->
+`property P can_reach(goal)` is the CTL formula `AG (present => E[present U (present /\
+goal)])` per instance of each binder: from every reachable state where the instance is
+present (and, under `.along`, linked), some path on which it stays present reaches a state
+where the goal holds for it.
+No TLA+ temporal formula states it, so TLC does not check it. `export --kind tla` lists it
+in a comment, and no `.cfg` names it.
+
+`verify` decides it by BFS on the property's cone, at its bounds; `check` and `states`,
+which verify safety only, do not evaluate it. The run
+keeps every edge it finds, so the decision is one pass over the explored graph per binding
+of the binders. The pass goes backward from the states where the instance is present and
+the goal holds, through states where the instance is present, and marks every state that
+can still reach the goal. A present state the pass does not mark fails the property. The
+first such state in discovery order ends a shortest trace, since BFS reaches states in
+depth order. The finding prints that trace, then what the goal reads of the instance in
+each state reachable from there. The pass is linear in the graph's states and edges, once
+per binding: two bindings at `verify`'s two instances.
+
+The cone must be exact, because `EF` is not monotone in the transitions. A step the cone
+allows and the whole model does not could reach the goal and hide a violation. Two kinds of
+cone allow such steps. One creates an entity whose slots the cone does not count (the
+`FreesSlots` case). The other runs a use case without its event's mark. So the cone of a
+`can_reach` keeps every action that writes into it, which brings in the marks it reads, and
+reads the existence of each entity such an action creates, until nothing more is added. On
+that cone, a path of the cone is a path of the whole model and the other way round, so the
+cone's verdict is the whole model's at the same bounds. A reduced cone (the next section)
+keeps stuttering equivalence, which says nothing of `AG EF`, so no `can_reach` cone is
+reduced. A cone that stops at the state cap decides nothing, since a state it did not expand
+has no edges and would look stuck: it reports `StateCapReached` as an invariant's cone
+does. A scoped `verify` checks no property, `can_reach` included.
+
+`verify` prints `can_reach properties: N, decided natively by BFS on each one's cone (TLC
+cannot check AG EF)` in its header, explores those cones beside the entity cones, and ends
+the BFS pass with `can_reach (BFS on N cones): N checked, M violated`. A violation fails the
+run after `tlc_result:`, as a deadlock does:
+
+```
+$ rdra-ish verify samples/formal-verification/can_reach_unmet.rdra --backend tlc
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+cones: 0 for 0 invariant(s) and 0 after-assert(s)
+temporal properties: none
+can_reach properties: 1, decided natively by BFS on each one's cone (TLC cannot check AG EF)
+error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1
+  rule: skills/rdra-ish-verify/samples/can_reach_unmet.rdra:57:1
+  counterexample (3 steps):
+    1. Place [Order#1]                                                 skills/rdra-ish-verify/samples/can_reach_unmet.rdra:17:1
+         + Order#1 (status=pending, in_stock=true, window_open=true)
+    2. CloseWindow [Order#1]                                           skills/rdra-ish-verify/samples/can_reach_unmet.rdra:23:1
+         Order#1.window_open: true -> false                            skills/rdra-ish-verify/samples/can_reach_unmet.rdra:47:1
+    3. LoseStock [Order#1]                                             skills/rdra-ish-verify/samples/can_reach_unmet.rdra:22:1
+         Order#1.in_stock: true -> false                               skills/rdra-ish-verify/samples/can_reach_unmet.rdra:46:1
+  confined: from there Order#1 stays within 34 reachable states, where its goal never holds:
+    status = pending
+    status = on_hold
+state models (BFS on 1 entity cone): 1 state model, 4 states witnessed, 0 deadlocks, 0 use cases that never run
+can_reach (BFS on 1 cone): 1 checked, 1 violated
+nothing to check
+tlc_result: ok
+Error: verification failed: 1 can_reach error(s) from BFS on their cones
+```
+
+The 34 states count the moves of Order#2 too; Order#1 stays at `pending` or `on_hold` in
+all of them. The tests in `lifecycle::tests::reach` compare the cone's verdict with the
+whole system's on both samples, at one instance and at two, and on a goal behind an event
+that is never raised and a goal that needs a slot the bound never frees, where a cone that
+is not exact would pass.
 
 ### Reduction by an independent sub-lifecycle
 
@@ -989,7 +1119,10 @@ gaps.
   more instances, or run `verify --prove` to prove a state rule for any number of rows
   ([Proofs for any number of rows](#proofs-for-any-number-of-rows)).
 - **Temporal properties are checked only by `verify`, and a scoped run checks none.**
-  `check` and `states` evaluate no `property` and print a `note:` that says so. A run with
+  `check` and `states` verify safety only, by state exploration. They evaluate no
+  `property`, `can_reach` included, and `check` prints a `note:` that says so. `verify`
+  checks `always`, `eventually`, and `leads_to` with TLC and decides `can_reach` by BFS
+  ([Recoverability on a cone](#recoverability-on-a-cone)). A run with
   `--buc` or `--entity` checks no property: `--buc` drops use cases a property's fairness
   reads, and `--entity` may defer an error inside a property's cone. See it: the `note:`
   from `check`, and `temporal properties: 2, not checked: a scoped run checks none` in a
@@ -1082,6 +1215,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `event_order.rdra` | pass, pass | no state rule | `triggers(EvOrderExecuted, IssueCert)` runs IssueCert only after ExecuteCertIssue raised the event on the order (#30, #112), so the `after(IssueCert).assert` on the order's status holds with no guard |
 | `after_assert_unmet.rdra` | fail, fail | no state rule | `after(DeliverOrder).assert` without the `sets` that makes it true |
 | `temporal_fair.rdra` | pass, fail | no state rule | `leads_to(granted, registered or dismissed)` fails without fairness: another application is ordered to amend and amends forever, and `WF_vars(Next)` holds on that loop. The same property with `.fair(Register, Dismiss)` holds |
+| `order_stability.rdra` | pass, fail | no state rule | `stable`, `unchanged(..).when(..)`, and `precedes` on an Order, decided by BFS on each cone. A shipped order stays shipped, an approved amount stays, and an order ships only after it is paid. Reopen, Refund, and a Ship that reads no invoice break `CancelledStaysCancelled`, `AmountKeptOnceDecided`, and `ShippedAfterInvoiced`, each at the shortest trace to the step or state (#166) |
+| `temporal_along.rdra` | pass, fail | no state rule | `always(not captured or paid)` over a Payment and an Order holds with `.along(Payment, Order)`: Pay captures a payment and pays its own order. The same formula without `.along` fails on a captured payment beside another order that is never paid (#165) |
 | `temporal_unmet.rdra` | pass, fail | no state rule | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
 | `none_any_child.rdra` | pass, pass | 1 of 1 | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
@@ -1092,6 +1227,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `check_met.rdra` | pass, pass | 2 of 2 | The same check with a use case that keeps `qty` in range; `forbidden` reads the derived `bulk: Bool @derived(qty >= 3)` as its expression |
 | `unwitnessed_state.rdra` | fail, pass | 1 of 1 | `refunded` has no witness: Refund needs `shipped` and a refund window that holds only while `pending`. TLC passes; the BFS witness check fails `check` and `verify`, a shipped Order is a deadlock (Refund is its only way out), and both warn that Refund never runs (its guards never hold together). TLC alone finds both errors with the exported `StateModel_Order` specs |
 | `deadlock.rdra` | fail, pass | no state rule | An Order stays `paid` forever: Ship leaves `paid` only while a packing condition holds, and it holds only while `pending`. Express ships a pending Order, so `shipped` has a witness. TLC passes; the BFS deadlock check fails `check` and `verify`, and both warn that Ship never runs. TLC alone finds the deadlock with the exported `StateModel_Order` specs |
+| `can_reach_unmet.rdra` | pass, pass | no state rule | `can_reach(Order.status in (delivered, cancelled))` fails: once LoseStock and CloseWindow have run, an Order moves between `pending` and `on_hold` forever. Each of those states has a way out, so no deadlock is reported. `check` evaluates no property and TLC checks nothing; `verify`'s BFS fails it with a shortest trace and the states the Order is confined to |
+| `can_reach_met.rdra` | pass, pass | no state rule | The same model with Restock, so every reachable state can still finish. An Order may still be held and resumed forever: `can_reach` asks for a path, not for progress |
 | `partial_scope.rdra` | fail, not run | not run | Audit's `forbidden` reads the arithmetic `@derived` column `score`: a `DerivedColumnRead` build error stops `check` and `verify` before TLC. With `--entity Order` both defer it under `not checked:` and pass; TLC checks `Forbidden_Order_0` |
 | `fail/order.rdra` | fail, fail | 0 of 1 | Intentionally unsafe (reachable invariant violation) |
 

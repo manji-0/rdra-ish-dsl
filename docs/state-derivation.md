@@ -429,7 +429,7 @@ none does:
 | `invariant(...).when(G)`, a quantifier rule with guards | The guards `G` hold for some rows. |
 | `invariant(E).none(R...)` | A row of `R` exists beside a row of `E`. A `.has(R...)` asks for a row itself, so it has no such premise. |
 | `after(UC).assert(...)` | `UC` runs to its last step, the one the assertion follows (a split use case may run its earlier transactions without it). When the assertion reads an entity the step does not bind, some such step ends in a state with a row of it. |
-| `property` | Rows of the entities it ranges over exist together. For a `leads_to`, its trigger holds for some such rows. |
+| `property` | Rows of the entities it ranges over exist together, linked as its `.along` says. Beyond that, some such rows meet the condition the form speaks from: the trigger of a `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second condition of a `precedes`. |
 | `forbidden` of several conditions | Each condition holds for some row, on its own. A rule over two entities meets a condition on one of them with a row of that entity alone. |
 
 That the conditions of a `forbidden` never hold together is what the rule claims, so their

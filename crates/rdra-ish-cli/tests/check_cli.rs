@@ -382,6 +382,20 @@ warning[Runs_Ship]: use case Ship can never run: each of its guards holds in som
     );
 }
 
+/// `check` verifies safety only: it passes a model whose `can_reach` fails, and its note
+/// sends the property to `verify`.
+#[test]
+fn check_leaves_a_can_reach_property_to_verify() {
+    let output = run(&["check", "samples/formal-verification/can_reach_unmet.rdra"]);
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        format!(
+            "{BOUNDS}\nnote: 1 temporal properties were not model-checked by check; use verify --backend tlc\n"
+        )
+    );
+}
+
 /// From a relative input, `states --format json` names witness sites in the path form
 /// `check`'s text renderer prints for the same file.
 #[test]

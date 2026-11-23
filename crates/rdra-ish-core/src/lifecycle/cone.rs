@@ -11,7 +11,8 @@ use std::collections::BTreeSet;
 
 use super::expr::State;
 use super::types::{
-    ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Term, VarId, VarKind,
+    ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Property, Term, VarId,
+    VarKind,
 };
 use super::TransitionSystem;
 
@@ -46,6 +47,8 @@ pub enum Target {
     Invariant(usize),
     /// Index into `after_asserts()`.
     AfterAssert(usize),
+    /// Index into `reach_properties()`.
+    Reach(usize),
 }
 
 /// A closed var set and the actions that must stay even when they write nothing in it.
@@ -72,6 +75,26 @@ impl TransitionSystem {
         reads
     }
 
+    /// What a property reads: `check_reads` of its link and operands, and the columns of
+    /// `unchanged`.
+    pub(crate) fn property_reads(&self, p: &Property) -> VarSet {
+        let mut reads = self.check_reads(&p.binders, p.preds());
+        for t in p.formula.columns() {
+            self.term_reads(t, &mut reads);
+        }
+        reads
+    }
+
+    fn term_reads(&self, t: &Term, out: &mut VarSet) {
+        match t {
+            Term::Slot { var, .. } => {
+                out.insert(*var);
+            }
+            Term::Now => out.extend(self.now),
+            Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
+        }
+    }
+
     pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut VarSet) {
         for node in pred.nodes() {
             if let Pred::Forall { entity, .. } | Pred::Exists { entity, .. } = node {
@@ -79,13 +102,7 @@ impl TransitionSystem {
             }
         }
         for t in pred.terms() {
-            match t {
-                Term::Slot { var, .. } => {
-                    out.insert(*var);
-                }
-                Term::Now => out.extend(self.now),
-                Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
-            }
+            self.term_reads(t, out);
         }
     }
 
@@ -374,8 +391,38 @@ impl TransitionSystem {
                     keep.insert(step.act);
                 }
             }
+            Target::Reach(i) => return self.reach_seed(i),
         }
         (seed, keep)
+    }
+
+    /// What a `can_reach` reads, grown until its cone is exact. `EF` is not monotone in the
+    /// transitions: a step the cone allows and the whole model does not (a creation of an
+    /// entity whose slots the cone does not count, or a use case run without its event's
+    /// mark) could reach the goal where the whole model cannot. So every action that writes
+    /// into the cone is kept, which brings in the marks it reads, and the existence of each
+    /// entity it creates is read; with no such step left out, a path of the cone is a path of
+    /// the whole model and the other way round.
+    fn reach_seed(&self, i: usize) -> Seed {
+        let r = &self.reach[i];
+        let mut seed = self.check_reads(&r.binders, r.preds());
+        let mut keep = BTreeSet::new();
+        loop {
+            let vars = self.cone(&seed, &keep);
+            let mut grew = false;
+            for (k, a) in self.actions.iter().enumerate() {
+                if !keep.contains(&ActId::at(k)) && self.action_writes(a).is_disjoint(&vars) {
+                    continue;
+                }
+                grew |= keep.insert(ActId::at(k));
+                for p in a.params.iter().filter(|p| p.role == ParamRole::New) {
+                    grew |= seed.insert(self.entity(p.entity).exists);
+                }
+            }
+            if !grew {
+                return (seed, keep);
+            }
+        }
     }
 
     /// The cone a temporal property is checked on: what its formula reads, and each action of
@@ -397,7 +444,7 @@ impl TransitionSystem {
     /// actions as kept.
     pub fn property_seed(&self, i: usize) -> Seed {
         let p = &self.properties[i];
-        let mut seed = self.check_reads(&p.binders, p.formula.preds());
+        let mut seed = self.property_reads(p);
         let mut keep = BTreeSet::new();
         for (k, a) in self.actions.iter().enumerate() {
             if !p.is_fair(a) {
@@ -434,12 +481,19 @@ impl TransitionSystem {
         })
     }
 
+    /// The targets `check` and `states` explore: views and safety checks. A `can_reach` is a
+    /// temporal property, which only `verify` decides (`reach_targets`).
     pub fn targets(&self) -> Vec<Target> {
         (0..self.entities.len())
             .map(|i| Target::Entity(EntId::at(i)))
             .chain((0..self.invariants.len()).map(Target::Invariant))
             .chain((0..self.after.len()).map(Target::AfterAssert))
             .collect()
+    }
+
+    /// One target per `can_reach` property, which `verify` explores beside the entity cones.
+    pub fn reach_targets(&self) -> Vec<Target> {
+        (0..self.reach.len()).map(Target::Reach).collect()
     }
 
     /// A state of this system projected onto `vars`, in the layout of `restrict_to(vars, ..)`.

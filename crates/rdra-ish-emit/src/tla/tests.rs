@@ -46,6 +46,28 @@ fn tla_published_outbox_is_one_action_snapshot() {
     insta::assert_snapshot!(bundle.tla);
 }
 
+/// A `can_reach` is CTL, which TLC cannot check: the module names it in a comment, and no
+/// cfg checks it.
+#[test]
+fn a_can_reach_is_a_comment_and_no_check() {
+    let ts = system(&sample("can_reach_unmet.rdra"));
+    let bundle = print(&ts, PrintMode::Check, "M");
+    assert!(
+        bundle.tla.contains(
+            "\\* can_reach properties are CTL, AG (present => EF goal), which no TLA+ formula\n\
+             \\* states and TLC does not check; rdra-ish check and verify decide them by BFS.\n\
+             \\*   OrderCanFinish: \\A b0 \\in Order_Ids : AG((Order_exists[b0] = \"present\") => EF(Order_status[b0] \\in {\"delivered\", \"cancelled\"}))\n"
+        ),
+        "{}",
+        bundle.tla
+    );
+    assert!(!bundle.tla.contains("OrderCanFinish =="), "{}", bundle.tla);
+    for mode in [PrintMode::Check, PrintMode::Temporal] {
+        let cfg = print(&ts, mode, "M").cfg;
+        assert!(!cfg.contains("OrderCanFinish"), "{cfg}");
+    }
+}
+
 #[test]
 fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
     let ts = system(&sample("order.rdra"));
@@ -547,6 +569,136 @@ fn a_fair_property_assumes_weak_fairness_per_instance() {
     assert!(tla.contains("Spec == Init /\\ [][Next]_vars /\\ WF_vars(Next)\n"));
     assert!(bundle.cfg.contains("SPECIFICATION Spec\n"));
     assert!(bundle.cfg.contains("PROPERTY Ends\nPROPERTY Plain\n"));
+}
+
+const ORDER_AND_STABILITY: &str = r#"
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, cancelled, shipped) @default(draft)
+  amount: Int @default(0)
+  paid: Bool @default(false)
+}
+entity Payment "Payment" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Cancel "Cancel"
+usecase Pay "Pay"
+usecase Amend "Amend"
+transitions(Cancel, Order.status, draft -> cancelled)
+sets(Amend, Order.amount == 2)
+sets(Pay, Order.paid == true)
+transitions(Pay, Payment.status, pending -> captured)
+property Kept stable(Order.status == cancelled)
+property Fixed unchanged(Order.amount, Order.paid).when(Order.status != draft)
+property Paid precedes(Order.paid == true, Order.status == shipped)
+property Captured precedes(Payment.status == captured, Order.status == shipped).along(Payment, Order)
+"#;
+
+/// `stable` and `unchanged` are action properties quantified inside `[]`, so TLC checks them
+/// on every step; `precedes` reads a latch `<P>_seen` per binding that `Init` and every action
+/// set (#166).
+#[test]
+fn the_order_and_stability_forms_print_as_steps_and_a_latch() {
+    let ts = system(ORDER_AND_STABILITY);
+    let tla = print(&ts, PrintMode::Check, "M").tla;
+    let present = |e: &str, b: &str, primed: &str| format!("{e}_exists{primed}[{b}] = \"present\"");
+    let expected = [
+        format!(
+            "Kept == [][\\A b0 \\in Order_Ids : (({}) /\\ (Order_status[b0] = \"cancelled\")) => (({}) => (Order_status'[b0] = \"cancelled\"))]_vars\n",
+            present("Order", "b0", ""),
+            present("Order", "b0", "'")
+        ),
+        format!(
+            "Fixed == [][\\A b0 \\in Order_Ids : (({}) /\\ (~(Order_status[b0] = \"draft\"))) => (({}) => (Order_amount'[b0] = Order_amount[b0] /\\ Order_paid'[b0] = Order_paid[b0]))]_vars\n",
+            present("Order", "b0", ""),
+            present("Order", "b0", "'")
+        ),
+        format!(
+            "Paid == [](\\A b0 \\in Order_Ids : (({}) /\\ (Order_status[b0] = \"shipped\")) => Paid_seen[b0])\n",
+            present("Order", "b0", "")
+        ),
+        format!(
+            "  /\\ Paid_seen = [b0 \\in Order_Ids |-> ({}) /\\ (Order_paid[b0] = TRUE)]\n",
+            present("Order", "b0", "")
+        ),
+        format!(
+            "Paid_latch == Paid_seen' = [b0 \\in Order_Ids |-> Paid_seen[b0] \\/ (({}) /\\ (Order_paid'[b0] = TRUE))]\n",
+            present("Order", "b0", "'")
+        ),
+        "  /\\ Paid_seen \\in [Order_Ids -> BOOLEAN]\n".to_string(),
+        "  /\\ Captured_seen \\in [Payment_Ids \\X Order_Ids -> BOOLEAN]\n".to_string(),
+        format!(
+            "Captured == [](\\A b0 \\in Payment_Ids, b1 \\in Order_Ids : (({} /\\ {} /\\ Payment_owner_Order[b0] = b1) /\\ (Order_status[b1] = \"shipped\")) => Captured_seen[b0, b1])\n",
+            present("Payment", "b0", ""),
+            present("Order", "b1", "")
+        ),
+        "vars == <<Order_vars, Payment_vars, Paid_seen, Captured_seen>>\n".to_string(),
+        "  /\\ Paid_latch\n  /\\ Captured_latch\n".to_string(),
+    ];
+    for line in expected {
+        assert!(tla.contains(&line), "{line}\n{tla}");
+    }
+}
+
+/// A latch is a var only where the cfg checks its property: a safety cone and another
+/// property's run keep the explorer's state graph.
+#[test]
+fn a_latch_is_declared_only_where_its_property_is_checked() {
+    let ts = system(ORDER_AND_STABILITY);
+    for mode in [
+        PrintMode::Safety,
+        PrintMode::Explore,
+        PrintMode::ConeProperty(0),
+    ] {
+        let tla = print(&ts, mode, "M").tla;
+        assert!(!tla.contains("_seen"), "{mode:?}\n{tla}");
+        assert!(!tla.contains("_latch"), "{mode:?}\n{tla}");
+    }
+    let tla = print(&ts, PrintMode::ConeProperty(2), "M").tla;
+    assert!(tla.contains("Paid_seen"), "{tla}");
+    assert!(!tla.contains("Captured_seen"), "{tla}");
+}
+
+const ALONG: &str = r#"
+entity Order "Order" { id: Int @pk  status: Enum(draft, paid) @default(draft) }
+entity Payment "Payment" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Pay "Pay"
+transitions(Pay, Order.status, draft -> paid)
+transitions(Pay, Payment.status, pending -> captured)
+property Paid always(not (Payment.status == captured) or (Order.status == paid)).along(Payment, Order)
+property Eventually eventually(Payment.status == captured).along(Order, Payment)
+property Leads leads_to(Payment.status == captured, Order.status == paid).along(Payment, Order)
+property AnyPair always(not (Payment.status == captured) or (Order.status == paid))
+"#;
+
+/// `.along` joins the owner link to the trigger of each form, so the formula speaks only of
+/// linked rows; a property without it quantifies every pair (#165).
+#[test]
+fn a_property_along_joins_the_link_to_its_trigger() {
+    let tla = print(&system(ALONG), PrintMode::Check, "M").tla;
+    let present =
+        |a: &str, b: &str| format!("{a}_exists[b0] = \"present\" /\\ {b}_exists[b1] = \"present\"");
+    let expected = [
+        format!(
+            "Paid == \\A b0 \\in Payment_Ids, b1 \\in Order_Ids : [](({} /\\ Payment_owner_Order[b0] = b1) => ((~(Payment_status[b0] = \"captured\")) \\/ (Order_status[b1] = \"paid\")))\n",
+            present("Payment", "Order")
+        ),
+        format!(
+            "Eventually == \\A b0 \\in Payment_Ids, b1 \\in Order_Ids : [](({} /\\ Payment_owner_Order[b0] = b1) => <>(Payment_status[b0] = \"captured\"))\n",
+            present("Payment", "Order")
+        ),
+        format!(
+            "Leads == \\A b0 \\in Payment_Ids, b1 \\in Order_Ids : (({} /\\ Payment_owner_Order[b0] = b1) /\\ (Payment_status[b0] = \"captured\")) ~> (Order_status[b1] = \"paid\")\n",
+            present("Payment", "Order")
+        ),
+        format!(
+            "AnyPair == \\A b0 \\in Payment_Ids, b1 \\in Order_Ids : [](({}) => ((~(Payment_status[b0] = \"captured\")) \\/ (Order_status[b1] = \"paid\")))\n",
+            present("Payment", "Order")
+        ),
+    ];
+    for line in expected {
+        assert!(tla.contains(&line), "{line}\n{tla}");
+    }
 }
 
 /// A use case split into transaction groups is fair on each of its actions, the later ones

@@ -162,6 +162,7 @@ violation_message(text, pattern_desc)
         | StateDiag::ArmNeverTaken { .. }
         | StateDiag::ValueNeverChosen { .. }
         | StateDiag::Deadlock { .. }
+        | StateDiag::GoalUnreachable { .. }
         | StateDiag::ContradictoryDrivenComparison { .. }
         | StateDiag::AssertOnInertUseCase { .. }
         | StateDiag::FairOnInertUseCase { .. }

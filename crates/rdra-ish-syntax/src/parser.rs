@@ -724,18 +724,11 @@ fn empty_sets(items: &[Item]) -> Vec<Span> {
                     }
                 }
             }
-            Item::Property(prop) => match &prop.formula {
-                AstTemporalFormula::Always(e) | AstTemporalFormula::Eventually(e) => {
-                    expr(e, &mut out)
+            Item::Property(prop) => {
+                for e in prop.formula.exprs() {
+                    expr(e, &mut out);
                 }
-                AstTemporalFormula::LeadsTo {
-                    antecedent,
-                    consequent,
-                } => {
-                    expr(antecedent, &mut out);
-                    expr(consequent, &mut out);
-                }
-            },
+            }
             Item::Instance(inst) => {
                 for ann in inst.columns.iter().flat_map(|c| c.annotations.iter()) {
                     if let Annotation::Check(ColumnExpr::Logical(e))
@@ -843,7 +836,43 @@ fn property_decl() -> impl Parser<Token, PropertyDecl, Error = Simple<Token>> + 
             consequent,
         });
 
-    let formula = choice((leads_to, always, eventually));
+    let can_reach = just(Token::Ident("can_reach".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(AstTemporalFormula::CanReach);
+
+    let stable = just(Token::Ident("stable".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(AstTemporalFormula::Stable);
+
+    // `.when(p)` belongs to the form: its argument is a logical expression, which no chain
+    // method takes.
+    let when = just(Token::Dot)
+        .ignore_then(just(Token::Ident("when".to_string())))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::RParen));
+    let unchanged = just(Token::Ident("unchanged".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(operand().separated_by(just(Token::Comma)).at_least(1))
+        .then_ignore(just(Token::RParen))
+        .then(when.or_not())
+        .map(|(columns, when)| AstTemporalFormula::Unchanged { columns, when });
+
+    let precedes = just(Token::Ident("precedes".to_string()))
+        .ignore_then(just(Token::LParen))
+        .ignore_then(logical_expr())
+        .then_ignore(just(Token::Comma))
+        .then(logical_expr())
+        .then_ignore(just(Token::RParen))
+        .map(|(first, then)| AstTemporalFormula::Precedes { first, then });
+
+    let formula = choice((
+        leads_to, always, eventually, can_reach, stable, unchanged, precedes,
+    ));
 
     just(Token::Property)
         .ignore_then(ident())

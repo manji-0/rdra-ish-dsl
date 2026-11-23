@@ -1,0 +1,77 @@
+// Properties for order and stability (#166), each decided by verify alone with BFS on its
+// cone: `stable(p)` on every step, `unchanged(cols).when(p)` on every step, and
+// `precedes(p, q)` on every state with a latch of whether p has held. check evaluates none
+// of them. A shipped order stays shipped, an approved amount stays as it is, and an order
+// ships only after it is paid; each of these holds. Reopen takes a cancelled order back to
+// draft, Refund zeroes a cancelled order's amount, and Ship reads no invoice, so the other
+// three fail, each at the shortest trace to the step or state that breaks it.
+// expect check: ok
+// expect verify: tlc=ok fail CancelledStaysCancelled AmountKeptOnceDecided ShippedAfterInvoiced
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(draft, approved, cancelled, shipped) @default(draft)
+  amount: Int @default(0)
+  paid: Bool @default(false)
+  invoiced: Bool @default(false)
+}
+
+usecase Place "注文"
+usecase Amend "金額変更"
+usecase Approve "承認"
+usecase Cancel "取消"
+usecase Reopen "再開"
+usecase Refund "返金"
+usecase Pay "支払"
+usecase Invoice "請求書発行"
+usecase Ship "出荷"
+
+buc BucOrder "Order"
+contains(BucOrder, Place)
+contains(BucOrder, Amend)
+contains(BucOrder, Approve)
+contains(BucOrder, Cancel)
+contains(BucOrder, Reopen)
+contains(BucOrder, Refund)
+contains(BucOrder, Pay)
+contains(BucOrder, Invoice)
+contains(BucOrder, Ship)
+
+creates(Place, Order)
+sets(Amend, Order.amount == 2)
+transitions(Approve, Order.status, draft -> approved)
+transitions(Cancel, Order.status, (draft, approved) -> cancelled)
+transitions(Reopen, Order.status, cancelled -> draft)
+sets(Refund, Order.amount == 0)
+sets(Pay, Order.paid == true)
+sets(Invoice, Order.invoiced == true)
+transitions(Ship, Order.status, approved -> shipped)
+
+condition Draft "下書き"
+holds(Draft, Order.status == draft)
+applies_to(Draft, Amend)
+
+condition Cancelled "取消済"
+holds(Cancelled, Order.status == cancelled)
+applies_to(Cancelled, Refund)
+
+condition Paid "支払済"
+holds(Paid, Order.paid == true)
+applies_to(Paid, Ship)
+
+property ShippedStaysShipped "a shipped order stays shipped"
+  stable(Order.status == shipped)
+
+property CancelledStaysCancelled "a cancelled order stays cancelled"
+  stable(Order.status == cancelled)
+
+property AmountKeptOnceApproved "an approved or shipped order keeps its amount"
+  unchanged(Order.amount).when(Order.status in (approved, shipped))
+
+property AmountKeptOnceDecided "an order past draft keeps its amount"
+  unchanged(Order.amount).when(Order.status != draft)
+
+property ShippedAfterPaid "an order ships only after it is paid"
+  precedes(Order.paid == true, Order.status == shipped)
+
+property ShippedAfterInvoiced "an order ships only after it is invoiced"
+  precedes(Order.invoiced == true, Order.status == shipped)

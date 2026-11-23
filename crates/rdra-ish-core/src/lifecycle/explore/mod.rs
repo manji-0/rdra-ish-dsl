@@ -5,11 +5,13 @@
 mod bfs;
 mod graph;
 mod moves;
+mod properties;
 mod scan;
 mod views;
 mod violations;
 
-pub use graph::LabelledEdges;
+pub use graph::{Adjacency, LabelledEdges};
+pub use properties::PropertyVerdict;
 
 use std::collections::{BTreeSet, HashSet};
 

@@ -48,14 +48,105 @@ property ShippedOnceCaptured
   `.fair` is `FairRequiresUseCases`; a use case that changes nothing is `FairOnInertUseCase`.
 - A property holds per present instance: `always x` is `[](present => x)`,
   `eventually x` is `[](present => <>x)`, and `leads_to x y` is `(present /\ x) ~> y`.
-- Only `verify` evaluates properties, each in its own TLC run on its cone (the whole model
-  only when the cone does not decide it); `check` prints a `note:` that it did not.
+- A property whose atoms read two or more entities ranges over every combination of their
+  rows. `.along(A, B, ..)` (with `.role(role)` after it) limits it to linked rows, as on a
+  multi-entity `invariant`: the owner links join `present` in the trigger, so
+  `always x` is `[](present /\ link => x)`. Write `.global()` when every combination is
+  meant. Neither, with keys relating the entities, draws `lint` `multi-rule-unscoped`;
+  `.global()` with `.along` is `GlobalWithAlong`; a path that misses an atom's entity or a
+  hop no key binds is `UnbindableScope` (example below the table).
+- Only `verify` evaluates properties. `check` and `states` verify safety only, by state
+  exploration, and evaluate no `property`; `check` prints a `note:` that it did not.
+  `verify` checks `always`, `eventually`, and `leads_to` each in its own TLC run on its cone
+  (the whole model only when the cone does not decide it). It decides `can_reach`,
+  `stable`, `unchanged`, and `precedes` by BFS on their cone, with no TLC run.
+- `can_reach(expr)` says the actors can still finish each present instance: from every
+  reachable state, some path on which the instance stays present reaches `expr`. It is CTL
+  `AG (present => EF expr)`, which TLC cannot check, so `verify` decides it by BFS on its
+  cone and `export --kind tla` only names it in a comment. Use it for a trap a
+  `Deadlock_*` misses, such as an instance that moves between two states forever once a
+  guard is false. A violation prints a shortest trace, then `confined:` with what `expr`
+  reads in the states the instance is left with. Deleting the instance does not reach
+  `expr`. `.along(..)` joins its link to the trigger, as for the other forms.
+  `.fair(...)` on it is `FairOnReachProperty`.
+
+```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(pending, on_hold, delivered, cancelled) @default(pending)
+}
+
+usecase Place "Place"
+usecase Hold "Hold"
+usecase Resume "Resume"
+usecase Deliver "Deliver"
+creates(Place, Order)
+transitions(Hold, Order.status, pending -> on_hold)
+transitions(Resume, Order.status, on_hold -> pending)
+transitions(Deliver, Order.status, pending -> delivered)
+
+property OrderCanFinish "every order can still be delivered or cancelled"
+  can_reach(Order.status in (delivered, cancelled))
+```
 
 | Form | TLA+ |
 |---|---|
 | `always(expr)` | `[]expr` |
 | `eventually(expr)` | `<>expr` |
 | `leads_to(p, q)` | `p ~> q` |
+| `can_reach(expr)` | none (CTL `AG (present => EF expr)`), decided by BFS |
+| `stable(p)` | `[][(present /\ p) => (present' => p')]_vars` |
+| `unchanged(E.col, ..).when(p)` | `[][(present /\ p) => (present' => col' = col)]_vars` |
+| `precedes(p, q)` | latch `<P>_seen` set where `present /\ p` holds; `[](present /\ q => <P>_seen)` |
+
+Order and stability rules, per present instance (`.along` scopes them as above):
+
+```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, approved, cancelled, shipped) @default(draft)
+  amount: Int @default(0)
+  paid: Bool @default(false)
+}
+
+// A cancelled order stays cancelled: every step, not only one use case's.
+property CancelledStaysCancelled
+  stable(Order.status == cancelled)
+
+// While approved or shipped, no step changes the amount; `.when` comes right after.
+property AmountKeptOnceApproved
+  unchanged(Order.amount).when(Order.status in (approved, shipped))
+
+// Shipped only in a state where it is paid or was paid before.
+property ShippedAfterPaid
+  precedes(Order.paid == true, Order.status == shipped)
+```
+
+- `stable` and `unchanged` fail at a step, `precedes` at a state; `verify` prints the
+  shortest trace to it and no loop. `.fair` on any of them is `FairOnSafetyProperty`.
+- `after(UC).assert(...)` reads only the steps of `UC`; `stable`/`unchanged` read every
+  step, so they catch another use case that rewrites the column.
+- `unchanged` without `.when` means the columns never change while the row is present.
+  `.when` elsewhere in the chain is `UnknownChainMethod`.
+
+A property over a Payment and the Order it belongs to:
+
+```rdra
+entity Order "Order" {
+  id: Int @pk
+  status: Enum(draft, paid) @default(draft)
+}
+
+entity Payment "Payment" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+}
+
+relate(Payment, Order, N:1)
+
+property CapturedPaid
+  always((not (Payment.status == captured)) or (Order.status == paid)).along(Payment, Order)
+```
 
 ## Postconditions
 

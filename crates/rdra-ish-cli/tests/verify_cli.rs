@@ -44,6 +44,78 @@ fn verify(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
         .expect("rdra-ish runs")
 }
 
+/// `order_stability.rdra`: BFS decides `stable`, `unchanged`, and `precedes` on each one's
+/// cone, with no TLC run, and prints the shortest trace to the step or state that breaks each
+/// failing one. `check` evaluates none of them (#166).
+#[test]
+fn verify_decides_order_and_stability_by_bfs_and_check_does_not() {
+    let tmp = scratch("verify_cli_order_stability");
+    let sample = repo().join("samples/formal-verification/order_stability.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("\norder and stability properties: 6, each decided by BFS on its cone\n"),
+        "{stdout}"
+    );
+    for (name, verdict) in [
+        ("ShippedStaysShipped", "ok"),
+        ("CancelledStaysCancelled", "violated"),
+        ("AmountKeptOnceApproved", "ok"),
+        ("AmountKeptOnceDecided", "violated"),
+        ("ShippedAfterPaid", "ok"),
+        ("ShippedAfterInvoiced", "violated"),
+    ] {
+        assert!(
+            stdout.contains(&format!("property {name} (BFS on its cone): {verdict}\n")),
+            "{name}\n{stdout}"
+        );
+    }
+    let stable = "error[CancelledStaysCancelled]: property CancelledStaysCancelled is violated: its stable condition holds for Order#1 before step 3 and is false after it";
+    assert!(stderr.contains(stable), "{stderr}");
+    assert!(
+        stderr.contains("counterexample (3 steps):\n    1. Place [Order#1]"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("    3. Reopen [Order#1]"), "{stderr}");
+    assert!(
+        stderr.contains("error[AmountKeptOnceDecided]: property AmountKeptOnceDecided is violated: step 4 changes a column unchanged(..) keeps for Order#1 while its when condition holds"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("error[ShippedAfterInvoiced]: property ShippedAfterInvoiced is violated: its second condition holds for Order#1 after step 4"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("then nothing changes forever"), "{stderr}");
+    assert!(
+        stderr.contains(
+            "verification failed: 3 property violation(s) from BFS on the property cones"
+        ),
+        "{stderr}"
+    );
+
+    let check = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .arg("check")
+        .arg(&sample)
+        .output()
+        .expect("rdra-ish runs");
+    let out = format!(
+        "{}{}",
+        String::from_utf8_lossy(&check.stdout),
+        String::from_utf8_lossy(&check.stderr)
+    );
+    assert_eq!(check.status.code(), Some(0), "{out}");
+    for name in [
+        "CancelledStaysCancelled",
+        "AmountKeptOnceDecided",
+        "ShippedAfterInvoiced",
+    ] {
+        assert!(!out.contains(name), "check reports {name}\n{out}");
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 #[test]
 fn failed_verify_without_out_keeps_and_names_its_specs() {
     if !have_tlc() {
@@ -310,6 +382,43 @@ fn a_fair_property_holds_where_the_unfair_one_loops() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
+/// `temporal_along.rdra`: the property with `.along(Payment, Order)` holds on its cone, which
+/// keeps the owner link, and the same formula without it fails on a captured payment beside
+/// an order it does not belong to (#165).
+#[test]
+fn a_property_along_reads_only_linked_rows() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_along");
+    let sample = repo().join("samples/formal-verification/temporal_along.rdra");
+    let out = tmp.join("M.tla");
+    let output = verify(
+        &repo(),
+        &tmp,
+        &[sample.to_str().unwrap(), "-o", out.to_str().unwrap()],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(stdout.contains("[CapturedPaid]: ok"), "{stdout}");
+    assert!(
+        stdout.contains("[CapturedPaidAnyOrder]: counterexample"),
+        "{stdout}"
+    );
+    assert!(!stderr.contains("error[CapturedPaid]:"), "{stderr}");
+    assert!(
+        stderr.contains("error[CapturedPaidAnyOrder]: property CapturedPaidAnyOrder is violated"),
+        "{stderr}"
+    );
+    let tla = std::fs::read_to_string(tmp.join("Cone_CapturedPaid.tla")).unwrap();
+    assert!(
+        tla.contains("Payment_exists[b0] = \"present\" /\\ Order_exists[b1] = \"present\" /\\ Payment_owner_Order[b0] = b1) =>"),
+        "{tla}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
 /// A property without `.fair` rests on the whole model's `WF_vars(Next)`, which the cone
 /// does not keep: the cone's two runs leave it undecided, and the whole-model run decides it
 /// under the budget. With a budget of 0 s the whole-model run is stopped, the property is
@@ -474,6 +583,58 @@ fn a_deadlock_fails_verify_while_tlc_passes() {
     assert!(
         stdout.lines().any(|l| l
             == "state models (BFS on 1 entity cone): 1 state model, 3 states witnessed, 1 deadlock, 1 use case that never runs"),
+        "{stdout}"
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// `verify` decides a `can_reach` by BFS at its bounds and says so; TLC runs nothing for it.
+/// At two instances the trap is the same, and the passing model passes.
+#[test]
+fn verify_decides_a_can_reach_natively() {
+    if !have_tlc() {
+        return;
+    }
+    let tmp = scratch("verify_cli_can_reach");
+    let sample = repo().join("samples/formal-verification/can_reach_unmet.rdra");
+    let output = verify(&repo(), &tmp, &[sample.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    assert!(
+        stdout.lines().any(|l| l
+            == "can_reach properties: 1, decided natively by BFS on each one's cone (TLC cannot check AG EF)"),
+        "{stdout}"
+    );
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 1 violated"),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("not checked"), "{stdout}");
+    assert!(
+        stderr.contains(
+            "error[OrderCanFinish]: property OrderCanFinish is violated: from the counterexample's last state no path reaches its goal for Order#1"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("  confined: from there Order#1 stays within 34 reachable states, where its goal never holds:\n    status = pending\n    status = on_hold\n"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("Error: verification failed: 1 can_reach error(s) from BFS on their cones"),
+        "{stderr}"
+    );
+    let met = repo().join("samples/formal-verification/can_reach_met.rdra");
+    let output = verify(&repo(), &tmp, &[met.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(0), "{stdout}");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l == "can_reach (BFS on 1 cone): 1 checked, 0 violated"),
         "{stdout}"
     );
     let _ = std::fs::remove_dir_all(&tmp);

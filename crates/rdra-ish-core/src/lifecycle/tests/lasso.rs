@@ -96,7 +96,7 @@ fn verdict(d: Option<StateDiag>) -> Option<Verdict> {
             kind,
             instance.iter().map(Inst::to_string).collect(),
             witness,
-            lasso,
+            lasso.expect("a temporal counterexample is a lasso"),
             trace.steps.iter().map(|s| s.action.clone()).collect(),
         )),
         other => panic!("not a property violation: {other:?}"),
@@ -291,5 +291,90 @@ fn a_back_edge_no_move_takes_does_not_replay() {
         ts.replay_lasso(states, &acts, Loop::Back { to: 3 }),
         Err(ReplayError::Length),
         "a back edge needs its own action"
+    );
+}
+
+const PAYMENT: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(draft, paid) @default(draft) }
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Pay "支払"
+usecase Capture "確定"
+transitions(Pay, Order.status, draft -> paid)
+transitions(Capture, Payment.status, pending -> captured)
+property CapturedPaid
+  always(not (Payment.status == captured) or (Order.status == paid)).along(Payment, Order)
+property CapturedPaidAnyOrder
+  always(not (Payment.status == captured) or (Order.status == paid))
+property CapturedLeadsToPaid
+  leads_to(Payment.status == captured, Order.status == paid).along(Payment, Order)
+property CapturedLeadsToAnyPaid
+  leads_to(Payment.status == captured, Order.status == paid)
+"#;
+
+const CAPTURED_PAID: usize = 0;
+const CAPTURED_PAID_ANY_ORDER: usize = 1;
+const CAPTURED_LEADS_TO_PAID: usize = 2;
+const CAPTURED_LEADS_TO_ANY_PAID: usize = 3;
+
+/// `steps` from the initial state where both payments belong to Order#1, then nothing
+/// changes.
+fn both_under_first_order(
+    ts: &TransitionSystem,
+    steps: &[(&str, u8)],
+) -> crate::lifecycle::LassoReplay {
+    let payment = ts
+        .entity_ids()
+        .find(|e| ts.entity(*e).id == "Payment")
+        .unwrap();
+    let owner = ts.entity(payment).owners[0];
+    let domain = ts.var(owner).domain.clone();
+    let mut states = vec![ts
+        .initial_states()
+        .into_iter()
+        .find(|s| (0..2).all(|slot| domain.slot(s.get(ts, owner, slot)) == Some(0)))
+        .expect("an initial state puts both payments under Order#1")];
+    let mut acts = Vec::new();
+    for &(name, slot) in steps {
+        let m = ts
+            .moves(states.last().unwrap())
+            .find(|m| ts.actions()[m.act.index()].name == name && *m.params == [slot])
+            .unwrap_or_else(|| panic!("{name} [{slot}] does not run"));
+        acts.push(m.act);
+        states.push(m.next);
+    }
+    ts.replay_lasso(states, &acts, Loop::Stutter)
+        .expect("the path replays")
+}
+
+#[test]
+fn along_reads_only_the_linked_rows() {
+    let ts = TransitionSystem::build(&model_from(PAYMENT), Bounds::VERIFY, &Scope::ALL).ts;
+    // Payment#1 is captured under Order#1, which is paid; Order#2 stays a draft.
+    let l = both_under_first_order(&ts, &[("Pay", 0), ("Capture", 0)]);
+    assert_eq!(ts.explain_property(CAPTURED_PAID, &l), None);
+    assert_eq!(ts.explain_property(CAPTURED_LEADS_TO_PAID, &l), None);
+    let (_, instance, _, _, _) = verdict(ts.explain_property(CAPTURED_PAID_ANY_ORDER, &l)).unwrap();
+    assert_eq!(instance, names(&["Payment#1", "Order#2"]));
+    let (_, instance, _, _, _) =
+        verdict(ts.explain_property(CAPTURED_LEADS_TO_ANY_PAID, &l)).unwrap();
+    assert_eq!(instance, names(&["Payment#1", "Order#2"]));
+}
+
+#[test]
+fn along_still_fails_on_a_linked_pair() {
+    let ts = TransitionSystem::build(&model_from(PAYMENT), Bounds::VERIFY, &Scope::ALL).ts;
+    // Payment#1 is captured and its order, Order#1, never pays.
+    let l = both_under_first_order(&ts, &[("Pay", 1), ("Capture", 0)]);
+    let (kind, instance, witness, _, _) = verdict(ts.explain_property(CAPTURED_PAID, &l)).unwrap();
+    assert_eq!(
+        (kind, instance, witness),
+        (LtlKind::Always, names(&["Payment#1", "Order#1"]), 2)
+    );
+    let (kind, instance, _, _, _) =
+        verdict(ts.explain_property(CAPTURED_LEADS_TO_PAID, &l)).unwrap();
+    assert_eq!(
+        (kind, instance),
+        (LtlKind::LeadsTo, names(&["Payment#1", "Order#1"]))
     );
 }

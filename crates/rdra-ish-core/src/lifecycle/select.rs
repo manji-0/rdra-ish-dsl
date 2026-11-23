@@ -248,6 +248,11 @@ impl TransitionSystem {
                 }
                 entities
             }
+            Target::Reach(i) => self.reach[i]
+                .binders
+                .iter()
+                .map(|e| self.entity(*e).key)
+                .collect(),
         }
     }
 
@@ -334,6 +339,7 @@ impl NotChecked<'_> {
                     let anchor = self.ts.after_asserts()[i].steps[0].act;
                     format!("after({})", self.ts.actions()[anchor.index()].name)
                 }
+                Target::Reach(i) => self.ts.reach_properties()[i].name.clone(),
             })
             .collect()
     }

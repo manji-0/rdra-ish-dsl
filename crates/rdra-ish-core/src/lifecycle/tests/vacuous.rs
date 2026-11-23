@@ -310,3 +310,31 @@ property TwoLead "両方"
         "{found:?}"
     );
 }
+
+/// The forms BFS decides say something only where their condition holds: what a `stable`
+/// keeps, and what a `precedes` asks a predecessor for. No order is ever void, so both hold
+/// vacuously; the same forms over a reached state do not.
+#[test]
+fn a_stable_or_precedes_over_a_state_no_row_reaches_holds_vacuously() {
+    let src = format!(
+        "{SHIPPING}property VoidStays \"無効は無効\"\n  stable(Order.status == void)\n\
+         property PaidFirst \"支払が先\"\n  precedes(Order.status == paid, Order.status == void)\n\
+         property PaidStays \"支払は支払\"\n  stable(Order.status == paid)\n\
+         property OpenFirst \"未払が先\"\n  precedes(Order.status == open, Order.status == paid)\n"
+    );
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
+    let found = texts(&ts.vacuous_properties(Caps::STATES));
+    assert_eq!(
+        found,
+        BTreeMap::from([
+            (
+                "VoidStays".to_string(),
+                vec!["its stable condition holds in no reachable state".to_string()]
+            ),
+            (
+                "PaidFirst".to_string(),
+                vec!["its precedes second condition holds in no reachable state".to_string()]
+            ),
+        ])
+    );
+}

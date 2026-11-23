@@ -626,7 +626,7 @@ pub enum RdraError {
         system: String,
     },
 
-    #[error("invalid temporal property '{id}': {message}\n  hint: use always/eventually/leads_to with ==/!= or Int comparisons (<,>,<=,>=) over entity columns, combining with and / or / not (`/\\` `\\/` `~` remain aliases)")]
+    #[error("invalid temporal property '{id}': {message}\n  hint: use always/eventually/leads_to/stable/precedes, or unchanged over stored columns, with ==/!= or Int comparisons (<,>,<=,>=) over entity columns, combining with and / or / not (`/\\` `\\/` `~` remain aliases)")]
     InvalidTemporalProperty { id: String, message: String },
 
     #[error("property {property}: no single entity owns column {column}\n  hint: name the entity, as in `Order.{column}`, and check the column is declared on it")]
@@ -655,8 +655,11 @@ pub enum RdraError {
     #[error("`.fair(...)` on property '{id}' must name one or more use cases, each once, in a single `.fair`\n  hint: write `.fair(UseCaseA, UseCaseB)`; each listed use case is weakly fair per instance it acts on")]
     FairRequiresUseCases { id: String },
 
-    #[error("property '{id}' is `always(...)`, a safety property, and `.fair(...)` cannot change its verdict\n  hint: drop `.fair(...)`; fairness only rules out runs that starve a use case, which matters for `eventually` and `leads_to`")]
-    FairOnSafetyProperty { id: String },
+    #[error("property '{id}' is `{form}(...)`, a safety property, and `.fair(...)` cannot change its verdict\n  hint: drop `.fair(...)`; fairness only rules out runs that starve a use case, which matters for `eventually` and `leads_to`")]
+    FairOnSafetyProperty { id: String, form: String },
+
+    #[error("property '{id}' is `can_reach(...)`, which asks whether some path reaches its goal, and `.fair(...)` cannot change its verdict\n  hint: drop `.fair(...)`; reachability needs no fairness, which only rules out runs, and `can_reach` asks whether one exists")]
+    FairOnReachProperty { id: String },
 
     #[error("duplicate temporal property id '{id}'\n  hint: each `property` declaration must have a unique id")]
     DuplicateProperty { id: String },
