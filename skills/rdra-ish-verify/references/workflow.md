@@ -62,7 +62,7 @@ rdra-ish export samples/order.rdra --kind tla -o /tmp/rdra-tla   # the whole-mod
   `[verify]` in `rdra.toml`; default `16GiB`).
 - A finding listed as `not decided: the <E> cone stopped at the memory limit (...)` means
   the cone's states outgrew BFS's share of that limit (all of it, half under `--with-tlc`). Raise `--memory`, or narrow the cone
-  as for the state cap; `check` reports the same stop as `MemoryCapReached_<E>` (default
+  as for the state cap (`verify --max-states <N>` raises it); `check` reports the same stop as `MemoryCapReached_<E>` (default
   limit `4GiB`, `memory` under `[check]`).
 - `verify` explores the cones side by side on the machine's cores
   (at most 8). `RDRA_JOBS=2` lowers that when memory is short; the result does not change.
@@ -85,7 +85,7 @@ two actions, and `Cancel` runs between them:
 
 ```text
 $ rdra-ish verify samples/cross_order_payment_split.rdra
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 16GiB; entities a check does not read are unbounded
 cones: 1 for 1 invariant(s) and 0 after-assert(s)
 temporal properties: none
 state models (BFS on 2 entity cones): 2 state models, 5 states witnessed, 0 deadlocks, 0 use cases that never run
@@ -134,7 +134,7 @@ instead of adding a transition out:
 
 ```text
 $ rdra-ish verify samples/deadlock.rdra
-bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 8388608 states per BFS cone; entities a check does not read are unbounded
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 16GiB; entities a check does not read are unbounded
 cones: 0 for 0 invariant(s) and 0 after-assert(s)
 temporal properties: none
 error[Deadlock_Order_status_paid]: deadlock: Order#1 stays at status = paid forever, and paid is not an end state

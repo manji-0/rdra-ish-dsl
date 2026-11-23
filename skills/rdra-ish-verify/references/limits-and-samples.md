@@ -60,9 +60,9 @@
   its `.fair` use cases, where `WF_vars(Next)` does not restrict; a property without `.fair`
   reaches the whole model unless its cone holds every written var, and a whole-model run of
   patent-ops, food-permit-ops, or insurance-claim-ops at two instances stops at
-  `--temporal-budget` or at the state cap as not decided.
+  `--temporal-budget` or at the state cap (`--max-states`) as not decided.
 - **State models**: witnesses, deadlocks, and use cases that never run come from BFS on
-  each entity's cone, at `verify`'s bounds (capped at 8,388,608 states per cone).
+  each entity's cone, at `verify`'s bounds (no state cap; `--memory` stops a cone, `--max-states <N>` sets one, `--max-patterns <N>` the 256 patterns).
   TLC's own `CHECK_DEADLOCK` stays `FALSE`: every bounded model ends with no enabled
   action, and TLC cannot see one instance stuck while others keep moving. `export --kind
   tla` writes the same cones as `StateModel_<E>.tla` with `Deadlock_` and `Witness_`

@@ -33,6 +33,16 @@
 
 ### Added
 
+- `verify --max-states <N>` and `--max-patterns <N>` raise the exploration caps that were
+  fixed: `--max-states` is the state cap of every BFS run `verify` makes (entity, safety, and
+  property cones, and the whole-model run), `--max-patterns` the patterns per entity (default
+  still 256). Without `--max-states`, `verify` has no state cap: the 8,388,608 per cone and
+  2,097,152 for the whole model are gone, and `--memory` (and `--temporal-budget` for the
+  whole-model run) stops a run as `not decided`. The `bounds:` line says `no state cap per
+  BFS cone, memory <limit>`, or the cap given, and the hints name the flag. Under
+  `--with-tlc` the whole-model TLC run keeps its 2,097,152 cap unless `--max-states` is
+  given. Not settable in `rdra.toml`; `check` and `states` are unchanged.
+
 - `verify --with-tlc` runs TLC beside the native checker as a second opinion and fails the
   run when the two disagree on a check; a check one engine leaves `not decided` is no
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py

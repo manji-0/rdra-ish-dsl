@@ -4,7 +4,7 @@
 //! explorer (`bfs_cones`), `stable`, `unchanged`, and `precedes` on their cones
 //! (`TransitionSystem::decide_property`), and `always`, `eventually`, and `leads_to` by the
 //! runs `property_cone` defines (`native_property`), the whole-model run included
-//! (`native_wholes`), under `--temporal-budget` and `WHOLE_MODEL_STATE_CAP`.
+//! (`native_wholes`), under `--temporal-budget` and `WHOLE_MODEL_STATE_CAP` (under TLC, or `--max-states`).
 //!
 //! A cone (`TransitionSystem::target_cone`) is closed: its restricted system reaches exactly
 //! the projection of the whole system's states, so a safety verdict on the cone is the
@@ -58,10 +58,29 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-/// Distinct states a whole-model temporal run may reach before it is stopped, natively and
-/// under TLC. Separate from `Caps::VERIFY`, the BFS cap per cone: the run's memory and time
-/// grow with this one, and `--temporal-budget` bounds only the time.
-const WHOLE_MODEL_STATE_CAP: u64 = 1 << 21;
+/// Distinct states a whole-model temporal run under TLC may reach before it is stopped,
+/// unless `--max-states` replaces it. TLC's heap is not `--memory`'s pool, so it needs a bound;
+/// the native runs have none by default, and the memory limit and `--temporal-budget` stop them.
+const WHOLE_MODEL_STATE_CAP: usize = 1 << 21;
+
+/// What a whole-model run gets: `--temporal-budget` seconds, and a state cap.
+#[derive(Clone, Copy)]
+pub(super) struct WholeRun {
+    pub(super) budget: Duration,
+    /// `--max-states`; `None`: no cap natively, `WHOLE_MODEL_STATE_CAP` under TLC.
+    pub(super) states: Option<usize>,
+}
+
+impl WholeRun {
+    /// `caps` for a run that starts now: this cap on states, and the time budget from now.
+    pub(super) fn caps(self, caps: Caps) -> Caps {
+        Caps {
+            states: self.states.unwrap_or(usize::MAX),
+            ..caps
+        }
+        .until(Instant::now() + self.budget)
+    }
+}
 
 /// `--with-tlc`: TLC runs beside the native checker.
 pub struct WithTlc {
@@ -74,6 +93,11 @@ pub struct WithTlc {
 pub struct Budget {
     /// Seconds a temporal property's whole-model run gets.
     pub temporal: Duration,
+    /// `--max-patterns`; default `Caps::VERIFY`'s.
+    pub max_patterns: Option<usize>,
+    /// `--max-states`: the state cap of every BFS run, the whole-model one and TLC's included.
+    /// Without it BFS has no state cap; TLC's whole-model run keeps `WHOLE_MODEL_STATE_CAP`.
+    pub max_states: Option<usize>,
     /// `--deny-undecided`: an undecided finding is an error, not a warning.
     pub deny_undecided: bool,
     /// `--prove`: z3 tries each state rule for any number of rows.
@@ -99,7 +123,9 @@ pub fn run(
     (instance_count, int_range_max): (u32, u32),
     scope: &Scope,
     Budget {
-        temporal: budget,
+        temporal: whole_time,
+        max_patterns,
+        max_states,
         deny_undecided,
         prove,
         memory,
@@ -140,11 +166,20 @@ pub fn run(
     } else {
         format!("{}; BFS has {} of it", Budgeted::Verify.raise(), memory.bfs)
     };
-    let caps = Caps::VERIFY.charged_to(MemoryPool::share_of(
+    // No `--max-states`: no state cap, and the memory limit stops a cone.
+    let caps = Caps::new(
+        max_patterns.unwrap_or(Caps::VERIFY.patterns),
+        max_states.unwrap_or(usize::MAX),
+    )
+    .charged_to(MemoryPool::share_of(
         memory.limit,
         memory.bfs,
         Box::leak(raise.into_boxed_str()),
     ));
+    let budget = WholeRun {
+        budget: whole_time,
+        states: max_states,
+    };
     let mut jobs = cone_jobs(&ts, &names, &targets, &mut modules, caps);
     let cones = jobs.len();
     let line = print_plan(
@@ -152,9 +187,9 @@ pub fn run(
         &ts,
         scope,
         &selection,
-        bounds,
+        (bounds, caps),
         (cones, temporal, with_tlc.is_some()),
-        budget,
+        budget.budget,
     );
     let mut whole_modules = Vec::new();
     if temporal {
@@ -350,11 +385,4 @@ fn worst(outcomes: impl IntoIterator<Item = Outcome>) -> Outcome {
         (Outcome::ToolError, _) | (_, Outcome::ToolError) => Outcome::ToolError,
         _ => Outcome::Ok,
     })
-}
-
-/// Caps for a whole-model run that starts now: `WHOLE_MODEL_STATE_CAP` states, and the time
-/// budget from now.
-fn whole_caps(caps: Caps, budget: Duration) -> Caps {
-    let states = usize::try_from(WHOLE_MODEL_STATE_CAP).expect("the cap fits in usize");
-    Caps { states, ..caps }.until(Instant::now() + budget)
 }
