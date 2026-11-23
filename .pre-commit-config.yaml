@@ -1,3 +1,9 @@
+# `pre-commit install` installs both hooks: fmt and clippy on each commit, the test
+# suite once per push. The tests run inside `nix develop`, so the Go and Java the codegen
+# and TLC tests call are the flake's.
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -28,7 +34,8 @@ repos:
 
       - id: cargo-test
         name: cargo test
-        entry: cargo test --all
+        entry: nix develop --command cargo test --all
         language: system
         pass_filenames: false
         types: [rust]
+        stages: [pre-push]

@@ -192,6 +192,12 @@ nix build            # builds rdra-ish and rdra-ish-lsp into ./result
 
 CI runs every step inside the same `nix develop` shell.
 
+`pre-commit install` sets up two hooks. Each commit runs the whitespace checks,
+`cargo fmt`, and `cargo clippy`. Each push runs `cargo test --all` inside
+`nix develop`, so the codegen and TLC tests use the flake's Go and Java. A clone that
+installed the hooks before this change runs `pre-commit install` once more to add the
+push hook.
+
 The files in `samples/formal-verification/` are symlinks into
 `skills/rdra-ish-verify/samples/`. On Windows, clone with
 `git clone -c core.symlinks=true` (Developer Mode or an elevated shell), or Git writes
