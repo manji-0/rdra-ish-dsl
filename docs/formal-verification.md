@@ -897,9 +897,9 @@ rules and lemmas that is inductive together (the Houdini algorithm):
   and one column of each), and the pairs of patterns two children of one parent take. The
   pairs of one column of each are many on a model with many columns, so they join only
   when a rule stays unproved without them, and the proof runs once more. Each mining run
-  stops at 50,000 states. A cone that passes it at the run's bounds usually finishes at one
-  instance, so a proof does not get weaker as the run's bounds grow. A lemma only the
-  one-instance run offers prints with `(mined at 1 instance per entity)`.
+  stops at 50,000 states. A cone that passes this cap at the run's bounds usually finishes at
+  one instance, so mining there as well keeps the candidates a one-instance proof uses. A
+  lemma that only the one-instance run offers prints with `(mined at 1 instance per entity)`.
 
 A lemma is only a guess until it survives the same checks, so a capped exploration costs
 proofs, not soundness. The lemmas a proof kept print as `lemma:` lines.
