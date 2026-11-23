@@ -38,6 +38,7 @@ fn verify(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(cwd)
         .env("TMPDIR", tmpdir)
+        .env_remove("RDRA_ISH_NATIVE")
         .arg("verify")
         .args(args)
         .output()
@@ -1220,4 +1221,207 @@ fn verify_warns_of_checks_that_hold_vacuously() {
     ] {
         assert!(stderr.contains(warning), "missing {warning}\n{stderr}");
     }
+}
+
+/// Runs `verify` under the test hook `RDRA_ISH_NATIVE`, with no `tlc` on PATH and no jar, so a
+/// run that passes or fails here started no TLC.
+fn verify_native(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
+    let empty = tmpdir.join("no-tools");
+    std::fs::create_dir_all(&empty).unwrap();
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(cwd)
+        .env("TMPDIR", tmpdir)
+        .env("RDRA_ISH_NATIVE", "1")
+        .env("PATH", &empty)
+        .env_remove("RDRA_TLC_JAR")
+        .arg("verify")
+        .args(args)
+        .output()
+        .expect("rdra-ish runs")
+}
+
+/// The names of the `error[<name>]:` findings, sorted.
+fn error_names(stderr: &str) -> Vec<String> {
+    let mut names: Vec<String> = stderr
+        .lines()
+        .filter_map(|l| l.strip_prefix("error[")?.split_once("]:"))
+        .map(|(name, _)| name.to_string())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Capture moves a payment without paying its order, and nothing sets `paid_at`: the rule on
+/// shipped orders, the assertion after Pay, and both `always` properties fail, the one with
+/// `.along` on a payment beside its own order.
+const SAFETY_VIOLATED: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(draft, paid, shipped) @default(draft)  paid_at: DateTime @null }
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Capture "支払確定"
+transitions(Pay, Order.status, draft -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+transitions(Capture, Payment.status, pending -> captured)
+invariant(Order).when(status == shipped).then(paid_at == present)
+after(Pay).assert(Order.paid_at == present)
+property CapturedPaid always((not (Payment.status == captured)) or (Order.status != draft)).along(Payment, Order)
+property CapturedPaidAnyOrder always((not (Payment.status == captured)) or (Order.status != draft))
+"#;
+
+/// `SAFETY_VIOLATED` with Pay capturing the payment of the order it pays and setting
+/// `paid_at`, and a way out of draft and pending for the rows Pay leaves: every check holds.
+const SAFETY_HELD: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(draft, paid, shipped, cancelled) @default(draft)  paid_at: DateTime @null }
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured, voided) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Cancel "取消"
+usecase Void "無効"
+transitions(Cancel, Order.status, draft -> cancelled)
+transitions(Void, Payment.status, pending -> voided)
+transitions(Pay, Order.status, draft -> paid)
+transitions(Pay, Payment.status, pending -> captured)
+sets(Pay, Order.paid_at == present)
+transitions(Ship, Order.status, paid -> shipped)
+invariant(Order).when(status == shipped).then(paid_at == present)
+after(Pay).assert(Order.paid_at == present)
+property CapturedPaid always((not (Payment.status == captured)) or (Order.status != draft)).along(Payment, Order)
+"#;
+
+/// Under `RDRA_ISH_NATIVE` BFS decides a rule, an `after` assertion, and `always` with and
+/// without `.along`, with no TLC on PATH: the run fails with the error names the TLC run
+/// reports, each with BFS's trace, and passes where they hold.
+#[test]
+fn a_native_verify_decides_the_safety_checks_without_tlc() {
+    let tmp = scratch("verify_cli_native_safety");
+    let model = tmp.join("violated.rdra");
+    std::fs::write(&model, SAFETY_VIOLATED).unwrap();
+    let output = verify_native(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stdout}{stderr}");
+    let names = error_names(&stderr);
+    for name in [
+        "Inv_Order_0",
+        "AfterAssert_Pay_0",
+        "CapturedPaid",
+        "CapturedPaidAnyOrder",
+    ] {
+        assert!(
+            names.iter().any(|n| n == name),
+            "{name}: {names:?}\n{stderr}"
+        );
+    }
+    assert!(!stdout.contains("tlc_result:"), "{stdout}");
+    assert!(!stderr.contains("from TLC"), "{stderr}");
+    assert!(
+        stdout.lines().any(|l| l.starts_with("Cone_Inv_Order_0 [")
+            && l.contains("]: counterexample (")
+            && l.ends_with(" states, BFS)")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("property CapturedPaid (BFS on its cone): violated\n"),
+        "{stdout}"
+    );
+    // The shortest trace: Capture moves the payment of a draft order in one step.
+    assert!(
+        stderr.contains("error[CapturedPaid]: property CapturedPaid is violated: its always condition is false for Payment#1, Order#1 after step 1\n"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("verification failed: 2 property violation(s) from BFS on the property cones and 2 invariant or after-assert violation(s) from BFS on their cones"),
+        "{stderr}"
+    );
+    if have_tlc() {
+        let tlc = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+        let tlc_stderr = String::from_utf8_lossy(&tlc.stderr);
+        assert_eq!(tlc.status.code(), Some(1), "{tlc_stderr}");
+        assert_eq!(error_names(&tlc_stderr), names, "{tlc_stderr}");
+    }
+
+    let model = tmp.join("held.rdra");
+    std::fs::write(&model, SAFETY_HELD).unwrap();
+    let output = verify_native(&repo(), &tmp, &[model.to_str().unwrap()]);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    assert_eq!(error_names(&stderr), Vec::<String>::new(), "{stderr}");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.starts_with("Cone_Inv_Order_0 [") && l.contains("]: ok (")),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("property CapturedPaid (BFS on its cone): ok\n"),
+        "{stdout}"
+    );
+    if have_tlc() {
+        let tlc = verify(&repo(), &tmp, &[model.to_str().unwrap()]);
+        assert_eq!(
+            tlc.status.code(),
+            Some(0),
+            "{}",
+            String::from_utf8_lossy(&tlc.stderr)
+        );
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A `.lemma()` rule only helps `--prove`, so the native run explores no cone for it either,
+/// and still decides the other rule's cone. That cone's system holds the lemma, so it is
+/// checked there, as TLC checks every rule of the module it runs.
+#[test]
+fn a_native_verify_runs_no_cone_for_a_lemma() {
+    let tmp = scratch("verify_cli_native_lemma");
+    let model = tmp.join("m.rdra");
+    std::fs::write(
+        &model,
+        r#"entity Order "注文" {
+  id: Int @pk
+  status: Enum(placed, shipped) @default(placed)
+}
+
+entity Shipment "出荷" {
+  id: Int @pk
+}
+
+usecase Place "注文確定"
+usecase Ship "出荷"
+
+creates(Place, Order)
+creates(Ship, Shipment)
+updates(Ship, Order)
+transitions(Ship, Order.status, placed -> shipped)
+relate(Shipment, Order, 1:1)
+
+invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").lemma()
+"#,
+    )
+    .unwrap();
+    let specs = tmp.join("specs");
+    let output = verify_native(
+        &repo(),
+        &tmp,
+        &[model.to_str().unwrap(), "-o", specs.to_str().unwrap()],
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0), "{stdout}{stderr}");
+    assert!(stdout.contains("\ncones: 1 for 2 invariant(s)"), "{stdout}");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.starts_with("Cone_Unique_Shipment_Order [") && l.contains("]: ok (")),
+        "{stdout}"
+    );
+    assert!(!stdout.contains("Cone_Quantifier_Order_0"), "{stdout}");
+    let cones = std::fs::read_to_string(specs.join("cones.txt")).unwrap();
+    assert!(!cones.contains("Cone_Quantifier_Order_0"), "{cones}");
+    let _ = std::fs::remove_dir_all(&tmp);
 }

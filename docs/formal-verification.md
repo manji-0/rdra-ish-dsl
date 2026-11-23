@@ -1273,6 +1273,10 @@ Name         = [A-Za-z0-9_]+
 - `tlc=` must equal the `tlc_result:` line. A `verify` expectation without `tlc=` asserts
   that no `tlc_result:` line is printed: the run stops before TLC, as at a build error.
   `tlc=counterexample` also needs TLC's own `violated: Error: ... violated.` line.
+- With `RDRA_ISH_NATIVE` set, a test hook and not a setting, `verify` decides every
+  invariant, `after` assertion, and `always` by BFS, and TLC runs only `eventually` and
+  `leads_to`. The script then does not compare `tlc=` and compares the exit status and the
+  names only. CI runs the samples once more this way, until BFS decides by default.
 - `fail` needs at least one name. The names must equal the set of names of the run's
   errors, not just be part of it. Every lifecycle error prints as `error[<Name>]: ...`, and
   the script reads the name from there and from TLC's `violated:` line. A name is the
