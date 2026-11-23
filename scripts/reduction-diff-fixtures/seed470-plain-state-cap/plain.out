@@ -1,0 +1,24 @@
+warning[UnjoinedWrite_S_E2_E3]: E2: S writes E2 and E3, and no row it writes joins them, so one run may write E2 and E3 rows that belong to different E1 and E0 rows; write E1 and E0 in S (`updates(S, E1)`, `updates(S, E0)`) to write joined rows, or mark a write meant as a row of its own with `.apart()`
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 500000 states per BFS cone; entities a check does not read are unbounded
+cones: 2 for 2 invariant(s) and 0 after-assert(s)
+temporal properties: 1, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
+not checked: 8 findings not decided
+  whether some E2 can get stuck at status = s0 is not decided: the E2 cone stopped at the state cap (500000 states)
+  whether some E2 can get stuck at status = s1 is not decided: the E2 cone stopped at the state cap (500000 states)
+  whether some E3 can get stuck at status = s0 is not decided: the E3 cone stopped at the state cap (500000 states)
+  whether some E3 can get stuck at status = s1 is not decided: the E3 cone stopped at the state cap (500000 states)
+  state E4.status = s3 is not decided: the E4 cone stopped at the state cap (500000 states)
+  whether some E4 can get stuck at status = s0 is not decided: the E4 cone stopped at the state cap (500000 states)
+  whether some E4 can get stuck at status = s1 is not decided: the E4 cone stopped at the state cap (500000 states)
+  whether some E4 can get stuck at status = s2 is not decided: the E4 cone stopped at the state cap (500000 states)
+warning[Runs_T1_1]: use case T1_1 can never run: in no reachable state do its guards hold
+  declared: use case T1_1                                           m.rdra:52:1
+  guard: condition C1                                               m.rdra:76:1
+  guard: an arm of E1.status whose guard holds (s0 -> s1 when C0)   m.rdra:74:1
+state models (BFS on 5 entity cones): 5 state models, 15 states witnessed, 0 deadlocks, 1 use case that never runs
+wrote 4 specs and out/cones.txt
+Cone_Forbidden_E1_0 [Forbidden_E1_0]: ok (1638 states)
+Cone_MultiForbidden_E1_0 [Forbidden_E1_0, MultiForbidden_E1_0]: not decided (500000 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)
+Cone_P0 [P0]: not decided (500000 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)
+result: not decided
+Error: verification incomplete: 10 findings a cone stopped at the state cap or the memory limit left undecided (--deny-undecided)

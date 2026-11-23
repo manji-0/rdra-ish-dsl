@@ -61,6 +61,8 @@ jobs:
         timeout-minutes: 20
       - name: A reduced cone decides what its cone decides on the domain samples
         run: cargo test --release -p rdra-ish-core --lib reduced_domain_cones_decide_what_the_cones_decide
+      - name: The reduced-unreduced comparison gets each saved output pair right
+        run: python3 -I scripts/reduction-diff.py selfcheck
       - name: Reduced and unreduced verify agree on random models, and TLC agrees with both
         # Quick seeds of a local sweep: reduced cones, timers, chooses, split use cases and
         # 3 instances among them; 78 to 127 raise events and reduce a cone whose

@@ -1,0 +1,42 @@
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); no state cap per BFS cone, memory 12GiB; entities a check does not read are unbounded
+cones: 2 for 2 invariant(s) and 0 after-assert(s)
+temporal properties: 1, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
+  P0 assumes weak fairness per instance on T1_1
+error[Deadlock_E2_status_s0]: deadlock: E2#2 stays at status = s0 forever, and s0 is not an end state
+  leaves s0: T2_0 (s0 -> s1)                                                            m.rdra:89:1
+    guard: condition C5                                                                 m.rdra:91:1
+  leaves s0: T2_2 (s0 -> s1)                                                            m.rdra:98:1
+    guard: an arm of E2.status whose guard holds (s0 -> s1 when C7, s0 -> s1 when C8)   m.rdra:98:1
+  reached by (6 steps):
+    1. New0 [E0#1]                                       m.rdra:35:1
+         + E0#1 (status=s0, due=1)
+    2. New1 [E1#1, E0#1]                                 m.rdra:37:1
+         + E1#1 (status=s0, kind=a, owner E0=E0#1)
+    3. New2 [E2#1, E1#1]                                 m.rdra:39:1
+         + E2#1 (status=s0, flag=false, owner E1=E1#1)
+    4. New2 [E2#2, E1#1]                                 m.rdra:39:1
+         + E2#2 (status=s0, flag=false, owner E1=E1#1)
+    5. New3 [E3#1, E2#1]                                 m.rdra:41:1
+         + E3#1 (status=s0, due=0, owner E2=E2#1)
+    6. New3 [E3#2, E2#1]                                 m.rdra:41:1
+         + E3#2 (status=s0, due=0, owner E2=E2#1)
+state models (BFS on 4 entity cones): 4 state models, 11 states witnessed, 1 deadlock, 0 use cases that never run
+wrote 4 specs and out/cones.txt
+Cone_Forbidden_E0_0 [Forbidden_E0_0]: counterexample (122334 states)
+error[Forbidden_E0_0]: invariant Forbidden_E0_0 is violated: forbidden state is reachable: status=s0 AND due > now witnessed by due=1, status=s0
+  rule: m.rdra:83:1
+  counterexample (1 step):
+    1. New0 [E0#1]                   m.rdra:35:1
+         + E0#1 (status=s0, due=1)
+Cone_Forbidden_E0_1 [Forbidden_E0_0, Forbidden_E0_1]: counterexample (283824 states)
+error[Forbidden_E0_1]: invariant Forbidden_E0_1 is violated: forbidden state is reachable: status=s1 AND flag=true witnessed by due=1, flag=true, status=s1
+  rule: m.rdra:121:1
+  counterexample (2 steps):
+    1. New0 [E0#1]                               m.rdra:35:1
+         + E0#1 (status=s0, flag=false, due=1)
+    2. T0_1 [E0#1]                               m.rdra:45:1
+         E0#1.status: s0 -> s1                   m.rdra:68:1
+         E0#1.flag: false -> true                m.rdra:69:1
+Cone_P0 [P0]: ok (122334 states)
+result: counterexample
+Error: verification failed: 1 state-model error(s) from BFS on the entity cones and 2 invariant or after-assert violation(s)
