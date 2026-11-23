@@ -468,6 +468,8 @@ The bounds are inputs of the system, and every result states them.
 |---|---|---|
 | `states`, `check` | `--instance-count` (default 1) | `0..--int-range-max` (default 5) |
 | the generators | 1 | `0..5` |
+
+`check` and `states` also scale their default caps with the instance count; the caps below say how.
 | `export --kind tla`, `verify` | `--instance-count` (default 2) | `0..--int-range-max` (default 5) |
 
 `states` prints its bounds on stderr first:
@@ -478,8 +480,8 @@ bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check
 
 With one slot, an entity is created once, and deleting it does not free the slot.
 An entity that a target does not read has no slot limit: a use case that creates an
-audit row on every write never stops for want of a free slot. An Int literal outside `0..5` in a `sets`, a constraint, or a condition is
-`IntLiteralOutOfBounds`.
+audit row on every write never stops for want of a free slot. An Int literal outside `0..5` in a `sets`, a constraint, a condition, or the `@default`
+of a column a rule reads is `IntLiteralOutOfBounds`.
 
 ---
 
@@ -533,10 +535,17 @@ no new state appears or a cap is hit.
 
 Two caps stop a cone, and `check` and `states` take both:
 
-- `--max-patterns` (default 256) caps the distinct patterns of one entity view within a
-  cone.
-- `--max-states` (default 65,536) caps the joint states of one cone. The `bounds:` line
-  prints it.
+- `--max-patterns` caps the distinct patterns of one entity view within a cone. Default:
+  2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: 1,024 at one instance, 2^18 at two,
+  2^26 at three.
+- `--max-states` caps the joint states of one cone. The `bounds:` line prints it. Default:
+  four times the default `--max-patterns`, at least 65,536: 65,536 at one instance, 2^20
+  at two, 2^28 at three.
+
+The defaults grow with `--instance-count` because each added instance multiplies a cone's
+states. A shift past the machine's word size saturates, so a very large count has no cap
+of its own; `--memory` (4GiB by default) stops such a run, and the cone it stops is
+reported as not decided. A flag you pass always replaces its default.
 
 When a cap is hit, the view is marked `truncated` and `PatternCapReached` or
 `StateCapReached` is an error: a rule checked on a partial set is not sound. The
@@ -867,7 +876,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `DoubleModeledEnum { column, usecase }` | `DoubleModeledEnum_<E>_<usecase>_<column>` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
 | `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column that a driven comparison reads and does not drive the comparison, so the comparison keeps the truth its last `drives` gave whatever the column holds. Add a `drives` of the comparison to the use case with the truth the new value gives. |
-| `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal lies outside `0..max`. |
+| `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or an integer `@default` lies outside `0..max`. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | The `.along` of a multi-entity rule, or of an `invariant` with `.has`/`.none`, names a hop that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |

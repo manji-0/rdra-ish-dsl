@@ -145,16 +145,23 @@ impl Builder<'_> {
                 } else {
                     Domain::Int
                 };
-                let base = col
-                    .default_val
-                    .as_deref()
-                    .and_then(|d| d.parse::<i64>().ok())
-                    .and_then(|n| domain.of_number(n, self.bounds))
-                    .unwrap_or(if col.is_nullable {
-                        Value::NULL
-                    } else {
-                        Value(0)
-                    });
+                let unset = if col.is_nullable {
+                    Value::NULL
+                } else {
+                    Value(0)
+                };
+                // A default that is no integer (`"9.99"`, a date) is schema text; it starts unset.
+                let base = match col.default_val.as_deref().map(str::parse::<i64>) {
+                    Some(Ok(n)) => domain.of_number(n, self.bounds).unwrap_or_else(|| {
+                        let site = Site::bare(ModelRef::Column {
+                            entity: ek,
+                            column: col.name.clone(),
+                        });
+                        self.out_of_bounds(n, &site, ek);
+                        unset
+                    }),
+                    _ => unset,
+                };
                 (domain, base, false)
             }
             _ if col.is_nullable => {

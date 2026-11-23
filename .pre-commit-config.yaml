@@ -1,3 +1,6 @@
+# Each commit runs fmt, clippy, and the tests of the crates it touches, inside
+# `nix develop` so the codegen tests use the flake's Go. CI runs the whole workspace.
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
@@ -27,8 +30,7 @@ repos:
         types: [rust]
 
       - id: cargo-test
-        name: cargo test
-        entry: cargo test --all
+        name: cargo test (crates the commit touches)
+        entry: nix develop --command scripts/diff-test.sh
         language: system
-        pass_filenames: false
-        types: [rust]
+        files: '^(crates/.*|Cargo\.(toml|lock))$'

@@ -129,6 +129,13 @@
 
 ### Changed
 
+- The default `--max-patterns` and `--max-states` of `check` and `states` follow
+  `--instance-count`: 2^(10 + 8 * (n - 1)) patterns (1,024, 2^18, 2^26, ...) and the larger
+  of 65,536 and four times that many states (65,536, 2^20, 2^28, ...), for `n` instances.
+  A count whose shift passes the word size saturates; the 4GiB `--memory` default is what
+  stops such a run, as before. A flag you pass always wins. At one instance the state cap
+  stays 65,536 and the pattern cap rises from 256 to 1,024; the generators run at that.
+  `verify`'s caps do not change.
 - `verify` checks `always`, `eventually`, and `leads_to` natively on the graph BFS
   explores, under each property's fairness, through the same ladder of runs TLC took: the
   reduced cone, the full cone, the cone with `WF_vars(Next)`, and the whole model. A
@@ -185,6 +192,14 @@
 
 ### Fixed
 
+- An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
+  DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
+  literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column
+  used to start at 0 (or `null`) in `check`, `states`, `verify`, `--with-tlc`, `--prove`,
+  and the TLA+ export, so every engine reported violations the model does not have. A model
+  with such a default now fails `check` and stops `verify` and `export --kind tla` before
+  any engine runs; raise `--int-range-max` or lower the default. The top of the range is
+  still a valid default (#180).
 - `check`, `lint` and the LSP print the warnings for an API or an entity in several
   systems, an entity owned by several systems or without an API of its owner, and a
   permission no actor can reach in id order. They came in the order of a hash map, which

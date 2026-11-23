@@ -235,7 +235,7 @@ fn verify_diags(model: &SemanticModel) -> Vec<StateDiag> {
     let built = TransitionSystem::build(model, Bounds::VERIFY, &Scope::ALL);
     let run = built.ts.explore_targets(
         &built.selection.targets,
-        Caps::new(Caps::DEFAULT_PATTERNS, 1_000_000),
+        Caps::new(Caps::STATES.patterns, 1_000_000),
     );
     let views = run.entity_views(&built.ts, model, &built.diags);
     built

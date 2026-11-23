@@ -168,13 +168,15 @@ pub(crate) enum Commands {
         #[arg(long)]
         deny_deprecated: bool,
         /// Cap on each entity's distinct patterns within one target cone; past it is a
-        /// `PatternCapReached` error
-        #[arg(long, default_value_t = Caps::DEFAULT_PATTERNS)]
-        max_patterns: usize,
+        /// `PatternCapReached` error. Default: 2^(10 + 8 * (n - 1)) for n = --instance-count
+        /// (1024 at one instance, 262144 at two)
+        #[arg(long)]
+        max_patterns: Option<usize>,
         /// Cap on the joint states of each target cone; a cone past it is a
-        /// `StateCapReached` error
-        #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
-        max_states: usize,
+        /// `StateCapReached` error. Default: four times the default --max-patterns, at least
+        /// 65536 (65536 at one instance, 1048576 at two)
+        #[arg(long)]
+        max_states: Option<usize>,
         /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
         /// a cone whose states pass it stops, as at --max-states. Default: `memory` under
         /// [check] in rdra.toml, else 4GiB
@@ -293,13 +295,15 @@ pub(crate) enum Commands {
         #[arg(long, default_value = "table")]
         format: StatesFormat,
         /// Cap on each entity's distinct patterns within one target cone; past it is a
-        /// `PatternCapReached` error
-        #[arg(long, default_value_t = Caps::DEFAULT_PATTERNS)]
-        max_patterns: usize,
+        /// `PatternCapReached` error. Default: 2^(10 + 8 * (n - 1)) for n = --instance-count
+        /// (1024 at one instance, 262144 at two)
+        #[arg(long)]
+        max_patterns: Option<usize>,
         /// Cap on the joint states of each target cone; a cone past it is a
-        /// `StateCapReached` error
-        #[arg(long, default_value_t = Caps::DEFAULT_STATES)]
-        max_states: usize,
+        /// `StateCapReached` error. Default: four times the default --max-patterns, at least
+        /// 65536 (65536 at one instance, 1048576 at two)
+        #[arg(long)]
+        max_states: Option<usize>,
         /// What the run may hold in memory, such as 4GiB or 512MiB (G and GB also mean GiB);
         /// a cone whose states pass it stops, as at --max-states. Default: `memory` under
         /// [check] in rdra.toml, else 4GiB
@@ -439,6 +443,15 @@ pub(crate) struct BoundsArgs {
 }
 
 impl BoundsArgs {
+    /// The BFS caps: the defaults for `--instance-count`, each replaced by the flag given.
+    pub(crate) fn caps(&self, max_patterns: Option<usize>, max_states: Option<usize>) -> Caps {
+        let default = Caps::for_instances(self.instance_count);
+        Caps::new(
+            max_patterns.unwrap_or(default.patterns),
+            max_states.unwrap_or(default.states),
+        )
+    }
+
     pub(crate) fn bounds(&self) -> anyhow::Result<rdra_ish_core::lifecycle::Bounds> {
         crate::export::checked_bounds(self.instance_count, self.int_range_max)
     }
@@ -613,6 +626,56 @@ pub(crate) enum CsvKind {
 mod tests {
     use super::*;
     use clap::Parser;
+
+    #[test]
+    fn check_and_states_caps_follow_the_instance_count_unless_given() {
+        fn caps(args: &[&str]) -> (usize, usize) {
+            let mut argv = vec!["rdra-ish", args[0], "m.rdra"];
+            argv.extend_from_slice(&args[1..]);
+            let (bounds, max_patterns, max_states) =
+                match Cli::try_parse_from(argv).unwrap().command {
+                    Commands::Check {
+                        bounds,
+                        max_patterns,
+                        max_states,
+                        ..
+                    }
+                    | Commands::States {
+                        bounds,
+                        max_patterns,
+                        max_states,
+                        ..
+                    } => (bounds, max_patterns, max_states),
+                    _ => panic!("expected check or states"),
+                };
+            let caps = bounds.caps(max_patterns, max_states);
+            (caps.patterns, caps.states)
+        }
+        for command in ["check", "states"] {
+            assert_eq!(caps(&[command]), (1 << 10, 1 << 16));
+            assert_eq!(
+                caps(&[command, "--instance-count", "2"]),
+                (1 << 18, 1 << 20)
+            );
+            assert_eq!(
+                caps(&[command, "--instance-count", "3"]),
+                (1 << 26, 1 << 28)
+            );
+            assert_eq!(
+                caps(&[command, "--instance-count", "2", "--max-patterns", "7"]),
+                (7, 1 << 20),
+                "the states default does not follow an explicit pattern cap"
+            );
+            assert_eq!(
+                caps(&[command, "--instance-count", "2", "--max-states", "9"]),
+                (1 << 18, 9)
+            );
+            assert_eq!(
+                caps(&[command, "--instance-count", "255"]),
+                (usize::MAX, usize::MAX)
+            );
+        }
+    }
 
     #[test]
     fn parses_changed_subcommands_and_options() {

@@ -252,8 +252,8 @@ triggers(Ev2, Handle)
 "#;
     let ts = TransitionSystem::build(&model_from(src), Bounds::STATES, &Scope::ALL).ts;
     let targets = ts.targets();
-    for (states, complete) in [(6, false), (Caps::DEFAULT_STATES, true)] {
-        let x = ts.explore_targets(&targets, Caps::new(Caps::DEFAULT_PATTERNS, states));
+    for (states, complete) in [(6, false), (Caps::STATES.states, true)] {
+        let x = ts.explore_targets(&targets, Caps::new(Caps::STATES.patterns, states));
         assert_eq!(x.cone_of(targets[0]).run.complete, complete);
         let names: Vec<String> = x.verdicts().iter().map(|d| d.diag.name(&[])).collect();
         assert!(

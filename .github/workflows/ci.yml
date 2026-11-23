@@ -24,18 +24,11 @@ jobs:
       - name: clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: test
-        # The comparisons with TLC and z3 run in release in engine-equivalence, and the domain-sample
-        # reduction in formal-verify; in debug they take most of this step. `--skip` matches a
-        # part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is skipped too.
+        # scripts/diff-test.sh holds the tests this step skips: the comparisons with TLC and z3
+        # run in release in engine-equivalence, and the domain-sample reduction in formal-verify.
         # RDRA_REQUIRE_CODEGEN_TOOLS: the devShell has tsc and go, so the codegen build tests
         # may not skip a language here; portability.yml runs without them and skips.
-        run: >-
-          RDRA_REQUIRE_CODEGEN_TOOLS=1 cargo test --all --
-          --skip bfs_and_tlc_
-          --skip tlc_alone_
-          --skip a_property_cone_decides_what_the_whole_model_decides
-          --skip reduced_domain_cones_decide_what_the_cones_decide
-          --skip no_proved_rule_has_a_bounded_counterexample
+        run: RDRA_REQUIRE_CODEGEN_TOOLS=1 scripts/diff-test.sh --all
       - name: sample artifact snapshots
         run: bash scripts/check-sample-artifacts.sh
       - name: skill snippets
