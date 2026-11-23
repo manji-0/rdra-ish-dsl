@@ -190,6 +190,7 @@ kinds fail to parse, with a hint naming the replacement.
 | `invariant` (quantifier) | `(Entity).when(...).none/has(...)` | to-many quantifier over related rows (prefer `Entity.col`) |
 | `property` | `Name ["label"] always\|eventually\|leads_to(...)[.along(...)[.role(role)] \| .global()][.fair(UC, ...)]` | temporal path property, checked by `verify` only; over several entities `.along` limits it to linked rows |
 | `property` | `Name ["label"] stable(p) \| unchanged(E.col, ..)[.when(p)] \| precedes(p, q)` then `[.along(...)[.role(role)] \| .global()]` | order and stability: `p` keeps holding, the columns keep their values while `p` holds, `q` only after `p`; `verify` decides each by BFS, `check` never; no `.fair` |
+| `property` | `Name ["label"] can_reach(p)` then `[.along(...)[.role(role)] \| .global()]` | recoverability: from every reachable state each present instance can still reach `p` (it need not); `verify` decides it by BFS, `check` never; no `.fair` |
 | `after` | `(UseCase).assert(...)` | predicate on the state each run of the use case leaves, read after its last step |
 | `relate` | `(Entity, Entity, 1:1\|1:N\|N:1\|N:M)` | ER relation and generated key; see below |
 | `has_permission` | `(Actor, Permission)` | actor-side grant |
@@ -229,7 +230,7 @@ import shared.actors.{Staff as S}
   default. Add `owns(System, Entity)` only to record intentional ownership before
   CRUD APIs are complete, and review any difference from derived ownership.
 - A use case's actors are its direct performers plus the performers of every BUC that
-  contains it. So `performs(Actor, Buc)` says the actor runs every use case of the BUC,
+  contains it or whose flow has a step that `covers` it. So `performs(Actor, Buc)` says the actor runs every use case of the BUC,
   and the permission check requires each of those actors to hold each use case's
   permissions. When an actor runs only some of the use cases, write
   `performs(Actor, UseCase)` for those instead.
@@ -261,10 +262,11 @@ import shared.actors.{Staff as S}
 - A `condition` is an RDRA 条件. Without a body it is a trace link; with a `holds` body
   it guards each use case it `applies_to` (Step 6).
 - `check` evaluates every rule, quantifier, and `after(UC).assert` at one instance per
-  entity. A temporal `property`, and a rule that needs two instances, need `verify`
-  (skill `rdra-ish-verify`). A deadlock can also come from the one slot: when a way out
-  needs a row of an entity some use case creates and the slot was used up, the `check`
-  error ends with `the deadlock may clear at --instance-count 2`. Run `verify` before
+  entity. A rule that needs two instances (a 1:1 key or a `@unique` set, `Unique_*`)
+  needs `check --instance-count 2` or `verify`, and a temporal `property` needs `verify`
+  (skill `rdra-ish-verify`); `check` notes the properties it skipped. A deadlock can also
+  come from the one slot: when a way out needs a row of an entity some use case creates
+  and the slot was used up, the `check` error ends with `the deadlock may clear at --instance-count 2`. Run `verify` before
   changing the model for it.
 
 ### Common Mistakes
@@ -278,6 +280,9 @@ import shared.actors.{Staff as S}
 - Adding quotes inside `Enum(...)` values or around `sets` values (`flag == true`,
   `at == present`, not `"true"`).
 - Quoting the `@check(...)` or `@derived(...)` expression: write `@check(qty >= 1)`.
+- A `@default` that is not one of the column's values: an `Enum` takes a value as declared
+  (`@default(open)`, not `Open`) and a `Bool` takes `true` or `false`; otherwise the model
+  does not load. `@default(null)` is no value of either, even on a `@null` column: drop it.
 - Writing an inline `Enum(...)` for a value the actor picks (payment method, channel):
   `states` then reports its unchosen variants unreachable. Declare a `variation`.
 - Forgetting `module`, or using a module name that does not match the file path.
