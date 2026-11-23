@@ -7,6 +7,7 @@ mod graph;
 mod liveness;
 mod moves;
 mod properties;
+mod reach;
 mod scan;
 mod store;
 mod views;
@@ -15,6 +16,7 @@ mod violations;
 pub use graph::{Adjacency, LabelledEdges};
 pub use liveness::{LassoFault, ReducedVerdict, Spurious};
 pub use properties::PropertyVerdict;
+pub use reach::{Estimate, Layers};
 pub use store::{store_bytes, Held};
 
 use std::collections::{BTreeSet, HashSet};
@@ -111,6 +113,8 @@ pub struct ComponentRun {
     /// The store once every edge is counted, with `seen`: `peak_admitted` leaves the edges of
     /// the last expanded states out.
     pub peak: u64,
+    /// The states first reached at each depth.
+    pub layers: Layers,
     /// `kept`, charged to `Caps::memory` while the result is alive.
     _charge: Option<Charge>,
 }
@@ -281,6 +285,7 @@ struct Bfs<'t> {
     /// keeps what it holds of it.
     charge: Option<Charge>,
     peak_admitted: u64,
+    layers: Layers,
 }
 
 impl TransitionSystem {
@@ -310,6 +315,7 @@ impl TransitionSystem {
             bindings,
             violations,
             charge,
+            layers,
             ..
         } = bfs;
         let mut run = ComponentRun {
@@ -324,6 +330,7 @@ impl TransitionSystem {
             kept,
             peak_admitted,
             peak,
+            layers,
             _charge: charge,
         };
         for (at, reach) in &violations {

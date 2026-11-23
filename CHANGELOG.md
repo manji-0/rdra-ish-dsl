@@ -34,12 +34,17 @@
 ### Added
 
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
-  finishing needs: the bytes each held state took, and, from the most states the cone's
-  variables allow, the memory to finish it (`at least about 12GiB`, for the cone alone, at
-  the edges per state seen so far) with the `--memory` to give. When the bound is past
-  `1TiB`, it says so and suggests narrowing. The estimate is the store model `store_bytes`
-  of `rdra-ish-core`, which stood 2.4% to 6.7% over the bytes a run counts on the 52 sample
-  cones of a thousand states and more.
+  finishing needs: the bytes each held state took, and an estimate of the states the cone
+  reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,
+  the fall is taken to mirror the rise (`the cone probably holds about 258 states`), and
+  the message names the `--memory` for a quarter more states than that, for the cone
+  alone. On 73 sample cones stopped at a tenth to nine tenths of their states, the
+  estimates came out at 0.51 to 1.37 of the true count. While the frontier still grows, or
+  has only just peaked, the message says so and gives no estimate. Without one, it falls
+  back on the most states the cone's variables allow (`at least about 12GiB`, if all are
+  reachable) when that is no more than `1TiB`. The sizes use the store model `store_bytes`
+  of `rdra-ish-core`, which stood 2.4% to 6.7% over the bytes a run counts on the 52
+  sample cones of a thousand states and more.
 - `verify --max-states <N>` and `--max-patterns <N>` raise the exploration caps that were
   fixed: `--max-states` is the state cap of every BFS run `verify` makes (entity, safety, and
   property cones, and the whole-model run), `--max-patterns` the patterns per entity (default

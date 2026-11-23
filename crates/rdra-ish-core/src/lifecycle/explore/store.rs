@@ -9,7 +9,7 @@ use std::mem::size_of;
 use crate::lifecycle::expr::State;
 use crate::lifecycle::types::ActId;
 
-use super::{Bfs, ComponentRun, Edge};
+use super::{Bfs, ComponentRun, Edge, Layers};
 
 /// A heap block for `n` bytes: the allocator rounds up to 16.
 fn block(n: usize) -> u64 {
@@ -65,7 +65,7 @@ pub fn store_bytes(states: u64, width: usize, edges: u64) -> u64 {
 }
 
 /// What a run held when the memory limit stopped it, to say what finishing would take.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Held {
     /// The store with the state that did not fit (`Bfs::bytes_with_one_more`).
     pub bytes: u64,
@@ -76,6 +76,8 @@ pub struct Held {
     /// The most states the system can have: the product of its variables' domains. `None`
     /// when that passes `u64`.
     pub bound: Option<u64>,
+    /// The states first reached at each depth.
+    pub layers: Layers,
 }
 
 impl Held {
@@ -85,17 +87,13 @@ impl Held {
         (self.bytes + n / 2) / n
     }
 
-    /// What the store takes if the run reaches all `bound` states, at the moves per state seen
-    /// so far. Early layers have fewer moves per state than later ones, so this is a lower
-    /// bound on that part. `None` when no bound is known.
-    pub fn bytes_to_finish(&self, states: usize) -> Option<u64> {
-        let n = self.bound?.max(states as u64);
-        let edges = (u128::from(self.edges) * u128::from(n)).div_ceil((states as u128).max(1));
-        Some(store_bytes(
-            n,
-            self.width,
-            u64::try_from(edges).unwrap_or(u64::MAX),
-        ))
+    /// What the store takes once the run holds `states` states, at the moves per expanded
+    /// state seen so far. Early layers have fewer moves per state than later ones, so this
+    /// is low on that part.
+    pub fn bytes_for(&self, states: u64) -> u64 {
+        let expanded = self.layers.expanded_states().max(1);
+        let edges = (u128::from(self.edges) * u128::from(states)).div_ceil(u128::from(expanded));
+        store_bytes(states, self.width, u64::try_from(edges).unwrap_or(u64::MAX))
     }
 }
 
@@ -116,6 +114,7 @@ impl Bfs<'_> {
             width: self.ts.width,
             edges: self.edges.len() as u64,
             bound,
+            layers: self.layers.clone(),
         }
     }
 
@@ -138,6 +137,7 @@ impl Bfs<'_> {
             + vec_bytes::<Option<u32>>(&self.parents, more)
             + vec_bytes::<Edge>(&self.edges, 0)
             + self.bindings.bytes
+            + self.layers.bytes()
     }
 }
 
