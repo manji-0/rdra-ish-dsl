@@ -570,6 +570,25 @@ fn multi_rule_unscoped_names_the_along_the_keys_give() {
     assert!(invariant[0].0.starts_with("invariant on "), "{invariant:?}");
 }
 
+/// A property over two related entities with neither `.along` nor `.global()` is warned as a
+/// rule is, and either chain silences it (#165).
+#[test]
+fn multi_rule_unscoped_covers_a_property() {
+    let formula = "always(not (Cert.status == used) or (Account.status == allocated))";
+    assert_eq!(
+        unscoped(&format!("property P {formula}")),
+        [(
+            "property on Cert, Account has no `.along(...)`, so it holds over every combination of their rows, related or not; `verify` reports a pair of unrelated rows as a counterexample".to_string(),
+            "add `.along(Cert, Assignment, Account)` to hold it over related rows only, or `.global()` if every combination is meant".to_string()
+        )]
+    );
+    for chain in [".along(Cert, Assignment, Account)", ".global()"] {
+        let scoped = unscoped(&format!("property P {formula}{chain}"));
+        assert!(scoped.is_empty(), "{chain}: {scoped:?}");
+    }
+    assert!(unscoped("property P always(Cert.status != used)").is_empty());
+}
+
 #[test]
 fn multi_rule_unscoped_skips_an_along_a_global_and_unrelated_entities() {
     let along = "forbidden(Account, Cert, Account.status == registered, Cert.status == used).along(Account, Assignment, Cert)";

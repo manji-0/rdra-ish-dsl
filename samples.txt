@@ -8,6 +8,8 @@ samples/personal-info
 samples/api-contract
 samples/incremental-order/step-7-business-rules/src
 samples/formal-verification/after_assert_unmet.rdra
+samples/formal-verification/can_reach_met.rdra
+samples/formal-verification/can_reach_unmet.rdra
 samples/formal-verification/check_met.rdra
 samples/formal-verification/check_unmet.rdra
 samples/formal-verification/cross_order_payment.rdra
@@ -27,6 +29,8 @@ samples/formal-verification/quantifier_none.rdra
 samples/formal-verification/quantifier_guard.rdra
 samples/formal-verification/split_run_order.rdra
 samples/formal-verification/temporal_fair.rdra
+samples/formal-verification/temporal_along.rdra
+samples/formal-verification/order_stability.rdra
 samples/formal-verification/temporal_unmet.rdra
 samples/formal-verification/untriggered_sets.rdra
 samples/formal-verification/unwitnessed_state.rdra

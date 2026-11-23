@@ -13,10 +13,9 @@ use crate::diagnostics::*;
 use crate::location::DiagCtxt;
 use rdra_ish_syntax::ast::*;
 
-#[cfg(test)]
-pub(crate) use self::cross::cross_scope_semantics_from_chain;
 pub(crate) use self::cross::{
-    add_condition_entities_to_scope, along_scope, resolve_cross_condition,
+    add_condition_entities_to_scope, along_scope, cross_scope_semantics_from_chain,
+    resolve_cross_condition,
 };
 #[cfg(test)]
 pub(crate) use self::entity_conditions::push_unique_entity;
@@ -29,7 +28,7 @@ pub(crate) use self::guards::{
     when_condition_ref,
 };
 pub(crate) use self::quantifier::{check_quantifier_paths, resolve_related_quantifier};
-pub(crate) use self::rules::{process_forbidden, process_invariant};
+pub(crate) use self::rules::{global_chain, process_forbidden, process_invariant};
 pub(crate) use self::temporal::process_after_predicate;
 
 /// `Lit(s)` または kind修飾なし1セグメントの `Ref` から文字列を取り出す。

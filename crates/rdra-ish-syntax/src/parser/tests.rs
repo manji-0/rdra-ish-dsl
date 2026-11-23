@@ -1027,6 +1027,20 @@ fn test_parse_property_leads_to() {
 }
 
 #[test]
+fn test_parse_property_can_reach() {
+    let ast = parse_ok(
+        r#"property OrderCanFinish
+  can_reach(Order.status in (delivered, cancelled))
+"#,
+    );
+    let Item::Property(prop) = &ast.items[0] else {
+        panic!("expected Property");
+    };
+    assert_eq!(prop.id, "OrderCanFinish");
+    assert!(matches!(&prop.formula, AstTemporalFormula::CanReach(_)));
+}
+
+#[test]
 fn test_parse_property_fair_chain() {
     let ast = parse_ok(
         r#"property GrantEnds
@@ -1039,6 +1053,47 @@ fn test_parse_property_fair_chain() {
     assert_eq!(prop.chain.len(), 1);
     assert_eq!(prop.chain[0].name, "fair");
     assert_eq!(prop.chain[0].args.len(), 2);
+}
+
+/// The order and stability forms (#166). `.when(p)` belongs to `unchanged` and takes a
+/// logical expression; the chain after it holds the other methods.
+#[test]
+fn test_parse_property_order_and_stability_forms() {
+    let ast = parse_ok(
+        r#"property CancelledStays stable(Order.status == cancelled)
+property AmountKept
+  unchanged(Order.amount, total).when(Order.status == approved or Order.status == shipped).along(Order)
+property AlwaysKept unchanged(Order.amount)
+property ShippedAfterPaid precedes(Order.paid == true, Order.status == shipped)
+"#,
+    );
+    let formulas: Vec<&AstTemporalFormula> = ast
+        .items
+        .iter()
+        .map(|item| match item {
+            Item::Property(prop) => &prop.formula,
+            other => panic!("expected Property, got {other:?}"),
+        })
+        .collect();
+    assert!(matches!(formulas[0], AstTemporalFormula::Stable(_)));
+    let AstTemporalFormula::Unchanged { columns, when } = formulas[1] else {
+        panic!("expected unchanged: {:?}", formulas[1]);
+    };
+    assert!(matches!(
+        columns.as_slice(),
+        [Operand::QualifiedColumn(_), Operand::Column(c)] if c == "total"
+    ));
+    assert!(matches!(when, Some(Expr::Or(_, _))));
+    let Item::Property(amount) = &ast.items[1] else {
+        unreachable!()
+    };
+    assert_eq!(amount.chain.len(), 1);
+    assert_eq!(amount.chain[0].name, "along");
+    assert!(matches!(
+        formulas[2],
+        AstTemporalFormula::Unchanged { when: None, .. }
+    ));
+    assert!(matches!(formulas[3], AstTemporalFormula::Precedes { .. }));
 }
 
 #[test]

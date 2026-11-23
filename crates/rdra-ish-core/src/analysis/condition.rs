@@ -498,7 +498,7 @@ pub(crate) fn process_holds_predicate(
         }
     }
     let by = selectors(&pred.chain, None);
-    let along = along_scope(model, pred, ctx, diags);
+    let along = along_scope(model, &pred.name, &pred.chain, ctx, diags);
     model.conditions[condition].body = Some(HoldsBody {
         conds: body,
         quantifiers,

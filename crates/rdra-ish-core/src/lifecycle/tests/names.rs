@@ -69,7 +69,18 @@ fn one_of_each() -> Vec<StateDiag> {
                 slot: 1,
             }],
             witness: 3,
-            lasso: Loop::Stutter,
+            lasso: Some(Loop::Stutter),
+            site: site(),
+            trace: Trace::default(),
+        },
+        StateDiag::GoalUnreachable {
+            name: "OrderCanFinish".into(),
+            instance: vec![Inst {
+                entity: "Order".into(),
+                slot: 1,
+            }],
+            confined: vec!["status = on_hold".into()],
+            states: 1,
             site: site(),
             trace: Trace::default(),
         },
@@ -250,6 +261,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::VacuousRule { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::PropertyViolated { .. }
+            | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }
             | StateDiag::NeverRuns { .. }
             | StateDiag::ArmNeverTaken { .. }

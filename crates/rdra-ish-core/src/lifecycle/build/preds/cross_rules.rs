@@ -10,7 +10,7 @@ use crate::model::{CrossConstraintScope, EntityKey, FkId, QuantifierKind, Relate
 
 impl Builder<'_> {
     /// Binders for a cross constraint's scope, plus the relate links its `.along` names.
-    fn scope_binding(
+    pub(super) fn scope_binding(
         &mut self,
         scope: &[EntityKey],
         semantics: &CrossConstraintScope,

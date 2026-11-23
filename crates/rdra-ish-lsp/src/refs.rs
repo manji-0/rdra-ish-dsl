@@ -174,16 +174,14 @@ pub fn ast_references(ast: &Ast) -> Vec<&QRef> {
                 collect_chain_references(&pred.chain, &mut refs);
             }
             Item::Property(prop) => {
-                match &prop.formula {
-                    AstTemporalFormula::Always(expr) | AstTemporalFormula::Eventually(expr) => {
-                        collect_expr_references(expr, &mut refs)
-                    }
-                    AstTemporalFormula::LeadsTo {
-                        antecedent,
-                        consequent,
-                    } => {
-                        collect_expr_references(antecedent, &mut refs);
-                        collect_expr_references(consequent, &mut refs);
+                for expr in prop.formula.exprs() {
+                    collect_expr_references(expr, &mut refs);
+                }
+                if let AstTemporalFormula::Unchanged { columns, .. } = &prop.formula {
+                    for operand in columns {
+                        if let Operand::QualifiedColumn(col) = operand {
+                            refs.push(&col.entity);
+                        }
                     }
                 }
                 collect_chain_references(&prop.chain, &mut refs);

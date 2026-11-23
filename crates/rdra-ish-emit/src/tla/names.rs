@@ -3,7 +3,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rdra_ish_core::lifecycle::{
-    ActId, EntId, ModelState, State, TransitionSystem, Value, VarId, VarKind,
+    ActId, EntId, Ltl, ModelState, State, TransitionSystem, Value, VarId, VarKind,
 };
 
 use super::{render_value, sanitize_ident};
@@ -33,6 +33,9 @@ pub struct TlaNames {
     properties: Vec<String>,
     /// `Fair_<property>` for a property with `.fair(...)`.
     fair: Vec<Option<String>>,
+    /// `<property>_seen`, the latch of a `precedes` property, and `<property>_latch`, the
+    /// step that sets it.
+    seen: Vec<Option<(String, String)>>,
     /// The class var of a reduced cone (`TransitionSystem::reduced`), which stands for the S
     /// vars: `Rep_<var>` tables give each S var the printed module reads, and `Succ_<action>`
     /// the class moves of each S action.
@@ -136,6 +139,14 @@ impl TlaNames {
             .iter()
             .map(|x| (!x.fair.is_empty()).then(|| format!("Fair_{}", x.name)))
             .collect();
+        let seen: Vec<Option<(String, String)>> = ts
+            .properties()
+            .iter()
+            .map(|x| {
+                matches!(x.formula, Ltl::Precedes(..))
+                    .then(|| (format!("{}_seen", x.name), format!("{}_latch", x.name)))
+            })
+            .collect();
         let ids: Vec<String> = ts
             .entities()
             .iter()
@@ -177,6 +188,7 @@ impl TlaNames {
                 .chain(&invariants)
                 .chain(&after)
                 .chain(fair.iter().flatten())
+                .chain(seen.iter().flatten().flat_map(|(v, l)| [v, l]))
                 .chain(&ids)
                 .chain(vars.iter().flatten())
                 .chain(&actions)
@@ -205,6 +217,11 @@ impl TlaNames {
             })
             .collect();
         let actions = taken.claim_all(&actions);
+        // After the actions, so a column or a use case spelled like a latch keeps its name.
+        let seen = seen
+            .iter()
+            .map(|s| s.as_ref().map(|(v, l)| (taken.claim(v), taken.claim(l))))
+            .collect();
         let class = ts.reduction().map(|_| taken.claim("S_class"));
         // Claimed last, so a model id that spells one takes no name from anything else.
         let mut rep = vec![None; vars.len()];
@@ -256,6 +273,7 @@ impl TlaNames {
             after,
             properties,
             fair,
+            seen,
             class,
             rep,
             succ,
@@ -340,6 +358,12 @@ impl TlaNames {
     /// The operator that conjoins the fairness `properties()[i]` assumes, if it lists any.
     pub fn fair(&self, i: usize) -> Option<&str> {
         self.fair[i].as_deref()
+    }
+
+    /// The latch var of `properties()[i]`, a `precedes`, and the operator of the step that
+    /// sets it.
+    pub fn seen(&self, i: usize) -> Option<(&str, &str)> {
+        self.seen[i].as_ref().map(|(v, l)| (v.as_str(), l.as_str()))
     }
 
     pub fn invariant_index(&self, name: &str) -> Option<usize> {
@@ -439,6 +463,7 @@ impl TlaNames {
             ts,
             vars,
             class: self.class.clone(),
+            latches: self.seen.iter().flatten().map(|(v, _)| v.clone()).collect(),
         }
     }
 }
@@ -449,11 +474,19 @@ pub struct Decoder<'a> {
     /// Per var: the key of each slot, and the value each text names.
     vars: Vec<(Vec<String>, HashMap<String, Value>)>,
     class: Option<String>,
+    /// The `precedes` latches, which are no state of the system: their keys are skipped.
+    latches: Vec<String>,
 }
 
 impl Decoder<'_> {
     pub fn decode(&self, canon: &BTreeMap<String, String>) -> Option<State> {
-        let mut used = 0;
+        let latch = |key: &str| {
+            self.latches.iter().any(|l| {
+                key.strip_prefix(l.as_str())
+                    .is_some_and(|rest| rest.is_empty() || rest.starts_with('['))
+            })
+        };
+        let mut used = canon.keys().filter(|k| latch(k)).count();
         // A reduced cone's S vars come from the class var's representative.
         let class: Option<u32> = match (self.ts.reduction(), &self.class) {
             (Some(r), Some(key)) => {

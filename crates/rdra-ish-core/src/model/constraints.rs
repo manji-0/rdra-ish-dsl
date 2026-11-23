@@ -287,6 +287,41 @@ pub enum TemporalFormula {
         antecedent: TemporalExpr,
         consequent: TemporalExpr,
     },
+    /// `can_reach(expr)`: CTL `AG (present => EF expr)`, which no LTL formula states, so
+    /// BFS decides it on the explored graph and the TLA+ export only names it.
+    CanReach(TemporalExpr),
+    /// `stable(p)` → `[][(present /\ p) => (present' => p')]_vars`
+    Stable(TemporalExpr),
+    /// `unchanged(E.col, ..).when(p)` → `[][(present /\ p) => (present' => col' = col)]_vars`;
+    /// `when` is `None` without `.when`.
+    Unchanged {
+        columns: Vec<QualifiedModelColumnRef>,
+        when: Option<TemporalExpr>,
+    },
+    /// `precedes(p, q)` → a latch `<P>_seen` set where `present /\ p` holds, and
+    /// `[]((present /\ q) => <P>_seen)`
+    Precedes {
+        first: TemporalExpr,
+        then: TemporalExpr,
+    },
+}
+
+impl TemporalFormula {
+    /// The state predicates of the formula, left to right.
+    pub fn exprs(&self) -> Vec<&TemporalExpr> {
+        match self {
+            TemporalFormula::Always(e)
+            | TemporalFormula::Eventually(e)
+            | TemporalFormula::Stable(e)
+            | TemporalFormula::CanReach(e) => vec![e],
+            TemporalFormula::LeadsTo {
+                antecedent: a,
+                consequent: b,
+            }
+            | TemporalFormula::Precedes { first: a, then: b } => vec![a, b],
+            TemporalFormula::Unchanged { when, .. } => when.iter().collect(),
+        }
+    }
 }
 
 /// `property Id "label"` with a temporal formula body.
@@ -295,6 +330,14 @@ pub struct TemporalProperty {
     pub id: std::string::String,
     pub label: std::string::String,
     pub formula: TemporalFormula,
+    /// The entities the formula's atoms read, in the order the atoms first read them.
+    pub scope: Vec<EntityKey>,
+    /// `.along(A, B, ..)`: the formula speaks only of rows its keys link, as on a
+    /// multi-entity `invariant`. `GlobalProduct` without one.
+    pub scope_semantics: CrossConstraintScope,
+    /// `.global()`: the formula is meant for every combination of rows, though keys relate
+    /// them.
+    pub global: bool,
     /// `.fair(UC, ...)`: the use cases assumed weakly fair per instance they act on.
     pub fair: Vec<UseCaseKey>,
 

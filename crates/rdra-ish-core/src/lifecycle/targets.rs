@@ -210,7 +210,9 @@ impl TransitionSystem {
         // Each cone is explored on its own system, so the cones run side by side; the runs
         // come back in cone order, and each is what it is alone.
         let cones: Vec<ConeRun> = in_parallel(groups, jobs(), |(cone, shared)| {
-            let system = if reduce {
+            // A reduction keeps what LTL reads, not `AG EF`: a `can_reach` cone stays whole.
+            let reach = shared.iter().any(|t| matches!(t, Target::Reach(_)));
+            let system = if reduce && !reach {
                 let seeds = shared.iter().map(|t| self.target_seed(*t));
                 self.reduced_cone(&cone, seeds, caps)
             } else {
@@ -243,7 +245,13 @@ impl TransitionSystem {
         }
         out.cones = cones;
         out.tally.entity_cones = entity_cones.len();
-        for (i, r) in self.merge_variants(runs, &mut out.verdicts, &mut out.undecided) {
+        // Whether an action runs is judged on entity cones only: a run of other targets alone
+        // (verify's `can_reach` cones) judges none.
+        let judged = match entity_cones.is_empty() {
+            true => Vec::new(),
+            false => self.merge_variants(runs, &mut out.verdicts, &mut out.undecided),
+        };
+        for (i, r) in judged {
             if r.fired {
                 for arm in r.arms.into_iter().filter(|a| !a.taken) {
                     if let Some(diag) = arm.never {
@@ -601,9 +609,9 @@ impl TransitionSystem {
         }
     }
 
-    /// What the target's own cone says about an invariant or assert: its violations, each
-    /// trace marked when it creates more instances than the bound, and any cap that left the
-    /// verdict incomplete.
+    /// What the target's own cone says about an invariant, assert, or `can_reach`: its
+    /// violations, each trace marked when it creates more instances than the bound, and any
+    /// cap that left the verdict incomplete.
     fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
         let run = &cone.run;
         debug_assert!(
@@ -611,6 +619,26 @@ impl TransitionSystem {
             "an entity target has no verdict"
         );
         let entities = self.target_entities(target);
+        if let Target::Reach(i) = target {
+            // A state the cap left unexpanded has no edges, so it would look stuck: only a
+            // complete graph decides.
+            if run.complete {
+                let name = &self.reach[i].name;
+                let local = run
+                    .system
+                    .reach_properties()
+                    .iter()
+                    .position(|r| r.name == *name)
+                    .expect("the cone holds what the property reads");
+                if let Some((at, mut diag)) = run.system.reach_failure(local, &run.graph()) {
+                    if let Some(trace) = diag.trace_mut() {
+                        *trace = run.trace_to(at);
+                    }
+                    return vec![Diag { entities, diag }];
+                }
+                return Vec::new();
+            }
+        }
         let mut out: Vec<Diag> = run
             .diags
             .iter()
@@ -646,7 +674,8 @@ impl TransitionSystem {
             return None;
         }
         let (name, label, site, unmet) = match target {
-            Target::Entity(_) => return None,
+            // A `can_reach` cone is decided by `verify` alone; its vacuity is not read here.
+            Target::Entity(_) | Target::Reach(_) => return None,
             Target::Invariant(i) => {
                 let inv = &self.invariants[i];
                 (

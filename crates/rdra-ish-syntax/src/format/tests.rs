@@ -12,6 +12,22 @@ fn assert_formats_to(src: &str, expected: &str) {
 }
 
 #[test]
+fn formats_the_order_and_stability_forms() {
+    assert_formats_to(
+        "property S stable( Order.status==cancelled )\n",
+        "property S\n  stable(Order.status == cancelled)\n",
+    );
+    assert_formats_to(
+        "property U unchanged(Order.amount,total ).when(Order.status==approved).along(Order)\n",
+        "property U\n  unchanged(Order.amount, total).when(Order.status == approved).along(Order)\n",
+    );
+    assert_formats_to(
+        "property P \"paid first\" precedes(Order.paid==true,Order.status==shipped)\n",
+        "property P \"paid first\"\n  precedes(Order.paid == true, Order.status == shipped)\n",
+    );
+}
+
+#[test]
 fn keeps_the_use_case_first_and_entity_column_forms() {
     assert_formats_to(
         "transitions( Pay,Order.status, pending->paid )\n",
@@ -224,6 +240,13 @@ fn formats_check_and_derived_unquoted() {
 #[test]
 fn formats_a_property_fair_chain() {
     let src = "property GrantEnds\n  leads_to(A.status == granted, A.status == registered).fair(Pay, Register)\n";
+    let formatted = format_source(src).unwrap();
+    assert_eq!(formatted, src);
+}
+
+#[test]
+fn formats_a_can_reach_property() {
+    let src = "property OrderCanFinish \"every order can finish\"\n  can_reach(Order.status == delivered)\n";
     let formatted = format_source(src).unwrap();
     assert_eq!(formatted, src);
 }

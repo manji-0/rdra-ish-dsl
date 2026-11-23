@@ -39,8 +39,8 @@ use rdra_ish_cli::tlc_env::{tlc_env, Heap};
 use rdra_ish_cli::tlc_output::{parse_dot, Outcome, TlcRun};
 use rdra_ish_cli::tlc_replay::{explain_property, explain_violation};
 use rdra_ish_core::lifecycle::{
-    ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, Runs, Scope, Seed, State,
-    StateDiag, StateModelFindings, Taken, Target, TransitionSystem, Witness,
+    ActId, Bounds, Caps, ComponentRun, Cone, LabelledEdges, Progress, PropertyVerdict, Runs, Scope,
+    Seed, State, StateDiag, StateModelFindings, Taken, Target, TransitionSystem, Witness,
 };
 use rdra_ish_core::{load_project, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
@@ -561,6 +561,7 @@ fn target_label(ts: &TransitionSystem, t: Target) -> String {
         Target::Entity(e) => format!("entity {}", ts.entity(e).id),
         Target::Invariant(i) => format!("invariant {}", ts.invariants()[i].name),
         Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
+        Target::Reach(i) => format!("can_reach {}", ts.reach_properties()[i].name),
     }
 }
 
@@ -593,12 +594,14 @@ fn check_model(
     let workers = std::thread::available_parallelism().map_or(4, |n| n.get().min(8));
     let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
     let mut cones: Vec<(Cone, String, Vec<Seed>)> = Vec::new();
-    // `verify` runs no cone for a `.lemma()` rule, so neither does the comparison.
+    // `verify` runs no TLC cone for a `.lemma()` rule or a `can_reach`, so neither does the
+    // comparison.
     let lemmas = rdra_ish_core::lifecycle::prove::lemma_invariants(model, &ts);
-    let targets = ts
-        .targets()
-        .into_iter()
-        .filter(|t| !matches!(t, Target::Invariant(i) if lemmas.contains(i)));
+    let targets = ts.targets().into_iter().filter(|t| match t {
+        Target::Invariant(i) => !lemmas.contains(i),
+        Target::Reach(_) => false,
+        _ => true,
+    });
     for t in targets {
         let cone = ts.target_cone(t);
         match cones.iter_mut().find(|(c, _, _)| *c == cone) {
@@ -2506,6 +2509,16 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
     ),
     ("samples/formal-verification/int_stock.rdra", "", &[]),
     ("samples/formal-verification/temporal_fair.rdra", "", &[]),
+    ("samples/formal-verification/temporal_along.rdra", "", &[]),
+    ("samples/formal-verification/order_stability.rdra", "", &[]),
+    ("explored_along", EXPLORED_ALONG, &[]),
+    ("explored_relink", EXPLORED_RELINK, &[]),
+    ("explored_delete", EXPLORED_DELETE, &[]),
+    (
+        "explored_frees_slots",
+        EXPLORED_FREES_SLOTS,
+        &[("NeverD", Why::FreesSlots)],
+    ),
     ("samples/formal-verification/temporal_unmet.rdra", "", &[]),
     ("samples/formal-verification/split_run_order.rdra", "", &[]),
     (
@@ -2548,6 +2561,71 @@ const TEMPORAL_CASES: &[TemporalCase] = &[
         ],
     ),
 ];
+
+/// `precedes` over two entities, along the key and over every pair: Capture captures a payment
+/// and ships the one order it belongs to (#166). The latch is per pair of slots.
+const EXPLORED_ALONG: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, shipped) @default(open) }
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+relate(Payment, Order, 1:1)
+usecase Capture "確定"
+usecase Reopen "再開"
+transitions(Capture, Payment.status, pending -> captured)
+transitions(Capture, Order.status, open -> shipped)
+transitions(Reopen, Order.status, shipped -> open)
+property ShippedWithItsCapture
+  precedes(Payment.status == captured, Order.status == shipped).along(Payment, Order)
+property ShippedWithAnyCapture
+  precedes(Payment.status == captured, Order.status == shipped).global()
+property CaptureStays stable(Payment.status == captured).along(Payment, Order)
+property ShippedStays stable(Order.status == shipped)
+"#;
+
+/// The link of `stable(..).along(..)` is read before the step only: Move relinks a captured
+/// payment and voids it in one step, a violation in both engines.
+const EXPLORED_RELINK: &str = r#"
+entity Order "注文" { id: Int @pk }
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured, voided) @default(pending) }
+relate(Payment, Order, N:1)
+usecase Capture "確定"
+usecase Move "付け替え"
+transitions(Capture, Payment.status, pending -> captured)
+relinks(Move, Payment, Order)
+transitions(Move, Payment.status, captured -> voided)
+property CapturedStays stable(Payment.status == captured).along(Payment, Order)
+"#;
+
+/// A deleted row resets to its base values; a step that deletes it breaks no `stable`, since
+/// the row is not present after it.
+const EXPLORED_DELETE: &str = r#"
+entity Payment "支払" { id: Int @pk  status: Enum(pending, captured) @default(pending) }
+usecase Open "起票"
+usecase Capture "確定"
+usecase Drop "削除"
+creates(Open, Payment)
+transitions(Capture, Payment.status, pending -> captured)
+deletes(Drop, Payment)
+property CapturedStays stable(Payment.status == captured)
+property PendingStays stable(Payment.status == pending)
+property AmountFree unchanged(Payment.status).when(Payment.status == captured)
+"#;
+
+/// Each Bump creates a receipt `NeverD` does not read, so its cone counts no receipt and bumps
+/// an order to `d`; the whole model runs out of receipts first. The cone leaves the property
+/// undecided for TLC, and BFS decides it on the whole model, as TLC does.
+const EXPLORED_FREES_SLOTS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(a, b, c, d) @default(a) }
+entity Receipt "領収書" { id: Int @pk }
+relate(Receipt, Order, N:1)
+usecase Place "注文"
+usecase Bump "進行"
+creates(Place, Order)
+transitions(Bump, Order.status, a -> b)
+transitions(Bump, Order.status, b -> c)
+transitions(Bump, Order.status, c -> d)
+creates(Bump, Receipt)
+property NeverD stable(Order.status != d)
+"#;
 
 /// A fair use case copies its parent's kind: the copy target is in the cone, so the parent's
 /// column, its owner and its creation come in with it.
@@ -2745,6 +2823,49 @@ transitions(Ship, Order.status, paid -> shipped)
 property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship)
 "#;
 
+/// `stable`, `unchanged`, and `precedes` (#166): what BFS decides on the property's cone is
+/// what TLC decides on the whole model, and a violation's trace is as long as TLC's, which
+/// replays as the same violation.
+fn explored_agrees(
+    ts: &TransitionSystem,
+    i: usize,
+    label: &str,
+    (whole, outcome, run): (&tla::TlaBundle, Outcome, &TlcRun),
+    log: &str,
+) {
+    match (ts.decide_property(i, Caps::VERIFY), outcome) {
+        (PropertyVerdict::Holds, Outcome::Ok) => {}
+        (PropertyVerdict::Violated(native), Outcome::Counterexample) => {
+            let StateDiag::PropertyViolated { trace, witness, .. } = *native else {
+                panic!("{label}: BFS reports no property violation: {native:?}");
+            };
+            let v = run
+                .violations
+                .first()
+                .expect("a counterexample has a trace");
+            let tlc = explain_property(ts, &whole.names, i, v)
+                .unwrap_or_else(|why| panic!("{label}: TLC's trace does not replay: {why}\n{log}"));
+            let StateDiag::PropertyViolated {
+                trace: tlc_trace,
+                witness: tlc_witness,
+                ..
+            } = tlc
+            else {
+                panic!("{label}: TLC's trace explains no property violation");
+            };
+            assert_eq!(
+                (trace.steps.len(), witness),
+                (tlc_trace.steps.len(), tlc_witness),
+                "{label}: BFS and TLC find counterexamples of different lengths\n{log}"
+            );
+        }
+        (native, outcome) => panic!(
+            "{label}: BFS decides {native:?}, TLC on the whole model {}\n{log}",
+            outcome.as_str()
+        ),
+    }
+}
+
 /// One property run of `bundle` in `dir`; the module is printed as `Cone`.
 fn run_property(tlc: &Path, dir: &Path, bundle: &tla::TlaBundle) -> (Outcome, TlcRun, String) {
     let (ok, log) = run_tlc(tlc, dir, &[], &bundle.tla, &bundle.cfg);
@@ -2829,12 +2950,22 @@ fn a_property_cone_decides_what_the_whole_model_decides() {
                 }
             };
             let whole = tla::print(&ts, PrintMode::Property(i), "Cone");
-            let (whole_outcome, _, whole_log) = run_property(&tlc, &dir.join("whole"), &whole);
+            let (whole_outcome, whole_run, whole_log) =
+                run_property(&tlc, &dir.join("whole"), &whole);
             assert_ne!(
                 whole_outcome,
                 Outcome::ToolError,
                 "{label}: whole model\n{whole_log}"
             );
+            if ts.properties()[i].formula.kind().is_explored() {
+                explored_agrees(
+                    &ts,
+                    i,
+                    &label,
+                    (&whole, whole_outcome, &whole_run),
+                    &whole_log,
+                );
+            }
             match verdict {
                 Verdict::Ok => assert_eq!(
                     whole_outcome,
