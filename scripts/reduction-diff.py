@@ -5,9 +5,11 @@ Generates random models from seeds and runs `verify --deny-undecided` on each tw
 users run it, and with RDRA_ISH_NO_REDUCE set, which keeps every cone unreduced. The two
 runs must agree on the exit code, the finding names, the verdict of each check, and the
 state-model summary. State counts and traces are not compared: a reduced cone has fewer
-states, and a lifted trace can take another path to the same violation. Where the unreduced
-run leaves a finding undecided (a cone past the state cap) and the reduced run decides it, the
-seed is listed under `plain_undecided` and compared on what the unreduced run decided.
+states, and a lifted trace can take another path to the same violation. Where one run leaves
+a check or a state-model finding undecided at a bound (a cone past the state cap or the memory
+limit, a property past the budget) and the other decides it, the seed is listed under
+`plain_undecided` or `reduced_undecided` and compared on what both decided: a finding one run
+prints must be one the other prints or leaves open.
 
 With `--with-tlc` both runs pass `--with-tlc`, so TLC runs every cone beside the native
 checker, and every check on which the two engines differ (an `error[EngineDisagreement]`
@@ -20,6 +22,7 @@ is recorded. Such a seed is listed under `disagreed`, its model copied to
   python3 -I scripts/reduction-diff.py gen SEED
   python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py minimize BIN MODEL.rdra OUT.rdra [--instance-count N] [--with-tlc]
+  python3 -I scripts/reduction-diff.py selfcheck
 
 `run --with-tlc` needs `tlc` on PATH (run it under `nix develop`); without it no run starts
 TLC. It writes each seed's model and outputs under `--work` (default target/reduction-diff),
@@ -30,7 +33,8 @@ dropped silently. The exit code is 1 when any seed diverges or disagrees, or tim
 `--fail-on-timeout`.
 
 `minimize` shrinks a diverging or disagreeing model by deleting lines (ddmin) while it
-still does.
+still does. `selfcheck` runs the comparison on the saved output pairs under
+scripts/reduction-diff-fixtures and checks each gets the status its `expect` file names.
 """
 
 import argparse
@@ -287,11 +291,47 @@ VERDICT = re.compile(r"^\S+ \[([^\]]*)\]: (ok|counterexample|tool_error|not deci
 ENGINE_BUG = re.compile(r"^error\[(?:EngineDisagreement|LassoFault)\]: (.*)$", re.M)
 
 
+# A state-model finding a cone left open at a bound (the state cap, the pattern cap, or the
+# memory limit), as `Undecided` prints it; a scope's `--buc` or `--entity` is not a bound.
+OPEN_FINDING = re.compile(
+    r"^\s*(?:state (?P<w>\S+) = (?P<wv>\S+)"
+    r"|whether (?P<r>\S+) can run"
+    r"|whether (?P<a>\S+) can take \S+ (?P<af>\S+) -> (?P<at>\S+)"
+    r"|whether (?P<c>\S+) can choose (?P<cc>\S+) = (?P<cv>\S+)"
+    r"|whether some (?P<d>\S+) can get stuck at (?P<dc>\S+) = (?P<dv>\S+))"
+    r" is not decided: the \S+ cone stopped at the ",
+    re.M,
+)
+
+
+def open_name(m):
+    """The name the finding `m` leaves open prints when it is decided, as `StateDiag::name`
+    makes it."""
+    g = m.groupdict()
+    if g["w"]:
+        raw = f"Witness_{g['w']}_{g['wv']}"
+    elif g["r"]:
+        raw = f"Runs_{g['r']}"
+    elif g["a"]:
+        raw = f"Arm_{g['a']}_{g['af']}_{g['at']}"
+    elif g["c"]:
+        raw = f"Choice_{g['c']}_{g['cc']}_{g['cv']}"
+    else:
+        raw = f"Deadlock_{g['d']}_{g['dc']}_{g['dv']}"
+    return re.sub(r"[^A-Za-z0-9_]", "_", raw)
+
+
+# What a run that stopped at a bound reports about the stop, not about the model: a name
+# starting with one of these.
+STOP_NAMES = ("StateCapReached", "PatternCapReached", "MemoryCapReached", "TimeBudgetReached")
+
+
 def observe(rc, out):
     """What both runs must agree on, and the engine bugs each run reports."""
     disagreements = ENGINE_BUG.findall(out)
     out = ENGINE_BUG.sub("", out)
     names = sorted(set(re.findall(r"^(?:error|warning|info)\[([^\]]+)\]", out, re.M)))
+    opened = sorted({open_name(m) for m in OPEN_FINDING.finditer(out)})
     # A cone's line gives the cone's outcome, and the cones group checks differently when
     # reduced; a check of a cone with a counterexample is violated when a finding names it.
     checks = {}
@@ -305,7 +345,7 @@ def observe(rc, out):
             checks[check] = verdict
     keep = ("state models", "not checked", "result:", "tlc_result", "OK:", "verification ", "Error: verification")
     lines = [l for l in out.splitlines() if l.startswith(keep)]
-    return dict(rc=rc, names=names, checks=checks, lines=lines, disagreements=disagreements)
+    return dict(rc=rc, names=names, checks=checks, lines=lines, opened=opened, disagreements=disagreements)
 
 
 def disagreed(sides):
@@ -313,36 +353,58 @@ def disagreed(sides):
 
 
 def undecided(o):
-    return any(l.startswith("not checked") for l in o["lines"]) or "not decided" in o["checks"].values()
+    return (
+        bool(o["opened"])
+        or any(l.startswith("not checked") for l in o["lines"])
+        or "not decided" in o["checks"].values()
+    )
 
 
 def agreement(red, plain):
-    """"same"; "plain_undecided" when they agree on all the unreduced run decided, which a
-    cone past the state cap or the budget can leave open where its reduced cone decides; or
-    "diverged". The engine bugs are compared by `disagreed`, not here."""
+    """"same"; "plain_undecided" or "reduced_undecided" when they agree on all both runs
+    decided, and that side left something open at a bound (the state cap, the memory limit,
+    the budget) that the other decided; or "diverged". A check is compared where both decide
+    it, and a finding one side prints must be one the other prints or left open. The engine
+    bugs are compared by `disagreed`, not here."""
     red, plain = (dict(o, disagreements=[]) for o in (red, plain))
     if red == plain:
         return "same"
-    if undecided(red) or not undecided(plain):
+    if not undecided(red) and not undecided(plain):
         return "diverged"
-    decided = {c: v for c, v in plain["checks"].items() if v != "not decided"}
-    if any(red["checks"].get(c) != v for c, v in decided.items()):
-        return "diverged"
-    skip = lambda l: l.startswith(("not checked", "state models", "Error: verification incomplete"))
+    for c in set(red["checks"]) | set(plain["checks"]):
+        r, p = red["checks"].get(c), plain["checks"].get(c)
+        if r != p and "not decided" not in (r, p):
+            return "diverged"
+    for this, other in ((red, plain), (plain, red)):
+        # A check the other side left open may print its violation or vacuity here.
+        open_checks = {c for c, v in other["checks"].items() if v == "not decided"}
+        open_checks |= {f"Vacuous_{c}" for c in open_checks}
+        extra = set(this["names"]) - set(other["names"]) - set(other["opened"]) - open_checks
+        if any(not n.startswith(STOP_NAMES) for n in extra):
+            return "diverged"
+    # The `result:` and `Error: verification` lines sum up what each side decided (a
+    # failure count, or `incomplete` for what was left open), so they differ with what the
+    # other side decided; the checks and findings above already compare it.
+    skip = lambda l: l.startswith(("not checked", "state models", "result:", "Error: verification"))
     lines = lambda o: [l for l in o["lines"] if not skip(l)]
-    if lines(red) != lines(plain) or set(plain["names"]) - set(red["names"]) - {"StateCapReached"}:
+    if lines(red) != lines(plain):
         return "diverged"
-    # The state-model summary counts what was decided: the reduced run counts at least as
-    # many witnessed states, deadlocks and use cases that never run, over the same cones.
+    # The state-model summary counts what was decided: the side that left nothing open
+    # counts at least as many witnessed states, deadlocks and use cases that never run,
+    # over the same cones.
     counts = lambda o: [
         [int(n) for n in re.findall(r"\d+", l)] for l in o["lines"] if l.startswith("state models")
     ]
     if len(counts(red)) != 1 or len(counts(plain)) != 1:
         return "diverged"
     r, p = counts(red)[0], counts(plain)[0]
-    if len(r) != 5 or r[:2] != p[:2] or any(a < b for a, b in zip(r[2:], p[2:])):
+    if len(r) != 5 or r[:2] != p[:2]:
         return "diverged"
-    return "plain_undecided"
+    if not undecided(red) and any(a < b for a, b in zip(r[2:], p[2:])):
+        return "diverged"
+    if not undecided(plain) and any(a > b for a, b in zip(r[2:], p[2:])):
+        return "diverged"
+    return "plain_undecided" if undecided(plain) else "reduced_undecided"
 
 
 def has_reduced_cone(d):
@@ -431,7 +493,7 @@ def cmd_run(args):
     with ThreadPoolExecutor(args.jobs) as ex:
         results = list(ex.map(lambda s: one(args, s), seed_list(args.seeds)))
     by = lambda st: [x for x in results if x["status"] == st]
-    compared = by("same") + by("plain_undecided") + by("diverged")
+    compared = by("same") + by("plain_undecided") + by("reduced_undecided") + by("diverged")
     for x in by("diverged"):
         print(f"seed {x['seed']} diverges at {x['instances']} instances:")
         for side in ("reduced", "plain"):
@@ -449,6 +511,7 @@ def cmd_run(args):
         reduced=sum(1 for x in compared if x["reduced"]),
         three_instances=sum(1 for x in compared if x["instances"] == 3),
         plain_undecided=[x["seed"] for x in by("plain_undecided")],
+        reduced_undecided=[x["seed"] for x in by("reduced_undecided")],
         timed_out=[(x["seed"], x["side"]) for x in by("timeout")],
         load_errors=[x["seed"] for x in by("load_error")],
         diverged=[x["seed"] for x in by("diverged")],
@@ -515,6 +578,21 @@ def cmd_minimize(args):
     return 0
 
 
+FIXTURES = Path(__file__).resolve().parent / "reduction-diff-fixtures"
+
+
+def cmd_selfcheck(args):
+    """`agreement` on each saved pair of outputs in FIXTURES: `<case>/reduced.out`,
+    `<case>/plain.out`, and `<case>/expect`, the status the pair must get."""
+    failed = 0
+    for case in sorted(d for d in FIXTURES.iterdir() if d.is_dir()):
+        sides = [observe(None, (case / f"{s}.out").read_text()) for s in ("reduced", "plain")]
+        got, want = agreement(*sides), (case / "expect").read_text().strip()
+        failed += got != want
+        print(f"{'ok' if got == want else 'FAIL'}: {case.name}: {got}" + ("" if got == want else f", want {want}"))
+    return 1 if failed else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--work", default="target/reduction-diff")
@@ -528,6 +606,7 @@ def main():
     p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker and record where they differ")
     p = sub.add_parser("gen")
     p.add_argument("seed", type=int)
+    sub.add_parser("selfcheck")
     for name in ("compare", "minimize"):
         p = sub.add_parser(name)
         p.add_argument("bin")
@@ -538,7 +617,8 @@ def main():
         p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker")
     args = ap.parse_args()
     args.work = str(Path(args.work).resolve())
-    return dict(run=cmd_run, gen=cmd_gen, compare=cmd_compare, minimize=cmd_minimize)[args.cmd](args)
+    cmds = dict(run=cmd_run, gen=cmd_gen, compare=cmd_compare, minimize=cmd_minimize, selfcheck=cmd_selfcheck)
+    return cmds[args.cmd](args)
 
 
 if __name__ == "__main__":

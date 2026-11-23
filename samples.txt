@@ -34,4 +34,6 @@ samples/formal-verification/order_stability.rdra
 samples/formal-verification/temporal_unmet.rdra
 samples/formal-verification/untriggered_sets.rdra
 samples/formal-verification/unwitnessed_state.rdra
+samples/formal-verification/unique_double_booking.rdra
+samples/formal-verification/unique_booking_guarded.rdra
 samples/formal-verification-fail/order.rdra

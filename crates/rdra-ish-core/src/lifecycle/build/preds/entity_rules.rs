@@ -1,15 +1,16 @@
-//! Rules of one entity: its invariants, driven columns, min cards, unique keys, and cascade deletes.
+//! Rules of one entity: its invariants, driven columns, min cards, unique keys and column
+//! sets, and cascade deletes.
 
 use super::display::{local_display, local_displays};
 use super::{forbidden_premises, implies, premise, Binding};
 use crate::lifecycle::build::Builder;
 use crate::lifecycle::diag::StateDiag;
 use crate::lifecycle::types::{
-    Action, ActionOrigin, At, Birth, CmpOp, Effect, InvText, Invariant, ModelRef, ParamRole, Pred,
-    Premise, Rhs, Site, Term, Value, VarId, VarKind,
+    Action, ActionOrigin, At, Birth, CmpOp, Domain, Effect, InvText, Invariant, ModelRef,
+    ParamRole, Pred, Premise, Rhs, Site, Term, Value, VarId, VarKind,
 };
 use crate::lifecycle::EntId;
-use crate::model::{CmpRhs, EntityCondition, EntityKey, Min, RefAction, UseCaseKey};
+use crate::model::{CmpRhs, EntityCondition, EntityKey, Min, RefAction, UniqueSource, UseCaseKey};
 
 impl Builder<'_> {
     fn local_binding(ek: EntityKey) -> Binding {
@@ -110,6 +111,7 @@ impl Builder<'_> {
         self.cross_invariants();
         self.quantifiers();
         self.unique_keys();
+        self.unique_columns();
         self.min_cards();
         self.cascade_deletes();
         self.driven_columns_written();
@@ -305,65 +307,152 @@ impl Builder<'_> {
         }
     }
 
+    /// Two present rows of one entity that agree on every var of `vars` break it. A row whose
+    /// var of a null-capable domain is null agrees with none, as SQL's NULLs are distinct.
+    /// Two rows exist only above one instance per entity, which the bounds say, so at one the
+    /// rule has no premise to miss.
+    fn push_unique(&mut self, name: String, e: EntId, vars: &[VarId], text: InvText, site: Site) {
+        let index = |b| Term::Index(At::Bound(b));
+        let slot = |var, b| Term::Slot {
+            var,
+            at: At::Bound(b),
+        };
+        let mut apart = vec![Pred::Cmp(index(0), CmpOp::Eq, index(1))];
+        apart.extend(
+            vars.iter()
+                .map(|&v| Pred::Cmp(slot(v, 0), CmpOp::Ne, slot(v, 1))),
+        );
+        apart.extend(
+            vars.iter()
+                .filter(|v| {
+                    matches!(
+                        self.ts.vars[v.index()].domain,
+                        Domain::NullableInt | Domain::Instance { optional: true, .. }
+                    )
+                })
+                .map(|&v| Pred::Cmp(slot(v, 0), CmpOp::Eq, Term::Lit(Value::NULL))),
+        );
+        let premises = match self.ts.bounds.slots() {
+            1 => Vec::new(),
+            _ => vec![premise(
+                vec![Pred::Cmp(index(0), CmpOp::Ne, index(1))],
+                String::new(),
+            )],
+        };
+        self.ts.invariants.push(Invariant {
+            name,
+            binders: vec![e, e],
+            premises,
+            body: Pred::Or(apart),
+            text,
+            label: None,
+            site,
+        });
+    }
+
     /// `Unique_{child}_{role}` per 1:1 key: two distinct present children never share a
     /// parent slot. An unlinked optional owner shares nothing.
     fn unique_keys(&mut self) {
         let model = self.model;
         for (id, fk) in model.foreign_keys().filter(|(_, fk)| fk.unique()) {
-            let Some(owner) = self
-                .ts
-                .vars
-                .iter()
-                .position(|d| matches!(d.kind, VarKind::Owner { fk: f, .. } if f == id))
-            else {
+            let Some(owner) = self.owner_var(id) else {
                 continue;
             };
-            let owner = VarId::at(owner);
-            let c = self.ent_of[&fk.child];
-            let slot = |b| Term::Slot {
-                var: owner,
-                at: At::Bound(b),
-            };
-            let mut apart = vec![
-                Pred::Cmp(
-                    Term::Index(At::Bound(0)),
-                    CmpOp::Eq,
-                    Term::Index(At::Bound(1)),
-                ),
-                Pred::Cmp(slot(0), CmpOp::Ne, slot(1)),
-            ];
-            if fk.optional() {
-                apart.push(Pred::Cmp(slot(0), CmpOp::Eq, Term::Lit(Value::NULL)));
-            }
             let (child, parent) = (
                 model.entities[fk.child].id.clone(),
                 model.entities[fk.parent].id.clone(),
             );
             let role = fk.role_or(&parent).to_string();
-            // Two rows of the child: at one instance per entity there are none, which the
-            // bounds say, so the rule has no premise to miss there.
-            let two_rows = Pred::Cmp(
-                Term::Index(At::Bound(0)),
-                CmpOp::Ne,
-                Term::Index(At::Bound(1)),
-            );
-            let premises = match self.ts.bounds.slots() {
-                1 => Vec::new(),
-                _ => vec![premise(vec![two_rows], String::new())],
+            let name = format!("Unique_{child}_{role}");
+            let text = InvText::Unique {
+                child,
+                parent,
+                role,
             };
-            self.ts.invariants.push(Invariant {
-                name: format!("Unique_{child}_{role}"),
-                binders: vec![c, c],
-                premises,
-                body: Pred::Or(apart),
-                text: InvText::Unique {
-                    child,
-                    parent,
-                    role,
-                },
-                label: None,
-                site: Site::new(ModelRef::Relation(fk.relation), &fk.site),
-            });
+            let site = Site::new(ModelRef::Relation(fk.relation), &fk.site);
+            self.push_unique(name, self.ent_of[&fk.child], &[owner], text, site);
         }
+    }
+
+    /// `Unique_{entity}_{columns}` per unique column set whose every column the system holds
+    /// by value: a single `@unique` column, a `@unique(a, b)`, and an N:M junction's pair of
+    /// keys. A key column reads as its key's owner, so a set must hold every column of the
+    /// key. A set with a column held as null or present only, or with none, is the database's
+    /// to check; so is a declared set on an entity with a `@soft_delete` column, whose index
+    /// covers only live rows; and a set that is a 1:1 key already has `Unique_{child}_{role}`.
+    fn unique_columns(&mut self) {
+        let model = self.model;
+        let mut keys: Vec<(EntityKey, EntId)> = self.ent_of.iter().map(|(&k, &e)| (k, e)).collect();
+        keys.sort_by_key(|&(_, e)| e);
+        for (ek, e) in keys {
+            let entity = &model.entities[ek];
+            let soft_delete = entity.columns.iter().any(|c| c.is_soft_delete);
+            let singles = entity
+                .columns
+                .iter()
+                .filter(|c| c.is_unique && entity.primary_key != [c.name.clone()])
+                .map(|c| (vec![c.name.clone()], UniqueSource::Declared));
+            let sets = singles.chain(
+                model
+                    .unique_keys(ek)
+                    .into_iter()
+                    .map(|u| (u.columns, u.source)),
+            );
+            for (columns, source) in sets.collect::<Vec<_>>() {
+                let site = match source {
+                    UniqueSource::OneToOne(_) => continue,
+                    UniqueSource::Declared if soft_delete => continue,
+                    UniqueSource::Declared => Site::bare(ModelRef::Column {
+                        entity: ek,
+                        column: columns[0].clone(),
+                    }),
+                    UniqueSource::Junction(a, _) => {
+                        let fk = model.foreign_key(a);
+                        Site::new(ModelRef::Relation(fk.relation), &fk.site)
+                    }
+                };
+                let Some(vars) = self.unique_set_vars(ek, e, &columns) else {
+                    continue;
+                };
+                let one_to_one = |&v: &VarId| {
+                    matches!(self.ts.vars[v.index()].kind,
+                        VarKind::Owner { fk, .. } if model.foreign_key(fk).unique())
+                };
+                let name = format!("Unique_{}_{}", entity.id, columns.join("_"));
+                if matches!(vars.as_slice(), [v] if one_to_one(v))
+                    || self.ts.invariants.iter().any(|i| i.name == name)
+                {
+                    continue;
+                }
+                let text = InvText::UniqueSet {
+                    entity: entity.id.clone(),
+                    columns: columns.join(", "),
+                };
+                self.push_unique(name, e, &vars, text, site);
+            }
+        }
+    }
+
+    /// The vars that hold the values of `columns`, each once, or `None` when one is not held
+    /// by value.
+    fn unique_set_vars(&self, ek: EntityKey, e: EntId, columns: &[String]) -> Option<Vec<VarId>> {
+        let mut vars = Vec::new();
+        for column in columns {
+            let var = match self.col_var.get(&(e, column.clone())) {
+                Some(&v) if self.ts.vars[v.index()].domain == Domain::Nullable => return None,
+                Some(&v) => v,
+                None => {
+                    let (id, fk) = self.model.column_fk(ek, column)?;
+                    if !fk.columns.iter().all(|(c, _)| columns.contains(c)) {
+                        return None;
+                    }
+                    self.owner_var(id)?
+                }
+            };
+            if !vars.contains(&var) {
+                vars.push(var);
+            }
+        }
+        Some(vars)
     }
 }

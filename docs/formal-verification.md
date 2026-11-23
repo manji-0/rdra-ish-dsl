@@ -1353,6 +1353,8 @@ symlinks to those skill-bundled files (CLI tests keep working after skill instal
 | `temporal_along.rdra` | pass, fail | no state rule | `always(not captured or paid)` over a Payment and an Order holds with `.along(Payment, Order)`: Pay captures a payment and pays its own order. The same formula without `.along` fails on a captured payment beside another order that is never paid (#165) |
 | `temporal_unmet.rdra` | pass, fail | no state rule | `always(Order.status != shipped)` fails once an Order ships, and `leads_to(pending, delivered)` fails because ReopenOrder lets an Order be cancelled and reopened forever, so its lasso loops back. `check` does not model-check properties; each prints its lasso in model terms |
 | `one_to_one_shared.rdra` | pass, fail | 0 of 1 | `relate(.., 1:1)` adds `Unique_Shipment_Order`; Ship and Reship each link a Shipment to the same Order, which takes two instances |
+| `unique_double_booking.rdra` | pass, fail | 0 of 1 | `@unique(room_id, slot)` adds `Unique_Booking_room_id_slot`, which reads the owner Room beside `slot`; BookAm books any room for the morning, so two Bookings take one room at `am`, which takes two instances |
+| `unique_booking_guarded.rdra` | pass, pass | 1 of 1 | The same model with a guard on each booking use case: `.none(Booking.slot == am)` on the Room it binds keeps the slot free |
 | `none_any_child.rdra` | pass, pass | 1 of 1 | `.none(Invoice)` on Issue says "no invoice yet" and reads the link only, so `Unique_Invoice_Order` holds on a cone without `Invoice.status` (25 states). The enumerating form `.none(Invoice.status in (<every value>))` builds the same cones |
 | `none_any_child_bypassed.rdra` | pass, fail | 0 of 1 | The same model with Reissue, which creates an Invoice under a closed Order without the guard; `Unique_Invoice_Order` fails at two instances on the cone without `Invoice.status` |
 | `min_card_unmet.rdra` | fail, fail | 0 of 1 | `relate(OrderLine, Order, 1..*:1)` adds `MinCard_OrderLine_Order`; Place creates an Order without a line |
@@ -1370,8 +1372,8 @@ The native checker and TLC give the same verdict on every row at the same bounds
 `check` runs at one
 instance per entity, where `Unique_*` holds vacuously. The `--prove` column counts the state
 rules `verify --prove` proves for any number of rows. A rule that fails `check` or TLC is
-never proved, and `one_to_one_shared` and `none_any_child_bypassed`, which pass `check`, are
-unproved too.
+never proved, and `one_to_one_shared`, `none_any_child_bypassed`, and
+`unique_double_booking`, which pass `check`, are unproved too.
 
 ### Sample expectations
 

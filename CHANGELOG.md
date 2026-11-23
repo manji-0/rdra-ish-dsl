@@ -4,6 +4,19 @@
 
 ### Breaking
 
+- The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
+  and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
+  `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,
+  `Bool`, or variation column, a compared `Int`, or a key column, read as its key's owner.
+  Two present rows that agree on every column break it; a null column exempts its row, as
+  in SQL. `check`, `states`, `verify` (with its TLA+ export under `--with-tlc`), and
+  `verify --prove` check it. A model whose use case creates a second row at the same values,
+  such as two bookings of one room at one slot, now fails `check --instance-count 2` and
+  `verify`, where the database used to be the first to reject it. Add a guard that keeps the
+  set free, such as `holds(AmFree, Room.open == true).none(Booking.slot == am)`. Sets with a
+  `String` column, or on an entity with a `@soft_delete` column, are not checked. No sample
+  changes verdict.
+
 - `verify` decides every invariant, `after` assertion, and property with its native
   checker and starts no JVM: `tlc` is no longer needed, and `verify` no longer fails when it
   is missing. TLC runs only under the new `--with-tlc`, beside the native checker, on the
@@ -57,6 +70,16 @@
   - `codegen` refuses a model that `check` rejects (exit 1), as the export did, and has
     no `--buc` or `--entity` scope. `--allow-failing` prints the types without narrowing
     any column.
+- An `@default` on an `Enum` column that is not one of its values is `InvalidEnumVariant`,
+  and one on a `Bool` column other than `true` or `false` is `InvalidBoolValue`, on an
+  entity or a DTO, as a variation's default outside its values already was. The state
+  model used to drop the default and start the row at the first value or `false`, so
+  `check`, `states`, `verify`, `--with-tlc`, `--prove`, and the TLA+ export explored from a
+  start the model never declared, and the SQL export wrote `DEFAULT 'bogus'`. Such a model
+  now fails to load in every command, the LSP included. To migrate, write one of the
+  column's values, spelled as declared (`@default(open)`, not `@default(Open)`), or
+  lowercase `true` or `false`. `@default(null)` is no value of either type, even on a
+  `@null` column; drop it (#187).
 
 ### Added
 

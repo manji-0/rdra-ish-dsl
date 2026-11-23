@@ -1,0 +1,33 @@
+bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 200000 states per BFS cone; entities a check does not read are unbounded
+cones: 2 for 2 invariant(s) and 0 after-assert(s)
+temporal properties: 1, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
+  P0 assumes weak fairness per instance on T1_1
+not checked: 8 findings not decided
+  whether some E0 can get stuck at status = s0 is not decided: the E0 cone stopped at the state cap (200000 states)
+  whether some E0 can get stuck at status = s1 is not decided: the E0 cone stopped at the state cap (200000 states)
+  whether some E2 can get stuck at status = s0 is not decided: the E2 cone stopped at the state cap (200000 states)
+  whether some E2 can get stuck at status = s1 is not decided: the E2 cone stopped at the state cap (200000 states)
+  whether some E3 can get stuck at status = s0 is not decided: the E3 cone stopped at the state cap (200000 states)
+  whether some E3 can get stuck at status = s1 is not decided: the E3 cone stopped at the state cap (200000 states)
+  whether some E3 can get stuck at status = s2 is not decided: the E3 cone stopped at the state cap (200000 states)
+  whether some E3 can get stuck at status = s3 is not decided: the E3 cone stopped at the state cap (200000 states)
+state models (BFS on 4 entity cones): 4 state models, 11 states witnessed, 0 deadlocks, 0 use cases that never run
+wrote 4 specs and out/cones.txt
+Cone_Forbidden_E0_0 [Forbidden_E0_0]: counterexample (122334 states)
+error[Forbidden_E0_0]: invariant Forbidden_E0_0 is violated: forbidden state is reachable: status=s0 AND due > now witnessed by due=1, status=s0
+  rule: m.rdra:83:1
+  counterexample (1 step):
+    1. New0 [E0#1]                   m.rdra:35:1
+         + E0#1 (status=s0, due=1)
+Cone_Forbidden_E0_1 [Forbidden_E0_0, Forbidden_E0_1]: counterexample (200000 states, stopped at the state or pattern cap (--max-states, --max-patterns) or the memory limit)
+error[Forbidden_E0_1]: invariant Forbidden_E0_1 is violated: forbidden state is reachable: status=s1 AND flag=true witnessed by due=1, flag=true, status=s1
+  rule: m.rdra:121:1
+  counterexample (2 steps):
+    1. New0 [E0#1]                               m.rdra:35:1
+         + E0#1 (status=s0, flag=false, due=1)
+    2. T0_1 [E0#1]                               m.rdra:45:1
+         E0#1.status: s0 -> s1                   m.rdra:68:1
+         E0#1.flag: false -> true                m.rdra:69:1
+Cone_P0 [P0]: ok (122334 states)
+result: counterexample
+Error: verification failed: 2 invariant or after-assert violation(s)
