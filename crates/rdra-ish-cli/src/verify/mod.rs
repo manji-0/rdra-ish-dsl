@@ -19,6 +19,7 @@
 //! one engine leaves undecided is no disagreement.
 
 mod bfs;
+mod compare;
 mod jobs;
 mod native;
 mod report;
@@ -27,28 +28,26 @@ mod tlc;
 mod tlc_tool;
 
 use self::bfs::{
-    bfs_cones, explored_properties, report_bfs_cones, state_models, Bfs, BfsCone, Explored, Safety,
+    bfs_cones, explored_properties, report_bfs_cones, state_models, Bfs, Explored, Safety,
 };
+use self::compare::disagreements;
 use self::jobs::{cone_jobs, property_jobs, Job, JobKind};
 use self::native::{native_properties, native_wholes, Natives};
 use self::report::{print_plan, report_properties, Temporal};
 use self::specs::{out_names, spec_dir, write_specs_and_index, write_whole_specs};
-use self::tlc::{run_cones, run_tlc_wholes, tlc_failures, Decision, Ran};
+use self::tlc::{run_cones, run_tlc_wholes, tlc_failures, Ran};
 pub(crate) use self::tlc_tool::find_on_path;
 use self::tlc_tool::Tlc;
 use crate::export::{checked_system, tla_bounds, Modules};
 use crate::memory::{Budgeted, VerifySplit};
-use crate::property_cone::ConeRun;
 use crate::prove::{find_z3, run_proof, Marks, ProofTally};
 use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
-use crate::tlc_replay::explain_violation;
 use anyhow::{bail, Result};
 use rdra_ish_core::lifecycle::{BoundsLine, Caps, Scope, Target};
 use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{ResolvedProgram, SemanticModel};
 use rdra_ish_emit::tla::{self, PrintMode, TlaNames};
-use std::collections::BTreeSet;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -353,116 +352,6 @@ fn worst(outcomes: impl IntoIterator<Item = Outcome>) -> Outcome {
 fn whole_caps(caps: Caps, budget: Duration) -> Caps {
     let states = usize::try_from(WHOLE_MODEL_STATE_CAP).expect("the cap fits in usize");
     Caps { states, ..caps }.until(Instant::now() + budget)
-}
-
-/// Under `--with-tlc`, each check the two engines decide differently, as an
-/// `error[EngineDisagreement]` line: a safety cone's verdict and the checks its counterexample
-/// breaks, and a property's verdict on each run both made and in the end. A check one engine
-/// leaves undecided, or a TLC run that failed as a tool, is no disagreement.
-fn disagreements(
-    whole_modules: &[String],
-    jobs: &[Job],
-    natives: &Natives,
-    (ran, whole_ran): (&[Ran], &[Ran]),
-) -> Vec<String> {
-    let line = |module: &str, checks: &[String], native: &str, tlc: &str| {
-        format!(
-            "error[EngineDisagreement]: {module} [{}]: native {native}, TLC {tlc}; one engine is wrong (a tool bug, not a finding about the model)",
-            checks.join(", ")
-        )
-    };
-    let differ = |a: Option<Outcome>, b: Option<Outcome>| match (a, b) {
-        (Some(a), Some(b)) => a != b && a != Outcome::ToolError && b != Outcome::ToolError,
-        _ => false,
-    };
-    let mut out = Vec::new();
-    let mut tlc_wholes = whole_ran.iter();
-    for (k, (job, tlc)) in jobs.iter().zip(ran).enumerate() {
-        match &job.kind {
-            JobKind::Cone(cs) => {
-                let Some(native) = &natives.safety[k] else {
-                    continue;
-                };
-                let (a, b) = (native.verdict(), tlc.decision.verdict());
-                if differ(a, b) {
-                    out.push(line(&job.module, &job.checks, as_str(a), as_str(b)));
-                    continue;
-                }
-                if (a, b) != (Some(Outcome::Counterexample), Some(Outcome::Counterexample)) {
-                    continue;
-                }
-                let BfsCone::Ran { found, .. } = native else {
-                    continue;
-                };
-                let mine: BTreeSet<String> = found.iter().map(|d| d.diag.name(&[])).collect();
-                let theirs: Option<BTreeSet<String>> = tlc
-                    .run
-                    .violations
-                    .iter()
-                    .map(|v| explain_violation(&cs.system, &cs.names, v).map(|d| d.name(&[])))
-                    .collect::<Result<_, _>>()
-                    .ok();
-                if let Some(theirs) = theirs.filter(|t| *t != mine) {
-                    let list =
-                        |s: &BTreeSet<String>| s.iter().cloned().collect::<Vec<_>>().join(" ");
-                    out.push(line(
-                        &job.module,
-                        &job.checks,
-                        &format!("violates {}", list(&mine)),
-                        &format!("violates {}", list(&theirs)),
-                    ));
-                }
-            }
-            JobKind::PropertyCone(p) => {
-                let Some(native) = &natives.properties[k] else {
-                    continue;
-                };
-                let module = |run: ConeRun| match run {
-                    ConeRun::Plain => job.module.clone(),
-                    ConeRun::Full => p
-                        .full
-                        .as_ref()
-                        .map_or(job.module.clone(), |s| s.module.clone()),
-                    ConeRun::WfNext => {
-                        p.wf.as_ref()
-                            .map_or(job.module.clone(), |s| s.module.clone())
-                    }
-                };
-                for (run, mine) in &native.runs {
-                    let theirs = tlc.runs.iter().find(|(r, _)| r == run).map(|(_, o)| *o);
-                    if differ(Some(*mine), theirs) {
-                        out.push(line(
-                            &module(*run),
-                            &job.checks,
-                            mine.as_str(),
-                            as_str(theirs),
-                        ));
-                    }
-                }
-                // The final verdict: the whole-model run's where a cone left the property open.
-                let tlc_whole = match tlc.decision {
-                    Decision::Undecided { .. } => tlc_wholes.next(),
-                    Decision::Decided(_) => None,
-                };
-                let mine = natives.whole(p.index).unwrap_or(native);
-                let theirs = tlc_whole.unwrap_or(tlc);
-                let (a, b) = (mine.decision.verdict(), theirs.decision.verdict());
-                if differ(a, b) {
-                    let module = match (natives.whole(p.index), tlc_whole) {
-                        (None, None) => &job.module,
-                        _ => &whole_modules[p.index],
-                    };
-                    out.push(line(module, &job.checks, as_str(a), as_str(b)));
-                }
-            }
-            JobKind::Whole(_) => {}
-        }
-    }
-    out
-}
-
-fn as_str(outcome: Option<Outcome>) -> &'static str {
-    outcome.map_or("not decided", Outcome::as_str)
 }
 
 /// What TLC adds to the end of a `--with-tlc` run.
