@@ -400,3 +400,54 @@ fn the_estimate_on_a_sample_cone_comes_within_a_third_of_its_states() {
         }
     );
 }
+
+/// Under a memory limit the cones explored side by side stop where they stop run by hand one
+/// at a time in cone order, each in the room that what the pool held before, and the results
+/// of the cones before it, leave; and the pool never holds more than the limit.
+#[test]
+fn cones_under_a_limit_stop_where_they_stop_one_at_a_time_in_order() {
+    use crate::memory::{Charge, MemoryPool, MemorySize};
+
+    let bounds = Bounds {
+        instances: NonZeroU8::new(3).expect("3 instances"),
+        int_max: 5,
+    };
+    let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
+    let targets = ts.targets();
+    let free = ts.explore_targets(&targets, Caps::VERIFY);
+    assert!(free.cones.len() >= 3, "{} cones", free.cones.len());
+    let total: u64 = free.cones.iter().map(|c| c.run.peak).sum();
+    for (fifths, before) in [(2, 0), (3, 0), (2, 5)] {
+        let limit = MemorySize::from_bytes(total * fifths / 5).expect("not zero");
+        let pool = || {
+            let pool = MemoryPool::for_command(limit, "--memory");
+            let mut held = Charge::new(pool);
+            assert!(held.cover(limit.bytes() * before / 100));
+            (pool, held)
+        };
+        let at = format!("{fifths}/5 of {total} B, {before}% held before");
+        let (side, _before) = pool();
+        let got = ts.explore_targets(&targets, Caps::VERIFY.charged_to(side));
+        let (alone, _before) = pool();
+        let mut held = alone.held();
+        let mut kept = Vec::new();
+        for c in &got.cones {
+            let room = alone.room().saturating_sub(held);
+            let caps = Caps::VERIFY.charged_to(alone.with_room(room));
+            let run = ts.restrict_to(&c.cone.vars, &c.cone.keep).run(caps);
+            assert_eq!(run.states, c.run.states, "{at}");
+            assert_eq!(run.complete, c.run.complete, "{at}");
+            held += run.kept;
+            kept.push(run);
+        }
+        assert!(
+            got.cones.iter().any(|c| !c.run.complete),
+            "{at}: none stops"
+        );
+        assert!(
+            side.peak() <= limit.bytes(),
+            "{at}: {} B at once",
+            side.peak()
+        );
+    }
+}

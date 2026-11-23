@@ -244,7 +244,9 @@
   at once on `food-permit-ops`, 4968MiB on `patent-ops`, and 4473MiB on `clinic-ops`,
   depending on how the threads ran. Now the runs after it that can no longer count are
   dropped first, and when the rest still crowd it, they are dropped too and run alone in
-  their turn. Every cone stops at the same state as before, on any number of threads. The
+  their turn. Every cone stops at the same state as before, on any number of threads, but
+  one: the `can_reach` cones of `verify` now leave room for the entity cones' results,
+  which stay held while they run, so under a tight limit they may stop sooner. The
   peak footprint of those three runs (macOS) fell from 1.10 to 1.40 times the limit to 1.02
   to 1.23 times; the rest is one cone's run passing its own count while it grows (#242).
   Passes over a finished cone stay uncounted (#243) (#237).
