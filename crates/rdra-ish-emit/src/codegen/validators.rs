@@ -68,7 +68,10 @@ pub(super) fn add_validators(
 
     let mut obligations: Vec<(String, String, Option<String>)> = Vec::new();
     for inv in ts.invariants() {
-        if matches!(inv.text.kind(), InvKind::Unique | InvKind::MinCard) {
+        if matches!(
+            inv.text.kind(),
+            InvKind::Unique | InvKind::MinCard | InvKind::DanglingKey
+        ) {
             continue; // obligations of the data layer
         }
         let at = inv.site.span.as_ref().and_then(site);
@@ -187,5 +190,11 @@ fn text(t: &InvText) -> String {
         } => {
             format!("{parent} has a {child} ({role})")
         }
+        InvText::DanglingKey {
+            child,
+            parent,
+            role,
+            ..
+        } => format!("{child} names a present {parent} ({role})"),
     }
 }

@@ -503,6 +503,10 @@ pub enum GuardWhy {
     /// `<E>._raised_<Ev>` of the bound row is `true`: the event was raised on it, so the use
     /// case `triggers(Ev, UC)` starts may run on it.
     Raised { event: EventKey },
+    /// `deletes(UC, Parent)` over a key whose `.on_delete` is `restrict`, `no_action`, or
+    /// unset (the SQL default): no present child the step does not delete names the row, as
+    /// the database rejects the delete otherwise.
+    Restrict { fk: FkId },
 }
 
 #[derive(Clone, Debug)]
@@ -679,6 +683,8 @@ pub enum InvKind {
     MinCard,
     /// A column's `@check(expr)`: no present slot makes the expression false.
     Check,
+    /// A key whose parent a step deletes: every present child names a present parent.
+    DanglingKey,
 }
 
 impl InvText {
@@ -694,6 +700,7 @@ impl InvText {
             InvText::Unique { .. } | InvText::UniqueSet { .. } => InvKind::Unique,
             InvText::MinCard { .. } => InvKind::MinCard,
             InvText::Check(_) => InvKind::Check,
+            InvText::DanglingKey { .. } => InvKind::DanglingKey,
         }
     }
 }
@@ -741,6 +748,14 @@ pub enum InvText {
         child: String,
         parent: String,
         role: String,
+    },
+    /// A key whose parent a use case deletes, by the key's role and its `.on_delete` as
+    /// written (`cascade`, `set_null`, ...; empty when unset).
+    DanglingKey {
+        child: String,
+        parent: String,
+        role: String,
+        on_delete: String,
     },
 }
 

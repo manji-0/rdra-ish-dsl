@@ -1,0 +1,18 @@
+// trap: .on_delete(set_null) keeps its one-row delete, and DanglingKey reads null as no link.
+// The key is optional: AddLine creates an unlinked line, and Attach links it to an Order.
+// The lifecycle does not null the key when the Order goes, so a line that Attach linked
+// names a deleted Order after CancelDraft, and DanglingKey_OrderLine_Order fails. A line
+// left unlinked names nothing, so the rule holds on it. z3 meets the same step from a state
+// where the rule holds, so the rule is unproved.
+// expect DanglingKey_OrderLine_Order: native=counterexample tlc=counterexample z3=unproved
+entity Order "注文" { id: Int @pk }
+entity OrderLine "明細" { id: Int @pk }
+relate(OrderLine, Order, N:1).optional().on_delete(set_null)
+usecase Open "起票"
+usecase AddLine "明細追加"
+usecase Attach "紐付け"
+usecase CancelDraft "下書き取消"
+creates(Open, Order)
+creates(AddLine, OrderLine)
+links(Attach, OrderLine, Order)
+deletes(CancelDraft, Order)

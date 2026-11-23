@@ -43,6 +43,10 @@
   `relate(.., 1..*:1)` or `1..1:1`: every present parent has a present child. A use
   case that creates the parent without a child in the same transaction fails it, at one
   instance too, so `check` finds it.
+- **Dangling keys**: one `INVARIANT DanglingKey_<Child>_<role>` per key whose parent a
+  use case deletes: every present child names a present parent. A key with no
+  `.on_delete`, `restrict`, or `no_action` guards the delete, so it holds; `cascade` and
+  `set_null` are not run, so a delete that leaves a child fails it.
 - **`@check`**: one `INVARIANT Check_<Entity>_<column>_<n>` per `@check(expr)`. A null
   operand satisfies no comparison but `!=`, as in every rule; `@check(qty == null or qty
   >= 1)` admits null. A `@derived` column

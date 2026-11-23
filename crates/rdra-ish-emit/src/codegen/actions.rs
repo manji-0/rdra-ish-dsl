@@ -258,7 +258,7 @@ fn functions(
             GuardWhy::Link => return Err("links, relinks, or unlinks a row (phase 5)".into()),
             GuardWhy::Copy => return Err("copies a value from another row (phase 5)".into()),
             GuardWhy::ArmCondition { .. } => {}
-            GuardWhy::Run { .. } => {}
+            GuardWhy::Run { .. } | GuardWhy::Restrict { .. } => {}
             GuardWhy::Condition { .. } => {
                 return Err(
                     "a condition on what the use case creates or a later step writes (phase 5)"

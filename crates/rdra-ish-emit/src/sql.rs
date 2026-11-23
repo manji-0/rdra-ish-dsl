@@ -982,6 +982,12 @@ fn inv_text(inv: &Invariant) -> String {
             child,
             parent,
             role,
+        }
+        | InvText::DanglingKey {
+            child,
+            parent,
+            role,
+            ..
         } => format!("{child} -> {parent} ({role})"),
         InvText::UniqueSet { entity, columns } => format!("{entity} unique ({columns})"),
     }

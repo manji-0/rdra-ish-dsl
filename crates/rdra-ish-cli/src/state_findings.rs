@@ -446,6 +446,17 @@ fn guard_text(model: &SemanticModel, why: GuardWhy, site: &Site) -> String {
             "event {} was raised on the bound row (triggers)",
             model.events[event].id
         ),
+        (GuardWhy::Restrict { fk }, _) => {
+            let fk = model.foreign_key(fk);
+            let (child, parent) = (&model.entities[fk.child].id, &model.entities[fk.parent].id);
+            let action = fk
+                .on_delete
+                .map_or("unset, the SQL default", |a| a.as_str());
+            format!(
+                "no {child} names the deleted {parent} through '{}' (.on_delete: {action}, so the database rejects the delete); delete the {child} rows first",
+                fk.role_or(parent)
+            )
+        }
     }
 }
 
@@ -782,6 +793,33 @@ fn violation_message(text: &InvText, p: &str) -> String {
 } => format!(
             "minimum children unmet: a '{parent}' has no '{child}' through '{role}', witnessed by {p}"
         ),
+        InvText::DanglingKey {
+                child,
+                parent,
+                role,
+                on_delete,
+} => format!(
+            "dangling key: a '{child}' names a '{parent}' through '{role}' that is not present, witnessed by {p}; {}",
+            dangling_fix(on_delete, child)
+        ),
+    }
+}
+
+/// What a `DanglingKey_*` violation asks of the model, by the key's `.on_delete`: the
+/// lifecycle does not run `cascade`, `set_null` or `set_default`, so the use case that
+/// deletes the parent must remove or unlink the children itself.
+fn dangling_fix(on_delete: &str, child: &str) -> String {
+    match on_delete {
+        "cascade" => format!(
+            "the lifecycle does not run .on_delete(cascade), so delete the '{child}' rows before the parent"
+        ),
+        "set_null" => format!(
+            "the lifecycle does not run .on_delete(set_null), so unlink the '{child}' rows before the parent is deleted"
+        ),
+        "set_default" => format!(
+            "the lifecycle does not run .on_delete(set_default), so relink or delete the '{child}' rows before the parent"
+        ),
+        _ => format!("the delete of the parent left the '{child}' rows naming it"),
     }
 }
 

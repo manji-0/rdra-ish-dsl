@@ -4,6 +4,26 @@
 
 ### Breaking
 
+- A `deletes(UC, Parent)` waits until no present child names the row when the key's
+  `.on_delete` is `restrict`, `no_action`, or unset (#199). Unset is the SQL default, which
+  the export leaves in place, so the database rejects such a delete; the lifecycle used to
+  delete the row anyway and explore states the database never reaches. `check`, `states`,
+  `verify` (with its TLA+ export under `--with-tlc`), and `verify --prove` read the same
+  guard. A model that deletes a parent while its children stay now finds that delete
+  disabled, which can turn a passing liveness or `can_reach` property into a
+  counterexample, add a deadlock, or make the use case one that never runs. To migrate,
+  delete the children in an earlier step before the parent goes (a use case that
+  `deletes(UC, Child)`), or declare `.on_delete(cascade)` where the database removes them.
+  Each key whose parent some use case deletes also gets the invariant
+  `DanglingKey_<Child>_<role>`: every present child names a present parent. The lifecycle
+  does not run `cascade`, `set_null`, or `set_default` yet: their delete removes the one
+  row as before, and the rule fails when it leaves a child behind. So a key that declares
+  `cascade` re-enables the delete, and `DanglingKey_*` then reports the children it leaves
+  until the model deletes them before the parent; a model that only had the info
+  `DeleteLeavesChildren` now fails. A parent with a `@soft_delete` column is marked, not
+  removed, so its keys get no guard and no rule. No sample changes verdict: no sample
+  deletes a row that a key names.
+
 - The lifecycle checks unique column sets (#222). A `@unique` column, a `@unique(a, b)`,
   and the pair of keys of a `relate(A, B, N:M).via(J)` junction become the invariant
   `Unique_<Entity>_<columns>` when the lifecycle holds every column's value: an `Enum`,

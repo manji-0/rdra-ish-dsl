@@ -62,6 +62,10 @@ Also ask:
    second child linked to one parent). Write `1..*:1` when every parent must have a
    child; the lifecycle checks it as `MinCard_<Child>_<role>`, so the use case that
    creates the parent must create its first child in the same transaction.
+   A `deletes(UC, Parent)` under a key with no `.on_delete`, `restrict`, or `no_action`
+   waits until no present child names the row, as the database rejects it otherwise;
+   delete the children in an earlier step. Under `cascade` or `set_null` the lifecycle
+   leaves the children, and `DanglingKey_<Child>_<role>` reports them.
    Chain `.role(name)` when two relates join one child to one parent, or when a second
    relate joins the same two entities the other way. Every rule, guard, quantifier and copy
    that joins such a pair then names its key with `.role(name)` (`AmbiguousOwnerLink`

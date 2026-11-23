@@ -110,6 +110,15 @@ impl ForeignKey {
     pub fn unique(&self) -> bool {
         self.children.max == Max::One
     }
+
+    /// Whether the database rejects deleting a parent that a child still names: `restrict`,
+    /// `no_action`, or no `.on_delete`, the SQL default the export leaves in place.
+    pub fn delete_rejected(&self) -> bool {
+        matches!(
+            self.on_delete,
+            None | Some(RefAction::Restrict | RefAction::NoAction)
+        )
+    }
 }
 
 /// A set of columns no two rows of an entity share.

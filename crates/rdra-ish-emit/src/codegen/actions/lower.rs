@@ -871,6 +871,23 @@ impl Frame<'_> {
                         conditions.push(self.condition(guard, c.id.clone(), c.label.clone(), e));
                     }
                 }
+                // A delete the key's children reject: no listed child row names the row.
+                GuardWhy::Restrict { fk } => {
+                    if let Some(e) = self.lower_guard(&guard.pred, &mut quant)? {
+                        let fk = cx.model.foreign_key(fk);
+                        let (child, parent) = (
+                            &cx.model.entities[fk.child].id,
+                            &cx.model.entities[fk.parent].id,
+                        );
+                        let role = fk.role_or(parent);
+                        conditions.push(self.condition(
+                            guard,
+                            format!("Restrict_{child}_{role}"),
+                            format!("no {child} names the deleted {parent}"),
+                            e,
+                        ));
+                    }
+                }
                 _ => return Err(unsupported("a guard this phase does not print")),
             }
         }

@@ -206,6 +206,9 @@ loading the machine) it takes about 25 s in release, measured.
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create | ok; `PendingStays` counterexample |
 | `safety_can_reach_frees_slots` | `can_reach` where slots run out | counterexample; per-bill ok |
 | `safety_vacuity` | A trigger that never holds | ok; `always` counterexample |
+| `safety_delete_restrict` | A delete the key's children reject (no `.on_delete`, `restrict`) waits until no child names the row | ok, z3 proved |
+| `safety_delete_cascade` | `.on_delete(cascade)` keeps its one-row delete; `DanglingKey_*` reports the child it leaves | counterexample, z3 unproved |
+| `safety_delete_set_null` | `.on_delete(set_null)` keeps its one-row delete; an unlinked child names nothing | counterexample, z3 unproved |
 | `safety_unique_sets` | A unique column set over column vars, owner vars, and a nullable Int that two rows leave null | single column and junction counterexample; guarded set and null set ok, z3 proved |
 | `cap_temporal_budget_zero` | `--temporal-budget 0` | not decided on both engines |
 | `cap_memory_limit` | `--memory 2KiB` stops runs partway (native only) | not decided |
