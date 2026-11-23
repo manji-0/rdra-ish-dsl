@@ -36,7 +36,7 @@ rdra-ish verify <INPUTS...> [--with-tlc] [-o <OUT_DIR>] [--instance-count N] [--
 |---|---|
 | `export --kind tla` | Write `RdraSpec.tla` **and** sibling `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs that check the deadlocks and witnesses |
 | `verify` | Decide every invariant, `after` assertion, and property on its own cone with the native checker; no JVM |
-| `verify --with-tlc` | The same, and run `tlc` / `tlc2` from `PATH` on one spec per cone and per property run beside it; a check the two decide differently fails the run |
+| `verify --with-tlc` | The same, and run `tlc` / `tlc2` from `PATH` on one spec per cone and per property run beside it, and on the state models of each entity cone up to 100,000 states; a check the two decide differently fails the run |
 | `states`, `check` | BFS on the same system; safety only, no `property` |
 
 `--instance-count` (default `2`) sets `InstanceCount` (`1..=255`; `1` warns that
@@ -55,7 +55,9 @@ module name. If `-o` is a directory (or has no extension), `export` writes
 answers. When the model has temporal properties it also writes the whole-model `RdraSpec`
 pair, whose `.cfg` names every property, for a run by hand, and a `RdraSpec_<Property>`
 pair for each property its cone leaves undecided, which the whole-model run decides (see
-[Temporal properties on a cone](#temporal-properties-on-a-cone)). The native checker reads
+[Temporal properties on a cone](#temporal-properties-on-a-cone)). Under `--with-tlc` it
+also writes a `Cone_<Property>` pair per `stable`, `unchanged`, and `precedes`, and the
+`StateModel_<E>` specs of the entity cones TLC checks. The native checker reads
 none of these files: they are for a TLC run by hand, and for TLC under `--with-tlc`.
 Without `-o`, `verify` writes nothing, and `verify --with-tlc` writes them to a temp dir. It
 deletes the dir when TLC passes every check, and keeps it and prints `specs: <dir>` when TLC
@@ -148,8 +150,26 @@ The TLC reading differs from `check` in two cases:
 - `check` reports a deadlock as a warning when only the instance bound blocks its way out.
   TLC reports the invariant violated, as for an error.
 
-`verify` does not run these specs: its BFS reports the same findings, and its output
-stays as it was.
+`verify` decides the state models by BFS and runs these specs only under `--with-tlc`.
+There it prints each module and its checks in `cones.txt` and runs TLC on each entity cone
+that BFS explored to the end, up to 100,000 states, on the system BFS explored. It runs the
+deadlocks cfg with `-continue` and the witnesses cfg as described above: with `-continue`
+up to 1,000 states, and one witness per run above that. Each cfg reruns without the
+invariants it reported until a run reports no new one. One line per module says what TLC
+found:
+
+```
+tlc: StateModel_Order (13 states): 3 deadlock and 4 witness checks; found Deadlock_Order_status_shipped, Witness_Order_status_refunded
+```
+
+A module with no `Deadlock_` check has no deadlocks run to count its states, and its line
+shows BFS's count, `(<n> states by BFS)`. A larger cone prints `tlc: StateModel_<E> (<n>
+states by BFS): not run, over the limit of 100000 states`. TLC must name the same states without a witness as BFS, and each deadlock
+TLC reports must be one that BFS reports. A deadlock that only BFS finds is no disagreement,
+for the reason above. Any other difference prints `error[EngineDisagreement]:
+StateModel_<E> [<check>]: native <a>, TLC <b>; ...` and fails the run. A missing witness, or a
+deadlock that BFS rates an error, makes `tlc_result:` `counterexample`. The run prints no
+`violated:` line for these modules, since a witnesses cfg violates every reached state.
 
 ## Mapping
 
@@ -234,7 +254,7 @@ did not model-check them. Use `export` or `verify`.
 
 `stable`, `unchanged`, and `precedes` are safety properties that BFS decides on the graph it
 explores. `verify` runs BFS on each one's cone (`TransitionSystem::decide_property`), next to
-the BFS on the entity cones, and starts no TLC run for it. It prints
+the BFS on the entity cones. It prints
 `order and stability properties: <n>, each decided by BFS on its cone` under the bounds and
 one line per property:
 
@@ -273,6 +293,13 @@ and TLC on the whole model give the same verdict, and that a counterexample has 
 length and replays as the same violation. The latch is printed only in a module whose
 `.cfg` checks the property, so the cone modules of the rules and the entity cones keep the
 state graph the explorer reaches.
+
+Under `--with-tlc`, TLC checks each of these properties too, on the same unreduced cone,
+module `Cone_<Property>`, and prints `tlc: Cone_<Property> [<Property>]: <verdict>`. When the
+cone frees slots, TLC's counterexample there sends the property to the whole-model run
+`RdraSpec_<Property>`, as BFS's does. A final verdict the two decide differently prints
+`error[EngineDisagreement]` and fails the run. A run without `--with-tlc` writes no module
+for these properties.
 
 ## What `verify` checks
 

@@ -60,7 +60,8 @@ property ShippedOnceCaptured
   `verify` checks `always`, `eventually`, and `leads_to` each alone with its native checker
   on its cone (the whole model only when the cone does not decide it); `--with-tlc` runs TLC
   on the same runs beside it. It decides `can_reach`, `stable`, `unchanged`, and
-  `precedes` by BFS on their cone, with no TLC run even under `--with-tlc`.
+  `precedes` by BFS on their cone. Under `--with-tlc` TLC checks `stable`, `unchanged`,
+  and `precedes` on the same cone; `can_reach` has no TLC run.
 - `can_reach(expr)` says the actors can still finish each present instance: from every
   reachable state, some path on which the instance stays present reaches `expr`. It is CTL
   `AG (present => EF expr)`, which TLC cannot check, so `verify` decides it by BFS on its

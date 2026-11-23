@@ -109,6 +109,27 @@
   run when the two disagree on a check; a check one engine leaves `not decided` is no
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
+- `verify --with-tlc` also cross-checks `stable`, `unchanged`, `precedes`, and the state
+  models, which only the native checker decided before (#201):
+  - Each of those properties runs in TLC on the unreduced cone the native checker reads,
+    module `Cone_<Property>`, and on the whole model (`RdraSpec_<Property>`) when a
+    counterexample on a cone that frees slots asks for it. The final verdicts must agree.
+  - Each entity cone that BFS explored to the end, up to 100,000 states, runs its
+    `StateModel_<E>` deadlocks and witnesses cfgs on the system BFS explored, and prints
+    `tlc: StateModel_<E> (<n> states): <counts>; found <checks>`. TLC must name the same
+    states without a witness as BFS, and each deadlock TLC reports must be one BFS reports.
+    A deadlock only BFS finds is no disagreement, since a cycle in the column's cone hides
+    it from TLC. A larger cone prints `not run, over the limit of 100000 states`.
+  - Any other difference prints `error[EngineDisagreement]` and fails the run. A missing
+    witness or a deadlock BFS rates an error now makes `tlc_result:` `counterexample`, where
+    it said `ok` before.
+  - `can_reach` and the use cases that never run stay native-only. A run without
+    `--with-tlc` builds none of these jobs, and its output does not change.
+
+  The cross-check found that the `Deadlock_` invariant `export --kind tla` prints leaves out
+  the vars a writing step reads outside the column's cone, such as an event mark, so TLC
+  can report a deadlock that does not exist (#261). The engine corpus records it as a known
+  disagreement in `fair_triggered_handler.rdra`.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
   decide: past the budget, the memory limit, or `--max-states` when given, the run stops
   and the property is `not decided` unless the partial graph already holds a
