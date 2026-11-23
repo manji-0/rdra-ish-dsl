@@ -247,6 +247,13 @@
 
 ### Fixed
 
+- `verify --prove` no longer proves fewer rules as `--instance-count` grows (#231). The
+  lemma candidates were mined only at the run's bounds, and each mining run stops at 50,000
+  states; on oidc-auth at two instances 13 of 24 cones stopped there, and the proof lost 2
+  of 16 rules that it proves at one instance. The prover now also mines every cone at one
+  instance per entity, where they finish, and offers both sets of candidates. A candidate
+  only the one-instance run offers prints as a kept `lemma:` with
+  `(mined at 1 instance per entity)`. oidc-auth proves 16 of 16 rules at both counts.
 - An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
   DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
   literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column
