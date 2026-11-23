@@ -156,7 +156,8 @@ impl MemoryPool {
     }
 
     /// A pool that lets its runs hold `room` bytes and names this pool's limit. What its runs
-    /// hold counts in this pool too, past its limit if need be.
+    /// hold is taken from this pool too, so they are refused when either pool has too little
+    /// left.
     pub(crate) fn with_room(&'static self, room: u64) -> &'static MemoryPool {
         Box::leak(Box::new(MemoryPool {
             room,
@@ -189,11 +190,11 @@ impl MemoryPool {
         let Ok(before) = taken else {
             return false;
         };
-        self.peak.fetch_max(before + bytes, Ordering::Relaxed);
-        if let Some(parent) = self.parent {
-            let before = parent.held.fetch_add(bytes, Ordering::Relaxed);
-            parent.peak.fetch_max(before + bytes, Ordering::Relaxed);
+        if self.parent.is_some_and(|parent| !parent.charge(bytes)) {
+            self.held.fetch_sub(bytes, Ordering::Relaxed);
+            return false;
         }
+        self.peak.fetch_max(before + bytes, Ordering::Relaxed);
         true
     }
 
@@ -254,16 +255,15 @@ impl Charge {
 
     /// Raises the charge to cover `bytes`, a mebibyte ahead when the pool has it so that a
     /// growing run seldom touches the pool; false, keeping the charge, when the pool has less
-    /// than `bytes` left. A refusal of `bytes` within the pool's room is a crowded one: other
-    /// runs hold the rest (`watch`).
+    /// than `bytes` left. `watch` sees both.
     pub(crate) fn cover(&mut self, bytes: u64) -> bool {
         let covered = bytes <= self.bytes || self.grow_to(bytes + MIB) || self.grow_to(bytes);
         WATCH.with(|w| {
             let mut seen = w.get();
             if covered {
                 seen.peak = seen.peak.max(bytes);
-            } else if bytes <= self.pool.room {
-                seen.crowded = true;
+            } else {
+                seen.refused = Some(seen.refused.map_or(bytes, |r| r.min(bytes)));
             }
             w.set(seen);
         });
@@ -304,16 +304,25 @@ impl Drop for Charge {
 /// What the runs on one thread met while `watch` looked on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Watched {
-    /// A run was refused memory it would have had alone: other runs held the rest.
-    pub(crate) crowded: bool,
+    /// The least bytes a run was refused.
+    pub(crate) refused: Option<u64>,
     /// The most bytes a run covered.
     pub(crate) peak: u64,
+}
+
+impl Watched {
+    /// The runs ended as they would with `room` bytes to themselves: each was covered no
+    /// more than `room` and refused only past it. A run asks for the same bytes in the same
+    /// order whatever the pool holds, so the pool refused it where `room` would have.
+    pub(crate) fn as_alone_in(&self, room: u64) -> bool {
+        self.peak <= room && self.refused.is_none_or(|r| r > room)
+    }
 }
 
 thread_local! {
     static WATCH: Cell<Watched> = const {
         Cell::new(Watched {
-            crowded: false,
+            refused: None,
             peak: 0,
         })
     };
@@ -383,19 +392,29 @@ mod tests {
         let mut b = Charge::new(pool);
         let (refused, seen) = watch(|| b.cover(50));
         assert!(
-            !refused && seen.crowded,
+            !refused && !seen.as_alone_in(100) && seen.as_alone_in(40),
             "60 + 50 is past 100, and 50 alone is not"
         );
         let (covered, seen) = watch(|| b.cover(40));
-        assert!(covered && !seen.crowded && seen.peak == 40);
+        assert!(covered && seen.as_alone_in(40) && seen.peak == 40);
         drop(a);
         assert!(b.cover(100));
         let (refused, seen) = watch(|| b.cover(101));
-        assert!(!refused && !seen.crowded, "101 is past the limit alone");
+        assert!(
+            !refused && seen.as_alone_in(100),
+            "101 is past the limit alone"
+        );
         b.shrink_to(30);
         let mut c = Charge::new(pool.with_room(50));
         assert!(!c.cover(51), "past the room");
         assert!(c.cover(50));
         assert!(!Charge::new(pool).cover(21), "30 + 50 + 21 is past 100");
+        let mut d = Charge::new(pool.with_room(30));
+        assert!(
+            !d.cover(21),
+            "within its room, but 30 + 50 + 21 is past 100"
+        );
+        assert!(d.cover(20));
+        assert_eq!(pool.peak(), 100, "the pool never held more than its limit");
     }
 }

@@ -205,6 +205,57 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
     assert_eq!(run_on("3"), one);
 }
 
+/// A cone run again alone, because its run beside the others did not end as it would in its
+/// own room, runs only beside the runs behind it that leave it that room: what the pool held
+/// at once stays within the limit (the most `RDRA_ISH_MEMORY_STATS` reports), on any number
+/// of jobs. Before, all of them stayed held: food-permit-ops reached 17,888,272 bytes of this
+/// 16MiB on four jobs, and 5803MiB of the default 4GiB.
+#[test]
+fn the_cones_run_again_alone_hold_no_more_than_the_limit() {
+    const LIMIT: u64 = 16 << 20;
+    let run_on = |jobs: &str| {
+        let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .current_dir(repo())
+            .env("RDRA_JOBS", jobs)
+            .env("RDRA_ISH_MEMORY_STATS", "1")
+            .args([
+                "check",
+                "--instance-count",
+                "2",
+                "--memory",
+                "16MiB",
+                "samples/food-permit-ops",
+            ])
+            .output()
+            .expect("rdra-ish runs");
+        let stderr = String::from_utf8_lossy(&out.stderr).into_owned();
+        let peak = stderr
+            .lines()
+            .filter_map(|l| l.strip_prefix("memory: "))
+            .filter_map(|l| l.rsplit_once(" peak="))
+            .map(|(_, peak)| peak.parse::<u64>().expect("a byte count"))
+            .max()
+            .expect("the stats name the pool's peak");
+        let rest: Vec<String> = stderr
+            .lines()
+            .filter(|l| !l.starts_with("memory: "))
+            .map(str::to_string)
+            .collect();
+        (peak, rest)
+    };
+    let (peak, one) = run_on("1");
+    assert!(peak <= LIMIT, "1 job: {peak} B held at once");
+    assert!(
+        one.iter().any(|l| l.starts_with("error[MemoryCapReached_")),
+        "{one:?}"
+    );
+    for jobs in ["3", "8"] {
+        let (peak, out) = run_on(jobs);
+        assert!(peak <= LIMIT, "{jobs} jobs: {peak} B held at once");
+        assert_eq!(out, one, "{jobs} jobs");
+    }
+}
+
 #[test]
 fn the_flag_overrides_rdra_toml_which_overrides_the_default() {
     let dir = project(

@@ -1,7 +1,7 @@
 //! Exploration per target: each entity view and each constraint verdict is computed on the
 //! cone it reads, and identical cones are explored once.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 use super::cone::{Cone, Target};
@@ -15,7 +15,7 @@ use super::types::{
 };
 use super::view::{entity_view, AbstractValue, EntityStateResult};
 use super::TransitionSystem;
-use crate::memory::{watch, MemorySize};
+use crate::memory::{watch, MemorySize, Watched};
 use crate::model::{EntityKey, SemanticModel};
 use crate::parallel::{in_parallel, jobs};
 
@@ -184,6 +184,18 @@ struct ArmSoFar {
     capped: Option<(String, UndecidedWhy)>,
 }
 
+/// A cone's run beside the others, with what its runs met; `None` once dropped.
+type Ran = (Cone, Vec<Target>, Option<ComponentRun>, Watched);
+
+/// Drops each run that covered more than `room`, which covers more than any room left to it.
+fn drop_past(ran: &mut VecDeque<Ran>, room: u64) {
+    for (_, _, run, seen) in ran.iter_mut() {
+        if seen.peak > room {
+            *run = None;
+        }
+    }
+}
+
 impl TransitionSystem {
     /// Explores each target on its cone; targets with the same cone share one run.
     pub fn explore_targets(&self, targets: &[Target], caps: Caps) -> TargetExploration {
@@ -227,38 +239,46 @@ impl TransitionSystem {
             };
             system.run(caps)
         };
+        // What the pool held before: results of an earlier exploration still alive.
+        let mut held = caps.memory.map_or(0, |pool| pool.held());
         let ran = in_parallel(groups, jobs(), |(cone, shared)| {
             let (run, seen) = watch(|| explore(&cone, &shared, caps));
-            (cone, shared, run, seen)
+            (cone, shared, Some(run), seen)
         });
         // Under a memory limit the result is the one of the cones run one at a time in cone
-        // order, each with the room the results before it leave. A cone whose run side by
-        // side met a fuller pool, or reached past that room, runs again alone with it.
-        // A crowded run is dropped before the first run again, so that what the runs hold
-        // stays near the limit.
-        let ran: Vec<_> = ran
-            .into_iter()
-            .map(|(cone, shared, run, seen)| {
-                let run = (!seen.crowded).then_some(run);
-                (cone, shared, run, seen.peak)
-            })
-            .collect();
-        let mut held = 0u64;
+        // order, each with the room that the results the pool held when this began, and the
+        // results of the cones before it, leave. A run side by side is kept when it ended as
+        // it would have alone in its room (`Watched::as_alone_in`). One that did not runs
+        // again alone in its room, beside the runs behind it that may still be kept: a run
+        // that covered more than this room covers more than its own, and is dropped first.
+        // When the runs behind crowd it too, they are all dropped and it runs again; each
+        // cone whose run was dropped runs alone when its turn comes. The pool never holds
+        // more than its limit.
         let mut cones = Vec::with_capacity(ran.len());
-        for (cone, shared, run, peak) in ran {
-            let run = match (caps.memory, run) {
-                (None, Some(run)) => run,
-                (Some(pool), run) => {
-                    let room = pool.room().saturating_sub(held);
-                    let run = match run.filter(|_| peak <= room) {
-                        Some(run) => run,
-                        None => explore(&cone, &shared, caps.charged_to(pool.with_room(room))),
-                    };
-                    held += run.kept;
-                    run
-                }
-                (None, None) => unreachable!("only a run charged to a pool is crowded"),
+        let mut ran = VecDeque::from(ran);
+        while let Some((cone, shared, run, seen)) = ran.pop_front() {
+            let Some(pool) = caps.memory else {
+                let run = run.expect("only a run charged to a pool is dropped");
+                cones.push(ConeRun { cone, run });
+                continue;
             };
+            let room = pool.room().saturating_sub(held);
+            let run = match run.filter(|_| seen.as_alone_in(room)) {
+                Some(run) => run,
+                None => {
+                    drop_past(&mut ran, room);
+                    let alone = caps.charged_to(pool.with_room(room));
+                    match watch(|| explore(&cone, &shared, alone)) {
+                        (run, seen) if seen.as_alone_in(room) => run,
+                        (run, _) => {
+                            drop(run);
+                            drop_past(&mut ran, 0);
+                            explore(&cone, &shared, alone)
+                        }
+                    }
+                }
+            };
+            held += run.kept;
             cones.push(ConeRun { cone, run });
         }
         let mut out = TargetExploration {
