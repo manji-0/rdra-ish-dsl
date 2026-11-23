@@ -1,0 +1,16 @@
+// trap: an Enum or Bool default outside the column's values, which every engine reads the same wrong way.
+// `@default(bogus)` is no value of `Enum(open, closed)` and `@default(maybe)` is neither
+// `true` nor `false`. Like a variation's default outside its values, each is an error when
+// the model loads, so no engine explores. Until #187 the builder dropped both defaults and
+// started the row at `open` and `false`, so BFS and TLC agreed that `Close` reaches the
+// forbidden `closed` from a start the model never declared, and z3 read the same Init.
+// rejects: column 'status' has no variant 'bogus'
+// rejects: column 'flag' set to 'maybe'
+// expect Forbidden_Item_0: native=none tlc=none
+entity Item "商品" { id: Int @pk  status: Enum(open, closed) @default(bogus)  flag: Bool @default(maybe) }
+usecase Make "作る"
+usecase Close "閉じる"
+creates(Make, Item)
+transitions(Close, Item.status, open -> closed)
+sets(Close, Item.flag == true)
+forbidden(Item, status == closed)

@@ -43,6 +43,16 @@
     `specs:` line. `--tlc-jar`, `RDRA_TLC_JAR`, and `RDRA_TLC_HEAP` apply only with
     `--with-tlc`, and `--memory` gives BFS the whole limit without it.
   - The `RDRA_ISH_NATIVE` test hook is gone; the default does what it did and more.
+- An `@default` on an `Enum` column that is not one of its values is `InvalidEnumVariant`,
+  and one on a `Bool` column other than `true` or `false` is `InvalidBoolValue`, on an
+  entity or a DTO, as a variation's default outside its values already was. The state
+  model used to drop the default and start the row at the first value or `false`, so
+  `check`, `states`, `verify`, `--with-tlc`, `--prove`, and the TLA+ export explored from a
+  start the model never declared, and the SQL export wrote `DEFAULT 'bogus'`. Such a model
+  now fails to load in every command, the LSP included. To migrate, write one of the
+  column's values, spelled as declared (`@default(open)`, not `@default(Open)`), or
+  lowercase `true` or `false`. `@default(null)` is no value of either type, even on a
+  `@null` column; drop it (#187).
 
 ### Added
 
