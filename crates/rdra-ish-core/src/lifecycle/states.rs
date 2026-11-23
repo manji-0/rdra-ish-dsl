@@ -268,6 +268,11 @@ pub fn derive_states_built(
             diags.push(d.clone());
         }
     }
+    // BFS evaluates no temporal formula, but it can say that one holds vacuously. A scope
+    // drops use cases or cones a property may need, so only the whole model is asked.
+    if scope.is_whole() {
+        diags.extend(built.ts.vacuous_properties(caps));
+    }
     let report = StatesReport {
         bounds,
         caps,

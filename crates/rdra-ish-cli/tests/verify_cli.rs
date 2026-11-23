@@ -1180,3 +1180,44 @@ fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
         assert!(line.contains(": counterexample ("), "{test}: {line}");
     }
 }
+
+/// No order is ever held, so the rule about held orders says nothing; Ship needs a held
+/// order, so it never runs and its assertion says nothing; and the trigger of the leads_to
+/// never holds. TLC passes all three.
+const VACUOUS_CHECKS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(open, paid) @default(open)  held: Bool @default(false)  flagged: Bool @default(false) }
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, open -> paid)
+updates(Ship, Order)
+sets(Ship, Order.flagged == true)
+condition Held "保留"
+holds(Held, Order.held == true)
+applies_to(Held, Ship)
+invariant(Order).when(held == true).then(flagged == true)
+after(Ship).assert(Order.flagged == true)
+property HeldFlags "保留は印"
+  leads_to(Order.held == true, Order.flagged == true)
+"#;
+
+/// `verify` explores each cone it hands to TLC and warns of a check that holds vacuously: a
+/// rule, an `after` assertion, and a `leads_to`. The run still passes, and at two instances
+/// the warning carries no note about one instance.
+#[test]
+fn verify_warns_of_checks_that_hold_vacuously() {
+    if !have_tlc() {
+        return;
+    }
+    let (stdout, stderr, code, _) = verify_model("verify_cli_vacuous", VACUOUS_CHECKS, "specs");
+    assert_eq!(code, Some(0), "{stdout}\n{stderr}");
+    assert!(stdout.contains("tlc_result: ok"), "{stdout}");
+    for warning in [
+        "warning[Vacuous_Inv_Order_0]: Inv_Order_0 holds vacuously: no reachable state has a row of Order with held=true\n",
+        "warning[Vacuous_AfterAssert_Ship_0]: AfterAssert_Ship_0 holds vacuously: Ship never runs to its last step\n",
+        "warning[Vacuous_HeldFlags]: HeldFlags holds vacuously: its leads_to trigger holds in no reachable state\n",
+    ] {
+        assert!(stderr.contains(warning), "missing {warning}\n{stderr}");
+    }
+}

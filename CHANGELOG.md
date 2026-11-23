@@ -4,6 +4,10 @@
 
 ### Added
 
+- The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
+  and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
+  `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
+  a check that is vacuous only at one instance is not reported there (#173).
 - `samples/oidc-auth` models an OpenID Provider and every OpenID Connect authentication
   scenario: discovery and dynamic registration, the code, implicit, and hybrid flows with
   all six response types, PKCE, `prompt` / `max_age` / `acr_values` and the `prompt=none`

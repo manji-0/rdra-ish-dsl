@@ -236,9 +236,8 @@ fn one_of_each() -> Vec<StateDiag> {
         },
         StateDiag::VacuousRule {
             name: "Inv_Order_0".into(),
-            text: InvText::Forbidden("status=void".into()),
             label: None,
-            unmet: vec![UnmetPremise {
+            unmet: vec![UnmetPremise::Rows {
                 rows: vec!["Order".into()],
                 text: "status=void".into(),
             }],

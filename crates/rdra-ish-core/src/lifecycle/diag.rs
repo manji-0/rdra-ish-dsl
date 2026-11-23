@@ -100,26 +100,60 @@ impl fmt::Display for CapGrowth {
     }
 }
 
-/// A premise of a rule that no reachable state meets (`StateDiag::VacuousRule`).
+/// Why a check that holds says nothing (`StateDiag::VacuousRule`): a premise of it that no
+/// reachable state meets.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UnmetPremise {
-    /// The entities whose rows the premise asks for, by id: those it reads, or every entity
-    /// the rule ranges over when it reads none.
-    pub rows: Vec<String>,
-    /// What the premise asks of those rows, as written; empty when it asks only for them.
-    pub text: String,
+pub enum UnmetPremise {
+    /// No reachable state has rows of `rows` of which `text` holds. `rows` are the entities
+    /// the premise asks rows of, by id: those it reads, or every entity the check ranges
+    /// over when it reads none. `text` is the condition as written; empty when the premise
+    /// asks only for the rows.
+    Rows { rows: Vec<String>, text: String },
+    /// An `after(UC).assert`: no run takes the last step of the use case, the one the
+    /// assertion follows. A split use case may still run its earlier transactions.
+    NeverRuns { usecase: String },
+    /// An `after(UC).assert` over entities no param of the step binds: the step runs, but
+    /// never into a state with rows of them.
+    NoRowsAfter { usecase: String, rows: Vec<String> },
+    /// A property that says something only where a condition of it holds: the trigger of a
+    /// `leads_to`, what a `stable` keeps, the `.when` of an `unchanged`, the second
+    /// condition of a `precedes`. `what` names it; it holds for no rows in any reachable
+    /// state.
+    Trigger { what: String },
+}
+
+/// `a row of X`, `two rows of X`, or `rows of X and Y`.
+fn rows_of(rows: &[String]) -> String {
+    match rows {
+        [one] => format!("a row of {one}"),
+        [a, b] if a == b => format!("two rows of {a}"),
+        several => format!("rows of {}", several.join(" and ")),
+    }
 }
 
 impl fmt::Display for UnmetPremise {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.rows[..] {
-            [one] => write!(f, "a row of {one}")?,
-            [a, b] if a == b => write!(f, "two rows of {a}")?,
-            several => write!(f, "rows of {}", several.join(" and "))?,
-        }
-        match self.text.as_str() {
-            "" => Ok(()),
-            text => write!(f, " with {text}"),
+        match self {
+            UnmetPremise::Rows { rows, text } => {
+                write!(f, "no reachable state has {}", rows_of(rows))?;
+                match text.as_str() {
+                    "" => Ok(()),
+                    text => write!(f, " with {text}"),
+                }
+            }
+            UnmetPremise::NeverRuns { usecase } => {
+                write!(f, "{usecase} never runs to its last step")
+            }
+            UnmetPremise::NoRowsAfter { usecase, rows } => {
+                write!(
+                    f,
+                    "no run of {usecase} ends in a state with {}",
+                    rows_of(rows)
+                )
+            }
+            UnmetPremise::Trigger { what } => {
+                write!(f, "its {what} holds in no reachable state")
+            }
         }
     }
 }
@@ -180,14 +214,15 @@ pub enum StateDiag {
         site: Site,
         trace: Trace,
     },
-    /// A state constraint that holds, and one of whose premises no reachable state meets
-    /// (`Invariant::premises`): no state has the rows it ranges over, the guards of its
-    /// `.when` never hold, or a `forbidden` state is out of reach even without one of its
-    /// conditions. The rule would hold whatever the rest of it said.
+    /// A check that holds and says nothing, because no reachable state meets one of its
+    /// premises. A state rule (`Invariant::premises`): no state has the rows it ranges over,
+    /// the guards of its `.when` never hold, or one condition of a `forbidden` of several is
+    /// one no row meets. An `after` assertion: its use case never runs. A temporal property:
+    /// no row it ranges over exists, or the trigger of its `leads_to` never holds.
     VacuousRule {
+        /// The name of the rule, the assertion, or the property.
         name: String,
-        text: InvText,
-        /// The rule's `.label("...")`, when it has one.
+        /// The check's `.label("...")`, when it has one.
         label: Option<String>,
         /// The premises no reachable state meets.
         unmet: Vec<UnmetPremise>,
@@ -837,9 +872,9 @@ impl fmt::Display for StateDiag {
                 let unmet: Vec<String> = unmet.iter().map(UnmetPremise::to_string).collect();
                 write!(
                     f,
-                    "{}{name} holds vacuously: no reachable state has {}",
+                    "{}{name} holds vacuously: {}",
                     label_prefix(label),
-                    unmet.join(", nor ")
+                    unmet.join(", and ")
                 )?;
                 if *one_instance {
                     write!(

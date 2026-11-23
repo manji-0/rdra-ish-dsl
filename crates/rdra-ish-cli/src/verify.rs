@@ -117,6 +117,8 @@ impl Job {
 /// its module prints.
 struct ConeSystem {
     cone: Cone,
+    /// The invariants and after-asserts whose cone this is.
+    targets: Vec<Target>,
     system: TransitionSystem,
     names: TlaNames,
     /// Per action of the cone before any reduction, by its id in the whole system: how many
@@ -256,6 +258,7 @@ fn cone_jobs(
                     .iter()
                     .map(|a| (a.source, (a.guards.len(), a.params.len())))
                     .collect(),
+                targets: shared,
                 cone,
                 system: sub,
                 names: bundle.names,
@@ -960,6 +963,14 @@ pub fn run_tlc(
         let cones =
             start.map(|tlc| threads.spawn(|| run_cones(tlc, &dir, &modules, &jobs, memory.cones)));
         let bfs = state_models(program, model, &ts, scope, &selection, caps);
+        // A `--buc` drops use cases that may reach a premise.
+        if scope.bucs.is_empty() {
+            for d in vacuous_checks(&ts, &jobs, caps) {
+                if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
+                    eprintln!("{}", Finding::new(&d.diag, &[], text));
+                }
+            }
+        }
         let explored = match temporal {
             true => explored_properties(program, model, &ts, caps),
             false => Explored::default(),
@@ -1367,6 +1378,12 @@ fn explored_properties(
             continue;
         }
         let verdict = ts.decide_property(i, caps);
+        // BFS decides this property, so no TLC cone looks for its premises.
+        if let (PropertyVerdict::Holds, Some(d)) = (&verdict, ts.vacuous_property(i, caps)) {
+            if let Some(text) = render_violation(program, model, &d.diag, TraceSource::Bfs) {
+                eprintln!("{}", Finding::new(&d.diag, &[], text));
+            }
+        }
         let said = match &verdict {
             PropertyVerdict::Holds => "ok",
             PropertyVerdict::Violated(_) => "violated",
@@ -1387,6 +1404,39 @@ fn explored_properties(
         }
     }
     out
+}
+
+/// The checks TLC is asked about that hold vacuously (`StateDiag::VacuousRule`): BFS explores
+/// each cone as TLC gets it, at the same bounds, and looks for a state that meets each
+/// premise of the cone's own rules, asserts, or property. TLC says only that a check holds.
+/// The cones are explored side by side, and each run is dropped once it is read.
+fn vacuous_checks(ts: &TransitionSystem, jobs: &[Job], caps: Caps) -> Vec<Diag> {
+    // A covered cone takes the steps of the cone that covers it and no others on its own
+    // vars, so its checks are read off that cone's run and it is not explored again.
+    let covers = covering(jobs);
+    let at: Vec<usize> = (0..jobs.len()).collect();
+    let found = in_parallel(at, rdra_ish_core::jobs(), |at| match &jobs[at].kind {
+        JobKind::Cone(_) if covers[at].is_some() => Vec::new(),
+        JobKind::Cone(cone) => {
+            let run = cone.system.clone().run(caps);
+            let covered = (0..jobs.len()).filter(|a| covers[*a] == Some(at));
+            std::iter::once(at)
+                .chain(covered)
+                .filter_map(|a| match &jobs[a].kind {
+                    JobKind::Cone(cone) => Some(&cone.targets),
+                    JobKind::PropertyCone(_) | JobKind::Whole(_) => None,
+                })
+                .flatten()
+                .filter_map(|t| ts.vacuity(*t, &run))
+                .collect::<Vec<Diag>>()
+        }
+        JobKind::PropertyCone(p) => {
+            let run = p.cone.reduced.clone().run(caps);
+            ts.property_vacuity(p.index, &run).into_iter().collect()
+        }
+        JobKind::Whole(_) => Vec::new(),
+    });
+    found.into_iter().flatten().collect()
 }
 
 /// How a run whose TLC checks passed ends.
