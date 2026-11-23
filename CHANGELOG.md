@@ -167,6 +167,16 @@
 
 ### Changed
 
+- `verify` runs `Cone_<P>_WF` on the reduced cone first, with every class whose
+  sub-lifecycle can loop taken as a place a behavior may stop. An `ok` there is the
+  unreduced cone's `ok`, and a counterexample there prints only after it lifts to the
+  unreduced cone and replays, fails the property, and passes the fairness check; anything
+  else runs `Cone_<P>_Full` and `Cone_<P>_WF` on the unreduced cone as before. The note reads
+  `Cone_<P>_WF: ok on the reduced cone` and has no `Cone_<P>_Full` part. A property whose
+  unreduced cone passes the state cap or the memory limit can now be decided where it was
+  `not decided`. No sample's verdict changes. The argument is in
+  [WF_vars(Next) on a reduced cone](docs/formal-verification.md#wf_varsnext-on-a-reduced-cone);
+  `RDRA_ISH_NO_WF_REDUCED` turns the run off for measurement.
 - `check` and `states` have no state cap by default: `--memory` (4GiB, or `memory` under
   `[check]`) is what stops a cone, and `--max-states <N>` still caps it. The `bounds:` line
   says `no state cap per cone, memory 4GiB`, or `<N> states per cone` under the flag. A cone
