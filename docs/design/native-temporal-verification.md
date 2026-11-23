@@ -922,6 +922,19 @@ The owner decided four more on 2026-11-23, closing the questions this plan left 
     have two or fewer runs undecided for memory in all, or when what stays undecided comes
     from the whole-model step that phase 4 replaces, in which case phase 4 goes first and
     the trial is measured again after it.
+- **C is adopted (2026-11-24).** The trial (#227) held its argument with no extra
+  condition; native and TLC agreed on every corpus case, every sample run, and every sweep
+  seed C decided, at 2 and at 3 instances; 1 of 21 sweep runs C entered fell back on a
+  spurious counterexample; and insurance-claim-ops' wall time and peak memory did not grow
+  (medians 11.57 s and 2,055 MB against main's 12.27 s and 2,083 MB, 5 runs each). The
+  committed samples have no run with `WF_vars(Next)` left undecided for memory, so by the
+  letter of the criteria above the choice was A. The owner chose C on the variants without
+  `.fair`, where C decided both of insurance-claim-ops' memory-undecided runs at 3.4 times
+  less time and 6.5 times less memory, and because phase 4 will turn that saving into
+  final verdicts. B is not needed: a divergence-sensitive split would add about 2% classes.
+  Two gaps stay open: an `ok` on a cone with looping classes is untested at 3 instances,
+  and the unobserved-sub-lifecycle clause is covered by a unit test only, since no
+  property reaches it today.
 - **The samples run with `--with-tlc` on `main` until the release gate passes, and then
   only at release.** While phases 4 and 5 and the divergence trial change native verdicts,
   that step is the only one that compares the samples' temporal verdicts with TLC. Once the
