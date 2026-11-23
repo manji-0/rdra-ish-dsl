@@ -7,10 +7,11 @@
 <!-- derived-from ../state-derivation.md#exploration-by-cone-of-influence -->
 <!-- derived-from ../language-reference.md#fairness-fairusecase- -->
 
-Status: proposed on 2026-11-23. Nothing here is implemented. The plan starts after
+Status: in progress. The plan started after
 [#165](https://github.com/manji-0/rdra-ish-dsl/issues/165),
 [#166](https://github.com/manji-0/rdra-ish-dsl/issues/166), and
-[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) land. The owner decided three
+[#167](https://github.com/manji-0/rdra-ish-dsl/issues/167) landed, and phases 0 to 2 landed
+on 2026-11-23 (#176, #177, #178). The owner decided three
 questions on 2026-11-23: `verify` defaults to the native checker and `--with-tlc` adds
 TLC, each phase lands on `main` when it passes while the next release waits until the
 native checker is stable, and `check` and `states` evaluate no `property`. The same day
@@ -207,9 +208,12 @@ action, and it does not make any action enabled.
 they are printed:
 
 - **`Fair_P`.** For each action of each use case in `.fair`, and for each binding of the
-  action's `Existing` and `Parent` parameters, `WF_vars` of the action with its `New`
-  parameters bound inside by `\E` (`crates/rdra-ish-emit/src/tla/module.rs:864-895`). A fair
-  instance is therefore the pair of an action and its non-`New` slots. A split use case has
+  action's parameters other than `New` (`Existing`, `Parent`, `Earlier`, and `Triggered`),
+  `WF_vars` of the action with its `New` parameters bound inside by `\E`
+  (`crates/rdra-ish-emit/src/tla/module.rs`). A fair instance is therefore the pair of an
+  action and its non-`New` slots. `Property::fair_instance` and
+  `ParamRole::keys_fair_instance` state the rule once, and the printer and the checker both
+  read it. A split use case has
   one fair instance per step and binding. The property is `Fair_P => (...)`, so a behavior
   that starves a fair instance is not a counterexample.
 - **`WF_vars(Next)`.** The specification of an `eventually` or a `leads_to` adds weak
@@ -237,8 +241,9 @@ operand can name.
 
 ### One graph, three kinds of question
 
-The checker takes a `Graph`, a property, and a mode, and returns a verdict with a witness.
-It never explores. Each class of form asks a different question of the same graph:
+The checker takes a finished run (`ComponentRun`), a property, and a mode, and returns a
+verdict with a witness. It reads the run's graph, the BFS parents for the prefix of a
+counterexample, and each binding's parameters for the fair instances. It never explores. Each class of form asks a different question of the same graph:
 
 | Class | Question | Cost per binding |
 |---|---|---|
@@ -304,8 +309,11 @@ state for the component pass. The run itself already holds 12 bytes per edge. At
 has 36 to 52 million edges. The run holds 0.4 to 0.6 GB of edges, and both adjacencies with
 the component arrays add 0.4 to 0.55 GB.
 
-**Incomplete graphs.** A graph that stopped at the cap has states with no out-edges
-recorded. Such a state is never a fair end, and a component that holds one is skipped, so a
+**Incomplete graphs.** A graph that stopped at the cap has states whose moves were not all
+recorded. A state with no recorded move does not identify them, since the cap can stop a
+state partway through its moves. BFS expands states in order, so every state from the
+source of the last recorded edge onward counts as unexpanded. Such a state is never a fair
+end, and a component that holds one is skipped, so a
 counterexample found on an incomplete graph is real. An `ok` needs a complete graph. A
 capped graph with no counterexample is `not decided`, as a capped BFS cone is today.
 
@@ -720,8 +728,8 @@ reports the exit status and error names that the TLC run reports on every root t
 `engine_equivalence` is unchanged.
 
 **Phase 2: the liveness routine.** Add the fair-component routine to `rdra-ish-core` with
-the two modes, the lasso builder, and the fairness check of a lasso. It reads a `Graph` and
-returns a verdict with a lasso. `verify` does not call it yet. Exit: in
+the two modes, the lasso builder, and the fairness check of a lasso. It reads a finished
+run and returns a verdict with a lasso. `verify` does not call it yet. Exit: in
 `a_property_cone_decides_what_the_whole_model_decides`, the native verdict of each run
 equals TLC's on every case, and every native lasso replays and passes both checks.
 
