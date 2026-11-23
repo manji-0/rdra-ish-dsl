@@ -480,8 +480,8 @@ bounds: 1 instance per entity, Int 0..5; 65536 states per cone; entities a check
 
 With one slot, an entity is created once, and deleting it does not free the slot.
 An entity that a target does not read has no slot limit: a use case that creates an
-audit row on every write never stops for want of a free slot. An Int literal outside `0..5` in a `sets`, a constraint, or a condition is
-`IntLiteralOutOfBounds`.
+audit row on every write never stops for want of a free slot. An Int literal outside `0..5` in a `sets`, a constraint, a condition, or the `@default`
+of a column a rule reads is `IntLiteralOutOfBounds`.
 
 ---
 
@@ -876,7 +876,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `DoubleModeledEnum { column, usecase }` | `DoubleModeledEnum_<E>_<usecase>_<column>` | error | A use case that does not create the entity `sets` a lifecycle column that `transitions` drive. The creating use case's `sets` of the status is the start state and is not an error. |
 | `ContradictoryDrivenComparison { usecase, proposition, driven }` | `ContradictoryDrivenComparison_<E>_<usecase>_<proposition>` | error | A use case drives a comparison to one truth while its own Int `sets` make it the other. |
 | `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column that a driven comparison reads and does not drive the comparison, so the comparison keeps the truth its last `drives` gave whatever the column holds. Add a `drives` of the comparison to the use case with the truth the new value gives. |
-| `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal lies outside `0..max`. |
+| `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or an integer `@default` lies outside `0..max`. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
 | `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | The `.along` of a multi-entity rule, or of an `invariant` with `.has`/`.none`, names a hop that no `relate` binds. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |

@@ -880,6 +880,44 @@ fn check_bounds_flags_size_the_system() {
     assert!(!stderr.contains("TLA+"), "{stderr}");
 }
 
+/// A numeric `@default` outside `0..--int-range-max` is `IntLiteralOutOfBounds` in `check`
+/// and stops `verify` before any engine runs; the top of the range is a valid default (#180).
+#[test]
+fn a_default_past_the_int_range_is_an_error_and_the_top_is_not() {
+    let src = |default: &str| {
+        format!(
+            r#"entity Item "商品" {{ id: Int @pk  stock: Int @default("{default}") }}
+usecase Stock "商品登録"
+usecase Restock "補充"
+creates(Stock, Item)
+sets(Restock, Item.stock == 3)
+forbidden(Item, stock == 0)
+"#
+        )
+    };
+    for command in ["check", "verify"] {
+        let (code, _, stderr) =
+            run_on_source("default-top", &src("6"), &[command, "--int-range-max", "6"]);
+        assert_eq!(code, Some(0), "{command}: {stderr}");
+        assert!(!stderr.contains("IntLiteralOutOfBounds"), "{stderr}");
+
+        let (code, _, stderr) = run_on_source(
+            "default-past-top",
+            &src("7"),
+            &[command, "--int-range-max", "6"],
+        );
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(
+            stderr.contains("error[IntLiteralOutOfBounds_Item_7]")
+                && stderr.contains("@default(7) of stock is outside the bounded domain 0..6"),
+            "{command}: {stderr}"
+        );
+    }
+    let (code, _, stderr) = run_on_source("default-past-top-verify", &src("7"), &["verify"]);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(!stderr.contains("Forbidden_Item_0"), "{stderr}");
+}
+
 #[test]
 fn states_bounds_flags_change_the_bounds_line() {
     let (_, _, stderr) = run_on_source("states-default", TWO_CASES_ONE_HANDLER, &["states"]);

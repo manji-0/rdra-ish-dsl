@@ -55,7 +55,8 @@ every case, whatever the case's header says.
 the corpus also catches a drift that all engines share. Two parts are shared. The cone
 ladder decides both the native and the TLC verdict from each engine's runs, so a wrong
 step in it moves both together (see [What the corpus catches](#what-the-corpus-catches)).
-The model builder feeds every engine, so one mistake there is wrong in all of them at once
+The model builder feeds every engine, so one mistake there is wrong in all of them at once.
+An Int `@default` outside the range once started at 0 in every engine
 ([#180](https://github.com/manji-0/rdra-ish-dsl/issues/180)).
 
 ### Int columns and `now`
@@ -126,7 +127,7 @@ gives today, and the issue that tracks it:
 
 ```
 // expect Forbidden_Item_0: native=none tlc=none
-// known Forbidden_Item_0: native=counterexample https://github.com/manji-0/rdra-ish-dsl/issues/180
+// known Forbidden_Item_0: native=counterexample https://github.com/manji-0/rdra-ish-dsl/issues/<n>
 ```
 
 The harness prints each known disagreement on a `known` line. A case fails when the
@@ -201,7 +202,7 @@ loading the machine) it takes about 25 s in release, measured.
 | `z3_lemma` | A `.lemma()` closes that CTI | both proved |
 | `z3_int_and_now_boundary` | Int at the top, `now` that stops at the top | as stated per rule |
 | `z3_now_past_the_top` | The same `now` rule at Int 0..6 | counterexample; z3 unproved |
-| `z3_int_default_out_of_range` | An Int default outside the range | known wrong in every engine ([#180](https://github.com/manji-0/rdra-ish-dsl/issues/180)) |
+| `z3_int_default_out_of_range` | An Int default outside the range | `IntLiteralOutOfBounds`; no engine runs |
 
 The state-cap trap has no file of its own. It is rule 7, which the capped-graph test
 checks on every case's whole model.

@@ -906,9 +906,9 @@ to add a case.
   still fails.
 - **Int arithmetic.** Comparisons and `sets(..., E.col == N)` on Int, Money, Decimal,
   Date, and DateTime columns use TLC integers on `IntRange` (default `0..5`, override
-  with `--int-range-max`). A literal outside that window is
+  with `--int-range-max`). A literal or a numeric `@default` outside that window is
   `IntLiteralOutOfBounds` in `check` and `states` too: raise `--int-range-max` or lower
-  the literal. `@default(0)` is accepted for Int columns.
+  the value. `@default(0)` is accepted for Int columns.
 - **`now`.** `now` is a global Int clock with a `Tick` action. Nothing pins a column
   that `now` is compared to, so the clock can tick past it and TLC finds a violation of
   `forbidden(col < now)` (see `now_coupon.rdra`).
@@ -1139,7 +1139,8 @@ gaps.
 - **Int columns range over `0..5`, and `now` is a bounded clock.** Every Int, Money,
   Decimal, Date, and DateTime column takes values in `IntRange`. `now` starts in that range
   and a `Tick` action raises it to the top, so a run never sees a later time. See it: the
-  `Int 0..5` in the `bounds:` line, and `IntLiteralOutOfBounds` for a literal outside it.
+  `Int 0..5` in the `bounds:` line, and `IntLiteralOutOfBounds` for a literal or a
+  `@default` outside it.
   What you can do: `--int-range-max N` on `check`, `states`, `export`, or `verify` widens
   the range.
 - **Instances are bounded: by default 1 per entity in `check` and `states`, 2 in `verify`.** A rule that needs two

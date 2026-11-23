@@ -523,6 +523,40 @@ sets(Make, Item.stock == 9)
     )));
 }
 
+/// A numeric `@default` the bounds cannot hold is the same error as a literal there, never a
+/// start of 0 (#180). The bound is `0..=int_max`, so the top itself is a valid default.
+#[test]
+fn a_default_outside_the_bound_is_an_error_and_the_top_is_not() {
+    let out_of_bounds = |column: &str, default: &str, int_max: u8| {
+        let src = format!(
+            r#"
+entity Item "商品" {{ id: Int @pk  {column} @default("{default}") }}
+usecase Make "作る"
+creates(Make, Item)
+forbidden(Item, v == 0)
+"#
+        );
+        let bounds = Bounds {
+            int_max,
+            ..Bounds::STATES
+        };
+        let d = derive_scoped(&model_from(&src), bounds, &Scope::ALL);
+        d.entity("Item").diagnostics.iter().find_map(|x| match x {
+            StateDiag::IntLiteralOutOfBounds { value, max, .. } => Some((*value, *max)),
+            _ => None,
+        })
+    };
+    assert_eq!(out_of_bounds("v: Int", "5", 5), None, "the top of 0..5");
+    assert_eq!(out_of_bounds("v: Int", "6", 5), Some((6, 5)));
+    assert_eq!(out_of_bounds("v: Int", "6", 6), None, "the top of 0..6");
+    assert_eq!(out_of_bounds("v: Int", "7", 6), Some((7, 6)));
+    assert_eq!(out_of_bounds("v: Int", "0", 5), None);
+    assert_eq!(out_of_bounds("v: Int", "-1", 5), Some((-1, 5)));
+    assert_eq!(out_of_bounds("v: Int @null", "7", 5), Some((7, 5)));
+    assert_eq!(out_of_bounds("v: Date", "9", 5), Some((9, 5)));
+    assert_eq!(out_of_bounds("v: Money", "100", 5), Some((100, 5)));
+}
+
 /// A driven comparison is a variable of its own, which only `drives` moves (#89). A use case
 /// that `sets` a column the comparison reads and does not drive it leaves the comparison at its
 /// last truth: the warning `DrivenComparisonColumnWritten` names it, once per column. A use
