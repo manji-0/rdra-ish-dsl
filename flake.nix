@@ -106,6 +106,13 @@
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.time ];
 
           JAVA_HOME = "${pkgs.jdk17_headless}";
+
+          # A GOROOT from the user's shell (a version manager's Go, say) points the flake's
+          # `go` at another toolchain's standard library, and the codegen build tests then
+          # fail on a version mismatch. Without it, `go` finds its own root.
+          shellHook = ''
+            unset GOROOT
+          '';
         };
       });
 
