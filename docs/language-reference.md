@@ -1917,9 +1917,9 @@ transitions(EndPublication, Disposition.publication, published -> ended)
   `transitions(Go, E.period, x -> z)`. A self-loop `x -> x` lets it run
   but leaves the period at `x`; with the arms above, a row at `(b, y)` then has no use case
   that moves the period, and `check` reports `Deadlock_E_period_y`.
-- **A single-tag export picks one column.** `export --kind typescript` tags each state union
-  by `status`, else a `*_status` column, else the first lifecycle column by name; the other
-  columns are fields of each variant.
+- **A state type picks one tag column.** `codegen` tags each state type by `status`, else
+  a `*_status` column, else the first lifecycle column by name; the other columns are
+  fields of each variant.
 
 #### Guard one arm: `.when`
 

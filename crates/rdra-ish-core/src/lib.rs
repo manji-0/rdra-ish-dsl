@@ -6,7 +6,6 @@ pub(crate) mod analysis_diag;
 pub mod business_flow;
 pub mod diagnostics;
 pub mod entity_lifecycle;
-pub mod entity_state_variant;
 pub mod event_flow;
 mod fasthash;
 pub mod import_scope;
@@ -41,10 +40,6 @@ pub use analysis::{build_model, build_model_items, build_model_items_with_scopes
 pub use business_flow::{buc_handoffs, buc_members, buc_participants, Handoff, Involvement};
 pub use diagnostics::{Diagnostic, RdraError};
 pub use entity_lifecycle::{state_id, state_key, state_label, state_models, StateModel};
-pub use entity_state_variant::{
-    collect_entity_state_variants, entity_state_variants, EntityStateVariant, EntityStateVariants,
-    StateFieldValue,
-};
 pub use event_flow::{
     api_diagnostics, api_route_diagnostics, collect_event_flows, collect_timer_flows,
     event_diagnostics, EventFlow, TimerFlow,

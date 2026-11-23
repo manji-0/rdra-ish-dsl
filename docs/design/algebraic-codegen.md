@@ -6,8 +6,12 @@
 <!-- derived-from ../language-reference.md#data-layer -->
 
 Status: accepted in scope on 2026-11-07 as an experimental extra
-([vision.md](../vision.md#decisions)). Neither the `codegen` subcommand nor its output is
-covered by [compatibility](../compatibility.md). Phases 0 to 4 have landed, phase 5
+([vision.md](../vision.md#decisions)). On 2026-11-24 the TypeScript types of the output
+became covered by
+[compatibility](../compatibility.md#the-typescript-types-of-codegen), and
+`export --kind typescript-states` was removed (see
+[The state unions before codegen](#the-state-unions-before-codegen)). The rest of the
+subcommand and its output stays experimental. Phases 0 to 4 have landed, phase 5
 has landed except for 11 use cases on the samples (see
 [Phases](#phases)), and every question is [decided](#decisions).
 
@@ -24,12 +28,13 @@ verified, and build as printed. Finishing the code (persistence, the values the 
 leaves abstract, wiring) is the agent's job, not rdra-ish's. Writing files is a means, not
 a goal: the output is one stream the agent reads and places.
 
-## What exists today
+## The state unions before codegen
 
-`export --kind typescript-states` (`crates/rdra-ish-emit/src/typescript.rs`) prints one
-discriminated union per entity from the reachable patterns `states` derives. It is the
-only code output, and running it on the samples shows why it cannot be the base of a code
-generator as it stands:
+This section is history. When this note was written, `export --kind typescript-states`
+(`crates/rdra-ish-emit/src/typescript.rs`) printed one discriminated union per entity from
+the reachable patterns `states` derives. `states --format typescript` printed the same
+unions. It was the only code output. Running it on the samples showed why it could not be
+the base of a code generator as it stood:
 
 | Observation (command) | Problem for code |
 |---|---|
@@ -39,8 +44,16 @@ generator as it stands:
 | The same output types `Order.delivered_at` as `null` in every variant, `delivered` included, and `Payment.gateway_ref` as `null` throughout | ec-site never `sets` those columns, so no reachable state holds a value. The type turns a gap in the model into a rule of the code: a delivered order can never record its delivery time. |
 | Only state axes appear | `total`, `ordered_at`, the keys, and every column no rule reads are missing, so the union describes states, not records. |
 
-The first two are bugs in the existing export and can be fixed on their own (see
-[Phases](#phases), phase 0). The last three are design questions this note answers.
+The first two were bugs in that export, fixed on their own (see [Phases](#phases),
+phase 0). The last three are design questions this note answers.
+
+The next release after v2.3.0 removed both outputs. `codegen --lang ts` prints a state type
+for each entity with a lifecycle column. That state type answers the last three rows: one
+interface for each tag value, narrowed only by rules, with every column of the entity.
+Keeping a second TypeScript output that narrows by reachable patterns meant two answers to
+one question, and one of them encodes the gaps of the model as rules of the code. The
+owner chose `codegen` as the one way to get the types, and made those types part of the
+compatibility contract.
 
 ## Goals and non-goals
 
@@ -80,11 +93,13 @@ This widens what rdra-ish produces from review and verification artifacts to cod
 build depends on. The maintainer decided on 2026-11-07 that this is in scope
 ([vision.md](../vision.md#decisions)).
 
-Code generation is an experimental extra, outside [compatibility](../compatibility.md).
-The `codegen` subcommand, its flags, and its exit status may change or go away in any
-release. So may the generated code: its names, its shape, the obligation list, and the
-JSON form. `rdra-ish --help` and the CLI reference label the subcommand experimental, and
-the header of every output says so. An agent therefore treats the output as a starting point
+Code generation is an experimental extra, outside [compatibility](../compatibility.md),
+except for the TypeScript types of `codegen --lang ts`, which
+[compatibility](../compatibility.md#the-typescript-types-of-codegen) covers since
+2026-11-24. The other flags of the subcommand may change or go away in any release. So may
+the rest of the generated code: its functions, the obligation list, the Rust and Go output,
+and the JSON form. `rdra-ish --help`, the CLI reference, and the header of every output
+say which part is covered. An agent therefore treats the output as a starting point
 to finish, not as an interface to depend on across rdra-ish upgrades. After an upgrade,
 it generates again and compares the new output with the old. Phase 1 adds the
 subcommand and its output to the "What is not covered" list of the compatibility page.
@@ -119,11 +134,13 @@ verdicts.
 
 ### State sums
 
-An entity with a lifecycle column is a sum with one variant per state of its state model,
-the same set of states the state diagram draws (a `transitions` endpoint or a value a
-creating use case sets). An entity with no lifecycle column is a plain record. The tag is
-the column `typescript-states` already picks: `status`, else a `*_status` column, else the
-first lifecycle column by name. Every other lifecycle column is a field typed by its own
+An entity with a lifecycle column is a sum with one variant per value of its tag column's
+inline `Enum`, a value that no use case reaches included. (This note first proposed the
+states the state diagram draws, a `transitions` endpoint or a value a creating use case
+sets; the generator prints every value, and
+[compatibility](../compatibility.md#the-typescript-types-of-codegen) now covers that.) An entity with no lifecycle column is a plain record. The tag is
+the column the removed `typescript-states` export picked: `status`, else a `*_status`
+column, else the first lifecycle column by name. Every other lifecycle column is a field typed by its own
 enum.
 
 Each variant carries every column of the entity. The question is which columns a variant
@@ -148,7 +165,7 @@ since no use case writes `delivered_at`. After
 says what the business means: a delivered order has a delivery time.
 
 **Reachable refinement (opt-in, `--refine reachable`).** A variant refines a column when
-every reachable pattern with that tag agrees on it, as `typescript-states` does today. It
+every reachable pattern with that tag agrees on it, as the removed `typescript-states` did. It
 is tighter, but the table above shows the cost: it is bounded, and it turns a column the
 model never writes into a column the code can never write. It was never measured whether
 the patterns at 1 instance per entity (`Bounds::STATES`, what `states` explores) are every
@@ -469,12 +486,12 @@ rules ────────► refinements ──┘                         
   generated names that collide (an entity `OrderPaid` beside the variant `OrderPaid`) are
   a generator error naming both declarations.
 - The CLI adds a subcommand, `rdra-ish codegen <inputs> --lang ts|rust|go`, that prints
-  the stream to stdout, as `states --format typescript` does. `-o <file>` is optional, and
+  the stream to stdout, as the removed `states --format typescript` did. `-o <file>` is optional, and
   for Go `--package` names the package. Both have landed. Later phases add these: `--format json` prints the intermediate form and the obligations. `--part
-  types|core|scaffold|tests` limits the stream, `--buc` scopes it as `typescript-states`
-  does, and `--scalars` names the scalars module. `export --kind
-  typescript-states` stays as it is: its kind name is covered by
-  [compatibility](../compatibility.md).
+  types|core|scaffold|tests` limits the stream, `--buc` scopes it as the removed
+  `typescript-states` did, and `--scalars` names the scalars module. `export --kind
+  typescript-states` and `states --format typescript` were removed on 2026-11-24 (see
+  [The state unions before codegen](#the-state-unions-before-codegen)).
 - The generator runs the same `check` first and refuses when it fails, because the code
   would then encode a model that was not verified. `cross_order_payment_split` is refused
   this way. `--allow-failing` prints anyway and lists each failing invariant as an
@@ -514,7 +531,7 @@ sample. For this generator:
 
 ## Phases
 
-0. **Fix `typescript-states`.** Landed. An Int axis prints the column's type, not a literal, and
+0. **Fix `typescript-states`.** Landed; the export was removed later. An Int axis prints the column's type, not a literal, and
    a present value with no `present:<type>` prints the column's declared type instead of
    `unknown`. Independent of the rest, and small.
 1. **Data types.** Landed. Variations, entities as records, id newtypes, keys, `@null`, DTOs,
@@ -600,7 +617,10 @@ The maintainer decided these on 2026-11-07:
 
 1. **Scope and stability.** The generator is in scope as an experimental extra. Neither
    the subcommand nor its output is covered by compatibility (see
-   [Goals and non-goals](#goals-and-non-goals)).
+   [Goals and non-goals](#goals-and-non-goals)). On 2026-11-24 the owner narrowed this:
+   the TypeScript types (scalars, ids, value sets, state types, and row types) are covered
+   by [compatibility](../compatibility.md#the-typescript-types-of-codegen), and the rest
+   stays experimental.
 2. **Use cases split into transactions.** One function per step, linked by stored run
    marks ([the decision](#split)).
 3. **Default refinement.** Declared refinement. It is sound regardless of the bounds, and

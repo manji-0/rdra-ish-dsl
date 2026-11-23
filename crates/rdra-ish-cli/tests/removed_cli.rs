@@ -95,3 +95,27 @@ fn the_migration_script_writes_the_current_forms() {
     assert_eq!(migrated.stdout, written.stdout);
     assert!(!migrated.stdout.is_empty());
 }
+
+/// The TypeScript state unions of `export` and `states` are gone: each spelling is a usage
+/// error (exit 2) that names `codegen --lang ts`, and writes nothing.
+#[test]
+fn the_typescript_state_unions_point_to_codegen() {
+    let path = model("typescript_states", NEW);
+    for args in [
+        ["export", "--kind", "typescript-states"],
+        ["export", "--kind", "type-script-states"],
+        ["states", "--format", "typescript"],
+        ["states", "--format", "type-script"],
+    ] {
+        let output = run(&args, &path);
+        let err = stderr(&output);
+        assert_eq!(output.status.code(), Some(2), "{args:?}\n{err}");
+        assert!(
+            err.contains(&format!("`{} {}` is no longer supported", args[1], args[2]))
+                && err.contains("codegen <INPUTS> --lang ts"),
+            "{args:?}\n{err}"
+        );
+        assert!(output.stdout.is_empty(), "{args:?}");
+    }
+    assert!(!path.parent().unwrap().join("out.entity-states.ts").exists());
+}

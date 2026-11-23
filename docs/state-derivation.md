@@ -6,8 +6,8 @@ State derivation answers the question: *for each entity, which combinations of i
 state columns are reachable, and does any reachable state break a declared rule?*
 
 The tool builds one transition system from the model and explores it by breadth-first
-search (BFS). `states`, `check`, `diagram`, `csv`, `list`, `export`, and the
-TypeScript unions read the explored states. `export --kind tla` and `verify` print the
+search (BFS). `states`, `check`, `diagram`, `csv`, `list`, `export`, and
+`codegen` read the explored states. `export --kind tla` and `verify` print the
 same transition system as TLA+ for TLC (see [formal-verification.md](./formal-verification.md)),
 and `verify --prove` encodes it for z3, for any number of rows
 ([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
@@ -942,7 +942,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 
 ## Output formats
 
-`rdra-ish states` renders the views in one of four formats (`--format`).
+`rdra-ish states` renders the views in one of three formats (`--format`).
 
 - `table` (default). One table per entity with an axis legend, one column per axis, and
   the `INITIAL`, `TERMINAL`, and `VIA` columns. `VIA` is the least set of use cases on some
@@ -960,7 +960,6 @@ these names, and the `// expect` headers of the samples list the names of the er
   `usecase` that ran without its `event` having been raised, see **Raised marks** under
   [Exploration by cone of influence](#exploration-by-cone-of-influence)). A change is
   `create`, `delete`, `set` (with the `site` of the arm or `sets` that wrote it), or `tick`.
-- `typescript`. One union per entity. The union reads the same views.
 
 All formats honor `--entity <id>`, `--buc <id>`, `--max-patterns <n>`, and `--max-states <n>`. `--buc`
 keeps the use cases reachable from the named BUCs. It does not change how an entity
