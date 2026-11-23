@@ -1,0 +1,23 @@
+// trap: `--temporal-budget 0` stops the whole-model run before it decides.
+// PaidShipsUnfair needs the whole model (the ticket loops outside its cone). With a budget
+// of 0 s both engines stop at once, so the property is not decided, which is no
+// disagreement and no failure. PaidShips is decided on its cone and needs no budget.
+// flags: --temporal-budget 0
+// expect PaidShipsUnfair: native=not_decided tlc=not_decided
+// expect PaidShips: native=ok tlc=ok
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Ticket "問い合わせ" { id: Int @pk  status: Enum(open, closed) @default(open) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Open "起票"
+usecase Close "完了"
+usecase Reopen "再開"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+transitions(Reopen, Ticket.status, closed -> open)
+property PaidShipsUnfair leads_to(Order.status == paid, Order.status == shipped)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Ship)

@@ -1,0 +1,14 @@
+// trap: a self-loop is neither a step nor enabling.
+// Touch's only move at `paid` changes no var, so the fair instance Touch(o) is never enabled
+// and a behavior may stop at `paid` under Fair_P. Nothing else moves a paid order, so the
+// stop meets WF_vars(Next) as well, and the property fails on both runs of the cone. A
+// checker that counted the self-loop as enabling would rule the stop out and answer ok.
+// expect PaidShips: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Touch "確認"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Touch, Order.status, paid -> paid)
+property PaidShips leads_to(Order.status == paid, Order.status == shipped).fair(Touch)

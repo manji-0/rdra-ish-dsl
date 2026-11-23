@@ -1,0 +1,31 @@
+// trap: a `.lemma()` rule supplies the fact a CTI needs, and the rule is proved.
+// The light turns off only while no door is ajar or open; a door cracks open only while no
+// light is off; Swing opens an ajar door with no guard. So no state has a light off and a
+// door open, at any bound. The rule is not inductive alone: from the unreachable state
+// (light off, door ajar), Swing breaks it, and no mined lemma rules that state out, since
+// the light and the door are not related by a key. z3 reports the CTI; BFS finds nothing.
+// Here the lemma states that fact; it holds at every bound and makes the rule inductive.
+// expect MultiForbidden_Light_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect MultiForbidden_Light_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Deadlock_Door_state_closed: native=counterexample tlc=none
+// expect Deadlock_Light_state_on: native=counterexample tlc=none
+entity Light "照明" { id: Int @pk  state: Enum(on, off) @default(on) }
+entity Door "扉" { id: Int @pk  state: Enum(closed, ajar, open) @default(closed) }
+usecase Install "照明設置"
+usecase Fit "扉設置"
+usecase TurnOff "消灯"
+usecase Crack "少し開ける"
+usecase Swing "開ける"
+creates(Install, Light)
+creates(Fit, Door)
+transitions(TurnOff, Light.state, on -> off)
+transitions(Crack, Door.state, closed -> ajar)
+transitions(Swing, Door.state, ajar -> open)
+condition DoorsShut "開いた扉がない"
+holds(DoorsShut, Light.state == on).none(Door.state in (ajar, open))
+applies_to(DoorsShut, TurnOff)
+condition LightsOn "消えた照明がない"
+holds(LightsOn, Door.state == closed).none(Light.state == off)
+applies_to(LightsOn, Crack)
+forbidden(Light, Door, Light.state == off, Door.state == open).global()
+forbidden(Light, Door, Light.state == off, Door.state == ajar).global().lemma()

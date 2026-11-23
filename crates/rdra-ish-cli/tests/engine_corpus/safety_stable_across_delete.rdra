@@ -1,0 +1,29 @@
+// trap: `stable` and `unchanged` across delete and create.
+// A captured payment may be dropped, which resets the row to its base values (pending),
+// and Open may create another payment in the next slot. A step that deletes the row breaks
+// no `stable` or `unchanged`, since the row is not present after it, and a creation is no
+// step of a present row. CapturedStays and AmountKept hold. PendingStays fails at Capture.
+// A checker that read a deleted row as present would see captured -> pending and report
+// CapturedStays and AmountKept violated.
+// expect CapturedStays: native=ok tlc=none
+// expect AmountKept: native=ok tlc=none
+// expect PendingStays: native=counterexample tlc=none
+entity Payment "支払" {
+  id: Int @pk
+  status: Enum(pending, captured) @default(pending)
+  amount: Int @default(1)
+}
+usecase Open "起票"
+usecase Capture "確定"
+usecase Drop "削除"
+usecase Adjust "金額訂正"
+creates(Open, Payment)
+transitions(Capture, Payment.status, pending -> captured)
+deletes(Drop, Payment)
+sets(Adjust, Payment.amount == 3)
+condition Pending "未確定"
+holds(Pending, Payment.status == pending)
+applies_to(Pending, Adjust)
+property CapturedStays stable(Payment.status == captured)
+property AmountKept unchanged(Payment.amount).when(Payment.status == captured)
+property PendingStays stable(Payment.status == pending)

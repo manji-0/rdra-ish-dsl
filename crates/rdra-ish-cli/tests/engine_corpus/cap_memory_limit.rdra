@@ -1,0 +1,25 @@
+// trap: the memory limit stops a run partway, which must leave a check not decided, never ok.
+// At 2KiB the whole-model run of PaidShipsUnfair stops after a few states: no
+// counterexample yet, so the property is not decided. TLC cannot run under 64MiB, so this
+// case is native only, and every state-model finding of the capped Ticket cone is left
+// undecided as well (not an error). The `always` cone is small enough to finish.
+// flags: --memory 2KiB
+// tlc: skip, verify refuses --with-tlc under 64MiB
+// expect PaidShipsUnfair: native=not_decided tlc=none
+// expect NoShip: native=counterexample tlc=none
+entity Order "注文" { id: Int @pk  status: Enum(pending, paid, shipped) @default(pending) }
+entity Ticket "問い合わせ" { id: Int @pk  status: Enum(open, closed) @default(open) }
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Ship "出荷"
+usecase Open "起票"
+usecase Close "完了"
+usecase Reopen "再開"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+creates(Open, Ticket)
+transitions(Close, Ticket.status, open -> closed)
+transitions(Reopen, Ticket.status, closed -> open)
+property PaidShipsUnfair leads_to(Order.status == paid, Order.status == shipped)
+property NoShip always(Order.status != shipped)

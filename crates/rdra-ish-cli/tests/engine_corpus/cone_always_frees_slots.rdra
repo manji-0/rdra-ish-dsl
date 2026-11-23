@@ -1,0 +1,17 @@
+// trap: `always` on a cone that frees slots.
+// Each Bump creates a receipt the property does not read, so the cone counts no receipt
+// slots and bumps an order to `d`. The whole model has 2 receipts and needs 3 bumps, so it
+// never reaches `d`. The cone's counterexample creates more receipts than the bound allows
+// and must not be reported; the whole model decides ok.
+// expect NeverD: native=ok tlc=ok
+entity Order "注文" { id: Int @pk  status: Enum(a, b, c, d) @default(a) }
+entity Receipt "領収書" { id: Int @pk }
+relate(Receipt, Order, N:1)
+usecase Place "注文"
+usecase Bump "進行"
+creates(Place, Order)
+transitions(Bump, Order.status, a -> b)
+transitions(Bump, Order.status, b -> c)
+transitions(Bump, Order.status, c -> d)
+creates(Bump, Receipt)
+property NeverD always(Order.status != d)

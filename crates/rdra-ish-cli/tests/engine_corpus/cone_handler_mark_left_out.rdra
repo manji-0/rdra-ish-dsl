@@ -1,0 +1,36 @@
+// trap: a handler whose raised mark the cone leaves out.
+// Approve raises EvApproved and sets a flag no property reads; Ship runs on that event.
+// Reject blocks Approve for good. ShipsUnfair has no `.fair`: its cone holds the status
+// but not the raiser's flag, so it leaves the mark out and runs Ship unordered, enabled at
+// every paid order, and its WF_vars(Next) run says ok. In the whole model a rejected order
+// is never approved, Ship never runs on it, and the stop at `paid` meets WF_vars(Next):
+// the property fails. ShipsFair names Ship, whose guard reads the mark, so its cone keeps
+// the mark and Approve, and fails there for the same reason.
+// expect ShipsUnfair: native=counterexample tlc=counterexample
+// expect ShipsFair: native=counterexample tlc=counterexample
+// expect Deadlock_Order_status_paid: native=counterexample tlc=none
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  approved: Bool @default(false)
+  rejected: Bool @default(false)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Approve "承認"
+usecase Reject "却下"
+usecase Ship "出荷"
+event EvApproved "承認済"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+sets(Approve, Order.approved == true)
+raises(Approve, EvApproved)
+triggers(EvApproved, Ship)
+sets(Reject, Order.rejected == true)
+transitions(Ship, Order.status, paid -> shipped)
+condition Open "未判断"
+holds(Open, Order.approved == false, Order.rejected == false)
+applies_to(Open, Approve)
+applies_to(Open, Reject)
+property ShipsUnfair leads_to(Order.status == paid, Order.status == shipped)
+property ShipsFair leads_to(Order.status == paid, Order.status == shipped).fair(Ship)

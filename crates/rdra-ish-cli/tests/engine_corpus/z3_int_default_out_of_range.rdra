@@ -1,0 +1,19 @@
+// trap: an Int default outside the bounded range, which every engine reads the same wrong way.
+// `@default("7")` is outside Int 0..5. A literal outside the range is IntLiteralOutOfBounds
+// (docs/formal-verification.md, "Approximations and limitations"), and so should this
+// default be. Today the builder drops it and starts the column at 0, so BFS and TLC agree
+// that a new item breaks `stock == 0`, a state the model cannot reach, and z3 cannot prove
+// the rule from the same Init. The engines agree with each other, so only the stated
+// verdicts catch it.
+// expect IntLiteralOutOfBounds_Item_7: native=counterexample tlc=none
+// expect Forbidden_Item_0: native=none tlc=none
+// known IntLiteralOutOfBounds_Item_7: native=none https://github.com/manji-0/rdra-ish-dsl/issues/180
+// known Forbidden_Item_0: native=counterexample https://github.com/manji-0/rdra-ish-dsl/issues/180
+// known Forbidden_Item_0: tlc=counterexample https://github.com/manji-0/rdra-ish-dsl/issues/180
+// known Forbidden_Item_0: z3=unproved https://github.com/manji-0/rdra-ish-dsl/issues/180
+entity Item "商品" { id: Int @pk  stock: Int @default("7") }
+usecase Stock "商品登録"
+usecase Restock "補充"
+creates(Stock, Item)
+sets(Restock, Item.stock == 3)
+forbidden(Item, stock == 0)

@@ -1,0 +1,18 @@
+// trap: one edge explained by a fair action and a non-fair one counts for the fair one.
+// Toggle (fair) and Nudge (not fair) both move x -> y -> x. The cycle x <-> y takes those
+// edges, so it takes Toggle's steps and is fair; Finish is not fair, so the order may cycle
+// forever and LoopsForever fails. A checker that kept one label per edge and kept Nudge's
+// would see Toggle enabled and never taken, call the cycle unfair, and answer ok.
+// expect LoopsForever: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(x, y, done) @default(x) }
+usecase Place "注文"
+usecase Toggle "切替"
+usecase Nudge "手動切替"
+usecase Finish "完了"
+creates(Place, Order)
+transitions(Toggle, Order.status, x -> y)
+transitions(Toggle, Order.status, y -> x)
+transitions(Nudge, Order.status, x -> y)
+transitions(Nudge, Order.status, y -> x)
+transitions(Finish, Order.status, y -> done)
+property LoopsForever leads_to(Order.status == x, Order.status == done).fair(Toggle)

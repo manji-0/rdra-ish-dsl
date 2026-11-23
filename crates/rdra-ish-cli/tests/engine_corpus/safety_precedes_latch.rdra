@@ -1,0 +1,28 @@
+// trap: `precedes` reads a latch, not the current state.
+// Refund takes a paid order back to pending and marks it refunded; Ship moves only a
+// refunded order. When Ship runs the order is not paid, but it was paid before, so
+// ShippedAfterPaid holds. A checker that read `p` in the current state only would report a
+// violation. ShippedAfterAudit waits for a column no use case sets, so its latch is never
+// set and the first Ship violates it.
+// expect ShippedAfterPaid: native=ok tlc=none
+// expect ShippedAfterAudit: native=counterexample tlc=none
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped) @default(pending)
+  refunded: Bool @default(false)
+  audited: Bool @default(false)
+}
+usecase Place "注文"
+usecase Pay "支払い"
+usecase Refund "返金"
+usecase Ship "出荷"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+transitions(Refund, Order.status, paid -> pending)
+sets(Refund, Order.refunded == true)
+transitions(Ship, Order.status, pending -> shipped)
+condition Refunded "返金済み"
+holds(Refunded, Order.refunded == true)
+applies_to(Refunded, Ship)
+property ShippedAfterPaid precedes(Order.status == paid, Order.status == shipped)
+property ShippedAfterAudit precedes(Order.audited == true, Order.status == shipped)

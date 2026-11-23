@@ -1,0 +1,15 @@
+// trap: the same `now` rule as z3_int_and_now_boundary.rdra with one more value of range.
+// At Int 0..6 the clock reaches 6 and BFS finds an active coupon past its expiry (5) at every
+// instance count, which z3 (unproved) allows. A z3 proof here would be a disagreement.
+// flags: --int-range-max 6
+// expect Forbidden_Coupon_0: native=counterexample tlc=counterexample z3=unproved bfs=counterexample,counterexample,counterexample
+entity Coupon "クーポン" {
+  id: Int @pk
+  status: Enum(active, expired) @default(active)
+  expires_at: Date @default("5")
+}
+usecase Issue "発行"
+usecase Expire "失効"
+creates(Issue, Coupon)
+transitions(Expire, Coupon.status, active -> expired)
+forbidden(Coupon, status == active, expires_at < now)
