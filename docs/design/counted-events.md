@@ -1,6 +1,6 @@
 # Counted events: a handler runs once per raise
 
-<!-- supersedes ./native-temporal-verification.md#goals-and-non-goals -->
+<!-- constrained-by ./native-temporal-verification.md#goals-and-non-goals -->
 <!-- derived-from ./event-order.md#the-rules -->
 <!-- constrained-by ./event-order.md#cones-and-the-reduction -->
 <!-- constrained-by ../compatibility.md -->

@@ -531,3 +531,72 @@ transitions(Receive, Box.got, none -> one)
         "16 is allowed"
     );
 }
+
+/// Mixed edges: one event with a counted and a latch handler, and one handler with a counted
+/// and a latch event. The latch handler keeps the shared latch; each `<UC>_by_<Ev>` variant
+/// reads its own edge's mark, and only the counted variant takes one off its counter.
+#[test]
+fn counted_and_latch_edges_mix_by_edge() {
+    let src = r#"
+entity Box "箱" { id: Int @pk  sent: Enum(none, one) @default(none)  got: Enum(none, one, two) @default(none)  log: Enum(empty, logged) @default(empty) }
+usecase Pack "箱詰め"
+usecase Ship "発送"
+usecase Return "返品"
+usecase Receive "入庫"
+usecase Log "記録"
+event EvShipped "発送済"
+event EvReturned "返品済"
+creates(Pack, Box)
+transitions(Ship, Box.sent, none -> one)
+raises(Ship, EvShipped)
+transitions(Return, Box.sent, one -> none)
+raises(Return, EvReturned)
+triggers(EvShipped, Receive).counted(1)
+triggers(EvReturned, Receive)
+triggers(EvShipped, Log)
+transitions(Receive, Box.got, none -> one)
+transitions(Receive, Box.got, one -> two)
+transitions(Log, Box.log, empty -> logged)
+"#;
+    let model = model_from(src);
+    let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let var = |name: &str| {
+        ts.var_ids()
+            .find(|v| ts.var_name(*v) == name)
+            .unwrap_or_else(|| panic!("no {name}"))
+    };
+    let pending = var("Box._pending_EvShipped_Receive");
+    let shipped = var("Box._raised_EvShipped");
+    let returned = var("Box._raised_EvReturned");
+    let action = |name: &str| {
+        ts.actions()
+            .iter()
+            .find(|a| a.name == name)
+            .unwrap_or_else(|| panic!("no {name}"))
+    };
+    let reads = |a: &crate::lifecycle::Action, v| {
+        a.guards.iter().any(|g| {
+            matches!(&g.pred, crate::lifecycle::Pred::Cmp(crate::lifecycle::Term::Slot { var, .. }, ..) if *var == v)
+        })
+    };
+    let writes = |a: &crate::lifecycle::Action, v| {
+        a.effects.iter().any(|e| {
+            matches!(e, crate::lifecycle::Effect::Transition { var, .. } | crate::lifecycle::Effect::Assign { var, .. } if *var == v)
+        })
+    };
+    let by_shipped = action("Receive_by_EvShipped");
+    let by_returned = action("Receive_by_EvReturned");
+    assert!(reads(by_shipped, pending) && writes(by_shipped, pending));
+    assert!(!reads(by_shipped, shipped));
+    assert!(reads(by_returned, returned) && !writes(by_returned, returned));
+    assert!(!reads(by_returned, pending) && !writes(by_returned, pending));
+    assert!(reads(action("Log"), shipped) && !writes(action("Log"), shipped));
+    let ship = action("Ship");
+    assert!(
+        writes(ship, pending) && writes(ship, shipped),
+        "Ship counts and latches"
+    );
+    // Ship, Return, Ship again before Receive: two raises against k = 1.
+    let d = derive_at_two(src);
+    assert_eq!(errors(&d), ["EventOverflow_Box_EvShipped_Receive"]);
+}

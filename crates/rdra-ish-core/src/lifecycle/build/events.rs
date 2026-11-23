@@ -204,6 +204,18 @@ impl<'m> Builder<'m> {
             let ev = &model.events[event].id;
             let name = &model.use_cases[uc].id;
             let flow = flows.iter().find(|f| f.event == event);
+            // A use case the scope leaves out (`--buc`, an assumed-never-run use case) has no
+            // action here but writes in the model: the edge is out of this run, not wrong.
+            let scoped_out =
+                |u: &UseCaseKey| self.active_ucs.contains(u) && !self.uc_actions.contains_key(u);
+            let raisers = flow.into_iter().flat_map(|f| &f.raised_by);
+            if scoped_out(&uc)
+                || raisers
+                    .into_iter()
+                    .any(|r| matches!(r, Raiser::UseCase(u) if scoped_out(u)))
+            {
+                continue;
+            }
             let why = if !self.uc_actions.contains_key(&uc) {
                 format!("{name} writes nothing, so it has no step to run once per raise")
             } else if flow.is_none_or(is_free) {

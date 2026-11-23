@@ -209,7 +209,8 @@ shared latch, and two counted handlers have a counter each. The counter is not a
 A counted edge needs a tracked edge. On a free event, on a handler that a free trigger also
 starts or that writes nothing, on raisers with no entity in common, on a handler that raises
 the event itself, or on a raiser that binds a mark entity twice, `.counted` is the error
-`UncountedTrigger`, naming the reason.
+`UncountedTrigger`, naming the reason. An edge whose raiser or handler the run's scope leaves
+out (`--buc`, `--without-usecase`) is not checked in that run, and draws no error.
 
 An action takes one parameter per entity it writes. A `creates` takes the lowest
 `absent` slot. An `updates` or `deletes` takes any `present` slot. The
