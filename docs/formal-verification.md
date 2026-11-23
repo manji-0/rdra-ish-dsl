@@ -1126,7 +1126,7 @@ gaps.
   you can do: rely on `check` at 1 instance for those findings, or shrink the cone, for
   example by removing a guard that pulls another entity's columns in. The whole-model
   temporal run below keeps its own cap of 2,097,152 distinct states.
-- **`check` stops at 65,536 states per cone.** A cone past the cap is the
+- **`check` stops at 65,536 states per cone at one instance, and at 2^20 at two.** A cone past the cap is the
   `StateCapReached_<E>` error, so `check` fails rather than passing on part of the cone.
   See it: the error, whose message names the variables the reached states vary in. What
   you can do: raise the cap with `--max-states`, or narrow the cone by moving a guard that

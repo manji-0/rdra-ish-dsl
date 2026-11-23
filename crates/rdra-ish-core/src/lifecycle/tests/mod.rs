@@ -83,7 +83,7 @@ impl Derived {
 }
 
 pub(super) fn derive_scoped(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Derived {
-    let caps = Caps::new(Caps::DEFAULT_PATTERNS, 100_000);
+    let caps = Caps::new(Caps::STATES.patterns, 100_000);
     let (report, _) = super::derive_states_built(model, scope, bounds, caps);
     Derived {
         views: report.views,

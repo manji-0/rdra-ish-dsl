@@ -824,7 +824,7 @@ fn a_capped_graph_decides_nothing_the_full_graph_contradicts() {
         let project = load_project(std::slice::from_ref(&case.path), None)
             .unwrap_or_else(|e| panic!("{}: {e}", case.name));
         let ts = TransitionSystem::build(&project.model, case.bounds(), &Scope::default()).ts;
-        let full = ts.clone().run(Caps::new(Caps::DEFAULT_PATTERNS, 1 << 20));
+        let full = ts.clone().run(Caps::new(Caps::VERIFY.patterns, 1 << 20));
         assert!(
             full.complete,
             "{}: the whole model passes 2^20 states",
@@ -864,7 +864,7 @@ fn a_capped_graph_decides_nothing_the_full_graph_contradicts() {
                 .map(|&i| matches!(decide(&full, i, fairness), PropertyVerdict::Violated(_)))
                 .collect();
             for &cap in &caps {
-                let run = ts.clone().run(Caps::new(Caps::DEFAULT_PATTERNS, cap));
+                let run = ts.clone().run(Caps::new(Caps::VERIFY.patterns, cap));
                 if run.complete {
                     continue;
                 }

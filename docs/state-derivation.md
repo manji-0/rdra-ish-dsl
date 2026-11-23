@@ -468,6 +468,8 @@ The bounds are inputs of the system, and every result states them.
 |---|---|---|
 | `states`, `check` | `--instance-count` (default 1) | `0..--int-range-max` (default 5) |
 | the generators | 1 | `0..5` |
+
+`check` and `states` also scale their default caps with the instance count; the caps below say how.
 | `export --kind tla`, `verify` | `--instance-count` (default 2) | `0..--int-range-max` (default 5) |
 
 `states` prints its bounds on stderr first:
@@ -533,10 +535,17 @@ no new state appears or a cap is hit.
 
 Two caps stop a cone, and `check` and `states` take both:
 
-- `--max-patterns` (default 256) caps the distinct patterns of one entity view within a
-  cone.
-- `--max-states` (default 65,536) caps the joint states of one cone. The `bounds:` line
-  prints it.
+- `--max-patterns` caps the distinct patterns of one entity view within a cone. Default:
+  2^(10 + 8 * (n - 1)) for `n` = `--instance-count`: 1,024 at one instance, 2^18 at two,
+  2^26 at three.
+- `--max-states` caps the joint states of one cone. The `bounds:` line prints it. Default:
+  four times the default `--max-patterns`, at least 65,536: 65,536 at one instance, 2^20
+  at two, 2^28 at three.
+
+The defaults grow with `--instance-count` because each added instance multiplies a cone's
+states. A shift past the machine's word size saturates, so a very large count has no cap
+of its own; `--memory` (4GiB by default) stops such a run, and the cone it stops is
+reported as not decided. A flag you pass always replaces its default.
 
 When a cap is hit, the view is marked `truncated` and `PatternCapReached` or
 `StateCapReached` is an error: a rule checked on a partial set is not sound. The

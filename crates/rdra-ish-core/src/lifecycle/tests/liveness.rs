@@ -160,7 +160,7 @@ fn a_self_loop_is_neither_a_step_nor_enabling() {
 /// the paid order third and expands it fourth, of 13 states.
 #[test]
 fn a_capped_graph_decides_only_a_counterexample() {
-    let capped = Caps::new(Caps::DEFAULT_PATTERNS, 6);
+    let capped = Caps::new(Caps::STATES.patterns, 6);
     assert_eq!(decide(SHIP, "PaidShipsFair", Fairness::Plain), None);
     assert_eq!(
         decide_under(SHIP, "PaidShipsFair", Fairness::Plain, capped),
@@ -173,7 +173,7 @@ fn a_capped_graph_decides_only_a_counterexample() {
     // The cap stops the run before it expands the paid order, or while it does: that order
     // may have moves the run did not record, so it is no stop.
     for cap in [3, 5] {
-        let tight = Caps::new(Caps::DEFAULT_PATTERNS, cap);
+        let tight = Caps::new(Caps::STATES.patterns, cap);
         assert_eq!(
             decide_under(SHIP, "PaidShips", Fairness::Plain, tight),
             Err(()),

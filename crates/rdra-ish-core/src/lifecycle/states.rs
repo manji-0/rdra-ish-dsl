@@ -12,15 +12,15 @@ use super::{Bounds, TransitionSystem};
 use crate::model::{EntityKey, SemanticModel};
 
 impl Caps {
-    /// What `check`, `states`, and the generators run at unless `--max-patterns` or
-    /// `--max-states` says otherwise. `examples/lifecycle_measure.rs` prints the largest cone of
-    /// each sample.
-    pub const STATES: Caps = Caps::new(Caps::DEFAULT_PATTERNS, Caps::DEFAULT_STATES);
+    /// What the generators run at, with one instance per entity: `for_instances(1)`, 2^10
+    /// patterns and 2^16 states. `check` and `states` scale theirs with `--instance-count`.
+    /// `examples/lifecycle_measure.rs` prints the largest cone of each sample.
+    pub const STATES: Caps = Caps::for_instances(1);
 
     /// For BFS at `Bounds::VERIFY`: 2^23 states per cone. A cone past it leaves its state-model
     /// findings undecided; `engine_equivalence`'s `VERIFY_FALLBACK` names the sample cones
     /// over 300,000 states there.
-    pub const VERIFY: Caps = Caps::new(Caps::DEFAULT_PATTERNS, 1 << 23);
+    pub const VERIFY: Caps = Caps::new(256, 1 << 23);
 }
 
 /// The one bounds line every command prints: `check` and `states` on stderr, `verify` on

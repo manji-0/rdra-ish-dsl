@@ -129,6 +129,13 @@
 
 ### Changed
 
+- The default `--max-patterns` and `--max-states` of `check` and `states` follow
+  `--instance-count`: 2^(10 + 8 * (n - 1)) patterns (1,024, 2^18, 2^26, ...) and the larger
+  of 65,536 and four times that many states (65,536, 2^20, 2^28, ...), for `n` instances.
+  A count whose shift passes the word size saturates; the 4GiB `--memory` default is what
+  stops such a run, as before. A flag you pass always wins. At one instance the state cap
+  stays 65,536 and the pattern cap rises from 256 to 1,024; the generators run at that.
+  `verify`'s caps do not change.
 - `verify` checks `always`, `eventually`, and `leads_to` natively on the graph BFS
   explores, under each property's fairness, through the same ladder of runs TLC took: the
   reduced cone, the full cone, the cone with `WF_vars(Next)`, and the whole model. A
