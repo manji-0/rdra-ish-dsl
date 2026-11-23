@@ -218,9 +218,10 @@ fn a_capped_cone_leaves_an_untaken_arm_undecided() {
     use crate::lifecycle::{Bounds, Subject, UndecidedWhy};
     let model = model_from(DOC);
     let built = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL);
-    let run = built
-        .ts
-        .explore_targets(&built.ts.targets(), Caps::new(Caps::STATES.patterns, 4));
+    let run = built.ts.explore_targets(
+        &built.ts.targets(),
+        Caps::new(Caps::for_instances(1).patterns, 4),
+    );
     assert!(
         !run.verdicts()
             .iter()
@@ -245,7 +246,9 @@ fn a_capped_cone_leaves_an_untaken_arm_undecided() {
 fn a_scope_that_drops_use_cases_leaves_an_untaken_arm_undecided() {
     use crate::lifecycle::{Bounds, Subject, UndecidedWhy};
     let built = TransitionSystem::build(&model_from(DOC), Bounds::STATES, &Scope::ALL);
-    let mut report = built.ts.explore_targets(&built.ts.targets(), Caps::STATES);
+    let mut report = built
+        .ts
+        .explore_targets(&built.ts.targets(), Caps::for_instances(1));
     report.defer_progress();
     assert!(report.undecided().iter().any(|u| matches!(
         &u.subject,

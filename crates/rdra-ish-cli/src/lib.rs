@@ -26,10 +26,9 @@ use export::run_export;
 use fmt_cmd::run_fmt;
 use lifecycle_gate::{gate, Lifecycle};
 use list_output::{format_lint_issues, format_rules, format_transitions, list_elements};
-use load::{deny_deprecated, eprint_diagnostic, load_clean, load_clean_with_manifest};
-use memory::{memory_limit, Budgeted};
+use load::{deny_deprecated, eprint_diagnostic, load_clean};
+use memory::{charged, generator_caps, memory_limit, Budgeted};
 use rdra_ish_core::lifecycle::{FindingTally, Severity};
-use rdra_ish_core::memory::MemoryPool;
 use rdra_ish_core::{collect_rdra_files, load_project, Project};
 use rdra_ish_core::{lint_issues, LintSeverity, RdraError};
 use state_findings::state_findings;
@@ -90,12 +89,12 @@ pub fn run() -> Result<()> {
 
             let scope = scope.resolve(&model)?;
             // Same severity as `states` (fail-closed on caps and violated constraints).
-            let caps = bounds
-                .caps(max_patterns, max_states)
-                .charged_to(MemoryPool::for_command(
-                    memory_limit(memory, manifest.as_ref(), Budgeted::Check),
-                    Budgeted::Check.raise(),
-                ));
+            let caps = charged(
+                bounds.caps(max_patterns, max_states),
+                memory,
+                manifest.as_ref(),
+                Budgeted::Check,
+            );
             let lifecycle = state_findings(&program, &model, &scope, bounds.bounds()?, caps);
             eprintln!("{}", lifecycle.bounds);
             for diag in rdra_ish_core::consistency_diagnostics(&model) {
@@ -158,8 +157,11 @@ pub fn run() -> Result<()> {
                     )
                     .exit();
             }
-            let (program, model) = load_clean(&inputs)?;
-            gate(&Lifecycle::new(&program, &model), kind.reads())?;
+            let (program, model, manifest) = load_clean(&inputs)?;
+            gate(
+                &Lifecycle::new(&program, &model, generator_caps(manifest.as_ref())),
+                kind.reads(),
+            )?;
 
             let output = match kind {
                 ListKind::Rule => format_rules(&model, Some(&program), &format)?,
@@ -268,7 +270,7 @@ pub fn run() -> Result<()> {
                     "warning: --tlc-jar applies only with --with-tlc; this run starts no TLC"
                 );
             }
-            let (program, model, manifest) = load_clean_with_manifest(&inputs)?;
+            let (program, model, manifest) = load_clean(&inputs)?;
             let memory = memory_limit(memory, manifest.as_ref(), Budgeted::Verify);
             let memory = memory::VerifySplit::of(memory, with_tlc)?;
             let scope = scope.resolve(&model)?;

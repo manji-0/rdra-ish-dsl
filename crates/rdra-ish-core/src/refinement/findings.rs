@@ -89,8 +89,8 @@ pub(super) struct Attributed {
     pub unowned: Vec<FindingRef>,
 }
 
-pub(super) fn attribute(model: &SemanticModel, facts: &[BucFacts]) -> Attributed {
-    let report = derive_states(model, &Scope::ALL, Caps::STATES);
+pub(super) fn attribute(model: &SemanticModel, facts: &[BucFacts], caps: Caps) -> Attributed {
+    let report = derive_states(model, &Scope::ALL, caps);
     let entity_key = |id: &str| {
         model
             .entities

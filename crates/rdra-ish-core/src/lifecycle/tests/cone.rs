@@ -183,7 +183,7 @@ fn an_entity_the_view_does_not_read_never_runs_out_of_slots() {
     // Every card and address use case also creates an AuditLog. With one slot per entity the
     // first creator would spend it; the card and address views do not read AuditLog.
     let model = load("samples/personal-info");
-    let report = crate::lifecycle::derive_states(&model, &Scope::ALL, Caps::STATES);
+    let report = crate::lifecycle::derive_states(&model, &Scope::ALL, Caps::for_instances(1));
     let via = |id: &str| -> BTreeSet<String> {
         report
             .views

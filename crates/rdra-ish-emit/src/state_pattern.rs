@@ -221,12 +221,6 @@ pub struct StatePatternTableEmitter {
     pub caps: Caps,
 }
 
-impl Default for StatePatternTableEmitter {
-    fn default() -> Self {
-        Self { caps: Caps::STATES }
-    }
-}
-
 impl Emitter for StatePatternTableEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         Ok(render_table(&derive_views(model, view, self.caps), model))
@@ -378,12 +372,6 @@ pub struct StatePatternCsvEmitter {
     pub caps: Caps,
 }
 
-impl Default for StatePatternCsvEmitter {
-    fn default() -> Self {
-        Self { caps: Caps::STATES }
-    }
-}
-
 impl Emitter for StatePatternCsvEmitter {
     fn emit(&self, model: &SemanticModel, view: &View) -> Result<String, EmitError> {
         render_csv(&derive_views(model, view, self.caps))
@@ -455,12 +443,6 @@ pub fn render_csv(results: &[EntityStateResult]) -> Result<String, EmitError> {
 
 pub struct StatePatternJsonEmitter {
     pub caps: Caps,
-}
-
-impl Default for StatePatternJsonEmitter {
-    fn default() -> Self {
-        Self { caps: Caps::STATES }
-    }
 }
 
 impl Emitter for StatePatternJsonEmitter {
@@ -631,6 +613,8 @@ mod tests {
     use rdra_ish_core::analysis::build_model;
     use rdra_ish_syntax::parse;
 
+    const CAPS: Caps = Caps::for_instances(1);
+
     fn model_from(src: &str) -> SemanticModel {
         let (ast, errors) = parse(src);
         assert!(errors.is_empty(), "parse errors: {:?}", errors);
@@ -667,7 +651,7 @@ sets(usecase::DeliverOrder, Order.delivered_at == present)
     fn test_order_states_table_snapshot() {
         let model = model_from(ORDER_SRC);
         let view = View::whole();
-        let result = StatePatternTableEmitter::default()
+        let result = StatePatternTableEmitter { caps: CAPS }
             .emit(&model, &view)
             .unwrap();
         insta::assert_snapshot!(result);
@@ -677,7 +661,7 @@ sets(usecase::DeliverOrder, Order.delivered_at == present)
     fn test_order_states_csv_snapshot() {
         let model = model_from(ORDER_SRC);
         let view = View::whole();
-        let result = StatePatternCsvEmitter::default()
+        let result = StatePatternCsvEmitter { caps: CAPS }
             .emit(&model, &view)
             .unwrap();
         insta::assert_snapshot!(result);
@@ -687,7 +671,7 @@ sets(usecase::DeliverOrder, Order.delivered_at == present)
     fn test_order_states_json_snapshot() {
         let model = model_from(ORDER_SRC);
         let view = View::whole();
-        let result = StatePatternJsonEmitter::default()
+        let result = StatePatternJsonEmitter { caps: CAPS }
             .emit(&model, &view)
             .unwrap();
         insta::assert_snapshot!(result);
@@ -720,7 +704,7 @@ sets(Restock, Item.stock == 3)
 forbidden(Item, stock < 1)
 "#,
         );
-        let table = StatePatternTableEmitter::default()
+        let table = StatePatternTableEmitter { caps: CAPS }
             .emit(&model, &View::whole())
             .unwrap();
         assert!(
@@ -728,7 +712,7 @@ forbidden(Item, stock < 1)
             "{table}"
         );
         assert!(table.contains("reachable: 2 / bound: 12"), "{table}");
-        let json = StatePatternJsonEmitter::default()
+        let json = StatePatternJsonEmitter { caps: CAPS }
             .emit(&model, &View::whole())
             .unwrap();
         assert!(json.contains(r#""stock": "3""#), "{json}");

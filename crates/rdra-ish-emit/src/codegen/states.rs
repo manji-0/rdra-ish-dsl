@@ -204,9 +204,13 @@ pub(super) fn tag_column<'m>(
 /// nullable column every reachable row of that state holds present (or null). Each is
 /// printed as the rule that would narrow the type; the modeler decides whether it is a rule
 /// of the business or an accident of the model.
-pub(super) fn candidates(model: &SemanticModel, sums: &[super::ir::SumDecl]) -> Vec<String> {
-    use rdra_ish_core::lifecycle::{derive_states, AbstractValue, Caps, Scope};
-    let report = derive_states(model, &Scope::ALL, Caps::STATES);
+pub(super) fn candidates(
+    model: &SemanticModel,
+    sums: &[super::ir::SumDecl],
+    caps: rdra_ish_core::lifecycle::Caps,
+) -> Vec<String> {
+    use rdra_ish_core::lifecycle::{derive_states, AbstractValue, Scope};
+    let report = derive_states(model, &Scope::ALL, caps);
     let mut out = Vec::new();
     for view in report.views.iter().filter(|v| !v.truncated) {
         let Some(sum) = sums.iter().find(|s| s.entity == view.entity_id) else {

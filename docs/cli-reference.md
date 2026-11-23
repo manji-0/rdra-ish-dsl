@@ -512,7 +512,7 @@ auth = { path = "../auth-model" }
 `[check]` and `[verify]` tables set the [memory limit](#memory-limit) of those commands:
 
 ```toml
-[check]           # check and states
+[check]           # check, states, and the generators
 memory = "4GiB"
 
 [verify]
@@ -550,6 +550,11 @@ a diagnostic on an open `.rdra` file.
 `check`, `states`, and `verify` each run within a memory limit: `--memory`, else `memory` in
 the command's `rdra.toml` table (`[check]` for `check` and `states`, `[verify]` for
 `verify`), else `4GiB` for `check` and `states` and `16GiB` for `verify`.
+
+The generators explore within the limit of `check`: `codegen`, `next`, and the lifecycle
+gate of `diagram`, `export`, `list`, and `csv` take `memory` under `[check]`, else `4GiB`,
+and no `--memory` flag. They run at the other caps of `check` at its defaults too, so a
+model `check` passes with no flags explores the same in them.
 
 A size is a whole number and a binary unit: `4GiB`, `512MiB`, `64KiB`, `1TiB`. `G` and `GB`
 mean `GiB` too, and likewise `K`, `M`, and `T`, so `4G` and `4GB` are 4 × 2^30 bytes. A bare

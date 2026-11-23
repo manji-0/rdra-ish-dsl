@@ -342,7 +342,7 @@ fn explained(model: &SemanticModel, diags: &[Diag], i: usize) -> bool {
 /// The arms no edge takes at `Bounds::STATES`, each explained by a diagnostic. With `verify`,
 /// two instances per entity take every arm one instance takes.
 fn audit(name: &str, model: &SemanticModel, verify: bool) -> Vec<usize> {
-    let diags = super::super::derive_states(model, &Scope::ALL, Caps::STATES).diags;
+    let diags = super::super::derive_states(model, &Scope::ALL, Caps::for_instances(1)).diags;
     let untaken = untaken_arms(model, Bounds::STATES);
     for &i in &untaken {
         let st = &model.state_transitions[i];

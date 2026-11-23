@@ -15,7 +15,11 @@ fn export_artifact(
     kind: &ExportKind,
     view: &View,
 ) -> anyhow::Result<(String, &'static str)> {
-    match export_output(kind, crate::cli::SqlDialect::Postgres) {
+    match export_output(
+        kind,
+        crate::cli::SqlDialect::Postgres,
+        Caps::for_instances(1),
+    ) {
         Export::Artifact(Output::Declared(emitter), ext) => Ok((emitter.emit(model, view)?, ext)),
         _ => panic!("not a declared-model artifact"),
     }
@@ -792,8 +796,14 @@ requires_permission(BookAppointment, ScheduleWrite)
         .into_iter()
         .map(|d| d.error.to_string())
         .collect();
-    let state_findings =
-        state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings;
+    let state_findings = state_findings(
+        &program,
+        &model,
+        &Scope::ALL,
+        Bounds::STATES,
+        Caps::for_instances(1),
+    )
+    .findings;
 
     assert!(warnings
         .iter()
@@ -904,8 +914,14 @@ fn clinic_ops_attribute_columns_are_variations_not_unreachable_states() {
         "clinic-ops must load without errors: {diags:?}"
     );
 
-    let findings =
-        state_findings(&program, &model, &Scope::ALL, Bounds::STATES, Caps::STATES).findings;
+    let findings = state_findings(
+        &program,
+        &model,
+        &Scope::ALL,
+        Bounds::STATES,
+        Caps::for_instances(1),
+    )
+    .findings;
     let unreachable_method: Vec<_> = findings
         .iter()
         .filter(|f| f.message.contains("'method'") && f.message.contains("unreachable"))

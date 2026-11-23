@@ -83,7 +83,7 @@ impl Derived {
 }
 
 pub(super) fn derive_scoped(model: &SemanticModel, bounds: Bounds, scope: &Scope) -> Derived {
-    let caps = Caps::new(Caps::STATES.patterns, 100_000);
+    let caps = Caps::new(Caps::for_instances(1).patterns, 100_000);
     let (report, _) = super::derive_states_built(model, scope, bounds, caps);
     Derived {
         views: report.views,
@@ -93,7 +93,7 @@ pub(super) fn derive_scoped(model: &SemanticModel, bounds: Bounds, scope: &Scope
 
 /// What `states` derives: `Bounds::STATES`, each view and verdict on its own cone.
 pub(super) fn derive(model: &SemanticModel) -> Derived {
-    let report = super::derive_states(model, &Scope::ALL, Caps::STATES);
+    let report = super::derive_states(model, &Scope::ALL, Caps::for_instances(1));
     Derived {
         views: report.views,
         diags: report.diags,

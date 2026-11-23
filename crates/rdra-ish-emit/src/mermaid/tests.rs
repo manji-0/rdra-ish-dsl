@@ -978,7 +978,7 @@ fn anomaly_view(entities: &[&str]) -> (View, Explored) {
     let report = rdra_ish_core::lifecycle::derive_states(
         &model,
         &rdra_ish_core::lifecycle::Scope::ALL,
-        rdra_ish_core::lifecycle::Caps::STATES,
+        rdra_ish_core::lifecycle::Caps::for_instances(1),
     );
     let mut view = View::whole();
     view.state.entities = entities.iter().map(|e| e.to_string()).collect();
