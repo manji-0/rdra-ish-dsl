@@ -50,11 +50,12 @@ pub fn store_bytes(states: u64, width: usize, edges: u64) -> u64 {
 /// What a run held when the memory limit stopped it, to say what finishing would take.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Held {
-    /// The store with the state that did not fit (`Bfs::bytes_with_one_more`).
+    /// The store with what did not fit: one more state (`Bfs::bytes_with_one_more`), or the
+    /// larger buffer of edges (`Bfs::bytes_with_more_edges`).
     pub bytes: u64,
     /// Bytes in one state.
     pub width: usize,
-    /// Moves found so far.
+    /// Moves found so far, the one that did not fit counted when it stopped the run.
     pub edges: u64,
     /// The most states the system can have: the product of its variables' domains. `None`
     /// when that passes `u64`.
@@ -81,8 +82,9 @@ impl Held {
 }
 
 impl Bfs<'_> {
-    /// What the run holds now, `bytes` being what its store would take with one more state.
-    pub(super) fn held(&self, bytes: u64) -> Held {
+    /// What the run holds now, `bytes` being what its store would take with what did not
+    /// fit: one more state, or `edges` more edges.
+    pub(super) fn held(&self, bytes: u64, edges: u64) -> Held {
         let bound = self
             .ts
             .var_ids()
@@ -95,7 +97,7 @@ impl Bfs<'_> {
         Held {
             bytes,
             width: self.ts.width,
-            edges: self.edges.len() as u64,
+            edges: self.edges.len() as u64 + edges,
             bound,
             layers: self.layers.clone(),
         }
@@ -104,18 +106,23 @@ impl Bfs<'_> {
     /// The store once one more state is admitted: each state once, in `states`, its index in
     /// `seen`, its parent, every edge, and the bindings.
     pub(super) fn bytes_with_one_more(&self) -> u64 {
-        self.kept_with(1) + self.seen.bytes_with(1)
+        self.kept_with(1, 0) + self.seen.bytes_with(1)
+    }
+
+    /// The store once `edges`, full, has grown for one more edge.
+    pub(super) fn bytes_with_more_edges(&self) -> u64 {
+        self.kept_with(0, 1) + self.seen.bytes_with(0)
     }
 
     /// What the run's result keeps once the run ends and `seen` is dropped.
     pub(super) fn kept(&self) -> u64 {
-        self.kept_with(0)
+        self.kept_with(0, 0)
     }
 
-    fn kept_with(&self, more: usize) -> u64 {
-        self.states.bytes_with(more)
-            + vec_bytes::<Option<u32>>(&self.parents, more)
-            + vec_bytes::<Edge>(&self.edges, 0)
+    fn kept_with(&self, states: usize, edges: usize) -> u64 {
+        self.states.bytes_with(states)
+            + vec_bytes::<Option<u32>>(&self.parents, states)
+            + vec_bytes::<Edge>(&self.edges, edges)
             + self.bindings.bytes
             + self.layers.bytes()
     }

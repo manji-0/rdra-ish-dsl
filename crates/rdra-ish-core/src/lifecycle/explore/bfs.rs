@@ -260,6 +260,9 @@ impl<'t> Bfs<'t> {
                 return false;
             }
             let binding = self.bindings.id(act, params);
+            if !self.room_for_edge() {
+                return false;
+            }
             let edge = self.edges.len() as u32;
             if *s2 == s {
                 self.edges.push(Edge {
@@ -320,23 +323,8 @@ impl<'t> Bfs<'t> {
         }
         let bytes = self.bytes_with_one_more();
         self.peak_admitted = bytes;
-        if let Some(charge) = &mut self.charge {
-            if !charge.cover(bytes) {
-                let pool = charge.pool();
-                self.complete = false;
-                let entities = self.ts.entities.iter().map(|e| e.key).collect();
-                self.diags.push(Diag {
-                    entities,
-                    diag: StateDiag::MemoryCapReached {
-                        limit: pool.limit(),
-                        raise: pool.raise(),
-                        states: self.states.len(),
-                        growth: self.growth(),
-                        held: self.held(bytes),
-                    },
-                });
-                return false;
-            }
+        if !self.cover(bytes, 0) {
+            return false;
         }
         self.check_invariants(s, self.states.len() as u32);
         self.states.push(s);
@@ -344,6 +332,42 @@ impl<'t> Bfs<'t> {
         self.parents.push(parent);
         self.layers.admit(parent.is_none());
         true
+    }
+
+    /// Makes room in `edges` for one more edge; false when the memory limit stops the run.
+    /// A full buffer moves into one twice its size, and both are held while it moves, so the
+    /// store is charged with the larger buffer before it grows rather than at the next state.
+    fn room_for_edge(&mut self) -> bool {
+        if self.edges.len() < self.edges.capacity() {
+            return true;
+        }
+        let bytes = self.bytes_with_more_edges();
+        self.cover(bytes, 1)
+    }
+
+    /// Raises the run's charge to `bytes`, the store with `edges` more edges than it holds;
+    /// false, with a `MemoryCapReached`, when the pool has less left.
+    fn cover(&mut self, bytes: u64, edges: u64) -> bool {
+        let Some(charge) = &mut self.charge else {
+            return true;
+        };
+        if charge.cover(bytes) {
+            return true;
+        }
+        let pool = charge.pool();
+        self.complete = false;
+        let entities = self.ts.entities.iter().map(|e| e.key).collect();
+        self.diags.push(Diag {
+            entities,
+            diag: StateDiag::MemoryCapReached {
+                limit: pool.limit(),
+                raise: pool.raise(),
+                states: self.states.len(),
+                growth: self.growth(),
+                held: self.held(bytes, edges),
+            },
+        });
+        false
     }
 
     /// What the reached states vary in: the distinct values of each variable, and the use

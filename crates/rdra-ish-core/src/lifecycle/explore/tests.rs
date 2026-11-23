@@ -143,6 +143,45 @@ fn a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads() 
     }
 }
 
+/// A run holds no more than it is charged: its store grows only once the pool has covered
+/// the larger buffer, the edges' included. The one thing it holds past its charge is the old
+/// index of seen states while the index grows, a third of the index at most.
+#[test]
+fn a_run_holds_no_more_than_its_charge() {
+    use crate::memory::{MemoryPool, MemorySize};
+    use crate::test_alloc::most_held;
+
+    let bounds = Bounds {
+        instances: NonZeroU8::new(2).expect("2 instances"),
+        int_max: 5,
+    };
+    let ts = TransitionSystem::build(&model_from(SHOP), bounds, &Scope::ALL).ts;
+    let whole = ts.clone().run_on(Caps::VERIFY, Threads::Fixed(0));
+    let mut worst = (0, 0);
+    // Limits a few KiB apart, so that some stop just as the edges fill their buffer.
+    for step in 1..=48u64 {
+        let limit = whole.peak * step / 48;
+        let size = MemorySize::from_bytes(limit).expect("not zero");
+        let pool = MemoryPool::for_command(size, "--memory");
+        let caps = Caps::VERIFY.charged_to(pool);
+        let system = ts.clone();
+        let (run, held) = most_held(|| system.run_on(caps, Threads::Fixed(0)));
+        // The old index while the index grows: 5 bytes a bucket, half the buckets of now.
+        let buckets = (run.states.len() * 8 / 7).max(4).next_power_of_two();
+        let past = held.saturating_sub(pool.peak() + 5 * buckets as u64 / 2);
+        if past > worst.0 {
+            worst = (past, limit);
+        }
+    }
+    // The views, the moves of the states being expanded, and the findings are not charged.
+    assert!(
+        worst.0 <= 64 << 10,
+        "{} B past the charge at a limit of {} B",
+        worst.0,
+        worst.1
+    );
+}
+
 /// A run past its deadline stops before it holds a state and says so: `verify` bounds a
 /// whole-model run by `--temporal-budget` this way, and a budget of 0 s stops it at once.
 #[test]

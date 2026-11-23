@@ -16,6 +16,8 @@ pub mod location;
 pub mod memory;
 pub mod model;
 mod parallel;
+#[cfg(test)]
+mod test_alloc;
 pub use parallel::{in_parallel, jobs};
 pub mod predicate;
 pub mod project;
