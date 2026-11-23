@@ -16,7 +16,9 @@ questions on 2026-11-23: `verify` defaults to the native checker and `--with-tlc
 TLC, each phase lands on `main` when it passes while the next release waits until the
 native checker is stable, and `check` and `states` evaluate no `property`. The same day
 the owner settled `--backend tlc`, the verdict line, verdicts that move off `not decided`,
-and the release gate. [Decisions](#decisions) records them and lists what is still open.
+and the release gate, and then the wait of the release gate, step 5, a trial of a
+conservative divergence, and where the samples run with `--with-tlc`.
+[Decisions](#decisions) records them.
 
 `verify` needs a JVM and TLC today. TLC decides every invariant cone, every `after`
 assertion, and every temporal property, while the explorer in `rdra-ish-core` reaches the
@@ -664,20 +666,20 @@ plan's proposal:
    natively. Each domain sample's native `verify` takes no more wall time and no more peak
    memory than the TLC run in [What exists today](#what-exists-today), measured on the
    same machine.
-7. **A quiet period without a fix to a verdict.** For the period the owner sets, shorter
-   than 14 days, no commit on `main` changed a native verdict on a sample, a fixture, or a
-   sweep seed.
+7. **A quiet period without a fix to a verdict.** No commit on `main` changed a native
+   verdict on a sample, a fixture, or a sweep seed, for as long as the owner judges enough.
 8. **The contract is written.** `compatibility.md`, the changelog, the docs, and the
    skills below describe the tool at that commit.
 
-Item 7 is a waiting time and the others are checks. The owner chose a wait shorter than
-14 days and has not given the number yet.
+Item 7 is a waiting time and the others are checks. The owner ends the wait when they
+judge it long enough; it has no fixed number of days.
 
 **CI.** Before the default changes, the `formal-verify` job runs the samples as today and
 once more under `RDRA_ISH_NATIVE`. After it, the step that checks every sample against its
 header runs without a JVM, and a second step runs the samples with `--with-tlc`.
 `engine_equivalence` keeps `RDRA_REQUIRE_TLC=1`, and the sweep runs its `--with-tlc` mode
-on the fixed seeds.
+on the fixed seeds. Once the release gate passes, the step with `--with-tlc` moves to `release.yml`
+and stops running on `main`.
 
 **Docs that change.** The documents must say in plain words who checks what:
 
@@ -873,22 +875,27 @@ The owner decided four more on 2026-11-23:
   which let `result: ok` stand beside a failing run. Decided on 2026-11-23, before any
   release carries the line.
 - **The release gate keeps its eight criteria, with a shorter wait.** Item 7 waits fewer
-  than 14 days. The owner has not given the number yet.
+  than 14 days.
 
-Still open, each with a recommendation:
+The owner decided four more on 2026-11-23, closing the questions this plan left open:
 
-- **Open: how many days item 7 of the release gate waits.** Fewer than 14, by the decision
-  above.
-- **Open: step 5 or only step 6?** Step 5 is a shortcut for a case step 6 also decides, at
-  the cost of a product of two graphs. Recommendation: keep step 5, because the product is
-  what makes the domain samples' whole models too large, and measure in phase 4 how often
-  each step fires on the samples and the sweep.
-- **Open: a divergence-sensitive reduction.** If the quotient recorded which classes can
-  loop inside themselves, the run with `WF_vars(Next)` could use the reduced cone.
-  Recommendation: out of this plan. It changes the reduction's partition and its proof, and
-  phase 5 already removes the need for the unreduced cone in the counterexample case.
-- **Open: does CI keep running the samples with `--with-tlc` after the release?** Until
-  the gate passes it must, since item 2 of the gate is that run. Recommendation: keep it
-  afterwards too, as its own step in the job that already installs TLC, so the step that
-  checks the headers stays free of a JVM. The earlier recommendation was to drop it. A
-  default that most runs never cross-check should be cross-checked in CI.
+- **The owner ends the wait of item 7.** It has no fixed number of days: the quiet period
+  lasts until the owner judges it enough.
+- **Step 5 stays for now.** Phase 4 measures how often step 5 and step 6 fire on the
+  samples and the sweep, and the owner decides from those numbers whether step 5 stays.
+- **Try a conservative divergence before deciding the reduction.** The run with
+  `WF_vars(Next)` runs on the reduced cone with every class whose sub-lifecycle can loop
+  taken as able to loop inside itself. Taking more classes as able to loop admits more
+  fair behaviors, so an `ok` there is final. A counterexample there may not exist in the
+  cone: it is lifted and must pass the replay, the formula, and the fairness checks, and
+  one that fails them falls back to the unreduced cone as today. The partition and its
+  proof stay as they are. The trial writes the argument that the `ok` is sound first, adds
+  corpus cases whose only counterexample loops inside one class, and then measures how many
+  of the samples' runs with `WF_vars(Next)` it decides. A divergence-sensitive partition,
+  which splits classes by whether they loop, is considered only if the trial falls short.
+- **The samples run with `--with-tlc` on `main` until the release gate passes, and then
+  only at release.** While phases 4 and 5 and the divergence trial change native verdicts,
+  that step is the only one that compares the samples' temporal verdicts with TLC. Once the
+  gate passes, the step moves from the `main` CI to `release.yml`, where it gates every
+  release. The step that checks the headers without a JVM stays on `main`, and so do the
+  random-model sweep with `--with-tlc`, `engine_equivalence`, and the adversarial corpus.
