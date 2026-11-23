@@ -1,0 +1,54 @@
+// trap: a count bound the instance count hides. Borrow opens a loan for any member, so
+// nothing keeps a member at three open loans: the rule needs four loans of one member to
+// fail, and a run with three slots per entity or fewer never has them, so it is ok at 1, 2,
+// and 3 instances and a counterexample at 4. The Shelf rule is the same rule, and Lend
+// counts the shelf's open copies before it runs (`at_most(2)`, so the third is the last):
+// it holds at any count, and z3 proves it by unrolling each count into distinct rows. An
+// engine that counted the row being created, counted a row twice, or read the count as a
+// `has`, would give the Shelf rule a counterexample or the Member rule none at 4.
+// expect Quantifier_Member_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok,counterexample
+// expect Quantifier_Shelf_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok,ok
+entity Member "会員" {
+  id: Int @pk
+}
+
+entity Shelf "棚" {
+  id: Int @pk
+  open: Bool @default(true)
+}
+
+entity Loan "貸出" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+entity Copy "蔵書" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+usecase Join "入会"
+usecase Borrow "貸出"
+usecase Return "返却"
+usecase Stock "入架"
+usecase Lend "棚から貸出"
+usecase Shelve "棚へ返却"
+
+creates(Join, Member)
+creates(Borrow, Loan)
+updates(Borrow, Member)
+transitions(Return, Loan.status, open -> closed)
+creates(Stock, Shelf)
+creates(Lend, Copy)
+updates(Lend, Shelf)
+transitions(Shelve, Copy.status, open -> closed)
+
+relate(Loan, Member, N:1)
+relate(Copy, Shelf, N:1)
+
+invariant(Member).at_most(3, Loan.status == open)
+
+condition ShelfUnderLimit "開いている貸出が2件以下の棚だけ貸し出せる"
+holds(ShelfUnderLimit, Shelf.open == true).at_most(2, Copy.status == open)
+applies_to(ShelfUnderLimit, Lend)
+invariant(Shelf).at_most(3, Copy.status == open)

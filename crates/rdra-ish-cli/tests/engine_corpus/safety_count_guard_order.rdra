@@ -1,0 +1,46 @@
+// trap: two count guards that point opposite ways on one row. The rule reads only Shelf,
+// and the copies reach its cone through the guards of Close and Crowd. Close needs at most
+// one copy on the shelf and Crowd at least two; Stock adds a copy only to an open shelf and
+// nothing removes one. So a shelf crowded first can no longer close, and one closed first
+// gets no second copy: no shelf is closed and crowded, at any count. An engine that read
+// either count as an existential (`some copy`) would let Crowd run with one copy and Close
+// with the same copy, and report a counterexample; one that counted the slots of other
+// shelves would let a shelf crowd on another's copies.
+// expect Forbidden_Shelf_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// expect Deadlock_Shelf_status_open: native=counterexample tlc=none
+entity Shelf "棚" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+  crowded: Bool @default(false)
+}
+
+entity Copy "蔵書" {
+  id: Int @pk
+}
+
+usecase Build "棚設置"
+usecase Stock "入架"
+usecase Close "閉架"
+usecase Crowd "混雑"
+
+creates(Build, Shelf)
+creates(Stock, Copy)
+updates(Stock, Shelf)
+transitions(Close, Shelf.status, open -> closed)
+sets(Crowd, Shelf.crowded == true)
+
+relate(Copy, Shelf, N:1)
+
+condition ShelfOpen "開いている棚にだけ入架できる"
+holds(ShelfOpen, Shelf.status == open)
+applies_to(ShelfOpen, Stock)
+
+condition FewCopies "蔵書が1冊以下の棚だけ閉架できる"
+holds(FewCopies, Shelf.status == open).at_most(1, Copy)
+applies_to(FewCopies, Close)
+
+condition ManyCopies "蔵書が2冊以上の棚だけ混雑とする"
+holds(ManyCopies, Shelf.crowded == false).at_least(2, Copy)
+applies_to(ManyCopies, Crowd)
+
+forbidden(Shelf, status == closed, crowded == true)

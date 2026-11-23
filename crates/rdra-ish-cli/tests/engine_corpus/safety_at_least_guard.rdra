@@ -1,0 +1,61 @@
+// trap: an `at_least` guard and the rule it keeps, against a delete. Assess moves a claim to
+// assessed only while two estimates of it exist, but Drop deletes an estimate at any time,
+// so an assessed claim can fall to one estimate: a counterexample from two instances on.
+// At one instance Estimate has one slot, the guard never holds, no claim is assessed, and
+// the rule holds there. Price does the same for an order and its quotes, and nothing
+// deletes a quote: once priced an order keeps its two, so the rule holds at any count, and
+// z3 proves it. An engine that read the guard on the successor would let Assess count the
+// estimate Drop removes in the same state; one that read `at_least(2)` as `has` would let
+// one estimate assess a claim.
+// expect Quantifier_Claim_0: native=counterexample tlc=counterexample z3=unproved bfs=ok,counterexample,counterexample
+// expect Quantifier_Order_1: native=ok tlc=ok z3=proved bfs=ok,ok,ok
+// expect Deadlock_Claim_status_open: native=counterexample tlc=none
+// expect Deadlock_Order_status_open: native=counterexample tlc=none
+entity Claim "請求" {
+  id: Int @pk
+  status: Enum(open, assessed) @default(open)
+}
+
+entity Estimate "見積" {
+  id: Int @pk
+}
+
+entity Order "注文" {
+  id: Int @pk
+  status: Enum(open, priced) @default(open)
+}
+
+entity Quote "見積書" {
+  id: Int @pk
+}
+
+usecase File "請求登録"
+usecase AddEstimate "見積追加"
+usecase Drop "見積取消"
+usecase Assess "査定"
+usecase Place "注文"
+usecase AddQuote "見積書追加"
+usecase Price "価格決定"
+
+creates(File, Claim)
+creates(AddEstimate, Estimate)
+updates(AddEstimate, Claim)
+deletes(Drop, Estimate)
+transitions(Assess, Claim.status, open -> assessed)
+creates(Place, Order)
+creates(AddQuote, Quote)
+updates(AddQuote, Order)
+transitions(Price, Order.status, open -> priced)
+
+relate(Estimate, Claim, N:1)
+relate(Quote, Order, N:1)
+
+condition TwoEstimates "見積が2件以上ある請求だけ査定できる"
+holds(TwoEstimates, Claim.status == open).at_least(2, Estimate)
+applies_to(TwoEstimates, Assess)
+invariant(Claim).when(status == assessed).at_least(2, Estimate)
+
+condition TwoQuotes "見積書が2件以上ある注文だけ価格を決められる"
+holds(TwoQuotes, Order.status == open).at_least(2, Quote)
+applies_to(TwoQuotes, Price)
+invariant(Order).when(status == priced).at_least(2, Quote)

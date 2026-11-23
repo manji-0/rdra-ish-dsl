@@ -1,0 +1,46 @@
+// trap: a count over an entity with its own slot count, in both directions. With
+// `--instances Loan=4` Loan has four slots and Member two, so one member can hold four
+// open loans and the `at_most(3)` rule fails; Cardinality ranges over Loan_Ids of four
+// while Member_Ids has two. With `--instances Shelf=3` Shelf has three slots and Copy two:
+// two copies on one shelf break the `at_most(1)` rule, and each copy's owner ranges over
+// three shelves. An engine that sized the count by one shared slot count would miss the
+// fourth loan or count a copy slot that does not exist.
+// flags: --instances Loan=4 --instances Shelf=3
+// expect Quantifier_Member_0: native=counterexample tlc=counterexample z3=unproved
+// expect Quantifier_Shelf_1: native=counterexample tlc=counterexample z3=unproved
+entity Member "会員" {
+  id: Int @pk
+}
+
+entity Loan "貸出" {
+  id: Int @pk
+  status: Enum(open, closed) @default(open)
+}
+
+entity Shelf "棚" {
+  id: Int @pk
+}
+
+entity Copy "蔵書" {
+  id: Int @pk
+}
+
+usecase Join "入会"
+usecase Borrow "貸出"
+usecase Return "返却"
+usecase Stock "入架"
+usecase Lend "棚から貸出"
+
+creates(Join, Member)
+creates(Borrow, Loan)
+updates(Borrow, Member)
+transitions(Return, Loan.status, open -> closed)
+creates(Stock, Shelf)
+creates(Lend, Copy)
+updates(Lend, Shelf)
+
+relate(Loan, Member, N:1)
+relate(Copy, Shelf, N:1)
+
+invariant(Member).at_most(3, Loan.status == open)
+invariant(Shelf).at_most(1, Copy)
