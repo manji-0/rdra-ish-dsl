@@ -359,6 +359,14 @@ fn an_enum_default_outside_its_values_is_an_error() {
     let ok = default_errors_of("  status: Enum(open, closed) @default(closed)");
     assert!(ok.is_empty(), "{ok:?}");
 
+    // A type that names no variation is one error, not a second for its default.
+    let errors = default_errors_of("  kind: Undeclared @default(a)");
+    assert_eq!(errors.len(), 2, "the entity and the DTO: {errors:?}");
+    assert!(
+        errors.iter().all(|e| e.contains("names no variation")),
+        "{errors:?}"
+    );
+
     let errors = default_errors_of("  status: Enum(open, closed) @default(bogus)");
     assert_eq!(errors.len(), 2, "the entity and the DTO: {errors:?}");
     assert!(
