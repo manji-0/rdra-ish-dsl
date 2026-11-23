@@ -674,7 +674,7 @@ impl TransitionSystem {
             return None;
         }
         let (name, label, site, unmet) = match target {
-            // A `can_reach` is a witness, and one that holds has its state.
+            // A `can_reach` is a witness: one that holds has the state it asks for.
             Target::Entity(_) | Target::Reach(_) => return None,
             Target::Invariant(i) => {
                 let inv = &self.invariants[i];
