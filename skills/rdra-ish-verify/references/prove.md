@@ -2,7 +2,8 @@
 
 `verify` checks a model at a fixed number of instances, so a rule that holds at two can
 still break at three. `verify --prove` is experimental. It asks z3 whether each state rule
-(`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*`, `MinCard_*`)
+(`forbidden`, `invariant`, `required`, `@check`, quantifier rules, `Unique_*` of 1:1 keys
+and `@unique` sets, `MinCard_*`)
 holds for **any** number of rows and **any** non-negative Int value, at any time (`now`
 has no top). It needs `z3` on `PATH`, or
 `--z3 <path>`, or `RDRA_Z3`. The repository's `nix develop` shell provides it.
@@ -11,7 +12,7 @@ The proof never finds a counterexample. The bounded engines do that, in the same
 
 ## Reading the Output
 
-Each rule prints one line before TLC runs:
+Each rule prints one line after the `proof (...)` header, before the cone lines:
 
 - `proved: <rule>` — the rule holds for any number of rows and any Int value.
 - `unproved: <rule>: not inductive; ...` — a counterexample to induction (CTI) follows.
@@ -97,8 +98,9 @@ invariant(Order).when(status == placed).none(Shipment).label("a placed order has
 ```
 
 - **`check` checks a lemma.** It checks it as a rule, so a wrong lemma fails there with a
-  trace: run `rdra-ish check` before trusting one. `verify` runs no TLC cone for a lemma; the
-  proof uses a lemma only once it proves it.
+  trace: run `rdra-ish check` before trusting one. `verify` runs no cone of its own for a
+  lemma (a cone another rule needs still checks a lemma it holds); the proof uses a lemma
+  only once it proves it.
 - **The proof uses a lemma it can prove.** A lemma becomes a candidate fact, like a rule.
   It prints as `proved: lemma <name>` or `unproved: lemma <name>`, and `proof: your
   lemmas: ...` counts lemmas apart from the rules.

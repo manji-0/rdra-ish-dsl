@@ -158,6 +158,7 @@ fn main() {
             continue;
         }
         let ts = built.ts;
+        let twin = prove::mining_twin(&project.model, &Scope::default(), &ts);
         let rules: Vec<usize> = (0..ts.invariants().len()).collect();
         let log = Arc::new(Mutex::new(Vec::new()));
         let mut meters: Vec<Meter> = (0..solvers)
@@ -168,7 +169,7 @@ fn main() {
             })
             .collect();
         let start = Instant::now();
-        let proof = prove::prove(&ts, &rules, &mut meters, options)
+        let proof = prove::prove(&ts, twin.as_ref(), &rules, &mut meters, options)
             .unwrap_or_else(|e| panic!("{root}: {e}"));
         let secs = start.elapsed().as_secs_f64();
         let mut h = DefaultHasher::new();

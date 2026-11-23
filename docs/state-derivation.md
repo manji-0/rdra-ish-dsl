@@ -6,9 +6,10 @@ State derivation answers the question: *for each entity, which combinations of i
 state columns are reachable, and does any reachable state break a declared rule?*
 
 The tool builds one transition system from the model and explores it by breadth-first
-search (BFS). `states`, `check`, `diagram`, `csv`, `list`, `export`, and
-`codegen` read the explored states. `export --kind tla` and `verify` print the
-same transition system as TLA+ for TLC (see [formal-verification.md](./formal-verification.md)),
+search (BFS). `states`, `check`, `next`, `diagram`, `csv`, `list`, `export`, and
+`codegen` read the explored states, and `verify` decides its checks by BFS on the same
+system. `export --kind tla` prints it as TLA+ for TLC, as `verify --with-tlc` does for its
+second opinion (see [formal-verification.md](./formal-verification.md)),
 and `verify --prove` encodes it for z3, for any number of rows
 ([Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows)).
 No second reading of the model exists, so the native checker and TLC cannot disagree on what a use case
@@ -501,9 +502,10 @@ The bounds are inputs of the system, and every result states them.
 |---|---|---|
 | `states`, `check` | `--instance-count` (default 1) | `0..--int-range-max` (default 5) |
 | the generators | 1 | `0..5` |
-
-`check` and `states` also scale their default caps with the instance count; the caps below say how.
 | `export --kind tla`, `verify` | `--instance-count` (default 2) | `0..--int-range-max` (default 5) |
+
+`check` and `states` also scale their default pattern cap with the instance count; see
+[Exploration by cone of influence](#exploration-by-cone-of-influence).
 
 `states` prints its bounds on stderr first:
 
@@ -573,7 +575,8 @@ Two caps and the memory limit stop a cone, and `check` and `states` take all thr
   2^26 at three.
 - `--max-states` caps the joint states of one cone. The `bounds:` line prints it. Default:
   none, and the line says `no state cap per cone, memory 4GiB`.
-- `--memory` (4GiB by default) stops a cone whose stored states pass the limit. It is what
+- `--memory` (4GiB by default) stops a cone whose stored states pass the limit, which the
+  cones of one run share (see [Memory limit](./cli-reference.md#memory-limit)). It is what
   stops a run without `--max-states`, and the cone it stops is reported as not decided.
 
 The default pattern cap grows with `--instance-count` because each added instance
@@ -586,16 +589,31 @@ model `check` passes at its defaults explores the same in them. A cone past the 
 limit is `MemoryCapReached`, which refuses `codegen` and the outputs that read the
 explored states, and is a note on the others.
 
-When a cap is hit, the view is marked `truncated` and `PatternCapReached` or
-`StateCapReached` is an error: a rule checked on a partial set is not sound. The
-`StateCapReached` message names what the cone's reached states vary in: each variable
-with the values it reached out of its domain (an Int column says `Int 0..5`, the clock
-says `clock`), and the use cases that first reached the most states. A variable of
-another entity in that list was pulled into the cone by a guard or a transition source
-that reads it.
+When a cap or the memory limit is hit, the view is marked `truncated` and
+`PatternCapReached`, `StateCapReached`, or `MemoryCapReached` is an error: a rule checked on
+a partial set is not sound. The `StateCapReached` and `MemoryCapReached` messages name what
+the cone's reached states vary in: each variable with the values it reached out of its
+domain (an Int column says `Int 0..5`, the clock says `clock`), and the use cases that first
+reached the most states. A variable of another entity in that list was pulled into the cone
+by a guard or a transition source that reads it. `check samples/patent-ops --max-states 1000`
+prints:
 
 ```
-error[StateCapReached_OfficeAction]: state derivation for entity 'OfficeAction': state cap 1000 reached; results are incomplete: the cone has 11 variables, 10 of them vary (values reached/domain: PatentApplication.status 12/12, OfficeAction.status 6/6, ...); new states first reached by: CloseOfficeActionDocket 105, ExpireResponseTerm 87, ...; raise --max-states, or narrow with --entity or --buc
+error[StateCapReached_OfficeAction]: state derivation for entity 'OfficeAction': state cap 1000 reached; results are incomplete: the cone has 23 variables, 20 of them vary (values reached/domain: PatentApplication.status 12/12, InventionDisclosure.status 8/8, OfficeAction.status 6/6, ...); new states first reached by: DraftResponse 110, ExpireResponseTerm 107, ...; raise --max-states, or narrow with --entity or --buc
+```
+
+`MemoryCapReached` also says what the cone held and what finishing it needs: the bytes each
+held state took and, once the frontier has shrunk for two BFS depths past its peak, an
+estimate of the states the cone holds, its falling side taken to mirror its rising side, with
+the limit that leaves a quarter to spare, for the cone alone. While the frontier still grows,
+or has only just peaked, or the cone stopped before its layers show how the frontier grows
+(as when the shared limit is already full), the message says so and gives no estimate; it then falls back on
+the most states the cone's variables allow (`at least about 33MiB`, if all are reachable)
+when that is no more than `1TiB`. `check samples/insurance-claim-ops --memory 512KiB`
+prints:
+
+```
+error[MemoryCapReached_Claim]: state derivation for entity 'Claim': memory limit 512KiB reached at 2316 states; results are incomplete: the cone has 33 variables, 29 of them vary (values reached/domain: Claim.status 9/9, ClaimCase.status 6/6, ...); new states first reached by: WithdrawClaim 386, TimeBarClaim 306, ...; held at 226 B per state; the frontier peaked at depth 11 and has shrunk for 2 layers since, so the cone probably holds about 2520 states (its falling side taken to mirror its rising side: an estimate, not a bound); with a quarter to spare, this cone alone probably needs about 1MiB: try 1MiB or more with --memory or `memory` under [check] in rdra.toml, or narrow with --entity or --buc
 ```
 
 A run costs time and memory up to its cap or the memory limit. Measured on a release build, a cone
@@ -645,6 +663,7 @@ $ rdra-ish check samples/formal-verification/unwitnessed_state.rdra
 bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded
 error[Witness_Order_status_refunded]: state Order.status = refunded has no reachability witness: no sequence of use cases from the start reaches it
   state model: Order.status, entered by Refund (shipped -> refunded)   skills/rdra-ish-verify/samples/unwitnessed_state.rdra:31:1
+...
 ```
 
 Each pattern's **witness** is a shortest path from an initial state to the first state in
@@ -883,7 +902,9 @@ syntax.
 
 `StateDiag` in `crates/rdra-ish-core/src/lifecycle/diag.rs` lists every diagnostic.
 `states`, `check`, `export --kind tla`, and `verify` share the severities. An error
-makes the command exit non-zero in every format, and the generators refuse to emit.
+makes the command exit non-zero in every format, and the generators refuse to emit, except
+that `MemoryCapReached` refuses only `codegen` and the outputs that read the explored states
+and is a note on the others.
 
 Every diagnostic has a stable name (`StateDiag::name`), and the commands print it after
 the severity: `error[Deadlock_Order_status_paid]: deadlock: ...`. `states --format table`
@@ -917,7 +938,7 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `DrivenComparisonColumnWritten { usecase, column, proposition, drivers }` | `DrivenComparisonColumnWritten_<E>_<usecase>_<column>` | warning | A use case `sets` a column that a driven comparison reads and does not drive the comparison, so the comparison keeps the truth its last `drives` gave whatever the column holds. Add a `drives` of the comparison to the use case with the truth the new value gives. |
 | `IntLiteralOutOfBounds { value, max }` | `IntLiteralOutOfBounds_<E>_<value>` | error | An Int literal or an integer `@default` lies outside `0..max`. |
 | `UnsupportedComparison { comparison }` | `UnsupportedComparison_<E>_<comparison>` | error | An order comparison has a non-numeric operand, or `==` / `!=` compares two columns of different domains. |
-| `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | The `.along` of a multi-entity rule, or of an `invariant` with `.has`/`.none`, names a hop that no `relate` binds. |
+| `UnbindableScope { constraint }` | `UnbindableScope_<E>_<constraint>` | error | The `.along` of a multi-entity rule or `property`, or of an `invariant` with `.has`/`.none`, names a hop that no `relate` binds, or misses an entity the rule names. |
 | `UnbindableCondition { condition, usecase }` | `UnbindableCondition_<E>_<condition>_<usecase>` | error | A condition body is applied to a use case that writes nothing, or its `.along` names a hop that no `relate` binds, or names an entity a `.has`/`.none` counts before any entity the use case binds or the body compares, goes on past it to an entity nothing reads, or joins a compared entity through it. |
 | `UnjoinedGuardRead { condition, usecase, entity, fix }` | `UnjoinedGuardRead_<E>_<condition>_<usecase>` | warning | A `holds` body compares an entity that no key joins, directly or along its `.along` path, to a row the guarded use case binds, so any row of it satisfies the guard. `fix` names the `.along(...)` of the shortest key path, or writing the entity in the use case. |
 | `UnjoinedWrite { usecase, a, b, path }` | `UnjoinedWrite_<usecase>_<a>_<b>` | warning | A step of the use case writes or binds rows of `a` and `b` that no owner guard or assignment joins, while the shortest key path between them (`path`) runs through entities the step does not bind, so one run may write rows that belong to different rows of those entities. One instance per entity cannot show it; two can. Fixed by writing the entities between, or silenced by `.apart()` on the write meant as a row of its own. |
@@ -929,14 +950,16 @@ these names, and the `// expect` headers of the samples list the names of the er
 | `UnboundCopySource { usecase, column, source, reason }` | `UnboundCopySource_<E>_<usecase>_<column>` | error | A `sets(UC, E.col == F.src)` names an `F` that the step binds to no one row: not written by this or an earlier step of the use case and not the target's parent, a child of the target, or the parent of a child created unlinked. The copy is not applied. |
 | `AmbiguousOwnerLink { statement, a, b, roles, rewrite }` | `AmbiguousOwnerLink_<E>_<a>_<b>` | error | A `.has/.none(...)`, a `holds` body, or a copy joins two entities that several keys join, and no `.role(role)` names one. The message names the candidate roles and the statement with the `.role` to add; the join is left unlinked. |
 | `DerivedColumnRead { column }` | `DerivedColumnRead_<entity>_<column>` | error | A constraint, condition, assertion, or property reads an arithmetic `@derived` column, which the lifecycle cannot evaluate. |
-| `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule. |
+| `ConstraintViolated { name, ... }` | the rule's name, such as `Forbidden_Order_0` | error | A reachable state breaks a `forbidden`, `invariant`, `required`, `exclusive`, `@check`, multi-entity, or quantifier rule, or a unique set (`Unique_<Entity>_<columns>`, see [Unique column sets](#unique-column-sets)). |
 | `AfterAssertViolated { anchor, ... }` | `AfterAssert_<anchor>_<i>` | error | A step of the anchor use case ends in a state that fails the assertion. |
-| `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A property fails: an `always` at a state, an `eventually` or `leads_to` on a lasso that replays through the step relation and passes the property's fairness. Only `verify` reports it; `check` and `states` evaluate no property. |
+| `PropertyViolated { name, kind, instance, witness, lasso, ... }` | the property's name, such as `NeverShipped` | error | A property fails: an `always` at a state, an `eventually` or `leads_to` on a lasso that replays through the step relation and passes the property's fairness, a `stable` or `unchanged` at the step that breaks it, or a `precedes` at the state where its second condition first holds without the first. Only `verify` reports it; `check` and `states` evaluate no property. |
+| `GoalUnreachable { name, instance, confined, states, .. }` | the property's name, such as `OrderCanFinish` | error | A `can_reach` property fails: from the last state of a shortest trace, no path on which the instance stays present reaches the goal. `confined` lists what the goal reads of the instance in the states it can still reach. Only `verify` reports it. |
 | `AssertOnInertUseCase { anchor }` | `AssertOnInertUseCase_<E>_<anchor>` | error | `after(UC).assert` names a use case with no action. |
 | `FairOnInertUseCase { property, usecase }` | `FairOnInertUseCase_<E>_<property>_<usecase>` | error | A property's `.fair(...)` names a use case with no action, so its fairness constrains no step. |
 | `PatternCapReached { cap, bound }` | `PatternCapReached_<E>` | error | An entity view exceeded `--max-patterns`. Raise the flag or narrow `--buc`. |
 | `StateCapReached { cap, growth }` | `StateCapReached_<E>` | error | A cone exceeded `--max-states`. The message names the variables the reached states vary in and the use cases that reached the most of them. Raise the flag, narrow `--entity` or `--buc`, or drop the guard that pulls another entity into the cone. |
-| `MemoryCapReached { limit, states, growth, held, .. }` | `MemoryCapReached_<E>` | error | A cone's states outgrew the [memory limit](./cli-reference.md#memory-limit) (`--memory`, default `4GiB`). The message names the limit, the states reached, what they vary in, the bytes each state took, and, when the cone's variables bound its states, an estimate of the memory to finish the cone (`at least about 12GiB`, for the cone alone) and the size to give `--memory`. Raise it, or narrow the cone as for `StateCapReached`. |
+| `MemoryCapReached { limit, states, growth, held, .. }` | `MemoryCapReached_<E>` | error | A cone's states outgrew the [memory limit](./cli-reference.md#memory-limit) (`--memory`, else `memory` under `[check]`, else `4GiB`). The message names the limit, the states reached, what they vary in, the bytes each state took, and an estimate of what finishing the cone needs, for the cone alone: from its BFS layers once the frontier has shrunk past its peak (`the cone probably holds about 2520 states`), else, when the cone's variables bound its states, from that bound (`at least about 33MiB`), with the size to give `--memory` (see [Exploration by cone of influence](#exploration-by-cone-of-influence)). Raise it, or narrow the cone as for `StateCapReached`. In `verify`, the findings of the cone are `not decided` instead. |
+| `TimeBudgetReached { states }` | `TimeBudgetReached` | error | A run passed its deadline. Only the whole-model run of a property in `verify` has one (`--temporal-budget`, 300 s by default), and it prints no line of its own: the property is `not decided`, with the note `stopped at the time budget of <n> s`, unless the run had already found a counterexample. |
 
 ---
 
@@ -961,7 +984,7 @@ these names, and the `// expect` headers of the samples list the names of the er
   [Exploration by cone of influence](#exploration-by-cone-of-influence)). A change is
   `create`, `delete`, `set` (with the `site` of the arm or `sets` that wrote it), or `tick`.
 
-All formats honor `--entity <id>`, `--buc <id>`, `--max-patterns <n>`, and `--max-states <n>`. `--buc`
+All formats honor `--entity <id>`, `--buc <id>`, `--max-patterns <n>`, `--max-states <n>`, and `--memory <size>`. `--buc`
 keeps the use cases reachable from the named BUCs. It does not change how an entity
 starts: whether an entity is pre-existing is decided on the whole model. `--entity`
 derives only the named entities' views, each on its own cone, and the invariants and

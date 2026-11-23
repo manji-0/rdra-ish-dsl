@@ -57,6 +57,18 @@ fn system(sample: &str, bounds: Bounds) -> Option<TransitionSystem> {
     (!rdra_ish_core::lifecycle::has_errors(&built.diags)).then_some(built.ts)
 }
 
+/// The system `verify --prove` proves at its default bounds, and the twin it also mines
+/// lemmas from (`prove::mining_twin`).
+fn proving(sample: &str) -> Option<(TransitionSystem, Option<TransitionSystem>)> {
+    let project = load_project(&[repo().join(sample)], None).ok()?;
+    let built = TransitionSystem::build(&project.model, Bounds::VERIFY, &Scope::default());
+    if rdra_ish_core::lifecycle::has_errors(&built.diags) {
+        return None;
+    }
+    let twin = prove::mining_twin(&project.model, &Scope::default(), &built.ts);
+    Some((built.ts, twin))
+}
+
 /// The rules some reachable state violates at `bounds`, and the rules whose cone BFS did not
 /// finish.
 fn bounded_verdicts(ts: &TransitionSystem) -> (Vec<String>, Vec<String>) {
@@ -88,24 +100,42 @@ fn instances(n: u8) -> Bounds {
     }
 }
 
+/// Also: every rule of a domain sample is proved at `verify`'s default two instances, as at
+/// one. oidc-auth's browser flow passes the mining cap at two, and two of its rules were
+/// proved only at one until the prover mined at one instance too (#231).
 #[test]
 fn no_proved_rule_has_a_bounded_counterexample() {
     let Some(z3) = find_z3() else { return };
     let mut proved_total = 0;
+    let mut domain_unproved = Vec::new();
     for sample in samples() {
-        let Some(ts) = system(&sample, Bounds::VERIFY) else {
+        let Some((ts, twin)) = proving(&sample) else {
             continue;
         };
         let rules: Vec<usize> = (0..ts.invariants().len()).collect();
         let mut solvers = [(); 2].map(|()| Z3::start(&z3).expect("z3 starts"));
-        let proof = prove::prove(&ts, &rules, &mut solvers, ProveOptions::default())
-            .unwrap_or_else(|e| panic!("{sample}: {e}"));
+        let proof = prove::prove(
+            &ts,
+            twin.as_ref(),
+            &rules,
+            &mut solvers,
+            ProveOptions::default(),
+        )
+        .unwrap_or_else(|e| panic!("{sample}: {e}"));
         let verdicts: BTreeMap<String, &Verdict> = proof
             .rules
             .iter()
             .map(|r| (ts.invariants()[r.inv].name.clone(), &r.verdict))
             .collect();
         proved_total += proof.proved();
+        if !sample.contains("formal-verification") {
+            domain_unproved.extend(
+                verdicts
+                    .iter()
+                    .filter(|(_, v)| !matches!(v, Verdict::Proved))
+                    .map(|(name, _)| format!("{sample}: {name}")),
+            );
+        }
         for n in 1..=3 {
             let Some(bounded) = system(&sample, instances(n)) else {
                 continue;
@@ -130,6 +160,11 @@ fn no_proved_rule_has_a_bounded_counterexample() {
         }
     }
     assert!(proved_total > 0, "no sample rule was proved");
+    assert_eq!(
+        domain_unproved,
+        Vec::<String>::new(),
+        "domain sample rules left unproved"
+    );
 }
 
 /// The proof does not depend on how many solvers share its checks: the same verdicts, the
@@ -148,7 +183,7 @@ fn a_proof_is_the_same_on_any_number_of_solvers() {
             || s.ends_with("insurance-claim-ops")
             || s.ends_with("oidc-auth")
     }) {
-        let Some(ts) = system(&sample, Bounds::VERIFY) else {
+        let Some((ts, twin)) = proving(&sample) else {
             continue;
         };
         let rules: Vec<usize> = (0..ts.invariants().len()).collect();
@@ -156,8 +191,14 @@ fn a_proof_is_the_same_on_any_number_of_solvers() {
             let mut solvers: Vec<Z3> = (0..solvers)
                 .map(|_| Z3::start(&z3).expect("z3 starts"))
                 .collect();
-            let proof = prove::prove(&ts, &rules, &mut solvers, ProveOptions::default())
-                .unwrap_or_else(|e| panic!("{sample}: {e}"));
+            let proof = prove::prove(
+                &ts,
+                twin.as_ref(),
+                &rules,
+                &mut solvers,
+                ProveOptions::default(),
+            )
+            .unwrap_or_else(|e| panic!("{sample}: {e}"));
             format!("{proof:?}")
         };
         let one = proof(1);

@@ -37,6 +37,7 @@ same way, and every kind in the language names the check or output that reviews 
 | `csv`, `list` | CRUD matrix, permission audit, and element metadata |
 | `states` | Reachable entity states and state rule violations |
 | `export`, `verify` | OpenAPI, DBML, SQL DDL, JSON Schema, AsyncAPI, and TLA+; `verify` checks every rule and temporal property with a native checker and no JVM, `--with-tlc` adds TLC as a second opinion, and `--prove` (experimental) proves state rules for any number of rows with z3 |
+| `codegen` | The domain types a build imports: `--lang ts` prints TypeScript state, row, and id types that the [compatibility contract](./docs/compatibility.md#the-typescript-types-of-codegen) covers; the functions and the Rust and Go output are experimental |
 
 ## Documents from the Model
 
@@ -126,6 +127,9 @@ rdra-ish states samples/clinic-ops --entity Appointment
 # 5) Formal verification (no JVM; --with-tlc also runs `tlc` or `tlc2` from PATH)
 rdra-ish verify samples/formal-verification/order.rdra
 rdra-ish verify samples/formal-verification/order.rdra --with-tlc -o /tmp/rdra-tla
+
+# 6) TypeScript types of the entities and their states
+rdra-ish codegen samples/ec-site --lang ts -o /tmp/domain.ts
 ```
 
 ## What You Can Review

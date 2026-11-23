@@ -630,6 +630,13 @@ rdra-ish states src/ --entity Order
 
 Move on when advanced diagnostics either disappear or are accepted as known modeling gaps.
 
+`check` and `states` run one instance per entity by default. A rule that only two rows of
+one entity can break, such as a `.none` over rows of the same entity or a `@unique` set
+(`Unique_<Entity>_<columns>`), cannot fail there, and a multi-entity rule without `.along`
+sees one pair of rows only. Run `rdra-ish check src/ --instance-count 2` or
+`rdra-ish verify src/` before relying on such a rule. A temporal `property` is checked by
+`verify` only; `check` notes how many it left unchecked.
+
 ## Choosing the Next Question
 
 `rdra-ish next` answers this per BUC from the stage gates. Use the current abstraction

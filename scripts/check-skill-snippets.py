@@ -22,7 +22,7 @@ Every Markdown file under the skills dir is read, and five things are checked:
   stream) in order and contiguously. A `...` line stands for any number of lines. Source
   sites print as absolute paths, so each `.rdra` path is made relative to the skill
   directory before comparing.
-  A `verify` transcript needs `tlc` or `tlc2` on PATH.
+  A `verify --with-tlc` (or `--backend tlc`) transcript needs `tlc` or `tlc2` on PATH.
 - Command references. In code spans and fenced lines, every `rdra-ish <command>` must be
   a subcommand, every `--flag` one its `--help` lists, and every value of a flag with
   listed possible values one of them. A code span that starts with a subcommand name and
@@ -41,7 +41,7 @@ import subprocess
 import sys
 import tempfile
 
-SUBCOMMANDS = ["check", "lint", "files", "fmt", "diagram", "csv", "export", "verify", "list", "states", "next"]
+SUBCOMMANDS = ["check", "lint", "files", "fmt", "diagram", "csv", "export", "verify", "list", "states", "next", "codegen"]
 TOLERATED = re.compile(r"undefined symbol|unknown module|module file not found")
 DSL_FIRST_LINE = re.compile(r'^(module |import |[a-z_]+ [A-Z]\w* "|[a-z_]+\()')
 EXPECT_ERROR = re.compile(r"^<!--\s*expect-error(?::\s*(.*?))?\s*-->$")
@@ -211,8 +211,9 @@ class Checker:
     def check_transcript(self, path, where, command, expected):
         self.counts["transcripts"] += 1
         argv = shlex.split(command)
-        if len(argv) > 1 and argv[1] == "verify" and not (shutil.which("tlc") or shutil.which("tlc2")):
-            self.fail(where, "verify transcript needs tlc or tlc2 on PATH (the repo's `nix develop` shell provides it)")
+        wants_tlc = "--with-tlc" in argv or "--backend" in argv
+        if len(argv) > 1 and argv[1] == "verify" and wants_tlc and not (shutil.which("tlc") or shutil.which("tlc2")):
+            self.fail(where, "verify --with-tlc transcript needs tlc or tlc2 on PATH (the repo's `nix develop` shell provides it)")
             return
         cwd = os.path.realpath(self.skill_dir(path))
         out = subprocess.run(

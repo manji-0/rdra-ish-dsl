@@ -15,6 +15,7 @@ mod effects;
 mod events;
 mod explored;
 mod guard_quantifiers;
+mod guards;
 mod joins;
 mod lasso;
 mod liveness;

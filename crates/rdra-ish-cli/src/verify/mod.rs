@@ -253,7 +253,8 @@ pub fn run(
         let proof = match (&prove, z3) {
             (Some(Prove { deny_unproved, .. }), Some(z3)) => z3.and_then(|z3| {
                 let marks = Marks::of(model, &ts);
-                run_proof(&ts, &selection, &marks, &z3, *deny_unproved).map(Some)
+                let twin = rdra_ish_core::lifecycle::prove::mining_twin(model, scope, &ts);
+                run_proof(&ts, twin.as_ref(), &selection, &marks, &z3, *deny_unproved).map(Some)
             }),
             _ => Ok(None),
         };

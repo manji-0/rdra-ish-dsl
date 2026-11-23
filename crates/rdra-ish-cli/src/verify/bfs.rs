@@ -6,7 +6,7 @@ use crate::state_findings::{render_violation, Finding, TraceSource};
 use crate::tlc_output::Outcome;
 use rdra_ish_core::lifecycle::{
     Caps, ComponentRun, Diag, NotChecked, PropertyVerdict, Scope, Selection, Severity, StateDiag,
-    Target, TransitionSystem,
+    Target, TransitionSystem, Undecided,
 };
 use rdra_ish_core::{in_parallel, ResolvedProgram, SemanticModel};
 use std::collections::BTreeSet;
@@ -15,9 +15,10 @@ use std::collections::BTreeSet;
 pub(super) struct Bfs {
     /// Errors of the entity cones.
     pub(super) errors: usize,
-    /// Errors of the `can_reach` cones: violations, and cones the state cap stopped.
+    /// Errors of the `can_reach` cones: their violations.
     pub(super) reach_errors: usize,
-    /// Findings an entity cone left undecided at the state cap.
+    /// Findings an entity cone, and `can_reach` properties their cone, left undecided at the
+    /// state cap or the memory limit.
     pub(super) capped: usize,
 }
 
@@ -48,14 +49,22 @@ pub(super) fn state_models(
     if !scope.bucs.is_empty() {
         run.defer_progress();
     }
+    // A `can_reach` whose cone stopped is listed beside the entity findings it left open.
+    let reach_undecided = reach_run.as_ref().map_or(&[][..], |r| r.undecided());
+    let undecided: Vec<Undecided> = run
+        .undecided()
+        .iter()
+        .chain(reach_undecided)
+        .cloned()
+        .collect();
     // A finding `--buc` leaves open is the scope's choice, not a bound's.
-    let capped = run.undecided().iter().filter(|u| u.cone.is_some()).count();
+    let capped = undecided.iter().filter(|u| u.cone.is_some()).count();
     let not_checked = NotChecked {
         ts,
         model,
         scope,
         selection,
-        undecided: run.undecided(),
+        undecided: &undecided,
         temporal: ts.properties().len() + ts.reach_properties().len(),
     };
     if !not_checked.is_empty() {
@@ -91,8 +100,12 @@ pub(super) fn state_models(
     );
     if let Some(r) = &reach_run {
         let cones = r.cones.len();
+        let open = match reach_undecided.len() {
+            0 => String::new(),
+            n => format!(", {n} not decided"),
+        };
         println!(
-            "can_reach (BFS on {cones} cone{}): {} checked, {} violated",
+            "can_reach (BFS on {cones} cone{}): {} checked, {} violated{open}",
             if cones == 1 { "" } else { "s" },
             reach.len(),
             r.verdicts()

@@ -102,6 +102,19 @@
 
 ### Added
 
+- `check --guards` reports which rules each guard protects (#198). A guard is a `holds`
+  condition applied to a use case, or the `.when` conditions of one column's arms or
+  values. For each guard, after a clean `check`, the run removes it from every action of
+  the use case, explores again the cones of the rules that keep the use case, under the
+  same caps and `--memory`, and prints on stdout the rules that now fail (`protects:`), a
+  `rules:` block with the guards each rule depends on, and, for a guard no rule depends
+  on, `no rule depends on this guard; it is either a business rule nobody wrote as a rule,
+  or not needed`. A rule whose cone stops at a cap without the guard is `not decided`. The
+  report adds no finding and leaves the exit status to `check`. On `samples/oidc-auth` it
+  takes about 3 s (34 guards, 131 cones), and `tests/guards_cli.rs` reads the sample
+  README's table of rules and guards and checks each row against it. The table now has one
+  row per rule, also names `AccountChoiceAsked` on `SelectAccount` for the `prompt=login`
+  rule, and no longer names `ConsentOnRecord`, whose removal alone fails no rule.
 - A `MemoryCapReached` error of `check` and `states` says what the cone held and what
   finishing needs: the bytes each held state took, and an estimate of the states the cone
   reaches from its BFS layers. Once the frontier has shrunk for two depths past its peak,
@@ -129,9 +142,9 @@
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
-  decide: past the budget, or 2,097,152 states, the run stops with
-  `TimeBudgetReached` or the state cap and the property is `not decided` unless the partial
-  graph already holds a counterexample.
+  decide: past the budget, the memory limit, or `--max-states` when given, the run stops
+  and the property is `not decided` unless the partial graph already holds a
+  counterexample.
 - The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
@@ -321,6 +334,13 @@
 
 ### Fixed
 
+- `verify --prove` above one instance now offers every lemma candidate it would offer at
+  one instance (#231). Candidates were mined only at the run's bounds, and each mining run
+  stops at 50,000 states. On oidc-auth at two instances, 13 of 24 cones stopped there, and
+  the proof lost 2 of the 16 rules it proves at one instance. The prover now also mines every
+  cone at one instance per entity, where these cones finish, and offers both sets of
+  candidates. A kept `lemma:` that only the one-instance run offers ends with
+  `(mined at 1 instance per entity)`. oidc-auth proves 16 of 16 rules at both counts.
 - An integer `@default` outside `0..--int-range-max` on an Int, Money, Decimal, Date, or
   DateTime column that a rule reads is `error[IntLiteralOutOfBounds_<E>_<value>]`, as a
   literal there is: `@default(7) of stock is outside the bounded domain 0..5`. The column
@@ -358,6 +378,15 @@
   permissions, actor inputs and the `TriggeredUseCaseUnreachable` warning too, as it
   already was for `next` and the BUC hand-offs. `performs(Actor, Buc)` now lends the actor
   to it, so its required permissions find the actor (#161).
+- `verify` no longer passes a `can_reach` whose cone stops at `--max-states`, the pattern
+  cap, or the `--memory` limit. Such a property is `not decided`: it is listed under
+  `not checked:` as `can_reach <P> is not decided: the <P> cone stopped at the state cap
+  (<n> states)` (or at the memory limit), the `can_reach (BFS on ...)` line adds
+  `, <n> not decided`, the `result:` line says `not decided`, and `--deny-undecided` fails
+  the run. The stop was dropped, so a run whose entity cones finished printed
+  `result: ok` and passed `--deny-undecided`, even where the full cone breaks the property.
+  `stable`, `unchanged`, `precedes`, `always`, `eventually`, and `leads_to` already counted
+  a stopped cone as undecided (#246).
 
 ## v2.3.0 - 2026-11-18
 

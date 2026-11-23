@@ -110,10 +110,10 @@ rdra-ish verify src/
 - Use `states --format json` for the exact reachable combinations and a witness path
   per pattern.
 
-## When To Prefer TLA+
+## When To Prefer `verify`
 
 Prefer skill **`rdra-ish-verify`** for the full workflow. Short rule: run `verify` when
-rules involve a temporal `property`, or quantifiers, `.along`, and 1:1 keys that need
-two instances; `check` and `states` run one instance per entity and do not evaluate
-`property`. Check one formal-verification sample at a time; the bundled samples reuse
+rules involve a temporal `property`, or quantifiers, `.along`, 1:1 keys, and `@unique`
+sets that need two instances; `check` and `states` run one instance per entity and do
+not evaluate `property`. Check one formal-verification sample at a time; the bundled samples reuse
 ids and collide when checked as one directory.

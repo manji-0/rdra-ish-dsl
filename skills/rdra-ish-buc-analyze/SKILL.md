@@ -19,7 +19,7 @@ reference file for the concrete analysis task.
 | "Are permissions/media correct?" | screen/access paths, permission callables, actor grants | `references/access-permissions.md` |
 | "Are API/system boundaries sound?" | API ownership, API CRUD, cross-system relations, coordination | `references/api-system-boundaries.md` |
 | "Are lifecycle states/rules valid?" | reachable state patterns, states with no witness, deadlocks, use cases that never run, rule counterexamples, and `not checked:` | `references/state-patterns.md` |
-| "Do temporal `property` rules or two-instance rules hold?" | Prefer skill `rdra-ish-verify` (TLA+/TLC) | `references/state-patterns.md` |
+| "Do temporal `property` rules or two-instance rules hold?" | Prefer skill `rdra-ish-verify` (`verify`) | `references/state-patterns.md` |
 | "Summarize findings for review" | severity, evidence, next questions, and concrete recommendations | `references/reporting.md` |
 
 ### Default Workflow
@@ -81,6 +81,6 @@ rdra-ish export src/ --kind dbml --out out/schema.dbml
   API/entity matrices, and cross-system coordination.
 - `references/state-patterns.md` — interpret `states` and the lifecycle findings of
   `check`: witnesses, deadlocks, use cases that never run, rule counterexamples, and
-  caps. For the TLA+/TLC workflow, load skill `rdra-ish-verify` instead.
+  caps. For formal verification with `verify`, load skill `rdra-ish-verify` instead.
 - `references/reporting.md` — structure analysis output with severity, evidence, and
   recommendations.
