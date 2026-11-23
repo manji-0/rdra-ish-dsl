@@ -185,22 +185,30 @@ impl Gated<'_> {
 
 #[cfg(test)]
 mod tests {
-    use rdra_ish_core::lifecycle::Caps;
+    use rdra_ish_core::SemanticModel;
     use rdra_ish_emit::mermaid::{ErMermaidEmitter, StateMermaidEmitter};
-    use rdra_ish_emit::typescript::TypeScriptStateUnionEmitter;
+    use rdra_ish_emit::{EmitError, Explored, OnDeadlock, StatesEmitter, View};
 
     use super::{Output, Reads};
+
+    /// A states emitter that refuses on a deadlock. No shipped output does since the
+    /// TypeScript state unions were removed; the gate keeps the case.
+    struct Refusing;
+
+    impl StatesEmitter for Refusing {
+        fn on_deadlock(&self) -> OnDeadlock {
+            OnDeadlock::Refuse
+        }
+
+        fn emit(&self, _: &SemanticModel, _: &View, _: &Explored) -> Result<String, EmitError> {
+            Ok(String::new())
+        }
+    }
 
     #[test]
     fn what_an_output_reads_follows_the_trait_its_emitter_implements() {
         assert_eq!(Output::declared(ErMermaidEmitter).reads(), Reads::Declared);
-        assert_eq!(
-            Output::states(TypeScriptStateUnionEmitter {
-                caps: Caps::for_instances(1)
-            })
-            .reads(),
-            Reads::States
-        );
+        assert_eq!(Output::states(Refusing).reads(), Reads::States);
         assert_eq!(
             Output::states(StateMermaidEmitter).reads(),
             Reads::StatesDrawingDeadlocks

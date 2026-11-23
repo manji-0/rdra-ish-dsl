@@ -2,14 +2,14 @@
 
 use std::collections::HashSet;
 
-use crate::lifecycle::expr::{Env, State};
+use crate::lifecycle::expr::{Env, State, StateSlice};
 use crate::lifecycle::types::{ActId, Action, Effect, EntId, ParamRole, Rhs, Start, Value, VarId};
 use crate::lifecycle::TransitionSystem;
 
 use super::{Move, Moves};
 
 impl TransitionSystem {
-    pub(crate) fn pattern_key(&self, state: &State, e: EntId, slot: usize) -> Box<[u8]> {
+    pub(crate) fn pattern_key(&self, state: &StateSlice, e: EntId, slot: usize) -> Box<[u8]> {
         self.entity(e)
             .columns
             .iter()
@@ -18,7 +18,13 @@ impl TransitionSystem {
     }
 
     /// `pattern_key` written into `key`, which keeps its allocation.
-    pub(crate) fn pattern_key_into(&self, state: &State, e: EntId, slot: usize, key: &mut Vec<u8>) {
+    pub(crate) fn pattern_key_into(
+        &self,
+        state: &StateSlice,
+        e: EntId,
+        slot: usize,
+        key: &mut Vec<u8>,
+    ) {
         key.clear();
         key.extend(
             self.entity(e)
@@ -78,13 +84,18 @@ impl TransitionSystem {
 
     /// Slot choices for each param: the lowest absent slot for `New`, every present slot
     /// otherwise.
-    pub(super) fn bindings(&self, action: &Action, state: &State) -> Vec<Vec<u8>> {
+    pub(super) fn bindings(&self, action: &Action, state: &StateSlice) -> Vec<Vec<u8>> {
         self.bindings_for(action, state, false)
     }
 
     /// `bindings`, except that with `crowd` a `New` param with no free slot takes every slot,
     /// as if the bound left one free.
-    pub(super) fn bindings_for(&self, action: &Action, state: &State, crowd: bool) -> Vec<Vec<u8>> {
+    pub(super) fn bindings_for(
+        &self,
+        action: &Action,
+        state: &StateSlice,
+        crowd: bool,
+    ) -> Vec<Vec<u8>> {
         let mut out: Vec<Vec<u8>> = vec![Vec::new()];
         for p in &action.params {
             let exists = self.entity(p.entity).exists;
@@ -124,7 +135,7 @@ impl TransitionSystem {
 
     /// The `bindings` of `action` in `state` whose pre-guards hold, in `bindings` order.
     #[cfg(test)]
-    pub(super) fn enabled_bindings(&self, action: &Action, state: &State) -> Vec<Box<[u8]>> {
+    pub(super) fn enabled_bindings(&self, action: &Action, state: &StateSlice) -> Vec<Box<[u8]>> {
         let mut out = Vec::new();
         self.each_enabled(action, state, |params| out.push(params.into()));
         out
@@ -133,7 +144,7 @@ impl TransitionSystem {
     /// Calls `found` with each of the `bindings` of `action` in `state` whose pre-guards hold,
     /// in `bindings` order. It walks the choices in buffers on the stack, so a state where
     /// the action cannot run costs no allocation.
-    fn each_enabled(&self, action: &Action, state: &State, mut found: impl FnMut(&[u8])) {
+    fn each_enabled(&self, action: &Action, state: &StateSlice, mut found: impl FnMut(&[u8])) {
         const MAX: usize = 16;
         let slots = self.bounds.slots();
         let count = action.params.len();
@@ -205,7 +216,12 @@ impl TransitionSystem {
         }
     }
 
-    pub(super) fn pre_guards_hold(&self, action: &Action, state: &State, params: &[u8]) -> bool {
+    pub(super) fn pre_guards_hold(
+        &self,
+        action: &Action,
+        state: &StateSlice,
+        params: &[u8],
+    ) -> bool {
         let mut env = Env::new(params);
         action
             .guards
@@ -214,9 +230,9 @@ impl TransitionSystem {
             .all(|g| self.eval(&g.pred, state, &mut env))
     }
 
-    pub(super) fn successors(&self, action: &Action, params: &[u8], s: &State) -> Vec<State> {
+    pub(super) fn successors(&self, action: &Action, params: &[u8], s: &StateSlice) -> Vec<State> {
         let mut out = Vec::new();
-        let mut scratch = s.clone();
+        let mut scratch = s.to_owned();
         self.each_successor(action, params, s, &mut scratch, |next| {
             out.push(next.clone())
         });
@@ -231,7 +247,7 @@ impl TransitionSystem {
         &self,
         action: &Action,
         params: &[u8],
-        s: &State,
+        s: &StateSlice,
         scratch: &mut State,
         mut found: impl FnMut(&mut State),
     ) {
@@ -313,14 +329,14 @@ impl TransitionSystem {
     /// Every move from `s`, in BFS order: actions by index, then `bindings`, then the
     /// successors of each binding whose pre-guards hold, keeping those whose post-guards hold.
     /// With a reduction, the S actions are left out and the class moves come last.
-    pub(crate) fn moves(&self, s: &State) -> impl Iterator<Item = Move> {
+    pub(crate) fn moves(&self, s: &StateSlice) -> impl Iterator<Item = Move> {
         let mut out = Moves::default();
-        self.moves_into(s, &mut s.clone(), &mut out);
+        self.moves_into(s, &mut s.to_owned(), &mut out);
         out.into_moves().into_iter()
     }
 
     /// `moves`, appended to `out`. `scratch` is any state of this system; it is overwritten.
-    pub(crate) fn moves_into(&self, s: &State, scratch: &mut State, out: &mut Moves) {
+    pub(crate) fn moves_into(&self, s: &StateSlice, scratch: &mut State, out: &mut Moves) {
         self.moves_of_into(s, true, scratch, out);
     }
 
@@ -328,7 +344,7 @@ impl TransitionSystem {
     /// reduction: its action, its params, and its successor, which `found` may change.
     pub(crate) fn each_raw_move(
         &self,
-        s: &State,
+        s: &StateSlice,
         skip: impl Fn(ActId) -> bool,
         scratch: &mut State,
         mut found: impl FnMut(ActId, &[u8], &mut State),

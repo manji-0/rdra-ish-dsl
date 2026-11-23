@@ -33,7 +33,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    that no BUC reaches, or a transitioning use case outside every BUC) as staged review
    signals. Also read `multi-rule-unscoped` (a multi-entity rule with neither `.along` nor
    `.global()`), `end-redundant` (an `@end` value no arm leaves), and
-   `query-index-missing` (a declared read shape no key or `@index` serves).
+   `query-index-missing` (a declared read shape, a timer's sweep by state, a `.has` /
+   `.none` over a large entity, or a guard that reads across a table, that no key or
+   `@index` serves; skipped on an entity whose `rows` estimate is under 10,000).
 
 3. **Check file layout**
    - Small models start with `shared/actors.rdra`, `shared/biz.rdra`,
@@ -61,8 +63,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
    - Every use case has a performer, directly or through `performs(Actor, Buc)`, or is
      started by an event or timer
    - Every `performs(Actor, Buc)` is meant for every use case of the BUC: a use case's
-     actors are its direct performers plus the performers of each BUC that contains it,
-     and each of them must hold the use case's permissions. An actor that only takes part
+     actors are its direct performers plus the performers of each BUC that contains it
+     (or covers it from a flow step), and each of them must hold the use case's permissions. An actor that only takes part
      performs its use cases or steps instead
    - A use case a timer or an event starts, with no direct performer, invokes the same API
      as the actors' use cases; the system holds its permissions
@@ -125,7 +127,15 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
       distinct `.role(...)`s (`DuplicateRelateRole`)
     - A parent that must have a child uses `1..*:1`, checked as `MinCard_<Child>_<role>`;
       `MinCardNeedsCreate` names each use case that creates such a parent without a child.
-      A `1:1` is checked as `Unique_<Child>_<role>`, which only `verify` can break
+      A `1:1` is checked as `Unique_<Child>_<role>`, which takes two instances to break
+      (`check --instance-count 2` or `verify`)
+    - A `@unique` column or set, and an `N:M` junction's key pair, is checked as
+      `Unique_<Entity>_<columns>` when the lifecycle holds every column (not a `String`,
+      not on a `@soft_delete` entity); each use case that writes the set has a guard that
+      keeps it free, such as a `.none(...)` on the parent it binds
+    - Each `@default` is one of the `Enum`'s values as declared, or `true` / `false` on a
+      `Bool` (else the model does not load: `InvalidEnumVariant`, `InvalidBoolValue`), and
+      an integer `@default` on a column a rule reads lies in `0..--int-range-max` (`IntLiteralOutOfBounds_<Entity>_<value>`)
     - Index/unique/check/FK optionality/on-delete/on-update/soft-delete/history/tenant
       annotations reflect real reviewable constraints; each `@check` is the invariant
       `Check_<Entity>_<column>_<n>`
@@ -135,7 +145,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
       A key to a non-primary unique set uses `.references(...)`
       (`ReferencesNotUnique` otherwise)
     - Each list or search read declares its shape (`reads(...).by(...).order(...)`), and
-      `query-index-missing` findings are resolved or accepted
+      `query-index-missing` findings are resolved or accepted; an entity whose size is
+      known carries a `rows` estimate
     - A column whose value an actor chooses is typed by a `variation`, not an inline `Enum`
 
 11. **Check screen fields and non-functional constraints**
@@ -154,7 +165,7 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
       - `EventNeverRaised`: the event has no `raises` predicate — add one or remove the event
       - `EventNeverConsumed`: the event is raised but `triggers` nothing and is not an
         `outbox` publication — add the consumer, or delete the event and its `raises`
-      - `TriggeredUseCaseUnreachable`: the triggered UC belongs to no BUC — add a `contains`
+      - `TriggeredUseCaseUnreachable`: the triggered UC belongs to no BUC (no `contains` and no covering flow step) — add a `contains`
     - Every `transitions` names the use case that drives the edge, and every `from -> to`
       variant is a variant of the Enum column
     - Review the state-model findings of `rdra-ish check`:
@@ -164,8 +175,9 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
         instance slot is missing)
       - `warning[Runs_<UseCase>]`: the use case never runs, with the guard or instance
         that blocks it
-      - `warning[Vacuous_<rule>]`: the rule holds and says nothing; no reachable state
-        meets the premise the message names
+      - `warning[Vacuous_<rule>]`: the rule, `after` assertion, or property holds and says
+        nothing; no reachable state meets the premise the message names (such as a use
+        case that never runs to its last step)
       - `warning[UnreachableEnumVariant_...]`: a declared variant that is no state of the
         state model and that nothing reaches
       - `warning[UnjoinedWrite_<UC>_<A>_<B>]`: the use case writes two entities that a key
@@ -202,7 +214,8 @@ API/system boundaries, persistence structure, reachable lifecycle states, and ru
       `MultiForbidden_Order_0`) with the rule's site and a shortest counterexample of use
       case steps. An `UnbindableScope` error means an `.along(...)` path that no `relate`
       binds. For temporal `property` and rules that need two instances, also run
-      `rdra-ish verify <src-dir>/` (skill `rdra-ish-verify`) when TLC is available.
+      `rdra-ish verify <src-dir>/` (skill `rdra-ish-verify`); `check` evaluates no
+      `property` and says so in a `note:` line.
 
 15. **Check imports**
     - Every referenced symbol has a corresponding `import`
@@ -302,5 +315,5 @@ yourself is marked `(review)`. Never present a `(review)` item as something `che
 | `forbidden` (multi-entity) | Entity... | cross-entity condition(s) | `.along(...)` / `.role(role)`, or `.global()` for every combination |
 | `invariant` (multi-entity) | Entity... | `.when(...)` / `.then(...)` chains | `.along(...)` / `.role(role)`, or `.global()` for every combination |
 | `invariant` (quantifier) | Entity | `.when(...)` conditions | `.none(...)` / `.has(...)` over related rows |
-| `property` | Name | optional label | `always` / `eventually` / `leads_to` |
+| `property` | Name | optional label | `always` / `eventually` / `leads_to` / `stable` / `unchanged` / `precedes` / `can_reach` |
 | `after` | UseCase | `.assert(...)` | — |

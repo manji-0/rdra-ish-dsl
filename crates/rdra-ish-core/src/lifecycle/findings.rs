@@ -3,7 +3,7 @@
 
 use super::diag::{Blocked, Entry, Exit, StateDiag};
 use super::explore::{Adjacency, Graph, Scan};
-use super::expr::State;
+use super::expr::StateSlice;
 use super::trace::Trace;
 use super::types::{
     ActId, ActionOrigin, Domain, Effect, EntId, ParamRole, Site, Value, VarId, VarKind,
@@ -344,7 +344,8 @@ impl TransitionSystem {
                 None => Progress::Leaves,
                 Some((at, k)) => {
                     let held = Self::forward(&adjacency, at as u32);
-                    let held: Vec<&State> = held.iter().map(|&i| &g.states[i as usize]).collect();
+                    let held: Vec<&StateSlice> =
+                        held.iter().map(|&i| &g.states[i as usize]).collect();
                     Progress::Stuck {
                         at: at as u32,
                         diag: Box::new(self.deadlock(e, var, value, k, &exits, &held)),
@@ -418,7 +419,7 @@ impl TransitionSystem {
         value: Value,
         k: usize,
         exits: &[ExitArm],
-        held: &[&State],
+        held: &[&StateSlice],
     ) -> StateDiag {
         let exits = exits
             .iter()
@@ -511,7 +512,7 @@ impl TransitionSystem {
                     if conds.is_empty() {
                         continue;
                     }
-                    let moves = |s: &State, t: &State| {
+                    let moves = |s: &StateSlice, t: &StateSlice| {
                         (0..self.bounds.slots()).any(|k| match from {
                             Some(from) => {
                                 s.is_present(self, e, k)

@@ -39,7 +39,11 @@ the behavior it describes.
 <!-- constrained-by ./cli-reference.md -->
 - **Subcommands and flags.** Each subcommand and flag in the
   [CLI reference](./cli-reference.md) keeps its name, its meaning, and the values it takes,
-  such as each `--kind` and `--format`.
+  such as each `--kind` and `--format`. Of `codegen`, only `--lang ts` and `-o` are
+  covered, as [The TypeScript types of `codegen`](#the-typescript-types-of-codegen) states.
+  The next release removes `export --kind typescript-states` and
+  `states --format typescript`, so it is a major release. Each now fails as a usage error
+  that names its rewrite, `codegen <INPUTS> --lang ts -o <FILE>.ts`.
 - **The default of `verify`.** `verify` decides every check with its native checker and
   starts no JVM. `--with-tlc` runs TLC beside it and fails the run when the two decide a
   check differently. `--backend tlc` is a deprecated spelling of `--with-tlc` that prints a
@@ -85,6 +89,92 @@ The order of nodes and messages is covered where the encoding contract states on
 the robustness and sequence kinds. The layout a renderer draws, any order the contract does
 not state, and the colors in a `classDef` are not covered.
 
+### The TypeScript types of `codegen`
+
+<!-- constrained-by ./cli-reference.md#codegen -->
+`codegen` is experimental except for the TypeScript types it prints. The contract covers
+`rdra-ish codegen <INPUTS...> --lang ts [-o <FILE>]` on a model that `check` passes.
+For such a model, the command writes one TypeScript module to stdout, or to `<FILE>`
+with `-o`, and exits 0, unless the model hits a `NameCollision` (see the list of what is
+not covered below). The module declares the types below with these names and shapes.
+`crates/rdra-ish-cli/tests/codegen_contract.rs` pins these types for a model that uses
+every column type, every naming rule, and every rule form below.
+
+A type name is a model id in PascalCase. `_`, `-`, and spaces split the id into words. The
+first letter of each word becomes upper case, and the other letters stay as written. A
+name that does not start with an ASCII capital letter gets the prefix `V`. When two values
+of one tag column give the same name, the first value keeps it. The later values get the
+suffix `2`, `3`, and so on.
+
+- **Scalars.** `Money`, `Decimal`, `Date`, and `DateTime`, each declared as
+  `string & { readonly __brand: "<Name>" }`.
+- **Id types.** `<Entity>Id` for each entity with a one-column primary key of a type other
+  than `Enum` or a variation. It is the key column's type from the table under
+  **Properties**, with `& { readonly __brand: "<Entity>Id" }`. For example, an `Int` key gives
+  `number & { readonly __brand: "OrderId" }`. An entity with a key of two or more
+  columns has no id type.
+- **Value sets.** `<Variation>` for each variation, and `<Entity><Column>` for each inline
+  `Enum` column of an entity. Each is a union of string literals, one for each value as it
+  is written in the model. Each also has the constant
+  `<Name>Values: readonly <Name>[]`, which holds every value.
+- **State types.** An entity whose tag column is an inline `Enum` with at least one value
+  is a state type. The tag column is chosen from the columns that `transitions` names:
+  `status`, else a column whose name ends in `_status`, else the first such column by name.
+  Each value `v` of the tag column gets an interface `<Entity><V>`, including a value that
+  no use case reaches. The interface has the property `<tag>: "<v>"`, and one property for
+  each other column of the entity. `<Entity>` is the union of these interfaces. An entity
+  whose `Enum` only `sets` writes, with no `transitions`, is not a state type.
+- **Row types.** `<Entity>Row` for each state type: an interface with one property for each
+  column of the entity. The tag column takes its value set, and no column is narrowed.
+- **Properties.** The name of a property is the column name. The property type follows
+  the column type:
+
+  | Column | TypeScript |
+  |---|---|
+  | `Int` | `number` |
+  | `String` | `string` |
+  | `Bool` | `boolean` |
+  | `Money`, `Decimal`, `Date`, `DateTime` | the scalar of the same name |
+  | a variation | its value set |
+  | an inline `Enum` | `<Entity><Column>` |
+  | the entity's one-column primary key | `<Entity>Id` |
+  | a key column to a parent's one-column primary key | the parent's `<Parent>Id` |
+
+- **Nullability.** A `@null` column is `T | null`. In a state type, a rule of the entity
+  narrows the column for each state that the rule names. The column is then `T` where the
+  rule makes it present, and `null` where the rule makes it null. Here `x` is a `@null`
+  column other than the tag, `v` is a value of the tag column, and only these rules narrow:
+  - `required(E, .., x == present, ..)` makes `x` present in every state, and
+    `x == null` makes it null in every state. Each such conjunct narrows, whatever the
+    other conjuncts are.
+  - `forbidden(E, tag == v, x == present)` makes `x` null in `v`, and `x == null` makes
+    `x` present in `v`. The tag atoms may be several `tag == v` and `tag in (..)` atoms,
+    which name the states they all allow, or none, which names every state. Besides them,
+    the rule holds exactly one atom, on `x`.
+  - `invariant(E).when(tag == v).then(.., x == present, ..)` makes `x` present in `v`,
+    and `x == null` makes `x` null. The `when` holds at least one tag atom of the forms
+    above and no other atom. Each such conjunct of the `then` narrows, whatever the other
+    conjuncts are.
+
+  A `forbidden` or `invariant` with a `.when(Cond)` guard narrows nothing, and neither
+  does a rule on a derived column. When two rules narrow one column in opposite ways in one
+  state, the column stays `T | null` in that state. A minor release does not add a rule
+  form that narrows, because that would change the type of a column in a model that the
+  contract already covers.
+
+The contract does not cover the following:
+
+- the comments and doc comments;
+- the order of declarations and properties;
+- the header and its obligation and candidate lists;
+- `InvalidRow`, `<entity>FromRow`, and `<entity>ToRow`;
+- the transition functions, results, events, run marks, rule checks, `Rejected`,
+  `NotEnabled`, and dispatchers;
+- the interfaces of entities that are not state types, and of DTOs;
+- which models fail with a `NameCollision`: the experimental declarations share the
+  namespace, so a new one can collide with a model's name;
+- the output of `--allow-failing`, `--package`, and `--lang rust` or `--lang go`.
+
 ### The TLA+ export
 
 <!-- constrained-by ./formal-verification.md#mapping -->
@@ -93,7 +183,8 @@ written by hand can name them:
 
 - Invariants: `Forbidden_<E>_<n>`, `Inv_<E>_<n>`, `Required_<E>_<n>`, `Exclusive_<E>_<n>`,
   `MultiForbidden_<E>_<n>`, `MultiInv_<E>_<n>`, `Quantifier_<E>_<n>`, `Check_<E>_<column>_<n>`,
-  `Unique_<Child>_<role>`, `MinCard_<Child>_<role>`, and `TypeOK`.
+  `Unique_<Child>_<role>`, `Unique_<Entity>_<columns>`, `MinCard_<Child>_<role>`, and
+  `TypeOK`.
 - Properties: `AfterAssert_<UC>_<n>`, each temporal property under its declared name, and
   `Fair_<P>`. A `precedes` property adds the variable `<P>_seen` and the operator
   `<P>_latch` in a module whose `.cfg` checks it.
@@ -155,14 +246,16 @@ minor release.
 - **Performance and state counts.** Run time, memory, and the number of states a run
   explores or prints.
 - **Diagram layout.** Where a renderer places the nodes, as above.
-- **`codegen`.** The subcommand is an experimental extra: its name, its flags, its exit
-  status, and the code it prints (names, shapes, the obligation list) may change or go away
-  in any release.
+- **The rest of `codegen`.** All of `codegen` except
+  [its TypeScript types](#the-typescript-types-of-codegen) is experimental. Its other
+  flags, its Rust and Go output, and the parts of the TypeScript output that the section
+  excludes (names, shapes, the obligation list) may change or be removed in any release.
 - **`verify --prove` and `.lemma()`.** The flag and its companions `--deny-unproved` and
   `--z3` are experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove,
   and the clause the `OK:` line gains may change or go away in any release. So is the
   `.lemma()` marker on a rule: `check` checks a lemma like any rule, but `verify` runs no
-  cone for one, so a lemma that only fails at two instances passes `verify`. Do not mark
+  cone of its own for one and checks it only in a cone another check runs, so a lemma that
+  only fails at two instances can pass `verify`. Do not mark
   a rule the model must keep as a lemma. Apart from lemmas, `verify` without `--prove` is
   unchanged.
 
@@ -170,22 +263,23 @@ minor release.
 
 <!-- constrained-by ./formal-verification.md#approximations-and-limitations -->
 Every result holds within the bounds its `bounds:` line prints: the instances per entity,
-the Int range, and the state caps of `check` and of the `verify` BFS. A release may change
-a default bound or cap. That is not a breaking change, and the changelog records it. A
-result that changes for a model within the same printed bounds is a breaking change,
-unless it fixes a bug that the changelog names. 2.0.0 is such a change: for a model with
-`raises` and `triggers` between use cases, `check` and `verify` order the triggered use
-case after its event within the same bounds, so a verdict can move while the `bounds:` line
-stays as it was. The `### Breaking` entry for #112 in the [changelog](../CHANGELOG.md)
+the Int range, the state cap (none unless `--max-states` gives one), and the memory limit.
+A release may change a default bound, cap, or memory limit. That is not a breaking
+change, and the changelog records it. A result that changes for a model within the same
+printed bounds is a breaking change, unless it fixes a bug that the changelog names. 2.0.0
+is such a change: for a model with `raises` and `triggers` between use cases, `check` and
+`verify` order the triggered use case after its event within the same bounds, so a verdict
+can move while the `bounds:` line stays as it was. The `### Breaking` entry for #112 in the [changelog](../CHANGELOG.md)
 names which verdicts move and how to migrate.
 
 To keep a result reproducible across releases, pass the bounds a command takes as flags
-instead of relying on the defaults: `--instance-count`, `--int-range-max`, and
-`--max-patterns` (its default follows `--instance-count`) and `--max-states` (default none) for `check` and `states`, and `--instance-count` and `--int-range-max` for
-`verify`. The [Bounds](./state-derivation.md#bounds) table lists each command's defaults.
-The [memory limit](./cli-reference.md#memory-limit) (`--memory`) can leave a cone
-undecided as `--max-states` does; its count of a cone's bytes is the same on every
-machine, but a release may change it.
+instead of relying on the defaults: `--instance-count`, `--int-range-max`,
+`--max-patterns`, and `--max-states` for `check`, `states`, and `verify`. The default of
+`--max-patterns` follows `--instance-count` in `check` and `states` and is 256 in `verify`;
+`--max-states` has no default. The [Bounds](./state-derivation.md#bounds) table lists each
+command's defaults. The [memory limit](./cli-reference.md#memory-limit) (`--memory`) can
+leave a cone undecided as `--max-states` does; its count of a cone's bytes is the same on
+every machine, but a release may change it.
 [Known verification gaps](./formal-verification.md#known-verification-gaps) lists what the
 bounds leave unchecked.
 

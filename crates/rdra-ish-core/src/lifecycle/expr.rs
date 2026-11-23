@@ -5,10 +5,27 @@ use super::types::{At, CmpOp, Domain, EntId, Pred, Term, Value, VarId};
 use super::TransitionSystem;
 
 /// One flat byte per slot. Slot `(var, inst)` lives at `offset(var) + inst`; `now` has one slot.
+/// It reads as a `StateSlice`, the form a run's store (`States`) lends its states in.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct State(pub(crate) Box<[u8]>);
 
-impl State {
+/// A state's bytes wherever they are kept, as `str` is to `String`: in a `State`, or in the one
+/// buffer `States` holds a run's states in.
+#[derive(Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct StateSlice(pub(crate) [u8]);
+
+impl StateSlice {
+    pub(crate) fn new(bytes: &[u8]) -> &StateSlice {
+        // SAFETY: `StateSlice` is `repr(transparent)` over `[u8]`, so the two share a layout.
+        unsafe { &*(bytes as *const [u8] as *const StateSlice) }
+    }
+
+    fn new_mut(bytes: &mut [u8]) -> &mut StateSlice {
+        // SAFETY: as in `new`.
+        unsafe { &mut *(bytes as *mut [u8] as *mut StateSlice) }
+    }
+
     pub fn get(&self, ts: &TransitionSystem, var: VarId, slot: usize) -> Value {
         Value(self.0[ts.offset(var) + slot])
     }
@@ -22,12 +39,52 @@ impl State {
     }
 }
 
+impl std::ops::Deref for State {
+    type Target = StateSlice;
+
+    fn deref(&self) -> &StateSlice {
+        StateSlice::new(&self.0)
+    }
+}
+
+impl std::ops::DerefMut for State {
+    fn deref_mut(&mut self) -> &mut StateSlice {
+        StateSlice::new_mut(&mut self.0)
+    }
+}
+
+impl std::borrow::Borrow<StateSlice> for State {
+    fn borrow(&self) -> &StateSlice {
+        self
+    }
+}
+
+impl ToOwned for StateSlice {
+    type Owned = State;
+
+    fn to_owned(&self) -> State {
+        State(self.0.into())
+    }
+}
+
+impl PartialEq<StateSlice> for State {
+    fn eq(&self, other: &StateSlice) -> bool {
+        **self == *other
+    }
+}
+
+impl PartialEq<State> for StateSlice {
+    fn eq(&self, other: &State) -> bool {
+        *self == **other
+    }
+}
+
 /// Bindings a predicate reads: action params and quantifier binders, as slot indices.
 pub(crate) struct Env<'a> {
     pub params: &'a [u8],
     pub bound: Vec<u8>,
     /// The successor `At::Next` reads.
-    pub next: Option<&'a State>,
+    pub next: Option<&'a StateSlice>,
 }
 
 impl<'a> Env<'a> {
@@ -55,7 +112,7 @@ enum Operand<'d> {
 }
 
 impl TransitionSystem {
-    pub(crate) fn eval(&self, pred: &Pred, state: &State, env: &mut Env) -> bool {
+    pub(crate) fn eval(&self, pred: &Pred, state: &StateSlice, env: &mut Env) -> bool {
         match pred {
             Pred::True => true,
             Pred::False => false,
@@ -82,7 +139,7 @@ impl TransitionSystem {
         &self,
         entity: EntId,
         body: &Pred,
-        state: &State,
+        state: &StateSlice,
         env: &mut Env,
         all: bool,
     ) -> bool {
@@ -125,7 +182,7 @@ impl TransitionSystem {
     /// Whether `state` meets a premise: `pred` holds for some present rows of the binders it
     /// asks rows of (`premise_rows`). A binder it does not read needs no row, so a condition
     /// on one entity of a rule over two is met by a row of that entity alone.
-    pub(crate) fn meets(&self, binders: &[EntId], pred: &Pred, state: &State) -> bool {
+    pub(crate) fn meets(&self, binders: &[EntId], pred: &Pred, state: &StateSlice) -> bool {
         let read = Self::premise_rows(binders.len(), pred);
         let slots = self.bounds.slots();
         let mut env = Env::new(&[]);
@@ -155,7 +212,7 @@ impl TransitionSystem {
         &self,
         binders: &[EntId],
         body: &Pred,
-        state: &State,
+        state: &StateSlice,
         params: &[u8],
     ) -> Option<Vec<u8>> {
         let mut env = Env::new(params);
@@ -166,7 +223,7 @@ impl TransitionSystem {
         &self,
         binders: &[EntId],
         body: &Pred,
-        state: &State,
+        state: &StateSlice,
         env: &mut Env,
     ) -> Option<Vec<u8>> {
         let Some((&first, rest)) = binders.split_first() else {
@@ -188,7 +245,13 @@ impl TransitionSystem {
 
     /// Whether the slot `term` names under `binding` holds the same value in `a` and `b`; a
     /// term that names no slot never changes.
-    pub(crate) fn term_unchanged(&self, term: &Term, a: &State, b: &State, binding: &[u8]) -> bool {
+    pub(crate) fn term_unchanged(
+        &self,
+        term: &Term,
+        a: &StateSlice,
+        b: &StateSlice,
+        binding: &[u8],
+    ) -> bool {
         match term {
             Term::Slot {
                 var,
@@ -204,7 +267,7 @@ impl TransitionSystem {
         }
     }
 
-    fn operand(&self, term: &Term, state: &State, env: &Env) -> Operand<'_> {
+    fn operand(&self, term: &Term, state: &StateSlice, env: &Env) -> Operand<'_> {
         match term {
             Term::Slot { var, at } => {
                 let read = match at {

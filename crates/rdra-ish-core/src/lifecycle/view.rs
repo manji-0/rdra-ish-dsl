@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::diag::{Diag, StateDiag};
 use super::explore::ComponentRun;
-use super::expr::State;
+use super::expr::StateSlice;
 use super::trace::Trace;
 use super::types::{ActionOrigin, Birth, Domain, EntId, Value, VarKind};
 use super::TransitionSystem;
@@ -142,7 +142,7 @@ fn pattern(ts: &TransitionSystem, e: EntId, key: &[u8]) -> StatePattern {
 /// `col=val, ..` of one slot (columns in name order), or `Entity(col=val, ..)` when qualified.
 pub(crate) fn describe_slot(
     ts: &TransitionSystem,
-    s: &State,
+    s: &StateSlice,
     e: EntId,
     slot: usize,
     qualified: bool,

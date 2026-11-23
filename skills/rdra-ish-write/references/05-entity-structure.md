@@ -41,6 +41,18 @@ Also ask:
    `String(255)`, `Decimal(10, 2)`, `DateTime(tz)`; wrong arguments are `InvalidTypeArgs`,
    and a function on a column of the wrong type is `InvalidColumnFunction`. A key unique
    within a tenant is a composite set with the tenant column: `@unique(tenant_id, code)`.
+   The lifecycle checks a unique set (and an `N:M` junction's key pair) as
+   `Unique_<Entity>_<columns>` when it holds every column's value: an `Enum`, `Bool`, or
+   variation column, a compared `Int`, or a key column, read as its parent. A use case that
+   can create a second row at the same values fails `check --instance-count 2` and
+   `verify`; guard it so the set stays free, such as
+   `holds(AmFree, Room.open == true).none(Booking.slot == am)` on the use case that books a
+   room's morning. A set with a `String` column, or on a `@soft_delete` entity, is left to
+   the database. A `@default` must be one of an `Enum`'s values as declared
+   (`@default(open)`, not `Open`) or `true` / `false` on a `Bool`, or the model does not load
+   (`InvalidEnumVariant`, `InvalidBoolValue`). An integer `@default` on a column a rule reads
+   must lie in `0..--int-range-max`, or `check` fails with
+   `IntLiteralOutOfBounds_<Entity>_<value>`.
    Write `entity OrderLine "Order line"` followed by `table "order_lines"` when the physical
    table name differs from the entity id; only the SQL and DBML exports use it. Write `@check` and `@derived` unquoted: `@check(total >= 0)`,
    `@derived(total - discount)`. `@check` becomes the invariant

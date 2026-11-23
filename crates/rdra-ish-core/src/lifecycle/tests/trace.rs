@@ -131,7 +131,7 @@ fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
     let path = run.path_to(at);
     let states: Vec<_> = std::iter::once(path[0].from)
         .chain(path.iter().map(|e| e.to))
-        .map(|i| run.states[i as usize].clone())
+        .map(|i| run.states[i as usize].to_owned())
         .collect();
     let acts: Vec<_> = path.iter().map(|e| run.step(e).0).collect();
     assert_eq!(acts.len(), 3, "Place, Pay, Ship");
@@ -151,7 +151,7 @@ fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
 
     // Ship's successor replaced by Pay's: no Ship move reaches it.
     let mut corrupted = states.clone();
-    corrupted[3] = states[2].clone();
+    corrupted[3] = states[2].to_owned();
     assert_eq!(
         ts.replay(corrupted, &acts),
         Err(ReplayError::NoMove {

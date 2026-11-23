@@ -43,6 +43,43 @@
     `specs:` line. `--tlc-jar`, `RDRA_TLC_JAR`, and `RDRA_TLC_HEAP` apply only with
     `--with-tlc`, and `--memory` gives BFS the whole limit without it.
   - The `RDRA_ISH_NATIVE` test hook is gone; the default does what it did and more.
+- `export --kind typescript-states` (also spelled `type-script-states`) and
+  `states --format typescript` (also `type-script`) are removed. `codegen --lang ts` is the
+  one way to get TypeScript state types. Each removed spelling is a usage error (exit 2)
+  that names the rewrite and writes nothing:
+  - `rdra-ish export <INPUTS> --kind typescript-states -o x` becomes
+    `rdra-ish codegen <INPUTS> --lang ts -o x.ts`.
+  - `rdra-ish states <INPUTS> --format typescript` becomes
+    `rdra-ish codegen <INPUTS> --lang ts`, which prints to stdout.
+
+  The output has a different shape. Code that imports the old unions needs these changes:
+  - A state is a named interface, `<Entity><Value>`, one for each value of the tag column,
+    including values that no use case reaches. `<Entity>` is their union. The old union
+    had one inline object for each reachable pattern, so one tag could have several
+    shapes.
+  - A variant narrows a `@null` column only where a rule states it (`required`,
+    `forbidden` with a tag atom, `invariant(..).when(tag == v)`), not where every reachable
+    pattern agrees. A column that no use case writes is `T | null`, not `null`, and
+    `codegen` lists it as a candidate rule in the header.
+  - Every column appears with its declared type, and keys take their id type
+    (`OrderId`). An `Int` column is `number`, and an `@null` column is `T | null`. The old
+    union listed only the state axes.
+  - Only an entity whose tag column is an inline `Enum` that `transitions` drives is a
+    state type. An entity whose `Enum` only `sets` writes (ec-site's `Payment`) is a plain
+    interface. The old export made a union of it from its first `Enum` axis.
+  - `codegen` refuses a model that `check` rejects (exit 1), as the export did, and has
+    no `--buc` or `--entity` scope. `--allow-failing` prints the types without narrowing
+    any column.
+- An `@default` on an `Enum` column that is not one of its values is `InvalidEnumVariant`,
+  and one on a `Bool` column other than `true` or `false` is `InvalidBoolValue`, on an
+  entity or a DTO, as a variation's default outside its values already was. The state
+  model used to drop the default and start the row at the first value or `false`, so
+  `check`, `states`, `verify`, `--with-tlc`, `--prove`, and the TLA+ export explored from a
+  start the model never declared, and the SQL export wrote `DEFAULT 'bogus'`. Such a model
+  now fails to load in every command, the LSP included. To migrate, write one of the
+  column's values, spelled as declared (`@default(open)`, not `@default(Open)`), or
+  lowercase `true` or `false`. `@default(null)` is no value of either type, even on a
+  `@null` column; drop it (#187).
 
 ### Added
 
@@ -73,9 +110,9 @@
   disagreement. `scripts/verify-samples.sh --with-tlc` and `scripts/reduction-diff.py
   --with-tlc` run the samples and random models that way.
 - `--temporal-budget` bounds the native whole-model run of a property its cone does not
-  decide: past the budget, or 2,097,152 states, the run stops with
-  `TimeBudgetReached` or the state cap and the property is `not decided` unless the partial
-  graph already holds a counterexample.
+  decide: past the budget, the memory limit, or `--max-states` when given, the run stops
+  and the property is `not decided` unless the partial graph already holds a
+  counterexample.
 - The `Vacuous_<name>` warning also covers an `after` assertion whose use case never runs
   and a temporal property whose rows never exist or whose `leads_to` trigger never holds.
   `verify` warns too: it explores by BFS each cone it hands to TLC, at the same bounds, so
@@ -177,6 +214,24 @@
   `not decided`. No sample's verdict changes. The argument is in
   [WF_vars(Next) on a reduced cone](docs/formal-verification.md#wf_varsnext-on-a-reduced-cone);
   `RDRA_ISH_NO_WF_REDUCED` turns the run off for measurement.
+- BFS keeps each explored state once, in one buffer, with a table of state numbers to find
+  it by, in place of a heap block per state and a second copy as the key of the seen
+  set. The store per state on the sample cones of a thousand states and more falls from
+  215 to 125 bytes at the median at `check` bounds (260 to 154 at the most) and from 248 to
+  159 at `verify` bounds (403 to 316). States, edges, verdicts, and counterexamples do not
+  change, but a cone fits more states under `--memory`: a cone that stopped at the limit
+  stops later or finishes, and the `held at <N> B per state` of `MemoryCapReached` is
+  smaller. The memory estimate follows the new store, `(w + 12)·p2(n) + 5·buckets(n) +
+  12·p2(e)` bytes.
+- The TypeScript types of `codegen --lang ts` are covered by the compatibility contract
+  ([The TypeScript types of `codegen`](./docs/compatibility.md#the-typescript-types-of-codegen)).
+  The contract covers the scalars, the `<Entity>Id` types, the value sets with their
+  `<Name>Values` constants, the state types, and the `<Entity>Row` types that
+  `codegen <INPUTS> --lang ts [-o <FILE>]` prints for a model `check` passes. It covers
+  their names, their property names and types, and the rules that narrow a nullable
+  column. The rest of `codegen` stays experimental: the functions, rule checks,
+  dispatchers, header, `--allow-failing`, and the Rust and Go output. The generated header
+  says which part is covered. `tests/codegen_contract.rs` pins the covered types.
 - `check` and `states` have no state cap by default: `--memory` (4GiB, or `memory` under
   `[check]`) is what stops a cone, and `--max-states <N>` still caps it. The `bounds:` line
   says `no state cap per cone, memory 4GiB`, or `<N> states per cone` under the flag. A cone
@@ -468,7 +523,7 @@ contract. It also fixes the types `typescript-states` prints for Int and present
   contract) prints the model's data layer as one compilation unit for an agent to finish:
   value sets, id types, entity and DTO records whose key columns take the parent's id type,
   and the numbered obligations `check` and `verify` assume of the data
-  ([CLI reference](./docs/cli-reference.md#codegen-experimental),
+  ([CLI reference](./docs/cli-reference.md#codegen),
   [design](./docs/design/algebraic-codegen.md)). Every sample's output builds under
   `tsc --strict`, `rustc -D warnings`, and `go vet` (`tests/codegen_builds.rs`); the dev
   shell gains TypeScript and Go.

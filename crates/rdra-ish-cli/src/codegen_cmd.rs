@@ -1,4 +1,5 @@
-//! `rdra-ish codegen` (experimental): the model's domain types as code, on stdout.
+//! `rdra-ish codegen`: the model's domain types as code, on stdout. Only the TypeScript types
+//! are covered by docs/compatibility.md; the rest is experimental.
 
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -119,7 +119,7 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
             Some((se, whole, sub_vars, whole_vars))
         })
         .collect();
-    let pattern = |s: &crate::lifecycle::State, vars: &[VarId], slot: usize| -> Pattern {
+    let pattern = |s: &crate::lifecycle::StateSlice, vars: &[VarId], slot: usize| -> Pattern {
         vars.iter().map(|v| s.get(sys, *v, slot).0).collect()
     };
     let slots = sys.bounds.slots();

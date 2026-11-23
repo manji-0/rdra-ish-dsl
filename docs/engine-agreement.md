@@ -57,7 +57,9 @@ ladder decides both the native and the TLC verdict from each engine's runs, so a
 step in it moves both together (see [What the corpus catches](#what-the-corpus-catches)).
 The model builder feeds every engine, so one mistake there is wrong in all of them at once.
 An Int `@default` outside the range once started at 0 in every engine
-([#180](https://github.com/manji-0/rdra-ish-dsl/issues/180)).
+([#180](https://github.com/manji-0/rdra-ish-dsl/issues/180)), and an Enum or Bool
+`@default` outside its values at the first value
+([#187](https://github.com/manji-0/rdra-ish-dsl/issues/187)).
 
 ### Int columns and `now`
 
@@ -98,6 +100,7 @@ parse fails the suite. Other `//` lines are free text that explains the trap.
 // trap: <what the case checks, in one line>            exactly once
 // flags: <verify flags>                                 optional
 // tlc: skip, <why>                                      optional; the case never runs TLC
+// rejects: <text>                                       optional, repeatable
 // expect <Check>: native=<V> tlc=<V> [z3=<Z>] [bfs=<V>,<V>,<V>]
 // known <Check>: <engine>=<observed> <issue URL>
 ```
@@ -116,6 +119,11 @@ parse fails the suite. Other `//` lines are free text that explains the trap.
   (`Deadlock_*`, `Witness_*`) are checks too. Every check the run names needs an `expect`
   line. Every `expect` line needs a check in the run, unless its native verdict is `none`
   or a `known` line covers it.
+- `rejects` says the model fails to load with an `error:` line that contains `<text>`. A
+  case without one fails on any load error, which has no check name. A case with one
+  fails when the model loads without that error, or prints a load error that no `rejects`
+  line covers. No engine runs on such a model, so every `expect` line says
+  `native=none tlc=none`.
 - `flags` go to every `verify` run of the case. They must not name `--with-tlc` or
   `--prove`, which the harness adds.
 
@@ -208,6 +216,7 @@ loading the machine) it takes about 25 s in release, measured.
 | `z3_int_and_now_boundary` | Int at the top, `now` that stops at the top | as stated per rule |
 | `z3_now_past_the_top` | The same `now` rule at Int 0..6 | counterexample; z3 unproved |
 | `z3_int_default_out_of_range` | An Int default outside the range | `IntLiteralOutOfBounds`; no engine runs |
+| `z3_enum_bool_default_outside_values` | An Enum or Bool default outside its values | the model does not load; no engine runs |
 
 The state-cap trap has no file of its own. It is rule 7, which the capped-graph test
 checks on every case's whole model.

@@ -20,3 +20,6 @@ anyhow      = { workspace = true }
 miette      = { workspace = true }
 serde_json  = { workspace = true }
 dunce       = { workspace = true }
+
+[dev-dependencies]
+insta       = { workspace = true }

@@ -13,20 +13,30 @@ machine-readable exports.
 | `dbml` | DBML schema text | logical entities, variations, and `relate` keys; a table's `Note` lists its rules by the names `check` gives them |
 | `sql` | SQL DDL (`--dialect postgres` or `sqlite`) | logical entities and `relate` keys; entity-local rules become named `CHECK` constraints; `reads` query shapes add suggested indexes and `SELECT`s as comments |
 | `json-schema` | JSON Schema | DTOs and entities under `$defs`; a mapped DTO field carries `x-rdra-ish-maps-to` |
-| `typescript-states` | TypeScript `.entity-states.ts` | entity lifecycles; refused while `check` reports a lifecycle error |
 | `mermaid-er` | Mermaid ER `.er.mmd` | logical entities and `relate` keys, as `diagram --kind er` draws them |
 | `tla` | TLA+ `.tla` + `.cfg` | the lifecycle transition system, for reading or a TLC run by hand |
+
+For TypeScript types of the entities and their lifecycle states, run
+`rdra-ish codegen src/ --lang ts -o out/domain.ts`. It is not an `export` kind, and it
+refuses a model that `check` rejects.
 
 `diagram` writes Mermaid text only, and `mermaid` is the default `--format`. The text
 is meant to be redrawn: render the `.mmd` with Mermaid CLI (`mmdc`), or hand it to a tool
 that draws SVG from it. `references/reading-diagrams.md` says what a redrawing must keep.
 
-Only the outputs that print reachable states (`diagram --kind state` and
-`export --kind typescript-states`) refuse to write while `check` reports a lifecycle
-error. The outputs of declared facts and the data layer (`diagram` of every other kind,
+Only the output that prints reachable states (`diagram --kind state`) refuses to write
+while `check` reports a lifecycle error, unless every error is a deadlock, which it
+colours. The outputs of declared facts and the data layer (`diagram` of every other kind,
 `csv` and `list` of every kind, and the `dbml`, `sql`, `json-schema`, `openapi`, `asyncapi`,
 ER, and `tla` exports) still write and print one note. TLC on the `tla` export finds no
 deadlock and no state without a witness, so run `verify` for those.
+
+These outputs, `codegen`, and `next` explore the lifecycle at the bounds `check` runs at by
+default: no state cap, 1,024 patterns per entity, and `memory` under `[check]` in
+`rdra.toml` (4GiB unless set). They take no `--memory` flag. A cone past the limit is
+`MemoryCapReached`: it refuses `diagram --kind state` and `codegen` (exit 1); the other
+diagrams, `list`, `csv`, and `export` still write and print a note. Raise `memory` under
+`[check]`, or narrow the model.
 
 ## Commands
 

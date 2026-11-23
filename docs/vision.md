@@ -1,7 +1,7 @@
 # Target shape of rdra-ish
 
 This note defines what rdra-ish is when it is finished: an RDRA requirements model
-that also carries a logical data model and a lifecycle that TLC can check. It records
+that also carries a logical data model and a lifecycle that `verify` can check. It records
 where today's DSL stands against the RDRA primary sources, the semantics the finished
 DSL commits to, and the order of work that gets there.
 
@@ -135,7 +135,7 @@ DSL keeps these rules and adds what a normalized relational model needs:
 ## The lifecycle layer has one semantics
 
 `rdra-ish-core` defines one transition system in `crates/rdra-ish-core/src/lifecycle/`.
-`states`, `check`, the TLA+ export, `verify`, the TypeScript state unions, and the state
+`states`, `check`, the TLA+ export, `verify`, `codegen`, and the state
 diagrams all read it. The TLA+ emitter only prints it. [State derivation](./state-derivation.md)
 describes how the tool explores the system.
 
@@ -368,8 +368,8 @@ These questions were decided on 2026-10-29, during phase 6:
   TLC's state graph. It compares every cone of every sample at 2 instances, except a cone
   whose BFS passes 300,000 states there, which it compares at 1 instance. The test lists
   those cones in `VERIFY_FALLBACK` and fails when a cone joins or leaves the list, so the
-  coverage it gives up is always named. Today the list holds 11 cones: 1 of clinic-ops, 2 of
-  patent-ops, 1 of food-permit-ops, and 7 of insurance-claim-ops
+  coverage it gives up is always named. Today the list holds 24 cones: 1 of clinic-ops, 2 of
+  patent-ops, 1 of food-permit-ops, 7 of insurance-claim-ops, and 13 of oidc-auth
   ([formal-verification.md](./formal-verification.md#known-verification-gaps) names them).
 - Each sample states its expected result in `// expect` lines of its first file in load
   order, so CI keeps no second list of samples. The deadlock check found one model defect:
@@ -442,6 +442,17 @@ reasons and the phases.
   section of the changelog lists what `main` changed since the last one. Every run states
   its verdict on a `result:` line, and `tlc_result:` prints beside it only under
   `--with-tlc`.
+
+The maintainer decided these questions on 2026-11-24, for the next major release:
+
+- `codegen --lang ts` is the one way to get TypeScript state types. The next major
+  release removes `export --kind typescript-states` and `states --format typescript`,
+  which typed an entity by the patterns `states` reaches. Each fails with a usage error
+  that names `codegen`. This narrows the 2026-11-07 entry above.
+- The TypeScript types of `codegen` are covered by
+  [compatibility](./compatibility.md#the-typescript-types-of-codegen): the scalars, the id
+  types, the value sets, the state types, and the `<Entity>Row` row types. The rest of
+  `codegen` stays experimental. `export --kind json-schema` stays as it is.
 
 ## Sources
 
