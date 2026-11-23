@@ -419,8 +419,11 @@ counterexample sends the property to the whole model. Each property's line names
 happened: `Cone_P [P]: ok (111 states)`, `Cone_P [P]: counterexample (43 states, Cone_P_WF:
 counterexample)`, or `Cone_P [P]: not decided (31 states, Cone_P_WF: ok, needs the whole model's
 WF_vars(Next))` followed by the `RdraSpec_P [P]:` line. A cone reduced by its independent
-sub-lifecycle (the next section) adds `Cone_P_Full: counterexample` after a counterexample on
-the reduced cone, before the `_WF` note. A property without `.fair` rests on
+sub-lifecycle (the next section) runs `_WF` on the reduced cone first and notes
+`Cone_P_WF: ok on the reduced cone` or `Cone_P_WF: counterexample on the reduced cone` when
+that decides ([WF_vars(Next) on a reduced cone](#wf_varsnext-on-a-reduced-cone)); otherwise it
+adds `Cone_P_Full: counterexample` after a counterexample on the reduced cone, before the `_WF`
+note. A property without `.fair` rests on
 `WF_vars(Next)` alone, so it reaches the whole model unless its cone holds every written
 var; name the use cases it relies on to keep it on the cone. On food-permit-ops
 `HygieneManagerEventuallyAppointed` runs on a 243-state cone and the whole `verify` takes
@@ -719,10 +722,11 @@ state with a present slot some path takes an edge that moves it (no deadlock). A
 formula over T and `obs` under a fairness that reads T and `obs`, so the `Cone_<P>` run, whose
 `Spec` admits stuttering, decides on R what it decides on C. What the bisimulation does not
 preserve is `WF_vars(Next)`: a class that loops inside itself forever never stutters in C under
-`WF_vars(Next)` while R stands still, so the `_WF` run stays on the unreduced cone, and a
-counterexample of the `Cone_<P>` run on R is repeated on the unreduced cone as `Cone_<P>_Full`,
-whose lasso the printed trace reads (`verify` reports that run's outcome beside the first's; an
-`ok` there is a tool bug, reported as such).
+`WF_vars(Next)` while R stands still. So the `_WF` run reads R with every class that can loop
+marked ([WF_vars(Next) on a reduced cone](#wf_varsnext-on-a-reduced-cone)), and when that does
+not decide, a counterexample of the `Cone_<P>` run on R is repeated on the unreduced cone as
+`Cone_<P>_Full`, whose lasso the printed trace reads (`verify` reports that run's outcome beside
+the first's; an `ok` there is a tool bug, reported as such), and the `_WF` run follows there.
 
 A trace of R is lifted to a path of C before it is printed (`TransitionSystem::lift`): a T step
 is itself, and a class move becomes the path of S steps that realizes it from the concrete S
@@ -736,6 +740,93 @@ reduced cone against its BFS and checks that each check the reduced cone keeps h
 verdict. `scripts/reduction-diff.py` compares whole `verify` runs, reduced and unreduced, on
 random models (see the `engine_equivalence` item under
 [Approximations and limitations](#approximations-and-limitations)).
+
+### WF_vars(Next) on a reduced cone
+
+<!-- derived-from #reduction-by-an-independent-sub-lifecycle -->
+<!-- constrained-by #temporal-properties-on-a-cone -->
+The bisimulation above is blind to divergence, so the reduced cone R cannot answer the
+`Cone_<P>_WF` run as it is: a behavior of the cone C that steps inside one class of S
+forever meets `WF_vars(Next)`, and its image in R stands still at a state that may have a
+move. The native checker runs `Cone_<P>_WF` on R anyway, with every class that *can loop*
+taken as a place where a behavior may stand still forever. This section proves that an `ok`
+of that run is the `ok` of `Cone_<P>_WF` on C. A counterexample of that run is only a
+candidate, and the last paragraph says how it is checked.
+
+**Classes that can loop.** Let `X` be the run of the extended sub-lifecycle from which the
+partition is built, with its silent edges (S steps, at fixed inputs) and its rises (T steps).
+When S is reduced inside, a state of `X` holds an inner class. A class `c` *can loop* when
+one of these holds:
+
+1. The silent edges of `X` between two different states that are both in `c` contain a
+   cycle: a strongly connected set of at least two such states.
+2. A state of `X` in `c` holds an inner class that can loop, by this definition applied to
+   the inner reduction.
+3. S is unobserved (`obs` empty), so it is one class and `X` is not explored, and some S var
+   is not monotone (`monotone_vars` on the extended sub-lifecycle). When every S var is
+   monotone, every var of S changes finitely often, and no infinite path of S steps exists.
+
+The mark costs one strongly connected component pass over the in-class silent edges of `X`,
+which `Quotient::of` already holds. It reads nothing outside the sub-lifecycle.
+
+**The run.** On R, under `Fair_P` and the property's goal as before, a state `r = (t, c)` of
+`N` may stop when no fair instance is enabled at `r` and either no move leaves `r` or `c`
+can loop. A component of `N` admits a fair cycle by the rule it has today. Every stop of
+this run is a stop of the `Cone_<P>` run on R, so the run lies between that run and the
+blind `WF_vars(Next)` run on R.
+
+**Claim.** Suppose C has a behavior σ that satisfies `Fair_P` and `WF_vars(Next)`, reaches
+a state where the trigger holds, and then never meets the goal. Then the run on R finds a
+counterexample. So when it finds none on a complete graph, `Cone_<P>_WF` on C is `ok`.
+
+**Proof.** Map each state `(t, s)` of σ to `(t, rep(class(s)))`. By points 2, 3, and 5 of
+the proof obligation, each step of σ is a step of R or stays at the same state of R, so σ
+maps to a path of R from an initial state. Related states agree on T and `obs`. The trigger,
+the goal, and the enabledness of every fair instance read only T and `obs`, since the fair
+actions are T actions. A fair instance takes a step of σ exactly when its image takes a step
+of R, because a T step is the same step on both sides. Now split σ by what its image does
+after the trigger.
+
+- *The image moves infinitely often.* From some point the image visits only the states and
+  edges of one strongly connected component `K` of `N` in R. Each fair instance is either
+  taken infinitely often by σ, and so labels an edge inside `K`, or disabled infinitely
+  often, and so disabled at some state of `K`. `K` has an edge, so `K` admits a fair cycle.
+- *The image moves finitely often and σ changes the state infinitely often.* From some
+  point σ holds T at `t`, and every step that changes the state is an S step inside one
+  class `c`. If infinitely many of them move between states of `X`, those states
+  are finitely many, so they contain a cycle of in-class silent edges, which is case 1. If
+  from some point none does, σ steps inside one inner class forever, and the same argument
+  one level down gives case 2. With `obs` empty, an infinite path of S steps changes some S
+  var infinitely often, so that var is not monotone, which is case 3. So `c` can loop. Every
+  fair instance is disabled at `(t, s)` from that point on, since `Fair_P` holds and none
+  takes a step. Its enabledness is the same at `(t, rep(c))`. So `(t, rep(c))` may stop.
+- *σ stands still at `(t, s)` forever.* `WF_vars(Next)` then says that no move leaves
+  `(t, s)` in C. A T move of R from `(t, rep(c))` reads only T and `obs`, so it would leave
+  `(t, s)` too. A class move from `rep(c)` into `c'` would, by stability, be matched by a
+  path of S steps from `s` into `c'`, which has a first step. So no move leaves
+  `(t, rep(c))`, and it may stop.
+
+In each case the image of the triggered state reaches a fair end of the run through goal-free
+states, so the run finds a counterexample. ∎
+
+The claim does not use that the mark is tight. Marking more classes only adds stops, which
+keeps the claim and adds candidates. What `Cone_<P>_WF` on C decides is unchanged: its
+counterexample is the whole model's, and its `ok` is the whole model's only when the cone
+holds every var an action writes (`cone_keeps_every_write`). Otherwise the property goes to
+the whole model, as it does after the unreduced run.
+
+**Candidates.** A stop at a class that can loop need not exist in C: the looping states of
+`c` may be ones that C does not reach at `t`, since `X` takes its rises without their T
+guards and folds bits that rise and fall freely. So a counterexample of the run on R is
+lifted to C and certified there before anything uses it. The prefix lifts with `lift`. A
+loop of R lifts by lifting the prefix and the loop repeated, until the concrete state at the
+end of a copy is one at the end of an earlier copy. That takes at most as many copies as the
+class has concrete states. A stop lifts to the concrete state `x` that the lifted prefix
+ends at, followed by a walk from `x` of S steps of C that keep T and `obs` as they are at
+`x`, to a state with no move or around a cycle. The lifted lasso must replay through the
+moves of C, fail the property there, and pass the fairness check under `WF_vars(Next)`. A
+lasso that fails a check, or a walk that finds neither, is dropped unprinted, and `verify`
+runs `Cone_<P>_Full` and `Cone_<P>_WF` on C as it did before.
 
 ### Part of a model
 

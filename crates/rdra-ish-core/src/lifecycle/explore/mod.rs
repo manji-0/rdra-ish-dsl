@@ -13,7 +13,7 @@ mod views;
 mod violations;
 
 pub use graph::{Adjacency, LabelledEdges};
-pub use liveness::LassoFault;
+pub use liveness::{LassoFault, ReducedVerdict, Spurious};
 pub use properties::PropertyVerdict;
 pub use store::{store_bytes, Held};
 

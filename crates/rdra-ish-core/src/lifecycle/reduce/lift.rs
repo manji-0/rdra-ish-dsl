@@ -1,12 +1,13 @@
 //! Lifting a reduced path back to a path of the unreduced cone.
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use super::extended::Extended;
 use super::partition::{quotient_blocks, split_edges, Succ};
 use super::*;
 use crate::lifecycle::cone::VarSet;
-use crate::lifecycle::explore::Caps;
+use crate::lifecycle::explore::{Adjacency, Caps, Spurious};
 use crate::lifecycle::expr::State;
+use crate::lifecycle::lasso::Loop;
 use crate::lifecycle::types::ActId;
 use crate::lifecycle::TransitionSystem;
 
@@ -165,5 +166,173 @@ impl TransitionSystem {
             out.push(group);
         }
         (out_start, out)
+    }
+}
+
+/// A lasso of the unreduced cone: its states, the action of each step (with `Loop::Back`, one
+/// more, which returns to state `to`), and how it goes on.
+pub(crate) type ConeLasso = (Vec<State>, Vec<ActId>, Loop);
+
+/// The most copies of a reduced loop lifted before the lift gives up on closing it.
+const MAX_COPIES: usize = 1 << 12;
+/// The most states the walk from a stop's concrete state visits.
+const MAX_WALK: usize = 1 << 18;
+
+impl TransitionSystem {
+    /// A reduced lasso that loops, lifted to the unreduced cone: the prefix, then the loop
+    /// repeated until the concrete state at the end of a copy is one at the end of an earlier
+    /// copy. The lift of a copy is a function of the concrete state it starts from, so the
+    /// lifted loop closes after at most as many copies as there are concrete states at the
+    /// loop's start.
+    pub(crate) fn lift_cycle(
+        &self,
+        start: &State,
+        prefix: &[Step],
+        cycle: &[Step],
+    ) -> Result<ConeLasso, Spurious> {
+        let mut copies = 4;
+        while copies <= MAX_COPIES {
+            let mut steps = prefix.to_vec();
+            (0..copies).for_each(|_| steps.extend_from_slice(cycle));
+            let (first, groups) = self.lift(start, &steps);
+            let mut states = vec![first];
+            let mut actions = Vec::new();
+            let mut ends = Vec::new();
+            for (k, group) in groups.into_iter().enumerate() {
+                if k == prefix.len() {
+                    ends.push(states.len() - 1);
+                }
+                for (act, _, post) in group {
+                    actions.push(act);
+                    states.push(post);
+                }
+                if k + 1 > prefix.len() && (k + 1 - prefix.len()).is_multiple_of(cycle.len()) {
+                    ends.push(states.len() - 1);
+                }
+            }
+            let mut seen: HashMap<&State, usize> = HashMap::new();
+            for &end in &ends {
+                if let Some(&back) = seen.get(&states[end]) {
+                    let states = states[..end].to_vec();
+                    let actions = actions[..end].to_vec();
+                    return Ok((states, actions, Loop::Back { to: back + 1 }));
+                }
+                seen.insert(&states[end], end);
+            }
+            copies *= 2;
+        }
+        Err(Spurious::Unclosed)
+    }
+
+    /// A reduced lasso that stops, lifted to the unreduced cone `cone`: the prefix, then a
+    /// walk of S steps from the concrete state it ends at that keep T and `obs` where they
+    /// are, to a state with no move (a stop) or around a cycle (a loop inside the class).
+    pub(crate) fn lift_stop(
+        &self,
+        cone: &TransitionSystem,
+        start: &State,
+        prefix: &[Step],
+    ) -> Result<ConeLasso, Spurious> {
+        let r = self.reduction().expect("a reduced cone");
+        let (first, steps) = self.lifted(start, prefix);
+        let mut states = vec![first];
+        let mut actions = Vec::new();
+        for (act, _, post) in steps {
+            actions.push(act);
+            states.push(post);
+        }
+        let x = states.last().expect("a lasso has a state").clone();
+        let obs = cone.project(&x, r.obs());
+        // The walk's graph: its states in the order found, the parent of each on a shortest
+        // walk, and the moves it keeps.
+        let mut at: HashMap<State, u32> = HashMap::from([(x.clone(), 0)]);
+        let mut order = vec![x];
+        let mut parent: Vec<Option<(u32, ActId)>> = vec![None];
+        let mut edges: Vec<(u32, u32, ActId)> = Vec::new();
+        let walk_to = |order: &[State], parent: &[Option<(u32, ActId)>], mut i: u32| {
+            let mut walk = Vec::new();
+            while let Some((p, act)) = parent[i as usize] {
+                walk.push((act, order[i as usize].clone()));
+                i = p;
+            }
+            walk.reverse();
+            walk
+        };
+        let mut k = 0;
+        while k < order.len() {
+            let s = order[k].clone();
+            let moves: Vec<_> = cone.moves(&s).filter(|m| m.next != s).collect();
+            if moves.is_empty() {
+                for (act, s) in walk_to(&order, &parent, k as u32) {
+                    actions.push(act);
+                    states.push(s);
+                }
+                return Ok((states, actions, Loop::Stutter));
+            }
+            for m in moves {
+                if !r.skips(m.act) || cone.project(&m.next, r.obs()) != obs {
+                    continue;
+                }
+                let next = order.len() as u32;
+                let to = *at.entry(m.next.clone()).or_insert_with(|| {
+                    order.push(m.next.clone());
+                    parent.push(Some((k as u32, m.act)));
+                    next
+                });
+                edges.push((k as u32, to, m.act));
+                if order.len() > MAX_WALK {
+                    return Err(Spurious::NoLoop);
+                }
+            }
+            k += 1;
+        }
+        // Every state of the walk has a move: a cycle, entered at its first state found.
+        let n = order.len();
+        let adjacency = Adjacency::new(n, || edges.iter().map(|&(a, b, _)| (a, b)));
+        let (comp, count) = adjacency.components();
+        let mut size = vec![0u32; count];
+        comp.iter().for_each(|c| size[*c as usize] += 1);
+        let Some(entry) = (0..n).find(|&i| size[comp[i] as usize] >= 2) else {
+            return Err(Spurious::NoLoop);
+        };
+        for (act, s) in walk_to(&order, &parent, entry as u32) {
+            actions.push(act);
+            states.push(s);
+        }
+        let to = states.len();
+        // A shortest walk inside the component from the entry back to it.
+        let c = comp[entry];
+        let mut via: Vec<Option<(u32, ActId)>> = vec![None; n];
+        let mut queue = VecDeque::from([entry as u32]);
+        let mut back = None;
+        'search: while let Some(u) = queue.pop_front() {
+            for &(a, b, act) in edges.iter().filter(|e| e.0 == u) {
+                if comp[b as usize] != c || a == b {
+                    continue;
+                }
+                if b as usize == entry {
+                    back = Some((u, act));
+                    break 'search;
+                }
+                if via[b as usize].is_none() {
+                    via[b as usize] = Some((u, act));
+                    queue.push_back(b);
+                }
+            }
+        }
+        let (last, back_act) = back.expect("a component of two states has a cycle");
+        let mut cycle = Vec::new();
+        let mut i = last;
+        while i as usize != entry {
+            let (p, act) = via[i as usize].expect("the walk's parent");
+            cycle.push((act, order[i as usize].clone()));
+            i = p;
+        }
+        for (act, s) in cycle.into_iter().rev() {
+            actions.push(act);
+            states.push(s);
+        }
+        actions.push(back_act);
+        Ok((states, actions, Loop::Back { to }))
     }
 }

@@ -1,0 +1,50 @@
+// trap: a reduced class can loop, but not from the states the cone reaches it in.
+// The gate is the job's independent sub-lifecycle; the job observes only its phase. From
+// `pa` the gate either goes to `pb`, marks x2, and comes back, or steps aside to x3
+// and then toggles between x3 and x4 forever. Both ends sit at `pa` with no way back to
+// `pb`, so they form one class, and that class can loop. The job is seen only while the
+// gate is at `pb`, so a seen job meets the gate at x2, where the gate has no move left and
+// Finish must run under WF_vars(Next). The run with WF_vars(Next) on the reduced cone takes
+// the class as a place to stop and finds a counterexample; it does not lift (no loop from
+// x2), so the cone runs unreduced and decides ok. A checker that printed the reduced
+// counterexample would report a property that holds.
+// flags: --instance-count 1
+// A gate that steps aside never leaves `pa`, and its job is never seen: both are deadlocks.
+// expect SeenFinishes: native=ok tlc=ok
+// expect Deadlock_Gate_phase_pa: native=counterexample tlc=none
+// expect Deadlock_Job_status_waiting: native=counterexample tlc=none
+entity Gate "門" { id: Int @pk  phase: Enum(pa, pb) @default(pa)  x: Enum(x0, x2, x3, x4) @default(x0) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, seen, done) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase GoB "裏へ回る"
+usecase Mark "印を付ける"
+usecase BackA "表へ戻る"
+usecase Side "脇へ寄る"
+usecase Tog "切り替える"
+usecase Untog "戻す"
+usecase Submit "投入"
+usecase Watch "見る"
+usecase Finish "終える"
+transitions(GoB, Gate.phase, pa -> pb)
+transitions(Mark, Gate.x, x0 -> x2)
+transitions(BackA, Gate.phase, pb -> pa)
+transitions(Side, Gate.x, x0 -> x3)
+transitions(Tog, Gate.x, x3 -> x4)
+transitions(Untog, Gate.x, x4 -> x3)
+condition AtX0 "まだ動いていない"
+holds(AtX0, Gate.x == x0)
+applies_to(AtX0, GoB)
+condition AtA "表にいる"
+holds(AtA, Gate.phase == pa)
+applies_to(AtA, Side)
+condition AtX2 "印がある"
+holds(AtX2, Gate.x == x2)
+applies_to(AtX2, BackA)
+creates(Submit, Job)
+transitions(Watch, Job.status, waiting -> seen)
+transitions(Finish, Job.status, seen -> done)
+condition AtB "裏にいる"
+holds(AtB, Gate.phase == pb)
+applies_to(AtB, Watch)
+applies_to(AtB, Mark)
+property SeenFinishes leads_to(Job.status == seen, Job.status == done)
